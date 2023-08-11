@@ -1,0 +1,9 @@
+[workspace]
+
+members=[
+    "representation",
+    "maplib",
+    "triplestore",
+    "parquet_io",
+    "arrow_python_utils"
+]

@@ -1,0 +1,43 @@
+name: Python tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_LOG: debug
+
+jobs:
+  build_and_test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Install dependencies
+      run: |
+        python -m venv .venv
+        source .venv/bin/activate
+        pip install --upgrade pip
+        pip install -r tests/requirements.txt
+      working-directory: ./py_maplib
+
+    - name: Set up nightly rust
+      run: |
+        rustup toolchain install nightly-2023-08-01
+        rustup default nightly-2023-08-01
+
+    - name: Build install package
+      run: |
+        source .venv/bin/activate
+        maturin develop
+      working-directory: ./py_maplib
+
+    - name: pytest
+      run: |
+        source ../.venv/bin/activate
+        pytest
+      working-directory: ./py_maplib/tests

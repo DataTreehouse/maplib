@@ -1,0 +1,11 @@
+[package]
+name = "arrow_python_utils"
+version = "0.4.8"
+edition = "2021"
+
+[dependencies]
+pyo3 = {version = "0.19.2", features = ["extension-module"]}
+polars-core = {version="0.31.1", features=["dtype-array", "dtype-categorical", "dtype-date", "dtype-datetime",
+    "dtype-decimal", "dtype-duration", "dtype-i8", "dtype-i16", "dtype-struct", "dtype-time", "dtype-u8", "dtype-u16"]}
+thiserror="1.0.31"
+simple-error = "0.2.3"

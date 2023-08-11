@@ -1,0 +1,63 @@
+name: Release tag on mac
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_LOG: debug
+
+jobs:
+  create_release: #From: https://jon.sprig.gs/blog/post/2442
+    name: Create release
+    runs-on: macos-12-xl
+    steps:
+      - name: Create Release
+        id: create_release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+          generate_release_notes: false
+
+  build_release:
+    name: Build release
+    runs-on: macos-12
+    needs: create_release
+    strategy:
+          matrix:
+            python-version: ['3.9', '3.10', '3.11']
+    steps:
+    - uses: actions/checkout@v3
+    - uses: actions/setup-python@v2
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Create venv
+      run: |
+        python -m venv .venv
+        source .venv/bin/activate
+        pip install --upgrade pip
+        pip install maturin
+      working-directory: .
+
+    - name: Set up nightly rust
+      run: |
+        rustup toolchain install nightly-2023-08-01
+        rustup default nightly-2023-08-01
+
+    - name: Build mapper wheels
+      run: |
+        source ../.venv/bin/activate
+        maturin build
+      working-directory: ./py_maplib
+
+    - name: Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ needs.create_release.outputs.tag-name }}
+        files: |
+          ./py_maplib/target/wheels/*.whl

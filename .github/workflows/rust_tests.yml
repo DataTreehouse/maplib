@@ -1,0 +1,40 @@
+name: Rust tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_LOG: debug
+
+jobs:
+  build_and_test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Upgrade rust with nightly and pull oxigraph and dremio image
+      run: |
+        rustup update
+        rustup toolchain install nightly-2023-08-01
+        rustup default nightly-2023-08-01
+
+        docker pull oxigraph/oxigraph:v0.3.2
+        docker pull dremio/dremio-oss:22.0.0
+
+    - uses: actions/cache@v2
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.toml') }}
+
+    - name: Build
+      run: cargo build --verbose --all
+    - name: Run rust tests
+      run: cargo test --verbose --all

@@ -1,0 +1,7 @@
+TODO list:
+- Detect situation with incompatible datatypes and recover
+- What happens in unions when one side has categorical string..? Should cast
+- Get rid of "columns" in solution mappings, as datatypes sorts this out
+- Improve quality of datatype inference in expressions
+- Create tests for folder cleanup with caching folder
+- Create write native parquet test
