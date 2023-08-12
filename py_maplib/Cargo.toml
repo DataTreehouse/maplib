@@ -15,8 +15,7 @@ arrow_python_utils = {path="../arrow_python_utils"}
 thiserror="1.0.31"
 polars-core = {version="0.31.1", features=["dtype-array", "dtype-categorical", "dtype-date", "dtype-datetime",
     "dtype-decimal", "dtype-duration", "dtype-i8", "dtype-i16", "dtype-struct", "dtype-time", "dtype-u8", "dtype-u16"]}
-
-jemallocator="0.5.4"
+jemallocator = {version = "0.5.4", features = ["disable_initial_exec_tls"]}
 
 [lib]
 name = "maplib"
