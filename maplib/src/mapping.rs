@@ -35,6 +35,7 @@ pub struct Mapping {
     use_caching: bool,
 }
 
+#[derive(Clone)]
 pub struct ExpandOptions {
     pub language_tags: Option<HashMap<String, String>>,
     pub unique_subsets: Option<Vec<Vec<String>>>,
