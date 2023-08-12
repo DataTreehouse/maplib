@@ -6,11 +6,6 @@ extern crate core;
 extern crate chrono;
 extern crate chrono_tz;
 
-use mimalloc::MiMalloc;
-
-#[global_allocator]
-static GLOBAL: MiMalloc = MiMalloc;
-
 mod ast;
 mod constants;
 mod parsing;

@@ -21,6 +21,11 @@ use maplib::mapping::errors::MappingError;
 use oxrdf::NamedNode;
 use triplestore::sparql::QueryResult;
 
+use jemallocator::Jemalloc;
+
+#[global_allocator]
+static GLOBAL: Jemalloc = Jemalloc;
+
 #[pyclass]
 #[derive(Debug, PartialEq, PartialOrd, Clone)]
 pub struct BlankNode {

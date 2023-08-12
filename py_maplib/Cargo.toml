@@ -16,6 +16,8 @@ thiserror="1.0.31"
 polars-core = {version="0.31.1", features=["dtype-array", "dtype-categorical", "dtype-date", "dtype-datetime",
     "dtype-decimal", "dtype-duration", "dtype-i8", "dtype-i16", "dtype-struct", "dtype-time", "dtype-u8", "dtype-u16"]}
 
+jemallocator="0.5.4"
+
 [lib]
 name = "maplib"
 crate-type = ["cdylib"]
