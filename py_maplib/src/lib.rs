@@ -20,6 +20,7 @@ use maplib::errors::MaplibError;
 use maplib::mapping::errors::MappingError;
 use oxrdf::NamedNode;
 use triplestore::sparql::QueryResult;
+use log::warn;
 
 use jemallocator::Jemalloc;
 
@@ -164,6 +165,12 @@ pub struct Mapping {
     inner: InnerMapping,
 }
 
+impl Mapping {
+    pub fn from_inner_mapping(inner:InnerMapping) -> Mapping {
+        Mapping{inner}
+    }
+}
+
 
 #[derive(Debug, Clone)]
 pub struct ExpandOptions {
@@ -209,23 +216,28 @@ impl Mapping {
         language_tags: Option<HashMap<String, String>>,
         caching_folder: Option<String>
     ) -> PyResult<Option<PyObject>> {
-        let df = polars_df_to_rust_df(&df)?;
-        let unique_subsets = if let Some(unique_subset) = unique_subset {
-            Some(vec![unique_subset.into_iter().collect()])
-        } else {
-            None
-        };
-        let options = ExpandOptions {
-            language_tags,
-            unique_subsets,
-            caching_folder
-        };
+        if df.getattr("height")?.gt(0).unwrap() {
+            let df = polars_df_to_rust_df(&df)?;
+            let unique_subsets = if let Some(unique_subset) = unique_subset {
+                Some(vec![unique_subset.into_iter().collect()])
+            } else {
+                None
+            };
+            let options = ExpandOptions {
+                language_tags,
+                unique_subsets,
+                caching_folder
+            };
 
-        let mut _report = self
-            .inner
-            .expand(template, df, options.to_rust_expand_options())
-            .map_err(MaplibError::from)
-            .map_err(PyMaplibError::from)?;
+            let mut _report = self
+                .inner
+                .expand(template, df, options.to_rust_expand_options())
+                .map_err(MaplibError::from)
+                .map_err(PyMaplibError::from)?;
+        } else {
+            warn!("Template expansion of {} with empty DataFrame", template);
+        }
+
         Ok(None)
     }
 

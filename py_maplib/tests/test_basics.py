@@ -20,3 +20,15 @@ def test_create_mapping_from_polars_df():
         '<http://example.net/ns#myObject> <http://example.net/ns#hasValue> "2"^^<http://www.w3.org/2001/XMLSchema#long>']
     expected_triples_strs.sort()
     assert actual_triples_strs == expected_triples_strs
+
+def test_create_mapping_from_empty_polars_df():
+    doc = """
+    @prefix ex:<http://example.net/ns#>.
+    ex:ExampleTemplate [?MyValue] :: {
+    ottr:Triple(ex:myObject, ex:hasValue, ?MyValue)
+    } .
+    """
+
+    df = pl.DataFrame({"MyValue": []})
+    mapping = Mapping([doc])
+    mapping.expand("http://example.net/ns#ExampleTemplate", df)
