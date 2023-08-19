@@ -89,7 +89,7 @@ fn validate_infer_column_data_type(
 fn infer_rdf_node_type(ptype: &PType) -> RDFNodeType {
     match ptype {
         PType::BasicType(b, _) => {
-            if b.as_str() == xsd::ANY_URI {
+            if b.as_str() == xsd::ANY_URI.as_str() {
                 RDFNodeType::IRI
             } else {
                 RDFNodeType::Literal(b.clone())

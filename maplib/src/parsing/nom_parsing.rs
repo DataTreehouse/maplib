@@ -229,9 +229,11 @@ fn list_expand(l: &str) -> IResult<&str, &str> {
 }
 
 fn pattern_list(p: &str) -> IResult<&str, Vec<UnresolvedInstance>> {
-    let (p, (_, ilist, _, _, _)) = tuple((
+    let (p, (_, _, ilist, _, _, _, _)) = tuple((
         tag("{"),
+        multispace0,
         separated_list0(tag(","), instance),
+        multispace0,
         opt(tag(",")),
         multispace0,
         tag("}"),

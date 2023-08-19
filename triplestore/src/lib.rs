@@ -355,12 +355,22 @@ pub fn prepare_triples(
     if df.height() == 0 {
         return vec![];
     }
+
+    //Important in order to consistently handle URIs
+    let object_type = match &object_type {
+        RDFNodeType::Literal(l) => match l.as_ref() {
+            xsd::ANY_URI => RDFNodeType::IRI,
+            _ => RDFNodeType::Literal(l.clone()),
+        },
+        _ => object_type.clone(),
+    };
+
     if let Some(static_verb_column) = static_verb_column {
         df = df.select(["subject", "object"]).unwrap();
         if let Some(tdf) = prepare_triples_df(
             df,
             static_verb_column,
-            object_type,
+            &object_type,
             language_tag,
             has_unique_subset,
         ) {
@@ -382,7 +392,7 @@ pub fn prepare_triples(
             if let Some(tdf) = prepare_triples_df(
                 part,
                 predicate,
-                object_type,
+                &object_type,
                 language_tag,
                 has_unique_subset,
             ) {

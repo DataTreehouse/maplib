@@ -246,7 +246,11 @@ impl Mapping {
                 let now = Instant::now();
 
                 let mut expand_params_vec = vec![];
-                let colnames:HashSet<_> = df.get_column_names().iter().map(|x|x.to_string()).collect();
+                let colnames: HashSet<_> = df
+                    .get_column_names()
+                    .iter()
+                    .map(|x| x.to_string())
+                    .collect();
                 for i in &template.pattern_list {
                     let mut instance_series = vec![];
                     let vs = get_variable_names(i);

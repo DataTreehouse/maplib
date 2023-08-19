@@ -103,6 +103,94 @@ fn test_easy_template() {
 }
 
 #[test]
+fn test_easy_template_extra_comma() {
+    //This test case is taken from:
+    // https://github.com/Callidon/pyOTTR/blob/master/tests/stottr_test.py
+    let stottr = r#"
+        @prefix ex: <http://example.org#>.
+        ex:Person[ ?firstName, ?lastName, ?email, ] :: {
+            o-rdf:Type (_:person, foaf:Person )
+        } .
+    "#;
+
+    let doc = whole_stottr_doc(stottr).expect("Ok");
+
+    let expected = UnresolvedStottrDocument {
+        directives: vec![Directive::Prefix(Prefix {
+            name: "ex".to_string(),
+            iri: NamedNode::new_unchecked("http://example.org#"),
+        })],
+        statements: vec![UnresolvedStatement::Template(UnresolvedTemplate {
+            signature: UnresolvedSignature {
+                template_name: ResolvesToNamedNode::PrefixedName(PrefixedName {
+                    prefix: "ex".to_string(),
+                    name: "Person".to_string(),
+                }),
+                parameter_list: vec![
+                    UnresolvedParameter {
+                        optional: false,
+                        non_blank: false,
+                        ptype: None,
+                        stottr_variable: StottrVariable {
+                            name: "firstName".to_string(),
+                        },
+                        default_value: None,
+                    },
+                    UnresolvedParameter {
+                        optional: false,
+                        non_blank: false,
+                        ptype: None,
+                        stottr_variable: StottrVariable {
+                            name: "lastName".to_string(),
+                        },
+                        default_value: None,
+                    },
+                    UnresolvedParameter {
+                        optional: false,
+                        non_blank: false,
+                        ptype: None,
+                        stottr_variable: StottrVariable {
+                            name: "email".to_string(),
+                        },
+                        default_value: None,
+                    },
+                ],
+                annotation_list: None,
+            },
+            pattern_list: vec![UnresolvedInstance {
+                list_expander: None,
+                template_name: ResolvesToNamedNode::PrefixedName(PrefixedName {
+                    prefix: "o-rdf".to_string(),
+                    name: "Type".to_string(),
+                }),
+                argument_list: vec![
+                    UnresolvedArgument {
+                        list_expand: false,
+                        term: UnresolvedStottrTerm::ConstantTerm(UnresolvedConstantTerm::Constant(
+                            UnresolvedConstantLiteral::BlankNode(BlankNode::new_unchecked(
+                                "person",
+                            )),
+                        )),
+                    },
+                    UnresolvedArgument {
+                        list_expand: false,
+                        term: UnresolvedStottrTerm::ConstantTerm(UnresolvedConstantTerm::Constant(
+                            UnresolvedConstantLiteral::IRI(ResolvesToNamedNode::PrefixedName(
+                                PrefixedName {
+                                    prefix: "foaf".to_string(),
+                                    name: "Person".to_string(),
+                                },
+                            )),
+                        )),
+                    },
+                ],
+            }],
+        })],
+    };
+    assert_eq!(expected, doc);
+}
+
+#[test]
 fn test_spec_modifiers_1() {
     let stottr = r#"
         @prefix ex:<http://example.net/ns#>.

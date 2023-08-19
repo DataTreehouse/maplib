@@ -77,6 +77,7 @@ impl Triplestore {
             left_solution_mappings.columns.insert(c);
         }
         for (var, dt) in right_datatypes.drain() {
+            // TODO: This should lead to empty result, not error.
             if let Some(dt_left) = left_solution_mappings.rdf_node_types.get(&var) {
                 if &dt != dt_left {
                     return Err(SparqlError::InconsistentDatatypes(

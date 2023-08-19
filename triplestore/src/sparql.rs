@@ -8,6 +8,7 @@ pub mod solution_mapping;
 mod sparql_to_polars;
 
 use crate::sparql::query_context::Context;
+use oxrdf::vocab::xsd;
 use oxrdf::{NamedNode, Variable};
 use std::collections::HashMap;
 
@@ -138,7 +139,11 @@ fn triple_to_df(
     }
     let df = DataFrame::new(vec![subj_ser, verb_ser, obj_ser])
         .unwrap()
-        .unique(Some(unique_subset.as_slice()), UniqueKeepStrategy::First, None)
+        .unique(
+            Some(unique_subset.as_slice()),
+            UniqueKeepStrategy::First,
+            None,
+        )
         .unwrap();
     Ok((df, dt))
 }
@@ -166,18 +171,22 @@ fn term_pattern_series(
             unimplemented!("Blank node term pattern not supported")
         }
         TermPattern::Literal(lit) => {
-            let (anyvalue, dt) = sparql_literal_to_any_value(
-                &lit.value().to_string(),
-                &Some(lit.datatype().into_owned()),
-            );
-            let mut any_values = vec![];
-            for _ in 0..len {
-                any_values.push(anyvalue.clone())
+            if lit.datatype() == xsd::ANY_URI {
+                named_node_series(&NamedNode::new(lit.to_string()).unwrap(), name, len)
+            } else {
+                let (anyvalue, dt) = sparql_literal_to_any_value(
+                    &lit.value().to_string(),
+                    &Some(lit.datatype().into_owned()),
+                );
+                let mut any_values = vec![];
+                for _ in 0..len {
+                    any_values.push(anyvalue.clone())
+                }
+                (
+                    Series::from_any_values(name, &any_values, false).unwrap(),
+                    RDFNodeType::Literal(dt),
+                )
             }
-            (
-                Series::from_any_values(name, &any_values, false).unwrap(),
-                RDFNodeType::Literal(dt),
-            )
         }
         TermPattern::Variable(v) => variable_series(df, rdf_node_types, v, name),
     }
