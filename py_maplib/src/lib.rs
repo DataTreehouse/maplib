@@ -43,13 +43,19 @@ use triplestore::sparql::QueryResult;
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
-#[cfg(all(target_os = "linux", not(use_mimalloc)))]
+#[cfg(target_os = "linux")]
 use jemallocator::Jemalloc;
-#[cfg(any(not(target_os = "linux"), use_mimalloc))]
+
+#[cfg(not(target_os = "linux"))]
 use mimalloc::MiMalloc;
 
+#[cfg(target_os = "linux")]
 #[global_allocator]
 static GLOBAL: Jemalloc = Jemalloc;
+
+#[cfg(not(target_os = "linux"))]
+#[global_allocator]
+static GLOBAL: MiMalloc = MiMalloc;
 
 #[pyclass]
 #[derive(Debug, PartialEq, PartialOrd, Clone)]
