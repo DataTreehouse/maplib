@@ -5,24 +5,48 @@ mod error;
 use crate::error::PyMaplibError;
 use arrow_python_utils::to_rust::polars_df_to_rust_df;
 
+use arrow_python_utils::to_python::{df_to_py_df, df_vec_to_py_df_list};
+use log::warn;
 use maplib::document::document_from_str;
+use maplib::errors::MaplibError;
+use maplib::mapping::errors::MappingError;
 use maplib::mapping::ExpandOptions as RustExpandOptions;
 use maplib::mapping::Mapping as InnerMapping;
 use maplib::templates::TemplateDataset;
+use oxrdf::NamedNode;
 use pyo3::basic::CompareOp;
 use pyo3::prelude::PyModule;
 use pyo3::*;
-use std::collections::{HashMap};
-use std::path::PathBuf;
+use std::collections::HashMap;
 use std::fs::File;
-use arrow_python_utils::to_python::{df_to_py_df, df_vec_to_py_df_list};
-use maplib::errors::MaplibError;
-use maplib::mapping::errors::MappingError;
-use oxrdf::NamedNode;
+use std::path::PathBuf;
 use triplestore::sparql::QueryResult;
-use log::warn;
 
+//The below snippet controlling alloc-library is from https://github.com/pola-rs/polars/blob/main/py-polars/src/lib.rs
+//And has a MIT license:
+//Copyright (c) 2020 Ritchie Vink
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+#[cfg(all(target_os = "linux", not(use_mimalloc)))]
 use jemallocator::Jemalloc;
+#[cfg(any(not(target_os = "linux"), use_mimalloc))]
+use mimalloc::MiMalloc;
 
 #[global_allocator]
 static GLOBAL: Jemalloc = Jemalloc;
@@ -166,17 +190,16 @@ pub struct Mapping {
 }
 
 impl Mapping {
-    pub fn from_inner_mapping(inner:InnerMapping) -> Mapping {
-        Mapping{inner}
+    pub fn from_inner_mapping(inner: InnerMapping) -> Mapping {
+        Mapping { inner }
     }
 }
-
 
 #[derive(Debug, Clone)]
 pub struct ExpandOptions {
     pub language_tags: Option<HashMap<String, String>>,
     pub unique_subsets: Option<Vec<Vec<String>>>,
-    pub caching_folder: Option<String>
+    pub caching_folder: Option<String>,
 }
 
 impl ExpandOptions {
@@ -191,7 +214,7 @@ impl ExpandOptions {
 #[pymethods]
 impl Mapping {
     #[new]
-    pub fn new(documents: Option<Vec<&str>>, caching_folder:Option<String>) -> PyResult<Mapping> {
+    pub fn new(documents: Option<Vec<&str>>, caching_folder: Option<String>) -> PyResult<Mapping> {
         let mut parsed_documents = vec![];
         if let Some(documents) = documents {
             for ds in documents {
@@ -203,7 +226,8 @@ impl Mapping {
             .map_err(MaplibError::from)
             .map_err(PyMaplibError::from)?;
         Ok(Mapping {
-            inner: InnerMapping::new(&template_dataset, caching_folder).map_err(PyMaplibError::from)?,
+            inner: InnerMapping::new(&template_dataset, caching_folder)
+                .map_err(PyMaplibError::from)?,
         })
     }
 
@@ -214,7 +238,7 @@ impl Mapping {
         df: &PyAny,
         unique_subset: Option<Vec<String>>,
         language_tags: Option<HashMap<String, String>>,
-        caching_folder: Option<String>
+        caching_folder: Option<String>,
     ) -> PyResult<Option<PyObject>> {
         if df.getattr("height")?.gt(0).unwrap() {
             let df = polars_df_to_rust_df(&df)?;
@@ -226,7 +250,7 @@ impl Mapping {
             let options = ExpandOptions {
                 language_tags,
                 unique_subsets,
-                caching_folder
+                caching_folder,
             };
 
             let mut _report = self
@@ -241,7 +265,9 @@ impl Mapping {
         Ok(None)
     }
 
-    #[pyo3(text_signature = "(template, primary_key_column, foreign_key_column, template_prefix, predicate_uri_prefix, language_tags, caching_folder)")]
+    #[pyo3(
+        text_signature = "(template, primary_key_column, foreign_key_column, template_prefix, predicate_uri_prefix, language_tags, caching_folder)"
+    )]
     pub fn expand_default(
         &mut self,
         df: &PyAny,
@@ -250,12 +276,12 @@ impl Mapping {
         template_prefix: Option<String>,
         predicate_uri_prefix: Option<String>,
         language_tags: Option<HashMap<String, String>>,
-        caching_folder: Option<String>
+        caching_folder: Option<String>,
     ) -> PyResult<String> {
         let df = polars_df_to_rust_df(&df)?;
         let options = ExpandOptions {
             language_tags,
-            unique_subsets:Some(vec![vec![primary_key_column.clone()]]),
+            unique_subsets: Some(vec![vec![primary_key_column.clone()]]),
             caching_folder,
         };
 
@@ -265,35 +291,43 @@ impl Mapping {
             vec![]
         };
 
-        let tmpl = self.inner.expand_default(
-            df,
-            primary_key_column,
-            fk_cols,
-            template_prefix,
-            predicate_uri_prefix,
-            options.to_rust_expand_options()
-        ).map_err(MaplibError::from)
+        let tmpl = self
+            .inner
+            .expand_default(
+                df,
+                primary_key_column,
+                fk_cols,
+                template_prefix,
+                predicate_uri_prefix,
+                options.to_rust_expand_options(),
+            )
+            .map_err(MaplibError::from)
             .map_err(PyMaplibError::from)?;
-        return Ok(format!("{}", tmpl))
+        return Ok(format!("{}", tmpl));
     }
 
     #[pyo3(text_signature = "(query)")]
-    pub fn query(&mut self, py: Python<'_>, query:String) -> PyResult<PyObject> {
-        let res = self.inner.triplestore.query(&query).map_err(PyMaplibError::from)?;
+    pub fn query(&mut self, py: Python<'_>, query: String) -> PyResult<PyObject> {
+        let res = self
+            .inner
+            .triplestore
+            .query(&query)
+            .map_err(PyMaplibError::from)?;
         match res {
-            QueryResult::Select(df) => {
-                df_to_py_df(df, py)
-            }
+            QueryResult::Select(df) => df_to_py_df(df, py),
             QueryResult::Construct(dfs) => {
-                let dfs = dfs.into_iter().map(|(df,_)|df).collect();
-                Ok(df_vec_to_py_df_list(dfs,py)?.into())
+                let dfs = dfs.into_iter().map(|(df, _)| df).collect();
+                Ok(df_vec_to_py_df_list(dfs, py)?.into())
             }
         }
     }
 
     #[pyo3(text_signature = "(query)")]
-    pub fn insert(&mut self, query:String) -> PyResult<()> {
-        self.inner.triplestore.insert(&query).map_err(PyMaplibError::from)?;
+    pub fn insert(&mut self, query: String) -> PyResult<()> {
+        self.inner
+            .triplestore
+            .insert(&query)
+            .map_err(PyMaplibError::from)?;
         Ok(())
     }
 
@@ -346,7 +380,7 @@ impl Mapping {
                     })
                 } else {
                     None
-                }
+                },
             }
         }
 
@@ -402,28 +436,39 @@ impl Mapping {
             }
         }
 
-        self.inner.triplestore.deduplicate().map_err(PyMaplibError::from)?;
-        self.inner.triplestore
-            .object_property_triples(to_python_object_triple, &mut triples).map_err(PyMaplibError::from)?;
-        self.inner.triplestore
-            .string_data_property_triples(to_python_string_literal_triple, &mut triples).map_err(PyMaplibError::from)?;
-        self.inner.triplestore.nonstring_data_property_triples(
-            to_python_nonstring_literal_triple, &mut triples
-        ).map_err(PyMaplibError::from)?;
+        self.inner
+            .triplestore
+            .deduplicate()
+            .map_err(PyMaplibError::from)?;
+        self.inner
+            .triplestore
+            .object_property_triples(to_python_object_triple, &mut triples)
+            .map_err(PyMaplibError::from)?;
+        self.inner
+            .triplestore
+            .string_data_property_triples(to_python_string_literal_triple, &mut triples)
+            .map_err(PyMaplibError::from)?;
+        self.inner
+            .triplestore
+            .nonstring_data_property_triples(to_python_nonstring_literal_triple, &mut triples)
+            .map_err(PyMaplibError::from)?;
         Ok(triples)
     }
 
     #[pyo3(text_signature = "(file_path)")]
-    pub fn write_ntriples(&mut self, path:&str) -> PyResult<()> {
+    pub fn write_ntriples(&mut self, path: &str) -> PyResult<()> {
         let path_buf = PathBuf::from(path);
-        let mut actual_file = File::create(path_buf.as_path()).map_err(|x| PyMaplibError::from(MappingError::FileCreateIOError(x)))?;
+        let mut actual_file = File::create(path_buf.as_path())
+            .map_err(|x| PyMaplibError::from(MappingError::FileCreateIOError(x)))?;
         self.inner.write_n_triples(&mut actual_file).unwrap();
         Ok(())
     }
 
     #[pyo3(text_signature = "(folder_path)")]
-    pub fn write_native_parquet(&mut self, path:&str) -> PyResult<()> {
-        self.inner.write_native_parquet(path).map_err(|x| PyMaplibError::MappingError(x))?;
+    pub fn write_native_parquet(&mut self, path: &str) -> PyResult<()> {
+        self.inner
+            .write_native_parquet(path)
+            .map_err(|x| PyMaplibError::MappingError(x))?;
         Ok(())
     }
 }
