@@ -1,9 +1,10 @@
 name: Release tag on linux
-
 on:
   push:
     tags:
       - 'v[0-9]+.[0-9]+.[0-9]+'
+
+permissions: write-all
 
 env:
   CARGO_TERM_COLOR: always
