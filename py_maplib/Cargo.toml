@@ -1,6 +1,6 @@
 [package]
 name = "py_maplib"
-version = "0.4.14"
+version = "0.4.15"
 edition = "2021"
 
 [workspace]
@@ -15,7 +15,6 @@ arrow_python_utils = {path="../arrow_python_utils"}
 thiserror="1.0.31"
 polars-core = {version="0.32.1", features=["dtype-array", "dtype-categorical", "dtype-date", "dtype-datetime",
     "dtype-decimal", "dtype-duration", "dtype-i8", "dtype-i16", "dtype-struct", "dtype-time", "dtype-u8", "dtype-u16"]}
-jemallocator = {version = "0.5.4", features = ["disable_initial_exec_tls"]}
 log ="0.4.19"
 
 [lib]
