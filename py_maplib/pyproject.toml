@@ -27,7 +27,7 @@ Repository = "https://github.com/DataTreehouse/maplib"
 Changelog = "https://github.com/DataTreehouse/maplib/releases"
 
 [build-system]
-requires = ["maturin=1.2.1"]
+requires = ["maturin==1.2.3"]
 build-backend = "maturin"
 
 [tool.maturin]

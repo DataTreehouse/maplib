@@ -43,7 +43,7 @@ jobs:
         python -m venv .venv
         source .venv/bin/activate
         pip install --upgrade pip
-        pip install maturin
+        pip install -r requirements.txt
       working-directory: .
 
     - name: Set up nightly rust
