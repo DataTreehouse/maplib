@@ -1,5 +1,5 @@
 # maplib
-Very fast and scalable toolkit for mapping and enriching knowledge graphs. The library is especially suitable for problems that arise when building industrial knowledge graphs. The library is a Rust-based implementation of [stOTTR](https://dev.spec.ottr.xyz/stOTTR/). Implemented with [Apache Arrow](https://arrow.apache.org/) in Rust using [Pola.rs](https://www.pola.rs/), with a Python wrapper.
+Dataframe-based interactive knowledge graph construction, validation and enrichment using stOTTR templates and SPARQL. The library is especially suitable for problems that arise when building industrial knowledge graphs. The library is a Rust-based implementation of [stOTTR](https://dev.spec.ottr.xyz/stOTTR/). Implemented with [Apache Arrow](https://arrow.apache.org/) in Rust using [Pola.rs](https://www.pola.rs/), with a Python wrapper.
 
 There is an associated paper [1] that can be found [here](https://ieeexplore.ieee.org/document/10106242).
 

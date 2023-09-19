@@ -7,7 +7,7 @@ We provide a Python wrapper for the library, which allows us to create mappings 
 ## API
 The API is simple, and contains only one class and a few methods.
 ```python
-from maplib import Mapping, ResolveIRI, MintingOptions, to_graph
+from maplib import Mapping
 import polars as pl
 ```
 
@@ -40,11 +40,5 @@ The parameters of the templates must be provided as identically-named columns. T
 ## Exporting
 Multiple alternatives exist to export the mapped triples. The fastest way to serialize is the _write_ntriples_-method.
 ```python
-mapping.write_ntriples(file:str)
-```
-
-Alternatively, we can export the mapping to an [rdflib](https://rdflib.readthedocs.io/en/stable/)-graph. 
-
-```python
-gr = to_graph(mapping)
+def write_ntriples(&self, file:str)
 ```

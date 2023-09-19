@@ -1,11 +1,35 @@
+[project]
+name = "maplib"
+description = "Dataframe-based interactive knowledge graph construction using stOTTR templates"
+dependencies = ["polars==0.18.0", "pyarrow>=7.0.0"]
+readme = "README.md"
+authors = [{name = "Magnus Bakken", email = "magnus@data-treehouse.com" }]
+license = {file = "LICENSE"}
+requires-python = ">=3.8"
+keywords = ["rdf", "graph", "dataframe", "sparql", "ottr"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Rust",
+    "Topic :: Database :: Database Engines/Servers",
+    "Topic :: Scientific/Engineering",
+]
+
+[project.urls]
+Homepage = "https://www.data-treehouse.com/"
+Documentation = "https://github.com/DataTreehouse/maplib/blob/main/doc/python_mapper_api.md"
+Repository = "https://github.com/DataTreehouse/maplib"
+Changelog = "https://github.com/DataTreehouse/maplib/releases"
+
+[build-system]
+requires = ["maturin=1.2.1"]
+build-backend = "maturin"
+
 [tool.maturin]
 module-name = "maplib._maplib"
 python-source = "python"
-
-[project]
-name = "maplib"
-dependencies = ["polars==0.18.0", "pyarrow>=7.0.0"]
-
-[build-system]
-requires = ["maturin>=0.13,<0.14"]
-build-backend = "maturin"
