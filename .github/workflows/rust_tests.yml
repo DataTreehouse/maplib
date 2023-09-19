@@ -12,7 +12,8 @@ env:
 
 jobs:
   build_and_test:
-    runs-on: ubuntu-latest
+    runs-on:
+      group: ubuntu_runners
 
     steps:
     - uses: actions/checkout@v3
