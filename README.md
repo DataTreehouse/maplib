@@ -37,7 +37,7 @@ doc = """
 @prefix xsd:<http://www.w3.org/2001/XMLSchema#>.
 @prefix ex:<https://github.com/DataTreehouse/maplib/pizza#>.
 
-ex:Pizza[?p, xsd:AnyURI ?c, List<xsd:AnyURI> ?is] :: {
+ex:Pizza[?p, xsd:anyURI ?c, List<xsd:anyURI> ?is] :: {
 ottr:Triple(?p, a, pizza:Pizza),
 ottr:Triple(?p, pizza:fromCountry, ?c),
 cross | ottr:Triple(?p, pizza:hasIngredient, ++?is)
