@@ -170,9 +170,9 @@ fn validate_datatype(
 }
 
 fn validate_basic_datatype(
-    column_name: &str,
-    datatype: &DataType,
-    rdf_datatype: &NamedNode,
+    _column_name: &str,
+    _datatype: &DataType,
+    _rdf_datatype: &NamedNode,
 ) -> Result<(), MappingError> {
     // match rdf_datatype.as_ref() {
     //     xsd::INT => {

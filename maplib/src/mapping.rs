@@ -228,7 +228,7 @@ impl Mapping {
     fn _expand(
         &self,
         name: &str,
-        mut df: DataFrame,
+        df: DataFrame,
         dynamic_columns: HashMap<String, PrimitiveColumn>,
         static_columns: HashMap<String, StaticColumn>,
         unique_subsets: Vec<Vec<String>>,

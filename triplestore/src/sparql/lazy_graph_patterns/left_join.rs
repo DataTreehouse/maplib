@@ -90,7 +90,7 @@ impl Triplestore {
             left_solution_mappings.columns.insert(c);
         }
         for (var, dt) in right_datatypes.drain() {
-            if let Some(dt_left) = left_solution_mappings.rdf_node_types.get(&var) {
+            if let Some(_dt_left) = left_solution_mappings.rdf_node_types.get(&var) {
                 //TODO: handle compatibility
                 // if &dt != dt_left {
                 //     return Err(SparqlError::InconsistentDatatypes(var.clone(), dt_left.clone(), dt, context.clone()))

@@ -1,0 +1,126 @@
+# Adapted from https://github.com/pola-rs/maplib/blob/main/.github/workflows/release-python.yml
+# With license found in maplib/licensing/maplib_LICENSE
+
+name: Release Python
+
+on:
+  push:
+    tags:
+      - 'py-v[0-9]+.[0-9]+.[0-9]+'
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_LOG: debug
+  RUST_TOOLCHAIN: nightly-2023-08-01
+  PYTHON_VERSION: '3.8'
+  MATURIN_VERSION: '1.2.3'
+  MATURIN_PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+
+jobs:
+  manylinux-x64_64:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Fix README symlink
+        run: |
+          rm py-maplib/README.md
+          cp README.md py-maplib/README.md
+
+      - name: Publish wheel
+        uses: PyO3/maturin-action@v1
+        env:
+          RUSTFLAGS: -C target-feature=+fxsr,+sse,+sse2,+sse3,+ssse3,+sse4.1,+sse4.2,+popcnt,+avx,+fma
+        with:
+          command: publish
+          args: -m py-maplib/Cargo.toml --skip-existing -o wheels -u magbak
+          maturin-version: ${{ env.MATURIN_VERSION }}
+          rust-toolchain: ${{ env.RUST_TOOLCHAIN }}
+
+  # Needed for Docker on Apple M1
+  manylinux-aarch64:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      # Needed to avoid out-of-memory error
+      - name: Set Swap Space
+        uses: pierotofy/set-swap-space@master
+        with:
+          swap-size-gb: 10
+
+      - name: Fix README symlink
+        run: |
+          rm py-maplib/README.md
+          cp README.md py-maplib/README.md
+
+      - name: Publish wheel
+        uses: PyO3/maturin-action@v1
+        env:
+          JEMALLOC_SYS_WITH_LG_PAGE: 16
+        with:
+          command: publish
+          args: -m py-maplib/Cargo.toml --skip-existing --no-sdist -o wheels -i python -u magbak
+          target: aarch64-unknown-linux-gnu
+          maturin-version: ${{ env.MATURIN_VERSION }}
+          rust-toolchain: ${{ env.RUST_TOOLCHAIN }}
+
+  win-macos:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ macos-latest, windows-latest ]
+
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Fix README symlink
+        run: |
+          rm py-maplib/README.md
+          cp README.md py-maplib/README.md
+
+      - name: Publish wheel
+        uses: PyO3/maturin-action@v1
+        env:
+          RUSTFLAGS: -C target-feature=+fxsr,+sse,+sse2,+sse3,+sse4.1,+sse4.2
+        with:
+          command: publish
+          args: -m py-maplib/Cargo.toml --no-sdist --skip-existing -o wheels -i python -u magbak
+          maturin-version: ${{ env.MATURIN_VERSION }}
+          rust-toolchain: ${{ env.RUST_TOOLCHAIN }}
+
+  macos-aarch64:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Fix README symlink
+        run: |
+          rm py-maplib/README.md
+          cp README.md py-maplib/README.md
+
+      - name: Set up Rust targets
+        run: rustup target add aarch64-apple-darwin
+
+      - name: Publish wheel
+        uses: PyO3/maturin-action@v1
+        with:
+          command: publish
+          args: -m py-maplib/Cargo.toml --target aarch64-apple-darwin --no-sdist -o wheels -i python -u magbak
+          maturin-version: ${{ env.MATURIN_VERSION }}

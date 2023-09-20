@@ -55,7 +55,7 @@ impl Triplestore {
         ppe: &PropertyPathExpression,
         object: &TermPattern,
         solution_mappings: Option<SolutionMappings>,
-        context: &Context,
+        _context: &Context,
     ) -> Result<SolutionMappings, SparqlError> {
         let create_sparse = need_sparse_matrix(ppe);
         let mut out_df;
@@ -65,7 +65,7 @@ impl Triplestore {
         let cat_df_map = self.create_unique_cat_dfs(ppe, Some(subject), Some(object))?;
         let max_index = find_max_index(cat_df_map.values());
         if create_sparse {
-            let SparsePathReturn { sparmat, soo, dt } =
+            let SparsePathReturn { sparmat, soo: _, dt: _ } =
                 sparse_path(ppe, &cat_df_map, max_index as usize);
             let mut subject_vec = vec![];
             let mut object_vec = vec![];
@@ -289,7 +289,7 @@ impl Triplestore {
             } else if m.len() > 1 {
                 todo!("Multiple datatypes not supported yet")
             } else {
-                let (dt, tt) = m.iter().next().unwrap();
+                let (_dt, tt) = m.iter().next().unwrap();
                 assert!(tt.unique, "Should be deduplicated");
                 let mut lf = concat(
                     tt.get_lazy_frames()
@@ -334,7 +334,7 @@ impl Triplestore {
 
 fn find_lookup(map: &HashMap<String, DataFrame>) -> DataFrame {
     let mut all_values = vec![];
-    for (k, v) in map {
+    for (_k, v) in map {
         let mut obj = v.column("object").unwrap().unique().unwrap();
         obj.rename("value");
         let mut sub = v.column("subject").unwrap().unique().unwrap();
@@ -386,7 +386,7 @@ fn df_path(
                 dt,
             }
         }
-        PropertyPathExpression::Sequence(left, right) => {
+        PropertyPathExpression::Sequence(left, _right) => {
             let DFPathReturn {
                 df: mut df_left,
                 soo: _,
@@ -410,7 +410,7 @@ fn df_path(
                 dt: dt_right,
             }
         }
-        PropertyPathExpression::Alternative(left, right) => {
+        PropertyPathExpression::Alternative(left, _right) => {
             let DFPathReturn {
                 df: df_left,
                 soo: soo_left,
@@ -672,8 +672,8 @@ fn sparse_path(
             } = sparse_path(a, cat_df_map, max_index);
             let SparsePathReturn {
                 sparmat: sparmat_b,
-                soo: soo_b,
-                dt: dt_b,
+                soo: _soo_b,
+                dt: _dt_b,
             } = sparse_path(b, cat_df_map, max_index);
             let sparmat = (&sparmat_a + &sparmat_b).to_csr().map(|x| (x > &0) as u32);
             SparsePathReturn {
@@ -685,8 +685,8 @@ fn sparse_path(
         PropertyPathExpression::ZeroOrMore(inner) => {
             let SparsePathReturn {
                 sparmat: sparmat_inner,
-                soo: soo,
-                dt: dt,
+                soo,
+                dt,
             } = sparse_path(inner, cat_df_map, max_index);
             let sparmat = zero_or_more(sparmat_inner);
             SparsePathReturn { sparmat, soo, dt }
@@ -694,8 +694,8 @@ fn sparse_path(
         PropertyPathExpression::OneOrMore(inner) => {
             let SparsePathReturn {
                 sparmat: sparmat_inner,
-                soo: soo,
-                dt: dt,
+                soo,
+                dt,
             } = sparse_path(inner, cat_df_map, max_index);
             let sparmat = one_or_more(sparmat_inner);
             SparsePathReturn { sparmat, soo, dt }
@@ -703,8 +703,8 @@ fn sparse_path(
         PropertyPathExpression::ZeroOrOne(inner) => {
             let SparsePathReturn {
                 sparmat: sparmat_inner,
-                soo: soo,
-                dt: dt,
+                soo,
+                dt,
             } = sparse_path(inner, cat_df_map, max_index);
             let sparmat = zero_or_one(sparmat_inner);
             SparsePathReturn { sparmat, soo, dt }

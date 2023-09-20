@@ -19,7 +19,7 @@ impl Triplestore {
         solution_mappings: Option<SolutionMappings>,
         variables: &Vec<Variable>,
         bindings: &Vec<Vec<Option<GroundTerm>>>,
-        context: &Context,
+        _context: &Context,
     ) -> Result<SolutionMappings, SparqlError> {
         let mut col_vecs = HashMap::new();
         for i in 0..variables.len() {

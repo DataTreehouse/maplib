@@ -5,17 +5,17 @@ use crate::sparql::solution_mapping::{is_string_col, SolutionMappings};
 use crate::sparql::sparql_to_polars::{
     sparql_literal_to_polars_literal_value, sparql_named_node_to_polars_literal_value,
 };
-use log::warn;
+
 use oxrdf::vocab::xsd;
 use polars::prelude::{col, concat, lit, Expr};
 use polars::prelude::{IntoLazy, UnionArgs};
 use polars_core::datatypes::{AnyValue, DataType};
 use polars_core::frame::DataFrame;
-use polars_core::prelude::{JoinArgs, JoinType, NamedFrom};
+use polars_core::prelude::{JoinType, NamedFrom};
 use polars_core::series::Series;
 use representation::RDFNodeType;
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap};
 
 impl Triplestore {
     pub fn lazy_triple_pattern(
@@ -27,7 +27,7 @@ impl Triplestore {
         let subject_filter = create_term_pattern_filter(&triple_pattern.subject, "subject");
         let object_filter = create_term_pattern_filter(&triple_pattern.object, "object");
         let object_datatype_req = match &triple_pattern.object {
-            TermPattern::NamedNode(nn) => Some(RDFNodeType::IRI),
+            TermPattern::NamedNode(_nn) => Some(RDFNodeType::IRI),
             TermPattern::BlankNode(_) => None,
             TermPattern::Literal(l) => match l.datatype() {
                 xsd::ANY_URI => Some(RDFNodeType::IRI),
@@ -53,7 +53,7 @@ impl Triplestore {
             NamedNodePattern::Variable(v) => {
                 let predicates: Vec<String>;
                 if let Some(SolutionMappings {
-                    mut mappings,
+                    mappings,
                     columns,
                     rdf_node_types,
                 }) = solution_mappings
