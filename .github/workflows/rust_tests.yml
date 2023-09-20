@@ -9,6 +9,7 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RUST_LOG: debug
+  RUST_TOOLCHAIN: nightly-2023-08-01
 
 jobs:
   build_and_test:
@@ -21,8 +22,8 @@ jobs:
     - name: Upgrade rust with nightly and pull oxigraph and dremio image
       run: |
         rustup update
-        rustup toolchain install nightly-2023-08-01
-        rustup default nightly-2023-08-01
+        rustup toolchain install ${{ env.RUST_TOOLCHAIN }}
+        rustup default ${{ env.RUST_TOOLCHAIN }}
 
         docker pull oxigraph/oxigraph:v0.3.2
         docker pull dremio/dremio-oss:22.0.0
