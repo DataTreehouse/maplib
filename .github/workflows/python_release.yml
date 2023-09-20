@@ -64,7 +64,7 @@ jobs:
           JEMALLOC_SYS_WITH_LG_PAGE: 16
         with:
           command: publish
-          args: -i python${{ matrix.python-version }} -m py_maplib/Cargo.toml --skip-existing --no-sdist -o wheels -i python -u magbak
+          args: -i python${{ matrix.python-version }} -m py_maplib/Cargo.toml --skip-existing --no-sdist -o wheels -u magbak
           target: aarch64-unknown-linux-gnu
           maturin-version: ${{ env.MATURIN_VERSION }}
           rust-toolchain: ${{ env.RUST_TOOLCHAIN }}
@@ -86,7 +86,7 @@ jobs:
           RUSTFLAGS: -C target-feature=+fxsr,+sse,+sse2,+sse3,+sse4.1,+sse4.2
         with:
           command: publish
-          args: -i python${{ env.python-version }} -m py_maplib/Cargo.toml --no-sdist --skip-existing -o wheels -i python -u magbak
+          args: -i python${{ env.python-version }} -m py_maplib/Cargo.toml --no-sdist --skip-existing -o wheels -u magbak
           maturin-version: ${{ env.MATURIN_VERSION }}
           rust-toolchain: ${{ env.RUST_TOOLCHAIN }}
 
@@ -108,6 +108,6 @@ jobs:
         uses: PyO3/maturin-action@v1
         with:
           command: publish
-          args: -i python${{ env.python-version }} -m py_maplib/Cargo.toml --target aarch64-apple-darwin --no-sdist -o wheels -i python -u magbak
+          args: -i python${{ env.python-version }} -m py_maplib/Cargo.toml --target aarch64-apple-darwin --no-sdist -o wheels -u magbak
           maturin-version: ${{ env.MATURIN_VERSION }}
           rust-toolchain: ${{ env.RUST_TOOLCHAIN }}
