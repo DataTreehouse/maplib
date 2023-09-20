@@ -113,7 +113,7 @@ Indeed, we have added the triple:
 |"https://github.com/DataTreehouse/maplib/pizza#Hawaiian"|
 
 ## API
-The Python API is documented [here](https://github.com/DataTreehouse/maplib/tree/main/doc/python_mapper_api.md)
+The Python API is documented [here](https://github.com/DataTreehouse/maplib/tree/main/py_maplib/doc/python_mapper_api.md)
 
 ## Installing
 The package is published on PyPi:
