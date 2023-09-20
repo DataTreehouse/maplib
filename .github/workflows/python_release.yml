@@ -22,6 +22,7 @@ env:
 jobs:
   manylinux-x64_64:
     runs-on: ubuntu-latest
+    environment: release
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-python@v4
@@ -46,6 +47,7 @@ jobs:
   # Needed for Docker on Apple M1
   manylinux-aarch64:
     runs-on: ubuntu-latest
+    environment: release
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-python@v4
@@ -76,6 +78,7 @@ jobs:
 
   win-macos:
     runs-on: ${{ matrix.os }}
+    environment: release
     strategy:
       fail-fast: false
       matrix:
@@ -104,6 +107,7 @@ jobs:
 
   macos-aarch64:
     runs-on: macos-latest
+    environment: release
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-python@v4
