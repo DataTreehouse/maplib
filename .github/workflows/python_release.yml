@@ -77,6 +77,10 @@ jobs:
 
   win-macos:
     runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ macos-latest, windows-latest ]
     environment: release
     steps:
       - uses: actions/checkout@v3
