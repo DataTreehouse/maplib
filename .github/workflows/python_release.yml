@@ -13,7 +13,6 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
-  RUST_LOG: debug
   RUST_TOOLCHAIN: nightly-2023-08-01
   PYTHON_VERSION: '3.8'
   MATURIN_VERSION: '1.2.3'
@@ -128,3 +127,4 @@ jobs:
           command: publish
           args: -m py_maplib/Cargo.toml --target aarch64-apple-darwin --no-sdist -o wheels -i python -u magbak
           maturin-version: ${{ env.MATURIN_VERSION }}
+          rust-toolchain: ${{ env.RUST_TOOLCHAIN }}

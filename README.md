@@ -7,10 +7,10 @@ There is an associated paper [1] that can be found [here](https://ieeexplore.iee
 We can easily map DataFrames to RDF-graphs using the Python library. Below is a reproduction of the example in the paper [1]. Assume that we have a DataFrame given by: 
 
 ```python
-ex = "https://github.com/magbak/maplib/example#"
-co = "https://github.com/magbak/maplib/countries#"
-pi = "https://github.com/magbak/maplib/pizza#"
-ing = "https://github.com/magbak/maplib/pizza/ingredients#"
+ex = "https://github.com/DataTreehouse/maplib/example#"
+co = "https://github.com/DataTreehouse/maplib/countries#"
+pi = "https://github.com/DataTreehouse/maplib/pizza#"
+ing = "https://github.com/DataTreehouse/maplib/pizza/ingredients#"
 
 import polars as pl
 df = pl.DataFrame({"p":[pi + "Hawaiian", pi + "Grandiosa"],
@@ -21,11 +21,11 @@ df
 ```
 That is, our DataFrame is:
 
-|p|c|is|
-|-|-|-|
-|str|str|list[str]|
-|"https://github.com/magbak/maplib/pizza#Hawaiian"|"https://github.com/magbak/maplib/countries#CAN"|["https://github.com/magbak/maplib/pizza/ingredients#Pineapple", "https://github.com/magbak/maplib/pizza/ingredients#Ham"]|
-|"https://github.com/magbak/maplib/pizza#Grandiosa"|"https://github.com/magbak/maplib/countries#NOR"|["https://github.com/magbak/maplib/pizza/ingredients#Pepper", "https://github.com/magbak/maplib/pizza/ingredients#Meat"]|
+| p                             | c                                  | is                                                   |
+|-------------------------------|------------------------------------|------------------------------------------------------|
+| str                           | str                                | list[str]                                            |
+| "https://.../pizza#Hawaiian"  | "https://.../maplib/countries#CAN" | [".../ingredients#Pineapple", ".../ingredients#Ham"] |
+| "https://.../pizza#Grandiosa" | "https://.../maplib/countries#NOR" | [".../ingredients#Pepper", ".../ingredients#Meat"]   |
 
 Then we can define a stOTTR template, and create our knowledge graph by expanding this template with our DataFrame as input:
 ```python
@@ -33,9 +33,9 @@ from maplib import Mapping
 pl.Config.set_fmt_str_lengths(150)
 
 doc = """
-@prefix pizza:<https://github.com/magbak/maplib/pizza#>.
+@prefix pizza:<https://github.com/DataTreehouse/maplib/pizza#>.
 @prefix xsd:<http://www.w3.org/2001/XMLSchema#>.
-@prefix ex:<https://github.com/magbak/maplib/pizza#>.
+@prefix ex:<https://github.com/DataTreehouse/maplib/pizza#>.
 
 ex:Pizza[?p, xsd:AnyURI ?c, List<xsd:AnyURI> ?is] :: {
 ottr:Triple(?p, a, pizza:Pizza),
@@ -52,7 +52,7 @@ We can immediately query the mapped knowledge graph:
 
 ```python
 m.query("""
-PREFIX pizza:<https://github.com/magbak/maplib/pizza#>
+PREFIX pizza:<https://github.com/DataTreehouse/maplib/pizza#>
 SELECT ?p ?i WHERE {
 ?p a pizza:Pizza .
 ?p pizza:hasIngredient ?i .
@@ -62,20 +62,20 @@ SELECT ?p ?i WHERE {
 
 The query gives the following result (a DataFrame):
 
-|p|i|
-|---|---|
-|str|str|
-|"https://github.com/magbak/maplib/pizza#Grandiosa"|"https://github.com/magbak/maplib/pizza/ingredients#Meat"|
-|"https://github.com/magbak/maplib/pizza#Grandiosa"|"https://github.com/magbak/maplib/pizza/ingredients#Pepper"|
-|"https://github.com/magbak/maplib/pizza#Hawaiian"|"https://github.com/magbak/maplib/pizza/ingredients#Pineapple"|
-|"https://github.com/magbak/maplib/pizza#Hawaiian"|"https://github.com/magbak/maplib/pizza/ingredients#Ham"|
+| p                             | i                                   |
+|-------------------------------|-------------------------------------|
+| str                           | str                                 |
+| "https://.../pizza#Grandiosa" | "https://.../ingredients#Meat"      |
+| "https://.../pizza#Grandiosa" | "https://.../ingredients#Pepper"    |
+| "https://.../pizza#Hawaiian"  | "https://.../ingredients#Pineapple" |
+| "https://.../pizza#Hawaiian"  | "https://.../ingredients#Ham"       |
 
 Next, we are able to perform a construct query, which creates new triples but does not insert them. 
 
 ```python
 hpizzas = """
-PREFIX pizza:<https://github.com/magbak/maplib/pizza#>
-PREFIX ing:<https://github.com/magbak/maplib/pizza/ingredients#>
+PREFIX pizza:<https://github.com/DataTreehouse/maplib/pizza#>
+PREFIX ing:<https://github.com/DataTreehouse/maplib/pizza/ingredients#>
 CONSTRUCT { ?p a pizza:UnorthodoxPizza } 
 WHERE {
     ?p a pizza:Pizza .
@@ -87,17 +87,17 @@ res[0]
 
 The resulting triples are given below:
 
-|subject|verb|object|
-|-|-|-|
-|str|str|str|
-|"https://github.com/magbak/maplib/pizza#Hawaiian"|"http://www.w3.org/1999/02/22-rdf-syntax-ns#type"|"https://github.com/magbak/maplib/pizza#UnorthodoxPizza"|
+| subject                      | verb                               | object                              |
+|------------------------------|------------------------------------|-------------------------------------|
+| str                          | str                                | str                                 |
+| "https://.../pizza#Hawaiian" | "http://.../22-rdf-syntax-ns#type" | "https://.../pizza#UnorthodoxPizza" |
 
 If we are happy with the output of this construct-query, we can insert it in the mapping state. Afterwards we check that the triple is added with a query.
 
 ```python
 m.insert(hpizzas)
 m.query("""
-PREFIX pizza:<https://github.com/magbak/maplib/pizza#>
+PREFIX pizza:<https://github.com/DataTreehouse/maplib/pizza#>
 
 SELECT ?p WHERE {
 ?p a pizza:UnorthodoxPizza
@@ -110,15 +110,15 @@ Indeed, we have added the triple:
 |p|
 |-|
 |str|
-|"https://github.com/magbak/maplib/pizza#Hawaiian"|
+|"https://github.com/DataTreehouse/maplib/pizza#Hawaiian"|
 
 ## API
-The Python API is documented [here](https://github.com/magbak/maplib/tree/main/doc/python_mapper_api.md)
+The Python API is documented [here](https://github.com/DataTreehouse/maplib/tree/main/doc/python_mapper_api.md)
 
-## Installing pre-built wheels
-From the latest [release](https://github.com/magbak/maplib/releases), copy the appropriate .whl-file for your system, then run e.g.:
+## Installing
+The package is published on PyPi:
 ```shell
-pip install https://github.com/magbak/maplib/releases/download/v0.4.1/maplib-0.4.1-cp310-cp310-manylinux_2_34_x86_64.whl
+pip install maplib
 ```
 
 ## References
@@ -130,4 +130,4 @@ pip install https://github.com/magbak/maplib/releases/download/v0.4.1/maplib-0.4
 ## Licensing
 All code produced since August 1st. 2023 is copyrighted to [Data Treehouse AS](https://www.data-treehouse.com/) with an Apache 2.0 license unless otherwise noted. 
 
-All code which was produced before August 1st. 2023 copyrighted to [Prediktor AS](https://www.prediktor.com/) with an Apache 2.0 license unless otherwise noted, and has been financed by [The Research Council of Norway](https://www.forskningsradet.no/en/) (grant no. 316656) and [Prediktor AS](https://www.prediktor.com/) as part of a PhD Degree. The code at this state is archived in the repository at [https://github.com/magbak/maplib](https://github.com/magbak/maplib).
+All code which was produced before August 1st. 2023 copyrighted to [Prediktor AS](https://www.prediktor.com/) with an Apache 2.0 license unless otherwise noted, and has been financed by [The Research Council of Norway](https://www.forskningsradet.no/en/) (grant no. 316656) and [Prediktor AS](https://www.prediktor.com/) as part of a PhD Degree. The code at this state is archived in the repository at [https://github.com/DataTreehouse/maplib](https://github.com/DataTreehouse/maplib).
