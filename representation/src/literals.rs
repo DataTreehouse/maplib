@@ -64,5 +64,5 @@ pub fn sparql_literal_to_any_value(
     } else {
         (AnyValue::Utf8Owned(value.into()), xsd::STRING.into_owned())
     };
-    return (anyv.into_static().unwrap(), dt);
+    (anyv.into_static().unwrap(), dt)
 }

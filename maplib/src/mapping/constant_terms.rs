@@ -7,8 +7,12 @@ use oxrdf::NamedNode;
 use polars::prelude::{concat_list, lit, Expr, LiteralValue, SpecialEq};
 use polars_core::datatypes::DataType;
 use polars_core::prelude::{AnyValue, IntoSeries, ListChunked, Series};
+use rayon::iter::ParallelIterator;
+use rayon::prelude::IntoParallelIterator;
 use representation::literals::sparql_literal_to_any_value;
 use std::ops::Deref;
+
+const BLANK_NODE_SERIES_NAME: &str = "blank_node_series";
 
 pub fn constant_to_expr(
     constant_term: &ConstantTerm,
@@ -22,15 +26,9 @@ pub fn constant_to_expr(
                 RDFNodeType::IRI,
                 None,
             ),
-            ConstantLiteral::BlankNode(bn) => (
-                Expr::Literal(LiteralValue::Utf8(bn.as_str().to_string())),
-                PType::BasicType(
-                    NamedNode::new_unchecked(BLANK_NODE_IRI),
-                    BLANK_NODE_IRI.to_string(),
-                ),
-                RDFNodeType::BlankNode,
-                None,
-            ),
+            ConstantLiteral::BlankNode(_) => {
+                panic!("Should never happen")
+            }
             ConstantLiteral::Literal(lit) => {
                 let (mut any, dt) = sparql_literal_to_any_value(&lit.value, &lit.data_type_iri);
                 let mut value_series = Series::new_empty("literal", &DataType::Utf8);
@@ -41,11 +39,7 @@ pub fn constant_to_expr(
                 } else {
                     value_series = value_series.extend_constant(any, 1).unwrap();
                 }
-                let language_tag = if let Some(tag) = &lit.language {
-                    Some(tag.clone())
-                } else {
-                    None
-                };
+                let language_tag = lit.language.as_ref().cloned();
                 (
                     Expr::Literal(LiteralValue::Series(SpecialEq::new(value_series))),
                     PType::BasicType(
@@ -117,14 +111,51 @@ pub fn constant_to_expr(
             }
         }
     };
-    if let Some(ptype_in) = ptype_opt {
-        if ptype_in != &ptype {
+    if let Some(ptype_inferred) = ptype_opt {
+        if ptype_inferred != &ptype {
             return Err(MappingError::ConstantDoesNotMatchDataType(
                 constant_term.clone(),
-                ptype_in.clone(),
-                ptype.clone(),
+                ptype_inferred.clone(),
+                ptype,
             ));
         }
     }
     Ok((expr, ptype, rdf_node_type, language_tag))
+}
+
+pub fn constant_blank_node_to_series(
+    layer: usize,
+    blank_node_counter: usize,
+    constant_term: &ConstantTerm,
+    n_rows: usize,
+) -> Result<(Series, PType, RDFNodeType), MappingError> {
+    Ok(match constant_term {
+        ConstantTerm::Constant(ConstantLiteral::BlankNode(bl)) => {
+            let any_value_vec: Vec<_> = (blank_node_counter..(blank_node_counter + n_rows))
+                .into_par_iter()
+                .map(|i| AnyValue::Utf8Owned(format!("_:{}_l{}_r{}", bl.as_str(), layer, i).into()))
+                .collect();
+
+            (
+                Series::from_any_values_and_dtype(
+                    BLANK_NODE_SERIES_NAME,
+                    any_value_vec.as_slice(),
+                    &DataType::Utf8,
+                    false,
+                )
+                .unwrap(),
+                PType::BasicType(
+                    NamedNode::new_unchecked(BLANK_NODE_IRI),
+                    BLANK_NODE_IRI.to_string(),
+                ),
+                RDFNodeType::BlankNode,
+            )
+        }
+        ConstantTerm::ConstantList(_) => {
+            todo!("Not yet implemented support for lists of blank nodes")
+        }
+        _ => {
+            panic!("Should never happen")
+        }
+    })
 }

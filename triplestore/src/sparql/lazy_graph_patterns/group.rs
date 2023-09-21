@@ -26,7 +26,7 @@ impl Triplestore {
             self.lazy_graph_pattern(inner, solution_mapping, &inner_context)?;
         let by: Vec<Expr>;
         let dummy_varname = Uuid::new_v4().to_string();
-        if variables.len() == 0 {
+        if variables.is_empty() {
             by = vec![col(&dummy_varname)];
             output_solution_mappings.mappings = output_solution_mappings
                 .mappings

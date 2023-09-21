@@ -65,8 +65,11 @@ impl Triplestore {
         let cat_df_map = self.create_unique_cat_dfs(ppe, Some(subject), Some(object))?;
         let max_index = find_max_index(cat_df_map.values());
         if create_sparse {
-            let SparsePathReturn { sparmat, soo: _, dt: _ } =
-                sparse_path(ppe, &cat_df_map, max_index as usize);
+            let SparsePathReturn {
+                sparmat,
+                soo: _,
+                dt: _,
+            } = sparse_path(ppe, &cat_df_map, max_index as usize);
             let mut subject_vec = vec![];
             let mut object_vec = vec![];
             for (i, row) in sparmat.outer_iterator().enumerate() {
@@ -78,9 +81,9 @@ impl Triplestore {
                 }
             }
             let mut lookup_df = find_lookup(&cat_df_map);
-            let mut subject_series = Series::from_iter(subject_vec.into_iter());
+            let mut subject_series = Series::from_iter(subject_vec);
             subject_series.rename("subject_key");
-            let mut object_series = Series::from_iter(object_vec.into_iter());
+            let mut object_series = Series::from_iter(object_vec);
             object_series.rename("object_key");
             out_df = DataFrame::new(vec![subject_series, object_series]).unwrap();
             lookup_df.rename("value", "subject").unwrap();
@@ -182,7 +185,7 @@ impl Triplestore {
                     .insert(v.as_str().to_string(), RDFNodeType::IRI);
             }
 
-            return Ok(mappings);
+            Ok(mappings)
         } else {
             let mut datatypes = HashMap::new();
             if let TermPattern::Variable(v) = subject {
@@ -191,11 +194,11 @@ impl Triplestore {
             if let TermPattern::Variable(v) = object {
                 datatypes.insert(v.as_str().to_string(), RDFNodeType::IRI);
             }
-            return Ok(SolutionMappings {
+            Ok(SolutionMappings {
                 mappings: out_df.lazy(),
                 columns: var_cols.into_iter().map(|x| x.to_string()).collect(),
                 rdf_node_types: datatypes,
-            });
+            })
         }
     }
 
@@ -233,7 +236,7 @@ impl Triplestore {
             }
             PropertyPathExpression::Alternative(left, right) => {
                 let mut left_df_map =
-                    self.create_unique_cat_dfs(left, subject.clone(), object.clone())?;
+                    self.create_unique_cat_dfs(left, subject, object)?;
                 let right_df_map = self.create_unique_cat_dfs(right, subject, object)?;
                 left_df_map.extend(right_df_map);
                 Ok(left_df_map)
@@ -259,7 +262,7 @@ impl Triplestore {
                     }
                 }
                 let df;
-                if dfs.len() > 0 {
+                if !dfs.is_empty() {
                     df = concat_df(dfs.as_slice())
                         .unwrap()
                         .unique(None, UniqueKeepStrategy::First, None)
@@ -293,7 +296,7 @@ impl Triplestore {
                 assert!(tt.unique, "Should be deduplicated");
                 let mut lf = concat(
                     tt.get_lazy_frames()
-                        .map_err(|x| SparqlError::TripleTableReadError(x))?,
+                        .map_err(SparqlError::TripleTableReadError)?,
                     UnionArgs::default(),
                 )
                 .unwrap()
@@ -643,7 +646,7 @@ fn sparse_path(
             SparsePathReturn {
                 sparmat: sparmat.transpose_into(),
                 soo: soo.flip(),
-                dt: dt,
+                dt,
             }
         }
         PropertyPathExpression::Sequence(left, right) => {

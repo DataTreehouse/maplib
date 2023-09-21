@@ -26,15 +26,15 @@ impl Mapping {
             if df_columns.contains(variable_name.as_str()) {
                 df_columns.remove(variable_name.as_str());
                 if !parameter.optional {
-                    validate_non_optional_parameter(&df, variable_name)?;
+                    validate_non_optional_parameter(df, variable_name)?;
                 }
                 if parameter.non_blank {
                     //TODO handle blanks;
-                    validate_non_blank_parameter(&df, variable_name)?;
+                    validate_non_blank_parameter(df, variable_name)?;
                 }
                 let column_data_type = validate_infer_column_data_type(
                     df,
-                    &parameter,
+                    parameter,
                     variable_name,
                     &options.language_tags,
                 )?;
@@ -67,16 +67,12 @@ fn validate_infer_column_data_type(
         validate_datatype(series.name(), dtype, ptype)?;
         ptype.clone()
     } else {
-        let target_ptype = polars_datatype_to_xsd_datatype(dtype);
-        target_ptype
+        
+        polars_datatype_to_xsd_datatype(dtype)
     };
     let rdf_node_type = infer_rdf_node_type(&ptype);
     let language_tag = if let Some(map) = language_tag_map {
-        if let Some(tag) = map.get(column_name) {
-            Some(tag.clone())
-        } else {
-            None
-        }
+        map.get(column_name).cloned()
     } else {
         None
     };

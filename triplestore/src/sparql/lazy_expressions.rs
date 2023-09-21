@@ -415,7 +415,7 @@ impl Triplestore {
                         (Expr::BinaryExpr {
                             left: Box::new(Expr::Literal(LiteralValue::Int32(0))),
                             op: Operator::Plus,
-                            right: Box::new(col(&plus_context.as_str())),
+                            right: Box::new(col(plus_context.as_str())),
                         })
                         .alias(context.as_str()),
                     )
@@ -439,7 +439,7 @@ impl Triplestore {
                         (Expr::BinaryExpr {
                             left: Box::new(Expr::Literal(LiteralValue::Int32(0))),
                             op: Operator::Minus,
-                            right: Box::new(col(&minus_context.as_str())),
+                            right: Box::new(col(minus_context.as_str())),
                         })
                         .alias(context.as_str()),
                     )
@@ -459,7 +459,7 @@ impl Triplestore {
                     self.lazy_expression(inner, solution_mappings, &not_context)?;
                 output_solution_mappings.mappings = output_solution_mappings
                     .mappings
-                    .with_column(col(&not_context.as_str()).not().alias(context.as_str()))
+                    .with_column(col(not_context.as_str()).not().alias(context.as_str()))
                     .drop_columns([&not_context.as_str()]);
                 output_solution_mappings.rdf_node_types.insert(
                     context.as_str().to_string(),
@@ -473,11 +473,11 @@ impl Triplestore {
                 output_solution_mappings.mappings = output_solution_mappings
                     .mappings
                     .with_column(
-                        Expr::Literal(LiteralValue::Int64(1)).alias(&exists_context.as_str()),
+                        Expr::Literal(LiteralValue::Int64(1)).alias(exists_context.as_str()),
                     )
-                    .with_column(col(&exists_context.as_str()).cumsum(false).keep_name());
+                    .with_column(col(exists_context.as_str()).cumsum(false).keep_name());
 
-                let new_inner = rewrite_exists_graph_pattern(inner, &exists_context.as_str());
+                let new_inner = rewrite_exists_graph_pattern(inner, exists_context.as_str());
                 let SolutionMappings {
                     mappings: exists_lf,
                     ..
@@ -493,19 +493,19 @@ impl Triplestore {
                 } = output_solution_mappings;
                 let mut df = mappings.collect().unwrap();
                 let exists_df = exists_lf
-                    .select([col(&exists_context.as_str())])
+                    .select([col(exists_context.as_str())])
                     .unique(None, UniqueKeepStrategy::First)
                     .collect()
                     .expect("Collect lazy exists error");
                 let mut ser = Series::from(
-                    df.column(&exists_context.as_str())
+                    df.column(exists_context.as_str())
                         .unwrap()
-                        .is_in(exists_df.column(&exists_context.as_str()).unwrap())
+                        .is_in(exists_df.column(exists_context.as_str()).unwrap())
                         .unwrap(),
                 );
                 ser.rename(context.as_str());
                 df.with_column(ser).unwrap();
-                df = df.drop(&exists_context.as_str()).unwrap();
+                df = df.drop(exists_context.as_str()).unwrap();
                 rdf_node_types.insert(
                     context.as_str().to_string(),
                     RDFNodeType::Literal(xsd::BOOLEAN.into_owned()),
@@ -573,7 +573,7 @@ impl Triplestore {
                 }
 
                 let coalesced_context = inner_contexts.get(0).unwrap();
-                let mut coalesced = col(&coalesced_context.as_str());
+                let mut coalesced = col(coalesced_context.as_str());
                 for c in &inner_contexts[1..inner_contexts.len()] {
                     coalesced = Expr::Ternary {
                         predicate: Box::new(is_not_null(coalesced.clone())),
@@ -626,7 +626,7 @@ impl Triplestore {
                         let first_context = args_contexts.get(&0).unwrap();
                         output_solution_mappings.mappings =
                             output_solution_mappings.mappings.with_column(
-                                col(&first_context.as_str())
+                                col(first_context.as_str())
                                     .dt()
                                     .year()
                                     .alias(context.as_str()),
@@ -641,7 +641,7 @@ impl Triplestore {
                         let first_context = args_contexts.get(&0).unwrap();
                         output_solution_mappings.mappings =
                             output_solution_mappings.mappings.with_column(
-                                col(&first_context.as_str())
+                                col(first_context.as_str())
                                     .dt()
                                     .month()
                                     .alias(context.as_str()),
@@ -656,7 +656,7 @@ impl Triplestore {
                         let first_context = args_contexts.get(&0).unwrap();
                         output_solution_mappings.mappings =
                             output_solution_mappings.mappings.with_column(
-                                col(&first_context.as_str())
+                                col(first_context.as_str())
                                     .dt()
                                     .day()
                                     .alias(context.as_str()),
@@ -671,7 +671,7 @@ impl Triplestore {
                         let first_context = args_contexts.get(&0).unwrap();
                         output_solution_mappings.mappings =
                             output_solution_mappings.mappings.with_column(
-                                col(&first_context.as_str())
+                                col(first_context.as_str())
                                     .dt()
                                     .hour()
                                     .alias(context.as_str()),
@@ -686,7 +686,7 @@ impl Triplestore {
                         let first_context = args_contexts.get(&0).unwrap();
                         output_solution_mappings.mappings =
                             output_solution_mappings.mappings.with_column(
-                                col(&first_context.as_str())
+                                col(first_context.as_str())
                                     .dt()
                                     .minute()
                                     .alias(context.as_str()),
@@ -701,7 +701,7 @@ impl Triplestore {
                         let first_context = args_contexts.get(&0).unwrap();
                         output_solution_mappings.mappings =
                             output_solution_mappings.mappings.with_column(
-                                col(&first_context.as_str())
+                                col(first_context.as_str())
                                     .dt()
                                     .second()
                                     .alias(context.as_str()),
@@ -716,7 +716,7 @@ impl Triplestore {
                         let first_context = args_contexts.get(&0).unwrap();
                         output_solution_mappings.mappings =
                             output_solution_mappings.mappings.with_column(
-                                col(&first_context.as_str()).abs().alias(context.as_str()),
+                                col(first_context.as_str()).abs().alias(context.as_str()),
                             );
                         let existing_type = output_solution_mappings
                             .rdf_node_types
@@ -731,7 +731,7 @@ impl Triplestore {
                         let first_context = args_contexts.get(&0).unwrap();
                         output_solution_mappings.mappings =
                             output_solution_mappings.mappings.with_column(
-                                col(&first_context.as_str()).ceil().alias(context.as_str()),
+                                col(first_context.as_str()).ceil().alias(context.as_str()),
                             );
                         output_solution_mappings.rdf_node_types.insert(
                             context.as_str().to_string(),
@@ -743,7 +743,7 @@ impl Triplestore {
                         let first_context = args_contexts.get(&0).unwrap();
                         output_solution_mappings.mappings =
                             output_solution_mappings.mappings.with_column(
-                                col(&first_context.as_str()).floor().alias(context.as_str()),
+                                col(first_context.as_str()).floor().alias(context.as_str()),
                             );
                         output_solution_mappings.rdf_node_types.insert(
                             context.as_str().to_string(),
@@ -782,7 +782,7 @@ impl Triplestore {
                         let first_context = args_contexts.get(&0).unwrap();
                         output_solution_mappings.mappings =
                             output_solution_mappings.mappings.with_column(
-                                col(&first_context.as_str())
+                                col(first_context.as_str())
                                     .round(0)
                                     .alias(context.as_str()),
                             );
@@ -802,7 +802,7 @@ impl Triplestore {
                             if let Expression::Literal(l) = args.get(1).unwrap() {
                                 output_solution_mappings.mappings =
                                     output_solution_mappings.mappings.with_column(
-                                        col(&first_context.as_str())
+                                        col(first_context.as_str())
                                             .str()
                                             .contains(lit(l.value()), false)
                                             .alias(context.as_str()),
@@ -821,7 +821,7 @@ impl Triplestore {
                             let first_context = args_contexts.get(&0).unwrap();
                             output_solution_mappings.mappings =
                                 output_solution_mappings.mappings.with_column(
-                                    col(&first_context.as_str())
+                                    col(first_context.as_str())
                                         .cast(DataType::Int64)
                                         .alias(context.as_str()),
                                 );
@@ -834,7 +834,7 @@ impl Triplestore {
                             let first_context = args_contexts.get(&0).unwrap();
                             output_solution_mappings.mappings =
                                 output_solution_mappings.mappings.with_column(
-                                    col(&first_context.as_str())
+                                    col(first_context.as_str())
                                         .cast(DataType::Utf8)
                                         .alias(context.as_str()),
                                 );
@@ -851,9 +851,7 @@ impl Triplestore {
                     }
                 }
                 output_solution_mappings.mappings = output_solution_mappings.mappings.drop_columns(
-                    args_contexts
-                        .iter()
-                        .map(|(_, x)| x.as_str())
+                    args_contexts.values().map(|x| x.as_str())
                         .collect::<Vec<&str>>(),
                 );
                 output_solution_mappings
@@ -868,7 +866,7 @@ fn binop_type(left_type: &RDFNodeType, right_type: &RDFNodeType) -> RDFNodeType 
         (left_type, right_type)
     {
         if left_lit.as_ref() == xsd::DOUBLE {
-            return left_type.clone();
+            left_type.clone()
         } else if right_lit.as_ref() == xsd::DOUBLE {
             return right_type.clone();
         } else if left_lit.as_ref() == xsd::FLOAT {

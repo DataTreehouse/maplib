@@ -35,7 +35,7 @@ impl Triplestore {
                     filename = format!("{}_object_property", property_to_filename(property),)
                 }
                 let file_path = path_buf.clone();
-                if let Some(_) = &self.caching_folder {
+                if self.caching_folder.is_some() {
                 } else {
                     for (i, df) in tt.dfs.as_mut().unwrap().iter_mut().enumerate() {
                         let filename = format!("{filename}_part_{i}.parquet");
@@ -52,7 +52,7 @@ impl Triplestore {
             .map(|(df, file_path)| write_parquet(df, file_path.as_path()))
             .collect();
         for r in results {
-            r.map_err(|x| TriplestoreError::ParquetIOError(x))?;
+            r.map_err(TriplestoreError::ParquetIOError)?;
         }
 
         debug!(

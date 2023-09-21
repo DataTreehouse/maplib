@@ -1,3 +1,4 @@
+use crate::constants::BLANK_NODE_IRI;
 #[cfg(test)]
 use crate::constants::OTTR_TRIPLE;
 use oxrdf::vocab::xsd;
@@ -62,7 +63,7 @@ impl Display for Signature {
                 write!(f, ", ")?;
             }
         }
-        if let Some(_) = self.annotation_list {
+        if self.annotation_list.is_some() {
             todo!();
         }
         write!(f, " ]")
@@ -109,6 +110,26 @@ pub enum PType {
     LUBType(Box<PType>),
     ListType(Box<PType>),
     NEListType(Box<PType>),
+}
+
+impl PType {
+    pub fn is_blank_node(&self) -> bool {
+        if let PType::BasicType(nn, _) = &self {
+            if nn.as_str() == BLANK_NODE_IRI {
+                return true;
+            }
+        }
+        false
+    }
+
+    pub fn is_iri(&self) -> bool {
+        if let PType::BasicType(nn, _) = self {
+            if nn.as_ref() == xsd::ANY_URI {
+                return true;
+            }
+        }
+        true
+    }
 }
 
 impl Display for PType {
@@ -161,6 +182,22 @@ pub enum ConstantTerm {
     ConstantList(Vec<ConstantTerm>),
 }
 
+impl ConstantTerm {
+    pub fn has_blank_node(&self) -> bool {
+        match self {
+            ConstantTerm::Constant(c) => c.is_blank_node(),
+            ConstantTerm::ConstantList(l) => {
+                for c in l {
+                    if c.has_blank_node() {
+                        return true;
+                    }
+                }
+                false
+            }
+        }
+    }
+}
+
 impl Display for ConstantTerm {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -185,6 +222,12 @@ pub enum ConstantLiteral {
     BlankNode(BlankNode),
     Literal(StottrLiteral),
     None,
+}
+
+impl ConstantLiteral {
+    pub fn is_blank_node(&self) -> bool {
+        matches!(self, ConstantLiteral::BlankNode(_))
+    }
 }
 
 impl Display for ConstantLiteral {

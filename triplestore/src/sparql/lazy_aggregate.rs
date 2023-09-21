@@ -47,8 +47,7 @@ impl Triplestore {
                     column_context = None;
                     let all_proper_column_names: Vec<String> = output_solution_mappings
                         .columns
-                        .iter()
-                        .map(|x| x.clone())
+                        .iter().cloned()
                         .collect();
                     let columns_expr = Expr::Columns(all_proper_column_names);
                     if *distinct {

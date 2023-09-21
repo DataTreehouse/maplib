@@ -79,6 +79,6 @@ fn hack_format_timestamp_with_timezone(series: &Series, tz: &mut TimeZone) -> Se
 
         datetime_strings
     } else {
-        panic!("Unknown timezone{}", tz.to_string());
+        panic!("Unknown timezone{}", tz);
     }
 }

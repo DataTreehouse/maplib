@@ -34,7 +34,7 @@ impl Mapping {
             .map(|x| x.to_string())
             .collect();
         for c in &columns {
-            let dt = df.column(&c).unwrap().dtype().clone();
+            let dt = df.column(c).unwrap().dtype().clone();
             let has_null = df.column(c).unwrap().is_null().any();
             if c == &pk_col {
                 if let DataType::List(..) = dt {
@@ -47,7 +47,7 @@ impl Mapping {
                     );
                     df = df
                         .lazy()
-                        .with_column(col(&c).cast(DataType::Utf8))
+                        .with_column(col(c).cast(DataType::Utf8))
                         .collect()
                         .unwrap();
                 }
@@ -64,7 +64,7 @@ impl Mapping {
                     },
                     default_value: None,
                 })
-            } else if fk_cols.contains(&c) {
+            } else if fk_cols.contains(c) {
                 if let DataType::List(..) = dt {
                     todo!()
                 }
@@ -76,7 +76,7 @@ impl Mapping {
                     );
                     df = df
                         .lazy()
-                        .with_column(col(&c).cast(DataType::Utf8))
+                        .with_column(col(c).cast(DataType::Utf8))
                         .collect()
                         .unwrap();
                 }

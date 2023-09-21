@@ -34,10 +34,8 @@ impl Triplestore {
                         GroundTerm::NamedNode(nn) => {
                             if i == 0 {
                                 datatypes.insert(j, RDFNodeType::IRI);
-                            } else {
-                                if datatypes.get(&j).unwrap() != &RDFNodeType::IRI {
-                                    todo!("No support yet for values of same variables having different types")
-                                }
+                            } else if datatypes.get(&j).unwrap() != &RDFNodeType::IRI {
+                                todo!("No support yet for values of same variables having different types")
                             }
                             col_vecs
                                 .get_mut(&j)
@@ -71,9 +69,7 @@ impl Triplestore {
                         }
                     }
                     if i + 1 == bindings.len() {
-                        if !datatypes.contains_key(&j) {
-                            datatypes.insert(j, RDFNodeType::None);
-                        }
+                        datatypes.entry(j).or_insert(RDFNodeType::None);
                     }
                     col_vecs.get_mut(&j).unwrap().push(AnyValue::Null);
                 }

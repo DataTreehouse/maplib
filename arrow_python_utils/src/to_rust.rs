@@ -66,7 +66,7 @@ pub fn array_to_rust(obj: &PyAny) -> PyResult<ArrayRef> {
     unsafe {
         let field = ffi::import_field_from_c(schema.as_ref()).map_err(ToRustError::from)?;
         let array = ffi::import_array_from_c(*array, field.data_type).map_err(ToRustError::from)?;
-        Ok(array.into())
+        Ok(array)
     }
 }
 

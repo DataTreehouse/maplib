@@ -76,7 +76,7 @@ fn to_py_df(
     pyarrow: &PyModule,
     polars: &PyModule,
 ) -> PyResult<PyObject> {
-    let py_rb = to_py_rb(rb, names, py.clone(), pyarrow)?;
+    let py_rb = to_py_rb(rb, names, py, pyarrow)?;
     let py_rb_list = PyList::empty(py);
     py_rb_list.append(py_rb)?;
     let py_table = pyarrow

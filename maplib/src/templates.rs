@@ -115,9 +115,9 @@ impl TemplateDataset {
     pub fn from_folder<P: AsRef<Path>>(path: P) -> Result<TemplateDataset, TemplateError> {
         let mut docs = vec![];
         let files_result =
-            read_dir(path).map_err(|e| TemplateError::ReadTemplateDirectoryError(e))?;
+            read_dir(path).map_err(TemplateError::ReadTemplateDirectoryError)?;
         for f in files_result {
-            let f = f.map_err(|x| TemplateError::ResolveDirectoryEntryError(x))?;
+            let f = f.map_err(TemplateError::ResolveDirectoryEntryError)?;
             if let Some(e) = f.path().extension() {
                 if let Some(s) = e.to_str() {
                     let extension = s.to_lowercase();
@@ -128,21 +128,16 @@ impl TemplateDataset {
                 }
             }
         }
-        Ok(TemplateDataset::new(docs)?)
+        TemplateDataset::new(docs)
     }
 
     pub fn from_file<P: AsRef<Path>>(path: P) -> Result<TemplateDataset, TemplateError> {
         let doc = document_from_file(path)?;
-        Ok(TemplateDataset::new(vec![doc])?)
+        TemplateDataset::new(vec![doc])
     }
 
     pub fn get(&self, template: &str) -> Option<&Template> {
-        for t in &self.templates {
-            if t.signature.template_name.as_str() == template {
-                return Some(t);
-            }
-        }
-        None
+        self.templates.iter().find(|&t| t.signature.template_name.as_str() == template)
     }
 
     fn infer_types(&mut self) -> Result<(), TemplateError> {
@@ -155,7 +150,7 @@ impl TemplateDataset {
                 inner_changed = inner_changed
                     || infer_template_types(
                         element.first_mut().unwrap(),
-                        (&left).iter().chain((&right).iter()).collect(),
+                        left.iter().chain(right.iter()).collect(),
                     )?;
             }
             if !inner_changed {
@@ -242,23 +237,21 @@ fn lub_update(
     if my_parameter.ptype.is_none() {
         my_parameter.ptype = Some(right.clone());
         Ok(true)
-    } else {
-        if my_parameter.ptype.as_ref().unwrap() != right {
-            let ptype = lub(
-                template_name,
-                variable,
-                my_parameter.ptype.as_ref().unwrap(),
-                right,
-            )?;
-            if my_parameter.ptype.as_ref().unwrap() != &ptype {
-                my_parameter.ptype = Some(ptype);
-                Ok(true)
-            } else {
-                Ok(false)
-            }
+    } else if my_parameter.ptype.as_ref().unwrap() != right {
+        let ptype = lub(
+            template_name,
+            variable,
+            my_parameter.ptype.as_ref().unwrap(),
+            right,
+        )?;
+        if my_parameter.ptype.as_ref().unwrap() != &ptype {
+            my_parameter.ptype = Some(ptype);
+            Ok(true)
         } else {
             Ok(false)
         }
+    } else {
+        Ok(false)
     }
 }
 
@@ -271,39 +264,37 @@ fn lub(
 ) -> Result<PType, TemplateError> {
     if left == right {
         return Ok(left.clone());
-    } else {
-        if let PType::NEListType(left_inner) = left {
-            if let PType::ListType(right_inner) = right {
-                return Ok(PType::NEListType(Box::new(lub(
-                    template_name,
-                    variable,
-                    left_inner,
-                    right_inner,
-                )?)));
-            } else if let PType::NEListType(right_inner) = right {
-                return Ok(PType::NEListType(Box::new(lub(
-                    template_name,
-                    variable,
-                    left_inner,
-                    right_inner,
-                )?)));
-            }
-        } else if let PType::ListType(left_inner) = left {
-            if let PType::NEListType(right_inner) = right {
-                return Ok(PType::NEListType(Box::new(lub(
-                    template_name,
-                    variable,
-                    left_inner,
-                    right_inner,
-                )?)));
-            } else if let PType::ListType(right_inner) = right {
-                return Ok(PType::ListType(Box::new(lub(
-                    template_name,
-                    variable,
-                    left_inner,
-                    right_inner,
-                )?)));
-            }
+    } else if let PType::NEListType(left_inner) = left {
+        if let PType::ListType(right_inner) = right {
+            return Ok(PType::NEListType(Box::new(lub(
+                template_name,
+                variable,
+                left_inner,
+                right_inner,
+            )?)));
+        } else if let PType::NEListType(right_inner) = right {
+            return Ok(PType::NEListType(Box::new(lub(
+                template_name,
+                variable,
+                left_inner,
+                right_inner,
+            )?)));
+        }
+    } else if let PType::ListType(left_inner) = left {
+        if let PType::NEListType(right_inner) = right {
+            return Ok(PType::NEListType(Box::new(lub(
+                template_name,
+                variable,
+                left_inner,
+                right_inner,
+            )?)));
+        } else if let PType::ListType(right_inner) = right {
+            return Ok(PType::ListType(Box::new(lub(
+                template_name,
+                variable,
+                left_inner,
+                right_inner,
+            )?)));
         }
     }
     Err(TemplateError::IncompatibleTypes(

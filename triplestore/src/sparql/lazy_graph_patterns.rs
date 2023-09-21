@@ -56,7 +56,7 @@ impl Triplestore {
                 expression,
             } => self.lazy_left_join(left, right, expression, solution_mappings, context),
             GraphPattern::Filter { expr, inner } => {
-                self.lazy_filter(inner, expr, solution_mappings, &context)
+                self.lazy_filter(inner, expr, solution_mappings, context)
             }
             GraphPattern::Union { left, right } => {
                 self.lazy_union(left, right, solution_mappings, context)
