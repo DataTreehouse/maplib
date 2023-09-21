@@ -707,13 +707,14 @@ fn base(b: &str) -> IResult<&str, NamedNode> {
 }
 
 fn prefix_id(p: &str) -> IResult<&str, Prefix> {
-    let (p, (_, _, _, name, _, iri, _)) = tuple((
+    let (p, (_, _, _, name, _, iri,_ , _)) = tuple((
         multispace0,
         tag("@prefix"),
         multispace0,
         pname_ns,
         multispace0,
         iri_ref,
+        multispace0,
         tag("."),
     ))(p)?;
     Ok((p, Prefix { name, iri }))

@@ -1384,3 +1384,20 @@ t:Stops [ xsd:anyURI ?stop_id, ?stop_code, ?stop_name, ?stop_desc, ?stop_lat, ?s
     let _doc = whole_stottr_doc(s).expect("Ok");
     //No assert, enough that we are parsing it
 }
+
+#[test]
+fn test_handles_space_before_prefix_dot() {
+    let s = r#"
+    @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+
+    ex:Person[ ?firstName, ?lastName, ?email ] :: {
+      ottr:Triple(_:person, rdf:type, foaf:Person ),
+      ottr:Triple(_:person, foaf:firstName, ?firstName ),
+      ottr:Triple(_:person, foaf:lastName, ?lastName ),
+      ottr:Triple(_:person, foaf:mbox, ?email )
+    } .
+    "#;
+
+    let _doc = whole_stottr_doc(s).expect("Ok");
+    // No assert, we are just testing that this parses
+}
