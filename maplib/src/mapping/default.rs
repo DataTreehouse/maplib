@@ -34,7 +34,7 @@ impl Mapping {
             .map(|x| x.to_string())
             .collect();
         for c in &columns {
-            let dt = df.column(&c).unwrap().dtype().clone();
+            let dt = df.column(c).unwrap().dtype().clone();
             let has_null = df.column(c).unwrap().is_null().any();
             if c == &pk_col {
                 if let DataType::List(..) = dt {
@@ -47,7 +47,7 @@ impl Mapping {
                     );
                     df = df
                         .lazy()
-                        .with_column(col(&c).cast(DataType::Utf8))
+                        .with_column(col(c).cast(DataType::Utf8))
                         .collect()
                         .unwrap();
                 }
@@ -55,7 +55,7 @@ impl Mapping {
                 params.push(Parameter {
                     optional: has_null,
                     non_blank: false,
-                    ptype: Some(PType::BasicType(
+                    ptype: Some(PType::Basic(
                         xsd::ANY_URI.into_owned(),
                         "xsd:anyURI".to_string(),
                     )),
@@ -64,7 +64,7 @@ impl Mapping {
                     },
                     default_value: None,
                 })
-            } else if fk_cols.contains(&c) {
+            } else if fk_cols.contains(c) {
                 if let DataType::List(..) = dt {
                     todo!()
                 }
@@ -76,7 +76,7 @@ impl Mapping {
                     );
                     df = df
                         .lazy()
-                        .with_column(col(&c).cast(DataType::Utf8))
+                        .with_column(col(c).cast(DataType::Utf8))
                         .collect()
                         .unwrap();
                 }
@@ -84,7 +84,7 @@ impl Mapping {
                 params.push(Parameter {
                     optional: has_null,
                     non_blank: false,
-                    ptype: Some(PType::BasicType(
+                    ptype: Some(PType::Basic(
                         xsd::ANY_URI.into_owned(),
                         "xsd:anyURI".to_string(),
                     )),
@@ -129,7 +129,7 @@ impl Mapping {
                         Argument {
                             list_expand: false,
                             term: StottrTerm::ConstantTerm(ConstantTerm::Constant(
-                                ConstantLiteral::IRI(
+                                ConstantLiteral::Iri(
                                     NamedNode::new(format!("{}{}", &use_predicate_uri_prefix, c))
                                         .unwrap(),
                                 ),

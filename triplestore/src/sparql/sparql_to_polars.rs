@@ -30,10 +30,7 @@ pub(crate) fn sparql_literal_to_polars_literal_value(lit: &Literal) -> LiteralVa
     } else if datatype == xsd::UNSIGNED_LONG {
         let u = u64::from_str(value).expect("Integer parsing error");
         LiteralValue::UInt64(u)
-    } else if datatype == xsd::INTEGER {
-        let i = i64::from_str(value).expect("Integer parsing error");
-        LiteralValue::Int64(i)
-    } else if datatype == xsd::LONG {
+    } else if datatype == xsd::INTEGER || datatype == xsd::LONG {
         let i = i64::from_str(value).expect("Integer parsing error");
         LiteralValue::Int64(i)
     } else if datatype == xsd::INT {
@@ -61,20 +58,16 @@ pub(crate) fn sparql_literal_to_polars_literal_value(lit: &Literal) -> LiteralVa
             }
         }
     } else if datatype == xsd::DATE {
-        let ymd_string: Vec<&str> = value.split("-").collect();
+        let ymd_string: Vec<&str> = value.split('-').collect();
         if ymd_string.len() != 3 {
             todo!("Unsupported date format {}", value)
         }
-        let y = i32::from_str(ymd_string.get(0).unwrap()).expect(&format!(
-            "Year parsing error {}",
-            ymd_string.get(0).unwrap()
-        ));
-        let m = u32::from_str(ymd_string.get(1).unwrap()).expect(&format!(
-            "Month parsing error {}",
-            ymd_string.get(1).unwrap()
-        ));
+        let y = i32::from_str(ymd_string.first().unwrap())
+            .unwrap_or_else(|_| panic!("Year parsing error {}", ymd_string.first().unwrap()));
+        let m = u32::from_str(ymd_string.get(1).unwrap())
+            .unwrap_or_else(|_| panic!("Month parsing error {}", ymd_string.get(1).unwrap()));
         let d = u32::from_str(ymd_string.get(2).unwrap())
-            .expect(&format!("Day parsing error {}", ymd_string.get(1).unwrap()));
+            .unwrap_or_else(|_| panic!("Day parsing error {}", ymd_string.get(1).unwrap()));
         let date = NaiveDate::from_ymd_opt(y, m, d).unwrap();
         let dt = date.and_hms_opt(0, 0, 0).unwrap();
 
@@ -209,7 +202,7 @@ fn polars_literal_values_to_series(literal_values: Vec<LiteralValue>, name: &str
             LiteralValue::DateTime(_, t, None) =>
             //TODO: Assert time unit lik??
             {
-                let s = Series::new(
+                Series::new(
                     name,
                     literal_values
                         .into_iter()
@@ -222,8 +215,7 @@ fn polars_literal_values_to_series(literal_values: Vec<LiteralValue>, name: &str
                             }
                         })
                         .collect::<Vec<i64>>(),
-                );
-                s
+                )
             }
             LiteralValue::Duration(_, _) => {
                 todo!()

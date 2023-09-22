@@ -33,14 +33,14 @@ pub enum QueryResult {
 
 impl Triplestore {
     pub fn query(&mut self, query: &str) -> Result<QueryResult, SparqlError> {
-        let query = Query::parse(query, None).map_err(|x| SparqlError::ParseError(x))?;
+        let query = Query::parse(query, None).map_err(SparqlError::ParseError)?;
         self.query_parsed(&query)
     }
 
     fn query_parsed(&mut self, query: &Query) -> Result<QueryResult, SparqlError> {
         if !self.deduplicated {
             self.deduplicate()
-                .map_err(|x| SparqlError::DeduplicationError(x))?;
+                .map_err(SparqlError::DeduplicationError)?;
         }
         enable_string_cache(true);
         let context = Context::new();
@@ -54,7 +54,7 @@ impl Triplestore {
                     mappings,
                     columns: _,
                     rdf_node_types: _,
-                } = self.lazy_graph_pattern(&pattern, None, &context)?;
+                } = self.lazy_graph_pattern(pattern, None, &context)?;
                 let mut df = mappings.collect().unwrap();
                 df = cats_to_utf8s(df);
 
@@ -70,7 +70,7 @@ impl Triplestore {
                     mappings,
                     columns: _,
                     rdf_node_types,
-                } = self.lazy_graph_pattern(&pattern, None, &context)?;
+                } = self.lazy_graph_pattern(pattern, None, &context)?;
                 let mut df = mappings.collect().unwrap();
                 df = cats_to_utf8s(df);
                 let mut dfs = vec![];
@@ -85,7 +85,7 @@ impl Triplestore {
 
     pub fn insert(&mut self, query: &str) -> Result<(), SparqlError> {
         let call_uuid = Uuid::new_v4().to_string();
-        let query = Query::parse(query, None).map_err(|x| SparqlError::ParseError(x))?;
+        let query = Query::parse(query, None).map_err(SparqlError::ParseError)?;
         if let Query::Construct { .. } = &query {
             let res = self.query_parsed(&query)?;
             match res {
@@ -104,7 +104,7 @@ impl Triplestore {
                         });
                     }
                     self.add_triples_vec(all_triples_to_add, &call_uuid)
-                        .map_err(|x| SparqlError::StoreTriplesError(x))?;
+                        .map_err(SparqlError::StoreTriplesError)?;
                     Ok(())
                 }
             }
@@ -155,7 +155,7 @@ fn triple_has_variable(t: &TriplePattern) -> bool {
     if let TermPattern::Variable(_) = t.object {
         return true;
     }
-    return false;
+    false
 }
 
 fn term_pattern_series(
@@ -206,7 +206,7 @@ fn named_node_pattern_series(
 }
 
 fn named_node_series(nn: &NamedNode, name: &str, len: usize) -> (Series, RDFNodeType) {
-    let nn_vec = vec![nn.as_str()].repeat(len);
+    let nn_vec = [nn.as_str()].repeat(len);
     let mut ser = Series::from_iter(nn_vec);
     ser.rename(name);
     (ser, RDFNodeType::IRI)
@@ -234,5 +234,5 @@ fn cats_to_utf8s(df: DataFrame) -> DataFrame {
     for c in cats {
         lf = lf.with_column(col(&c).cast(DataType::Utf8))
     }
-    return lf.collect().unwrap();
+    lf.collect().unwrap()
 }

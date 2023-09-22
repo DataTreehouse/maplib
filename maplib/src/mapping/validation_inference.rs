@@ -26,15 +26,15 @@ impl Mapping {
             if df_columns.contains(variable_name.as_str()) {
                 df_columns.remove(variable_name.as_str());
                 if !parameter.optional {
-                    validate_non_optional_parameter(&df, variable_name)?;
+                    validate_non_optional_parameter(df, variable_name)?;
                 }
                 if parameter.non_blank {
                     //TODO handle blanks;
-                    validate_non_blank_parameter(&df, variable_name)?;
+                    validate_non_blank_parameter(df, variable_name)?;
                 }
                 let column_data_type = validate_infer_column_data_type(
                     df,
-                    &parameter,
+                    parameter,
                     variable_name,
                     &options.language_tags,
                 )?;
@@ -67,16 +67,11 @@ fn validate_infer_column_data_type(
         validate_datatype(series.name(), dtype, ptype)?;
         ptype.clone()
     } else {
-        let target_ptype = polars_datatype_to_xsd_datatype(dtype);
-        target_ptype
+        polars_datatype_to_xsd_datatype(dtype)
     };
     let rdf_node_type = infer_rdf_node_type(&ptype);
     let language_tag = if let Some(map) = language_tag_map {
-        if let Some(tag) = map.get(column_name) {
-            Some(tag.clone())
-        } else {
-            None
-        }
+        map.get(column_name).cloned()
     } else {
         None
     };
@@ -88,16 +83,16 @@ fn validate_infer_column_data_type(
 
 fn infer_rdf_node_type(ptype: &PType) -> RDFNodeType {
     match ptype {
-        PType::BasicType(b, _) => {
+        PType::Basic(b, _) => {
             if b.as_str() == xsd::ANY_URI.as_str() {
                 RDFNodeType::IRI
             } else {
                 RDFNodeType::Literal(b.clone())
             }
         }
-        PType::LUBType(l) => infer_rdf_node_type(l),
-        PType::ListType(l) => infer_rdf_node_type(l),
-        PType::NEListType(l) => infer_rdf_node_type(l),
+        PType::Lub(l) => infer_rdf_node_type(l),
+        PType::List(l) => infer_rdf_node_type(l),
+        PType::NEList(l) => infer_rdf_node_type(l),
     }
 }
 
@@ -156,16 +151,16 @@ fn validate_datatype(
         }
     };
     match target_ptype {
-        PType::BasicType(bt, _) => {
+        PType::Basic(bt, _) => {
             if let DataType::List(_) = datatype {
                 mismatch_error()
             } else {
                 Ok(validate_basic_datatype(column_name, datatype, bt)?)
             }
         }
-        PType::LUBType(inner) => validate_if_series_list(inner),
-        PType::ListType(inner) => validate_if_series_list(inner),
-        PType::NEListType(inner) => validate_if_series_list(inner),
+        PType::Lub(inner) => validate_if_series_list(inner),
+        PType::List(inner) => validate_if_series_list(inner),
+        PType::NEList(inner) => validate_if_series_list(inner),
     }
 }
 
@@ -201,11 +196,11 @@ pub fn polars_datatype_to_xsd_datatype(datatype: &DataType) -> PType {
         DataType::Duration(_) => xsd::DURATION,
         DataType::Categorical(_) => xsd::STRING,
         DataType::List(inner) => {
-            return PType::ListType(Box::new(polars_datatype_to_xsd_datatype(inner)))
+            return PType::List(Box::new(polars_datatype_to_xsd_datatype(inner)))
         }
         _ => {
             panic!("Unsupported datatype:{}", datatype)
         }
     };
-    PType::BasicType(xsd_nn_ref.into_owned(), "".to_string())
+    PType::Basic(xsd_nn_ref.into_owned(), "".to_string())
 }

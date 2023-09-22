@@ -269,10 +269,10 @@ fn parameter(p: &str) -> IResult<&str, UnresolvedParameter> {
     let mut optional = false;
     let mut non_blank = false;
     if let Some(mode) = opt_mode {
-        if mode.contains(&"!") {
+        if mode.contains('!') {
             non_blank = true;
         }
-        if mode.contains(&"?") {
+        if mode.contains('?') {
             optional = true;
         }
     }
@@ -296,24 +296,24 @@ fn ptype(p: &str) -> IResult<&str, UnresolvedPType> {
 
 fn list_type(l: &str) -> IResult<&str, UnresolvedPType> {
     let (l, (_, t, _)) = tuple((tag("List<"), ptype, tag(">")))(l)?;
-    Ok((l, UnresolvedPType::ListType(Box::new(t))))
+    Ok((l, UnresolvedPType::List(Box::new(t))))
 }
 
 fn ne_list_type(l: &str) -> IResult<&str, UnresolvedPType> {
     let (l, (_, t, _)) = tuple((tag("NEList<"), ptype, tag(">")))(l)?;
-    Ok((l, UnresolvedPType::NEListType(Box::new(t))))
+    Ok((l, UnresolvedPType::NEList(Box::new(t))))
 }
 
 fn lub_type(l: &str) -> IResult<&str, UnresolvedPType> {
     let (l, (_, t, _)) = tuple((tag("LUB<"), basic_type, tag(">")))(l)?;
-    Ok((l, UnresolvedPType::LUBType(Box::new(t))))
+    Ok((l, UnresolvedPType::Lub(Box::new(t))))
 }
 
 fn basic_type(b: &str) -> IResult<&str, UnresolvedPType> {
     let (b, t) = prefixed_name(b)?;
     Ok((
         b,
-        UnresolvedPType::BasicType(ResolvesToNamedNode::PrefixedName(t)),
+        UnresolvedPType::Basic(ResolvesToNamedNode::PrefixedName(t)),
     ))
 }
 
@@ -374,7 +374,7 @@ fn literal_as_constant_literal(l: &str) -> IResult<&str, UnresolvedConstantLiter
 
 fn iri_as_constant_literal(i: &str) -> IResult<&str, UnresolvedConstantLiteral> {
     let (i, iri) = iri(i)?;
-    Ok((i, UnresolvedConstantLiteral::IRI(iri)))
+    Ok((i, UnresolvedConstantLiteral::Iri(iri)))
 }
 
 fn blank_node_as_constant_literal(b: &str) -> IResult<&str, UnresolvedConstantLiteral> {
@@ -401,7 +401,7 @@ fn blank_node_label(b: &str) -> IResult<&str, String> {
     ))(b)?;
     let mut out = startchar.to_string();
     if let Some(period) = opt_period {
-        out += &period.to_string();
+        out += period;
     }
     let stringvec: Vec<String> = period_sep_list
         .iter()
@@ -707,7 +707,7 @@ fn base(b: &str) -> IResult<&str, NamedNode> {
 }
 
 fn prefix_id(p: &str) -> IResult<&str, Prefix> {
-    let (p, (_, _, _, name, _, iri,_ , _)) = tuple((
+    let (p, (_, _, _, name, _, iri, _, _)) = tuple((
         multispace0,
         tag("@prefix"),
         multispace0,
@@ -862,7 +862,7 @@ fn pn_local(p: &str) -> IResult<&str, String> {
     ))(p)?;
     let mut out = s1.to_string();
     if let Some(period) = opt_period {
-        out += &period;
+        out += period;
     }
     let liststrings: Vec<String> = s2.into_iter().map(|x| x.join("")).collect();
     out += &liststrings.join(".");
@@ -890,7 +890,7 @@ fn one_digit(d: &str) -> IResult<&str, char> {
 }
 
 fn pn_local_esc(s: &str) -> IResult<&str, String> {
-    let esc = r#"\(_~.-!$&\()*+,;=/?#@%"#;
+    let esc = r"\(_~.-!$&\()*+,;=/?#@%";
     let (s, (_, c)) = tuple((tag("\\"), one_of(esc)))(s)?;
     Ok((s, c.to_string()))
 }
@@ -960,7 +960,7 @@ fn test_instance() {
             UnresolvedArgument {
                 list_expand: false,
                 term: UnresolvedStottrTerm::ConstantTerm(UnresolvedConstantTerm::Constant(
-                    UnresolvedConstantLiteral::IRI(ResolvesToNamedNode::PrefixedName(
+                    UnresolvedConstantLiteral::Iri(ResolvesToNamedNode::PrefixedName(
                         PrefixedName {
                             prefix: "foaf".to_string(),
                             name: "Person".to_string(),

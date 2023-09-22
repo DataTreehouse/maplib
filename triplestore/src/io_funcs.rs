@@ -6,13 +6,12 @@ use std::path::Path;
 pub(crate) fn delete_tmp_parquets_in_caching_folder(
     caching_folder: &Path,
 ) -> Result<(), TriplestoreError> {
-    let contents =
-        read_dir(caching_folder).map_err(|x| TriplestoreError::ReadCachingDirectoryError(x))?;
+    let contents = read_dir(caching_folder).map_err(TriplestoreError::ReadCachingDirectoryError)?;
     for f in contents {
-        let entry = f.map_err(|x| TriplestoreError::ReadCachingDirectoryEntryError(x))?;
+        let entry = f.map_err(TriplestoreError::ReadCachingDirectoryEntryError)?;
         let fname = entry.file_name().to_str().unwrap().to_string();
         if fname.starts_with("tmp_") && fname.ends_with(".parquet") {
-            remove_file(entry.path()).map_err(|x| TriplestoreError::RemoveParquetFileError(x))?;
+            remove_file(entry.path()).map_err(TriplestoreError::RemoveParquetFileError)?;
         }
     }
     Ok(())
@@ -20,7 +19,7 @@ pub(crate) fn delete_tmp_parquets_in_caching_folder(
 
 pub(crate) fn create_folder_if_not_exists(path: &Path) -> Result<(), TriplestoreError> {
     if !path.exists() {
-        create_dir(path).map_err(|x| TriplestoreError::FolderCreateIOError(x))?;
+        create_dir(path).map_err(TriplestoreError::FolderCreateIOError)?;
     }
     Ok(())
 }

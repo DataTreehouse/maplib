@@ -46,7 +46,7 @@ fn test_maplib_easy_case(testdata_path: PathBuf) {
     let series = [v1, v2];
     let df = DataFrame::from_iter(series);
 
-    let mut mapping = Mapping::from_str(&t_str, None).unwrap();
+    let mut mapping = Mapping::from_str(t_str, None).unwrap();
     let _report = mapping
         .expand(
             "http://example.net/ns#ExampleTemplate",
@@ -88,7 +88,7 @@ fn test_all_iri_case() {
     let series = [v1];
     let df = DataFrame::from_iter(series);
 
-    let mut mapping = Mapping::from_str(&t_str, None).unwrap();
+    let mut mapping = Mapping::from_str(t_str, None).unwrap();
     let _report = mapping
         .expand(
             "http://example.net/ns#ExampleTemplate",
@@ -98,7 +98,7 @@ fn test_all_iri_case() {
         .expect("");
     let triples = mapping.export_oxrdf_triples().unwrap();
     //println!("{:?}", triples);
-    let actual_triples_set: HashSet<Triple> = HashSet::from_iter(triples.into_iter());
+    let actual_triples_set: HashSet<Triple> = HashSet::from_iter(triples);
     let expected_triples_set = HashSet::from([
         Triple {
             subject: Subject::NamedNode(NamedNode::new_unchecked("http://example.net/ns#anObject")),
@@ -134,7 +134,7 @@ fn test_string_language_tag_cases() {
     let series = [my_string];
     let df = DataFrame::from_iter(series);
 
-    let mut mapping = Mapping::from_str(&t_str, None).unwrap();
+    let mut mapping = Mapping::from_str(t_str, None).unwrap();
     let _report = mapping
         .expand(
             "http://example.net/ns#ExampleTemplate",
@@ -150,7 +150,7 @@ fn test_string_language_tag_cases() {
         .expect("");
     let triples = mapping.export_oxrdf_triples().unwrap();
     //println!("{:?}", triples);
-    let actual_triples_set: HashSet<Triple> = HashSet::from_iter(triples.into_iter());
+    let actual_triples_set: HashSet<Triple> = HashSet::from_iter(triples);
     let expected_triples_set = HashSet::from([
         Triple {
             subject: Subject::NamedNode(NamedNode::new_unchecked("http://example.net/ns#anObject")),
@@ -197,7 +197,7 @@ fn test_const_list_case() {
     let series = [v1];
     let df = DataFrame::from_iter(series);
 
-    let mut mapping = Mapping::from_str(&t_str, None).unwrap();
+    let mut mapping = Mapping::from_str(t_str, None).unwrap();
     let _report = mapping
         .expand(
             "http://example.net/ns#ExampleTemplate",
@@ -207,7 +207,7 @@ fn test_const_list_case() {
         .expect("");
     let triples = mapping.export_oxrdf_triples().unwrap();
     //println!("{:?}", triples);
-    let actual_triples_set: HashSet<Triple> = HashSet::from_iter(triples.into_iter());
+    let actual_triples_set: HashSet<Triple> = HashSet::from_iter(triples);
     let expected_triples_set = HashSet::from([
         Triple {
             subject: Subject::NamedNode(NamedNode::new_unchecked("http://example.net/ns#OneThing")),
@@ -262,7 +262,7 @@ ex:Nested [?myVar] :: {
     ottr:Triple(ex:anObject, ex:hasNumber, ?myVar)
 } .
 "#;
-    let mut mapping = Mapping::from_str(&stottr, None).unwrap();
+    let mut mapping = Mapping::from_str(stottr, None).unwrap();
     let mut v1 = Series::from_iter(&[1, 2i32]);
     v1.rename("myVar1");
     let mut v2 = Series::from_iter(&[3, 4i32]);
@@ -278,7 +278,7 @@ ex:Nested [?myVar] :: {
         .unwrap();
     let triples = mapping.export_oxrdf_triples().unwrap();
     //println!("{:?}", triples);
-    let actual_triples_set: HashSet<Triple> = HashSet::from_iter(triples.into_iter());
+    let actual_triples_set: HashSet<Triple> = HashSet::from_iter(triples);
     let expected_triples_set = HashSet::from([
         Triple {
             subject: Subject::NamedNode(NamedNode::new_unchecked("http://example.net/ns#anObject")),
@@ -350,7 +350,7 @@ ex:ExampleTemplate [
     ottr:Triple(ex:yetAnotherObject, ex:hasDateTime, ?Datetime_ms)
   } .
 "#;
-    let mut mapping = Mapping::from_str(&stottr, None).unwrap();
+    let mut mapping = Mapping::from_str(stottr, None).unwrap();
     let mut boolean = Series::from_iter(&[true, false]);
     boolean.rename("Boolean");
     let mut uint32 = Series::from_iter(&[5u32, 6u32]);
@@ -612,7 +612,7 @@ ex:AnotherExampleTemplate [?object, ?predicate, ?myList] :: {
     cross | ottr:Triple(?object, ?predicate, ++?myList)
   } .
 "#;
-    let mut mapping = Mapping::from_str(&stottr, None).unwrap();
+    let mut mapping = Mapping::from_str(stottr, None).unwrap();
     let mut object = Series::from_iter([
         "http://example.net/ns#obj1",
         "http://example.net/ns#obj1",
@@ -647,7 +647,7 @@ ex:AnotherExampleTemplate [?object, ?predicate, ?myList] :: {
         .unwrap();
     let triples = mapping.export_oxrdf_triples().unwrap();
     //println!("{:?}", triples);
-    let actual_triples_set: HashSet<Triple> = HashSet::from_iter(triples.into_iter());
+    let actual_triples_set: HashSet<Triple> = HashSet::from_iter(triples);
     let expected_triples_set = HashSet::from([
         Triple {
             subject: Subject::NamedNode(NamedNode::new_unchecked("http://example.net/ns#obj1")),
@@ -698,7 +698,7 @@ ex:AnotherExampleTemplate [?subject, ?myList1, ?myList2] :: {
     ottr:Triple(?subject, ex:hasOtherNumber, ?myVar2)
 } .
 "#;
-    let mut mapping = Mapping::from_str(&stottr, None).unwrap();
+    let mut mapping = Mapping::from_str(stottr, None).unwrap();
     let mut subject = Series::from_iter([
         "http://example.net/ns#obj1",
         "http://example.net/ns#obj1",
@@ -730,7 +730,7 @@ ex:AnotherExampleTemplate [?subject, ?myList1, ?myList2] :: {
         .unwrap();
     let triples = mapping.export_oxrdf_triples().unwrap();
     //println!("{:?}", triples);
-    let actual_triples_set: HashSet<Triple> = HashSet::from_iter(triples.into_iter());
+    let actual_triples_set: HashSet<Triple> = HashSet::from_iter(triples);
     let expected_triples_set = HashSet::from([
         Triple {
             subject: Subject::NamedNode(NamedNode::new_unchecked("http://example.net/ns#obj1")),
@@ -838,7 +838,7 @@ fn test_default() {
         .unwrap();
     let triples = mapping.export_oxrdf_triples().unwrap();
     //println!("{:?}", triples);
-    let actual_triples_set: HashSet<Triple> = HashSet::from_iter(triples.into_iter());
+    let actual_triples_set: HashSet<Triple> = HashSet::from_iter(triples);
     let expected_triples_set = HashSet::from([
         Triple {
             subject: Subject::NamedNode(NamedNode::new_unchecked("http://example.net/ns#obj1")),
@@ -932,7 +932,7 @@ fn test_default_list() {
         .unwrap();
     let triples = mapping.export_oxrdf_triples().unwrap();
     //println!("{:?}", triples);
-    let actual_triples_set: HashSet<Triple> = HashSet::from_iter(triples.into_iter());
+    let actual_triples_set: HashSet<Triple> = HashSet::from_iter(triples);
     let expected_triples_set = HashSet::from([
         Triple {
             subject: Subject::NamedNode(NamedNode::new_unchecked("http://example.net/ns#obj1")),

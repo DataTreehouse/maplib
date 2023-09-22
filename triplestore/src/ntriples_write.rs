@@ -80,7 +80,7 @@ impl Triplestore {
                 } else if let Some(paths) = &tt.df_paths {
                     for p in paths {
                         let df = read_parquet(p)
-                            .map_err(|x| TriplestoreError::ParquetIOError(x))?
+                            .map_err(TriplestoreError::ParquetIOError)?
                             .collect()
                             .unwrap();
                         write_ntriples_for_df(
@@ -104,7 +104,7 @@ impl Triplestore {
 
 fn write_ntriples_for_df<W: Write + ?Sized>(
     df: &DataFrame,
-    verb: &String,
+    verb: &str,
     dt: &Option<NamedNode>,
     writer: &mut W,
     chunk_size: usize,
@@ -204,7 +204,7 @@ fn write_ntriples_for_df<W: Write + ?Sized>(
         for mut buf in result_buf.drain(..) {
             let _ = writer
                 .write(&buf)
-                .map_err(|x| TriplestoreError::WriteNTriplesError(x));
+                .map_err(TriplestoreError::WriteNTriplesError);
             buf.clear();
             write_buffer_pool.set(buf);
         }

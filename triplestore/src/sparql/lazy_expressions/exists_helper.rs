@@ -70,7 +70,7 @@ pub fn rewrite_exists_graph_pattern(
         } => GraphPattern::Slice {
             inner: Box::new(rewrite_exists_graph_pattern(inner, helper_column_name)),
             start: *start,
-            length: length.clone(),
+            length: *length,
         },
         GraphPattern::Group {
             inner,

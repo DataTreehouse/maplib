@@ -38,7 +38,7 @@ impl RDFNodeType {
     }
 
     pub fn find_triple_type(&self) -> TripleType {
-        let triple_type = if let RDFNodeType::IRI = self {
+        if let RDFNodeType::IRI = self {
             TripleType::ObjectProperty
         } else if let RDFNodeType::Literal(lit) = self {
             if lit.as_ref() == xsd::STRING {
@@ -48,8 +48,7 @@ impl RDFNodeType {
             }
         } else {
             todo!("Triple type {:?} not supported", self)
-        };
-        triple_type
+        }
     }
 
     pub fn polars_data_type(&self) -> DataType {

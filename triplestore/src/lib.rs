@@ -62,7 +62,7 @@ impl TripleTable {
             Ok(dfs.get(idx).unwrap())
         } else if let Some(paths) = &self.df_paths {
             let tmp_df = read_parquet(paths.get(idx).unwrap())
-                .map_err(|x| TriplestoreError::ParquetIOError(x))?
+                .map_err(TriplestoreError::ParquetIOError)?
                 .collect()
                 .unwrap();
             self.tmp_df = Some(tmp_df);
@@ -81,10 +81,10 @@ impl TripleTable {
             Ok(vec![concat_df(dfs).unwrap().lazy()])
         } else if let Some(paths) = &self.df_paths {
             let lf_results: Vec<Result<LazyFrame, ParquetIOError>> =
-                paths.par_iter().map(|x| read_parquet(x)).collect();
+                paths.par_iter().map(read_parquet).collect();
             let mut lfs = vec![];
             for lfr in lf_results {
-                lfs.push(lfr.map_err(|x| TriplestoreError::ParquetIOError(x))?);
+                lfs.push(lfr.map_err(TriplestoreError::ParquetIOError)?);
             }
             Ok(lfs)
         } else {
@@ -124,7 +124,7 @@ impl Triplestore {
     pub fn deduplicate(&mut self) -> Result<(), TriplestoreError> {
         let now = Instant::now();
         for (predicate, map) in &mut self.df_map {
-            for (_, v) in map {
+            for v in map.values_mut() {
                 if !v.unique {
                     if self.caching_folder.is_some() {
                         let lf_results: Vec<Result<LazyFrame, ParquetIOError>> = v
@@ -132,11 +132,11 @@ impl Triplestore {
                             .as_ref()
                             .unwrap()
                             .par_iter()
-                            .map(|x| read_parquet(x))
+                            .map(read_parquet)
                             .collect();
                         let mut lfs = vec![];
                         for lf_res in lf_results {
-                            lfs.push(lf_res.map_err(|x| TriplestoreError::ParquetIOError(x))?);
+                            lfs.push(lf_res.map_err(TriplestoreError::ParquetIOError)?);
                         }
                         let unique_df = concat(lfs, UnionArgs::default())
                             .unwrap()
@@ -152,14 +152,14 @@ impl Triplestore {
                             .map(|x| remove_file(Path::new(x)))
                             .collect();
                         for r in removed {
-                            r.map_err(|x| TriplestoreError::RemoveParquetFileError(x))?
+                            r.map_err(TriplestoreError::RemoveParquetFileError)?
                         }
                         let paths = split_write_tmp_df(
                             self.caching_folder.as_ref().unwrap(),
                             unique_df,
                             predicate,
                         )
-                        .map_err(|x| TriplestoreError::ParquetIOError(x))?;
+                        .map_err(TriplestoreError::ParquetIOError)?;
                         v.df_paths = Some(paths);
                         v.unique = true;
                     } else {
@@ -198,14 +198,14 @@ impl Triplestore {
                     static_verb_column,
                     has_unique_subset,
                 } = t;
-                let prepared_triples = prepare_triples(
+
+                prepare_triples(
                     df,
                     &object_type,
                     &language_tag,
                     static_verb_column,
                     has_unique_subset,
-                );
-                prepared_triples
+                )
             })
             .collect();
         let dfs_to_add = flatten(df_vecs_to_add);
@@ -218,7 +218,7 @@ impl Triplestore {
         triples_df: Vec<TripleDF>,
         call_uuid: &String,
     ) -> Result<(), TriplestoreError> {
-        if let Some(_) = &self.caching_folder {
+        if self.caching_folder.is_some() {
             self.add_triples_df_with_caching_folder(triples_df, call_uuid)?;
         } else {
             self.add_triples_df_without_folder(triples_df, call_uuid);
@@ -250,14 +250,14 @@ impl Triplestore {
                 let file_path = file_path_buf.as_path();
                 (
                     file_path.to_str().unwrap().to_string(),
-                    write_parquet(&mut df, &file_path),
+                    write_parquet(&mut df, file_path),
                     predicate,
                     object_type,
                 )
             })
             .collect();
         for (file_path, res, predicate, object_type) in file_paths {
-            res.map_err(|x| TriplestoreError::ParquetIOError(x))?;
+            res.map_err(TriplestoreError::ParquetIOError)?;
             //Safe to assume everything is unique
             if let Some(m) = self.df_map.get_mut(&predicate) {
                 if let Some(v) = m.get_mut(&object_type) {

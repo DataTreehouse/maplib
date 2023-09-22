@@ -26,7 +26,7 @@ impl Triplestore {
             self.lazy_expression(expression, output_solution_mappings, &expression_context)?;
         output_solution_mappings.mappings = output_solution_mappings
             .mappings
-            .rename([expression_context.as_str()], &[variable.as_str()]);
+            .rename([expression_context.as_str()], [variable.as_str()]);
         let existing_rdf_node_type = output_solution_mappings
             .rdf_node_types
             .remove(expression_context.as_str())

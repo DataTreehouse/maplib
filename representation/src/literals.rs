@@ -20,10 +20,7 @@ pub fn sparql_literal_to_any_value(
         } else if datatype == xsd::UNSIGNED_LONG {
             let u = u64::from_str(value).expect("Integer parsing error");
             AnyValue::from(u)
-        } else if datatype == xsd::INTEGER {
-            let i = i64::from_str(value).expect("Integer parsing error");
-            AnyValue::from(i)
-        } else if datatype == xsd::LONG {
+        } else if datatype == xsd::INTEGER || datatype == xsd::LONG {
             let i = i64::from_str(value).expect("Integer parsing error");
             AnyValue::from(i)
         } else if datatype == xsd::INT {
@@ -41,12 +38,16 @@ pub fn sparql_literal_to_any_value(
         } else if datatype == xsd::DATE_TIME {
             let dt_without_tz = value.parse::<NaiveDateTime>();
             if let Ok(dt) = dt_without_tz {
-                AnyValue::Datetime(dt.timestamp_nanos(), TimeUnit::Nanoseconds, &None)
+                AnyValue::Datetime(
+                    dt.timestamp_nanos_opt().unwrap(),
+                    TimeUnit::Nanoseconds,
+                    &None,
+                )
             } else {
                 let dt_without_tz = value.parse::<DateTime<Utc>>();
                 if let Ok(dt) = dt_without_tz {
                     AnyValue::Datetime(
-                        dt.naive_utc().timestamp_nanos(),
+                        dt.naive_utc().timestamp_nanos_opt().unwrap(),
                         TimeUnit::Nanoseconds,
                         &None,
                     )
@@ -64,5 +65,5 @@ pub fn sparql_literal_to_any_value(
     } else {
         (AnyValue::Utf8Owned(value.into()), xsd::STRING.into_owned())
     };
-    return (anyv.into_static().unwrap(), dt);
+    (anyv.into_static().unwrap(), dt)
 }

@@ -32,7 +32,7 @@ impl Triplestore {
                 self.lazy_expression(expr, right_solution_mappings, &expression_context)?;
             right_solution_mappings.mappings = right_solution_mappings
                 .mappings
-                .filter(col(&expression_context.as_str()))
+                .filter(col(expression_context.as_str()))
                 .drop_columns([&expression_context.as_str()]);
         }
         let SolutionMappings {

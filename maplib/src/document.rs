@@ -6,11 +6,11 @@ use std::fs::read_to_string;
 use std::path::Path;
 
 pub fn document_from_str(s: &str) -> Result<StottrDocument, TemplateError> {
-    let unresolved = whole_stottr_doc(s).map_err(|x| TemplateError::ParsingError(x))?;
-    resolve_document(unresolved).map_err(|x| TemplateError::ResolutionError(x))
+    let unresolved = whole_stottr_doc(s).map_err(TemplateError::ParsingError)?;
+    resolve_document(unresolved).map_err(TemplateError::ResolutionError)
 }
 
 pub fn document_from_file<P: AsRef<Path>>(p: P) -> Result<StottrDocument, TemplateError> {
-    let s = read_to_string(p).map_err(|x| TemplateError::ReadTemplateFileError(x))?;
+    let s = read_to_string(p).map_err(TemplateError::ReadTemplateFileError)?;
     document_from_str(&s)
 }

@@ -11,11 +11,11 @@ use polars::prelude::{col, concat, lit, Expr};
 use polars::prelude::{IntoLazy, UnionArgs};
 use polars_core::datatypes::{AnyValue, DataType};
 use polars_core::frame::DataFrame;
-use polars_core::prelude::{JoinType, NamedFrom};
+use polars_core::prelude::JoinType;
 use polars_core::series::Series;
 use representation::RDFNodeType;
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
-use std::collections::{HashMap};
+use std::collections::HashMap;
 
 impl Triplestore {
     pub fn lazy_triple_pattern(
@@ -130,7 +130,7 @@ impl Triplestore {
                     }
                 }
             } else {
-                if overlap.len() > 0 {
+                if !overlap.is_empty() {
                     //TODO: Introduce data type sensitivity here.
                     let join_on: Vec<Expr> = overlap.iter().map(|x| col(x)).collect();
                     let mut strcol = vec![];
@@ -155,7 +155,7 @@ impl Triplestore {
                     mappings = mappings.join(df.lazy(), [], [], JoinType::Cross.into());
                 }
 
-                columns.extend(colnames.into_iter());
+                columns.extend(colnames);
                 rdf_node_types.extend(dts);
             }
             solution_mappings = Some(SolutionMappings {
@@ -209,7 +209,7 @@ impl Triplestore {
             let mut out_datatypes = HashMap::new();
             let mut lf = concat(
                 tt.get_lazy_frames()
-                    .map_err(|x| SparqlError::TripleTableReadError(x))?,
+                    .map_err(SparqlError::TripleTableReadError)?,
                 UnionArgs::default(),
             )
             .unwrap()
@@ -295,7 +295,7 @@ impl Triplestore {
                 lfs.push(df.lazy());
             }
         }
-        Ok(if lfs.len() > 0 {
+        Ok(if !lfs.is_empty() {
             (
                 concat(lfs, UnionArgs::default())
                     .unwrap()

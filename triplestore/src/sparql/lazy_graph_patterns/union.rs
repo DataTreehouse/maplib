@@ -22,7 +22,7 @@ impl Triplestore {
             mappings: left_mappings,
             columns: mut left_columns,
             rdf_node_types: mut left_datatypes,
-        } = self.lazy_graph_pattern(&left, solution_mappings.clone(), &left_context)?;
+        } = self.lazy_graph_pattern(left, solution_mappings.clone(), &left_context)?;
 
         let SolutionMappings {
             mappings: right_mappings,

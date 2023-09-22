@@ -38,5 +38,5 @@ pub fn is_string_col(rdf_node_type: &RDFNodeType) -> bool {
             panic!("No support for datatype {:?}", rdf_node_type)
         }
     }
-    return false;
+    false
 }

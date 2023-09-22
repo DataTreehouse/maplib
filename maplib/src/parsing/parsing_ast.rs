@@ -38,10 +38,10 @@ pub struct UnresolvedParameter {
 
 #[derive(PartialEq, Debug)]
 pub enum UnresolvedPType {
-    BasicType(ResolvesToNamedNode),
-    LUBType(Box<UnresolvedPType>),
-    ListType(Box<UnresolvedPType>),
-    NEListType(Box<UnresolvedPType>),
+    Basic(ResolvesToNamedNode),
+    Lub(Box<UnresolvedPType>),
+    List(Box<UnresolvedPType>),
+    NEList(Box<UnresolvedPType>),
 }
 
 #[derive(PartialEq, Debug)]
@@ -57,7 +57,7 @@ pub enum UnresolvedConstantTerm {
 
 #[derive(PartialEq, Debug)]
 pub enum UnresolvedConstantLiteral {
-    IRI(ResolvesToNamedNode),
+    Iri(ResolvesToNamedNode),
     BlankNode(BlankNode),
     Literal(UnresolvedStottrLiteral),
     None,

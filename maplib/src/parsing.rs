@@ -12,7 +12,7 @@ pub fn whole_stottr_doc(s: &str) -> Result<UnresolvedStottrDocument, ParsingErro
     let result = stottr_doc(s).finish();
     match result {
         Ok((rest, doc)) => {
-            if rest != "" {
+            if !rest.is_empty() {
                 Err(ParsingError {
                     kind: ParsingErrorKind::CouldNotParseEverything(rest.to_string()),
                 })
