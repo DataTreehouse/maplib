@@ -263,12 +263,6 @@ pub struct Context {
     pub path: Vec<PathEntry>,
 }
 
-impl Default for Context {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl Context {
     pub fn in_scope(&self, other: &Context, partial_scope: bool) -> bool {
         let min_i = min(self.path.len(), other.path.len());
@@ -439,7 +433,10 @@ fn maintains_full_downward_scope(path_entry: &PathEntry) -> bool {
 
 impl Context {
     pub fn new() -> Context {
-        Context::default()
+        Context {
+            string_rep: "".to_string(),
+            path: vec![],
+        }
     }
 
     pub fn from_path(path: Vec<PathEntry>) -> Context {

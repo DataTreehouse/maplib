@@ -41,9 +41,9 @@ struct DFPathReturn {
 
 impl SubjectOrObject {
     fn flip(&self) -> SubjectOrObject {
-        match *self {
-            SubjectOrObject::Subject => SubjectOrObject::Object,
-            SubjectOrObject::Object => SubjectOrObject::Subject,
+        match self {
+            &SubjectOrObject::Subject => SubjectOrObject::Object,
+            &SubjectOrObject::Object => SubjectOrObject::Subject,
         }
     }
 }
@@ -260,18 +260,19 @@ impl Triplestore {
                         }
                     }
                 }
-                let df = if !dfs.is_empty() {
-                    concat_df(dfs.as_slice())
+                let df;
+                if !dfs.is_empty() {
+                    df = concat_df(dfs.as_slice())
                         .unwrap()
                         .unique(None, UniqueKeepStrategy::First, None)
-                        .unwrap()
+                        .unwrap();
                 } else {
-                    DataFrame::new(vec![
+                    df = DataFrame::new(vec![
                         Series::new_empty("subject", &DataType::Categorical(None)),
                         Series::new_empty("object", &DataType::Categorical(None)),
                     ])
-                    .unwrap()
-                };
+                    .unwrap();
+                }
                 Ok(HashMap::from([(nns_name(nns), df)]))
             }
         }
@@ -335,7 +336,7 @@ impl Triplestore {
 
 fn find_lookup(map: &HashMap<String, DataFrame>) -> DataFrame {
     let mut all_values = vec![];
-    for v in map.values() {
+    for (_k, v) in map {
         let mut obj = v.column("object").unwrap().unique().unwrap();
         obj.rename("value");
         let mut sub = v.column("subject").unwrap().unique().unwrap();

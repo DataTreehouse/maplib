@@ -38,12 +38,12 @@ pub fn sparql_literal_to_any_value(
         } else if datatype == xsd::DATE_TIME {
             let dt_without_tz = value.parse::<NaiveDateTime>();
             if let Ok(dt) = dt_without_tz {
-                AnyValue::Datetime(dt.timestamp_nanos(), TimeUnit::Nanoseconds, &None)
+                AnyValue::Datetime(dt.timestamp_nanos_opt().unwrap(), TimeUnit::Nanoseconds, &None)
             } else {
                 let dt_without_tz = value.parse::<DateTime<Utc>>();
                 if let Ok(dt) = dt_without_tz {
                     AnyValue::Datetime(
-                        dt.naive_utc().timestamp_nanos(),
+                        dt.naive_utc().timestamp_nanos_opt().unwrap(),
                         TimeUnit::Nanoseconds,
                         &None,
                     )

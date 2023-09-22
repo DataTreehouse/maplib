@@ -38,6 +38,7 @@ def blank_person_mapping():
 
 
 def test_simple_query_no_error(blank_person_mapping):
+    print("Hello!")
     df = blank_person_mapping.query("""
         PREFIX foaf:<http://xmlns.com/foaf/0.1/>
 
@@ -46,6 +47,6 @@ def test_simple_query_no_error(blank_person_mapping):
         ?p foaf:lastName ?lastName .
         } ORDER BY ?p ?lastName
         """)
-    expected_df = pl.DataFrame({"p": ["_:person_l0_r0", "_:person_l0_r1"],
-                                "lastName": ["Strong", "Brite"]})
+    expected_df = pl.DataFrame({"p": ["_:person_l0_p0_r0", "_:person_l0_p0_r1"],
+                                 "lastName": ["Strong", "Brite"]})
     assert_frame_equal(df, expected_df)

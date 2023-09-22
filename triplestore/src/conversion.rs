@@ -57,7 +57,7 @@ pub fn convert_to_string(series: &Series) -> Option<Series> {
     Some(series.cast(&DataType::Utf8).unwrap())
 }
 
-fn hack_format_timestamp_with_timezone(series: &Series, tz: &TimeZone) -> Series {
+fn hack_format_timestamp_with_timezone(series: &Series, tz: &mut TimeZone) -> Series {
     let timezone_opt: Result<chrono_tz::Tz, _> = tz.parse();
     if let Ok(timezone) = timezone_opt {
         let datetime_strings = Series::from_iter(
@@ -70,17 +70,8 @@ fn hack_format_timestamp_with_timezone(series: &Series, tz: &TimeZone) -> Series
                     format!(
                         "{}",
                         timezone
-                            .with_ymd_and_hms(
-                                x.year(),
-                                x.month(),
-                                x.day(),
-                                x.hour(),
-                                x.minute(),
-                                x.second()
-                            )
-                            .unwrap()
-                            .with_nanosecond(x.nanosecond())
-                            .unwrap()
+                            .ymd(x.year(), x.month(), x.day())
+                            .and_hms_nano(x.hour(), x.minute(), x.second(), x.nanosecond())
                             .format(XSD_DATETIME_WITH_TZ_FORMAT)
                     )
                 }),
