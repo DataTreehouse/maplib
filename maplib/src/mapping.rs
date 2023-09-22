@@ -169,6 +169,7 @@ impl Mapping {
         let now = Instant::now();
         let target_template = self.resolve_template(template)?.clone();
         let target_template_name = target_template.signature.template_name.as_str().to_string();
+
         let columns =
             self.validate_infer_dataframe_columns(&target_template.signature, &df, &options)?;
         let ExpandOptions {

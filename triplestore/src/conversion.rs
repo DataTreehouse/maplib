@@ -70,8 +70,17 @@ fn hack_format_timestamp_with_timezone(series: &Series, tz: &mut TimeZone) -> Se
                     format!(
                         "{}",
                         timezone
-                            .ymd(x.year(), x.month(), x.day())
-                            .and_hms_nano(x.hour(), x.minute(), x.second(), x.nanosecond())
+                            .with_ymd_and_hms(
+                                x.year(),
+                                x.month(),
+                                x.day(),
+                                x.hour(),
+                                x.minute(),
+                                x.second()
+                            )
+                            .unwrap()
+                            .with_nanosecond(x.nanosecond())
+                            .unwrap()
                             .format(XSD_DATETIME_WITH_TZ_FORMAT)
                     )
                 }),
