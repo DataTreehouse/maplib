@@ -67,7 +67,6 @@ fn validate_infer_column_data_type(
         validate_datatype(series.name(), dtype, ptype)?;
         ptype.clone()
     } else {
-        
         polars_datatype_to_xsd_datatype(dtype)
     };
     let rdf_node_type = infer_rdf_node_type(&ptype);

@@ -125,6 +125,7 @@ pub fn constant_to_expr(
 
 pub fn constant_blank_node_to_series(
     layer: usize,
+    pattern_num: usize,
     blank_node_counter: usize,
     constant_term: &ConstantTerm,
     n_rows: usize,
@@ -133,7 +134,11 @@ pub fn constant_blank_node_to_series(
         ConstantTerm::Constant(ConstantLiteral::BlankNode(bl)) => {
             let any_value_vec: Vec<_> = (blank_node_counter..(blank_node_counter + n_rows))
                 .into_par_iter()
-                .map(|i| AnyValue::Utf8Owned(format!("_:{}_l{}_r{}", bl.as_str(), layer, i).into()))
+                .map(|i| {
+                    AnyValue::Utf8Owned(
+                        format!("_:{}_l{}_p{}_r{}", bl.as_str(), layer, pattern_num, i).into(),
+                    )
+                })
                 .collect();
 
             (

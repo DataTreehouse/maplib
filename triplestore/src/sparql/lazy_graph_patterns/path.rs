@@ -235,8 +235,7 @@ impl Triplestore {
                 Ok(left_df_map)
             }
             PropertyPathExpression::Alternative(left, right) => {
-                let mut left_df_map =
-                    self.create_unique_cat_dfs(left, subject, object)?;
+                let mut left_df_map = self.create_unique_cat_dfs(left, subject, object)?;
                 let right_df_map = self.create_unique_cat_dfs(right, subject, object)?;
                 left_df_map.extend(right_df_map);
                 Ok(left_df_map)

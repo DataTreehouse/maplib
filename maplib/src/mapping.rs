@@ -18,6 +18,7 @@ use oxrdf::Triple;
 use polars::lazy::prelude::{col, Expr};
 use polars::prelude::{DataFrame, IntoLazy};
 use polars_core::series::Series;
+use rayon::iter::IndexedParallelIterator;
 use rayon::iter::ParallelDrainRange;
 use rayon::iter::ParallelIterator;
 use representation::RDFNodeType;
@@ -36,8 +37,7 @@ pub struct Mapping {
     blank_node_counter: usize,
 }
 
-#[derive(Clone)]
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct ExpandOptions {
     pub language_tags: Option<HashMap<String, String>>,
     pub unique_subsets: Option<Vec<Vec<String>>>,
@@ -55,8 +55,6 @@ struct StaticColumn {
     constant_term: ConstantTerm,
     ptype: Option<PType>,
 }
-
-
 
 #[derive(Clone, Debug)]
 pub struct PrimitiveColumn {
@@ -89,8 +87,7 @@ impl Mapping {
         path: P,
         caching_folder: Option<String>,
     ) -> Result<Mapping, MaplibError> {
-        let dataset =
-            TemplateDataset::from_folder(path).map_err(MaplibError::TemplateError)?;
+        let dataset = TemplateDataset::from_folder(path).map_err(MaplibError::TemplateError)?;
         Mapping::new(&dataset, caching_folder)
     }
 
@@ -98,8 +95,7 @@ impl Mapping {
         path: P,
         caching_folder: Option<String>,
     ) -> Result<Mapping, MaplibError> {
-        let dataset =
-            TemplateDataset::from_file(path).map_err(MaplibError::TemplateError)?;
+        let dataset = TemplateDataset::from_file(path).map_err(MaplibError::TemplateError)?;
         Mapping::new(&dataset, caching_folder)
     }
 
@@ -196,6 +192,7 @@ impl Mapping {
                 offset += chunk_size as i64;
                 let (result_vec, new_blank_node_counter) = self._expand(
                     0,
+                    0,
                     self.blank_node_counter,
                     &target_template_name,
                     df_slice,
@@ -211,6 +208,7 @@ impl Mapping {
             }
         } else {
             let (result_vec, new_blank_node_counter) = self._expand(
+                0,
                 0,
                 self.blank_node_counter,
                 &target_template_name,
@@ -228,6 +226,7 @@ impl Mapping {
     fn _expand(
         &self,
         layer: usize,
+        pattern_num: usize,
         mut blank_node_counter: usize,
         name: &str,
         df: DataFrame,
@@ -266,9 +265,12 @@ impl Mapping {
 
                 let results: Vec<_> = expand_params_vec
                     .par_drain(..)
-                    .map(|(i, series_vec)| {
-                        let target_template =
-                            self.template_dataset.get(i.template_name.as_str()).unwrap();
+                    .enumerate()
+                    .map(|(i, (instance, series_vec))| {
+                        let target_template = self
+                            .template_dataset
+                            .get(instance.template_name.as_str())
+                            .unwrap();
                         let (
                             instance_df,
                             instance_dynamic_columns,
@@ -278,7 +280,8 @@ impl Mapping {
                         ) = create_remapped(
                             self.blank_node_counter,
                             layer,
-                            i,
+                            pattern_num,
+                            instance,
                             &target_template.signature,
                             series_vec,
                             &dynamic_columns,
@@ -289,8 +292,9 @@ impl Mapping {
 
                         self._expand(
                             layer + 1,
+                            i,
                             updated_blank_node_counter,
-                            i.template_name.as_str(),
+                            instance.template_name.as_str(),
                             instance_df,
                             instance_dynamic_columns,
                             instance_static_columns,
@@ -321,10 +325,7 @@ impl Mapping {
         let now = Instant::now();
         let triples: Vec<
             Result<(DataFrame, RDFNodeType, Option<String>, Option<String>, bool), MappingError>,
-        > = result_vec
-            .par_drain(..)
-            .map(create_triples)
-            .collect();
+        > = result_vec.par_drain(..).map(create_triples).collect();
         let mut ok_triples = vec![];
         for t in triples {
             ok_triples.push(t?);
@@ -434,13 +435,19 @@ fn create_dynamic_expression_from_static(
 
 fn create_series_from_blank_node_constant(
     layer: usize,
+    pattern_num: usize,
     blank_node_counter: usize,
     column_name: &str,
     constant_term: &ConstantTerm,
     n_rows: usize,
 ) -> Result<(Series, PrimitiveColumn), MappingError> {
-    let (mut series, _, rdf_node_type) =
-        constant_blank_node_to_series(layer, blank_node_counter, constant_term, n_rows)?;
+    let (mut series, _, rdf_node_type) = constant_blank_node_to_series(
+        layer,
+        pattern_num,
+        blank_node_counter,
+        constant_term,
+        n_rows,
+    )?;
     series.rename(column_name);
     let mapped_column = PrimitiveColumn {
         rdf_node_type,
@@ -452,6 +459,7 @@ fn create_series_from_blank_node_constant(
 fn create_remapped(
     mut blank_node_counter: usize,
     layer: usize,
+    pattern_num: usize,
     instance: &Instance,
     signature: &Signature,
     mut series_vec: Vec<Series>,
@@ -512,6 +520,7 @@ fn create_remapped(
                 if ct.has_blank_node() {
                     let (series, primitive_column) = create_series_from_blank_node_constant(
                         layer,
+                        pattern_num,
                         blank_node_counter,
                         target_colname,
                         ct,

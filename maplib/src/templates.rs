@@ -114,8 +114,7 @@ impl TemplateDataset {
 
     pub fn from_folder<P: AsRef<Path>>(path: P) -> Result<TemplateDataset, TemplateError> {
         let mut docs = vec![];
-        let files_result =
-            read_dir(path).map_err(TemplateError::ReadTemplateDirectoryError)?;
+        let files_result = read_dir(path).map_err(TemplateError::ReadTemplateDirectoryError)?;
         for f in files_result {
             let f = f.map_err(TemplateError::ResolveDirectoryEntryError)?;
             if let Some(e) = f.path().extension() {
@@ -137,7 +136,9 @@ impl TemplateDataset {
     }
 
     pub fn get(&self, template: &str) -> Option<&Template> {
-        self.templates.iter().find(|&t| t.signature.template_name.as_str() == template)
+        self.templates
+            .iter()
+            .find(|&t| t.signature.template_name.as_str() == template)
     }
 
     fn infer_types(&mut self) -> Result<(), TemplateError> {

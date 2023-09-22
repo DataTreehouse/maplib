@@ -198,7 +198,7 @@ impl Triplestore {
                     static_verb_column,
                     has_unique_subset,
                 } = t;
-                
+
                 prepare_triples(
                     df,
                     &object_type,

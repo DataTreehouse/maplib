@@ -6,8 +6,7 @@ use std::path::Path;
 pub(crate) fn delete_tmp_parquets_in_caching_folder(
     caching_folder: &Path,
 ) -> Result<(), TriplestoreError> {
-    let contents =
-        read_dir(caching_folder).map_err(TriplestoreError::ReadCachingDirectoryError)?;
+    let contents = read_dir(caching_folder).map_err(TriplestoreError::ReadCachingDirectoryError)?;
     for f in contents {
         let entry = f.map_err(TriplestoreError::ReadCachingDirectoryEntryError)?;
         let fname = entry.file_name().to_str().unwrap().to_string();

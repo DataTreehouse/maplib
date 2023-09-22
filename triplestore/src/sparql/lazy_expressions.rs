@@ -714,10 +714,9 @@ impl Triplestore {
                     Function::Abs => {
                         assert_eq!(args.len(), 1);
                         let first_context = args_contexts.get(&0).unwrap();
-                        output_solution_mappings.mappings =
-                            output_solution_mappings.mappings.with_column(
-                                col(first_context.as_str()).abs().alias(context.as_str()),
-                            );
+                        output_solution_mappings.mappings = output_solution_mappings
+                            .mappings
+                            .with_column(col(first_context.as_str()).abs().alias(context.as_str()));
                         let existing_type = output_solution_mappings
                             .rdf_node_types
                             .get(first_context.as_str())
@@ -782,9 +781,7 @@ impl Triplestore {
                         let first_context = args_contexts.get(&0).unwrap();
                         output_solution_mappings.mappings =
                             output_solution_mappings.mappings.with_column(
-                                col(first_context.as_str())
-                                    .round(0)
-                                    .alias(context.as_str()),
+                                col(first_context.as_str()).round(0).alias(context.as_str()),
                             );
                         let existing_type = output_solution_mappings
                             .rdf_node_types
@@ -851,7 +848,9 @@ impl Triplestore {
                     }
                 }
                 output_solution_mappings.mappings = output_solution_mappings.mappings.drop_columns(
-                    args_contexts.values().map(|x| x.as_str())
+                    args_contexts
+                        .values()
+                        .map(|x| x.as_str())
                         .collect::<Vec<&str>>(),
                 );
                 output_solution_mappings

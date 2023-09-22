@@ -65,10 +65,10 @@ pub(crate) fn sparql_literal_to_polars_literal_value(lit: &Literal) -> LiteralVa
         if ymd_string.len() != 3 {
             todo!("Unsupported date format {}", value)
         }
-        let y = i32::from_str(ymd_string.first().unwrap()).unwrap_or_else(|_| panic!("Year parsing error {}",
-            ymd_string.first().unwrap()));
-        let m = u32::from_str(ymd_string.get(1).unwrap()).unwrap_or_else(|_| panic!("Month parsing error {}",
-            ymd_string.get(1).unwrap()));
+        let y = i32::from_str(ymd_string.first().unwrap())
+            .unwrap_or_else(|_| panic!("Year parsing error {}", ymd_string.first().unwrap()));
+        let m = u32::from_str(ymd_string.get(1).unwrap())
+            .unwrap_or_else(|_| panic!("Month parsing error {}", ymd_string.get(1).unwrap()));
         let d = u32::from_str(ymd_string.get(2).unwrap())
             .unwrap_or_else(|_| panic!("Day parsing error {}", ymd_string.get(1).unwrap()));
         let date = NaiveDate::from_ymd_opt(y, m, d).unwrap();
@@ -205,7 +205,6 @@ fn polars_literal_values_to_series(literal_values: Vec<LiteralValue>, name: &str
             LiteralValue::DateTime(_, t, None) =>
             //TODO: Assert time unit lik??
             {
-                
                 Series::new(
                     name,
                     literal_values
