@@ -124,7 +124,7 @@ impl Triplestore {
     pub fn deduplicate(&mut self) -> Result<(), TriplestoreError> {
         let now = Instant::now();
         for (predicate, map) in &mut self.df_map {
-            for (_, v) in map {
+            for v in map.values_mut() {
                 if !v.unique {
                     if self.caching_folder.is_some() {
                         let lf_results: Vec<Result<LazyFrame, ParquetIOError>> = v

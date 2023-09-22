@@ -20,10 +20,7 @@ pub fn sparql_literal_to_any_value(
         } else if datatype == xsd::UNSIGNED_LONG {
             let u = u64::from_str(value).expect("Integer parsing error");
             AnyValue::from(u)
-        } else if datatype == xsd::INTEGER {
-            let i = i64::from_str(value).expect("Integer parsing error");
-            AnyValue::from(i)
-        } else if datatype == xsd::LONG {
+        } else if datatype == xsd::INTEGER || datatype == xsd::LONG {
             let i = i64::from_str(value).expect("Integer parsing error");
             AnyValue::from(i)
         } else if datatype == xsd::INT {
