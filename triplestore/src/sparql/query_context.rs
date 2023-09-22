@@ -4,7 +4,7 @@ use std::fmt::Formatter;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum PathEntry {
-    BGP,
+    Bgp,
     UnionLeftSide,
     UnionRightSide,
     JoinLeftSide,
@@ -70,7 +70,7 @@ pub enum PathEntry {
 impl fmt::Display for PathEntry {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match self {
-            PathEntry::BGP => {
+            PathEntry::Bgp => {
                 write!(f, "BGP")
             }
             PathEntry::UnionLeftSide => {
@@ -263,6 +263,12 @@ pub struct Context {
     pub path: Vec<PathEntry>,
 }
 
+impl Default for Context {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Context {
     pub fn in_scope(&self, other: &Context, partial_scope: bool) -> bool {
         let min_i = min(self.path.len(), other.path.len());
@@ -301,7 +307,7 @@ impl Context {
 
 fn exposes_variables(path_entry: &PathEntry) -> bool {
     match path_entry {
-        PathEntry::BGP => true,
+        PathEntry::Bgp => true,
         PathEntry::UnionLeftSide => true,
         PathEntry::UnionRightSide => true,
         PathEntry::JoinLeftSide => true,
@@ -367,7 +373,7 @@ fn exposes_variables(path_entry: &PathEntry) -> bool {
 
 fn maintains_full_downward_scope(path_entry: &PathEntry) -> bool {
     match path_entry {
-        PathEntry::BGP => false,
+        PathEntry::Bgp => false,
         PathEntry::UnionLeftSide => false,
         PathEntry::UnionRightSide => false,
         PathEntry::JoinLeftSide => false,
@@ -433,10 +439,7 @@ fn maintains_full_downward_scope(path_entry: &PathEntry) -> bool {
 
 impl Context {
     pub fn new() -> Context {
-        Context {
-            string_rep: "".to_string(),
-            path: vec![],
-        }
+        Context::default()
     }
 
     pub fn from_path(path: Vec<PathEntry>) -> Context {

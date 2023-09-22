@@ -20,9 +20,9 @@ pub fn constant_to_expr(
 ) -> Result<(Expr, PType, RDFNodeType, Option<String>), MappingError> {
     let (expr, ptype, rdf_node_type, language_tag) = match constant_term {
         ConstantTerm::Constant(c) => match c {
-            ConstantLiteral::IRI(iri) => (
+            ConstantLiteral::Iri(iri) => (
                 Expr::Literal(LiteralValue::Utf8(iri.as_str().to_string())),
-                PType::BasicType(xsd::ANY_URI.into_owned(), "xsd:anyURI".to_string()),
+                PType::Basic(xsd::ANY_URI.into_owned(), "xsd:anyURI".to_string()),
                 RDFNodeType::IRI,
                 None,
             ),
@@ -42,7 +42,7 @@ pub fn constant_to_expr(
                 let language_tag = lit.language.as_ref().cloned();
                 (
                     Expr::Literal(LiteralValue::Series(SpecialEq::new(value_series))),
-                    PType::BasicType(
+                    PType::Basic(
                         lit.data_type_iri.as_ref().unwrap().clone(),
                         lit.data_type_iri.as_ref().unwrap().to_string(),
                     ),
@@ -52,7 +52,7 @@ pub fn constant_to_expr(
             }
             ConstantLiteral::None => (
                 Expr::Literal(LiteralValue::Null),
-                PType::BasicType(NamedNode::new_unchecked(NONE_IRI), NONE_IRI.to_string()),
+                PType::Basic(NamedNode::new_unchecked(NONE_IRI), NONE_IRI.to_string()),
                 RDFNodeType::None,
                 None,
             ),
@@ -79,7 +79,7 @@ pub fn constant_to_expr(
                 last_rdf_node_type = Some(rdf_node_type);
                 expressions.push(constant_expr);
             }
-            let out_ptype = PType::ListType(Box::new(last_ptype.unwrap()));
+            let out_ptype = PType::List(Box::new(last_ptype.unwrap()));
             let out_rdf_node_type = last_rdf_node_type.as_ref().unwrap().clone();
 
             if let RDFNodeType::Literal(_lit) = last_rdf_node_type.as_ref().unwrap() {
@@ -149,7 +149,7 @@ pub fn constant_blank_node_to_series(
                     false,
                 )
                 .unwrap(),
-                PType::BasicType(
+                PType::Basic(
                     NamedNode::new_unchecked(BLANK_NODE_IRI),
                     BLANK_NODE_IRI.to_string(),
                 ),

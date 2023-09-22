@@ -87,7 +87,7 @@ fn test_easy_template() {
                     UnresolvedArgument {
                         list_expand: false,
                         term: UnresolvedStottrTerm::ConstantTerm(UnresolvedConstantTerm::Constant(
-                            UnresolvedConstantLiteral::IRI(ResolvesToNamedNode::PrefixedName(
+                            UnresolvedConstantLiteral::Iri(ResolvesToNamedNode::PrefixedName(
                                 PrefixedName {
                                     prefix: "foaf".to_string(),
                                     name: "Person".to_string(),
@@ -175,7 +175,7 @@ fn test_easy_template_extra_comma() {
                     UnresolvedArgument {
                         list_expand: false,
                         term: UnresolvedStottrTerm::ConstantTerm(UnresolvedConstantTerm::Constant(
-                            UnresolvedConstantLiteral::IRI(ResolvesToNamedNode::PrefixedName(
+                            UnresolvedConstantLiteral::Iri(ResolvesToNamedNode::PrefixedName(
                                 PrefixedName {
                                     prefix: "foaf".to_string(),
                                     name: "Person".to_string(),
@@ -352,7 +352,7 @@ fn test_spec_type_1() {
             parameter_list: vec![UnresolvedParameter {
                 optional: false,
                 non_blank: false,
-                ptype: Some(UnresolvedPType::BasicType(
+                ptype: Some(UnresolvedPType::Basic(
                     ResolvesToNamedNode::PrefixedName(PrefixedName {
                         prefix: "owl".to_string(),
                         name: "Class".to_string(),
@@ -392,7 +392,7 @@ fn test_spec_type_2() {
             parameter_list: vec![UnresolvedParameter {
                 optional: true,
                 non_blank: false,
-                ptype: Some(UnresolvedPType::BasicType(
+                ptype: Some(UnresolvedPType::Basic(
                     ResolvesToNamedNode::PrefixedName(PrefixedName {
                         prefix: "owl".to_string(),
                         name: "Class".to_string(),
@@ -432,7 +432,7 @@ fn test_spec_type_3() {
             parameter_list: vec![UnresolvedParameter {
                 optional: true,
                 non_blank: true,
-                ptype: Some(UnresolvedPType::BasicType(
+                ptype: Some(UnresolvedPType::Basic(
                     ResolvesToNamedNode::PrefixedName(PrefixedName {
                         prefix: "owl".to_string(),
                         name: "Class".to_string(),
@@ -476,7 +476,7 @@ fn test_spec_default_value_1() {
             parameter_list: vec![UnresolvedParameter {
                 optional: false,
                 non_blank: false,
-                ptype: Some(UnresolvedPType::BasicType(
+                ptype: Some(UnresolvedPType::Basic(
                     ResolvesToNamedNode::PrefixedName(PrefixedName {
                         prefix: "owl".to_string(),
                         name: "Class".to_string(),
@@ -487,7 +487,7 @@ fn test_spec_default_value_1() {
                 },
                 default_value: Some(UnresolvedDefaultValue {
                     constant_term: UnresolvedConstantTerm::Constant(
-                        UnresolvedConstantLiteral::IRI(ResolvesToNamedNode::PrefixedName(
+                        UnresolvedConstantLiteral::Iri(ResolvesToNamedNode::PrefixedName(
                             PrefixedName {
                                 prefix: "p".to_string(),
                                 name: "pizza".to_string(),
@@ -529,7 +529,7 @@ fn test_spec_default_value_2() {
             parameter_list: vec![UnresolvedParameter {
                 optional: false,
                 non_blank: false,
-                ptype: Some(UnresolvedPType::BasicType(
+                ptype: Some(UnresolvedPType::Basic(
                     ResolvesToNamedNode::PrefixedName(PrefixedName {
                         prefix: "owl".to_string(),
                         name: "Class".to_string(),
@@ -583,7 +583,7 @@ fn test_spec_default_value_3() {
             parameter_list: vec![UnresolvedParameter {
                 optional: false,
                 non_blank: false,
-                ptype: Some(UnresolvedPType::BasicType(
+                ptype: Some(UnresolvedPType::Basic(
                     ResolvesToNamedNode::PrefixedName(PrefixedName {
                         prefix: "owl".to_string(),
                         name: "Class".to_string(),
@@ -803,7 +803,7 @@ fn test_spec_more_complex_types() {
                 UnresolvedParameter {
                     optional: false,
                     non_blank: true,
-                    ptype: Some(UnresolvedPType::BasicType(
+                    ptype: Some(UnresolvedPType::Basic(
                         ResolvesToNamedNode::PrefixedName(PrefixedName {
                             prefix: "owl".to_string(),
                             name: "Class".to_string(),
@@ -817,7 +817,7 @@ fn test_spec_more_complex_types() {
                 UnresolvedParameter {
                     optional: true,
                     non_blank: true,
-                    ptype: Some(UnresolvedPType::BasicType(
+                    ptype: Some(UnresolvedPType::Basic(
                         ResolvesToNamedNode::PrefixedName(PrefixedName {
                             prefix: "owl".to_string(),
                             name: "NamedIndividual".to_string(),
@@ -828,7 +828,7 @@ fn test_spec_more_complex_types() {
                     },
                     default_value: Some(UnresolvedDefaultValue {
                         constant_term: UnresolvedConstantTerm::Constant(
-                            UnresolvedConstantLiteral::IRI(ResolvesToNamedNode::PrefixedName(
+                            UnresolvedConstantLiteral::Iri(ResolvesToNamedNode::PrefixedName(
                                 PrefixedName {
                                     prefix: "ex".to_string(),
                                     name: "Class".to_string(),
@@ -840,9 +840,9 @@ fn test_spec_more_complex_types() {
                 UnresolvedParameter {
                     optional: false,
                     non_blank: false,
-                    ptype: Some(UnresolvedPType::NEListType(Box::new(
-                        UnresolvedPType::ListType(Box::new(UnresolvedPType::ListType(Box::new(
-                            UnresolvedPType::BasicType(ResolvesToNamedNode::PrefixedName(
+                    ptype: Some(UnresolvedPType::NEList(Box::new(
+                        UnresolvedPType::List(Box::new(UnresolvedPType::List(Box::new(
+                            UnresolvedPType::Basic(ResolvesToNamedNode::PrefixedName(
                                 PrefixedName {
                                     prefix: "owl".to_string(),
                                     name: "Class".to_string(),
@@ -900,7 +900,7 @@ fn test_spec_example_1() {
                     list_expand: false,
                     term: UnresolvedStottrTerm::ConstantTerm(UnresolvedConstantTerm::ConstantList(
                         vec![UnresolvedConstantTerm::Constant(
-                            UnresolvedConstantLiteral::IRI(ResolvesToNamedNode::PrefixedName(
+                            UnresolvedConstantLiteral::Iri(ResolvesToNamedNode::PrefixedName(
                                 PrefixedName {
                                     prefix: "ex".to_string(),
                                     name: "template".to_string(),
@@ -962,7 +962,7 @@ fn test_spec_example_2() {
                     term: UnresolvedStottrTerm::ConstantTerm(UnresolvedConstantTerm::ConstantList(
                         vec![UnresolvedConstantTerm::ConstantList(vec![
                             UnresolvedConstantTerm::ConstantList(vec![
-                                UnresolvedConstantTerm::Constant(UnresolvedConstantLiteral::IRI(
+                                UnresolvedConstantTerm::Constant(UnresolvedConstantLiteral::Iri(
                                     ResolvesToNamedNode::PrefixedName(PrefixedName {
                                         prefix: "ex".to_string(),
                                         name: "template".to_string(),
@@ -1016,7 +1016,7 @@ fn test_spec_example_3() {
                     list_expand: false,
                     term: UnresolvedStottrTerm::ConstantTerm(UnresolvedConstantTerm::ConstantList(
                         vec![UnresolvedConstantTerm::Constant(
-                            UnresolvedConstantLiteral::IRI(ResolvesToNamedNode::PrefixedName(
+                            UnresolvedConstantLiteral::Iri(ResolvesToNamedNode::PrefixedName(
                                 PrefixedName {
                                     prefix: "ex".to_string(),
                                     name: "template".to_string(),
@@ -1073,13 +1073,13 @@ fn test_spec_example_4() {
                     UnresolvedParameter {
                         optional: false,
                         non_blank: true,
-                        ptype: Some(UnresolvedPType::BasicType(ResolvesToNamedNode::PrefixedName(PrefixedName {
+                        ptype: Some(UnresolvedPType::Basic(ResolvesToNamedNode::PrefixedName(PrefixedName {
                             prefix: "owl".to_string(),
                             name: "Class".to_string(),
                         }))),
                         stottr_variable: StottrVariable { name: "pizza".to_string() },
                         default_value: Some(UnresolvedDefaultValue {
-                            constant_term: UnresolvedConstantTerm::Constant(UnresolvedConstantLiteral::IRI(ResolvesToNamedNode::PrefixedName(PrefixedName {
+                            constant_term: UnresolvedConstantTerm::Constant(UnresolvedConstantLiteral::Iri(ResolvesToNamedNode::PrefixedName(PrefixedName {
                                 prefix: "p".to_string(),
                                 name: "Grandiosa".to_string(),
                             }))),
@@ -1088,7 +1088,7 @@ fn test_spec_example_4() {
                     UnresolvedParameter {
                         optional: true,
                         non_blank: true,
-                        ptype: Some(UnresolvedPType::LUBType(Box::new(UnresolvedPType::BasicType(ResolvesToNamedNode::PrefixedName(PrefixedName {
+                        ptype: Some(UnresolvedPType::Lub(Box::new(UnresolvedPType::Basic(ResolvesToNamedNode::PrefixedName(PrefixedName {
                             prefix: "owl".to_string(),
                             name: "NamedIndividual".to_string(),
                         }))))),
@@ -1098,7 +1098,7 @@ fn test_spec_example_4() {
                     UnresolvedParameter {
                         optional: false,
                         non_blank: false,
-                        ptype: Some(UnresolvedPType::ListType(Box::new(UnresolvedPType::BasicType(ResolvesToNamedNode::PrefixedName(PrefixedName {
+                        ptype: Some(UnresolvedPType::List(Box::new(UnresolvedPType::Basic(ResolvesToNamedNode::PrefixedName(PrefixedName {
                             prefix: "owl".to_string(),
                             name: "Class".to_string(),
                         }))))),

@@ -31,7 +31,7 @@ impl Triplestore {
         match graph_pattern {
             GraphPattern::Bgp { patterns } => {
                 let mut updated_solution_mappings = solution_mappings;
-                let bgp_context = context.extension_with(PathEntry::BGP);
+                let bgp_context = context.extension_with(PathEntry::Bgp);
                 for tp in patterns {
                     updated_solution_mappings = Some(self.lazy_triple_pattern(
                         updated_solution_mappings,

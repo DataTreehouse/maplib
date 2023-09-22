@@ -296,24 +296,24 @@ fn ptype(p: &str) -> IResult<&str, UnresolvedPType> {
 
 fn list_type(l: &str) -> IResult<&str, UnresolvedPType> {
     let (l, (_, t, _)) = tuple((tag("List<"), ptype, tag(">")))(l)?;
-    Ok((l, UnresolvedPType::ListType(Box::new(t))))
+    Ok((l, UnresolvedPType::List(Box::new(t))))
 }
 
 fn ne_list_type(l: &str) -> IResult<&str, UnresolvedPType> {
     let (l, (_, t, _)) = tuple((tag("NEList<"), ptype, tag(">")))(l)?;
-    Ok((l, UnresolvedPType::NEListType(Box::new(t))))
+    Ok((l, UnresolvedPType::NEList(Box::new(t))))
 }
 
 fn lub_type(l: &str) -> IResult<&str, UnresolvedPType> {
     let (l, (_, t, _)) = tuple((tag("LUB<"), basic_type, tag(">")))(l)?;
-    Ok((l, UnresolvedPType::LUBType(Box::new(t))))
+    Ok((l, UnresolvedPType::Lub(Box::new(t))))
 }
 
 fn basic_type(b: &str) -> IResult<&str, UnresolvedPType> {
     let (b, t) = prefixed_name(b)?;
     Ok((
         b,
-        UnresolvedPType::BasicType(ResolvesToNamedNode::PrefixedName(t)),
+        UnresolvedPType::Basic(ResolvesToNamedNode::PrefixedName(t)),
     ))
 }
 
@@ -374,7 +374,7 @@ fn literal_as_constant_literal(l: &str) -> IResult<&str, UnresolvedConstantLiter
 
 fn iri_as_constant_literal(i: &str) -> IResult<&str, UnresolvedConstantLiteral> {
     let (i, iri) = iri(i)?;
-    Ok((i, UnresolvedConstantLiteral::IRI(iri)))
+    Ok((i, UnresolvedConstantLiteral::Iri(iri)))
 }
 
 fn blank_node_as_constant_literal(b: &str) -> IResult<&str, UnresolvedConstantLiteral> {
@@ -960,7 +960,7 @@ fn test_instance() {
             UnresolvedArgument {
                 list_expand: false,
                 term: UnresolvedStottrTerm::ConstantTerm(UnresolvedConstantTerm::Constant(
-                    UnresolvedConstantLiteral::IRI(ResolvesToNamedNode::PrefixedName(
+                    UnresolvedConstantLiteral::Iri(ResolvesToNamedNode::PrefixedName(
                         PrefixedName {
                             prefix: "foaf".to_string(),
                             name: "Person".to_string(),

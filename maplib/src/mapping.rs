@@ -70,9 +70,9 @@ impl Mapping {
         template_dataset: &TemplateDataset,
         caching_folder: Option<String>,
     ) -> Result<Mapping, MaplibError> {
-        match env_logger::try_init() {
-            _ => {}
-        }
+        #[allow(clippy::match_single_binding)]
+        match env_logger::try_init() { _=>{}};
+
         let use_caching = caching_folder.is_some();
         Ok(Mapping {
             template_dataset: template_dataset.clone(),
@@ -381,14 +381,8 @@ fn create_triples(
     let mut verb = None;
     for (k, sc) in static_columns {
         if k == "verb" {
-            if let ConstantTerm::Constant(c) = &sc.constant_term {
-                if let ConstantLiteral::IRI(nn) = c {
+            if let ConstantTerm::Constant(ConstantLiteral::Iri(nn)) = &sc.constant_term {
                     verb = Some(nn.as_str().to_string());
-                } else {
-                    return Err(MappingError::InvalidPredicateConstant(
-                        sc.constant_term.clone(),
-                    ));
-                }
             } else {
                 return Err(MappingError::InvalidPredicateConstant(
                     sc.constant_term.clone(),

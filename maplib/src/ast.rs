@@ -106,15 +106,15 @@ impl Display for Parameter {
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum PType {
-    BasicType(NamedNode, String),
-    LUBType(Box<PType>),
-    ListType(Box<PType>),
-    NEListType(Box<PType>),
+    Basic(NamedNode, String),
+    Lub(Box<PType>),
+    List(Box<PType>),
+    NEList(Box<PType>),
 }
 
 impl PType {
     pub fn is_blank_node(&self) -> bool {
-        if let PType::BasicType(nn, _) = &self {
+        if let PType::Basic(nn, _) = &self {
             if nn.as_str() == BLANK_NODE_IRI {
                 return true;
             }
@@ -123,7 +123,7 @@ impl PType {
     }
 
     pub fn is_iri(&self) -> bool {
-        if let PType::BasicType(nn, _) = self {
+        if let PType::Basic(nn, _) = self {
             if nn.as_ref() == xsd::ANY_URI {
                 return true;
             }
@@ -135,18 +135,18 @@ impl PType {
 impl Display for PType {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            PType::BasicType(_nn, s) => {
+            PType::Basic(_nn, s) => {
                 write!(f, "{}", s)
             }
-            PType::LUBType(lt) => {
+            PType::Lub(lt) => {
                 let s = lt.to_string();
                 write!(f, "LUBType({})", s)
             }
-            PType::ListType(lt) => {
+            PType::List(lt) => {
                 let s = lt.to_string();
                 write!(f, "ListType({})", s)
             }
-            PType::NEListType(lt) => {
+            PType::NEList(lt) => {
                 let s = lt.to_string();
                 write!(f, "NEListType({})", s)
             }
@@ -218,7 +218,7 @@ impl Display for ConstantTerm {
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum ConstantLiteral {
-    IRI(NamedNode),
+    Iri(NamedNode),
     BlankNode(BlankNode),
     Literal(StottrLiteral),
     None,
@@ -233,7 +233,7 @@ impl ConstantLiteral {
 impl Display for ConstantLiteral {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            ConstantLiteral::IRI(i) => std::fmt::Display::fmt(i, f),
+            ConstantLiteral::Iri(i) => std::fmt::Display::fmt(i, f),
             ConstantLiteral::BlankNode(bn) => std::fmt::Display::fmt(bn, f),
             ConstantLiteral::Literal(lit) => std::fmt::Display::fmt(lit, f),
             ConstantLiteral::None => {
@@ -389,7 +389,7 @@ fn test_display_easy_template() {
             parameter_list: vec![Parameter {
                 optional: true,
                 non_blank: true,
-                ptype: Some(PType::BasicType(
+                ptype: Some(PType::Basic(
                     xsd::DOUBLE.into_owned(),
                     "xsd:double".to_string(),
                 )),

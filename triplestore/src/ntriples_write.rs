@@ -51,8 +51,8 @@ impl Triplestore {
     ) -> Result<(), TriplestoreError> {
         self.deduplicate()?;
         let n_threads = POOL.current_num_threads();
-        let mut any_value_iter_pool = LowContentionPool::<Vec<_>>::new(n_threads);
-        let mut write_buffer_pool = LowContentionPool::<Vec<_>>::new(n_threads);
+        let any_value_iter_pool = LowContentionPool::<Vec<_>>::new(n_threads);
+        let write_buffer_pool = LowContentionPool::<Vec<_>>::new(n_threads);
 
         for (property, map) in &mut self.df_map {
             for (rdf_node_type, tt) in map {
@@ -73,8 +73,8 @@ impl Triplestore {
                             chunk_size,
                             triple_type.clone(),
                             n_threads,
-                            &mut any_value_iter_pool,
-                            &mut write_buffer_pool,
+                            &any_value_iter_pool,
+                            &write_buffer_pool,
                         )?;
                     }
                 } else if let Some(paths) = &tt.df_paths {
@@ -91,8 +91,8 @@ impl Triplestore {
                             chunk_size,
                             triple_type.clone(),
                             n_threads,
-                            &mut any_value_iter_pool,
-                            &mut write_buffer_pool,
+                            &any_value_iter_pool,
+                            &write_buffer_pool,
                         )?;
                     }
                 }
@@ -104,14 +104,14 @@ impl Triplestore {
 
 fn write_ntriples_for_df<W: Write + ?Sized>(
     df: &DataFrame,
-    verb: &String,
+    verb: &str,
     dt: &Option<NamedNode>,
     writer: &mut W,
     chunk_size: usize,
     triple_type: TripleType,
     n_threads: usize,
-    any_value_iter_pool: &mut LowContentionPool<Vec<SeriesIter>>,
-    write_buffer_pool: &mut LowContentionPool<Vec<u8>>,
+    any_value_iter_pool: &LowContentionPool<Vec<SeriesIter>>,
+    write_buffer_pool: &LowContentionPool<Vec<u8>>,
 ) -> Result<(), TriplestoreError> {
     let dt_str = if triple_type == TripleType::NonStringProperty {
         if let Some(nn) = dt {

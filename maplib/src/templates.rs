@@ -65,7 +65,7 @@ impl TemplateDataset {
         let ottr_triple_subject = Parameter {
             optional: false,
             non_blank: false,
-            ptype: Some(PType::BasicType(
+            ptype: Some(PType::Basic(
                 xsd::ANY_URI.into_owned(),
                 "xsd:anyURI".to_string(),
             )),
@@ -77,7 +77,7 @@ impl TemplateDataset {
         let ottr_triple_verb = Parameter {
             optional: false,
             non_blank: false,
-            ptype: Some(PType::BasicType(
+            ptype: Some(PType::Basic(
                 xsd::ANY_URI.into_owned(),
                 "xsd:anyURI".to_string(),
             )),
@@ -170,7 +170,7 @@ fn infer_template_types(
     for i in &mut template.pattern_list {
         let other = *templates
             .iter()
-            .find(|t| &t.signature.template_name == &i.template_name)
+            .find(|t| t.signature.template_name == i.template_name)
             .unwrap();
         if i.argument_list.len() != other.signature.parameter_list.len() {
             return Err(TemplateError::InconsistentNumberOfArguments(
@@ -194,18 +194,18 @@ fn infer_template_types(
                                     if !other_parameter.optional {
                                         changed = changed
                                             || lub_update(
-                                                &template.signature.template_name,
-                                                v,
-                                                my_parameter,
-                                                &PType::NEListType(Box::new(other_ptype.clone())),
+                                            &template.signature.template_name,
+                                            v,
+                                            my_parameter,
+                                            &PType::NEList(Box::new(other_ptype.clone())),
                                             )?;
                                     } else {
                                         changed = changed
                                             || lub_update(
-                                                &template.signature.template_name,
-                                                v,
-                                                my_parameter,
-                                                &PType::ListType(Box::new(other_ptype.clone())),
+                                            &template.signature.template_name,
+                                            v,
+                                            my_parameter,
+                                            &PType::List(Box::new(other_ptype.clone())),
                                             )?;
                                     }
                                 } else {
@@ -265,32 +265,32 @@ fn lub(
 ) -> Result<PType, TemplateError> {
     if left == right {
         return Ok(left.clone());
-    } else if let PType::NEListType(left_inner) = left {
-        if let PType::ListType(right_inner) = right {
-            return Ok(PType::NEListType(Box::new(lub(
+    } else if let PType::NEList(left_inner) = left {
+        if let PType::List(right_inner) = right {
+            return Ok(PType::NEList(Box::new(lub(
                 template_name,
                 variable,
                 left_inner,
                 right_inner,
             )?)));
-        } else if let PType::NEListType(right_inner) = right {
-            return Ok(PType::NEListType(Box::new(lub(
+        } else if let PType::NEList(right_inner) = right {
+            return Ok(PType::NEList(Box::new(lub(
                 template_name,
                 variable,
                 left_inner,
                 right_inner,
             )?)));
         }
-    } else if let PType::ListType(left_inner) = left {
-        if let PType::NEListType(right_inner) = right {
-            return Ok(PType::NEListType(Box::new(lub(
+    } else if let PType::List(left_inner) = left {
+        if let PType::NEList(right_inner) = right {
+            return Ok(PType::NEList(Box::new(lub(
                 template_name,
                 variable,
                 left_inner,
                 right_inner,
             )?)));
-        } else if let PType::ListType(right_inner) = right {
-            return Ok(PType::ListType(Box::new(lub(
+        } else if let PType::List(right_inner) = right {
+            return Ok(PType::List(Box::new(lub(
                 template_name,
                 variable,
                 left_inner,

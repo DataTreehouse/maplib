@@ -220,10 +220,10 @@ fn resolve_constant_term(
 
 fn resolve_constant_literal(
     unresolved_constant_literal: &UnresolvedConstantLiteral,
-    prefix_map: &mut HashMap<String, NamedNode>,
+    prefix_map: &HashMap<String, NamedNode>,
 ) -> Result<ConstantLiteral, ResolutionError> {
     Ok(match unresolved_constant_literal {
-        UnresolvedConstantLiteral::IRI(iri) => ConstantLiteral::IRI(resolve(iri, prefix_map)?),
+        UnresolvedConstantLiteral::Iri(iri) => ConstantLiteral::Iri(resolve(iri, prefix_map)?),
         UnresolvedConstantLiteral::BlankNode(bn) => ConstantLiteral::BlankNode(bn.clone()),
         UnresolvedConstantLiteral::Literal(lit) => {
             ConstantLiteral::Literal(resolve_stottr_literal(lit, prefix_map)?)
@@ -234,7 +234,7 @@ fn resolve_constant_literal(
 
 fn resolve_stottr_literal(
     unresolved_stottr_literal: &UnresolvedStottrLiteral,
-    prefix_map: &mut HashMap<String, NamedNode>,
+    prefix_map: &HashMap<String, NamedNode>,
 ) -> Result<StottrLiteral, ResolutionError> {
     Ok(StottrLiteral {
         value: unresolved_stottr_literal.value.clone(),
@@ -284,18 +284,18 @@ fn resolve_ptype(
     prefix_map: &mut HashMap<String, NamedNode>,
 ) -> Result<PType, ResolutionError> {
     Ok(match unresolved_ptype {
-        UnresolvedPType::BasicType(b) => PType::BasicType(resolve(b, prefix_map)?, get_name(b)),
-        UnresolvedPType::LUBType(l) => PType::LUBType(Box::new(resolve_ptype(l, prefix_map)?)),
-        UnresolvedPType::ListType(l) => PType::ListType(Box::new(resolve_ptype(l, prefix_map)?)),
-        UnresolvedPType::NEListType(l) => {
-            PType::NEListType(Box::new(resolve_ptype(l, prefix_map)?))
+        UnresolvedPType::Basic(b) => PType::Basic(resolve(b, prefix_map)?, get_name(b)),
+        UnresolvedPType::Lub(l) => PType::Lub(Box::new(resolve_ptype(l, prefix_map)?)),
+        UnresolvedPType::List(l) => PType::List(Box::new(resolve_ptype(l, prefix_map)?)),
+        UnresolvedPType::NEList(l) => {
+            PType::NEList(Box::new(resolve_ptype(l, prefix_map)?))
         }
     })
 }
 
 fn resolve(
     resolves_to_named_node: &ResolvesToNamedNode,
-    prefix_map: &mut HashMap<String, NamedNode>,
+    prefix_map: &HashMap<String, NamedNode>,
 ) -> Result<NamedNode, ResolutionError> {
     Ok(match resolves_to_named_node {
         ResolvesToNamedNode::PrefixedName(pn) => {

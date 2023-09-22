@@ -55,7 +55,7 @@ impl Mapping {
                 params.push(Parameter {
                     optional: has_null,
                     non_blank: false,
-                    ptype: Some(PType::BasicType(
+                    ptype: Some(PType::Basic(
                         xsd::ANY_URI.into_owned(),
                         "xsd:anyURI".to_string(),
                     )),
@@ -84,7 +84,7 @@ impl Mapping {
                 params.push(Parameter {
                     optional: has_null,
                     non_blank: false,
-                    ptype: Some(PType::BasicType(
+                    ptype: Some(PType::Basic(
                         xsd::ANY_URI.into_owned(),
                         "xsd:anyURI".to_string(),
                     )),
@@ -129,7 +129,7 @@ impl Mapping {
                         Argument {
                             list_expand: false,
                             term: StottrTerm::ConstantTerm(ConstantTerm::Constant(
-                                ConstantLiteral::IRI(
+                                ConstantLiteral::Iri(
                                     NamedNode::new(format!("{}{}", &use_predicate_uri_prefix, c))
                                         .unwrap(),
                                 ),
