@@ -260,7 +260,7 @@ impl Triplestore {
                         }
                     }
                 }
-                let df= if !dfs.is_empty() {
+                let df = if !dfs.is_empty() {
                     concat_df(dfs.as_slice())
                         .unwrap()
                         .unique(None, UniqueKeepStrategy::First, None)

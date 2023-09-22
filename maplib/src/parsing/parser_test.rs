@@ -352,12 +352,12 @@ fn test_spec_type_1() {
             parameter_list: vec![UnresolvedParameter {
                 optional: false,
                 non_blank: false,
-                ptype: Some(UnresolvedPType::Basic(
-                    ResolvesToNamedNode::PrefixedName(PrefixedName {
+                ptype: Some(UnresolvedPType::Basic(ResolvesToNamedNode::PrefixedName(
+                    PrefixedName {
                         prefix: "owl".to_string(),
                         name: "Class".to_string(),
-                    }),
-                )),
+                    },
+                ))),
                 stottr_variable: StottrVariable {
                     name: "pizza".to_string(),
                 },
@@ -392,12 +392,12 @@ fn test_spec_type_2() {
             parameter_list: vec![UnresolvedParameter {
                 optional: true,
                 non_blank: false,
-                ptype: Some(UnresolvedPType::Basic(
-                    ResolvesToNamedNode::PrefixedName(PrefixedName {
+                ptype: Some(UnresolvedPType::Basic(ResolvesToNamedNode::PrefixedName(
+                    PrefixedName {
                         prefix: "owl".to_string(),
                         name: "Class".to_string(),
-                    }),
-                )),
+                    },
+                ))),
                 stottr_variable: StottrVariable {
                     name: "pizza".to_string(),
                 },
@@ -432,12 +432,12 @@ fn test_spec_type_3() {
             parameter_list: vec![UnresolvedParameter {
                 optional: true,
                 non_blank: true,
-                ptype: Some(UnresolvedPType::Basic(
-                    ResolvesToNamedNode::PrefixedName(PrefixedName {
+                ptype: Some(UnresolvedPType::Basic(ResolvesToNamedNode::PrefixedName(
+                    PrefixedName {
                         prefix: "owl".to_string(),
                         name: "Class".to_string(),
-                    }),
-                )),
+                    },
+                ))),
                 stottr_variable: StottrVariable {
                     name: "pizza".to_string(),
                 },
@@ -476,12 +476,12 @@ fn test_spec_default_value_1() {
             parameter_list: vec![UnresolvedParameter {
                 optional: false,
                 non_blank: false,
-                ptype: Some(UnresolvedPType::Basic(
-                    ResolvesToNamedNode::PrefixedName(PrefixedName {
+                ptype: Some(UnresolvedPType::Basic(ResolvesToNamedNode::PrefixedName(
+                    PrefixedName {
                         prefix: "owl".to_string(),
                         name: "Class".to_string(),
-                    }),
-                )),
+                    },
+                ))),
                 stottr_variable: StottrVariable {
                     name: "pizza".to_string(),
                 },
@@ -529,12 +529,12 @@ fn test_spec_default_value_2() {
             parameter_list: vec![UnresolvedParameter {
                 optional: false,
                 non_blank: false,
-                ptype: Some(UnresolvedPType::Basic(
-                    ResolvesToNamedNode::PrefixedName(PrefixedName {
+                ptype: Some(UnresolvedPType::Basic(ResolvesToNamedNode::PrefixedName(
+                    PrefixedName {
                         prefix: "owl".to_string(),
                         name: "Class".to_string(),
-                    }),
-                )),
+                    },
+                ))),
                 stottr_variable: StottrVariable {
                     name: "pizza".to_string(),
                 },
@@ -583,12 +583,12 @@ fn test_spec_default_value_3() {
             parameter_list: vec![UnresolvedParameter {
                 optional: false,
                 non_blank: false,
-                ptype: Some(UnresolvedPType::Basic(
-                    ResolvesToNamedNode::PrefixedName(PrefixedName {
+                ptype: Some(UnresolvedPType::Basic(ResolvesToNamedNode::PrefixedName(
+                    PrefixedName {
                         prefix: "owl".to_string(),
                         name: "Class".to_string(),
-                    }),
-                )),
+                    },
+                ))),
                 stottr_variable: StottrVariable {
                     name: "pizza".to_string(),
                 },
@@ -803,12 +803,12 @@ fn test_spec_more_complex_types() {
                 UnresolvedParameter {
                     optional: false,
                     non_blank: true,
-                    ptype: Some(UnresolvedPType::Basic(
-                        ResolvesToNamedNode::PrefixedName(PrefixedName {
+                    ptype: Some(UnresolvedPType::Basic(ResolvesToNamedNode::PrefixedName(
+                        PrefixedName {
                             prefix: "owl".to_string(),
                             name: "Class".to_string(),
-                        }),
-                    )),
+                        },
+                    ))),
                     stottr_variable: StottrVariable {
                         name: "pizza".to_string(),
                     },
@@ -817,12 +817,12 @@ fn test_spec_more_complex_types() {
                 UnresolvedParameter {
                     optional: true,
                     non_blank: true,
-                    ptype: Some(UnresolvedPType::Basic(
-                        ResolvesToNamedNode::PrefixedName(PrefixedName {
+                    ptype: Some(UnresolvedPType::Basic(ResolvesToNamedNode::PrefixedName(
+                        PrefixedName {
                             prefix: "owl".to_string(),
                             name: "NamedIndividual".to_string(),
-                        }),
-                    )),
+                        },
+                    ))),
                     stottr_variable: StottrVariable {
                         name: "country".to_string(),
                     },
@@ -840,16 +840,14 @@ fn test_spec_more_complex_types() {
                 UnresolvedParameter {
                     optional: false,
                     non_blank: false,
-                    ptype: Some(UnresolvedPType::NEList(Box::new(
-                        UnresolvedPType::List(Box::new(UnresolvedPType::List(Box::new(
-                            UnresolvedPType::Basic(ResolvesToNamedNode::PrefixedName(
-                                PrefixedName {
-                                    prefix: "owl".to_string(),
-                                    name: "Class".to_string(),
-                                },
-                            )),
+                    ptype: Some(UnresolvedPType::NEList(Box::new(UnresolvedPType::List(
+                        Box::new(UnresolvedPType::List(Box::new(UnresolvedPType::Basic(
+                            ResolvesToNamedNode::PrefixedName(PrefixedName {
+                                prefix: "owl".to_string(),
+                                name: "Class".to_string(),
+                            }),
                         )))),
-                    ))),
+                    )))),
                     stottr_variable: StottrVariable {
                         name: "toppings".to_string(),
                     },

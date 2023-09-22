@@ -71,7 +71,9 @@ impl Mapping {
         caching_folder: Option<String>,
     ) -> Result<Mapping, MaplibError> {
         #[allow(clippy::match_single_binding)]
-        match env_logger::try_init() { _=>{}};
+        match env_logger::try_init() {
+            _ => {}
+        };
 
         let use_caching = caching_folder.is_some();
         Ok(Mapping {
@@ -382,7 +384,7 @@ fn create_triples(
     for (k, sc) in static_columns {
         if k == "verb" {
             if let ConstantTerm::Constant(ConstantLiteral::Iri(nn)) = &sc.constant_term {
-                    verb = Some(nn.as_str().to_string());
+                verb = Some(nn.as_str().to_string());
             } else {
                 return Err(MappingError::InvalidPredicateConstant(
                     sc.constant_term.clone(),

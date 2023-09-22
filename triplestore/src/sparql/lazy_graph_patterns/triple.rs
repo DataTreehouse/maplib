@@ -33,7 +33,7 @@ impl Triplestore {
                 xsd::ANY_URI => Some(RDFNodeType::IRI),
                 _ => Some(RDFNodeType::Literal(l.datatype().into_owned())),
             },
-            TermPattern::Variable(_) => None
+            TermPattern::Variable(_) => None,
         };
         let subject_rename = get_keep_rename_term_pattern(&triple_pattern.subject);
         let verb_rename = get_keep_rename_named_node_pattern(&triple_pattern.predicate);

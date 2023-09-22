@@ -287,9 +287,7 @@ fn resolve_ptype(
         UnresolvedPType::Basic(b) => PType::Basic(resolve(b, prefix_map)?, get_name(b)),
         UnresolvedPType::Lub(l) => PType::Lub(Box::new(resolve_ptype(l, prefix_map)?)),
         UnresolvedPType::List(l) => PType::List(Box::new(resolve_ptype(l, prefix_map)?)),
-        UnresolvedPType::NEList(l) => {
-            PType::NEList(Box::new(resolve_ptype(l, prefix_map)?))
-        }
+        UnresolvedPType::NEList(l) => PType::NEList(Box::new(resolve_ptype(l, prefix_map)?)),
     })
 }
 

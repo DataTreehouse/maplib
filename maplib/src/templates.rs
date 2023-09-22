@@ -194,18 +194,18 @@ fn infer_template_types(
                                     if !other_parameter.optional {
                                         changed = changed
                                             || lub_update(
-                                            &template.signature.template_name,
-                                            v,
-                                            my_parameter,
-                                            &PType::NEList(Box::new(other_ptype.clone())),
+                                                &template.signature.template_name,
+                                                v,
+                                                my_parameter,
+                                                &PType::NEList(Box::new(other_ptype.clone())),
                                             )?;
                                     } else {
                                         changed = changed
                                             || lub_update(
-                                            &template.signature.template_name,
-                                            v,
-                                            my_parameter,
-                                            &PType::List(Box::new(other_ptype.clone())),
+                                                &template.signature.template_name,
+                                                v,
+                                                my_parameter,
+                                                &PType::List(Box::new(other_ptype.clone())),
                                             )?;
                                     }
                                 } else {
