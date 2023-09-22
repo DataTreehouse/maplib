@@ -104,7 +104,7 @@ impl Triplestore {
 
 fn write_ntriples_for_df<W: Write + ?Sized>(
     df: &DataFrame,
-    verb: &String,
+    verb: &str,
     dt: &Option<NamedNode>,
     writer: &mut W,
     chunk_size: usize,
