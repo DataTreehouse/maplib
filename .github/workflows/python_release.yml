@@ -1,5 +1,5 @@
-# Adapted from https://github.com/pola-rs/maplib/blob/main/.github/workflows/release-python.yml
-# With license found in maplib/licensing/maplib_LICENSE
+# Adapted from https://github.com/pola-rs/polars/blob/main/.github/workflows/release-python.yml
+# With license found in maplib/licensing/polars_LICENSE
 
 name: Release Python
 
