@@ -32,6 +32,7 @@ pub enum MappingError {
     WriteNTriplesError(io::Error),
     RemoveParquetFileError(io::Error),
     TriplestoreError(TriplestoreError),
+    MissingDataFrameForNonEmptySignature,
 }
 
 impl Display for MappingError {
@@ -139,6 +140,9 @@ impl Display for MappingError {
             }
             MappingError::TriplestoreError(e) => {
                 write!(f, "Triplestore error {}", e)
+            }
+            MappingError::MissingDataFrameForNonEmptySignature => {
+                write!(f, "Missing DataFrame argument, but signature is not empty")
             }
         }
     }

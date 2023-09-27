@@ -17,6 +17,7 @@ use log::debug;
 use oxrdf::Triple;
 use polars::lazy::prelude::{col, Expr};
 use polars::prelude::{DataFrame, IntoLazy};
+use polars_core::prelude::NamedFrom;
 use polars_core::series::Series;
 use rayon::iter::IndexedParallelIterator;
 use rayon::iter::ParallelDrainRange;
@@ -165,7 +166,7 @@ impl Mapping {
     pub fn expand(
         &mut self,
         template: &str,
-        df: DataFrame,
+        df: Option<DataFrame>,
         options: ExpandOptions,
     ) -> Result<MappingReport, MappingError> {
         let now = Instant::now();
@@ -185,7 +186,8 @@ impl Mapping {
         };
         let call_uuid = Uuid::new_v4().to_string();
 
-        if self.use_caching {
+        if self.use_caching && df.is_some() {
+            let df = df.unwrap();
             let n_50_mb = (df.estimated_size() / 50_000_000) + 1;
             let chunk_size = df.height() / n_50_mb;
             let mut offset = 0i64;
@@ -198,7 +200,7 @@ impl Mapping {
                     0,
                     self.blank_node_counter,
                     &target_template_name,
-                    df_slice,
+                    Some(df_slice),
                     columns.clone(),
                     HashMap::new(),
                     unique_subsets.clone(),
@@ -232,39 +234,50 @@ impl Mapping {
         pattern_num: usize,
         mut blank_node_counter: usize,
         name: &str,
-        df: DataFrame,
+        df: Option<DataFrame>,
         dynamic_columns: HashMap<String, PrimitiveColumn>,
         static_columns: HashMap<String, StaticColumn>,
         unique_subsets: Vec<Vec<String>>,
     ) -> Result<(Vec<OTTRTripleInstance>, usize), MappingError> {
         if let Some(template) = self.template_dataset.get(name) {
             if template.signature.template_name.as_str() == OTTR_TRIPLE {
-                Ok((
-                    vec![OTTRTripleInstance {
-                        df,
-                        dynamic_columns,
-                        static_columns,
-                        has_unique_subset: !unique_subsets.is_empty(),
-                    }],
-                    blank_node_counter,
-                ))
+                if let Some(df) = df {
+                    Ok((
+                        vec![OTTRTripleInstance {
+                            df,
+                            dynamic_columns,
+                            static_columns,
+                            has_unique_subset: !unique_subsets.is_empty(),
+                        }],
+                        blank_node_counter,
+                    ))
+                } else {
+                    panic!("Reached OTTR_TRIPLE basis rule without df, this should never happen")
+                }
             } else {
                 let mut expand_params_vec = vec![];
-                let colnames: HashSet<_> = df
-                    .get_column_names()
-                    .iter()
-                    .map(|x| x.to_string())
-                    .collect();
+                let colnames: HashSet<_> = if let Some(df) = &df {
+                    df.get_column_names()
+                        .iter()
+                        .map(|x| x.to_string())
+                        .collect()
+                } else {
+                    Default::default()
+                };
                 for i in &template.pattern_list {
                     let mut instance_series = vec![];
                     let vs = get_variable_names(i);
-                    for v in vs {
-                        if colnames.contains(v) {
-                            instance_series.push(df.column(v).unwrap().clone());
+                    if let Some(df) = &df {
+                        for v in vs {
+                            if colnames.contains(v) {
+                                instance_series.push(df.column(v).unwrap().clone());
+                            }
                         }
                     }
                     expand_params_vec.push((i, instance_series));
                 }
+
+                let use_df_height = if let Some(df) = &df { df.height() } else { 1 };
 
                 let results: Vec<_> = expand_params_vec
                     .par_drain(..)
@@ -290,7 +303,7 @@ impl Mapping {
                             &dynamic_columns,
                             &static_columns,
                             &unique_subsets,
-                            df.height(),
+                            use_df_height,
                         )?;
 
                         self._expand(
@@ -298,7 +311,7 @@ impl Mapping {
                             i,
                             updated_blank_node_counter,
                             instance.template_name.as_str(),
-                            instance_df,
+                            Some(instance_df),
                             instance_dynamic_columns,
                             instance_static_columns,
                             new_unique_subsets,
@@ -372,7 +385,7 @@ fn create_triples(
     i: OTTRTripleInstance,
 ) -> Result<(DataFrame, RDFNodeType, Option<String>, Option<String>, bool), MappingError> {
     let OTTRTripleInstance {
-        df,
+        mut df,
         mut dynamic_columns,
         static_columns,
         has_unique_subset,
@@ -381,6 +394,12 @@ fn create_triples(
     let mut expressions = vec![];
 
     let mut verb = None;
+
+    if dynamic_columns.is_empty() && df.height() == 0 {
+        df.with_column(Series::new("dummy_column", vec!["dummy_row"]))
+            .unwrap();
+    }
+
     for (k, sc) in static_columns {
         if k == "verb" {
             if let ConstantTerm::Constant(ConstantLiteral::Iri(nn)) = &sc.constant_term {
@@ -398,6 +417,7 @@ fn create_triples(
             dynamic_columns.insert(k, mapped_column);
         }
     }
+
     let mut lf = df.lazy();
     for e in expressions {
         lf = lf.with_column(e);

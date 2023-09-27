@@ -50,7 +50,7 @@ fn test_maplib_easy_case(testdata_path: PathBuf) {
     let _report = mapping
         .expand(
             "http://example.net/ns#ExampleTemplate",
-            df,
+            Some(df),
             Default::default(),
         )
         .expect("");
@@ -92,7 +92,7 @@ fn test_all_iri_case() {
     let _report = mapping
         .expand(
             "http://example.net/ns#ExampleTemplate",
-            df,
+            Some(df),
             Default::default(),
         )
         .expect("");
@@ -138,7 +138,7 @@ fn test_string_language_tag_cases() {
     let _report = mapping
         .expand(
             "http://example.net/ns#ExampleTemplate",
-            df,
+            Some(df),
             ExpandOptions {
                 language_tags: Some(HashMap::from([(
                     "myString".to_string(),
@@ -201,7 +201,7 @@ fn test_const_list_case() {
     let _report = mapping
         .expand(
             "http://example.net/ns#ExampleTemplate",
-            df,
+            Some(df),
             Default::default(),
         )
         .expect("");
@@ -272,7 +272,7 @@ ex:Nested [?myVar] :: {
     let _report = mapping
         .expand(
             "http://example.net/ns#ExampleTemplate",
-            df,
+            Some(df),
             Default::default(),
         )
         .unwrap();
@@ -410,7 +410,7 @@ ex:ExampleTemplate [
     let _report = mapping
         .expand(
             "http://example.net/ns#ExampleTemplate",
-            df,
+            Some(df),
             Default::default(),
         )
         .unwrap();
@@ -641,7 +641,7 @@ ex:AnotherExampleTemplate [?object, ?predicate, ?myList] :: {
     let _report = mapping
         .expand(
             "http://example.net/ns#AnotherExampleTemplate",
-            df,
+            Some(df),
             Default::default(),
         )
         .unwrap();
@@ -724,7 +724,7 @@ ex:AnotherExampleTemplate [?subject, ?myList1, ?myList2] :: {
     let _report = mapping
         .expand(
             "http://example.net/ns#AnotherExampleTemplate",
-            df,
+            Some(df),
             Default::default(),
         )
         .unwrap();

@@ -156,7 +156,7 @@ impl Mapping {
             pattern_list: patterns,
         };
         self.template_dataset.templates.push(template.clone());
-        self.expand(template_name.as_str(), df, options)?;
+        self.expand(template_name.as_str(), Some(df), options)?;
         Ok(template)
     }
 }

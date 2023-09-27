@@ -220,7 +220,7 @@ impl Triplestore {
                 lf = lf.rename(["subject"], [renamed]);
                 out_datatypes.insert(renamed.to_string(), RDFNodeType::IRI);
             } else {
-                drop.push("select");
+                drop.push("subject");
             }
             if let Some(renamed) = object_keep_rename {
                 lf = lf.rename(["object"], [renamed]);

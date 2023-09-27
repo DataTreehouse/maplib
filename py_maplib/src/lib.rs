@@ -241,31 +241,40 @@ impl Mapping {
     pub fn expand(
         &mut self,
         template: &str,
-        df: &PyAny,
+        df: Option<&PyAny>,
         unique_subset: Option<Vec<String>>,
         language_tags: Option<HashMap<String, String>>,
         caching_folder: Option<String>,
     ) -> PyResult<Option<PyObject>> {
-        if df.getattr("height")?.gt(0).unwrap() {
-            let df = polars_df_to_rust_df(&df)?;
-            let unique_subsets = if let Some(unique_subset) = unique_subset {
-                Some(vec![unique_subset.into_iter().collect()])
-            } else {
-                None
-            };
-            let options = ExpandOptions {
-                language_tags,
-                unique_subsets,
-                caching_folder,
-            };
+        let unique_subsets = if let Some(unique_subset) = unique_subset {
+            Some(vec![unique_subset.into_iter().collect()])
+        } else {
+            None
+        };
+        let options = ExpandOptions {
+            language_tags,
+            unique_subsets,
+            caching_folder,
+        };
 
-            let mut _report = self
+        if let Some(df) = df {
+            if df.getattr("height")?.gt(0).unwrap() {
+                let df = polars_df_to_rust_df(&df)?;
+
+                let _report = self
+                    .inner
+                    .expand(template, Some(df), options.to_rust_expand_options())
+                    .map_err(MaplibError::from)
+                    .map_err(PyMaplibError::from)?;
+            } else {
+                warn!("Template expansion of {} with empty DataFrame", template);
+            }
+        } else {
+            let _report = self
                 .inner
-                .expand(template, df, options.to_rust_expand_options())
+                .expand(template, None, options.to_rust_expand_options())
                 .map_err(MaplibError::from)
                 .map_err(PyMaplibError::from)?;
-        } else {
-            warn!("Template expansion of {} with empty DataFrame", template);
         }
 
         Ok(None)

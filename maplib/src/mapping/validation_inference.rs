@@ -14,42 +14,46 @@ impl Mapping {
     pub fn validate_infer_dataframe_columns(
         &self,
         signature: &Signature,
-        df: &DataFrame,
+        df: &Option<DataFrame>,
         options: &ExpandOptions,
     ) -> Result<HashMap<String, PrimitiveColumn>, MappingError> {
-        let mut df_columns = HashSet::new();
-        df_columns.extend(df.get_column_names().into_iter().map(|x| x.to_string()));
-
         let mut map = HashMap::new();
-        for parameter in &signature.parameter_list {
-            let variable_name = &parameter.stottr_variable.name;
-            if df_columns.contains(variable_name.as_str()) {
-                df_columns.remove(variable_name.as_str());
-                if !parameter.optional {
-                    validate_non_optional_parameter(df, variable_name)?;
-                }
-                if parameter.non_blank {
-                    //TODO handle blanks;
-                    validate_non_blank_parameter(df, variable_name)?;
-                }
-                let column_data_type = validate_infer_column_data_type(
-                    df,
-                    parameter,
-                    variable_name,
-                    &options.language_tags,
-                )?;
+        if let Some(df) = df {
+            let mut df_columns = HashSet::new();
+            df_columns.extend(df.get_column_names().into_iter().map(|x| x.to_string()));
 
-                map.insert(variable_name.to_string(), column_data_type);
-            } else {
-                return Err(MappingError::MissingParameterColumn(
-                    variable_name.to_string(),
+            for parameter in &signature.parameter_list {
+                let variable_name = &parameter.stottr_variable.name;
+                if df_columns.contains(variable_name.as_str()) {
+                    df_columns.remove(variable_name.as_str());
+                    if !parameter.optional {
+                        validate_non_optional_parameter(df, variable_name)?;
+                    }
+                    if parameter.non_blank {
+                        //TODO handle blanks;
+                        validate_non_blank_parameter(df, variable_name)?;
+                    }
+                    let column_data_type = validate_infer_column_data_type(
+                        df,
+                        parameter,
+                        variable_name,
+                        &options.language_tags,
+                    )?;
+
+                    map.insert(variable_name.to_string(), column_data_type);
+                } else {
+                    return Err(MappingError::MissingParameterColumn(
+                        variable_name.to_string(),
+                    ));
+                }
+            }
+            if !df_columns.is_empty() {
+                return Err(MappingError::ContainsIrrelevantColumns(
+                    df_columns.iter().map(|x| x.to_string()).collect(),
                 ));
             }
-        }
-        if !df_columns.is_empty() {
-            return Err(MappingError::ContainsIrrelevantColumns(
-                df_columns.iter().map(|x| x.to_string()).collect(),
-            ));
+        } else if !signature.parameter_list.is_empty() {
+            return Err(MappingError::MissingDataFrameForNonEmptySignature);
         }
         Ok(map)
     }
