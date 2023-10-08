@@ -16,6 +16,7 @@ use polars_core::series::Series;
 use representation::RDFNodeType;
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 use std::collections::HashMap;
+use crate::sparql::lazy_graph_patterns::load_tt::multiple_tt_to_lf;
 
 impl Triplestore {
     pub fn lazy_triple_pattern(
@@ -34,7 +35,6 @@ impl Triplestore {
                 _ => Some(RDFNodeType::Literal(l.datatype().into_owned())),
             },
             TermPattern::Variable(_) => None,
-            _ => None,
         };
         let subject_rename = get_keep_rename_term_pattern(&triple_pattern.subject);
         let verb_rename = get_keep_rename_named_node_pattern(&triple_pattern.predicate);
@@ -48,6 +48,7 @@ impl Triplestore {
                 &object_rename,
                 subject_filter,
                 object_filter,
+                &None, //TODO!
                 &object_datatype_req,
             )?,
             NamedNodePattern::Variable(v) => {
@@ -181,61 +182,51 @@ impl Triplestore {
         object_keep_rename: &Option<String>,
         subject_filter: Option<Expr>,
         object_filter: Option<Expr>,
+        subject_datatype_req: &Option<RDFNodeType>,
         object_datatype_req: &Option<RDFNodeType>,
     ) -> Result<(DataFrame, HashMap<String, RDFNodeType>), SparqlError> {
+        println!("Predicate {}", verb_uri);
         if let Some(m) = self.df_map.get(verb_uri) {
             if m.is_empty() {
                 panic!("Empty map should never happen");
             }
-            let (dt, tt) = if let Some(object_datatype) = object_datatype_req {
-                if let Some(tt) = m.get(object_datatype) {
-                    (object_datatype, tt)
+            if let Some((subj_dt, obj_dt, mut lf)) =
+                multiple_tt_to_lf(m, subject_datatype_req, object_datatype_req)?
+            {
+                println!("Subj dt {:?}", subj_dt);
+                println!("Obj dt {:?}", obj_dt);
+                let mut out_datatypes = HashMap::new();
+
+                let mut drop = vec![];
+                if let Some(renamed) = subject_keep_rename {
+                    lf = lf.rename(["subject"], [renamed]);
+                    out_datatypes.insert(renamed.to_string(), subj_dt.clone());
                 } else {
-                    return Ok(create_empty_df_datatypes(
-                        subject_keep_rename,
-                        verb_keep_rename,
-                        object_keep_rename,
-                        object_datatype_req,
-                    ));
+                    drop.push("subject");
                 }
-            } else if m.len() > 1 {
-                let dts: Vec<&RDFNodeType> = m.keys().collect();
-                todo!("Multiple datatypes not supported yet {:?}", dts);
+                if let Some(renamed) = object_keep_rename {
+                    lf = lf.rename(["object"], [renamed]);
+                    out_datatypes.insert(renamed.to_string(), obj_dt.clone());
+                } else {
+                    drop.push("object")
+                }
+                if let Some(f) = subject_filter {
+                    lf = lf.filter(f);
+                }
+                if let Some(f) = object_filter {
+                    lf = lf.filter(f);
+                }
+                lf = lf.drop_columns(drop);
+                println!("Out datatypes {:?}", out_datatypes);
+                Ok((lf.collect().unwrap(), out_datatypes))
             } else {
-                m.iter().next().unwrap()
-            };
-
-            assert!(tt.unique, "Should be deduplicated");
-            let mut out_datatypes = HashMap::new();
-            let mut lf = concat(
-                tt.get_lazy_frames()
-                    .map_err(SparqlError::TripleTableReadError)?,
-                UnionArgs::default(),
-            )
-            .unwrap()
-            .select(vec![col("subject"), col("object")]);
-
-            let mut drop = vec![];
-            if let Some(renamed) = subject_keep_rename {
-                lf = lf.rename(["subject"], [renamed]);
-                out_datatypes.insert(renamed.to_string(), RDFNodeType::IRI);
-            } else {
-                drop.push("subject");
+                Ok(create_empty_df_datatypes(
+                    subject_keep_rename,
+                    verb_keep_rename,
+                    object_keep_rename,
+                    object_datatype_req,
+                ))
             }
-            if let Some(renamed) = object_keep_rename {
-                lf = lf.rename(["object"], [renamed]);
-                out_datatypes.insert(renamed.to_string(), dt.clone());
-            } else {
-                drop.push("object")
-            }
-            if let Some(f) = subject_filter {
-                lf = lf.filter(f);
-            }
-            if let Some(f) = object_filter {
-                lf = lf.filter(f);
-            }
-            lf = lf.drop_columns(drop);
-            Ok((lf.collect().unwrap(), out_datatypes))
         } else {
             Ok(create_empty_df_datatypes(
                 subject_keep_rename,
@@ -266,6 +257,7 @@ impl Triplestore {
                 object_keep_rename,
                 subject_filter.clone(),
                 object_filter.clone(),
+                &None, //TODO!
                 object_datatype_req,
             )?;
 

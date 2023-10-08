@@ -55,13 +55,13 @@ impl Triplestore {
         let mut write_buffer_pool = LowContentionPool::<Vec<_>>::new(n_threads);
 
         for (property, map) in &mut self.df_map {
-            for (rdf_node_type, tt) in map {
-                let dt = if let RDFNodeType::Literal(dt) = rdf_node_type {
+            for ((rdf_node_type_k, rdf_node_type_o), tt) in map {
+                let dt = if let RDFNodeType::Literal(dt) = rdf_node_type_o {
                     Some(dt.clone())
                 } else {
                     None
                 };
-                let triple_type = rdf_node_type.find_triple_type();
+                let triple_type = rdf_node_type_o.find_triple_type();
                 if let Some(dfs) = &mut tt.dfs {
                     for df in dfs {
                         df.as_single_chunk_par();

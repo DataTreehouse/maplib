@@ -339,18 +339,17 @@ impl Mapping {
         new_blank_node_counter: usize,
     ) -> Result<(), MappingError> {
         let now = Instant::now();
-        let triples: Vec<
-            Result<(DataFrame, RDFNodeType, Option<String>, Option<String>, bool), MappingError>,
-        > = result_vec.par_drain(..).map(create_triples).collect();
+        let triples: Vec<_> = result_vec.par_drain(..).map(create_triples).collect();
         let mut ok_triples = vec![];
         for t in triples {
             ok_triples.push(t?);
         }
         let mut all_triples_to_add = vec![];
-        for (df, rdf_node_type, language_tag, verb, has_unique_subset) in ok_triples {
+        for (df, subj_rdf_node_type, obj_rdf_node_type , language_tag, verb, has_unique_subset) in ok_triples {
             all_triples_to_add.push(TriplesToAdd {
                 df,
-                object_type: rdf_node_type,
+                subject_type: subj_rdf_node_type,
+                object_type: obj_rdf_node_type,
                 language_tag,
                 static_verb_column: verb,
                 has_unique_subset,
@@ -383,7 +382,7 @@ fn get_variable_names(i: &Instance) -> Vec<&String> {
 
 fn create_triples(
     i: OTTRTripleInstance,
-) -> Result<(DataFrame, RDFNodeType, Option<String>, Option<String>, bool), MappingError> {
+) -> Result<(DataFrame, RDFNodeType, RDFNodeType, Option<String>, Option<String>, bool), MappingError> {
     let OTTRTripleInstance {
         mut df,
         mut dynamic_columns,
@@ -430,10 +429,14 @@ fn create_triples(
     lf = lf.select(keep_cols.as_slice());
     let df = lf.collect().expect("Collect problem");
     let PrimitiveColumn {
-        rdf_node_type,
+        rdf_node_type:subj_rdf_node_type,
+        language_tag:_,
+    } = dynamic_columns.remove("subject").unwrap();
+    let PrimitiveColumn {
+        rdf_node_type: obj_rdf_node_type,
         language_tag,
     } = dynamic_columns.remove("object").unwrap();
-    Ok((df, rdf_node_type, language_tag, verb, has_unique_subset))
+    Ok((df, subj_rdf_node_type, obj_rdf_node_type, language_tag, verb, has_unique_subset))
 }
 
 fn create_dynamic_expression_from_static(

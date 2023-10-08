@@ -329,9 +329,9 @@ impl Mapping {
             .query(&query)
             .map_err(PyMaplibError::from)?;
         match res {
-            QueryResult::Select(df) => df_to_py_df(df, py),
+            QueryResult::Select(df, datatypes) => df_to_py_df(df, py),
             QueryResult::Construct(dfs) => {
-                let dfs = dfs.into_iter().map(|(df, _)| df).collect();
+                let dfs = dfs.into_iter().map(|(df, subj_type, obj_type)| df).collect();
                 Ok(df_vec_to_py_df_list(dfs, py)?.into())
             }
         }

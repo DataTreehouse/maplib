@@ -35,7 +35,7 @@ const LANGUAGE_TAG_COLUMN: &str = "language_tag";
 pub struct Triplestore {
     deduplicated: bool,
     pub(crate) caching_folder: Option<String>,
-    df_map: HashMap<String, HashMap<RDFNodeType, TripleTable>>,
+    df_map: HashMap<String, HashMap<(RDFNodeType, RDFNodeType), TripleTable>>,
 }
 
 pub struct TripleTable {
@@ -95,6 +95,7 @@ impl TripleTable {
 
 pub struct TriplesToAdd {
     pub df: DataFrame,
+    pub subject_type: RDFNodeType,
     pub object_type: RDFNodeType,
     pub language_tag: Option<String>,
     pub static_verb_column: Option<String>,
@@ -104,6 +105,7 @@ pub struct TriplesToAdd {
 pub struct TripleDF {
     df: DataFrame,
     predicate: String,
+    subject_type: RDFNodeType,
     object_type: RDFNodeType,
 }
 
@@ -193,6 +195,7 @@ impl Triplestore {
             .map(|t| {
                 let TriplesToAdd {
                     df,
+                    subject_type,
                     object_type,
                     language_tag,
                     static_verb_column,
@@ -201,6 +204,7 @@ impl Triplestore {
 
                 prepare_triples(
                     df,
+                    &subject_type,
                     &object_type,
                     &language_tag,
                     static_verb_column,
@@ -232,12 +236,13 @@ impl Triplestore {
         call_uuid: &String,
     ) -> Result<(), TriplestoreError> {
         let folder_path = Path::new(self.caching_folder.as_ref().unwrap());
-        let file_paths: Vec<(String, Result<_, _>, String, RDFNodeType)> = triples_df
+        let file_paths: Vec<_> = triples_df
             .par_drain(..)
             .map(|tdf| {
                 let TripleDF {
                     mut df,
                     predicate,
+                    subject_type,
                     object_type,
                 } = tdf;
                 let file_name = format!(
@@ -252,15 +257,18 @@ impl Triplestore {
                     file_path.to_str().unwrap().to_string(),
                     write_parquet(&mut df, file_path),
                     predicate,
+                    subject_type,
                     object_type,
                 )
             })
             .collect();
-        for (file_path, res, predicate, object_type) in file_paths {
+        for (file_path, res, predicate, subject_type, object_type) in file_paths {
             res.map_err(TriplestoreError::ParquetIOError)?;
+            let k = (subject_type, object_type);
+
             //Safe to assume everything is unique
             if let Some(m) = self.df_map.get_mut(&predicate) {
-                if let Some(v) = m.get_mut(&object_type) {
+                if let Some(v) = m.get_mut(&k) {
                     v.df_paths.as_mut().unwrap().push(file_path);
                     v.unique = v.unique && (call_uuid == &v.call_uuid);
                     if !v.unique {
@@ -268,7 +276,7 @@ impl Triplestore {
                     }
                 } else {
                     m.insert(
-                        object_type,
+                        k,
                         TripleTable {
                             dfs: None,
                             df_paths: Some(vec![file_path]),
@@ -282,7 +290,7 @@ impl Triplestore {
                 self.df_map.insert(
                     predicate,
                     HashMap::from([(
-                        object_type,
+                        k,
                         TripleTable {
                             dfs: None,
                             df_paths: Some(vec![file_path]),
@@ -301,12 +309,15 @@ impl Triplestore {
         for TripleDF {
             df,
             predicate,
+            subject_type,
             object_type,
         } in triples_df
         {
+            let k = (subject_type, object_type);
+
             //Safe to assume everything is unique
             if let Some(m) = self.df_map.get_mut(&predicate) {
-                if let Some(v) = m.get_mut(&object_type) {
+                if let Some(v) = m.get_mut(&k) {
                     v.dfs.as_mut().unwrap().push(df);
                     v.unique = v.unique && (call_uuid == &v.call_uuid);
                     if !v.unique {
@@ -314,7 +325,7 @@ impl Triplestore {
                     }
                 } else {
                     m.insert(
-                        object_type,
+                        k,
                         TripleTable {
                             dfs: Some(vec![df]),
                             df_paths: None,
@@ -328,7 +339,7 @@ impl Triplestore {
                 self.df_map.insert(
                     predicate,
                     HashMap::from([(
-                        object_type,
+                        k,
                         TripleTable {
                             dfs: Some(vec![df]),
                             df_paths: None,
@@ -345,6 +356,7 @@ impl Triplestore {
 
 pub fn prepare_triples(
     mut df: DataFrame,
+    subject_type: &RDFNodeType,
     object_type: &RDFNodeType,
     language_tag: &Option<String>,
     static_verb_column: Option<String>,
@@ -356,20 +368,24 @@ pub fn prepare_triples(
         return vec![];
     }
 
-    //Important in order to consistently handle URIs
-    let object_type = match &object_type {
+    let map_literal_variants_to_iri = |t:&RDFNodeType| match t {
         RDFNodeType::Literal(l) => match l.as_ref() {
             xsd::ANY_URI => RDFNodeType::IRI,
             _ => RDFNodeType::Literal(l.clone()),
         },
-        _ => object_type.clone(),
+        _ => t.clone(),
     };
+
+    //Important in order to consistently handle URIs
+    let subject_type = map_literal_variants_to_iri(subject_type);
+    let object_type = map_literal_variants_to_iri(object_type);
 
     if let Some(static_verb_column) = static_verb_column {
         df = df.select(["subject", "object"]).unwrap();
         if let Some(tdf) = prepare_triples_df(
             df,
             static_verb_column,
+            &subject_type,
             &object_type,
             language_tag,
             has_unique_subset,
@@ -392,6 +408,7 @@ pub fn prepare_triples(
             if let Some(tdf) = prepare_triples_df(
                 part,
                 predicate,
+                &subject_type,
                 &object_type,
                 language_tag,
                 has_unique_subset,
@@ -410,6 +427,7 @@ pub fn prepare_triples(
 fn prepare_triples_df(
     mut df: DataFrame,
     predicate: String,
+    subject_type: &RDFNodeType,
     object_type: &RDFNodeType,
     language_tag: &Option<String>,
     has_unique_subset: bool,
@@ -452,6 +470,7 @@ fn prepare_triples_df(
     Some(TripleDF {
         df,
         predicate,
+        subject_type: subject_type.clone(),
         object_type: object_type.clone(),
     })
 }
