@@ -2,12 +2,14 @@ import polars as pl
 import pytest
 import rdflib
 from polars.testing import assert_frame_equal
-import rdflib as rl
-
+import pathlib
 from maplib import Mapping
 
 pl.Config.set_fmt_str_lengths(300)
 
+
+PATH_HERE = pathlib.Path(__file__).parent
+TESTDATA_PATH = PATH_HERE / "testdata"
 
 @pytest.fixture(scope="function")
 def blank_person_mapping():
@@ -24,7 +26,7 @@ def blank_person_mapping():
     @prefix ottr: 	<http://ns.ottr.xyz/0.4/> . 
     @prefix ax: 	<http://tpl.ottr.xyz/owl/axiom/0.1/> . 
     @prefix rstr: 	<http://tpl.ottr.xyz/owl/restriction/0.1/> .
-    ex:Person[ ?firstName, ?lastName, ?email ] :: {
+    ex:Person[ ?firstName, ?lastName, xsd:anyURI ?email ] :: {
       ottr:Triple(_:person, rdf:type, foaf:Person ),
       ottr:Triple(_:person, foaf:firstName, ?firstName ),
       ottr:Triple(_:person, foaf:lastName, ?lastName ),
@@ -50,8 +52,7 @@ def test_simple_query_no_error(blank_person_mapping):
         } ORDER BY ?firstName ?lastName
         """)
     expected_df = pl.DataFrame({"firstName": ["Ann", "Bob"],
-                                 "lastName": ["Strong", "Brite"]})
-
+                                "lastName": ["Strong", "Brite"]})
 
     assert_frame_equal(df, expected_df)
 
@@ -71,3 +72,29 @@ def test_simple_query_blank_node_output_no_error(blank_person_mapping):
             """)
     assert len(res) == 2
 
+
+def test_multi_datatype_query_no_error(blank_person_mapping):
+    df = blank_person_mapping.query("""
+        PREFIX foaf:<http://xmlns.com/foaf/0.1/>
+
+        SELECT ?s ?v ?o WHERE {
+        ?s ?v ?o .
+        } 
+        """)
+    by = ["s","v","o"]
+    df = df.sort(by=by)
+    filename = TESTDATA_PATH / "multi_datatype_query.csv"
+    #df.write_csv(filename)
+    expected_df = pl.scan_csv(filename).sort(by).collect()
+    assert_frame_equal(df, expected_df)
+
+
+@pytest.mark.skip()
+def test_multi_datatype_query_sorting_no_error(blank_person_mapping):
+    df = blank_person_mapping.query("""
+        PREFIX foaf:<http://xmlns.com/foaf/0.1/>
+
+        SELECT ?s ?v ?o WHERE {
+        ?s ?v ?o .
+        } ORDER BY ?s ?v ?o
+        """)

@@ -5,7 +5,9 @@ use polars_core::prelude::{AnyValue, ChunkedArray, NewChunkedArray, ObjectChunke
 use polars_core::series::Series;
 use representation::RDFNodeType;
 
-#[derive(Debug, Clone, Default, Eq, Hash, PartialEq)]
+pub const MULTI_TYPE_NAME:&str = "MultiTypes";
+
+#[derive(Debug, Clone, Default, Eq, Hash, PartialEq, Ord)]
 pub enum MultiType {
     IRI(NamedNode),
     BlankNode(BlankNode),
@@ -18,13 +20,13 @@ impl Display for MultiType {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             MultiType::IRI(i) => {
-                write!(f, "IRI({})", i)
+                write!(f, "{}", i)
             }
             MultiType::BlankNode(b) => {
-                write!(f, "BlankNode({})", b)
+                write!(f, "{}", b)
             }
             MultiType::Literal(l) => {
-                write!(f, "IRI({})", l)
+                write!(f, "{}", l)
             }
             MultiType::Null => {
                 write!(f, "Null")
@@ -35,7 +37,7 @@ impl Display for MultiType {
 
 impl PolarsObject for MultiType {
     fn type_name() -> &'static str {
-        todo!()
+        MULTI_TYPE_NAME
     }
 }
 
@@ -135,7 +137,10 @@ pub fn unitype_to_multitype(ser:&Series, dt:&RDFNodeType) -> Series {
                 _ => todo!("Not yet implemented: {:?}", dt)
             },
             RDFNodeType::None => {
-                todo!()
+                convert_to_multitype(
+                    |_: AnyValue| MultiType::Null,
+                    ser,
+                )
             }
             _ => {
                 todo!()
@@ -147,6 +152,6 @@ pub fn unitype_to_multitype(ser:&Series, dt:&RDFNodeType) -> Series {
 
 fn convert_to_multitype(f: fn(AnyValue) -> MultiType, objects: &Series) -> Series {
     let vs = objects.iter().map(|x| f(x));
-    let s: ObjectChunked<MultiType> = ChunkedArray::from_iter_values("object", vs);
+    let s: ObjectChunked<MultiType> = ChunkedArray::from_iter_values(objects.name(), vs);
     s.into()
 }

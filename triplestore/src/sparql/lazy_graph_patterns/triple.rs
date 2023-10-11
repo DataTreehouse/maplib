@@ -6,6 +6,8 @@ use crate::sparql::sparql_to_polars::{
     sparql_literal_to_polars_literal_value, sparql_named_node_to_polars_literal_value,
 };
 
+use crate::sparql::lazy_graph_patterns::load_tt::multiple_tt_to_lf;
+use crate::sparql::multitype::unitype_to_multitype;
 use oxrdf::vocab::xsd;
 use polars::prelude::{col, concat, lit, Expr};
 use polars::prelude::{IntoLazy, UnionArgs};
@@ -16,7 +18,6 @@ use polars_core::series::Series;
 use representation::RDFNodeType;
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 use std::collections::HashMap;
-use crate::sparql::lazy_graph_patterns::load_tt::multiple_tt_to_lf;
 
 impl Triplestore {
     pub fn lazy_triple_pattern(
@@ -185,7 +186,6 @@ impl Triplestore {
         subject_datatype_req: &Option<RDFNodeType>,
         object_datatype_req: &Option<RDFNodeType>,
     ) -> Result<(DataFrame, HashMap<String, RDFNodeType>), SparqlError> {
-        println!("Predicate {}", verb_uri);
         if let Some(m) = self.df_map.get(verb_uri) {
             if m.is_empty() {
                 panic!("Empty map should never happen");
@@ -193,8 +193,6 @@ impl Triplestore {
             if let Some((subj_dt, obj_dt, mut lf)) =
                 multiple_tt_to_lf(m, subject_datatype_req, object_datatype_req)?
             {
-                println!("Subj dt {:?}", subj_dt);
-                println!("Obj dt {:?}", obj_dt);
                 let mut out_datatypes = HashMap::new();
 
                 let mut drop = vec![];
@@ -210,6 +208,10 @@ impl Triplestore {
                 } else {
                     drop.push("object")
                 }
+                if let Some(renamed) = verb_keep_rename {
+                    lf = lf.with_column(lit(verb_uri).alias(renamed));
+                    out_datatypes.insert(renamed.clone(), RDFNodeType::IRI);
+                }
                 if let Some(f) = subject_filter {
                     lf = lf.filter(f);
                 }
@@ -217,7 +219,6 @@ impl Triplestore {
                     lf = lf.filter(f);
                 }
                 lf = lf.drop_columns(drop);
-                println!("Out datatypes {:?}", out_datatypes);
                 Ok((lf.collect().unwrap(), out_datatypes))
             } else {
                 Ok(create_empty_df_datatypes(
@@ -249,6 +250,10 @@ impl Triplestore {
     ) -> Result<(DataFrame, HashMap<String, RDFNodeType>), SparqlError> {
         let mut out_datatypes = HashMap::new();
         let mut lfs = vec![];
+
+        let need_multi_subject = self.partial_check_need_multi(predicate_uris, object_datatype_req, true);
+        let need_multi_object = self.partial_check_need_multi(predicate_uris, object_datatype_req,false);
+
         for v in predicate_uris {
             let (mut df, datatypes_map) = self.get_predicate_df(
                 v,
@@ -260,29 +265,39 @@ impl Triplestore {
                 &None, //TODO!
                 object_datatype_req,
             )?;
-
-            //Should be possible to skip around multiple datatypes requirement when df is empty
-            if df.height() > 0 {
-                if let Some(renamed) = verb_keep_rename {
-                    if let Some(others_dt) = out_datatypes.get(renamed) {
-                        if others_dt != &RDFNodeType::IRI {
-                            todo!("Multiple datatypes not implemented yet");
-                        }
-                    }
-                    out_datatypes.insert(renamed.to_string(), RDFNodeType::IRI);
-                    df = df
-                        .lazy()
-                        .with_column(lit(v.to_string()).alias(renamed))
-                        .collect()
-                        .unwrap();
+            if let Some(subj_col) = subject_keep_rename {
+                if df.height() > 0 && need_multi_subject
+                    && datatypes_map.get(subj_col).unwrap() != &RDFNodeType::MultiType
+                {
+                    df.with_column(unitype_to_multitype(
+                        df.column(subj_col).unwrap(),
+                        datatypes_map.get(subj_col).unwrap(),
+                    ))
+                    .unwrap();
+                    out_datatypes.insert(subj_col.clone(), RDFNodeType::MultiType);
+                } else {
+                    out_datatypes.insert(subj_col.clone(), datatypes_map.get(subj_col).unwrap().clone());
                 }
-                for (col, dt) in datatypes_map.into_iter() {
-                    if let Some(others_dt) = out_datatypes.get(&col) {
-                        if others_dt != &dt {
-                            todo!("Multiple datatypes not implemented yet");
-                        }
-                    }
-                    out_datatypes.insert(col, dt);
+            }
+
+            if let Some(obj_col) = object_keep_rename {
+                if df.height() > 0 && need_multi_object
+                    && datatypes_map.get(obj_col).unwrap() != &RDFNodeType::MultiType
+                {
+                    df.with_column(unitype_to_multitype(
+                        df.column(obj_col).unwrap(),
+                        datatypes_map.get(obj_col).unwrap(),
+                    ))
+                    .unwrap();
+                    out_datatypes.insert(obj_col.clone(), RDFNodeType::MultiType);
+                } else {
+                    out_datatypes.insert(obj_col.clone(), datatypes_map.get(obj_col).unwrap().clone());
+                }
+            }
+
+            if df.height() > 0 {
+                if let Some(verb_col) = verb_keep_rename {
+                    out_datatypes.insert(verb_col.clone(),datatypes_map.get(verb_col).unwrap().clone());
                 }
                 lfs.push(df.lazy());
             }
@@ -311,6 +326,26 @@ impl Triplestore {
             strs.push(k.clone())
         }
         strs
+    }
+    fn partial_check_need_multi(&self, predicates: &Vec<String>, object_datatype_req: &Option<RDFNodeType>, subject: bool) -> bool {
+        if !subject && object_datatype_req.is_some() {
+            return false;
+        }
+
+        let mut first_datatype = None;
+        for p in predicates {
+            for (subject_dt, object_dt) in self.df_map.get(p).unwrap().keys() {
+                let use_dt = if subject { subject_dt } else { object_dt };
+                if let Some(first) = &first_datatype {
+                    if first != &use_dt {
+                        return true;
+                    }
+                } else {
+                    first_datatype = Some(use_dt);
+                }
+            }
+        }
+        false
     }
 }
 
