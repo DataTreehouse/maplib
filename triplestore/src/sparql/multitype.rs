@@ -7,7 +7,7 @@ use representation::RDFNodeType;
 
 pub const MULTI_TYPE_NAME:&str = "MultiTypes";
 
-#[derive(Debug, Clone, Default, Eq, Hash, PartialEq, Ord)]
+#[derive(Debug, Clone, Default, Eq, Hash, PartialEq)]
 pub enum MultiType {
     IRI(NamedNode),
     BlankNode(BlankNode),
