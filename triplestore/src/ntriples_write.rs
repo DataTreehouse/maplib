@@ -230,9 +230,41 @@ fn write_string_property_triple(f: &mut Vec<u8>, mut any_values: Vec<AnyValue>, 
     } else {
         panic!()
     };
-    write!(f, "<{}>", s).unwrap();
+    write_iri_or_blanknode(f, s);
     write!(f, " <{}>", v).unwrap();
-    write!(f, " \"{}\"", lex).unwrap();
+    write!(f, " \"").unwrap();
+    let mut last = None;
+    let mut chars = lex.chars().peekable();
+    loop {
+        if let Some(c) = chars.next() {
+            if last.is_none() || last.unwrap() != '\\' {
+                match c {
+                    '\"' => write!(f, "\\\"").unwrap(),
+                    '\n' => write!(f, "\\n").unwrap(),
+                    '#' => write!(f, "\\#").unwrap(),
+                    '\\' => {
+                        if let Some(c) = chars.peek() {
+                            if !matches!(c, 't' | 'b' | 'n' | 'r' | 'f' | '"' | '\'' | '\\') {
+                                write!(f, "\\\\").unwrap();
+                            } else {
+                                write!(f, "\\").unwrap();
+                            }
+                        } else {
+                            write!(f, "\\\\").unwrap();
+                        }
+                    }
+                    _ => {
+                        write!(f, "{}", c).unwrap();
+                    }
+                }
+            }
+            last = Some(c);
+        } else {
+            break;
+        }
+    }
+    write!(f, "\"").unwrap();
+
     if let Some(lang) = lang_opt {
         writeln!(f, "@{} .", lang).unwrap();
     } else {
@@ -257,7 +289,7 @@ fn write_non_string_property_triple(
     } else {
         panic!()
     };
-    write!(f, "<{}>", s).unwrap();
+    write_iri_or_blanknode(f, s);
     write!(f, " <{}>", v).unwrap();
     write!(f, " \"{}\"", lex).unwrap();
     writeln!(f, "^^<{}> .", dt).unwrap();
@@ -274,7 +306,16 @@ fn write_object_property_triple(f: &mut Vec<u8>, mut any_values: Vec<AnyValue>, 
     } else {
         panic!()
     };
-    write!(f, "<{}>", s).unwrap();
-    write!(f, " <{}>", v).unwrap();
-    writeln!(f, " <{}> .", o).unwrap();
+    write_iri_or_blanknode(f, s);
+    write!(f, " <{}> ", v).unwrap();
+    write_iri_or_blanknode(f, o);
+    writeln!(f, " .").unwrap();
+}
+
+fn write_iri_or_blanknode(f: &mut Vec<u8>, s: &str) {
+    if s.chars().nth(0).unwrap() == '_' {
+        write!(f, "{}", s).unwrap();
+    } else {
+        write!(f, "<{}>", s).unwrap();
+    }
 }

@@ -1,6 +1,8 @@
 import polars as pl
 import pytest
+import rdflib
 from polars.testing import assert_frame_equal
+import rdflib as rl
 
 from maplib import Mapping
 
@@ -52,3 +54,20 @@ def test_simple_query_no_error(blank_person_mapping):
 
 
     assert_frame_equal(df, expected_df)
+
+
+def test_simple_query_blank_node_output_no_error(blank_person_mapping):
+    blank_person_mapping.write_ntriples("out.nt")
+    gr = rdflib.Graph()
+    gr.parse("out.nt", format="ntriples")
+    res = gr.query("""
+            PREFIX foaf:<http://xmlns.com/foaf/0.1/>
+
+            SELECT ?firstName ?lastName WHERE {
+            ?p a foaf:Person .
+            ?p foaf:lastName ?lastName .
+            ?p foaf:firstName ?firstName .
+            } ORDER BY ?firstName ?lastName
+            """)
+    assert len(res) == 2
+
