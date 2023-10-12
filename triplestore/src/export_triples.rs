@@ -16,8 +16,8 @@ impl Triplestore {
         F: Fn(&str, &str, &str) -> T,
     {
         for (verb, map) in &mut self.df_map {
-            for (k, v) in map {
-                if k.find_triple_type() == TripleType::ObjectProperty {
+            for ((k1, k2), v) in map {
+                if k2.find_triple_type() == TripleType::ObjectProperty {
                     for i in 0..v.len() {
                         let df = v.get_df(i)?;
                         if df.height() == 0 {
@@ -48,8 +48,8 @@ impl Triplestore {
     {
         //subject, verb, lexical_form, language_tag, datatype
         for (verb, map) in &mut self.df_map {
-            for (k, v) in map {
-                if k.find_triple_type() == TripleType::StringProperty {
+            for ((k1, k2), v) in map {
+                if k2.find_triple_type() == TripleType::StringProperty {
                     for i in 0..v.len() {
                         let df = v.get_df(i)?;
                         if df.height() == 0 {
@@ -88,9 +88,9 @@ impl Triplestore {
     {
         //subject, verb, lexical_form, datatype
         for (verb, map) in &mut self.df_map {
-            for (k, v) in map {
-                if k.find_triple_type() == TripleType::NonStringProperty {
-                    let object_type = if let RDFNodeType::Literal(l) = k {
+            for ((k1, k2), v) in map {
+                if k2.find_triple_type() == TripleType::NonStringProperty {
+                    let object_type = if let RDFNodeType::Literal(l) = k2 {
                         l
                     } else {
                         panic!("Should never happen")

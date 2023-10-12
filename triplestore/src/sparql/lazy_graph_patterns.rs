@@ -11,6 +11,7 @@ mod project;
 mod triple;
 mod union;
 mod values;
+pub(crate) mod load_tt;
 
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;

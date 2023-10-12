@@ -17,9 +17,19 @@ pub enum RDFNodeType {
     BlankNode,
     Literal(NamedNode),
     None,
+    MultiType
 }
 
 impl RDFNodeType {
+
+    pub fn union(&self, other:&RDFNodeType) -> RDFNodeType {
+        if self == other {
+            self.clone()
+        } else {
+            RDFNodeType::MultiType
+        }
+    }
+
     pub fn is_lit_type(&self, nnref: NamedNodeRef) -> bool {
         if let RDFNodeType::Literal(l) = self {
             if l.as_ref() == nnref {
@@ -70,6 +80,7 @@ impl RDFNodeType {
                 }
             },
             RDFNodeType::None => DataType::Null,
+            RDFNodeType::MultiType => todo!()
         }
     }
 }

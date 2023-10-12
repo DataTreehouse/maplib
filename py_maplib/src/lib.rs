@@ -45,6 +45,9 @@ use triplestore::sparql::QueryResult;
 // SOFTWARE.
 #[cfg(target_os = "linux")]
 use jemallocator::Jemalloc;
+use polars_core::frame::DataFrame;
+use polars_core::prelude::{DataType, NamedFrom, Series};
+use triplestore::sparql::multitype::{MULTI_TYPE_NAME, MultiType};
 
 #[cfg(not(target_os = "linux"))]
 use mimalloc::MiMalloc;
@@ -329,9 +332,12 @@ impl Mapping {
             .query(&query)
             .map_err(PyMaplibError::from)?;
         match res {
-            QueryResult::Select(df) => df_to_py_df(df, py),
+            QueryResult::Select(mut df, datatypes) => {
+                df = fix_multicolumns(df);
+                df_to_py_df(df, py)
+            },
             QueryResult::Construct(dfs) => {
-                let dfs = dfs.into_iter().map(|(df, _)| df).collect();
+                let dfs = dfs.into_iter().map(|(df, subj_type, obj_type)| fix_multicolumns(df)).collect();
                 Ok(df_vec_to_py_df_list(dfs, py)?.into())
             }
         }
@@ -497,4 +503,30 @@ fn _maplib(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
 
 fn is_blank_node(s: &str) -> bool {
     s.starts_with("_:")
+}
+
+fn fix_multicolumns(mut df: DataFrame) -> DataFrame {
+    let columns:Vec<_> = df.get_column_names().iter().map(|x|x.to_string()).collect();
+    for c in columns {
+        if df.column(&c).unwrap().dtype() == &DataType::Object(MULTI_TYPE_NAME) {
+            let ser = df.column(&c).unwrap();
+            let mut strs = vec![];
+            for i in 0..ser.len() {
+                let maybe_o = ser.get_object(i);
+                if let Some(o) = maybe_o {
+                    let o: Option<&MultiType> = o.as_any().downcast_ref();
+                    if let Some(m) = o {
+                        strs.push(Some(m.to_string()));
+                    } else {
+                        strs.push(None)
+                    }
+                } else {
+                    strs.push(None);
+                }
+            }
+            let new_ser = Series::new(&c, strs);
+            df.with_column(new_ser).unwrap();
+        }
+    }
+    df
 }

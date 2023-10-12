@@ -23,9 +23,9 @@ impl Triplestore {
         let mut dfs_to_write = vec![];
 
         for (property, tts) in &mut self.df_map {
-            for (rdf_node_type, tt) in tts {
+            for ((rdf_node_type_s, rdf_node_type_o), tt) in tts {
                 let filename;
-                if let RDFNodeType::Literal(literal_type) = rdf_node_type {
+                if let RDFNodeType::Literal(literal_type) = rdf_node_type_o {
                     filename = format!(
                         "{}_{}",
                         property_to_filename(property),

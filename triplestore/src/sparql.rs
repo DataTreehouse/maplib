@@ -6,6 +6,7 @@ mod lazy_order;
 mod query_context;
 pub mod solution_mapping;
 mod sparql_to_polars;
+pub mod multitype;
 
 use crate::sparql::query_context::Context;
 use oxrdf::vocab::xsd;
@@ -27,8 +28,8 @@ use spargebra::Query;
 use uuid::Uuid;
 
 pub enum QueryResult {
-    Select(DataFrame),
-    Construct(Vec<(DataFrame, RDFNodeType)>),
+    Select(DataFrame, HashMap<String, RDFNodeType>),
+    Construct(Vec<(DataFrame, RDFNodeType, RDFNodeType)>),
 }
 
 impl Triplestore {
@@ -53,12 +54,12 @@ impl Triplestore {
                 let SolutionMappings {
                     mappings,
                     columns: _,
-                    rdf_node_types: _,
+                    rdf_node_types: types,
                 } = self.lazy_graph_pattern(pattern, None, &context)?;
                 let mut df = mappings.collect().unwrap();
                 df = cats_to_utf8s(df);
 
-                Ok(QueryResult::Select(df))
+                Ok(QueryResult::Select(df, types))
             }
             Query::Construct {
                 template,
@@ -89,15 +90,16 @@ impl Triplestore {
         if let Query::Construct { .. } = &query {
             let res = self.query_parsed(&query)?;
             match res {
-                QueryResult::Select(_) => {
+                QueryResult::Select(_,_) => {
                     panic!("Should never happen")
                 }
                 QueryResult::Construct(dfs) => {
                     let mut all_triples_to_add = vec![];
-                    for (df, dt) in dfs {
+                    for (df, subj_dt, obj_dt) in dfs {
                         all_triples_to_add.push(TriplesToAdd {
                             df,
-                            object_type: dt,
+                            subject_type: subj_dt,
+                            object_type: obj_dt,
                             language_tag: None,
                             static_verb_column: None,
                             has_unique_subset: false,
@@ -118,15 +120,15 @@ fn triple_to_df(
     df: &DataFrame,
     rdf_node_types: &HashMap<String, RDFNodeType>,
     t: &TriplePattern,
-) -> Result<(DataFrame, RDFNodeType), SparqlError> {
+) -> Result<(DataFrame, RDFNodeType, RDFNodeType), SparqlError> {
     let len = if triple_has_variable(t) {
         df.height()
     } else {
         1
     };
-    let (subj_ser, _) = term_pattern_series(df, rdf_node_types, &t.subject, "subject", len);
+    let (subj_ser, subj_dt) = term_pattern_series(df, rdf_node_types, &t.subject, "subject", len);
     let (verb_ser, _) = named_node_pattern_series(df, rdf_node_types, &t.predicate, "verb", len);
-    let (obj_ser, dt) = term_pattern_series(df, rdf_node_types, &t.object, "object", len);
+    let (obj_ser, obj_dt) = term_pattern_series(df, rdf_node_types, &t.object, "object", len);
     let mut unique_subset = vec![];
     if subj_ser.dtype() != &DataType::Null {
         unique_subset.push("subject".to_string());
@@ -145,7 +147,7 @@ fn triple_to_df(
             None,
         )
         .unwrap();
-    Ok((df, dt))
+    Ok((df, subj_dt, obj_dt))
 }
 
 fn triple_has_variable(t: &TriplePattern) -> bool {
