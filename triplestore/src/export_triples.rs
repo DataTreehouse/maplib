@@ -16,7 +16,7 @@ impl Triplestore {
         F: Fn(&str, &str, &str) -> T,
     {
         for (verb, map) in &mut self.df_map {
-            for ((k1, k2), v) in map {
+            for ((_k1, k2), v) in map {
                 if k2.find_triple_type() == TripleType::ObjectProperty {
                     for i in 0..v.len() {
                         let df = v.get_df(i)?;
@@ -48,7 +48,7 @@ impl Triplestore {
     {
         //subject, verb, lexical_form, language_tag, datatype
         for (verb, map) in &mut self.df_map {
-            for ((k1, k2), v) in map {
+            for ((_k1, k2), v) in map {
                 if k2.find_triple_type() == TripleType::StringProperty {
                     for i in 0..v.len() {
                         let df = v.get_df(i)?;
@@ -88,7 +88,7 @@ impl Triplestore {
     {
         //subject, verb, lexical_form, datatype
         for (verb, map) in &mut self.df_map {
-            for ((k1, k2), v) in map {
+            for ((_k1, k2), v) in map {
                 if k2.find_triple_type() == TripleType::NonStringProperty {
                     let object_type = if let RDFNodeType::Literal(l) = k2 {
                         l

@@ -47,7 +47,7 @@ use triplestore::sparql::QueryResult;
 use jemallocator::Jemalloc;
 use polars_core::frame::DataFrame;
 use polars_core::prelude::{DataType, NamedFrom, Series};
-use triplestore::sparql::multitype::{MULTI_TYPE_NAME, MultiType};
+use triplestore::sparql::multitype::{multi_series_to_string_series, MULTI_TYPE_NAME, MultiType};
 
 #[cfg(not(target_os = "linux"))]
 use mimalloc::MiMalloc;
@@ -510,21 +510,7 @@ fn fix_multicolumns(mut df: DataFrame) -> DataFrame {
     for c in columns {
         if df.column(&c).unwrap().dtype() == &DataType::Object(MULTI_TYPE_NAME) {
             let ser = df.column(&c).unwrap();
-            let mut strs = vec![];
-            for i in 0..ser.len() {
-                let maybe_o = ser.get_object(i);
-                if let Some(o) = maybe_o {
-                    let o: Option<&MultiType> = o.as_any().downcast_ref();
-                    if let Some(m) = o {
-                        strs.push(Some(m.to_string()));
-                    } else {
-                        strs.push(None)
-                    }
-                } else {
-                    strs.push(None);
-                }
-            }
-            let new_ser = Series::new(&c, strs);
+            let new_ser = multi_series_to_string_series(ser);
             df.with_column(new_ser).unwrap();
         }
     }

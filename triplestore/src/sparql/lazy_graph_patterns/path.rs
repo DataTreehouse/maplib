@@ -46,8 +46,8 @@ impl Triplestore {
     ) -> Result<SolutionMappings, SparqlError> {
         let create_sparse = need_sparse_matrix(ppe);
         let mut out_df;
-        let mut out_dt_subj;
-        let mut out_dt_obj;
+        let out_dt_subj;
+        let out_dt_obj;
 
         let cat_df_map = self.create_unique_cat_dfs(ppe, Some(subject), Some(object))?;
         let max_index = find_max_index(cat_df_map.values());

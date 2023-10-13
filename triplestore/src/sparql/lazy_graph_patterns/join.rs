@@ -1,11 +1,13 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
+use crate::sparql::multitype::{clean_up_after_join_workaround, create_compatible_solution_mappings, helper_cols_join_workaround_polars_object_series_bug};
 use crate::sparql::query_context::{Context, PathEntry};
 use crate::sparql::solution_mapping::{is_string_col, SolutionMappings};
 use log::debug;
 use polars::prelude::{col, Expr};
 use polars_core::datatypes::DataType;
 use polars_core::prelude::{JoinArgs, JoinType};
+use representation::RDFNodeType;
 use spargebra::algebra::GraphPattern;
 
 impl Triplestore {
@@ -20,20 +22,54 @@ impl Triplestore {
         let left_context = context.extension_with(PathEntry::JoinLeftSide);
         let right_context = context.extension_with(PathEntry::JoinRightSide);
 
-        let mut left_solution_mappings =
+        let left_solution_mappings =
             self.lazy_graph_pattern(left, solution_mappings.clone(), &left_context)?;
         let SolutionMappings {
-            mappings: mut right_mappings,
+            mappings: right_mappings,
             columns: mut right_columns,
-            rdf_node_types: mut right_datatypes,
+            rdf_node_types: right_datatypes,
         } = self.lazy_graph_pattern(right, solution_mappings, &right_context)?;
-        let mut join_on: Vec<&String> = left_solution_mappings
+
+        let mut join_on: Vec<_> = left_solution_mappings
             .columns
             .intersection(&right_columns)
+            .map(|x| x.clone())
             .collect();
         join_on.sort();
 
         let join_on_cols: Vec<Expr> = join_on.iter().map(|x| col(x)).collect();
+
+        let SolutionMappings {
+            mappings: left_mappings,
+            columns: left_columns,
+            rdf_node_types: left_datatypes,
+        } = left_solution_mappings;
+
+        let (left_mappings, mut left_datatypes, right_mappings, right_datatypes) =
+            create_compatible_solution_mappings(
+                left_mappings,
+                left_datatypes,
+                right_mappings,
+                right_datatypes,
+            );
+        for (k, v) in &right_datatypes {
+            if !left_datatypes.contains_key(k) {
+                left_datatypes.insert(k.clone(), v.clone());
+            }
+        }
+        let (left_mappings, mut right_mappings, left_original_map, right_original_map) =
+            helper_cols_join_workaround_polars_object_series_bug(
+                left_mappings,
+                right_mappings,
+                &join_on,
+                &left_datatypes,
+            );
+
+        let mut left_solution_mappings = SolutionMappings {
+            mappings: left_mappings,
+            columns: left_columns,
+            rdf_node_types: left_datatypes,
+        };
 
         if join_on.is_empty() {
             left_solution_mappings.mappings = left_solution_mappings.mappings.join(
@@ -44,28 +80,16 @@ impl Triplestore {
             )
         } else {
             for c in join_on {
-                if is_string_col(right_datatypes.get(c).unwrap()) {
+                let dt = right_datatypes.get(&c).unwrap();
+                if dt == &RDFNodeType::MultiType || is_string_col(dt) {
                     right_mappings =
-                        right_mappings.with_column(col(c).cast(DataType::Categorical(None)));
+                        right_mappings.with_column(col(&c).cast(DataType::Categorical(None)));
                     left_solution_mappings.mappings = left_solution_mappings
                         .mappings
-                        .with_column(col(c).cast(DataType::Categorical(None)));
+                        .with_column(col(&c).cast(DataType::Categorical(None)));
                 }
             }
-            let all_false = [false].repeat(join_on_cols.len());
 
-            right_mappings = right_mappings.sort_by_exprs(
-                join_on_cols.as_slice(),
-                all_false.as_slice(),
-                false,
-                false,
-            );
-            left_solution_mappings.mappings = left_solution_mappings.mappings.sort_by_exprs(
-                join_on_cols.as_slice(),
-                all_false.as_slice(),
-                false,
-                false,
-            );
             left_solution_mappings.mappings = left_solution_mappings.mappings.join(
                 right_mappings,
                 join_on_cols.as_slice(),
@@ -76,21 +100,12 @@ impl Triplestore {
         for c in right_columns.drain() {
             left_solution_mappings.columns.insert(c);
         }
-        for (var, dt) in right_datatypes.drain() {
-            // TODO: This should lead to empty result, not error.
-            if let Some(dt_left) = left_solution_mappings.rdf_node_types.get(&var) {
-                if &dt != dt_left {
-                    return Err(SparqlError::InconsistentDatatypes(
-                        var,
-                        dt_left.clone(),
-                        dt,
-                        context.as_str().to_string(),
-                    ));
-                }
-            } else {
-                left_solution_mappings.rdf_node_types.insert(var, dt);
-            }
-        }
+
+        left_solution_mappings.mappings = clean_up_after_join_workaround(
+            left_solution_mappings.mappings,
+            left_original_map,
+            right_original_map,
+        );
 
         Ok(left_solution_mappings)
     }

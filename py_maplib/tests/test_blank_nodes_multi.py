@@ -89,8 +89,86 @@ def test_multi_datatype_query_no_error(blank_person_mapping):
     assert_frame_equal(df, expected_df)
 
 
-@pytest.mark.skip()
-def test_multi_datatype_query_sorting_no_error(blank_person_mapping):
+def test_multi_datatype_union_query_no_error(blank_person_mapping):
+    df = blank_person_mapping.query("""
+        PREFIX foaf:<http://xmlns.com/foaf/0.1/>
+
+        SELECT ?s ?o WHERE {
+        {?s foaf:firstName ?o .}
+        UNION {
+        ?s a ?o .
+        }
+        } 
+        """)
+    by = ["s","o"]
+    df = df.sort(by=by)
+    filename = TESTDATA_PATH / "multi_datatype_union_query.csv"
+    #df.write_csv(filename)
+    expected_df = pl.scan_csv(filename).sort(by).collect()
+    assert_frame_equal(df, expected_df)
+
+
+def test_multi_datatype_left_join_query_no_error(blank_person_mapping):
+    df = blank_person_mapping.query("""
+        PREFIX foaf:<http://xmlns.com/foaf/0.1/>
+
+        SELECT ?s ?o WHERE {
+        ?s foaf:firstName ?o .
+        OPTIONAL {
+        ?s a ?o .
+        }
+        } 
+        """)
+    by = ["s","o"]
+    df = df.sort(by=by)
+    filename = TESTDATA_PATH / "multi_datatype_leftjoin_query.csv"
+    df.write_csv(filename)
+    expected_df = pl.scan_csv(filename).sort(by).collect()
+    assert_frame_equal(df, expected_df)
+
+#This test is skipped due to a bug in Polars.
+def test_multi_datatype_join_query_two_vars_no_error(blank_person_mapping):
+    df = blank_person_mapping.query("""
+        PREFIX foaf:<http://xmlns.com/foaf/0.1/>
+
+        SELECT ?s ?o WHERE {
+        ?s foaf:firstName ?o .
+        {
+        {?s foaf:firstName ?o }
+        UNION
+        {?s a ?o }.
+        }
+        } 
+        """)
+    by = ["s","o"]
+    df = df.sort(by=by)
+    filename = TESTDATA_PATH / "multi_datatype_join_query_two_vars.csv"
+    df.write_csv(filename)
+    expected_df = pl.scan_csv(filename).sort(by).collect()
+    assert_frame_equal(df, expected_df)
+
+def test_multi_datatype_join_query_no_error(blank_person_mapping):
+    df = blank_person_mapping.query("""
+        PREFIX foaf:<http://xmlns.com/foaf/0.1/>
+
+        SELECT ?s1 ?s2 ?o WHERE {
+        ?s1 foaf:firstName ?o .
+        {
+        {?s2 foaf:firstName ?o }
+        UNION
+        {?s2 a ?o }.
+        }
+        } 
+        """)
+    by = ["s1", "s2","o"]
+    df = df.sort(by=by)
+    filename = TESTDATA_PATH / "multi_datatype_join_query.csv"
+    #df.write_csv(filename)
+    expected_df = pl.scan_csv(filename).sort(by).collect()
+    assert_frame_equal(df, expected_df)
+
+
+def test_multi_datatype_query_sorting_sorting(blank_person_mapping):
     df = blank_person_mapping.query("""
         PREFIX foaf:<http://xmlns.com/foaf/0.1/>
 
@@ -98,3 +176,7 @@ def test_multi_datatype_query_sorting_no_error(blank_person_mapping):
         ?s ?v ?o .
         } ORDER BY ?s ?v ?o
         """)
+    filename = TESTDATA_PATH / "multi_datatype_query_sorting.csv"
+    #df.write_csv(filename)
+    expected_df = pl.scan_csv(filename).collect()
+    assert_frame_equal(df, expected_df)
