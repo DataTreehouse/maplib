@@ -5,6 +5,7 @@ use crate::sparql::solution_mapping::SolutionMappings;
 use log::debug;
 use polars::prelude::{col, Expr};
 use spargebra::algebra::{GraphPattern, OrderExpression};
+use crate::sparql::multitype::{clean_up_after_sort_workaround, helper_cols_sort_workaround_polars_object_series_bug};
 
 impl Triplestore {
     pub(crate) fn lazy_order_by(
@@ -20,6 +21,17 @@ impl Triplestore {
             solution_mappings,
             &context.extension_with(PathEntry::OrderByInner),
         )?;
+
+        let SolutionMappings {
+            mappings, columns, rdf_node_types
+        } = output_solution_mappings;
+
+        let (mappings, original_map) = helper_cols_sort_workaround_polars_object_series_bug(mappings, &rdf_node_types, &expression);
+
+        output_solution_mappings = SolutionMappings {
+            mappings, columns, rdf_node_types
+        };
+
         let order_expression_contexts: Vec<Context> = (0..expression.len())
             .map(|i| context.extension_with(PathEntry::OrderByExpression(i as u16)))
             .collect();
@@ -56,6 +68,9 @@ impl Triplestore {
                 .map(|x| x.as_str())
                 .collect::<Vec<&str>>(),
         );
+
+        mappings = clean_up_after_sort_workaround(mappings, original_map);
+
         Ok(SolutionMappings::new(mappings, columns, datatypes))
     }
 }

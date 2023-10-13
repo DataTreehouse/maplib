@@ -27,19 +27,23 @@ impl SolutionMappings {
 pub fn is_string_col(rdf_node_type: &RDFNodeType) -> bool {
     match rdf_node_type {
         RDFNodeType::IRI => {
-            return true;
+            true
         }
         RDFNodeType::BlankNode => {
-            return true;
+            true
         }
         RDFNodeType::Literal(lit) => {
             if lit.as_ref() == xsd::STRING {
-                return true;
+                true
+            } else {
+                false
             }
         }
-        _ => {
-            panic!("No support for datatype {:?}", rdf_node_type)
+        RDFNodeType::MultiType => {
+            false
+        }
+        RDFNodeType::None => {
+            false
         }
     }
-    false
 }
