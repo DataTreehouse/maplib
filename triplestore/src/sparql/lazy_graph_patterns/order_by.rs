@@ -1,11 +1,13 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
+use crate::sparql::multitype::{
+    clean_up_after_sort_workaround, helper_cols_sort_workaround_polars_object_series_bug,
+};
 use crate::sparql::query_context::{Context, PathEntry};
 use crate::sparql::solution_mapping::SolutionMappings;
 use log::debug;
 use polars::prelude::{col, Expr};
 use spargebra::algebra::{GraphPattern, OrderExpression};
-use crate::sparql::multitype::{clean_up_after_sort_workaround, helper_cols_sort_workaround_polars_object_series_bug};
 
 impl Triplestore {
     pub(crate) fn lazy_order_by(
@@ -23,13 +25,21 @@ impl Triplestore {
         )?;
 
         let SolutionMappings {
-            mappings, columns, rdf_node_types
+            mappings,
+            columns,
+            rdf_node_types,
         } = output_solution_mappings;
 
-        let (mappings, original_map) = helper_cols_sort_workaround_polars_object_series_bug(mappings, &rdf_node_types, &expression);
+        let (mappings, original_map) = helper_cols_sort_workaround_polars_object_series_bug(
+            mappings,
+            &rdf_node_types,
+            &expression,
+        );
 
         output_solution_mappings = SolutionMappings {
-            mappings, columns, rdf_node_types
+            mappings,
+            columns,
+            rdf_node_types,
         };
 
         let order_expression_contexts: Vec<Context> = (0..expression.len())

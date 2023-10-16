@@ -7,7 +7,10 @@ use crate::sparql::sparql_to_polars::{
 };
 
 use crate::sparql::lazy_graph_patterns::load_tt::multiple_tt_to_lf;
-use crate::sparql::multitype::unitype_to_multitype;
+use crate::sparql::multitype::{
+    clean_up_after_join_workaround, helper_cols_join_workaround_polars_object_series_bug,
+    unitype_to_multitype,
+};
 use oxrdf::vocab::xsd;
 use polars::prelude::{col, concat, lit, Expr};
 use polars::prelude::{IntoLazy, UnionArgs};
@@ -118,48 +121,58 @@ impl Triplestore {
             mut rdf_node_types,
         }) = solution_mappings
         {
-            let overlap: Vec<_> = colnames.iter().filter(|x| columns.contains(*x)).collect();
-
+            let overlap: Vec<_> = colnames
+                .iter()
+                .filter(|x| columns.contains(*x))
+                .map(|x| x.clone())
+                .collect();
             if df.height() == 0 {
                 df = df.drop_many(overlap.as_slice());
                 if colnames.is_empty() {
                     mappings = mappings.filter(lit(false));
                 } else {
                     mappings = mappings.join(df.lazy(), [], [], JoinType::Cross.into());
-                    for c in overlap {
-                        columns.insert(c.to_string());
-                        rdf_node_types.insert(c.to_string(), dts.remove(c).unwrap());
-                    }
                 }
             } else {
                 if !overlap.is_empty() {
                     //TODO: Introduce data type sensitivity here.
                     let join_on: Vec<Expr> = overlap.iter().map(|x| col(x)).collect();
+                    let (mut existing_mappings, mut lf, left_original_map, right_original_map) =
+                        helper_cols_join_workaround_polars_object_series_bug(
+                            mappings,
+                            df.lazy(),
+                            &overlap,
+                            &rdf_node_types,
+                        );
                     let mut strcol = vec![];
-                    for c in overlap {
-                        if is_string_col(rdf_node_types.get(c).unwrap()) {
+                    for c in &overlap {
+                        let dt = rdf_node_types.get(c).unwrap();
+                        if dt == &RDFNodeType::MultiType || is_string_col(dt) {
                             strcol.push(c);
                         }
                     }
-                    let mut lf = df.lazy();
                     for c in strcol {
                         lf = lf.with_column(col(c).cast(DataType::Categorical(None)));
-                        mappings = mappings.with_column(col(c).cast(DataType::Categorical(None)));
+                        existing_mappings = existing_mappings.with_column(col(c).cast(DataType::Categorical(None)));
                     }
 
-                    mappings = mappings.join(
+                    existing_mappings = existing_mappings.join(
                         lf,
                         join_on.as_slice(),
                         join_on.as_slice(),
                         JoinType::Inner.into(),
                     );
+                    mappings = clean_up_after_join_workaround(
+                        existing_mappings,
+                        left_original_map,
+                        right_original_map,
+                    );
                 } else {
                     mappings = mappings.join(df.lazy(), [], [], JoinType::Cross.into());
                 }
-
-                columns.extend(colnames);
-                rdf_node_types.extend(dts);
             }
+            columns.extend(colnames);
+            rdf_node_types.extend(dts);
             solution_mappings = Some(SolutionMappings {
                 mappings,
                 columns,
@@ -251,8 +264,10 @@ impl Triplestore {
         let mut out_datatypes = HashMap::new();
         let mut lfs = vec![];
 
-        let need_multi_subject = self.partial_check_need_multi(predicate_uris, object_datatype_req, true);
-        let need_multi_object = self.partial_check_need_multi(predicate_uris, object_datatype_req,false);
+        let need_multi_subject =
+            self.partial_check_need_multi(predicate_uris, object_datatype_req, true);
+        let need_multi_object =
+            self.partial_check_need_multi(predicate_uris, object_datatype_req, false);
 
         for v in predicate_uris {
             let (mut df, datatypes_map) = self.get_predicate_df(
@@ -266,7 +281,8 @@ impl Triplestore {
                 object_datatype_req,
             )?;
             if let Some(subj_col) = subject_keep_rename {
-                if df.height() > 0 && need_multi_subject
+                if df.height() > 0
+                    && need_multi_subject
                     && datatypes_map.get(subj_col).unwrap() != &RDFNodeType::MultiType
                 {
                     df.with_column(unitype_to_multitype(
@@ -276,12 +292,16 @@ impl Triplestore {
                     .unwrap();
                     out_datatypes.insert(subj_col.clone(), RDFNodeType::MultiType);
                 } else {
-                    out_datatypes.insert(subj_col.clone(), datatypes_map.get(subj_col).unwrap().clone());
+                    out_datatypes.insert(
+                        subj_col.clone(),
+                        datatypes_map.get(subj_col).unwrap().clone(),
+                    );
                 }
             }
 
             if let Some(obj_col) = object_keep_rename {
-                if df.height() > 0 && need_multi_object
+                if df.height() > 0
+                    && need_multi_object
                     && datatypes_map.get(obj_col).unwrap() != &RDFNodeType::MultiType
                 {
                     df.with_column(unitype_to_multitype(
@@ -291,13 +311,17 @@ impl Triplestore {
                     .unwrap();
                     out_datatypes.insert(obj_col.clone(), RDFNodeType::MultiType);
                 } else {
-                    out_datatypes.insert(obj_col.clone(), datatypes_map.get(obj_col).unwrap().clone());
+                    out_datatypes
+                        .insert(obj_col.clone(), datatypes_map.get(obj_col).unwrap().clone());
                 }
             }
 
             if df.height() > 0 {
                 if let Some(verb_col) = verb_keep_rename {
-                    out_datatypes.insert(verb_col.clone(),datatypes_map.get(verb_col).unwrap().clone());
+                    out_datatypes.insert(
+                        verb_col.clone(),
+                        datatypes_map.get(verb_col).unwrap().clone(),
+                    );
                 }
                 lfs.push(df.lazy());
             }
@@ -327,7 +351,12 @@ impl Triplestore {
         }
         strs
     }
-    fn partial_check_need_multi(&self, predicates: &Vec<String>, object_datatype_req: &Option<RDFNodeType>, subject: bool) -> bool {
+    fn partial_check_need_multi(
+        &self,
+        predicates: &Vec<String>,
+        object_datatype_req: &Option<RDFNodeType>,
+        subject: bool,
+    ) -> bool {
         if !subject && object_datatype_req.is_some() {
             return false;
         }
