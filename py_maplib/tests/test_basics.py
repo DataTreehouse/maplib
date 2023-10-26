@@ -113,7 +113,7 @@ def test_create_and_write_no_bug_string_lit_df():
     } .
     """
 
-    df = pl.DataFrame({"MyString": ["!!#\"", "ABC\#123"]})
+    df = pl.DataFrame({"MyString": ["\"!!\n#\"", "ABC#123\n\t\r"]})
     mapping = Mapping([doc])
     mapping.expand("http://example.net/ns#ExampleTemplate", df)
     ntfile = "create_and_write_no_bug_string_lit.nt"
@@ -122,8 +122,8 @@ def test_create_and_write_no_bug_string_lit_df():
         lines = f.readlines()
 
     lines.sort()
-    assert lines == ['<http://example.net/ns#myObject> <http://example.net/ns#hasValue> "!!\\#\\"" .\n',
-                     '<http://example.net/ns#myObject> <http://example.net/ns#hasValue> "ABC\\\\\\#123" .\n']
+    assert lines == ['<http://example.net/ns#myObject> <http://example.net/ns#hasValue> "ABC#123\\n\\t\\r" .\n',
+                     '<http://example.net/ns#myObject> <http://example.net/ns#hasValue> "\\"!!\\n#\\"" .\n']
 
 def test_create_and_write_no_bug_bool_lit_df():
     doc = """
@@ -136,7 +136,7 @@ def test_create_and_write_no_bug_bool_lit_df():
     df = pl.DataFrame({"MyBool": [True, False]})
     mapping = Mapping([doc])
     mapping.expand("http://example.net/ns#ExampleTemplate", df)
-    ntfile = "create_and_write_no_bug_string_lit.nt"
+    ntfile = "create_and_write_no_bug_bool_lit.nt"
     mapping.write_ntriples(ntfile)
     with open(ntfile) as f:
         lines = f.readlines()
