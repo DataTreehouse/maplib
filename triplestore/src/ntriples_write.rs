@@ -231,39 +231,10 @@ fn write_string_property_triple(f: &mut Vec<u8>, mut any_values: Vec<AnyValue>, 
         panic!()
     };
     write_iri_or_blanknode(f, s);
-    write!(f, " <{}>", v).unwrap();
-    write!(f, " \"").unwrap();
-    let mut last = None;
-    let mut chars = lex.chars().peekable();
-    loop {
-        if let Some(c) = chars.next() {
-            if last.is_none() || last.unwrap() != '\\' {
-                match c {
-                    '\"' => write!(f, "\\\"").unwrap(),
-                    '\n' => write!(f, "\\n").unwrap(),
-                    '#' => write!(f, "\\#").unwrap(),
-                    '\\' => {
-                        if let Some(c) = chars.peek() {
-                            if !matches!(c, 't' | 'b' | 'n' | 'r' | 'f' | '"' | '\'' | '\\') {
-                                write!(f, "\\\\").unwrap();
-                            } else {
-                                write!(f, "\\").unwrap();
-                            }
-                        } else {
-                            write!(f, "\\\\").unwrap();
-                        }
-                    }
-                    _ => {
-                        write!(f, "{}", c).unwrap();
-                    }
-                }
-            }
-            last = Some(c);
-        } else {
-            break;
-        }
-    }
-    write!(f, "\"").unwrap();
+    write!(f, " ").unwrap();
+    write_iri(f, v);
+    write!(f, " ").unwrap();
+    write_string(f, lex);
 
     if let Some(lang) = lang_opt {
         writeln!(f, "@{} .", lang).unwrap();
@@ -290,8 +261,10 @@ fn write_non_string_property_triple(
         panic!()
     };
     write_iri_or_blanknode(f, s);
-    write!(f, " <{}>", v).unwrap();
-    write!(f, " \"{}\"", lex).unwrap();
+    write!(f, " ").unwrap();
+    write_iri(f, v);
+    write!(f, " ").unwrap();
+    write_string(f, lex);
     writeln!(f, "^^<{}> .", dt).unwrap();
 }
 
@@ -307,7 +280,9 @@ fn write_object_property_triple(f: &mut Vec<u8>, mut any_values: Vec<AnyValue>, 
         panic!()
     };
     write_iri_or_blanknode(f, s);
-    write!(f, " <{}> ", v).unwrap();
+    write!(f, " ").unwrap();
+    write_iri(f, v);
+    write!(f, " ").unwrap();
     write_iri_or_blanknode(f, o);
     writeln!(f, " .").unwrap();
 }
@@ -316,6 +291,42 @@ fn write_iri_or_blanknode(f: &mut Vec<u8>, s: &str) {
     if s.chars().nth(0).unwrap() == '_' {
         write!(f, "{}", s).unwrap();
     } else {
-        write!(f, "<{}>", s).unwrap();
+        write_iri(f, s);
     }
+}
+
+fn write_iri(f: &mut Vec<u8>, s: &str) {
+    let mut chars = s.chars();
+    write!(f, "<").unwrap();
+    loop {
+        if let Some(c) = chars.next() {
+            match c {
+                '>' => write!(f, "\\>").unwrap(),
+                '\\' => write!(f, "\\\\").unwrap(),
+                _ => {
+                    write!(f, "{}", c).unwrap();
+                }
+            }
+        } else {
+            break;
+        }
+    }
+    write!(f, ">").unwrap();
+}
+
+fn write_string(f: &mut Vec<u8>, s: &str) {
+    write!(f, "\"").unwrap();
+    let mut chars = s.chars();
+    loop {
+        if let Some(c) = chars.next() {
+            if matches!(c, '#' | 't' | 'b' | 'n' | 'r' | 'f' | '"' | '\'' | '\\') {
+                write!(f, "\\{c}").unwrap();
+            } else {
+                write!(f, "{c}").unwrap();
+            }
+        } else {
+            break;
+        }
+    }
+    write!(f, "\"").unwrap();
 }
