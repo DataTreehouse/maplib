@@ -124,3 +124,23 @@ def test_create_and_write_no_bug_string_lit_df():
     lines.sort()
     assert lines == ['<http://example.net/ns#myObject> <http://example.net/ns#hasValue> "!!\\#\\"" .\n',
                      '<http://example.net/ns#myObject> <http://example.net/ns#hasValue> "ABC\\\\\\#123" .\n']
+
+def test_create_and_write_no_bug_bool_lit_df():
+    doc = """
+    @prefix ex:<http://example.net/ns#>.
+    ex:ExampleTemplate [?MyBool] :: {
+    ottr:Triple(ex:myObject, ex:hasValue, ?MyBool)
+    } .
+    """
+
+    df = pl.DataFrame({"MyBool": [True, False]})
+    mapping = Mapping([doc])
+    mapping.expand("http://example.net/ns#ExampleTemplate", df)
+    ntfile = "create_and_write_no_bug_string_lit.nt"
+    mapping.write_ntriples(ntfile)
+    with open(ntfile) as f:
+        lines = f.readlines()
+
+    lines.sort()
+    assert lines == ['<http://example.net/ns#myObject> <http://example.net/ns#hasValue> "false"^^<http://www.w3.org/2001/XMLSchema#boolean> .\n',
+                     '<http://example.net/ns#myObject> <http://example.net/ns#hasValue> "true"^^<http://www.w3.org/2001/XMLSchema#boolean> .\n']

@@ -319,7 +319,7 @@ fn write_string(f: &mut Vec<u8>, s: &str) {
     let mut chars = s.chars();
     loop {
         if let Some(c) = chars.next() {
-            if matches!(c, '#' | 't' | 'b' | 'n' | 'r' | 'f' | '"' | '\'' | '\\') {
+            if matches!(c, '#' | '"' | '\'' | '\\') {
                 write!(f, "\\{c}").unwrap();
             } else {
                 write!(f, "{c}").unwrap();
