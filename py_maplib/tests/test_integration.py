@@ -271,6 +271,48 @@ SELECT ?site_label ?node WHERE {
     expected_df = pl.scan_csv(filename).sort(by).collect()
     pl.testing.assert_frame_equal(df, expected_df)
 
+def test_iterated_property_path_constant_object_query(windpower_mapping):
+    query = """PREFIX xsd:<http://www.w3.org/2001/XMLSchema#>
+PREFIX ct:<https://github.com/magbak/chrontext#>
+PREFIX wp:<https://github.com/magbak/chrontext/windpower_example#>
+PREFIX rdfs:<http://www.w3.org/2000/01/rdf-schema#>
+PREFIX rdf:<http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rds:<https://github.com/magbak/chrontext/rds_power#>
+SELECT ?site_label WHERE {
+    ?site a rds:Site .
+    ?site rdfs:label ?site_label .
+    ?site (rds:hasFunctionalAspect / ^rds:hasFunctionalAspectNode)+ <https://github.com/magbak/chrontext/windpower_example#Generator40> .
+}"""
+    by = ["site_label"]
+    start = time.time()
+    df = windpower_mapping.query(query).sort(by)
+    end = time.time()
+    print(f"Took {round(end-start, 3)}")
+    filename = TESTDATA_PATH / "iterated_property_path_constant_object_query.csv"
+    #df.write_csv(filename)
+    expected_df = pl.scan_csv(filename).sort(by).collect()
+    pl.testing.assert_frame_equal(df, expected_df)
+
+def test_iterated_property_path_constant_subject_query(windpower_mapping):
+    query = """PREFIX xsd:<http://www.w3.org/2001/XMLSchema#>
+PREFIX ct:<https://github.com/magbak/chrontext#>
+PREFIX wp:<https://github.com/magbak/chrontext/windpower_example#>
+PREFIX rdfs:<http://www.w3.org/2000/01/rdf-schema#>
+PREFIX rdf:<http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rds:<https://github.com/magbak/chrontext/rds_power#>
+SELECT ?node WHERE {
+    <https://github.com/magbak/chrontext/windpower_example#Site3> (rds:hasFunctionalAspect / ^rds:hasFunctionalAspectNode)+ ?node .
+}"""
+    by = ["node"]
+    start = time.time()
+    df = windpower_mapping.query(query).sort(by)
+    end = time.time()
+    print(f"Took {round(end-start, 3)}")
+    filename = TESTDATA_PATH / "iterated_property_path_constant_subject_query.csv"
+    #df.write_csv(filename)
+    expected_df = pl.scan_csv(filename).sort(by).collect()
+    pl.testing.assert_frame_equal(df, expected_df)
+
 
 def test_iterated_property_path_query_with_bug(windpower_mapping):
     query = """PREFIX xsd:<http://www.w3.org/2001/XMLSchema#>

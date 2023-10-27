@@ -7,7 +7,7 @@ use crate::sparql::sparql_to_polars::{
     sparql_literal_to_polars_literal_value, sparql_named_node_to_polars_literal_value,
 };
 use oxrdf::NamedNode;
-use polars::prelude::{col, DataFrameJoinOps, Expr, IntoLazy};
+use polars::prelude::{col, DataFrameJoinOps, Expr, IntoLazy, lit};
 use polars_core::datatypes::{AnyValue, DataType};
 use polars_core::frame::{DataFrame, UniqueKeepStrategy};
 use polars_core::prelude::{ChunkAgg, JoinArgs, JoinType};
@@ -118,17 +118,46 @@ impl Triplestore {
             }
         }
         let mut var_cols = vec![];
-        if let TermPattern::Variable(v) = subject {
-            var_cols.push(v.as_str().to_string());
-            out_df.rename("subject", v.as_str()).unwrap();
-        } else {
-            out_df = out_df.drop("subject").unwrap();
+        match subject {
+            TermPattern::NamedNode(nn) => {
+                let l  = sparql_named_node_to_polars_literal_value(nn);
+                out_df = out_df.lazy().filter(col("subject").eq(lit(l))).collect().unwrap();
+                out_df = out_df.drop("subject").unwrap();
+            }
+            TermPattern::BlankNode(b) => {
+                var_cols.push(b.as_str().to_string());
+                out_df.rename("subject", b.as_str()).unwrap();
+            }
+            TermPattern::Literal(l) => {
+                let l  = sparql_literal_to_polars_literal_value(l);
+                out_df = out_df.lazy().filter(col("subject").eq(lit(l))).collect().unwrap();
+                out_df = out_df.drop("subject").unwrap();
+            }
+            TermPattern::Variable(v) => {
+                var_cols.push(v.as_str().to_string());
+                out_df.rename("subject", v.as_str()).unwrap();
+            }
         }
-        if let TermPattern::Variable(v) = object {
-            var_cols.push(v.as_str().to_string());
-            out_df.rename("object", v.as_str()).unwrap();
-        } else {
-            out_df = out_df.drop("object").unwrap();
+
+        match object {
+            TermPattern::NamedNode(nn) => {
+                let l  = sparql_named_node_to_polars_literal_value(nn);
+                out_df = out_df.lazy().filter(col("object").eq(lit(l))).collect().unwrap();
+                out_df = out_df.drop("object").unwrap();
+            }
+            TermPattern::BlankNode(b) => {
+                var_cols.push(b.as_str().to_string());
+                out_df.rename("object", b.as_str()).unwrap();
+            }
+            TermPattern::Literal(l) => {
+                let l  = sparql_literal_to_polars_literal_value(l);
+                out_df = out_df.lazy().filter(col("object").eq(lit(l))).collect().unwrap();
+                out_df = out_df.drop("object").unwrap();
+            }
+            TermPattern::Variable(v) => {
+                var_cols.push(v.as_str().to_string());
+                out_df.rename("object", v.as_str()).unwrap();
+            }
         }
 
         if let Some(mut mappings) = solution_mappings {
@@ -245,13 +274,13 @@ impl Triplestore {
                 Ok(left_df_map)
             }
             PropertyPathExpression::ZeroOrMore(inner) => {
-                self.create_unique_cat_dfs(inner, subject, object)
+                self.create_unique_cat_dfs(inner, None, None)
             }
             PropertyPathExpression::OneOrMore(inner) => {
-                self.create_unique_cat_dfs(inner, subject, object)
+                self.create_unique_cat_dfs(inner, None, None)
             }
             PropertyPathExpression::ZeroOrOne(inner) => {
-                self.create_unique_cat_dfs(inner, subject, object)
+                self.create_unique_cat_dfs(inner, None, None)
             }
             PropertyPathExpression::NegatedPropertySet(nns) => {
                 todo!()
