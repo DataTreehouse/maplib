@@ -43,9 +43,9 @@ impl Triplestore {
                                 .push(AnyValue::Utf8Owned(nn.as_str().into()));
                         }
                         GroundTerm::Literal(lit) => {
-                            let dt = lit.datatype().into_owned();
+                            let dt = lit.datatype();
                             if i == 0 {
-                                datatypes.insert(j, RDFNodeType::Literal(dt.clone()));
+                                datatypes.insert(j, RDFNodeType::Literal(dt.into_owned()));
                             } else {
                                 let existing = datatypes.get(&j).unwrap();
                                 match existing {

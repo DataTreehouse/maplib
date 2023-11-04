@@ -30,15 +30,21 @@ pub fn constant_to_expr(
                 panic!("Should never happen")
             }
             ConstantLiteral::Literal(lit) => {
-                let (mut any, dt) = sparql_literal_to_any_value(&lit.value, &lit.data_type_iri);
-                let mut value_series = Series::new_empty("literal", &DataType::Utf8);
-                //Workaround for owned utf 8..
-                if let AnyValue::Utf8Owned(s) = any {
-                    any = AnyValue::Utf8(&s);
-                    value_series = value_series.extend_constant(any, 1).unwrap();
+                let dt = if let Some(nn) = &lit.data_type_iri {
+                    Some(nn.as_ref())
                 } else {
+                    None
+                };
+                let (mut any, dt) = sparql_literal_to_any_value(&lit.value, &dt);
+                //Workaround for owned utf 8..
+                let value_series = if let AnyValue::Utf8Owned(s) = any {
+                    any = AnyValue::Utf8(&s);
+                    let mut value_series = Series::new_empty("literal", &DataType::Utf8);
                     value_series = value_series.extend_constant(any, 1).unwrap();
-                }
+                    value_series
+                } else {
+                    Series::from_any_values("literal", &[any], false).unwrap()
+                };
                 let language_tag = lit.language.as_ref().cloned();
                 (
                     Expr::Literal(LiteralValue::Series(SpecialEq::new(value_series))),
@@ -46,7 +52,7 @@ pub fn constant_to_expr(
                         lit.data_type_iri.as_ref().unwrap().clone(),
                         lit.data_type_iri.as_ref().unwrap().to_string(),
                     ),
-                    RDFNodeType::Literal(dt),
+                    RDFNodeType::Literal(dt.into()),
                     language_tag,
                 )
             }

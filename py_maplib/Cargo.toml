@@ -1,6 +1,6 @@
 [package]
 name = "py_maplib"
-version = "0.4.32"
+version = "0.4.33"
 edition = "2021"
 
 [workspace]
@@ -9,6 +9,7 @@ edition = "2021"
 pyo3 = {version = "0.19.2", features = ["extension-module"]}
 maplib = {path="../maplib"}
 triplestore = {path="../triplestore"}
+shacl = {path="../shacl"}
 
 oxrdf = "0.1.0"
 arrow_python_utils = {path="../arrow_python_utils"}

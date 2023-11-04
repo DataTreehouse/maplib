@@ -61,6 +61,15 @@ static GLOBAL: Jemalloc = Jemalloc;
 static GLOBAL: MiMalloc = MiMalloc;
 
 #[pyclass]
+#[derive(Debug, Clone)]
+pub struct ValidationReport {
+    #[pyo3(get)]
+    pub conforms: bool,
+    #[pyo3(get)]
+    pub report: Option<PyObject>,
+}
+
+#[pyclass]
 #[derive(Debug, PartialEq, PartialOrd, Clone)]
 pub struct BlankNode {
     #[pyo3(get)]
@@ -341,6 +350,25 @@ impl Mapping {
                 Ok(df_vec_to_py_df_list(dfs, py)?.into())
             }
         }
+    }
+
+    #[pyo3(text_signature = "()")]
+    pub fn validate(&mut self, py: Python<'_>) -> PyResult<ValidationReport> {
+        let shacl::ValidationReport{ conforms, df } = self
+            .inner
+            .validate()
+            .map_err(PyMaplibError::from)?;
+
+        let report = if let Some(df) = df {
+            Some(df_to_py_df(df, py)?)
+        } else {
+            None
+        };
+
+        Ok(ValidationReport{
+            conforms,
+            report
+        })
     }
 
     #[pyo3(text_signature = "(query)")]

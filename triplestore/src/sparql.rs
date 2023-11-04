@@ -3,7 +3,7 @@ pub(crate) mod lazy_aggregate;
 mod lazy_expressions;
 mod lazy_graph_patterns;
 mod lazy_order;
-mod query_context;
+pub mod query_context;
 pub mod solution_mapping;
 mod sparql_to_polars;
 pub mod multitype;
@@ -178,7 +178,7 @@ fn term_pattern_series(
             } else {
                 let (anyvalue, dt) = sparql_literal_to_any_value(
                     &lit.value().to_string(),
-                    &Some(lit.datatype().into_owned()),
+                    &Some(lit.datatype()),
                 );
                 let mut any_values = vec![];
                 for _ in 0..len {
@@ -186,7 +186,7 @@ fn term_pattern_series(
                 }
                 (
                     Series::from_any_values(name, &any_values, false).unwrap(),
-                    RDFNodeType::Literal(dt),
+                    RDFNodeType::Literal(dt.into_owned()),
                 )
             }
         }

@@ -19,12 +19,7 @@ use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 
 #[derive(Debug)]
-pub struct ResolutionError {
-    kind: ResolutionErrorType,
-}
-
-#[derive(Debug)]
-pub enum ResolutionErrorType {
+pub enum ResolutionError {
     DuplicatedPrefixDefinition(String, String, String),
     BadCompositeIRIError(IriParseError),
     MissingPrefixError(String),
@@ -32,18 +27,18 @@ pub enum ResolutionErrorType {
 
 impl Display for ResolutionError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match &self.kind {
-            ResolutionErrorType::DuplicatedPrefixDefinition(prefix, def1, def2) => {
+        match self {
+            ResolutionError::DuplicatedPrefixDefinition(prefix, def1, def2) => {
                 write!(
                     f,
                     "Prefix {} has two defintions: {} and {}",
                     prefix, def1, def2
                 )
             }
-            ResolutionErrorType::BadCompositeIRIError(iri_err) => {
+            ResolutionError::BadCompositeIRIError(iri_err) => {
                 write!(f, "Bad composite IRI {}", iri_err)
             }
-            ResolutionErrorType::MissingPrefixError(prefix) => {
+            ResolutionError::MissingPrefixError(prefix) => {
                 write!(f, "Prefix {} is not defined", prefix)
             }
         }
@@ -226,7 +221,8 @@ fn resolve_constant_literal(
         UnresolvedConstantLiteral::Iri(iri) => ConstantLiteral::Iri(resolve(iri, prefix_map)?),
         UnresolvedConstantLiteral::BlankNode(bn) => ConstantLiteral::BlankNode(bn.clone()),
         UnresolvedConstantLiteral::Literal(lit) => {
-            ConstantLiteral::Literal(resolve_stottr_literal(lit, prefix_map)?)
+            let resolved_lit = resolve_stottr_literal(lit, prefix_map)?;
+            ConstantLiteral::Literal(resolved_lit)
         }
         UnresolvedConstantLiteral::None => ConstantLiteral::None,
     })
@@ -302,18 +298,14 @@ fn resolve(
                 match new_node_result {
                     Ok(new_node) => new_node,
                     Err(err) => {
-                        return Err(ResolutionError {
-                            kind: ResolutionErrorType::BadCompositeIRIError(err),
-                        })
+                        return Err(ResolutionError::BadCompositeIRIError(err))
                     }
                 }
             } else {
-                return Err(ResolutionError {
-                    kind: ResolutionErrorType::MissingPrefixError(format!(
+                return Err(ResolutionError::MissingPrefixError(format!(
                         "{}:{}",
                         &pn.prefix, &pn.name
-                    )),
-                });
+                    )));
             }
         }
         ResolvesToNamedNode::NamedNode(nn) => nn.clone(),
@@ -355,13 +347,11 @@ fn insert_or_raise(
 ) -> Result<(), ResolutionError> {
     if let Some(n) = map.insert(key.to_string(), value.clone()) {
         if &n != value {
-            return Err(ResolutionError {
-                kind: ResolutionErrorType::DuplicatedPrefixDefinition(
+            return Err(ResolutionError::DuplicatedPrefixDefinition(
                     key.to_string(),
                     value.as_str().to_string(),
                     n.as_str().to_string(),
-                ),
-            });
+                ));
         } else {
             warn!("Prefix {} was defined as {} two times", key, value.as_str());
         }

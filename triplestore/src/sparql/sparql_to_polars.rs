@@ -5,7 +5,7 @@ use polars::export::chrono::{DateTime, NaiveDateTime, Utc};
 use polars::prelude::{LiteralValue, NamedFrom, Series, TimeUnit};
 use std::str::FromStr;
 
-pub(crate) fn sparql_term_to_polars_literal_value(term: &Term) -> polars::prelude::LiteralValue {
+pub fn sparql_term_to_polars_literal_value(term: &Term) -> polars::prelude::LiteralValue {
     match term {
         Term::NamedNode(named_node) => sparql_named_node_to_polars_literal_value(named_node),
         Term::Literal(lit) => sparql_literal_to_polars_literal_value(lit),
@@ -15,11 +15,11 @@ pub(crate) fn sparql_term_to_polars_literal_value(term: &Term) -> polars::prelud
     }
 }
 
-pub(crate) fn sparql_named_node_to_polars_literal_value(named_node: &NamedNode) -> LiteralValue {
+pub fn sparql_named_node_to_polars_literal_value(named_node: &NamedNode) -> LiteralValue {
     LiteralValue::Utf8(named_node.as_str().to_string())
 }
 
-pub(crate) fn sparql_literal_to_polars_literal_value(lit: &Literal) -> LiteralValue {
+pub fn sparql_literal_to_polars_literal_value(lit: &Literal) -> LiteralValue {
     let datatype = lit.datatype();
     let value = lit.value();
     let literal_value = if datatype == xsd::STRING {
@@ -81,7 +81,7 @@ pub(crate) fn sparql_literal_to_polars_literal_value(lit: &Literal) -> LiteralVa
     literal_value
 }
 
-fn polars_literal_values_to_series(literal_values: Vec<LiteralValue>, name: &str) -> Series {
+pub fn polars_literal_values_to_series(literal_values: Vec<LiteralValue>, name: &str) -> Series {
     let first_non_null_opt = literal_values
         .iter()
         .find(|x| &&LiteralValue::Null != x)

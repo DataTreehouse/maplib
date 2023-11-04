@@ -1,17 +1,17 @@
 use chrono::{DateTime, NaiveDateTime, Utc};
 use oxrdf::vocab::xsd;
-use oxrdf::NamedNode;
+use oxrdf::{NamedNodeRef};
 use polars_core::datatypes::TimeUnit;
 use polars_core::prelude::AnyValue;
 use std::str::FromStr;
 
-//This code is copied from Chrontext, which has identical licensing
-pub fn sparql_literal_to_any_value(
-    value: &String,
-    datatype: &Option<NamedNode>,
-) -> (AnyValue<'static>, NamedNode) {
-    let (anyv, dt) = if let Some(nn) = datatype {
-        let datatype = nn.as_ref();
+//This code is copied and modified from Chrontext, which has identical licensing
+pub fn sparql_literal_to_any_value<'a, 'b>(
+    value: &'b str,
+    datatype: &Option<NamedNodeRef<'a>>,
+) -> (AnyValue<'static>, NamedNodeRef<'a>) {
+    let (anyv, dt) = if let Some(datatype) = datatype {
+        let datatype = *datatype;
         let literal_value = if datatype == xsd::STRING {
             AnyValue::Utf8Owned(value.into())
         } else if datatype == xsd::UNSIGNED_INT {
@@ -61,9 +61,9 @@ pub fn sparql_literal_to_any_value(
         } else {
             todo!("Not implemented!")
         };
-        (literal_value, nn.clone())
+        (literal_value, datatype.clone())
     } else {
-        (AnyValue::Utf8Owned(value.into()), xsd::STRING.into_owned())
+        (AnyValue::Utf8Owned(value.into()), xsd::STRING)
     };
     (anyv.into_static().unwrap(), dt)
 }

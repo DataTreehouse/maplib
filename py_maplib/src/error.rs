@@ -30,6 +30,7 @@ use std::fmt::Debug;
 use thiserror::Error;
 use triplestore::errors::TriplestoreError;
 use triplestore::sparql::errors::SparqlError;
+use shacl::errors::ShaclError;
 
 #[derive(Error, Debug)]
 pub enum PyMaplibError {
@@ -47,6 +48,8 @@ pub enum PyMaplibError {
     MappingError(#[from] MappingError),
     #[error(transparent)]
     TriplestoreError(#[from] TriplestoreError),
+    #[error(transparent)]
+    ShaclError(#[from] ShaclError)
 }
 
 impl std::convert::From<PyMaplibError> for PyErr {
@@ -63,6 +66,9 @@ impl std::convert::From<PyMaplibError> for PyErr {
             PyMaplibError::TriplestoreError(err) => {
                 TriplestoreErrorException::new_err(format!("{}", err))
             }
+            PyMaplibError::ShaclError(err) => {
+                ShaclErrorException::new_err(format!("{}", err))
+            }
         }
     }
 }
@@ -74,3 +80,4 @@ create_exception!(exceptions, MappingErrorException, PyException);
 create_exception!(exceptions, SparqlErrorException, PyException);
 create_exception!(exceptions, TemplateErrorException, PyException);
 create_exception!(exceptions, TriplestoreErrorException, PyException);
+create_exception!(exceptions, ShaclErrorException, PyException);

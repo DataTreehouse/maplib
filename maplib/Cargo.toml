@@ -7,6 +7,7 @@ edition = "2021"
 representation = {path="../representation"}
 triplestore = {path="../triplestore"}
 parquet_io = {path="../parquet_io"}
+shacl = {path="../shacl"}
 
 rayon = "1.6.0"
 nom={version="7.1.1", features=["alloc"]}

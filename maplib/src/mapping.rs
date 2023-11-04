@@ -30,6 +30,8 @@ use std::path::Path;
 use std::time::Instant;
 use triplestore::{TriplesToAdd, Triplestore};
 use uuid::Uuid;
+use shacl::{validate, ValidationReport};
+use shacl::errors::ShaclError;
 
 pub struct Mapping {
     template_dataset: TemplateDataset,
@@ -51,7 +53,7 @@ struct OTTRTripleInstance {
     has_unique_subset: bool,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct StaticColumn {
     constant_term: ConstantTerm,
     ptype: Option<PType>,
@@ -226,6 +228,10 @@ impl Mapping {
             debug!("Expansion took {} seconds", now.elapsed().as_secs_f32());
         }
         Ok(MappingReport {})
+    }
+
+    pub fn validate(&mut self) -> Result<ValidationReport, ShaclError> {
+      validate(&mut self.triplestore)
     }
 
     fn _expand(

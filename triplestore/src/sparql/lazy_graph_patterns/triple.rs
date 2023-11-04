@@ -188,7 +188,7 @@ impl Triplestore {
         Ok(solution_mappings.unwrap())
     }
 
-    fn get_predicate_df(
+    pub fn get_predicate_df(
         &self,
         verb_uri: &str,
         subject_keep_rename: &Option<String>,
@@ -232,7 +232,8 @@ impl Triplestore {
                     lf = lf.filter(f);
                 }
                 lf = lf.drop_columns(drop);
-                Ok((lf.collect().unwrap(), out_datatypes))
+                let df = lf.collect().unwrap();
+                Ok((df, out_datatypes))
             } else {
                 Ok(create_empty_df_datatypes(
                     subject_keep_rename,
@@ -407,7 +408,7 @@ fn create_empty_df_datatypes(
             (dt.clone(), polars_dt)
         } else {
             let dt = RDFNodeType::None;
-            let polars_dt = dt.polars_data_type();
+            let polars_dt = DataType::Utf8;
             (dt, polars_dt)
         };
         out_datatypes.insert(object_rename.to_string(), use_datatype);
