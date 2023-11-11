@@ -322,13 +322,13 @@ fn write_string(f: &mut Vec<u8>, s: &str) {
             match c {
                 '\n' => {
                     write!(f, "\\n").unwrap();
-                },
+                }
                 '\t' => {
                     write!(f, "\\t").unwrap();
-                },
+                }
                 '\r' => {
                     write!(f, "\\r").unwrap();
-                },
+                }
                 '"' | '\\' => {
                     write!(f, "\\{c}").unwrap();
                 }

@@ -4,7 +4,7 @@ use crate::sparql::multitype::create_compatible_solution_mappings;
 use crate::sparql::query_context::{Context, PathEntry};
 use crate::sparql::solution_mapping::SolutionMappings;
 use log::debug;
-use polars::prelude::{diag_concat_lf};
+use polars::prelude::diag_concat_lf;
 use spargebra::algebra::GraphPattern;
 
 impl Triplestore {

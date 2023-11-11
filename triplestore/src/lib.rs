@@ -1,3 +1,5 @@
+extern crate core;
+
 mod constants;
 pub(crate) mod conversion;
 pub mod errors;
@@ -6,6 +8,7 @@ mod io_funcs;
 pub mod native_parquet_write;
 mod ntriples_write;
 pub mod sparql;
+pub mod triples_read;
 
 use crate::errors::TriplestoreError;
 use crate::io_funcs::{create_folder_if_not_exists, delete_tmp_parquets_in_caching_folder};
@@ -368,7 +371,7 @@ pub fn prepare_triples(
         return vec![];
     }
 
-    let map_literal_variants_to_iri = |t:&RDFNodeType| match t {
+    let map_literal_variants_to_iri = |t: &RDFNodeType| match t {
         RDFNodeType::Literal(l) => match l.as_ref() {
             xsd::ANY_URI => RDFNodeType::IRI,
             _ => RDFNodeType::Literal(l.clone()),

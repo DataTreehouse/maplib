@@ -7,7 +7,7 @@ use crate::sparql::sparql_to_polars::{
     sparql_literal_to_polars_literal_value, sparql_named_node_to_polars_literal_value,
 };
 use oxrdf::NamedNode;
-use polars::prelude::{col, DataFrameJoinOps, Expr, IntoLazy, lit};
+use polars::prelude::{col, lit, DataFrameJoinOps, Expr, IntoLazy};
 use polars_core::datatypes::{AnyValue, DataType};
 use polars_core::frame::{DataFrame, UniqueKeepStrategy};
 use polars_core::prelude::{ChunkAgg, JoinArgs, JoinType};
@@ -56,7 +56,8 @@ impl Triplestore {
                 sparmat,
                 dt_subj,
                 dt_obj,
-            }) = sparse_path(ppe, &cat_df_map, max_index as usize) {
+            }) = sparse_path(ppe, &cat_df_map, max_index as usize)
+            {
                 let mut subject_vec = vec![];
                 let mut object_vec = vec![];
                 for (i, row) in sparmat.outer_iterator().enumerate() {
@@ -120,8 +121,12 @@ impl Triplestore {
         let mut var_cols = vec![];
         match subject {
             TermPattern::NamedNode(nn) => {
-                let l  = sparql_named_node_to_polars_literal_value(nn);
-                out_df = out_df.lazy().filter(col("subject").eq(lit(l))).collect().unwrap();
+                let l = sparql_named_node_to_polars_literal_value(nn);
+                out_df = out_df
+                    .lazy()
+                    .filter(col("subject").eq(lit(l)))
+                    .collect()
+                    .unwrap();
                 out_df = out_df.drop("subject").unwrap();
             }
             TermPattern::BlankNode(b) => {
@@ -129,8 +134,12 @@ impl Triplestore {
                 out_df.rename("subject", b.as_str()).unwrap();
             }
             TermPattern::Literal(l) => {
-                let l  = sparql_literal_to_polars_literal_value(l);
-                out_df = out_df.lazy().filter(col("subject").eq(lit(l))).collect().unwrap();
+                let l = sparql_literal_to_polars_literal_value(l);
+                out_df = out_df
+                    .lazy()
+                    .filter(col("subject").eq(lit(l)))
+                    .collect()
+                    .unwrap();
                 out_df = out_df.drop("subject").unwrap();
             }
             TermPattern::Variable(v) => {
@@ -141,8 +150,12 @@ impl Triplestore {
 
         match object {
             TermPattern::NamedNode(nn) => {
-                let l  = sparql_named_node_to_polars_literal_value(nn);
-                out_df = out_df.lazy().filter(col("object").eq(lit(l))).collect().unwrap();
+                let l = sparql_named_node_to_polars_literal_value(nn);
+                out_df = out_df
+                    .lazy()
+                    .filter(col("object").eq(lit(l)))
+                    .collect()
+                    .unwrap();
                 out_df = out_df.drop("object").unwrap();
             }
             TermPattern::BlankNode(b) => {
@@ -150,8 +163,12 @@ impl Triplestore {
                 out_df.rename("object", b.as_str()).unwrap();
             }
             TermPattern::Literal(l) => {
-                let l  = sparql_literal_to_polars_literal_value(l);
-                out_df = out_df.lazy().filter(col("object").eq(lit(l))).collect().unwrap();
+                let l = sparql_literal_to_polars_literal_value(l);
+                out_df = out_df
+                    .lazy()
+                    .filter(col("object").eq(lit(l)))
+                    .collect()
+                    .unwrap();
                 out_df = out_df.drop("object").unwrap();
             }
             TermPattern::Variable(v) => {
@@ -806,7 +823,9 @@ fn sparse_path(
                     dt_obj: dt_obj_right,
                 }) = res_right
                 {
-                    let sparmat = (&sparmat_left + &sparmat_right).to_csr().map(|x| (x > &0) as u32);
+                    let sparmat = (&sparmat_left + &sparmat_right)
+                        .to_csr()
+                        .map(|x| (x > &0) as u32);
                     Some(SparsePathReturn {
                         sparmat,
                         dt_subj: dt_subj_left.union(&dt_subj_right),
@@ -830,7 +849,8 @@ fn sparse_path(
                 sparmat: sparmat_inner,
                 dt_subj,
                 dt_obj,
-            }) = sparse_path(inner, cat_df_map, max_index) {
+            }) = sparse_path(inner, cat_df_map, max_index)
+            {
                 let sparmat = zero_or_more(sparmat_inner);
                 Some(SparsePathReturn {
                     sparmat,
@@ -846,7 +866,8 @@ fn sparse_path(
                 sparmat: sparmat_inner,
                 dt_subj,
                 dt_obj,
-            }) = sparse_path(inner, cat_df_map, max_index) {
+            }) = sparse_path(inner, cat_df_map, max_index)
+            {
                 let sparmat = one_or_more(sparmat_inner);
                 Some(SparsePathReturn {
                     sparmat,
@@ -859,10 +880,17 @@ fn sparse_path(
         }
         PropertyPathExpression::ZeroOrOne(inner) => {
             if let Some(SparsePathReturn {
-                sparmat: sparmat_inner, dt_subj, dt_obj,
-                        }) = sparse_path(inner, cat_df_map, max_index) {
+                sparmat: sparmat_inner,
+                dt_subj,
+                dt_obj,
+            }) = sparse_path(inner, cat_df_map, max_index)
+            {
                 let sparmat = zero_or_one(sparmat_inner);
-                Some(SparsePathReturn { sparmat, dt_subj, dt_obj })
+                Some(SparsePathReturn {
+                    sparmat,
+                    dt_subj,
+                    dt_obj,
+                })
             } else {
                 None
             }

@@ -153,7 +153,8 @@ impl Triplestore {
                     }
                     for c in strcol {
                         lf = lf.with_column(col(c).cast(DataType::Categorical(None)));
-                        existing_mappings = existing_mappings.with_column(col(c).cast(DataType::Categorical(None)));
+                        existing_mappings =
+                            existing_mappings.with_column(col(c).cast(DataType::Categorical(None)));
                     }
 
                     existing_mappings = existing_mappings.join(

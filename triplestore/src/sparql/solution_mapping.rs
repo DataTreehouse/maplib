@@ -26,12 +26,8 @@ impl SolutionMappings {
 
 pub fn is_string_col(rdf_node_type: &RDFNodeType) -> bool {
     match rdf_node_type {
-        RDFNodeType::IRI => {
-            true
-        }
-        RDFNodeType::BlankNode => {
-            true
-        }
+        RDFNodeType::IRI => true,
+        RDFNodeType::BlankNode => true,
         RDFNodeType::Literal(lit) => {
             if lit.as_ref() == xsd::STRING {
                 true
@@ -39,11 +35,7 @@ pub fn is_string_col(rdf_node_type: &RDFNodeType) -> bool {
                 false
             }
         }
-        RDFNodeType::MultiType => {
-            false
-        }
-        RDFNodeType::None => {
-            false
-        }
+        RDFNodeType::MultiType => false,
+        RDFNodeType::None => false,
     }
 }
