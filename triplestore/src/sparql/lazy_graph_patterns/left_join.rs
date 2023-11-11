@@ -1,17 +1,20 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
-use crate::sparql::multitype::{clean_up_after_join_workaround, create_compatible_solution_mappings, helper_cols_join_workaround_polars_object_series_bug};
+use crate::sparql::multitype::{
+    clean_up_after_join_workaround, create_compatible_solution_mappings,
+    helper_cols_join_workaround_polars_object_series_bug,
+};
 use crate::sparql::query_context::{Context, PathEntry};
 use crate::sparql::solution_mapping::{is_string_col, SolutionMappings};
 use log::debug;
 use polars::prelude::{col, Expr};
 use polars_core::datatypes::DataType;
 use polars_core::prelude::{JoinArgs, JoinType};
-use spargebra::algebra::{Expression, GraphPattern};
 use representation::RDFNodeType;
+use spargebra::algebra::{Expression, GraphPattern};
 
 impl Triplestore {
-    pub(crate) fn lazy_left_join(
+    pub fn lazy_left_join(
         &self,
         left: &GraphPattern,
         right: &GraphPattern,
@@ -50,7 +53,8 @@ impl Triplestore {
         } = left_solution_mappings;
 
         let mut join_on: Vec<_> = left_columns
-            .intersection(&right_columns).map(|x|x.clone())
+            .intersection(&right_columns)
+            .map(|x| x.clone())
             .collect();
         join_on.sort();
 
@@ -69,7 +73,6 @@ impl Triplestore {
                 &join_on,
                 &left_datatypes,
             );
-
 
         for (k, v) in &right_datatypes {
             if !left_datatypes.contains_key(k) {

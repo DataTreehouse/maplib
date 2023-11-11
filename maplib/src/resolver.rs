@@ -297,15 +297,13 @@ fn resolve(
                 let new_node_result = NamedNode::new(format!("{}{}", nn.as_str(), &pn.name));
                 match new_node_result {
                     Ok(new_node) => new_node,
-                    Err(err) => {
-                        return Err(ResolutionError::BadCompositeIRIError(err))
-                    }
+                    Err(err) => return Err(ResolutionError::BadCompositeIRIError(err)),
                 }
             } else {
                 return Err(ResolutionError::MissingPrefixError(format!(
-                        "{}:{}",
-                        &pn.prefix, &pn.name
-                    )));
+                    "{}:{}",
+                    &pn.prefix, &pn.name
+                )));
             }
         }
         ResolvesToNamedNode::NamedNode(nn) => nn.clone(),
@@ -348,10 +346,10 @@ fn insert_or_raise(
     if let Some(n) = map.insert(key.to_string(), value.clone()) {
         if &n != value {
             return Err(ResolutionError::DuplicatedPrefixDefinition(
-                    key.to_string(),
-                    value.as_str().to_string(),
-                    n.as_str().to_string(),
-                ));
+                key.to_string(),
+                value.as_str().to_string(),
+                n.as_str().to_string(),
+            ));
         } else {
             warn!("Prefix {} was defined as {} two times", key, value.as_str());
         }

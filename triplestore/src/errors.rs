@@ -12,6 +12,8 @@ pub enum TriplestoreError {
     FolderCreateIOError(io::Error),
     ReadCachingDirectoryError(io::Error),
     ReadCachingDirectoryEntryError(io::Error),
+    TurtleParsingError(String),
+    ReadTriplesFileError(io::Error),
 }
 
 impl Display for TriplestoreError {
@@ -37,6 +39,12 @@ impl Display for TriplestoreError {
             }
             TriplestoreError::ReadCachingDirectoryEntryError(e) => {
                 write!(f, "Read caching directory entry error {}", e)
+            }
+            TriplestoreError::TurtleParsingError(tp) => {
+                write!(f, "Turtle parsing error {}", tp)
+            }
+            TriplestoreError::ReadTriplesFileError(rt) => {
+                write!(f, "Read triples file error {}", rt)
             }
         }
     }

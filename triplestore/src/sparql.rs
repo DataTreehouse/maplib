@@ -3,10 +3,10 @@ pub(crate) mod lazy_aggregate;
 mod lazy_expressions;
 mod lazy_graph_patterns;
 mod lazy_order;
+pub mod multitype;
 pub mod query_context;
 pub mod solution_mapping;
 mod sparql_to_polars;
-pub mod multitype;
 
 use crate::sparql::query_context::Context;
 use oxrdf::vocab::xsd;
@@ -90,7 +90,7 @@ impl Triplestore {
         if let Query::Construct { .. } = &query {
             let res = self.query_parsed(&query)?;
             match res {
-                QueryResult::Select(_,_) => {
+                QueryResult::Select(_, _) => {
                     panic!("Should never happen")
                 }
                 QueryResult::Construct(dfs) => {
@@ -176,10 +176,8 @@ fn term_pattern_series(
             if lit.datatype() == xsd::ANY_URI {
                 named_node_series(&NamedNode::new(lit.to_string()).unwrap(), name, len)
             } else {
-                let (anyvalue, dt) = sparql_literal_to_any_value(
-                    &lit.value().to_string(),
-                    &Some(lit.datatype()),
-                );
+                let (anyvalue, dt) =
+                    sparql_literal_to_any_value(&lit.value().to_string(), &Some(lit.datatype()));
                 let mut any_values = vec![];
                 for _ in 0..len {
                     any_values.push(anyvalue.clone())

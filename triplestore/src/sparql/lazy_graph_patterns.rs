@@ -4,6 +4,7 @@ mod filter;
 mod group;
 mod join;
 mod left_join;
+pub(crate) mod load_tt;
 mod minus;
 mod order_by;
 mod path;
@@ -11,7 +12,6 @@ mod project;
 mod triple;
 mod union;
 mod values;
-pub(crate) mod load_tt;
 
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;

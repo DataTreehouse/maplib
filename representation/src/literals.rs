@@ -1,6 +1,6 @@
 use chrono::{DateTime, NaiveDateTime, Utc};
 use oxrdf::vocab::xsd;
-use oxrdf::{NamedNodeRef};
+use oxrdf::NamedNodeRef;
 use polars_core::datatypes::TimeUnit;
 use polars_core::prelude::AnyValue;
 use std::str::FromStr;

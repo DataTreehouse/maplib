@@ -1,9 +1,9 @@
-use std::collections::{HashMap, HashSet};
-use polars::prelude::{col, concat, IntoLazy, LazyFrame, UnionArgs};
-use representation::RDFNodeType;
 use crate::sparql::errors::SparqlError;
 use crate::sparql::multitype::unitype_to_multitype;
 use crate::TripleTable;
+use polars::prelude::{col, concat, IntoLazy, LazyFrame, UnionArgs};
+use representation::RDFNodeType;
+use std::collections::{HashMap, HashSet};
 
 fn single_tt_to_lf(tt: &TripleTable) -> Result<LazyFrame, SparqlError> {
     assert!(tt.unique, "Should be deduplicated");
@@ -39,7 +39,11 @@ pub fn multiple_tt_to_lf(
         Ok(None)
     } else if filtered.len() == 1 {
         let (subj_dt, obj_dt, tt) = filtered.remove(0);
-        Ok(Some((subj_dt.clone(), obj_dt.clone(), single_tt_to_lf(tt)?)))
+        Ok(Some((
+            subj_dt.clone(),
+            obj_dt.clone(),
+            single_tt_to_lf(tt)?,
+        )))
     } else {
         let mut lfs = vec![];
         let set_subj_dt: HashSet<_> = m.keys().map(|(x, _)| x).collect();

@@ -10,6 +10,6 @@ pub struct ValidationReport {
     pub df: Option<DataFrame>,
 }
 
-pub fn validate(triplestore: &mut Triplestore) -> Result<ValidationReport, ShaclError> {
+pub fn validate(_triplestore: &mut Triplestore) -> Result<ValidationReport, ShaclError> {
     unimplemented!("Enterprise edition only")
 }

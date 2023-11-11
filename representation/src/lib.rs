@@ -17,12 +17,11 @@ pub enum RDFNodeType {
     BlankNode,
     Literal(NamedNode),
     None,
-    MultiType
+    MultiType,
 }
 
 impl RDFNodeType {
-
-    pub fn union(&self, other:&RDFNodeType) -> RDFNodeType {
+    pub fn union(&self, other: &RDFNodeType) -> RDFNodeType {
         if self == other {
             self.clone()
         } else {
@@ -80,7 +79,7 @@ impl RDFNodeType {
                 }
             },
             RDFNodeType::None => DataType::Null,
-            RDFNodeType::MultiType => todo!()
+            RDFNodeType::MultiType => todo!(),
         }
     }
 }

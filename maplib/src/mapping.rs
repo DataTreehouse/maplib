@@ -23,6 +23,8 @@ use rayon::iter::IndexedParallelIterator;
 use rayon::iter::ParallelDrainRange;
 use rayon::iter::ParallelIterator;
 use representation::RDFNodeType;
+use shacl::errors::ShaclError;
+use shacl::{validate, ValidationReport};
 use std::cmp::{max, min};
 use std::collections::{HashMap, HashSet};
 use std::io::Write;
@@ -30,8 +32,6 @@ use std::path::Path;
 use std::time::Instant;
 use triplestore::{TriplesToAdd, Triplestore};
 use uuid::Uuid;
-use shacl::{validate, ValidationReport};
-use shacl::errors::ShaclError;
 
 pub struct Mapping {
     template_dataset: TemplateDataset,
@@ -121,6 +121,13 @@ impl Mapping {
         }
         let dataset = TemplateDataset::new(docs).map_err(MaplibError::TemplateError)?;
         Mapping::new(&dataset, caching_folder)
+    }
+
+    pub fn read_triples(&mut self, p: &Path) -> Result<(), MappingError> {
+        Ok(self
+            .triplestore
+            .read_triples(p)
+            .map_err(|x| MappingError::TriplestoreError(x))?)
     }
 
     pub fn write_n_triples(&mut self, buffer: &mut dyn Write) -> Result<(), MappingError> {
@@ -231,7 +238,7 @@ impl Mapping {
     }
 
     pub fn validate(&mut self) -> Result<ValidationReport, ShaclError> {
-      validate(&mut self.triplestore)
+        validate(&mut self.triplestore)
     }
 
     fn _expand(
@@ -351,7 +358,9 @@ impl Mapping {
             ok_triples.push(t?);
         }
         let mut all_triples_to_add = vec![];
-        for (df, subj_rdf_node_type, obj_rdf_node_type , language_tag, verb, has_unique_subset) in ok_triples {
+        for (df, subj_rdf_node_type, obj_rdf_node_type, language_tag, verb, has_unique_subset) in
+            ok_triples
+        {
             all_triples_to_add.push(TriplesToAdd {
                 df,
                 subject_type: subj_rdf_node_type,
@@ -388,7 +397,17 @@ fn get_variable_names(i: &Instance) -> Vec<&String> {
 
 fn create_triples(
     i: OTTRTripleInstance,
-) -> Result<(DataFrame, RDFNodeType, RDFNodeType, Option<String>, Option<String>, bool), MappingError> {
+) -> Result<
+    (
+        DataFrame,
+        RDFNodeType,
+        RDFNodeType,
+        Option<String>,
+        Option<String>,
+        bool,
+    ),
+    MappingError,
+> {
     let OTTRTripleInstance {
         mut df,
         mut dynamic_columns,
@@ -435,14 +454,21 @@ fn create_triples(
     lf = lf.select(keep_cols.as_slice());
     let df = lf.collect().expect("Collect problem");
     let PrimitiveColumn {
-        rdf_node_type:subj_rdf_node_type,
-        language_tag:_,
+        rdf_node_type: subj_rdf_node_type,
+        language_tag: _,
     } = dynamic_columns.remove("subject").unwrap();
     let PrimitiveColumn {
         rdf_node_type: obj_rdf_node_type,
         language_tag,
     } = dynamic_columns.remove("object").unwrap();
-    Ok((df, subj_rdf_node_type, obj_rdf_node_type, language_tag, verb, has_unique_subset))
+    Ok((
+        df,
+        subj_rdf_node_type,
+        obj_rdf_node_type,
+        language_tag,
+        verb,
+        has_unique_subset,
+    ))
 }
 
 fn create_dynamic_expression_from_static(

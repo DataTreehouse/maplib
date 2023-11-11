@@ -1,5 +1,5 @@
 use oxrdf::vocab::xsd;
-use oxrdf::{BlankNode, Literal, NamedNode};
+use oxrdf::{BlankNode, Literal, NamedNode, Subject, Term};
 use polars::prelude::{coalesce, col, IntoLazy, LazyFrame};
 use polars_core::frame::DataFrame;
 use polars_core::prelude::{
@@ -38,6 +38,43 @@ impl Display for MultiType {
                 write!(f, "Null")
             }
         }
+    }
+}
+
+impl From<Subject> for MultiType {
+    fn from(s: Subject) -> Self {
+        match s {
+            Subject::NamedNode(nn) => MultiType::IRI(nn),
+            Subject::BlankNode(bn) => MultiType::BlankNode(bn),
+        }
+    }
+}
+
+impl From<Term> for MultiType {
+    fn from(t: Term) -> Self {
+        match t {
+            Term::NamedNode(nn) => MultiType::IRI(nn),
+            Term::BlankNode(bn) => MultiType::BlankNode(bn),
+            Term::Literal(l) => MultiType::Literal(l),
+        }
+    }
+}
+
+impl From<Literal> for MultiType {
+    fn from(value: Literal) -> Self {
+        MultiType::Literal(value)
+    }
+}
+
+impl From<NamedNode> for MultiType {
+    fn from(value: NamedNode) -> Self {
+        MultiType::IRI(value.clone())
+    }
+}
+
+impl From<BlankNode> for MultiType {
+    fn from(value: BlankNode) -> Self {
+        MultiType::BlankNode(value)
     }
 }
 
@@ -347,7 +384,7 @@ fn find_e_columns(e: &Expression) -> Vec<String> {
             let mut out = find_e_columns(a);
             out.extend(find_e_columns(b));
             out
-        },
+        }
         Expression::In(a, bs) => {
             let mut out_a = find_e_columns(a);
             for b in bs {
