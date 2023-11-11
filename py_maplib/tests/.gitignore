@@ -7,4 +7,5 @@ test_opcua_mapping.py
 testdata/*.parquet
 bench200_000.nt
 tmp
-*.nt
+out.nt
+create*.nt
