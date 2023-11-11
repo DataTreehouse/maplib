@@ -19,7 +19,7 @@ use pyo3::prelude::PyModule;
 use pyo3::*;
 use std::collections::HashMap;
 use std::fs::File;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use triplestore::sparql::QueryResult;
 
 //The below snippet controlling alloc-library is from https://github.com/pola-rs/polars/blob/main/py-polars/src/lib.rs
@@ -46,8 +46,8 @@ use triplestore::sparql::QueryResult;
 #[cfg(target_os = "linux")]
 use jemallocator::Jemalloc;
 use polars_core::frame::DataFrame;
-use polars_core::prelude::{DataType, NamedFrom, Series};
-use triplestore::sparql::multitype::{multi_series_to_string_series, MULTI_TYPE_NAME, MultiType};
+use polars_core::prelude::{DataType, NamedFrom};
+use triplestore::sparql::multitype::{multi_series_to_string_series, MULTI_TYPE_NAME};
 
 #[cfg(not(target_os = "linux"))]
 use mimalloc::MiMalloc;
@@ -505,8 +505,15 @@ impl Mapping {
     }
 
     #[pyo3(text_signature = "(file_path)")]
-    pub fn write_ntriples(&mut self, path: &str) -> PyResult<()> {
-        let path_buf = PathBuf::from(path);
+    pub fn read_triples(&mut self, file_path:&str) -> PyResult<()> {
+        let path = Path::new(file_path);
+        self.inner.read_triples(path).map_err(|x| PyMaplibError::from(x))?;
+        Ok(())
+    }
+
+    #[pyo3(text_signature = "(file_path)")]
+    pub fn write_ntriples(&mut self, file_path: &str) -> PyResult<()> {
+        let path_buf = PathBuf::from(file_path);
         let mut actual_file = File::create(path_buf.as_path())
             .map_err(|x| PyMaplibError::from(MappingError::FileCreateIOError(x)))?;
         self.inner.write_n_triples(&mut actual_file).unwrap();

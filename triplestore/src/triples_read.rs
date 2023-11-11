@@ -37,7 +37,7 @@ impl Triplestore {
             Ok(()) as Result<(), TurtleError>
         };
 
-        if path.ends_with(".ttl") {
+        if path.extension() == Some("ttl".as_ref()) {
             let mut tparser = TurtleParser::new(
                 BufReader::new(
                     File::open(path).map_err(|x| TriplestoreError::ReadTriplesFileError(x))?,
@@ -47,7 +47,7 @@ impl Triplestore {
             tparser
                 .parse_all(parse_func)
                 .map_err(|x| TriplestoreError::TurtleParsingError(x.to_string()))?;
-        } else if path.ends_with(".nt") {
+        } else if path.extension()  == Some("nt".as_ref()) {
             let mut ntparser = NTriplesParser::new(BufReader::new(
                 File::open(path).map_err(|x| TriplestoreError::ReadTriplesFileError(x))?,
             ));
@@ -66,16 +66,12 @@ impl Triplestore {
                     any_vec.push(match s {
                         oxrdf::Subject::NamedNode(nn) => AnyValue::Utf8(nn.as_str()),
                         oxrdf::Subject::BlankNode(bb) => AnyValue::Utf8(bb.as_str()),
-                        _ => {
-                            todo!()
-                        }
                     });
                 }
                 let subjects_ser =
                     Series::from_any_values("subject", any_vec.as_slice(), false).unwrap();
 
                 let mut any_vec = vec![];
-                let mut found_language_tag = false;
                 let mut language_tags_vec = vec![];
                 for t in &objects {
                     match t {
@@ -94,7 +90,7 @@ impl Triplestore {
                         }
                     }
                 }
-                let language_tag_ser = if found_language_tag {
+                let language_tag_ser = if !language_tags_vec.is_empty() {
                     Some(Series::new("language_tag", language_tags_vec))
                 } else {
                     None
