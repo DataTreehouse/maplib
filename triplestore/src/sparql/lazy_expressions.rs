@@ -12,10 +12,10 @@ use crate::sparql::sparql_to_polars::{
 };
 use oxrdf::vocab::xsd;
 use polars::datatypes::DataType;
-use polars::functions::concat_str;
 use polars::lazy::dsl::is_not_null;
 use polars::prelude::{
-    col, lit, Expr, IntoLazy, IntoSeries, LiteralValue, Operator, Series, UniqueKeepStrategy,
+    col, concat_str, is_in, lit, Expr, IntoLazy, IntoSeries, LiteralValue, Operator, Series,
+    UniqueKeepStrategy,
 };
 use representation::RDFNodeType;
 use spargebra::algebra::{Expression, Function};
@@ -475,7 +475,7 @@ impl Triplestore {
                     .with_column(
                         Expr::Literal(LiteralValue::Int64(1)).alias(exists_context.as_str()),
                     )
-                    .with_column(col(exists_context.as_str()).cumsum(false).keep_name());
+                    .with_column(col(exists_context.as_str()).cumsum(false));
 
                 let new_inner = rewrite_exists_graph_pattern(inner, exists_context.as_str());
                 let SolutionMappings {
@@ -498,10 +498,11 @@ impl Triplestore {
                     .collect()
                     .expect("Collect lazy exists error");
                 let mut ser = Series::from(
-                    df.column(exists_context.as_str())
-                        .unwrap()
-                        .is_in(exists_df.column(exists_context.as_str()).unwrap())
-                        .unwrap(),
+                    is_in(
+                        df.column(exists_context.as_str()).unwrap(),
+                        exists_df.column(exists_context.as_str()).unwrap(),
+                    )
+                    .unwrap(),
                 );
                 ser.rename(context.as_str());
                 df.with_column(ser).unwrap();
@@ -756,21 +757,13 @@ impl Triplestore {
                             columns,
                             rdf_node_types: datatypes,
                         } = output_solution_mappings;
-                        let mut inner_df = mappings.collect().unwrap();
-                        let series = (0..args.len())
-                            .map(|i| {
-                                inner_df
-                                    .column(args_contexts.get(&i).unwrap().as_str())
-                                    .unwrap()
-                                    .clone()
-                            })
-                            .collect::<Vec<Series>>();
-                        let mut concat_series =
-                            concat_str(series.as_slice(), "").unwrap().into_series();
-                        concat_series.rename(context.as_str());
-                        inner_df.with_column(concat_series).unwrap();
+                        let cols: Vec<_> = (0..args.len())
+                            .map(|i| col(args_contexts.get(&i).unwrap().as_str()))
+                            .collect();
+                        let new_mappings =
+                            mappings.with_column(concat_str(cols, "").alias(context.as_str()));
                         output_solution_mappings =
-                            SolutionMappings::new(inner_df.lazy(), columns, datatypes);
+                            SolutionMappings::new(new_mappings, columns, datatypes);
                         output_solution_mappings.rdf_node_types.insert(
                             context.as_str().to_string(),
                             RDFNodeType::Literal(xsd::STRING.into_owned()),

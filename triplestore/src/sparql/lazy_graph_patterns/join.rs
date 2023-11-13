@@ -7,9 +7,9 @@ use crate::sparql::multitype::{
 use crate::sparql::query_context::{Context, PathEntry};
 use crate::sparql::solution_mapping::{is_string_col, SolutionMappings};
 use log::debug;
-use polars::prelude::{col, Expr};
+use polars::prelude::{col, Expr, JoinType};
 use polars_core::datatypes::DataType;
-use polars_core::prelude::{JoinArgs, JoinType};
+use polars::prelude::JoinArgs;
 use representation::RDFNodeType;
 use spargebra::algebra::GraphPattern;
 

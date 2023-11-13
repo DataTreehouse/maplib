@@ -10,7 +10,7 @@ use oxrdf::NamedNode;
 use polars::prelude::{col, lit, DataFrameJoinOps, Expr, IntoLazy};
 use polars_core::datatypes::{AnyValue, DataType};
 use polars_core::frame::{DataFrame, UniqueKeepStrategy};
-use polars_core::prelude::{ChunkAgg, JoinArgs, JoinType};
+use polars::prelude::{ChunkAgg, JoinArgs, JoinType};
 use polars_core::series::{IntoSeries, Series};
 use polars_core::utils::concat_df;
 use representation::RDFNodeType;
@@ -20,6 +20,7 @@ use sprs::{CsMatBase, TriMatBase};
 use std::cmp::max;
 use std::collections::hash_map::Values;
 use std::collections::HashMap;
+use crate::sparql::lazy_graph_patterns::triple::create_term_pattern_filter;
 
 type SparseMatrix = CsMatBase<u32, usize, Vec<usize>, Vec<usize>, Vec<u32>, usize>;
 
@@ -262,7 +263,19 @@ impl Triplestore {
     ) -> Result<HashMap<String, (DataFrame, RDFNodeType, RDFNodeType)>, SparqlError> {
         match ppe {
             PropertyPathExpression::NamedNode(nn) => {
-                let res = self.get_single_nn_df(nn.as_str(), subject, object)?;
+                let subject_filter = if let Some(subject) = subject {
+                    create_term_pattern_filter(subject, "subject")    
+                }  else {
+                    None
+                };
+                
+                let object_filter = if let Some(object) = object {
+                    create_term_pattern_filter(object, "object")    
+                }  else {
+                    None
+                };
+                
+                let res = self.get_single_nn_df(nn.as_str(), subject, object, subject_filter, object_filter)?;
                 if let Some((df, subj_dt, obj_dt)) = res {
                     let unique_cat_df = df_with_cats(df)
                         .unique(None, UniqueKeepStrategy::First, None)
@@ -331,6 +344,8 @@ impl Triplestore {
         nn: &str,
         subject: Option<&TermPattern>,
         object: Option<&TermPattern>,
+        subject_filter: Option<Expr>,
+        object_filter: Option<Expr>,
     ) -> Result<Option<(DataFrame, RDFNodeType, RDFNodeType)>, SparqlError> {
         let map_opt = self.df_map.get(nn);
         if let Some(m) = map_opt {
@@ -355,7 +370,7 @@ impl Triplestore {
                 let subj_datatype_req = tp_opt_to_dt_req(subject);
                 let obj_datatype_req = tp_opt_to_dt_req(object);
 
-                let ret = multiple_tt_to_lf(m, &subj_datatype_req, &obj_datatype_req)?;
+                let ret = multiple_tt_to_lf(m, &subj_datatype_req, &obj_datatype_req, subject_filter, object_filter)?;
                 if let Some((subj_dt, obj_dt, mut lf)) = ret {
                     if let Some(subject) = subject {
                         if let TermPattern::NamedNode(nn) = subject {
@@ -422,7 +437,7 @@ fn find_lookup(
             .unwrap()
             .categorical()
             .unwrap()
-            .logical()
+            .physical()
             .clone()
             .into_series();
         key_col.rename("key");
@@ -608,7 +623,7 @@ fn find_max_index(vals: Values<String, (DataFrame, RDFNodeType, RDFNodeType)>) -
             .unwrap()
             .categorical()
             .unwrap()
-            .logical()
+            .physical()
             .max()
         {
             max_index = max(max_index, max_subject);
@@ -618,7 +633,7 @@ fn find_max_index(vals: Values<String, (DataFrame, RDFNodeType, RDFNodeType)>) -
             .unwrap()
             .categorical()
             .unwrap()
-            .logical()
+            .physical()
             .max()
         {
             max_index = max(max_index, max_object);
@@ -633,7 +648,7 @@ fn to_csr(df: &DataFrame, max_index: usize) -> SparseMatrix {
         .unwrap()
         .categorical()
         .unwrap()
-        .logical()
+        .physical()
         .clone()
         .into_series();
     let obj = df
@@ -641,7 +656,7 @@ fn to_csr(df: &DataFrame, max_index: usize) -> SparseMatrix {
         .unwrap()
         .categorical()
         .unwrap()
-        .logical()
+        .physical()
         .clone()
         .into_series();
     let df = DataFrame::new(vec![sub, obj]).unwrap();

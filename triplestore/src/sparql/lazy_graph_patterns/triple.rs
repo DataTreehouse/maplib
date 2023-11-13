@@ -8,15 +8,14 @@ use crate::sparql::sparql_to_polars::{
 
 use crate::sparql::lazy_graph_patterns::load_tt::multiple_tt_to_lf;
 use crate::sparql::multitype::{
-    clean_up_after_join_workaround, helper_cols_join_workaround_polars_object_series_bug,
-    unitype_to_multitype,
+    clean_up_after_join_workaround, create_compatible_solution_mappings,
+    helper_cols_join_workaround_polars_object_series_bug, unitype_to_multitype,
 };
 use oxrdf::vocab::xsd;
-use polars::prelude::{col, concat, lit, Expr};
+use polars::prelude::{col, concat, lit, Expr, JoinType};
 use polars::prelude::{IntoLazy, UnionArgs};
 use polars_core::datatypes::{AnyValue, DataType};
 use polars_core::frame::DataFrame;
-use polars_core::prelude::JoinType;
 use polars_core::series::Series;
 use representation::RDFNodeType;
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
@@ -128,6 +127,17 @@ impl Triplestore {
                 .collect();
             if df.height() == 0 {
                 df = df.drop_many(overlap.as_slice());
+                //workaround for object registry bug
+                let mut multicols = vec![];
+                for (k,v) in &rdf_node_types {
+                    if v == &RDFNodeType::MultiType {
+                        multicols.push(k.clone())
+                    }
+                }
+                for c in multicols {
+                    mappings = mappings.with_column(lit("").alias(&c));
+                    rdf_node_types.insert(c, RDFNodeType::None);
+                }
                 if colnames.is_empty() {
                     mappings = mappings.filter(lit(false));
                 } else {
@@ -135,12 +145,22 @@ impl Triplestore {
                 }
             } else {
                 if !overlap.is_empty() {
-                    //TODO: Introduce data type sensitivity here.
+                    let (new_mappings, new_rdf_node_types, lf, new_dts) =
+                        create_compatible_solution_mappings(
+                            mappings,
+                            rdf_node_types,
+                            df.lazy(),
+                            dts,
+                        );
+                    dts = new_dts;
+                    rdf_node_types = new_rdf_node_types;
+                    mappings = new_mappings;
+
                     let join_on: Vec<Expr> = overlap.iter().map(|x| col(x)).collect();
                     let (mut existing_mappings, mut lf, left_original_map, right_original_map) =
                         helper_cols_join_workaround_polars_object_series_bug(
                             mappings,
-                            df.lazy(),
+                            lf,
                             &overlap,
                             &rdf_node_types,
                         );
@@ -205,7 +225,7 @@ impl Triplestore {
                 panic!("Empty map should never happen");
             }
             if let Some((subj_dt, obj_dt, mut lf)) =
-                multiple_tt_to_lf(m, subject_datatype_req, object_datatype_req)?
+                multiple_tt_to_lf(m, subject_datatype_req, object_datatype_req, subject_filter, object_filter)?
             {
                 let mut out_datatypes = HashMap::new();
 
@@ -225,12 +245,6 @@ impl Triplestore {
                 if let Some(renamed) = verb_keep_rename {
                     lf = lf.with_column(lit(verb_uri).alias(renamed));
                     out_datatypes.insert(renamed.clone(), RDFNodeType::IRI);
-                }
-                if let Some(f) = subject_filter {
-                    lf = lf.filter(f);
-                }
-                if let Some(f) = object_filter {
-                    lf = lf.filter(f);
                 }
                 lf = lf.drop_columns(drop);
                 let df = lf.collect().unwrap();
@@ -418,7 +432,7 @@ fn create_empty_df_datatypes(
     (DataFrame::new(series_vec).unwrap(), out_datatypes)
 }
 
-fn create_term_pattern_filter(term_pattern: &TermPattern, target_col: &str) -> Option<Expr> {
+pub fn create_term_pattern_filter(term_pattern: &TermPattern, target_col: &str) -> Option<Expr> {
     if let TermPattern::Literal(l) = term_pattern {
         return Some(col(target_col).eq(lit(sparql_literal_to_polars_literal_value(l))));
     } else if let TermPattern::NamedNode(nn) = term_pattern {

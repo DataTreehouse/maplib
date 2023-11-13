@@ -18,7 +18,10 @@ use crate::sparql::errors::SparqlError;
 use crate::sparql::query_context::{Context, PathEntry};
 use crate::sparql::solution_mapping::SolutionMappings;
 use log::{debug, info};
+use oxrdf::Literal;
+use polars_core::prelude::ObjectChunked;
 use spargebra::algebra::GraphPattern;
+use crate::sparql::multitype::MultiType;
 
 impl Triplestore {
     pub(crate) fn lazy_graph_pattern(
@@ -31,6 +34,8 @@ impl Triplestore {
 
         match graph_pattern {
             GraphPattern::Bgp { patterns } => {
+                let v = vec![MultiType::Literal(Literal::new_simple_literal("abc"))];
+                ObjectChunked::new_from_vec("chunky", v);
                 let mut updated_solution_mappings = solution_mappings;
                 let bgp_context = context.extension_with(PathEntry::Bgp);
                 for tp in patterns {
@@ -39,7 +44,6 @@ impl Triplestore {
                         tp,
                         &bgp_context,
                     )?);
-                    //println!("Out soln mapping {:?}", updated_solution_mappings.as_ref().unwrap().mappings.clone().collect());
                 }
                 Ok(updated_solution_mappings.unwrap())
             }

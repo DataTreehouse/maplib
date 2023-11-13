@@ -1,6 +1,7 @@
 use super::Triplestore;
 use crate::errors::TriplestoreError;
 use crate::TriplesToAdd;
+use oxiri::Iri;
 use oxrdf::vocab::xsd;
 use polars_core::frame::DataFrame;
 use polars_core::prelude::{AnyValue, NamedFrom, Series};
@@ -14,7 +15,11 @@ use std::io::BufReader;
 use std::path::Path;
 
 impl Triplestore {
-    pub fn read_triples(&mut self, path: &Path) -> Result<(), TriplestoreError> {
+    pub fn read_triples(
+        &mut self,
+        path: &Path,
+        base_iri: Option<String>,
+    ) -> Result<(), TriplestoreError> {
         //Copied from the documentation of rio_turtle
 
         let mut predicate_map = HashMap::new();
@@ -37,17 +42,26 @@ impl Triplestore {
             Ok(()) as Result<(), TurtleError>
         };
 
+        let base_iri = if let Some(base_iri) = base_iri {
+            Some(
+                Iri::parse(base_iri)
+                    .map_err(|x| TriplestoreError::InvalidBaseIri(x.to_string()))?,
+            )
+        } else {
+            None
+        };
+
         if path.extension() == Some("ttl".as_ref()) {
             let mut tparser = TurtleParser::new(
                 BufReader::new(
                     File::open(path).map_err(|x| TriplestoreError::ReadTriplesFileError(x))?,
                 ),
-                None,
+                base_iri,
             );
             tparser
                 .parse_all(parse_func)
                 .map_err(|x| TriplestoreError::TurtleParsingError(x.to_string()))?;
-        } else if path.extension()  == Some("nt".as_ref()) {
+        } else if path.extension() == Some("nt".as_ref()) {
             let mut ntparser = NTriplesParser::new(BufReader::new(
                 File::open(path).map_err(|x| TriplestoreError::ReadTriplesFileError(x))?,
             ));
@@ -173,7 +187,9 @@ fn get_rio_subject_datatype(s: &rio_api::model::Subject) -> RDFNodeType {
     match s {
         rio_api::model::Subject::NamedNode(_) => RDFNodeType::IRI,
         rio_api::model::Subject::BlankNode(_) => RDFNodeType::BlankNode,
-        _ => {todo!()}
+        _ => {
+            todo!()
+        }
     }
 }
 

@@ -43,7 +43,7 @@ impl Triplestore {
             self.deduplicate()
                 .map_err(SparqlError::DeduplicationError)?;
         }
-        enable_string_cache(true);
+        enable_string_cache();
         let context = Context::new();
         match query {
             Query::Select {

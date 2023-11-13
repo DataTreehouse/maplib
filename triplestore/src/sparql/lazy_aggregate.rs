@@ -4,7 +4,7 @@ use crate::sparql::query_context::{Context, PathEntry};
 use crate::sparql::solution_mapping::SolutionMappings;
 use oxrdf::vocab::xsd;
 use oxrdf::Variable;
-use polars::prelude::{col, DataType, Expr, GetOutput, IntoSeries};
+use polars::prelude::{col, str_concat, DataType, Expr, GetOutput, IntoSeries};
 use representation::RDFNodeType;
 use spargebra::algebra::AggregateExpression;
 
@@ -164,10 +164,14 @@ impl Triplestore {
                         .apply(
                             move |s| {
                                 Ok(Some(
-                                    s.unique_stable()
-                                        .expect("Unique stable error")
-                                        .str_concat(use_sep.as_str())
-                                        .into_series(),
+                                    str_concat(
+                                        s.unique_stable()
+                                            .expect("Unique stable error")
+                                            .utf8()
+                                            .unwrap(),
+                                        use_sep.as_str(),
+                                    )
+                                    .into_series(),
                                 ))
                             },
                             GetOutput::from_type(DataType::Utf8),
@@ -179,7 +183,7 @@ impl Triplestore {
                         .list()
                         .0
                         .apply(
-                            move |s| Ok(Some(s.str_concat(use_sep.as_str()).into_series())),
+                            move |s| Ok(Some(str_concat(s.utf8().unwrap(), use_sep.as_str()).into_series())),
                             GetOutput::from_type(DataType::Utf8),
                         )
                         .first();

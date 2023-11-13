@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-use polars_core::error::{ArrowError, PolarsError};
+use polars_core::error::{PolarsError};
 use polars_core::prelude::{ArrayRef, ArrowDataType, DataFrame, Series};
 use polars_core::utils::accumulate_dataframes_vertical;
 use polars_core::utils::arrow::ffi;
@@ -40,8 +40,6 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum ToRustError {
-    #[error(transparent)]
-    Arrow(#[from] ArrowError),
     #[error(transparent)]
     Other(SimpleError),
     #[error(transparent)]
@@ -143,7 +141,6 @@ impl std::convert::From<ToRustError> for PyErr {
         let default = || PyRuntimeError::new_err(format!("{:?}", &err));
 
         match &err {
-            ToRustError::Arrow(err) => ArrowErrorException::new_err(format!("{:?}", err)),
             _ => default(),
         }
     }

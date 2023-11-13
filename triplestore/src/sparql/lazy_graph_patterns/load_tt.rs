@@ -1,7 +1,7 @@
 use crate::sparql::errors::SparqlError;
 use crate::sparql::multitype::unitype_to_multitype;
 use crate::TripleTable;
-use polars::prelude::{col, concat, IntoLazy, LazyFrame, UnionArgs};
+use polars::prelude::{col, concat, Expr, IntoLazy, LazyFrame, UnionArgs};
 use representation::RDFNodeType;
 use std::collections::{HashMap, HashSet};
 
@@ -21,6 +21,8 @@ pub fn multiple_tt_to_lf(
     m: &HashMap<(RDFNodeType, RDFNodeType), TripleTable>,
     subj_datatype_req: &Option<RDFNodeType>,
     obj_datatype_req: &Option<RDFNodeType>,
+    subject_filter: Option<Expr>,
+    object_filter: Option<Expr>,
 ) -> Result<Option<(RDFNodeType, RDFNodeType, LazyFrame)>, SparqlError> {
     let mut filtered = vec![];
     for ((subj_type, obj_type), tt) in m {
@@ -32,17 +34,27 @@ pub fn multiple_tt_to_lf(
             keep = keep && obj_req == obj_type;
         }
         if keep {
-            filtered.push((subj_type, obj_type, tt));
+            let mut lf = single_tt_to_lf(tt)?;
+            if let Some(subject_filter) = &subject_filter {
+                lf = lf.filter(subject_filter.clone());
+            }
+            if let Some(object_filter) = &object_filter {
+                lf = lf.filter(object_filter.clone())
+            }
+            let df = lf.collect().unwrap();
+            if df.height() > 0 {
+                filtered.push((subj_type, obj_type, df.lazy()));
+            }
         }
     }
     if filtered.is_empty() {
         Ok(None)
     } else if filtered.len() == 1 {
-        let (subj_dt, obj_dt, tt) = filtered.remove(0);
+        let (subj_dt, obj_dt, lf) = filtered.remove(0);
         Ok(Some((
             subj_dt.clone(),
             obj_dt.clone(),
-            single_tt_to_lf(tt)?,
+            lf,
         )))
     } else {
         let mut lfs = vec![];
@@ -52,8 +64,8 @@ pub fn multiple_tt_to_lf(
         let mut use_subj_dt = None;
         let mut use_obj_dt = None;
 
-        for ((subj_dt, obj_dt), tt) in m {
-            let mut df = single_tt_to_lf(tt)?.collect().unwrap();
+        for (subj_dt, obj_dt, lf) in filtered {
+            let mut df = lf.collect().unwrap();
             if set_subj_dt.len() > 1 {
                 let subjects = df.column("subject").unwrap();
                 let out_subjects = unitype_to_multitype(subjects, subj_dt);

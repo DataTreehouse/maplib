@@ -2,14 +2,15 @@ use oxrdf::vocab::xsd;
 use oxrdf::{BlankNode, Literal, NamedNode, Subject, Term};
 use polars::prelude::{coalesce, col, IntoLazy, LazyFrame};
 use polars_core::frame::DataFrame;
-use polars_core::prelude::{
-    AnyValue, ChunkedArray, NamedFrom, NewChunkedArray, ObjectChunked, PolarsObject,
-};
+use polars_core::prelude::{AnyValue, ChunkedArray, DataType, NamedFrom, NewChunkedArray, ObjectChunked, PolarsObject};
 use polars_core::series::Series;
 use representation::RDFNodeType;
 use spargebra::algebra::{Expression, OrderExpression};
 use std::collections::{HashMap, HashSet};
+use std::collections::hash_map::DefaultHasher;
 use std::fmt::{Display, Formatter};
+use std::hash::Hash;
+use polars::export::arrow::util::total_ord::TotalEq;
 
 pub const MULTI_TYPE_NAME: &str = "MultiTypes";
 
@@ -78,6 +79,20 @@ impl From<BlankNode> for MultiType {
     }
 }
 
+impl TotalEq for MultiType {
+    fn tot_eq(&self, other: &Self) -> bool {
+        let mut s = DefaultHasher::new();
+        let mut t = DefaultHasher::new();
+        self.hash(&mut s);
+        other.hash(&mut t);
+        self.finish() == other.finish()
+    }
+
+    fn tot_ne(&self, other: &Self) -> bool {
+        !self.tot_eq(other)
+    }
+}
+
 impl PolarsObject for MultiType {
     fn type_name() -> &'static str {
         MULTI_TYPE_NAME
@@ -132,6 +147,11 @@ pub fn create_compatible_solution_mappings(
 }
 
 pub fn unitype_to_multitype(ser: &Series, dt: &RDFNodeType) -> Series {
+    let ser = if let DataType::Categorical(_) = ser.dtype() {
+        ser.cast(&DataType::Utf8).unwrap()
+    } else {
+        ser.clone()
+    };
     let out_ser: Series = match dt {
         RDFNodeType::IRI => convert_to_multitype(
             |x: AnyValue| match x {
@@ -140,17 +160,20 @@ pub fn unitype_to_multitype(ser: &Series, dt: &RDFNodeType) -> Series {
                     panic!()
                 }
             },
-            ser,
+            &ser,
         ),
-        RDFNodeType::BlankNode => convert_to_multitype(
-            |x: AnyValue| match x {
-                AnyValue::Utf8(a) => MultiType::BlankNode(BlankNode::new_unchecked(a)),
-                _ => {
-                    panic!()
-                }
-            },
-            ser,
-        ),
+        RDFNodeType::BlankNode => {
+            convert_to_multitype(
+                |x: AnyValue|
+                    match x {
+                        AnyValue::Utf8(a) => MultiType::BlankNode(BlankNode::new_unchecked(a)),
+                        _ => {
+                            panic!()
+                        }
+                    },
+                &ser,
+            )
+    },
         RDFNodeType::Literal(l) => match l.as_ref() {
             xsd::STRING => convert_to_multitype(
                 |x: AnyValue| match x {
@@ -159,7 +182,7 @@ pub fn unitype_to_multitype(ser: &Series, dt: &RDFNodeType) -> Series {
                         panic!()
                     }
                 },
-                ser,
+                &ser,
             ),
             xsd::UNSIGNED_INT => convert_to_multitype(
                 |x: AnyValue| match x {
@@ -168,7 +191,7 @@ pub fn unitype_to_multitype(ser: &Series, dt: &RDFNodeType) -> Series {
                         panic!()
                     }
                 },
-                ser,
+                &ser,
             ),
             xsd::UNSIGNED_LONG => convert_to_multitype(
                 |x: AnyValue| match x {
@@ -177,7 +200,7 @@ pub fn unitype_to_multitype(ser: &Series, dt: &RDFNodeType) -> Series {
                         panic!()
                     }
                 },
-                ser,
+                &ser,
             ),
             xsd::INTEGER | xsd::LONG => convert_to_multitype(
                 |x: AnyValue| match x {
@@ -186,7 +209,7 @@ pub fn unitype_to_multitype(ser: &Series, dt: &RDFNodeType) -> Series {
                         panic!()
                     }
                 },
-                ser,
+                &ser,
             ),
             xsd::INT => convert_to_multitype(
                 |x: AnyValue| match x {
@@ -195,7 +218,7 @@ pub fn unitype_to_multitype(ser: &Series, dt: &RDFNodeType) -> Series {
                         panic!()
                     }
                 },
-                ser,
+                &ser,
             ),
             xsd::DOUBLE => convert_to_multitype(
                 |x: AnyValue| match x {
@@ -204,7 +227,7 @@ pub fn unitype_to_multitype(ser: &Series, dt: &RDFNodeType) -> Series {
                         panic!()
                     }
                 },
-                ser,
+                &ser,
             ),
             xsd::FLOAT => convert_to_multitype(
                 |x: AnyValue| match x {
@@ -213,7 +236,7 @@ pub fn unitype_to_multitype(ser: &Series, dt: &RDFNodeType) -> Series {
                         panic!()
                     }
                 },
-                ser,
+                &ser,
             ),
             xsd::BOOLEAN => convert_to_multitype(
                 |x: AnyValue| match x {
@@ -222,11 +245,11 @@ pub fn unitype_to_multitype(ser: &Series, dt: &RDFNodeType) -> Series {
                         panic!()
                     }
                 },
-                ser,
+                &ser,
             ),
             _ => todo!("Not yet implemented: {:?}", dt),
         },
-        RDFNodeType::None => convert_to_multitype(|_: AnyValue| MultiType::Null, ser),
+        RDFNodeType::None => convert_to_multitype(|_: AnyValue| MultiType::Null, &ser),
         _ => {
             todo!()
         }

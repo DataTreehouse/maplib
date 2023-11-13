@@ -14,6 +14,7 @@ pub enum TriplestoreError {
     ReadCachingDirectoryEntryError(io::Error),
     TurtleParsingError(String),
     ReadTriplesFileError(io::Error),
+    InvalidBaseIri(String),
 }
 
 impl Display for TriplestoreError {
@@ -45,6 +46,9 @@ impl Display for TriplestoreError {
             }
             TriplestoreError::ReadTriplesFileError(rt) => {
                 write!(f, "Read triples file error {}", rt)
+            }
+            TriplestoreError::InvalidBaseIri(x) => {
+                write!(f, "Invalid base iri {x}")
             }
         }
     }
