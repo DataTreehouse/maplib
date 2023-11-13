@@ -183,7 +183,11 @@ impl Triplestore {
                         .list()
                         .0
                         .apply(
-                            move |s| Ok(Some(str_concat(s.utf8().unwrap(), use_sep.as_str()).into_series())),
+                            move |s| {
+                                Ok(Some(
+                                    str_concat(s.utf8().unwrap(), use_sep.as_str()).into_series(),
+                                ))
+                            },
                             GetOutput::from_type(DataType::Utf8),
                         )
                         .first();

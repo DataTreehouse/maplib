@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-use polars_core::error::{PolarsError};
+use polars_core::error::PolarsError;
 use polars_core::prelude::{ArrayRef, ArrowDataType, DataFrame, Series};
 use polars_core::utils::accumulate_dataframes_vertical;
 use polars_core::utils::arrow::ffi;

@@ -1,6 +1,7 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
 use crate::sparql::lazy_graph_patterns::load_tt::multiple_tt_to_lf;
+use crate::sparql::lazy_graph_patterns::triple::create_term_pattern_filter;
 use crate::sparql::query_context::Context;
 use crate::sparql::solution_mapping::SolutionMappings;
 use crate::sparql::sparql_to_polars::{
@@ -8,9 +9,9 @@ use crate::sparql::sparql_to_polars::{
 };
 use oxrdf::NamedNode;
 use polars::prelude::{col, lit, DataFrameJoinOps, Expr, IntoLazy};
+use polars::prelude::{ChunkAgg, JoinArgs, JoinType};
 use polars_core::datatypes::{AnyValue, DataType};
 use polars_core::frame::{DataFrame, UniqueKeepStrategy};
-use polars::prelude::{ChunkAgg, JoinArgs, JoinType};
 use polars_core::series::{IntoSeries, Series};
 use polars_core::utils::concat_df;
 use representation::RDFNodeType;
@@ -20,7 +21,6 @@ use sprs::{CsMatBase, TriMatBase};
 use std::cmp::max;
 use std::collections::hash_map::Values;
 use std::collections::HashMap;
-use crate::sparql::lazy_graph_patterns::triple::create_term_pattern_filter;
 
 type SparseMatrix = CsMatBase<u32, usize, Vec<usize>, Vec<usize>, Vec<u32>, usize>;
 
@@ -264,18 +264,24 @@ impl Triplestore {
         match ppe {
             PropertyPathExpression::NamedNode(nn) => {
                 let subject_filter = if let Some(subject) = subject {
-                    create_term_pattern_filter(subject, "subject")    
-                }  else {
+                    create_term_pattern_filter(subject, "subject")
+                } else {
                     None
                 };
-                
+
                 let object_filter = if let Some(object) = object {
-                    create_term_pattern_filter(object, "object")    
-                }  else {
+                    create_term_pattern_filter(object, "object")
+                } else {
                     None
                 };
-                
-                let res = self.get_single_nn_df(nn.as_str(), subject, object, subject_filter, object_filter)?;
+
+                let res = self.get_single_nn_df(
+                    nn.as_str(),
+                    subject,
+                    object,
+                    subject_filter,
+                    object_filter,
+                )?;
                 if let Some((df, subj_dt, obj_dt)) = res {
                     let unique_cat_df = df_with_cats(df)
                         .unique(None, UniqueKeepStrategy::First, None)
@@ -370,7 +376,13 @@ impl Triplestore {
                 let subj_datatype_req = tp_opt_to_dt_req(subject);
                 let obj_datatype_req = tp_opt_to_dt_req(object);
 
-                let ret = multiple_tt_to_lf(m, &subj_datatype_req, &obj_datatype_req, subject_filter, object_filter)?;
+                let ret = multiple_tt_to_lf(
+                    m,
+                    &subj_datatype_req,
+                    &obj_datatype_req,
+                    subject_filter,
+                    object_filter,
+                )?;
                 if let Some((subj_dt, obj_dt, mut lf)) = ret {
                     if let Some(subject) = subject {
                         if let TermPattern::NamedNode(nn) = subject {

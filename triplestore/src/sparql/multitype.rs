@@ -1,16 +1,18 @@
 use oxrdf::vocab::xsd;
 use oxrdf::{BlankNode, Literal, NamedNode, Subject, Term};
+use polars::export::arrow::util::total_ord::TotalEq;
 use polars::prelude::{coalesce, col, IntoLazy, LazyFrame};
 use polars_core::frame::DataFrame;
-use polars_core::prelude::{AnyValue, ChunkedArray, DataType, NamedFrom, NewChunkedArray, ObjectChunked, PolarsObject};
+use polars_core::prelude::{
+    AnyValue, ChunkedArray, DataType, NamedFrom, NewChunkedArray, ObjectChunked, PolarsObject,
+};
 use polars_core::series::Series;
 use representation::RDFNodeType;
 use spargebra::algebra::{Expression, OrderExpression};
-use std::collections::{HashMap, HashSet};
 use std::collections::hash_map::DefaultHasher;
+use std::collections::{HashMap, HashSet};
 use std::fmt::{Display, Formatter};
 use std::hash::Hash;
-use polars::export::arrow::util::total_ord::TotalEq;
 
 pub const MULTI_TYPE_NAME: &str = "MultiTypes";
 
@@ -162,18 +164,15 @@ pub fn unitype_to_multitype(ser: &Series, dt: &RDFNodeType) -> Series {
             },
             &ser,
         ),
-        RDFNodeType::BlankNode => {
-            convert_to_multitype(
-                |x: AnyValue|
-                    match x {
-                        AnyValue::Utf8(a) => MultiType::BlankNode(BlankNode::new_unchecked(a)),
-                        _ => {
-                            panic!()
-                        }
-                    },
-                &ser,
-            )
-    },
+        RDFNodeType::BlankNode => convert_to_multitype(
+            |x: AnyValue| match x {
+                AnyValue::Utf8(a) => MultiType::BlankNode(BlankNode::new_unchecked(a)),
+                _ => {
+                    panic!()
+                }
+            },
+            &ser,
+        ),
         RDFNodeType::Literal(l) => match l.as_ref() {
             xsd::STRING => convert_to_multitype(
                 |x: AnyValue| match x {

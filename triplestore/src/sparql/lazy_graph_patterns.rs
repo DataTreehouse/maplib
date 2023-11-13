@@ -15,13 +15,13 @@ mod values;
 
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
+use crate::sparql::multitype::MultiType;
 use crate::sparql::query_context::{Context, PathEntry};
 use crate::sparql::solution_mapping::SolutionMappings;
 use log::{debug, info};
 use oxrdf::Literal;
 use polars_core::prelude::ObjectChunked;
 use spargebra::algebra::GraphPattern;
-use crate::sparql::multitype::MultiType;
 
 impl Triplestore {
     pub(crate) fn lazy_graph_pattern(

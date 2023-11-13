@@ -123,7 +123,7 @@ impl Mapping {
         Mapping::new(&dataset, caching_folder)
     }
 
-    pub fn read_triples(&mut self, p: &Path, base_iri:Option<String>) -> Result<(), MappingError> {
+    pub fn read_triples(&mut self, p: &Path, base_iri: Option<String>) -> Result<(), MappingError> {
         Ok(self
             .triplestore
             .read_triples(p, base_iri)

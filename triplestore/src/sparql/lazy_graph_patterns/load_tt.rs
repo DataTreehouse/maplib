@@ -51,11 +51,7 @@ pub fn multiple_tt_to_lf(
         Ok(None)
     } else if filtered.len() == 1 {
         let (subj_dt, obj_dt, lf) = filtered.remove(0);
-        Ok(Some((
-            subj_dt.clone(),
-            obj_dt.clone(),
-            lf,
-        )))
+        Ok(Some((subj_dt.clone(), obj_dt.clone(), lf)))
     } else {
         let mut lfs = vec![];
         let set_subj_dt: HashSet<_> = m.keys().map(|(x, _)| x).collect();

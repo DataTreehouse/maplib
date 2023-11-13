@@ -129,7 +129,7 @@ impl Triplestore {
                 df = df.drop_many(overlap.as_slice());
                 //workaround for object registry bug
                 let mut multicols = vec![];
-                for (k,v) in &rdf_node_types {
+                for (k, v) in &rdf_node_types {
                     if v == &RDFNodeType::MultiType {
                         multicols.push(k.clone())
                     }
@@ -224,9 +224,13 @@ impl Triplestore {
             if m.is_empty() {
                 panic!("Empty map should never happen");
             }
-            if let Some((subj_dt, obj_dt, mut lf)) =
-                multiple_tt_to_lf(m, subject_datatype_req, object_datatype_req, subject_filter, object_filter)?
-            {
+            if let Some((subj_dt, obj_dt, mut lf)) = multiple_tt_to_lf(
+                m,
+                subject_datatype_req,
+                object_datatype_req,
+                subject_filter,
+                object_filter,
+            )? {
                 let mut out_datatypes = HashMap::new();
 
                 let mut drop = vec![];

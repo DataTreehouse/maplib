@@ -46,8 +46,9 @@ impl Triplestore {
             }
         }
 
-        let output_mappings = concat_lf_diagonal(vec![left_mappings, right_mappings],UnionArgs::default())
-            .expect("Concat problem");
+        let output_mappings =
+            concat_lf_diagonal(vec![left_mappings, right_mappings], UnionArgs::default())
+                .expect("Concat problem");
         Ok(SolutionMappings::new(
             output_mappings,
             left_columns,
