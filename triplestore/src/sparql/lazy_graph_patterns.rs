@@ -12,6 +12,7 @@ mod project;
 mod triple;
 mod union;
 mod values;
+pub(crate) mod ordering;
 
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
@@ -24,7 +25,7 @@ use polars_core::prelude::ObjectChunked;
 use spargebra::algebra::GraphPattern;
 
 impl Triplestore {
-    pub(crate) fn lazy_graph_pattern(
+    pub fn lazy_graph_pattern(
         &self,
         graph_pattern: &GraphPattern,
         solution_mappings: Option<SolutionMappings>,

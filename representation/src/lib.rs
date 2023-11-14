@@ -3,6 +3,7 @@ pub mod literals;
 use oxrdf::vocab::xsd;
 use oxrdf::{NamedNode, NamedNodeRef};
 use polars_core::prelude::{DataType, TimeUnit};
+use spargebra::term::TermPattern;
 
 #[derive(PartialEq, Clone)]
 pub enum TripleType {
@@ -21,6 +22,16 @@ pub enum RDFNodeType {
 }
 
 impl RDFNodeType {
+    pub fn infer_from_term_pattern(tp: &TermPattern) -> Option<Self> {
+        match tp {
+            TermPattern::NamedNode(_) => {Some(RDFNodeType::IRI)}
+            TermPattern::BlankNode(_) => {None}
+            TermPattern::Literal(l) => {Some(RDFNodeType::Literal(l.datatype().into_owned()))}
+            _ => {unimplemented!()}
+            TermPattern::Variable(v) => {None}
+        }
+    }
+
     pub fn union(&self, other: &RDFNodeType) -> RDFNodeType {
         if self == other {
             self.clone()
@@ -82,4 +93,9 @@ impl RDFNodeType {
             RDFNodeType::MultiType => todo!(),
         }
     }
+}
+
+pub fn literal_iri_to_namednode(s:&str) -> NamedNode {
+    println!("{s}");
+    NamedNode::new_unchecked(&s[1..(s.len()-1)])
 }

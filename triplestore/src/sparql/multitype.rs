@@ -7,12 +7,13 @@ use polars_core::prelude::{
     AnyValue, ChunkedArray, DataType, NamedFrom, NewChunkedArray, ObjectChunked, PolarsObject,
 };
 use polars_core::series::Series;
-use representation::RDFNodeType;
+use representation::{literal_iri_to_namednode, RDFNodeType};
 use spargebra::algebra::{Expression, OrderExpression};
 use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Display, Formatter};
 use std::hash::Hash;
+use std::hash::Hasher;
 
 pub const MULTI_TYPE_NAME: &str = "MultiTypes";
 
@@ -87,7 +88,7 @@ impl TotalEq for MultiType {
         let mut t = DefaultHasher::new();
         self.hash(&mut s);
         other.hash(&mut t);
-        self.finish() == other.finish()
+        s.finish() == t.finish()
     }
 
     fn tot_ne(&self, other: &Self) -> bool {
@@ -102,6 +103,9 @@ impl PolarsObject for MultiType {
 }
 
 pub fn convert_df_col_to_multitype(df: &mut DataFrame, col: &str, dt: &RDFNodeType) {
+    if dt == &RDFNodeType::MultiType {
+        return;
+    }
     let ser = df.column(col).unwrap();
     let new_ser = unitype_to_multitype(ser, dt);
     df.with_column(new_ser).unwrap();
@@ -157,7 +161,7 @@ pub fn unitype_to_multitype(ser: &Series, dt: &RDFNodeType) -> Series {
     let out_ser: Series = match dt {
         RDFNodeType::IRI => convert_to_multitype(
             |x: AnyValue| match x {
-                AnyValue::Utf8(a) => MultiType::IRI(NamedNode::new_unchecked(a)),
+                AnyValue::Utf8(a) => MultiType::IRI(literal_iri_to_namednode(a)),
                 _ => {
                     panic!()
                 }

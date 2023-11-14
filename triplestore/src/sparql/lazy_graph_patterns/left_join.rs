@@ -1,4 +1,5 @@
 use super::Triplestore;
+use crate::sparql::lazy_graph_patterns::ordering::{decide_order, Order};
 use crate::sparql::errors::SparqlError;
 use crate::sparql::multitype::{
     clean_up_after_join_workaround, create_compatible_solution_mappings,
@@ -25,6 +26,7 @@ impl Triplestore {
         let left_context = context.extension_with(PathEntry::LeftJoinLeftSide);
         let right_context = context.extension_with(PathEntry::LeftJoinRightSide);
         let expression_context = context.extension_with(PathEntry::LeftJoinExpression);
+
         let left_solution_mappings =
             self.lazy_graph_pattern(left, solution_mappings.clone(), &left_context)?;
 

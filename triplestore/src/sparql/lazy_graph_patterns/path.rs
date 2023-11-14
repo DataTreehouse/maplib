@@ -1,12 +1,15 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
 use crate::sparql::lazy_graph_patterns::load_tt::multiple_tt_to_lf;
-use crate::sparql::lazy_graph_patterns::triple::create_term_pattern_filter;
+use crate::sparql::lazy_graph_patterns::triple::{
+    create_term_pattern_filter, get_keep_rename_term_pattern,
+};
 use crate::sparql::query_context::Context;
 use crate::sparql::solution_mapping::SolutionMappings;
 use crate::sparql::sparql_to_polars::{
     sparql_literal_to_polars_literal_value, sparql_named_node_to_polars_literal_value,
 };
+use crate::sparql::{solution_mapping, term_pattern_series};
 use oxrdf::NamedNode;
 use polars::prelude::{col, lit, DataFrameJoinOps, Expr, IntoLazy};
 use polars::prelude::{ChunkAgg, JoinArgs, JoinType};
@@ -45,20 +48,25 @@ impl Triplestore {
         solution_mappings: Option<SolutionMappings>,
         _context: &Context,
     ) -> Result<SolutionMappings, SparqlError> {
+        println!("Path has solution mappings: {}", solution_mappings.is_some());
         let create_sparse = need_sparse_matrix(ppe);
         let mut out_df;
         let out_dt_subj;
         let out_dt_obj;
 
-        let cat_df_map = self.create_unique_cat_dfs(ppe, Some(subject), Some(object))?;
+        let cat_df_map =
+            self.create_unique_cat_dfs(ppe, Some(subject), Some(object))?;
         let max_index = find_max_index(cat_df_map.values());
         if create_sparse {
             if let Some(SparsePathReturn {
                 sparmat,
                 dt_subj,
                 dt_obj,
-            }) = sparse_path(ppe, &cat_df_map, max_index as usize)
+            }) = sparse_path(ppe, &cat_df_map, max_index as usize, false)
             {
+                println!("DT subj {:?}", dt_subj);
+                println!("DT obj {:?}", dt_obj);
+
                 let mut subject_vec = vec![];
                 let mut object_vec = vec![];
                 for (i, row) in sparmat.outer_iterator().enumerate() {
@@ -260,7 +268,10 @@ impl Triplestore {
         ppe: &PropertyPathExpression,
         subject: Option<&TermPattern>,
         object: Option<&TermPattern>,
-    ) -> Result<HashMap<String, (DataFrame, RDFNodeType, RDFNodeType)>, SparqlError> {
+    ) -> Result<
+            HashMap<String, (DataFrame, RDFNodeType, RDFNodeType)>,
+        SparqlError,
+    > {
         match ppe {
             PropertyPathExpression::NamedNode(nn) => {
                 let subject_filter = if let Some(subject) = subject {
@@ -286,37 +297,43 @@ impl Triplestore {
                     let unique_cat_df = df_with_cats(df)
                         .unique(None, UniqueKeepStrategy::First, None)
                         .unwrap();
-                    Ok(HashMap::from([(
-                        nn.as_str().to_string(),
-                        (unique_cat_df, subj_dt, obj_dt),
-                    )]))
+                    Ok(
+                        HashMap::from([(
+                            nn.as_str().to_string(),
+                            (unique_cat_df, subj_dt, obj_dt),
+                        )]),
+                    )
                 } else {
-                    Ok(HashMap::new())
+                        Ok(HashMap::new())
+                    }
                 }
-            }
             PropertyPathExpression::Reverse(inner) => {
                 self.create_unique_cat_dfs(inner, object, subject)
             }
             PropertyPathExpression::Sequence(left, right) => {
-                let mut left_df_map = self.create_unique_cat_dfs(left, subject, None)?;
-                let right_df_map = self.create_unique_cat_dfs(right, None, object)?;
+                let mut left_df_map =
+                    self.create_unique_cat_dfs(left, subject, None)?;
+                let right_df_map=
+                    self.create_unique_cat_dfs(right, None, object)?;
                 left_df_map.extend(right_df_map);
                 Ok(left_df_map)
             }
             PropertyPathExpression::Alternative(left, right) => {
-                let mut left_df_map = self.create_unique_cat_dfs(left, subject, object)?;
-                let right_df_map = self.create_unique_cat_dfs(right, subject, object)?;
+                let mut left_df_map =
+                    self.create_unique_cat_dfs(left, subject, object)?;
+                let right_df_map =
+                    self.create_unique_cat_dfs(right, subject, object)?;
                 left_df_map.extend(right_df_map);
                 Ok(left_df_map)
             }
             PropertyPathExpression::ZeroOrMore(inner) => {
-                self.create_unique_cat_dfs(inner, None, None)
+                self.create_unique_cat_dfs(inner, subject, object)
             }
             PropertyPathExpression::OneOrMore(inner) => {
-                self.create_unique_cat_dfs(inner, None, None)
+                self.create_unique_cat_dfs(inner, subject, object)
             }
             PropertyPathExpression::ZeroOrOne(inner) => {
-                self.create_unique_cat_dfs(inner, None, None)
+                self.create_unique_cat_dfs(inner, subject, object)
             }
             PropertyPathExpression::NegatedPropertySet(nns) => {
                 todo!()
@@ -629,7 +646,7 @@ fn df_with_cats(df: DataFrame) -> DataFrame {
 
 fn find_max_index(vals: Values<String, (DataFrame, RDFNodeType, RDFNodeType)>) -> u32 {
     let mut max_index = 0u32;
-    for (df, _, _) in vals {
+    for (df,_, _) in vals {
         if let Some(max_subject) = df
             .column("subject")
             .unwrap()
@@ -777,17 +794,18 @@ fn sparse_path(
     ppe: &PropertyPathExpression,
     cat_df_map: &HashMap<String, (DataFrame, RDFNodeType, RDFNodeType)>,
     max_index: usize,
+    reflexive: bool,
 ) -> Option<SparsePathReturn> {
     match ppe {
         PropertyPathExpression::NamedNode(nn) => {
             if let Some((df, dt_subj, dt_obj)) = cat_df_map.get(nn.as_str()) {
-                let sparmat = to_csr(df, max_index);
-                Some(SparsePathReturn {
-                    sparmat,
-                    dt_subj: dt_subj.clone(),
-                    dt_obj: dt_obj.clone(),
-                })
-            } else {
+                    let sparmat = to_csr(df, max_index);
+                    Some(SparsePathReturn {
+                        sparmat,
+                        dt_subj: dt_subj.clone(),
+                        dt_obj: dt_obj.clone(),
+                    })
+                } else {
                 None
             }
         }
@@ -796,7 +814,7 @@ fn sparse_path(
                 sparmat,
                 dt_subj,
                 dt_obj,
-            }) = sparse_path(inner, cat_df_map, max_index)
+            }) = sparse_path(inner, cat_df_map, max_index, reflexive)
             {
                 Some(SparsePathReturn {
                     sparmat: sparmat.transpose_into(),
@@ -808,8 +826,8 @@ fn sparse_path(
             }
         }
         PropertyPathExpression::Sequence(left, right) => {
-            let res_left = sparse_path(left, cat_df_map, max_index);
-            let res_right = sparse_path(right, cat_df_map, max_index);
+            let res_left = sparse_path(left, cat_df_map, max_index, false);
+            let res_right = sparse_path(right, cat_df_map, max_index, false);
             if let Some(SparsePathReturn {
                 sparmat: sparmat_left,
                 dt_subj: dt_subj_left,
@@ -836,8 +854,8 @@ fn sparse_path(
             }
         }
         PropertyPathExpression::Alternative(left, right) => {
-            let res_left = sparse_path(left, cat_df_map, max_index);
-            let res_right = sparse_path(right, cat_df_map, max_index);
+            let res_left = sparse_path(left, cat_df_map, max_index, reflexive);
+            let res_right = sparse_path(right, cat_df_map, max_index, reflexive);
             if let Some(SparsePathReturn {
                 sparmat: sparmat_left,
                 dt_subj: dt_subj_left,
@@ -872,11 +890,12 @@ fn sparse_path(
             }
         }
         PropertyPathExpression::ZeroOrMore(inner) => {
+            println!("Cat df map zero or more: {:?}", cat_df_map);
             if let Some(SparsePathReturn {
                 sparmat: sparmat_inner,
                 dt_subj,
                 dt_obj,
-            }) = sparse_path(inner, cat_df_map, max_index)
+            }) = sparse_path(inner, cat_df_map, max_index, true)
             {
                 let sparmat = zero_or_more(sparmat_inner);
                 Some(SparsePathReturn {
@@ -885,7 +904,7 @@ fn sparse_path(
                     dt_obj,
                 })
             } else {
-                todo!("Should be just the diagonal..")
+                None
             }
         }
         PropertyPathExpression::OneOrMore(inner) => {
@@ -893,7 +912,7 @@ fn sparse_path(
                 sparmat: sparmat_inner,
                 dt_subj,
                 dt_obj,
-            }) = sparse_path(inner, cat_df_map, max_index)
+            }) = sparse_path(inner, cat_df_map, max_index, false)
             {
                 let sparmat = one_or_more(sparmat_inner);
                 Some(SparsePathReturn {
@@ -910,7 +929,7 @@ fn sparse_path(
                 sparmat: sparmat_inner,
                 dt_subj,
                 dt_obj,
-            }) = sparse_path(inner, cat_df_map, max_index)
+            }) = sparse_path(inner, cat_df_map, max_index, true)
             {
                 let sparmat = zero_or_one(sparmat_inner);
                 Some(SparsePathReturn {

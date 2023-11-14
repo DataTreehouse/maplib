@@ -17,7 +17,7 @@ pub fn sparql_term_to_polars_literal_value(term: &Term) -> polars::prelude::Lite
 }
 
 pub fn sparql_named_node_to_polars_literal_value(named_node: &NamedNode) -> LiteralValue {
-    LiteralValue::Utf8(named_node.as_str().to_string())
+    LiteralValue::Utf8(named_node.to_string())
 }
 
 pub fn sparql_blank_node_to_polars_literal_value(blank_node: &BlankNode) -> LiteralValue {

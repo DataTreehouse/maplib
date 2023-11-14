@@ -445,7 +445,7 @@ pub fn create_term_pattern_filter(term_pattern: &TermPattern, target_col: &str) 
     None
 }
 
-fn get_keep_rename_term_pattern(term_pattern: &TermPattern) -> Option<String> {
+pub fn get_keep_rename_term_pattern(term_pattern: &TermPattern) -> Option<String> {
     if let TermPattern::Variable(v) = term_pattern {
         return Some(v.as_str().to_string());
     } else if let TermPattern::BlankNode(b) = term_pattern {

@@ -297,7 +297,6 @@ fn write_iri_or_blanknode(f: &mut Vec<u8>, s: &str) {
 
 fn write_iri(f: &mut Vec<u8>, s: &str) {
     let mut chars = s.chars();
-    write!(f, "<").unwrap();
     loop {
         if let Some(c) = chars.next() {
             match c {
@@ -311,7 +310,6 @@ fn write_iri(f: &mut Vec<u8>, s: &str) {
             break;
         }
     }
-    write!(f, ">").unwrap();
 }
 
 fn write_string(f: &mut Vec<u8>, s: &str) {
