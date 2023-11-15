@@ -6,7 +6,7 @@ mod lazy_order;
 pub mod multitype;
 pub mod query_context;
 pub mod solution_mapping;
-mod sparql_to_polars;
+pub mod sparql_to_polars;
 
 use crate::sparql::query_context::Context;
 use oxrdf::vocab::xsd;

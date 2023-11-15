@@ -1,13 +1,18 @@
+use crate::sparql::sparql_to_polars::{
+    polars_literal_values_to_series, sparql_blank_node_to_polars_literal_value,
+    sparql_literal_to_polars_literal_value, sparql_named_node_to_polars_literal_value,
+};
 use oxrdf::vocab::xsd;
 use oxrdf::{BlankNode, Literal, NamedNode, Subject, Term};
+use oxsdatatypes::Decimal;
 use polars::export::arrow::util::total_ord::TotalEq;
-use polars::prelude::{coalesce, col, IntoLazy, LazyFrame};
+use polars::prelude::{coalesce, col, IntoLazy, LazyFrame, LiteralValue};
 use polars_core::frame::DataFrame;
 use polars_core::prelude::{
     AnyValue, ChunkedArray, DataType, NamedFrom, NewChunkedArray, ObjectChunked, PolarsObject,
 };
 use polars_core::series::Series;
-use representation::{literal_iri_to_namednode, RDFNodeType};
+use representation::{literal_blanknode_to_blanknode, literal_iri_to_namednode, RDFNodeType};
 use spargebra::algebra::{Expression, OrderExpression};
 use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet};
@@ -170,7 +175,7 @@ pub fn unitype_to_multitype(ser: &Series, dt: &RDFNodeType) -> Series {
         ),
         RDFNodeType::BlankNode => convert_to_multitype(
             |x: AnyValue| match x {
-                AnyValue::Utf8(a) => MultiType::BlankNode(BlankNode::new_unchecked(a)),
+                AnyValue::Utf8(a) => MultiType::BlankNode(literal_blanknode_to_blanknode(a)),
                 _ => {
                     panic!()
                 }
@@ -247,6 +252,15 @@ pub fn unitype_to_multitype(ser: &Series, dt: &RDFNodeType) -> Series {
                     _ => {
                         panic!()
                     }
+                },
+                &ser,
+            ),
+            xsd::DECIMAL => convert_to_multitype(
+                |x: AnyValue| match x {
+                    AnyValue::Decimal(i, n) => {
+                        MultiType::Literal(Literal::from(Decimal::new(i, n as u32).unwrap()))
+                    }
+                    _ => panic!(),
                 },
                 &ser,
             ),
@@ -438,4 +452,132 @@ fn find_e_columns(e: &Expression) -> Vec<String> {
             out
         }
     }
+}
+
+fn multi_to_polars_literal_value(m: &MultiType) -> LiteralValue {
+    match m {
+        MultiType::IRI(i) => sparql_named_node_to_polars_literal_value(i),
+        MultiType::BlankNode(b) => sparql_blank_node_to_polars_literal_value(b),
+        MultiType::Literal(l) => sparql_literal_to_polars_literal_value(l),
+        MultiType::Null => {
+            panic!("")
+        }
+    }
+}
+
+pub fn maybe_convert_df_multicol_to_single(df: &mut DataFrame, c: &str, maybe: bool) -> bool {
+    let c_ser = df.column(c).unwrap();
+    let mut first_datatype = None;
+    for i in 0..c_ser.len() {
+        if !maybe && first_datatype.is_some() {
+            break;
+        }
+        let c_obj: Option<&MultiType> = c_ser.get_object(i).unwrap().as_any().downcast_ref();
+        if let Some(c_obj) = c_obj {
+            match c_obj {
+                MultiType::IRI(i) => {
+                    if let Some(dt) = &first_datatype {
+                        if dt != &RDFNodeType::IRI {
+                            return false;
+                        }
+                    } else {
+                        first_datatype = Some(RDFNodeType::IRI)
+                    }
+                }
+                MultiType::BlankNode(b) => {
+                    if let Some(dt) = &first_datatype {
+                        if dt != &RDFNodeType::BlankNode {
+                            return false;
+                        }
+                    } else {
+                        first_datatype = Some(RDFNodeType::BlankNode)
+                    }
+                }
+                MultiType::Literal(l) => {
+                    let dt = l.datatype();
+                    if let Some(rdfnodetype) = &first_datatype {
+                        if let RDFNodeType::Literal(otherdt) = rdfnodetype {
+                            if dt != otherdt.as_ref() {
+                                return false;
+                            }
+                        }
+                    } else {
+                        first_datatype = Some(RDFNodeType::Literal(dt.into_owned()))
+                    }
+                }
+                MultiType::Null => {
+                    panic!("")
+                }
+            }
+        }
+    }
+    if let Some(dt) = first_datatype {
+        let mut literal_values = vec![];
+        for i in 0..c_ser.len() {
+            let o: Option<&MultiType> = c_ser.get_object(i).unwrap().as_any().downcast_ref();
+            literal_values.push(match o {
+                None => LiteralValue::Null,
+                Some(m) => multi_to_polars_literal_value(m),
+            })
+        }
+        let new_series = polars_literal_values_to_series(literal_values, c);
+        df.with_column(new_series).unwrap();
+    } else {
+        return false;
+    }
+    true
+}
+
+pub fn split_df_multicol(df: &mut DataFrame, c: &str) -> Vec<DataFrame> {
+    let c_ser = df.column(c).unwrap();
+    let mut datatypes_vec = vec![];
+    for i in 0..c_ser.len() {
+        let c_obj: Option<&MultiType> = c_ser.get_object(i).unwrap().as_any().downcast_ref();
+        if let Some(c_obj) = c_obj {
+            match c_obj {
+                MultiType::IRI(i) => {
+                    datatypes_vec.push("i");
+                }
+                MultiType::BlankNode(b) => {
+                    datatypes_vec.push("b");
+                }
+                MultiType::Literal(l) => {
+                    datatypes_vec.push(l.datatype().as_str());
+                }
+                MultiType::Null => {
+                    panic!("")
+                }
+            }
+        } else {
+            datatypes_vec.push("n");
+        }
+    }
+    let key_col_name = "key_col".to_string();
+    let s = Series::new(&key_col_name, datatypes_vec);
+    df.with_column(s)
+        .unwrap()
+        .sort_in_place(vec![&key_col_name], vec![false], true)
+        .unwrap();
+    println!("Sorted df {}", df);
+    let mut dfs = df
+        .select([&key_col_name, c])
+        .unwrap()
+        .partition_by_stable(vec![&key_col_name], true)
+        .unwrap();
+    dfs.sort_by_key(|x| {
+        x.column(&key_col_name)
+            .unwrap()
+            .utf8()
+            .unwrap()
+            .get(0)
+            .unwrap()
+            .to_string()
+    });
+    for df in dfs.iter_mut() {
+        let _ = df.drop_in_place(&key_col_name).unwrap();
+        maybe_convert_df_multicol_to_single(df, c, false);
+    }
+    let _ = df.drop_in_place(&key_col_name).unwrap();
+    println!("DFS {:?}", dfs);
+    dfs
 }

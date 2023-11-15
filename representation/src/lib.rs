@@ -1,7 +1,7 @@
 pub mod literals;
 
 use oxrdf::vocab::xsd;
-use oxrdf::{NamedNode, NamedNodeRef};
+use oxrdf::{BlankNode, NamedNode, NamedNodeRef};
 use polars_core::prelude::{DataType, TimeUnit};
 use spargebra::term::TermPattern;
 
@@ -24,11 +24,13 @@ pub enum RDFNodeType {
 impl RDFNodeType {
     pub fn infer_from_term_pattern(tp: &TermPattern) -> Option<Self> {
         match tp {
-            TermPattern::NamedNode(_) => {Some(RDFNodeType::IRI)}
-            TermPattern::BlankNode(_) => {None}
-            TermPattern::Literal(l) => {Some(RDFNodeType::Literal(l.datatype().into_owned()))}
-            _ => {unimplemented!()}
-            TermPattern::Variable(v) => {None}
+            TermPattern::NamedNode(_) => Some(RDFNodeType::IRI),
+            TermPattern::BlankNode(_) => None,
+            TermPattern::Literal(l) => Some(RDFNodeType::Literal(l.datatype().into_owned())),
+            _ => {
+                unimplemented!()
+            }
+            TermPattern::Variable(v) => None,
         }
     }
 
@@ -95,7 +97,10 @@ impl RDFNodeType {
     }
 }
 
-pub fn literal_iri_to_namednode(s:&str) -> NamedNode {
-    println!("{s}");
-    NamedNode::new_unchecked(&s[1..(s.len()-1)])
+pub fn literal_iri_to_namednode(s: &str) -> NamedNode {
+    NamedNode::new_unchecked(&s[1..(s.len() - 1)])
+}
+
+pub fn literal_blanknode_to_blanknode(b: &str) -> BlankNode {
+    BlankNode::new_unchecked(&b[2..b.len()])
 }

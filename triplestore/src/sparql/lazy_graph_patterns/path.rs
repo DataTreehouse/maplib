@@ -48,14 +48,16 @@ impl Triplestore {
         solution_mappings: Option<SolutionMappings>,
         _context: &Context,
     ) -> Result<SolutionMappings, SparqlError> {
-        println!("Path has solution mappings: {}", solution_mappings.is_some());
+        println!(
+            "Path has solution mappings: {}",
+            solution_mappings.is_some()
+        );
         let create_sparse = need_sparse_matrix(ppe);
         let mut out_df;
         let out_dt_subj;
         let out_dt_obj;
 
-        let cat_df_map =
-            self.create_unique_cat_dfs(ppe, Some(subject), Some(object))?;
+        let cat_df_map = self.create_unique_cat_dfs(ppe, Some(subject), Some(object))?;
         let max_index = find_max_index(cat_df_map.values());
         if create_sparse {
             if let Some(SparsePathReturn {
@@ -268,10 +270,7 @@ impl Triplestore {
         ppe: &PropertyPathExpression,
         subject: Option<&TermPattern>,
         object: Option<&TermPattern>,
-    ) -> Result<
-            HashMap<String, (DataFrame, RDFNodeType, RDFNodeType)>,
-        SparqlError,
-    > {
+    ) -> Result<HashMap<String, (DataFrame, RDFNodeType, RDFNodeType)>, SparqlError> {
         match ppe {
             PropertyPathExpression::NamedNode(nn) => {
                 let subject_filter = if let Some(subject) = subject {
@@ -297,32 +296,26 @@ impl Triplestore {
                     let unique_cat_df = df_with_cats(df)
                         .unique(None, UniqueKeepStrategy::First, None)
                         .unwrap();
-                    Ok(
-                        HashMap::from([(
-                            nn.as_str().to_string(),
-                            (unique_cat_df, subj_dt, obj_dt),
-                        )]),
-                    )
+                    Ok(HashMap::from([(
+                        nn.as_str().to_string(),
+                        (unique_cat_df, subj_dt, obj_dt),
+                    )]))
                 } else {
-                        Ok(HashMap::new())
-                    }
+                    Ok(HashMap::new())
                 }
+            }
             PropertyPathExpression::Reverse(inner) => {
                 self.create_unique_cat_dfs(inner, object, subject)
             }
             PropertyPathExpression::Sequence(left, right) => {
-                let mut left_df_map =
-                    self.create_unique_cat_dfs(left, subject, None)?;
-                let right_df_map=
-                    self.create_unique_cat_dfs(right, None, object)?;
+                let mut left_df_map = self.create_unique_cat_dfs(left, subject, None)?;
+                let right_df_map = self.create_unique_cat_dfs(right, None, object)?;
                 left_df_map.extend(right_df_map);
                 Ok(left_df_map)
             }
             PropertyPathExpression::Alternative(left, right) => {
-                let mut left_df_map =
-                    self.create_unique_cat_dfs(left, subject, object)?;
-                let right_df_map =
-                    self.create_unique_cat_dfs(right, subject, object)?;
+                let mut left_df_map = self.create_unique_cat_dfs(left, subject, object)?;
+                let right_df_map = self.create_unique_cat_dfs(right, subject, object)?;
                 left_df_map.extend(right_df_map);
                 Ok(left_df_map)
             }
@@ -646,7 +639,7 @@ fn df_with_cats(df: DataFrame) -> DataFrame {
 
 fn find_max_index(vals: Values<String, (DataFrame, RDFNodeType, RDFNodeType)>) -> u32 {
     let mut max_index = 0u32;
-    for (df,_, _) in vals {
+    for (df, _, _) in vals {
         if let Some(max_subject) = df
             .column("subject")
             .unwrap()
@@ -799,13 +792,13 @@ fn sparse_path(
     match ppe {
         PropertyPathExpression::NamedNode(nn) => {
             if let Some((df, dt_subj, dt_obj)) = cat_df_map.get(nn.as_str()) {
-                    let sparmat = to_csr(df, max_index);
-                    Some(SparsePathReturn {
-                        sparmat,
-                        dt_subj: dt_subj.clone(),
-                        dt_obj: dt_obj.clone(),
-                    })
-                } else {
+                let sparmat = to_csr(df, max_index);
+                Some(SparsePathReturn {
+                    sparmat,
+                    dt_subj: dt_subj.clone(),
+                    dt_obj: dt_obj.clone(),
+                })
+            } else {
                 None
             }
         }

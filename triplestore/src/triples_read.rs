@@ -2,6 +2,7 @@ use super::Triplestore;
 use crate::errors::TriplestoreError;
 use crate::TriplesToAdd;
 use oxiri::Iri;
+use oxrdf::vocab::rdf::LANG_STRING;
 use oxrdf::vocab::xsd;
 use polars_core::frame::DataFrame;
 use polars_core::prelude::{AnyValue, NamedFrom, Series, Utf8Chunked};
@@ -13,7 +14,6 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
-use oxrdf::vocab::rdf::LANG_STRING;
 
 impl Triplestore {
     pub fn read_triples(
@@ -76,18 +76,11 @@ impl Triplestore {
         let mut triples_to_add = vec![];
         for (k, map) in predicate_map {
             for ((subject_dt, object_dt), (subjects, objects)) in map {
-                let strings_iter = subjects.into_iter().map(|s|{
-                    match s {
-                        oxrdf::Subject::NamedNode(nn) => {
-                            nn.to_string()
-                        },
-                        oxrdf::Subject::BlankNode(bl) => {
-                            bl.to_string()
-                        }
-                    }
+                let strings_iter = subjects.into_iter().map(|s| match s {
+                    oxrdf::Subject::NamedNode(nn) => nn.to_string(),
+                    oxrdf::Subject::BlankNode(bl) => bl.to_string(),
                 });
-                let mut subjects_ser =
-                    Series::from_iter(strings_iter);
+                let mut subjects_ser = Series::from_iter(strings_iter);
                 subjects_ser.rename("subject");
 
                 let mut language_tags_vec = vec![];
@@ -105,14 +98,16 @@ impl Triplestore {
                     }
                 }
 
-                let any_iter: Vec<AnyValue> = objects.into_iter().map(|t| {
-                    match t {
+                let any_iter: Vec<AnyValue> = objects
+                    .into_iter()
+                    .map(|t| match t {
                         oxrdf::Term::NamedNode(nn) => AnyValue::Utf8Owned(nn.to_string().into()),
                         oxrdf::Term::BlankNode(bb) => AnyValue::Utf8Owned(bb.to_string().into()),
                         oxrdf::Term::Literal(l) => {
                             sparql_literal_to_any_value(l.value(), &Some(l.datatype())).0
                         }
-                    }}).collect();
+                    })
+                    .collect();
                 let language_tag_ser = if !language_tags_vec.is_empty() {
                     Some(Series::new("language_tag", language_tags_vec))
                 } else {

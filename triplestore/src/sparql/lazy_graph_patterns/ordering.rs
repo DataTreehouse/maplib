@@ -2,13 +2,13 @@ use spargebra::algebra::GraphPattern;
 
 pub enum Order {
     Left,
-    Right
+    Right,
 }
 
-pub fn decide_order(left:&GraphPattern, right:&GraphPattern) -> Order {
-    if let GraphPattern::Path {..} = left {
+pub fn decide_order(left: &GraphPattern, right: &GraphPattern) -> Order {
+    if let GraphPattern::Path { .. } = left {
         Order::Right
-    } else if let GraphPattern::Path {..} = right {
+    } else if let GraphPattern::Path { .. } = right {
         Order::Left
     } else {
         Order::Left

@@ -1,10 +1,12 @@
+use bigdecimal::BigDecimal;
+use bigdecimal::ToPrimitive;
 use chrono::{DateTime, NaiveDateTime, Utc};
+use oxrdf::vocab::rdf::LANG_STRING;
 use oxrdf::vocab::xsd;
 use oxrdf::NamedNodeRef;
 use polars_core::datatypes::TimeUnit;
 use polars_core::prelude::AnyValue;
 use std::str::FromStr;
-use oxrdf::vocab::rdf::LANG_STRING;
 
 //This code is copied and modified from Chrontext, which has identical licensing
 pub fn sparql_literal_to_any_value<'a, 'b>(
@@ -57,12 +59,12 @@ pub fn sparql_literal_to_any_value<'a, 'b>(
                 }
             }
         } else if datatype == xsd::DECIMAL {
-            let d = f64::from_str(value).expect("Decimal parsing error");
-            AnyValue::from(d)
+            let d = BigDecimal::from_str(value).expect("Decimal parsing error");
+            let (bint, exp) = d.as_bigint_and_exponent();
+            AnyValue::Decimal(bint.to_i128().unwrap(), exp as usize)
         } else if datatype == LANG_STRING {
             todo!()
-        }
-        else {
+        } else {
             todo!("Not implemented! {:?}", datatype)
         };
         (literal_value, datatype.clone())

@@ -7,12 +7,12 @@ mod left_join;
 pub(crate) mod load_tt;
 mod minus;
 mod order_by;
+pub(crate) mod ordering;
 mod path;
 mod project;
 mod triple;
 mod union;
 mod values;
-pub(crate) mod ordering;
 
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;

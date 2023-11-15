@@ -445,7 +445,12 @@ fn prepare_triples_df(
         now.elapsed().as_secs_f32()
     );
     if !has_unique_subset {
-        df = df.unique(None, UniqueKeepStrategy::First, None).unwrap();
+        let obj_ser = df.column("object").unwrap();
+        if let DataType::Decimal(i, n) = obj_ser.dtype() {
+            //TODO: Handle `vec_hash_combine` operation not supported for dtype
+        } else {
+            df = df.unique(None, UniqueKeepStrategy::First, None).unwrap();
+        }
     }
     debug!(
         "Prepare single triple df unique before it is added took {} seconds",
