@@ -6,10 +6,11 @@ use oxrdf::vocab::xsd;
 use oxrdf::{BlankNode, Literal, NamedNode, Subject, Term};
 use oxsdatatypes::Decimal;
 use polars::export::arrow::util::total_ord::TotalEq;
-use polars::prelude::{coalesce, col, IntoLazy, LazyFrame, LiteralValue};
+use polars::prelude::{coalesce, col, cols, IntoLazy, LazyFrame, lit, LiteralValue};
 use polars_core::frame::DataFrame;
 use polars_core::prelude::{
     AnyValue, ChunkedArray, DataType, NamedFrom, NewChunkedArray, ObjectChunked, PolarsObject,
+    SortOptions,
 };
 use polars_core::series::Series;
 use representation::{literal_blanknode_to_blanknode, literal_iri_to_namednode, RDFNodeType};
@@ -214,7 +215,7 @@ pub fn unitype_to_multitype(ser: &Series, dt: &RDFNodeType) -> Series {
                 |x: AnyValue| match x {
                     AnyValue::Int64(a) => MultiType::Literal(Literal::from(a)),
                     _ => {
-                        panic!()
+                        panic!("{:?}", x)
                     }
                 },
                 &ser,
@@ -267,16 +268,19 @@ pub fn unitype_to_multitype(ser: &Series, dt: &RDFNodeType) -> Series {
             _ => todo!("Not yet implemented: {:?}", dt),
         },
         RDFNodeType::None => convert_to_multitype(|_: AnyValue| MultiType::Null, &ser),
-        _ => {
-            todo!()
-        }
+        RDFNodeType::MultiType => ser.clone(),
     };
     out_ser
 }
 
 fn convert_to_multitype(f: fn(AnyValue) -> MultiType, objects: &Series) -> Series {
-    let vs = objects.iter().map(|x| f(x));
-    let s: ObjectChunked<MultiType> = ChunkedArray::from_iter_values(objects.name(), vs);
+    let vs = objects.iter().map(|x|
+        match x {
+            AnyValue::Null => None,
+            x => Some(f(x))
+        }
+    );
+    let s: ObjectChunked<MultiType> = ChunkedArray::from_iter_options(objects.name(), vs);
     s.into()
 }
 
@@ -500,6 +504,8 @@ pub fn maybe_convert_df_multicol_to_single(df: &mut DataFrame, c: &str, maybe: b
                             if dt != otherdt.as_ref() {
                                 return false;
                             }
+                        } else {
+                            return false;
                         }
                     } else {
                         first_datatype = Some(RDFNodeType::Literal(dt.into_owned()))
@@ -528,7 +534,7 @@ pub fn maybe_convert_df_multicol_to_single(df: &mut DataFrame, c: &str, maybe: b
     true
 }
 
-pub fn split_df_multicol(df: &mut DataFrame, c: &str) -> Vec<DataFrame> {
+pub fn split_df_multicol(df: &mut DataFrame, c: &str) -> Vec<(DataFrame, RDFNodeType)> {
     let c_ser = df.column(c).unwrap();
     let mut datatypes_vec = vec![];
     for i in 0..c_ser.len() {
@@ -558,7 +564,6 @@ pub fn split_df_multicol(df: &mut DataFrame, c: &str) -> Vec<DataFrame> {
         .unwrap()
         .sort_in_place(vec![&key_col_name], vec![false], true)
         .unwrap();
-    println!("Sorted df {}", df);
     let mut dfs = df
         .select([&key_col_name, c])
         .unwrap()
@@ -573,11 +578,96 @@ pub fn split_df_multicol(df: &mut DataFrame, c: &str) -> Vec<DataFrame> {
             .unwrap()
             .to_string()
     });
-    for df in dfs.iter_mut() {
-        let _ = df.drop_in_place(&key_col_name).unwrap();
-        maybe_convert_df_multicol_to_single(df, c, false);
+    let mut dfs_dts = vec![];
+    for mut df in dfs {
+        let s = df.drop_in_place(&key_col_name).unwrap();
+        let dt = match s.utf8().unwrap().get(0).unwrap() {
+            "i" => RDFNodeType::IRI,
+            "b" => RDFNodeType::BlankNode,
+            t => RDFNodeType::Literal(NamedNode::new_unchecked(t)),
+        };
+        maybe_convert_df_multicol_to_single(&mut df, c, false);
+        dfs_dts.push((df, dt));
     }
     let _ = df.drop_in_place(&key_col_name).unwrap();
-    println!("DFS {:?}", dfs);
-    dfs
+    dfs_dts
+}
+
+pub fn split_df_multicols(
+    mut df: DataFrame,
+    cs: Vec<&str>,
+) -> Vec<(DataFrame, HashMap<String, RDFNodeType>)> {
+    let mut key_cols = vec![];
+    for (i, c) in cs.iter().enumerate() {
+        let c_ser = df.column(c).unwrap();
+        let mut datatypes_vec = vec![];
+        for i in 0..c_ser.len() {
+            let c_obj: Option<&MultiType> = c_ser.get_object(i).unwrap().as_any().downcast_ref();
+            if let Some(c_obj) = c_obj {
+                match c_obj {
+                    MultiType::IRI(i) => {
+                        datatypes_vec.push("i");
+                    }
+                    MultiType::BlankNode(b) => {
+                        datatypes_vec.push("b");
+                    }
+                    MultiType::Literal(l) => {
+                        datatypes_vec.push(l.datatype().as_str());
+                    }
+                    MultiType::Null => {
+                        panic!("")
+                    }
+                }
+            } else {
+                datatypes_vec.push("n");
+            }
+        }
+        let key_col_name = format!("key_col_{i}");
+        let s = Series::new(&key_col_name, datatypes_vec);
+        key_cols.push(key_col_name);
+        df.with_column(s).unwrap();
+    }
+    let mut concat_expr = col(key_cols.get(0).unwrap());
+    for i in 1..key_cols.len() {
+        concat_expr = concat_expr + lit("-") + col(key_cols.get(i).unwrap());
+    }
+
+
+    df = df
+        .lazy()
+        .with_column(concat_expr.alias("key_col"))
+        .sort(
+            "key_col",
+            SortOptions {
+                descending: false,
+                nulls_last: false,
+                multithreaded: true,
+                maintain_order: false,
+            },
+        )
+        .collect()
+        .unwrap();
+    let mut selection = cs.clone();
+    selection.push("key_col");
+    for k in &key_cols {
+        selection.push(k.as_str());
+    }
+
+    let mut dfs = df.partition_by(vec!["key_col"], false).unwrap();
+    let mut dfs_dts = vec![];
+    for mut df in dfs {
+        let mut map = HashMap::new();
+        for (i, key_col) in key_cols.iter().enumerate() {
+            let s = df.drop_in_place(key_col).unwrap();
+            let dt = match s.utf8().unwrap().get(0).unwrap() {
+                "i" => RDFNodeType::IRI,
+                "b" => RDFNodeType::BlankNode,
+                t => RDFNodeType::Literal(NamedNode::new_unchecked(t)),
+            };
+            maybe_convert_df_multicol_to_single(&mut df, cs.get(i).unwrap(), false);
+            map.insert(cs.get(i).unwrap().to_string(), dt);
+        }
+        dfs_dts.push((df, map));
+    }
+    dfs_dts
 }

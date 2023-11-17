@@ -15,6 +15,8 @@ pub enum TriplestoreError {
     TurtleParsingError(String),
     ReadTriplesFileError(io::Error),
     InvalidBaseIri(String),
+    SubtractTransientTriplesError(String),
+    RDFSClassInheritanceError(String),
 }
 
 impl Display for TriplestoreError {
@@ -49,6 +51,12 @@ impl Display for TriplestoreError {
             }
             TriplestoreError::InvalidBaseIri(x) => {
                 write!(f, "Invalid base iri {x}")
+            }
+            TriplestoreError::SubtractTransientTriplesError(x) => {
+                write!(f, "Error subtracting from transient triples {x}")
+            }
+            TriplestoreError::RDFSClassInheritanceError(x) => {
+                write!(f, "RDFS Class inheritance error {x}")
             }
         }
     }

@@ -2,8 +2,9 @@ use super::Triplestore;
 use crate::sparql::errors::SparqlError;
 use crate::sparql::lazy_graph_patterns::load_tt::multiple_tt_to_lf;
 use crate::sparql::lazy_graph_patterns::triple::{
-    create_term_pattern_filter, get_keep_rename_term_pattern,
+    create_empty_df_datatypes, create_term_pattern_filter, get_keep_rename_term_pattern,
 };
+use crate::sparql::multitype::{convert_df_col_to_multitype, multi_series_to_string_series};
 use crate::sparql::query_context::Context;
 use crate::sparql::solution_mapping::SolutionMappings;
 use crate::sparql::sparql_to_polars::{
@@ -11,6 +12,7 @@ use crate::sparql::sparql_to_polars::{
 };
 use crate::sparql::{solution_mapping, term_pattern_series};
 use oxrdf::NamedNode;
+use polars::export::arrow::compute::arithmetics::basic::sub;
 use polars::prelude::{col, lit, DataFrameJoinOps, Expr, IntoLazy};
 use polars::prelude::{ChunkAgg, JoinArgs, JoinType};
 use polars_core::datatypes::{AnyValue, DataType};
@@ -48,10 +50,6 @@ impl Triplestore {
         solution_mappings: Option<SolutionMappings>,
         _context: &Context,
     ) -> Result<SolutionMappings, SparqlError> {
-        println!(
-            "Path has solution mappings: {}",
-            solution_mappings.is_some()
-        );
         let create_sparse = need_sparse_matrix(ppe);
         let mut out_df;
         let out_dt_subj;
@@ -66,9 +64,6 @@ impl Triplestore {
                 dt_obj,
             }) = sparse_path(ppe, &cat_df_map, max_index as usize, false)
             {
-                println!("DT subj {:?}", dt_subj);
-                println!("DT obj {:?}", dt_obj);
-
                 let mut subject_vec = vec![];
                 let mut object_vec = vec![];
                 for (i, row) in sparmat.outer_iterator().enumerate() {
@@ -112,21 +107,42 @@ impl Triplestore {
                 out_dt_obj = dt_obj;
                 out_dt_subj = dt_subj;
             } else {
-                todo!()
+                out_df = DataFrame::new(vec![
+                    Series::new_empty("subject", &DataType::Utf8),
+                    Series::new_empty("object", &DataType::Utf8),
+                ])
+                .unwrap();
+                out_dt_obj = RDFNodeType::IRI;
+                out_dt_subj = RDFNodeType::IRI;
             }
         } else {
             let res = df_path(ppe, &cat_df_map, max_index);
             if let Some(DFPathReturn {
-                df,
+                mut df,
                 dt_subj,
                 dt_obj,
             }) = res
             {
+                if dt_subj == RDFNodeType::MultiType {
+                    df = df.drop("subject").unwrap();
+                    df.rename("subject_multi", "subject").unwrap();
+                }
+                if dt_obj == RDFNodeType::MultiType {
+                    df = df.drop("object").unwrap();
+                    df.rename("object_multi", "object").unwrap();
+                }
+
                 out_df = df;
                 out_dt_obj = dt_obj;
                 out_dt_subj = dt_subj;
             } else {
-                todo!()
+                out_df = DataFrame::new(vec![
+                    Series::new_empty("subject", &DataType::Utf8),
+                    Series::new_empty("object", &DataType::Utf8),
+                ])
+                .unwrap();
+                out_dt_obj = RDFNodeType::IRI;
+                out_dt_subj = RDFNodeType::IRI;
             }
         }
         let mut var_cols = vec![];
@@ -203,13 +219,34 @@ impl Triplestore {
 
             let join_on: Vec<Expr> = join_cols.iter().map(|x| col(x)).collect();
 
-            if join_on.is_empty() {
+            //workaround for object registry bug
+                let mut multicols = vec![];
+                for (k, v) in &mappings.rdf_node_types {
+                    if v == &RDFNodeType::MultiType {
+                        multicols.push(k.clone())
+                    }
+                }
+
+            if out_df.height() == 0 {
+                out_df = out_df.lazy().drop_columns(join_cols.as_slice()).collect().unwrap();
+
+                for c in &multicols {
+                    mappings.mappings = mappings.mappings.with_column(lit("").alias(c));
+                }
+            }
+
+            if out_df.height() == 0 || join_on.is_empty() {
                 mappings.mappings = mappings.mappings.join(
                     out_df.lazy(),
-                    join_on.as_slice(),
-                    join_on.as_slice(),
+                    vec![],
+                    vec![],
                     JoinArgs::new(JoinType::Cross),
                 );
+                for m in &multicols {
+                        let mut df = mappings.mappings.collect().unwrap();
+                        convert_df_col_to_multitype(&mut df, &m, &RDFNodeType::IRI);
+                        mappings.mappings = df.lazy();
+                    }
             } else {
                 let join_col_exprs: Vec<Expr> = join_cols.iter().map(|x| col(x)).collect();
                 let all_false = [false].repeat(join_cols.len());
@@ -293,7 +330,8 @@ impl Triplestore {
                     object_filter,
                 )?;
                 if let Some((df, subj_dt, obj_dt)) = res {
-                    let unique_cat_df = df_with_cats(df)
+                    let mut unique_cat_df = df_with_cats(df, &subj_dt, &obj_dt);
+                    unique_cat_df = unique_cat_df
                         .unique(None, UniqueKeepStrategy::First, None)
                         .unwrap();
                     Ok(HashMap::from([(
@@ -388,8 +426,9 @@ impl Triplestore {
 
                 let ret = multiple_tt_to_lf(
                     m,
-                    &subj_datatype_req,
-                    &obj_datatype_req,
+                    self.transient_df_map.get(nn),
+                    subj_datatype_req.as_ref(),
+                    obj_datatype_req.as_ref(),
                     subject_filter,
                     object_filter,
                 )?;
@@ -442,10 +481,18 @@ fn find_lookup(
             }
             let mut ser = df.column(c).unwrap().clone();
             ser.rename("value");
+            let mut include_series = vec![ser];
+            if dt == &RDFNodeType::MultiType {
+                let multiname = format!("{c}_multi");
+                let mut ser = df.column(&multiname).unwrap().clone();
+                ser.rename("value_multi");
+                include_series.push(ser);
+            }
+
             all_values_map
                 .get_mut(dt)
                 .unwrap()
-                .push(DataFrame::new(vec![ser]).unwrap());
+                .push(DataFrame::new(include_series).unwrap());
         }
     }
     let mut out_map = HashMap::new();
@@ -463,6 +510,9 @@ fn find_lookup(
             .clone()
             .into_series();
         key_col.rename("key");
+        if df.column("value_multi").is_ok() {
+            df.rename("value_multi", "value").unwrap();
+        }
         df.with_column(key_col).unwrap();
         out_map.insert(dt, df);
     }
@@ -525,12 +575,19 @@ fn df_path(
                 }) = right_res
                 {
                     df_left.rename("object", "on").unwrap();
+                    if df_left.column("object_multi").is_ok() {
+                        df_left = df_left.drop("object_multi").unwrap();
+                    }
                     df_right.rename("subject", "on").unwrap();
+                    if df_right.column("subject_multi").is_ok() {
+                        df_right = df_right.drop("subject_multi").unwrap();
+                    }
                     df_left = df_left.sort(vec!["on"], vec![false], false).unwrap();
                     df_right = df_right.sort(vec!["on"], vec![false], false).unwrap();
-                    let df = df_left
+                    let mut df = df_left
                         .join(&df_right, ["on"], ["on"], JoinArgs::new(JoinType::Inner))
                         .unwrap();
+                    df = df.drop("on").unwrap();
                     Some(DFPathReturn {
                         df,
                         dt_subj,
@@ -543,9 +600,9 @@ fn df_path(
                 None
             }
         }
-        PropertyPathExpression::Alternative(left, _right) => {
+        PropertyPathExpression::Alternative(left, right) => {
             let left_res = df_path(left, cat_df_map, max_index);
-            let right_res = df_path(left, cat_df_map, max_index);
+            let right_res = df_path(right, cat_df_map, max_index);
             if let Some(DFPathReturn {
                 df: df_left,
                 dt_subj: dt_subj_left,
@@ -623,7 +680,17 @@ fn df_path(
     }
 }
 
-fn df_with_cats(df: DataFrame) -> DataFrame {
+fn df_with_cats(mut df: DataFrame, subj_dt: &RDFNodeType, obj_dt: &RDFNodeType) -> DataFrame {
+    if subj_dt == &RDFNodeType::MultiType {
+        let subj_string_series = multi_series_to_string_series(df.column("subject").unwrap());
+        df.rename("subject", "subject_multi").unwrap();
+        df.with_column(subj_string_series).unwrap();
+    }
+    if obj_dt == &RDFNodeType::MultiType {
+        let obj_string_series = multi_series_to_string_series(df.column("object").unwrap());
+        df.rename("object", "object_multi").unwrap();
+        df.with_column(obj_string_series).unwrap();
+    }
     let subject = df
         .column("subject")
         .unwrap()
@@ -634,7 +701,9 @@ fn df_with_cats(df: DataFrame) -> DataFrame {
         .unwrap()
         .cast(&DataType::Categorical(None))
         .unwrap();
-    DataFrame::new(vec![subject, object]).unwrap()
+    df.with_column(subject).unwrap();
+    df.with_column(object).unwrap();
+    df
 }
 
 fn find_max_index(vals: Values<String, (DataFrame, RDFNodeType, RDFNodeType)>) -> u32 {
@@ -883,7 +952,6 @@ fn sparse_path(
             }
         }
         PropertyPathExpression::ZeroOrMore(inner) => {
-            println!("Cat df map zero or more: {:?}", cat_df_map);
             if let Some(SparsePathReturn {
                 sparmat: sparmat_inner,
                 dt_subj,

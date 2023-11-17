@@ -132,7 +132,7 @@ impl Triplestore {
                 });
             }
         }
-        self.add_triples_vec(triples_to_add, &uuid::Uuid::new_v4().to_string())?;
+        self.add_triples_vec(triples_to_add, &uuid::Uuid::new_v4().to_string(), false)?;
 
         Ok(())
     }

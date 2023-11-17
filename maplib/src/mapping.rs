@@ -371,7 +371,7 @@ impl Mapping {
             });
         }
         self.triplestore
-            .add_triples_vec(all_triples_to_add, call_uuid)
+            .add_triples_vec(all_triples_to_add, call_uuid, false)
             .map_err(MappingError::TriplestoreError)?;
 
         self.blank_node_counter = new_blank_node_counter;
