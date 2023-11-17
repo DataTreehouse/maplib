@@ -141,6 +141,7 @@ impl Triplestore {
                     for m in &multicols {
                         let mut df = mappings.collect().unwrap();
                         convert_df_col_to_multitype(&mut df, m, &RDFNodeType::IRI);
+                        dts.insert(m.clone(), RDFNodeType::MultiType);
                         mappings = df.lazy();
                     }
                 }
