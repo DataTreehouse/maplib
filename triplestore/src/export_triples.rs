@@ -28,7 +28,7 @@ impl Triplestore {
                         for _ in 0..df.height() {
                             let s = anyutf8_to_str(subject_iterator.next().unwrap());
                             let o = anyutf8_to_str(object_iterator.next().unwrap());
-                            out.push(func(s, verb, o));
+                            out.push(func(s, verb.as_str(), o));
                         }
                     }
                 }
@@ -68,7 +68,7 @@ impl Triplestore {
                             } else {
                                 None
                             };
-                            out.push(func(s, verb, lex, lang_opt));
+                            out.push(func(s, verb.as_str(), lex, lang_opt));
                         }
                         v.forget_tmp_df();
                     }
@@ -107,14 +107,14 @@ impl Triplestore {
                             for _ in 0..df.height() {
                                 let s = anyutf8_to_str(subject_iterator.next().unwrap());
                                 let lex = anyutf8_to_str(data_iterator.next().unwrap());
-                                out.push(func(s, verb, lex, object_type));
+                                out.push(func(s, verb.as_str(), lex, object_type));
                             }
                         } else {
                             let mut data_iterator = df.column("object").unwrap().iter();
                             for _ in 0..df.height() {
                                 let s = anyutf8_to_str(subject_iterator.next().unwrap());
                                 let lex = anyutf8_to_str(data_iterator.next().unwrap());
-                                out.push(func(s, verb, lex, object_type));
+                                out.push(func(s, verb.as_str(), lex, object_type));
                             }
                         };
                         v.forget_tmp_df();

@@ -14,9 +14,10 @@ use polars::prelude::{IntoLazy, UnionArgs};
 use polars_core::datatypes::{AnyValue, DataType};
 use polars_core::frame::DataFrame;
 use polars_core::series::Series;
-use representation::RDFNodeType;
+use representation::{literal_iri_to_namednode, RDFNodeType};
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 use std::collections::HashMap;
+use oxrdf::NamedNode;
 
 impl Triplestore {
     pub fn lazy_triple_pattern(
@@ -42,7 +43,7 @@ impl Triplestore {
 
         let (mut df, mut dts) = match &triple_pattern.predicate {
             NamedNodePattern::NamedNode(n) => self.get_predicate_df(
-                n.as_str(),
+                n,
                 &subject_rename,
                 &verb_rename,
                 &object_rename,
@@ -52,7 +53,7 @@ impl Triplestore {
                 object_datatype_req.as_ref(),
             )?,
             NamedNodePattern::Variable(v) => {
-                let predicates: Vec<String>;
+                let predicates: Vec<NamedNode>;
                 if let Some(SolutionMappings {
                     mappings,
                     columns,
@@ -66,7 +67,7 @@ impl Triplestore {
                             predicates = predicates_iter
                                 .filter_map(|x| match x {
                                     AnyValue::Null => None,
-                                    AnyValue::Utf8(s) => Some(s.to_string()),
+                                    AnyValue::Utf8(s) => Some(literal_iri_to_namednode(s)),
                                     _ => panic!("Should never happen"),
                                 })
                                 .collect();
@@ -95,7 +96,7 @@ impl Triplestore {
                     predicates = self.all_predicates();
                 }
                 self.get_predicates_df(
-                    &predicates,
+                    predicates,
                     &subject_rename,
                     &verb_rename,
                     &object_rename,
@@ -213,7 +214,7 @@ impl Triplestore {
 
     pub fn get_predicate_df(
         &self,
-        verb_uri: &str,
+        verb_uri: &NamedNode,
         subject_keep_rename: &Option<String>,
         verb_keep_rename: &Option<String>,
         object_keep_rename: &Option<String>,
@@ -250,7 +251,7 @@ impl Triplestore {
                     drop.push("object")
                 }
                 if let Some(renamed) = verb_keep_rename {
-                    lf = lf.with_column(lit(verb_uri).alias(renamed));
+                    lf = lf.with_column(lit(verb_uri.to_string()).alias(renamed));
                     out_datatypes.insert(renamed.clone(), RDFNodeType::IRI);
                 }
                 lf = lf.drop_columns(drop);
@@ -276,7 +277,7 @@ impl Triplestore {
 
     fn get_predicates_df(
         &self,
-        predicate_uris: &Vec<String>,
+        predicate_uris: Vec<NamedNode>,
         subject_keep_rename: &Option<String>,
         verb_keep_rename: &Option<String>,
         object_keep_rename: &Option<String>,
@@ -288,13 +289,13 @@ impl Triplestore {
         let mut lfs = vec![];
 
         let need_multi_subject =
-            self.partial_check_need_multi(predicate_uris, object_datatype_req, true);
+            self.partial_check_need_multi(&predicate_uris, object_datatype_req, true);
         let need_multi_object =
-            self.partial_check_need_multi(predicate_uris, object_datatype_req, false);
+            self.partial_check_need_multi(&predicate_uris, object_datatype_req, false);
 
         for v in predicate_uris {
             let (mut df, datatypes_map) = self.get_predicate_df(
-                v,
+                &v,
                 subject_keep_rename,
                 verb_keep_rename,
                 object_keep_rename,
@@ -367,7 +368,7 @@ impl Triplestore {
         })
     }
 
-    fn all_predicates(&self) -> Vec<String> {
+    fn all_predicates(&self) -> Vec<NamedNode> {
         let mut strs = vec![];
         for k in self.df_map.keys() {
             strs.push(k.clone())
@@ -376,7 +377,7 @@ impl Triplestore {
     }
     fn partial_check_need_multi(
         &self,
-        predicates: &Vec<String>,
+        predicates: &Vec<NamedNode>,
         object_datatype_req: Option<&RDFNodeType>,
         subject: bool,
     ) -> bool {

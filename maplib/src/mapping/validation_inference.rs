@@ -9,6 +9,7 @@ use polars_core::export::rayon::prelude::ParallelIterator;
 use polars_core::frame::DataFrame;
 use polars_core::prelude::DataType;
 use std::collections::{HashMap, HashSet};
+use polars::prelude::{col, IntoLazy, lit};
 
 impl Mapping {
     pub fn validate_infer_dataframe_columns(

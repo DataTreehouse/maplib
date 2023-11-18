@@ -236,8 +236,7 @@ fn named_node_pattern_series(
 }
 
 fn named_node_series(nn: &NamedNode, name: &str, len: usize) -> (Series, RDFNodeType) {
-    let nn_vec = [nn.as_str()].repeat(len);
-    let mut ser = Series::from_iter(nn_vec);
+    let mut ser = Series::from_iter([nn.to_string().as_str()].repeat(len));
     ser.rename(name);
     (ser, RDFNodeType::IRI)
 }

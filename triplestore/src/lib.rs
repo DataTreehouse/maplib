@@ -27,12 +27,13 @@ use polars_core::series::Series;
 use polars_core::utils::concat_df;
 use rayon::iter::ParallelIterator;
 use rayon::iter::{IntoParallelRefIterator, ParallelDrainRange};
-use representation::RDFNodeType;
+use representation::{literal_iri_to_namednode, RDFNodeType};
 use std::collections::HashMap;
 use std::fs::remove_file;
 use std::io;
 use std::path::Path;
 use std::time::Instant;
+use oxrdf::NamedNode;
 use uuid::Uuid;
 
 const LANGUAGE_TAG_COLUMN: &str = "language_tag";
@@ -40,8 +41,8 @@ const LANGUAGE_TAG_COLUMN: &str = "language_tag";
 pub struct Triplestore {
     deduplicated: bool,
     pub(crate) caching_folder: Option<String>,
-    df_map: HashMap<String, HashMap<(RDFNodeType, RDFNodeType), TripleTable>>,
-    transient_df_map: HashMap<String, HashMap<(RDFNodeType, RDFNodeType), TripleTable>>,
+    df_map: HashMap<NamedNode, HashMap<(RDFNodeType, RDFNodeType), TripleTable>>,
+    transient_df_map: HashMap<NamedNode, HashMap<(RDFNodeType, RDFNodeType), TripleTable>>,
 }
 
 pub struct TripleTable {
@@ -104,13 +105,14 @@ pub struct TriplesToAdd {
     pub subject_type: RDFNodeType,
     pub object_type: RDFNodeType,
     pub language_tag: Option<String>,
-    pub static_verb_column: Option<String>,
+    pub static_verb_column: Option<NamedNode>,
     pub has_unique_subset: bool,
 }
 
+#[derive(Debug)]
 pub struct TripleDF {
     df: DataFrame,
-    predicate: String,
+    predicate: NamedNode,
     subject_type: RDFNodeType,
     object_type: RDFNodeType,
 }
@@ -166,7 +168,7 @@ impl Triplestore {
                         let paths = split_write_tmp_df(
                             self.caching_folder.as_ref().unwrap(),
                             unique_df,
-                            predicate,
+                            predicate.as_str(),
                         )
                         .map_err(TriplestoreError::ParquetIOError)?;
                         v.df_paths = Some(paths);
@@ -228,7 +230,7 @@ impl Triplestore {
 
     fn add_triples_df(
         &mut self,
-        mut triples_df: Vec<TripleDF>,
+        triples_df: Vec<TripleDF>,
         call_uuid: &String,
         transient: bool,
         overwrite: bool,
@@ -236,7 +238,6 @@ impl Triplestore {
         // if !overwrite {
         //     triples_df = self.subtract_from_transient(triples_df, call_uuid, transient)?;
         // }
-
         if self.caching_folder.is_some() {
             self.add_triples_df_with_caching_folder(triples_df, call_uuid, transient, overwrite)?;
         } else {
@@ -264,7 +265,7 @@ impl Triplestore {
                 } = tdf;
                 let file_name = format!(
                     "tmp_{}_{}{}.parquet",
-                    property_to_filename(&predicate),
+                    property_to_filename(predicate.as_str()),
                     Uuid::new_v4(),
                     if transient { "_transient" } else { "" }
                 );
@@ -474,7 +475,7 @@ pub fn prepare_triples(
     subject_type: &RDFNodeType,
     object_type: &RDFNodeType,
     language_tag: &Option<String>,
-    static_verb_column: Option<String>,
+    static_verb_column: Option<NamedNode>,
     has_unique_subset: bool,
 ) -> Vec<TripleDF> {
     let now = Instant::now();
@@ -514,7 +515,7 @@ pub fn prepare_triples(
             {
                 let any_predicate = part.column("verb").unwrap().get(0);
                 if let Ok(AnyValue::Utf8(p)) = any_predicate {
-                    predicate = p.to_string();
+                    predicate = literal_iri_to_namednode(p);
                 } else {
                     panic!()
                 }
@@ -541,7 +542,7 @@ pub fn prepare_triples(
 
 fn prepare_triples_df(
     mut df: DataFrame,
-    predicate: String,
+    predicate: NamedNode,
     subject_type: &RDFNodeType,
     object_type: &RDFNodeType,
     language_tag: &Option<String>,

@@ -327,7 +327,7 @@ impl Triplestore {
                 };
 
                 let res = self.get_single_nn_df(
-                    nn.as_str(),
+                    nn,
                     subject,
                     object,
                     subject_filter,
@@ -378,7 +378,7 @@ impl Triplestore {
 
     fn get_single_nn_df(
         &self,
-        nn: &str,
+        nn: &NamedNode,
         subject: Option<&TermPattern>,
         object: Option<&TermPattern>,
         subject_filter: Option<Expr>,

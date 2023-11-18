@@ -14,6 +14,7 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
+use oxrdf::NamedNode;
 
 impl Triplestore {
     pub fn read_triples(
@@ -127,7 +128,7 @@ impl Triplestore {
                     subject_type: subject_dt,
                     object_type: object_dt,
                     language_tag: None,
-                    static_verb_column: Some(k.to_string()),
+                    static_verb_column: Some(NamedNode::new_unchecked(k.clone())),
                     has_unique_subset: false,
                 });
             }
