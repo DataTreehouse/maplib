@@ -371,11 +371,11 @@ impl Mapping {
         })
     }
 
-    #[pyo3(text_signature = "(query)")]
-    pub fn insert(&mut self, query: String) -> PyResult<()> {
+    #[pyo3(text_signature = "(query, transient)")]
+    pub fn insert(&mut self, query: String, transient:bool) -> PyResult<()> {
         self.inner
             .triplestore
-            .insert(&query)
+            .insert(&query, transient)
             .map_err(PyMaplibError::from)?;
         Ok(())
     }
