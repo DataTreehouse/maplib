@@ -15,7 +15,7 @@ use std::collections::HashMap;
 
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
-use crate::sparql::multitype::{split_df_multicol, split_df_multicols};
+use crate::sparql::multitype::split_df_multicols;
 use crate::sparql::solution_mapping::SolutionMappings;
 use crate::TriplesToAdd;
 use polars::frame::DataFrame;
@@ -99,7 +99,7 @@ impl Triplestore {
 
                     for (df, mut subj_dt, mut obj_dt) in dfs {
                         if df.height() == 0 {
-                            continue
+                            continue;
                         }
                         let mut multicols = vec![];
                         if subj_dt == RDFNodeType::MultiType {

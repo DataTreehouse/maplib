@@ -7,8 +7,13 @@ use crate::sparql::sparql_to_polars::{
 };
 
 use crate::sparql::lazy_graph_patterns::load_tt::multiple_tt_to_lf;
-use crate::sparql::multitype::{clean_up_after_join_workaround, convert_df_col_to_multitype, create_compatible_solution_mappings, helper_cols_join_workaround_polars_object_series_bug, unitype_to_multitype};
+use crate::sparql::multitype::{
+    clean_up_after_join_workaround, convert_df_col_to_multitype,
+    create_compatible_solution_mappings, helper_cols_join_workaround_polars_object_series_bug,
+    unitype_to_multitype,
+};
 use oxrdf::vocab::xsd;
+use oxrdf::NamedNode;
 use polars::prelude::{col, concat, lit, Expr, JoinType};
 use polars::prelude::{IntoLazy, UnionArgs};
 use polars_core::datatypes::{AnyValue, DataType};
@@ -17,7 +22,6 @@ use polars_core::series::Series;
 use representation::{literal_iri_to_namednode, RDFNodeType};
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 use std::collections::HashMap;
-use oxrdf::NamedNode;
 
 impl Triplestore {
     pub fn lazy_triple_pattern(

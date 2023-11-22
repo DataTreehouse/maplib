@@ -326,13 +326,8 @@ impl Triplestore {
                     None
                 };
 
-                let res = self.get_single_nn_df(
-                    nn,
-                    subject,
-                    object,
-                    subject_filter,
-                    object_filter,
-                )?;
+                let res =
+                    self.get_single_nn_df(nn, subject, object, subject_filter, object_filter)?;
                 if let Some((df, subj_dt, obj_dt)) = res {
                     let mut unique_cat_df = df_with_cats(df, &subj_dt, &obj_dt);
                     unique_cat_df = unique_cat_df
@@ -482,7 +477,9 @@ fn create_graph_pattern(
         },
         PropertyPathExpression::ZeroOrMore(_)
         | PropertyPathExpression::OneOrMore(_)
-        | PropertyPathExpression::ZeroOrOne(_) => {panic!("Should never happen")}
+        | PropertyPathExpression::ZeroOrOne(_) => {
+            panic!("Should never happen")
+        }
         PropertyPathExpression::NegatedPropertySet(_) => {
             todo!()
         }

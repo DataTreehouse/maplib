@@ -7,15 +7,16 @@ mod export_triples;
 mod io_funcs;
 pub mod native_parquet_write;
 mod ntriples_write;
+pub mod rdfs_inferencing;
 pub mod sparql;
 pub mod triples_read;
-pub mod rdfs_inferencing;
 
 use crate::errors::TriplestoreError;
 use crate::io_funcs::{create_folder_if_not_exists, delete_tmp_parquets_in_caching_folder};
 use crate::sparql::lazy_graph_patterns::load_tt::multiple_tt_to_lf;
 use log::debug;
 use oxrdf::vocab::xsd;
+use oxrdf::NamedNode;
 use parquet_io::{
     property_to_filename, read_parquet, split_write_tmp_df, write_parquet, ParquetIOError,
 };
@@ -33,7 +34,6 @@ use std::fs::remove_file;
 use std::io;
 use std::path::Path;
 use std::time::Instant;
-use oxrdf::NamedNode;
 use uuid::Uuid;
 
 const LANGUAGE_TAG_COLUMN: &str = "language_tag";
@@ -332,7 +332,13 @@ impl Triplestore {
         Ok(())
     }
 
-    fn add_triples_df_without_folder(&mut self, triples_df: Vec<TripleDF>, call_uuid: &String, transient:bool, overwrite:bool) {
+    fn add_triples_df_without_folder(
+        &mut self,
+        triples_df: Vec<TripleDF>,
+        call_uuid: &String,
+        transient: bool,
+        overwrite: bool,
+    ) {
         for TripleDF {
             df,
             predicate,
@@ -403,7 +409,9 @@ impl Triplestore {
                         Some(&tdf.object_type),
                         None,
                         None,
-                    ).map_err(|x|TriplestoreError::SubtractTransientTriplesError(x.to_string()))? {
+                    )
+                    .map_err(|x| TriplestoreError::SubtractTransientTriplesError(x.to_string()))?
+                    {
                         let TripleDF {
                             df,
                             predicate,
@@ -442,14 +450,16 @@ impl Triplestore {
                         Some(&tdf.object_type),
                         None,
                         None,
-                    ).map_err(|x|TriplestoreError::SubtractTransientTriplesError(x.to_string()))? {
+                    )
+                    .map_err(|x| TriplestoreError::SubtractTransientTriplesError(x.to_string()))?
+                    {
                         let join_on = vec![col("subject"), col("object")];
                         let df = lf
                             .join(
                                 tdf.df.clone().lazy(),
                                 &join_on,
                                 &join_on,
-                                JoinArgs::new(JoinType::Anti)
+                                JoinArgs::new(JoinType::Anti),
                             )
                             .collect()
                             .unwrap();
@@ -558,12 +568,7 @@ fn prepare_triples_df(
         now.elapsed().as_secs_f32()
     );
     if !has_unique_subset {
-        let obj_ser = df.column("object").unwrap();
-        if let DataType::Decimal(i, n) = obj_ser.dtype() {
-            //TODO: Handle `vec_hash_combine` operation not supported for dtype
-        } else {
-            df = df.unique(None, UniqueKeepStrategy::First, None).unwrap();
-        }
+        df = df.unique(None, UniqueKeepStrategy::First, None).unwrap();
     }
     debug!(
         "Prepare single triple df unique before it is added took {} seconds",

@@ -1,6 +1,5 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
-use crate::sparql::lazy_graph_patterns::ordering::{decide_order, Order};
 use crate::sparql::multitype::{
     clean_up_after_join_workaround, create_compatible_solution_mappings,
     helper_cols_join_workaround_polars_object_series_bug,

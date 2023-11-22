@@ -26,7 +26,7 @@ pub fn multiple_tt_to_lf(
     object_filter: Option<Expr>,
 ) -> Result<Option<(RDFNodeType, RDFNodeType, LazyFrame)>, SparqlError> {
     let mut filtered = vec![];
-    let m:Vec<_> = if let Some(m2) = m2 {
+    let m: Vec<_> = if let Some(m2) = m2 {
         m1.iter().chain(m2).collect()
     } else {
         m1.iter().collect()
@@ -60,8 +60,8 @@ pub fn multiple_tt_to_lf(
         Ok(Some((subj_dt.clone(), obj_dt.clone(), lf)))
     } else {
         let mut lfs = vec![];
-        let set_subj_dt: HashSet<_> = filtered.iter().map(|(x, _,_)| *x).collect();
-        let set_obj_dt: HashSet<_> = filtered.iter().map(|(_, x,_)| *x).collect();
+        let set_subj_dt: HashSet<_> = filtered.iter().map(|(x, _, _)| *x).collect();
+        let set_obj_dt: HashSet<_> = filtered.iter().map(|(_, x, _)| *x).collect();
 
         let mut use_subj_dt = None;
         let mut use_obj_dt = None;
@@ -87,11 +87,6 @@ pub fn multiple_tt_to_lf(
             lfs.push(df.lazy())
         }
         let lf = concat(lfs, Default::default()).unwrap();
-
-        Ok(Some((
-            use_subj_dt.unwrap(),
-            use_obj_dt.unwrap(),
-            lf,
-        )))
+        Ok(Some((use_subj_dt.unwrap(), use_obj_dt.unwrap(), lf)))
     }
 }

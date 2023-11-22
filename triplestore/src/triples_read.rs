@@ -4,8 +4,9 @@ use crate::TriplesToAdd;
 use oxiri::Iri;
 use oxrdf::vocab::rdf::LANG_STRING;
 use oxrdf::vocab::xsd;
+use oxrdf::NamedNode;
 use polars_core::frame::DataFrame;
-use polars_core::prelude::{AnyValue, NamedFrom, Series, Utf8Chunked};
+use polars_core::prelude::{AnyValue, NamedFrom, Series};
 use representation::literals::sparql_literal_to_any_value;
 use representation::RDFNodeType;
 use rio_api::parser::TriplesParser;
@@ -14,7 +15,6 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
-use oxrdf::NamedNode;
 
 impl Triplestore {
     pub fn read_triples(
@@ -23,7 +23,6 @@ impl Triplestore {
         base_iri: Option<String>,
     ) -> Result<(), TriplestoreError> {
         //Copied from the documentation of rio_turtle
-
         let mut predicate_map = HashMap::new();
         let parse_func = &mut |t: rio_api::model::Triple| {
             let verb_key = t.predicate.iri;
@@ -134,7 +133,6 @@ impl Triplestore {
             }
         }
         self.add_triples_vec(triples_to_add, &uuid::Uuid::new_v4().to_string(), false)?;
-
         Ok(())
     }
 }

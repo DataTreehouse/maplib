@@ -14,8 +14,7 @@ use oxrdf::vocab::xsd;
 use polars::datatypes::DataType;
 use polars::lazy::dsl::is_not_null;
 use polars::prelude::{
-    col, concat_str, is_in, lit, Expr, IntoLazy, IntoSeries, LiteralValue, Operator, Series,
-    UniqueKeepStrategy,
+    col, concat_str, is_in, lit, Expr, IntoLazy, LiteralValue, Operator, Series, UniqueKeepStrategy,
 };
 use representation::RDFNodeType;
 use spargebra::algebra::{Expression, Function};

@@ -59,6 +59,26 @@ impl RDFNodeType {
         self.is_lit_type(xsd::FLOAT)
     }
 
+    pub fn is_numeric(&self) -> bool {
+        match self {
+            RDFNodeType::Literal(l) => {
+                matches!(
+                    l.as_ref(),
+                    xsd::INT
+                        | xsd::BYTE
+                        | xsd::SHORT
+                        | xsd::INTEGER
+                        | xsd::UNSIGNED_BYTE
+                        | xsd::UNSIGNED_INT
+                        | xsd::DECIMAL
+                        | xsd::FLOAT
+                        | xsd::DOUBLE
+                )
+            }
+            _ => false,
+        }
+    }
+
     pub fn find_triple_type(&self) -> TripleType {
         if let RDFNodeType::IRI = self {
             TripleType::ObjectProperty

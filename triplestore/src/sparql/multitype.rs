@@ -4,9 +4,8 @@ use crate::sparql::sparql_to_polars::{
 };
 use oxrdf::vocab::xsd;
 use oxrdf::{BlankNode, Literal, NamedNode, Subject, Term};
-use oxsdatatypes::Decimal;
 use polars::export::arrow::util::total_ord::TotalEq;
-use polars::prelude::{coalesce, col, cols, IntoLazy, LazyFrame, lit, LiteralValue};
+use polars::prelude::{coalesce, col, lit, IntoLazy, LazyFrame, LiteralValue};
 use polars_core::frame::DataFrame;
 use polars_core::prelude::{
     AnyValue, ChunkedArray, DataType, NamedFrom, NewChunkedArray, ObjectChunked, PolarsObject,
@@ -258,10 +257,10 @@ pub fn unitype_to_multitype(ser: &Series, dt: &RDFNodeType) -> Series {
             ),
             xsd::DECIMAL => convert_to_multitype(
                 |x: AnyValue| match x {
-                    AnyValue::Decimal(i, n) => {
-                        MultiType::Literal(Literal::from(Decimal::new(i, n as u32).unwrap()))
+                    AnyValue::Float64(f) => {
+                        MultiType::Literal(Literal::new_typed_literal(f.to_string(), xsd::DECIMAL))
                     }
-                    _ => panic!(),
+                    _ => panic!("anyvalue {:?}", x),
                 },
                 &ser,
             ),
@@ -274,13 +273,13 @@ pub fn unitype_to_multitype(ser: &Series, dt: &RDFNodeType) -> Series {
 }
 
 fn convert_to_multitype(f: fn(AnyValue) -> MultiType, objects: &Series) -> Series {
-    let vs = objects.iter().map(|x|
-        match x {
-            AnyValue::Null => None,
-            x => Some(f(x))
-        }
-    );
-    let s: ObjectChunked<MultiType> = ChunkedArray::from_iter_options(objects.name(), vs);
+    let vs = objects.iter().map(|x| match x {
+        AnyValue::Null => None,
+        x => Some(f(x)),
+    });
+    let vs: Vec<_> = vs.collect();
+    let s: ObjectChunked<MultiType> =
+        ChunkedArray::from_iter_options(objects.name(), vs.into_iter());
     s.into()
 }
 
@@ -476,8 +475,9 @@ pub fn maybe_convert_df_multicol_to_single(df: &mut DataFrame, c: &str, maybe: b
         if !maybe && first_datatype.is_some() {
             break;
         }
-        let c_obj: Option<&MultiType> = c_ser.get_object(i).unwrap().as_any().downcast_ref();
+        let c_obj = c_ser.get_object(i);
         if let Some(c_obj) = c_obj {
+            let c_obj: &MultiType = c_obj.as_any().downcast_ref().unwrap();
             match c_obj {
                 MultiType::IRI(i) => {
                     if let Some(dt) = &first_datatype {
@@ -529,7 +529,12 @@ pub fn maybe_convert_df_multicol_to_single(df: &mut DataFrame, c: &str, maybe: b
         let new_series = polars_literal_values_to_series(literal_values, c);
         df.with_column(new_series).unwrap();
     } else {
-        return false;
+        df.with_column(
+            Series::new_null(c, df.height())
+                .cast(&DataType::Utf8)
+                .unwrap(),
+        )
+        .unwrap();
     }
     true
 }
@@ -602,8 +607,9 @@ pub fn split_df_multicols(
         let c_ser = df.column(c).unwrap();
         let mut datatypes_vec = vec![];
         for i in 0..c_ser.len() {
-            let c_obj: Option<&MultiType> = c_ser.get_object(i).unwrap().as_any().downcast_ref();
-            if let Some(c_obj) = c_obj {
+            let c_opt = c_ser.get_object(i);
+            if let Some(c_obj) = c_opt {
+                let c_obj: &MultiType = c_obj.as_any().downcast_ref().unwrap();
                 match c_obj {
                     MultiType::IRI(i) => {
                         datatypes_vec.push("i");
@@ -619,7 +625,7 @@ pub fn split_df_multicols(
                     }
                 }
             } else {
-                datatypes_vec.push("n");
+                datatypes_vec.push("i");
             }
         }
         let key_col_name = format!("key_col_{i}");
@@ -631,7 +637,6 @@ pub fn split_df_multicols(
     for i in 1..key_cols.len() {
         concat_expr = concat_expr + lit("-") + col(key_cols.get(i).unwrap());
     }
-
 
     df = df
         .lazy()

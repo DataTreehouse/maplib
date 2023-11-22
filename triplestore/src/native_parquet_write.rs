@@ -32,7 +32,10 @@ impl Triplestore {
                         property_to_filename(literal_type.as_str())
                     );
                 } else {
-                    filename = format!("{}_object_property", property_to_filename(property.as_str()),)
+                    filename = format!(
+                        "{}_object_property",
+                        property_to_filename(property.as_str()),
+                    )
                 }
                 let file_path = path_buf.clone();
                 if self.caching_folder.is_some() {
