@@ -470,6 +470,10 @@ fn multi_to_polars_literal_value(m: &MultiType) -> LiteralValue {
 
 pub fn maybe_convert_df_multicol_to_single(df: &mut DataFrame, c: &str, maybe: bool) -> bool {
     let c_ser = df.column(c).unwrap();
+    if let DataType::Object(_) = c_ser.dtype() {
+    } else {
+        return true
+    }
     let mut first_datatype = None;
     for i in 0..c_ser.len() {
         if !maybe && first_datatype.is_some() {
