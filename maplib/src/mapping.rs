@@ -14,9 +14,9 @@ use crate::mapping::constant_terms::{constant_blank_node_to_series, constant_to_
 use crate::mapping::errors::MappingError;
 use crate::templates::TemplateDataset;
 use log::debug;
-use oxrdf::Triple;
+use oxrdf::{NamedNode, Triple};
 use polars::lazy::prelude::{col, Expr};
-use polars::prelude::{DataFrame, IntoLazy};
+use polars::prelude::{lit, DataFrame, IntoLazy};
 use polars_core::prelude::NamedFrom;
 use polars_core::series::Series;
 use rayon::iter::IndexedParallelIterator;
@@ -123,10 +123,10 @@ impl Mapping {
         Mapping::new(&dataset, caching_folder)
     }
 
-    pub fn read_triples(&mut self, p: &Path) -> Result<(), MappingError> {
+    pub fn read_triples(&mut self, p: &Path, base_iri: Option<String>) -> Result<(), MappingError> {
         Ok(self
             .triplestore
-            .read_triples(p)
+            .read_triples(p, base_iri)
             .map_err(|x| MappingError::TriplestoreError(x))?)
     }
 
@@ -358,9 +358,42 @@ impl Mapping {
             ok_triples.push(t?);
         }
         let mut all_triples_to_add = vec![];
-        for (df, subj_rdf_node_type, obj_rdf_node_type, language_tag, verb, has_unique_subset) in
-            ok_triples
+        for (
+            mut df,
+            subj_rdf_node_type,
+            obj_rdf_node_type,
+            language_tag,
+            mut verb,
+            has_unique_subset,
+        ) in ok_triples
         {
+            let mut coltypes_names = vec![
+                (&subj_rdf_node_type, "subject"),
+                (&obj_rdf_node_type, "object"),
+            ];
+            if verb.is_none() {
+                coltypes_names.push((&RDFNodeType::IRI, "verb"));
+            }
+            let mut fix_iris = vec![];
+            for (coltype, colname) in coltypes_names {
+                if coltype == &RDFNodeType::IRI {
+                    let nonnull = df.column(colname).unwrap().utf8().unwrap().first_non_null();
+                    if let Some(i) = nonnull {
+                        let first_iri = df.column(colname).unwrap().utf8().unwrap().get(i).unwrap();
+                        {
+                            if !first_iri.starts_with("<") {
+                                fix_iris.push(colname);
+                            }
+                        }
+                    }
+                }
+            }
+            let mut lf = df.lazy();
+            for colname in fix_iris {
+                lf = lf.with_column((lit("<") + col(colname) + lit(">")).alias(colname));
+            }
+            df = lf.collect().unwrap();
+
             all_triples_to_add.push(TriplesToAdd {
                 df,
                 subject_type: subj_rdf_node_type,
@@ -371,7 +404,7 @@ impl Mapping {
             });
         }
         self.triplestore
-            .add_triples_vec(all_triples_to_add, call_uuid)
+            .add_triples_vec(all_triples_to_add, call_uuid, false)
             .map_err(MappingError::TriplestoreError)?;
 
         self.blank_node_counter = new_blank_node_counter;
@@ -403,7 +436,7 @@ fn create_triples(
         RDFNodeType,
         RDFNodeType,
         Option<String>,
-        Option<String>,
+        Option<NamedNode>,
         bool,
     ),
     MappingError,
@@ -427,7 +460,7 @@ fn create_triples(
     for (k, sc) in static_columns {
         if k == "verb" {
             if let ConstantTerm::Constant(ConstantLiteral::Iri(nn)) = &sc.constant_term {
-                verb = Some(nn.as_str().to_string());
+                verb = Some(nn.clone());
             } else {
                 return Err(MappingError::InvalidPredicateConstant(
                     sc.constant_term.clone(),

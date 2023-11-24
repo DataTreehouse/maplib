@@ -7,9 +7,8 @@ use crate::sparql::multitype::{
 use crate::sparql::query_context::{Context, PathEntry};
 use crate::sparql::solution_mapping::{is_string_col, SolutionMappings};
 use log::debug;
-use polars::prelude::{col, Expr};
+use polars::prelude::{col, Expr, JoinArgs, JoinType};
 use polars_core::datatypes::DataType;
-use polars_core::prelude::{JoinArgs, JoinType};
 use representation::RDFNodeType;
 use spargebra::algebra::{Expression, GraphPattern};
 
@@ -26,6 +25,7 @@ impl Triplestore {
         let left_context = context.extension_with(PathEntry::LeftJoinLeftSide);
         let right_context = context.extension_with(PathEntry::LeftJoinRightSide);
         let expression_context = context.extension_with(PathEntry::LeftJoinExpression);
+
         let left_solution_mappings =
             self.lazy_graph_pattern(left, solution_mappings.clone(), &left_context)?;
 

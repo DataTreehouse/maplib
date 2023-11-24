@@ -633,7 +633,7 @@ ex:AnotherExampleTemplate [?object, ?predicate, ?myList] :: {
     let mut df = DataFrame::from_iter(series);
     df = df
         .lazy()
-        .groupby_stable([col("object"), col("predicate")])
+        .group_by_stable([col("object"), col("predicate")])
         .agg([col("myList").list().0])
         .collect()
         .unwrap();
@@ -715,7 +715,7 @@ ex:AnotherExampleTemplate [?subject, ?myList1, ?myList2] :: {
     let mut df = DataFrame::from_iter(series);
     df = df
         .lazy()
-        .groupby_stable([col("subject")])
+        .group_by_stable([col("subject")])
         .agg([col("myList1").list().0, col("myList2").list().0])
         .collect()
         .unwrap();
@@ -912,7 +912,7 @@ fn test_default_list() {
     let mut df = DataFrame::from_iter(series);
     df = df
         .lazy()
-        .groupby_stable([col("subject")])
+        .group_by_stable([col("subject")])
         .agg([
             col("myList1").drop_nulls().list().0,
             col("myList2").list().0,

@@ -1,12 +1,12 @@
 pub mod errors;
 pub(crate) mod lazy_aggregate;
 mod lazy_expressions;
-mod lazy_graph_patterns;
+pub(crate) mod lazy_graph_patterns;
 mod lazy_order;
 pub mod multitype;
 pub mod query_context;
 pub mod solution_mapping;
-mod sparql_to_polars;
+pub mod sparql_to_polars;
 
 use crate::sparql::query_context::Context;
 use oxrdf::vocab::xsd;
@@ -15,6 +15,7 @@ use std::collections::HashMap;
 
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
+use crate::sparql::multitype::split_df_multicols;
 use crate::sparql::solution_mapping::SolutionMappings;
 use crate::TriplesToAdd;
 use polars::frame::DataFrame;
@@ -43,7 +44,7 @@ impl Triplestore {
             self.deduplicate()
                 .map_err(SparqlError::DeduplicationError)?;
         }
-        enable_string_cache(true);
+        enable_string_cache();
         let context = Context::new();
         match query {
             Query::Select {
@@ -84,7 +85,7 @@ impl Triplestore {
         }
     }
 
-    pub fn insert(&mut self, query: &str) -> Result<(), SparqlError> {
+    pub fn insert(&mut self, query: &str, transient: bool) -> Result<(), SparqlError> {
         let call_uuid = Uuid::new_v4().to_string();
         let query = Query::parse(query, None).map_err(SparqlError::ParseError)?;
         if let Query::Construct { .. } = &query {
@@ -95,18 +96,47 @@ impl Triplestore {
                 }
                 QueryResult::Construct(dfs) => {
                     let mut all_triples_to_add = vec![];
-                    for (df, subj_dt, obj_dt) in dfs {
-                        all_triples_to_add.push(TriplesToAdd {
-                            df,
-                            subject_type: subj_dt,
-                            object_type: obj_dt,
-                            language_tag: None,
-                            static_verb_column: None,
-                            has_unique_subset: false,
-                        });
+
+                    for (df, mut subj_dt, mut obj_dt) in dfs {
+                        if df.height() == 0 {
+                            continue;
+                        }
+                        let mut multicols = vec![];
+                        if subj_dt == RDFNodeType::MultiType {
+                            multicols.push("subject");
+                        }
+                        if obj_dt == RDFNodeType::MultiType {
+                            multicols.push("object");
+                        }
+                        if !multicols.is_empty() {
+                            let dfs_dts = split_df_multicols(df, multicols);
+                            for (df, mut map) in dfs_dts {
+                                let new_subj_dt = map.remove("subject").unwrap_or(subj_dt.clone());
+                                let new_obj_dt = map.remove("object").unwrap_or(obj_dt.clone());
+                                all_triples_to_add.push(TriplesToAdd {
+                                    df,
+                                    subject_type: new_subj_dt,
+                                    object_type: new_obj_dt,
+                                    language_tag: None,
+                                    static_verb_column: None,
+                                    has_unique_subset: false,
+                                });
+                            }
+                        } else {
+                            all_triples_to_add.push(TriplesToAdd {
+                                df,
+                                subject_type: subj_dt,
+                                object_type: obj_dt,
+                                language_tag: None,
+                                static_verb_column: None,
+                                has_unique_subset: false,
+                            });
+                        }
                     }
-                    self.add_triples_vec(all_triples_to_add, &call_uuid)
-                        .map_err(SparqlError::StoreTriplesError)?;
+                    if !all_triples_to_add.is_empty() {
+                        self.add_triples_vec(all_triples_to_add, &call_uuid, transient)
+                            .map_err(SparqlError::StoreTriplesError)?;
+                    }
                     Ok(())
                 }
             }
@@ -206,8 +236,7 @@ fn named_node_pattern_series(
 }
 
 fn named_node_series(nn: &NamedNode, name: &str, len: usize) -> (Series, RDFNodeType) {
-    let nn_vec = [nn.as_str()].repeat(len);
-    let mut ser = Series::from_iter(nn_vec);
+    let mut ser = Series::from_iter([nn.to_string().as_str()].repeat(len));
     ser.rename(name);
     (ser, RDFNodeType::IRI)
 }

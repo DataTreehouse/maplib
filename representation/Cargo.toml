@@ -6,6 +6,8 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-oxrdf = "0.1.0"
-polars-core = "0.32.1"
+oxrdf = {version = "0.1.7", features = ["oxsdatatypes"]}
+polars-core = "0.34.2"
 chrono = "0.4"
+spargebra = "0.2.8"
+bigdecimal = "0.4.1"

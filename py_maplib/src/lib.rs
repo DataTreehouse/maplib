@@ -371,11 +371,11 @@ impl Mapping {
         })
     }
 
-    #[pyo3(text_signature = "(query)")]
-    pub fn insert(&mut self, query: String) -> PyResult<()> {
+    #[pyo3(text_signature = "(query, transient)")]
+    pub fn insert(&mut self, query: String, transient:Option<bool>) -> PyResult<()> {
         self.inner
             .triplestore
-            .insert(&query)
+            .insert(&query, transient.unwrap_or(false))
             .map_err(PyMaplibError::from)?;
         Ok(())
     }
@@ -504,10 +504,10 @@ impl Mapping {
         Ok(triples)
     }
 
-    #[pyo3(text_signature = "(file_path)")]
-    pub fn read_triples(&mut self, file_path:&str) -> PyResult<()> {
+    #[pyo3(text_signature = "(file_path, base_iri)")]
+    pub fn read_triples(&mut self, file_path:&str, base_iri:Option<String>) -> PyResult<()> {
         let path = Path::new(file_path);
-        self.inner.read_triples(path).map_err(|x| PyMaplibError::from(x))?;
+        self.inner.read_triples(path, base_iri).map_err(|x| PyMaplibError::from(x))?;
         Ok(())
     }
 

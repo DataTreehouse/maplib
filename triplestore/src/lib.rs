@@ -7,17 +7,20 @@ mod export_triples;
 mod io_funcs;
 pub mod native_parquet_write;
 mod ntriples_write;
+pub mod rdfs_inferencing;
 pub mod sparql;
 pub mod triples_read;
 
 use crate::errors::TriplestoreError;
 use crate::io_funcs::{create_folder_if_not_exists, delete_tmp_parquets_in_caching_folder};
+use crate::sparql::lazy_graph_patterns::load_tt::multiple_tt_to_lf;
 use log::debug;
 use oxrdf::vocab::xsd;
+use oxrdf::NamedNode;
 use parquet_io::{
     property_to_filename, read_parquet, split_write_tmp_df, write_parquet, ParquetIOError,
 };
-use polars::prelude::{concat, IntoLazy, LazyFrame, UnionArgs};
+use polars::prelude::{col, concat, IntoLazy, JoinArgs, JoinType, LazyFrame, UnionArgs};
 use polars_core::datatypes::AnyValue;
 use polars_core::frame::{DataFrame, UniqueKeepStrategy};
 use polars_core::prelude::DataType;
@@ -25,7 +28,7 @@ use polars_core::series::Series;
 use polars_core::utils::concat_df;
 use rayon::iter::ParallelIterator;
 use rayon::iter::{IntoParallelRefIterator, ParallelDrainRange};
-use representation::RDFNodeType;
+use representation::{literal_iri_to_namednode, RDFNodeType};
 use std::collections::HashMap;
 use std::fs::remove_file;
 use std::io;
@@ -38,7 +41,8 @@ const LANGUAGE_TAG_COLUMN: &str = "language_tag";
 pub struct Triplestore {
     deduplicated: bool,
     pub(crate) caching_folder: Option<String>,
-    df_map: HashMap<String, HashMap<(RDFNodeType, RDFNodeType), TripleTable>>,
+    df_map: HashMap<NamedNode, HashMap<(RDFNodeType, RDFNodeType), TripleTable>>,
+    transient_df_map: HashMap<NamedNode, HashMap<(RDFNodeType, RDFNodeType), TripleTable>>,
 }
 
 pub struct TripleTable {
@@ -101,13 +105,14 @@ pub struct TriplesToAdd {
     pub subject_type: RDFNodeType,
     pub object_type: RDFNodeType,
     pub language_tag: Option<String>,
-    pub static_verb_column: Option<String>,
+    pub static_verb_column: Option<NamedNode>,
     pub has_unique_subset: bool,
 }
 
+#[derive(Debug)]
 pub struct TripleDF {
     df: DataFrame,
-    predicate: String,
+    predicate: NamedNode,
     subject_type: RDFNodeType,
     object_type: RDFNodeType,
 }
@@ -121,6 +126,7 @@ impl Triplestore {
         }
         Ok(Triplestore {
             df_map: HashMap::new(),
+            transient_df_map: HashMap::new(),
             deduplicated: true,
             caching_folder,
         })
@@ -162,7 +168,7 @@ impl Triplestore {
                         let paths = split_write_tmp_df(
                             self.caching_folder.as_ref().unwrap(),
                             unique_df,
-                            predicate,
+                            predicate.as_str(),
                         )
                         .map_err(TriplestoreError::ParquetIOError)?;
                         v.df_paths = Some(paths);
@@ -192,6 +198,7 @@ impl Triplestore {
         &mut self,
         mut ts: Vec<TriplesToAdd>,
         call_uuid: &String,
+        transient: bool,
     ) -> Result<(), TriplestoreError> {
         let df_vecs_to_add: Vec<Vec<TripleDF>> = ts
             .par_drain(..)
@@ -204,7 +211,8 @@ impl Triplestore {
                     static_verb_column,
                     has_unique_subset,
                 } = t;
-
+                assert_ne!(subject_type, RDFNodeType::MultiType);
+                assert_ne!(object_type, RDFNodeType::MultiType);
                 prepare_triples(
                     df,
                     &subject_type,
@@ -216,7 +224,7 @@ impl Triplestore {
             })
             .collect();
         let dfs_to_add = flatten(df_vecs_to_add);
-        self.add_triples_df(dfs_to_add, call_uuid)?;
+        self.add_triples_df(dfs_to_add, call_uuid, transient, false)?;
         Ok(())
     }
 
@@ -224,11 +232,16 @@ impl Triplestore {
         &mut self,
         triples_df: Vec<TripleDF>,
         call_uuid: &String,
+        transient: bool,
+        overwrite: bool,
     ) -> Result<(), TriplestoreError> {
+        // if !overwrite {
+        //     triples_df = self.subtract_from_transient(triples_df, call_uuid, transient)?;
+        // }
         if self.caching_folder.is_some() {
-            self.add_triples_df_with_caching_folder(triples_df, call_uuid)?;
+            self.add_triples_df_with_caching_folder(triples_df, call_uuid, transient, overwrite)?;
         } else {
-            self.add_triples_df_without_folder(triples_df, call_uuid);
+            self.add_triples_df_without_folder(triples_df, call_uuid, transient, overwrite);
         }
         Ok(())
     }
@@ -237,6 +250,8 @@ impl Triplestore {
         &mut self,
         mut triples_df: Vec<TripleDF>,
         call_uuid: &String,
+        transient: bool,
+        overwrite: bool,
     ) -> Result<(), TriplestoreError> {
         let folder_path = Path::new(self.caching_folder.as_ref().unwrap());
         let file_paths: Vec<_> = triples_df
@@ -249,9 +264,10 @@ impl Triplestore {
                     object_type,
                 } = tdf;
                 let file_name = format!(
-                    "tmp_{}_{}.parquet",
-                    property_to_filename(&predicate),
-                    Uuid::new_v4()
+                    "tmp_{}_{}{}.parquet",
+                    property_to_filename(predicate.as_str()),
+                    Uuid::new_v4(),
+                    if transient { "_transient" } else { "" }
                 );
                 let mut file_path_buf = folder_path.to_path_buf();
                 file_path_buf.push(file_name);
@@ -265,13 +281,21 @@ impl Triplestore {
                 )
             })
             .collect();
+
+        let use_map = if transient {
+            &mut self.transient_df_map
+        } else {
+            &mut self.df_map
+        };
+
         for (file_path, res, predicate, subject_type, object_type) in file_paths {
             res.map_err(TriplestoreError::ParquetIOError)?;
             let k = (subject_type, object_type);
-
-            //Safe to assume everything is unique
-            if let Some(m) = self.df_map.get_mut(&predicate) {
+            if let Some(m) = use_map.get_mut(&predicate) {
                 if let Some(v) = m.get_mut(&k) {
+                    if overwrite {
+                        v.df_paths = Some(vec![]);
+                    }
                     v.df_paths.as_mut().unwrap().push(file_path);
                     v.unique = v.unique && (call_uuid == &v.call_uuid);
                     if !v.unique {
@@ -290,7 +314,7 @@ impl Triplestore {
                     );
                 }
             } else {
-                self.df_map.insert(
+                use_map.insert(
                     predicate,
                     HashMap::from([(
                         k,
@@ -308,7 +332,13 @@ impl Triplestore {
         Ok(())
     }
 
-    fn add_triples_df_without_folder(&mut self, triples_df: Vec<TripleDF>, call_uuid: &String) {
+    fn add_triples_df_without_folder(
+        &mut self,
+        triples_df: Vec<TripleDF>,
+        call_uuid: &String,
+        transient: bool,
+        overwrite: bool,
+    ) {
         for TripleDF {
             df,
             predicate,
@@ -317,10 +347,17 @@ impl Triplestore {
         } in triples_df
         {
             let k = (subject_type, object_type);
+            let use_map = if transient {
+                &mut self.transient_df_map
+            } else {
+                &mut self.df_map
+            };
 
-            //Safe to assume everything is unique
-            if let Some(m) = self.df_map.get_mut(&predicate) {
+            if let Some(m) = use_map.get_mut(&predicate) {
                 if let Some(v) = m.get_mut(&k) {
+                    if overwrite {
+                        v.dfs = Some(vec![]);
+                    }
                     v.dfs.as_mut().unwrap().push(df);
                     v.unique = v.unique && (call_uuid == &v.call_uuid);
                     if !v.unique {
@@ -339,7 +376,7 @@ impl Triplestore {
                     );
                 }
             } else {
-                self.df_map.insert(
+                use_map.insert(
                     predicate,
                     HashMap::from([(
                         k,
@@ -355,6 +392,92 @@ impl Triplestore {
             }
         }
     }
+    fn subtract_from_transient(
+        &mut self,
+        triples_df: Vec<TripleDF>,
+        call_uuid: &String,
+        transient: bool,
+    ) -> Result<Vec<TripleDF>, TriplestoreError> {
+        let mut new_triples_df = vec![];
+        if transient {
+            for tdf in triples_df {
+                if let Some(m) = self.df_map.get(&tdf.predicate) {
+                    if let Some((_, _, lf)) = multiple_tt_to_lf(
+                        m,
+                        None,
+                        Some(&tdf.subject_type),
+                        Some(&tdf.object_type),
+                        None,
+                        None,
+                    )
+                    .map_err(|x| TriplestoreError::SubtractTransientTriplesError(x.to_string()))?
+                    {
+                        let TripleDF {
+                            df,
+                            predicate,
+                            subject_type,
+                            object_type,
+                        } = tdf;
+                        let join_on = vec![col("subject"), col("object")];
+                        let df = df
+                            .lazy()
+                            .join(lf, &join_on, &join_on, JoinArgs::new(JoinType::Anti))
+                            .collect()
+                            .unwrap();
+                        if df.height() > 0 {
+                            new_triples_df.push(TripleDF {
+                                df,
+                                predicate,
+                                subject_type,
+                                object_type,
+                            })
+                        }
+                    } else {
+                        new_triples_df.push(tdf);
+                    }
+                } else {
+                    new_triples_df.push(tdf);
+                }
+            }
+        } else {
+            let mut updated_transient_triples_df = vec![];
+            for tdf in &triples_df {
+                if let Some(m) = self.transient_df_map.get(&tdf.predicate) {
+                    if let Some((_, _, lf)) = multiple_tt_to_lf(
+                        m,
+                        None,
+                        Some(&tdf.subject_type),
+                        Some(&tdf.object_type),
+                        None,
+                        None,
+                    )
+                    .map_err(|x| TriplestoreError::SubtractTransientTriplesError(x.to_string()))?
+                    {
+                        let join_on = vec![col("subject"), col("object")];
+                        let df = lf
+                            .join(
+                                tdf.df.clone().lazy(),
+                                &join_on,
+                                &join_on,
+                                JoinArgs::new(JoinType::Anti),
+                            )
+                            .collect()
+                            .unwrap();
+                        updated_transient_triples_df.push(TripleDF {
+                            df,
+                            predicate: tdf.predicate.clone(),
+                            subject_type: tdf.subject_type.clone(),
+                            object_type: tdf.object_type.clone(),
+                        });
+                    }
+                }
+            }
+            if !updated_transient_triples_df.is_empty() {
+                self.add_triples_df(updated_transient_triples_df, call_uuid, true, true)?;
+            }
+        }
+        Ok(new_triples_df)
+    }
 }
 
 pub fn prepare_triples(
@@ -362,7 +485,7 @@ pub fn prepare_triples(
     subject_type: &RDFNodeType,
     object_type: &RDFNodeType,
     language_tag: &Option<String>,
-    static_verb_column: Option<String>,
+    static_verb_column: Option<NamedNode>,
     has_unique_subset: bool,
 ) -> Vec<TripleDF> {
     let now = Instant::now();
@@ -402,7 +525,7 @@ pub fn prepare_triples(
             {
                 let any_predicate = part.column("verb").unwrap().get(0);
                 if let Ok(AnyValue::Utf8(p)) = any_predicate {
-                    predicate = p.to_string();
+                    predicate = literal_iri_to_namednode(p);
                 } else {
                     panic!()
                 }
@@ -429,7 +552,7 @@ pub fn prepare_triples(
 
 fn prepare_triples_df(
     mut df: DataFrame,
-    predicate: String,
+    predicate: NamedNode,
     subject_type: &RDFNodeType,
     object_type: &RDFNodeType,
     language_tag: &Option<String>,

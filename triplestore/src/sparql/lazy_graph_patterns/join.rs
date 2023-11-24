@@ -1,5 +1,6 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
+use crate::sparql::lazy_graph_patterns::ordering::{decide_order, Order};
 use crate::sparql::multitype::{
     clean_up_after_join_workaround, create_compatible_solution_mappings,
     helper_cols_join_workaround_polars_object_series_bug,
@@ -7,14 +8,14 @@ use crate::sparql::multitype::{
 use crate::sparql::query_context::{Context, PathEntry};
 use crate::sparql::solution_mapping::{is_string_col, SolutionMappings};
 use log::debug;
-use polars::prelude::{col, Expr};
+use polars::prelude::JoinArgs;
+use polars::prelude::{col, Expr, JoinType};
 use polars_core::datatypes::DataType;
-use polars_core::prelude::{JoinArgs, JoinType};
 use representation::RDFNodeType;
 use spargebra::algebra::GraphPattern;
 
 impl Triplestore {
-    pub(crate) fn lazy_join(
+    pub fn lazy_join(
         &self,
         left: &GraphPattern,
         right: &GraphPattern,
@@ -25,13 +26,34 @@ impl Triplestore {
         let left_context = context.extension_with(PathEntry::JoinLeftSide);
         let right_context = context.extension_with(PathEntry::JoinRightSide);
 
-        let left_solution_mappings =
-            self.lazy_graph_pattern(left, solution_mappings.clone(), &left_context)?;
+        let (left_solution_mappings, right_solution_mappings) = match decide_order(left, right) {
+            Order::Left => {
+                let left_solution_mappings =
+                    self.lazy_graph_pattern(left, solution_mappings.clone(), &left_context)?;
+                let right_solution_mappings = self.lazy_graph_pattern(
+                    right,
+                    Some(left_solution_mappings.clone()),
+                    &right_context,
+                )?;
+                (left_solution_mappings, right_solution_mappings)
+            }
+            Order::Right => {
+                let right_solution_mappings =
+                    self.lazy_graph_pattern(right, solution_mappings, &right_context)?;
+                let left_solution_mappings = self.lazy_graph_pattern(
+                    left,
+                    Some(right_solution_mappings.clone()),
+                    &left_context,
+                )?;
+                (left_solution_mappings, right_solution_mappings)
+            }
+        };
+
         let SolutionMappings {
             mappings: right_mappings,
             columns: mut right_columns,
             rdf_node_types: right_datatypes,
-        } = self.lazy_graph_pattern(right, solution_mappings, &right_context)?;
+        } = right_solution_mappings;
 
         let mut join_on: Vec<_> = left_solution_mappings
             .columns

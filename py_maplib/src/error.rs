@@ -24,7 +24,7 @@
 use maplib::errors::MaplibError;
 use maplib::mapping::errors::MappingError;
 use maplib::templates::errors::TemplateError;
-use polars_core::error::{ArrowError, PolarsError};
+use polars_core::error::{PolarsError};
 use pyo3::{create_exception, exceptions::PyException, prelude::*};
 use std::fmt::Debug;
 use thiserror::Error;
@@ -38,8 +38,6 @@ pub enum PyMaplibError {
     MaplibError(#[from] MaplibError),
     #[error(transparent)]
     PolarsError(#[from] PolarsError),
-    #[error(transparent)]
-    Arrow(#[from] ArrowError),
     #[error(transparent)]
     SparqlError(#[from] SparqlError),
     #[error(transparent)]
@@ -56,7 +54,6 @@ impl std::convert::From<PyMaplibError> for PyErr {
     fn from(err: PyMaplibError) -> PyErr {
         match &err {
             PyMaplibError::MaplibError(err) => MaplibErrorException::new_err(format!("{}", err)),
-            PyMaplibError::Arrow(err) => ArrowErrorException::new_err(format!("{}", err)),
             PyMaplibError::PolarsError(err) => PolarsErrorException::new_err(format!("{}", err)),
             PyMaplibError::SparqlError(err) => SparqlErrorException::new_err(format!("{}", err)),
             PyMaplibError::TemplateError(err) => {
@@ -74,7 +71,6 @@ impl std::convert::From<PyMaplibError> for PyErr {
 }
 
 create_exception!(exceptions, MaplibErrorException, PyException);
-create_exception!(exceptions, ArrowErrorException, PyException);
 create_exception!(exceptions, PolarsErrorException, PyException);
 create_exception!(exceptions, MappingErrorException, PyException);
 create_exception!(exceptions, SparqlErrorException, PyException);

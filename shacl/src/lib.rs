@@ -2,8 +2,8 @@ pub mod errors;
 
 use polars_core::prelude::DataFrame;
 //Placeholder
-use triplestore::Triplestore;
 use crate::errors::ShaclError;
+use triplestore::Triplestore;
 
 pub struct ValidationReport {
     pub conforms: bool,

@@ -61,7 +61,7 @@ impl Triplestore {
             mut columns,
             rdf_node_types: mut datatypes,
         } = output_solution_mappings;
-        let grouped_mappings = mappings.groupby(by.as_slice());
+        let grouped_mappings = mappings.group_by(by.as_slice());
 
         mappings = grouped_mappings.agg(aggregate_expressions.as_slice());
         for (k, v) in new_rdf_node_types {
