@@ -472,7 +472,7 @@ pub fn maybe_convert_df_multicol_to_single(df: &mut DataFrame, c: &str, maybe: b
     let c_ser = df.column(c).unwrap();
     if let DataType::Object(_) = c_ser.dtype() {
     } else {
-        return true
+        return true;
     }
     let mut first_datatype = None;
     for i in 0..c_ser.len() {

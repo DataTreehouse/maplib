@@ -4,7 +4,7 @@ use crate::conversion::convert_to_string;
 use crate::errors::TriplestoreError;
 use oxrdf::{Literal, NamedNode, Subject, Term, Triple};
 use polars_core::prelude::AnyValue;
-use representation::{RDFNodeType, TripleType};
+use representation::{literal_iri_to_namednode, RDFNodeType, TripleType};
 
 impl Triplestore {
     pub fn object_property_triples<F, T>(
@@ -128,10 +128,10 @@ impl Triplestore {
     pub fn export_oxrdf_triples(&mut self) -> Result<Vec<Triple>, TriplestoreError> {
         self.deduplicate()?;
         fn subject_from_str(s: &str) -> Subject {
-            Subject::NamedNode(NamedNode::new_unchecked(s))
+            Subject::NamedNode(literal_iri_to_namednode(s))
         }
         fn object_term_from_str(s: &str) -> Term {
-            Term::NamedNode(NamedNode::new_unchecked(s))
+            Term::NamedNode(literal_iri_to_namednode(s))
         }
 
         fn object_triple_func(s: &str, v: &str, o: &str) -> Triple {
