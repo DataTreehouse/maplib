@@ -32,6 +32,7 @@ use polars_core::POOL;
 use polars_utils::contention_pool::LowContentionPool;
 use representation::{RDFNodeType, TripleType};
 use std::io::Write;
+use std::ptr::write;
 
 /// Utility to write to `&mut Vec<u8>` buffer
 struct StringWrap<'a>(pub &'a mut Vec<u8>);
@@ -67,7 +68,7 @@ impl Triplestore {
                         df.as_single_chunk_par();
                         write_ntriples_for_df(
                             df,
-                            property,
+                            &property.to_string(),
                             &dt,
                             writer,
                             chunk_size,
@@ -85,7 +86,7 @@ impl Triplestore {
                             .unwrap();
                         write_ntriples_for_df(
                             &df,
-                            property,
+                            &property.to_string(),
                             &dt,
                             writer,
                             chunk_size,
@@ -296,7 +297,7 @@ fn write_iri_or_blanknode(f: &mut Vec<u8>, s: &str) {
 }
 
 fn write_iri(f: &mut Vec<u8>, s: &str) {
-    let mut chars = s.chars();
+    let mut chars = s[1..(s.len() - 1)].chars();
     write!(f, "<").unwrap();
     loop {
         if let Some(c) = chars.next() {
@@ -322,13 +323,13 @@ fn write_string(f: &mut Vec<u8>, s: &str) {
             match c {
                 '\n' => {
                     write!(f, "\\n").unwrap();
-                },
+                }
                 '\t' => {
                     write!(f, "\\t").unwrap();
-                },
+                }
                 '\r' => {
                     write!(f, "\\r").unwrap();
-                },
+                }
                 '"' | '\\' => {
                     write!(f, "\\{c}").unwrap();
                 }

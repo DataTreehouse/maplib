@@ -4,7 +4,7 @@ use crate::sparql::multitype::create_compatible_solution_mappings;
 use crate::sparql::query_context::{Context, PathEntry};
 use crate::sparql::solution_mapping::SolutionMappings;
 use log::debug;
-use polars::prelude::{diag_concat_lf};
+use polars::prelude::{concat_lf_diagonal, UnionArgs};
 use spargebra::algebra::GraphPattern;
 
 impl Triplestore {
@@ -46,8 +46,9 @@ impl Triplestore {
             }
         }
 
-        let output_mappings = diag_concat_lf(vec![left_mappings, right_mappings], true, true)
-            .expect("Concat problem");
+        let output_mappings =
+            concat_lf_diagonal(vec![left_mappings, right_mappings], UnionArgs::default())
+                .expect("Concat problem");
         Ok(SolutionMappings::new(
             output_mappings,
             left_columns,

@@ -33,6 +33,7 @@ pub enum MappingError {
     RemoveParquetFileError(io::Error),
     TriplestoreError(TriplestoreError),
     MissingDataFrameForNonEmptySignature,
+    TurtleParsingError(String),
 }
 
 impl Display for MappingError {
@@ -143,6 +144,9 @@ impl Display for MappingError {
             }
             MappingError::MissingDataFrameForNonEmptySignature => {
                 write!(f, "Missing DataFrame argument, but signature is not empty")
+            }
+            MappingError::TurtleParsingError(t) => {
+                write!(f, "Turtle parsing error: {}", t)
             }
         }
     }

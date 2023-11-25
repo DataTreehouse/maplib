@@ -8,17 +8,18 @@ use crate::sparql::sparql_to_polars::{
 
 use crate::sparql::lazy_graph_patterns::load_tt::multiple_tt_to_lf;
 use crate::sparql::multitype::{
-    clean_up_after_join_workaround, helper_cols_join_workaround_polars_object_series_bug,
+    clean_up_after_join_workaround, convert_df_col_to_multitype,
+    create_compatible_solution_mappings, helper_cols_join_workaround_polars_object_series_bug,
     unitype_to_multitype,
 };
 use oxrdf::vocab::xsd;
-use polars::prelude::{col, concat, lit, Expr};
+use oxrdf::NamedNode;
+use polars::prelude::{col, concat, lit, Expr, JoinType};
 use polars::prelude::{IntoLazy, UnionArgs};
 use polars_core::datatypes::{AnyValue, DataType};
 use polars_core::frame::DataFrame;
-use polars_core::prelude::JoinType;
 use polars_core::series::Series;
-use representation::RDFNodeType;
+use representation::{literal_iri_to_namednode, RDFNodeType};
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 use std::collections::HashMap;
 
@@ -46,17 +47,17 @@ impl Triplestore {
 
         let (mut df, mut dts) = match &triple_pattern.predicate {
             NamedNodePattern::NamedNode(n) => self.get_predicate_df(
-                n.as_str(),
+                n,
                 &subject_rename,
                 &verb_rename,
                 &object_rename,
                 subject_filter,
                 object_filter,
-                &None, //TODO!
-                &object_datatype_req,
+                None, //TODO!
+                object_datatype_req.as_ref(),
             )?,
             NamedNodePattern::Variable(v) => {
-                let predicates: Vec<String>;
+                let predicates: Vec<NamedNode>;
                 if let Some(SolutionMappings {
                     mappings,
                     columns,
@@ -70,7 +71,7 @@ impl Triplestore {
                             predicates = predicates_iter
                                 .filter_map(|x| match x {
                                     AnyValue::Null => None,
-                                    AnyValue::Utf8(s) => Some(s.to_string()),
+                                    AnyValue::Utf8(s) => Some(literal_iri_to_namednode(s)),
                                     _ => panic!("Should never happen"),
                                 })
                                 .collect();
@@ -99,13 +100,13 @@ impl Triplestore {
                     predicates = self.all_predicates();
                 }
                 self.get_predicates_df(
-                    &predicates,
+                    predicates,
                     &subject_rename,
                     &verb_rename,
                     &object_rename,
                     subject_filter,
                     object_filter,
-                    &object_datatype_req,
+                    object_datatype_req.as_ref(),
                 )?
             }
         };
@@ -128,19 +129,45 @@ impl Triplestore {
                 .collect();
             if df.height() == 0 {
                 df = df.drop_many(overlap.as_slice());
+                //workaround for object registry bug
+                let mut multicols = vec![];
+                for (k, v) in &rdf_node_types {
+                    if v == &RDFNodeType::MultiType {
+                        multicols.push(k.clone())
+                    }
+                }
+                for c in &multicols {
+                    mappings = mappings.with_column(lit("").alias(c));
+                }
                 if colnames.is_empty() {
                     mappings = mappings.filter(lit(false));
                 } else {
                     mappings = mappings.join(df.lazy(), [], [], JoinType::Cross.into());
+                    for m in &multicols {
+                        let mut df = mappings.collect().unwrap();
+                        convert_df_col_to_multitype(&mut df, m, &RDFNodeType::IRI);
+                        dts.insert(m.clone(), RDFNodeType::MultiType);
+                        mappings = df.lazy();
+                    }
                 }
             } else {
                 if !overlap.is_empty() {
-                    //TODO: Introduce data type sensitivity here.
+                    let (new_mappings, new_rdf_node_types, lf, new_dts) =
+                        create_compatible_solution_mappings(
+                            mappings,
+                            rdf_node_types,
+                            df.lazy(),
+                            dts,
+                        );
+                    dts = new_dts;
+                    rdf_node_types = new_rdf_node_types;
+                    mappings = new_mappings;
+
                     let join_on: Vec<Expr> = overlap.iter().map(|x| col(x)).collect();
                     let (mut existing_mappings, mut lf, left_original_map, right_original_map) =
                         helper_cols_join_workaround_polars_object_series_bug(
                             mappings,
-                            df.lazy(),
+                            lf,
                             &overlap,
                             &rdf_node_types,
                         );
@@ -153,7 +180,8 @@ impl Triplestore {
                     }
                     for c in strcol {
                         lf = lf.with_column(col(c).cast(DataType::Categorical(None)));
-                        existing_mappings = existing_mappings.with_column(col(c).cast(DataType::Categorical(None)));
+                        existing_mappings =
+                            existing_mappings.with_column(col(c).cast(DataType::Categorical(None)));
                     }
 
                     existing_mappings = existing_mappings.join(
@@ -190,22 +218,27 @@ impl Triplestore {
 
     pub fn get_predicate_df(
         &self,
-        verb_uri: &str,
+        verb_uri: &NamedNode,
         subject_keep_rename: &Option<String>,
         verb_keep_rename: &Option<String>,
         object_keep_rename: &Option<String>,
         subject_filter: Option<Expr>,
         object_filter: Option<Expr>,
-        subject_datatype_req: &Option<RDFNodeType>,
-        object_datatype_req: &Option<RDFNodeType>,
+        subject_datatype_req: Option<&RDFNodeType>,
+        object_datatype_req: Option<&RDFNodeType>,
     ) -> Result<(DataFrame, HashMap<String, RDFNodeType>), SparqlError> {
         if let Some(m) = self.df_map.get(verb_uri) {
             if m.is_empty() {
                 panic!("Empty map should never happen");
             }
-            if let Some((subj_dt, obj_dt, mut lf)) =
-                multiple_tt_to_lf(m, subject_datatype_req, object_datatype_req)?
-            {
+            if let Some((subj_dt, obj_dt, mut lf)) = multiple_tt_to_lf(
+                m,
+                self.transient_df_map.get(verb_uri),
+                subject_datatype_req,
+                object_datatype_req,
+                subject_filter,
+                object_filter,
+            )? {
                 let mut out_datatypes = HashMap::new();
 
                 let mut drop = vec![];
@@ -222,14 +255,8 @@ impl Triplestore {
                     drop.push("object")
                 }
                 if let Some(renamed) = verb_keep_rename {
-                    lf = lf.with_column(lit(verb_uri).alias(renamed));
+                    lf = lf.with_column(lit(verb_uri.to_string()).alias(renamed));
                     out_datatypes.insert(renamed.clone(), RDFNodeType::IRI);
-                }
-                if let Some(f) = subject_filter {
-                    lf = lf.filter(f);
-                }
-                if let Some(f) = object_filter {
-                    lf = lf.filter(f);
                 }
                 lf = lf.drop_columns(drop);
                 let df = lf.collect().unwrap();
@@ -254,31 +281,31 @@ impl Triplestore {
 
     fn get_predicates_df(
         &self,
-        predicate_uris: &Vec<String>,
+        predicate_uris: Vec<NamedNode>,
         subject_keep_rename: &Option<String>,
         verb_keep_rename: &Option<String>,
         object_keep_rename: &Option<String>,
         subject_filter: Option<Expr>,
         object_filter: Option<Expr>,
-        object_datatype_req: &Option<RDFNodeType>,
+        object_datatype_req: Option<&RDFNodeType>,
     ) -> Result<(DataFrame, HashMap<String, RDFNodeType>), SparqlError> {
         let mut out_datatypes = HashMap::new();
         let mut lfs = vec![];
 
         let need_multi_subject =
-            self.partial_check_need_multi(predicate_uris, object_datatype_req, true);
+            self.partial_check_need_multi(&predicate_uris, object_datatype_req, true);
         let need_multi_object =
-            self.partial_check_need_multi(predicate_uris, object_datatype_req, false);
+            self.partial_check_need_multi(&predicate_uris, object_datatype_req, false);
 
         for v in predicate_uris {
             let (mut df, datatypes_map) = self.get_predicate_df(
-                v,
+                &v,
                 subject_keep_rename,
                 verb_keep_rename,
                 object_keep_rename,
                 subject_filter.clone(),
                 object_filter.clone(),
-                &None, //TODO!
+                None, //TODO!
                 object_datatype_req,
             )?;
             if let Some(subj_col) = subject_keep_rename {
@@ -345,7 +372,7 @@ impl Triplestore {
         })
     }
 
-    fn all_predicates(&self) -> Vec<String> {
+    fn all_predicates(&self) -> Vec<NamedNode> {
         let mut strs = vec![];
         for k in self.df_map.keys() {
             strs.push(k.clone())
@@ -354,8 +381,8 @@ impl Triplestore {
     }
     fn partial_check_need_multi(
         &self,
-        predicates: &Vec<String>,
-        object_datatype_req: &Option<RDFNodeType>,
+        predicates: &Vec<NamedNode>,
+        object_datatype_req: Option<&RDFNodeType>,
         subject: bool,
     ) -> bool {
         if !subject && object_datatype_req.is_some() {
@@ -379,11 +406,11 @@ impl Triplestore {
     }
 }
 
-fn create_empty_df_datatypes(
+pub fn create_empty_df_datatypes(
     subject_keep_rename: &Option<String>,
     verb_keep_rename: &Option<String>,
     object_keep_rename: &Option<String>,
-    object_datatype_req: &Option<RDFNodeType>,
+    object_datatype_req: Option<&RDFNodeType>,
 ) -> (DataFrame, HashMap<String, RDFNodeType>) {
     let mut series_vec = vec![];
     let mut out_datatypes = HashMap::new();
@@ -407,7 +434,7 @@ fn create_empty_df_datatypes(
             let polars_dt = dt.polars_data_type();
             (dt.clone(), polars_dt)
         } else {
-            let dt = RDFNodeType::None;
+            let dt = RDFNodeType::IRI;
             let polars_dt = DataType::Utf8;
             (dt, polars_dt)
         };
@@ -417,7 +444,7 @@ fn create_empty_df_datatypes(
     (DataFrame::new(series_vec).unwrap(), out_datatypes)
 }
 
-fn create_term_pattern_filter(term_pattern: &TermPattern, target_col: &str) -> Option<Expr> {
+pub fn create_term_pattern_filter(term_pattern: &TermPattern, target_col: &str) -> Option<Expr> {
     if let TermPattern::Literal(l) = term_pattern {
         return Some(col(target_col).eq(lit(sparql_literal_to_polars_literal_value(l))));
     } else if let TermPattern::NamedNode(nn) = term_pattern {
@@ -426,7 +453,7 @@ fn create_term_pattern_filter(term_pattern: &TermPattern, target_col: &str) -> O
     None
 }
 
-fn get_keep_rename_term_pattern(term_pattern: &TermPattern) -> Option<String> {
+pub fn get_keep_rename_term_pattern(term_pattern: &TermPattern) -> Option<String> {
     if let TermPattern::Variable(v) = term_pattern {
         return Some(v.as_str().to_string());
     } else if let TermPattern::BlankNode(b) = term_pattern {

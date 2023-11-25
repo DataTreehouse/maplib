@@ -1,6 +1,6 @@
 [package]
 name = "py_maplib"
-version = "0.4.33"
+version = "0.5.0"
 edition = "2021"
 
 [workspace]
@@ -14,7 +14,7 @@ shacl = {path="../shacl"}
 oxrdf = "0.1.0"
 arrow_python_utils = {path="../arrow_python_utils"}
 thiserror="1.0.31"
-polars-core = {version="0.32.1", features=["object", "dtype-array", "dtype-categorical", "dtype-date", "dtype-datetime",
+polars-core = {version="0.34.2", features=["object", "dtype-array", "dtype-categorical", "dtype-date", "dtype-datetime",
     "dtype-decimal", "dtype-duration", "dtype-i8", "dtype-i16", "dtype-struct", "dtype-time", "dtype-u8", "dtype-u16"]}
 log ="0.4.19"
 

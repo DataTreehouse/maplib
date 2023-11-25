@@ -12,6 +12,11 @@ pub enum TriplestoreError {
     FolderCreateIOError(io::Error),
     ReadCachingDirectoryError(io::Error),
     ReadCachingDirectoryEntryError(io::Error),
+    TurtleParsingError(String),
+    ReadTriplesFileError(io::Error),
+    InvalidBaseIri(String),
+    SubtractTransientTriplesError(String),
+    RDFSClassInheritanceError(String),
 }
 
 impl Display for TriplestoreError {
@@ -37,6 +42,21 @@ impl Display for TriplestoreError {
             }
             TriplestoreError::ReadCachingDirectoryEntryError(e) => {
                 write!(f, "Read caching directory entry error {}", e)
+            }
+            TriplestoreError::TurtleParsingError(tp) => {
+                write!(f, "Turtle parsing error {}", tp)
+            }
+            TriplestoreError::ReadTriplesFileError(rt) => {
+                write!(f, "Read triples file error {}", rt)
+            }
+            TriplestoreError::InvalidBaseIri(x) => {
+                write!(f, "Invalid base iri {x}")
+            }
+            TriplestoreError::SubtractTransientTriplesError(x) => {
+                write!(f, "Error subtracting from transient triples {x}")
+            }
+            TriplestoreError::RDFSClassInheritanceError(x) => {
+                write!(f, "RDFS Class inheritance error {x}")
             }
         }
     }

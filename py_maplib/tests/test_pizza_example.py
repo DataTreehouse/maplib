@@ -41,6 +41,7 @@ def pizzas_mapping():
         ?p a pizza:Pizza .
         ?p pizza:hasIngredient ing:Pineapple .
     }"""
+    print(m.query(hpizzas))
     m.insert(hpizzas)
     return m
 
@@ -54,5 +55,5 @@ def test_simple_query_no_error(pizzas_mapping):
     }
     """)
 
-    expected_df = pl.DataFrame({"p": ["https://github.com/magbak/maplib/pizza#Hawaiian"]})
+    expected_df = pl.DataFrame({"p": ["<https://github.com/magbak/maplib/pizza#Hawaiian>"]})
     assert_frame_equal(df, expected_df)

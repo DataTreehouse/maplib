@@ -6,4 +6,4 @@ edition = "2021"
 [dependencies]
 triplestore = {path="../triplestore"}
 thiserror = "1.0.48"
-polars-core = "0.32.1"
+polars-core = "0.34.2"

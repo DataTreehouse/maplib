@@ -1,6 +1,7 @@
 use chrono::{DateTime, NaiveDateTime, Utc};
+use oxrdf::vocab::rdf::LANG_STRING;
 use oxrdf::vocab::xsd;
-use oxrdf::{NamedNodeRef};
+use oxrdf::NamedNodeRef;
 use polars_core::datatypes::TimeUnit;
 use polars_core::prelude::AnyValue;
 use std::str::FromStr;
@@ -26,7 +27,7 @@ pub fn sparql_literal_to_any_value<'a, 'b>(
         } else if datatype == xsd::INT {
             let i = i32::from_str(value).expect("Integer parsing error");
             AnyValue::from(i)
-        } else if datatype == xsd::DOUBLE {
+        } else if datatype == xsd::DOUBLE || datatype == xsd::DECIMAL {
             let d = f64::from_str(value).expect("Integer parsing error");
             AnyValue::from(d)
         } else if datatype == xsd::FLOAT {
@@ -55,11 +56,10 @@ pub fn sparql_literal_to_any_value<'a, 'b>(
                     panic!("Could not parse datetime: {}", value);
                 }
             }
-        } else if datatype == xsd::DECIMAL {
-            let d = f64::from_str(value).expect("Decimal parsing error");
-            AnyValue::from(d)
+        } else if datatype == LANG_STRING {
+            todo!()
         } else {
-            todo!("Not implemented!")
+            todo!("Not implemented! {:?}", datatype)
         };
         (literal_value, datatype.clone())
     } else {
