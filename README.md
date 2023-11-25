@@ -62,13 +62,13 @@ SELECT ?p ?i WHERE {
 
 The query gives the following result (a DataFrame):
 
-| p                             | i                                   |
-|-------------------------------|-------------------------------------|
-| str                           | str                                 |
-| "https://.../pizza#Grandiosa" | "https://.../ingredients#Meat"      |
-| "https://.../pizza#Grandiosa" | "https://.../ingredients#Pepper"    |
-| "https://.../pizza#Hawaiian"  | "https://.../ingredients#Pineapple" |
-| "https://.../pizza#Hawaiian"  | "https://.../ingredients#Ham"       |
+| p                               | i                                     |
+|---------------------------------|---------------------------------------|
+| str                             | str                                   |
+| "<https://.../pizza#Grandiosa>" | "<https://.../ingredients#Meat>"      |
+| "<https://.../pizza#Grandiosa>" | "<https://.../ingredients#Pepper>"    |
+| "<https://.../pizza#Hawaiian>"  | "<https://.../ingredients#Pineapple>" |
+| "<https://.../pizza#Hawaiian>"  | "<https://.../ingredients#Ham>"       |
 
 Next, we are able to perform a construct query, which creates new triples but does not insert them. 
 
@@ -87,10 +87,10 @@ res[0]
 
 The resulting triples are given below:
 
-| subject                      | verb                               | object                              |
-|------------------------------|------------------------------------|-------------------------------------|
-| str                          | str                                | str                                 |
-| "https://.../pizza#Hawaiian" | "http://.../22-rdf-syntax-ns#type" | "https://.../pizza#UnorthodoxPizza" |
+| subject                        | verb                                 | object                                |
+|--------------------------------|--------------------------------------|---------------------------------------|
+| str                            | str                                  | str                                   |
+| "<https://.../pizza#Hawaiian>" | "<http://.../22-rdf-syntax-ns#type>" | "<https://.../pizza#UnorthodoxPizza>" |
 
 If we are happy with the output of this construct-query, we can insert it in the mapping state. Afterwards we check that the triple is added with a query.
 
@@ -107,10 +107,10 @@ SELECT ?p WHERE {
 
 Indeed, we have added the triple: 
 
-|p|
-|-|
-|str|
-|"https://github.com/DataTreehouse/maplib/pizza#Hawaiian"|
+| p                                                          |
+|------------------------------------------------------------|
+| str                                                        |
+| "<https://github.com/DataTreehouse/maplib/pizza#Hawaiian>" |
 
 ## API
 The Python API is documented [here](https://github.com/DataTreehouse/maplib/tree/main/py_maplib/doc/python_mapper_api.md)

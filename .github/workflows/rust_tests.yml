@@ -25,9 +25,6 @@ jobs:
         rustup toolchain install ${{ env.RUST_TOOLCHAIN }}
         rustup default ${{ env.RUST_TOOLCHAIN }}
 
-        docker pull oxigraph/oxigraph:v0.3.2
-        docker pull dremio/dremio-oss:22.0.0
-
     - uses: actions/cache@v2
       with:
         path: |
