@@ -4,7 +4,7 @@ use crate::ast::{
     Instance, PType, Parameter, Signature, Statement, StottrDocument, StottrTerm, StottrVariable,
     Template,
 };
-use crate::constants::{OTTR_IRI, OTTR_TRIPLE};
+use crate::constants::{OTTR_IRI, OTTR_TRIPLE, OWL};
 use crate::document::document_from_file;
 use crate::templates::errors::TemplateError;
 use log::warn;
@@ -66,7 +66,7 @@ impl TemplateDataset {
             optional: false,
             non_blank: false,
             ptype: Some(PType::Basic(
-                OTTR_IRI.parse().unwrap(),
+                NamedNode::new_unchecked(OTTR_IRI),
                 "ottr:IRI".to_string(),
             )),
             stottr_variable: StottrVariable {
@@ -78,7 +78,7 @@ impl TemplateDataset {
             optional: false,
             non_blank: false,
             ptype: Some(PType::Basic(
-                OTTR_IRI.parse().unwrap(),
+                NamedNode::new_unchecked(OTTR_IRI),
                 "ottr:IRI".to_string(),
             )),
             stottr_variable: StottrVariable {
@@ -263,7 +263,7 @@ fn lub(
     left: &PType,
     right: &PType,
 ) -> Result<PType, TemplateError> {
-    if left == right {
+    if left == right || left.is_iri() && right.is_iri() {
         return Ok(left.clone());
     } else if let PType::NEList(left_inner) = left {
         if let PType::List(right_inner) = right {

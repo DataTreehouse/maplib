@@ -192,6 +192,42 @@ pub fn unitype_to_multitype(ser: &Series, dt: &RDFNodeType) -> Series {
                 },
                 &ser,
             ),
+            xsd::BYTE => convert_to_multitype(
+                |x: AnyValue| match x {
+                    AnyValue::Int8(i) => MultiType::Literal(Literal::new_typed_literal(i.to_string(), xsd::BYTE)),
+                    _ => {
+                        panic!()
+                    }
+                },
+                &ser,
+            ),
+            xsd::SHORT => convert_to_multitype(
+                |x: AnyValue| match x {
+                    AnyValue::UInt16(i) => MultiType::Literal(Literal::from(i)),
+                    _ => {
+                        panic!()
+                    }
+                },
+                &ser,
+            ),
+            xsd::UNSIGNED_BYTE => convert_to_multitype(
+                |x: AnyValue| match x {
+                    AnyValue::UInt8(u) => MultiType::Literal(Literal::new_typed_literal(u.to_string(), xsd::UNSIGNED_BYTE)),
+                    _ => {
+                        panic!()
+                    }
+                },
+                &ser,
+            ),
+            xsd::UNSIGNED_SHORT => convert_to_multitype(
+                |x: AnyValue| match x {
+                    AnyValue::UInt16(u) => MultiType::Literal(Literal::from(u)),
+                    _ => {
+                        panic!()
+                    }
+                },
+                &ser,
+            ),
             xsd::UNSIGNED_INT => convert_to_multitype(
                 |x: AnyValue| match x {
                     AnyValue::UInt32(a) => MultiType::Literal(Literal::from(a)),

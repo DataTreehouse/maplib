@@ -1,5 +1,5 @@
 use super::Mapping;
-use crate::ast::{PType, Parameter, Signature};
+use crate::ast::{PType, Parameter, Signature, has_iritype};
 use crate::constants::{OTTR_IRI, OWL, XSD_ANY_URI};
 use crate::mapping::errors::MappingError;
 use crate::mapping::{ExpandOptions, PrimitiveColumn, RDFNodeType};
@@ -99,10 +99,6 @@ fn infer_rdf_node_type(ptype: &PType) -> RDFNodeType {
         PType::List(l) => infer_rdf_node_type(l),
         PType::NEList(l) => infer_rdf_node_type(l),
     }
-}
-
-fn has_iritype(s: &str) -> bool {
-    matches!(s, XSD_ANY_URI | OTTR_IRI) || s.starts_with(OWL)
 }
 
 fn validate_non_optional_parameter(df: &DataFrame, column_name: &str) -> Result<(), MappingError> {

@@ -1,4 +1,4 @@
-use crate::constants::BLANK_NODE_IRI;
+use crate::constants::{BLANK_NODE_IRI, OTTR_IRI, OWL, XSD_ANY_URI};
 #[cfg(test)]
 use crate::constants::OTTR_TRIPLE;
 use oxrdf::vocab::xsd;
@@ -124,12 +124,15 @@ impl PType {
 
     pub fn is_iri(&self) -> bool {
         if let PType::Basic(nn, _) = self {
-            if nn.as_ref() == xsd::ANY_URI {
-                return true;
-            }
+            return has_iritype(nn.as_str());
         }
-        true
+        false
     }
+}
+
+
+pub fn has_iritype(s: &str) -> bool {
+    matches!(s, XSD_ANY_URI | OTTR_IRI) || s.starts_with(OWL)
 }
 
 impl Display for PType {

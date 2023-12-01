@@ -22,7 +22,7 @@ pub fn constant_to_expr(
         ConstantTerm::Constant(c) => match c {
             ConstantLiteral::Iri(iri) => (
                 Expr::Literal(LiteralValue::Utf8(iri.as_str().to_string())),
-                PType::Basic(OTTR_IRI.parse().unwrap(), "ottr:IRI".to_string()),
+                PType::Basic(NamedNode::new_unchecked(OTTR_IRI), "ottr:IRI".to_string()),
                 RDFNodeType::IRI,
                 None,
             ),
