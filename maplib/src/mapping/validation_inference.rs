@@ -1,10 +1,10 @@
 use super::Mapping;
 use crate::ast::{PType, Parameter, Signature};
+use crate::constants::{OTTR_IRI, OWL, XSD_ANY_URI};
 use crate::mapping::errors::MappingError;
 use crate::mapping::{ExpandOptions, PrimitiveColumn, RDFNodeType};
 use oxrdf::vocab::xsd;
 use oxrdf::NamedNode;
-use polars::prelude::{col, lit, IntoLazy};
 use polars_core::datatypes::BooleanChunked;
 use polars_core::export::rayon::prelude::ParallelIterator;
 use polars_core::frame::DataFrame;
@@ -89,7 +89,7 @@ fn validate_infer_column_data_type(
 fn infer_rdf_node_type(ptype: &PType) -> RDFNodeType {
     match ptype {
         PType::Basic(b, _) => {
-            if b.as_str() == xsd::ANY_URI.as_str() {
+            if has_iritype(b.as_str()) {
                 RDFNodeType::IRI
             } else {
                 RDFNodeType::Literal(b.clone())
@@ -99,6 +99,10 @@ fn infer_rdf_node_type(ptype: &PType) -> RDFNodeType {
         PType::List(l) => infer_rdf_node_type(l),
         PType::NEList(l) => infer_rdf_node_type(l),
     }
+}
+
+fn has_iritype(s: &str) -> bool {
+    matches!(s, XSD_ANY_URI | OTTR_IRI) || s.starts_with(OWL)
 }
 
 fn validate_non_optional_parameter(df: &DataFrame, column_name: &str) -> Result<(), MappingError> {

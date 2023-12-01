@@ -57,7 +57,7 @@ impl Mapping {
                     non_blank: false,
                     ptype: Some(PType::Basic(
                         xsd::ANY_URI.into_owned(),
-                        "xsd:anyURI".to_string(),
+                        "ottr:IRI".to_string(),
                     )),
                     stottr_variable: StottrVariable {
                         name: c.to_string(),
@@ -86,7 +86,7 @@ impl Mapping {
                     non_blank: false,
                     ptype: Some(PType::Basic(
                         xsd::ANY_URI.into_owned(),
-                        "xsd:anyURI".to_string(),
+                        "ottr:IRI".to_string(),
                     )),
                     stottr_variable: StottrVariable {
                         name: c.to_string(),

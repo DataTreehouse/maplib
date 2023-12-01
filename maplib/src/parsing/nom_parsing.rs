@@ -219,7 +219,13 @@ fn list_as_term(l: &str) -> IResult<&str, UnresolvedStottrTerm> {
 }
 
 fn list(l: &str) -> IResult<&str, Vec<UnresolvedStottrTerm>> {
-    let (l, (_,_, li,_, _)) = tuple((tag("("), multispace0, separated_list0(tag(","), term), multispace0, tag(")")))(l)?;
+    let (l, (_, _, li, _, _)) = tuple((
+        tag("("),
+        multispace0,
+        separated_list0(tag(","), term),
+        multispace0,
+        tag(")"),
+    ))(l)?;
     Ok((l, li))
 }
 
@@ -232,11 +238,11 @@ fn pattern_list(p: &str) -> IResult<&str, Vec<UnresolvedInstance>> {
     let (p, (_, _, ilist, _, _)) = tuple((
         tag("{"),
         multispace0,
-        many0(tuple((instance, multispace0, opt(tag(",")), multispace0)) ),
+        many0(tuple((instance, multispace0, opt(tag(",")), multispace0))),
         multispace0,
         tag("}"),
     ))(p)?;
-    let unresolved = ilist.into_iter().map(|(i,_,_,_)|i).collect();
+    let unresolved = ilist.into_iter().map(|(i, _, _, _)| i).collect();
     Ok((p, unresolved))
 }
 
@@ -317,7 +323,7 @@ fn basic_type(b: &str) -> IResult<&str, UnresolvedPType> {
 }
 
 fn variable(v: &str) -> IResult<&str, StottrVariable> {
-    let (v, (_, _, name,_)) = tuple((multispace0, tag("?"), b_node_label, multispace0))(v)?;
+    let (v, (_, _, name, _)) = tuple((multispace0, tag("?"), b_node_label, multispace0))(v)?;
     Ok((v, StottrVariable { name }))
 }
 

@@ -4,7 +4,7 @@ use crate::ast::{
     Instance, PType, Parameter, Signature, Statement, StottrDocument, StottrTerm, StottrVariable,
     Template,
 };
-use crate::constants::OTTR_TRIPLE;
+use crate::constants::{OTTR_IRI, OTTR_TRIPLE};
 use crate::document::document_from_file;
 use crate::templates::errors::TemplateError;
 use log::warn;
@@ -66,8 +66,8 @@ impl TemplateDataset {
             optional: false,
             non_blank: false,
             ptype: Some(PType::Basic(
-                xsd::ANY_URI.into_owned(),
-                "xsd:anyURI".to_string(),
+                OTTR_IRI.parse().unwrap(),
+                "ottr:IRI".to_string(),
             )),
             stottr_variable: StottrVariable {
                 name: "subject".to_string(),
@@ -78,8 +78,8 @@ impl TemplateDataset {
             optional: false,
             non_blank: false,
             ptype: Some(PType::Basic(
-                xsd::ANY_URI.into_owned(),
-                "xsd:anyURI".to_string(),
+                OTTR_IRI.parse().unwrap(),
+                "ottr:IRI".to_string(),
             )),
             stottr_variable: StottrVariable {
                 name: "verb".to_string(),

@@ -11,3 +11,9 @@ pub const BLANK_NODE_IRI: &str = "BLANK_NODE_IRI";
 pub const NONE_IRI: &str = "NONE_IRI";
 pub const DEFAULT_PREDICATE_URI_PREFIX: &str = "https://github.com/magbak/maplib/Predicates#";
 pub const DEFAULT_TEMPLATE_PREFIX: &str = "default:";
+
+pub const OTTR_IRI: &str = "http://ns.ottr.xyz/0.4/IRI";
+
+pub const OWL: &str = "http://www.w3.org/2002/07/owl#";
+
+pub const XSD_ANY_URI: &str = "http://www.w3.org/2001/XMLSchema#anyURI";
