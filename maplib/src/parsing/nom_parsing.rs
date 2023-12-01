@@ -219,7 +219,7 @@ fn list_as_term(l: &str) -> IResult<&str, UnresolvedStottrTerm> {
 }
 
 fn list(l: &str) -> IResult<&str, Vec<UnresolvedStottrTerm>> {
-    let (l, (_, li, _)) = tuple((tag("("), separated_list0(tag(","), term), tag(")")))(l)?;
+    let (l, (_,_, li,_, _)) = tuple((tag("("), multispace0, separated_list0(tag(","), term), multispace0, tag(")")))(l)?;
     Ok((l, li))
 }
 
@@ -229,16 +229,15 @@ fn list_expand(l: &str) -> IResult<&str, &str> {
 }
 
 fn pattern_list(p: &str) -> IResult<&str, Vec<UnresolvedInstance>> {
-    let (p, (_, _, ilist, _, _, _, _)) = tuple((
+    let (p, (_, _, ilist, _, _)) = tuple((
         tag("{"),
         multispace0,
-        separated_list0(tag(","), instance),
-        multispace0,
-        opt(tag(",")),
+        many0(tuple((instance, multispace0, opt(tag(",")), multispace0)) ),
         multispace0,
         tag("}"),
     ))(p)?;
-    Ok((p, ilist))
+    let unresolved = ilist.into_iter().map(|(i,_,_,_)|i).collect();
+    Ok((p, unresolved))
 }
 
 fn parameter(p: &str) -> IResult<&str, UnresolvedParameter> {
@@ -318,7 +317,7 @@ fn basic_type(b: &str) -> IResult<&str, UnresolvedPType> {
 }
 
 fn variable(v: &str) -> IResult<&str, StottrVariable> {
-    let (v, (_, name)) = tuple((tag("?"), b_node_label))(v)?;
+    let (v, (_, _, name,_)) = tuple((multispace0, tag("?"), b_node_label, multispace0))(v)?;
     Ok((v, StottrVariable { name }))
 }
 
@@ -941,6 +940,13 @@ fn test_argument_bad_escape_behavior() {
 }
 
 #[test]
+fn test_list_term() {
+    let s = "(?a, ?x, ?y, ?h)";
+    let (r, _) = list(s).finish().expect("Ok");
+    assert_eq!(r, "");
+}
+
+#[test]
 fn test_instance() {
     let s = "ottr:Triple (_:person, foaf:Person, ?var)";
     let (r, i) = instance(s).finish().expect("Ok");
@@ -984,6 +990,13 @@ fn test_instance() {
 fn test_statement_signature() {
     let s = "ex:NamedPizza [ ??pizza  ] .";
     let (r, _) = statement(s).finish().expect("Ok");
+    assert_eq!(r, "");
+}
+
+#[test]
+fn test_parameter() {
+    let s = "? ottr:IRI ?uom";
+    let (r, _) = parameter(s).finish().expect("Ok");
     assert_eq!(r, "");
 }
 
