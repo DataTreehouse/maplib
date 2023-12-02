@@ -1,6 +1,6 @@
-use crate::constants::{BLANK_NODE_IRI, OTTR_IRI, OWL, XSD_ANY_URI};
 #[cfg(test)]
 use crate::constants::OTTR_TRIPLE;
+use crate::constants::{BLANK_NODE_IRI, OTTR_IRI, OWL, XSD_ANY_URI};
 use oxrdf::vocab::xsd;
 use oxrdf::{BlankNode, NamedNode};
 use std::collections::HashMap;
@@ -129,7 +129,6 @@ impl PType {
         false
     }
 }
-
 
 pub fn has_iritype(s: &str) -> bool {
     matches!(s, XSD_ANY_URI | OTTR_IRI) || s.starts_with(OWL)

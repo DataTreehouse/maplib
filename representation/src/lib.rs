@@ -30,7 +30,7 @@ impl RDFNodeType {
             _ => {
                 unimplemented!()
             }
-            TermPattern::Variable(v) => None,
+            TermPattern::Variable(_v) => None,
         }
     }
 

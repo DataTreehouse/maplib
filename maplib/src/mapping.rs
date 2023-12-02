@@ -363,7 +363,7 @@ impl Mapping {
             subj_rdf_node_type,
             obj_rdf_node_type,
             language_tag,
-            mut verb,
+            verb,
             has_unique_subset,
         ) in ok_triples
         {

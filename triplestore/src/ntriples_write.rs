@@ -32,7 +32,7 @@ use polars_core::POOL;
 use polars_utils::contention_pool::LowContentionPool;
 use representation::{RDFNodeType, TripleType};
 use std::io::Write;
-use std::ptr::write;
+
 
 /// Utility to write to `&mut Vec<u8>` buffer
 struct StringWrap<'a>(pub &'a mut Vec<u8>);

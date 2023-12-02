@@ -18,7 +18,7 @@ pub fn sparql_literal_to_any_value<'a, 'b>(
         } else if datatype == xsd::UNSIGNED_INT {
             let u = u32::from_str(value).expect("Integer parsing error");
             AnyValue::from(u)
-        } else if datatype == xsd::UNSIGNED_LONG {
+        } else if datatype == xsd::UNSIGNED_LONG || datatype == xsd::NON_NEGATIVE_INTEGER {
             let u = u64::from_str(value).expect("Integer parsing error");
             AnyValue::from(u)
         } else if datatype == xsd::INTEGER || datatype == xsd::LONG {

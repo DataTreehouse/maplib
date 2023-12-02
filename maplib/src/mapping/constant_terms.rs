@@ -2,7 +2,7 @@ use crate::ast::{ConstantLiteral, ConstantTerm, PType};
 use crate::constants::{BLANK_NODE_IRI, NONE_IRI, OTTR_IRI};
 use crate::mapping::errors::MappingError;
 use crate::mapping::RDFNodeType;
-use oxrdf::vocab::xsd;
+
 use oxrdf::NamedNode;
 use polars::prelude::{concat_list, lit, Expr, LiteralValue, SpecialEq};
 use polars_core::datatypes::DataType;

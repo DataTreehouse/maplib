@@ -4,11 +4,11 @@ use crate::ast::{
     Instance, PType, Parameter, Signature, Statement, StottrDocument, StottrTerm, StottrVariable,
     Template,
 };
-use crate::constants::{OTTR_IRI, OTTR_TRIPLE, OWL};
+use crate::constants::{OTTR_IRI, OTTR_TRIPLE};
 use crate::document::document_from_file;
 use crate::templates::errors::TemplateError;
 use log::warn;
-use oxrdf::vocab::xsd;
+
 use oxrdf::NamedNode;
 use std::collections::{HashMap, HashSet};
 use std::fs::read_dir;

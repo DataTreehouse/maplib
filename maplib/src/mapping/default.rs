@@ -3,11 +3,13 @@ use crate::ast::{
     Argument, ConstantLiteral, ConstantTerm, Instance, ListExpanderType, PType, Parameter,
     Signature, StottrTerm, StottrVariable, Template,
 };
-use crate::constants::{DEFAULT_PREDICATE_URI_PREFIX, DEFAULT_TEMPLATE_PREFIX, OTTR_IRI, OTTR_TRIPLE};
+use crate::constants::{
+    DEFAULT_PREDICATE_URI_PREFIX, DEFAULT_TEMPLATE_PREFIX, OTTR_IRI, OTTR_TRIPLE,
+};
 use crate::mapping::errors::MappingError;
 use crate::mapping::ExpandOptions;
 use log::warn;
-use oxrdf::vocab::xsd;
+
 use oxrdf::NamedNode;
 use polars::prelude::{col, IntoLazy};
 use polars_core::frame::DataFrame;

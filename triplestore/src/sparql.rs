@@ -97,7 +97,7 @@ impl Triplestore {
                 QueryResult::Construct(dfs) => {
                     let mut all_triples_to_add = vec![];
 
-                    for (df, mut subj_dt, mut obj_dt) in dfs {
+                    for (df, subj_dt, obj_dt) in dfs {
                         if df.height() == 0 {
                             continue;
                         }

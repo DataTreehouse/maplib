@@ -1,6 +1,6 @@
 use super::Mapping;
-use crate::ast::{PType, Parameter, Signature, has_iritype};
-use crate::constants::{OTTR_IRI, OWL, XSD_ANY_URI};
+use crate::ast::{has_iritype, PType, Parameter, Signature};
+
 use crate::mapping::errors::MappingError;
 use crate::mapping::{ExpandOptions, PrimitiveColumn, RDFNodeType};
 use oxrdf::vocab::xsd;

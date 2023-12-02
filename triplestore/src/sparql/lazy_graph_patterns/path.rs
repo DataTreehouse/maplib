@@ -365,7 +365,7 @@ impl Triplestore {
             PropertyPathExpression::ZeroOrOne(inner) => {
                 self.create_unique_cat_dfs(inner, subject, object)
             }
-            PropertyPathExpression::NegatedPropertySet(nns) => {
+            PropertyPathExpression::NegatedPropertySet(_nns) => {
                 todo!()
             }
         }
@@ -527,6 +527,7 @@ fn find_lookup(
             .into_series();
         key_col.rename("key");
         if df.column("value_multi").is_ok() {
+            df = df.drop("value").unwrap();
             df.rename("value_multi", "value").unwrap();
         }
         df.with_column(key_col).unwrap();
@@ -857,7 +858,7 @@ fn sparse_path(
                 None
             }
         }
-        PropertyPathExpression::NegatedPropertySet(nns) => {
+        PropertyPathExpression::NegatedPropertySet(_nns) => {
             todo!()
         }
     }

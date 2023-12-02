@@ -194,7 +194,9 @@ pub fn unitype_to_multitype(ser: &Series, dt: &RDFNodeType) -> Series {
             ),
             xsd::BYTE => convert_to_multitype(
                 |x: AnyValue| match x {
-                    AnyValue::Int8(i) => MultiType::Literal(Literal::new_typed_literal(i.to_string(), xsd::BYTE)),
+                    AnyValue::Int8(i) => {
+                        MultiType::Literal(Literal::new_typed_literal(i.to_string(), xsd::BYTE))
+                    }
                     _ => {
                         panic!()
                     }
@@ -212,7 +214,10 @@ pub fn unitype_to_multitype(ser: &Series, dt: &RDFNodeType) -> Series {
             ),
             xsd::UNSIGNED_BYTE => convert_to_multitype(
                 |x: AnyValue| match x {
-                    AnyValue::UInt8(u) => MultiType::Literal(Literal::new_typed_literal(u.to_string(), xsd::UNSIGNED_BYTE)),
+                    AnyValue::UInt8(u) => MultiType::Literal(Literal::new_typed_literal(
+                        u.to_string(),
+                        xsd::UNSIGNED_BYTE,
+                    )),
                     _ => {
                         panic!()
                     }
@@ -474,7 +479,7 @@ fn find_e_columns(e: &Expression) -> Vec<String> {
         Expression::Not(a) | Expression::UnaryPlus(a) | Expression::UnaryMinus(a) => {
             find_e_columns(a)
         }
-        Expression::Exists(q) => {
+        Expression::Exists(_q) => {
             todo!()
         }
         Expression::If(a, b, c) => {
@@ -519,7 +524,7 @@ pub fn maybe_convert_df_multicol_to_single(df: &mut DataFrame, c: &str, maybe: b
         if let Some(c_obj) = c_obj {
             let c_obj: &MultiType = c_obj.as_any().downcast_ref().unwrap();
             match c_obj {
-                MultiType::IRI(i) => {
+                MultiType::IRI(_i) => {
                     if let Some(dt) = &first_datatype {
                         if dt != &RDFNodeType::IRI {
                             return false;
@@ -528,7 +533,7 @@ pub fn maybe_convert_df_multicol_to_single(df: &mut DataFrame, c: &str, maybe: b
                         first_datatype = Some(RDFNodeType::IRI)
                     }
                 }
-                MultiType::BlankNode(b) => {
+                MultiType::BlankNode(_b) => {
                     if let Some(dt) = &first_datatype {
                         if dt != &RDFNodeType::BlankNode {
                             return false;
@@ -557,7 +562,7 @@ pub fn maybe_convert_df_multicol_to_single(df: &mut DataFrame, c: &str, maybe: b
             }
         }
     }
-    if let Some(dt) = first_datatype {
+    if let Some(_dt) = first_datatype {
         let mut literal_values = vec![];
         for i in 0..c_ser.len() {
             let o: Option<&MultiType> = c_ser.get_object(i).unwrap().as_any().downcast_ref();
@@ -586,10 +591,10 @@ pub fn split_df_multicol(df: &mut DataFrame, c: &str) -> Vec<(DataFrame, RDFNode
         let c_obj: Option<&MultiType> = c_ser.get_object(i).unwrap().as_any().downcast_ref();
         if let Some(c_obj) = c_obj {
             match c_obj {
-                MultiType::IRI(i) => {
+                MultiType::IRI(_i) => {
                     datatypes_vec.push("i");
                 }
-                MultiType::BlankNode(b) => {
+                MultiType::BlankNode(_b) => {
                     datatypes_vec.push("b");
                 }
                 MultiType::Literal(l) => {
@@ -651,10 +656,10 @@ pub fn split_df_multicols(
             if let Some(c_obj) = c_opt {
                 let c_obj: &MultiType = c_obj.as_any().downcast_ref().unwrap();
                 match c_obj {
-                    MultiType::IRI(i) => {
+                    MultiType::IRI(_i) => {
                         datatypes_vec.push("i");
                     }
-                    MultiType::BlankNode(b) => {
+                    MultiType::BlankNode(_b) => {
                         datatypes_vec.push("b");
                     }
                     MultiType::Literal(l) => {
@@ -698,7 +703,7 @@ pub fn split_df_multicols(
         selection.push(k.as_str());
     }
 
-    let mut dfs = df.partition_by(vec!["key_col"], false).unwrap();
+    let dfs = df.partition_by(vec!["key_col"], false).unwrap();
     let mut dfs_dts = vec![];
     for mut df in dfs {
         let mut map = HashMap::new();
