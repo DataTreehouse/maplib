@@ -8,8 +8,8 @@ use polars::export::arrow::util::total_ord::TotalEq;
 use polars::prelude::{coalesce, col, lit, IntoLazy, LazyFrame, LiteralValue};
 use polars_core::frame::DataFrame;
 use polars_core::prelude::{
-    AnyValue, ChunkedArray, DataType, NamedFrom, NewChunkedArray, ObjectChunked, PolarsObject,
-    SortOptions,
+    AnyValue, ChunkedArray, DataType, IntoSeries, NamedFrom, NewChunkedArray, ObjectChunked,
+    PolarsObject, SortOptions,
 };
 use polars_core::series::Series;
 use representation::{literal_blanknode_to_blanknode, literal_iri_to_namednode, RDFNodeType};
@@ -155,6 +155,91 @@ pub fn create_compatible_solution_mappings(
         right_mappings,
         right_datatypes,
     )
+}
+
+pub fn create_join_compatible_solution_mappings(
+    mut left_mappings: LazyFrame,
+    mut left_datatypes: HashMap<String, RDFNodeType>,
+    mut right_mappings: LazyFrame,
+    mut right_datatypes: HashMap<String, RDFNodeType>,
+    inner: bool,
+) -> (
+    LazyFrame,
+    HashMap<String, RDFNodeType>,
+    LazyFrame,
+    HashMap<String, RDFNodeType>,
+) {
+    let mut new_left_datatypes = HashMap::new();
+    let mut new_right_datatypes = HashMap::new();
+    for (v, right_dt) in &right_datatypes {
+        if let Some(left_dt) = left_datatypes.get(v) {
+            if right_dt != left_dt {
+                if left_dt == &RDFNodeType::MultiType {
+                    if inner {
+                        let mut left_df = left_mappings.collect().unwrap();
+                        force_convert_df_multicol_to_single_col(&mut left_df, v, right_dt);
+                        left_mappings = left_df.lazy();
+                        new_left_datatypes.insert(v.clone(), right_dt.clone());
+                    } else {
+                        let mut right_df = right_mappings.collect().unwrap();
+                        convert_df_col_to_multitype(&mut right_df, v, right_dt);
+                        right_mappings = right_df.lazy();
+                        new_right_datatypes.insert(v.clone(), RDFNodeType::MultiType);
+                    }
+                } else {
+                    if right_dt == &RDFNodeType::MultiType {
+                        let mut right_df = right_mappings.collect().unwrap();
+                        force_convert_df_multicol_to_single_col(&mut right_df, v, left_dt);
+                        right_mappings = right_df.lazy();
+                        new_right_datatypes.insert(v.clone(), left_dt.clone());
+                    } else {
+                        right_mappings = right_mappings
+                            .drop_columns([v])
+                            .with_column(lit(LiteralValue::Null).cast(left_dt.polars_data_type()).alias(v));
+                        new_right_datatypes.insert(v.clone(), left_dt.clone());
+                    }
+                }
+            }
+        }
+    }
+    left_datatypes.extend(new_left_datatypes);
+    right_datatypes.extend(new_right_datatypes);
+    (
+        left_mappings,
+        left_datatypes,
+        right_mappings,
+        right_datatypes,
+    )
+}
+
+pub fn force_convert_df_multicol_to_single_col(df: &mut DataFrame, c: &str, dt: &RDFNodeType) {
+    let ser = df.drop_in_place(c).unwrap();
+    let mut new = vec![];
+    for i in 0..ser.len() {
+        let o = ser.get_object(i);
+        if let Some(o) = o {
+            let m: &MultiType = o.as_any().downcast_ref().unwrap();
+            let matches = match m {
+                MultiType::IRI(_) => dt == &RDFNodeType::IRI,
+                MultiType::BlankNode(_) => dt == &RDFNodeType::BlankNode,
+                MultiType::Literal(l) => {
+                    if let RDFNodeType::Literal(nn) = dt {
+                        nn.as_ref() == l.datatype()
+                    } else {
+                        false
+                    }
+                }
+                MultiType::Null => false,
+            };
+            new.push(if matches { Some(m.clone()) } else { None });
+        } else {
+            new.push(None)
+        }
+    }
+    let och = ObjectChunked::from_iter_options(ser.name(), new.into_iter());
+    let new_ser = och.into_series();
+    df.with_column(new_ser).unwrap();
+    maybe_convert_df_multicol_to_single(df, c, false);
 }
 
 pub fn unitype_to_multitype(ser: &Series, dt: &RDFNodeType) -> Series {

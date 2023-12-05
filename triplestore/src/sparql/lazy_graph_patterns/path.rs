@@ -31,12 +31,6 @@ struct SparsePathReturn {
     dt_obj: RDFNodeType,
 }
 
-struct DFPathReturn {
-    df: DataFrame,
-    dt_subj: RDFNodeType,
-    dt_obj: RDFNodeType,
-}
-
 impl Triplestore {
     pub fn lazy_path(
         &self,

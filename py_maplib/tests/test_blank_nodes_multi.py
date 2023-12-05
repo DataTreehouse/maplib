@@ -122,7 +122,7 @@ def test_multi_datatype_left_join_query_no_error(blank_person_mapping):
     by = ["s","o"]
     df = df.sort(by=by)
     filename = TESTDATA_PATH / "multi_datatype_leftjoin_query.csv"
-    df.write_csv(filename)
+    #df.write_csv(filename)
     expected_df = pl.scan_csv(filename).sort(by).collect()
     assert_frame_equal(df, expected_df)
 
@@ -143,7 +143,7 @@ def test_multi_datatype_join_query_two_vars_no_error(blank_person_mapping):
     by = ["s","o"]
     df = df.sort(by=by)
     filename = TESTDATA_PATH / "multi_datatype_join_query_two_vars.csv"
-    df.write_csv(filename)
+    #df.write_csv(filename)
     expected_df = pl.scan_csv(filename).sort(by).collect()
     assert_frame_equal(df, expected_df)
 

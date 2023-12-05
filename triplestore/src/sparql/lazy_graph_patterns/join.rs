@@ -1,10 +1,7 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
 use crate::sparql::lazy_graph_patterns::ordering::{decide_order, Order};
-use crate::sparql::multitype::{
-    clean_up_after_join_workaround, create_compatible_solution_mappings,
-    helper_cols_join_workaround_polars_object_series_bug,
-};
+use crate::sparql::multitype::{clean_up_after_join_workaround, create_compatible_solution_mappings, create_join_compatible_solution_mappings, helper_cols_join_workaround_polars_object_series_bug};
 use crate::sparql::query_context::{Context, PathEntry};
 use crate::sparql::solution_mapping::{is_string_col, SolutionMappings};
 use log::debug;
@@ -71,11 +68,12 @@ impl Triplestore {
         } = left_solution_mappings;
 
         let (left_mappings, mut left_datatypes, right_mappings, right_datatypes) =
-            create_compatible_solution_mappings(
+            create_join_compatible_solution_mappings(
                 left_mappings,
                 left_datatypes,
                 right_mappings,
                 right_datatypes,
+                true
             );
         for (k, v) in &right_datatypes {
             if !left_datatypes.contains_key(k) {
