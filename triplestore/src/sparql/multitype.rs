@@ -345,6 +345,15 @@ pub fn unitype_to_multitype(ser: &Series, dt: &RDFNodeType) -> Series {
                 },
                 &ser,
             ),
+            xsd::NON_NEGATIVE_INTEGER => convert_to_multitype(
+                |x: AnyValue| match x {
+                    AnyValue::UInt64(a) => MultiType::Literal(Literal::from(a)),
+                    _ => {
+                        panic!("{:?}", x)
+                    }
+                },
+                &ser,
+            ),
             xsd::INT => convert_to_multitype(
                 |x: AnyValue| match x {
                     AnyValue::Int32(a) => MultiType::Literal(Literal::from(a)),

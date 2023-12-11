@@ -7,11 +7,7 @@ use crate::sparql::sparql_to_polars::{
 };
 
 use crate::sparql::lazy_graph_patterns::load_tt::multiple_tt_to_lf;
-use crate::sparql::multitype::{
-    clean_up_after_join_workaround, convert_df_col_to_multitype,
-    create_compatible_solution_mappings, helper_cols_join_workaround_polars_object_series_bug,
-    unitype_to_multitype,
-};
+use crate::sparql::multitype::{clean_up_after_join_workaround, convert_df_col_to_multitype, create_compatible_solution_mappings, create_join_compatible_solution_mappings, helper_cols_join_workaround_polars_object_series_bug, unitype_to_multitype};
 use oxrdf::vocab::xsd;
 use oxrdf::NamedNode;
 use polars::prelude::{col, concat, lit, Expr, JoinType};
@@ -153,11 +149,12 @@ impl Triplestore {
             } else {
                 if !overlap.is_empty() {
                     let (new_mappings, new_rdf_node_types, lf, new_dts) =
-                        create_compatible_solution_mappings(
+                        create_join_compatible_solution_mappings(
                             mappings,
                             rdf_node_types,
                             df.lazy(),
                             dts,
+                            true
                         );
                     dts = new_dts;
                     rdf_node_types = new_rdf_node_types;

@@ -3,10 +3,7 @@ pub mod default;
 pub mod errors;
 mod validation_inference;
 
-use crate::ast::{
-    ConstantLiteral, ConstantTerm, Instance, ListExpanderType, PType, Signature, StottrTerm,
-    Template,
-};
+use crate::ast::{ConstantLiteral, ConstantTerm, Instance, ListExpanderType, PType, Signature, StottrTerm, StottrVariable, Template};
 use crate::constants::OTTR_TRIPLE;
 use crate::document::document_from_str;
 use crate::errors::MaplibError;
@@ -419,13 +416,23 @@ impl Mapping {
 fn get_variable_names(i: &Instance) -> Vec<&String> {
     let mut out_vars = vec![];
     for a in &i.argument_list {
-        if let StottrTerm::Variable(v) = &a.term {
-            out_vars.push(&v.name);
-        } else if let StottrTerm::List(..) = &a.term {
-            todo!();
-        }
+        get_term_names(&mut out_vars, &a.term)
     }
     out_vars
+}
+
+fn get_variable_name<'a>(out_vars:&mut Vec<&'a String>, var:&'a StottrVariable) {
+    out_vars.push(&var.name);
+}
+
+fn get_term_names<'a>(out_vars:&mut Vec<&'a String>, term:&'a StottrTerm) {
+    if let StottrTerm::Variable(v) = term {
+            get_variable_name(out_vars,v);
+        } else if let StottrTerm::List(l) = term {
+            for t in l {
+                get_term_names(out_vars, t);
+            }
+        }
 }
 
 fn create_triples(
@@ -629,7 +636,7 @@ fn create_remapped(
                     new_constant_columns.insert(target_colname.clone(), static_column);
                 }
             }
-            StottrTerm::List(_) => {
+            StottrTerm::List(l) => {
                 todo!()
             }
         }
