@@ -79,7 +79,7 @@ impl Triplestore {
         let out_dt_subj;
         let out_dt_obj;
 
-        let cat_df_map = self.create_unique_cat_dfs(ppe, Some(subject), Some(object))?;
+        let cat_df_map = self.create_unique_cat_dfs(ppe)?;
         let max_index = find_max_index(cat_df_map.values());
 
         if let Some(SparsePathReturn {
@@ -302,26 +302,12 @@ impl Triplestore {
 
     fn create_unique_cat_dfs(
         &self,
-        ppe: &PropertyPathExpression,
-        subject: Option<&TermPattern>,
-        object: Option<&TermPattern>,
+        ppe: &PropertyPathExpression
     ) -> Result<HashMap<String, (DataFrame, RDFNodeType, RDFNodeType)>, SparqlError> {
         match ppe {
             PropertyPathExpression::NamedNode(nn) => {
-                let subject_filter = if let Some(subject) = subject {
-                    create_term_pattern_filter(subject, "subject")
-                } else {
-                    None
-                };
-
-                let object_filter = if let Some(object) = object {
-                    create_term_pattern_filter(object, "object")
-                } else {
-                    None
-                };
-
                 let res =
-                    self.get_single_nn_df(nn, subject, object, subject_filter, object_filter)?;
+                    self.get_single_nn_df(nn, None, None, None, None)?;
                 if let Some((df, subj_dt, obj_dt)) = res {
                     let mut unique_cat_df = df_with_cats(df, &subj_dt, &obj_dt);
                     unique_cat_df = unique_cat_df
@@ -336,28 +322,28 @@ impl Triplestore {
                 }
             }
             PropertyPathExpression::Reverse(inner) => {
-                self.create_unique_cat_dfs(inner, object, subject)
+                self.create_unique_cat_dfs(inner)
             }
             PropertyPathExpression::Sequence(left, right) => {
-                let mut left_df_map = self.create_unique_cat_dfs(left, subject, None)?;
-                let right_df_map = self.create_unique_cat_dfs(right, None, object)?;
+                let mut left_df_map = self.create_unique_cat_dfs(left)?;
+                let right_df_map = self.create_unique_cat_dfs(right)?;
                 left_df_map.extend(right_df_map);
                 Ok(left_df_map)
             }
             PropertyPathExpression::Alternative(left, right) => {
-                let mut left_df_map = self.create_unique_cat_dfs(left, subject, object)?;
-                let right_df_map = self.create_unique_cat_dfs(right, subject, object)?;
+                let mut left_df_map = self.create_unique_cat_dfs(left)?;
+                let right_df_map = self.create_unique_cat_dfs(right)?;
                 left_df_map.extend(right_df_map);
                 Ok(left_df_map)
             }
             PropertyPathExpression::ZeroOrMore(inner) => {
-                self.create_unique_cat_dfs(inner, subject, object)
+                self.create_unique_cat_dfs(inner)
             }
             PropertyPathExpression::OneOrMore(inner) => {
-                self.create_unique_cat_dfs(inner, subject, object)
+                self.create_unique_cat_dfs(inner)
             }
             PropertyPathExpression::ZeroOrOne(inner) => {
-                self.create_unique_cat_dfs(inner, subject, object)
+                self.create_unique_cat_dfs(inner)
             }
             PropertyPathExpression::NegatedPropertySet(_nns) => {
                 todo!()
