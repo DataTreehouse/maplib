@@ -6,6 +6,7 @@ use oxrdf::vocab::xsd;
 use oxrdf::{BlankNode, Literal, NamedNode, Subject, Term};
 use polars::export::arrow::util::total_ord::TotalEq;
 use polars::prelude::{coalesce, col, lit, IntoLazy, LazyFrame, LiteralValue};
+use polars_core::chunked_array::object::PolarsObjectSafe;
 use polars_core::frame::DataFrame;
 use polars_core::prelude::{
     AnyValue, ChunkedArray, DataType, IntoSeries, NamedFrom, NewChunkedArray, ObjectChunked,
@@ -193,9 +194,11 @@ pub fn create_join_compatible_solution_mappings(
                         right_mappings = right_df.lazy();
                         new_right_datatypes.insert(v.clone(), left_dt.clone());
                     } else {
-                        right_mappings = right_mappings
-                            .drop_columns([v])
-                            .with_column(lit(LiteralValue::Null).cast(left_dt.polars_data_type()).alias(v));
+                        right_mappings = right_mappings.drop_columns([v]).with_column(
+                            lit(LiteralValue::Null)
+                                .cast(left_dt.polars_data_type())
+                                .alias(v),
+                        );
                         new_right_datatypes.insert(v.clone(), left_dt.clone());
                     }
                 }
@@ -659,11 +662,16 @@ pub fn maybe_convert_df_multicol_to_single(df: &mut DataFrame, c: &str, maybe: b
     if let Some(_dt) = first_datatype {
         let mut literal_values = vec![];
         for i in 0..c_ser.len() {
-            let o: Option<&MultiType> = c_ser.get_object(i).unwrap().as_any().downcast_ref();
-            literal_values.push(match o {
-                None => LiteralValue::Null,
-                Some(m) => multi_to_polars_literal_value(m),
-            })
+            let o = c_ser.get_object(i);
+            if let Some(o) = o {
+                let o: Option<&MultiType> = o.as_any().downcast_ref();
+                literal_values.push(match o {
+                    None => LiteralValue::Null,
+                    Some(m) => multi_to_polars_literal_value(m),
+                })
+            } else {
+                literal_values.push(LiteralValue::Null);
+            }
         }
         let new_series = polars_literal_values_to_series(literal_values, c);
         df.with_column(new_series).unwrap();
