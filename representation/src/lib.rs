@@ -2,7 +2,6 @@ pub mod literals;
 
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{BlankNode, NamedNode, NamedNodeRef};
-use polars_core::datatypes::Field;
 use polars_core::prelude::{DataType, TimeUnit};
 use spargebra::term::TermPattern;
 

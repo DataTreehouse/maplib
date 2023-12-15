@@ -344,9 +344,12 @@ impl Mapping {
             QueryResult::Select(mut df, datatypes) => {
                 df = fix_multicolumns(df);
                 df_to_py_df(df, py)
-            },
+            }
             QueryResult::Construct(dfs) => {
-                let dfs = dfs.into_iter().map(|(df, subj_type, obj_type)| fix_multicolumns(df)).collect();
+                let dfs = dfs
+                    .into_iter()
+                    .map(|(df, subj_type, obj_type)| fix_multicolumns(df))
+                    .collect();
                 Ok(df_vec_to_py_df_list(dfs, py)?.into())
             }
         }
@@ -354,10 +357,8 @@ impl Mapping {
 
     #[pyo3(text_signature = "()")]
     pub fn validate(&mut self, py: Python<'_>) -> PyResult<ValidationReport> {
-        let shacl::ValidationReport{ conforms, df } = self
-            .inner
-            .validate()
-            .map_err(PyMaplibError::from)?;
+        let shacl::ValidationReport { conforms, df } =
+            self.inner.validate().map_err(PyMaplibError::from)?;
 
         let report = if let Some(df) = df {
             Some(df_to_py_df(df, py)?)
@@ -365,14 +366,11 @@ impl Mapping {
             None
         };
 
-        Ok(ValidationReport{
-            conforms,
-            report
-        })
+        Ok(ValidationReport { conforms, report })
     }
 
     #[pyo3(text_signature = "(query, transient)")]
-    pub fn insert(&mut self, query: String, transient:Option<bool>) -> PyResult<()> {
+    pub fn insert(&mut self, query: String, transient: Option<bool>) -> PyResult<()> {
         self.inner
             .triplestore
             .insert(&query, transient.unwrap_or(false))
@@ -443,15 +441,26 @@ impl Mapping {
                 object,
             }
         }
-        fn to_python_string_literal_triple(
-            s: &str,
-            v: &str,
-            lex: &str,
-            ltag_opt: Option<&str>,
-        ) -> Triple {
+        fn to_python_string_literal_triple(s: &str, v: &str, lex: &str) -> Triple {
             let subject = create_subject(s);
             let verb = IRI { iri: v.to_string() };
-            let literal = create_literal(lex, ltag_opt, None);
+            let literal = create_literal(lex, None, None);
+            let object = TripleObject {
+                iri: None,
+                blank_node: None,
+                literal: Some(literal),
+            };
+            Triple {
+                subject,
+                verb,
+                object,
+            }
+        }
+
+        fn to_python_lang_string_literal_triple(s: &str, v: &str, lex: &str, ltag: &str) -> Triple {
+            let subject = create_subject(s);
+            let verb = IRI { iri: v.to_string() };
+            let literal = create_literal(lex, Some(ltag), None);
             let object = TripleObject {
                 iri: None,
                 blank_node: None,
@@ -495,7 +504,11 @@ impl Mapping {
             .map_err(PyMaplibError::from)?;
         self.inner
             .triplestore
-            .string_data_property_triples(to_python_string_literal_triple, &mut triples)
+            .string_data_property_triples(
+                to_python_string_literal_triple,
+                to_python_lang_string_literal_triple,
+                &mut triples,
+            )
             .map_err(PyMaplibError::from)?;
         self.inner
             .triplestore
@@ -505,9 +518,11 @@ impl Mapping {
     }
 
     #[pyo3(text_signature = "(file_path, base_iri)")]
-    pub fn read_triples(&mut self, file_path:&str, base_iri:Option<String>) -> PyResult<()> {
+    pub fn read_triples(&mut self, file_path: &str, base_iri: Option<String>) -> PyResult<()> {
         let path = Path::new(file_path);
-        self.inner.read_triples(path, base_iri).map_err(|x| PyMaplibError::from(x))?;
+        self.inner
+            .read_triples(path, base_iri)
+            .map_err(|x| PyMaplibError::from(x))?;
         Ok(())
     }
 
@@ -541,7 +556,11 @@ fn is_blank_node(s: &str) -> bool {
 }
 
 fn fix_multicolumns(mut df: DataFrame) -> DataFrame {
-    let columns:Vec<_> = df.get_column_names().iter().map(|x|x.to_string()).collect();
+    let columns: Vec<_> = df
+        .get_column_names()
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
     for c in columns {
         if df.column(&c).unwrap().dtype() == &DataType::Object(MULTI_TYPE_NAME) {
             let ser = df.column(&c).unwrap();

@@ -24,13 +24,13 @@
 use maplib::errors::MaplibError;
 use maplib::mapping::errors::MappingError;
 use maplib::templates::errors::TemplateError;
-use polars_core::error::{PolarsError};
+use polars_core::error::PolarsError;
 use pyo3::{create_exception, exceptions::PyException, prelude::*};
+use shacl::errors::ShaclError;
 use std::fmt::Debug;
 use thiserror::Error;
 use triplestore::errors::TriplestoreError;
 use triplestore::sparql::errors::SparqlError;
-use shacl::errors::ShaclError;
 
 #[derive(Error, Debug)]
 pub enum PyMaplibError {
@@ -47,7 +47,7 @@ pub enum PyMaplibError {
     #[error(transparent)]
     TriplestoreError(#[from] TriplestoreError),
     #[error(transparent)]
-    ShaclError(#[from] ShaclError)
+    ShaclError(#[from] ShaclError),
 }
 
 impl std::convert::From<PyMaplibError> for PyErr {
@@ -63,9 +63,7 @@ impl std::convert::From<PyMaplibError> for PyErr {
             PyMaplibError::TriplestoreError(err) => {
                 TriplestoreErrorException::new_err(format!("{}", err))
             }
-            PyMaplibError::ShaclError(err) => {
-                ShaclErrorException::new_err(format!("{}", err))
-            }
+            PyMaplibError::ShaclError(err) => ShaclErrorException::new_err(format!("{}", err)),
         }
     }
 }
