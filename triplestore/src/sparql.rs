@@ -207,7 +207,7 @@ fn term_pattern_series(
                 named_node_series(&NamedNode::new(lit.to_string()).unwrap(), name, len)
             } else {
                 let (anyvalue, dt) =
-                    sparql_literal_to_any_value(&lit.value().to_string(), &Some(lit.datatype()));
+                    sparql_literal_to_any_value(lit.value(), lit.language(), &Some(lit.datatype()));
                 let mut any_values = vec![];
                 for _ in 0..len {
                     any_values.push(anyvalue.clone())

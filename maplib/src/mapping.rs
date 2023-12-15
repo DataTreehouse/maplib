@@ -3,7 +3,10 @@ pub mod default;
 pub mod errors;
 mod validation_inference;
 
-use crate::ast::{ConstantLiteral, ConstantTerm, Instance, ListExpanderType, PType, Signature, StottrTerm, StottrVariable, Template};
+use crate::ast::{
+    ConstantLiteral, ConstantTerm, Instance, ListExpanderType, PType, Signature, StottrTerm,
+    StottrVariable, Template,
+};
 use crate::constants::OTTR_TRIPLE;
 use crate::document::document_from_str;
 use crate::errors::MaplibError;
@@ -421,18 +424,18 @@ fn get_variable_names(i: &Instance) -> Vec<&String> {
     out_vars
 }
 
-fn get_variable_name<'a>(out_vars:&mut Vec<&'a String>, var:&'a StottrVariable) {
+fn get_variable_name<'a>(out_vars: &mut Vec<&'a String>, var: &'a StottrVariable) {
     out_vars.push(&var.name);
 }
 
-fn get_term_names<'a>(out_vars:&mut Vec<&'a String>, term:&'a StottrTerm) {
+fn get_term_names<'a>(out_vars: &mut Vec<&'a String>, term: &'a StottrTerm) {
     if let StottrTerm::Variable(v) = term {
-            get_variable_name(out_vars,v);
-        } else if let StottrTerm::List(l) = term {
-            for t in l {
-                get_term_names(out_vars, t);
-            }
+        get_variable_name(out_vars, v);
+    } else if let StottrTerm::List(l) = term {
+        for t in l {
+            get_term_names(out_vars, t);
         }
+    }
 }
 
 fn create_triples(
@@ -516,10 +519,10 @@ fn create_dynamic_expression_from_static(
     constant_term: &ConstantTerm,
     ptype: &Option<PType>,
 ) -> Result<(Expr, PrimitiveColumn), MappingError> {
-    let (mut expr, _, rdf_node_type, language_tag) = constant_to_expr(constant_term, ptype)?;
+    let (mut expr, _, rdf_node_type) = constant_to_expr(constant_term, ptype)?;
     let mapped_column = PrimitiveColumn {
         rdf_node_type,
-        language_tag,
+        language_tag: None,
     };
     expr = expr.alias(column_name);
     Ok((expr, mapped_column))

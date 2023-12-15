@@ -1,14 +1,19 @@
 pub mod literals;
 
-use oxrdf::vocab::xsd;
+use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{BlankNode, NamedNode, NamedNodeRef};
+use polars_core::datatypes::Field;
 use polars_core::prelude::{DataType, TimeUnit};
 use spargebra::term::TermPattern;
+
+pub const LANG_STRING_VALUE_FIELD: &str = "v";
+pub const LANG_STRING_LANG_FIELD: &str = "l";
 
 #[derive(PartialEq, Clone)]
 pub enum TripleType {
     ObjectProperty,
     StringProperty,
+    LangStringProperty,
     NonStringProperty,
 }
 
@@ -85,6 +90,8 @@ impl RDFNodeType {
         } else if let RDFNodeType::Literal(lit) = self {
             if lit.as_ref() == xsd::STRING {
                 TripleType::StringProperty
+            } else if lit.as_ref() == rdf::LANG_STRING {
+                TripleType::LangStringProperty
             } else {
                 TripleType::NonStringProperty
             }

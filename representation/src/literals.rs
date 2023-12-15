@@ -1,14 +1,16 @@
+use crate::{LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD};
 use chrono::{DateTime, NaiveDateTime, Utc};
 use oxrdf::vocab::rdf::LANG_STRING;
 use oxrdf::vocab::xsd;
 use oxrdf::NamedNodeRef;
 use polars_core::datatypes::TimeUnit;
-use polars_core::prelude::AnyValue;
+use polars_core::prelude::{AnyValue, DataType, Field};
 use std::str::FromStr;
 
 //This code is copied and modified from Chrontext, which has identical licensing
 pub fn sparql_literal_to_any_value<'a, 'b>(
     value: &'b str,
+    language: Option<&str>,
     datatype: &Option<NamedNodeRef<'a>>,
 ) -> (AnyValue<'static>, NamedNodeRef<'a>) {
     let (anyv, dt) = if let Some(datatype) = datatype {
@@ -57,7 +59,16 @@ pub fn sparql_literal_to_any_value<'a, 'b>(
                 }
             }
         } else if datatype == LANG_STRING {
-            todo!()
+            println!("VALUE: {}", value);
+            let val = AnyValue::Utf8(value);
+            let lang = AnyValue::Utf8(language.unwrap());
+            let polars_fields: Vec<Field> = vec![
+                Field::new(LANG_STRING_VALUE_FIELD, DataType::Utf8),
+                Field::new(LANG_STRING_LANG_FIELD, DataType::Utf8),
+            ];
+            let av = AnyValue::StructOwned(Box::new((vec![val, lang], polars_fields)));
+            println!("AV {:?}", av);
+            av
         } else {
             todo!("Not implemented! {:?}", datatype)
         };

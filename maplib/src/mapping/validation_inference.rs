@@ -3,7 +3,7 @@ use crate::ast::{has_iritype, PType, Parameter, Signature};
 
 use crate::mapping::errors::MappingError;
 use crate::mapping::{ExpandOptions, PrimitiveColumn, RDFNodeType};
-use oxrdf::vocab::xsd;
+use oxrdf::vocab::{rdf, xsd};
 use oxrdf::NamedNode;
 use polars_core::datatypes::BooleanChunked;
 use polars_core::export::rayon::prelude::ParallelIterator;
@@ -68,18 +68,19 @@ fn validate_infer_column_data_type(
 ) -> Result<PrimitiveColumn, MappingError> {
     let series = dataframe.column(column_name).unwrap();
     let dtype = series.dtype();
-    let ptype = if let Some(ptype) = &parameter.ptype {
-        validate_datatype(series.name(), dtype, ptype)?;
-        ptype.clone()
-    } else {
-        polars_datatype_to_xsd_datatype(dtype)
-    };
-    let rdf_node_type = infer_rdf_node_type(&ptype);
     let language_tag = if let Some(map) = language_tag_map {
         map.get(column_name).cloned()
     } else {
         None
     };
+    let ptype = if let Some(ptype) = &parameter.ptype {
+        validate_datatype(series.name(), dtype, ptype)?;
+        ptype.clone()
+    } else {
+        polars_datatype_to_xsd_datatype(dtype, language_tag.is_some())
+    };
+    let rdf_node_type = infer_rdf_node_type(&ptype);
+
     Ok(PrimitiveColumn {
         rdf_node_type,
         language_tag,
@@ -183,7 +184,7 @@ fn validate_basic_datatype(
     Ok(())
 }
 
-pub fn polars_datatype_to_xsd_datatype(datatype: &DataType) -> PType {
+pub fn polars_datatype_to_xsd_datatype(datatype: &DataType, has_language_tag: bool) -> PType {
     let xsd_nn_ref = match datatype {
         DataType::Boolean => xsd::BOOLEAN,
         DataType::Int8 => xsd::BYTE,
@@ -196,14 +197,23 @@ pub fn polars_datatype_to_xsd_datatype(datatype: &DataType) -> PType {
         DataType::Int64 => xsd::LONG,
         DataType::Float32 => xsd::FLOAT,
         DataType::Float64 => xsd::DOUBLE,
-        DataType::Utf8 => xsd::STRING,
+        DataType::Utf8 => {
+            if has_language_tag {
+                rdf::LANG_STRING
+            } else {
+                xsd::STRING
+            }
+        }
         DataType::Date => xsd::DATE,
         DataType::Datetime(_, Some(_)) => xsd::DATE_TIME_STAMP,
         DataType::Datetime(_, None) => xsd::DATE_TIME,
         DataType::Duration(_) => xsd::DURATION,
         DataType::Categorical(_) => xsd::STRING,
         DataType::List(inner) => {
-            return PType::List(Box::new(polars_datatype_to_xsd_datatype(inner)))
+            return PType::List(Box::new(polars_datatype_to_xsd_datatype(
+                inner,
+                has_language_tag,
+            )))
         }
         _ => {
             panic!("Unsupported datatype:{}", datatype)

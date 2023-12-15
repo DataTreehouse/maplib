@@ -1,6 +1,9 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
-use crate::sparql::multitype::{clean_up_after_join_workaround, create_compatible_solution_mappings, create_join_compatible_solution_mappings, helper_cols_join_workaround_polars_object_series_bug};
+use crate::sparql::multitype::{
+    clean_up_after_join_workaround, create_compatible_solution_mappings,
+    create_join_compatible_solution_mappings, helper_cols_join_workaround_polars_object_series_bug,
+};
 use crate::sparql::query_context::{Context, PathEntry};
 use crate::sparql::solution_mapping::{is_string_col, SolutionMappings};
 use log::debug;

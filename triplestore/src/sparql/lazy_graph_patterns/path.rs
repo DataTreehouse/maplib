@@ -302,12 +302,11 @@ impl Triplestore {
 
     fn create_unique_cat_dfs(
         &self,
-        ppe: &PropertyPathExpression
+        ppe: &PropertyPathExpression,
     ) -> Result<HashMap<String, (DataFrame, RDFNodeType, RDFNodeType)>, SparqlError> {
         match ppe {
             PropertyPathExpression::NamedNode(nn) => {
-                let res =
-                    self.get_single_nn_df(nn, None, None, None, None)?;
+                let res = self.get_single_nn_df(nn, None, None, None, None)?;
                 if let Some((df, subj_dt, obj_dt)) = res {
                     let mut unique_cat_df = df_with_cats(df, &subj_dt, &obj_dt);
                     unique_cat_df = unique_cat_df
@@ -321,9 +320,7 @@ impl Triplestore {
                     Ok(HashMap::new())
                 }
             }
-            PropertyPathExpression::Reverse(inner) => {
-                self.create_unique_cat_dfs(inner)
-            }
+            PropertyPathExpression::Reverse(inner) => self.create_unique_cat_dfs(inner),
             PropertyPathExpression::Sequence(left, right) => {
                 let mut left_df_map = self.create_unique_cat_dfs(left)?;
                 let right_df_map = self.create_unique_cat_dfs(right)?;
@@ -336,15 +333,9 @@ impl Triplestore {
                 left_df_map.extend(right_df_map);
                 Ok(left_df_map)
             }
-            PropertyPathExpression::ZeroOrMore(inner) => {
-                self.create_unique_cat_dfs(inner)
-            }
-            PropertyPathExpression::OneOrMore(inner) => {
-                self.create_unique_cat_dfs(inner)
-            }
-            PropertyPathExpression::ZeroOrOne(inner) => {
-                self.create_unique_cat_dfs(inner)
-            }
+            PropertyPathExpression::ZeroOrMore(inner) => self.create_unique_cat_dfs(inner),
+            PropertyPathExpression::OneOrMore(inner) => self.create_unique_cat_dfs(inner),
+            PropertyPathExpression::ZeroOrOne(inner) => self.create_unique_cat_dfs(inner),
             PropertyPathExpression::NegatedPropertySet(_nns) => {
                 todo!()
             }

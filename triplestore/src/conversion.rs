@@ -3,8 +3,11 @@ use crate::constants::{
 };
 use chrono::TimeZone as ChronoTimeZone;
 use chrono::{Datelike, Timelike};
+use polars::prelude::{col, lit, IntoLazy};
 use polars_core::datatypes::{DataType, TimeZone};
+use polars_core::frame::DataFrame;
 use polars_core::series::{IntoSeries, Series};
+use representation::{LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD};
 
 pub fn convert_to_string(series: &Series) -> Option<Series> {
     let series_data_type = series.dtype();
@@ -47,7 +50,25 @@ pub fn convert_to_string(series: &Series) -> Option<Series> {
             panic!("Not supported")
         }
         DataType::Struct(_) => {
-            panic!("Not supported")
+            let mut df = DataFrame::new(vec![series.clone()]).unwrap();
+            println!("DF: {}", df);
+            df = df
+                .lazy()
+                .with_column(
+                    (lit("\"")
+                        + col(series.name())
+                            .struct_()
+                            .field_by_name(LANG_STRING_VALUE_FIELD)
+                        + lit("\"@")
+                        + col(series.name())
+                            .struct_()
+                            .field_by_name(LANG_STRING_LANG_FIELD))
+                    .alias(series.name()),
+                )
+                .collect()
+                .unwrap();
+            println!("DF: {}", df);
+            return Some(df.drop_in_place(series.name()).unwrap());
         }
         DataType::Unknown => {
             panic!("Not supported")

@@ -17,14 +17,13 @@ const BLANK_NODE_SERIES_NAME: &str = "blank_node_series";
 pub fn constant_to_expr(
     constant_term: &ConstantTerm,
     ptype_opt: &Option<PType>,
-) -> Result<(Expr, PType, RDFNodeType, Option<String>), MappingError> {
-    let (expr, ptype, rdf_node_type, language_tag) = match constant_term {
+) -> Result<(Expr, PType, RDFNodeType), MappingError> {
+    let (expr, ptype, rdf_node_type) = match constant_term {
         ConstantTerm::Constant(c) => match c {
             ConstantLiteral::Iri(iri) => (
                 Expr::Literal(LiteralValue::Utf8(iri.as_str().to_string())),
                 PType::Basic(NamedNode::new_unchecked(OTTR_IRI), "ottr:IRI".to_string()),
                 RDFNodeType::IRI,
-                None,
             ),
             ConstantLiteral::BlankNode(_) => {
                 panic!("Should never happen")
@@ -35,7 +34,13 @@ pub fn constant_to_expr(
                 } else {
                     None
                 };
-                let (mut any, dt) = sparql_literal_to_any_value(&lit.value, &dt);
+                let language = if let Some(l) = &lit.language {
+                    Some(l.as_str())
+                } else {
+                    None
+                };
+                println!("lit val {} lang {:?}", lit.value, language);
+                let (mut any, dt) = sparql_literal_to_any_value(&lit.value, language, &dt);
                 //Workaround for owned utf 8..
                 let value_series = if let AnyValue::Utf8Owned(s) = any {
                     any = AnyValue::Utf8(&s);
@@ -45,7 +50,7 @@ pub fn constant_to_expr(
                 } else {
                     Series::from_any_values("literal", &[any], false).unwrap()
                 };
-                let language_tag = lit.language.as_ref().cloned();
+                println!("Value series {}", value_series);
                 (
                     Expr::Literal(LiteralValue::Series(SpecialEq::new(value_series))),
                     PType::Basic(
@@ -53,14 +58,12 @@ pub fn constant_to_expr(
                         lit.data_type_iri.as_ref().unwrap().to_string(),
                     ),
                     RDFNodeType::Literal(dt.into()),
-                    language_tag,
                 )
             }
             ConstantLiteral::None => (
                 Expr::Literal(LiteralValue::Null),
                 PType::Basic(NamedNode::new_unchecked(NONE_IRI), NONE_IRI.to_string()),
                 RDFNodeType::None,
-                None,
             ),
         },
         ConstantTerm::ConstantList(inner) => {
@@ -68,11 +71,7 @@ pub fn constant_to_expr(
             let mut last_ptype = None;
             let mut last_rdf_node_type = None;
             for ct in inner {
-                let (constant_expr, actual_ptype, rdf_node_type, language_tag) =
-                    constant_to_expr(ct, ptype_opt)?;
-                if language_tag.is_some() {
-                    todo!()
-                }
+                let (constant_expr, actual_ptype, rdf_node_type) = constant_to_expr(ct, ptype_opt)?;
                 if last_ptype.is_none() {
                     last_ptype = Some(actual_ptype);
                 } else if last_ptype.as_ref().unwrap() != &actual_ptype {
@@ -106,13 +105,12 @@ pub fn constant_to_expr(
                     first.append(s).unwrap();
                 }
                 let out_series = ListChunked::from_iter([first]).into_series();
-                (lit(out_series), out_ptype, out_rdf_node_type, None)
+                (lit(out_series), out_ptype, out_rdf_node_type)
             } else {
                 (
                     concat_list(expressions).expect("Concat OK"),
                     out_ptype,
                     out_rdf_node_type,
-                    None,
                 )
             }
         }
@@ -126,7 +124,7 @@ pub fn constant_to_expr(
             ));
         }
     }
-    Ok((expr, ptype, rdf_node_type, language_tag))
+    Ok((expr, ptype, rdf_node_type))
 }
 
 pub fn constant_blank_node_to_series(

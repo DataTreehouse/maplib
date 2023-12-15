@@ -20,6 +20,7 @@ use nom::combinator::opt;
 use nom::multi::{count, many0, many1, separated_list0, separated_list1};
 use nom::sequence::tuple;
 use nom::IResult;
+use oxrdf::vocab::rdf::LANG_STRING;
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{BlankNode, NamedNode};
 
@@ -546,7 +547,7 @@ fn rdf_literal_lang_tag(r: &str) -> IResult<&str, UnresolvedStottrLiteral> {
         UnresolvedStottrLiteral {
             value: value.to_string(),
             language: Some(language),
-            data_type_iri: Some(ResolvesToNamedNode::NamedNode(xsd::STRING.into_owned())),
+            data_type_iri: Some(ResolvesToNamedNode::NamedNode(LANG_STRING.into_owned())),
         },
     ))
 }

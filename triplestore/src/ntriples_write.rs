@@ -33,7 +33,6 @@ use polars_utils::contention_pool::LowContentionPool;
 use representation::{RDFNodeType, TripleType};
 use std::io::Write;
 
-
 /// Utility to write to `&mut Vec<u8>` buffer
 struct StringWrap<'a>(pub &'a mut Vec<u8>);
 
@@ -181,6 +180,9 @@ fn write_ntriples_for_df<W: Write + ?Sized>(
                         TripleType::StringProperty => {
                             write_string_property_triple(&mut write_buffer, any_values, verb);
                         }
+                        TripleType::LangStringProperty => {
+                            write_lang_string_property_triple(&mut write_buffer, any_values, verb);
+                        }
                         TripleType::NonStringProperty => {
                             write_non_string_property_triple(
                                 &mut write_buffer,
@@ -216,11 +218,6 @@ fn write_ntriples_for_df<W: Write + ?Sized>(
 }
 
 fn write_string_property_triple(f: &mut Vec<u8>, mut any_values: Vec<AnyValue>, v: &str) {
-    let lang_opt = if let AnyValue::Utf8(lang) = any_values.pop().unwrap() {
-        Some(lang)
-    } else {
-        None
-    };
     let lex = if let AnyValue::Utf8(lex) = any_values.pop().unwrap() {
         lex
     } else {
@@ -236,12 +233,24 @@ fn write_string_property_triple(f: &mut Vec<u8>, mut any_values: Vec<AnyValue>, 
     write_iri(f, v);
     write!(f, " ").unwrap();
     write_string(f, lex);
+    writeln!(f, " .").unwrap();
+}
 
-    if let Some(lang) = lang_opt {
-        writeln!(f, "@{} .", lang).unwrap();
+fn write_lang_string_property_triple(f: &mut Vec<u8>, mut any_values: Vec<AnyValue>, v: &str) {
+    let lex = if let AnyValue::Utf8(lex) = any_values.pop().unwrap() {
+        lex
     } else {
-        writeln!(f, " .").unwrap();
-    }
+        panic!()
+    };
+    let s = if let AnyValue::Utf8(s) = any_values.pop().unwrap() {
+        s
+    } else {
+        panic!()
+    };
+    write_iri_or_blanknode(f, s);
+    write!(f, " ").unwrap();
+    write_iri(f, v);
+    writeln!(f, " {} .", lex).unwrap();
 }
 
 //Assumes that the data has been bulk-converted

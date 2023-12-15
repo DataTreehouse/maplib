@@ -15,12 +15,12 @@ use crate::errors::TriplestoreError;
 use crate::io_funcs::{create_folder_if_not_exists, delete_tmp_parquets_in_caching_folder};
 use crate::sparql::lazy_graph_patterns::load_tt::multiple_tt_to_lf;
 use log::debug;
-use oxrdf::vocab::xsd;
+use oxrdf::vocab::{rdf, xsd};
 use oxrdf::NamedNode;
 use parquet_io::{
     property_to_filename, read_parquet, split_write_tmp_df, write_parquet, ParquetIOError,
 };
-use polars::prelude::{col, concat, IntoLazy, JoinArgs, JoinType, LazyFrame, UnionArgs};
+use polars::prelude::{as_struct, col, concat, IntoLazy, JoinArgs, JoinType, LazyFrame, UnionArgs};
 use polars_core::datatypes::AnyValue;
 use polars_core::frame::{DataFrame, UniqueKeepStrategy};
 use polars_core::prelude::DataType;
@@ -28,7 +28,9 @@ use polars_core::series::Series;
 use polars_core::utils::concat_df;
 use rayon::iter::ParallelIterator;
 use rayon::iter::{IntoParallelRefIterator, ParallelDrainRange};
-use representation::{literal_iri_to_namednode, RDFNodeType};
+use representation::{
+    literal_iri_to_namednode, RDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD,
+};
 use std::collections::HashMap;
 use std::fs::remove_file;
 use std::io;
@@ -574,19 +576,23 @@ fn prepare_triples_df(
         "Prepare single triple df unique before it is added took {} seconds",
         now.elapsed().as_secs_f32()
     );
-
-    if let RDFNodeType::Literal(lit) = object_type {
-        if lit.as_ref() == xsd::STRING {
-            if let Some(tag) = language_tag {
-                let lt_ser = Series::new_empty(LANGUAGE_TAG_COLUMN, &DataType::Utf8)
-                    .extend_constant(AnyValue::Utf8(tag), df.height())
-                    .unwrap();
-                df.with_column(lt_ser).unwrap();
-            } else {
-                let lt_ser = Series::full_null(LANGUAGE_TAG_COLUMN, df.height(), &DataType::Utf8);
-                df.with_column(lt_ser).unwrap();
-            }
-        }
+    if let Some(tag) = language_tag {
+        let lt_ser = Series::new_empty(LANGUAGE_TAG_COLUMN, &DataType::Utf8)
+            .extend_constant(AnyValue::Utf8(tag), df.height())
+            .unwrap();
+        df.with_column(lt_ser).unwrap();
+        df = df
+            .lazy()
+            .with_column(
+                as_struct(vec![
+                    col("object").alias(LANG_STRING_VALUE_FIELD),
+                    col(LANGUAGE_TAG_COLUMN).alias(LANG_STRING_LANG_FIELD),
+                ])
+                .alias("object"),
+            )
+            .drop_columns(vec![LANGUAGE_TAG_COLUMN])
+            .collect()
+            .unwrap();
     }
     //TODO: add polars datatype harmonization here.
     debug!(

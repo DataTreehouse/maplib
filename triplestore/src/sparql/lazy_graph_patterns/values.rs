@@ -58,8 +58,8 @@ impl Triplestore {
                                     }
                                 }
                             }
-                            let value = lit.value().to_string();
-                            let (mut polarlit, _) = sparql_literal_to_any_value(&value, &Some(dt));
+                            let (mut polarlit, _) =
+                                sparql_literal_to_any_value(lit.value(), lit.language(), &Some(dt));
                             polarlit = polarlit.into_static().unwrap();
                             col_vecs.get_mut(&j).unwrap().push(polarlit);
                         }
