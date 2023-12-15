@@ -39,7 +39,6 @@ pub fn constant_to_expr(
                 } else {
                     None
                 };
-                println!("lit val {} lang {:?}", lit.value, language);
                 let (mut any, dt) = sparql_literal_to_any_value(&lit.value, language, &dt);
                 //Workaround for owned utf 8..
                 let value_series = if let AnyValue::Utf8Owned(s) = any {
@@ -50,7 +49,6 @@ pub fn constant_to_expr(
                 } else {
                     Series::from_any_values("literal", &[any], false).unwrap()
                 };
-                println!("Value series {}", value_series);
                 (
                     Expr::Literal(LiteralValue::Series(SpecialEq::new(value_series))),
                     PType::Basic(

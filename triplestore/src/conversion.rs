@@ -51,7 +51,6 @@ pub fn convert_to_string(series: &Series) -> Option<Series> {
         }
         DataType::Struct(_) => {
             let mut df = DataFrame::new(vec![series.clone()]).unwrap();
-            println!("DF: {}", df);
             df = df
                 .lazy()
                 .with_column(
@@ -67,7 +66,6 @@ pub fn convert_to_string(series: &Series) -> Option<Series> {
                 )
                 .collect()
                 .unwrap();
-            println!("DF: {}", df);
             return Some(df.drop_in_place(series.name()).unwrap());
         }
         DataType::Unknown => {
