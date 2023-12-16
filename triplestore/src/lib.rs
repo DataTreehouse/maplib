@@ -1,7 +1,7 @@
 extern crate core;
 
 mod constants;
-pub(crate) mod conversion;
+pub mod conversion;
 pub mod errors;
 mod export_triples;
 mod io_funcs;

@@ -583,6 +583,7 @@ fn create_remapped(
     let mut existing = vec![];
     let mut new = vec![];
     let mut rename_map: HashMap<&String, Vec<&String>> = HashMap::new();
+    let mut out_blank_node_counter = blank_node_counter;
 
     for (original, target) in instance
         .argument_list
@@ -624,7 +625,7 @@ fn create_remapped(
                     new_series.push(series);
                     new_dynamic_columns.insert(target_colname.clone(), primitive_column);
                     new_dynamic_from_constant.push(target_colname);
-                    blank_node_counter += input_df_height;
+                    out_blank_node_counter = max(out_blank_node_counter, blank_node_counter+input_df_height);
                 } else if original.list_expand {
                     let (expr, primitive_column) =
                         create_dynamic_expression_from_static(target_colname, ct, &target.ptype)?;
@@ -701,12 +702,13 @@ fn create_remapped(
         "Creating remapped took {} seconds",
         now.elapsed().as_secs_f32()
     );
+    println!("Remapped {}", lf.clone().collect().unwrap());
     Ok((
         lf.collect().unwrap(),
         new_dynamic_columns,
         new_constant_columns,
         new_unique_subsets,
-        blank_node_counter,
+        out_blank_node_counter,
     ))
 }
 

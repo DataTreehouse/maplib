@@ -1,5 +1,5 @@
 use chrono::NaiveDate;
-use oxrdf::vocab::xsd;
+use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{BlankNode, Literal, NamedNode, Term};
 use polars::export::chrono::{DateTime, NaiveDateTime, Utc};
 use polars::prelude::{LiteralValue, NamedFrom, Series, TimeUnit};
@@ -29,7 +29,7 @@ pub fn sparql_literal_to_polars_literal_value(lit: &Literal) -> LiteralValue {
     let value = lit.value();
     let literal_value = if datatype == xsd::STRING {
         LiteralValue::Utf8(value.to_string())
-    } else if datatype == xsd::UNSIGNED_INT {
+    }  else if datatype == xsd::UNSIGNED_INT {
         let u = u32::from_str(value).expect("Integer parsing error");
         LiteralValue::UInt32(u)
     } else if datatype == xsd::UNSIGNED_LONG {

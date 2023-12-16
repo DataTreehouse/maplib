@@ -1,11 +1,13 @@
 use crate::{LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD};
 use chrono::{DateTime, NaiveDateTime, Utc};
 use oxrdf::vocab::rdf::LANG_STRING;
-use oxrdf::vocab::xsd;
-use oxrdf::NamedNodeRef;
+use oxrdf::vocab::{rdf, xsd};
+use oxrdf::{Literal, NamedNodeRef};
 use polars_core::datatypes::TimeUnit;
 use polars_core::prelude::{AnyValue, DataType, Field};
 use std::str::FromStr;
+use polars_arrow::offset::Offset;
+use polars_arrow::scalar::Utf8Scalar;
 
 //This code is copied and modified from Chrontext, which has identical licensing
 pub fn sparql_literal_to_any_value<'a, 'b>(
@@ -59,7 +61,6 @@ pub fn sparql_literal_to_any_value<'a, 'b>(
                 }
             }
         } else if datatype == LANG_STRING {
-            println!("VALUE: {}", value);
             let val = AnyValue::Utf8(value);
             let lang = AnyValue::Utf8(language.unwrap());
             let polars_fields: Vec<Field> = vec![
@@ -67,7 +68,6 @@ pub fn sparql_literal_to_any_value<'a, 'b>(
                 Field::new(LANG_STRING_LANG_FIELD, DataType::Utf8),
             ];
             let av = AnyValue::StructOwned(Box::new((vec![val, lang], polars_fields)));
-            println!("AV {:?}", av);
             av
         } else {
             todo!("Not implemented! {:?}", datatype)
