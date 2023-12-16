@@ -702,7 +702,6 @@ fn create_remapped(
         "Creating remapped took {} seconds",
         now.elapsed().as_secs_f32()
     );
-    println!("Remapped {}", lf.clone().collect().unwrap());
     Ok((
         lf.collect().unwrap(),
         new_dynamic_columns,
