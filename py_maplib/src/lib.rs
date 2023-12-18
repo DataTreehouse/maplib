@@ -517,11 +517,11 @@ impl Mapping {
         Ok(triples)
     }
 
-    #[pyo3(text_signature = "(file_path, base_iri)")]
-    pub fn read_triples(&mut self, file_path: &str, base_iri: Option<String>) -> PyResult<()> {
+    #[pyo3(text_signature = "(file_path, base_iri, transient)")]
+    pub fn read_triples(&mut self, file_path: &str, base_iri: Option<String>, transient:Option<bool>) -> PyResult<()> {
         let path = Path::new(file_path);
         self.inner
-            .read_triples(path, base_iri)
+            .read_triples(path, base_iri, transient.unwrap_or(false))
             .map_err(|x| PyMaplibError::from(x))?;
         Ok(())
     }

@@ -61,7 +61,7 @@ pub fn sparql_literal_to_any_value<'a, 'b>(
                 }
             }
         } else if datatype == LANG_STRING {
-            //Not using Utf8 here causes corruption..
+            //Not using Utf8Owned here causes corruption..
             let val = AnyValue::Utf8Owned(value.into());
             let lang = AnyValue::Utf8Owned(language.unwrap().into());
             let polars_fields: Vec<Field> = vec![
