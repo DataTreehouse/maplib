@@ -136,61 +136,8 @@ impl Triplestore {
 
     pub fn deduplicate(&mut self) -> Result<(), TriplestoreError> {
         let now = Instant::now();
-        for (predicate, map) in &mut self.df_map {
-            for v in map.values_mut() {
-                if !v.unique {
-                    if self.caching_folder.is_some() {
-                        let lf_results: Vec<Result<LazyFrame, ParquetIOError>> = v
-                            .df_paths
-                            .as_ref()
-                            .unwrap()
-                            .par_iter()
-                            .map(read_parquet)
-                            .collect();
-                        let mut lfs = vec![];
-                        for lf_res in lf_results {
-                            lfs.push(lf_res.map_err(TriplestoreError::ParquetIOError)?);
-                        }
-                        let unique_df = concat(lfs, UnionArgs::default())
-                            .unwrap()
-                            .unique(None, UniqueKeepStrategy::First)
-                            .collect()
-                            .unwrap();
-                        //TODO: Implement trick with len to avoid IO
-                        let removed: Vec<Result<(), io::Error>> = v
-                            .df_paths
-                            .as_ref()
-                            .unwrap()
-                            .par_iter()
-                            .map(|x| remove_file(Path::new(x)))
-                            .collect();
-                        for r in removed {
-                            r.map_err(TriplestoreError::RemoveParquetFileError)?
-                        }
-                        let paths = split_write_tmp_df(
-                            self.caching_folder.as_ref().unwrap(),
-                            unique_df,
-                            predicate.as_str(),
-                        )
-                        .map_err(TriplestoreError::ParquetIOError)?;
-                        v.df_paths = Some(paths);
-                        v.unique = true;
-                    } else {
-                        let drained: Vec<LazyFrame> = v
-                            .dfs
-                            .as_mut()
-                            .unwrap()
-                            .drain(..)
-                            .map(|x| x.lazy())
-                            .collect();
-                        let mut lf = concat(drained.as_slice(), UnionArgs::default()).unwrap();
-                        lf = lf.unique(None, UniqueKeepStrategy::First);
-                        v.dfs.as_mut().unwrap().push(lf.collect().unwrap());
-                        v.unique = true;
-                    }
-                }
-            }
-        }
+        deduplicate_map(&mut self.df_map, &self.caching_folder)?;
+        deduplicate_map(&mut self.transient_df_map, &self.caching_folder)?;
         self.deduplicated = true;
         debug!("Deduplication took {} seconds", now.elapsed().as_secs_f64());
         Ok(())
@@ -610,4 +557,66 @@ fn prepare_triples_df(
 //From: https://users.rust-lang.org/t/flatten-a-vec-vec-t-to-a-vec-t/24526/3
 fn flatten<T>(nested: Vec<Vec<T>>) -> Vec<T> {
     nested.into_iter().flatten().collect()
+}
+
+
+fn deduplicate_map(df_map:&mut HashMap<NamedNode, HashMap<(RDFNodeType, RDFNodeType), TripleTable>>,
+                   caching_folder: &Option<String>,
+) -> Result<(), TriplestoreError> {
+    for (predicate, map) in df_map {
+        for v in map.values_mut() {
+            if !v.unique {
+                if caching_folder.is_some() {
+                    let lf_results: Vec<Result<LazyFrame, ParquetIOError>> = v
+                        .df_paths
+                        .as_ref()
+                        .unwrap()
+                        .par_iter()
+                        .map(read_parquet)
+                        .collect();
+                    let mut lfs = vec![];
+                    for lf_res in lf_results {
+                        lfs.push(lf_res.map_err(TriplestoreError::ParquetIOError)?);
+                    }
+                    let unique_df = concat(lfs, UnionArgs::default())
+                        .unwrap()
+                        .unique(None, UniqueKeepStrategy::First)
+                        .collect()
+                        .unwrap();
+                    //TODO: Implement trick with len to avoid IO
+                    let removed: Vec<Result<(), io::Error>> = v
+                        .df_paths
+                        .as_ref()
+                        .unwrap()
+                        .par_iter()
+                        .map(|x| remove_file(Path::new(x)))
+                        .collect();
+                    for r in removed {
+                        r.map_err(TriplestoreError::RemoveParquetFileError)?
+                    }
+                    let paths = split_write_tmp_df(
+                        caching_folder.as_ref().unwrap(),
+                        unique_df,
+                        predicate.as_str(),
+                    )
+                        .map_err(TriplestoreError::ParquetIOError)?;
+                    v.df_paths = Some(paths);
+                    v.unique = true;
+                } else {
+                    let drained: Vec<LazyFrame> = v
+                        .dfs
+                        .as_mut()
+                        .unwrap()
+                        .drain(..)
+                        .map(|x| x.lazy())
+                        .collect();
+                    let mut lf = concat(drained.as_slice(), UnionArgs::default()).unwrap();
+                    lf = lf.unique(None, UniqueKeepStrategy::First);
+                    v.dfs.as_mut().unwrap().push(lf.collect().unwrap());
+                    v.unique = true;
+                }
+            }
+        }
+    }
+    Ok(())
 }

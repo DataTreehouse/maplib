@@ -6,7 +6,7 @@ use oxrdf::vocab::rdf::LANG_STRING;
 use oxrdf::vocab::xsd;
 use oxrdf::NamedNode;
 use polars_core::frame::DataFrame;
-use polars_core::prelude::{AnyValue, NamedFrom, Series};
+use polars_core::prelude::{AnyValue, DataType, NamedFrom, Series};
 use representation::literals::sparql_literal_to_any_value;
 use representation::RDFNodeType;
 use rio_api::parser::TriplesParser;
@@ -21,6 +21,7 @@ impl Triplestore {
         &mut self,
         path: &Path,
         base_iri: Option<String>,
+        transient: bool,
     ) -> Result<(), TriplestoreError> {
         //Copied from the documentation of rio_turtle
         let mut predicate_map = HashMap::new();
@@ -40,7 +41,7 @@ impl Triplestore {
             let (subjects, objects) = type_map.get_mut(&(types_tuple)).unwrap();
             subjects.push(rio_subject_to_oxrdf_subject(&t.subject));
             objects.push(rio_term_to_oxrdf_term(&t.object));
-            Ok(()) as Result<(), TurtleError>
+            Ok(())
         };
 
         let base_iri = if let Some(base_iri) = base_iri {
@@ -61,7 +62,7 @@ impl Triplestore {
             );
             tparser
                 .parse_all(parse_func)
-                .map_err(|x| TriplestoreError::TurtleParsingError(x.to_string()))?;
+                .map_err(|x:rio_turtle::TurtleError | TriplestoreError::TurtleParsingError(x.to_string()))?;
         } else if path.extension() == Some("nt".as_ref()) {
             let mut ntparser = NTriplesParser::new(BufReader::new(
                 File::open(path).map_err(|x| TriplestoreError::ReadTriplesFileError(x))?,
@@ -83,21 +84,6 @@ impl Triplestore {
                 let mut subjects_ser = Series::from_iter(strings_iter);
                 subjects_ser.rename("subject");
 
-                let mut language_tags_vec = vec![];
-                for t in &objects {
-                    match t {
-                        oxrdf::Term::Literal(l) => {
-                            if l.datatype() == xsd::STRING || l.datatype() == LANG_STRING {
-                                language_tags_vec.push(match l.language() {
-                                    None => None,
-                                    Some(tag) => Some(tag.to_string()),
-                                });
-                            }
-                        }
-                        _ => {}
-                    }
-                }
-
                 let any_iter: Vec<AnyValue> = objects
                     .into_iter()
                     .map(|t| match t {
@@ -117,19 +103,11 @@ impl Triplestore {
                         }
                     })
                     .collect();
-                let language_tag_ser = if !language_tags_vec.is_empty() {
-                    Some(Series::new("language_tag", language_tags_vec))
-                } else {
-                    None
-                };
 
                 let objects_ser =
                     Series::from_any_values("object", any_iter.as_slice(), false).unwrap();
 
-                let mut all_series = vec![subjects_ser, objects_ser];
-                if let Some(language_tag_ser) = language_tag_ser {
-                    all_series.push(language_tag_ser);
-                }
+                let all_series = vec![subjects_ser, objects_ser];
                 let df = DataFrame::new(all_series).unwrap();
                 triples_to_add.push(TriplesToAdd {
                     df,
@@ -141,7 +119,7 @@ impl Triplestore {
                 });
             }
         }
-        self.add_triples_vec(triples_to_add, &uuid::Uuid::new_v4().to_string(), false)?;
+        self.add_triples_vec(triples_to_add, &uuid::Uuid::new_v4().to_string(), transient)?;
         Ok(())
     }
 }

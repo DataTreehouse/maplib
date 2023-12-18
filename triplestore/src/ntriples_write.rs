@@ -53,7 +53,6 @@ impl Triplestore {
         let n_threads = POOL.current_num_threads();
         let mut any_value_iter_pool = LowContentionPool::<Vec<_>>::new(n_threads);
         let mut write_buffer_pool = LowContentionPool::<Vec<_>>::new(n_threads);
-
         for (property, map) in &mut self.df_map {
             for ((_rdf_node_type_k, rdf_node_type_o), tt) in map {
                 let dt = if let RDFNodeType::Literal(dt) = rdf_node_type_o {
@@ -140,7 +139,6 @@ fn write_ntriples_for_df<W: Write + ?Sized>(
             if let Some(s) = convert_to_string(df.column("object").unwrap()) {
                 df.with_column(s).unwrap();
             }
-
             let cols = df.get_columns();
 
             // Safety:
@@ -237,6 +235,7 @@ fn write_string_property_triple(f: &mut Vec<u8>, mut any_values: Vec<AnyValue>, 
 }
 
 fn write_lang_string_property_triple(f: &mut Vec<u8>, mut any_values: Vec<AnyValue>, v: &str) {
+    any_values.pop().unwrap();
     let lex = if let AnyValue::Utf8(lex) = any_values.pop().unwrap() {
         lex
     } else {

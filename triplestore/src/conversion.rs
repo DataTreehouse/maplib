@@ -57,11 +57,11 @@ pub fn convert_to_string(series: &Series) -> Option<Series> {
                     (lit("\"")
                         + col(series.name())
                             .struct_()
-                            .field_by_name(LANG_STRING_VALUE_FIELD)
+                            .field_by_name(LANG_STRING_VALUE_FIELD).cast(DataType::Utf8)
                         + lit("\"@")
                         + col(series.name())
                             .struct_()
-                            .field_by_name(LANG_STRING_LANG_FIELD))
+                            .field_by_name(LANG_STRING_LANG_FIELD)).cast(DataType::Utf8)
                     .alias(series.name()),
                 )
                 .collect()

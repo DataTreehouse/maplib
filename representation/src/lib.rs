@@ -84,7 +84,7 @@ impl RDFNodeType {
     }
 
     pub fn find_triple_type(&self) -> TripleType {
-        if let RDFNodeType::IRI = self {
+        if matches!(self, RDFNodeType::IRI | RDFNodeType::BlankNode) {
             TripleType::ObjectProperty
         } else if let RDFNodeType::Literal(lit) = self {
             if lit.as_ref() == xsd::STRING {
