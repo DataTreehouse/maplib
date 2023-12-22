@@ -1,5 +1,5 @@
 use crate::sparql::errors::SparqlError;
-use crate::sparql::multitype::unitype_to_multitype;
+use crate::sparql::multitype::convert_lf_col_to_multitype;
 use crate::TripleTable;
 use polars::prelude::{col, concat, Expr, IntoLazy, LazyFrame, UnionArgs};
 use representation::RDFNodeType;
@@ -66,25 +66,20 @@ pub fn multiple_tt_to_lf(
         let mut use_subj_dt = None;
         let mut use_obj_dt = None;
 
-        for (subj_dt, obj_dt, lf) in filtered {
-            let mut df = lf.collect().unwrap();
+        for (subj_dt, obj_dt, mut lf) in filtered {
             if set_subj_dt.len() > 1 && subj_dt != &RDFNodeType::MultiType {
-                let subjects = df.column("subject").unwrap();
-                let out_subjects = unitype_to_multitype(subjects, subj_dt);
-                df.with_column(out_subjects).unwrap();
+                lf = convert_lf_col_to_multitype(lf, "subject", subj_dt);
                 use_subj_dt = Some(RDFNodeType::MultiType)
             } else {
                 use_subj_dt = Some(subj_dt.clone())
             }
             if set_obj_dt.len() > 1 && obj_dt != &RDFNodeType::MultiType {
-                let objects = df.column("object").unwrap();
-                let out_objects = unitype_to_multitype(objects, obj_dt);
-                df.with_column(out_objects).unwrap();
+                lf = convert_lf_col_to_multitype(lf, "object", subj_dt);
                 use_obj_dt = Some(RDFNodeType::MultiType)
             } else {
                 use_obj_dt = Some(obj_dt.clone());
             }
-            lfs.push(df.lazy())
+            lfs.push(lf)
         }
         let lf = concat(lfs, Default::default()).unwrap();
         Ok(Some((use_subj_dt.unwrap(), use_obj_dt.unwrap(), lf)))

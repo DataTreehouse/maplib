@@ -34,16 +34,25 @@ pub enum QueryResult {
 }
 
 impl Triplestore {
-    pub fn query(&mut self, query: &str) -> Result<QueryResult, SparqlError> {
+    pub fn query_deduplicated(&self, query: &str) -> Result<QueryResult, SparqlError> {
         let query = Query::parse(query, None).map_err(SparqlError::ParseError)?;
-        self.query_parsed(&query)
+        self.query_deduplicated_impl(&query)
     }
 
-    fn query_parsed(&mut self, query: &Query) -> Result<QueryResult, SparqlError> {
+    pub fn query(&mut self, query: &str) -> Result<QueryResult, SparqlError> {
+        let query = Query::parse(query, None).map_err(SparqlError::ParseError)?;
+        self.query_impl(&query)
+    }
+
+    fn query_impl(&mut self, query: &Query) -> Result<QueryResult, SparqlError> {
         if !self.deduplicated {
             self.deduplicate()
                 .map_err(SparqlError::DeduplicationError)?;
         }
+        self.query_deduplicated_impl(query)
+    }
+
+    fn query_deduplicated_impl(&self, query: &Query) -> Result<QueryResult, SparqlError> {
         enable_string_cache();
         let context = Context::new();
         match query {
@@ -89,7 +98,7 @@ impl Triplestore {
         let call_uuid = Uuid::new_v4().to_string();
         let query = Query::parse(query, None).map_err(SparqlError::ParseError)?;
         if let Query::Construct { .. } = &query {
-            let res = self.query_parsed(&query)?;
+            let res = self.query_impl(&query)?;
             match res {
                 QueryResult::Select(_, _) => {
                     panic!("Should never happen")

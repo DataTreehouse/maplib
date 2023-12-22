@@ -1,8 +1,7 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
 use crate::sparql::lazy_graph_patterns::load_tt::multiple_tt_to_lf;
-use crate::sparql::lazy_graph_patterns::triple::create_term_pattern_filter;
-use crate::sparql::multitype::{convert_df_col_to_multitype, multi_series_to_string_series};
+use crate::sparql::multitype::{convert_lf_col_to_multitype, multi_col_to_string_col};
 use crate::sparql::query_context::{Context, PathEntry};
 use crate::sparql::solution_mapping::SolutionMappings;
 use crate::sparql::sparql_to_polars::{
@@ -241,9 +240,8 @@ impl Triplestore {
                     JoinArgs::new(JoinType::Cross),
                 );
                 for m in &multicols {
-                    let mut df = mappings.mappings.collect().unwrap();
-                    convert_df_col_to_multitype(&mut df, &m, &RDFNodeType::IRI);
-                    mappings.mappings = df.lazy();
+                    mappings.mappings =
+                        convert_lf_col_to_multitype(mappings.mappings, &m, &RDFNodeType::IRI);
                 }
             } else {
                 let join_col_exprs: Vec<Expr> = join_cols.iter().map(|x| col(x)).collect();
@@ -508,29 +506,20 @@ fn find_lookup(
 }
 
 fn df_with_cats(mut df: DataFrame, subj_dt: &RDFNodeType, obj_dt: &RDFNodeType) -> DataFrame {
+    let mut lf = df.lazy();
     if subj_dt == &RDFNodeType::MultiType {
-        let subj_string_series = multi_series_to_string_series(df.column("subject").unwrap());
-        df.rename("subject", "subject_multi").unwrap();
-        df.with_column(subj_string_series).unwrap();
+        lf = lf.with_column(col("subject").alias("subject_multi"));
+        lf = multi_col_to_string_col(lf, "subject");
     }
     if obj_dt == &RDFNodeType::MultiType {
-        let obj_string_series = multi_series_to_string_series(df.column("object").unwrap());
-        df.rename("object", "object_multi").unwrap();
-        df.with_column(obj_string_series).unwrap();
+        lf = lf.with_column(col("object").alias("object_multi"));
+        lf = multi_col_to_string_col(lf, "object");
     }
-    let subject = df
-        .column("subject")
-        .unwrap()
-        .cast(&DataType::Categorical(None))
-        .unwrap();
-    let object = df
-        .column("object")
-        .unwrap()
-        .cast(&DataType::Categorical(None))
-        .unwrap();
-    df.with_column(subject).unwrap();
-    df.with_column(object).unwrap();
-    df
+    lf = lf.with_columns([
+        col("subject").cast(DataType::Categorical(None)),
+        col("object").cast(DataType::Categorical(None)),
+    ]);
+    lf.collect().unwrap()
 }
 
 fn find_max_index(vals: Values<String, (DataFrame, RDFNodeType, RDFNodeType)>) -> u32 {

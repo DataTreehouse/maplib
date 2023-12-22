@@ -1,6 +1,5 @@
 pub mod literals;
 
-use std::fmt::Display;
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{BlankNode, NamedNode, NamedNodeRef, NamedOrBlankNode, Term};
 use polars_core::prelude::{DataType, TimeUnit};
@@ -39,10 +38,10 @@ impl RDFNodeType {
             TermPattern::NamedNode(_) => Some(RDFNodeType::IRI),
             TermPattern::BlankNode(_) => None,
             TermPattern::Literal(l) => Some(RDFNodeType::Literal(l.datatype().into_owned())),
+            TermPattern::Variable(_v) => None,
             _ => {
                 unimplemented!()
             }
-            TermPattern::Variable(_v) => None,
         }
     }
 
@@ -92,18 +91,23 @@ impl RDFNodeType {
     }
 
     pub fn find_triple_type(&self) -> TripleType {
-        if matches!(self, RDFNodeType::IRI | RDFNodeType::BlankNode) {
-            TripleType::ObjectProperty
-        } else if let RDFNodeType::Literal(lit) = self {
-            if lit.as_ref() == xsd::STRING {
-                TripleType::StringProperty
-            } else if lit.as_ref() == rdf::LANG_STRING {
-                TripleType::LangStringProperty
-            } else {
-                TripleType::NonStringProperty
+        match self {
+            RDFNodeType::IRI | RDFNodeType::BlankNode => TripleType::ObjectProperty,
+            RDFNodeType::Literal(lit) => {
+                if lit.as_ref() == xsd::STRING {
+                    TripleType::StringProperty
+                } else if lit.as_ref() == rdf::LANG_STRING {
+                    TripleType::LangStringProperty
+                } else {
+                    TripleType::NonStringProperty
+                }
             }
-        } else {
-            todo!("Triple type {:?} not supported", self)
+            RDFNodeType::None => {
+                panic!()
+            }
+            RDFNodeType::MultiType => {
+                panic!()
+            }
         }
     }
 

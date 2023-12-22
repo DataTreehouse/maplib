@@ -47,7 +47,9 @@ use triplestore::sparql::QueryResult;
 use jemallocator::Jemalloc;
 use polars_core::frame::DataFrame;
 use polars_core::prelude::{DataType, NamedFrom};
-use triplestore::sparql::multitype::{multi_series_to_string_series, MULTI_TYPE_NAME};
+use polars_lazy::frame::IntoLazy;
+use representation::RDFNodeType;
+use triplestore::sparql::multitype::{multi_col_to_string_col};
 
 #[cfg(not(target_os = "linux"))]
 use mimalloc::MiMalloc;
@@ -342,13 +344,13 @@ impl Mapping {
             .map_err(PyMaplibError::from)?;
         match res {
             QueryResult::Select(mut df, datatypes) => {
-                df = fix_multicolumns(df);
+                df = fix_multicolumns(df, &datatypes);
                 df_to_py_df(df, py)
             }
             QueryResult::Construct(dfs) => {
                 let dfs = dfs
                     .into_iter()
-                    .map(|(df, subj_type, obj_type)| fix_multicolumns(df))
+                    .map(|(df, subj_type, obj_type)| fix_multicolumns(df, &[("subject".to_string(), subj_type), ("object".to_string(), obj_type)].into()))
                     .collect();
                 Ok(df_vec_to_py_df_list(dfs, py)?.into())
             }
@@ -555,18 +557,12 @@ fn is_blank_node(s: &str) -> bool {
     s.starts_with("_:")
 }
 
-fn fix_multicolumns(mut df: DataFrame) -> DataFrame {
-    let columns: Vec<_> = df
-        .get_column_names()
-        .iter()
-        .map(|x| x.to_string())
-        .collect();
-    for c in columns {
-        if df.column(&c).unwrap().dtype() == &DataType::Object(MULTI_TYPE_NAME) {
-            let ser = df.column(&c).unwrap();
-            let new_ser = multi_series_to_string_series(ser);
-            df.with_column(new_ser).unwrap();
+fn fix_multicolumns(mut df: DataFrame, dts:&HashMap<String, RDFNodeType>) -> DataFrame {
+    let mut lf = df.lazy();
+    for (c, v) in dts {
+        if v == &RDFNodeType::MultiType {
+            lf = multi_col_to_string_col(lf, c);
         }
     }
-    df
+    lf.collect().unwrap()
 }

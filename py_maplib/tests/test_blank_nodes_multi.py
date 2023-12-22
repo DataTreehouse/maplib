@@ -82,6 +82,7 @@ def test_multi_datatype_query_no_error(blank_person_mapping):
         } 
         """)
     by = ["s","v","o"]
+    print(df)
     df = df.sort(by=by)
     filename = TESTDATA_PATH / "multi_datatype_query.csv"
     #df.write_csv(filename)

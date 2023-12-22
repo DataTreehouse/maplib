@@ -15,7 +15,7 @@ use crate::errors::TriplestoreError;
 use crate::io_funcs::{create_folder_if_not_exists, delete_tmp_parquets_in_caching_folder};
 use crate::sparql::lazy_graph_patterns::load_tt::multiple_tt_to_lf;
 use log::debug;
-use oxrdf::vocab::{rdf, xsd};
+use oxrdf::vocab::xsd;
 use oxrdf::NamedNode;
 use parquet_io::{
     property_to_filename, read_parquet, split_write_tmp_df, write_parquet, ParquetIOError,
@@ -132,6 +132,10 @@ impl Triplestore {
             deduplicated: true,
             caching_folder,
         })
+    }
+
+    pub fn is_deduplicated(&self) -> bool {
+        self.deduplicated
     }
 
     pub fn deduplicate(&mut self) -> Result<(), TriplestoreError> {
@@ -559,9 +563,9 @@ fn flatten<T>(nested: Vec<Vec<T>>) -> Vec<T> {
     nested.into_iter().flatten().collect()
 }
 
-
-fn deduplicate_map(df_map:&mut HashMap<NamedNode, HashMap<(RDFNodeType, RDFNodeType), TripleTable>>,
-                   caching_folder: &Option<String>,
+fn deduplicate_map(
+    df_map: &mut HashMap<NamedNode, HashMap<(RDFNodeType, RDFNodeType), TripleTable>>,
+    caching_folder: &Option<String>,
 ) -> Result<(), TriplestoreError> {
     for (predicate, map) in df_map {
         for v in map.values_mut() {
@@ -599,7 +603,7 @@ fn deduplicate_map(df_map:&mut HashMap<NamedNode, HashMap<(RDFNodeType, RDFNodeT
                         unique_df,
                         predicate.as_str(),
                     )
-                        .map_err(TriplestoreError::ParquetIOError)?;
+                    .map_err(TriplestoreError::ParquetIOError)?;
                     v.df_paths = Some(paths);
                     v.unique = true;
                 } else {

@@ -1,10 +1,7 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
 use crate::sparql::lazy_graph_patterns::ordering::{decide_order, Order};
-use crate::sparql::multitype::{
-    clean_up_after_join_workaround, create_compatible_solution_mappings,
-    create_join_compatible_solution_mappings, helper_cols_join_workaround_polars_object_series_bug,
-};
+use crate::sparql::multitype::create_join_compatible_solution_mappings;
 use crate::sparql::query_context::{Context, PathEntry};
 use crate::sparql::solution_mapping::{is_string_col, SolutionMappings};
 use log::debug;
@@ -70,7 +67,7 @@ impl Triplestore {
             rdf_node_types: left_datatypes,
         } = left_solution_mappings;
 
-        let (left_mappings, mut left_datatypes, right_mappings, right_datatypes) =
+        let (left_mappings, mut left_datatypes, mut right_mappings, right_datatypes) =
             create_join_compatible_solution_mappings(
                 left_mappings,
                 left_datatypes,
@@ -83,13 +80,6 @@ impl Triplestore {
                 left_datatypes.insert(k.clone(), v.clone());
             }
         }
-        let (left_mappings, mut right_mappings, left_original_map, right_original_map) =
-            helper_cols_join_workaround_polars_object_series_bug(
-                left_mappings,
-                right_mappings,
-                &join_on,
-                &left_datatypes,
-            );
 
         let mut left_solution_mappings = SolutionMappings {
             mappings: left_mappings,
@@ -126,12 +116,6 @@ impl Triplestore {
         for c in right_columns.drain() {
             left_solution_mappings.columns.insert(c);
         }
-
-        left_solution_mappings.mappings = clean_up_after_join_workaround(
-            left_solution_mappings.mappings,
-            left_original_map,
-            right_original_map,
-        );
 
         Ok(left_solution_mappings)
     }

@@ -123,7 +123,12 @@ impl Mapping {
         Mapping::new(&dataset, caching_folder)
     }
 
-    pub fn read_triples(&mut self, p: &Path, base_iri: Option<String>, transient:bool) -> Result<(), MappingError> {
+    pub fn read_triples(
+        &mut self,
+        p: &Path,
+        base_iri: Option<String>,
+        transient: bool,
+    ) -> Result<(), MappingError> {
         Ok(self
             .triplestore
             .read_triples(p, base_iri, transient)
@@ -625,7 +630,8 @@ fn create_remapped(
                     new_series.push(series);
                     new_dynamic_columns.insert(target_colname.clone(), primitive_column);
                     new_dynamic_from_constant.push(target_colname);
-                    out_blank_node_counter = max(out_blank_node_counter, blank_node_counter+input_df_height);
+                    out_blank_node_counter =
+                        max(out_blank_node_counter, blank_node_counter + input_df_height);
                 } else if original.list_expand {
                     let (expr, primitive_column) =
                         create_dynamic_expression_from_static(target_colname, ct, &target.ptype)?;

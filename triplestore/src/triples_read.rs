@@ -62,7 +62,9 @@ impl Triplestore {
             );
             tparser
                 .parse_all(parse_func)
-                .map_err(|x:rio_turtle::TurtleError | TriplestoreError::TurtleParsingError(x.to_string()))?;
+                .map_err(|x: rio_turtle::TurtleError| {
+                    TriplestoreError::TurtleParsingError(x.to_string())
+                })?;
         } else if path.extension() == Some("nt".as_ref()) {
             let mut ntparser = NTriplesParser::new(BufReader::new(
                 File::open(path).map_err(|x| TriplestoreError::ReadTriplesFileError(x))?,
