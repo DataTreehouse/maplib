@@ -1,13 +1,11 @@
-use crate::{LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD};
+use crate::{RepresentationError, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD};
 use chrono::{DateTime, NaiveDateTime, Utc};
 use oxrdf::vocab::rdf::LANG_STRING;
-use oxrdf::vocab::{rdf, xsd};
-use oxrdf::{Literal, NamedNodeRef};
+use oxrdf::vocab::xsd;
+use oxrdf::{Literal, NamedNodeRef, Term};
 use polars_core::datatypes::TimeUnit;
 use polars_core::prelude::{AnyValue, DataType, Field};
 use std::str::FromStr;
-use polars_arrow::offset::Offset;
-use polars_arrow::scalar::Utf8Scalar;
 
 //This code is copied and modified from Chrontext, which has identical licensing
 pub fn sparql_literal_to_any_value<'a, 'b>(
@@ -78,4 +76,26 @@ pub fn sparql_literal_to_any_value<'a, 'b>(
         (AnyValue::Utf8Owned(value.into()), xsd::STRING)
     };
     (anyv.into_static().unwrap(), dt)
+}
+
+pub fn parse_literal_as_primitive<T: std::str::FromStr>(l: Literal) -> Result<T, RepresentationError> {
+    let parsed = l.value().parse().map_err(|x| {
+        RepresentationError::InvalidLiteralError(format!(
+            "Could not parse as literal {}",
+            l
+        ))
+    })?;
+    Ok(parsed)
+}
+
+pub fn parse_term_as_primitive<T: std::str::FromStr>(term: Term) -> Result<T, RepresentationError> {
+    Ok(match term {
+        Term::Literal(l) => {
+            parse_literal_as_primitive(l)
+        }
+        _ => Err(RepresentationError::InvalidLiteralError(format!(
+            "Wrong term type when trying to parse literal {}",
+            term
+        ))),
+    }?)
 }

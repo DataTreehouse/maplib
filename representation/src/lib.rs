@@ -1,9 +1,17 @@
 pub mod literals;
 
+use std::fmt::Display;
 use oxrdf::vocab::{rdf, xsd};
-use oxrdf::{BlankNode, NamedNode, NamedNodeRef};
+use oxrdf::{BlankNode, NamedNode, NamedNodeRef, NamedOrBlankNode, Term};
 use polars_core::prelude::{DataType, TimeUnit};
 use spargebra::term::TermPattern;
+use thiserror::*;
+
+#[derive(Debug, Error)]
+pub enum RepresentationError {
+    #[error("Invalid literal `{0}`")]
+    InvalidLiteralError(String)
+}
 
 pub const LANG_STRING_VALUE_FIELD: &str = "v";
 pub const LANG_STRING_LANG_FIELD: &str = "l";
@@ -129,4 +137,19 @@ pub fn literal_iri_to_namednode(s: &str) -> NamedNode {
 
 pub fn literal_blanknode_to_blanknode(b: &str) -> BlankNode {
     BlankNode::new_unchecked(&b[2..b.len()])
+}
+
+pub fn owned_term_to_named_or_blank_node(t:Term) -> Option<NamedOrBlankNode> {
+    match t {
+        Term::NamedNode(nn) => {Some(NamedOrBlankNode::NamedNode(nn))}
+        Term::BlankNode(bl) => {Some(NamedOrBlankNode::BlankNode(bl))}
+        _ => None
+    }
+}
+
+pub fn owned_term_to_named_node(t:Term) -> Option<NamedNode> {
+    match t {
+        Term::NamedNode(nn) => {Some(nn)}
+        _ => None
+    }
 }
