@@ -11,6 +11,7 @@ use crate::sparql::multitype::{
     convert_lf_col_to_multitype, create_join_compatible_solution_mappings,
     unicol_to_multitype_value,
 };
+use log::debug;
 use oxrdf::vocab::xsd;
 use oxrdf::NamedNode;
 use polars::prelude::{col, concat, lit, Expr, JoinType, LazyFrame};
@@ -27,8 +28,13 @@ impl Triplestore {
         &self,
         mut solution_mappings: Option<SolutionMappings>,
         triple_pattern: &TriplePattern,
-        _context: &Context,
+        context: &Context,
     ) -> Result<SolutionMappings, SparqlError> {
+        debug!(
+            "Processing triple pattern {:?} at {}"
+            triple_pattern,
+            context.as_str()
+        );
         let subject_filter = create_term_pattern_filter(&triple_pattern.subject, "subject");
         let object_filter = create_term_pattern_filter(&triple_pattern.object, "object");
         let object_datatype_req = match &triple_pattern.object {
@@ -109,6 +115,7 @@ impl Triplestore {
                 )?
             }
         };
+
         let colnames: Vec<_> = dts.keys().map(|x| x.clone()).collect();
         if let Some(SolutionMappings {
             mut mappings,
@@ -122,7 +129,9 @@ impl Triplestore {
                 .map(|x| x.clone())
                 .collect();
             if height_0 {
-                lf = lf.drop_columns(overlap.as_slice());
+                // Important that overlapping cols are dropped from mappings and not from lf,
+                // since we also overwrite rdf_node_types with dts correspondingly below.
+                mappings = mappings.drop_columns(overlap.as_slice());
                 if colnames.is_empty() {
                     mappings = mappings.filter(lit(false));
                 } else {
@@ -138,6 +147,7 @@ impl Triplestore {
                             dts,
                             true,
                         );
+
                     dts = new_dts;
                     rdf_node_types = new_rdf_node_types;
                     mappings = new_mappings;

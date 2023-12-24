@@ -9,7 +9,7 @@ use thiserror::*;
 #[derive(Debug, Error)]
 pub enum RepresentationError {
     #[error("Invalid literal `{0}`")]
-    InvalidLiteralError(String)
+    InvalidLiteralError(String),
 }
 
 pub const LANG_STRING_VALUE_FIELD: &str = "v";
@@ -143,17 +143,17 @@ pub fn literal_blanknode_to_blanknode(b: &str) -> BlankNode {
     BlankNode::new_unchecked(&b[2..b.len()])
 }
 
-pub fn owned_term_to_named_or_blank_node(t:Term) -> Option<NamedOrBlankNode> {
+pub fn owned_term_to_named_or_blank_node(t: Term) -> Option<NamedOrBlankNode> {
     match t {
-        Term::NamedNode(nn) => {Some(NamedOrBlankNode::NamedNode(nn))}
-        Term::BlankNode(bl) => {Some(NamedOrBlankNode::BlankNode(bl))}
-        _ => None
+        Term::NamedNode(nn) => Some(NamedOrBlankNode::NamedNode(nn)),
+        Term::BlankNode(bl) => Some(NamedOrBlankNode::BlankNode(bl)),
+        _ => None,
     }
 }
 
-pub fn owned_term_to_named_node(t:Term) -> Option<NamedNode> {
+pub fn owned_term_to_named_node(t: Term) -> Option<NamedNode> {
     match t {
-        Term::NamedNode(nn) => {Some(nn)}
-        _ => None
+        Term::NamedNode(nn) => Some(nn),
+        _ => None,
     }
 }

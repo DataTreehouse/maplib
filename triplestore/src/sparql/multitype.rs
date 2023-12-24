@@ -196,6 +196,7 @@ pub fn create_join_compatible_solution_mappings(
     }
     left_datatypes.extend(new_left_datatypes);
     right_datatypes.extend(new_right_datatypes);
+
     (
         left_mappings,
         left_datatypes,

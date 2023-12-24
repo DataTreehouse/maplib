@@ -78,21 +78,18 @@ pub fn sparql_literal_to_any_value<'a, 'b>(
     (anyv.into_static().unwrap(), dt)
 }
 
-pub fn parse_literal_as_primitive<T: std::str::FromStr>(l: Literal) -> Result<T, RepresentationError> {
+pub fn parse_literal_as_primitive<T: std::str::FromStr>(
+    l: Literal,
+) -> Result<T, RepresentationError> {
     let parsed = l.value().parse().map_err(|x| {
-        RepresentationError::InvalidLiteralError(format!(
-            "Could not parse as literal {}",
-            l
-        ))
+        RepresentationError::InvalidLiteralError(format!("Could not parse as literal {}", l))
     })?;
     Ok(parsed)
 }
 
 pub fn parse_term_as_primitive<T: std::str::FromStr>(term: Term) -> Result<T, RepresentationError> {
     Ok(match term {
-        Term::Literal(l) => {
-            parse_literal_as_primitive(l)
-        }
+        Term::Literal(l) => parse_literal_as_primitive(l),
         _ => Err(RepresentationError::InvalidLiteralError(format!(
             "Wrong term type when trying to parse literal {}",
             term

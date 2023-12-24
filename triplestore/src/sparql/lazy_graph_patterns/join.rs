@@ -97,7 +97,7 @@ impl Triplestore {
         } else {
             for c in join_on {
                 let dt = right_datatypes.get(&c).unwrap();
-                if dt == &RDFNodeType::MultiType || is_string_col(dt) {
+                if is_string_col(dt) {
                     right_mappings =
                         right_mappings.with_column(col(&c).cast(DataType::Categorical(None)));
                     left_solution_mappings.mappings = left_solution_mappings
