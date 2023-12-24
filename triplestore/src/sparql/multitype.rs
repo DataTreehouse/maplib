@@ -69,6 +69,7 @@ pub fn convert_lf_col_to_multitype(lf: LazyFrame, c: &str, dt: &RDFNodeType) -> 
                 lf.with_column(
                     as_struct(vec![
                         col(c)
+                            .cast(DataType::Utf8)
                             .cast(DataType::Categorical(None))
                             .alias(MULTI_VALUE_COL),
                         lit(non_multi_type_string(&dt))
@@ -203,13 +204,18 @@ pub fn create_join_compatible_solution_mappings(
     )
 }
 
-pub fn force_convert_multicol_to_single_col(lf: LazyFrame, c: &str, dt: &RDFNodeType) -> LazyFrame {
-    lf.filter(
+pub fn force_convert_multicol_to_single_col(
+    mut lf: LazyFrame,
+    c: &str,
+    dt: &RDFNodeType,
+) -> LazyFrame {
+    lf = lf.filter(
         col(c)
             .struct_()
             .field_by_name(MULTI_DT_COL)
             .eq(lit(non_multi_type_string(dt))),
-    )
+    );
+    definitively_convert_lf_multicol_to_single(lf, c, dt)
 }
 
 pub fn unicol_to_multitype_value(c: &str, dt: &RDFNodeType) -> Expr {
@@ -293,6 +299,13 @@ pub fn maybe_convert_df_multicol_to_single(
     dt: Option<&RDFNodeType>,
 ) -> bool {
     let c_ser = df.column(c).unwrap();
+    if let DataType::Struct(fields) = c_ser.dtype() {
+        if fields.len() != 3 {
+            return true;
+        }
+    } else {
+        return true;
+    }
     let dt = if let Some(dt) = dt {
         dt.clone()
     } else {
@@ -317,9 +330,30 @@ pub fn maybe_convert_df_multicol_to_single(
             return false;
         }
     };
-    df.with_column(c_ser.cast(&dt.polars_data_type()).unwrap())
-        .unwrap();
+    df.with_column(
+        c_ser
+            .cast(&DataType::Utf8)
+            .unwrap()
+            .cast(&dt.polars_data_type())
+            .unwrap(),
+    )
+    .unwrap();
     true
+}
+
+pub fn definitively_convert_lf_multicol_to_single(
+    lf: LazyFrame,
+    c: &str,
+    dt: &RDFNodeType,
+) -> LazyFrame {
+    let polars_dt = dt.polars_data_type();
+    lf.with_column(
+        col(c)
+            .struct_()
+            .field_by_name(MULTI_VALUE_COL)
+            .cast(polars_dt)
+            .alias(c),
+    )
 }
 
 pub fn split_df_multicol(df: &mut DataFrame, c: &str) -> Vec<(DataFrame, RDFNodeType)> {
@@ -384,15 +418,24 @@ pub fn split_df_multicols(
         .collect()
         .unwrap();
 
-    let dfs = df.partition_by(sort_colnames.as_slice(), false).unwrap();
+    let dfs = df.partition_by(sort_colnames.as_slice(), true).unwrap();
     let mut dfs_dts = vec![];
     for mut df in dfs {
         let mut map = HashMap::new();
         for (i, key_col) in sort_colnames.iter().enumerate() {
             let s = df.drop_in_place(key_col).unwrap();
-            let dt = str_non_multi_type(s.utf8().unwrap().get(0).unwrap());
-            maybe_convert_df_multicol_to_single(&mut df, cs.get(i).unwrap(), Some(&dt));
-            map.insert(cs.get(i).unwrap().to_string(), dt);
+            if let Some(dt) = s.cast(&DataType::Utf8).unwrap().utf8().unwrap().get(0) {
+                let dt = str_non_multi_type(dt);
+                maybe_convert_df_multicol_to_single(&mut df, cs.get(i).unwrap(), Some(&dt));
+                map.insert(cs.get(i).unwrap().to_string(), dt);
+            } else {
+                df = df
+                    .lazy()
+                    .with_column(lit(LiteralValue::Null).alias(cs.get(i).unwrap()))
+                    .collect()
+                    .unwrap();
+                map.insert(cs.get(i).unwrap().to_string(), RDFNodeType::None);
+            }
         }
         dfs_dts.push((df, map));
     }

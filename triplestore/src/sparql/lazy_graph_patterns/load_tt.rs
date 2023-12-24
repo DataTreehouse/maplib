@@ -74,7 +74,7 @@ pub fn multiple_tt_to_lf(
                 use_subj_dt = Some(subj_dt.clone())
             }
             if set_obj_dt.len() > 1 && obj_dt != &RDFNodeType::MultiType {
-                lf = convert_lf_col_to_multitype(lf, "object", subj_dt);
+                lf = convert_lf_col_to_multitype(lf, "object", obj_dt);
                 use_obj_dt = Some(RDFNodeType::MultiType)
             } else {
                 use_obj_dt = Some(obj_dt.clone());
