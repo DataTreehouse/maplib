@@ -31,7 +31,7 @@ impl Triplestore {
         context: &Context,
     ) -> Result<SolutionMappings, SparqlError> {
         debug!(
-            "Processing triple pattern {:?} at {}"
+            "Processing triple pattern {:?} at {}",
             triple_pattern,
             context.as_str()
         );
