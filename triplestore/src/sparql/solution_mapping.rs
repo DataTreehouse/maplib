@@ -28,9 +28,7 @@ pub fn is_string_col(rdf_node_type: &RDFNodeType) -> bool {
     match rdf_node_type {
         RDFNodeType::IRI => true,
         RDFNodeType::BlankNode => true,
-        RDFNodeType::Literal(lit) => {
-            lit.as_ref() == xsd::STRING
-        }
+        RDFNodeType::Literal(lit) => lit.as_ref() == xsd::STRING,
         RDFNodeType::MultiType => false,
         RDFNodeType::None => false,
     }

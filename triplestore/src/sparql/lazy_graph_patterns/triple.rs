@@ -124,7 +124,8 @@ impl Triplestore {
         {
             let overlap: Vec<_> = colnames
                 .iter()
-                .filter(|x| columns.contains(*x)).cloned()
+                .filter(|x| columns.contains(*x))
+                .cloned()
                 .collect();
             if height_0 {
                 // Important that overlapping cols are dropped from mappings and not from lf,
@@ -162,13 +163,8 @@ impl Triplestore {
                     mappings = mappings.with_column(col(c).cast(DataType::Categorical(None)));
                 }
 
-                mappings = join_workaround(
-                    mappings,
-                    &rdf_node_types,
-                    lf,
-                    &dts,
-                    JoinType::Inner.into(),
-                );
+                mappings =
+                    join_workaround(mappings, &rdf_node_types, lf, &dts, JoinType::Inner.into());
             } else {
                 mappings = mappings.join(lf, [], [], JoinType::Cross.into());
             }

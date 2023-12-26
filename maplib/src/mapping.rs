@@ -129,8 +129,7 @@ impl Mapping {
         base_iri: Option<String>,
         transient: bool,
     ) -> Result<(), MappingError> {
-        self
-            .triplestore
+        self.triplestore
             .read_triples(p, base_iri, transient)
             .map_err(MappingError::TriplestoreError)
     }

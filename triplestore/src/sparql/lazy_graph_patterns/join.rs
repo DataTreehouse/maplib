@@ -54,7 +54,8 @@ impl Triplestore {
 
         let mut join_on: Vec<_> = left_solution_mappings
             .columns
-            .intersection(&right_columns).cloned()
+            .intersection(&right_columns)
+            .cloned()
             .collect();
         join_on.sort();
 

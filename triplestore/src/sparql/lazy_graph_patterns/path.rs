@@ -761,7 +761,9 @@ fn sparse_path(
                         dt_obj: dt_obj_left,
                     })
                 }
-            } else { res_right }
+            } else {
+                res_right
+            }
         }
         PropertyPathExpression::ZeroOrMore(inner) => {
             if let Some(SparsePathReturn {

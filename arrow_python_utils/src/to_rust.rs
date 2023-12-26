@@ -79,7 +79,8 @@ pub fn polars_df_to_rust_df(df: &PyAny) -> PyResult<DataFrame> {
 }
 
 pub fn array_to_rust_df(rb: &[&PyAny]) -> PyResult<DataFrame> {
-    let schema = rb.first()
+    let schema = rb
+        .first()
         .ok_or_else(|| ToRustError::Other("empty table".into()))?
         .getattr("schema")?;
     let names = schema.getattr("names")?.extract::<Vec<String>>()?;

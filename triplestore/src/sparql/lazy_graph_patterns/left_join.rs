@@ -1,8 +1,6 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
-use crate::sparql::multitype::{
-    create_join_compatible_solution_mappings, join_workaround,
-};
+use crate::sparql::multitype::{create_join_compatible_solution_mappings, join_workaround};
 use crate::sparql::query_context::{Context, PathEntry};
 use crate::sparql::solution_mapping::{is_string_col, SolutionMappings};
 use log::debug;
@@ -51,9 +49,7 @@ impl Triplestore {
             rdf_node_types: left_datatypes,
         } = left_solution_mappings;
 
-        let mut join_on: Vec<_> = left_columns
-            .intersection(&right_columns).cloned()
-            .collect();
+        let mut join_on: Vec<_> = left_columns.intersection(&right_columns).cloned().collect();
         join_on.sort();
 
         let (mut left_mappings, mut left_datatypes, mut right_mappings, right_datatypes) =

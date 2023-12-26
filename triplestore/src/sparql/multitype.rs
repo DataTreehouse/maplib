@@ -20,7 +20,6 @@ pub const MULTI_BLANK_DT: &str = "B";
 pub const MULTI_PLACEHOLDER_LANG: &str = "?";
 
 pub fn convert_lf_col_to_multitype(lf: LazyFrame, c: &str, dt: &RDFNodeType) -> LazyFrame {
-    
     match dt {
         RDFNodeType::IRI => lf.with_column(
             as_struct(vec![
@@ -420,8 +419,12 @@ pub fn split_df_multicols(
 }
 
 pub fn lf_printer(lf: &LazyFrame) {
+    let df = lf_destruct(lf);
+    println!("DF: {}", df);
+}
+
+pub fn lf_destruct(lf: &LazyFrame) -> DataFrame {
     let df = lf.clone().collect().unwrap();
-    println!("DF datatypes {:?}", df.dtypes());
     let colnames: Vec<_> = df
         .get_column_names()
         .iter()
@@ -466,7 +469,7 @@ pub fn lf_printer(lf: &LazyFrame) {
             series_vec.push(ser.clone());
         }
     }
-    println!("DF: {}", DataFrame::new(series_vec).unwrap());
+    DataFrame::new(series_vec).unwrap()
 }
 
 pub fn join_workaround(

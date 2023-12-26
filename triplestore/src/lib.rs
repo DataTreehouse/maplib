@@ -45,6 +45,7 @@ pub struct Triplestore {
     pub(crate) caching_folder: Option<String>,
     df_map: HashMap<NamedNode, HashMap<(RDFNodeType, RDFNodeType), TripleTable>>,
     transient_df_map: HashMap<NamedNode, HashMap<(RDFNodeType, RDFNodeType), TripleTable>>,
+    parser_call: usize,
 }
 
 pub struct TripleTable {
@@ -131,6 +132,7 @@ impl Triplestore {
             transient_df_map: HashMap::new(),
             deduplicated: true,
             caching_folder,
+            parser_call: 0,
         })
     }
 

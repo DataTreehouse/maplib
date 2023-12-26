@@ -25,6 +25,7 @@ impl Triplestore {
     ) -> Result<(), TriplestoreError> {
         //Copied from the documentation of rio_turtle
         let mut predicate_map = HashMap::new();
+        let parser_call = self.parser_call.to_string();
         let parse_func = &mut |t: rio_api::model::Triple| {
             let verb_key = t.predicate.iri;
             if !predicate_map.contains_key(verb_key) {
@@ -39,8 +40,8 @@ impl Triplestore {
             }
 
             let (subjects, objects) = type_map.get_mut(&(types_tuple)).unwrap();
-            subjects.push(rio_subject_to_oxrdf_subject(&t.subject));
-            objects.push(rio_term_to_oxrdf_term(&t.object));
+            subjects.push(rio_subject_to_oxrdf_subject(&t.subject, &parser_call));
+            objects.push(rio_term_to_oxrdf_term(&t.object, &parser_call));
             Ok(())
         };
 
@@ -55,9 +56,7 @@ impl Triplestore {
 
         if path.extension() == Some("ttl".as_ref()) {
             let mut tparser = TurtleParser::new(
-                BufReader::new(
-                    File::open(path).map_err(TriplestoreError::ReadTriplesFileError)?,
-                ),
+                BufReader::new(File::open(path).map_err(TriplestoreError::ReadTriplesFileError)?),
                 base_iri,
             );
             tparser
@@ -121,18 +120,19 @@ impl Triplestore {
                 });
             }
         }
+        self.parser_call += 1;
         self.add_triples_vec(triples_to_add, &uuid::Uuid::new_v4().to_string(), transient)?;
         Ok(())
     }
 }
 
-fn rio_term_to_oxrdf_term(t: &rio_api::model::Term) -> oxrdf::Term {
+fn rio_term_to_oxrdf_term(t: &rio_api::model::Term, parser_call: &str) -> oxrdf::Term {
     match t {
         rio_api::model::Term::NamedNode(nn) => {
             oxrdf::Term::NamedNode(rio_named_node_to_oxrdf_named_node(nn))
         }
         rio_api::model::Term::BlankNode(bn) => {
-            oxrdf::Term::BlankNode(rio_blank_node_to_oxrdf_blank_node(bn))
+            oxrdf::Term::BlankNode(rio_blank_node_to_oxrdf_blank_node(bn, parser_call))
         }
         rio_api::model::Term::Literal(l) => oxrdf::Term::Literal(rio_literal_to_oxrdf_literal(l)),
         rio_api::model::Term::Triple(_) => {
@@ -153,13 +153,13 @@ fn rio_literal_to_oxrdf_literal(l: &rio_api::model::Literal) -> oxrdf::Literal {
     }
 }
 
-fn rio_subject_to_oxrdf_subject(s: &rio_api::model::Subject) -> oxrdf::Subject {
+fn rio_subject_to_oxrdf_subject(s: &rio_api::model::Subject, parser_call: &str) -> oxrdf::Subject {
     match s {
         rio_api::model::Subject::NamedNode(nn) => {
             oxrdf::Subject::NamedNode(rio_named_node_to_oxrdf_named_node(nn))
         }
         rio_api::model::Subject::BlankNode(bn) => {
-            oxrdf::Subject::BlankNode(rio_blank_node_to_oxrdf_blank_node(bn))
+            oxrdf::Subject::BlankNode(rio_blank_node_to_oxrdf_blank_node(bn, parser_call))
         }
         rio_api::model::Subject::Triple(_) => {
             todo!()
@@ -167,8 +167,11 @@ fn rio_subject_to_oxrdf_subject(s: &rio_api::model::Subject) -> oxrdf::Subject {
     }
 }
 
-fn rio_blank_node_to_oxrdf_blank_node(bn: &rio_api::model::BlankNode) -> oxrdf::BlankNode {
-    oxrdf::BlankNode::new_unchecked(bn.id)
+fn rio_blank_node_to_oxrdf_blank_node(
+    bn: &rio_api::model::BlankNode,
+    parser_call: &str,
+) -> oxrdf::BlankNode {
+    oxrdf::BlankNode::new_unchecked(format!("{}_{}", bn.id, parser_call))
 }
 
 fn rio_named_node_to_oxrdf_named_node(nn: &rio_api::model::NamedNode) -> oxrdf::NamedNode {
