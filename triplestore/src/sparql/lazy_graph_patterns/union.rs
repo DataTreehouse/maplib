@@ -41,9 +41,7 @@ impl Triplestore {
                 right_datatypes,
             );
         for (k, v) in right_datatypes.drain() {
-            if !left_datatypes.contains_key(&k) {
-                left_datatypes.insert(k, v);
-            }
+            left_datatypes.entry(k).or_insert(v);
         }
 
         let output_mappings =

@@ -297,7 +297,7 @@ fn write_object_property_triple(f: &mut Vec<u8>, mut any_values: Vec<AnyValue>, 
 }
 
 fn write_iri_or_blanknode(f: &mut Vec<u8>, s: &str) {
-    if s.chars().nth(0).unwrap() == '_' {
+    if s.starts_with('_') {
         write!(f, "{}", s).unwrap();
     } else {
         write_iri(f, s);

@@ -8,8 +8,8 @@ use polars_core::prelude::{AnyValue, DataType, Field};
 use std::str::FromStr;
 
 //This code is copied and modified from Chrontext, which has identical licensing
-pub fn sparql_literal_to_any_value<'a, 'b>(
-    value: &'b str,
+pub fn sparql_literal_to_any_value<'a>(
+    value: &str,
     language: Option<&str>,
     datatype: &Option<NamedNodeRef<'a>>,
 ) -> (AnyValue<'static>, NamedNodeRef<'a>) {
@@ -71,7 +71,7 @@ pub fn sparql_literal_to_any_value<'a, 'b>(
         } else {
             todo!("Not implemented! {:?}", datatype)
         };
-        (literal_value, datatype.clone())
+        (literal_value, datatype)
     } else {
         (AnyValue::Utf8Owned(value.into()), xsd::STRING)
     };
@@ -81,18 +81,18 @@ pub fn sparql_literal_to_any_value<'a, 'b>(
 pub fn parse_literal_as_primitive<T: std::str::FromStr>(
     l: Literal,
 ) -> Result<T, RepresentationError> {
-    let parsed = l.value().parse().map_err(|x| {
+    let parsed = l.value().parse().map_err(|_x| {
         RepresentationError::InvalidLiteralError(format!("Could not parse as literal {}", l))
     })?;
     Ok(parsed)
 }
 
 pub fn parse_term_as_primitive<T: std::str::FromStr>(term: Term) -> Result<T, RepresentationError> {
-    Ok(match term {
+    match term {
         Term::Literal(l) => parse_literal_as_primitive(l),
         _ => Err(RepresentationError::InvalidLiteralError(format!(
             "Wrong term type when trying to parse literal {}",
             term
         ))),
-    }?)
+    }
 }

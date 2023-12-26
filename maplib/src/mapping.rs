@@ -129,10 +129,10 @@ impl Mapping {
         base_iri: Option<String>,
         transient: bool,
     ) -> Result<(), MappingError> {
-        Ok(self
+        self
             .triplestore
             .read_triples(p, base_iri, transient)
-            .map_err(|x| MappingError::TriplestoreError(x))?)
+            .map_err(MappingError::TriplestoreError)
     }
 
     pub fn write_n_triples(&mut self, buffer: &mut dyn Write) -> Result<(), MappingError> {
@@ -386,7 +386,7 @@ impl Mapping {
                     if let Some(i) = nonnull {
                         let first_iri = df.column(colname).unwrap().utf8().unwrap().get(i).unwrap();
                         {
-                            if !first_iri.starts_with("<") {
+                            if !first_iri.starts_with('<') {
                                 fix_iris.push(colname);
                             }
                         }
@@ -557,7 +557,7 @@ fn create_series_from_blank_node_constant(
 }
 
 fn create_remapped(
-    mut blank_node_counter: usize,
+    blank_node_counter: usize,
     layer: usize,
     pattern_num: usize,
     instance: &Instance,
@@ -646,7 +646,7 @@ fn create_remapped(
                     new_constant_columns.insert(target_colname.clone(), static_column);
                 }
             }
-            StottrTerm::List(l) => {
+            StottrTerm::List(_l) => {
                 todo!()
             }
         }

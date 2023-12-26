@@ -108,7 +108,7 @@ impl Triplestore {
             subject_lookup_df.rename("value", "subject").unwrap();
             out_df = out_df
                 .join(
-                    &subject_lookup_df,
+                    subject_lookup_df,
                     &["subject_key"],
                     &["key"],
                     JoinArgs::new(JoinType::Inner),
@@ -120,7 +120,7 @@ impl Triplestore {
             object_lookup_df.rename("value", "object").unwrap();
             out_df = out_df
                 .join(
-                    &object_lookup_df,
+                    object_lookup_df,
                     &["object_key"],
                     &["key"],
                     JoinArgs::new(JoinType::Inner),
@@ -241,7 +241,7 @@ impl Triplestore {
                 );
                 for m in &multicols {
                     mappings.mappings =
-                        convert_lf_col_to_multitype(mappings.mappings, &m, &RDFNodeType::IRI);
+                        convert_lf_col_to_multitype(mappings.mappings, m, &RDFNodeType::IRI);
                 }
             } else {
                 let join_col_exprs: Vec<Expr> = join_cols.iter().map(|x| col(x)).collect();
@@ -505,7 +505,7 @@ fn find_lookup(
     out_map
 }
 
-fn df_with_cats(mut df: DataFrame, subj_dt: &RDFNodeType, obj_dt: &RDFNodeType) -> DataFrame {
+fn df_with_cats(df: DataFrame, subj_dt: &RDFNodeType, obj_dt: &RDFNodeType) -> DataFrame {
     let mut lf = df.lazy();
     if subj_dt == &RDFNodeType::MultiType {
         lf = lf.with_column(col("subject").alias("subject_multi"));
@@ -761,11 +761,7 @@ fn sparse_path(
                         dt_obj: dt_obj_left,
                     })
                 }
-            } else if let Some(r) = res_right {
-                Some(r)
-            } else {
-                None
-            }
+            } else { res_right }
         }
         PropertyPathExpression::ZeroOrMore(inner) => {
             if let Some(SparsePathReturn {

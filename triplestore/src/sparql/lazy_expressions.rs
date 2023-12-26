@@ -572,7 +572,7 @@ impl Triplestore {
                     )?;
                 }
 
-                let coalesced_context = inner_contexts.get(0).unwrap();
+                let coalesced_context = inner_contexts.first().unwrap();
                 let mut coalesced = col(coalesced_context.as_str());
                 for c in &inner_contexts[1..inner_contexts.len()] {
                     coalesced = Expr::Ternary {
@@ -593,7 +593,7 @@ impl Triplestore {
                 //TODO: generalize
                 let existing_type = output_solution_mappings
                     .rdf_node_types
-                    .get(inner_contexts.get(0).unwrap().as_str())
+                    .get(inner_contexts.first().unwrap().as_str())
                     .unwrap();
                 output_solution_mappings
                     .rdf_node_types

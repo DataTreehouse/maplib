@@ -9,7 +9,6 @@ use crate::sparql::sparql_to_polars::{
 use crate::sparql::lazy_graph_patterns::load_tt::multiple_tt_to_lf;
 use crate::sparql::multitype::{
     convert_lf_col_to_multitype, create_join_compatible_solution_mappings, join_workaround,
-    unicol_to_multitype_value,
 };
 use log::debug;
 use oxrdf::vocab::xsd;
@@ -50,7 +49,7 @@ impl Triplestore {
         let verb_rename = get_keep_rename_named_node_pattern(&triple_pattern.predicate);
         let object_rename = get_keep_rename_term_pattern(&triple_pattern.object);
 
-        let (mut lf, mut dts, height_0) = match &triple_pattern.predicate {
+        let (lf, mut dts, height_0) = match &triple_pattern.predicate {
             NamedNodePattern::NamedNode(n) => self.get_predicate_lf(
                 n,
                 &subject_rename,
@@ -116,7 +115,7 @@ impl Triplestore {
             }
         };
 
-        let colnames: Vec<_> = dts.keys().map(|x| x.clone()).collect();
+        let colnames: Vec<_> = dts.keys().cloned().collect();
         if let Some(SolutionMappings {
             mut mappings,
             mut columns,
@@ -125,8 +124,7 @@ impl Triplestore {
         {
             let overlap: Vec<_> = colnames
                 .iter()
-                .filter(|x| columns.contains(*x))
-                .map(|x| x.clone())
+                .filter(|x| columns.contains(*x)).cloned()
                 .collect();
             if height_0 {
                 // Important that overlapping cols are dropped from mappings and not from lf,
@@ -137,44 +135,42 @@ impl Triplestore {
                 } else {
                     mappings = mappings.join(lf, [], [], JoinType::Cross.into());
                 }
-            } else {
-                if !overlap.is_empty() {
-                    let (new_mappings, new_rdf_node_types, mut lf, new_dts) =
-                        create_join_compatible_solution_mappings(
-                            mappings,
-                            rdf_node_types,
-                            lf,
-                            dts,
-                            true,
-                        );
-
-                    dts = new_dts;
-                    rdf_node_types = new_rdf_node_types;
-                    mappings = new_mappings;
-
-                    let join_on: Vec<Expr> = overlap.iter().map(|x| col(x)).collect();
-                    let mut strcol = vec![];
-                    for c in &overlap {
-                        let dt = rdf_node_types.get(c).unwrap();
-                        if is_string_col(dt) {
-                            strcol.push(c);
-                        }
-                    }
-                    for c in strcol {
-                        lf = lf.with_column(col(c).cast(DataType::Categorical(None)));
-                        mappings = mappings.with_column(col(c).cast(DataType::Categorical(None)));
-                    }
-
-                    mappings = join_workaround(
+            } else if !overlap.is_empty() {
+                let (new_mappings, new_rdf_node_types, mut lf, new_dts) =
+                    create_join_compatible_solution_mappings(
                         mappings,
-                        &rdf_node_types,
+                        rdf_node_types,
                         lf,
-                        &dts,
-                        JoinType::Inner.into(),
+                        dts,
+                        true,
                     );
-                } else {
-                    mappings = mappings.join(lf, [], [], JoinType::Cross.into());
+
+                dts = new_dts;
+                rdf_node_types = new_rdf_node_types;
+                mappings = new_mappings;
+
+                let _join_on: Vec<Expr> = overlap.iter().map(|x| col(x)).collect();
+                let mut strcol = vec![];
+                for c in &overlap {
+                    let dt = rdf_node_types.get(c).unwrap();
+                    if is_string_col(dt) {
+                        strcol.push(c);
+                    }
                 }
+                for c in strcol {
+                    lf = lf.with_column(col(c).cast(DataType::Categorical(None)));
+                    mappings = mappings.with_column(col(c).cast(DataType::Categorical(None)));
+                }
+
+                mappings = join_workaround(
+                    mappings,
+                    &rdf_node_types,
+                    lf,
+                    &dts,
+                    JoinType::Inner.into(),
+                );
+            } else {
+                mappings = mappings.join(lf, [], [], JoinType::Cross.into());
             }
             columns.extend(colnames);
             rdf_node_types.extend(dts);

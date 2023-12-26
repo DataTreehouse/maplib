@@ -2,15 +2,15 @@ use super::Triplestore;
 use crate::errors::TriplestoreError;
 use crate::TriplesToAdd;
 use oxiri::Iri;
-use oxrdf::vocab::rdf::LANG_STRING;
+
 use oxrdf::vocab::xsd;
 use oxrdf::NamedNode;
 use polars_core::frame::DataFrame;
-use polars_core::prelude::{AnyValue, DataType, NamedFrom, Series};
+use polars_core::prelude::{AnyValue, NamedFrom, Series};
 use representation::literals::sparql_literal_to_any_value;
 use representation::RDFNodeType;
 use rio_api::parser::TriplesParser;
-use rio_turtle::{NTriplesParser, TurtleError, TurtleParser};
+use rio_turtle::{NTriplesParser, TurtleParser};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufReader;
@@ -56,7 +56,7 @@ impl Triplestore {
         if path.extension() == Some("ttl".as_ref()) {
             let mut tparser = TurtleParser::new(
                 BufReader::new(
-                    File::open(path).map_err(|x| TriplestoreError::ReadTriplesFileError(x))?,
+                    File::open(path).map_err(TriplestoreError::ReadTriplesFileError)?,
                 ),
                 base_iri,
             );
@@ -67,7 +67,7 @@ impl Triplestore {
                 })?;
         } else if path.extension() == Some("nt".as_ref()) {
             let mut ntparser = NTriplesParser::new(BufReader::new(
-                File::open(path).map_err(|x| TriplestoreError::ReadTriplesFileError(x))?,
+                File::open(path).map_err(TriplestoreError::ReadTriplesFileError)?,
             ));
             ntparser
                 .parse_all(parse_func)

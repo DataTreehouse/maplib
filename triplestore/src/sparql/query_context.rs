@@ -266,6 +266,12 @@ pub struct Context {
     pub path: Vec<PathEntry>,
 }
 
+impl Default for Context {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Context {
     pub fn new() -> Context {
         Context {

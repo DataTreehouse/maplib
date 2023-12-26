@@ -79,8 +79,7 @@ pub fn polars_df_to_rust_df(df: &PyAny) -> PyResult<DataFrame> {
 }
 
 pub fn array_to_rust_df(rb: &[&PyAny]) -> PyResult<DataFrame> {
-    let schema = rb
-        .get(0)
+    let schema = rb.first()
         .ok_or_else(|| ToRustError::Other("empty table".into()))?
         .getattr("schema")?;
     let names = schema.getattr("names")?.extract::<Vec<String>>()?;
@@ -140,9 +139,7 @@ impl std::convert::From<ToRustError> for PyErr {
     fn from(err: ToRustError) -> PyErr {
         let default = || PyRuntimeError::new_err(format!("{:?}", &err));
 
-        match &err {
-            _ => default(),
-        }
+        default()
     }
 }
 

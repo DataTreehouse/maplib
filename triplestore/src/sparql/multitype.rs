@@ -1,10 +1,10 @@
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::NamedNode;
 use polars::prelude::{
-    as_struct, col, lit, ternary_expr, Expr, IntoLazy, JoinArgs, JoinType, LazyFrame, LiteralValue,
+    as_struct, col, lit, ternary_expr, Expr, IntoLazy, JoinArgs, LazyFrame, LiteralValue,
 };
 use polars_core::frame::DataFrame;
-use polars_core::prelude::{DataType, Series, SortOptions};
+use polars_core::prelude::{DataType, Series};
 use representation::{
     literal_iri_to_namednode, RDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD,
 };
@@ -20,13 +20,14 @@ pub const MULTI_BLANK_DT: &str = "B";
 pub const MULTI_PLACEHOLDER_LANG: &str = "?";
 
 pub fn convert_lf_col_to_multitype(lf: LazyFrame, c: &str, dt: &RDFNodeType) -> LazyFrame {
-    let lf = match dt {
+    
+    match dt {
         RDFNodeType::IRI => lf.with_column(
             as_struct(vec![
                 col(c)
                     .cast(DataType::Categorical(None))
                     .alias(MULTI_VALUE_COL),
-                lit(non_multi_type_string(&dt))
+                lit(non_multi_type_string(dt))
                     .cast(DataType::Categorical(None))
                     .alias(MULTI_DT_COL),
                 lit(LiteralValue::Null)
@@ -41,7 +42,7 @@ pub fn convert_lf_col_to_multitype(lf: LazyFrame, c: &str, dt: &RDFNodeType) -> 
                 col(c)
                     .cast(DataType::Categorical(None))
                     .alias(MULTI_VALUE_COL),
-                lit(non_multi_type_string(&dt))
+                lit(non_multi_type_string(dt))
                     .cast(DataType::Categorical(None))
                     .alias(MULTI_DT_COL),
                 lit(LiteralValue::Null)
@@ -78,7 +79,7 @@ pub fn convert_lf_col_to_multitype(lf: LazyFrame, c: &str, dt: &RDFNodeType) -> 
                             .cast(DataType::Utf8)
                             .cast(DataType::Categorical(None))
                             .alias(MULTI_VALUE_COL),
-                        lit(non_multi_type_string(&dt))
+                        lit(non_multi_type_string(dt))
                             .cast(DataType::Categorical(None))
                             .alias(MULTI_DT_COL),
                         lit(LiteralValue::Null)
@@ -94,8 +95,7 @@ pub fn convert_lf_col_to_multitype(lf: LazyFrame, c: &str, dt: &RDFNodeType) -> 
             panic!()
         }
         RDFNodeType::MultiType => lf,
-    };
-    lf
+    }
 }
 
 pub fn non_multi_type_string(r: &RDFNodeType) -> String {
@@ -138,7 +138,7 @@ pub fn create_compatible_solution_mappings(
                     left_mappings = convert_lf_col_to_multitype(left_mappings, v, left_dt);
                 }
                 if dt != &RDFNodeType::MultiType {
-                    right_mappings = convert_lf_col_to_multitype(right_mappings, v, &dt);
+                    right_mappings = convert_lf_col_to_multitype(right_mappings, v, dt);
                 }
                 left_datatypes.insert(v.clone(), RDFNodeType::MultiType);
             }
@@ -183,19 +183,17 @@ pub fn create_join_compatible_solution_mappings(
                         right_mappings = convert_lf_col_to_multitype(right_mappings, v, right_dt);
                         new_right_datatypes.insert(v.clone(), RDFNodeType::MultiType);
                     }
+                } else if right_dt == &RDFNodeType::MultiType {
+                    right_mappings =
+                        force_convert_multicol_to_single_col(right_mappings, v, left_dt);
+                    new_right_datatypes.insert(v.clone(), left_dt.clone());
                 } else {
-                    if right_dt == &RDFNodeType::MultiType {
-                        right_mappings =
-                            force_convert_multicol_to_single_col(right_mappings, v, left_dt);
-                        new_right_datatypes.insert(v.clone(), left_dt.clone());
-                    } else {
-                        right_mappings = right_mappings.drop_columns([v]).with_column(
-                            lit(LiteralValue::Null)
-                                .cast(left_dt.polars_data_type())
-                                .alias(v),
-                        );
-                        new_right_datatypes.insert(v.clone(), left_dt.clone());
-                    }
+                    right_mappings = right_mappings.drop_columns([v]).with_column(
+                        lit(LiteralValue::Null)
+                            .cast(left_dt.polars_data_type())
+                            .alias(v),
+                    );
+                    new_right_datatypes.insert(v.clone(), left_dt.clone());
                 }
             }
         }
@@ -359,16 +357,16 @@ pub fn split_lf_multicol(mut lf: LazyFrame, c: &str, new_c: &str) -> Vec<(LazyFr
     let dt_suffix = uuid::Uuid::new_v4().to_string();
     let col_dt_utf8 = format!("{}_{}_utf8", c, dt_suffix);
     lf = lf.with_column(
-        col(&c)
+        col(c)
             .struct_()
             .field_by_name(MULTI_DT_COL)
             .cast(DataType::Utf8)
             .alias(&col_dt_utf8),
     );
     let df = lf.collect().unwrap();
-    let mut dfs = df.partition_by(vec![&col_dt_utf8], true).unwrap();
+    let dfs = df.partition_by(vec![&col_dt_utf8], true).unwrap();
     let mut lfs_dts = vec![];
-    for mut df in dfs {
+    for df in dfs {
         let s = df.column(&col_dt_utf8).unwrap();
         let dt = str_non_multi_type(s.utf8().unwrap().get(0).unwrap());
         let mut lf = df
@@ -390,7 +388,7 @@ pub fn split_df_multicols(
     for c in &cs {
         let col_dt_utf8 = format!("{}_{}_utf8", c, dt_suffix);
         lf = lf.with_column(
-            col(&c)
+            col(c)
                 .struct_()
                 .field_by_name(MULTI_DT_COL)
                 .cast(DataType::Utf8)
@@ -408,7 +406,7 @@ pub fn split_df_multicols(
         let mut map = HashMap::new();
         //TODO:Extract dts before this iteration so we can be lazy all the time.
         for (c, col_dt_utf8) in cs.iter().zip(helper_cols.iter()) {
-            let s = df.column(&col_dt_utf8).unwrap();
+            let s = df.column(col_dt_utf8).unwrap();
             let dt = str_non_multi_type(s.utf8().unwrap().get(0).unwrap());
             let mut lf = df.lazy();
             lf = lf.drop_columns(vec![&col_dt_utf8]);
@@ -431,7 +429,7 @@ pub fn lf_printer(lf: &LazyFrame) {
         .collect();
     let mut series_vec = vec![];
     for c in colnames {
-        let mut ser = df.column(&c).unwrap();
+        let ser = df.column(&c).unwrap();
         if let DataType::Categorical(_) = ser.dtype() {
             series_vec.push(ser.cast(&DataType::Utf8).unwrap());
         } else if let DataType::Struct(fields) = ser.dtype() {
@@ -522,12 +520,12 @@ fn split_multi_col(
         col(k)
             .struct_()
             .field_by_name(MULTI_VALUE_COL)
-            .alias(&col_value),
+            .alias(col_value),
         col(k)
             .struct_()
             .field_by_name(MULTI_LANG_COL)
-            .alias(&col_lang),
-        col(k).struct_().field_by_name(MULTI_DT_COL).alias(&col_dt),
+            .alias(col_lang),
+        col(k).struct_().field_by_name(MULTI_DT_COL).alias(col_dt),
     ])
     .drop_columns(vec![k])
 }
@@ -541,9 +539,9 @@ fn combine_multi_col(
 ) -> LazyFrame {
     lf.with_column(
         as_struct(vec![
-            col(&col_value).alias(MULTI_VALUE_COL),
-            col(&col_dt).alias(MULTI_DT_COL),
-            col(&col_lang).alias(MULTI_LANG_COL),
+            col(col_value).alias(MULTI_VALUE_COL),
+            col(col_dt).alias(MULTI_DT_COL),
+            col(col_lang).alias(MULTI_LANG_COL),
         ])
         .alias(k),
     )

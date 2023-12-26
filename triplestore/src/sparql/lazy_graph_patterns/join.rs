@@ -8,7 +8,7 @@ use log::debug;
 use polars::prelude::JoinArgs;
 use polars::prelude::{col, Expr, JoinType};
 use polars_core::datatypes::DataType;
-use representation::RDFNodeType;
+
 use spargebra::algebra::GraphPattern;
 
 impl Triplestore {
@@ -54,8 +54,7 @@ impl Triplestore {
 
         let mut join_on: Vec<_> = left_solution_mappings
             .columns
-            .intersection(&right_columns)
-            .map(|x| x.clone())
+            .intersection(&right_columns).cloned()
             .collect();
         join_on.sort();
 

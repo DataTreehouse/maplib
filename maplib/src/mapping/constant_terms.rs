@@ -29,16 +29,8 @@ pub fn constant_to_expr(
                 panic!("Should never happen")
             }
             ConstantLiteral::Literal(lit) => {
-                let dt = if let Some(nn) = &lit.data_type_iri {
-                    Some(nn.as_ref())
-                } else {
-                    None
-                };
-                let language = if let Some(l) = &lit.language {
-                    Some(l.as_str())
-                } else {
-                    None
-                };
+                let dt = lit.data_type_iri.as_ref().map(|nn| nn.as_ref());
+                let language = lit.language.as_deref();
                 let (mut any, dt) = sparql_literal_to_any_value(&lit.value, language, &dt);
                 //Workaround for owned utf 8..
                 let value_series = if let AnyValue::Utf8Owned(s) = any {
