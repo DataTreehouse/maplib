@@ -170,6 +170,7 @@ impl Triplestore {
                                             .utf8()
                                             .unwrap(),
                                         use_sep.as_str(),
+                                        true,
                                     )
                                     .into_series(),
                                 ))
@@ -185,7 +186,8 @@ impl Triplestore {
                         .apply(
                             move |s| {
                                 Ok(Some(
-                                    str_concat(s.utf8().unwrap(), use_sep.as_str()).into_series(),
+                                    str_concat(s.utf8().unwrap(), use_sep.as_str(), true)
+                                        .into_series(),
                                 ))
                             },
                             GetOutput::from_type(DataType::Utf8),

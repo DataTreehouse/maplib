@@ -118,8 +118,9 @@ impl Triplestore {
                             multicols.push("object");
                         }
                         if !multicols.is_empty() {
-                            let dfs_dts = split_df_multicols(df, multicols);
-                            for (df, mut map) in dfs_dts {
+                            let lfs_dts = split_df_multicols(df.lazy(), multicols);
+                            for (lf, mut map) in lfs_dts {
+                                let df = lf.collect().unwrap();
                                 let new_subj_dt = map.remove("subject").unwrap_or(subj_dt.clone());
                                 let new_obj_dt = map.remove("object").unwrap_or(obj_dt.clone());
                                 all_triples_to_add.push(TriplesToAdd {

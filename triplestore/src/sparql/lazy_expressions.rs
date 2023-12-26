@@ -474,7 +474,7 @@ impl Triplestore {
                     .with_column(
                         Expr::Literal(LiteralValue::Int64(1)).alias(exists_context.as_str()),
                     )
-                    .with_column(col(exists_context.as_str()).cumsum(false));
+                    .with_column(col(exists_context.as_str()).cum_sum(false));
 
                 let new_inner = rewrite_exists_graph_pattern(inner, exists_context.as_str());
                 let SolutionMappings {

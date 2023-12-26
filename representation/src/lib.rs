@@ -121,7 +121,7 @@ impl RDFNodeType {
                 xsd::UNSIGNED_LONG => DataType::UInt64,
                 xsd::INTEGER | xsd::LONG => DataType::Int64,
                 xsd::INT => DataType::Int32,
-                xsd::DOUBLE => DataType::Float64,
+                xsd::DOUBLE | xsd::DECIMAL => DataType::Float64,
                 xsd::FLOAT => DataType::Float32,
                 xsd::BOOLEAN => DataType::Boolean,
                 xsd::DATE_TIME => DataType::Datetime(TimeUnit::Nanoseconds, None),

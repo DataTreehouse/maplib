@@ -8,7 +8,7 @@ use crate::sparql::sparql_to_polars::{
 
 use crate::sparql::lazy_graph_patterns::load_tt::multiple_tt_to_lf;
 use crate::sparql::multitype::{
-    convert_lf_col_to_multitype, create_join_compatible_solution_mappings,
+    convert_lf_col_to_multitype, create_join_compatible_solution_mappings, join_workaround,
     unicol_to_multitype_value,
 };
 use log::debug;
@@ -165,10 +165,11 @@ impl Triplestore {
                         mappings = mappings.with_column(col(c).cast(DataType::Categorical(None)));
                     }
 
-                    mappings = mappings.join(
+                    mappings = join_workaround(
+                        mappings,
+                        &rdf_node_types,
                         lf,
-                        join_on.as_slice(),
-                        join_on.as_slice(),
+                        &dts,
                         JoinType::Inner.into(),
                     );
                 } else {
