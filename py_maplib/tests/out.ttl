@@ -1,0 +1,1 @@
+<http://example.net/ns#myObject> <http://example.net/ns#hasValue> "A" .

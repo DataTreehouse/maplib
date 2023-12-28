@@ -15,6 +15,42 @@ def test_create_mapping_from_empty_polars_df():
     mapping.expand("http://example.net/ns#ExampleTemplate", df)
 
 
+def test_create_mapping_with_optional_value_missing_df():
+    doc = """
+    @prefix ex:<http://example.net/ns#>.
+    ex:ExampleTemplate [?MyValue, ??MyOtherValue] :: {
+    ottr:Triple(ex:myObject, ex:hasValue, ?MyValue),
+    ottr:Triple(ex:myObject, ex:hasOtherValue, ?MyOtherValue)
+    } .
+    """
+
+    df = pl.DataFrame({"MyValue": ["A"]})
+    mapping = Mapping([doc])
+    mapping.expand("http://example.net/ns#ExampleTemplate", df)
+    qres = mapping.query(
+    """
+    PREFIX ex:<http://example.net/ns#>
+    
+    SELECT ?A WHERE {
+    ?obj1 ex:hasValue ?A
+    } 
+    """
+    )
+    expected_df = pl.DataFrame({"A":["A"],})
+    assert_frame_equal(qres.df, expected_df)
+
+    qres = mapping.query(
+        """
+        PREFIX ex:<http://example.net/ns#>
+        
+        SELECT ?A WHERE {
+        ?obj1 ex:hasOtherValue ?A
+        } 
+        """
+    )
+    assert qres.df.height == 0
+
+
 def test_create_mapping_from_empty_signature():
     doc = """
     @prefix ex:<http://example.net/ns#>.

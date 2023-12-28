@@ -214,6 +214,7 @@ impl Mapping {
                     self.blank_node_counter,
                     &target_template_name,
                     Some(df_slice),
+                    &target_template.signature,
                     columns.clone(),
                     HashMap::new(),
                     unique_subsets.clone(),
@@ -231,6 +232,7 @@ impl Mapping {
                 self.blank_node_counter,
                 &target_template_name,
                 df,
+                &target_template.signature,
                 columns,
                 HashMap::new(),
                 unique_subsets,
@@ -252,6 +254,7 @@ impl Mapping {
         mut blank_node_counter: usize,
         name: &str,
         df: Option<DataFrame>,
+        calling_signature: &Signature,
         dynamic_columns: HashMap<String, PrimitiveColumn>,
         static_columns: HashMap<String, StaticColumn>,
         unique_subsets: Vec<Vec<String>>,
@@ -316,6 +319,7 @@ impl Mapping {
                             pattern_num,
                             instance,
                             &target_template.signature,
+                            &calling_signature,
                             series_vec,
                             &dynamic_columns,
                             &static_columns,
@@ -328,6 +332,7 @@ impl Mapping {
                                 updated_blank_node_counter,
                                 instance.template_name.as_str(),
                                 Some(instance_df),
+                                &target_template.signature,
                                 instance_dynamic_columns,
                                 instance_static_columns,
                                 new_unique_subsets,
@@ -564,6 +569,7 @@ fn create_remapped(
     pattern_num: usize,
     instance: &Instance,
     signature: &Signature,
+    calling_signature: &Signature,
     mut series_vec: Vec<Series>,
     dynamic_columns: &HashMap<String, PrimitiveColumn>,
     constant_columns: &HashMap<String, StaticColumn>,
@@ -615,9 +621,12 @@ fn create_remapped(
                     new_dynamic_columns.insert(target_colname.clone(), c.clone());
                 } else if let Some(c) = constant_columns.get(&v.name) {
                     new_constant_columns.insert(target_colname.clone(), c.clone());
-                } else if target.optional {
-                    return Ok(None);
                 } else {
+                    if let Some(calling_formal_arg) = calling_signature.parameter_list.iter().find(|x|x.stottr_variable.name == v.name) {
+                        if calling_formal_arg.optional {
+                            return Ok(None)
+                        }
+                    }
                     return Err(MappingError::UnknownVariableError(v.name.clone()));
                 }
             }

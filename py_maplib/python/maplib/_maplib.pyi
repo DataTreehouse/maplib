@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Union, List
+from typing import Union, List, Dict
 
 from polars import DataFrame
 
@@ -11,6 +11,11 @@ class QueryResult:
     df: DataFrame with result
     types: Dict where each key is a column name and each value is the name of the type of that column. 
     """
+    def __init__(self, df:DataFrame, types:Dict[str, str]) -> QueryResult:
+        self.df = df
+        self.types = types
+        ...
+
 
 class ValidationReport:
     """
@@ -20,6 +25,10 @@ class ValidationReport:
     df: Report with constraints that were not met.
     conforms: True if no violations were found.
     """
+    def __init__(self, df:DataFrame, conforms:bool) -> ValidationReport:
+        self.df = df
+        self.conforms = conforms
+        ...
 
 class Mapping:
     """
@@ -46,7 +55,7 @@ class Mapping:
 
     def expand(self, template:str, df:DataFrame=None, unique_subset:List[str]=None) -> None:
         """
-        Expand a template using a DataFrame 
+        Expand a template using a DataFrame
         Usage:
 
         >>> m.expand("ex:ExampleTemplate", df)
@@ -54,7 +63,7 @@ class Mapping:
 
         If the template has no arguments, the df argument is not necessary.
 
-        :param template: String identifying the template: prefix:name or full IRI 
+        :param template: String identifying the template: prefix:name or full IRI
         :param df: DataFrame where the columns have the same names as the template arguments
         :param unique_subset: DataFrame column names known to be unique e.g. ["colA", "colB"], for a performance boost (reduce costly deduplication)
         """
@@ -89,9 +98,9 @@ class Mapping:
         ... print(res.types)
 
         :param query: The SPARQL query string
-        :return: QueryResult containing a DataFrame (types.df) and the types of each column (res.types) 
+        :return: QueryResult containing a DataFrame (types.df) and the types of each column (res.types)
         """
-    
+
     def validate(self) -> ValidationReport:
         """
         Validate the contained knowledge graph using SHACL
