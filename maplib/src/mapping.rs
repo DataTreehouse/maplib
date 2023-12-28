@@ -304,13 +304,13 @@ impl Mapping {
                             .template_dataset
                             .get(instance.template_name.as_str())
                             .unwrap();
-                        let (
+                        if let Some((
                             instance_df,
                             instance_dynamic_columns,
                             instance_static_columns,
                             new_unique_subsets,
                             updated_blank_node_counter,
-                        ) = create_remapped(
+                        )) = create_remapped(
                             self.blank_node_counter,
                             layer,
                             pattern_num,
@@ -321,25 +321,28 @@ impl Mapping {
                             &static_columns,
                             &unique_subsets,
                             use_df_height,
-                        )?;
-
-                        self._expand(
-                            layer + 1,
-                            i,
-                            updated_blank_node_counter,
-                            instance.template_name.as_str(),
-                            Some(instance_df),
-                            instance_dynamic_columns,
-                            instance_static_columns,
-                            new_unique_subsets,
-                        )
+                        )? {
+                            Ok::<_, MappingError>(Some(self._expand(
+                                layer + 1,
+                                i,
+                                updated_blank_node_counter,
+                                instance.template_name.as_str(),
+                                Some(instance_df),
+                                instance_dynamic_columns,
+                                instance_static_columns,
+                                new_unique_subsets,
+                            )?))
+                        } else {
+                            Ok(None)
+                        }
                     })
                     .collect();
                 let mut results_ok = vec![];
                 for r in results {
-                    let (r, new_counter) = r?;
-                    results_ok.push(r);
-                    blank_node_counter = max(blank_node_counter, new_counter);
+                    if let Some((r, new_counter)) = r? {
+                        results_ok.push(r);
+                        blank_node_counter = max(blank_node_counter, new_counter);
+                    }
                 }
 
                 Ok((flatten(results_ok), blank_node_counter))
@@ -567,13 +570,13 @@ fn create_remapped(
     unique_subsets: &Vec<Vec<String>>,
     input_df_height: usize,
 ) -> Result<
-    (
+    Option<(
         DataFrame,
         HashMap<String, PrimitiveColumn>,
         HashMap<String, StaticColumn>,
         Vec<Vec<String>>,
         usize,
-    ),
+    )>,
     MappingError,
 > {
     let now = Instant::now();
@@ -612,6 +615,8 @@ fn create_remapped(
                     new_dynamic_columns.insert(target_colname.clone(), c.clone());
                 } else if let Some(c) = constant_columns.get(&v.name) {
                     new_constant_columns.insert(target_colname.clone(), c.clone());
+                } else if target.optional {
+                    return Ok(None);
                 } else {
                     return Err(MappingError::UnknownVariableError(v.name.clone()));
                 }
@@ -707,13 +712,13 @@ fn create_remapped(
         "Creating remapped took {} seconds",
         now.elapsed().as_secs_f32()
     );
-    Ok((
+    Ok(Some((
         lf.collect().unwrap(),
         new_dynamic_columns,
         new_constant_columns,
         new_unique_subsets,
         out_blank_node_counter,
-    ))
+    )))
 }
 
 //From: https://users.rust-lang.org/t/flatten-a-vec-vec-t-to-a-vec-t/24526/3

@@ -1,12 +1,12 @@
 [package]
 name = "py_maplib"
-version = "0.5.13"
+version = "0.6.0"
 edition = "2021"
 
 [workspace]
 
 [dependencies]
-pyo3 = {version = "0.19.2", features = ["extension-module"]}
+pyo3 = {version = "0.19.2", features = ["extension-module"] }
 maplib = {path="../maplib"}
 triplestore = {path="../triplestore"}
 representation = {path = "../representation"}

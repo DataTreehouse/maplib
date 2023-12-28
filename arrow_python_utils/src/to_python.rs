@@ -99,12 +99,3 @@ pub fn df_to_py_df(mut df: DataFrame, py: Python) -> PyResult<PyObject> {
     let polars = PyModule::import(py, "polars")?;
     to_py_df(&chunk, names.as_slice(), py, pyarrow, polars)
 }
-
-pub fn df_vec_to_py_df_list(dfs: Vec<DataFrame>, py: Python) -> PyResult<&PyList> {
-    let mut py_dfs = vec![];
-    for df in dfs {
-        py_dfs.push(df_to_py_df(df, py)?)
-    }
-
-    Ok(PyList::new(py, py_dfs))
-}

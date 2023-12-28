@@ -4,6 +4,7 @@ use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{BlankNode, NamedNode, NamedNodeRef, NamedOrBlankNode, Term};
 use polars_core::prelude::{DataType, TimeUnit};
 use spargebra::term::TermPattern;
+use std::fmt::{Display, Formatter};
 use thiserror::*;
 
 #[derive(Debug, Error)]
@@ -30,6 +31,28 @@ pub enum RDFNodeType {
     Literal(NamedNode),
     None,
     MultiType,
+}
+
+impl Display for RDFNodeType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RDFNodeType::IRI => {
+                write!(f, "IRI")
+            }
+            RDFNodeType::BlankNode => {
+                write!(f, "Blank")
+            }
+            RDFNodeType::Literal(l) => {
+                write!(f, "{}", l)
+            }
+            RDFNodeType::None => {
+                write!(f, "None")
+            }
+            RDFNodeType::MultiType => {
+                write!(f, "MultiType")
+            }
+        }
+    }
 }
 
 impl RDFNodeType {

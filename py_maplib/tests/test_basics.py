@@ -25,7 +25,7 @@ def test_create_mapping_from_empty_signature():
 
     mapping = Mapping([doc])
     mapping.expand("http://example.net/ns#ExampleTemplate")
-    qdf = mapping.query(
+    qres = mapping.query(
         """
         PREFIX ex:<http://example.net/ns#>
 
@@ -37,7 +37,7 @@ def test_create_mapping_from_empty_signature():
     expected_df = pl.DataFrame({"obj1":"<http://example.net/ns#myObject>",
                                 "obj2":"<http://example.net/ns#myOtherObject>"})
 
-    assert_frame_equal(qdf, expected_df)
+    assert_frame_equal(qres.df, expected_df)
 
 
 def test_uri_subject_query():
@@ -50,7 +50,7 @@ def test_uri_subject_query():
 
     mapping = Mapping([doc])
     mapping.expand("http://example.net/ns#ExampleTemplate")
-    qdf = mapping.query(
+    qres = mapping.query(
         """
         PREFIX ex:<http://example.net/ns#>
 
@@ -61,7 +61,7 @@ def test_uri_subject_query():
     )
     expected_df = pl.DataFrame({"obj2":"<http://example.net/ns#myOtherObject>"})
 
-    assert_frame_equal(qdf, expected_df)
+    assert_frame_equal(qres.df, expected_df)
 
 
 def test_create_and_write_no_bug_escaped_uri_df():

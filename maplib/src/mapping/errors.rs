@@ -13,7 +13,6 @@ pub enum MappingError {
     InvalidTemplateNameError(#[from] IriParseError),
     TemplateNotFound(String),
     NonOptionalColumnHasNull(String, DataFrame),
-    NonBlankColumnHasBlankNode(String, Series),
     MissingParameterColumn(String),
     ContainsIrrelevantColumns(Vec<String>),
     CouldNotInferStottrDatatypeForColumn(String, DataType),
@@ -48,9 +47,6 @@ impl Display for MappingError {
                     "Column {} which is non-optional has null values for keys: {}",
                     col, nullkey
                 )
-            }
-            MappingError::NonBlankColumnHasBlankNode(col, blanks) => {
-                write!(f, "Non-blank column {} has blanks {}", col, blanks)
             }
             MappingError::MissingParameterColumn(c) => {
                 write!(f, "Expected column {} is missing", c)

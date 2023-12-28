@@ -5,7 +5,7 @@ mod error;
 use crate::error::PyMaplibError;
 use arrow_python_utils::to_rust::polars_df_to_rust_df;
 
-use arrow_python_utils::to_python::{df_to_py_df, df_vec_to_py_df_list};
+use arrow_python_utils::to_python::df_to_py_df;
 use log::warn;
 use maplib::document::document_from_str;
 use maplib::errors::MaplibError;
@@ -14,13 +14,11 @@ use maplib::mapping::ExpandOptions as RustExpandOptions;
 use maplib::mapping::Mapping as InnerMapping;
 use maplib::templates::TemplateDataset;
 use oxrdf::NamedNode;
-use pyo3::basic::CompareOp;
-use pyo3::prelude::PyModule;
-use pyo3::*;
+use pyo3::prelude::*;
 use std::collections::HashMap;
 use std::fs::File;
 use std::path::{Path, PathBuf};
-use triplestore::sparql::QueryResult;
+use triplestore::sparql::QueryResult as SparqlQueryResult;
 
 //The below snippet controlling alloc-library is from https://github.com/pola-rs/polars/blob/main/py-polars/src/lib.rs
 //And has a MIT license:
@@ -48,8 +46,9 @@ use jemallocator::Jemalloc;
 use polars_core::frame::DataFrame;
 use polars_core::prelude::{DataType, NamedFrom};
 use polars_lazy::frame::IntoLazy;
+use pyo3::types::PyList;
 use representation::RDFNodeType;
-use triplestore::sparql::multitype::{multi_col_to_string_col};
+use triplestore::sparql::multitype::multi_col_to_string_col;
 
 #[cfg(not(target_os = "linux"))]
 use mimalloc::MiMalloc;
@@ -72,136 +71,12 @@ pub struct ValidationReport {
 }
 
 #[pyclass]
-#[derive(Debug, PartialEq, PartialOrd, Clone)]
-pub struct BlankNode {
+#[derive(Debug, Clone)]
+pub struct QueryResult {
     #[pyo3(get)]
-    pub name: String,
-}
-
-#[pymethods]
-impl BlankNode {
-    fn __repr__(&self) -> String {
-        format!("_:{}", self.name)
-    }
-}
-
-#[pyclass]
-#[derive(Debug, PartialEq, PartialOrd, Clone)]
-pub struct IRI {
+    pub df: PyObject,
     #[pyo3(get)]
-    pub iri: String,
-}
-
-#[pymethods]
-impl IRI {
-    fn __repr__(&self) -> String {
-        format!("<{}>", self.iri)
-    }
-}
-
-#[pyclass]
-#[derive(Debug, PartialEq, PartialOrd, Clone)]
-pub struct TripleSubject {
-    #[pyo3(get)]
-    pub iri: Option<IRI>,
-    #[pyo3(get)]
-    pub blank_node: Option<BlankNode>,
-}
-
-impl TripleSubject {
-    pub fn __repr__(&self) -> String {
-        if let Some(iri) = &self.iri {
-            iri.__repr__()
-        } else if let Some(blank_node) = &self.blank_node {
-            blank_node.__repr__()
-        } else {
-            panic!("TripleSubject in invalid state: {:?}", self);
-        }
-    }
-}
-
-#[pyclass]
-#[derive(Debug, PartialEq, PartialOrd, Clone)]
-pub struct Literal {
-    #[pyo3(get)]
-    pub lexical_form: String,
-    #[pyo3(get)]
-    pub language_tag: Option<String>,
-    #[pyo3(get)]
-    pub datatype_iri: Option<IRI>,
-}
-
-#[pymethods]
-impl Literal {
-    pub fn __repr__(&self) -> String {
-        if let Some(tag) = &self.language_tag {
-            format!("\"{}\"@{}", self.lexical_form.to_owned(), tag)
-        } else if let Some(dt) = &self.datatype_iri {
-            format!("\"{}\"^^{}", &self.lexical_form, dt.__repr__())
-        } else {
-            panic!("Literal in invalid state {:?}", self)
-        }
-    }
-}
-
-#[pyclass]
-#[derive(Debug, PartialEq, PartialOrd, Clone)]
-pub struct TripleObject {
-    #[pyo3(get)]
-    pub iri: Option<IRI>,
-    #[pyo3(get)]
-    pub blank_node: Option<BlankNode>,
-    #[pyo3(get)]
-    pub literal: Option<Literal>,
-}
-
-#[pymethods]
-impl TripleObject {
-    pub fn __repr__(&self) -> String {
-        if let Some(iri) = &self.iri {
-            iri.__repr__()
-        } else if let Some(blank_node) = &self.blank_node {
-            blank_node.__repr__()
-        } else if let Some(literal) = &self.literal {
-            literal.__repr__()
-        } else {
-            panic!("TripleObject in invalid state: {:?}", self);
-        }
-    }
-
-    fn __richcmp__(&self, other: &Self, op: CompareOp) -> PyResult<bool> {
-        match op {
-            CompareOp::Lt => Ok(self < other),
-            CompareOp::Le => Ok(self <= other),
-            CompareOp::Eq => Ok(self == other),
-            CompareOp::Ne => Ok(self != other),
-            CompareOp::Gt => Ok(self > other),
-            CompareOp::Ge => Ok(self >= other),
-        }
-    }
-}
-
-#[pyclass]
-#[derive(Debug, PartialEq, PartialOrd, Clone)]
-pub struct Triple {
-    #[pyo3(get)]
-    pub subject: TripleSubject,
-    #[pyo3(get)]
-    pub verb: IRI,
-    #[pyo3(get)]
-    pub object: TripleObject,
-}
-
-#[pymethods]
-impl Triple {
-    pub fn __repr__(&self) -> String {
-        format!(
-            "{} {} {}",
-            self.subject.__repr__(),
-            self.verb.__repr__(),
-            self.object.__repr__()
-        )
-    }
+    pub types: HashMap<String, String>,
 }
 
 #[pyclass]
@@ -219,7 +94,6 @@ impl Mapping {
 pub struct ExpandOptions {
     pub language_tags: Option<HashMap<String, String>>,
     pub unique_subsets: Option<Vec<Vec<String>>>,
-    pub caching_folder: Option<String>,
 }
 
 impl ExpandOptions {
@@ -233,8 +107,36 @@ impl ExpandOptions {
 
 #[pymethods]
 impl Mapping {
+    /// Create a new Mapping object from a stOTTR document (a string) or list of stOTTR documents.
+    /// Usage:
+    /// import polars as pl
+    /// from maplib import Mapping
+    /// doc = """
+    ///     @prefix ex:<http://example.net/ns#>.
+    ///     ex:ExampleTemplate [?MyValue] :: {
+    ///     ottr:Triple(ex:myObject, ex:hasValue, ?MyValue)
+    ///     } .
+    ///     """
+    /// m = Mapping(doc)
+    /// m.expand("ex:ExampleTemplate", df)
+    /// Optionally, a caching folder (a string or Path) can be specified which offloads the constructed graph to disk in Parquet format.
     #[new]
-    pub fn new(documents: Option<Vec<&str>>, caching_folder: Option<String>) -> PyResult<Mapping> {
+    #[pyo3(signature=(/,documents=None,caching_folder=None),
+    text_signature="(documents:Union[str,List[str]]=None, caching_folder:str=None))")]
+    fn new(documents: Option<&PyAny>, caching_folder: Option<&PyAny>) -> PyResult<Mapping> {
+        let documents = if let Some(documents) = documents {
+            if documents.is_instance_of::<PyList>() {
+                let mut strs = vec![];
+                for doc in documents.iter()? {
+                    strs.push(doc?.str()?.to_str()?);
+                }
+                Some(strs)
+            } else {
+                Some(vec![documents.str()?.to_str()?])
+            }
+        } else {
+            None
+        };
         let mut parsed_documents = vec![];
         if let Some(documents) = documents {
             for ds in documents {
@@ -245,20 +147,33 @@ impl Mapping {
         let template_dataset = TemplateDataset::new(parsed_documents)
             .map_err(MaplibError::from)
             .map_err(PyMaplibError::from)?;
+        let caching_folder = if let Some(c) = caching_folder {
+            Some(c.str()?.to_string())
+        } else {
+            None
+        };
         Ok(Mapping {
             inner: InnerMapping::new(&template_dataset, caching_folder)
                 .map_err(PyMaplibError::from)?,
         })
     }
 
-    #[pyo3(text_signature = "(template, df, unique_subset, language_tags, caching_folder)")]
-    pub fn expand(
+    /// Expand a template (prefix:name or full IRI) using a DataFrame where the columns have the same names as the template arguments.
+    /// Usage:
+    /// m.expand("ex:ExampleTemplate", df)
+    /// DataFrame columns known to be unique may be specified, e.g. unique_subsets=["colA", "colB"], for a performance boost (reduce costly deduplication)
+    /// Usage:
+    /// m.expand("ex:ExampleTemplate", df, unique_subsets=["MyValue"])
+    /// If the template has no arguments, the df argument is not necessary.
+    #[pyo3(signature = (template, /, df=None, unique_subset=None, language_tags=None),
+        text_signature = "(template:str, df:DataFrame=None, unique_subset:List[str]=None, language_tags:Dict[str, str]=None))"
+    )]
+    fn expand(
         &mut self,
         template: &str,
         df: Option<&PyAny>,
         unique_subset: Option<Vec<String>>,
         language_tags: Option<HashMap<String, String>>,
-        caching_folder: Option<String>,
     ) -> PyResult<Option<PyObject>> {
         let unique_subsets = if let Some(unique_subset) = unique_subset {
             Some(vec![unique_subset.into_iter().collect()])
@@ -268,7 +183,6 @@ impl Mapping {
         let options = ExpandOptions {
             language_tags,
             unique_subsets,
-            caching_folder,
         };
 
         if let Some(df) = df {
@@ -294,10 +208,17 @@ impl Mapping {
         Ok(None)
     }
 
-    #[pyo3(
-        text_signature = "(template, primary_key_column, foreign_key_column, template_prefix, predicate_uri_prefix, language_tags, caching_folder)"
+    /// Create a default template and expand it based on a dataframe.
+    /// The primary key column must be specified
+    /// The types of other columns are inferred.
+    /// Other columns which are URI-columns can also be specified, otherwise they are assumed to be xsd:string
+    /// Usage:
+    /// template_string = m.expand_default(df, "myKeyCol", ["otherURICol1", "otherURICol1"])
+    /// print(template_string)
+    #[pyo3(signature = (df, primary_key_column, / ,foreign_key_columns=None, template_prefix=None, predicate_uri_prefix=None, language_tags=None),
+    text_signature = "(df:DataFrame, primary_key_column:str, foreign_key_column:List[str]=None, template_prefix:str=None, predicate_uri_prefix:str=None, language_tags:Dict[str,str]=None)"
     )]
-    pub fn expand_default(
+    fn expand_default(
         &mut self,
         df: &PyAny,
         primary_key_column: String,
@@ -305,13 +226,11 @@ impl Mapping {
         template_prefix: Option<String>,
         predicate_uri_prefix: Option<String>,
         language_tags: Option<HashMap<String, String>>,
-        caching_folder: Option<String>,
     ) -> PyResult<String> {
         let df = polars_df_to_rust_df(&df)?;
         let options = ExpandOptions {
             language_tags,
             unique_subsets: Some(vec![vec![primary_key_column.clone()]]),
-            caching_folder,
         };
 
         let fk_cols = if let Some(fk_cols) = foreign_key_columns {
@@ -335,30 +254,58 @@ impl Mapping {
         return Ok(format!("{}", tmpl));
     }
 
-    #[pyo3(text_signature = "(query)")]
-    pub fn query(&mut self, py: Python<'_>, query: String) -> PyResult<PyObject> {
+    /// Query the mapped knowledge graph using SPARQL
+    /// Currently, SELECT, CONSTRUCT and INSERT are supported.
+    /// res = mapping.query("""
+    /// PREFIX ex:<http://example.net/ns#>
+    /// SELECT ?obj1 ?obj2 WHERE {
+    /// ?obj1 ex:hasObj ?obj2
+    /// }""")
+    /// print(res.df)
+    #[pyo3(signature = (query),
+    text_signature = "(query:str)"
+    )]
+    fn query(&mut self, py: Python<'_>, query: String) -> PyResult<PyObject> {
         let res = self
             .inner
             .triplestore
             .query(&query)
             .map_err(PyMaplibError::from)?;
         match res {
-            QueryResult::Select(mut df, datatypes) => {
+            SparqlQueryResult::Select(mut df, datatypes) => {
                 df = fix_multicolumns(df, &datatypes);
-                df_to_py_df(df, py)
+                let pydf = df_to_py_df(df, py)?;
+                Ok(QueryResult {
+                    df: pydf,
+                    types: dtypes_map(datatypes),
+                }
+                .into_py(py))
             }
-            QueryResult::Construct(dfs) => {
-                let dfs = dfs
-                    .into_iter()
-                    .map(|(df, subj_type, obj_type)| fix_multicolumns(df, &[("subject".to_string(), subj_type), ("object".to_string(), obj_type)].into()))
-                    .collect();
-                Ok(df_vec_to_py_df_list(dfs, py)?.into())
+            SparqlQueryResult::Construct(dfs) => {
+                let mut query_results = vec![];
+                for (df, subj_type, obj_type) in dfs {
+                    let datatypes: HashMap<_, _> = [
+                        ("subject".to_string(), subj_type),
+                        ("object".to_string(), obj_type),
+                    ]
+                    .into();
+                    let df = fix_multicolumns(df, &datatypes);
+                    let pydf = df_to_py_df(df, py)?;
+                    query_results.push(
+                        QueryResult {
+                            df: pydf,
+                            types: dtypes_map(datatypes),
+                        }
+                        .into_py(py),
+                    );
+                }
+                Ok(PyList::new(py, query_results).into())
             }
         }
     }
 
-    #[pyo3(text_signature = "()")]
-    pub fn validate(&mut self, py: Python<'_>) -> PyResult<ValidationReport> {
+    #[pyo3(signature = ())]
+    fn validate(&mut self, py: Python<'_>) -> PyResult<ValidationReport> {
         let shacl::ValidationReport { conforms, df } =
             self.inner.validate().map_err(PyMaplibError::from)?;
 
@@ -371,8 +318,18 @@ impl Mapping {
         Ok(ValidationReport { conforms, report })
     }
 
-    #[pyo3(text_signature = "(query, transient)")]
-    pub fn insert(&mut self, query: String, transient: Option<bool>) -> PyResult<()> {
+    /// Utility method for running a CONSTRUCT query as if it were an INSERT query.
+    /// Useful when you want to first check the result of CONSTRUCT and then insert that exact result.
+    /// Specify transient if you only want the results to be available for further querying and validation, but not persisted using write-methods.
+    /// Usage:
+    /// res = m.query(my_construct_query)
+    /// print(res[0])
+    /// # I am happy with these results!
+    /// m.insert(my_construct_query, transient=True)
+    #[pyo3(signature = (query,/, transient=false),
+    text_signature = "(query:str, transient:bool=False)"
+    )]
+    fn insert(&mut self, query: String, transient: Option<bool>) -> PyResult<()> {
         self.inner
             .triplestore
             .insert(&query, transient.unwrap_or(false))
@@ -380,156 +337,37 @@ impl Mapping {
         Ok(())
     }
 
-    pub fn to_triples(&mut self) -> PyResult<Vec<Triple>> {
-        let mut triples = vec![];
-
-        fn create_subject(s: &str) -> TripleSubject {
-            if is_blank_node(s) {
-                TripleSubject {
-                    iri: None,
-                    blank_node: Some(BlankNode {
-                        name: s.to_string(),
-                    }),
-                }
-            } else {
-                TripleSubject {
-                    iri: Some(IRI { iri: s.to_string() }),
-                    blank_node: None,
-                }
-            }
-        }
-        fn create_nonliteral_object(s: &str) -> TripleObject {
-            if is_blank_node(s) {
-                TripleObject {
-                    iri: None,
-                    blank_node: Some(BlankNode {
-                        name: s.to_string(),
-                    }),
-                    literal: None,
-                }
-            } else {
-                TripleObject {
-                    iri: Some(IRI { iri: s.to_string() }),
-                    blank_node: None,
-                    literal: None,
-                }
-            }
-        }
-        fn create_literal(lex: &str, ltag_opt: Option<&str>, dt: Option<&str>) -> Literal {
-            Literal {
-                lexical_form: lex.to_string(),
-                language_tag: if let Some(ltag) = ltag_opt {
-                    Some(ltag.to_string())
-                } else {
-                    None
-                },
-                datatype_iri: if let Some(dt) = dt {
-                    Some(IRI {
-                        iri: dt.to_string(),
-                    })
-                } else {
-                    None
-                },
-            }
-        }
-
-        fn to_python_object_triple(s: &str, v: &str, o: &str) -> Triple {
-            let subject = create_subject(s);
-            let verb = IRI { iri: v.to_string() };
-            let object = create_nonliteral_object(o);
-            Triple {
-                subject,
-                verb,
-                object,
-            }
-        }
-        fn to_python_string_literal_triple(s: &str, v: &str, lex: &str) -> Triple {
-            let subject = create_subject(s);
-            let verb = IRI { iri: v.to_string() };
-            let literal = create_literal(lex, None, None);
-            let object = TripleObject {
-                iri: None,
-                blank_node: None,
-                literal: Some(literal),
-            };
-            Triple {
-                subject,
-                verb,
-                object,
-            }
-        }
-
-        fn to_python_lang_string_literal_triple(s: &str, v: &str, lex: &str, ltag: &str) -> Triple {
-            let subject = create_subject(s);
-            let verb = IRI { iri: v.to_string() };
-            let literal = create_literal(lex, Some(ltag), None);
-            let object = TripleObject {
-                iri: None,
-                blank_node: None,
-                literal: Some(literal),
-            };
-            Triple {
-                subject,
-                verb,
-                object,
-            }
-        }
-
-        fn to_python_nonstring_literal_triple(
-            s: &str,
-            v: &str,
-            lex: &str,
-            dt: &NamedNode,
-        ) -> Triple {
-            let subject = create_subject(s);
-            let verb = IRI { iri: v.to_string() };
-            let literal = create_literal(lex, None, Some(dt.as_str()));
-            let object = TripleObject {
-                iri: None,
-                blank_node: None,
-                literal: Some(literal),
-            };
-            Triple {
-                subject,
-                verb,
-                object,
-            }
-        }
-
-        self.inner
-            .triplestore
-            .deduplicate()
-            .map_err(PyMaplibError::from)?;
-        self.inner
-            .triplestore
-            .object_property_triples(to_python_object_triple, &mut triples)
-            .map_err(PyMaplibError::from)?;
-        self.inner
-            .triplestore
-            .string_data_property_triples(
-                to_python_string_literal_triple,
-                to_python_lang_string_literal_triple,
-                &mut triples,
-            )
-            .map_err(PyMaplibError::from)?;
-        self.inner
-            .triplestore
-            .nonstring_data_property_triples(to_python_nonstring_literal_triple, &mut triples)
-            .map_err(PyMaplibError::from)?;
-        Ok(triples)
-    }
-
-    #[pyo3(text_signature = "(file_path, base_iri, transient)")]
-    pub fn read_triples(&mut self, file_path: &str, base_iri: Option<String>, transient:Option<bool>) -> PyResult<()> {
-        let path = Path::new(file_path);
+    /// Reads triples from a path.
+    /// File format is derived using file extension, e.g. .ttl or .nt.
+    /// Specify transient if you only want the triples to be available for further querying and validation, but not persisted using write-methods.
+    /// Usage:
+    /// m.read_triples("my_triples.ttl", transient=True)
+    #[pyo3(signature = (file_path, /,base_iri=None, transient=false),
+    text_signature = "(file_path:Union[str, Path], base_iri:str=None, transient:bool=False)"
+    )]
+    fn read_triples(
+        &mut self,
+        file_path: &PyAny,
+        base_iri: Option<String>,
+        transient: Option<bool>,
+    ) -> PyResult<()> {
+        let file_path = file_path.str()?.to_string();
+        let path = Path::new(&file_path);
         self.inner
             .read_triples(path, base_iri, transient.unwrap_or(false))
             .map_err(|x| PyMaplibError::from(x))?;
         Ok(())
     }
 
-    #[pyo3(text_signature = "(file_path)")]
-    pub fn write_ntriples(&mut self, file_path: &str) -> PyResult<()> {
+    /// Write triples to an NTriples file.
+    /// Will not write triples that have been added using transient=True
+    /// Usage:
+    /// m.write_ntriples("my_triples.nt")
+    #[pyo3(signature = (file_path),
+    text_signature = "(file_path:Union[str, Path])"
+    )]
+    fn write_ntriples(&mut self, file_path: &PyAny) -> PyResult<()> {
+        let file_path = file_path.str()?.to_string();
         let path_buf = PathBuf::from(file_path);
         let mut actual_file = File::create(path_buf.as_path())
             .map_err(|x| PyMaplibError::from(MappingError::FileCreateIOError(x)))?;
@@ -537,10 +375,17 @@ impl Mapping {
         Ok(())
     }
 
-    #[pyo3(text_signature = "(folder_path)")]
-    pub fn write_native_parquet(&mut self, path: &str) -> PyResult<()> {
+    /// Write triples using the internal native Parquet format.
+    /// Will not write triples that have been added using transient=True
+    /// Usage:
+    /// m.write_native_parquet("native_parquet_path")
+    #[pyo3(signature = (folder_path),
+    text_signature = "(folder_path:Union[str,Path])"
+    )]
+    fn write_native_parquet(&mut self, folder_path: &PyAny) -> PyResult<()> {
+        let folder_path = folder_path.str()?.to_string();
         self.inner
-            .write_native_parquet(path)
+            .write_native_parquet(&folder_path)
             .map_err(|x| PyMaplibError::MappingError(x))?;
         Ok(())
     }
@@ -549,7 +394,8 @@ impl Mapping {
 #[pymodule]
 fn _maplib(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_class::<Mapping>()?;
-
+    m.add_class::<QueryResult>()?;
+    m.add_class::<ValidationReport>()?;
     Ok(())
 }
 
@@ -557,7 +403,7 @@ fn is_blank_node(s: &str) -> bool {
     s.starts_with("_:")
 }
 
-fn fix_multicolumns(mut df: DataFrame, dts:&HashMap<String, RDFNodeType>) -> DataFrame {
+fn fix_multicolumns(mut df: DataFrame, dts: &HashMap<String, RDFNodeType>) -> DataFrame {
     let mut lf = df.lazy();
     for (c, v) in dts {
         if v == &RDFNodeType::MultiType {
@@ -565,4 +411,8 @@ fn fix_multicolumns(mut df: DataFrame, dts:&HashMap<String, RDFNodeType>) -> Dat
         }
     }
     lf.collect().unwrap()
+}
+
+fn dtypes_map(map: HashMap<String, RDFNodeType>) -> HashMap<String, String> {
+    map.into_iter().map(|(x, y)| (x, y.to_string())).collect()
 }

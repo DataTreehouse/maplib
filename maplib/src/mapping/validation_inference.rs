@@ -30,10 +30,6 @@ impl Mapping {
                     if !parameter.optional {
                         validate_non_optional_parameter(df, variable_name)?;
                     }
-                    if parameter.non_blank {
-                        //TODO handle blanks;
-                        validate_non_blank_parameter(df, variable_name)?;
-                    }
                     let column_data_type = validate_infer_column_data_type(
                         df,
                         parameter,
@@ -42,7 +38,7 @@ impl Mapping {
                     )?;
 
                     map.insert(variable_name.to_string(), column_data_type);
-                } else {
+                } else if !parameter.optional {
                     return Err(MappingError::MissingParameterColumn(
                         variable_name.to_string(),
                     ));
@@ -112,29 +108,6 @@ fn validate_non_optional_parameter(df: &DataFrame, column_name: &str) -> Result<
     } else {
         Ok(())
     }
-}
-
-fn validate_non_blank_parameter(df: &DataFrame, column_name: &str) -> Result<(), MappingError> {
-    let is_blank_node_mask: BooleanChunked = df
-        .column(column_name)
-        .unwrap()
-        .utf8()
-        .map(move |x| {
-            x.par_iter()
-                .map(move |x| x.unwrap_or("").starts_with("_:"))
-                .collect()
-        })
-        .unwrap();
-    if is_blank_node_mask.any() {
-        return Err(MappingError::NonBlankColumnHasBlankNode(
-            column_name.to_string(),
-            df.column(column_name)
-                .unwrap()
-                .filter(&is_blank_node_mask)
-                .unwrap(),
-        ));
-    }
-    Ok(())
 }
 
 fn validate_datatype(

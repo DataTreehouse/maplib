@@ -42,7 +42,7 @@ def blank_person_mapping():
 
 
 def test_simple_query_no_error(blank_person_mapping):
-    df = blank_person_mapping.query("""
+    qres = blank_person_mapping.query("""
         PREFIX foaf:<http://xmlns.com/foaf/0.1/>
 
         SELECT ?firstName ?lastName WHERE {
@@ -54,7 +54,7 @@ def test_simple_query_no_error(blank_person_mapping):
     expected_df = pl.DataFrame({"firstName": ["Ann", "Bob"],
                                 "lastName": ["Strong", "Brite"]})
 
-    assert_frame_equal(df, expected_df)
+    assert_frame_equal(qres.df, expected_df)
 
 
 def test_simple_query_blank_node_output_no_error(blank_person_mapping):
@@ -74,7 +74,7 @@ def test_simple_query_blank_node_output_no_error(blank_person_mapping):
 
 
 def test_multi_datatype_query_no_error(blank_person_mapping):
-    df = blank_person_mapping.query("""
+    res = blank_person_mapping.query("""
         PREFIX foaf:<http://xmlns.com/foaf/0.1/>
 
         SELECT ?s ?v ?o WHERE {
@@ -82,8 +82,8 @@ def test_multi_datatype_query_no_error(blank_person_mapping):
         } 
         """)
     by = ["s","v","o"]
-    print(df)
-    df = df.sort(by=by)
+    print(res.df)
+    df = res.df.sort(by=by)
     filename = TESTDATA_PATH / "multi_datatype_query.csv"
     #df.write_csv(filename)
     expected_df = pl.scan_csv(filename).sort(by).collect()
@@ -91,7 +91,7 @@ def test_multi_datatype_query_no_error(blank_person_mapping):
 
 
 def test_multi_datatype_union_query_no_error(blank_person_mapping):
-    df = blank_person_mapping.query("""
+    res = blank_person_mapping.query("""
         PREFIX foaf:<http://xmlns.com/foaf/0.1/>
 
         SELECT ?s ?o WHERE {
@@ -102,7 +102,7 @@ def test_multi_datatype_union_query_no_error(blank_person_mapping):
         } 
         """)
     by = ["s","o"]
-    df = df.sort(by=by)
+    df = res.df.sort(by=by)
     filename = TESTDATA_PATH / "multi_datatype_union_query.csv"
     #df.write_csv(filename)
     expected_df = pl.scan_csv(filename).sort(by).collect()
@@ -110,7 +110,7 @@ def test_multi_datatype_union_query_no_error(blank_person_mapping):
 
 
 def test_multi_datatype_left_join_query_no_error(blank_person_mapping):
-    df = blank_person_mapping.query("""
+    res = blank_person_mapping.query("""
         PREFIX foaf:<http://xmlns.com/foaf/0.1/>
 
         SELECT ?s ?o WHERE {
@@ -121,7 +121,7 @@ def test_multi_datatype_left_join_query_no_error(blank_person_mapping):
         } 
         """)
     by = ["s","o"]
-    df = df.sort(by=by)
+    df = res.df.sort(by=by)
     filename = TESTDATA_PATH / "multi_datatype_leftjoin_query.csv"
     #df.write_csv(filename)
     expected_df = pl.scan_csv(filename).sort(by).collect()
@@ -129,7 +129,7 @@ def test_multi_datatype_left_join_query_no_error(blank_person_mapping):
 
 #This test is skipped due to a bug in Polars.
 def test_multi_datatype_join_query_two_vars_no_error(blank_person_mapping):
-    df = blank_person_mapping.query("""
+    res = blank_person_mapping.query("""
         PREFIX foaf:<http://xmlns.com/foaf/0.1/>
 
         SELECT ?s ?o WHERE {
@@ -142,14 +142,14 @@ def test_multi_datatype_join_query_two_vars_no_error(blank_person_mapping):
         } 
         """)
     by = ["s","o"]
-    df = df.sort(by=by)
+    df = res.df.sort(by=by)
     filename = TESTDATA_PATH / "multi_datatype_join_query_two_vars.csv"
     #df.write_csv(filename)
     expected_df = pl.scan_csv(filename).sort(by).collect()
     assert_frame_equal(df, expected_df)
 
 def test_multi_datatype_join_query_no_error(blank_person_mapping):
-    df = blank_person_mapping.query("""
+    res = blank_person_mapping.query("""
         PREFIX foaf:<http://xmlns.com/foaf/0.1/>
 
         SELECT ?s1 ?s2 ?o WHERE {
@@ -162,7 +162,7 @@ def test_multi_datatype_join_query_no_error(blank_person_mapping):
         } 
         """)
     by = ["s1", "s2","o"]
-    df = df.sort(by=by)
+    df = res.df.sort(by=by)
     filename = TESTDATA_PATH / "multi_datatype_join_query.csv"
     #df.write_csv(filename)
     expected_df = pl.scan_csv(filename).sort(by).collect()
@@ -170,7 +170,7 @@ def test_multi_datatype_join_query_no_error(blank_person_mapping):
 
 
 def test_multi_datatype_query_sorting_sorting(blank_person_mapping):
-    df = blank_person_mapping.query("""
+    res = blank_person_mapping.query("""
         PREFIX foaf:<http://xmlns.com/foaf/0.1/>
 
         SELECT ?s ?v ?o WHERE {
@@ -180,4 +180,4 @@ def test_multi_datatype_query_sorting_sorting(blank_person_mapping):
     filename = TESTDATA_PATH / "multi_datatype_query_sorting.csv"
     #df.write_csv(filename)
     expected_df = pl.scan_csv(filename).collect()
-    assert_frame_equal(df, expected_df)
+    assert_frame_equal(res.df, expected_df)

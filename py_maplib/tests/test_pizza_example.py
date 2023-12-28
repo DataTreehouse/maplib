@@ -47,7 +47,7 @@ def pizzas_mapping():
 
 
 def test_simple_query_no_error(pizzas_mapping):
-    df = pizzas_mapping.query("""
+    res = pizzas_mapping.query("""
     PREFIX pizza:<https://github.com/magbak/maplib/pizza#>
 
     SELECT ?p WHERE {
@@ -56,4 +56,4 @@ def test_simple_query_no_error(pizzas_mapping):
     """)
 
     expected_df = pl.DataFrame({"p": ["<https://github.com/magbak/maplib/pizza#Hawaiian>"]})
-    assert_frame_equal(df, expected_df)
+    assert_frame_equal(res.df, expected_df)
