@@ -165,15 +165,14 @@ impl Mapping {
     /// Usage:
     /// m.expand("ex:ExampleTemplate", df, unique_subsets=["MyValue"])
     /// If the template has no arguments, the df argument is not necessary.
-    #[pyo3(signature = (template, /, df=None, unique_subset=None, language_tags=None),
-        text_signature = "(template:str, df:DataFrame=None, unique_subset:List[str]=None, language_tags:Dict[str, str]=None))"
+    #[pyo3(signature = (template, /, df=None, unique_subset=None),
+        text_signature = "(template:str, df:DataFrame=None, unique_subset:List[str]=None)"
     )]
     fn expand(
         &mut self,
         template: &str,
         df: Option<&PyAny>,
         unique_subset: Option<Vec<String>>,
-        language_tags: Option<HashMap<String, String>>,
     ) -> PyResult<Option<PyObject>> {
         let unique_subsets = if let Some(unique_subset) = unique_subset {
             Some(vec![unique_subset.into_iter().collect()])
@@ -181,7 +180,7 @@ impl Mapping {
             None
         };
         let options = ExpandOptions {
-            language_tags,
+            language_tags: None,
             unique_subsets,
         };
 
@@ -215,28 +214,20 @@ impl Mapping {
     /// Usage:
     /// template_string = m.expand_default(df, "myKeyCol", ["otherURICol1", "otherURICol1"])
     /// print(template_string)
-    #[pyo3(signature = (df, primary_key_column, / ,foreign_key_columns=None, template_prefix=None, predicate_uri_prefix=None, language_tags=None),
-    text_signature = "(df:DataFrame, primary_key_column:str, foreign_key_column:List[str]=None, template_prefix:str=None, predicate_uri_prefix:str=None, language_tags:Dict[str,str]=None)"
+    #[pyo3(signature = (df, primary_key_column, /, template_prefix=None, predicate_uri_prefix=None),
+    text_signature = "(df:DataFrame, primary_key_column:str, template_prefix:str=None, predicate_uri_prefix:str=None)"
     )]
     fn expand_default(
         &mut self,
         df: &PyAny,
         primary_key_column: String,
-        foreign_key_columns: Option<Vec<String>>,
         template_prefix: Option<String>,
         predicate_uri_prefix: Option<String>,
-        language_tags: Option<HashMap<String, String>>,
     ) -> PyResult<String> {
         let df = polars_df_to_rust_df(&df)?;
         let options = ExpandOptions {
-            language_tags,
+            language_tags: None,
             unique_subsets: Some(vec![vec![primary_key_column.clone()]]),
-        };
-
-        let fk_cols = if let Some(fk_cols) = foreign_key_columns {
-            fk_cols
-        } else {
-            vec![]
         };
 
         let tmpl = self
@@ -244,7 +235,7 @@ impl Mapping {
             .expand_default(
                 df,
                 primary_key_column,
-                fk_cols,
+                vec![],
                 template_prefix,
                 predicate_uri_prefix,
                 options.to_rust_expand_options(),
@@ -304,6 +295,8 @@ impl Mapping {
         }
     }
 
+    /// Validate the contained knowledge graph using SHACL
+    /// Assumes that the contained knowledge graph also contains SHACL Shapes.
     #[pyo3(signature = ())]
     fn validate(&mut self, py: Python<'_>) -> PyResult<ValidationReport> {
         let shacl::ValidationReport { conforms, df } =
