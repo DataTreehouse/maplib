@@ -319,7 +319,7 @@ ex:Nested [?myVar] :: {
 // ?Date
 // ?Time
 // ?Duration_sec
-// ?List_Utf8
+// ?List_String
 
 #[rstest]
 #[serial]
@@ -334,7 +334,7 @@ ex:ExampleTemplate [
 ?Int64,
 ?Float32,
 ?Float64,
-?Utf8,
+?String,
 ?Datetime_ms_tz,
 ?Datetime_ms
 ] :: {
@@ -345,7 +345,7 @@ ex:ExampleTemplate [
     ottr:Triple(ex:anObject, ex:hasVal, ?Int64),
     ottr:Triple(ex:anotherObject, ex:hasValVal, ?Float32),
     ottr:Triple(ex:anotherObject, ex:hasValVal, ?Float64),
-    ottr:Triple(ex:yetAnotherObject, ex:hasString, ?Utf8),
+    ottr:Triple(ex:yetAnotherObject, ex:hasString, ?String),
     ottr:Triple(ex:yetAnotherObject, ex:hasDateTime, ?Datetime_ms_tz),
     ottr:Triple(ex:yetAnotherObject, ex:hasDateTime, ?Datetime_ms)
   } .
@@ -365,8 +365,8 @@ ex:ExampleTemplate [
     float32.rename("Float32");
     let mut float64 = Series::from_iter(&[21.22f64, 23.24f64]);
     float64.rename("Float64");
-    let mut utf8 = Series::from_iter(["abcde", "fghij"]);
-    utf8.rename("Utf8");
+    let mut String = Series::from_iter(["abcde", "fghij"]);
+    String.rename("String");
     let datetime_ms_tz = Series::from_any_values(
         "Datetime_ms_tz",
         &[
@@ -402,7 +402,7 @@ ex:ExampleTemplate [
         int64,
         float32,
         float64,
-        utf8,
+        String,
         datetime_ms_tz,
         datetime_ms,
     ];

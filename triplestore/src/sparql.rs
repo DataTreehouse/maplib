@@ -67,7 +67,7 @@ impl Triplestore {
                     rdf_node_types: types,
                 } = self.lazy_graph_pattern(pattern, None, &context)?;
                 let mut df = mappings.collect().unwrap();
-                df = cats_to_utf8s(df);
+                df = cats_to_Strings(df);
 
                 Ok(QueryResult::Select(df, types))
             }
@@ -83,7 +83,7 @@ impl Triplestore {
                     rdf_node_types,
                 } = self.lazy_graph_pattern(pattern, None, &context)?;
                 let mut df = mappings.collect().unwrap();
-                df = cats_to_utf8s(df);
+                df = cats_to_Strings(df);
                 let mut dfs = vec![];
                 for t in template {
                     dfs.push(triple_to_df(&df, &rdf_node_types, t)?);
@@ -262,16 +262,16 @@ fn variable_series(
     (ser, rdf_node_types.get(v.as_str()).unwrap().clone())
 }
 
-fn cats_to_utf8s(df: DataFrame) -> DataFrame {
+fn cats_to_Strings(df: DataFrame) -> DataFrame {
     let mut cats = vec![];
     for c in df.columns(df.get_column_names()).unwrap() {
-        if let DataType::Categorical(_) = c.dtype() {
+        if let DataType::Categorical(_, _) = c.dtype() {
             cats.push(c.name().to_string());
         }
     }
     let mut lf = df.lazy();
     for c in cats {
-        lf = lf.with_column(col(&c).cast(DataType::Utf8))
+        lf = lf.with_column(col(&c).cast(DataType::String))
     }
     lf.collect().unwrap()
 }

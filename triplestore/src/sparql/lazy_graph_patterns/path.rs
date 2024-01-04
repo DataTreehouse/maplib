@@ -131,8 +131,8 @@ impl Triplestore {
             out_dt_subj = dt_subj;
         } else {
             out_df = DataFrame::new(vec![
-                Series::new_empty("subject", &DataType::Utf8),
-                Series::new_empty("object", &DataType::Utf8),
+                Series::new_empty("subject", &DataType::String),
+                Series::new_empty("object", &DataType::String),
             ])
             .unwrap();
             out_dt_obj = RDFNodeType::IRI;
@@ -207,7 +207,7 @@ impl Triplestore {
             for j in &join_cols {
                 mappings.mappings = mappings
                     .mappings
-                    .with_column(col(j).cast(DataType::Categorical(None)));
+                    .with_column(col(j).cast(DataType::Categorical(None, Default::default())));
             }
 
             let join_on: Vec<Expr> = join_cols.iter().map(|x| col(x)).collect();
@@ -516,8 +516,8 @@ fn df_with_cats(df: DataFrame, subj_dt: &RDFNodeType, obj_dt: &RDFNodeType) -> D
         lf = multi_col_to_string_col(lf, "object");
     }
     lf = lf.with_columns([
-        col("subject").cast(DataType::Categorical(None)),
-        col("object").cast(DataType::Categorical(None)),
+        col("subject").cast(DataType::Categorical(None, Default::default())),
+        col("object").cast(DataType::Categorical(None, Default::default())),
     ]);
     lf.collect().unwrap()
 }

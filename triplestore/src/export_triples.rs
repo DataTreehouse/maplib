@@ -30,8 +30,8 @@ impl Triplestore {
                         let mut subject_iterator = df.column("subject").unwrap().iter();
                         let mut object_iterator = df.column("object").unwrap().iter();
                         for _ in 0..df.height() {
-                            let s = anyutf8_to_str(subject_iterator.next().unwrap());
-                            let o = anyutf8_to_str(object_iterator.next().unwrap());
+                            let s = anyString_to_str(subject_iterator.next().unwrap());
+                            let o = anyString_to_str(object_iterator.next().unwrap());
                             out.push(func(s, verb.as_str(), o));
                         }
                     }
@@ -69,8 +69,8 @@ impl Triplestore {
                             let mut subject_iterator = df.column("subject").unwrap().iter();
                             let mut data_iterator = df.column("object").unwrap().iter();
                             for _ in 0..df.height() {
-                                let s = anyutf8_to_str(subject_iterator.next().unwrap());
-                                let lex = anyutf8_to_str(data_iterator.next().unwrap());
+                                let s = anyString_to_str(subject_iterator.next().unwrap());
+                                let lex = anyString_to_str(data_iterator.next().unwrap());
                                 out.push(func_string(s, verb.as_str(), lex));
                             }
                         } else {
@@ -95,9 +95,9 @@ impl Triplestore {
                             let mut lang_iterator =
                                 df.column(LANG_STRING_LANG_FIELD).unwrap().iter();
                             for _ in 0..df.height() {
-                                let s = anyutf8_to_str(subject_iterator.next().unwrap());
-                                let val = anyutf8_to_str(value_iterator.next().unwrap());
-                                let lang = anyutf8_to_str(lang_iterator.next().unwrap());
+                                let s = anyString_to_str(subject_iterator.next().unwrap());
+                                let val = anyString_to_str(value_iterator.next().unwrap());
+                                let lang = anyString_to_str(lang_iterator.next().unwrap());
                                 out.push(func_langstring(s, verb.as_str(), val, lang));
                             }
                         }
@@ -138,15 +138,15 @@ impl Triplestore {
                         if let Some(s) = data_as_strings {
                             let mut data_iterator = s.iter();
                             for _ in 0..df.height() {
-                                let s = anyutf8_to_str(subject_iterator.next().unwrap());
-                                let lex = anyutf8_to_str(data_iterator.next().unwrap());
+                                let s = anyString_to_str(subject_iterator.next().unwrap());
+                                let lex = anyString_to_str(data_iterator.next().unwrap());
                                 out.push(f(s, verb.as_str(), lex, object_type));
                             }
                         } else {
                             let mut data_iterator = df.column("object").unwrap().iter();
                             for _ in 0..df.height() {
-                                let s = anyutf8_to_str(subject_iterator.next().unwrap());
-                                let lex = anyutf8_to_str(data_iterator.next().unwrap());
+                                let s = anyString_to_str(subject_iterator.next().unwrap());
+                                let lex = anyString_to_str(data_iterator.next().unwrap());
                                 out.push(f(s, verb.as_str(), lex, object_type));
                             }
                         };
@@ -207,8 +207,8 @@ impl Triplestore {
     }
 }
 
-fn anyutf8_to_str(a: AnyValue) -> &str {
-    if let AnyValue::Utf8(s) = a {
+fn anyString_to_str(a: AnyValue) -> &str {
+    if let AnyValue::String(s) = a {
         s
     } else {
         panic!("Should never happen {}", a)

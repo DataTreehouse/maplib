@@ -24,14 +24,14 @@ pub fn convert_lf_col_to_multitype(lf: LazyFrame, c: &str, dt: &RDFNodeType) -> 
         RDFNodeType::IRI => lf.with_column(
             as_struct(vec![
                 col(c)
-                    .cast(DataType::Categorical(None))
+                    .cast(DataType::Categorical(None, Default::default()))
                     .alias(MULTI_VALUE_COL),
                 lit(non_multi_type_string(dt))
-                    .cast(DataType::Categorical(None))
+                    .cast(DataType::Categorical(None, Default::default()))
                     .alias(MULTI_DT_COL),
                 lit(LiteralValue::Null)
-                    .cast(DataType::Utf8)
-                    .cast(DataType::Categorical(None))
+                    .cast(DataType::String)
+                    .cast(DataType::Categorical(None, Default::default()))
                     .alias(MULTI_LANG_COL),
             ])
             .alias(c),
@@ -39,14 +39,14 @@ pub fn convert_lf_col_to_multitype(lf: LazyFrame, c: &str, dt: &RDFNodeType) -> 
         RDFNodeType::BlankNode => lf.with_column(
             as_struct(vec![
                 col(c)
-                    .cast(DataType::Categorical(None))
+                    .cast(DataType::Categorical(None, Default::default()))
                     .alias(MULTI_VALUE_COL),
                 lit(non_multi_type_string(dt))
-                    .cast(DataType::Categorical(None))
+                    .cast(DataType::Categorical(None, Default::default()))
                     .alias(MULTI_DT_COL),
                 lit(LiteralValue::Null)
-                    .cast(DataType::Utf8)
-                    .cast(DataType::Categorical(None))
+                    .cast(DataType::String)
+                    .cast(DataType::Categorical(None, Default::default()))
                     .alias(MULTI_LANG_COL),
             ])
             .alias(c),
@@ -58,15 +58,15 @@ pub fn convert_lf_col_to_multitype(lf: LazyFrame, c: &str, dt: &RDFNodeType) -> 
                         col(c)
                             .struct_()
                             .field_by_name(LANG_STRING_VALUE_FIELD)
-                            .cast(DataType::Categorical(None))
+                            .cast(DataType::Categorical(None, Default::default()))
                             .alias(MULTI_VALUE_COL),
                         lit(non_multi_type_string(dt))
-                            .cast(DataType::Categorical(None))
+                            .cast(DataType::Categorical(None, Default::default()))
                             .alias(MULTI_DT_COL),
                         col(c)
                             .struct_()
                             .field_by_name(LANG_STRING_LANG_FIELD)
-                            .cast(DataType::Categorical(None))
+                            .cast(DataType::Categorical(None, Default::default()))
                             .alias(MULTI_LANG_COL),
                     ])
                     .alias(c),
@@ -75,15 +75,15 @@ pub fn convert_lf_col_to_multitype(lf: LazyFrame, c: &str, dt: &RDFNodeType) -> 
                 lf.with_column(
                     as_struct(vec![
                         col(c)
-                            .cast(DataType::Utf8)
-                            .cast(DataType::Categorical(None))
+                            .cast(DataType::String)
+                            .cast(DataType::Categorical(None, Default::default()))
                             .alias(MULTI_VALUE_COL),
                         lit(non_multi_type_string(dt))
-                            .cast(DataType::Categorical(None))
+                            .cast(DataType::Categorical(None, Default::default()))
                             .alias(MULTI_DT_COL),
                         lit(LiteralValue::Null)
-                            .cast(DataType::Utf8)
-                            .cast(DataType::Categorical(None))
+                            .cast(DataType::String)
+                            .cast(DataType::Categorical(None, Default::default()))
                             .alias(MULTI_LANG_COL),
                     ])
                     .alias(c),
@@ -234,9 +234,9 @@ pub fn get_unique_datatype(series: &Series) -> Option<RDFNodeType> {
     if uniques.len() == 1 {
         let unique = str_non_multi_type(
             uniques
-                .cast(&DataType::Utf8)
+                .cast(&DataType::String)
                 .unwrap()
-                .utf8()
+                .str()
                 .unwrap()
                 .get(0)
                 .unwrap(),
@@ -265,7 +265,7 @@ pub fn unicol_to_multitype_value(c: &str, dt: &RDFNodeType) -> Expr {
             | xsd::DOUBLE
             | xsd::FLOAT
             | xsd::BOOLEAN
-            | xsd::DECIMAL => col(c).cast(DataType::Utf8),
+            | xsd::DECIMAL => col(c).cast(DataType::String),
             _ => todo!("Not yet implemented: {:?}", dt),
         },
         RDFNodeType::None => {
@@ -346,7 +346,7 @@ pub fn definitively_convert_lf_multicol_to_single(
         col(c)
             .struct_()
             .field_by_name(MULTI_VALUE_COL)
-            .cast(DataType::Utf8)
+            .cast(DataType::String)
             .cast(polars_dt)
             .alias(c),
     )
@@ -354,24 +354,24 @@ pub fn definitively_convert_lf_multicol_to_single(
 
 pub fn split_lf_multicol(mut lf: LazyFrame, c: &str, new_c: &str) -> Vec<(LazyFrame, RDFNodeType)> {
     let dt_suffix = uuid::Uuid::new_v4().to_string();
-    let col_dt_utf8 = format!("{}_{}_utf8", c, dt_suffix);
+    let col_dt_String = format!("{}_{}_String", c, dt_suffix);
     lf = lf.with_column(
         col(c)
             .struct_()
             .field_by_name(MULTI_DT_COL)
-            .cast(DataType::Utf8)
-            .alias(&col_dt_utf8),
+            .cast(DataType::String)
+            .alias(&col_dt_String),
     );
     let df = lf.collect().unwrap();
-    let dfs = df.partition_by(vec![&col_dt_utf8], true).unwrap();
+    let dfs = df.partition_by(vec![&col_dt_String], true).unwrap();
     let mut lfs_dts = vec![];
     for df in dfs {
-        let s = df.column(&col_dt_utf8).unwrap();
-        let dt = str_non_multi_type(s.utf8().unwrap().get(0).unwrap());
+        let s = df.column(&col_dt_String).unwrap();
+        let dt = str_non_multi_type(s.str().unwrap().get(0).unwrap());
         let mut lf = df
             .lazy()
             .with_column(col(c).alias(new_c))
-            .drop_columns(vec![&col_dt_utf8]);
+            .drop_columns(vec![&col_dt_String]);
         lf = force_convert_multicol_to_single_col(lf, new_c, &dt);
         lfs_dts.push((lf, dt));
     }
@@ -385,15 +385,15 @@ pub fn split_df_multicols(
     let dt_suffix = uuid::Uuid::new_v4().to_string();
     let mut helper_cols = vec![];
     for c in &cs {
-        let col_dt_utf8 = format!("{}_{}_utf8", c, dt_suffix);
+        let col_dt_String = format!("{}_{}_String", c, dt_suffix);
         lf = lf.with_column(
             col(c)
                 .struct_()
                 .field_by_name(MULTI_DT_COL)
-                .cast(DataType::Utf8)
-                .alias(&col_dt_utf8),
+                .cast(DataType::String)
+                .alias(&col_dt_String),
         );
-        helper_cols.push(col_dt_utf8)
+        helper_cols.push(col_dt_String)
     }
     let dfs = lf
         .collect()
@@ -404,11 +404,11 @@ pub fn split_df_multicols(
     for mut df in dfs {
         let mut map = HashMap::new();
         //TODO:Extract dts before this iteration so we can be lazy all the time.
-        for (c, col_dt_utf8) in cs.iter().zip(helper_cols.iter()) {
-            let s = df.column(col_dt_utf8).unwrap();
-            let dt = str_non_multi_type(s.utf8().unwrap().get(0).unwrap());
+        for (c, col_dt_String) in cs.iter().zip(helper_cols.iter()) {
+            let s = df.column(col_dt_String).unwrap();
+            let dt = str_non_multi_type(s.str().unwrap().get(0).unwrap());
             let mut lf = df.lazy();
-            lf = lf.drop_columns(vec![&col_dt_utf8]);
+            lf = lf.drop_columns(vec![&col_dt_String]);
             lf = force_convert_multicol_to_single_col(lf, c, &dt);
             map.insert(c.to_string(), dt);
             df = lf.collect().unwrap();
@@ -433,8 +433,8 @@ pub fn lf_destruct(lf: &LazyFrame) -> DataFrame {
     let mut series_vec = vec![];
     for c in colnames {
         let ser = df.column(&c).unwrap();
-        if let DataType::Categorical(_) = ser.dtype() {
-            series_vec.push(ser.cast(&DataType::Utf8).unwrap());
+        if let DataType::Categorical(_, _) = ser.dtype() {
+            series_vec.push(ser.cast(&DataType::String).unwrap());
         } else if let DataType::Struct(fields) = ser.dtype() {
             if fields.len() == 3 {
                 let mut tmp_lf = DataFrame::new(vec![ser.clone()]).unwrap().lazy();
@@ -445,17 +445,17 @@ pub fn lf_destruct(lf: &LazyFrame) -> DataFrame {
                     col(&c)
                         .struct_()
                         .field_by_name(MULTI_VALUE_COL)
-                        .cast(DataType::Utf8)
+                        .cast(DataType::String)
                         .alias(&value_name),
                     col(&c)
                         .struct_()
                         .field_by_name(MULTI_LANG_COL)
-                        .cast(DataType::Utf8)
+                        .cast(DataType::String)
                         .alias(&lang_name),
                     col(&c)
                         .struct_()
                         .field_by_name(MULTI_DT_COL)
-                        .cast(DataType::Utf8)
+                        .cast(DataType::String)
                         .alias(&dt_name),
                 ]);
                 let mut tmp_df = tmp_lf.collect().unwrap();

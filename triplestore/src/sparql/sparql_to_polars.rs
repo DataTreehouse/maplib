@@ -17,18 +17,18 @@ pub fn sparql_term_to_polars_literal_value(term: &Term) -> polars::prelude::Lite
 }
 
 pub fn sparql_named_node_to_polars_literal_value(named_node: &NamedNode) -> LiteralValue {
-    LiteralValue::Utf8(named_node.to_string())
+    LiteralValue::String(named_node.to_string())
 }
 
 pub fn sparql_blank_node_to_polars_literal_value(blank_node: &BlankNode) -> LiteralValue {
-    LiteralValue::Utf8(blank_node.to_string())
+    LiteralValue::String(blank_node.to_string())
 }
 
 pub fn sparql_literal_to_polars_literal_value(lit: &Literal) -> LiteralValue {
     let datatype = lit.datatype();
     let value = lit.value();
     let literal_value = if datatype == xsd::STRING {
-        LiteralValue::Utf8(value.to_string())
+        LiteralValue::String(value.to_string())
     } else if datatype == xsd::UNSIGNED_INT {
         let u = u32::from_str(value).expect("Integer parsing error");
         LiteralValue::UInt32(u)
@@ -110,12 +110,12 @@ pub fn polars_literal_values_to_series(literal_values: Vec<LiteralValue>, name: 
                     })
                     .collect::<Vec<bool>>(),
             ),
-            LiteralValue::Utf8(_) => Series::new(
+            LiteralValue::String(_) => Series::new(
                 name,
                 literal_values
                     .into_iter()
                     .map(|x| {
-                        if let LiteralValue::Utf8(u) = x {
+                        if let LiteralValue::String(u) = x {
                             u
                         } else {
                             panic!("Not possible")
@@ -247,12 +247,12 @@ pub fn polars_literal_values_to_series(literal_values: Vec<LiteralValue>, name: 
                     })
                     .collect::<Vec<Option<bool>>>(),
             ),
-            LiteralValue::Utf8(_) => Series::new(
+            LiteralValue::String(_) => Series::new(
                 name,
                 literal_values
                     .into_iter()
                     .map(|x| {
-                        if let LiteralValue::Utf8(u) = x {
+                        if let LiteralValue::String(u) = x {
                             Some(u)
                         } else {
                             None

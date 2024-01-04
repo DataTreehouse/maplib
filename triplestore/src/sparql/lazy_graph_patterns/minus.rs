@@ -43,10 +43,10 @@ impl Triplestore {
             for c in join_on {
                 if is_string_col(left_solution_mappings.rdf_node_types.get(c).unwrap()) {
                     right_mappings =
-                        right_mappings.with_column(col(c).cast(DataType::Categorical(None)));
+                        right_mappings.with_column(col(c).cast(DataType::Categorical(None, Default::default())));
                     left_solution_mappings.mappings = left_solution_mappings
                         .mappings
-                        .with_column(col(c).cast(DataType::Categorical(None)));
+                        .with_column(col(c).cast(DataType::Categorical(None, Default::default())));
                 }
             }
             let all_false = [false].repeat(join_on_cols.len());

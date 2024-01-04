@@ -6,7 +6,7 @@ use oxiri::Iri;
 use oxrdf::vocab::xsd;
 use oxrdf::NamedNode;
 use polars_core::frame::DataFrame;
-use polars_core::prelude::{AnyValue, NamedFrom, Series};
+use polars_core::prelude::{AnyValue, Series};
 use representation::literals::sparql_literal_to_any_value;
 use representation::RDFNodeType;
 use rio_api::parser::TriplesParser;
@@ -88,11 +88,11 @@ impl Triplestore {
                 let any_iter: Vec<AnyValue> = objects
                     .into_iter()
                     .map(|t| match t {
-                        oxrdf::Term::NamedNode(nn) => AnyValue::Utf8Owned(nn.to_string().into()),
-                        oxrdf::Term::BlankNode(bb) => AnyValue::Utf8Owned(bb.to_string().into()),
+                        oxrdf::Term::NamedNode(nn) => AnyValue::StringOwned(nn.to_string().into()),
+                        oxrdf::Term::BlankNode(bb) => AnyValue::StringOwned(bb.to_string().into()),
                         oxrdf::Term::Literal(l) => {
                             if matches!(l.datatype(), xsd::ANY_URI) {
-                                AnyValue::Utf8Owned(l.value().into())
+                                AnyValue::StringOwned(l.value().into())
                             } else {
                                 sparql_literal_to_any_value(
                                     l.value(),

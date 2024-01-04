@@ -103,7 +103,7 @@ pub fn array_to_rust_df(rb: &[&PyAny]) -> PyResult<DataFrame> {
                 .collect::<PyResult<Vec<_>>>()?;
 
             // we parallelize this part because we can have dtypes that are not zero copy
-            // for instance utf8 -> large-utf8
+            // for instance String -> large-String
             // dict encoded to categorical
             let columns = if run_parallel {
                 POOL.install(|| {

@@ -389,9 +389,9 @@ impl Mapping {
             let mut fix_iris = vec![];
             for (coltype, colname) in coltypes_names {
                 if coltype == &RDFNodeType::IRI {
-                    let nonnull = df.column(colname).unwrap().utf8().unwrap().first_non_null();
+                    let nonnull = df.column(colname).unwrap().str().unwrap().first_non_null();
                     if let Some(i) = nonnull {
-                        let first_iri = df.column(colname).unwrap().utf8().unwrap().get(i).unwrap();
+                        let first_iri = df.column(colname).unwrap().str().unwrap().get(i).unwrap();
                         {
                             if !first_iri.starts_with('<') {
                                 fix_iris.push(colname);

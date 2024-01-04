@@ -824,7 +824,7 @@ impl Triplestore {
                             output_solution_mappings.mappings =
                                 output_solution_mappings.mappings.with_column(
                                     col(first_context.as_str())
-                                        .cast(DataType::Utf8)
+                                        .cast(DataType::String)
                                         .alias(context.as_str()),
                                 );
                             output_solution_mappings.rdf_node_types.insert(
