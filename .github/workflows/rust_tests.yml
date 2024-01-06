@@ -9,7 +9,7 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RUST_LOG: debug
-  RUST_TOOLCHAIN: nightly-2024-01-01
+  RUST_TOOLCHAIN: nightly-2023-12-01
 
 jobs:
   build_and_test:
