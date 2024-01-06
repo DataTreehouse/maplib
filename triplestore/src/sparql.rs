@@ -265,13 +265,13 @@ fn variable_series(
 fn cats_to_Strings(df: DataFrame) -> DataFrame {
     let mut cats = vec![];
     for c in df.columns(df.get_column_names()).unwrap() {
-        if let DataType::Categorical(_, _) = c.dtype() {
+        if let DataType::Categorical(_) = c.dtype() {
             cats.push(c.name().to_string());
         }
     }
     let mut lf = df.lazy();
     for c in cats {
-        lf = lf.with_column(col(&c).cast(DataType::String))
+        lf = lf.with_column(col(&c).cast(DataType::Utf8))
     }
     lf.collect().unwrap()
 }

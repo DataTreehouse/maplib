@@ -16,7 +16,7 @@ pub fn sparql_literal_to_any_value<'a>(
     let (anyv, dt) = if let Some(datatype) = datatype {
         let datatype = *datatype;
         let literal_value = if datatype == xsd::STRING {
-            AnyValue::StringOwned(value.into())
+            AnyValue::Utf8Owned(value.into())
         } else if datatype == xsd::UNSIGNED_INT {
             let u = u32::from_str(value).expect("Integer parsing error");
             AnyValue::from(u)
@@ -60,11 +60,11 @@ pub fn sparql_literal_to_any_value<'a>(
             }
         } else if datatype == LANG_STRING {
             //Not using StringOwned here causes corruption..
-            let val = AnyValue::StringOwned(value.into());
-            let lang = AnyValue::StringOwned(language.unwrap().into());
+            let val = AnyValue::Utf8Owned(value.into());
+            let lang = AnyValue::Utf8Owned(language.unwrap().into());
             let polars_fields: Vec<Field> = vec![
-                Field::new(LANG_STRING_VALUE_FIELD, DataType::String),
-                Field::new(LANG_STRING_LANG_FIELD, DataType::String),
+                Field::new(LANG_STRING_VALUE_FIELD, DataType::Utf8),
+                Field::new(LANG_STRING_LANG_FIELD, DataType::Utf8),
             ];
             let av = AnyValue::StructOwned(Box::new((vec![val, lang], polars_fields)));
             av
@@ -73,7 +73,7 @@ pub fn sparql_literal_to_any_value<'a>(
         };
         (literal_value, datatype)
     } else {
-        (AnyValue::StringOwned(value.into()), xsd::STRING)
+        (AnyValue::Utf8Owned(value.into()), xsd::STRING)
     };
     (anyv.into_static().unwrap(), dt)
 }

@@ -479,7 +479,7 @@ pub fn prepare_triples(
             let predicate;
             {
                 let any_predicate = part.column("verb").unwrap().get(0);
-                if let Ok(AnyValue::String(p)) = any_predicate {
+                if let Ok(AnyValue::Utf8(p)) = any_predicate {
                     predicate = literal_iri_to_namednode(p);
                 } else {
                     panic!()
@@ -530,8 +530,8 @@ fn prepare_triples_df(
         now.elapsed().as_secs_f32()
     );
     if let Some(tag) = language_tag {
-        let lt_ser = Series::new_empty(LANGUAGE_TAG_COLUMN, &DataType::String)
-            .extend_constant(AnyValue::String(tag), df.height())
+        let lt_ser = Series::new_empty(LANGUAGE_TAG_COLUMN, &DataType::Utf8)
+            .extend_constant(AnyValue::Utf8(tag), df.height())
             .unwrap();
         df.with_column(lt_ser).unwrap();
         df = df

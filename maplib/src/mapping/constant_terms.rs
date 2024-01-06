@@ -21,7 +21,7 @@ pub fn constant_to_expr(
     let (expr, ptype, rdf_node_type) = match constant_term {
         ConstantTerm::Constant(c) => match c {
             ConstantLiteral::Iri(iri) => (
-                Expr::Literal(LiteralValue::String(iri.as_str().to_string())),
+                Expr::Literal(LiteralValue::Utf8(iri.as_str().to_string())),
                 PType::Basic(NamedNode::new_unchecked(OTTR_IRI), "ottr:IRI".to_string()),
                 RDFNodeType::IRI,
             ),
@@ -33,9 +33,9 @@ pub fn constant_to_expr(
                 let language = lit.language.as_deref();
                 let (mut any, dt) = sparql_literal_to_any_value(&lit.value, language, &dt);
                 //Workaround for owned utf 8..
-                let value_series = if let AnyValue::StringOwned(s) = any {
-                    any = AnyValue::String(&s);
-                    let mut value_series = Series::new_empty("literal", &DataType::String);
+                let value_series = if let AnyValue::Utf8Owned(s) = any {
+                    any = AnyValue::Utf8(&s);
+                    let mut value_series = Series::new_empty("literal", &DataType::Utf8);
                     value_series = value_series.extend_constant(any, 1).unwrap();
                     value_series
                 } else {
@@ -129,7 +129,7 @@ pub fn constant_blank_node_to_series(
             let any_value_vec: Vec<_> = (blank_node_counter..(blank_node_counter + n_rows))
                 .into_par_iter()
                 .map(|i| {
-                    AnyValue::StringOwned(
+                    AnyValue::Utf8Owned(
                         format!("_:{}_l{}_p{}_r{}", bl.as_str(), layer, pattern_num, i).into(),
                     )
                 })
@@ -139,7 +139,7 @@ pub fn constant_blank_node_to_series(
                 Series::from_any_values_and_dtype(
                     BLANK_NODE_SERIES_NAME,
                     any_value_vec.as_slice(),
-                    &DataType::String,
+                    &DataType::Utf8,
                     false,
                 )
                 .unwrap(),

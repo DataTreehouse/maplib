@@ -136,10 +136,10 @@ impl RDFNodeType {
 
     pub fn polars_data_type(&self) -> DataType {
         match self {
-            RDFNodeType::IRI => DataType::String,
-            RDFNodeType::BlankNode => DataType::String,
+            RDFNodeType::IRI => DataType::Utf8,
+            RDFNodeType::BlankNode => DataType::Utf8,
             RDFNodeType::Literal(l) => match l.as_ref() {
-                xsd::STRING => DataType::String,
+                xsd::STRING => DataType::Utf8,
                 xsd::UNSIGNED_INT => DataType::UInt32,
                 xsd::UNSIGNED_LONG => DataType::UInt64,
                 xsd::INTEGER | xsd::LONG => DataType::Int64,

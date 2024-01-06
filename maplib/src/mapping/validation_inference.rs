@@ -169,7 +169,7 @@ pub fn polars_datatype_to_xsd_datatype(datatype: &DataType, has_language_tag: bo
         DataType::Int64 => xsd::LONG,
         DataType::Float32 => xsd::FLOAT,
         DataType::Float64 => xsd::DOUBLE,
-        DataType::String => {
+        DataType::Utf8 => {
             if has_language_tag {
                 rdf::LANG_STRING
             } else {
@@ -180,7 +180,7 @@ pub fn polars_datatype_to_xsd_datatype(datatype: &DataType, has_language_tag: bo
         DataType::Datetime(_, Some(_)) => xsd::DATE_TIME_STAMP,
         DataType::Datetime(_, None) => xsd::DATE_TIME,
         DataType::Duration(_) => xsd::DURATION,
-        DataType::Categorical(_, _) => xsd::STRING,
+        DataType::Categorical(_) => xsd::STRING,
         DataType::List(inner) => {
             return PType::List(Box::new(polars_datatype_to_xsd_datatype(
                 inner,

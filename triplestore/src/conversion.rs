@@ -13,7 +13,7 @@ pub fn convert_to_string(series: &Series) -> Option<Series> {
     let series_data_type = series.dtype();
 
     match series_data_type {
-        DataType::String => return None,
+        DataType::Utf8 => return None,
         DataType::Date => {
             return Some(
                 series
@@ -58,12 +58,12 @@ pub fn convert_to_string(series: &Series) -> Option<Series> {
                         + col(series.name())
                             .struct_()
                             .field_by_name(LANG_STRING_VALUE_FIELD)
-                            .cast(DataType::String)
+                            .cast(DataType::Utf8)
                         + lit("\"@")
                         + col(series.name())
                             .struct_()
                             .field_by_name(LANG_STRING_LANG_FIELD))
-                    .cast(DataType::String)
+                    .cast(DataType::Utf8)
                     .alias(series.name()),
                 )
                 .collect()
@@ -75,7 +75,7 @@ pub fn convert_to_string(series: &Series) -> Option<Series> {
         }
         _ => {}
     }
-    Some(series.cast(&DataType::String).unwrap())
+    Some(series.cast(&DataType::Utf8).unwrap())
 }
 
 fn hack_format_timestamp_with_timezone(series: &Series, tz: &mut TimeZone) -> Series {

@@ -88,9 +88,9 @@ impl Triplestore {
                 let dt = right_datatypes.get(&c).unwrap();
                 if is_string_col(dt) {
                     right_mappings =
-                        right_mappings.with_column(col(&c).cast(DataType::Categorical(None, Default::default())));
+                        right_mappings.with_column(col(&c).cast(DataType::Categorical(None)));
                     left_mappings =
-                        left_mappings.with_column(col(&c).cast(DataType::Categorical(None, Default::default())));
+                        left_mappings.with_column(col(&c).cast(DataType::Categorical(None)));
                 }
             }
 

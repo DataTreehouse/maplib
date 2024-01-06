@@ -39,7 +39,7 @@ impl Triplestore {
                             col_vecs
                                 .get_mut(&j)
                                 .unwrap()
-                                .push(AnyValue::StringOwned(nn.as_str().into()));
+                                .push(AnyValue::Utf8Owned(nn.as_str().into()));
                         }
                         GroundTerm::Literal(lit) => {
                             let dt = lit.datatype();

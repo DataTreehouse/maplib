@@ -22,6 +22,7 @@ use representation::{literal_iri_to_namednode, RDFNodeType};
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 use std::collections::HashMap;
 
+
 impl Triplestore {
     pub fn lazy_triple_pattern(
         &self,
@@ -75,7 +76,7 @@ impl Triplestore {
                             predicates = predicates_iter
                                 .filter_map(|x| match x {
                                     AnyValue::Null => None,
-                                    AnyValue::String(s) => Some(literal_iri_to_namednode(s)),
+                                    AnyValue::Utf8(s) => Some(literal_iri_to_namednode(s)),
                                     _ => panic!("Should never happen"),
                                 })
                                 .collect();
@@ -159,8 +160,8 @@ impl Triplestore {
                     }
                 }
                 for c in strcol {
-                    lf = lf.with_column(col(c).cast(DataType::Categorical(None, Default::default())));
-                    mappings = mappings.with_column(col(c).cast(DataType::Categorical(None, Default::default())));
+                    lf = lf.with_column(col(c).cast(DataType::Categorical(None)));
+                    mappings = mappings.with_column(col(c).cast(DataType::Categorical(None)));
                 }
 
                 mappings =
@@ -401,7 +402,7 @@ pub fn create_empty_lf_datatypes(
             (dt.clone(), polars_dt)
         } else {
             let dt = RDFNodeType::IRI;
-            let polars_dt = DataType::String;
+            let polars_dt = DataType::Utf8;
             (dt, polars_dt)
         };
         out_datatypes.insert(object_rename.to_string(), use_datatype);
