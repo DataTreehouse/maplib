@@ -319,7 +319,7 @@ impl Mapping {
                             pattern_num,
                             instance,
                             &target_template.signature,
-                            &calling_signature,
+                            calling_signature,
                             series_vec,
                             &dynamic_columns,
                             &static_columns,
@@ -622,9 +622,13 @@ fn create_remapped(
                 } else if let Some(c) = constant_columns.get(&v.name) {
                     new_constant_columns.insert(target_colname.clone(), c.clone());
                 } else {
-                    if let Some(calling_formal_arg) = calling_signature.parameter_list.iter().find(|x|x.stottr_variable.name == v.name) {
+                    if let Some(calling_formal_arg) = calling_signature
+                        .parameter_list
+                        .iter()
+                        .find(|x| x.stottr_variable.name == v.name)
+                    {
                         if calling_formal_arg.optional {
-                            return Ok(None)
+                            return Ok(None);
                         }
                     }
                     return Err(MappingError::UnknownVariableError(v.name.clone()));

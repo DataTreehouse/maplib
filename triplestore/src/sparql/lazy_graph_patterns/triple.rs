@@ -22,7 +22,6 @@ use representation::{literal_iri_to_namednode, RDFNodeType};
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 use std::collections::HashMap;
 
-
 impl Triplestore {
     pub fn lazy_triple_pattern(
         &self,

@@ -22,7 +22,6 @@ use std::cmp::max;
 use std::collections::hash_map::Values;
 use std::collections::HashMap;
 
-
 type SparseMatrix = CsMatBase<u32, usize, Vec<usize>, Vec<usize>, Vec<u32>, usize>;
 
 struct SparsePathReturn {
