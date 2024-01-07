@@ -604,21 +604,16 @@ impl Triplestore {
                 let mut args_contexts: HashMap<usize, Context> = HashMap::new();
                 let mut output_solution_mappings = solution_mappings;
                 for i in 0..args.len() {
-                    let arg = args.get(i).unwrap();
-                    if let Expression::Literal(_) = arg {
-                        // No operation here..
-                    } else {
-                        let arg_context = context.extension_with(PathEntry::FunctionCall(i as u16));
-                        output_solution_mappings = self.lazy_expression(
-                            args.get(i).unwrap(),
-                            output_solution_mappings,
-                            &arg_context,
-                        )?;
-                        args_contexts.insert(i, arg_context);
-                        output_solution_mappings.mappings =
-                            output_solution_mappings.mappings.collect().unwrap().lazy();
-                        //TODO: workaround for stack overflow - post bug?
-                    }
+                    let arg_context = context.extension_with(PathEntry::FunctionCall(i as u16));
+                    output_solution_mappings = self.lazy_expression(
+                        args.get(i).unwrap(),
+                        output_solution_mappings,
+                        &arg_context,
+                    )?;
+                    args_contexts.insert(i, arg_context);
+                    output_solution_mappings.mappings =
+                        output_solution_mappings.mappings.collect().unwrap().lazy();
+                    //TODO: workaround for stack overflow - post bug?
                 }
                 match func {
                     Function::Year => {
