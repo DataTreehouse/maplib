@@ -56,4 +56,4 @@ def test_simple_query_no_error(pizzas_mapping):
     """)
 
     expected_df = pl.DataFrame({"p": ["<https://github.com/magbak/maplib/pizza#Hawaiian>"]})
-    assert_frame_equal(res.df, expected_df)
+    assert_frame_equal(res, expected_df)

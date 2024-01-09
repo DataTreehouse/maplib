@@ -24,4 +24,4 @@ def test_read_ntriples():
     filename = TESTDATA_PATH / "read_ntriples.csv"
     #df.write_csv(str(filename))
     expected_df = pl.scan_csv(filename).collect()
-    pl.testing.assert_frame_equal(res.df, expected_df)
+    pl.testing.assert_frame_equal(res, expected_df)

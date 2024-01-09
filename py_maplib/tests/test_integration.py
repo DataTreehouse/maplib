@@ -193,7 +193,7 @@ def windpower_mapping():
 
 
 def test_simple_query(windpower_mapping):
-    df = windpower_mapping.query("SELECT ?a ?b WHERE {?a a ?b}").df.sort(["a", "b"])
+    df = windpower_mapping.query("SELECT ?a ?b WHERE {?a a ?b}").sort(["a", "b"])
     filename = TESTDATA_PATH / "simple_query.csv"
     #df.write_csv(filename)
     expected_df = pl.scan_csv(filename).sort(["a", "b"]).collect()
@@ -224,7 +224,7 @@ SELECT ?site_label ?wtur_label ?ts ?ts_label WHERE {
     FILTER(?wtur_label = "A1" && ?site_label = "Wind Mountain") .
 }"""
     by = ["site_label", "wtur_label", "ts", "ts_label"]
-    df = windpower_mapping.query(query).df.sort(by)
+    df = windpower_mapping.query(query).sort(by)
     filename = TESTDATA_PATH / "larger_query.csv"
     #df.write_csv(filename)
     expected_df = pl.scan_csv(filename).sort(by).collect()
@@ -243,7 +243,7 @@ SELECT ?site_label ?node WHERE {
     ?site rds:hasFunctionalAspect / ^rds:hasFunctionalAspectNode ?node .
 }"""
     by = ["site_label", "node"]
-    df = windpower_mapping.query(query).df.sort(by)
+    df = windpower_mapping.query(query).sort(by)
     filename = TESTDATA_PATH / "simple_property_path_query.csv"
     #df.write_csv(filename)
     expected_df = pl.scan_csv(filename).sort(by).collect()
@@ -263,7 +263,7 @@ SELECT ?site_label ?node WHERE {
 }"""
     by = ["site_label", "node"]
     start = time.time()
-    df = windpower_mapping.query(query).df.sort(by)
+    df = windpower_mapping.query(query).sort(by)
     end = time.time()
     print(f"Took {round(end-start, 3)}")
     filename = TESTDATA_PATH / "iterated_property_path_query.csv"
@@ -285,7 +285,7 @@ SELECT ?site_label WHERE {
 }"""
     by = ["site_label"]
     start = time.time()
-    df = windpower_mapping.query(query).df.sort(by)
+    df = windpower_mapping.query(query).sort(by)
     end = time.time()
     print(f"Took {round(end-start, 3)}")
     filename = TESTDATA_PATH / "iterated_property_path_constant_object_query.csv"
@@ -305,7 +305,7 @@ SELECT ?node WHERE {
 }"""
     by = ["node"]
     start = time.time()
-    df = windpower_mapping.query(query).df.sort(by)
+    df = windpower_mapping.query(query).sort(by)
     end = time.time()
     print(f"Took {round(end-start, 3)}")
     filename = TESTDATA_PATH / "iterated_property_path_constant_subject_query.csv"
@@ -329,7 +329,7 @@ SELECT ?site_label ?node_label WHERE {
 }"""
     by = ["site_label", "node_label"]
     start = time.time()
-    df = windpower_mapping.query(query).df.sort(by)
+    df = windpower_mapping.query(query).sort(by)
     end = time.time()
     print(f"Took {round(end-start, 3)}")
     filename = TESTDATA_PATH / "iterated_property_path_query_with_bug.csv"
@@ -344,8 +344,8 @@ def test_simple_construct_query(windpower_mapping):
     ?a a ct:something.
     ?b a ct:nothing. 
     } WHERE {?a a ?b}""")
-    something = dfs[0].df.sort(["subject", "object"])
-    nothing = dfs[1].df.sort(["subject", "object"])
+    something = dfs[0].sort(["subject", "object"])
+    nothing = dfs[1].sort(["subject", "object"])
     filename_something = TESTDATA_PATH / "simple_construct_query_something.csv"
     #something.write_csv(filename_something)
     filename_nothing = TESTDATA_PATH / "simple_construct_query_nothing.csv"
@@ -369,14 +369,14 @@ def test_simple_insert_construct_query(windpower_mapping):
         WHERE {
         ?a a ct:somethingTestit .
         }
-    """).df.sort(["a"])
+    """).sort(["a"])
     nothing = windpower_mapping.query("""
             PREFIX ct:<https://github.com/magbak/chrontext#>
             SELECT ?a
             WHERE {
             ?a a ct:nothingTestit .
             }
-        """).df.sort(["a"])
+        """).sort(["a"])
     filename_something = TESTDATA_PATH / "simple_insert_query_something.csv"
     #something.write_csv(filename_something)
     filename_nothing = TESTDATA_PATH / "simple_insert_query_nothing.csv"

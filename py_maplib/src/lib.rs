@@ -3,9 +3,9 @@ extern crate core;
 mod error;
 
 use crate::error::PyMaplibError;
-use arrow_python_utils::to_rust::polars_df_to_rust_df;
+use pydf_io::to_rust::polars_df_to_rust_df;
 
-use arrow_python_utils::to_python::df_to_py_df;
+use pydf_io::to_python::df_to_py_df;
 use log::warn;
 use maplib::document::document_from_str;
 use maplib::errors::MaplibError;
@@ -265,12 +265,8 @@ impl Mapping {
         match res {
             SparqlQueryResult::Select(mut df, datatypes) => {
                 df = fix_multicolumns(df, &datatypes);
-                let pydf = df_to_py_df(df, py)?;
-                Ok(QueryResult {
-                    df: pydf,
-                    types: dtypes_map(datatypes),
-                }
-                .into_py(py))
+                let pydf = df_to_py_df(df, dtypes_map(datatypes), py)?;
+                Ok(pydf)
             }
             SparqlQueryResult::Construct(dfs) => {
                 let mut query_results = vec![];
@@ -281,13 +277,9 @@ impl Mapping {
                     ]
                     .into();
                     let df = fix_multicolumns(df, &datatypes);
-                    let pydf = df_to_py_df(df, py)?;
+                    let pydf = df_to_py_df(df, dtypes_map(datatypes), py)?;
                     query_results.push(
-                        QueryResult {
-                            df: pydf,
-                            types: dtypes_map(datatypes),
-                        }
-                        .into_py(py),
+                        pydf,
                     );
                 }
                 Ok(PyList::new(py, query_results).into())
@@ -303,7 +295,7 @@ impl Mapping {
             self.inner.validate().map_err(PyMaplibError::from)?;
 
         let report = if let Some(df) = df {
-            Some(df_to_py_df(df, py)?)
+            Some(df_to_py_df(df, HashMap::new(), py)?)
         } else {
             None
         };

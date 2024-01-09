@@ -1,6 +1,6 @@
 [package]
 name = "py_maplib"
-version = "0.6.2"
+version = "0.7.0"
 edition = "2021"
 
 [workspace]
@@ -11,9 +11,8 @@ maplib = {path="../maplib"}
 triplestore = {path="../triplestore"}
 representation = {path = "../representation"}
 shacl = {path="../shacl"}
-
 oxrdf = {version="0.1.7"}
-arrow_python_utils = {path="../arrow_python_utils"}
+pydf_io = { git = "https://github.com/DataTreehouse/pydf_io"}
 thiserror="1.0.31"
 polars-lazy = "0.35.4"
 polars-core = {version="0.35.4", features=["dtype-array", "dtype-categorical", "dtype-date", "dtype-datetime",

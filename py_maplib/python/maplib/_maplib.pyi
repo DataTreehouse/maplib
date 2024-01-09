@@ -1,20 +1,8 @@
 from pathlib import Path
-from typing import Union, List, Dict
+from typing import Union, List
 
 from polars import DataFrame
-
-class QueryResult:
-    """
-    Class representing the result of SPARQL queries.
-    Only constructed by maplib.
-    Fields:
-    df: DataFrame with result
-    types: Dict where each key is a column name and each value is the name of the type of that column. 
-    """
-    def __init__(self, df:DataFrame, types:Dict[str, str]) -> QueryResult:
-        self.df = df
-        self.types = types
-        ...
+from .semantic_dataframe import SemanticDataFrame
 
 
 class ValidationReport:
@@ -25,10 +13,12 @@ class ValidationReport:
     df: Report with constraints that were not met.
     conforms: True if no violations were found.
     """
-    def __init__(self, df:DataFrame, conforms:bool) -> ValidationReport:
+
+    def __init__(self, df: SemanticDataFrame, conforms: bool) -> ValidationReport:
         self.df = df
         self.conforms = conforms
         ...
+
 
 class Mapping:
     """
@@ -51,9 +41,10 @@ class Mapping:
     :param documents: a stOTTR document or a list of these
     :param caching_folder: a folder to cache the triples as Parquet files
     """
-    def __init__(self, documents:Union[str,List[str]]=None, caching_folder:str=None) -> Mapping: ...
 
-    def expand(self, template:str, df:DataFrame=None, unique_subset:List[str]=None) -> None:
+    def __init__(self, documents: Union[str, List[str]] = None, caching_folder: str = None) -> Mapping: ...
+
+    def expand(self, template: str, df: DataFrame = None, unique_subset: List[str] = None) -> None:
         """
         Expand a template using a DataFrame
         Usage:
@@ -68,7 +59,8 @@ class Mapping:
         :param unique_subset: DataFrame column names known to be unique e.g. ["colA", "colB"], for a performance boost (reduce costly deduplication)
         """
 
-    def expand_default(self, df:DataFrame, primary_key_column:str, template_prefix:str=None, predicate_uri_prefix:str=None) -> str:
+    def expand_default(self, df: DataFrame, primary_key_column: str, template_prefix: str = None,
+                       predicate_uri_prefix: str = None) -> str:
         """
         Create a default template and expand it based on a dataframe.
         Usage:
@@ -83,7 +75,7 @@ class Mapping:
         :return: The generated template
         """
 
-    def query(self, query:str) -> QueryResult:
+    def query(self, query: str) -> Union[SemanticDataFrame, List[SemanticDataFrame], None]:
         """
         Query the contained knowledge graph using SPARQL
         Currently, SELECT, CONSTRUCT and INSERT are supported.
@@ -98,7 +90,29 @@ class Mapping:
         ... print(res.types)
 
         :param query: The SPARQL query string
-        :return: QueryResult containing a DataFrame (types.df) and the types of each column (res.types)
+        :return: DataFrame (Select), list of DataFrames (Construct) containing results, or None for Insert-queries
+        """
+
+    def insert(self, query: str):
+        """
+        Insert the results of a Construct query in the graph.
+        Useful for being able to use the same query for inspecting what will be inserted and actually inserting.
+        Usage:
+
+        >>> m = Mapping(doc)
+        ... # Omitted
+        ... hpizzas = '''
+        ... PREFIX pizza:<https://github.com/magbak/maplib/pizza#>
+        ... PREFIX ing:<https://github.com/magbak/maplib/pizza/ingredients#>
+        ... CONSTRUCT { ?p a pizza:HeterodoxPizza }
+        ... WHERE {
+        ... ?p a pizza:Pizza .
+        ... ?p pizza:hasIngredient ing:Pineapple .
+        ... }'''
+        ... m.insert(hpizzas)
+
+        :param query: The SPARQL Insert query string
+        :return: None
         """
 
     def validate(self) -> ValidationReport:
@@ -109,8 +123,7 @@ class Mapping:
         :return: Validation report containing a report (report.df) and whether the graph conforms (report.conforms)
         """
 
-
-    def read_triples(self, file_path:Union[str,Path], transient:bool=False) -> None:
+    def read_triples(self, file_path: Union[str, Path], transient: bool = False) -> None:
         """
         Reads triples from a file path.
         File format is derived using file extension, e.g. filename.ttl or filename.nt.
@@ -125,7 +138,7 @@ class Mapping:
         :param transient: Should these triples be included when writing the graph to the file system?
         """
 
-    def write_ntriples(self, file_path:Union[str,Path]) -> None:
+    def write_ntriples(self, file_path: Union[str, Path]) -> None:
         """
         Write the non-transient triples to the file path specified in the NTriples format.
 
@@ -136,7 +149,7 @@ class Mapping:
         :param file_path: The path of the file containing triples
         """
 
-    def write_native_parquet(self, folder_path:Union[str, Path]) -> None:
+    def write_native_parquet(self, folder_path: Union[str, Path]) -> None:
         """
         Write non-transient triples using the internal native Parquet format.
 

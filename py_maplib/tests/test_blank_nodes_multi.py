@@ -54,7 +54,7 @@ def test_simple_query_no_error(blank_person_mapping):
     expected_df = pl.DataFrame({"firstName": ["Ann", "Bob"],
                                 "lastName": ["Strong", "Brite"]})
 
-    assert_frame_equal(qres.df, expected_df)
+    assert_frame_equal(qres, expected_df)
 
 
 def test_simple_query_blank_node_output_no_error(blank_person_mapping):
@@ -82,8 +82,8 @@ def test_multi_datatype_query_no_error(blank_person_mapping):
         } 
         """)
     by = ["s","v","o"]
-    print(res.df)
-    df = res.df.sort(by=by)
+    print(res)
+    df = res.sort(by=by)
     filename = TESTDATA_PATH / "multi_datatype_query.csv"
     #df.write_csv(filename)
     expected_df = pl.scan_csv(filename).sort(by).collect()
@@ -102,7 +102,7 @@ def test_multi_datatype_union_query_no_error(blank_person_mapping):
         } 
         """)
     by = ["s","o"]
-    df = res.df.sort(by=by)
+    df = res.sort(by=by)
     filename = TESTDATA_PATH / "multi_datatype_union_query.csv"
     #df.write_csv(filename)
     expected_df = pl.scan_csv(filename).sort(by).collect()
@@ -121,7 +121,7 @@ def test_multi_datatype_left_join_query_no_error(blank_person_mapping):
         } 
         """)
     by = ["s","o"]
-    df = res.df.sort(by=by)
+    df = res.sort(by=by)
     filename = TESTDATA_PATH / "multi_datatype_leftjoin_query.csv"
     #df.write_csv(filename)
     expected_df = pl.scan_csv(filename).sort(by).collect()
@@ -142,7 +142,7 @@ def test_multi_datatype_join_query_two_vars_no_error(blank_person_mapping):
         } 
         """)
     by = ["s","o"]
-    df = res.df.sort(by=by)
+    df = res.sort(by=by)
     filename = TESTDATA_PATH / "multi_datatype_join_query_two_vars.csv"
     #df.write_csv(filename)
     expected_df = pl.scan_csv(filename).sort(by).collect()
@@ -162,7 +162,7 @@ def test_multi_datatype_join_query_no_error(blank_person_mapping):
         } 
         """)
     by = ["s1", "s2","o"]
-    df = res.df.sort(by=by)
+    df = res.sort(by=by)
     filename = TESTDATA_PATH / "multi_datatype_join_query.csv"
     #df.write_csv(filename)
     expected_df = pl.scan_csv(filename).sort(by).collect()
@@ -180,4 +180,4 @@ def test_multi_datatype_query_sorting_sorting(blank_person_mapping):
     filename = TESTDATA_PATH / "multi_datatype_query_sorting.csv"
     #df.write_csv(filename)
     expected_df = pl.scan_csv(filename).collect()
-    assert_frame_equal(res.df, expected_df)
+    assert_frame_equal(res, expected_df)
