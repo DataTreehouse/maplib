@@ -48,7 +48,7 @@ use polars_core::prelude::{DataType, NamedFrom};
 use polars_lazy::frame::IntoLazy;
 use pyo3::types::PyList;
 use representation::RDFNodeType;
-use triplestore::sparql::multitype::multi_col_to_string_col;
+use representation::multitype::multi_col_to_string_col;
 
 #[cfg(not(target_os = "linux"))]
 use mimalloc::MiMalloc;
