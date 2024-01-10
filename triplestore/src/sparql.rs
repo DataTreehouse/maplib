@@ -3,9 +3,7 @@ pub(crate) mod lazy_aggregate;
 mod lazy_expressions;
 pub(crate) mod lazy_graph_patterns;
 mod lazy_order;
-pub mod multitype;
 pub mod query_context;
-pub mod solution_mapping;
 pub mod sparql_to_polars;
 
 use crate::sparql::query_context::Context;
@@ -15,8 +13,8 @@ use std::collections::HashMap;
 
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
-use crate::sparql::multitype::split_df_multicols;
-use crate::sparql::solution_mapping::SolutionMappings;
+use representation::multitype::split_df_multicols;
+use representation::solution_mapping::SolutionMappings;
 use crate::TriplesToAdd;
 use polars::frame::DataFrame;
 use polars::prelude::{col, IntoLazy};
@@ -63,7 +61,6 @@ impl Triplestore {
             } => {
                 let SolutionMappings {
                     mappings,
-                    columns: _,
                     rdf_node_types: types,
                 } = self.lazy_graph_pattern(pattern, None, &context)?;
                 let mut df = mappings.collect().unwrap();
@@ -79,7 +76,6 @@ impl Triplestore {
             } => {
                 let SolutionMappings {
                     mappings,
-                    columns: _,
                     rdf_node_types,
                 } = self.lazy_graph_pattern(pattern, None, &context)?;
                 let mut df = mappings.collect().unwrap();

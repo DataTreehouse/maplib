@@ -1,7 +1,7 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
 use crate::sparql::query_context::{Context, PathEntry};
-use crate::sparql::solution_mapping::SolutionMappings;
+use representation::solution_mapping::SolutionMappings;
 use log::debug;
 use polars_core::frame::UniqueKeepStrategy;
 use spargebra::algebra::GraphPattern;
@@ -16,7 +16,6 @@ impl Triplestore {
         debug!("Processing distinct graph pattern");
         let SolutionMappings {
             mappings,
-            columns,
             rdf_node_types: datatypes,
         } = self.lazy_graph_pattern(
             inner,
@@ -25,7 +24,6 @@ impl Triplestore {
         )?;
         Ok(SolutionMappings::new(
             mappings.unique_stable(None, UniqueKeepStrategy::First),
-            columns,
             datatypes,
         ))
     }

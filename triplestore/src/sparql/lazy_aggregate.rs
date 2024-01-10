@@ -1,7 +1,7 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
 use crate::sparql::query_context::{Context, PathEntry};
-use crate::sparql::solution_mapping::SolutionMappings;
+use representation::solution_mapping::SolutionMappings;
 use oxrdf::vocab::xsd;
 use oxrdf::Variable;
 use polars::prelude::{col, str_concat, DataType, Expr, GetOutput, IntoSeries};
@@ -46,7 +46,7 @@ impl Triplestore {
                     output_solution_mappings = solution_mappings;
                     column_context = None;
                     let all_proper_column_names: Vec<String> =
-                        output_solution_mappings.columns.iter().cloned().collect();
+                        output_solution_mappings.rdf_node_types.keys().cloned().collect();
                     let columns_expr = Expr::Columns(all_proper_column_names);
                     if *distinct {
                         out_expr = columns_expr.n_unique();

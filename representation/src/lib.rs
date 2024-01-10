@@ -1,4 +1,6 @@
 pub mod literals;
+pub mod multitype;
+pub mod solution_mapping;
 
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{BlankNode, NamedNode, NamedNodeRef, NamedOrBlankNode, Term};

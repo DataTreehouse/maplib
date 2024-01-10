@@ -1,13 +1,13 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
 use crate::sparql::query_context::Context;
-use crate::sparql::solution_mapping::{is_string_col, SolutionMappings};
+use representation::solution_mapping::{is_string_col, SolutionMappings};
 use crate::sparql::sparql_to_polars::{
     sparql_literal_to_polars_literal_value, sparql_named_node_to_polars_literal_value,
 };
 
 use crate::sparql::lazy_graph_patterns::load_tt::multiple_tt_to_lf;
-use crate::sparql::multitype::{
+use representation::multitype::{
     convert_lf_col_to_multitype, create_join_compatible_solution_mappings, join_workaround,
 };
 use log::debug;
@@ -64,7 +64,6 @@ impl Triplestore {
                 let predicates: Vec<NamedNode>;
                 if let Some(SolutionMappings {
                     mappings,
-                    columns,
                     rdf_node_types,
                 }) = solution_mappings
                 {
@@ -81,21 +80,18 @@ impl Triplestore {
                                 .collect();
                             solution_mappings = Some(SolutionMappings {
                                 mappings: mappings_df.lazy(),
-                                columns,
                                 rdf_node_types,
                             })
                         } else {
                             predicates = vec![];
                             solution_mappings = Some(SolutionMappings {
                                 mappings,
-                                columns,
                                 rdf_node_types,
                             })
                         };
                     } else {
                         solution_mappings = Some(SolutionMappings {
                             mappings,
-                            columns,
                             rdf_node_types,
                         });
                         predicates = self.all_predicates();
@@ -118,13 +114,12 @@ impl Triplestore {
         let colnames: Vec<_> = dts.keys().cloned().collect();
         if let Some(SolutionMappings {
             mut mappings,
-            mut columns,
             mut rdf_node_types,
         }) = solution_mappings
         {
             let overlap: Vec<_> = colnames
                 .iter()
-                .filter(|x| columns.contains(*x))
+                .filter(|x| rdf_node_types.contains_key(*x))
                 .cloned()
                 .collect();
             if height_0 {
@@ -168,17 +163,14 @@ impl Triplestore {
             } else {
                 mappings = mappings.join(lf, [], [], JoinType::Cross.into());
             }
-            columns.extend(colnames);
             rdf_node_types.extend(dts);
             solution_mappings = Some(SolutionMappings {
                 mappings,
-                columns,
                 rdf_node_types,
             });
         } else {
             solution_mappings = Some(SolutionMappings {
                 mappings: lf,
-                columns: colnames.into_iter().collect(),
                 rdf_node_types: dts,
             })
         }

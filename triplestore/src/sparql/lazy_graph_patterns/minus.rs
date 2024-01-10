@@ -1,8 +1,9 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
 use crate::sparql::query_context::{Context, PathEntry};
-use crate::sparql::solution_mapping::{is_string_col, SolutionMappings};
+use representation::solution_mapping::{is_string_col, SolutionMappings};
 use log::debug;
+use polars::export::ahash::HashSet;
 use polars::prelude::{col, Expr, JoinArgs, JoinType};
 use polars_core::datatypes::DataType;
 use spargebra::algebra::GraphPattern;
@@ -26,13 +27,15 @@ impl Triplestore {
 
         let SolutionMappings {
             mappings: mut right_mappings,
-            columns: right_columns,
-            rdf_node_types: _,
+            rdf_node_types: right_datatypes,
         } = right_solution_mappings;
 
-        let mut join_on: Vec<&String> = left_solution_mappings
-            .columns
-            .intersection(&right_columns)
+        let right_column_set: HashSet<_> = right_datatypes.keys().collect();
+        let left_column_set: HashSet<_> = left_solution_mappings.rdf_node_types.keys().collect();
+
+        let mut join_on: Vec<_> = left_column_set
+            .intersection(&right_column_set)
+            .cloned()
             .collect();
         join_on.sort();
 

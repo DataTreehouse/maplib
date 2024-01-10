@@ -2,7 +2,7 @@ use super::Triplestore;
 use crate::sparql::errors::SparqlError;
 use crate::sparql::lazy_aggregate::AggregateReturn;
 use crate::sparql::query_context::{Context, PathEntry};
-use crate::sparql::solution_mapping::SolutionMappings;
+use representation::solution_mapping::SolutionMappings;
 use log::debug;
 use oxrdf::Variable;
 use polars::prelude::{col, lit, Expr};
@@ -58,7 +58,6 @@ impl Triplestore {
         }
         let SolutionMappings {
             mut mappings,
-            mut columns,
             rdf_node_types: mut datatypes,
         } = output_solution_mappings;
         let grouped_mappings = mappings.group_by(by.as_slice());
@@ -67,16 +66,9 @@ impl Triplestore {
         for (k, v) in new_rdf_node_types {
             datatypes.insert(k.as_str().to_string(), v);
         }
-        columns.clear();
-        for v in variables {
-            columns.insert(v.as_str().to_string());
-        }
-        for (v, _) in aggregates {
-            columns.insert(v.as_str().to_string());
-        }
         if variables.is_empty() {
             mappings = mappings.drop_columns([dummy_varname]);
         }
-        Ok(SolutionMappings::new(mappings, columns, datatypes))
+        Ok(SolutionMappings::new(mappings, datatypes))
     }
 }

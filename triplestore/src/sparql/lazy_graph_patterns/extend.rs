@@ -1,7 +1,7 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
 use crate::sparql::query_context::{Context, PathEntry};
-use crate::sparql::solution_mapping::SolutionMappings;
+use representation::solution_mapping::SolutionMappings;
 use log::debug;
 use oxrdf::Variable;
 use spargebra::algebra::{Expression, GraphPattern};
@@ -34,9 +34,6 @@ impl Triplestore {
         output_solution_mappings
             .rdf_node_types
             .insert(variable.as_str().to_string(), existing_rdf_node_type);
-        output_solution_mappings
-            .columns
-            .insert(variable.as_str().to_string());
         Ok(output_solution_mappings)
     }
 }

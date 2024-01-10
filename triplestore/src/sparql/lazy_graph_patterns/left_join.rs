@@ -1,9 +1,10 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
-use crate::sparql::multitype::{create_join_compatible_solution_mappings, join_workaround};
+use representation::multitype::{create_join_compatible_solution_mappings, join_workaround};
 use crate::sparql::query_context::{Context, PathEntry};
-use crate::sparql::solution_mapping::{is_string_col, SolutionMappings};
+use representation::solution_mapping::{is_string_col, SolutionMappings};
 use log::debug;
+use polars::export::ahash::HashSet;
 use polars::prelude::{col, Expr, JoinArgs, JoinType};
 use polars_core::datatypes::DataType;
 
@@ -39,17 +40,24 @@ impl Triplestore {
         }
         let SolutionMappings {
             mappings: right_mappings,
-            columns: mut right_columns,
             rdf_node_types: right_datatypes,
         } = right_solution_mappings;
 
         let SolutionMappings {
             mappings: left_mappings,
-            columns: left_columns,
             rdf_node_types: left_datatypes,
         } = left_solution_mappings;
 
-        let mut join_on: Vec<_> = left_columns.intersection(&right_columns).cloned().collect();
+        let mut join_on:Vec < _ > =
+            {
+                let right_column_set: HashSet<_> = right_datatypes.keys().collect();
+                let left_column_set: HashSet<_> = left_datatypes.keys().collect();
+
+                left_column_set
+                    .intersection(&right_column_set)
+                    .map(|x|(*x).clone())
+                    .collect()
+            };
         join_on.sort();
 
         let (mut left_mappings, mut left_datatypes, mut right_mappings, right_datatypes) =
@@ -100,15 +108,10 @@ impl Triplestore {
             }
         }
 
-        let mut left_solution_mappings = SolutionMappings {
+        let left_solution_mappings = SolutionMappings {
             mappings: left_mappings,
-            columns: left_columns,
             rdf_node_types: left_datatypes,
         };
-
-        for c in right_columns.drain() {
-            left_solution_mappings.columns.insert(c);
-        }
 
         Ok(left_solution_mappings)
     }

@@ -1,7 +1,7 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
 use crate::sparql::query_context::{Context, PathEntry};
-use crate::sparql::solution_mapping::SolutionMappings;
+use representation::solution_mapping::SolutionMappings;
 use log::debug;
 use polars::prelude::{col, Expr};
 use spargebra::algebra::{GraphPattern, OrderExpression};
@@ -23,13 +23,11 @@ impl Triplestore {
 
         let SolutionMappings {
             mappings,
-            columns,
             rdf_node_types,
         } = output_solution_mappings;
 
         output_solution_mappings = SolutionMappings {
             mappings,
-            columns,
             rdf_node_types,
         };
 
@@ -50,7 +48,6 @@ impl Triplestore {
         }
         let SolutionMappings {
             mut mappings,
-            columns,
             rdf_node_types: datatypes,
         } = output_solution_mappings;
 
@@ -70,6 +67,6 @@ impl Triplestore {
                 .collect::<Vec<&str>>(),
         );
 
-        Ok(SolutionMappings::new(mappings, columns, datatypes))
+        Ok(SolutionMappings::new(mappings, datatypes))
     }
 }

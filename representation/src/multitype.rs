@@ -5,7 +5,7 @@ use polars::prelude::{
 };
 use polars_core::frame::DataFrame;
 use polars_core::prelude::{DataType, Series};
-use representation::{
+use crate::{
     literal_iri_to_namednode, RDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD,
 };
 use std::collections::HashMap;
@@ -354,24 +354,24 @@ pub fn definitively_convert_lf_multicol_to_single(
 
 pub fn split_lf_multicol(mut lf: LazyFrame, c: &str, new_c: &str) -> Vec<(LazyFrame, RDFNodeType)> {
     let dt_suffix = uuid::Uuid::new_v4().to_string();
-    let col_dt_String = format!("{}_{}_String", c, dt_suffix);
+    let col_dt_string = format!("{}_{}_String", c, dt_suffix);
     lf = lf.with_column(
         col(c)
             .struct_()
             .field_by_name(MULTI_DT_COL)
             .cast(DataType::Utf8)
-            .alias(&col_dt_String),
+            .alias(&col_dt_string),
     );
     let df = lf.collect().unwrap();
-    let dfs = df.partition_by(vec![&col_dt_String], true).unwrap();
+    let dfs = df.partition_by(vec![&col_dt_string], true).unwrap();
     let mut lfs_dts = vec![];
     for df in dfs {
-        let s = df.column(&col_dt_String).unwrap();
+        let s = df.column(&col_dt_string).unwrap();
         let dt = str_non_multi_type(s.utf8().unwrap().get(0).unwrap());
         let mut lf = df
             .lazy()
             .with_column(col(c).alias(new_c))
-            .drop_columns(vec![&col_dt_String]);
+            .drop_columns(vec![&col_dt_string]);
         lf = force_convert_multicol_to_single_col(lf, new_c, &dt);
         lfs_dts.push((lf, dt));
     }
@@ -385,15 +385,15 @@ pub fn split_df_multicols(
     let dt_suffix = uuid::Uuid::new_v4().to_string();
     let mut helper_cols = vec![];
     for c in &cs {
-        let col_dt_String = format!("{}_{}_String", c, dt_suffix);
+        let col_dt_string = format!("{}_{}_String", c, dt_suffix);
         lf = lf.with_column(
             col(c)
                 .struct_()
                 .field_by_name(MULTI_DT_COL)
                 .cast(DataType::Utf8)
-                .alias(&col_dt_String),
+                .alias(&col_dt_string),
         );
-        helper_cols.push(col_dt_String)
+        helper_cols.push(col_dt_string)
     }
     let dfs = lf
         .collect()
@@ -404,11 +404,11 @@ pub fn split_df_multicols(
     for mut df in dfs {
         let mut map = HashMap::new();
         //TODO:Extract dts before this iteration so we can be lazy all the time.
-        for (c, col_dt_String) in cs.iter().zip(helper_cols.iter()) {
-            let s = df.column(col_dt_String).unwrap();
+        for (c, col_dt_string) in cs.iter().zip(helper_cols.iter()) {
+            let s = df.column(col_dt_string).unwrap();
             let dt = str_non_multi_type(s.utf8().unwrap().get(0).unwrap());
             let mut lf = df.lazy();
-            lf = lf.drop_columns(vec![&col_dt_String]);
+            lf = lf.drop_columns(vec![&col_dt_string]);
             lf = force_convert_multicol_to_single_col(lf, c, &dt);
             map.insert(c.to_string(), dt);
             df = lf.collect().unwrap();

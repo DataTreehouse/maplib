@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use crate::sparql::errors::SparqlError;
 use crate::sparql::lazy_expressions::exists_helper::rewrite_exists_graph_pattern;
 use crate::sparql::query_context::{Context, PathEntry};
-use crate::sparql::solution_mapping::SolutionMappings;
+use representation::solution_mapping::SolutionMappings;
 use crate::sparql::sparql_to_polars::{
     sparql_literal_to_polars_literal_value, sparql_named_node_to_polars_literal_value,
 };
@@ -49,7 +49,7 @@ impl Triplestore {
                 solution_mappings
             }
             Expression::Variable(v) => {
-                if !solution_mappings.columns.contains(v.as_str()) {
+                if !solution_mappings.rdf_node_types.contains_key(v.as_str()) {
                     return Err(SparqlError::VariableNotFound(
                         v.as_str().to_string(),
                         context.as_str().to_string(),
@@ -487,7 +487,6 @@ impl Triplestore {
                 )?;
                 let SolutionMappings {
                     mappings,
-                    columns,
                     mut rdf_node_types,
                 } = output_solution_mappings;
                 let mut df = mappings.collect().unwrap();
@@ -510,7 +509,7 @@ impl Triplestore {
                     context.as_str().to_string(),
                     RDFNodeType::Literal(xsd::BOOLEAN.into_owned()),
                 );
-                SolutionMappings::new(df.lazy(), columns, rdf_node_types)
+                SolutionMappings::new(df.lazy(), rdf_node_types)
             }
             Expression::Bound(v) => {
                 solution_mappings.mappings = solution_mappings
@@ -748,7 +747,6 @@ impl Triplestore {
                         assert!(args.len() > 1);
                         let SolutionMappings {
                             mappings,
-                            columns,
                             rdf_node_types: datatypes,
                         } = output_solution_mappings;
                         let cols: Vec<_> = (0..args.len())
@@ -757,7 +755,7 @@ impl Triplestore {
                         let new_mappings =
                             mappings.with_column(concat_str(cols, "").alias(context.as_str()));
                         output_solution_mappings =
-                            SolutionMappings::new(new_mappings, columns, datatypes);
+                            SolutionMappings::new(new_mappings, datatypes);
                         output_solution_mappings.rdf_node_types.insert(
                             context.as_str().to_string(),
                             RDFNodeType::Literal(xsd::STRING.into_owned()),

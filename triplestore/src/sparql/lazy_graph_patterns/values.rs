@@ -1,7 +1,7 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
 use crate::sparql::query_context::Context;
-use crate::sparql::solution_mapping::SolutionMappings;
+use representation::solution_mapping::SolutionMappings;
 use oxrdf::Variable;
 use polars::prelude::{col, Expr, IntoLazy, JoinArgs, JoinType};
 use polars_core::datatypes::AnyValue;
@@ -86,12 +86,9 @@ impl Triplestore {
             let join_on: Vec<String> = variables
                 .iter()
                 .map(|x| x.as_str().to_string())
-                .filter(|v| mappings.columns.contains(v))
+                .filter(|v| mappings.rdf_node_types.contains_key(v))
                 .collect();
             let join_cols: Vec<Expr> = join_on.iter().map(|x| col(x)).collect();
-            for v in variables {
-                mappings.columns.insert(v.as_str().to_string());
-            }
             for (k, v) in datatypes {
                 let var = variables.get(k).unwrap();
                 mappings.rdf_node_types.insert(var.as_str().to_string(), v);
@@ -120,7 +117,6 @@ impl Triplestore {
             }
             Ok(SolutionMappings::new(
                 df.lazy(),
-                variables.iter().map(|x| x.as_str().to_string()).collect(),
                 out_datatypes,
             ))
         }

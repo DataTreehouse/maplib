@@ -1,7 +1,7 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
 use crate::sparql::query_context::{Context, PathEntry};
-use crate::sparql::solution_mapping::SolutionMappings;
+use representation::solution_mapping::SolutionMappings;
 use log::{debug, warn};
 use oxrdf::Variable;
 use polars::prelude::{col, Expr};
@@ -41,7 +41,6 @@ impl Triplestore {
         }
         Ok(SolutionMappings::new(
             mappings,
-            variables.iter().map(|x| x.as_str().to_string()).collect(),
             new_datatypes,
         ))
     }

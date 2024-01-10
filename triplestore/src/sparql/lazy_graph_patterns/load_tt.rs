@@ -1,5 +1,5 @@
 use crate::sparql::errors::SparqlError;
-use crate::sparql::multitype::convert_lf_col_to_multitype;
+use representation::multitype::convert_lf_col_to_multitype;
 use crate::TripleTable;
 use polars::prelude::{col, concat, Expr, IntoLazy, LazyFrame, UnionArgs};
 use representation::RDFNodeType;

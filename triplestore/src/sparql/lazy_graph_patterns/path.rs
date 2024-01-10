@@ -1,9 +1,9 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
 use crate::sparql::lazy_graph_patterns::load_tt::multiple_tt_to_lf;
-use crate::sparql::multitype::{convert_lf_col_to_multitype, multi_col_to_string_col};
+use representation::multitype::{convert_lf_col_to_multitype, multi_col_to_string_col};
 use crate::sparql::query_context::{Context, PathEntry};
-use crate::sparql::solution_mapping::SolutionMappings;
+use representation::solution_mapping::SolutionMappings;
 use crate::sparql::sparql_to_polars::{
     sparql_literal_to_polars_literal_value, sparql_named_node_to_polars_literal_value,
 };
@@ -201,7 +201,7 @@ impl Triplestore {
             let join_cols: Vec<String> = var_cols
                 .clone()
                 .into_iter()
-                .filter(|x| mappings.columns.contains(x))
+                .filter(|x| mappings.rdf_node_types.contains_key(x))
                 .collect();
 
             for j in &join_cols {
@@ -265,10 +265,6 @@ impl Triplestore {
                     JoinArgs::new(JoinType::Inner),
                 );
             }
-            //Update mapping columns
-            for c in &var_cols {
-                mappings.columns.insert(c.to_string());
-            }
             //TODO: THIS IS WRONG
             if let TermPattern::Variable(v) = subject {
                 mappings
@@ -292,7 +288,6 @@ impl Triplestore {
             }
             Ok(SolutionMappings {
                 mappings: out_df.lazy(),
-                columns: var_cols.into_iter().map(|x| x.to_string()).collect(),
                 rdf_node_types: datatypes,
             })
         }
