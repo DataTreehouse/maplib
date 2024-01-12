@@ -1,9 +1,10 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
-use crate::sparql::query_context::{Context, PathEntry};
+use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::SolutionMappings;
 use log::debug;
 use polars::prelude::col;
+use query_processing::graph_patterns::filter;
 use spargebra::algebra::{Expression, GraphPattern};
 
 impl Triplestore {
@@ -18,15 +19,9 @@ impl Triplestore {
         let inner_context = context.extension_with(PathEntry::FilterInner);
         let expression_context = context.extension_with(PathEntry::FilterExpression);
 
-        let output_solution_mappings =
+        let mut output_solution_mappings =
             self.lazy_graph_pattern(inner, input_solution_mappings, &inner_context)?;
-        let SolutionMappings {
-            mut mappings,
-            rdf_node_types: datatypes,
-        } = self.lazy_expression(expression, output_solution_mappings, &expression_context)?;
-        mappings = mappings
-            .filter(col(expression_context.as_str()))
-            .drop_columns([&expression_context.as_str()]);
-        Ok(SolutionMappings::new(mappings, datatypes))
+        output_solution_mappings = self.lazy_expression(expression, output_solution_mappings, &expression_context)?;
+        Ok(filter(output_solution_mappings, &expression_context)?)
     }
 }

@@ -1,6 +1,6 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
-use crate::sparql::query_context::{Context, PathEntry};
+use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::SolutionMappings;
 use spargebra::algebra::OrderExpression;
 

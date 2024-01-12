@@ -1,8 +1,8 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
-use crate::sparql::query_context::Context;
+use representation::query_context::Context;
 use representation::solution_mapping::{is_string_col, SolutionMappings};
-use crate::sparql::sparql_to_polars::{
+use representation::sparql_to_polars::{
     sparql_literal_to_polars_literal_value, sparql_named_node_to_polars_literal_value,
 };
 

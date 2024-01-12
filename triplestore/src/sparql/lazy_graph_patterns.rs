@@ -7,7 +7,6 @@ mod left_join;
 pub(crate) mod load_tt;
 mod minus;
 mod order_by;
-pub(crate) mod ordering;
 mod path;
 mod project;
 mod triple;
@@ -16,7 +15,7 @@ mod values;
 
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
-use crate::sparql::query_context::{Context, PathEntry};
+use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::SolutionMappings;
 use log::{debug, info};
 use spargebra::algebra::GraphPattern;
@@ -33,7 +32,7 @@ impl Triplestore {
         match graph_pattern {
             GraphPattern::Bgp { patterns } => {
                 let mut updated_solution_mappings = solution_mappings;
-                let bgp_context = context.extension_with(PathEntry::Bgp);
+                let bgp_context = context.extension_with(PathEntry::BGP);
                 for tp in patterns {
                     updated_solution_mappings = Some(self.lazy_triple_pattern(
                         updated_solution_mappings,

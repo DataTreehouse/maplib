@@ -1,9 +1,10 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
-use crate::sparql::query_context::{Context, PathEntry};
+use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::SolutionMappings;
 use log::debug;
 use polars::prelude::{col, Expr};
+use query_processing::graph_patterns::order_by;
 use spargebra::algebra::{GraphPattern, OrderExpression};
 
 impl Triplestore {
@@ -46,27 +47,6 @@ impl Triplestore {
             inner_contexts.push(inner_context);
             asc_ordering.push(reverse);
         }
-        let SolutionMappings {
-            mut mappings,
-            rdf_node_types: datatypes,
-        } = output_solution_mappings;
-
-        mappings = mappings.sort_by_exprs(
-            inner_contexts
-                .iter()
-                .map(|c| col(c.as_str()))
-                .collect::<Vec<Expr>>(),
-            asc_ordering.iter().map(|asc| !asc).collect::<Vec<bool>>(),
-            true,
-            false,
-        );
-        mappings = mappings.drop_columns(
-            inner_contexts
-                .iter()
-                .map(|x| x.as_str())
-                .collect::<Vec<&str>>(),
-        );
-
-        Ok(SolutionMappings::new(mappings, datatypes))
+        Ok(order_by(output_solution_mappings, &inner_contexts, asc_ordering)?)
     }
 }

@@ -1,19 +1,10 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
-use crate::sparql::query_context::{Context, PathEntry};
+use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::SolutionMappings;
-use oxrdf::vocab::xsd;
 use oxrdf::Variable;
-use polars::prelude::{col, str_concat, DataType, Expr, GetOutput, IntoSeries};
-use representation::RDFNodeType;
+use query_processing::aggregates::{AggregateReturn, avg, count_with_expression, count_without_expression, group_concat, max, min, sample, sum};
 use spargebra::algebra::AggregateExpression;
-
-pub struct AggregateReturn {
-    pub solution_mappings: SolutionMappings,
-    pub expr: Expr,
-    pub context: Option<Context>,
-    pub rdf_node_type: RDFNodeType,
-}
 
 impl Triplestore {
     pub fn sparql_aggregate_expression_as_lazy_column_and_expression(
@@ -29,7 +20,6 @@ impl Triplestore {
         let out_rdf_node_type;
         match aggregate_expression {
             AggregateExpression::Count { expr, distinct } => {
-                out_rdf_node_type = RDFNodeType::Literal(xsd::UNSIGNED_INT.into_owned());
                 if let Some(some_expr) = expr {
                     column_context = Some(context.extension_with(PathEntry::AggregationOperation));
                     output_solution_mappings = self.lazy_expression(
@@ -37,22 +27,11 @@ impl Triplestore {
                         solution_mappings,
                         column_context.as_ref().unwrap(),
                     )?;
-                    if *distinct {
-                        out_expr = col(column_context.as_ref().unwrap().as_str()).n_unique();
-                    } else {
-                        out_expr = col(column_context.as_ref().unwrap().as_str()).count();
-                    }
+                    (out_expr, out_rdf_node_type) = count_with_expression(column_context.as_ref().unwrap(), *distinct);
                 } else {
                     output_solution_mappings = solution_mappings;
                     column_context = None;
-                    let all_proper_column_names: Vec<String> =
-                        output_solution_mappings.rdf_node_types.keys().cloned().collect();
-                    let columns_expr = Expr::Columns(all_proper_column_names);
-                    if *distinct {
-                        out_expr = columns_expr.n_unique();
-                    } else {
-                        out_expr = columns_expr.unique();
-                    }
+                    (out_expr, out_rdf_node_type) = count_without_expression(&output_solution_mappings, *distinct);
                 }
             }
             AggregateExpression::Sum { expr, distinct } => {
@@ -63,23 +42,7 @@ impl Triplestore {
                     solution_mappings,
                     column_context.as_ref().unwrap(),
                 )?;
-                let expr_rdf_node_type = rdf_node_type_from_context(
-                    column_context.as_ref().unwrap(),
-                    &output_solution_mappings,
-                );
-                if expr_rdf_node_type.is_bool() {
-                    out_rdf_node_type = RDFNodeType::Literal(xsd::UNSIGNED_LONG.into_owned())
-                } else {
-                    out_rdf_node_type = expr_rdf_node_type.clone()
-                }
-
-                if *distinct {
-                    out_expr = col(column_context.as_ref().unwrap().as_str())
-                        .unique()
-                        .sum();
-                } else {
-                    out_expr = col(column_context.as_ref().unwrap().as_str()).sum();
-                }
+                (out_expr, out_rdf_node_type) = sum(&output_solution_mappings, column_context.as_ref().unwrap(), *distinct);
             }
             AggregateExpression::Avg { expr, distinct } => {
                 column_context = Some(context.extension_with(PathEntry::AggregationOperation));
@@ -88,23 +51,7 @@ impl Triplestore {
                     solution_mappings,
                     column_context.as_ref().unwrap(),
                 )?;
-                let expr_rdf_node_type = rdf_node_type_from_context(
-                    column_context.as_ref().unwrap(),
-                    &output_solution_mappings,
-                );
-                if expr_rdf_node_type.is_float() {
-                    out_rdf_node_type = expr_rdf_node_type.clone();
-                } else {
-                    out_rdf_node_type = RDFNodeType::Literal(xsd::DOUBLE.into_owned());
-                }
-
-                if *distinct {
-                    out_expr = col(column_context.as_ref().unwrap().as_str())
-                        .unique()
-                        .mean();
-                } else {
-                    out_expr = col(column_context.as_ref().unwrap().as_str()).mean();
-                }
+                (out_expr, out_rdf_node_type) = avg(&output_solution_mappings, column_context.as_ref().unwrap(), *distinct);
             }
             AggregateExpression::Min { expr, distinct: _ } => {
                 column_context = Some(context.extension_with(PathEntry::AggregationOperation));
@@ -113,13 +60,7 @@ impl Triplestore {
                     solution_mappings,
                     column_context.as_ref().unwrap(),
                 )?;
-                out_rdf_node_type = rdf_node_type_from_context(
-                    column_context.as_ref().unwrap(),
-                    &output_solution_mappings,
-                )
-                .clone();
-
-                out_expr = col(column_context.as_ref().unwrap().as_str()).min();
+                (out_expr, out_rdf_node_type) = min(&output_solution_mappings, column_context.as_ref().unwrap());
             }
             AggregateExpression::Max { expr, distinct: _ } => {
                 column_context = Some(context.extension_with(PathEntry::AggregationOperation));
@@ -129,13 +70,7 @@ impl Triplestore {
                     solution_mappings,
                     column_context.as_ref().unwrap(),
                 )?;
-                out_rdf_node_type = rdf_node_type_from_context(
-                    column_context.as_ref().unwrap(),
-                    &output_solution_mappings,
-                )
-                .clone();
-
-                out_expr = col(column_context.as_ref().unwrap().as_str()).max();
+                (out_expr, out_rdf_node_type) = max(&output_solution_mappings, column_context.as_ref().unwrap());
             }
             AggregateExpression::GroupConcat {
                 expr,
@@ -149,67 +84,16 @@ impl Triplestore {
                     solution_mappings,
                     column_context.as_ref().unwrap(),
                 )?;
-                out_rdf_node_type = RDFNodeType::Literal(xsd::STRING.into_owned());
-
-                let use_sep = if let Some(sep) = separator {
-                    sep.to_string()
-                } else {
-                    "".to_string()
-                };
-                if *distinct {
-                    out_expr = col(column_context.as_ref().unwrap().as_str())
-                        .cast(DataType::Utf8)
-                        .list()
-                        .0
-                        .apply(
-                            move |s| {
-                                Ok(Some(
-                                    str_concat(
-                                        s.unique_stable()
-                                            .expect("Unique stable error")
-                                            .utf8()
-                                            .unwrap(),
-                                        use_sep.as_str(),
-                                        true,
-                                    )
-                                    .into_series(),
-                                ))
-                            },
-                            GetOutput::from_type(DataType::Utf8),
-                        )
-                        .first();
-                } else {
-                    out_expr = col(column_context.as_ref().unwrap().as_str())
-                        .cast(DataType::Utf8)
-                        .list()
-                        .0
-                        .apply(
-                            move |s| {
-                                Ok(Some(
-                                    str_concat(s.utf8().unwrap(), use_sep.as_str(), true)
-                                        .into_series(),
-                                ))
-                            },
-                            GetOutput::from_type(DataType::Utf8),
-                        )
-                        .first();
-                }
+                (out_expr, out_rdf_node_type) = group_concat(column_context.as_ref().unwrap(), separator, *distinct);
             }
-            AggregateExpression::Sample { expr, .. } => {
+            AggregateExpression::Sample { expr, distinct:_ } => {
                 column_context = Some(context.extension_with(PathEntry::AggregationOperation));
-
                 output_solution_mappings = self.lazy_expression(
                     expr,
                     solution_mappings,
                     column_context.as_ref().unwrap(),
                 )?;
-                out_rdf_node_type = rdf_node_type_from_context(
-                    column_context.as_ref().unwrap(),
-                    &output_solution_mappings,
-                )
-                .clone();
-
-                out_expr = col(column_context.as_ref().unwrap().as_str()).first();
+                (out_expr, out_rdf_node_type) = sample(&output_solution_mappings, column_context.as_ref().unwrap());
             }
             AggregateExpression::Custom {
                 name,
@@ -229,13 +113,3 @@ impl Triplestore {
     }
 }
 
-fn rdf_node_type_from_context<'a>(
-    context: &'_ Context,
-    solution_mappings: &'a SolutionMappings,
-) -> &'a RDFNodeType {
-    let datatype = solution_mappings
-        .rdf_node_types
-        .get(context.as_str())
-        .unwrap();
-    datatype
-}

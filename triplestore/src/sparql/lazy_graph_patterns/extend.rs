@@ -1,9 +1,10 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
-use crate::sparql::query_context::{Context, PathEntry};
+use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::SolutionMappings;
 use log::debug;
 use oxrdf::Variable;
+use query_processing::graph_patterns::extend;
 use spargebra::algebra::{Expression, GraphPattern};
 
 impl Triplestore {
@@ -24,16 +25,6 @@ impl Triplestore {
 
         output_solution_mappings =
             self.lazy_expression(expression, output_solution_mappings, &expression_context)?;
-        output_solution_mappings.mappings = output_solution_mappings
-            .mappings
-            .rename([expression_context.as_str()], [variable.as_str()]);
-        let existing_rdf_node_type = output_solution_mappings
-            .rdf_node_types
-            .remove(expression_context.as_str())
-            .unwrap();
-        output_solution_mappings
-            .rdf_node_types
-            .insert(variable.as_str().to_string(), existing_rdf_node_type);
-        Ok(output_solution_mappings)
+        Ok(extend(output_solution_mappings, &expression_context, variable)?)
     }
 }

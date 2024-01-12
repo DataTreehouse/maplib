@@ -1,3 +1,4 @@
+use query_processing::errors::QueryProcessingError;
 use crate::errors::TriplestoreError;
 use representation::RDFNodeType;
 use spargebra::ParseError;
@@ -11,8 +12,8 @@ pub enum SparqlError {
     QueryTypeNotSupported,
     #[error("Inconsistent datatypes for {}, {:?}, {:?} in context {}", .0, .1, .2, .3)]
     InconsistentDatatypes(String, RDFNodeType, RDFNodeType, String),
-    #[error("Variable ?{} not found in context {}",.0, .1)]
-    VariableNotFound(String, String),
+    #[error(transparent)]
+    QueryProcessingError(#[from] QueryProcessingError),
     #[error("Error deduplicating triples {}", .0)]
     DeduplicationError(TriplestoreError),
     #[error("Read dataframe error {}", .0)]

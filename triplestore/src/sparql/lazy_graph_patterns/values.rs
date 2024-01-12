@@ -1,6 +1,6 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
-use crate::sparql::query_context::Context;
+use representation::query_context::Context;
 use representation::solution_mapping::SolutionMappings;
 use oxrdf::Variable;
 use polars::prelude::{col, Expr, IntoLazy, JoinArgs, JoinType};

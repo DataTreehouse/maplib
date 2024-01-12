@@ -9,7 +9,7 @@ edition = "2021"
 pyo3 = {version = "0.19.2", features = ["extension-module"] }
 maplib = {path="../maplib"}
 triplestore = {path="../triplestore"}
-representation = {path = "../representation"}
+representation = {path = "../../representation"}
 shacl = {path="../shacl"}
 oxrdf = {version="0.1.7"}
 pydf_io = { git = "https://github.com/DataTreehouse/pydf_io"}

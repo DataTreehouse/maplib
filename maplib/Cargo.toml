@@ -4,7 +4,7 @@ version = "0.5.1"
 edition = "2021"
 
 [dependencies]
-representation = {path="../representation"}
+representation = {path="../../representation"}
 triplestore = {path="../triplestore"}
 parquet_io = {path="../parquet_io"}
 shacl = {path="../shacl"}

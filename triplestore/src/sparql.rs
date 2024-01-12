@@ -3,10 +3,8 @@ pub(crate) mod lazy_aggregate;
 mod lazy_expressions;
 pub(crate) mod lazy_graph_patterns;
 mod lazy_order;
-pub mod query_context;
-pub mod sparql_to_polars;
 
-use crate::sparql::query_context::Context;
+use representation::query_context::Context;
 use oxrdf::vocab::xsd;
 use oxrdf::{NamedNode, Variable};
 use std::collections::HashMap;

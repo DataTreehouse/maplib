@@ -1,13 +1,14 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
-use crate::sparql::lazy_aggregate::AggregateReturn;
-use crate::sparql::query_context::{Context, PathEntry};
+use query_processing::aggregates::AggregateReturn;
+use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::SolutionMappings;
 use log::debug;
 use oxrdf::Variable;
 use polars::prelude::{col, lit, Expr};
 use spargebra::algebra::{AggregateExpression, GraphPattern};
 use std::collections::HashMap;
+use query_processing::graph_patterns::{group_by, prepare_group_by};
 use uuid::Uuid;
 
 impl Triplestore {
@@ -21,19 +22,9 @@ impl Triplestore {
     ) -> Result<SolutionMappings, SparqlError> {
         debug!("Processing group graph pattern");
         let inner_context = context.extension_with(PathEntry::GroupInner);
-
-        let mut output_solution_mappings =
+        let output_solution_mappings =
             self.lazy_graph_pattern(inner, solution_mapping, &inner_context)?;
-        let by: Vec<Expr>;
-        let dummy_varname = Uuid::new_v4().to_string();
-        if variables.is_empty() {
-            by = vec![col(&dummy_varname)];
-            output_solution_mappings.mappings = output_solution_mappings
-                .mappings
-                .with_column(lit(true).alias(&dummy_varname))
-        } else {
-            by = variables.iter().map(|v| col(v.as_str())).collect();
-        };
+        let (mut output_solution_mappings, by, dummy_varname) = prepare_group_by(output_solution_mappings, variables);
 
         let mut aggregate_expressions = vec![];
         let mut new_rdf_node_types = HashMap::new();
@@ -53,22 +44,9 @@ impl Triplestore {
                 &aggregate_context,
             )?;
             output_solution_mappings = aggregate_solution_mappings;
-            new_rdf_node_types.insert(v.clone(), rdf_node_type);
+            new_rdf_node_types.insert(v.as_str().to_string(), rdf_node_type);
             aggregate_expressions.push(expr);
         }
-        let SolutionMappings {
-            mut mappings,
-            rdf_node_types: mut datatypes,
-        } = output_solution_mappings;
-        let grouped_mappings = mappings.group_by(by.as_slice());
-
-        mappings = grouped_mappings.agg(aggregate_expressions.as_slice());
-        for (k, v) in new_rdf_node_types {
-            datatypes.insert(k.as_str().to_string(), v);
-        }
-        if variables.is_empty() {
-            mappings = mappings.drop_columns([dummy_varname]);
-        }
-        Ok(SolutionMappings::new(mappings, datatypes))
+        Ok(group_by(output_solution_mappings, aggregate_expressions, by, dummy_varname, new_rdf_node_types)?)
     }
 }
