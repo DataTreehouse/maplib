@@ -90,14 +90,12 @@ impl Mapping {
 
 #[derive(Debug, Clone)]
 pub struct ExpandOptions {
-    pub language_tags: Option<HashMap<String, String>>,
     pub unique_subsets: Option<Vec<Vec<String>>>,
 }
 
 impl ExpandOptions {
     fn to_rust_expand_options(self) -> RustExpandOptions {
         RustExpandOptions {
-            language_tags: self.language_tags,
             unique_subsets: self.unique_subsets,
         }
     }
@@ -178,7 +176,6 @@ impl Mapping {
             None
         };
         let options = ExpandOptions {
-            language_tags: None,
             unique_subsets,
         };
 
@@ -224,7 +221,6 @@ impl Mapping {
     ) -> PyResult<String> {
         let df = polars_df_to_rust_df(&df)?;
         let options = ExpandOptions {
-            language_tags: None,
             unique_subsets: Some(vec![vec![primary_key_column.clone()]]),
         };
 
