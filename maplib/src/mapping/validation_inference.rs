@@ -2,11 +2,11 @@ use super::Mapping;
 use crate::ast::{has_iritype, PType, Parameter, Signature};
 
 use crate::mapping::errors::MappingError;
-use crate::mapping::{ExpandOptions, PrimitiveColumn, RDFNodeType};
-use oxrdf::vocab::{rdf, xsd};
+use crate::mapping::{PrimitiveColumn, RDFNodeType};
 use oxrdf::NamedNode;
 use polars_core::frame::DataFrame;
 use polars_core::prelude::DataType;
+use representation::polars_to_sparql::primitive_polars_type_to_literal_type;
 use std::collections::{HashMap, HashSet};
 
 impl Mapping {
@@ -14,7 +14,6 @@ impl Mapping {
         &self,
         signature: &Signature,
         df: &Option<DataFrame>,
-        options: &ExpandOptions,
     ) -> Result<HashMap<String, PrimitiveColumn>, MappingError> {
         let mut map = HashMap::new();
         if let Some(df) = df {
@@ -28,12 +27,8 @@ impl Mapping {
                     if !parameter.optional {
                         validate_non_optional_parameter(df, variable_name)?;
                     }
-                    let column_data_type = validate_infer_column_data_type(
-                        df,
-                        parameter,
-                        variable_name,
-                        &options.language_tags,
-                    )?;
+                    let column_data_type =
+                        validate_infer_column_data_type(df, parameter, variable_name)?;
 
                     map.insert(variable_name.to_string(), column_data_type);
                 } else if !parameter.optional {
@@ -58,27 +53,18 @@ fn validate_infer_column_data_type(
     dataframe: &DataFrame,
     parameter: &Parameter,
     column_name: &str,
-    language_tag_map: &Option<HashMap<String, String>>,
 ) -> Result<PrimitiveColumn, MappingError> {
     let series = dataframe.column(column_name).unwrap();
     let dtype = series.dtype();
-    let language_tag = if let Some(map) = language_tag_map {
-        map.get(column_name).cloned()
-    } else {
-        None
-    };
     let ptype = if let Some(ptype) = &parameter.ptype {
         validate_datatype(series.name(), dtype, ptype)?;
         ptype.clone()
     } else {
-        polars_datatype_to_xsd_datatype(dtype, language_tag.is_some())
+        polars_datatype_to_xsd_datatype(dtype)
     };
     let rdf_node_type = infer_rdf_node_type(&ptype);
 
-    Ok(PrimitiveColumn {
-        rdf_node_type,
-        language_tag,
-    })
+    Ok(PrimitiveColumn { rdf_node_type })
 }
 
 fn infer_rdf_node_type(ptype: &PType) -> RDFNodeType {
@@ -155,40 +141,17 @@ fn validate_basic_datatype(
     Ok(())
 }
 
-pub fn polars_datatype_to_xsd_datatype(datatype: &DataType, has_language_tag: bool) -> PType {
-    let xsd_nn_ref = match datatype {
-        DataType::Boolean => xsd::BOOLEAN,
-        DataType::Int8 => xsd::BYTE,
-        DataType::Int16 => xsd::SHORT,
-        DataType::UInt8 => xsd::UNSIGNED_BYTE,
-        DataType::UInt16 => xsd::UNSIGNED_SHORT,
-        DataType::UInt32 => xsd::UNSIGNED_INT,
-        DataType::UInt64 => xsd::UNSIGNED_LONG,
-        DataType::Int32 => xsd::INT,
-        DataType::Int64 => xsd::LONG,
-        DataType::Float32 => xsd::FLOAT,
-        DataType::Float64 => xsd::DOUBLE,
-        DataType::Utf8 => {
-            if has_language_tag {
-                rdf::LANG_STRING
-            } else {
-                xsd::STRING
-            }
-        }
-        DataType::Date => xsd::DATE,
-        DataType::Datetime(_, Some(_)) => xsd::DATE_TIME_STAMP,
-        DataType::Datetime(_, None) => xsd::DATE_TIME,
-        DataType::Duration(_) => xsd::DURATION,
-        DataType::Categorical(_) => xsd::STRING,
+pub fn polars_datatype_to_xsd_datatype(datatype: &DataType) -> PType {
+    if let Some(nn) = primitive_polars_type_to_literal_type(datatype) {
+        return PType::Basic(nn.into_owned(), nn.to_string());
+    }
+
+    match datatype {
         DataType::List(inner) => {
-            return PType::List(Box::new(polars_datatype_to_xsd_datatype(
-                inner,
-                has_language_tag,
-            )))
+            return PType::List(Box::new(polars_datatype_to_xsd_datatype(inner)))
         }
         _ => {
             panic!("Unsupported datatype:{}", datatype)
         }
     };
-    PType::Basic(xsd_nn_ref.into_owned(), "".to_string())
 }

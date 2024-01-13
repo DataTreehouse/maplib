@@ -42,7 +42,6 @@ pub struct Mapping {
 
 #[derive(Clone, Default)]
 pub struct ExpandOptions {
-    pub language_tags: Option<HashMap<String, String>>,
     pub unique_subsets: Option<Vec<Vec<String>>>,
 }
 
@@ -62,7 +61,6 @@ struct StaticColumn {
 #[derive(Clone, Debug)]
 pub struct PrimitiveColumn {
     pub rdf_node_type: RDFNodeType,
-    pub language_tag: Option<String>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -187,9 +185,8 @@ impl Mapping {
         let target_template_name = target_template.signature.template_name.as_str().to_string();
 
         let columns =
-            self.validate_infer_dataframe_columns(&target_template.signature, &df, &options)?;
+            self.validate_infer_dataframe_columns(&target_template.signature, &df)?;
         let ExpandOptions {
-            language_tags: _,
             unique_subsets: unique_subsets_opt,
         } = options;
         let unique_subsets = if let Some(unique_subsets) = unique_subsets_opt {
@@ -374,7 +371,6 @@ impl Mapping {
             mut df,
             subj_rdf_node_type,
             obj_rdf_node_type,
-            language_tag,
             verb,
             has_unique_subset,
         ) in ok_triples
@@ -410,7 +406,6 @@ impl Mapping {
                 df,
                 subject_type: subj_rdf_node_type,
                 object_type: obj_rdf_node_type,
-                language_tag,
                 static_verb_column: verb,
                 has_unique_subset,
             });
@@ -457,7 +452,6 @@ fn create_triples(
         DataFrame,
         RDFNodeType,
         RDFNodeType,
-        Option<String>,
         Option<NamedNode>,
         bool,
     ),
@@ -510,17 +504,14 @@ fn create_triples(
     let df = lf.collect().expect("Collect problem");
     let PrimitiveColumn {
         rdf_node_type: subj_rdf_node_type,
-        language_tag: _,
     } = dynamic_columns.remove("subject").unwrap();
     let PrimitiveColumn {
         rdf_node_type: obj_rdf_node_type,
-        language_tag,
     } = dynamic_columns.remove("object").unwrap();
     Ok((
         df,
         subj_rdf_node_type,
         obj_rdf_node_type,
-        language_tag,
         verb,
         has_unique_subset,
     ))
@@ -534,7 +525,6 @@ fn create_dynamic_expression_from_static(
     let (mut expr, _, rdf_node_type) = constant_to_expr(constant_term, ptype)?;
     let mapped_column = PrimitiveColumn {
         rdf_node_type,
-        language_tag: None,
     };
     expr = expr.alias(column_name);
     Ok((expr, mapped_column))
@@ -558,7 +548,6 @@ fn create_series_from_blank_node_constant(
     series.rename(column_name);
     let mapped_column = PrimitiveColumn {
         rdf_node_type,
-        language_tag: None,
     };
     Ok((series, mapped_column))
 }

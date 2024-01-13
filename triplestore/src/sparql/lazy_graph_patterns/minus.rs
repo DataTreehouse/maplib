@@ -1,12 +1,9 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
 use log::debug;
-use polars::export::ahash::HashSet;
-use polars::prelude::{col, Expr, JoinArgs, JoinType};
-use polars_core::datatypes::DataType;
 use query_processing::graph_patterns::minus;
 use representation::query_context::{Context, PathEntry};
-use representation::solution_mapping::{is_string_col, SolutionMappings};
+use representation::solution_mapping::{SolutionMappings};
 use spargebra::algebra::GraphPattern;
 
 impl Triplestore {

@@ -121,7 +121,6 @@ impl Triplestore {
                                     df,
                                     subject_type: new_subj_dt,
                                     object_type: new_obj_dt,
-                                    language_tag: None,
                                     static_verb_column: None,
                                     has_unique_subset: false,
                                 });
@@ -131,7 +130,6 @@ impl Triplestore {
                                 df,
                                 subject_type: subj_dt,
                                 object_type: obj_dt,
-                                language_tag: None,
                                 static_verb_column: None,
                                 has_unique_subset: false,
                             });

@@ -114,7 +114,6 @@ impl Triplestore {
                     df,
                     subject_type: subject_dt,
                     object_type: object_dt,
-                    language_tag: None,
                     static_verb_column: Some(NamedNode::new_unchecked(k.clone())),
                     has_unique_subset: false,
                 });

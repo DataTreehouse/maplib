@@ -20,16 +20,14 @@ use oxrdf::NamedNode;
 use parquet_io::{
     property_to_filename, read_parquet, split_write_tmp_df, write_parquet, ParquetIOError,
 };
-use polars::prelude::{as_struct, col, concat, IntoLazy, JoinArgs, JoinType, LazyFrame, UnionArgs};
+use polars::prelude::{col, concat, IntoLazy, JoinArgs, JoinType, LazyFrame, UnionArgs};
 use polars_core::datatypes::AnyValue;
 use polars_core::frame::{DataFrame, UniqueKeepStrategy};
-use polars_core::prelude::DataType;
-use polars_core::series::Series;
 use polars_core::utils::concat_df;
 use rayon::iter::ParallelIterator;
 use rayon::iter::{IntoParallelRefIterator, ParallelDrainRange};
 use representation::{
-    literal_iri_to_namednode, RDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD,
+    literal_iri_to_namednode, RDFNodeType,
 };
 use std::collections::HashMap;
 use std::fs::remove_file;
@@ -37,8 +35,6 @@ use std::io;
 use std::path::Path;
 use std::time::Instant;
 use uuid::Uuid;
-
-const LANGUAGE_TAG_COLUMN: &str = "language_tag";
 
 pub struct Triplestore {
     deduplicated: bool,
@@ -107,7 +103,6 @@ pub struct TriplesToAdd {
     pub df: DataFrame,
     pub subject_type: RDFNodeType,
     pub object_type: RDFNodeType,
-    pub language_tag: Option<String>,
     pub static_verb_column: Option<NamedNode>,
     pub has_unique_subset: bool,
 }
@@ -162,7 +157,6 @@ impl Triplestore {
                     df,
                     subject_type,
                     object_type,
-                    language_tag,
                     static_verb_column,
                     has_unique_subset,
                 } = t;
@@ -172,7 +166,6 @@ impl Triplestore {
                     df,
                     &subject_type,
                     &object_type,
-                    &language_tag,
                     static_verb_column,
                     has_unique_subset,
                 )
@@ -439,7 +432,6 @@ pub fn prepare_triples(
     mut df: DataFrame,
     subject_type: &RDFNodeType,
     object_type: &RDFNodeType,
-    language_tag: &Option<String>,
     static_verb_column: Option<NamedNode>,
     has_unique_subset: bool,
 ) -> Vec<TripleDF> {
@@ -468,7 +460,6 @@ pub fn prepare_triples(
             static_verb_column,
             &subject_type,
             &object_type,
-            language_tag,
             has_unique_subset,
         ) {
             out_df_vec.push(tdf);
@@ -491,7 +482,6 @@ pub fn prepare_triples(
                 predicate,
                 &subject_type,
                 &object_type,
-                language_tag,
                 has_unique_subset,
             ) {
                 out_df_vec.push(tdf);
@@ -510,7 +500,6 @@ fn prepare_triples_df(
     predicate: NamedNode,
     subject_type: &RDFNodeType,
     object_type: &RDFNodeType,
-    language_tag: &Option<String>,
     has_unique_subset: bool,
 ) -> Option<TripleDF> {
     let now = Instant::now();
@@ -524,28 +513,6 @@ fn prepare_triples_df(
     );
     if !has_unique_subset {
         df = df.unique(None, UniqueKeepStrategy::First, None).unwrap();
-    }
-    debug!(
-        "Prepare single triple df unique before it is added took {} seconds",
-        now.elapsed().as_secs_f32()
-    );
-    if let Some(tag) = language_tag {
-        let lt_ser = Series::new_empty(LANGUAGE_TAG_COLUMN, &DataType::Utf8)
-            .extend_constant(AnyValue::Utf8(tag), df.height())
-            .unwrap();
-        df.with_column(lt_ser).unwrap();
-        df = df
-            .lazy()
-            .with_column(
-                as_struct(vec![
-                    col("object").alias(LANG_STRING_VALUE_FIELD),
-                    col(LANGUAGE_TAG_COLUMN).alias(LANG_STRING_LANG_FIELD),
-                ])
-                .alias("object"),
-            )
-            .drop_columns(vec![LANGUAGE_TAG_COLUMN])
-            .collect()
-            .unwrap();
     }
     //TODO: add polars datatype harmonization here.
     debug!(

@@ -816,11 +816,3 @@ fn sparse_path(
         }
     }
 }
-
-fn nns_name(nns: &Vec<NamedNode>) -> String {
-    let mut names = vec![];
-    for nn in nns {
-        names.push(nn.as_str())
-    }
-    names.join(",")
-}

@@ -12,7 +12,7 @@ use polars::series::Series;
 use polars_core::prelude::{AnyValue, TimeUnit};
 use rstest::*;
 use serial_test::serial;
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashSet};
 use std::fs::File;
 use std::path::PathBuf;
 
@@ -140,10 +140,6 @@ fn test_string_language_tag_cases() {
             "http://example.net/ns#ExampleTemplate",
             Some(df),
             ExpandOptions {
-                language_tags: Some(HashMap::from([(
-                    "myString".to_string(),
-                    "bn-BD".to_string(),
-                )])),
                 ..Default::default()
             },
         )
@@ -155,15 +151,15 @@ fn test_string_language_tag_cases() {
         Triple {
             subject: Subject::NamedNode(NamedNode::new_unchecked("http://example.net/ns#anObject")),
             predicate: NamedNode::new_unchecked("http://example.net/ns#hasString"),
-            object: Term::Literal(Literal::new_language_tagged_literal_unchecked(
-                "one", "bn-BD",
+            object: Term::Literal(Literal::new_simple_literal(
+                "one",
             )),
         },
         Triple {
             subject: Subject::NamedNode(NamedNode::new_unchecked("http://example.net/ns#anObject")),
             predicate: NamedNode::new_unchecked("http://example.net/ns#hasString"),
-            object: Term::Literal(Literal::new_language_tagged_literal_unchecked(
-                "two", "bn-BD",
+            object: Term::Literal(Literal::new_simple_literal(
+                "two"
             )),
         },
         Triple {
