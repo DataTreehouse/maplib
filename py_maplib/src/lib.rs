@@ -13,7 +13,6 @@ use maplib::mapping::errors::MappingError;
 use maplib::mapping::ExpandOptions as RustExpandOptions;
 use maplib::mapping::Mapping as InnerMapping;
 use maplib::templates::TemplateDataset;
-use oxrdf::NamedNode;
 use pyo3::prelude::*;
 use std::collections::HashMap;
 use std::fs::File;
@@ -44,7 +43,6 @@ use triplestore::sparql::QueryResult as SparqlQueryResult;
 #[cfg(target_os = "linux")]
 use jemallocator::Jemalloc;
 use polars_core::frame::DataFrame;
-use polars_core::prelude::{DataType, NamedFrom};
 use polars_lazy::frame::IntoLazy;
 use pyo3::types::PyList;
 use representation::RDFNodeType;
@@ -382,10 +380,6 @@ fn _maplib(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_class::<QueryResult>()?;
     m.add_class::<ValidationReport>()?;
     Ok(())
-}
-
-fn is_blank_node(s: &str) -> bool {
-    s.starts_with("_:")
 }
 
 fn fix_multicolumns(mut df: DataFrame, dts: &HashMap<String, RDFNodeType>) -> DataFrame {

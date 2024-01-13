@@ -3,7 +3,6 @@ use crate::sparql::errors::SparqlError;
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::SolutionMappings;
 use log::debug;
-use polars::prelude::col;
 use query_processing::graph_patterns::filter;
 use spargebra::algebra::{Expression, GraphPattern};
 

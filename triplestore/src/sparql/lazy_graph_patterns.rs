@@ -118,6 +118,7 @@ impl Triplestore {
             GraphPattern::Service { .. } => {
                 unimplemented!("Services are not implemented")
             }
+            GraphPattern::DT { .. } => {panic!()}
         }
     }
 }

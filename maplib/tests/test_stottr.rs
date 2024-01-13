@@ -365,8 +365,8 @@ ex:ExampleTemplate [
     float32.rename("Float32");
     let mut float64 = Series::from_iter(&[21.22f64, 23.24f64]);
     float64.rename("Float64");
-    let mut String = Series::from_iter(["abcde", "fghij"]);
-    String.rename("String");
+    let mut string = Series::from_iter(["abcde", "fghij"]);
+    string.rename("String");
     let datetime_ms_tz = Series::from_any_values(
         "Datetime_ms_tz",
         &[
@@ -402,7 +402,7 @@ ex:ExampleTemplate [
         int64,
         float32,
         float64,
-        String,
+        string,
         datetime_ms_tz,
         datetime_ms,
     ];

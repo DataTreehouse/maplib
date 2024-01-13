@@ -5,11 +5,9 @@ use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::SolutionMappings;
 use log::debug;
 use oxrdf::Variable;
-use polars::prelude::{col, lit, Expr};
 use spargebra::algebra::{AggregateExpression, GraphPattern};
 use std::collections::HashMap;
 use query_processing::graph_patterns::{group_by, prepare_group_by};
-use uuid::Uuid;
 
 impl Triplestore {
     pub(crate) fn lazy_group(

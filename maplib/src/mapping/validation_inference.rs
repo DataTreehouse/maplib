@@ -5,7 +5,6 @@ use crate::mapping::errors::MappingError;
 use crate::mapping::{ExpandOptions, PrimitiveColumn, RDFNodeType};
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::NamedNode;
-use polars_core::export::rayon::prelude::ParallelIterator;
 use polars_core::frame::DataFrame;
 use polars_core::prelude::DataType;
 use std::collections::{HashMap, HashSet};

@@ -2,11 +2,9 @@ use super::Triplestore;
 use crate::sparql::errors::SparqlError;
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::SolutionMappings;
-use log::{debug, warn};
+use log::{debug};
 use oxrdf::Variable;
-use polars::prelude::{col, Expr};
 use spargebra::algebra::GraphPattern;
-use std::collections::HashMap;
 use query_processing::graph_patterns::project;
 
 impl Triplestore {

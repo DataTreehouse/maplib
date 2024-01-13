@@ -17,7 +17,7 @@ impl Triplestore {
     pub fn lazy_expression(
         &self,
         expr: &Expression,
-        mut solution_mappings: SolutionMappings,
+        solution_mappings: SolutionMappings,
         context: &Context,
     ) -> Result<SolutionMappings, SparqlError> {
         let output_solution_mappings = match expr {
@@ -237,7 +237,10 @@ impl Triplestore {
                         Expr::Literal(LiteralValue::Int64(1)).alias(exists_context.as_str()),
                     )
                     .with_column(col(exists_context.as_str()).cum_sum(false));
-
+                output_solution_mappings.rdf_node_types.insert(
+                    exists_context.as_str().to_string(),
+                    RDFNodeType::Literal(xsd::BOOLEAN.into_owned()),
+                );
                 let new_inner = rewrite_exists_graph_pattern(inner, exists_context.as_str());
                 let SolutionMappings {
                     mappings: exists_lf,

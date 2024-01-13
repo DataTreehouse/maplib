@@ -1,10 +1,8 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
-use representation::multitype::create_compatible_solution_mappings;
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::SolutionMappings;
 use log::debug;
-use polars::prelude::{concat_lf_diagonal, UnionArgs};
 use query_processing::graph_patterns::union;
 use spargebra::algebra::GraphPattern;
 
