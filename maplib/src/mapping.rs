@@ -32,6 +32,7 @@ use std::path::Path;
 use std::time::Instant;
 use triplestore::{TriplesToAdd, Triplestore};
 use uuid::Uuid;
+use triplestore::constants::{OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME};
 
 pub struct Mapping {
     template_dataset: TemplateDataset,
@@ -376,11 +377,11 @@ impl Mapping {
         ) in ok_triples
         {
             let mut coltypes_names = vec![
-                (&subj_rdf_node_type, "subject"),
-                (&obj_rdf_node_type, "object"),
+                (&subj_rdf_node_type, SUBJECT_COL_NAME),
+                (&obj_rdf_node_type, OBJECT_COL_NAME),
             ];
             if verb.is_none() {
-                coltypes_names.push((&RDFNodeType::IRI, "verb"));
+                coltypes_names.push((&RDFNodeType::IRI, VERB_COL_NAME));
             }
             let mut fix_iris = vec![];
             for (coltype, colname) in coltypes_names {
@@ -474,7 +475,7 @@ fn create_triples(
     }
 
     for (k, sc) in static_columns {
-        if k == "verb" {
+        if k == VERB_COL_NAME {
             if let ConstantTerm::Constant(ConstantLiteral::Iri(nn)) = &sc.constant_term {
                 verb = Some(nn.clone());
             } else {
@@ -496,9 +497,9 @@ fn create_triples(
         lf = lf.with_column(e);
     }
 
-    let mut keep_cols = vec![col("subject"), col("object")];
+    let mut keep_cols = vec![col("subject"), col(OBJECT_COL_NAME)];
     if verb.is_none() {
-        keep_cols.push(col("verb"));
+        keep_cols.push(col(VERB_COL_NAME));
     }
     lf = lf.select(keep_cols.as_slice());
     let df = lf.collect().expect("Collect problem");
@@ -507,7 +508,7 @@ fn create_triples(
     } = dynamic_columns.remove("subject").unwrap();
     let PrimitiveColumn {
         rdf_node_type: obj_rdf_node_type,
-    } = dynamic_columns.remove("object").unwrap();
+    } = dynamic_columns.remove(OBJECT_COL_NAME).unwrap();
     Ok((
         df,
         subj_rdf_node_type,

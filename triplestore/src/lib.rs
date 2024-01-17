@@ -1,6 +1,6 @@
 extern crate core;
 
-mod constants;
+pub mod constants;
 pub mod conversion;
 pub mod errors;
 mod export_triples;
@@ -35,6 +35,7 @@ use std::io;
 use std::path::Path;
 use std::time::Instant;
 use uuid::Uuid;
+use crate::constants::{OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME};
 
 pub struct Triplestore {
     deduplicated: bool,
@@ -366,7 +367,7 @@ impl Triplestore {
                             subject_type,
                             object_type,
                         } = tdf;
-                        let join_on = vec![col("subject"), col("object")];
+                        let join_on = vec![col(SUBJECT_COL_NAME), col(OBJECT_COL_NAME)];
                         let df = df
                             .lazy()
                             .join(lf, &join_on, &join_on, JoinArgs::new(JoinType::Anti))
@@ -401,7 +402,7 @@ impl Triplestore {
                     )
                     .map_err(|x| TriplestoreError::SubtractTransientTriplesError(x.to_string()))?
                     {
-                        let join_on = vec![col("subject"), col("object")];
+                        let join_on = vec![col(SUBJECT_COL_NAME), col(OBJECT_COL_NAME)];
                         let df = lf
                             .join(
                                 tdf.df.clone().lazy(),
@@ -454,7 +455,7 @@ pub fn prepare_triples(
     let object_type = map_literal_variants_to_iri(object_type);
 
     if let Some(static_verb_column) = static_verb_column {
-        df = df.select(["subject", "object"]).unwrap();
+        df = df.select([SUBJECT_COL_NAME, OBJECT_COL_NAME]).unwrap();
         if let Some(tdf) = prepare_triples_df(
             df,
             static_verb_column,
@@ -465,18 +466,18 @@ pub fn prepare_triples(
             out_df_vec.push(tdf);
         }
     } else {
-        let partitions = df.partition_by(["verb"], true).unwrap();
+        let partitions = df.partition_by([VERB_COL_NAME], true).unwrap();
         for mut part in partitions {
             let predicate;
             {
-                let any_predicate = part.column("verb").unwrap().get(0);
+                let any_predicate = part.column(VERB_COL_NAME).unwrap().get(0);
                 if let Ok(AnyValue::Utf8(p)) = any_predicate {
                     predicate = literal_iri_to_namednode(p);
                 } else {
                     panic!()
                 }
             }
-            part = part.select(["subject", "object"]).unwrap();
+            part = part.select([SUBJECT_COL_NAME, OBJECT_COL_NAME]).unwrap();
             if let Some(tdf) = prepare_triples_df(
                 part,
                 predicate,

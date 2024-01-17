@@ -9,6 +9,7 @@ use representation::{
     literal_iri_to_namednode, RDFNodeType, TripleType, LANG_STRING_LANG_FIELD,
     LANG_STRING_VALUE_FIELD,
 };
+use crate::constants::{OBJECT_COL_NAME, SUBJECT_COL_NAME};
 
 impl Triplestore {
     pub fn object_property_triples<F, T>(
@@ -27,8 +28,8 @@ impl Triplestore {
                         if df.height() == 0 {
                             return Ok(());
                         }
-                        let mut subject_iterator = df.column("subject").unwrap().iter();
-                        let mut object_iterator = df.column("object").unwrap().iter();
+                        let mut subject_iterator = df.column(SUBJECT_COL_NAME).unwrap().iter();
+                        let mut object_iterator = df.column(OBJECT_COL_NAME).unwrap().iter();
                         for _ in 0..df.height() {
                             let s = anystring_to_str(subject_iterator.next().unwrap());
                             let o = anystring_to_str(object_iterator.next().unwrap());
@@ -66,8 +67,8 @@ impl Triplestore {
                             return Ok(());
                         }
                         if tripletype == TripleType::StringProperty {
-                            let mut subject_iterator = df.column("subject").unwrap().iter();
-                            let mut data_iterator = df.column("object").unwrap().iter();
+                            let mut subject_iterator = df.column(SUBJECT_COL_NAME).unwrap().iter();
+                            let mut data_iterator = df.column(OBJECT_COL_NAME).unwrap().iter();
                             for _ in 0..df.height() {
                                 let s = anystring_to_str(subject_iterator.next().unwrap());
                                 let lex = anystring_to_str(data_iterator.next().unwrap());
@@ -78,18 +79,18 @@ impl Triplestore {
                             df = df
                                 .lazy()
                                 .with_columns([
-                                    col("object")
+                                    col(OBJECT_COL_NAME)
                                         .struct_()
                                         .field_by_name(LANG_STRING_VALUE_FIELD)
                                         .alias(LANG_STRING_VALUE_FIELD),
-                                    col("object")
+                                    col(OBJECT_COL_NAME)
                                         .struct_()
                                         .field_by_name(LANG_STRING_LANG_FIELD)
                                         .alias(LANG_STRING_LANG_FIELD),
                                 ])
                                 .collect()
                                 .unwrap();
-                            let mut subject_iterator = df.column("subject").unwrap().iter();
+                            let mut subject_iterator = df.column(SUBJECT_COL_NAME).unwrap().iter();
                             let mut value_iterator =
                                 df.column(LANG_STRING_VALUE_FIELD).unwrap().iter();
                             let mut lang_iterator =
@@ -133,8 +134,8 @@ impl Triplestore {
                         if df.height() == 0 {
                             return Ok(());
                         }
-                        let mut subject_iterator = df.column("subject").unwrap().iter();
-                        let data_as_strings = convert_to_string(df.column("object").unwrap());
+                        let mut subject_iterator = df.column(SUBJECT_COL_NAME).unwrap().iter();
+                        let data_as_strings = convert_to_string(df.column(OBJECT_COL_NAME).unwrap());
                         if let Some(s) = data_as_strings {
                             let mut data_iterator = s.iter();
                             for _ in 0..df.height() {
@@ -143,7 +144,7 @@ impl Triplestore {
                                 out.push(f(s, verb.as_str(), lex, object_type));
                             }
                         } else {
-                            let mut data_iterator = df.column("object").unwrap().iter();
+                            let mut data_iterator = df.column(OBJECT_COL_NAME).unwrap().iter();
                             for _ in 0..df.height() {
                                 let s = anystring_to_str(subject_iterator.next().unwrap());
                                 let lex = anystring_to_str(data_iterator.next().unwrap());

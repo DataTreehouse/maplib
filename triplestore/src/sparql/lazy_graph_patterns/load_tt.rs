@@ -4,6 +4,7 @@ use crate::TripleTable;
 use polars::prelude::{col, concat, Expr, IntoLazy, LazyFrame, UnionArgs};
 use representation::RDFNodeType;
 use std::collections::{HashMap, HashSet};
+use crate::constants::{OBJECT_COL_NAME, SUBJECT_COL_NAME};
 
 fn single_tt_to_lf(tt: &TripleTable) -> Result<LazyFrame, SparqlError> {
     assert!(tt.unique, "Should be deduplicated");
@@ -13,7 +14,7 @@ fn single_tt_to_lf(tt: &TripleTable) -> Result<LazyFrame, SparqlError> {
         UnionArgs::default(),
     )
     .unwrap()
-    .select(vec![col("subject"), col("object")]);
+    .select(vec![col(SUBJECT_COL_NAME), col(OBJECT_COL_NAME)]);
     Ok(lf)
 }
 
@@ -68,13 +69,13 @@ pub fn multiple_tt_to_lf(
 
         for (subj_dt, obj_dt, mut lf) in filtered {
             if set_subj_dt.len() > 1 && subj_dt != &RDFNodeType::MultiType {
-                lf = convert_lf_col_to_multitype(lf, "subject", subj_dt);
+                lf = convert_lf_col_to_multitype(lf, SUBJECT_COL_NAME, subj_dt);
                 use_subj_dt = Some(RDFNodeType::MultiType)
             } else {
                 use_subj_dt = Some(subj_dt.clone())
             }
             if set_obj_dt.len() > 1 && obj_dt != &RDFNodeType::MultiType {
-                lf = convert_lf_col_to_multitype(lf, "object", obj_dt);
+                lf = convert_lf_col_to_multitype(lf, OBJECT_COL_NAME, obj_dt);
                 use_obj_dt = Some(RDFNodeType::MultiType)
             } else {
                 use_obj_dt = Some(obj_dt.clone());

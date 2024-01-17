@@ -21,6 +21,7 @@ use polars_core::series::Series;
 use representation::{literal_iri_to_namednode, RDFNodeType};
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 use std::collections::HashMap;
+use crate::constants::{OBJECT_COL_NAME, SUBJECT_COL_NAME};
 
 impl Triplestore {
     pub fn lazy_triple_pattern(
@@ -34,8 +35,8 @@ impl Triplestore {
             triple_pattern,
             context.as_str()
         );
-        let subject_filter = create_term_pattern_filter(&triple_pattern.subject, "subject");
-        let object_filter = create_term_pattern_filter(&triple_pattern.object, "object");
+        let subject_filter = create_term_pattern_filter(&triple_pattern.subject, SUBJECT_COL_NAME);
+        let object_filter = create_term_pattern_filter(&triple_pattern.object, OBJECT_COL_NAME);
         let object_datatype_req = match &triple_pattern.object {
             TermPattern::NamedNode(_nn) => Some(RDFNodeType::IRI),
             TermPattern::BlankNode(_) => None,
@@ -201,19 +202,25 @@ impl Triplestore {
                 object_filter,
             )? {
                 let mut out_datatypes = HashMap::new();
+                let use_subject_col_name = uuid::Uuid::new_v4().to_string();
+                let use_object_col_name = uuid::Uuid::new_v4().to_string();
+                lf = lf.rename(
+                    [SUBJECT_COL_NAME, OBJECT_COL_NAME],
+                            [&use_subject_col_name, &use_object_col_name]
+                );
 
                 let mut drop = vec![];
                 if let Some(renamed) = subject_keep_rename {
-                    lf = lf.rename(["subject"], [renamed]);
+                    lf = lf.rename([&use_subject_col_name], [renamed]);
                     out_datatypes.insert(renamed.to_string(), subj_dt.clone());
                 } else {
-                    drop.push("subject");
+                    drop.push(use_subject_col_name);
                 }
                 if let Some(renamed) = object_keep_rename {
-                    lf = lf.rename(["object"], [renamed]);
+                    lf = lf.rename([&use_object_col_name], [renamed]);
                     out_datatypes.insert(renamed.to_string(), obj_dt.clone());
                 } else {
-                    drop.push("object")
+                    drop.push(use_object_col_name)
                 }
                 if let Some(renamed) = verb_keep_rename {
                     lf = lf.with_column(lit(verb_uri.to_string()).alias(renamed));

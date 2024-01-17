@@ -15,6 +15,7 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
+use crate::constants::{OBJECT_COL_NAME, SUBJECT_COL_NAME};
 
 impl Triplestore {
     pub fn read_triples(
@@ -83,7 +84,7 @@ impl Triplestore {
                     oxrdf::Subject::BlankNode(bl) => bl.to_string(),
                 });
                 let mut subjects_ser = Series::from_iter(strings_iter);
-                subjects_ser.rename("subject");
+                subjects_ser.rename(SUBJECT_COL_NAME);
 
                 let any_iter: Vec<AnyValue> = objects
                     .into_iter()
@@ -106,7 +107,7 @@ impl Triplestore {
                     .collect();
 
                 let objects_ser =
-                    Series::from_any_values("object", any_iter.as_slice(), false).unwrap();
+                    Series::from_any_values(OBJECT_COL_NAME, any_iter.as_slice(), false).unwrap();
 
                 let all_series = vec![subjects_ser, objects_ser];
                 let df = DataFrame::new(all_series).unwrap();

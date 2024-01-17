@@ -32,6 +32,7 @@ use polars_core::POOL;
 use polars_utils::contention_pool::LowContentionPool;
 use representation::{RDFNodeType, TripleType};
 use std::io::Write;
+use crate::constants::OBJECT_COL_NAME;
 
 /// Utility to write to `&mut Vec<u8>` buffer
 struct StringWrap<'a>(pub &'a mut Vec<u8>);
@@ -136,7 +137,7 @@ fn write_ntriples_for_df<W: Write + ?Sized>(
             let total_offset = n_rows_finished + thread_offset;
             let mut df = df.slice(total_offset as i64, chunk_size);
             //We force all objects to string-representations here
-            if let Some(s) = convert_to_string(df.column("object").unwrap()) {
+            if let Some(s) = convert_to_string(df.column(OBJECT_COL_NAME).unwrap()) {
                 df.with_column(s).unwrap();
             }
             let cols = df.get_columns();

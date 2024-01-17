@@ -18,6 +18,7 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::path::{Path, PathBuf};
 use triplestore::sparql::QueryResult as SparqlQueryResult;
+use triplestore::constants::{OBJECT_COL_NAME, SUBJECT_COL_NAME};
 
 //The below snippet controlling alloc-library is from https://github.com/pola-rs/polars/blob/main/py-polars/src/lib.rs
 //And has a MIT license:
@@ -266,8 +267,8 @@ impl Mapping {
                 let mut query_results = vec![];
                 for (df, subj_type, obj_type) in dfs {
                     let datatypes: HashMap<_, _> = [
-                        ("subject".to_string(), subj_type),
-                        ("object".to_string(), obj_type),
+                        (SUBJECT_COL_NAME.to_string(), subj_type),
+                        (OBJECT_COL_NAME.to_string(), obj_type),
                     ]
                     .into();
                     let df = fix_multicolumns(df, &datatypes);

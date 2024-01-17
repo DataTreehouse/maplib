@@ -13,6 +13,7 @@ use oxrdf::NamedNode;
 use std::collections::{HashMap, HashSet};
 use std::fs::read_dir;
 use std::path::Path;
+use triplestore::constants::{OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME};
 
 #[derive(Clone, Debug)]
 pub struct TemplateDataset {
@@ -70,7 +71,7 @@ impl TemplateDataset {
                 "ottr:IRI".to_string(),
             )),
             stottr_variable: StottrVariable {
-                name: "subject".to_string(),
+                name: SUBJECT_COL_NAME.to_string(),
             },
             default_value: None,
         };
@@ -82,7 +83,7 @@ impl TemplateDataset {
                 "ottr:IRI".to_string(),
             )),
             stottr_variable: StottrVariable {
-                name: "verb".to_string(),
+                name: VERB_COL_NAME.to_string(),
             },
             default_value: None,
         };
@@ -91,7 +92,7 @@ impl TemplateDataset {
             non_blank: false,
             ptype: None,
             stottr_variable: StottrVariable {
-                name: "object".to_string(),
+                name: OBJECT_COL_NAME.to_string(),
             },
             default_value: None,
         };

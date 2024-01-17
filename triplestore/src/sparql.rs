@@ -23,6 +23,7 @@ use representation::RDFNodeType;
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 use spargebra::Query;
 use uuid::Uuid;
+use crate::constants::{OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME};
 
 pub enum QueryResult {
     Select(DataFrame, HashMap<String, RDFNodeType>),
@@ -106,17 +107,17 @@ impl Triplestore {
                         }
                         let mut multicols = vec![];
                         if subj_dt == RDFNodeType::MultiType {
-                            multicols.push("subject");
+                            multicols.push(SUBJECT_COL_NAME);
                         }
                         if obj_dt == RDFNodeType::MultiType {
-                            multicols.push("object");
+                            multicols.push(OBJECT_COL_NAME);
                         }
                         if !multicols.is_empty() {
                             let lfs_dts = split_df_multicols(df.lazy(), multicols);
                             for (lf, mut map) in lfs_dts {
                                 let df = lf.collect().unwrap();
-                                let new_subj_dt = map.remove("subject").unwrap_or(subj_dt.clone());
-                                let new_obj_dt = map.remove("object").unwrap_or(obj_dt.clone());
+                                let new_subj_dt = map.remove(SUBJECT_COL_NAME).unwrap_or(subj_dt.clone());
+                                let new_obj_dt = map.remove(OBJECT_COL_NAME).unwrap_or(obj_dt.clone());
                                 all_triples_to_add.push(TriplesToAdd {
                                     df,
                                     subject_type: new_subj_dt,
@@ -158,18 +159,18 @@ fn triple_to_df(
     } else {
         1
     };
-    let (subj_ser, subj_dt) = term_pattern_series(df, rdf_node_types, &t.subject, "subject", len);
-    let (verb_ser, _) = named_node_pattern_series(df, rdf_node_types, &t.predicate, "verb", len);
-    let (obj_ser, obj_dt) = term_pattern_series(df, rdf_node_types, &t.object, "object", len);
+    let (subj_ser, subj_dt) = term_pattern_series(df, rdf_node_types, &t.subject, SUBJECT_COL_NAME, len);
+    let (verb_ser, _) = named_node_pattern_series(df, rdf_node_types, &t.predicate, VERB_COL_NAME, len);
+    let (obj_ser, obj_dt) = term_pattern_series(df, rdf_node_types, &t.object, OBJECT_COL_NAME, len);
     let mut unique_subset = vec![];
     if subj_ser.dtype() != &DataType::Null {
-        unique_subset.push("subject".to_string());
+        unique_subset.push(SUBJECT_COL_NAME.to_string());
     }
     if verb_ser.dtype() != &DataType::Null {
-        unique_subset.push("verb".to_string());
+        unique_subset.push(VERB_COL_NAME.to_string());
     }
     if obj_ser.dtype() != &DataType::Null {
-        unique_subset.push("object".to_string());
+        unique_subset.push(OBJECT_COL_NAME.to_string());
     }
     let df = DataFrame::new(vec![subj_ser, verb_ser, obj_ser])
         .unwrap()
