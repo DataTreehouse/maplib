@@ -379,7 +379,7 @@ fn _maplib(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     Ok(())
 }
 
-fn fix_multicolumns(mut df: DataFrame, dts: &HashMap<String, RDFNodeType>) -> DataFrame {
+fn fix_multicolumns(df: DataFrame, dts: &HashMap<String, RDFNodeType>) -> DataFrame {
     let mut lf = df.lazy();
     for (c, v) in dts {
         if v == &RDFNodeType::MultiType {

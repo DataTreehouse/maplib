@@ -617,7 +617,9 @@ fn create_remapped(
                         .iter()
                         .find(|x| x.stottr_variable.name == v.name)
                     {
-                        if calling_formal_arg.optional {
+                        if target.optional {
+                            continue;
+                        } else if calling_formal_arg.optional {
                             return Ok(None);
                         }
                     }
