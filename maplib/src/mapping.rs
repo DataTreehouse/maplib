@@ -35,10 +35,10 @@ use uuid::Uuid;
 use triplestore::constants::{OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME};
 
 pub struct Mapping {
-    template_dataset: TemplateDataset,
+    pub template_dataset: TemplateDataset,
     pub triplestore: Triplestore,
     use_caching: bool,
-    blank_node_counter: usize,
+    pub blank_node_counter: usize,
 }
 
 #[derive(Clone, Default)]

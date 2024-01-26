@@ -4,26 +4,26 @@ mod lazy_expressions;
 pub(crate) mod lazy_graph_patterns;
 mod lazy_order;
 
-use representation::query_context::Context;
 use oxrdf::vocab::xsd;
 use oxrdf::{NamedNode, Variable};
+use representation::query_context::Context;
 use std::collections::HashMap;
 
 use super::Triplestore;
+use crate::constants::{OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME};
 use crate::sparql::errors::SparqlError;
-use representation::multitype::split_df_multicols;
-use representation::solution_mapping::SolutionMappings;
 use crate::TriplesToAdd;
 use polars::frame::DataFrame;
 use polars::prelude::{col, IntoLazy};
 use polars_core::enable_string_cache;
 use polars_core::prelude::{DataType, Series, UniqueKeepStrategy};
 use representation::literals::sparql_literal_to_any_value;
+use representation::multitype::split_df_multicols;
+use representation::solution_mapping::SolutionMappings;
 use representation::RDFNodeType;
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 use spargebra::Query;
 use uuid::Uuid;
-use crate::constants::{OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME};
 
 pub enum QueryResult {
     Select(DataFrame, HashMap<String, RDFNodeType>),
@@ -81,7 +81,9 @@ impl Triplestore {
                 df = cats_to_strings(df);
                 let mut dfs = vec![];
                 for t in template {
-                    dfs.push(triple_to_df(&df, &rdf_node_types, t)?);
+                    if let Some(df_and_types) = triple_to_df(&df, &rdf_node_types, t)? {
+                        dfs.push(df_and_types);
+                    }
                 }
                 Ok(QueryResult::Construct(dfs))
             }
@@ -90,7 +92,6 @@ impl Triplestore {
     }
 
     pub fn insert(&mut self, query: &str, transient: bool) -> Result<(), SparqlError> {
-        let call_uuid = Uuid::new_v4().to_string();
         let query = Query::parse(query, None).map_err(SparqlError::ParseError)?;
         if let Query::Construct { .. } = &query {
             let res = self.query_impl(&query)?;
@@ -98,54 +99,60 @@ impl Triplestore {
                 QueryResult::Select(_, _) => {
                     panic!("Should never happen")
                 }
-                QueryResult::Construct(dfs) => {
-                    let mut all_triples_to_add = vec![];
-
-                    for (df, subj_dt, obj_dt) in dfs {
-                        if df.height() == 0 {
-                            continue;
-                        }
-                        let mut multicols = vec![];
-                        if subj_dt == RDFNodeType::MultiType {
-                            multicols.push(SUBJECT_COL_NAME);
-                        }
-                        if obj_dt == RDFNodeType::MultiType {
-                            multicols.push(OBJECT_COL_NAME);
-                        }
-                        if !multicols.is_empty() {
-                            let lfs_dts = split_df_multicols(df.lazy(), multicols);
-                            for (lf, mut map) in lfs_dts {
-                                let df = lf.collect().unwrap();
-                                let new_subj_dt = map.remove(SUBJECT_COL_NAME).unwrap_or(subj_dt.clone());
-                                let new_obj_dt = map.remove(OBJECT_COL_NAME).unwrap_or(obj_dt.clone());
-                                all_triples_to_add.push(TriplesToAdd {
-                                    df,
-                                    subject_type: new_subj_dt,
-                                    object_type: new_obj_dt,
-                                    static_verb_column: None,
-                                    has_unique_subset: false,
-                                });
-                            }
-                        } else {
-                            all_triples_to_add.push(TriplesToAdd {
-                                df,
-                                subject_type: subj_dt,
-                                object_type: obj_dt,
-                                static_verb_column: None,
-                                has_unique_subset: false,
-                            });
-                        }
-                    }
-                    if !all_triples_to_add.is_empty() {
-                        self.add_triples_vec(all_triples_to_add, &call_uuid, transient)
-                            .map_err(SparqlError::StoreTriplesError)?;
-                    }
-                    Ok(())
-                }
+                QueryResult::Construct(dfs) => self.insert_construct_result(dfs, transient),
             }
         } else {
             Err(SparqlError::QueryTypeNotSupported)
         }
+    }
+    pub fn insert_construct_result(
+        &mut self,
+        dfs: Vec<(DataFrame, RDFNodeType, RDFNodeType)>,
+        transient: bool,
+    ) -> Result<(), SparqlError> {
+        let call_uuid = Uuid::new_v4().to_string();
+        let mut all_triples_to_add = vec![];
+
+        for (df, subj_dt, obj_dt) in dfs {
+            if df.height() == 0 {
+                continue;
+            }
+            let mut multicols = vec![];
+            if subj_dt == RDFNodeType::MultiType {
+                multicols.push(SUBJECT_COL_NAME);
+            }
+            if obj_dt == RDFNodeType::MultiType {
+                multicols.push(OBJECT_COL_NAME);
+            }
+            if !multicols.is_empty() {
+                let lfs_dts = split_df_multicols(df.lazy(), multicols);
+                for (lf, mut map) in lfs_dts {
+                    let df = lf.collect().unwrap();
+                    let new_subj_dt = map.remove(SUBJECT_COL_NAME).unwrap_or(subj_dt.clone());
+                    let new_obj_dt = map.remove(OBJECT_COL_NAME).unwrap_or(obj_dt.clone());
+                    all_triples_to_add.push(TriplesToAdd {
+                        df,
+                        subject_type: new_subj_dt,
+                        object_type: new_obj_dt,
+                        static_verb_column: None,
+                        has_unique_subset: false,
+                    });
+                }
+            } else {
+                all_triples_to_add.push(TriplesToAdd {
+                    df,
+                    subject_type: subj_dt,
+                    object_type: obj_dt,
+                    static_verb_column: None,
+                    has_unique_subset: false,
+                });
+            }
+        }
+        if !all_triples_to_add.is_empty() {
+            self.add_triples_vec(all_triples_to_add, &call_uuid, transient)
+                .map_err(SparqlError::StoreTriplesError)?;
+        }
+        Ok(())
     }
 }
 
@@ -153,15 +160,18 @@ fn triple_to_df(
     df: &DataFrame,
     rdf_node_types: &HashMap<String, RDFNodeType>,
     t: &TriplePattern,
-) -> Result<(DataFrame, RDFNodeType, RDFNodeType), SparqlError> {
+) -> Result<Option<(DataFrame, RDFNodeType, RDFNodeType)>, SparqlError> {
     let len = if triple_has_variable(t) {
         df.height()
     } else {
         1
     };
-    let (subj_ser, subj_dt) = term_pattern_series(df, rdf_node_types, &t.subject, SUBJECT_COL_NAME, len);
-    let (verb_ser, _) = named_node_pattern_series(df, rdf_node_types, &t.predicate, VERB_COL_NAME, len);
-    let (obj_ser, obj_dt) = term_pattern_series(df, rdf_node_types, &t.object, OBJECT_COL_NAME, len);
+    let (subj_ser, subj_dt) =
+        term_pattern_series(df, rdf_node_types, &t.subject, SUBJECT_COL_NAME, len);
+    let (verb_ser, _) =
+        named_node_pattern_series(df, rdf_node_types, &t.predicate, VERB_COL_NAME, len);
+    let (obj_ser, obj_dt) =
+        term_pattern_series(df, rdf_node_types, &t.object, OBJECT_COL_NAME, len);
     let mut unique_subset = vec![];
     if subj_ser.dtype() != &DataType::Null {
         unique_subset.push(SUBJECT_COL_NAME.to_string());
@@ -174,13 +184,16 @@ fn triple_to_df(
     }
     let df = DataFrame::new(vec![subj_ser, verb_ser, obj_ser])
         .unwrap()
-        .unique(
-            Some(unique_subset.as_slice()),
-            UniqueKeepStrategy::First,
-            None,
-        )
+        .lazy()
+        .drop_nulls(None)
+        .unique(Some(unique_subset), UniqueKeepStrategy::First)
+        .collect()
         .unwrap();
-    Ok((df, subj_dt, obj_dt))
+    if df.height() > 0 {
+        Ok(Some((df, subj_dt, obj_dt)))
+    } else {
+        Ok(None)
+    }
 }
 
 fn triple_has_variable(t: &TriplePattern) -> bool {

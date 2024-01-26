@@ -5,7 +5,6 @@ mod error;
 use crate::error::PyMaplibError;
 use pydf_io::to_rust::polars_df_to_rust_df;
 
-use pydf_io::to_python::df_to_py_df;
 use log::warn;
 use maplib::document::document_from_str;
 use maplib::errors::MaplibError;
@@ -13,12 +12,13 @@ use maplib::mapping::errors::MappingError;
 use maplib::mapping::ExpandOptions as RustExpandOptions;
 use maplib::mapping::Mapping as InnerMapping;
 use maplib::templates::TemplateDataset;
+use pydf_io::to_python::df_to_py_df;
 use pyo3::prelude::*;
 use std::collections::HashMap;
 use std::fs::File;
 use std::path::{Path, PathBuf};
-use triplestore::sparql::QueryResult as SparqlQueryResult;
 use triplestore::constants::{OBJECT_COL_NAME, SUBJECT_COL_NAME};
+use triplestore::sparql::{QueryResult as SparqlQueryResult, QueryResult};
 
 //The below snippet controlling alloc-library is from https://github.com/pola-rs/polars/blob/main/py-polars/src/lib.rs
 //And has a MIT license:
@@ -46,8 +46,8 @@ use jemallocator::Jemalloc;
 use polars_core::frame::DataFrame;
 use polars_lazy::frame::IntoLazy;
 use pyo3::types::PyList;
-use representation::RDFNodeType;
 use representation::multitype::multi_col_to_string_col;
+use representation::RDFNodeType;
 
 #[cfg(not(target_os = "linux"))]
 use mimalloc::MiMalloc;
@@ -70,22 +70,17 @@ pub struct ValidationReport {
 }
 
 #[pyclass]
-#[derive(Debug, Clone)]
-pub struct QueryResult {
-    #[pyo3(get)]
-    pub df: PyObject,
-    #[pyo3(get)]
-    pub types: HashMap<String, String>,
-}
-
-#[pyclass]
 pub struct Mapping {
     inner: InnerMapping,
+    sprout: Option<InnerMapping>,
 }
 
 impl Mapping {
     pub fn from_inner_mapping(inner: InnerMapping) -> Mapping {
-        Mapping { inner }
+        Mapping {
+            inner,
+            sprout: None,
+        }
     }
 }
 
@@ -104,22 +99,7 @@ impl ExpandOptions {
 
 #[pymethods]
 impl Mapping {
-    /// Create a new Mapping object from a stOTTR document (a string) or list of stOTTR documents.
-    /// Usage:
-    /// import polars as pl
-    /// from maplib import Mapping
-    /// doc = """
-    ///     @prefix ex:<http://example.net/ns#>.
-    ///     ex:ExampleTemplate [?MyValue] :: {
-    ///     ottr:Triple(ex:myObject, ex:hasValue, ?MyValue)
-    ///     } .
-    ///     """
-    /// m = Mapping(doc)
-    /// m.expand("ex:ExampleTemplate", df)
-    /// Optionally, a caching folder (a string or Path) can be specified which offloads the constructed graph to disk in Parquet format.
     #[new]
-    #[pyo3(signature=(/,documents=None,caching_folder=None),
-    text_signature="(documents:Union[str,List[str]]=None, caching_folder:str=None))")]
     fn new(documents: Option<&PyAny>, caching_folder: Option<&PyAny>) -> PyResult<Mapping> {
         let documents = if let Some(documents) = documents {
             if documents.is_instance_of::<PyList>() {
@@ -152,19 +132,30 @@ impl Mapping {
         Ok(Mapping {
             inner: InnerMapping::new(&template_dataset, caching_folder)
                 .map_err(PyMaplibError::from)?,
+            sprout: None,
         })
     }
 
-    /// Expand a template (prefix:name or full IRI) using a DataFrame where the columns have the same names as the template arguments.
-    /// Usage:
-    /// m.expand("ex:ExampleTemplate", df)
-    /// DataFrame columns known to be unique may be specified, e.g. unique_subsets=["colA", "colB"], for a performance boost (reduce costly deduplication)
-    /// Usage:
-    /// m.expand("ex:ExampleTemplate", df, unique_subsets=["MyValue"])
-    /// If the template has no arguments, the df argument is not necessary.
-    #[pyo3(signature = (template, /, df=None, unique_subset=None),
-        text_signature = "(template:str, df:DataFrame=None, unique_subset:List[str]=None)"
-    )]
+    fn create_sprout(&mut self) -> PyResult<()> {
+        let mut sprout =
+            InnerMapping::new(&self.inner.template_dataset, None).map_err(PyMaplibError::from)?;
+        sprout.blank_node_counter = self.inner.blank_node_counter;
+        self.sprout = Some(sprout);
+        Ok(())
+    }
+
+    fn detach_sprout(&mut self) -> PyResult<Option<Mapping>> {
+        if let Some(sprout) = self.sprout.take() {
+            let m = Mapping {
+                inner: sprout,
+                sprout: None,
+            };
+            Ok(Some(m))
+        } else {
+            Ok(None)
+        }
+    }
+
     fn expand(
         &mut self,
         template: &str,
@@ -176,9 +167,7 @@ impl Mapping {
         } else {
             None
         };
-        let options = ExpandOptions {
-            unique_subsets,
-        };
+        let options = ExpandOptions { unique_subsets };
 
         if let Some(df) = df {
             if df.getattr("height")?.gt(0).unwrap() {
@@ -203,16 +192,6 @@ impl Mapping {
         Ok(None)
     }
 
-    /// Create a default template and expand it based on a dataframe.
-    /// The primary key column must be specified
-    /// The types of other columns are inferred.
-    /// Other columns which are URI-columns can also be specified, otherwise they are assumed to be xsd:string
-    /// Usage:
-    /// template_string = m.expand_default(df, "myKeyCol", ["otherURICol1", "otherURICol1"])
-    /// print(template_string)
-    #[pyo3(signature = (df, primary_key_column, /, template_prefix=None, predicate_uri_prefix=None),
-    text_signature = "(df:DataFrame, primary_key_column:str, template_prefix:str=None, predicate_uri_prefix:str=None)"
-    )]
     fn expand_default(
         &mut self,
         df: &PyAny,
@@ -240,51 +219,15 @@ impl Mapping {
         return Ok(format!("{}", tmpl));
     }
 
-    /// Query the mapped knowledge graph using SPARQL
-    /// Currently, SELECT, CONSTRUCT and INSERT are supported.
-    /// res = mapping.query("""
-    /// PREFIX ex:<http://example.net/ns#>
-    /// SELECT ?obj1 ?obj2 WHERE {
-    /// ?obj1 ex:hasObj ?obj2
-    /// }""")
-    /// print(res.df)
-    #[pyo3(signature = (query),
-    text_signature = "(query:str)"
-    )]
     fn query(&mut self, py: Python<'_>, query: String) -> PyResult<PyObject> {
         let res = self
             .inner
             .triplestore
             .query(&query)
             .map_err(PyMaplibError::from)?;
-        match res {
-            SparqlQueryResult::Select(mut df, datatypes) => {
-                df = fix_multicolumns(df, &datatypes);
-                let pydf = df_to_py_df(df, dtypes_map(datatypes), py)?;
-                Ok(pydf)
-            }
-            SparqlQueryResult::Construct(dfs) => {
-                let mut query_results = vec![];
-                for (df, subj_type, obj_type) in dfs {
-                    let datatypes: HashMap<_, _> = [
-                        (SUBJECT_COL_NAME.to_string(), subj_type),
-                        (OBJECT_COL_NAME.to_string(), obj_type),
-                    ]
-                    .into();
-                    let df = fix_multicolumns(df, &datatypes);
-                    let pydf = df_to_py_df(df, dtypes_map(datatypes), py)?;
-                    query_results.push(
-                        pydf,
-                    );
-                }
-                Ok(PyList::new(py, query_results).into())
-            }
-        }
+        query_to_result(res, py)
     }
 
-    /// Validate the contained knowledge graph using SHACL
-    /// Assumes that the contained knowledge graph also contains SHACL Shapes.
-    #[pyo3(signature = ())]
     fn validate(&mut self, py: Python<'_>) -> PyResult<ValidationReport> {
         let shacl::ValidationReport { conforms, df } =
             self.inner.validate().map_err(PyMaplibError::from)?;
@@ -298,33 +241,41 @@ impl Mapping {
         Ok(ValidationReport { conforms, report })
     }
 
-    /// Utility method for running a CONSTRUCT query as if it were an INSERT query.
-    /// Useful when you want to first check the result of CONSTRUCT and then insert that exact result.
-    /// Specify transient if you only want the results to be available for further querying and validation, but not persisted using write-methods.
-    /// Usage:
-    /// res = m.query(my_construct_query)
-    /// print(res[0])
-    /// # I am happy with these results!
-    /// m.insert(my_construct_query, transient=True)
-    #[pyo3(signature = (query,/, transient=false),
-    text_signature = "(query:str, transient:bool=False)"
-    )]
     fn insert(&mut self, query: String, transient: Option<bool>) -> PyResult<()> {
         self.inner
             .triplestore
             .insert(&query, transient.unwrap_or(false))
             .map_err(PyMaplibError::from)?;
+        if self.sprout.is_some() {
+            self.sprout.as_mut().unwrap().blank_node_counter = self.inner.blank_node_counter;
+        }
         Ok(())
     }
 
-    /// Reads triples from a path.
-    /// File format is derived using file extension, e.g. .ttl or .nt.
-    /// Specify transient if you only want the triples to be available for further querying and validation, but not persisted using write-methods.
-    /// Usage:
-    /// m.read_triples("my_triples.ttl", transient=True)
-    #[pyo3(signature = (file_path, /,base_iri=None, transient=false),
-    text_signature = "(file_path:Union[str, Path], base_iri:str=None, transient:bool=False)"
-    )]
+    fn insert_sprout(&mut self, query: String, transient: Option<bool>) -> PyResult<()> {
+        if self.sprout.is_none() {
+            self.create_sprout()?;
+        }
+        let res = self
+            .inner
+            .triplestore
+            .query(&query)
+            .map_err(PyMaplibError::from)?;
+        if let QueryResult::Construct(dfs_and_dts) = res {
+            self.sprout
+                .as_mut()
+                .unwrap()
+                .triplestore
+                .insert_construct_result(dfs_and_dts, transient.unwrap_or(false))
+                .map_err(PyMaplibError::from)?;
+        } else {
+            todo!("Handle this error..")
+        }
+        self.inner.blank_node_counter = self.sprout.as_ref().unwrap().blank_node_counter;
+
+        Ok(())
+    }
+
     fn read_triples(
         &mut self,
         file_path: &PyAny,
@@ -339,13 +290,6 @@ impl Mapping {
         Ok(())
     }
 
-    /// Write triples to an NTriples file.
-    /// Will not write triples that have been added using transient=True
-    /// Usage:
-    /// m.write_ntriples("my_triples.nt")
-    #[pyo3(signature = (file_path),
-    text_signature = "(file_path:Union[str, Path])"
-    )]
     fn write_ntriples(&mut self, file_path: &PyAny) -> PyResult<()> {
         let file_path = file_path.str()?.to_string();
         let path_buf = PathBuf::from(file_path);
@@ -355,13 +299,6 @@ impl Mapping {
         Ok(())
     }
 
-    /// Write triples using the internal native Parquet format.
-    /// Will not write triples that have been added using transient=True
-    /// Usage:
-    /// m.write_native_parquet("native_parquet_path")
-    #[pyo3(signature = (folder_path),
-    text_signature = "(folder_path:Union[str,Path])"
-    )]
     fn write_native_parquet(&mut self, folder_path: &PyAny) -> PyResult<()> {
         let folder_path = folder_path.str()?.to_string();
         self.inner
@@ -374,7 +311,6 @@ impl Mapping {
 #[pymodule]
 fn _maplib(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_class::<Mapping>()?;
-    m.add_class::<QueryResult>()?;
     m.add_class::<ValidationReport>()?;
     Ok(())
 }
@@ -387,6 +323,30 @@ fn fix_multicolumns(df: DataFrame, dts: &HashMap<String, RDFNodeType>) -> DataFr
         }
     }
     lf.collect().unwrap()
+}
+
+fn query_to_result(res: SparqlQueryResult, py: Python<'_>) -> PyResult<PyObject> {
+    match res {
+        SparqlQueryResult::Select(mut df, datatypes) => {
+            df = fix_multicolumns(df, &datatypes);
+            let pydf = df_to_py_df(df, dtypes_map(datatypes), py)?;
+            Ok(pydf)
+        }
+        SparqlQueryResult::Construct(dfs) => {
+            let mut query_results = vec![];
+            for (df, subj_type, obj_type) in dfs {
+                let datatypes: HashMap<_, _> = [
+                    (SUBJECT_COL_NAME.to_string(), subj_type),
+                    (OBJECT_COL_NAME.to_string(), obj_type),
+                ]
+                .into();
+                let df = fix_multicolumns(df, &datatypes);
+                let pydf = df_to_py_df(df, dtypes_map(datatypes), py)?;
+                query_results.push(pydf);
+            }
+            Ok(PyList::new(py, query_results).into())
+        }
+    }
 }
 
 fn dtypes_map(map: HashMap<String, RDFNodeType>) -> HashMap<String, String> {

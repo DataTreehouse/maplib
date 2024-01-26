@@ -44,6 +44,13 @@ class Mapping:
 
     def __init__(self, documents: Union[str, List[str]] = None, caching_folder: str = None) -> Mapping: ...
 
+    def detach_sprout(self) -> Mapping:
+        """
+        Detaches and returns the sprout from the mapping.
+
+        @return: The sprout as its own Mapping.
+        """
+
     def expand(self, template: str, df: DataFrame = None, unique_subset: List[str] = None) -> None:
         """
         Expand a template using a DataFrame
@@ -110,6 +117,29 @@ class Mapping:
         ... ?p pizza:hasIngredient ing:Pineapple .
         ... }'''
         ... m.insert(hpizzas)
+
+        :param query: The SPARQL Insert query string
+        :return: None
+        """
+
+    def insert_sprout(self, query: str):
+        """
+        Insert the results of a Construct query in the sprouted graph.
+        Useful for being able to use the same query for inspecting what will be inserted and actually inserting.
+        Usage:
+
+        >>> m = Mapping(doc)
+        ... m.create_sprout()
+        ... # Omitted
+        ... hpizzas = '''
+        ... PREFIX pizza:<https://github.com/magbak/maplib/pizza#>
+        ... PREFIX ing:<https://github.com/magbak/maplib/pizza/ingredients#>
+        ... CONSTRUCT { ?p a pizza:HeterodoxPizza }
+        ... WHERE {
+        ... ?p a pizza:Pizza .
+        ... ?p pizza:hasIngredient ing:Pineapple .
+        ... }'''
+        ... m.insert_sprout(hpizzas)
 
         :param query: The SPARQL Insert query string
         :return: None

@@ -2,15 +2,14 @@ use super::Triplestore;
 use crate::sparql::errors::SparqlError;
 use representation::query_context::Context;
 use representation::solution_mapping::SolutionMappings;
-use oxrdf::Variable;
-use polars::prelude::{col, Expr, IntoLazy, JoinArgs, JoinType};
-use polars_core::datatypes::AnyValue;
+use oxrdf::{Variable};
+use polars::prelude::{IntoLazy};
 use polars_core::frame::DataFrame;
-use polars_core::series::Series;
-use representation::literals::sparql_literal_to_any_value;
 use representation::RDFNodeType;
 use spargebra::term::GroundTerm;
 use std::collections::HashMap;
+use query_processing::graph_patterns::join;
+use representation::sparql_to_polars::{polars_literal_values_to_series, sparql_literal_to_polars_literal_value, sparql_named_node_to_polars_literal_value};
 
 impl Triplestore {
     pub(crate) fn lazy_values(
@@ -28,21 +27,17 @@ impl Triplestore {
         for (i, row) in bindings.iter().enumerate() {
             for (j, col) in row.iter().enumerate() {
                 if let Some(gt) = col {
-                    #[allow(unreachable_patterns)]
-                    match gt {
+                    let t = match gt {
                         GroundTerm::NamedNode(nn) => {
                             if i == 0 {
                                 datatypes.insert(j, RDFNodeType::IRI);
                             } else if datatypes.get(&j).unwrap() != &RDFNodeType::IRI {
                                 todo!("No support yet for values of same variables having different types")
                             }
-                            col_vecs
-                                .get_mut(&j)
-                                .unwrap()
-                                .push(AnyValue::Utf8Owned(nn.as_str().into()));
+                            sparql_named_node_to_polars_literal_value(nn)
                         }
-                        GroundTerm::Literal(lit) => {
-                            let dt = lit.datatype();
+                        GroundTerm::Literal(l) => {
+                            let dt = l.datatype();
                             if i == 0 {
                                 datatypes.insert(j, RDFNodeType::Literal(dt.into_owned()));
                             } else {
@@ -50,75 +45,44 @@ impl Triplestore {
                                 match existing {
                                     RDFNodeType::Literal(l) => {
                                         if l != &dt {
-                                            todo!("No support for values of some varibales having different types")
+                                            todo!("No support for values of some variables having different types")
                                         }
                                     }
                                     _ => {
-                                        todo!("No support for values of some varibales having different types")
+                                        todo!("No support for values of some variables having different types")
                                     }
                                 }
                             }
-                            let (mut polarlit, _) =
-                                sparql_literal_to_any_value(lit.value(), lit.language(), &Some(dt));
-                            polarlit = polarlit.into_static().unwrap();
-                            col_vecs.get_mut(&j).unwrap().push(polarlit);
+                            sparql_literal_to_polars_literal_value(l)
                         }
-                        _ => {
-                            unimplemented!()
-                        }
-                    }
+                        _ => {todo!()}
+                    };
+                    col_vecs.get_mut(&j).unwrap().push(t);
                     if i + 1 == bindings.len() {
                         datatypes.entry(j).or_insert(RDFNodeType::None);
                     }
-                    col_vecs.get_mut(&j).unwrap().push(AnyValue::Null);
                 }
             }
         }
         let mut all_series = vec![];
         for (i, var) in variables.iter().enumerate() {
             let series =
-                Series::from_any_values(var.as_str(), col_vecs.get(&i).unwrap().as_slice(), false)
-                    .unwrap();
+                polars_literal_values_to_series(col_vecs.remove(&i).unwrap(), var.as_str());
             all_series.push(series);
         }
         let df = DataFrame::new(all_series).unwrap();
+        let mut rdf_node_types = HashMap::new();
+        for (k, v) in datatypes {
+            let var = variables.get(k).unwrap();
+            rdf_node_types.insert(var.as_str().to_string(), v);
+        }
+        let sm = SolutionMappings{ mappings:df.lazy(), rdf_node_types };
+
         if let Some(mut mappings) = solution_mappings {
-            let join_on: Vec<String> = variables
-                .iter()
-                .map(|x| x.as_str().to_string())
-                .filter(|v| mappings.rdf_node_types.contains_key(v))
-                .collect();
-            let join_cols: Vec<Expr> = join_on.iter().map(|x| col(x)).collect();
-            for (k, v) in datatypes {
-                let var = variables.get(k).unwrap();
-                mappings.rdf_node_types.insert(var.as_str().to_string(), v);
-            }
-            if join_on.is_empty() {
-                mappings.mappings = mappings.mappings.join(
-                    df.lazy(),
-                    join_cols.as_slice(),
-                    join_cols.as_slice(),
-                    JoinArgs::new(JoinType::Cross),
-                );
-            } else {
-                mappings.mappings = mappings.mappings.join(
-                    df.lazy(),
-                    join_cols.as_slice(),
-                    join_cols.as_slice(),
-                    JoinArgs::new(JoinType::Inner),
-                );
-            }
+            mappings = join(mappings, sm)?;
             Ok(mappings)
         } else {
-            let mut out_datatypes = HashMap::new();
-            for (k, v) in datatypes {
-                let var = variables.get(k).unwrap();
-                out_datatypes.insert(var.as_str().to_string(), v);
-            }
-            Ok(SolutionMappings::new(
-                df.lazy(),
-                out_datatypes,
-            ))
+            Ok(sm)
         }
     }
 }
