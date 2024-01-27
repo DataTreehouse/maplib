@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use crate::sparql::errors::SparqlError;
 use oxrdf::vocab::xsd;
 use polars::prelude::{col, Expr, LiteralValue, Operator};
-use polars_core::frame::DataFrame;
+
 use query_processing::exists_helper::rewrite_exists_graph_pattern;
 use query_processing::expressions::{
     binary_expression, bound, coalesce_expression, exists, func_expression, if_expression,

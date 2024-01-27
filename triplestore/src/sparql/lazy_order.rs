@@ -1,6 +1,6 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
-use polars_core::frame::DataFrame;
+
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use spargebra::algebra::OrderExpression;

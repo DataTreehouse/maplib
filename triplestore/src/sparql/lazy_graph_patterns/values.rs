@@ -5,7 +5,7 @@ use polars::prelude::IntoLazy;
 use polars_core::frame::DataFrame;
 use query_processing::graph_patterns::join;
 use representation::query_context::Context;
-use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
+use representation::solution_mapping::{SolutionMappings};
 use representation::sparql_to_polars::{
     polars_literal_values_to_series, sparql_literal_to_polars_literal_value,
     sparql_named_node_to_polars_literal_value,

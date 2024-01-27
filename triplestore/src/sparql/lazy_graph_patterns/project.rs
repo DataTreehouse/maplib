@@ -2,7 +2,7 @@ use super::Triplestore;
 use crate::sparql::errors::SparqlError;
 use log::debug;
 use oxrdf::Variable;
-use polars_core::frame::DataFrame;
+
 use query_processing::graph_patterns::project;
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};

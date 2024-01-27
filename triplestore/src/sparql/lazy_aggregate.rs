@@ -1,7 +1,7 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
 use oxrdf::Variable;
-use polars_core::frame::DataFrame;
+
 use query_processing::aggregates::{
     avg, count_with_expression, count_without_expression, group_concat, max, min, sample, sum,
     AggregateReturn,

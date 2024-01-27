@@ -1,7 +1,7 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
 use log::debug;
-use polars_core::frame::DataFrame;
+
 use query_processing::graph_patterns::{filter, left_join};
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
