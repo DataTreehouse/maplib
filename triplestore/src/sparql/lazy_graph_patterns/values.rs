@@ -1,15 +1,18 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
-use representation::query_context::Context;
-use representation::solution_mapping::SolutionMappings;
-use oxrdf::{Variable};
-use polars::prelude::{IntoLazy};
+use oxrdf::Variable;
+use polars::prelude::IntoLazy;
 use polars_core::frame::DataFrame;
+use query_processing::graph_patterns::join;
+use representation::query_context::Context;
+use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
+use representation::sparql_to_polars::{
+    polars_literal_values_to_series, sparql_literal_to_polars_literal_value,
+    sparql_named_node_to_polars_literal_value,
+};
 use representation::RDFNodeType;
 use spargebra::term::GroundTerm;
 use std::collections::HashMap;
-use query_processing::graph_patterns::join;
-use representation::sparql_to_polars::{polars_literal_values_to_series, sparql_literal_to_polars_literal_value, sparql_named_node_to_polars_literal_value};
 
 impl Triplestore {
     pub(crate) fn lazy_values(
@@ -55,7 +58,9 @@ impl Triplestore {
                             }
                             sparql_literal_to_polars_literal_value(l)
                         }
-                        _ => {todo!()}
+                        _ => {
+                            todo!()
+                        }
                     };
                     col_vecs.get_mut(&j).unwrap().push(t);
                     if i + 1 == bindings.len() {
@@ -76,7 +81,10 @@ impl Triplestore {
             let var = variables.get(k).unwrap();
             rdf_node_types.insert(var.as_str().to_string(), v);
         }
-        let sm = SolutionMappings{ mappings:df.lazy(), rdf_node_types };
+        let sm = SolutionMappings {
+            mappings: df.lazy(),
+            rdf_node_types,
+        };
 
         if let Some(mut mappings) = solution_mappings {
             mappings = join(mappings, sm)?;

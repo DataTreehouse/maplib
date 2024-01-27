@@ -3,15 +3,17 @@ use std::collections::HashMap;
 
 use crate::sparql::errors::SparqlError;
 use oxrdf::vocab::xsd;
-use polars::prelude::{
-    col, Expr, LiteralValue, Operator,
-};
+use polars::prelude::{col, Expr, LiteralValue, Operator};
+use polars_core::frame::DataFrame;
 use query_processing::exists_helper::rewrite_exists_graph_pattern;
-use query_processing::expressions::{binary_expression, bound, coalesce_expression, exists, func_expression, if_expression, in_expression, literal, named_node, not_expression, unary_minus, unary_plus, variable};
+use query_processing::expressions::{
+    binary_expression, bound, coalesce_expression, exists, func_expression, if_expression,
+    in_expression, literal, named_node, not_expression, unary_minus, unary_plus, variable,
+};
 use representation::query_context::{Context, PathEntry};
-use representation::solution_mapping::SolutionMappings;
+use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use representation::RDFNodeType;
-use spargebra::algebra::{Expression};
+use spargebra::algebra::Expression;
 
 impl Triplestore {
     pub fn lazy_expression(
@@ -19,6 +21,7 @@ impl Triplestore {
         expr: &Expression,
         solution_mappings: SolutionMappings,
         context: &Context,
+        parameters: &Option<HashMap<String, EagerSolutionMappings>>,
     ) -> Result<SolutionMappings, SparqlError> {
         let output_solution_mappings = match expr {
             Expression::NamedNode(nn) => named_node(solution_mappings, nn, context)?,
@@ -27,10 +30,14 @@ impl Triplestore {
             Expression::Or(left, right) => {
                 let left_context = context.extension_with(PathEntry::OrLeft);
                 let mut output_solution_mappings =
-                    self.lazy_expression(left, solution_mappings, &left_context)?;
+                    self.lazy_expression(left, solution_mappings, &left_context, parameters)?;
                 let right_context = context.extension_with(PathEntry::OrRight);
-                output_solution_mappings =
-                    self.lazy_expression(right, output_solution_mappings, &right_context)?;
+                output_solution_mappings = self.lazy_expression(
+                    right,
+                    output_solution_mappings,
+                    &right_context,
+                    parameters,
+                )?;
                 binary_expression(
                     output_solution_mappings,
                     Operator::Or,
@@ -42,10 +49,14 @@ impl Triplestore {
             Expression::And(left, right) => {
                 let left_context = context.extension_with(PathEntry::AndLeft);
                 let mut output_solution_mappings =
-                    self.lazy_expression(left, solution_mappings, &left_context)?;
+                    self.lazy_expression(left, solution_mappings, &left_context, parameters)?;
                 let right_context = context.extension_with(PathEntry::AndRight);
-                output_solution_mappings =
-                    self.lazy_expression(right, output_solution_mappings, &right_context)?;
+                output_solution_mappings = self.lazy_expression(
+                    right,
+                    output_solution_mappings,
+                    &right_context,
+                    parameters,
+                )?;
                 binary_expression(
                     output_solution_mappings,
                     Operator::And,
@@ -57,10 +68,14 @@ impl Triplestore {
             Expression::Equal(left, right) => {
                 let left_context = context.extension_with(PathEntry::EqualLeft);
                 let mut output_solution_mappings =
-                    self.lazy_expression(left, solution_mappings, &left_context)?;
+                    self.lazy_expression(left, solution_mappings, &left_context, parameters)?;
                 let right_context = context.extension_with(PathEntry::EqualRight);
-                output_solution_mappings =
-                    self.lazy_expression(right, output_solution_mappings, &right_context)?;
+                output_solution_mappings = self.lazy_expression(
+                    right,
+                    output_solution_mappings,
+                    &right_context,
+                    parameters,
+                )?;
                 binary_expression(
                     output_solution_mappings,
                     Operator::Eq,
@@ -75,10 +90,14 @@ impl Triplestore {
             Expression::Greater(left, right) => {
                 let left_context = context.extension_with(PathEntry::GreaterLeft);
                 let mut output_solution_mappings =
-                    self.lazy_expression(left, solution_mappings, &left_context)?;
+                    self.lazy_expression(left, solution_mappings, &left_context, parameters)?;
                 let right_context = context.extension_with(PathEntry::GreaterRight);
-                output_solution_mappings =
-                    self.lazy_expression(right, output_solution_mappings, &right_context)?;
+                output_solution_mappings = self.lazy_expression(
+                    right,
+                    output_solution_mappings,
+                    &right_context,
+                    parameters,
+                )?;
                 binary_expression(
                     output_solution_mappings,
                     Operator::Gt,
@@ -90,10 +109,14 @@ impl Triplestore {
             Expression::GreaterOrEqual(left, right) => {
                 let left_context = context.extension_with(PathEntry::GreaterOrEqualLeft);
                 let mut output_solution_mappings =
-                    self.lazy_expression(left, solution_mappings, &left_context)?;
+                    self.lazy_expression(left, solution_mappings, &left_context, parameters)?;
                 let right_context = context.extension_with(PathEntry::GreaterOrEqualRight);
-                output_solution_mappings =
-                    self.lazy_expression(right, output_solution_mappings, &right_context)?;
+                output_solution_mappings = self.lazy_expression(
+                    right,
+                    output_solution_mappings,
+                    &right_context,
+                    parameters,
+                )?;
 
                 binary_expression(
                     output_solution_mappings,
@@ -106,10 +129,14 @@ impl Triplestore {
             Expression::Less(left, right) => {
                 let left_context = context.extension_with(PathEntry::LessLeft);
                 let mut output_solution_mappings =
-                    self.lazy_expression(left, solution_mappings, &left_context)?;
+                    self.lazy_expression(left, solution_mappings, &left_context, parameters)?;
                 let right_context = context.extension_with(PathEntry::LessRight);
-                output_solution_mappings =
-                    self.lazy_expression(right, output_solution_mappings, &right_context)?;
+                output_solution_mappings = self.lazy_expression(
+                    right,
+                    output_solution_mappings,
+                    &right_context,
+                    parameters,
+                )?;
                 binary_expression(
                     output_solution_mappings,
                     Operator::Lt,
@@ -121,10 +148,14 @@ impl Triplestore {
             Expression::LessOrEqual(left, right) => {
                 let left_context = context.extension_with(PathEntry::LessOrEqualLeft);
                 let mut output_solution_mappings =
-                    self.lazy_expression(left, solution_mappings, &left_context)?;
+                    self.lazy_expression(left, solution_mappings, &left_context, parameters)?;
                 let right_context = context.extension_with(PathEntry::LessOrEqualRight);
-                output_solution_mappings =
-                    self.lazy_expression(right, output_solution_mappings, &right_context)?;
+                output_solution_mappings = self.lazy_expression(
+                    right,
+                    output_solution_mappings,
+                    &right_context,
+                    parameters,
+                )?;
                 binary_expression(
                     output_solution_mappings,
                     Operator::LtEq,
@@ -139,22 +170,35 @@ impl Triplestore {
                     .map(|i| context.extension_with(PathEntry::InRight(i as u16)))
                     .collect();
                 let mut output_solution_mappings =
-                    self.lazy_expression(left, solution_mappings, &left_context)?;
+                    self.lazy_expression(left, solution_mappings, &left_context, parameters)?;
                 for i in 0..right.len() {
                     let expr = right.get(i).unwrap();
                     let expr_context = right_contexts.get(i).unwrap();
-                    output_solution_mappings =
-                        self.lazy_expression(expr, output_solution_mappings, expr_context)?;
+                    output_solution_mappings = self.lazy_expression(
+                        expr,
+                        output_solution_mappings,
+                        expr_context,
+                        parameters,
+                    )?;
                 }
-                in_expression(output_solution_mappings, &left_context, &right_contexts, &context)?
+                in_expression(
+                    output_solution_mappings,
+                    &left_context,
+                    &right_contexts,
+                    &context,
+                )?
             }
             Expression::Add(left, right) => {
                 let left_context = context.extension_with(PathEntry::AddLeft);
                 let mut output_solution_mappings =
-                    self.lazy_expression(left, solution_mappings, &left_context)?;
+                    self.lazy_expression(left, solution_mappings, &left_context, parameters)?;
                 let right_context = context.extension_with(PathEntry::AddRight);
-                output_solution_mappings =
-                    self.lazy_expression(right, output_solution_mappings, &right_context)?;
+                output_solution_mappings = self.lazy_expression(
+                    right,
+                    output_solution_mappings,
+                    &right_context,
+                    parameters,
+                )?;
                 binary_expression(
                     output_solution_mappings,
                     Operator::Plus,
@@ -166,10 +210,14 @@ impl Triplestore {
             Expression::Subtract(left, right) => {
                 let left_context = context.extension_with(PathEntry::SubtractLeft);
                 let mut output_solution_mappings =
-                    self.lazy_expression(left, solution_mappings, &left_context)?;
+                    self.lazy_expression(left, solution_mappings, &left_context, parameters)?;
                 let right_context = context.extension_with(PathEntry::SubtractRight);
-                output_solution_mappings =
-                    self.lazy_expression(right, output_solution_mappings, &right_context)?;
+                output_solution_mappings = self.lazy_expression(
+                    right,
+                    output_solution_mappings,
+                    &right_context,
+                    parameters,
+                )?;
                 binary_expression(
                     output_solution_mappings,
                     Operator::Minus,
@@ -181,10 +229,14 @@ impl Triplestore {
             Expression::Multiply(left, right) => {
                 let left_context = context.extension_with(PathEntry::MultiplyLeft);
                 let mut output_solution_mappings =
-                    self.lazy_expression(left, solution_mappings, &left_context)?;
+                    self.lazy_expression(left, solution_mappings, &left_context, parameters)?;
                 let right_context = context.extension_with(PathEntry::MultiplyRight);
-                output_solution_mappings =
-                    self.lazy_expression(right, output_solution_mappings, &right_context)?;
+                output_solution_mappings = self.lazy_expression(
+                    right,
+                    output_solution_mappings,
+                    &right_context,
+                    parameters,
+                )?;
                 binary_expression(
                     output_solution_mappings,
                     Operator::Multiply,
@@ -196,10 +248,14 @@ impl Triplestore {
             Expression::Divide(left, right) => {
                 let left_context = context.extension_with(PathEntry::DivideLeft);
                 let mut output_solution_mappings =
-                    self.lazy_expression(left, solution_mappings, &left_context)?;
+                    self.lazy_expression(left, solution_mappings, &left_context, parameters)?;
                 let right_context = context.extension_with(PathEntry::DivideRight);
-                output_solution_mappings =
-                    self.lazy_expression(right, output_solution_mappings, &right_context)?;
+                output_solution_mappings = self.lazy_expression(
+                    right,
+                    output_solution_mappings,
+                    &right_context,
+                    parameters,
+                )?;
 
                 binary_expression(
                     output_solution_mappings,
@@ -213,19 +269,19 @@ impl Triplestore {
                 let plus_context = context.extension_with(PathEntry::UnaryPlus);
 
                 let output_solution_mappings =
-                    self.lazy_expression(inner, solution_mappings, &plus_context)?;
+                    self.lazy_expression(inner, solution_mappings, &plus_context, parameters)?;
                 unary_plus(output_solution_mappings, &plus_context, context)?
             }
             Expression::UnaryMinus(inner) => {
                 let minus_context = context.extension_with(PathEntry::UnaryMinus);
                 let output_solution_mappings =
-                    self.lazy_expression(inner, solution_mappings, &minus_context)?;
+                    self.lazy_expression(inner, solution_mappings, &minus_context, parameters)?;
                 unary_minus(output_solution_mappings, &minus_context, &context)?
             }
             Expression::Not(inner) => {
                 let not_context = context.extension_with(PathEntry::Not);
                 let output_solution_mappings =
-                    self.lazy_expression(inner, solution_mappings, &not_context)?;
+                    self.lazy_expression(inner, solution_mappings, &not_context, parameters)?;
                 not_expression(output_solution_mappings, &not_context, &context)?
             }
             Expression::Exists(inner) => {
@@ -249,6 +305,7 @@ impl Triplestore {
                     &new_inner,
                     Some(output_solution_mappings.clone()),
                     &exists_context,
+                    parameters,
                 )?;
                 exists(
                     output_solution_mappings,
@@ -257,20 +314,32 @@ impl Triplestore {
                     &context,
                 )?
             }
-            Expression::Bound(v) => {
-                bound(solution_mappings, v, &context)?
-            }
+            Expression::Bound(v) => bound(solution_mappings, v, &context)?,
             Expression::If(left, middle, right) => {
                 let left_context = context.extension_with(PathEntry::IfLeft);
                 let mut output_solution_mappings =
-                    self.lazy_expression(left, solution_mappings, &left_context)?;
+                    self.lazy_expression(left, solution_mappings, &left_context, parameters)?;
                 let middle_context = context.extension_with(PathEntry::IfMiddle);
-                output_solution_mappings =
-                    self.lazy_expression(middle, output_solution_mappings, &middle_context)?;
+                output_solution_mappings = self.lazy_expression(
+                    middle,
+                    output_solution_mappings,
+                    &middle_context,
+                    parameters,
+                )?;
                 let right_context = context.extension_with(PathEntry::IfRight);
-                output_solution_mappings =
-                    self.lazy_expression(right, output_solution_mappings, &right_context)?;
-                if_expression(output_solution_mappings, &left_context, &middle_context, &right_context, &context)?
+                output_solution_mappings = self.lazy_expression(
+                    right,
+                    output_solution_mappings,
+                    &right_context,
+                    parameters,
+                )?;
+                if_expression(
+                    output_solution_mappings,
+                    &left_context,
+                    &middle_context,
+                    &right_context,
+                    &context,
+                )?
             }
             Expression::Coalesce(inner) => {
                 let inner_contexts: Vec<Context> = (0..inner.len())
@@ -283,6 +352,7 @@ impl Triplestore {
                         inner.get(i).unwrap(),
                         output_solution_mappings,
                         inner_context,
+                        parameters,
                     )?;
                 }
 
@@ -297,10 +367,17 @@ impl Triplestore {
                         args.get(i).unwrap(),
                         output_solution_mappings,
                         &arg_context,
+                        parameters,
                     )?;
                     args_contexts.insert(i, arg_context);
                 }
-                func_expression(output_solution_mappings, func, args, args_contexts, &context)?
+                func_expression(
+                    output_solution_mappings,
+                    func,
+                    args,
+                    args_contexts,
+                    &context,
+                )?
             }
         };
         Ok(output_solution_mappings)

@@ -1,5 +1,5 @@
-use query_processing::errors::QueryProcessingError;
 use crate::errors::TriplestoreError;
+use query_processing::errors::QueryProcessingError;
 use representation::RDFNodeType;
 use spargebra::ParseError;
 use thiserror::Error;

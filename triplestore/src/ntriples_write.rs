@@ -20,6 +20,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 use super::Triplestore;
+use crate::constants::OBJECT_COL_NAME;
 use crate::conversion::convert_to_string;
 use crate::errors::TriplestoreError;
 use oxrdf::NamedNode;
@@ -32,7 +33,6 @@ use polars_core::POOL;
 use polars_utils::contention_pool::LowContentionPool;
 use representation::{RDFNodeType, TripleType};
 use std::io::Write;
-use crate::constants::OBJECT_COL_NAME;
 
 /// Utility to write to `&mut Vec<u8>` buffer
 struct StringWrap<'a>(pub &'a mut Vec<u8>);

@@ -3,6 +3,7 @@ use crate::errors::TriplestoreError;
 use crate::TriplesToAdd;
 use oxiri::Iri;
 
+use crate::constants::{OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use oxrdf::vocab::xsd;
 use oxrdf::NamedNode;
 use polars_core::frame::DataFrame;
@@ -15,7 +16,6 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
-use crate::constants::{OBJECT_COL_NAME, SUBJECT_COL_NAME};
 
 impl Triplestore {
     pub fn read_triples(

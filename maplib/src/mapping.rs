@@ -30,9 +30,9 @@ use std::collections::{HashMap, HashSet};
 use std::io::Write;
 use std::path::Path;
 use std::time::Instant;
+use triplestore::constants::{OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME};
 use triplestore::{TriplesToAdd, Triplestore};
 use uuid::Uuid;
-use triplestore::constants::{OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME};
 
 pub struct Mapping {
     pub template_dataset: TemplateDataset,
@@ -185,8 +185,7 @@ impl Mapping {
         let target_template = self.resolve_template(template)?.clone();
         let target_template_name = target_template.signature.template_name.as_str().to_string();
 
-        let columns =
-            self.validate_infer_dataframe_columns(&target_template.signature, &df)?;
+        let columns = self.validate_infer_dataframe_columns(&target_template.signature, &df)?;
         let ExpandOptions {
             unique_subsets: unique_subsets_opt,
         } = options;
@@ -368,14 +367,7 @@ impl Mapping {
             ok_triples.push(t?);
         }
         let mut all_triples_to_add = vec![];
-        for (
-            mut df,
-            subj_rdf_node_type,
-            obj_rdf_node_type,
-            verb,
-            has_unique_subset,
-        ) in ok_triples
-        {
+        for (mut df, subj_rdf_node_type, obj_rdf_node_type, verb, has_unique_subset) in ok_triples {
             let mut coltypes_names = vec![
                 (&subj_rdf_node_type, SUBJECT_COL_NAME),
                 (&obj_rdf_node_type, OBJECT_COL_NAME),
@@ -448,16 +440,7 @@ fn get_term_names<'a>(out_vars: &mut Vec<&'a String>, term: &'a StottrTerm) {
 
 fn create_triples(
     i: OTTRTripleInstance,
-) -> Result<
-    (
-        DataFrame,
-        RDFNodeType,
-        RDFNodeType,
-        Option<NamedNode>,
-        bool,
-    ),
-    MappingError,
-> {
+) -> Result<(DataFrame, RDFNodeType, RDFNodeType, Option<NamedNode>, bool), MappingError> {
     let OTTRTripleInstance {
         mut df,
         mut dynamic_columns,
@@ -524,9 +507,7 @@ fn create_dynamic_expression_from_static(
     ptype: &Option<PType>,
 ) -> Result<(Expr, PrimitiveColumn), MappingError> {
     let (mut expr, _, rdf_node_type) = constant_to_expr(constant_term, ptype)?;
-    let mapped_column = PrimitiveColumn {
-        rdf_node_type,
-    };
+    let mapped_column = PrimitiveColumn { rdf_node_type };
     expr = expr.alias(column_name);
     Ok((expr, mapped_column))
 }
@@ -547,9 +528,7 @@ fn create_series_from_blank_node_constant(
         n_rows,
     )?;
     series.rename(column_name);
-    let mapped_column = PrimitiveColumn {
-        rdf_node_type,
-    };
+    let mapped_column = PrimitiveColumn { rdf_node_type };
     Ok((series, mapped_column))
 }
 

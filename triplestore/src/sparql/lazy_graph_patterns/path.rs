@@ -1,12 +1,6 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
 use crate::sparql::lazy_graph_patterns::load_tt::multiple_tt_to_lf;
-use representation::multitype::{convert_lf_col_to_multitype, multi_col_to_string_col};
-use representation::query_context::{Context, PathEntry};
-use representation::solution_mapping::SolutionMappings;
-use representation::sparql_to_polars::{
-    sparql_literal_to_polars_literal_value, sparql_named_node_to_polars_literal_value,
-};
 use oxrdf::{NamedNode, Variable};
 use polars::prelude::{col, lit, DataFrameJoinOps, Expr, IntoLazy};
 use polars::prelude::{ChunkAgg, JoinArgs, JoinType};
@@ -14,6 +8,12 @@ use polars_core::datatypes::{AnyValue, DataType};
 use polars_core::frame::{DataFrame, UniqueKeepStrategy};
 use polars_core::series::{IntoSeries, Series};
 use polars_core::utils::concat_df;
+use representation::multitype::{convert_lf_col_to_multitype, multi_col_to_string_col};
+use representation::query_context::{Context, PathEntry};
+use representation::solution_mapping::SolutionMappings;
+use representation::sparql_to_polars::{
+    sparql_literal_to_polars_literal_value, sparql_named_node_to_polars_literal_value,
+};
 use representation::RDFNodeType;
 use spargebra::algebra::{GraphPattern, PropertyPathExpression};
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
@@ -68,6 +68,7 @@ impl Triplestore {
                 &gp,
                 solution_mappings,
                 &context.extension_with(PathEntry::PathRewrite),
+                &None,
             )?;
             let select: Vec<_> = var_cols.iter().map(|x| col(x)).collect();
             sms.mappings = sms.mappings.select(select);

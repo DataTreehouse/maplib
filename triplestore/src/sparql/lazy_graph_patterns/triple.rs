@@ -6,10 +6,8 @@ use representation::sparql_to_polars::{
     sparql_literal_to_polars_literal_value, sparql_named_node_to_polars_literal_value,
 };
 
+use crate::constants::{OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use crate::sparql::lazy_graph_patterns::load_tt::multiple_tt_to_lf;
-use representation::multitype::{
-    convert_lf_col_to_multitype, create_join_compatible_solution_mappings, join_workaround,
-};
 use log::debug;
 use oxrdf::vocab::xsd;
 use oxrdf::NamedNode;
@@ -18,10 +16,12 @@ use polars::prelude::{IntoLazy, UnionArgs};
 use polars_core::datatypes::{AnyValue, DataType};
 use polars_core::frame::DataFrame;
 use polars_core::series::Series;
+use representation::multitype::{
+    convert_lf_col_to_multitype, create_join_compatible_solution_mappings, join_workaround,
+};
 use representation::{literal_iri_to_namednode, RDFNodeType};
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 use std::collections::HashMap;
-use crate::constants::{OBJECT_COL_NAME, SUBJECT_COL_NAME};
 
 impl Triplestore {
     pub fn lazy_triple_pattern(
@@ -206,7 +206,7 @@ impl Triplestore {
                 let use_object_col_name = uuid::Uuid::new_v4().to_string();
                 lf = lf.rename(
                     [SUBJECT_COL_NAME, OBJECT_COL_NAME],
-                            [&use_subject_col_name, &use_object_col_name]
+                    [&use_subject_col_name, &use_object_col_name],
                 );
 
                 let mut drop = vec![];

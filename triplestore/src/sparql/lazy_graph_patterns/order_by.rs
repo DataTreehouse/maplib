@@ -1,10 +1,12 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
-use representation::query_context::{Context, PathEntry};
-use representation::solution_mapping::SolutionMappings;
 use log::debug;
+use polars_core::frame::DataFrame;
 use query_processing::graph_patterns::order_by;
+use representation::query_context::{Context, PathEntry};
+use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use spargebra::algebra::{GraphPattern, OrderExpression};
+use std::collections::HashMap;
 
 impl Triplestore {
     pub(crate) fn lazy_order_by(
@@ -13,12 +15,14 @@ impl Triplestore {
         expression: &Vec<OrderExpression>,
         solution_mappings: Option<SolutionMappings>,
         context: &Context,
+        parameters: &Option<HashMap<String, EagerSolutionMappings>>,
     ) -> Result<SolutionMappings, SparqlError> {
         debug!("Processing order by graph pattern");
         let mut output_solution_mappings = self.lazy_graph_pattern(
             inner,
             solution_mappings,
             &context.extension_with(PathEntry::OrderByInner),
+            parameters,
         )?;
 
         let SolutionMappings {
@@ -41,11 +45,16 @@ impl Triplestore {
                 expression.get(i).unwrap(),
                 output_solution_mappings,
                 order_expression_contexts.get(i).unwrap(),
+                parameters,
             )?;
             output_solution_mappings = ordering_solution_mappings;
             inner_contexts.push(inner_context);
             asc_ordering.push(reverse);
         }
-        Ok(order_by(output_solution_mappings, &inner_contexts, asc_ordering)?)
+        Ok(order_by(
+            output_solution_mappings,
+            &inner_contexts,
+            asc_ordering,
+        )?)
     }
 }

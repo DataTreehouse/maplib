@@ -43,10 +43,13 @@ use triplestore::sparql::{QueryResult as SparqlQueryResult, QueryResult};
 // SOFTWARE.
 #[cfg(target_os = "linux")]
 use jemallocator::Jemalloc;
+use oxrdf::vocab::xsd;
 use polars_core::frame::DataFrame;
 use polars_lazy::frame::IntoLazy;
 use pyo3::types::PyList;
 use representation::multitype::multi_col_to_string_col;
+use representation::polars_to_sparql::primitive_polars_type_to_literal_type;
+use representation::solution_mapping::EagerSolutionMappings;
 use representation::RDFNodeType;
 
 #[cfg(not(target_os = "linux"))]
@@ -219,11 +222,17 @@ impl Mapping {
         return Ok(format!("{}", tmpl));
     }
 
-    fn query(&mut self, py: Python<'_>, query: String) -> PyResult<PyObject> {
+    fn query(
+        &mut self,
+        py: Python<'_>,
+        query: String,
+        parameters: Option<HashMap<String, &PyAny>>,
+    ) -> PyResult<PyObject> {
+        let mapped_parameters = map_parameters(parameters)?;
         let res = self
             .inner
             .triplestore
-            .query(&query)
+            .query(&query, &mapped_parameters)
             .map_err(PyMaplibError::from)?;
         query_to_result(res, py)
     }
@@ -241,10 +250,11 @@ impl Mapping {
         Ok(ValidationReport { conforms, report })
     }
 
-    fn insert(&mut self, query: String, transient: Option<bool>) -> PyResult<()> {
+    fn insert(&mut self, query: String, parameters: Option<HashMap<String, &PyAny>>, transient: Option<bool>) -> PyResult<()> {
+        let mapped_parameters = map_parameters(parameters)?;
         self.inner
             .triplestore
-            .insert(&query, transient.unwrap_or(false))
+            .insert(&query, &mapped_parameters, transient.unwrap_or(false))
             .map_err(PyMaplibError::from)?;
         if self.sprout.is_some() {
             self.sprout.as_mut().unwrap().blank_node_counter = self.inner.blank_node_counter;
@@ -252,14 +262,15 @@ impl Mapping {
         Ok(())
     }
 
-    fn insert_sprout(&mut self, query: String, transient: Option<bool>) -> PyResult<()> {
+    fn insert_sprout(&mut self, query: String, parameters: Option<HashMap<String, &PyAny>>, transient: Option<bool>) -> PyResult<()> {
+        let mapped_parameters = map_parameters(parameters)?;
         if self.sprout.is_none() {
             self.create_sprout()?;
         }
         let res = self
             .inner
             .triplestore
-            .query(&query)
+            .query(&query, &mapped_parameters)
             .map_err(PyMaplibError::from)?;
         if let QueryResult::Construct(dfs_and_dts) = res {
             self.sprout
@@ -351,4 +362,46 @@ fn query_to_result(res: SparqlQueryResult, py: Python<'_>) -> PyResult<PyObject>
 
 fn dtypes_map(map: HashMap<String, RDFNodeType>) -> HashMap<String, String> {
     map.into_iter().map(|(x, y)| (x, y.to_string())).collect()
+}
+
+fn map_parameters(
+    parameters: Option<HashMap<String, &PyAny>>,
+) -> PyResult<Option<HashMap<String, EagerSolutionMappings>>> {
+    if let Some(parameters) = parameters {
+        let mut mapped_parameters = HashMap::new();
+        for (k, pydf) in parameters {
+            let mut rdf_node_types = HashMap::new();
+            let df = polars_df_to_rust_df(pydf)?;
+            let names = df.get_column_names();
+            for c in df.columns(names).unwrap() {
+                let dt = primitive_polars_type_to_literal_type(c.dtype()).unwrap();
+
+                let mut rdf_node_type = None;
+
+                if dt == xsd::STRING {
+                    let ch = c.utf8().unwrap();
+                    if let Some(s) = ch.first_non_null() {
+                        let f = ch.get(s).unwrap();
+                        if f.starts_with("<") {
+                            rdf_node_type = Some(RDFNodeType::IRI);
+                        }
+                    }
+                }
+
+                if rdf_node_type.is_none() {
+                    rdf_node_type = Some(RDFNodeType::Literal(dt.into_owned()))
+                }
+                rdf_node_types.insert(c.name().to_string(), rdf_node_type.unwrap());
+            }
+            let m = EagerSolutionMappings {
+                mappings: df,
+                rdf_node_types,
+            };
+            mapped_parameters.insert(k, m);
+        }
+
+        Ok(Some(mapped_parameters))
+    } else {
+        Ok(None)
+    }
 }

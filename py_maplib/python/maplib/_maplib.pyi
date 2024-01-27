@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Union, List
+from typing import Union, List, Dict
 
 from polars import DataFrame
 from .semantic_dataframe import SemanticDataFrame
@@ -82,7 +82,8 @@ class Mapping:
         :return: The generated template
         """
 
-    def query(self, query: str) -> Union[SemanticDataFrame, List[SemanticDataFrame], None]:
+    def query(self, query: str, parameters: Dict[str, DataFrame] = None) -> Union[
+        SemanticDataFrame, List[SemanticDataFrame], None]:
         """
         Query the contained knowledge graph using SPARQL
         Currently, SELECT, CONSTRUCT and INSERT are supported.
@@ -97,10 +98,11 @@ class Mapping:
         ... print(res.types)
 
         :param query: The SPARQL query string
+        :param parameters: PVALUES Parameters, a DataFrame containing the value bindings in the custom PVALUES construction.
         :return: DataFrame (Select), list of DataFrames (Construct) containing results, or None for Insert-queries
         """
 
-    def insert(self, query: str):
+    def insert(self, query: str, parameters: Dict[str, DataFrame] = None, transient: bool = False):
         """
         Insert the results of a Construct query in the graph.
         Useful for being able to use the same query for inspecting what will be inserted and actually inserting.
@@ -119,10 +121,12 @@ class Mapping:
         ... m.insert(hpizzas)
 
         :param query: The SPARQL Insert query string
+        :param parameters: PVALUES Parameters, a DataFrame containing the value bindings in the custom PVALUES construction.
+        :param transient: Should the inserted triples be included in exports?
         :return: None
         """
 
-    def insert_sprout(self, query: str):
+    def insert_sprout(self, query: str, parameters: Dict[str, DataFrame] = None, transient: bool = False):
         """
         Insert the results of a Construct query in the sprouted graph.
         Useful for being able to use the same query for inspecting what will be inserted and actually inserting.
@@ -142,6 +146,8 @@ class Mapping:
         ... m.insert_sprout(hpizzas)
 
         :param query: The SPARQL Insert query string
+        :param parameters: PVALUES Parameters, a DataFrame containing the value bindings in the custom PVALUES construction.
+        :param transient: Should the inserted triples be included in exports?
         :return: None
         """
 

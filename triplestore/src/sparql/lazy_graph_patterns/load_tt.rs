@@ -1,10 +1,10 @@
+use crate::constants::{OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use crate::sparql::errors::SparqlError;
-use representation::multitype::convert_lf_col_to_multitype;
 use crate::TripleTable;
 use polars::prelude::{col, concat, Expr, IntoLazy, LazyFrame, UnionArgs};
+use representation::multitype::convert_lf_col_to_multitype;
 use representation::RDFNodeType;
 use std::collections::{HashMap, HashSet};
-use crate::constants::{OBJECT_COL_NAME, SUBJECT_COL_NAME};
 
 fn single_tt_to_lf(tt: &TripleTable) -> Result<LazyFrame, SparqlError> {
     assert!(tt.unique, "Should be deduplicated");

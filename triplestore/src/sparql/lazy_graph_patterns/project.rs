@@ -1,11 +1,13 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
-use representation::query_context::{Context, PathEntry};
-use representation::solution_mapping::SolutionMappings;
-use log::{debug};
+use log::debug;
 use oxrdf::Variable;
-use spargebra::algebra::GraphPattern;
+use polars_core::frame::DataFrame;
 use query_processing::graph_patterns::project;
+use representation::query_context::{Context, PathEntry};
+use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
+use spargebra::algebra::GraphPattern;
+use std::collections::HashMap;
 
 impl Triplestore {
     pub(crate) fn lazy_project(
@@ -14,12 +16,14 @@ impl Triplestore {
         variables: &Vec<Variable>,
         solution_mappings: Option<SolutionMappings>,
         context: &Context,
+        parameters: &Option<HashMap<String, EagerSolutionMappings>>,
     ) -> Result<SolutionMappings, SparqlError> {
         debug!("Processing project graph pattern");
         let solution_mappings = self.lazy_graph_pattern(
             inner,
             solution_mappings,
             &context.extension_with(PathEntry::ProjectInner),
+            parameters,
         )?;
         Ok(project(solution_mappings, variables)?)
     }

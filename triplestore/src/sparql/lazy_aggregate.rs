@@ -1,10 +1,15 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
-use representation::query_context::{Context, PathEntry};
-use representation::solution_mapping::SolutionMappings;
 use oxrdf::Variable;
-use query_processing::aggregates::{AggregateReturn, avg, count_with_expression, count_without_expression, group_concat, max, min, sample, sum};
+use polars_core::frame::DataFrame;
+use query_processing::aggregates::{
+    avg, count_with_expression, count_without_expression, group_concat, max, min, sample, sum,
+    AggregateReturn,
+};
+use representation::query_context::{Context, PathEntry};
+use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use spargebra::algebra::AggregateExpression;
+use std::collections::HashMap;
 
 impl Triplestore {
     pub fn sparql_aggregate_expression_as_lazy_column_and_expression(
@@ -13,6 +18,7 @@ impl Triplestore {
         aggregate_expression: &AggregateExpression,
         solution_mappings: SolutionMappings,
         context: &Context,
+        parameters: &Option<HashMap<String, EagerSolutionMappings>>,
     ) -> Result<AggregateReturn, SparqlError> {
         let output_solution_mappings;
         let mut out_expr;
@@ -26,12 +32,15 @@ impl Triplestore {
                         some_expr,
                         solution_mappings,
                         column_context.as_ref().unwrap(),
+                        parameters,
                     )?;
-                    (out_expr, out_rdf_node_type) = count_with_expression(column_context.as_ref().unwrap(), *distinct);
+                    (out_expr, out_rdf_node_type) =
+                        count_with_expression(column_context.as_ref().unwrap(), *distinct);
                 } else {
                     output_solution_mappings = solution_mappings;
                     column_context = None;
-                    (out_expr, out_rdf_node_type) = count_without_expression(&output_solution_mappings, *distinct);
+                    (out_expr, out_rdf_node_type) =
+                        count_without_expression(&output_solution_mappings, *distinct);
                 }
             }
             AggregateExpression::Sum { expr, distinct } => {
@@ -41,8 +50,13 @@ impl Triplestore {
                     expr,
                     solution_mappings,
                     column_context.as_ref().unwrap(),
+                    parameters,
                 )?;
-                (out_expr, out_rdf_node_type) = sum(&output_solution_mappings, column_context.as_ref().unwrap(), *distinct);
+                (out_expr, out_rdf_node_type) = sum(
+                    &output_solution_mappings,
+                    column_context.as_ref().unwrap(),
+                    *distinct,
+                );
             }
             AggregateExpression::Avg { expr, distinct } => {
                 column_context = Some(context.extension_with(PathEntry::AggregationOperation));
@@ -50,8 +64,13 @@ impl Triplestore {
                     expr,
                     solution_mappings,
                     column_context.as_ref().unwrap(),
+                    parameters,
                 )?;
-                (out_expr, out_rdf_node_type) = avg(&output_solution_mappings, column_context.as_ref().unwrap(), *distinct);
+                (out_expr, out_rdf_node_type) = avg(
+                    &output_solution_mappings,
+                    column_context.as_ref().unwrap(),
+                    *distinct,
+                );
             }
             AggregateExpression::Min { expr, distinct: _ } => {
                 column_context = Some(context.extension_with(PathEntry::AggregationOperation));
@@ -59,8 +78,10 @@ impl Triplestore {
                     expr,
                     solution_mappings,
                     column_context.as_ref().unwrap(),
+                    parameters,
                 )?;
-                (out_expr, out_rdf_node_type) = min(&output_solution_mappings, column_context.as_ref().unwrap());
+                (out_expr, out_rdf_node_type) =
+                    min(&output_solution_mappings, column_context.as_ref().unwrap());
             }
             AggregateExpression::Max { expr, distinct: _ } => {
                 column_context = Some(context.extension_with(PathEntry::AggregationOperation));
@@ -69,8 +90,10 @@ impl Triplestore {
                     expr,
                     solution_mappings,
                     column_context.as_ref().unwrap(),
+                    parameters,
                 )?;
-                (out_expr, out_rdf_node_type) = max(&output_solution_mappings, column_context.as_ref().unwrap());
+                (out_expr, out_rdf_node_type) =
+                    max(&output_solution_mappings, column_context.as_ref().unwrap());
             }
             AggregateExpression::GroupConcat {
                 expr,
@@ -83,17 +106,21 @@ impl Triplestore {
                     expr,
                     solution_mappings,
                     column_context.as_ref().unwrap(),
+                    parameters,
                 )?;
-                (out_expr, out_rdf_node_type) = group_concat(column_context.as_ref().unwrap(), separator, *distinct);
+                (out_expr, out_rdf_node_type) =
+                    group_concat(column_context.as_ref().unwrap(), separator, *distinct);
             }
-            AggregateExpression::Sample { expr, distinct:_ } => {
+            AggregateExpression::Sample { expr, distinct: _ } => {
                 column_context = Some(context.extension_with(PathEntry::AggregationOperation));
                 output_solution_mappings = self.lazy_expression(
                     expr,
                     solution_mappings,
                     column_context.as_ref().unwrap(),
+                    parameters,
                 )?;
-                (out_expr, out_rdf_node_type) = sample(&output_solution_mappings, column_context.as_ref().unwrap());
+                (out_expr, out_rdf_node_type) =
+                    sample(&output_solution_mappings, column_context.as_ref().unwrap());
             }
             AggregateExpression::Custom {
                 name,
@@ -112,4 +139,3 @@ impl Triplestore {
         })
     }
 }
-

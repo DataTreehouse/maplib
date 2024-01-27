@@ -12,7 +12,7 @@ use polars::series::Series;
 use polars_core::prelude::{AnyValue, TimeUnit};
 use rstest::*;
 use serial_test::serial;
-use std::collections::{HashSet};
+use std::collections::HashSet;
 use std::fs::File;
 use std::path::PathBuf;
 
@@ -151,16 +151,12 @@ fn test_string_language_tag_cases() {
         Triple {
             subject: Subject::NamedNode(NamedNode::new_unchecked("http://example.net/ns#anObject")),
             predicate: NamedNode::new_unchecked("http://example.net/ns#hasString"),
-            object: Term::Literal(Literal::new_simple_literal(
-                "one",
-            )),
+            object: Term::Literal(Literal::new_simple_literal("one")),
         },
         Triple {
             subject: Subject::NamedNode(NamedNode::new_unchecked("http://example.net/ns#anObject")),
             predicate: NamedNode::new_unchecked("http://example.net/ns#hasString"),
-            object: Term::Literal(Literal::new_simple_literal(
-                "two"
-            )),
+            object: Term::Literal(Literal::new_simple_literal("two")),
         },
         Triple {
             subject: Subject::NamedNode(NamedNode::new_unchecked(

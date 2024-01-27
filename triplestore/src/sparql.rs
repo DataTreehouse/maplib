@@ -19,7 +19,7 @@ use polars_core::enable_string_cache;
 use polars_core::prelude::{DataType, Series, UniqueKeepStrategy};
 use representation::literals::sparql_literal_to_any_value;
 use representation::multitype::split_df_multicols;
-use representation::solution_mapping::SolutionMappings;
+use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use representation::RDFNodeType;
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 use spargebra::Query;
@@ -31,25 +31,41 @@ pub enum QueryResult {
 }
 
 impl Triplestore {
-    pub fn query_deduplicated(&self, query: &str) -> Result<QueryResult, SparqlError> {
+    pub fn query_deduplicated(
+        &self,
+        query: &str,
+        parameters: &Option<HashMap<String, EagerSolutionMappings>>,
+    ) -> Result<QueryResult, SparqlError> {
         let query = Query::parse(query, None).map_err(SparqlError::ParseError)?;
-        self.query_deduplicated_impl(&query)
+        self.query_deduplicated_impl(&query, parameters)
     }
 
-    pub fn query(&mut self, query: &str) -> Result<QueryResult, SparqlError> {
+    pub fn query(
+        &mut self,
+        query: &str,
+        parameters: &Option<HashMap<String, EagerSolutionMappings>>,
+    ) -> Result<QueryResult, SparqlError> {
         let query = Query::parse(query, None).map_err(SparqlError::ParseError)?;
-        self.query_impl(&query)
+        self.query_impl(&query, parameters)
     }
 
-    fn query_impl(&mut self, query: &Query) -> Result<QueryResult, SparqlError> {
+    fn query_impl(
+        &mut self,
+        query: &Query,
+        parameters: &Option<HashMap<String, EagerSolutionMappings>>,
+    ) -> Result<QueryResult, SparqlError> {
         if !self.deduplicated {
             self.deduplicate()
                 .map_err(SparqlError::DeduplicationError)?;
         }
-        self.query_deduplicated_impl(query)
+        self.query_deduplicated_impl(query, parameters)
     }
 
-    fn query_deduplicated_impl(&self, query: &Query) -> Result<QueryResult, SparqlError> {
+    fn query_deduplicated_impl(
+        &self,
+        query: &Query,
+        parameters: &Option<HashMap<String, EagerSolutionMappings>>,
+    ) -> Result<QueryResult, SparqlError> {
         enable_string_cache();
         let context = Context::new();
         match query {
@@ -61,7 +77,7 @@ impl Triplestore {
                 let SolutionMappings {
                     mappings,
                     rdf_node_types: types,
-                } = self.lazy_graph_pattern(pattern, None, &context)?;
+                } = self.lazy_graph_pattern(pattern, None, &context, parameters)?;
                 let mut df = mappings.collect().unwrap();
                 df = cats_to_strings(df);
 
@@ -76,7 +92,7 @@ impl Triplestore {
                 let SolutionMappings {
                     mappings,
                     rdf_node_types,
-                } = self.lazy_graph_pattern(pattern, None, &context)?;
+                } = self.lazy_graph_pattern(pattern, None, &context, parameters)?;
                 let mut df = mappings.collect().unwrap();
                 df = cats_to_strings(df);
                 let mut dfs = vec![];
@@ -91,10 +107,15 @@ impl Triplestore {
         }
     }
 
-    pub fn insert(&mut self, query: &str, transient: bool) -> Result<(), SparqlError> {
+    pub fn insert(
+        &mut self,
+        query: &str,
+        parameters: &Option<HashMap<String, EagerSolutionMappings>>,
+        transient: bool,
+    ) -> Result<(), SparqlError> {
         let query = Query::parse(query, None).map_err(SparqlError::ParseError)?;
         if let Query::Construct { .. } = &query {
-            let res = self.query_impl(&query)?;
+            let res = self.query_impl(&query, parameters)?;
             match res {
                 QueryResult::Select(_, _) => {
                     panic!("Should never happen")

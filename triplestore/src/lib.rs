@@ -11,6 +11,7 @@ pub mod rdfs_inferencing;
 pub mod sparql;
 pub mod triples_read;
 
+use crate::constants::{OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME};
 use crate::errors::TriplestoreError;
 use crate::io_funcs::{create_folder_if_not_exists, delete_tmp_parquets_in_caching_folder};
 use crate::sparql::lazy_graph_patterns::load_tt::multiple_tt_to_lf;
@@ -26,16 +27,13 @@ use polars_core::frame::{DataFrame, UniqueKeepStrategy};
 use polars_core::utils::concat_df;
 use rayon::iter::ParallelIterator;
 use rayon::iter::{IntoParallelRefIterator, ParallelDrainRange};
-use representation::{
-    literal_iri_to_namednode, RDFNodeType,
-};
+use representation::{literal_iri_to_namednode, RDFNodeType};
 use std::collections::HashMap;
 use std::fs::remove_file;
 use std::io;
 use std::path::Path;
 use std::time::Instant;
 use uuid::Uuid;
-use crate::constants::{OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME};
 
 pub struct Triplestore {
     deduplicated: bool,

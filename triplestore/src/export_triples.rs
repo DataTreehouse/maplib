@@ -1,5 +1,6 @@
 use super::Triplestore;
 
+use crate::constants::{OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use crate::conversion::convert_to_string;
 use crate::errors::TriplestoreError;
 use oxrdf::{Literal, NamedNode, Subject, Term, Triple};
@@ -9,7 +10,6 @@ use representation::{
     literal_iri_to_namednode, RDFNodeType, TripleType, LANG_STRING_LANG_FIELD,
     LANG_STRING_VALUE_FIELD,
 };
-use crate::constants::{OBJECT_COL_NAME, SUBJECT_COL_NAME};
 
 impl Triplestore {
     pub fn object_property_triples<F, T>(
@@ -135,7 +135,8 @@ impl Triplestore {
                             return Ok(());
                         }
                         let mut subject_iterator = df.column(SUBJECT_COL_NAME).unwrap().iter();
-                        let data_as_strings = convert_to_string(df.column(OBJECT_COL_NAME).unwrap());
+                        let data_as_strings =
+                            convert_to_string(df.column(OBJECT_COL_NAME).unwrap());
                         if let Some(s) = data_as_strings {
                             let mut data_iterator = s.iter();
                             for _ in 0..df.height() {
