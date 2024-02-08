@@ -159,7 +159,7 @@ class Mapping:
         :return: Validation report containing a report (report.df) and whether the graph conforms (report.conforms)
         """
 
-    def read_triples(self, file_path: Union[str, Path], transient: bool = False) -> None:
+    def read_triples(self, file_path: Union[str, Path], base_iri: str=None, transient: bool = False) -> None:
         """
         Reads triples from a file path.
         File format is derived using file extension, e.g. filename.ttl or filename.nt.
@@ -171,6 +171,7 @@ class Mapping:
         >>> m.read_triples("my_triples.ttl", transient=True)
 
         :param file_path: The path of the file containing triples
+        :param base_iri: Base iri
         :param transient: Should these triples be included when writing the graph to the file system?
         """
 

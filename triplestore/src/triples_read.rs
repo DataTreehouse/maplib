@@ -11,7 +11,8 @@ use polars_core::prelude::{AnyValue, Series};
 use representation::literals::sparql_literal_to_any_value;
 use representation::RDFNodeType;
 use rio_api::parser::TriplesParser;
-use rio_turtle::{NTriplesParser, TurtleParser};
+use rio_turtle::{NTriplesParser, TurtleError, TurtleParser};
+use rio_xml::{RdfXmlError, RdfXmlParser};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufReader;
@@ -43,7 +44,6 @@ impl Triplestore {
             let (subjects, objects) = type_map.get_mut(&(types_tuple)).unwrap();
             subjects.push(rio_subject_to_oxrdf_subject(&t.subject, &parser_call));
             objects.push(rio_term_to_oxrdf_term(&t.object, &parser_call));
-            Ok(())
         };
 
         let base_iri = if let Some(base_iri) = base_iri {
@@ -61,17 +61,34 @@ impl Triplestore {
                 base_iri,
             );
             tparser
-                .parse_all(parse_func)
+                .parse_all(&mut |x| {
+                    parse_func(x);
+                    Ok(())
+                })
                 .map_err(|x: rio_turtle::TurtleError| {
-                    TriplestoreError::TurtleParsingError(x.to_string())
+                    TriplestoreError::NTriplesParsingError(x.to_string())
                 })?;
         } else if path.extension() == Some("nt".as_ref()) {
             let mut ntparser = NTriplesParser::new(BufReader::new(
                 File::open(path).map_err(TriplestoreError::ReadTriplesFileError)?,
             ));
             ntparser
-                .parse_all(parse_func)
+                .parse_all(&mut |x| -> Result<(),TurtleError>{
+                    parse_func(x);
+                    Ok(())
+                })
                 .map_err(|x| TriplestoreError::TurtleParsingError(x.to_string()))?;
+        } else if path.extension() == Some("xml".as_ref()) {
+            let mut xmlparser = RdfXmlParser::new(
+                BufReader::new(File::open(path).map_err(TriplestoreError::ReadTriplesFileError)?),
+                base_iri,
+            );
+            xmlparser
+                .parse_all(&mut |x| -> Result<(), RdfXmlError> {
+                    parse_func(x);
+                    Ok(())
+                })
+                .map_err(|x| TriplestoreError::XMLParsingError(x.to_string()))?;
         } else {
             todo!("Have not implemented file format {:?}", path);
         }
