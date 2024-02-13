@@ -25,6 +25,7 @@ use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 use spargebra::Query;
 use uuid::Uuid;
 
+#[derive(Debug)]
 pub enum QueryResult {
     Select(DataFrame, HashMap<String, RDFNodeType>),
     Construct(Vec<(DataFrame, RDFNodeType, RDFNodeType)>),
@@ -203,10 +204,11 @@ fn triple_to_df(
     if obj_ser.dtype() != &DataType::Null {
         unique_subset.push(OBJECT_COL_NAME.to_string());
     }
+    //Not using drop_null since behaviour is bad for structs where one field is null
     let df = DataFrame::new(vec![subj_ser, verb_ser, obj_ser])
         .unwrap()
         .lazy()
-        .drop_nulls(None)
+        .filter(col(SUBJECT_COL_NAME).is_null().or(col(OBJECT_COL_NAME).is_null()).or(col(VERB_COL_NAME).is_null()).not())
         .unique(Some(unique_subset), UniqueKeepStrategy::First)
         .collect()
         .unwrap();

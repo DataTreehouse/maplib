@@ -15,6 +15,7 @@ fn single_tt_to_lf(tt: &TripleTable) -> Result<LazyFrame, SparqlError> {
     )
     .unwrap()
     .select(vec![col(SUBJECT_COL_NAME), col(OBJECT_COL_NAME)]);
+
     Ok(lf)
 }
 

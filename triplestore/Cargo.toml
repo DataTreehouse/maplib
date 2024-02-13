@@ -9,7 +9,7 @@ representation = { git = "https://github.com/DataTreehouse/representation"}
 parquet_io = {path="../parquet_io"}
 
 rayon = "1.6.0"
-sprs = {version="0.11.0", features=["rayon"]}
+sprs = {version="0.11.1", features=["multi_thread"]}
 spargebra = { git = "https://github.com/DataTreehouse/spargebra"}
 oxrdf = {version="0.1.7"}
 polars = {version="0.35.4", features=["zip_with","performant", "cse", "semi_anti_join","abs", "round_series", "lazy", "concat_str", "is_in", "dtype-full", "strings", "horizontal_concat", "rows", "timezones", "polars-time", "temporal", "list_eval", "partition_by", "parquet", "diagonal_concat", "cross_join", "cum_agg"] }

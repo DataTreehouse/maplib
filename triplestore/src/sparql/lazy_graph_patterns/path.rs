@@ -8,6 +8,7 @@ use polars_core::datatypes::{AnyValue, DataType};
 use polars_core::frame::{DataFrame, UniqueKeepStrategy};
 use polars_core::series::{IntoSeries, Series};
 use polars_core::utils::concat_df;
+use query_processing::graph_patterns::join;
 use representation::multitype::{convert_lf_col_to_multitype, multi_col_to_string_col};
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::SolutionMappings;
@@ -117,7 +118,7 @@ impl Triplestore {
                 .unwrap();
             subject_lookup_df.rename("subject", "value").unwrap();
 
-            let object_lookup_df = lookup_df_map.get_mut(&dt_subj).unwrap();
+            let object_lookup_df = lookup_df_map.get_mut(&dt_obj).unwrap();
             object_lookup_df.rename("value", "object").unwrap();
             out_df = out_df
                 .join(
@@ -197,101 +198,22 @@ impl Triplestore {
                 out_df.rename("object", v.as_str()).unwrap();
             }
         }
-
-        if let Some(mut mappings) = solution_mappings {
-            let join_cols: Vec<String> = var_cols
-                .clone()
-                .into_iter()
-                .filter(|x| mappings.rdf_node_types.contains_key(x))
-                .collect();
-
-            for j in &join_cols {
-                mappings.mappings = mappings
-                    .mappings
-                    .with_column(col(j).cast(DataType::Categorical(None)));
-            }
-
-            let join_on: Vec<Expr> = join_cols.iter().map(|x| col(x)).collect();
-
-            //workaround for object registry bug
-            let mut multicols = vec![];
-            for (k, v) in &mappings.rdf_node_types {
-                if v == &RDFNodeType::MultiType {
-                    multicols.push(k.clone())
-                }
-            }
-
-            if out_df.height() == 0 {
-                out_df = out_df
-                    .lazy()
-                    .drop_columns(join_cols.as_slice())
-                    .collect()
-                    .unwrap();
-
-                for c in &multicols {
-                    mappings.mappings = mappings.mappings.with_column(lit("").alias(c));
-                }
-            }
-
-            if out_df.height() == 0 || join_on.is_empty() {
-                mappings.mappings = mappings.mappings.join(
-                    out_df.lazy(),
-                    vec![],
-                    vec![],
-                    JoinArgs::new(JoinType::Cross),
-                );
-                for m in &multicols {
-                    mappings.mappings =
-                        convert_lf_col_to_multitype(mappings.mappings, m, &RDFNodeType::IRI);
-                }
-            } else {
-                let join_col_exprs: Vec<Expr> = join_cols.iter().map(|x| col(x)).collect();
-                let all_false = [false].repeat(join_cols.len());
-                let lf = out_df.lazy().sort_by_exprs(
-                    join_col_exprs.as_slice(),
-                    all_false.as_slice(),
-                    false,
-                    false,
-                );
-                mappings.mappings = mappings.mappings.sort_by_exprs(
-                    join_col_exprs.as_slice(),
-                    all_false.as_slice(),
-                    false,
-                    false,
-                );
-                mappings.mappings = mappings.mappings.join(
-                    lf,
-                    join_on.as_slice(),
-                    join_on.as_slice(),
-                    JoinArgs::new(JoinType::Inner),
-                );
-            }
-            //TODO: THIS IS WRONG
-            if let TermPattern::Variable(v) = subject {
-                mappings
-                    .rdf_node_types
-                    .insert(v.as_str().to_string(), out_dt_subj);
-            }
-            if let TermPattern::Variable(v) = object {
-                mappings
-                    .rdf_node_types
-                    .insert(v.as_str().to_string(), out_dt_obj);
-            }
-
-            Ok(mappings)
-        } else {
-            let mut datatypes = HashMap::new();
-            if let TermPattern::Variable(v) = subject {
-                datatypes.insert(v.as_str().to_string(), out_dt_subj);
-            }
-            if let TermPattern::Variable(v) = object {
-                datatypes.insert(v.as_str().to_string(), out_dt_obj);
-            }
-            Ok(SolutionMappings {
-                mappings: out_df.lazy(),
-                rdf_node_types: datatypes,
-            })
+        let mut datatypes = HashMap::new();
+        if let TermPattern::Variable(v) = subject {
+            datatypes.insert(v.as_str().to_string(), out_dt_subj);
         }
+        if let TermPattern::Variable(v) = object {
+            datatypes.insert(v.as_str().to_string(), out_dt_obj);
+        }
+        let mut path_solution_mappings = SolutionMappings {
+            mappings: out_df.lazy(),
+            rdf_node_types: datatypes,
+        };
+
+        if let Some(mappings) = solution_mappings {
+            path_solution_mappings = join(path_solution_mappings, mappings)?;
+        }
+        Ok(path_solution_mappings)
     }
 
     fn create_unique_cat_dfs(

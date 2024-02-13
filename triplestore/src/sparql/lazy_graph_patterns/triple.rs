@@ -22,6 +22,7 @@ use representation::multitype::{
 use representation::{literal_iri_to_namednode, RDFNodeType};
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 use std::collections::HashMap;
+use query_processing::graph_patterns::join;
 
 impl Triplestore {
     pub fn lazy_triple_pattern(
@@ -111,7 +112,6 @@ impl Triplestore {
                 )?
             }
         };
-
         let colnames: Vec<_> = dts.keys().cloned().collect();
         if let Some(SolutionMappings {
             mut mappings,
@@ -132,43 +132,22 @@ impl Triplestore {
                 } else {
                     mappings = mappings.join(lf, [], [], JoinType::Cross.into());
                 }
-            } else if !overlap.is_empty() {
-                let (new_mappings, new_rdf_node_types, mut lf, new_dts) =
-                    create_join_compatible_solution_mappings(
-                        mappings,
-                        rdf_node_types,
-                        lf,
-                        dts,
-                        true,
-                    );
-
-                dts = new_dts;
-                rdf_node_types = new_rdf_node_types;
-                mappings = new_mappings;
-
-                let _join_on: Vec<Expr> = overlap.iter().map(|x| col(x)).collect();
-                let mut strcol = vec![];
-                for c in &overlap {
-                    let dt = rdf_node_types.get(c).unwrap();
-                    if is_string_col(dt) {
-                        strcol.push(c);
-                    }
-                }
-                for c in strcol {
-                    lf = lf.with_column(col(c).cast(DataType::Categorical(None)));
-                    mappings = mappings.with_column(col(c).cast(DataType::Categorical(None)));
-                }
-
-                mappings =
-                    join_workaround(mappings, &rdf_node_types, lf, &dts, JoinType::Inner.into());
+                rdf_node_types.extend(dts);
+                solution_mappings = Some(SolutionMappings {
+                    mappings,
+                    rdf_node_types,
+                });
             } else {
-                mappings = mappings.join(lf, [], [], JoinType::Cross.into());
+                solution_mappings = Some(SolutionMappings {
+                    mappings,
+                    rdf_node_types,
+                });
+                let new_solution_mappings = SolutionMappings {
+                    mappings:lf,
+                    rdf_node_types: dts
+                };
+                solution_mappings = Some(join(solution_mappings.unwrap(), new_solution_mappings)?);
             }
-            rdf_node_types.extend(dts);
-            solution_mappings = Some(SolutionMappings {
-                mappings,
-                rdf_node_types,
-            });
         } else {
             solution_mappings = Some(SolutionMappings {
                 mappings: lf,
