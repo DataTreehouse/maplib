@@ -1,4 +1,4 @@
-use super::Triplestore;
+use super::{TripleFormat, Triplestore};
 use crate::errors::TriplestoreError;
 use crate::TriplesToAdd;
 use oxiri::Iri;
@@ -15,13 +15,52 @@ use rio_turtle::{NTriplesParser, TurtleError, TurtleParser};
 use rio_xml::{RdfXmlError, RdfXmlParser};
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::BufReader;
+use std::io::{BufReader};
 use std::path::Path;
 
 impl Triplestore {
-    pub fn read_triples(
+    pub fn read_triples_from_path(
         &mut self,
         path: &Path,
+        triple_format: Option<TripleFormat>,
+        base_iri: Option<String>,
+        transient: bool,
+    ) -> Result<(), TriplestoreError> {
+        let triple_format = if let Some(triple_format) = triple_format {
+            triple_format
+        } else {
+            if path.extension() == Some("ttl".as_ref()) {
+                TripleFormat::Turtle
+            } else if path.extension() == Some("nt".as_ref()) {
+                TripleFormat::NTriples
+            } else if path.extension() == Some("xml".as_ref()) {
+                TripleFormat::RDFXML
+            } else {
+                todo!("Have not implemented file format {:?}", path);
+            }
+        };
+
+        let reader =
+            BufReader::new(File::open(path).map_err(TriplestoreError::ReadTriplesFileError)?);
+
+        self.read_triples(reader, triple_format, base_iri, transient)
+    }
+
+    pub fn read_triples_from_string(
+        &mut self,
+        s: &str,
+        triple_format: TripleFormat,
+        base_iri: Option<String>,
+        transient: bool,
+    ) -> Result<(), TriplestoreError> {
+        let reader = BufReader::new(s.as_bytes());
+        self.read_triples(reader, triple_format, base_iri, transient)
+    }
+
+    pub fn read_triples<R: std::io::Read>(
+        &mut self,
+        reader: BufReader<R>,
+        triple_format: TripleFormat,
         base_iri: Option<String>,
         transient: bool,
     ) -> Result<(), TriplestoreError> {
@@ -55,42 +94,36 @@ impl Triplestore {
             None
         };
 
-        if path.extension() == Some("ttl".as_ref()) {
-            let mut tparser = TurtleParser::new(
-                BufReader::new(File::open(path).map_err(TriplestoreError::ReadTriplesFileError)?),
-                base_iri,
-            );
-            tparser
-                .parse_all(&mut |x| {
-                    parse_func(x);
-                    Ok(())
-                })
-                .map_err(|x: rio_turtle::TurtleError| {
-                    TriplestoreError::NTriplesParsingError(x.to_string())
-                })?;
-        } else if path.extension() == Some("nt".as_ref()) {
-            let mut ntparser = NTriplesParser::new(BufReader::new(
-                File::open(path).map_err(TriplestoreError::ReadTriplesFileError)?,
-            ));
-            ntparser
-                .parse_all(&mut |x| -> Result<(),TurtleError>{
-                    parse_func(x);
-                    Ok(())
-                })
-                .map_err(|x| TriplestoreError::TurtleParsingError(x.to_string()))?;
-        } else if path.extension() == Some("xml".as_ref()) {
-            let mut xmlparser = RdfXmlParser::new(
-                BufReader::new(File::open(path).map_err(TriplestoreError::ReadTriplesFileError)?),
-                base_iri,
-            );
-            xmlparser
-                .parse_all(&mut |x| -> Result<(), RdfXmlError> {
-                    parse_func(x);
-                    Ok(())
-                })
-                .map_err(|x| TriplestoreError::XMLParsingError(x.to_string()))?;
-        } else {
-            todo!("Have not implemented file format {:?}", path);
+        match triple_format {
+            TripleFormat::NTriples => {
+                let mut ntparser = NTriplesParser::new(reader);
+                ntparser
+                    .parse_all(&mut |x| -> Result<(), TurtleError> {
+                        parse_func(x);
+                        Ok(())
+                    })
+                    .map_err(|x| TriplestoreError::TurtleParsingError(x.to_string()))?;
+            }
+            TripleFormat::Turtle => {
+                let mut tparser = TurtleParser::new(BufReader::new(reader), base_iri);
+                tparser
+                    .parse_all(&mut |x| {
+                        parse_func(x);
+                        Ok(())
+                    })
+                    .map_err(|x: rio_turtle::TurtleError| {
+                        TriplestoreError::NTriplesParsingError(x.to_string())
+                    })?;
+            }
+            TripleFormat::RDFXML => {
+                let mut xmlparser = RdfXmlParser::new(BufReader::new(reader), base_iri);
+                xmlparser
+                    .parse_all(&mut |x| -> Result<(), RdfXmlError> {
+                        parse_func(x);
+                        Ok(())
+                    })
+                    .map_err(|x| TriplestoreError::XMLParsingError(x.to_string()))?;
+            }
         }
 
         let mut triples_to_add = vec![];

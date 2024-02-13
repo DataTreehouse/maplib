@@ -33,6 +33,7 @@ use std::time::Instant;
 use triplestore::constants::{OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME};
 use triplestore::{TriplesToAdd, Triplestore};
 use uuid::Uuid;
+use triplestore::TripleFormat;
 
 pub struct Mapping {
     pub template_dataset: TemplateDataset,
@@ -125,11 +126,24 @@ impl Mapping {
     pub fn read_triples(
         &mut self,
         p: &Path,
+        triple_format: Option<TripleFormat>,
         base_iri: Option<String>,
         transient: bool,
     ) -> Result<(), MappingError> {
         self.triplestore
-            .read_triples(p, base_iri, transient)
+            .read_triples_from_path(p, triple_format, base_iri, transient)
+            .map_err(MappingError::TriplestoreError)
+    }
+
+    pub fn read_triples_string(
+        &mut self,
+        s: &str,
+        triple_format: TripleFormat,
+        base_iri: Option<String>,
+        transient: bool,
+    ) -> Result<(), MappingError> {
+        self.triplestore
+            .read_triples_from_string(s, triple_format, base_iri, transient)
             .map_err(MappingError::TriplestoreError)
     }
 

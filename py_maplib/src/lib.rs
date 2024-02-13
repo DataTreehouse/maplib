@@ -51,6 +51,7 @@ use representation::multitype::multi_col_to_string_col;
 use representation::polars_to_sparql::primitive_polars_type_to_literal_type;
 use representation::solution_mapping::EagerSolutionMappings;
 use representation::RDFNodeType;
+use triplestore::TripleFormat;
 
 #[cfg(not(target_os = "linux"))]
 use mimalloc::MiMalloc;
@@ -290,13 +291,33 @@ impl Mapping {
     fn read_triples(
         &mut self,
         file_path: &PyAny,
+        format: Option<String>,
         base_iri: Option<String>,
         transient: Option<bool>,
     ) -> PyResult<()> {
         let file_path = file_path.str()?.to_string();
         let path = Path::new(&file_path);
+        let format = if let Some(format) = format {
+            Some(resolve_format(&format))
+        } else {
+            None
+        };
         self.inner
-            .read_triples(path, base_iri, transient.unwrap_or(false))
+            .read_triples(path, format, base_iri, transient.unwrap_or(false))
+            .map_err(|x| PyMaplibError::from(x))?;
+        Ok(())
+    }
+
+    fn read_triples_string(
+        &mut self,
+        s: &str,
+        format: &str,
+        base_iri: Option<String>,
+        transient: Option<bool>,
+    ) -> PyResult<()> {
+        let format = resolve_format(&format);
+        self.inner
+            .read_triples_string(s, format, base_iri, transient.unwrap_or(false))
             .map_err(|x| PyMaplibError::from(x))?;
         Ok(())
     }
@@ -308,6 +329,12 @@ impl Mapping {
             .map_err(|x| PyMaplibError::from(MappingError::FileCreateIOError(x)))?;
         self.inner.write_n_triples(&mut actual_file).unwrap();
         Ok(())
+    }
+
+    fn write_ntriples_string(&mut self) -> PyResult<String> {
+        let mut out = vec![];
+        self.inner.write_n_triples(&mut out).unwrap();
+        Ok(String::from_utf8(out).unwrap())
     }
 
     fn write_native_parquet(&mut self, folder_path: &PyAny) -> PyResult<()> {
@@ -403,5 +430,15 @@ fn map_parameters(
         Ok(Some(mapped_parameters))
     } else {
         Ok(None)
+    }
+}
+
+
+fn resolve_format(format:&str) -> TripleFormat {
+    match format.to_lowercase().as_str() {
+        "ntriples" => TripleFormat::NTriples,
+        "turtle" => TripleFormat::Turtle,
+        "rdf/xml" | "xml" | "rdfxml" => TripleFormat::RDFXML,
+        _ => unimplemented!("Unknown format {}", format)
     }
 }

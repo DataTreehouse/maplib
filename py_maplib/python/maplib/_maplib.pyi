@@ -159,10 +159,10 @@ class Mapping:
         :return: Validation report containing a report (report.df) and whether the graph conforms (report.conforms)
         """
 
-    def read_triples(self, file_path: Union[str, Path], base_iri: str=None, transient: bool = False) -> None:
+    def read_triples(self, file_path: Union[str, Path], format: str=None, base_iri: str=None, transient: bool = False) -> None:
         """
         Reads triples from a file path.
-        File format is derived using file extension, e.g. filename.ttl or filename.nt.
+        You can specify the format, or it will be derived using file extension, e.g. filename.ttl or filename.nt.
         Specify transient if you only want the triples to be available for further querying and validation,
         but not persisted using write-methods.
 
@@ -171,6 +171,23 @@ class Mapping:
         >>> m.read_triples("my_triples.ttl", transient=True)
 
         :param file_path: The path of the file containing triples
+        :param format: One of "ntriples", "turtle", "rdf/xml", otherwise it is inferred from the file extension.
+        :param base_iri: Base iri
+        :param transient: Should these triples be included when writing the graph to the file system?
+        """
+
+    def read_triples_string(self, s: str, format: str, base_iri: str=None, transient: bool = False) -> None:
+        """
+        Reads triples from a string.
+        Specify transient if you only want the triples to be available for further querying and validation,
+        but not persisted using write-methods.
+
+        Usage:
+
+        >>> m.read_triples("my_triples.ttl", transient=True)
+
+        :param s: String containing serialized triples.
+        :param format: One of "ntriples", "turtle", "rdf/xml".
         :param base_iri: Base iri
         :param transient: Should these triples be included when writing the graph to the file system?
         """
@@ -184,6 +201,17 @@ class Mapping:
         >>> m.write_ntriples("my_triples.nt")
 
         :param file_path: The path of the file containing triples
+        """
+
+    def write_ntriples_string(self) -> str:
+        """
+        Write the non-transient triples to a string in memory.
+
+        Usage:
+
+        >>> s = m.write_ntriples_string()
+
+        :return Triples in mapping in the NTriples format (potentially a large string)
         """
 
     def write_native_parquet(self, folder_path: Union[str, Path]) -> None:

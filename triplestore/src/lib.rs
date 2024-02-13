@@ -35,6 +35,12 @@ use std::path::Path;
 use std::time::Instant;
 use uuid::Uuid;
 
+pub enum TripleFormat {
+    NTriples,
+    Turtle,
+    RDFXML,
+}
+
 pub struct Triplestore {
     deduplicated: bool,
     pub(crate) caching_folder: Option<String>,

@@ -25,3 +25,23 @@ def test_read_ntriples():
     #df.write_csv(str(filename))
     expected_df = pl.scan_csv(filename).collect()
     pl.testing.assert_frame_equal(res, expected_df)
+
+def test_read_write_ntriples_string():
+    m = Mapping()
+    with open(TESTDATA_PATH / "read_ntriples.nt") as f:
+        ntstring = f.read()
+    m.read_triples_string(ntstring, format="ntriples")
+    out_str = m.write_ntriples_string()
+    m2 = Mapping()
+    m2.read_triples_string(out_str, format="ntriples")
+    res = m2.query("""
+            PREFIX foaf:<http://xmlns.com/foaf/0.1/>
+
+            SELECT ?v ?o WHERE {
+            ?s ?v ?o .
+            } ORDER BY ?v ?o
+            """)
+    filename = TESTDATA_PATH / "read_ntriples.csv"
+    #df.write_csv(str(filename))
+    expected_df = pl.scan_csv(filename).select(["v", "o"]).sort(["v", "o"]).collect()
+    pl.testing.assert_frame_equal(res, expected_df)
