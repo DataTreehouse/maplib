@@ -21,7 +21,7 @@ use representation::multitype::{
 };
 use representation::{literal_iri_to_namednode, RDFNodeType};
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use query_processing::graph_patterns::join;
 
 impl Triplestore {
@@ -62,7 +62,7 @@ impl Triplestore {
                 object_datatype_req.as_ref(),
             )?,
             NamedNodePattern::Variable(v) => {
-                let predicates: Vec<NamedNode>;
+                let predicates: HashSet<NamedNode>;
                 if let Some(SolutionMappings {
                     mappings,
                     rdf_node_types,
@@ -71,12 +71,14 @@ impl Triplestore {
                     if let Some(dt) = rdf_node_types.get(v.as_str()) {
                         if let RDFNodeType::IRI = dt {
                             let mappings_df = mappings.collect().unwrap();
-                            let predicates_iter = mappings_df.column(v.as_str()).unwrap().iter();
+                            let predicates_series = mappings_df.column(v.as_str()).unwrap().cast(&DataType::Utf8).unwrap();
+                            let predicates_iter = predicates_series.iter();
                             predicates = predicates_iter
                                 .filter_map(|x| match x {
                                     AnyValue::Null => None,
                                     AnyValue::Utf8(s) => Some(literal_iri_to_namednode(s)),
-                                    _ => panic!("Should never happen"),
+                                    AnyValue::Utf8Owned(s) => Some(literal_iri_to_namednode(&s)),
+                                    x => panic!("Should never happen: {}", x),
                                 })
                                 .collect();
                             solution_mappings = Some(SolutionMappings {
@@ -84,7 +86,7 @@ impl Triplestore {
                                 rdf_node_types,
                             })
                         } else {
-                            predicates = vec![];
+                            predicates = HashSet::new();
                             solution_mappings = Some(SolutionMappings {
                                 mappings,
                                 rdf_node_types,
@@ -101,7 +103,7 @@ impl Triplestore {
                     predicates = self.all_predicates();
                 }
                 self.get_predicates_lf(
-                    predicates,
+                    predicates.into_iter().collect(),
                     &subject_rename,
                     &verb_rename,
                     &object_rename,
@@ -315,10 +317,10 @@ impl Triplestore {
         })
     }
 
-    fn all_predicates(&self) -> Vec<NamedNode> {
-        let mut strs = vec![];
+    fn all_predicates(&self) -> HashSet<NamedNode> {
+        let mut strs = HashSet::new();
         for k in self.df_map.keys() {
-            strs.push(k.clone())
+            strs.insert(k.clone());
         }
         strs
     }
@@ -334,14 +336,17 @@ impl Triplestore {
 
         let mut first_datatype = None;
         for p in predicates {
-            for (subject_dt, object_dt) in self.df_map.get(p).unwrap().keys() {
-                let use_dt = if subject { subject_dt } else { object_dt };
-                if let Some(first) = &first_datatype {
-                    if first != &use_dt {
-                        return true;
+            if let Some(tt_map) = self.df_map.get(p) {
+                for (subject_dt, object_dt) in tt_map.keys()
+                {
+                    let use_dt = if subject { subject_dt } else { object_dt };
+                    if let Some(first) = &first_datatype {
+                        if first != &use_dt {
+                            return true;
+                        }
+                    } else {
+                        first_datatype = Some(use_dt);
                     }
-                } else {
-                    first_datatype = Some(use_dt);
                 }
             }
         }
