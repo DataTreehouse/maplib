@@ -10,7 +10,7 @@ use representation::query_context::Context;
 use std::collections::HashMap;
 
 use super::Triplestore;
-use crate::constants::{OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME};
+use crate::constants::{OBJECT_COL_NAME, OTTR_IRI, SUBJECT_COL_NAME, VERB_COL_NAME};
 use crate::sparql::errors::SparqlError;
 use crate::TriplesToAdd;
 use polars::frame::DataFrame;
@@ -242,7 +242,7 @@ fn term_pattern_series(
             unimplemented!("Blank node term pattern not supported")
         }
         TermPattern::Literal(lit) => {
-            if lit.datatype() == xsd::ANY_URI {
+            if lit.datatype().as_str() == OTTR_IRI {
                 named_node_series(&NamedNode::new(lit.to_string()).unwrap(), name, len)
             } else {
                 let (anyvalue, dt) =

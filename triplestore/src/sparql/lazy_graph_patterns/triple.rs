@@ -42,7 +42,6 @@ impl Triplestore {
             TermPattern::NamedNode(_nn) => Some(RDFNodeType::IRI),
             TermPattern::BlankNode(_) => None,
             TermPattern::Literal(l) => match l.datatype() {
-                xsd::ANY_URI => Some(RDFNodeType::IRI),
                 _ => Some(RDFNodeType::Literal(l.datatype().into_owned())),
             },
             TermPattern::Variable(_) => None,

@@ -1360,8 +1360,8 @@ fn test_trailing_commas_and_rdftype_shorthand() {
 @prefix rdf:<http://www.w3.org/1999/02/22-rdf-syntax-ns#>.
 @prefix t:<https://github.com/magbak/maplib/benchmark/template#>.
 
-t:Stops [ xsd:anyURI ?stop_id, ?stop_code, ?stop_name, ?stop_desc, ?stop_lat, ?stop_lon, ??zone_id,
-          xsd:anyURI ?stop_url, xsd:anyURI ?location_type, ? xsd:anyURI ?parent_station, ??stop_timezone, ?wheelchair_boarding
+t:Stops [ ottr:IRI ?stop_id, ?stop_code, ?stop_name, ?stop_desc, ?stop_lat, ?stop_lon, ??zone_id,
+          ottr:IRI ?stop_url, ottr:IRI ?location_type, ? ottr:IRI ?parent_station, ??stop_timezone, ?wheelchair_boarding
           , ] :: {
   ottr:Triple(?stop_id, a, gtfs:Stop) ,
   ottr:Triple(?stop_id, gtfs:code, ?stop_code) ,

@@ -142,16 +142,12 @@ impl Triplestore {
                         oxrdf::Term::NamedNode(nn) => AnyValue::Utf8Owned(nn.to_string().into()),
                         oxrdf::Term::BlankNode(bb) => AnyValue::Utf8Owned(bb.to_string().into()),
                         oxrdf::Term::Literal(l) => {
-                            if matches!(l.datatype(), xsd::ANY_URI) {
-                                AnyValue::Utf8Owned(l.value().into())
-                            } else {
                                 sparql_literal_to_any_value(
                                     l.value(),
                                     l.language(),
                                     &Some(l.datatype()),
                                 )
                                 .0
-                            }
                         }
                     })
                     .collect();

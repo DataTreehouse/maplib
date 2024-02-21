@@ -7,6 +7,7 @@ edition = "2021"
 triplestore = {path="../triplestore"}
 parquet_io = {path="../parquet_io"}
 shacl = {path="../shacl"}
+#representation = { path = "../../representation"}
 representation = { git = "https://github.com/DataTreehouse/representation"}
 
 rayon = "1.6.0"

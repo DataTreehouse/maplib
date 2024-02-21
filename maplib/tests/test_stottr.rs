@@ -74,7 +74,7 @@ fn test_all_iri_case() {
     let t_str = r#"
     @prefix ex:<http://example.net/ns#>.
 
-    ex:ExampleTemplate [xsd:anyURI ?myVar1]
+    ex:ExampleTemplate [ottr:IRI ?myVar1]
       :: {
         ottr:Triple(ex:anObject, ex:relatesTo, ?myVar1)
       } .
@@ -175,7 +175,7 @@ fn test_const_list_case() {
     let t_str = r#"
     @prefix ex:<http://example.net/ns#>.
 
-    ex:ExampleTemplate [xsd:anyURI ?var1]
+    ex:ExampleTemplate [ottr:IRI ?var1]
       :: {
         cross | ottr:Triple(?var1, ex:hasNumber, ++(1,2))
       } .

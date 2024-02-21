@@ -5,7 +5,6 @@ use log::debug;
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use std::collections::HashMap;
-use polars::prelude::col;
 
 use spargebra::algebra::GraphPattern;
 

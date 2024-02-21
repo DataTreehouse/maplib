@@ -2,10 +2,7 @@ use crate::ast::{
     Annotation, Argument, ConstantLiteral, ConstantTerm, DefaultValue, Directive, Instance, PType,
     Parameter, Signature, Statement, StottrDocument, StottrLiteral, StottrTerm, Template,
 };
-use crate::constants::{
-    OTTR_PREFIX, OTTR_PREFIX_IRI, RDFS_PREFIX, RDFS_PREFIX_IRI, RDF_PREFIX, RDF_PREFIX_IRI,
-    XSD_PREFIX, XSD_PREFIX_IRI,
-};
+use crate::constants::{OTTR_PREFIX, OTTR_PREFIX_IRI, RDFS_PREFIX, RDFS_PREFIX_IRI, RDF_PREFIX, RDF_PREFIX_IRI, XSD_PREFIX, XSD_PREFIX_IRI, OTTR_IRI};
 use crate::parsing::parsing_ast::{
     ResolvesToNamedNode, UnresolvedAnnotation, UnresolvedArgument, UnresolvedBaseTemplate,
     UnresolvedConstantLiteral, UnresolvedConstantTerm, UnresolvedDefaultValue, UnresolvedInstance,
@@ -17,6 +14,7 @@ use oxrdf::{IriParseError, NamedNode};
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
+use oxrdf::vocab::xsd;
 
 #[derive(Debug)]
 pub enum ResolutionError {
@@ -280,7 +278,14 @@ fn resolve_ptype(
     prefix_map: &mut HashMap<String, NamedNode>,
 ) -> Result<PType, ResolutionError> {
     Ok(match unresolved_ptype {
-        UnresolvedPType::Basic(b) => PType::Basic(resolve(b, prefix_map)?, get_name(b)),
+        UnresolvedPType::Basic(b) => {
+            let mut resolved = resolve(b, prefix_map)?;
+            if resolved.as_ref() == xsd::ANY_URI {
+                warn!("To resolve an inconsistency, xsd:anyURI will in the future used to represent literal IRI/URIs while ottr:IRI is used as the type of actual IRI/URIs.\nPlease replace xsd:anyURI with ottr:IRI to get rid of this warning.");
+                resolved = NamedNode::new_unchecked(OTTR_IRI);
+            }
+            PType::Basic(resolved, get_name(b))
+        },
         UnresolvedPType::Lub(l) => PType::Lub(Box::new(resolve_ptype(l, prefix_map)?)),
         UnresolvedPType::List(l) => PType::List(Box::new(resolve_ptype(l, prefix_map)?)),
         UnresolvedPType::NEList(l) => PType::NEList(Box::new(resolve_ptype(l, prefix_map)?)),

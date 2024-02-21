@@ -447,8 +447,8 @@ pub fn prepare_triples(
     }
 
     let map_literal_variants_to_iri = |t: &RDFNodeType| match t {
-        RDFNodeType::Literal(l) => match l.as_ref() {
-            xsd::ANY_URI => RDFNodeType::IRI,
+        RDFNodeType::Literal(l) => match l.as_str() {
+            constants::OTTR_IRI => RDFNodeType::IRI,
             _ => RDFNodeType::Literal(l.clone()),
         },
         _ => t.clone(),
