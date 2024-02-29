@@ -382,8 +382,8 @@ pub fn create_empty_lf_datatypes(
             let polars_dt = dt.polars_data_type();
             (dt.clone(), polars_dt)
         } else {
-            let dt = RDFNodeType::IRI;
-            let polars_dt = DataType::Utf8;
+            let dt = RDFNodeType::None;
+            let polars_dt = DataType::Null;
             (dt, polars_dt)
         };
         out_datatypes.insert(object_rename.to_string(), use_datatype);

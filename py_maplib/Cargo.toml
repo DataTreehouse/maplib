@@ -9,13 +9,14 @@ edition = "2021"
 pyo3 = {version = "0.19.2", features = ["extension-module"] }
 maplib = {path="../maplib"}
 triplestore = {path="../triplestore"}
-representation = { git = "https://github.com/DataTreehouse/representation"}
+representation = {path="../representation"}
+#representation = { git = "https://github.com/DataTreehouse/representation"}
 shacl = {path="../shacl"}
 oxrdf = {version="0.1.7"}
 pydf_io = { git = "https://github.com/DataTreehouse/pydf_io"}
 thiserror="1.0.31"
-polars-lazy = "0.35.4"
-polars-core = {version="0.35.4", features=["dtype-array", "dtype-categorical", "dtype-date", "dtype-datetime",
+polars-lazy = "0.37.0"
+polars-core = {version="0.37.0", features=["dtype-array", "dtype-categorical", "dtype-date", "dtype-datetime",
     "dtype-decimal", "dtype-duration", "dtype-i8", "dtype-i16", "dtype-struct", "dtype-time", "dtype-u8", "dtype-u16"]}
 log ="0.4.19"
 
