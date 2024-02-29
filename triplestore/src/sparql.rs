@@ -4,7 +4,6 @@ mod lazy_expressions;
 pub(crate) mod lazy_graph_patterns;
 mod lazy_order;
 
-use oxrdf::vocab::xsd;
 use oxrdf::{NamedNode, Variable};
 use representation::query_context::Context;
 use std::collections::HashMap;
@@ -18,7 +17,6 @@ use polars::prelude::{col, IntoLazy};
 use polars_core::enable_string_cache;
 use polars_core::prelude::{DataType, Series, UniqueKeepStrategy};
 use representation::literals::sparql_literal_to_any_value;
-use representation::multitype::split_df_multicols;
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use representation::RDFNodeType;
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
@@ -300,7 +298,7 @@ fn cats_to_strings(df: DataFrame) -> DataFrame {
     }
     let mut lf = df.lazy();
     for c in cats {
-        lf = lf.with_column(col(&c).cast(DataType::Utf8))
+        lf = lf.with_column(col(&c).cast(DataType::String))
     }
     lf.collect().unwrap()
 }

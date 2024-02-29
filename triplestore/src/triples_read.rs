@@ -139,8 +139,8 @@ impl Triplestore {
                 let any_iter: Vec<AnyValue> = objects
                     .into_iter()
                     .map(|t| match t {
-                        oxrdf::Term::NamedNode(nn) => AnyValue::Utf8Owned(nn.to_string().into()),
-                        oxrdf::Term::BlankNode(bb) => AnyValue::Utf8Owned(bb.to_string().into()),
+                        oxrdf::Term::NamedNode(nn) => AnyValue::StringOwned(nn.to_string().into()),
+                        oxrdf::Term::BlankNode(bb) => AnyValue::StringOwned(bb.to_string().into()),
                         oxrdf::Term::Literal(l) => {
                                 sparql_literal_to_any_value(
                                     l.value(),

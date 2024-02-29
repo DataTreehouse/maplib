@@ -71,13 +71,13 @@ impl Triplestore {
                     if let Some(dt) = rdf_node_types.get(v.as_str()) {
                         if let RDFNodeType::IRI = dt {
                             let mappings_df = mappings.collect().unwrap();
-                            let predicates_series = mappings_df.column(v.as_str()).unwrap().cast(&DataType::Utf8).unwrap();
+                            let predicates_series = mappings_df.column(v.as_str()).unwrap().cast(&DataType::String).unwrap();
                             let predicates_iter = predicates_series.iter();
                             predicates = predicates_iter
                                 .filter_map(|x| match x {
                                     AnyValue::Null => None,
-                                    AnyValue::Utf8(s) => Some(literal_iri_to_namednode(s)),
-                                    AnyValue::Utf8Owned(s) => Some(literal_iri_to_namednode(&s)),
+                                    AnyValue::String(s) => Some(literal_iri_to_namednode(s)),
+                                    AnyValue::StringOwned(s) => Some(literal_iri_to_namednode(&s)),
                                     x => panic!("Should never happen: {}", x),
                                 })
                                 .collect();

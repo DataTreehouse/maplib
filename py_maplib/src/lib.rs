@@ -406,7 +406,7 @@ fn map_parameters(
                 let mut rdf_node_type = None;
 
                 if dt == xsd::STRING {
-                    let ch = c.utf8().unwrap();
+                    let ch = c.str().unwrap();
                     if let Some(s) = ch.first_non_null() {
                         let f = ch.get(s).unwrap();
                         if f.starts_with("<") {

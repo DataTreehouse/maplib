@@ -475,7 +475,7 @@ pub fn prepare_triples(
             let predicate;
             {
                 let any_predicate = part.column(VERB_COL_NAME).unwrap().get(0);
-                if let Ok(AnyValue::Utf8(p)) = any_predicate {
+                if let Ok(AnyValue::String(p)) = any_predicate {
                     predicate = literal_iri_to_namednode(p);
                 } else {
                     panic!()

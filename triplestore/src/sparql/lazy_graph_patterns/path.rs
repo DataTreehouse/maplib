@@ -4,12 +4,12 @@ use crate::sparql::lazy_graph_patterns::load_tt::multiple_tt_to_lf;
 use oxrdf::{NamedNode, Variable};
 use polars::prelude::{col, lit, DataFrameJoinOps, Expr, IntoLazy};
 use polars::prelude::{ChunkAgg, JoinArgs, JoinType};
-use polars_core::datatypes::{AnyValue, DataType};
+use polars_core::datatypes::{AnyValue, CategoricalOrdering, DataType};
 use polars_core::frame::{DataFrame, UniqueKeepStrategy};
 use polars_core::series::{IntoSeries, Series};
 use polars_core::utils::concat_df;
 use query_processing::graph_patterns::join;
-use representation::multitype::{convert_lf_col_to_multitype, multi_col_to_string_col};
+use representation::multitype::{convert_lf_col_to_multitype};
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::SolutionMappings;
 use representation::sparql_to_polars::{
@@ -133,8 +133,8 @@ impl Triplestore {
             out_dt_subj = dt_subj;
         } else {
             out_df = DataFrame::new(vec![
-                Series::new_empty("subject", &DataType::Utf8),
-                Series::new_empty("object", &DataType::Utf8),
+                Series::new_empty("subject", &DataType::String),
+                Series::new_empty("object", &DataType::String),
             ])
             .unwrap();
             out_dt_obj = RDFNodeType::IRI;
@@ -434,8 +434,8 @@ fn df_with_cats(df: DataFrame, subj_dt: &RDFNodeType, obj_dt: &RDFNodeType) -> D
         lf = multi_col_to_string_col(lf, "object");
     }
     lf = lf.with_columns([
-        col("subject").cast(DataType::Categorical(None)),
-        col("object").cast(DataType::Categorical(None)),
+        col("subject").cast(DataType::Categorical(None, CategoricalOrdering::Physical)),
+        col("object").cast(DataType::Categorical(None, CategoricalOrdering::Physical)),
     ]);
     lf.collect().unwrap()
 }
