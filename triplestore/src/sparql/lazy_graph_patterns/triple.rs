@@ -1,7 +1,7 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
 use representation::query_context::Context;
-use representation::solution_mapping::{is_string_col, SolutionMappings};
+use representation::solution_mapping::SolutionMappings;
 use representation::sparql_to_polars::{
     sparql_literal_to_polars_literal_value, sparql_named_node_to_polars_literal_value,
 };
@@ -9,20 +9,19 @@ use representation::sparql_to_polars::{
 use crate::constants::{OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use crate::sparql::lazy_graph_patterns::load_tt::multiple_tt_to_lf;
 use log::debug;
-use oxrdf::vocab::xsd;
 use oxrdf::NamedNode;
 use polars::prelude::{col, concat, lit, Expr, JoinType, LazyFrame};
 use polars::prelude::{IntoLazy, UnionArgs};
 use polars_core::datatypes::{AnyValue, DataType};
 use polars_core::frame::DataFrame;
 use polars_core::series::Series;
+use query_processing::graph_patterns::join;
 use representation::multitype::{
-    convert_lf_col_to_multitype, create_join_compatible_solution_mappings, join_workaround,
+    convert_lf_col_to_multitype,
 };
-use representation::{literal_iri_to_namednode, RDFNodeType};
+use representation::{literal_iri_to_namednode, BaseRDFNodeType, RDFNodeType};
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 use std::collections::{HashMap, HashSet};
-use query_processing::graph_patterns::join;
 
 impl Triplestore {
     pub fn lazy_triple_pattern(
@@ -71,7 +70,11 @@ impl Triplestore {
                     if let Some(dt) = rdf_node_types.get(v.as_str()) {
                         if let RDFNodeType::IRI = dt {
                             let mappings_df = mappings.collect().unwrap();
-                            let predicates_series = mappings_df.column(v.as_str()).unwrap().cast(&DataType::String).unwrap();
+                            let predicates_series = mappings_df
+                                .column(v.as_str())
+                                .unwrap()
+                                .cast(&DataType::String)
+                                .unwrap();
                             let predicates_iter = predicates_series.iter();
                             predicates = predicates_iter
                                 .filter_map(|x| match x {
@@ -127,7 +130,7 @@ impl Triplestore {
             if height_0 {
                 // Important that overlapping cols are dropped from mappings and not from lf,
                 // since we also overwrite rdf_node_types with dts correspondingly below.
-                mappings = mappings.drop_columns(overlap.as_slice());
+                mappings = mappings.drop(overlap.as_slice());
                 if colnames.is_empty() {
                     mappings = mappings.filter(lit(false));
                 } else {
@@ -144,8 +147,8 @@ impl Triplestore {
                     rdf_node_types,
                 });
                 let new_solution_mappings = SolutionMappings {
-                    mappings:lf,
-                    rdf_node_types: dts
+                    mappings: lf,
+                    rdf_node_types: dts,
                 };
                 solution_mappings = Some(join(solution_mappings.unwrap(), new_solution_mappings)?);
             }
@@ -206,7 +209,7 @@ impl Triplestore {
                     lf = lf.with_column(lit(verb_uri.to_string()).alias(renamed));
                     out_datatypes.insert(renamed.clone(), RDFNodeType::IRI);
                 }
-                lf = lf.drop_columns(drop);
+                lf = lf.drop(drop);
                 Ok((lf, out_datatypes, false))
             } else {
                 Ok(create_empty_lf_datatypes(
@@ -258,14 +261,22 @@ impl Triplestore {
             if let Some(subj_col) = subject_keep_rename {
                 if !height_0
                     && need_multi_subject
-                    && datatypes_map.get(subj_col).unwrap() != &RDFNodeType::MultiType
+                    && !matches!(
+                        datatypes_map.get(subj_col).unwrap(),
+                        &RDFNodeType::MultiType(..)
+                    )
                 {
                     lf = convert_lf_col_to_multitype(
                         lf,
                         subj_col,
                         datatypes_map.get(subj_col).unwrap(),
                     );
-                    out_datatypes.insert(subj_col.clone(), RDFNodeType::MultiType);
+                    out_datatypes.insert(
+                        subj_col.clone(),
+                        RDFNodeType::MultiType(vec![BaseRDFNodeType::from_rdf_node_type(
+                            datatypes_map.get(subj_col).unwrap(),
+                        )]),
+                    );
                 } else {
                     out_datatypes.insert(
                         subj_col.clone(),
@@ -277,14 +288,19 @@ impl Triplestore {
             if let Some(obj_col) = object_keep_rename {
                 if !height_0
                     && need_multi_object
-                    && datatypes_map.get(obj_col).unwrap() != &RDFNodeType::MultiType
+                    && !matches!(datatypes_map.get(obj_col).unwrap(), &RDFNodeType::MultiType(..))
                 {
                     lf = convert_lf_col_to_multitype(
                         lf,
                         obj_col,
                         datatypes_map.get(obj_col).unwrap(),
                     );
-                    out_datatypes.insert(obj_col.clone(), RDFNodeType::MultiType);
+                    out_datatypes.insert(
+                        obj_col.clone(),
+                        RDFNodeType::MultiType(vec![BaseRDFNodeType::from_rdf_node_type(
+                            datatypes_map.get(obj_col).unwrap(),
+                        )]),
+                    );
                 } else {
                     out_datatypes
                         .insert(obj_col.clone(), datatypes_map.get(obj_col).unwrap().clone());
@@ -337,8 +353,7 @@ impl Triplestore {
         let mut first_datatype = None;
         for p in predicates {
             if let Some(tt_map) = self.df_map.get(p) {
-                for (subject_dt, object_dt) in tt_map.keys()
-                {
+                for (subject_dt, object_dt) in tt_map.keys() {
                     let use_dt = if subject { subject_dt } else { object_dt };
                     if let Some(first) = &first_datatype {
                         if first != &use_dt {

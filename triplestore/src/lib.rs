@@ -165,8 +165,8 @@ impl Triplestore {
                     static_verb_column,
                     has_unique_subset,
                 } = t;
-                assert_ne!(subject_type, RDFNodeType::MultiType);
-                assert_ne!(object_type, RDFNodeType::MultiType);
+                assert!(!matches!(subject_type, RDFNodeType::MultiType(..)));
+                assert!(!matches!(object_type, RDFNodeType::MultiType(..)));
                 prepare_triples(
                     df,
                     &subject_type,

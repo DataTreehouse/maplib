@@ -138,10 +138,10 @@ impl Triplestore {
                 continue;
             }
             let mut multicols = vec![];
-            if subj_dt == RDFNodeType::MultiType {
+            if matches!(subj_dt, RDFNodeType::MultiType(..)) {
                 multicols.push(SUBJECT_COL_NAME);
             }
-            if obj_dt == RDFNodeType::MultiType {
+            if matches!(obj_dt, RDFNodeType::MultiType(..)) {
                 multicols.push(OBJECT_COL_NAME);
             }
             if !multicols.is_empty() {
@@ -292,7 +292,7 @@ fn variable_series(
 fn cats_to_strings(df: DataFrame) -> DataFrame {
     let mut cats = vec![];
     for c in df.columns(df.get_column_names()).unwrap() {
-        if let DataType::Categorical(_) = c.dtype() {
+        if let DataType::Categorical(_, _) = c.dtype() {
             cats.push(c.name().to_string());
         }
     }

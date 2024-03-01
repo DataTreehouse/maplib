@@ -66,17 +66,17 @@ pub fn multiple_tt_to_lf(
         let set_subj_dt: HashSet<_> = filtered.iter().map(|(x, _, _)| *x).collect();
         let set_obj_dt: HashSet<_> = filtered.iter().map(|(_, x, _)| *x).collect();
 
-        let mut use_subj_dt = None;
-        let mut use_obj_dt = None;
-
-        let mut exploded_subjects = None;
-        let mut exploded_objects = None;
-        let prefix = Uuid::new_v4().to_string();
+        let mut exploded_subjects: Option<(Vec<_>,Vec<_>)> = None;
+        let mut exploded_objects: Option<(Vec<_>,Vec<_>)> = None;
+        let subject_col_name_string = SUBJECT_COL_NAME.to_string();
+        let object_col_name_string = OBJECT_COL_NAME.to_string();
         for (subj_dt, obj_dt, mut lf) in filtered {
-            if set_subj_dt.len() > 1 && subj_dt != &RDFNodeType::MultiType {
+            assert!(!matches!(subj_dt, RDFNodeType::MultiType(..)));
+            assert!(!matches!(obj_dt, RDFNodeType::MultiType(..)));
+            if set_subj_dt.len() > 1 {
                 lf = convert_lf_col_to_multitype(lf, SUBJECT_COL_NAME, subj_dt);
-                let (new_lf, mut new_exploded_map) = explode_multicols(lf, &HashMap::from([(SUBJECT_COL_NAME.to_string(), subj_dt.clone())]), &prefix);
-                exploded_subjects = if let Some((new_inner_cols, new_prefixed_inner_cols)) = new_exploded_map.remove(SUBJECT_COL_NAME) {
+                let (new_lf, mut new_exploded_map) = explode_multicols(lf, &HashMap::from([(SUBJECT_COL_NAME.to_string(), subj_dt.clone())]));
+                exploded_subjects = if let Some((new_inner_cols, new_prefixed_inner_cols)) = new_exploded_map.remove(&subject_col_name_string) {
                     if let Some((mut inner_cols, mut prefixed_inner_cols)) = exploded_subjects {
                         inner_cols.extend(new_inner_cols);
                         prefixed_inner_cols.extend(new_prefixed_inner_cols);
@@ -89,10 +89,10 @@ pub fn multiple_tt_to_lf(
                 };
                 lf = new_lf;
             }
-            if set_obj_dt.len() > 1 && obj_dt != &RDFNodeType::MultiType {
-                let (new_lf, mut new_exploded_map) = explode_multicols(lf, &HashMap::from([(OBJECT_COL_NAME.to_string(), subj_dt.clone())]), &prefix);
+            if set_obj_dt.len() > 1 {
+                let (new_lf, mut new_exploded_map) = explode_multicols(lf, &HashMap::from([(OBJECT_COL_NAME.to_string(), obj_dt.clone())]));
                 lf = new_lf;
-                exploded_objects = if let Some((new_inner_cols, new_prefixed_inner_cols)) = new_exploded_map.remove(OBJECT_COL_NAME) {
+                exploded_objects = if let Some((new_inner_cols, new_prefixed_inner_cols)) = new_exploded_map.remove(&object_col_name_string) {
                     if let Some((mut inner_cols, mut prefixed_inner_cols)) = exploded_objects {
                         inner_cols.extend(new_inner_cols);
                         prefixed_inner_cols.extend(new_prefixed_inner_cols);
@@ -103,32 +103,29 @@ pub fn multiple_tt_to_lf(
                 } else {
                     None
                 };
-            } else {
-                use_obj_dt = Some(obj_dt.clone());
             }
             lfs.push(lf)
         }
         let mut lf = concat(lfs, Default::default()).unwrap();
         let use_subj_dt = if set_subj_dt.len() > 1 {
             let subject_col_name = SUBJECT_COL_NAME.to_string();
-            lf = implode_multicolumns(lf, HashMap::from([(&subject_col_name, exploded_subjects)]));
+            lf = implode_multicolumns(lf, HashMap::from([(&subject_col_name, exploded_subjects.unwrap())]));
             let mut types: Vec<_> = set_subj_dt.iter().map(|x|BaseRDFNodeType::from_rdf_node_type(*x)).collect();
             types.sort();
             RDFNodeType::MultiType(types)
         } else {
-            set_subj_dt.iter().next().unwrap().clone()
+            (*set_subj_dt.iter().next().unwrap()).clone()
         };
         let use_obj_dt = if set_obj_dt.len() > 1 {
             let object_col_name = OBJECT_COL_NAME.to_string();
-            lf = implode_multicolumns(lf, HashMap::from([(&object_col_name, exploded_objects)]));
+            lf = implode_multicolumns(lf, HashMap::from([(&object_col_name, exploded_objects.unwrap())]));
             let mut types: Vec<_> = set_obj_dt.iter().map(|x|BaseRDFNodeType::from_rdf_node_type(*x)).collect();
             types.sort();
             RDFNodeType::MultiType(types)
         } else {
-            set_obj_dt.iter().next().unwrap()
+            (*set_obj_dt.iter().next().unwrap()).clone()
         };
 
-
-        Ok(Some((use_subj_dt.unwrap(), use_obj_dt.unwrap(), lf)))
+        Ok(Some((use_subj_dt, use_obj_dt, lf)))
     }
 }
