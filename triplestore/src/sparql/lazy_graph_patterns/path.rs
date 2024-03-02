@@ -103,6 +103,9 @@ impl Triplestore {
             .unwrap()
             .unwrap();
 
+        println!("Lookup df: {:?}", lookup_df);
+        println!("Namednode_dfs: {:?}", namednode_dfs);
+
         if let Some(SparsePathReturn { sparmat }) =
             sparse_path(ppe, &namednode_dfs, max_index as usize, false)
         {
@@ -210,8 +213,8 @@ impl Triplestore {
             out_dt_obj = dtypes.remove(OBJECT_COL_NAME).unwrap();
         } else {
             out_df = DataFrame::new(vec![
-                Series::new_empty(SUBJECT_COL_NAME, &DataType::Null),
-                Series::new_empty(OBJECT_COL_NAME, &DataType::Null),
+                Series::new_empty(SUBJECT_COL_NAME, &RDFNodeType::None.polars_data_type()),
+                Series::new_empty(OBJECT_COL_NAME, &RDFNodeType::None.polars_data_type()),
             ])
             .unwrap();
             out_dt_obj = RDFNodeType::None;
@@ -721,6 +724,7 @@ impl U32DataFrameCreator {
         let row_index = uuid::Uuid::new_v4().to_string();
         mappings = mappings.with_row_index(&row_index, None);
         let df = mappings.collect().unwrap();
+        println!("DF current mappings {:?}", df);
 
         // Stack subject and object cols - deduplicate - add row index.
         let df_subj = df
@@ -784,7 +788,7 @@ impl U32DataFrameCreator {
         ]);
         mappings = mappings.with_row_index(LOOKUP_COLUMN, None);
         mappings = mappings.explode([col(&row_index), col("is_subject")]);
-        let lookup_df = mappings.collect().unwrap();
+        let mut lookup_df = mappings.collect().unwrap();
 
         let out_dfs = df.partition_by([NAMED_NODE_INDEX_COL], true).unwrap();
         let mut out_df_map = HashMap::new();
@@ -821,6 +825,7 @@ impl U32DataFrameCreator {
                 lf.collect().unwrap(),
             );
         }
+        lookup_df = lookup_df.drop(&row_index).unwrap().unique(None, UniqueKeepStrategy::Any, None).unwrap();
         Ok((lookup_df, lookup_df_types, out_df_map))
     }
 
@@ -834,8 +839,8 @@ impl U32DataFrameCreator {
                 let (SolutionMappings{ mappings, mut rdf_node_types }, is_empty) = triplestore.get_predicate_lf(
                     nn,
                     &Some(SUBJECT_COL_NAME.to_string()),
-                    &Some(OBJECT_COL_NAME.to_string()),
                     &None,
+                    &Some(OBJECT_COL_NAME.to_string()),
                     None,
                     None,
                     None,

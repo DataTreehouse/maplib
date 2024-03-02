@@ -257,6 +257,7 @@ impl Triplestore {
                 None, //TODO!
                 object_datatype_req,
             )?;
+            println!("Datatypes {:?}", datatypes_map);
             if let Some(subj_col) = subject_keep_rename {
                 if !height_0
                     && need_multi_subject

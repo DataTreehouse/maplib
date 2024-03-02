@@ -310,6 +310,7 @@ SELECT ?node WHERE {
     print(f"Took {round(end-start, 3)}")
     filename = TESTDATA_PATH / "iterated_property_path_constant_subject_query.csv"
     #df.write_csv(filename)
+    print(df)
     expected_df = pl.scan_csv(filename).sort(by).collect()
     pl.testing.assert_frame_equal(df, expected_df)
 

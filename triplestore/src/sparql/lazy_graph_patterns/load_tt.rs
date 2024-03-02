@@ -53,7 +53,7 @@ pub fn multiple_tt_to_lf(
             }
             let rdf_node_types = HashMap::from([
                 (SUBJECT_COL_NAME.to_string(), subj_type.clone()),
-                (OBJECT_COL_NAME.to_string(), subj_type.clone()),
+                (OBJECT_COL_NAME.to_string(), obj_type.clone()),
             ]);
             let sm = SolutionMappings::new(lf, rdf_node_types);
             filtered.push(sm);

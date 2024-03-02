@@ -195,6 +195,7 @@ fn triple_to_df(
     let (obj_ser, obj_dt) =
         term_pattern_series(df, rdf_node_types, &t.object, OBJECT_COL_NAME, len);
     let mut unique_subset = vec![];
+    //Todo: Fix datatype here..
     if subj_ser.dtype() != &DataType::Null {
         unique_subset.push(SUBJECT_COL_NAME.to_string());
     }
