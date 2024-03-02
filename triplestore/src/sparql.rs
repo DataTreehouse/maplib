@@ -17,6 +17,7 @@ use polars::prelude::{col, IntoLazy};
 use polars_core::enable_string_cache;
 use polars_core::prelude::{DataType, Series, UniqueKeepStrategy};
 use representation::literals::sparql_literal_to_any_value;
+use representation::multitype::{split_df_multicols};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use representation::RDFNodeType;
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
@@ -137,17 +138,16 @@ impl Triplestore {
             if df.height() == 0 {
                 continue;
             }
-            let mut multicols = vec![];
+            let mut multicols = HashMap::new();
             if matches!(subj_dt, RDFNodeType::MultiType(..)) {
-                multicols.push(SUBJECT_COL_NAME);
+                multicols.insert(SUBJECT_COL_NAME.to_string(), subj_dt.clone());
             }
             if matches!(obj_dt, RDFNodeType::MultiType(..)) {
-                multicols.push(OBJECT_COL_NAME);
+                multicols.insert(OBJECT_COL_NAME.to_string(), obj_dt.clone());
             }
             if !multicols.is_empty() {
-                let lfs_dts = split_df_multicols(df.lazy(), multicols);
-                for (lf, mut map) in lfs_dts {
-                    let df = lf.collect().unwrap();
+                let dfs_dts = split_df_multicols(df, &multicols);
+                for (df, mut map) in dfs_dts {
                     let new_subj_dt = map.remove(SUBJECT_COL_NAME).unwrap_or(subj_dt.clone());
                     let new_obj_dt = map.remove(OBJECT_COL_NAME).unwrap_or(obj_dt.clone());
                     all_triples_to_add.push(TriplesToAdd {
@@ -175,6 +175,8 @@ impl Triplestore {
         Ok(())
     }
 }
+
+
 
 fn triple_to_df(
     df: &DataFrame,

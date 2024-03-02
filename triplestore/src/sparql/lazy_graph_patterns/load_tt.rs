@@ -5,7 +5,8 @@ use polars::prelude::{col, concat, Expr, IntoLazy, LazyFrame, UnionArgs};
 use representation::multitype::{convert_lf_col_to_multitype, explode_multicols, implode_multicolumns};
 use representation::{BaseRDFNodeType, RDFNodeType};
 use std::collections::{HashMap, HashSet};
-use uuid::Uuid;
+use query_processing::graph_patterns::{filter, union};
+use representation::solution_mapping::SolutionMappings;
 
 fn single_tt_to_lf(tt: &TripleTable) -> Result<LazyFrame, SparqlError> {
     assert!(tt.unique, "Should be deduplicated");
@@ -27,14 +28,14 @@ pub fn multiple_tt_to_lf(
     obj_datatype_req: Option<&RDFNodeType>,
     subject_filter: Option<Expr>,
     object_filter: Option<Expr>,
-) -> Result<Option<(RDFNodeType, RDFNodeType, LazyFrame)>, SparqlError> {
+) -> Result<Option<SolutionMappings>, SparqlError> {
     let mut filtered = vec![];
     let m: Vec<_> = if let Some(m2) = m2 {
         m1.iter().chain(m2).collect()
     } else {
         m1.iter().collect()
     };
-    for ((subj_type, obj_type), tt) in &m {
+    for ((subj_type, obj_type), tt) in m {
         let mut keep = true;
         if let Some(subj_req) = subj_datatype_req {
             keep = subj_req == subj_type;
@@ -50,82 +51,22 @@ pub fn multiple_tt_to_lf(
             if let Some(object_filter) = &object_filter {
                 lf = lf.filter(object_filter.clone())
             }
-            let df = lf.collect().unwrap();
-            if df.height() > 0 {
-                filtered.push((subj_type, obj_type, df.lazy()));
-            }
+            let rdf_node_types = HashMap::from([
+                (SUBJECT_COL_NAME.to_string(), subj_type.clone()),
+                (OBJECT_COL_NAME.to_string(), subj_type.clone()),
+            ]);
+            let sm = SolutionMappings::new(lf, rdf_node_types);
+            filtered.push(sm);
         }
     }
     if filtered.is_empty() {
         Ok(None)
-    } else if filtered.len() == 1 {
-        let (subj_dt, obj_dt, lf) = filtered.remove(0);
-        Ok(Some((subj_dt.clone(), obj_dt.clone(), lf)))
-    } else {
-        let mut lfs = vec![];
-        let set_subj_dt: HashSet<_> = filtered.iter().map(|(x, _, _)| *x).collect();
-        let set_obj_dt: HashSet<_> = filtered.iter().map(|(_, x, _)| *x).collect();
-
-        let mut exploded_subjects: Option<(Vec<_>,Vec<_>)> = None;
-        let mut exploded_objects: Option<(Vec<_>,Vec<_>)> = None;
-        let subject_col_name_string = SUBJECT_COL_NAME.to_string();
-        let object_col_name_string = OBJECT_COL_NAME.to_string();
-        for (subj_dt, obj_dt, mut lf) in filtered {
-            assert!(!matches!(subj_dt, RDFNodeType::MultiType(..)));
-            assert!(!matches!(obj_dt, RDFNodeType::MultiType(..)));
-            if set_subj_dt.len() > 1 {
-                lf = convert_lf_col_to_multitype(lf, SUBJECT_COL_NAME, subj_dt);
-                let (new_lf, mut new_exploded_map) = explode_multicols(lf, &HashMap::from([(SUBJECT_COL_NAME.to_string(), subj_dt.clone())]));
-                exploded_subjects = if let Some((new_inner_cols, new_prefixed_inner_cols)) = new_exploded_map.remove(&subject_col_name_string) {
-                    if let Some((mut inner_cols, mut prefixed_inner_cols)) = exploded_subjects {
-                        inner_cols.extend(new_inner_cols);
-                        prefixed_inner_cols.extend(new_prefixed_inner_cols);
-                        Some((inner_cols, prefixed_inner_cols))
-                    } else {
-                        Some((new_inner_cols, new_prefixed_inner_cols))
-                    }
-                } else {
-                    None
-                };
-                lf = new_lf;
-            }
-            if set_obj_dt.len() > 1 {
-                let (new_lf, mut new_exploded_map) = explode_multicols(lf, &HashMap::from([(OBJECT_COL_NAME.to_string(), obj_dt.clone())]));
-                lf = new_lf;
-                exploded_objects = if let Some((new_inner_cols, new_prefixed_inner_cols)) = new_exploded_map.remove(&object_col_name_string) {
-                    if let Some((mut inner_cols, mut prefixed_inner_cols)) = exploded_objects {
-                        inner_cols.extend(new_inner_cols);
-                        prefixed_inner_cols.extend(new_prefixed_inner_cols);
-                        Some((inner_cols, prefixed_inner_cols))
-                    } else {
-                        Some((new_inner_cols, new_prefixed_inner_cols))
-                    }
-                } else {
-                    None
-                };
-            }
-            lfs.push(lf)
+    }
+    else {
+        let mut sm  = filtered.pop().unwrap();
+        for other_sm in filtered {
+            sm = union(sm, other_sm)?;
         }
-        let mut lf = concat(lfs, Default::default()).unwrap();
-        let use_subj_dt = if set_subj_dt.len() > 1 {
-            let subject_col_name = SUBJECT_COL_NAME.to_string();
-            lf = implode_multicolumns(lf, HashMap::from([(&subject_col_name, exploded_subjects.unwrap())]));
-            let mut types: Vec<_> = set_subj_dt.iter().map(|x|BaseRDFNodeType::from_rdf_node_type(*x)).collect();
-            types.sort();
-            RDFNodeType::MultiType(types)
-        } else {
-            (*set_subj_dt.iter().next().unwrap()).clone()
-        };
-        let use_obj_dt = if set_obj_dt.len() > 1 {
-            let object_col_name = OBJECT_COL_NAME.to_string();
-            lf = implode_multicolumns(lf, HashMap::from([(&object_col_name, exploded_objects.unwrap())]));
-            let mut types: Vec<_> = set_obj_dt.iter().map(|x|BaseRDFNodeType::from_rdf_node_type(*x)).collect();
-            types.sort();
-            RDFNodeType::MultiType(types)
-        } else {
-            (*set_obj_dt.iter().next().unwrap()).clone()
-        };
-
-        Ok(Some((use_subj_dt, use_obj_dt, lf)))
+        Ok(Some(sm))
     }
 }

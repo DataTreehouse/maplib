@@ -24,7 +24,7 @@ use crate::constants::OBJECT_COL_NAME;
 use crate::conversion::convert_to_string;
 use crate::errors::TriplestoreError;
 use oxrdf::NamedNode;
-use parquet_io::read_parquet;
+use parquet_io::scan_parquet;
 use polars::export::rayon::iter::{IntoParallelIterator, ParallelIterator};
 use polars::export::rayon::prelude::ParallelExtend;
 use polars::prelude::{AnyValue, DataFrame, Series};
@@ -79,7 +79,7 @@ impl Triplestore {
                     }
                 } else if let Some(paths) = &tt.df_paths {
                     for p in paths {
-                        let df = read_parquet(p)
+                        let df = scan_parquet(p)
                             .map_err(TriplestoreError::ParquetIOError)?
                             .collect()
                             .unwrap();

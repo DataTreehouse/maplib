@@ -47,7 +47,7 @@ use oxrdf::vocab::xsd;
 use polars_core::frame::DataFrame;
 use polars_lazy::frame::IntoLazy;
 use pyo3::types::PyList;
-use representation::multitype::multi_col_to_string_col;
+use representation::multitype::compress_actual_multitypes;
 use representation::polars_to_sparql::primitive_polars_type_to_literal_type;
 use representation::solution_mapping::EagerSolutionMappings;
 use representation::RDFNodeType;
@@ -353,32 +353,26 @@ fn _maplib(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     Ok(())
 }
 
-fn fix_multicolumns(df: DataFrame, dts: &HashMap<String, RDFNodeType>) -> DataFrame {
-    let mut lf = df.lazy();
-    for (c, v) in dts {
-        if v == &RDFNodeType::MultiType {
-            lf = multi_col_to_string_col(lf, c);
-        }
-    }
-    lf.collect().unwrap()
+fn fix_multicolumns(df: DataFrame, dts: HashMap<String, RDFNodeType>) -> (DataFrame, HashMap<String, RDFNodeType>)  {
+    compress_actual_multitypes(df, dts)
 }
 
 fn query_to_result(res: SparqlQueryResult, py: Python<'_>) -> PyResult<PyObject> {
     match res {
-        SparqlQueryResult::Select(mut df, datatypes) => {
-            df = fix_multicolumns(df, &datatypes);
+        SparqlQueryResult::Select(mut df, mut datatypes) => {
+            (df, datatypes) = fix_multicolumns(df, datatypes);
             let pydf = df_to_py_df(df, dtypes_map(datatypes), py)?;
             Ok(pydf)
         }
         SparqlQueryResult::Construct(dfs) => {
             let mut query_results = vec![];
-            for (df, subj_type, obj_type) in dfs {
-                let datatypes: HashMap<_, _> = [
+            for (mut df, subj_type, obj_type) in dfs {
+                let mut datatypes: HashMap<_, _> = [
                     (SUBJECT_COL_NAME.to_string(), subj_type),
                     (OBJECT_COL_NAME.to_string(), obj_type),
                 ]
                 .into();
-                let df = fix_multicolumns(df, &datatypes);
+                (df, datatypes) = fix_multicolumns(df, datatypes);
                 let pydf = df_to_py_df(df, dtypes_map(datatypes), py)?;
                 query_results.push(pydf);
             }

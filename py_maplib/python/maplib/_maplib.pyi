@@ -2,7 +2,6 @@ from pathlib import Path
 from typing import Union, List, Dict
 
 from polars import DataFrame
-from .semantic_dataframe import SemanticDataFrame
 
 
 class ValidationReport:
@@ -14,7 +13,7 @@ class ValidationReport:
     conforms: True if no violations were found.
     """
 
-    def __init__(self, df: SemanticDataFrame, conforms: bool) -> ValidationReport:
+    def __init__(self, df: DataFrame, conforms: bool) -> ValidationReport:
         self.df = df
         self.conforms = conforms
         ...
@@ -83,7 +82,7 @@ class Mapping:
         """
 
     def query(self, query: str, parameters: Dict[str, DataFrame] = None) -> Union[
-        SemanticDataFrame, List[SemanticDataFrame], None]:
+        DataFrame, List[DataFrame], None]:
         """
         Query the contained knowledge graph using SPARQL
         Currently, SELECT, CONSTRUCT and INSERT are supported.

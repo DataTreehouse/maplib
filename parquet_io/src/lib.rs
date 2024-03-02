@@ -52,7 +52,7 @@ pub fn write_parquet(df: &mut DataFrame, file_path: &Path) -> Result<(), Parquet
     Ok(())
 }
 
-pub fn read_parquet(file_path: &String) -> Result<LazyFrame, ParquetIOError> {
+pub fn scan_parquet(file_path: &String) -> Result<LazyFrame, ParquetIOError> {
     LazyFrame::scan_parquet(
         Path::new(file_path),
         ScanArgsParquet {

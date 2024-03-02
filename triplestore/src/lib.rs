@@ -16,10 +16,9 @@ use crate::errors::TriplestoreError;
 use crate::io_funcs::{create_folder_if_not_exists, delete_tmp_parquets_in_caching_folder};
 use crate::sparql::lazy_graph_patterns::load_tt::multiple_tt_to_lf;
 use log::debug;
-use oxrdf::vocab::xsd;
 use oxrdf::NamedNode;
 use parquet_io::{
-    property_to_filename, read_parquet, split_write_tmp_df, write_parquet, ParquetIOError,
+    property_to_filename, scan_parquet, split_write_tmp_df, write_parquet, ParquetIOError,
 };
 use polars::prelude::{col, concat, IntoLazy, JoinArgs, JoinType, LazyFrame, UnionArgs};
 use polars_core::datatypes::AnyValue;
@@ -33,6 +32,7 @@ use std::fs::remove_file;
 use std::io;
 use std::path::Path;
 use std::time::Instant;
+use representation::solution_mapping::SolutionMappings;
 use uuid::Uuid;
 
 pub enum TripleFormat {
@@ -72,7 +72,7 @@ impl TripleTable {
         if let Some(dfs) = &self.dfs {
             Ok(dfs.get(idx).unwrap())
         } else if let Some(paths) = &self.df_paths {
-            let tmp_df = read_parquet(paths.get(idx).unwrap())
+            let tmp_df = scan_parquet(paths.get(idx).unwrap())
                 .map_err(TriplestoreError::ParquetIOError)?
                 .collect()
                 .unwrap();
@@ -92,7 +92,7 @@ impl TripleTable {
             Ok(vec![concat_df(dfs).unwrap().lazy()])
         } else if let Some(paths) = &self.df_paths {
             let lf_results: Vec<Result<LazyFrame, ParquetIOError>> =
-                paths.par_iter().map(read_parquet).collect();
+                paths.par_iter().map(scan_parquet).collect();
             let mut lfs = vec![];
             for lfr in lf_results {
                 lfs.push(lfr.map_err(TriplestoreError::ParquetIOError)?);
@@ -355,7 +355,7 @@ impl Triplestore {
         if transient {
             for tdf in triples_df {
                 if let Some(m) = self.df_map.get(&tdf.predicate) {
-                    if let Some((_, _, lf)) = multiple_tt_to_lf(
+                    if let Some(SolutionMappings{ mappings:lf, rdf_node_types }) = multiple_tt_to_lf(
                         m,
                         None,
                         Some(&tdf.subject_type),
@@ -396,7 +396,7 @@ impl Triplestore {
             let mut updated_transient_triples_df = vec![];
             for tdf in &triples_df {
                 if let Some(m) = self.transient_df_map.get(&tdf.predicate) {
-                    if let Some((_, _, lf)) = multiple_tt_to_lf(
+                    if let Some(SolutionMappings{ mappings:lf, rdf_node_types }) = multiple_tt_to_lf(
                         m,
                         None,
                         Some(&tdf.subject_type),
@@ -550,7 +550,7 @@ fn deduplicate_map(
                         .as_ref()
                         .unwrap()
                         .par_iter()
-                        .map(read_parquet)
+                        .map(scan_parquet)
                         .collect();
                     let mut lfs = vec![];
                     for lf_res in lf_results {
