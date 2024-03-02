@@ -47,7 +47,7 @@ use oxrdf::vocab::xsd;
 use polars_core::frame::DataFrame;
 use polars_lazy::frame::IntoLazy;
 use pyo3::types::PyList;
-use representation::multitype::compress_actual_multitypes;
+use representation::multitype::{compress_actual_multitypes, lf_column_from_categorical, multi_columns_to_string_cols};
 use representation::polars_to_sparql::primitive_polars_type_to_literal_type;
 use representation::solution_mapping::EagerSolutionMappings;
 use representation::RDFNodeType;
@@ -353,14 +353,19 @@ fn _maplib(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     Ok(())
 }
 
-fn fix_multicolumns(df: DataFrame, dts: HashMap<String, RDFNodeType>) -> (DataFrame, HashMap<String, RDFNodeType>)  {
-    compress_actual_multitypes(df, dts)
+fn fix_cats_and_multicolumns(mut df: DataFrame, mut dts: HashMap<String, RDFNodeType>) -> (DataFrame, HashMap<String, RDFNodeType>)  {
+    for (c,_) in &dts {
+        df = lf_column_from_categorical(df.lazy(), c, &dts).collect().unwrap();
+    }
+    (df, dts) = compress_actual_multitypes(df, dts);
+    df = multi_columns_to_string_cols(df.lazy(), &dts).collect().unwrap();
+    (df, dts)
 }
 
 fn query_to_result(res: SparqlQueryResult, py: Python<'_>) -> PyResult<PyObject> {
     match res {
         SparqlQueryResult::Select(mut df, mut datatypes) => {
-            (df, datatypes) = fix_multicolumns(df, datatypes);
+            (df, datatypes) = fix_cats_and_multicolumns(df, datatypes);
             let pydf = df_to_py_df(df, dtypes_map(datatypes), py)?;
             Ok(pydf)
         }
@@ -372,7 +377,7 @@ fn query_to_result(res: SparqlQueryResult, py: Python<'_>) -> PyResult<PyObject>
                     (OBJECT_COL_NAME.to_string(), obj_type),
                 ]
                 .into();
-                (df, datatypes) = fix_multicolumns(df, datatypes);
+                (df, datatypes) = fix_cats_and_multicolumns(df, datatypes);
                 let pydf = df_to_py_df(df, dtypes_map(datatypes), py)?;
                 query_results.push(pydf);
             }

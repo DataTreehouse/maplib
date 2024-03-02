@@ -1,23 +1,19 @@
 use super::Triplestore;
 use crate::constants::{OBJECT_COL_NAME, SUBJECT_COL_NAME};
-use crate::errors::TriplestoreError;
 use crate::sparql::errors::SparqlError;
-use crate::sparql::lazy_graph_patterns::load_tt::multiple_tt_to_lf;
 use oxrdf::vocab::xsd;
 use oxrdf::{NamedNode, Variable};
 use polars::prelude::{
-    col, concat, concat_lf_diagonal, lit, DataFrameJoinOps, Expr, IntoLazy, UnionArgs,
+    col, lit, DataFrameJoinOps, IntoLazy,
 };
-use polars::prelude::{ChunkAgg, JoinArgs, JoinType};
-use polars_core::datatypes::{AnyValue, CategoricalOrdering, DataType};
+use polars::prelude::{JoinArgs, JoinType};
+use polars_core::datatypes::{AnyValue,};
 use polars_core::frame::{DataFrame, UniqueKeepStrategy};
 use polars_core::series::{IntoSeries, Series};
-use polars_core::utils::concat_df;
 use query_processing::errors::QueryProcessingError;
-use query_processing::graph_patterns::{group_by, join, union};
+use query_processing::graph_patterns::{ join, union};
 use representation::multitype::{
-    all_multi_main_cols, compress_actual_multitypes, convert_lf_col_to_multitype,
-    explode_multicols, force_convert_multicol_to_single_col,
+    compress_actual_multitypes, force_convert_multicol_to_single_col,
 };
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::SolutionMappings;
@@ -28,12 +24,7 @@ use representation::{BaseRDFNodeType, RDFNodeType};
 use spargebra::algebra::{GraphPattern, PropertyPathExpression};
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 use sprs::{CsMatBase, TriMatBase};
-use std::cmp::max;
-use std::collections::hash_map::Values;
-use std::collections::{HashMap, HashSet};
-use std::io::Read;
-use std::ops::Index;
-
+use std::collections::{HashMap};
 const NAMED_NODE_INDEX_COL: &str = "named_node_index_column";
 const VALUE_COLUMN: &str = "value";
 const LOOKUP_COLUMN: &str = "key";
@@ -295,82 +286,6 @@ impl Triplestore {
         }
         Ok(path_solution_mappings)
     }
-
-    fn get_single_nn_df(
-        &self,
-        nn: &NamedNode,
-        subject: Option<&TermPattern>,
-        object: Option<&TermPattern>,
-        subject_filter: Option<Expr>,
-        object_filter: Option<Expr>,
-    ) -> Result<Option<SolutionMappings>, SparqlError> {
-        let map_opt = self.df_map.get(nn);
-        if let Some(m) = map_opt {
-            if m.is_empty() {
-                panic!("Empty map should never happen");
-            } else {
-                let tp_opt_to_dt_req = |x: Option<&TermPattern>| {
-                    if let Some(tp) = x {
-                        match tp {
-                            TermPattern::NamedNode(_) => Some(RDFNodeType::IRI),
-                            TermPattern::BlankNode(_) => None,
-                            TermPattern::Literal(lit) => {
-                                Some(RDFNodeType::Literal(lit.datatype().into_owned()))
-                            }
-                            TermPattern::Variable(_) => None,
-                        }
-                    } else {
-                        None
-                    }
-                };
-
-                let subj_datatype_req = tp_opt_to_dt_req(subject);
-                let obj_datatype_req = tp_opt_to_dt_req(object);
-
-                let ret = multiple_tt_to_lf(
-                    m,
-                    self.transient_df_map.get(nn),
-                    subj_datatype_req.as_ref(),
-                    obj_datatype_req.as_ref(),
-                    subject_filter,
-                    object_filter,
-                )?;
-                if let Some(SolutionMappings{ mappings: mut lf, rdf_node_types }) = ret {
-                    if let Some(subject) = subject {
-                        if let TermPattern::NamedNode(nn) = subject {
-                            lf =
-                                lf.filter(col(SUBJECT_COL_NAME).eq(Expr::Literal(
-                                    sparql_named_node_to_polars_literal_value(nn),
-                                )))
-                        } else if let TermPattern::Literal(l) = subject {
-                            lf = lf.filter(
-                                col(SUBJECT_COL_NAME)
-                                    .eq(Expr::Literal(sparql_literal_to_polars_literal_value(l))),
-                            )
-                        }
-                    }
-                    if let Some(object) = object {
-                        if let TermPattern::NamedNode(nn) = object {
-                            lf =
-                                lf.filter(col(OBJECT_COL_NAME).eq(Expr::Literal(
-                                    sparql_named_node_to_polars_literal_value(nn),
-                                )))
-                        } else if let TermPattern::Literal(l) = object {
-                            lf = lf.filter(
-                                col(OBJECT_COL_NAME)
-                                    .eq(Expr::Literal(sparql_literal_to_polars_literal_value(l))),
-                            )
-                        }
-                    }
-                    Ok(Some(SolutionMappings::new(lf, rdf_node_types)))
-                } else {
-                    Ok(None)
-                }
-            }
-        } else {
-            Ok(None)
-        }
-    }
 }
 
 fn create_graph_pattern(
@@ -409,33 +324,6 @@ fn create_graph_pattern(
             todo!()
         }
     }
-}
-
-fn find_max_index(vals: Values<String, (DataFrame, RDFNodeType, RDFNodeType)>) -> u32 {
-    let mut max_index = 0u32;
-    for (df, _, _) in vals {
-        if let Some(max_subject) = df
-            .column(SUBJECT_COL_NAME)
-            .unwrap()
-            .categorical()
-            .unwrap()
-            .physical()
-            .max()
-        {
-            max_index = max(max_index, max_subject);
-        }
-        if let Some(max_object) = df
-            .column(OBJECT_COL_NAME)
-            .unwrap()
-            .categorical()
-            .unwrap()
-            .physical()
-            .max()
-        {
-            max_index = max(max_index, max_object);
-        }
-    }
-    max_index
 }
 
 fn to_csr(df: &DataFrame, max_index: usize) -> SparseMatrix {

@@ -142,6 +142,7 @@ def test_multi_datatype_join_query_two_vars_no_error(blank_person_mapping):
         }
         } 
         """)
+    print(res)
     by = ["s","o"]
     df = res.sort(by=by)
     filename = TESTDATA_PATH / "multi_datatype_join_query_two_vars.csv"

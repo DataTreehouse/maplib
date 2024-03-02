@@ -1,11 +1,10 @@
 use crate::constants::{OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use crate::sparql::errors::SparqlError;
 use crate::TripleTable;
-use polars::prelude::{col, concat, Expr, IntoLazy, LazyFrame, UnionArgs};
-use representation::multitype::{convert_lf_col_to_multitype, explode_multicols, implode_multicolumns};
-use representation::{BaseRDFNodeType, RDFNodeType};
-use std::collections::{HashMap, HashSet};
-use query_processing::graph_patterns::{filter, union};
+use polars::prelude::{col, concat, Expr, LazyFrame, UnionArgs};
+use representation::{RDFNodeType};
+use std::collections::{HashMap};
+use query_processing::graph_patterns::{union};
 use representation::solution_mapping::SolutionMappings;
 
 fn single_tt_to_lf(tt: &TripleTable) -> Result<LazyFrame, SparqlError> {
