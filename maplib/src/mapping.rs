@@ -31,9 +31,9 @@ use std::io::Write;
 use std::path::Path;
 use std::time::Instant;
 use triplestore::constants::{OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME};
+use triplestore::TripleFormat;
 use triplestore::{TriplesToAdd, Triplestore};
 use uuid::Uuid;
-use triplestore::TripleFormat;
 
 pub struct Mapping {
     pub template_dataset: TemplateDataset,

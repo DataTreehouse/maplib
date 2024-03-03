@@ -17,7 +17,7 @@ use polars::prelude::{col, IntoLazy};
 use polars_core::enable_string_cache;
 use polars_core::prelude::{DataType, Series, UniqueKeepStrategy};
 use representation::literals::sparql_literal_to_any_value;
-use representation::multitype::{split_df_multicols};
+use representation::multitype::split_df_multicols;
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use representation::RDFNodeType;
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
@@ -176,8 +176,6 @@ impl Triplestore {
     }
 }
 
-
-
 fn triple_to_df(
     df: &DataFrame,
     rdf_node_types: &HashMap<String, RDFNodeType>,
@@ -209,7 +207,13 @@ fn triple_to_df(
     let df = DataFrame::new(vec![subj_ser, verb_ser, obj_ser])
         .unwrap()
         .lazy()
-        .filter(col(SUBJECT_COL_NAME).is_null().or(col(OBJECT_COL_NAME).is_null()).or(col(VERB_COL_NAME).is_null()).not())
+        .filter(
+            col(SUBJECT_COL_NAME)
+                .is_null()
+                .or(col(OBJECT_COL_NAME).is_null())
+                .or(col(VERB_COL_NAME).is_null())
+                .not(),
+        )
         .unique(Some(unique_subset), UniqueKeepStrategy::First)
         .collect()
         .unwrap();

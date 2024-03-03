@@ -15,7 +15,7 @@ use rio_turtle::{NTriplesParser, TurtleError, TurtleParser};
 use rio_xml::{RdfXmlError, RdfXmlParser};
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{BufReader};
+use std::io::BufReader;
 use std::path::Path;
 
 impl Triplestore {
@@ -142,12 +142,12 @@ impl Triplestore {
                         oxrdf::Term::NamedNode(nn) => AnyValue::StringOwned(nn.to_string().into()),
                         oxrdf::Term::BlankNode(bb) => AnyValue::StringOwned(bb.to_string().into()),
                         oxrdf::Term::Literal(l) => {
-                                sparql_literal_to_any_value(
-                                    l.value(),
-                                    l.language(),
-                                    &Some(l.datatype()),
-                                )
-                                .0
+                            sparql_literal_to_any_value(
+                                l.value(),
+                                l.language(),
+                                &Some(l.datatype()),
+                            )
+                            .0
                         }
                     })
                     .collect();

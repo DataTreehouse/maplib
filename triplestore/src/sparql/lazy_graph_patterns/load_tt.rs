@@ -2,10 +2,10 @@ use crate::constants::{OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use crate::sparql::errors::SparqlError;
 use crate::TripleTable;
 use polars::prelude::{col, concat, Expr, LazyFrame, UnionArgs};
-use representation::{RDFNodeType};
-use std::collections::{HashMap};
-use query_processing::graph_patterns::{union};
+use query_processing::graph_patterns::union;
 use representation::solution_mapping::SolutionMappings;
+use representation::RDFNodeType;
+use std::collections::HashMap;
 
 fn single_tt_to_lf(tt: &TripleTable) -> Result<LazyFrame, SparqlError> {
     assert!(tt.unique, "Should be deduplicated");
@@ -60,12 +60,8 @@ pub fn multiple_tt_to_lf(
     }
     if filtered.is_empty() {
         Ok(None)
-    }
-    else {
-        let mut sm  = filtered.pop().unwrap();
-        for other_sm in filtered {
-            sm = union(sm, other_sm)?;
-        }
+    } else {
+        let sm = union(filtered)?;
         Ok(Some(sm))
     }
 }

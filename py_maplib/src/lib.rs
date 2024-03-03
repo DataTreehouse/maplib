@@ -239,10 +239,11 @@ impl Mapping {
     }
 
     fn validate(&mut self, py: Python<'_>) -> PyResult<ValidationReport> {
-        let shacl::ValidationReport { conforms, df } =
+        let shacl::ValidationReport { conforms, df, rdf_node_types } =
             self.inner.validate().map_err(PyMaplibError::from)?;
 
-        let report = if let Some(df) = df {
+        let report = if let Some(mut df) = df {
+            (df, _) = fix_cats_and_multicolumns(df, rdf_node_types.unwrap());
             Some(df_to_py_df(df, HashMap::new(), py)?)
         } else {
             None

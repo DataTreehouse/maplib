@@ -2,7 +2,10 @@ use crate::ast::{
     Annotation, Argument, ConstantLiteral, ConstantTerm, DefaultValue, Directive, Instance, PType,
     Parameter, Signature, Statement, StottrDocument, StottrLiteral, StottrTerm, Template,
 };
-use crate::constants::{OTTR_PREFIX, OTTR_PREFIX_IRI, RDFS_PREFIX, RDFS_PREFIX_IRI, RDF_PREFIX, RDF_PREFIX_IRI, XSD_PREFIX, XSD_PREFIX_IRI, OTTR_IRI};
+use crate::constants::{
+    OTTR_IRI, OTTR_PREFIX, OTTR_PREFIX_IRI, RDFS_PREFIX, RDFS_PREFIX_IRI, RDF_PREFIX,
+    RDF_PREFIX_IRI, XSD_PREFIX, XSD_PREFIX_IRI,
+};
 use crate::parsing::parsing_ast::{
     ResolvesToNamedNode, UnresolvedAnnotation, UnresolvedArgument, UnresolvedBaseTemplate,
     UnresolvedConstantLiteral, UnresolvedConstantTerm, UnresolvedDefaultValue, UnresolvedInstance,
@@ -10,11 +13,11 @@ use crate::parsing::parsing_ast::{
     UnresolvedStottrDocument, UnresolvedStottrLiteral, UnresolvedStottrTerm, UnresolvedTemplate,
 };
 use log::warn;
+use oxrdf::vocab::xsd;
 use oxrdf::{IriParseError, NamedNode};
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
-use oxrdf::vocab::xsd;
 
 #[derive(Debug)]
 pub enum ResolutionError {
@@ -285,7 +288,7 @@ fn resolve_ptype(
                 resolved = NamedNode::new_unchecked(OTTR_IRI);
             }
             PType::Basic(resolved, get_name(b))
-        },
+        }
         UnresolvedPType::Lub(l) => PType::Lub(Box::new(resolve_ptype(l, prefix_map)?)),
         UnresolvedPType::List(l) => PType::List(Box::new(resolve_ptype(l, prefix_map)?)),
         UnresolvedPType::NEList(l) => PType::NEList(Box::new(resolve_ptype(l, prefix_map)?)),

@@ -2,7 +2,8 @@ use super::Triplestore;
 use crate::sparql::errors::SparqlError;
 use log::debug;
 
-use query_processing::graph_patterns::{filter, left_join};
+use polars::prelude::JoinType;
+use query_processing::graph_patterns::{filter, join};
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use spargebra::algebra::{Expression, GraphPattern};
@@ -42,6 +43,12 @@ impl Triplestore {
             )?;
             right_solution_mappings = filter(right_solution_mappings, &expression_context)?;
         }
-        Ok(left_join(left_solution_mappings, right_solution_mappings)?)
+        let left_solution_mappings = join(
+            left_solution_mappings,
+            right_solution_mappings,
+            JoinType::Left,
+        )?;
+
+        Ok(left_solution_mappings)
     }
 }

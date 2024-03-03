@@ -26,13 +26,13 @@ use polars_core::frame::{DataFrame, UniqueKeepStrategy};
 use polars_core::utils::concat_df;
 use rayon::iter::ParallelIterator;
 use rayon::iter::{IntoParallelRefIterator, ParallelDrainRange};
+use representation::solution_mapping::SolutionMappings;
 use representation::{literal_iri_to_namednode, RDFNodeType};
 use std::collections::HashMap;
 use std::fs::remove_file;
 use std::io;
 use std::path::Path;
 use std::time::Instant;
-use representation::solution_mapping::SolutionMappings;
 use uuid::Uuid;
 
 pub enum TripleFormat {
@@ -355,7 +355,10 @@ impl Triplestore {
         if transient {
             for tdf in triples_df {
                 if let Some(m) = self.df_map.get(&tdf.predicate) {
-                    if let Some(SolutionMappings{ mappings:lf, rdf_node_types }) = multiple_tt_to_lf(
+                    if let Some(SolutionMappings {
+                        mappings: lf,
+                        rdf_node_types,
+                    }) = multiple_tt_to_lf(
                         m,
                         None,
                         Some(&tdf.subject_type),
@@ -396,7 +399,10 @@ impl Triplestore {
             let mut updated_transient_triples_df = vec![];
             for tdf in &triples_df {
                 if let Some(m) = self.transient_df_map.get(&tdf.predicate) {
-                    if let Some(SolutionMappings{ mappings:lf, rdf_node_types }) = multiple_tt_to_lf(
+                    if let Some(SolutionMappings {
+                        mappings: lf,
+                        rdf_node_types,
+                    }) = multiple_tt_to_lf(
                         m,
                         None,
                         Some(&tdf.subject_type),
