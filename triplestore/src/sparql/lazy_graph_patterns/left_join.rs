@@ -3,6 +3,7 @@ use crate::sparql::errors::SparqlError;
 use log::debug;
 
 use polars::prelude::JoinType;
+use query_processing::expressions::drop_inner_contexts;
 use query_processing::graph_patterns::{filter, join};
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
@@ -42,6 +43,8 @@ impl Triplestore {
                 parameters,
             )?;
             right_solution_mappings = filter(right_solution_mappings, &expression_context)?;
+            right_solution_mappings =
+                drop_inner_contexts(right_solution_mappings, &vec![&expression_context]);
         }
         let left_solution_mappings = join(
             left_solution_mappings,

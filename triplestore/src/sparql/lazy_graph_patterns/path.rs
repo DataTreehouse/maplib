@@ -11,7 +11,10 @@ use polars_core::frame::{DataFrame, UniqueKeepStrategy};
 use polars_core::series::{IntoSeries, Series};
 use query_processing::errors::QueryProcessingError;
 use query_processing::graph_patterns::{join, union};
-use representation::multitype::{compress_actual_multitypes, force_convert_multicol_to_single_col, group_by_workaround, implode_multicolumns};
+use representation::multitype::{
+    compress_actual_multitypes, force_convert_multicol_to_single_col, group_by_workaround,
+    implode_multicolumns,
+};
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::SolutionMappings;
 use representation::sparql_to_polars::{
@@ -117,6 +120,8 @@ impl Triplestore {
                     )
                     .unwrap()
                     .drop("subject_key")
+                    .unwrap()
+                    .drop("is_subject")
                     .unwrap();
                 lookup_df.rename(SUBJECT_COL_NAME, OBJECT_COL_NAME).unwrap();
                 out_df = out_df
@@ -128,6 +133,8 @@ impl Triplestore {
                     )
                     .unwrap()
                     .drop("object_key")
+                    .unwrap()
+                    .drop("is_subject")
                     .unwrap();
                 let mut dtypes = HashMap::new();
                 dtypes.insert(
@@ -605,7 +612,6 @@ impl U32DataFrameCreator {
         let row_index = uuid::Uuid::new_v4().to_string();
         mappings = mappings.with_row_index(&row_index, None);
         let df = mappings.collect().unwrap();
-        println!("DF current mappings {:?}", df);
 
         // Stack subject and object cols - deduplicate - add row index.
         let df_subj = df
@@ -663,7 +669,8 @@ impl U32DataFrameCreator {
             mut mappings,
             rdf_node_types: lookup_df_types,
         } = union(vec![subj_soln_mappings, obj_soln_mappings])?;
-        let (mappings_grby, maps) = group_by_workaround(mappings, &lookup_df_types, vec![VALUE_COLUMN.to_string()]);
+        let (mappings_grby, maps) =
+            group_by_workaround(mappings, &lookup_df_types, vec![VALUE_COLUMN.to_string()]);
         mappings = mappings_grby.agg([
             col(&row_index).alias(&row_index),
             col("is_subject").alias("is_subject"),
