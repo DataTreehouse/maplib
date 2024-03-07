@@ -4,10 +4,10 @@ version = "0.5.0"
 edition = "2021"
 
 [dependencies]
-query_processing = {path = "../../query_processing"}
-#query_processing = { git = "https://github.com/DataTreehouse/query_processing"}
-representation = { path = "../../representation"}
-#representation = { git = "https://github.com/DataTreehouse/representation"}
+#query_processing = {path = "../../query_processing"}
+query_processing = { git = "https://github.com/DataTreehouse/query_processing"}
+#representation = { path = "../../representation"}
+representation = { git = "https://github.com/DataTreehouse/representation"}
 parquet_io = {path="../parquet_io"}
 
 rayon = "1.6.0"

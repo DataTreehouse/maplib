@@ -1,0 +1,9 @@
+v,o
+<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>,<http://xmlns.com/foaf/0.1/Person>
+<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>,<http://xmlns.com/foaf/0.1/Person>
+<http://xmlns.com/foaf/0.1/firstName>,"""Ann"""
+<http://xmlns.com/foaf/0.1/firstName>,"""Bob"""
+<http://xmlns.com/foaf/0.1/lastName>,"""Brite"""
+<http://xmlns.com/foaf/0.1/lastName>,"""Strong"""
+<http://xmlns.com/foaf/0.1/mbox>,<mailto:ann.strong@example.com>
+<http://xmlns.com/foaf/0.1/mbox>,<mailto:bob.brite@example.com>

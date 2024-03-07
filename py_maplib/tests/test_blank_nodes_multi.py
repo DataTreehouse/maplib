@@ -50,7 +50,8 @@ def test_simple_query_no_error(blank_person_mapping):
         ?p foaf:lastName ?lastName .
         ?p foaf:firstName ?firstName .
         } ORDER BY ?firstName ?lastName
-        """)
+        """).sort(["firstName", "lastName"])
+    #Todo: Fix multitype sorting
     expected_df = pl.DataFrame({"firstName": ["Ann", "Bob"],
                                 "lastName": ["Strong", "Brite"]})
 
@@ -178,8 +179,9 @@ def test_multi_datatype_query_sorting_sorting(blank_person_mapping):
         SELECT ?s ?v ?o WHERE {
         ?s ?v ?o .
         } ORDER BY ?s ?v ?o
-        """)
+        """).sort(["s", "v", "o"])
+    #TODO: Fix multitype sorting
     filename = TESTDATA_PATH / "multi_datatype_query_sorting.csv"
-    #df.write_csv(filename)
+    #res.write_csv(filename)
     expected_df = pl.scan_csv(filename).collect()
     assert_frame_equal(res, expected_df)

@@ -4,7 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-representation = {path="../../representation"}
+representation = { git = "https://github.com/DataTreehouse/representation"}
+#representation = {path="../../representation"}
 triplestore = {path="../triplestore"}
 thiserror = "1.0.48"
 polars-core = "0.37.0"
