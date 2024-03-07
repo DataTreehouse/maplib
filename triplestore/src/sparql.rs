@@ -4,7 +4,6 @@ mod lazy_expressions;
 pub(crate) mod lazy_graph_patterns;
 mod lazy_order;
 
-use oxrdf::vocab::xsd;
 use oxrdf::{NamedNode, Variable};
 use representation::query_context::Context;
 use std::collections::HashMap;
@@ -139,17 +138,16 @@ impl Triplestore {
             if df.height() == 0 {
                 continue;
             }
-            let mut multicols = vec![];
-            if subj_dt == RDFNodeType::MultiType {
-                multicols.push(SUBJECT_COL_NAME);
+            let mut multicols = HashMap::new();
+            if matches!(subj_dt, RDFNodeType::MultiType(..)) {
+                multicols.insert(SUBJECT_COL_NAME.to_string(), subj_dt.clone());
             }
-            if obj_dt == RDFNodeType::MultiType {
-                multicols.push(OBJECT_COL_NAME);
+            if matches!(obj_dt, RDFNodeType::MultiType(..)) {
+                multicols.insert(OBJECT_COL_NAME.to_string(), obj_dt.clone());
             }
             if !multicols.is_empty() {
-                let lfs_dts = split_df_multicols(df.lazy(), multicols);
-                for (lf, mut map) in lfs_dts {
-                    let df = lf.collect().unwrap();
+                let dfs_dts = split_df_multicols(df, &multicols);
+                for (df, mut map) in dfs_dts {
                     let new_subj_dt = map.remove(SUBJECT_COL_NAME).unwrap_or(subj_dt.clone());
                     let new_obj_dt = map.remove(OBJECT_COL_NAME).unwrap_or(obj_dt.clone());
                     all_triples_to_add.push(TriplesToAdd {
@@ -195,6 +193,7 @@ fn triple_to_df(
     let (obj_ser, obj_dt) =
         term_pattern_series(df, rdf_node_types, &t.object, OBJECT_COL_NAME, len);
     let mut unique_subset = vec![];
+    //Todo: Fix datatype here..
     if subj_ser.dtype() != &DataType::Null {
         unique_subset.push(SUBJECT_COL_NAME.to_string());
     }
@@ -208,7 +207,13 @@ fn triple_to_df(
     let df = DataFrame::new(vec![subj_ser, verb_ser, obj_ser])
         .unwrap()
         .lazy()
-        .filter(col(SUBJECT_COL_NAME).is_null().or(col(OBJECT_COL_NAME).is_null()).or(col(VERB_COL_NAME).is_null()).not())
+        .filter(
+            col(SUBJECT_COL_NAME)
+                .is_null()
+                .or(col(OBJECT_COL_NAME).is_null())
+                .or(col(VERB_COL_NAME).is_null())
+                .not(),
+        )
         .unique(Some(unique_subset), UniqueKeepStrategy::First)
         .collect()
         .unwrap();
@@ -294,13 +299,13 @@ fn variable_series(
 fn cats_to_strings(df: DataFrame) -> DataFrame {
     let mut cats = vec![];
     for c in df.columns(df.get_column_names()).unwrap() {
-        if let DataType::Categorical(_) = c.dtype() {
+        if let DataType::Categorical(_, _) = c.dtype() {
             cats.push(c.name().to_string());
         }
     }
     let mut lf = df.lazy();
     for c in cats {
-        lf = lf.with_column(col(&c).cast(DataType::Utf8))
+        lf = lf.with_column(col(&c).cast(DataType::String))
     }
     lf.collect().unwrap()
 }

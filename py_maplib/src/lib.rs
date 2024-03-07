@@ -47,7 +47,7 @@ use oxrdf::vocab::xsd;
 use polars_core::frame::DataFrame;
 use polars_lazy::frame::IntoLazy;
 use pyo3::types::PyList;
-use representation::multitype::multi_col_to_string_col;
+use representation::multitype::{compress_actual_multitypes, lf_column_from_categorical, multi_columns_to_string_cols};
 use representation::polars_to_sparql::primitive_polars_type_to_literal_type;
 use representation::solution_mapping::EagerSolutionMappings;
 use representation::RDFNodeType;
@@ -239,10 +239,11 @@ impl Mapping {
     }
 
     fn validate(&mut self, py: Python<'_>) -> PyResult<ValidationReport> {
-        let shacl::ValidationReport { conforms, df } =
+        let shacl::ValidationReport { conforms, df, rdf_node_types } =
             self.inner.validate().map_err(PyMaplibError::from)?;
 
-        let report = if let Some(df) = df {
+        let report = if let Some(mut df) = df {
+            (df, _) = fix_cats_and_multicolumns(df, rdf_node_types.unwrap());
             Some(df_to_py_df(df, HashMap::new(), py)?)
         } else {
             None
@@ -353,32 +354,31 @@ fn _maplib(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     Ok(())
 }
 
-fn fix_multicolumns(df: DataFrame, dts: &HashMap<String, RDFNodeType>) -> DataFrame {
-    let mut lf = df.lazy();
-    for (c, v) in dts {
-        if v == &RDFNodeType::MultiType {
-            lf = multi_col_to_string_col(lf, c);
-        }
+fn fix_cats_and_multicolumns(mut df: DataFrame, mut dts: HashMap<String, RDFNodeType>) -> (DataFrame, HashMap<String, RDFNodeType>)  {
+    for (c,_) in &dts {
+        df = lf_column_from_categorical(df.lazy(), c, &dts).collect().unwrap();
     }
-    lf.collect().unwrap()
+    (df, dts) = compress_actual_multitypes(df, dts);
+    df = multi_columns_to_string_cols(df.lazy(), &dts).collect().unwrap();
+    (df, dts)
 }
 
 fn query_to_result(res: SparqlQueryResult, py: Python<'_>) -> PyResult<PyObject> {
     match res {
-        SparqlQueryResult::Select(mut df, datatypes) => {
-            df = fix_multicolumns(df, &datatypes);
+        SparqlQueryResult::Select(mut df, mut datatypes) => {
+            (df, datatypes) = fix_cats_and_multicolumns(df, datatypes);
             let pydf = df_to_py_df(df, dtypes_map(datatypes), py)?;
             Ok(pydf)
         }
         SparqlQueryResult::Construct(dfs) => {
             let mut query_results = vec![];
-            for (df, subj_type, obj_type) in dfs {
-                let datatypes: HashMap<_, _> = [
+            for (mut df, subj_type, obj_type) in dfs {
+                let mut datatypes: HashMap<_, _> = [
                     (SUBJECT_COL_NAME.to_string(), subj_type),
                     (OBJECT_COL_NAME.to_string(), obj_type),
                 ]
                 .into();
-                let df = fix_multicolumns(df, &datatypes);
+                (df, datatypes) = fix_cats_and_multicolumns(df, datatypes);
                 let pydf = df_to_py_df(df, dtypes_map(datatypes), py)?;
                 query_results.push(pydf);
             }
@@ -406,7 +406,7 @@ fn map_parameters(
                 let mut rdf_node_type = None;
 
                 if dt == xsd::STRING {
-                    let ch = c.utf8().unwrap();
+                    let ch = c.str().unwrap();
                     if let Some(s) = ch.first_non_null() {
                         let f = ch.get(s).unwrap();
                         if f.starts_with("<") {

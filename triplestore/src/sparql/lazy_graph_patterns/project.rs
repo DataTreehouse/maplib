@@ -19,12 +19,15 @@ impl Triplestore {
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
     ) -> Result<SolutionMappings, SparqlError> {
         debug!("Processing project graph pattern");
-        let solution_mappings = self.lazy_graph_pattern(
+        let mut solution_mappings = self.lazy_graph_pattern(
             inner,
             solution_mappings,
             &context.extension_with(PathEntry::ProjectInner),
             parameters,
         )?;
-        Ok(project(solution_mappings, variables)?)
+
+        solution_mappings = project(solution_mappings, variables)?;
+
+        Ok(solution_mappings)
     }
 }

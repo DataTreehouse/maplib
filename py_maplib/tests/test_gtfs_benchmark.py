@@ -138,7 +138,7 @@ def mapping() -> Mapping:
 
     agency_mut = agency.with_columns([
         (AGENCY_ID_PREFIX + pl.col("agency_id")).alias("agency_id"),
-        pl.col("agency_name").cast(pl.Utf8)
+        pl.col("agency_name").cast(pl.String)
     ]).collect()
 
     agency_mapping = mapping_prefixes + """

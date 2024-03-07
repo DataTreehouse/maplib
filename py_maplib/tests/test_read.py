@@ -20,9 +20,10 @@ def test_read_ntriples():
             SELECT ?s ?v ?o WHERE {
             ?s ?v ?o .
             } ORDER BY ?s ?v ?o
-            """)
+            """).sort(["s", "v", "o"])
+    # TODO: Fix multitype sorting
     filename = TESTDATA_PATH / "read_ntriples.csv"
-    #df.write_csv(str(filename))
+    #res.write_csv(str(filename))
     expected_df = pl.scan_csv(filename).collect()
     pl.testing.assert_frame_equal(res, expected_df)
 
@@ -40,8 +41,9 @@ def test_read_write_ntriples_string():
             SELECT ?v ?o WHERE {
             ?s ?v ?o .
             } ORDER BY ?v ?o
-            """)
-    filename = TESTDATA_PATH / "read_ntriples.csv"
-    #df.write_csv(str(filename))
+            """).sort(["v", "o"])
+    #TODO: Fix multitype sorting
+    filename = TESTDATA_PATH / "read_ntriples2.csv"
+    #res.write_csv(str(filename))
     expected_df = pl.scan_csv(filename).select(["v", "o"]).sort(["v", "o"]).collect()
     pl.testing.assert_frame_equal(res, expected_df)

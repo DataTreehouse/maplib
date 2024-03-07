@@ -2,7 +2,6 @@ from pathlib import Path
 from typing import Union, List, Dict
 
 from polars import DataFrame
-from .semantic_dataframe import SemanticDataFrame
 
 
 class ValidationReport:
@@ -14,7 +13,7 @@ class ValidationReport:
     conforms: True if no violations were found.
     """
 
-    def __init__(self, df: SemanticDataFrame, conforms: bool) -> ValidationReport:
+    def __init__(self, df: DataFrame, conforms: bool) -> ValidationReport:
         self.df = df
         self.conforms = conforms
         ...
@@ -82,24 +81,29 @@ class Mapping:
         :return: The generated template
         """
 
-    def query(self, query: str, parameters: Dict[str, DataFrame] = None) -> Union[
-        SemanticDataFrame, List[SemanticDataFrame], None]:
+    def query(self, query: str, parameters: Dict[str, DataFrame] = None, include_datatypes=False, multi_as_strings=True) -> Union[
+        DataFrame,
+        Dict[str, Union[DataFrame, Dict[str, str]]],
+        List[Union[DataFrame, Dict[str, Union[DataFrame, Dict[str, str]]]]],
+        None]:
         """
         Query the contained knowledge graph using SPARQL
         Currently, SELECT, CONSTRUCT and INSERT are supported.
         Usage:
 
-        >>> res = mapping.query('''
+        >>> df = mapping.query('''
         ... PREFIX ex:<http://example.net/ns#>
         ... SELECT ?obj1 ?obj2 WHERE {
         ...    ?obj1 ex:hasObj ?obj2
         ... }''')
-        ... print(res.df)
-        ... print(res.types)
+        ... print(df)
 
         :param query: The SPARQL query string
         :param parameters: PVALUES Parameters, a DataFrame containing the value bindings in the custom PVALUES construction.
+        :param multi_as_strings: Columns with multiple types are by default converted to their string representations, set to False to get the native Polars types in a struct.
+        :param include_datatypes: Datatypes are not returned by default, set to true to return a dict with the solution mappings and the datatypes.
         :return: DataFrame (Select), list of DataFrames (Construct) containing results, or None for Insert-queries
+
         """
 
     def insert(self, query: str, parameters: Dict[str, DataFrame] = None, transient: bool = False):

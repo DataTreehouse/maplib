@@ -1,13 +1,11 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
 use oxrdf::Variable;
-use polars::prelude::IntoLazy;
+use polars::prelude::{IntoLazy, JoinType};
 
 use query_processing::graph_patterns::join;
 use representation::query_context::Context;
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
-
-
 
 use std::collections::{HashMap, HashSet};
 
@@ -26,8 +24,8 @@ impl Triplestore {
                 rdf_node_types,
             }) = parameters.get(bindings_name)
             {
-                let mapping_vars:HashSet<_> = mappings.get_column_names().into_iter().collect();
-                let expected_vars: HashSet<_> = variables.iter().map(|x|x.as_str()).collect();
+                let mapping_vars: HashSet<_> = mappings.get_column_names().into_iter().collect();
+                let expected_vars: HashSet<_> = variables.iter().map(|x| x.as_str()).collect();
                 if mapping_vars != expected_vars {
                     todo!("Handle mismatching variables in PValues")
                 }
@@ -43,7 +41,7 @@ impl Triplestore {
             todo!("Handle this error")
         };
         if let Some(mut mappings) = solution_mappings {
-            mappings = join(mappings, sm)?;
+            mappings = join(mappings, sm, JoinType::Inner)?;
             Ok(mappings)
         } else {
             Ok(sm)

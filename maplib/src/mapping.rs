@@ -31,9 +31,9 @@ use std::io::Write;
 use std::path::Path;
 use std::time::Instant;
 use triplestore::constants::{OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME};
+use triplestore::TripleFormat;
 use triplestore::{TriplesToAdd, Triplestore};
 use uuid::Uuid;
-use triplestore::TripleFormat;
 
 pub struct Mapping {
     pub template_dataset: TemplateDataset,
@@ -392,9 +392,9 @@ impl Mapping {
             let mut fix_iris = vec![];
             for (coltype, colname) in coltypes_names {
                 if coltype == &RDFNodeType::IRI {
-                    let nonnull = df.column(colname).unwrap().utf8().unwrap().first_non_null();
+                    let nonnull = df.column(colname).unwrap().str().unwrap().first_non_null();
                     if let Some(i) = nonnull {
-                        let first_iri = df.column(colname).unwrap().utf8().unwrap().get(i).unwrap();
+                        let first_iri = df.column(colname).unwrap().str().unwrap().get(i).unwrap();
                         {
                             if !first_iri.starts_with('<') {
                                 fix_iris.push(colname);

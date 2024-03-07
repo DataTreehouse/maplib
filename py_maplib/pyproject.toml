@@ -1,7 +1,7 @@
 [project]
 name = "maplib"
 description = "Dataframe-based interactive knowledge graph construction using stOTTR templates"
-dependencies = ["polars==0.20.2", "pyarrow>=7.0.0"]
+dependencies = ["polars==0.20.13", "pyarrow>=7.0.0"]
 readme = "README.md"
 authors = [{name = "Magnus Bakken", email = "magnus@data-treehouse.com" }]
 license = {file = "LICENSE"}

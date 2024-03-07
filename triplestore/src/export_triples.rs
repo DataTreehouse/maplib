@@ -210,7 +210,7 @@ impl Triplestore {
 }
 
 fn anystring_to_str(a: AnyValue) -> &str {
-    if let AnyValue::Utf8(s) = a {
+    if let AnyValue::String(s) = a {
         s
     } else {
         panic!("Should never happen {}", a)

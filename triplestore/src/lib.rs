@@ -16,10 +16,9 @@ use crate::errors::TriplestoreError;
 use crate::io_funcs::{create_folder_if_not_exists, delete_tmp_parquets_in_caching_folder};
 use crate::sparql::lazy_graph_patterns::load_tt::multiple_tt_to_lf;
 use log::debug;
-use oxrdf::vocab::xsd;
 use oxrdf::NamedNode;
 use parquet_io::{
-    property_to_filename, read_parquet, split_write_tmp_df, write_parquet, ParquetIOError,
+    property_to_filename, scan_parquet, split_write_tmp_df, write_parquet, ParquetIOError,
 };
 use polars::prelude::{col, concat, IntoLazy, JoinArgs, JoinType, LazyFrame, UnionArgs};
 use polars_core::datatypes::AnyValue;
@@ -27,6 +26,7 @@ use polars_core::frame::{DataFrame, UniqueKeepStrategy};
 use polars_core::utils::concat_df;
 use rayon::iter::ParallelIterator;
 use rayon::iter::{IntoParallelRefIterator, ParallelDrainRange};
+use representation::solution_mapping::SolutionMappings;
 use representation::{literal_iri_to_namednode, RDFNodeType};
 use std::collections::HashMap;
 use std::fs::remove_file;
@@ -72,7 +72,7 @@ impl TripleTable {
         if let Some(dfs) = &self.dfs {
             Ok(dfs.get(idx).unwrap())
         } else if let Some(paths) = &self.df_paths {
-            let tmp_df = read_parquet(paths.get(idx).unwrap())
+            let tmp_df = scan_parquet(paths.get(idx).unwrap())
                 .map_err(TriplestoreError::ParquetIOError)?
                 .collect()
                 .unwrap();
@@ -92,7 +92,7 @@ impl TripleTable {
             Ok(vec![concat_df(dfs).unwrap().lazy()])
         } else if let Some(paths) = &self.df_paths {
             let lf_results: Vec<Result<LazyFrame, ParquetIOError>> =
-                paths.par_iter().map(read_parquet).collect();
+                paths.par_iter().map(scan_parquet).collect();
             let mut lfs = vec![];
             for lfr in lf_results {
                 lfs.push(lfr.map_err(TriplestoreError::ParquetIOError)?);
@@ -165,8 +165,8 @@ impl Triplestore {
                     static_verb_column,
                     has_unique_subset,
                 } = t;
-                assert_ne!(subject_type, RDFNodeType::MultiType);
-                assert_ne!(object_type, RDFNodeType::MultiType);
+                assert!(!matches!(subject_type, RDFNodeType::MultiType(..)));
+                assert!(!matches!(object_type, RDFNodeType::MultiType(..)));
                 prepare_triples(
                     df,
                     &subject_type,
@@ -355,7 +355,10 @@ impl Triplestore {
         if transient {
             for tdf in triples_df {
                 if let Some(m) = self.df_map.get(&tdf.predicate) {
-                    if let Some((_, _, lf)) = multiple_tt_to_lf(
+                    if let Some(SolutionMappings {
+                        mappings: lf,
+                        rdf_node_types,
+                    }) = multiple_tt_to_lf(
                         m,
                         None,
                         Some(&tdf.subject_type),
@@ -396,7 +399,10 @@ impl Triplestore {
             let mut updated_transient_triples_df = vec![];
             for tdf in &triples_df {
                 if let Some(m) = self.transient_df_map.get(&tdf.predicate) {
-                    if let Some((_, _, lf)) = multiple_tt_to_lf(
+                    if let Some(SolutionMappings {
+                        mappings: lf,
+                        rdf_node_types,
+                    }) = multiple_tt_to_lf(
                         m,
                         None,
                         Some(&tdf.subject_type),
@@ -475,7 +481,7 @@ pub fn prepare_triples(
             let predicate;
             {
                 let any_predicate = part.column(VERB_COL_NAME).unwrap().get(0);
-                if let Ok(AnyValue::Utf8(p)) = any_predicate {
+                if let Ok(AnyValue::String(p)) = any_predicate {
                     predicate = literal_iri_to_namednode(p);
                 } else {
                     panic!()
@@ -550,7 +556,7 @@ fn deduplicate_map(
                         .as_ref()
                         .unwrap()
                         .par_iter()
-                        .map(read_parquet)
+                        .map(scan_parquet)
                         .collect();
                     let mut lfs = vec![];
                     for lf_res in lf_results {

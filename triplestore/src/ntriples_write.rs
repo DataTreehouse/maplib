@@ -24,7 +24,7 @@ use crate::constants::OBJECT_COL_NAME;
 use crate::conversion::convert_to_string;
 use crate::errors::TriplestoreError;
 use oxrdf::NamedNode;
-use parquet_io::read_parquet;
+use parquet_io::scan_parquet;
 use polars::export::rayon::iter::{IntoParallelIterator, ParallelIterator};
 use polars::export::rayon::prelude::ParallelExtend;
 use polars::prelude::{AnyValue, DataFrame, Series};
@@ -79,7 +79,7 @@ impl Triplestore {
                     }
                 } else if let Some(paths) = &tt.df_paths {
                     for p in paths {
-                        let df = read_parquet(p)
+                        let df = scan_parquet(p)
                             .map_err(TriplestoreError::ParquetIOError)?
                             .collect()
                             .unwrap();
@@ -217,12 +217,12 @@ fn write_ntriples_for_df<W: Write + ?Sized>(
 }
 
 fn write_string_property_triple(f: &mut Vec<u8>, mut any_values: Vec<AnyValue>, v: &str) {
-    let lex = if let AnyValue::Utf8(lex) = any_values.pop().unwrap() {
+    let lex = if let AnyValue::String(lex) = any_values.pop().unwrap() {
         lex
     } else {
         panic!()
     };
-    let s = if let AnyValue::Utf8(s) = any_values.pop().unwrap() {
+    let s = if let AnyValue::String(s) = any_values.pop().unwrap() {
         s
     } else {
         panic!()
@@ -237,12 +237,12 @@ fn write_string_property_triple(f: &mut Vec<u8>, mut any_values: Vec<AnyValue>, 
 
 fn write_lang_string_property_triple(f: &mut Vec<u8>, mut any_values: Vec<AnyValue>, v: &str) {
     any_values.pop().unwrap();
-    let lex = if let AnyValue::Utf8(lex) = any_values.pop().unwrap() {
+    let lex = if let AnyValue::String(lex) = any_values.pop().unwrap() {
         lex
     } else {
         panic!()
     };
-    let s = if let AnyValue::Utf8(s) = any_values.pop().unwrap() {
+    let s = if let AnyValue::String(s) = any_values.pop().unwrap() {
         s
     } else {
         panic!()
@@ -260,12 +260,12 @@ fn write_non_string_property_triple(
     mut any_values: Vec<AnyValue>,
     v: &str,
 ) {
-    let lex = if let AnyValue::Utf8(lex) = any_values.pop().unwrap() {
+    let lex = if let AnyValue::String(lex) = any_values.pop().unwrap() {
         lex
     } else {
         panic!()
     };
-    let s = if let AnyValue::Utf8(s) = any_values.pop().unwrap() {
+    let s = if let AnyValue::String(s) = any_values.pop().unwrap() {
         s
     } else {
         panic!()
@@ -279,12 +279,12 @@ fn write_non_string_property_triple(
 }
 
 fn write_object_property_triple(f: &mut Vec<u8>, mut any_values: Vec<AnyValue>, v: &str) {
-    let o = if let AnyValue::Utf8(o) = any_values.pop().unwrap() {
+    let o = if let AnyValue::String(o) = any_values.pop().unwrap() {
         o
     } else {
         panic!()
     };
-    let s = if let AnyValue::Utf8(s) = any_values.pop().unwrap() {
+    let s = if let AnyValue::String(s) = any_values.pop().unwrap() {
         s
     } else {
         panic!()

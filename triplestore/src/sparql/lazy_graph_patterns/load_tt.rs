@@ -1,10 +1,11 @@
 use crate::constants::{OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use crate::sparql::errors::SparqlError;
 use crate::TripleTable;
-use polars::prelude::{col, concat, Expr, IntoLazy, LazyFrame, UnionArgs};
-use representation::multitype::convert_lf_col_to_multitype;
+use polars::prelude::{col, concat, Expr, LazyFrame, UnionArgs};
+use query_processing::graph_patterns::union;
+use representation::solution_mapping::SolutionMappings;
 use representation::RDFNodeType;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 fn single_tt_to_lf(tt: &TripleTable) -> Result<LazyFrame, SparqlError> {
     assert!(tt.unique, "Should be deduplicated");
@@ -26,14 +27,14 @@ pub fn multiple_tt_to_lf(
     obj_datatype_req: Option<&RDFNodeType>,
     subject_filter: Option<Expr>,
     object_filter: Option<Expr>,
-) -> Result<Option<(RDFNodeType, RDFNodeType, LazyFrame)>, SparqlError> {
+) -> Result<Option<SolutionMappings>, SparqlError> {
     let mut filtered = vec![];
     let m: Vec<_> = if let Some(m2) = m2 {
         m1.iter().chain(m2).collect()
     } else {
         m1.iter().collect()
     };
-    for ((subj_type, obj_type), tt) in &m {
+    for ((subj_type, obj_type), tt) in m {
         let mut keep = true;
         if let Some(subj_req) = subj_datatype_req {
             keep = subj_req == subj_type;
@@ -49,41 +50,18 @@ pub fn multiple_tt_to_lf(
             if let Some(object_filter) = &object_filter {
                 lf = lf.filter(object_filter.clone())
             }
-            let df = lf.collect().unwrap();
-            if df.height() > 0 {
-                filtered.push((subj_type, obj_type, df.lazy()));
-            }
+            let rdf_node_types = HashMap::from([
+                (SUBJECT_COL_NAME.to_string(), subj_type.clone()),
+                (OBJECT_COL_NAME.to_string(), obj_type.clone()),
+            ]);
+            let sm = SolutionMappings::new(lf, rdf_node_types);
+            filtered.push(sm);
         }
     }
     if filtered.is_empty() {
         Ok(None)
-    } else if filtered.len() == 1 {
-        let (subj_dt, obj_dt, lf) = filtered.remove(0);
-        Ok(Some((subj_dt.clone(), obj_dt.clone(), lf)))
     } else {
-        let mut lfs = vec![];
-        let set_subj_dt: HashSet<_> = filtered.iter().map(|(x, _, _)| *x).collect();
-        let set_obj_dt: HashSet<_> = filtered.iter().map(|(_, x, _)| *x).collect();
-
-        let mut use_subj_dt = None;
-        let mut use_obj_dt = None;
-
-        for (subj_dt, obj_dt, mut lf) in filtered {
-            if set_subj_dt.len() > 1 && subj_dt != &RDFNodeType::MultiType {
-                lf = convert_lf_col_to_multitype(lf, SUBJECT_COL_NAME, subj_dt);
-                use_subj_dt = Some(RDFNodeType::MultiType)
-            } else {
-                use_subj_dt = Some(subj_dt.clone())
-            }
-            if set_obj_dt.len() > 1 && obj_dt != &RDFNodeType::MultiType {
-                lf = convert_lf_col_to_multitype(lf, OBJECT_COL_NAME, obj_dt);
-                use_obj_dt = Some(RDFNodeType::MultiType)
-            } else {
-                use_obj_dt = Some(obj_dt.clone());
-            }
-            lfs.push(lf)
-        }
-        let lf = concat(lfs, Default::default()).unwrap();
-        Ok(Some((use_subj_dt.unwrap(), use_obj_dt.unwrap(), lf)))
+        let sm = union(filtered)?;
+        Ok(Some(sm))
     }
 }

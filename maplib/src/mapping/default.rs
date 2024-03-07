@@ -42,14 +42,14 @@ impl Mapping {
                 if let DataType::List(..) = dt {
                     todo!()
                 }
-                if dt != DataType::Utf8 {
+                if dt != DataType::String {
                     warn!(
                         "Primary key column {} is not String but instead {}. Will be cast",
                         &pk_col, dt
                     );
                     df = df
                         .lazy()
-                        .with_column(col(c).cast(DataType::Utf8))
+                        .with_column(col(c).cast(DataType::String))
                         .collect()
                         .unwrap();
                 }
@@ -71,14 +71,14 @@ impl Mapping {
                     todo!()
                 }
 
-                if dt != DataType::Utf8 {
+                if dt != DataType::String {
                     warn!(
                         "Foreign key column {} is not String but instead {}. Will be cast",
                         &c, dt
                     );
                     df = df
                         .lazy()
-                        .with_column(col(c).cast(DataType::Utf8))
+                        .with_column(col(c).cast(DataType::String))
                         .collect()
                         .unwrap();
                 }
