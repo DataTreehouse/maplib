@@ -388,24 +388,24 @@ pub fn create_empty_lf_datatypes(
         out_datatypes.insert(subject_rename.to_string(), RDFNodeType::None);
         series_vec.push(Series::new_empty(
             subject_rename,
-            &RDFNodeType::None.polars_data_type(),
+            &BaseRDFNodeType::None.polars_data_type(),
         ))
     }
     if let Some(verb_rename) = verb_keep_rename {
         out_datatypes.insert(verb_rename.to_string(), RDFNodeType::None);
         series_vec.push(Series::new_empty(
             verb_rename,
-            &RDFNodeType::None.polars_data_type(),
+            &BaseRDFNodeType::None.polars_data_type(),
         ))
     }
     if let Some(object_rename) = object_keep_rename {
         let (use_datatype, use_polars_datatype) = if let Some(dt) = object_datatype_req {
-            let polars_dt = dt.polars_data_type();
+            let polars_dt = BaseRDFNodeType::from_rdf_node_type(dt).polars_data_type();
             (dt.clone(), polars_dt)
         } else {
-            let dt = RDFNodeType::None;
-            let polars_dt = RDFNodeType::None.polars_data_type();
-            (dt, polars_dt)
+            let dt = BaseRDFNodeType::None;
+            let polars_dt = dt.polars_data_type();
+            (dt.as_rdf_node_type(), polars_dt)
         };
         out_datatypes.insert(object_rename.to_string(), use_datatype);
         series_vec.push(Series::new_empty(object_rename, &use_polars_datatype))

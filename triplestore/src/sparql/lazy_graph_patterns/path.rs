@@ -202,8 +202,8 @@ impl Triplestore {
                 out_dt_obj = dtypes.remove(OBJECT_COL_NAME).unwrap();
             } else {
                 out_df = DataFrame::new(vec![
-                    Series::new_empty(SUBJECT_COL_NAME, &RDFNodeType::None.polars_data_type()),
-                    Series::new_empty(OBJECT_COL_NAME, &RDFNodeType::None.polars_data_type()),
+                    Series::new_empty(SUBJECT_COL_NAME, &BaseRDFNodeType::None.polars_data_type()),
+                    Series::new_empty(OBJECT_COL_NAME, &BaseRDFNodeType::None.polars_data_type()),
                 ])
                 .unwrap();
                 out_dt_obj = RDFNodeType::None;
@@ -211,8 +211,8 @@ impl Triplestore {
             }
         } else {
             out_df = DataFrame::new(vec![
-                Series::new_empty(SUBJECT_COL_NAME, &RDFNodeType::None.polars_data_type()),
-                Series::new_empty(OBJECT_COL_NAME, &RDFNodeType::None.polars_data_type()),
+                Series::new_empty(SUBJECT_COL_NAME, &BaseRDFNodeType::None.polars_data_type()),
+                Series::new_empty(OBJECT_COL_NAME, &BaseRDFNodeType::None.polars_data_type()),
             ])
             .unwrap();
             out_dt_obj = RDFNodeType::None;
