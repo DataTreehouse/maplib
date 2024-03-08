@@ -180,7 +180,7 @@ fn write_ntriples_for_df<W: Write + ?Sized>(
                             write_string_property_triple(&mut write_buffer, any_values, verb);
                         }
                         TripleType::LangStringProperty => {
-                            write_lang_string_property_triple(&mut write_buffer, any_values, verb);
+                            write_string_property_triple(&mut write_buffer, any_values, verb);
                         }
                         TripleType::NonStringProperty => {
                             write_non_string_property_triple(

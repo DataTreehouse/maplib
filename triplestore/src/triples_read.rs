@@ -4,7 +4,7 @@ use crate::TriplesToAdd;
 use oxiri::Iri;
 
 use crate::constants::{OBJECT_COL_NAME, SUBJECT_COL_NAME};
-use oxrdf::vocab::xsd;
+use oxrdf::vocab::{rdf, xsd};
 use oxrdf::NamedNode;
 use polars_core::frame::DataFrame;
 use polars_core::prelude::{AnyValue, Series};
@@ -239,9 +239,11 @@ fn get_rio_term_datatype(t: &rio_api::model::Term) -> RDFNodeType {
         rio_api::model::Term::NamedNode(_) => RDFNodeType::IRI,
         rio_api::model::Term::BlankNode(_) => RDFNodeType::BlankNode,
         rio_api::model::Term::Literal(l) => match l {
-            rio_api::model::Literal::Simple { .. }
-            | rio_api::model::Literal::LanguageTaggedString { .. } => {
+            rio_api::model::Literal::Simple { .. } => {
                 RDFNodeType::Literal(xsd::STRING.into_owned())
+            }
+            rio_api::model::Literal::LanguageTaggedString { .. } => {
+                RDFNodeType::Literal(rdf::LANG_STRING.into_owned())
             }
             rio_api::model::Literal::Typed { value: _, datatype } => {
                 RDFNodeType::Literal(rio_named_node_to_oxrdf_named_node(datatype))
