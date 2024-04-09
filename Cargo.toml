@@ -6,3 +6,27 @@ members=[
     "parquet_io",
     "shacl"
 ]
+
+[workspace.dependencies]
+#representation = {path="../../representation"}
+representation = { git = "https://github.com/DataTreehouse/representation", tag="v0.5.0"}
+spargebra = { git = "https://github.com/DataTreehouse/spargebra", tag = "v0.2.8"}
+query_processing = { git = "https://github.com/DataTreehouse/query_processing", tag="v0.2.0"}
+polars = {version="0.38.3" }
+polars-utils = "0.38.3"
+polars-core = "0.38.3"
+rayon = "1.10.0"
+oxrdf = "0.1.7"
+rio_turtle = "0.8.4"
+rio_api = "0.8.4"
+rio_xml = "0.8.4"
+env_logger = "0.11.3"
+log="0.4.21"
+chrono = "0.4.37"
+chrono-tz = "0.9.0"
+uuid = {version="1.8.0", features = [
+    "v4",                # Lets you generate random UUIDs
+    "fast-rng",          # Use a faster (but still sufficiently random) RNG
+]}
+thiserror="1.0.31"
+

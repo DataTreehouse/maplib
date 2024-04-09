@@ -28,21 +28,11 @@ use parquet_io::scan_parquet;
 use polars::export::rayon::iter::{IntoParallelIterator, ParallelIterator};
 use polars::export::rayon::prelude::ParallelExtend;
 use polars::prelude::{AnyValue, DataFrame, Series};
-use polars::series::SeriesIter;
+use polars_core::series::SeriesIter;
 use polars_core::POOL;
 use polars_utils::contention_pool::LowContentionPool;
 use representation::{RDFNodeType, TripleType};
 use std::io::Write;
-
-/// Utility to write to `&mut Vec<u8>` buffer
-struct StringWrap<'a>(pub &'a mut Vec<u8>);
-
-impl<'a> std::fmt::Write for StringWrap<'a> {
-    fn write_str(&mut self, s: &str) -> std::fmt::Result {
-        self.0.extend_from_slice(s.as_bytes());
-        Ok(())
-    }
-}
 
 impl Triplestore {
     pub fn write_n_triples_all_dfs<W: Write + ?Sized>(
@@ -233,24 +223,6 @@ fn write_string_property_triple(f: &mut Vec<u8>, mut any_values: Vec<AnyValue>, 
     write!(f, " ").unwrap();
     write_string(f, lex);
     writeln!(f, " .").unwrap();
-}
-
-fn write_lang_string_property_triple(f: &mut Vec<u8>, mut any_values: Vec<AnyValue>, v: &str) {
-    any_values.pop().unwrap();
-    let lex = if let AnyValue::String(lex) = any_values.pop().unwrap() {
-        lex
-    } else {
-        panic!()
-    };
-    let s = if let AnyValue::String(s) = any_values.pop().unwrap() {
-        s
-    } else {
-        panic!()
-    };
-    write_iri_or_blanknode(f, s);
-    write!(f, " ").unwrap();
-    write_iri(f, v);
-    writeln!(f, " {} .", lex).unwrap();
 }
 
 //Assumes that the data has been bulk-converted

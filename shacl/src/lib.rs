@@ -1,8 +1,8 @@
 pub mod errors;
-use std::collections::HashMap;
 use errors::ShaclError;
-use polars_core::prelude::DataFrame;
+use polars::prelude::DataFrame;
 use representation::RDFNodeType;
+use std::collections::HashMap;
 use triplestore::Triplestore;
 
 pub struct ValidationReport {

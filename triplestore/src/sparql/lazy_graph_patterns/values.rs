@@ -1,8 +1,7 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
 use oxrdf::Variable;
-use polars::prelude::{IntoLazy, JoinType};
-use polars_core::frame::DataFrame;
+use polars::prelude::{DataFrame, IntoLazy, JoinType};
 use query_processing::graph_patterns::join;
 use representation::query_context::Context;
 use representation::solution_mapping::SolutionMappings;

@@ -4,31 +4,26 @@ version = "0.5.0"
 edition = "2021"
 
 [dependencies]
-#query_processing = {path = "../../query_processing"}
-query_processing = { git = "https://github.com/DataTreehouse/query_processing"}
-#representation = { path = "../../representation"}
-representation = { git = "https://github.com/DataTreehouse/representation"}
+query_processing = {workspace = true}
+representation = { workspace= true }
 parquet_io = {path="../parquet_io"}
-
-rayon = "1.6.0"
+rayon = {workspace=true}
 sprs = {version="0.11.1", features=["multi_thread"]}
-spargebra = { git = "https://github.com/DataTreehouse/spargebra"}
-oxrdf = {version="0.1.7"}
-polars = {version="0.37.0", features=["zip_with","performant", "cse", "semi_anti_join","abs", "round_series", "lazy", "concat_str", "is_in", "dtype-full", "strings", "rows", "timezones", "polars-time", "temporal", "list_eval", "partition_by", "parquet", "diagonal_concat", "cross_join", "cum_agg"] }
-log="0.4.19"
-rio_turtle = "0.8.4"
-rio_xml = "0.8.4"
-rio_api = "0.8.4"
-polars-utils = "0.37.0"
-polars-core = "0.37.0"
-chrono = "0.4"
-chrono-tz = "0.8"
-uuid = {version = "1.1.2", features = [
-    "v4",                # Lets you generate random UUIDs
-    "fast-rng",          # Use a faster (but still sufficiently random) RNG
-    ]}
-thiserror="1.0.31"
-env_logger = "0.10.0"
+spargebra = { workspace=true}
+oxrdf = {workspace=true}
+polars = {workspace=true, features=["zip_with","performant", "cse", "semi_anti_join","abs", "round_series", "lazy", "concat_str", "is_in", "dtype-full", "strings", "rows", "timezones", "polars-time", "temporal", "list_eval", "partition_by", "parquet", "diagonal_concat", "cross_join", "cum_agg"] }
+#TODO: Due to ntriples write using pool-functionality, should be refactored. Also concat df usage in lib.rs.
+polars-utils = { workspace=true }
+polars-core = {workspace=true}
+log= {workspace=true}
+rio_turtle = {workspace=true}
+rio_xml = { workspace=true }
+rio_api = { workspace=true }
+chrono = { workspace=true }
+chrono-tz = { workspace=true }
+uuid = {workspace=true}
+thiserror={ workspace= true }
+env_logger = { workspace=true }
 oxiri = "0.2.2"
 
 [dev-dependencies]

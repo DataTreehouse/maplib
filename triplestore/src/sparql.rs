@@ -13,9 +13,8 @@ use crate::constants::{OBJECT_COL_NAME, OTTR_IRI, SUBJECT_COL_NAME, VERB_COL_NAM
 use crate::sparql::errors::SparqlError;
 use crate::TriplesToAdd;
 use polars::frame::DataFrame;
-use polars::prelude::{col, IntoLazy};
+use polars::prelude::{col, DataType, IntoLazy, Series, UniqueKeepStrategy};
 use polars_core::enable_string_cache;
-use polars_core::prelude::{DataType, Series, UniqueKeepStrategy};
 use representation::literals::sparql_literal_to_any_value;
 use representation::multitype::split_df_multicols;
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};

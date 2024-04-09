@@ -11,9 +11,7 @@ use crate::mapping::ExpandOptions;
 use log::warn;
 
 use oxrdf::NamedNode;
-use polars::prelude::{col, IntoLazy};
-use polars_core::frame::DataFrame;
-use polars_core::prelude::DataType;
+use polars::prelude::{col, DataFrame, DataType, IntoLazy};
 use uuid::Uuid;
 
 impl Mapping {

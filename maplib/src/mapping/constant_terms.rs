@@ -4,9 +4,10 @@ use crate::mapping::errors::MappingError;
 use crate::mapping::RDFNodeType;
 
 use oxrdf::NamedNode;
-use polars::prelude::{concat_list, lit, Expr, LiteralValue, SpecialEq};
-use polars_core::datatypes::DataType;
-use polars_core::prelude::{AnyValue, IntoSeries, ListChunked, Series};
+use polars::prelude::{
+    concat_list, lit, AnyValue, DataType, Expr, IntoSeries, ListChunked, LiteralValue, Series,
+    SpecialEq,
+};
 use rayon::iter::ParallelIterator;
 use rayon::prelude::IntoParallelIterator;
 use representation::literals::sparql_literal_to_any_value;

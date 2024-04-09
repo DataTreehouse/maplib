@@ -1,11 +1,11 @@
-use polars::prelude::{LazyFrame, ParallelStrategy, ParquetWriter, ScanArgsParquet};
-use polars_core::frame::DataFrame;
+use polars::prelude::{
+    DataFrame, LazyFrame, ParallelStrategy, ParquetWriter, PolarsError, ScanArgsParquet,
+};
 use std::cmp::min;
 use std::fs::File;
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
-use polars_core::error::PolarsError;
 use std::fmt::{Display, Formatter};
 use std::io;
 use thiserror::Error;

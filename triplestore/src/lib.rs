@@ -20,9 +20,10 @@ use oxrdf::NamedNode;
 use parquet_io::{
     property_to_filename, scan_parquet, split_write_tmp_df, write_parquet, ParquetIOError,
 };
-use polars::prelude::{col, concat, IntoLazy, JoinArgs, JoinType, LazyFrame, UnionArgs};
-use polars_core::datatypes::AnyValue;
-use polars_core::frame::{DataFrame, UniqueKeepStrategy};
+use polars::prelude::{
+    col, concat, AnyValue, DataFrame, IntoLazy, JoinArgs, JoinType, LazyFrame, UnionArgs,
+    UniqueKeepStrategy,
+};
 use polars_core::utils::concat_df;
 use rayon::iter::ParallelIterator;
 use rayon::iter::{IntoParallelRefIterator, ParallelDrainRange};

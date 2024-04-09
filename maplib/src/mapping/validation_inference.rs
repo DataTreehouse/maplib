@@ -4,8 +4,7 @@ use crate::ast::{has_iritype, PType, Parameter, Signature};
 use crate::mapping::errors::MappingError;
 use crate::mapping::{PrimitiveColumn, RDFNodeType};
 use oxrdf::NamedNode;
-use polars_core::frame::DataFrame;
-use polars_core::prelude::DataType;
+use polars::prelude::{DataFrame, DataType};
 use representation::polars_to_sparql::primitive_polars_type_to_literal_type;
 use std::collections::{HashMap, HashSet};
 

@@ -11,10 +11,7 @@ use crate::sparql::lazy_graph_patterns::load_tt::multiple_tt_to_lf;
 use log::debug;
 use oxrdf::NamedNode;
 use polars::prelude::IntoLazy;
-use polars::prelude::{col, lit, Expr, JoinType};
-use polars_core::datatypes::{AnyValue, DataType};
-use polars_core::frame::DataFrame;
-use polars_core::series::Series;
+use polars::prelude::{col, lit, AnyValue, DataFrame, DataType, Expr, JoinType, Series};
 use query_processing::graph_patterns::{join, union};
 use representation::multitype::convert_lf_col_to_multitype;
 use representation::{literal_iri_to_namednode, BaseRDFNodeType, RDFNodeType};
@@ -327,7 +324,7 @@ impl Triplestore {
             }
         }
         Ok(if !solution_mappings.is_empty() {
-            let mut sm = union(solution_mappings)?;
+            let sm = union(solution_mappings)?;
             (sm, false)
         } else {
             create_empty_lf_datatypes(

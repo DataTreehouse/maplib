@@ -4,8 +4,7 @@ use crate::constants::{OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use crate::conversion::convert_to_string;
 use crate::errors::TriplestoreError;
 use oxrdf::{Literal, NamedNode, Subject, Term, Triple};
-use polars::prelude::{col, IntoLazy};
-use polars_core::prelude::AnyValue;
+use polars::prelude::{col, AnyValue, IntoLazy};
 use representation::{
     literal_iri_to_namednode, RDFNodeType, TripleType, LANG_STRING_LANG_FIELD,
     LANG_STRING_VALUE_FIELD,

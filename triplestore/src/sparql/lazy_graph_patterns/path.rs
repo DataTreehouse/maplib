@@ -1,14 +1,12 @@
 use super::Triplestore;
 use crate::constants::{OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use crate::sparql::errors::SparqlError;
-use crate::sparql::lazy_graph_patterns::triple::create_empty_lf_datatypes;
 use oxrdf::vocab::xsd;
 use oxrdf::{NamedNode, Variable};
-use polars::prelude::{col, lit, DataFrameJoinOps, IntoLazy};
-use polars::prelude::{JoinArgs, JoinType};
-use polars_core::datatypes::AnyValue;
-use polars_core::frame::{DataFrame, UniqueKeepStrategy};
-use polars_core::series::{IntoSeries, Series};
+use polars::prelude::{
+    col, lit, AnyValue, DataFrame, DataFrameJoinOps, IntoLazy, IntoSeries, JoinArgs, JoinType,
+    Series, UniqueKeepStrategy,
+};
 use query_processing::errors::QueryProcessingError;
 use query_processing::graph_patterns::{join, union};
 use representation::multitype::{
