@@ -44,9 +44,7 @@ use triplestore::sparql::{QueryResult as SparqlQueryResult, QueryResult};
 #[cfg(target_os = "linux")]
 use jemallocator::Jemalloc;
 use oxrdf::vocab::xsd;
-use polars_core::frame::DataFrame;
-use polars_lazy::frame::IntoLazy;
-use polars_lazy::prelude::col;
+use polars::prelude::{col, IntoLazy, DataFrame};
 use pyo3::types::PyList;
 use representation::multitype::{compress_actual_multitypes, lf_column_from_categorical, multi_columns_to_string_cols};
 use representation::polars_to_sparql::primitive_polars_type_to_literal_type;
