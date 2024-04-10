@@ -18,7 +18,16 @@ env:
   MATURIN_PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
 
 jobs:
+  security_audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+      - uses: actions-rs/audit-check@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
   manylinux-x64_64:
+    needs: security_audit
     runs-on: ubuntu-latest
     environment: release
     strategy:
@@ -47,6 +56,7 @@ jobs:
           rust-toolchain: ${{ env.RUST_TOOLCHAIN }}
 
   win-macos:
+    needs: security_audit
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -76,6 +86,7 @@ jobs:
           rust-toolchain: ${{ env.RUST_TOOLCHAIN }}
 
   macos-aarch64:
+    needs: security_audit
     runs-on: macos-latest
     environment: release
     strategy:
