@@ -13,7 +13,7 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
-  RUST_TOOLCHAIN: nightly-2024-03-20
+  RUST_TOOLCHAIN: nightly-2024-04-10
   MATURIN_VERSION: '1.5.1'
   MATURIN_PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
 
