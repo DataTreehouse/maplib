@@ -11,7 +11,7 @@ members=[
 #representation = {path="../../representation"}
 representation = { git = "https://github.com/DataTreehouse/representation", tag="v0.5.3"}
 spargebra = { git = "https://github.com/DataTreehouse/spargebra", tag = "v0.2.8"}
-query_processing = { git = "https://github.com/DataTreehouse/query_processing", tag="v0.2.4"}
+query_processing = { git = "https://github.com/DataTreehouse/query_processing", tag="v0.2.5"}
 polars = {version="0.38.3" }
 polars-utils = "0.38.3"
 polars-core = "0.38.3"

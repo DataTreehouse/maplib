@@ -270,19 +270,19 @@ impl Triplestore {
 
                 let output_solution_mappings =
                     self.lazy_expression(inner, solution_mappings, &plus_context, parameters)?;
-                unary_plus(output_solution_mappings, context, &plus_context)?
+                unary_plus(output_solution_mappings, &plus_context, context)?
             }
             Expression::UnaryMinus(inner) => {
                 let minus_context = context.extension_with(PathEntry::UnaryMinus);
                 let output_solution_mappings =
                     self.lazy_expression(inner, solution_mappings, &minus_context, parameters)?;
-                unary_minus(output_solution_mappings, &context, &minus_context)?
+                unary_minus(output_solution_mappings, &minus_context, context)?
             }
             Expression::Not(inner) => {
                 let not_context = context.extension_with(PathEntry::Not);
                 let output_solution_mappings =
                     self.lazy_expression(inner, solution_mappings, &not_context, parameters)?;
-                not_expression(output_solution_mappings, &context, &not_context)?
+                not_expression(output_solution_mappings, &not_context, context)?
             }
             Expression::Exists(inner) => {
                 let exists_context = context.extension_with(PathEntry::Exists);
@@ -310,8 +310,8 @@ impl Triplestore {
                 exists(
                     output_solution_mappings,
                     exists_lf,
-                    &context,
                     &exists_context,
+                    &context
                 )?
             }
             Expression::Bound(v) => bound(solution_mappings, v, &context)?,
