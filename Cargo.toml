@@ -9,9 +9,9 @@ members=[
 
 [workspace.dependencies]
 #representation = {path="../../representation"}
-representation = { git = "https://github.com/DataTreehouse/representation", tag="v0.5.0"}
+representation = { git = "https://github.com/DataTreehouse/representation", tag="v0.5.3"}
 spargebra = { git = "https://github.com/DataTreehouse/spargebra", tag = "v0.2.8"}
-query_processing = { git = "https://github.com/DataTreehouse/query_processing", tag="v0.2.0"}
+query_processing = { git = "https://github.com/DataTreehouse/query_processing", tag="v0.2.4"}
 polars = {version="0.38.3" }
 polars-utils = "0.38.3"
 polars-core = "0.38.3"
@@ -28,5 +28,5 @@ uuid = {version="1.8.0", features = [
     "v4",                # Lets you generate random UUIDs
     "fast-rng",          # Use a faster (but still sufficiently random) RNG
 ]}
-thiserror="1.0.31"
+thiserror="1.0.58"
 
