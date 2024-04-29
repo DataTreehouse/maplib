@@ -5,7 +5,7 @@ dependencies = ["polars>=0.20.13", "pyarrow>=7.0.0"]
 readme = "README.md"
 authors = [{name = "Magnus Bakken", email = "magnus@data-treehouse.com" }]
 license = {file = "LICENSE"}
-requires-python = ">=3.8"
+requires-python = ">=3.9"
 keywords = ["rdf", "graph", "dataframe", "sparql", "ottr"]
 classifiers = [
     "Development Status :: 4 - Beta",
