@@ -1,11 +1,11 @@
 #Based on https://github.com/mitmproxy/pdoc/blob/main/.github/workflows/docs.yml
 name: website
 
-# build the documentation whenever there are new tags
+# build the documentation whenever there are new changes on main
 on:
   push:
-    tags:
-      - 'py-v[0-9]+.[0-9]+.[0-9]+'
+    branches:
+      - main
 
 # security: restrict permissions for CI jobs.
 permissions:
