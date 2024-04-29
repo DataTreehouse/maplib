@@ -7,7 +7,7 @@ Template expansion is typically zero-copy and nearly instantaneous, and the buil
 maplib is written in Rust, it is built on [Apache Arrow](https://arrow.apache.org/) using [Pola.rs](https://www.pola.rs/) and uses libraries from [Oxigraph](https://github.com/oxigraph/oxigraph) for handling linked data as well as parsing SPARQL queries.
 
 ## Installing
-The package is published on PyPi:
+The package is published on [PyPi](https://pypi.org/project/maplib/) and the API documented [here](https://datatreehouse.github.io/maplib/maplib/maplib.html):
 ```shell
 pip install maplib
 ```
@@ -123,14 +123,14 @@ Indeed, we have added the triple:
 | "<https://github.com/DataTreehouse/maplib/pizza#Hawaiian>" |
 
 ## API
-The API is simple, and contains only one class and a few methods for:
+The [API](https://datatreehouse.github.io/maplib/maplib/maplib.html) is simple, and contains only one class and a few methods for:
 - expanding templates
 - querying
 - validating
 - importing triples
 - writing triples
 
-The API is documented HERE
+The API is documented [HERE](https://datatreehouse.github.io/maplib/maplib/maplib.html)
 
 ## References
 There is an associated paper [1] with associated benchmarks showing superior performance and scalability that can be found [here](https://ieeexplore.ieee.org/document/10106242). OTTR is described in [2].
