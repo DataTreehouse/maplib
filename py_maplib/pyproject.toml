@@ -22,7 +22,7 @@ classifiers = [
 
 [project.urls]
 Homepage = "https://github.com/DataTreehouse/maplib"
-Documentation = "https://github.com/DataTreehouse/maplib/blob/main/doc/python_mapper_api.md"
+Documentation = "https://datatreehouse.github.io/maplib/maplib/maplib.html"
 Repository = "https://github.com/DataTreehouse/maplib"
 Changelog = "https://github.com/DataTreehouse/maplib/releases"
 
