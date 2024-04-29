@@ -6,16 +6,12 @@ class ValidationReport:
     """
     SHACL Validation report.
     Only constructed by maplib.
-    Fields:
-    df: Report with constraints that were not met.
-    conforms: True if no violations were found.
     """
 
     def __init__(self, df: DataFrame, conforms: bool) -> ValidationReport:
-        self.df = df
-        self.conforms = conforms
+        conforms = conforms
+        df = df
         ...
-
 
 class Mapping:
     """

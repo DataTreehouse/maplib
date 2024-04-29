@@ -32,6 +32,7 @@ jobs:
           pip install --upgrade pip
           pip install maturin==${{ env.MATURIN_VERSION }}
           pip install -r tests/requirements.txt
+          pip install pdoc
         working-directory: ./py_maplib
 
       - name: Set up nightly rust
