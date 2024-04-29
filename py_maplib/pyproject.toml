@@ -29,7 +29,3 @@ Changelog = "https://github.com/DataTreehouse/maplib/releases"
 [build-system]
 requires = ["maturin==1.5.1"]
 build-backend = "maturin"
-
-[tool.maturin]
-module-name = "maplib._maplib"
-python-source = "python"

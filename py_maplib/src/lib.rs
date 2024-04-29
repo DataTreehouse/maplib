@@ -44,7 +44,7 @@ use triplestore::sparql::{QueryResult as SparqlQueryResult, QueryResult};
 #[cfg(target_os = "linux")]
 use jemallocator::Jemalloc;
 use oxrdf::vocab::xsd;
-use polars::prelude::{col, IntoLazy, DataFrame};
+use polars::prelude::{IntoLazy, DataFrame};
 use pyo3::types::PyList;
 use representation::multitype::{compress_actual_multitypes, lf_column_from_categorical, multi_columns_to_string_cols};
 use representation::polars_to_sparql::primitive_polars_type_to_literal_type;
@@ -347,6 +347,7 @@ impl Mapping {
 }
 
 #[pymodule]
+#[pyo3(name = "maplib")]
 fn _maplib(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_class::<Mapping>()?;
     m.add_class::<ValidationReport>()?;
@@ -354,7 +355,7 @@ fn _maplib(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
 }
 
 fn fix_cats_and_multicolumns(mut df: DataFrame, mut dts: HashMap<String, RDFNodeType>) -> (DataFrame, HashMap<String, RDFNodeType>)  {
-    let column_ordering: Vec<_> = df.get_column_names().iter().map(|x|x.to_string()).collect();;
+    let column_ordering: Vec<_> = df.get_column_names().iter().map(|x|x.to_string()).collect();
     for (c,_) in &dts {
         df = lf_column_from_categorical(df.lazy(), c, &dts).collect().unwrap();
     }

@@ -1,0 +1,66 @@
+#Based on https://github.com/mitmproxy/pdoc/blob/main/.github/workflows/docs.yml
+name: website
+
+# build the documentation whenever there are new tags
+on:
+  push:
+    tags:
+      - 'py-v[0-9]+.[0-9]+.[0-9]+'
+
+# security: restrict permissions for CI jobs.
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_LOG: debug
+  MATURIN_VERSION: '1.5.1'
+  RUST_TOOLCHAIN: nightly-2024-04-10
+
+jobs:
+  # Build the documentation and upload the static HTML files as an artifact.
+  build_and_test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install dependencies
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          pip install --upgrade pip
+          pip install maturin==${{ env.MATURIN_VERSION }}
+          pip install -r tests/requirements.txt
+        working-directory: ./py_maplib
+
+      - name: Set up nightly rust
+        run: |
+          rustup toolchain install ${{ env.RUST_TOOLCHAIN }}
+          rustup default ${{ env.RUST_TOOLCHAIN }}
+
+      - name: Build install package and build docs
+        run: |
+          source .venv/bin/activate
+          maturin develop
+          pdoc -o docs/ maplib
+        working-directory: ./py_maplib
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: py_maplib/docs/
+
+  # Deploy the artifact to GitHub pages.
+  # This is a separate job so that only actions/deploy-pages has the necessary permissions.
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

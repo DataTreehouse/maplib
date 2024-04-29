@@ -1,7 +1,17 @@
-# maplib
-Dataframe-based interactive knowledge graph construction, validation and enrichment using stOTTR templates and SPARQL. The library is especially suitable for problems that arise when building industrial knowledge graphs. The library is a Rust-based implementation of [stOTTR](https://dev.spec.ottr.xyz/stOTTR/). Implemented with [Apache Arrow](https://arrow.apache.org/) in Rust using [Pola.rs](https://www.pola.rs/), with a Python wrapper.
+## maplib: High-performance RDF knowledge graph construction, validation and enrichment in Python
+maplib is a knowledge graph construction library for building RDF knowledge graphs using template expansion ([OTTR](https://ottr.xyz/) Templates). Maplib features SPARQL- and SHACL-engines that are available as the graph is being constructed, allowing enrichment and validation. It can construct and validate knowledge graphs with millions of nodes in seconds.
 
-There is an associated paper [1] that can be found [here](https://ieeexplore.ieee.org/document/10106242).
+maplib allows you to leverage your existing skills with Pandas or Polars to extract and wrangle data in existing databases and spreadsheets, before applying simple templates to them to build the knowledge graph. 
+Template expansion is typically zero-copy and nearly instantaneous, and the built-in SPARQL and SHACL engines means you can query, inspect, enrich and validate the knowledge graph immediately.      
+
+maplib is written in Rust, it is built on [Apache Arrow](https://arrow.apache.org/) using [Pola.rs](https://www.pola.rs/) and uses libraries from [Oxigraph](https://github.com/oxigraph/oxigraph) for handling linked data as well as parsing SPARQL queries.
+
+## Installing
+The package is published on PyPi:
+```shell
+pip install maplib
+```
+Please send us a message on our [webpage](https://www.data-treehouse.com/contact-8) if you want to try out SHACL.  
 
 ## Mapping
 We can easily map DataFrames to RDF-graphs using the Python library. Below is a reproduction of the example in the paper [1]. Assume that we have a DataFrame given by: 
@@ -27,7 +37,7 @@ That is, our DataFrame is:
 | "https://.../pizza#Hawaiian"  | "https://.../maplib/countries#CAN" | [".../ingredients#Pineapple", ".../ingredients#Ham"] |
 | "https://.../pizza#Grandiosa" | "https://.../maplib/countries#NOR" | [".../ingredients#Pepper", ".../ingredients#Meat"]   |
 
-Then we can define a stOTTR template, and create our knowledge graph by expanding this template with our DataFrame as input:
+Then we can define a OTTR template, and create our knowledge graph by expanding this template with our DataFrame as input:
 ```python
 from maplib import Mapping
 pl.Config.set_fmt_str_lengths(150)
@@ -113,15 +123,18 @@ Indeed, we have added the triple:
 | "<https://github.com/DataTreehouse/maplib/pizza#Hawaiian>" |
 
 ## API
-The Python API is documented [here](https://github.com/DataTreehouse/maplib/tree/main/py_maplib/doc/python_mapper_api.md)
+The API is simple, and contains only one class and a few methods for:
+- expanding templates
+- querying
+- validating
+- importing triples
+- writing triples
 
-## Installing
-The package is published on PyPi:
-```shell
-pip install maplib
-```
+The API is documented HERE
 
 ## References
+There is an associated paper [1] with associated benchmarks showing superior performance and scalability that can be found [here](https://ieeexplore.ieee.org/document/10106242). OTTR is described in [2].
+
 [1] M. Bakken, "maplib: Interactive, literal RDF model mapping for industry," in IEEE Access, doi: 10.1109/ACCESS.2023.3269093.
 
 [2] M. G. Skjæveland, D. P. Lupp, L. H. Karlsen, and J. W. Klüwer, “Ottr: Formal templates for pattern-based ontology engineering.” in WOP (Book),
