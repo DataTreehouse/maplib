@@ -19,7 +19,7 @@ env:
 
 jobs:
   # Build the documentation and upload the static HTML files as an artifact.
-  build_and_test:
+  build:
     runs-on: ubuntu-latest
 
     steps:
