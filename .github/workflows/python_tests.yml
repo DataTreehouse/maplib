@@ -24,7 +24,7 @@ jobs:
         python -m venv .venv
         source .venv/bin/activate
         pip install --upgrade pip
-        pip install maturin==${{ env.MATURIN_VERSION }}
+        pip install "maturin[patchelf]"==${{ env.MATURIN_VERSION }}
         pip install -r tests/requirements.txt
       working-directory: ./py_maplib
 

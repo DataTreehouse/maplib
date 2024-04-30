@@ -348,7 +348,7 @@ impl Mapping {
 
 #[pymodule]
 #[pyo3(name = "maplib")]
-fn _maplib(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
+fn _maplib(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Mapping>()?;
     m.add_class::<ValidationReport>()?;
     Ok(())

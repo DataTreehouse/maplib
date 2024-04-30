@@ -6,7 +6,7 @@ edition = "2021"
 [workspace]
 
 [dependencies]
-pyo3 = {version = "0.21.1", features = ["extension-module"] }
+pyo3 = {version = "0.21.2", features = ["extension-module"] }
 maplib = {path="../maplib"}
 triplestore = {path="../triplestore"}
 representation = { git = "https://github.com/DataTreehouse/representation", tag="v0.5.3"}
@@ -22,9 +22,6 @@ log ="0.4.21"
 [lib]
 name = "maplib"
 crate-type = ["cdylib"]
-
-[package.metadata.maturin]
-python-source = "python"
 
 # Conditional dependency specification of mimalloc and jemallocator copied from: https://github.com/pola-rs/polars/blob/main/py-polars/Cargo.toml
 # Licence in /licensing/POLARS_LICENSE
