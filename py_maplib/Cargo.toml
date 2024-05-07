@@ -1,6 +1,6 @@
 [package]
 name = "py_maplib"
-version = "0.8.10"
+version = "0.8.11"
 edition = "2021"
 
 [workspace]
@@ -9,13 +9,14 @@ edition = "2021"
 pyo3 = {version = "0.21.2", features = ["extension-module"] }
 maplib = {path="../maplib"}
 triplestore = {path="../triplestore"}
-representation = { git = "https://github.com/DataTreehouse/representation", tag="v0.5.3"}
+#representation = {path="../../representation"}
+representation = { git = "https://github.com/DataTreehouse/representation", tag="v0.5.4"}
 shacl = {path="../shacl"}
 oxrdf = {version="0.1.7"}
 #pydf_io = {path = "../../pydf_io"}
-pydf_io = { git = "https://github.com/DataTreehouse/pydf_io", tag="v0.7.0"}
+pydf_io = { git = "https://github.com/DataTreehouse/pydf_io", tag="v0.7.1"}
 thiserror="1.0.58"
-polars = {version="0.38.3", features=["dtype-array", "dtype-categorical", "dtype-date", "dtype-datetime",
+polars = {version= "0.39.2", features=["dtype-array", "dtype-categorical", "dtype-date", "dtype-datetime",
     "dtype-decimal", "dtype-duration", "dtype-i8", "dtype-i16", "dtype-struct", "dtype-time", "dtype-u8", "dtype-u16"]}
 log ="0.4.21"
 

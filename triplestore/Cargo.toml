@@ -20,7 +20,6 @@ rio_turtle = {workspace=true}
 rio_xml = { workspace=true }
 rio_api = { workspace=true }
 chrono = { workspace=true }
-chrono-tz = { workspace=true }
 uuid = {workspace=true}
 thiserror={ workspace= true }
 env_logger = { workspace=true }

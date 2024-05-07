@@ -7,6 +7,7 @@ use polars::prelude::{
     col, lit, AnyValue, DataFrame, DataFrameJoinOps, IntoLazy, IntoSeries, JoinArgs, JoinType,
     Series, UniqueKeepStrategy,
 };
+use polars_core::prelude::SortMultipleOptions;
 use query_processing::errors::QueryProcessingError;
 use query_processing::graph_patterns::{join, union};
 use representation::multitype::{
@@ -350,8 +351,9 @@ fn to_csr(df: &DataFrame, max_index: usize) -> SparseMatrix {
     let df = df
         .sort(
             vec![SUBJECT_COL_NAME, SUBJECT_COL_NAME],
-            vec![false, false],
-            false,
+            SortMultipleOptions::default()
+                .with_order_descendings([false, false])
+                .with_maintain_order(false),
         )
         .unwrap();
     let subject = df.column(SUBJECT_COL_NAME).unwrap();

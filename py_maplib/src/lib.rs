@@ -103,16 +103,18 @@ impl ExpandOptions {
 #[pymethods]
 impl Mapping {
     #[new]
-    fn new(documents: Option<&PyAny>, caching_folder: Option<&PyAny>) -> PyResult<Mapping> {
+    fn new(documents: Option<&Bound<'_, PyAny>>, caching_folder: Option<&Bound<'_, PyAny>>) -> PyResult<Mapping> {
         let documents = if let Some(documents) = documents {
             if documents.is_instance_of::<PyList>() {
                 let mut strs = vec![];
                 for doc in documents.iter()? {
-                    strs.push(doc?.str()?.to_str()?);
+                    let docstr = doc?.str()?.to_str()?.to_string();
+                    strs.push(docstr);
                 }
                 Some(strs)
             } else {
-                Some(vec![documents.str()?.to_str()?])
+                let docstr = documents.str()?.to_str()?.to_string();
+                Some(vec![docstr])
             }
         } else {
             None
@@ -120,7 +122,7 @@ impl Mapping {
         let mut parsed_documents = vec![];
         if let Some(documents) = documents {
             for ds in documents {
-                let parsed_doc = document_from_str(ds).map_err(PyMaplibError::from)?;
+                let parsed_doc = document_from_str(&ds).map_err(PyMaplibError::from)?;
                 parsed_documents.push(parsed_doc);
             }
         }
@@ -162,7 +164,7 @@ impl Mapping {
     fn expand(
         &mut self,
         template: &str,
-        df: Option<&PyAny>,
+        df: Option<&Bound<'_, PyAny>>,
         unique_subset: Option<Vec<String>>,
     ) -> PyResult<Option<PyObject>> {
         let unique_subsets = if let Some(unique_subset) = unique_subset {
@@ -197,7 +199,7 @@ impl Mapping {
 
     fn expand_default(
         &mut self,
-        df: &PyAny,
+        df: &Bound<'_, PyAny>,
         primary_key_column: String,
         template_prefix: Option<String>,
         predicate_uri_prefix: Option<String>,
@@ -226,7 +228,9 @@ impl Mapping {
         &mut self,
         py: Python<'_>,
         query: String,
-        parameters: Option<HashMap<String, &PyAny>>,
+        parameters: Option<HashMap<String, Bound<'_, PyAny>>>,
+        include_datatypes: Option<bool>,
+        multi_as_strings: Option<bool>,
     ) -> PyResult<PyObject> {
         let mapped_parameters = map_parameters(parameters)?;
         let res = self
@@ -234,15 +238,15 @@ impl Mapping {
             .triplestore
             .query(&query, &mapped_parameters)
             .map_err(PyMaplibError::from)?;
-        query_to_result(res, py)
+        query_to_result(res, multi_as_strings.unwrap_or(true), py)
     }
 
-    fn validate(&mut self, py: Python<'_>) -> PyResult<ValidationReport> {
+    fn validate(&mut self, py: Python<'_>, multi_as_strings: Option<bool>) -> PyResult<ValidationReport> {
         let shacl::ValidationReport { conforms, df, rdf_node_types } =
             self.inner.validate().map_err(PyMaplibError::from)?;
 
         let report = if let Some(mut df) = df {
-            (df, _) = fix_cats_and_multicolumns(df, rdf_node_types.unwrap());
+            (df, _) = fix_cats_and_multicolumns(df, rdf_node_types.unwrap(), multi_as_strings.unwrap_or(true));
             Some(df_to_py_df(df, HashMap::new(), py)?)
         } else {
             None
@@ -251,7 +255,7 @@ impl Mapping {
         Ok(ValidationReport { conforms, report })
     }
 
-    fn insert(&mut self, query: String, parameters: Option<HashMap<String, &PyAny>>, transient: Option<bool>) -> PyResult<()> {
+    fn insert(&mut self, query: String, parameters: Option<HashMap<String, Bound<'_, PyAny>>>, transient: Option<bool>) -> PyResult<()> {
         let mapped_parameters = map_parameters(parameters)?;
         self.inner
             .triplestore
@@ -263,7 +267,7 @@ impl Mapping {
         Ok(())
     }
 
-    fn insert_sprout(&mut self, query: String, parameters: Option<HashMap<String, &PyAny>>, transient: Option<bool>) -> PyResult<()> {
+    fn insert_sprout(&mut self, query: String, parameters: Option<HashMap<String, Bound<'_, PyAny>>>, transient: Option<bool>) -> PyResult<()> {
         let mapped_parameters = map_parameters(parameters)?;
         if self.sprout.is_none() {
             self.create_sprout()?;
@@ -290,7 +294,7 @@ impl Mapping {
 
     fn read_triples(
         &mut self,
-        file_path: &PyAny,
+        file_path: &Bound<'_, PyAny>,
         format: Option<String>,
         base_iri: Option<String>,
         transient: Option<bool>,
@@ -322,7 +326,7 @@ impl Mapping {
         Ok(())
     }
 
-    fn write_ntriples(&mut self, file_path: &PyAny) -> PyResult<()> {
+    fn write_ntriples(&mut self, file_path: &Bound<'_, PyAny>) -> PyResult<()> {
         let file_path = file_path.str()?.to_string();
         let path_buf = PathBuf::from(file_path);
         let mut actual_file = File::create(path_buf.as_path())
@@ -337,7 +341,7 @@ impl Mapping {
         Ok(String::from_utf8(out).unwrap())
     }
 
-    fn write_native_parquet(&mut self, folder_path: &PyAny) -> PyResult<()> {
+    fn write_native_parquet(&mut self, folder_path: &Bound<'_, PyAny>) -> PyResult<()> {
         let folder_path = folder_path.str()?.to_string();
         self.inner
             .write_native_parquet(&folder_path)
@@ -354,21 +358,23 @@ fn _maplib(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     Ok(())
 }
 
-fn fix_cats_and_multicolumns(mut df: DataFrame, mut dts: HashMap<String, RDFNodeType>) -> (DataFrame, HashMap<String, RDFNodeType>)  {
+fn fix_cats_and_multicolumns(mut df: DataFrame, mut dts: HashMap<String, RDFNodeType>, multi_to_strings:bool) -> (DataFrame, HashMap<String, RDFNodeType>)  {
     let column_ordering: Vec<_> = df.get_column_names().iter().map(|x|x.to_string()).collect();
     for (c,_) in &dts {
         df = lf_column_from_categorical(df.lazy(), c, &dts).collect().unwrap();
     }
     (df, dts) = compress_actual_multitypes(df, dts);
-    df = multi_columns_to_string_cols(df.lazy(), &dts).collect().unwrap();
+    if multi_to_strings {
+        df = multi_columns_to_string_cols(df.lazy(), &dts).collect().unwrap();
+    }
     df = df.select(column_ordering.as_slice()).unwrap();
     (df, dts)
 }
 
-fn query_to_result(res: SparqlQueryResult, py: Python<'_>) -> PyResult<PyObject> {
+fn query_to_result(res: SparqlQueryResult, multi_as_strings:bool, py: Python<'_>) -> PyResult<PyObject> {
     match res {
         SparqlQueryResult::Select(mut df, mut datatypes) => {
-            (df, datatypes) = fix_cats_and_multicolumns(df, datatypes);
+            (df, datatypes) = fix_cats_and_multicolumns(df, datatypes, multi_as_strings);
             let pydf = df_to_py_df(df, dtypes_map(datatypes), py)?;
             Ok(pydf)
         }
@@ -380,11 +386,11 @@ fn query_to_result(res: SparqlQueryResult, py: Python<'_>) -> PyResult<PyObject>
                     (OBJECT_COL_NAME.to_string(), obj_type),
                 ]
                 .into();
-                (df, datatypes) = fix_cats_and_multicolumns(df, datatypes);
+                (df, datatypes) = fix_cats_and_multicolumns(df, datatypes, multi_as_strings);
                 let pydf = df_to_py_df(df, dtypes_map(datatypes), py)?;
                 query_results.push(pydf);
             }
-            Ok(PyList::new(py, query_results).into())
+            Ok(PyList::new_bound(py, query_results).into())
         }
     }
 }
@@ -394,13 +400,13 @@ fn dtypes_map(map: HashMap<String, RDFNodeType>) -> HashMap<String, String> {
 }
 
 fn map_parameters(
-    parameters: Option<HashMap<String, &PyAny>>,
+    parameters: Option<HashMap<String, Bound<'_, PyAny>>>,
 ) -> PyResult<Option<HashMap<String, EagerSolutionMappings>>> {
     if let Some(parameters) = parameters {
         let mut mapped_parameters = HashMap::new();
         for (k, pydf) in parameters {
             let mut rdf_node_types = HashMap::new();
-            let df = polars_df_to_rust_df(pydf)?;
+            let df = polars_df_to_rust_df(&pydf)?;
             let names = df.get_column_names();
             for c in df.columns(names).unwrap() {
                 let dt = primitive_polars_type_to_literal_type(c.dtype()).unwrap();

@@ -1,10 +1,6 @@
-use crate::constants::{
-    XSD_DATETIME_WITHOUT_TZ_FORMAT, XSD_DATETIME_WITH_TZ_FORMAT, XSD_DATE_WITHOUT_TZ_FORMAT,
-};
-use chrono::TimeZone as ChronoTimeZone;
-use chrono::{Datelike, Timelike};
 use polars::prelude::{col, lit, IntoLazy};
-use polars::prelude::{DataFrame, DataType, IntoSeries, Series, TimeZone};
+use polars::prelude::{DataFrame, DataType, Series};
+use representation::polars_to_sparql::{date_series_to_strings, datetime_series_to_strings};
 use representation::{LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD};
 
 pub fn convert_to_string(series: &Series) -> Option<Series> {
@@ -12,29 +8,8 @@ pub fn convert_to_string(series: &Series) -> Option<Series> {
 
     match series_data_type {
         DataType::String => return None,
-        DataType::Date => {
-            return Some(
-                series
-                    .date()
-                    .unwrap()
-                    .strftime(XSD_DATE_WITHOUT_TZ_FORMAT)
-                    .into_series(),
-            )
-        }
-        DataType::Datetime(_, tz_opt) => {
-            if let Some(tz) = tz_opt {
-                return Some(hack_format_timestamp_with_timezone(series, &mut tz.clone()));
-            } else {
-                return Some(
-                    series
-                        .datetime()
-                        .unwrap()
-                        .strftime(XSD_DATETIME_WITHOUT_TZ_FORMAT)
-                        .expect("Conversion OK")
-                        .into_series(),
-                );
-            }
-        }
+        DataType::Date => return Some(date_series_to_strings(series)),
+        DataType::Datetime(_, tz_opt) => return Some(datetime_series_to_strings(series, tz_opt)),
         DataType::Duration(_) => {
             todo!()
         }
@@ -74,40 +49,4 @@ pub fn convert_to_string(series: &Series) -> Option<Series> {
         _ => {}
     }
     Some(series.cast(&DataType::String).unwrap())
-}
-
-fn hack_format_timestamp_with_timezone(series: &Series, tz: &mut TimeZone) -> Series {
-    let timezone_opt: Result<chrono_tz::Tz, _> = tz.parse();
-    if let Ok(timezone) = timezone_opt {
-        let datetime_strings = Series::from_iter(
-            series
-                .datetime()
-                .unwrap()
-                .as_datetime_iter()
-                .map(|x| x.unwrap())
-                .map(|x| {
-                    format!(
-                        "{}",
-                        timezone
-                            .with_ymd_and_hms(
-                                x.year(),
-                                x.month(),
-                                x.day(),
-                                x.hour(),
-                                x.minute(),
-                                x.second()
-                            )
-                            .latest()
-                            .unwrap()
-                            .with_nanosecond(x.nanosecond())
-                            .unwrap()
-                            .format(XSD_DATETIME_WITH_TZ_FORMAT)
-                    )
-                }),
-        );
-
-        datetime_strings
-    } else {
-        panic!("Unknown timezone{}", tz);
-    }
 }

@@ -311,7 +311,7 @@ impl Triplestore {
                     output_solution_mappings,
                     exists_lf,
                     &exists_context,
-                    &context
+                    &context,
                 )?
             }
             Expression::Bound(v) => bound(solution_mappings, v, &context)?,
