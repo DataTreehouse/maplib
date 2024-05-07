@@ -351,9 +351,8 @@ fn to_csr(df: &DataFrame, max_index: usize) -> SparseMatrix {
     let df = df
         .sort(
             vec![SUBJECT_COL_NAME, SUBJECT_COL_NAME],
-            SortMultipleOptions::default()
-                .with_order_descendings([false, false])
-                .with_maintain_order(false),
+            vec![false, false],
+            false
         )
         .unwrap();
     let subject = df.column(SUBJECT_COL_NAME).unwrap();
