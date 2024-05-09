@@ -12,5 +12,9 @@ pub struct ValidationReport {
 }
 
 pub fn validate(_triplestore: &mut Triplestore) -> Result<ValidationReport, ShaclError> {
-    unimplemented!("Enterprise edition only")
+    unimplemented!("Contact Data Treehouse to try")
+}
+
+pub fn validate_shacl(_triplestore: &mut Triplestore) -> Result<ValidationReport, ShaclError> {
+    unimplemented!("Contact Data Treehouse to try")
 }
