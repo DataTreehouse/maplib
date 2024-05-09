@@ -83,7 +83,6 @@ def test_multi_datatype_query_no_error(blank_person_mapping):
         } 
         """)
     by = ["s","v","o"]
-    print(res)
     df = res.sort(by=by)
     filename = TESTDATA_PATH / "multi_datatype_query.csv"
     #df.write_csv(filename)
@@ -105,7 +104,6 @@ def test_multi_datatype_union_query_no_error(blank_person_mapping):
     by = ["s","o"]
     df = res.sort(by=by)
     filename = TESTDATA_PATH / "multi_datatype_union_query.csv"
-    print(df)
     #df.write_csv(filename)
     expected_df = pl.scan_csv(filename).sort(by).collect()
     assert_frame_equal(df, expected_df)
@@ -143,7 +141,6 @@ def test_multi_datatype_join_query_two_vars_no_error(blank_person_mapping):
         }
         } 
         """)
-    print(res)
     by = ["s","o"]
     df = res.sort(by=by)
     filename = TESTDATA_PATH / "multi_datatype_join_query_two_vars.csv"

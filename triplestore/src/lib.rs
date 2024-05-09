@@ -24,6 +24,7 @@ use polars::prelude::{
     col, concat, AnyValue, DataFrame, IntoLazy, JoinArgs, JoinType, LazyFrame, UnionArgs,
     UniqueKeepStrategy,
 };
+use polars_core::prelude::DataType;
 use polars_core::utils::concat_df;
 use rayon::iter::ParallelIterator;
 use rayon::iter::{IntoParallelRefIterator, ParallelDrainRange};
@@ -294,7 +295,7 @@ impl Triplestore {
         overwrite: bool,
     ) {
         for TripleDF {
-            df,
+            mut df,
             predicate,
             subject_type,
             object_type,
@@ -306,6 +307,21 @@ impl Triplestore {
             } else {
                 &mut self.df_map
             };
+
+            let mut cast_str_cols = vec![];
+            if let DataType::Categorical(_, _) = df.column(SUBJECT_COL_NAME).unwrap().dtype() {
+                cast_str_cols.push(SUBJECT_COL_NAME);
+            }
+            if let DataType::Categorical(_, _) = df.column(OBJECT_COL_NAME).unwrap().dtype() {
+                cast_str_cols.push(OBJECT_COL_NAME);
+            }
+            if !cast_str_cols.is_empty() {
+                let mut lf = df.lazy();
+                for c in cast_str_cols {
+                    lf = lf.with_column(col(c).cast(DataType::String));
+                }
+                df = lf.collect().unwrap();
+            }
 
             if let Some(m) = use_map.get_mut(&predicate) {
                 if let Some(v) = m.get_mut(&k) {

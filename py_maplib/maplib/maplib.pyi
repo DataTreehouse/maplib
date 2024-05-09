@@ -125,6 +125,13 @@ class Mapping:
         :return: Validation report containing a report (report.df) and whether the graph conforms (report.conforms)
         """
 
+    def validate_shacl(self) -> ValidationReport:
+        """
+        Validate the shapes in the contained knowledge graph using the SHACL-SHACL shapes
+
+        :return: Validation report containing a report (report.df) and whether the graph conforms (report.conforms)
+        """
+
     def read_triples(self, file_path: Union[str, Path], format: str=None, base_iri: str=None, transient: bool = False) -> None:
         """
         Reads triples from a file path.

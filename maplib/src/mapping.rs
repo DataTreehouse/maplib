@@ -22,7 +22,7 @@ use rayon::iter::ParallelDrainRange;
 use rayon::iter::ParallelIterator;
 use representation::RDFNodeType;
 use shacl::errors::ShaclError;
-use shacl::{validate, ValidationReport};
+use shacl::{validate, validate_shacl, ValidationReport};
 use std::cmp::{max, min};
 use std::collections::{HashMap, HashSet};
 use std::io::Write;
@@ -254,6 +254,10 @@ impl Mapping {
 
     pub fn validate(&mut self) -> Result<ValidationReport, ShaclError> {
         validate(&mut self.triplestore)
+    }
+
+    pub fn validate_shacl(&mut self) -> Result<ValidationReport, ShaclError> {
+        validate_shacl(&mut self.triplestore)
     }
 
     fn _expand(

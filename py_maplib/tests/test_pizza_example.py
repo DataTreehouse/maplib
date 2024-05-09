@@ -41,7 +41,6 @@ def pizzas_mapping():
         ?p a pizza:Pizza .
         ?p pizza:hasIngredient ing:Pineapple .
     }"""
-    print(m.query(hpizzas))
     m.insert(hpizzas)
     return m
 

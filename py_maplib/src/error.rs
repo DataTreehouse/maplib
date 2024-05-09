@@ -24,7 +24,7 @@
 use maplib::errors::MaplibError;
 use maplib::mapping::errors::MappingError;
 use maplib::templates::errors::TemplateError;
-use polars::prelude::{PolarsError};
+use polars::prelude::PolarsError;
 use pyo3::{create_exception, exceptions::PyException, prelude::*};
 use shacl::errors::ShaclError;
 use std::fmt::Debug;

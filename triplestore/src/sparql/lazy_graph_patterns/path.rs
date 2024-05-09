@@ -7,7 +7,6 @@ use polars::prelude::{
     col, lit, AnyValue, DataFrame, DataFrameJoinOps, IntoLazy, IntoSeries, JoinArgs, JoinType,
     Series, UniqueKeepStrategy,
 };
-use polars_core::prelude::SortMultipleOptions;
 use query_processing::errors::QueryProcessingError;
 use query_processing::graph_patterns::{join, union};
 use representation::multitype::{
@@ -68,15 +67,24 @@ impl Triplestore {
         }
 
         if !create_sparse {
-            let gp = create_graph_pattern(ppe, subject, object);
+            let mut intermediaries = vec![];
+            let mut gp = create_graph_pattern(ppe, subject, object, &mut intermediaries);
+            gp = GraphPattern::Distinct {
+                inner: Box::new(gp),
+            };
             let mut sms = self.lazy_graph_pattern(
                 &gp,
-                solution_mappings,
+                None,
                 &context.extension_with(PathEntry::PathRewrite),
                 &None,
             )?;
-            let select: Vec<_> = var_cols.iter().map(|x| col(x)).collect();
-            sms.mappings = sms.mappings.select(select);
+            for i in &intermediaries {
+                sms.rdf_node_types.remove(i).unwrap();
+            }
+            sms.mappings = sms.mappings.drop(intermediaries);
+            if let Some(solution_mappings) = solution_mappings {
+                sms = join(sms, solution_mappings, JoinType::Inner)?;
+            }
             return Ok(sms);
         }
 
@@ -298,6 +306,7 @@ fn create_graph_pattern(
     ppe: &PropertyPathExpression,
     subject: &TermPattern,
     object: &TermPattern,
+    intermediaries: &mut Vec<String>,
 ) -> GraphPattern {
     match ppe {
         PropertyPathExpression::NamedNode(nn) => GraphPattern::Bgp {
@@ -307,19 +316,31 @@ fn create_graph_pattern(
                 object: object.clone(),
             }],
         },
-        PropertyPathExpression::Reverse(r) => create_graph_pattern(r, object, subject),
+        PropertyPathExpression::Reverse(r) => {
+            create_graph_pattern(r, object, subject, intermediaries)
+        }
         PropertyPathExpression::Sequence(l, r) => {
-            let intermediary = uuid::Uuid::new_v4().to_string();
-            let intermediary_tp =
-                TermPattern::Variable(Variable::new_unchecked(format!("v{}", intermediary)));
+            let intermediary = format!("v{}", uuid::Uuid::new_v4().to_string());
+            let intermediary_tp = TermPattern::Variable(Variable::new_unchecked(&intermediary));
+            intermediaries.push(intermediary);
             GraphPattern::Join {
-                left: Box::new(create_graph_pattern(l, subject, &intermediary_tp)),
-                right: Box::new(create_graph_pattern(r, &intermediary_tp, object)),
+                left: Box::new(create_graph_pattern(
+                    l,
+                    subject,
+                    &intermediary_tp,
+                    intermediaries,
+                )),
+                right: Box::new(create_graph_pattern(
+                    r,
+                    &intermediary_tp,
+                    object,
+                    intermediaries,
+                )),
             }
         }
         PropertyPathExpression::Alternative(a, b) => GraphPattern::Union {
-            left: Box::new(create_graph_pattern(a, subject, object)),
-            right: Box::new(create_graph_pattern(b, subject, object)),
+            left: Box::new(create_graph_pattern(a, subject, object, intermediaries)),
+            right: Box::new(create_graph_pattern(b, subject, object, intermediaries)),
         },
         PropertyPathExpression::ZeroOrMore(_)
         | PropertyPathExpression::OneOrMore(_)
@@ -352,7 +373,7 @@ fn to_csr(df: &DataFrame, max_index: usize) -> SparseMatrix {
         .sort(
             vec![SUBJECT_COL_NAME, SUBJECT_COL_NAME],
             vec![false, false],
-            false
+            false,
         )
         .unwrap();
     let subject = df.column(SUBJECT_COL_NAME).unwrap();

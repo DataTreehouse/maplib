@@ -355,7 +355,6 @@ impl Triplestore {
                         parameters,
                     )?;
                 }
-
                 coalesce_expression(output_solution_mappings, inner_contexts, &context)?
             }
             Expression::FunctionCall(func, args) => {

@@ -13,11 +13,14 @@ use crate::constants::{OBJECT_COL_NAME, OTTR_IRI, SUBJECT_COL_NAME, VERB_COL_NAM
 use crate::sparql::errors::SparqlError;
 use crate::TriplesToAdd;
 use polars::frame::DataFrame;
-use polars::prelude::{col, DataType, IntoLazy, Series, UniqueKeepStrategy};
+use polars::prelude::{col, lit, DataType, Expr, IntoLazy};
 use polars_core::enable_string_cache;
-use representation::literals::sparql_literal_to_any_value;
-use representation::multitype::split_df_multicols;
+use query_processing::expressions::col_null_expr;
+use representation::multitype::{split_df_multicols, unique_workaround};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
+use representation::sparql_to_polars::{
+    sparql_literal_to_polars_literal_value, sparql_named_node_to_polars_literal_value,
+};
 use representation::RDFNodeType;
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 use spargebra::Query;
@@ -92,8 +95,7 @@ impl Triplestore {
                     mappings,
                     rdf_node_types,
                 } = self.lazy_graph_pattern(pattern, None, &context, parameters)?;
-                let mut df = mappings.collect().unwrap();
-                df = cats_to_strings(df);
+                let df = mappings.collect().unwrap();
                 let mut dfs = vec![];
                 for t in template {
                     if let Some(df_and_types) = triple_to_df(&df, &rdf_node_types, t)? {
@@ -180,44 +182,34 @@ fn triple_to_df(
     rdf_node_types: &HashMap<String, RDFNodeType>,
     t: &TriplePattern,
 ) -> Result<Option<(DataFrame, RDFNodeType, RDFNodeType)>, SparqlError> {
-    let len = if triple_has_variable(t) {
-        df.height()
-    } else {
-        1
-    };
-    let (subj_ser, subj_dt) =
-        term_pattern_series(df, rdf_node_types, &t.subject, SUBJECT_COL_NAME, len);
-    let (verb_ser, _) =
-        named_node_pattern_series(df, rdf_node_types, &t.predicate, VERB_COL_NAME, len);
-    let (obj_ser, obj_dt) =
-        term_pattern_series(df, rdf_node_types, &t.object, OBJECT_COL_NAME, len);
-    let mut unique_subset = vec![];
-    //Todo: Fix datatype here..
-    if subj_ser.dtype() != &DataType::Null {
-        unique_subset.push(SUBJECT_COL_NAME.to_string());
-    }
-    if verb_ser.dtype() != &DataType::Null {
-        unique_subset.push(VERB_COL_NAME.to_string());
-    }
-    if obj_ser.dtype() != &DataType::Null {
-        unique_subset.push(OBJECT_COL_NAME.to_string());
-    }
-    //Not using drop_null since behaviour is bad for structs where one field is null
-    let df = DataFrame::new(vec![subj_ser, verb_ser, obj_ser])
-        .unwrap()
+    let mut triple_types = HashMap::new();
+    let (subj_expr, subj_dt) =
+        term_pattern_expression(rdf_node_types, &t.subject, SUBJECT_COL_NAME);
+    triple_types.insert(SUBJECT_COL_NAME.to_string(), subj_dt);
+    let (verb_expr, verb_dt) = named_node_pattern_expr(rdf_node_types, &t.predicate, VERB_COL_NAME);
+    triple_types.insert(VERB_COL_NAME.to_string(), verb_dt);
+    let (obj_expr, obj_dt) = term_pattern_expression(rdf_node_types, &t.object, OBJECT_COL_NAME);
+    triple_types.insert(OBJECT_COL_NAME.to_string(), obj_dt);
+
+    let mut lf = df
+        .clone()
         .lazy()
+        .select(vec![subj_expr, verb_expr, obj_expr])
         .filter(
-            col(SUBJECT_COL_NAME)
-                .is_null()
-                .or(col(OBJECT_COL_NAME).is_null())
-                .or(col(VERB_COL_NAME).is_null())
-                .not(),
-        )
-        .unique(Some(unique_subset), UniqueKeepStrategy::First)
-        .collect()
-        .unwrap();
+            col_null_expr(SUBJECT_COL_NAME, &triple_types)
+                .not()
+                .and(col_null_expr(VERB_COL_NAME, &triple_types).not())
+                .and(col_null_expr(OBJECT_COL_NAME, &triple_types).not()),
+        );
+    lf = unique_workaround(lf, &triple_types, None, false);
+
+    let df = lf.collect().unwrap();
     if df.height() > 0 {
-        Ok(Some((df, subj_dt, obj_dt)))
+        Ok(Some((
+            df,
+            triple_types.remove(SUBJECT_COL_NAME).unwrap(),
+            triple_types.remove(OBJECT_COL_NAME).unwrap(),
+        )))
     } else {
         Ok(None)
     }
@@ -233,66 +225,55 @@ fn triple_has_variable(t: &TriplePattern) -> bool {
     false
 }
 
-fn term_pattern_series(
-    df: &DataFrame,
+fn term_pattern_expression(
     rdf_node_types: &HashMap<String, RDFNodeType>,
     tp: &TermPattern,
     name: &str,
-    len: usize,
-) -> (Series, RDFNodeType) {
+) -> (Expr, RDFNodeType) {
     match tp {
-        TermPattern::NamedNode(nn) => named_node_series(nn, name, len),
+        TermPattern::NamedNode(nn) => named_node_lit(nn, name),
         TermPattern::BlankNode(_) => {
             unimplemented!("Blank node term pattern not supported")
         }
-        TermPattern::Literal(lit) => {
-            if lit.datatype().as_str() == OTTR_IRI {
-                named_node_series(&NamedNode::new(lit.to_string()).unwrap(), name, len)
+        TermPattern::Literal(thelit) => {
+            if thelit.datatype().as_str() == OTTR_IRI {
+                named_node_lit(&NamedNode::new(thelit.to_string()).unwrap(), name)
             } else {
-                let (anyvalue, dt) =
-                    sparql_literal_to_any_value(lit.value(), lit.language(), &Some(lit.datatype()));
-                let mut any_values = vec![];
-                for _ in 0..len {
-                    any_values.push(anyvalue.clone())
-                }
-                (
-                    Series::from_any_values(name, &any_values, false).unwrap(),
-                    RDFNodeType::Literal(dt.into_owned()),
-                )
+                let l = lit(sparql_literal_to_polars_literal_value(thelit)).alias(name);
+                (l, RDFNodeType::Literal(thelit.datatype().into_owned()))
             }
         }
-        TermPattern::Variable(v) => variable_series(df, rdf_node_types, v, name),
+        TermPattern::Variable(v) => variable_expression(rdf_node_types, v, name),
     }
 }
 
-fn named_node_pattern_series(
-    df: &DataFrame,
+fn named_node_pattern_expr(
     rdf_node_types: &HashMap<String, RDFNodeType>,
     nnp: &NamedNodePattern,
     name: &str,
-    len: usize,
-) -> (Series, RDFNodeType) {
+) -> (Expr, RDFNodeType) {
     match nnp {
-        NamedNodePattern::NamedNode(nn) => named_node_series(nn, name, len),
-        NamedNodePattern::Variable(v) => variable_series(df, rdf_node_types, v, name),
+        NamedNodePattern::NamedNode(nn) => named_node_lit(nn, name),
+        NamedNodePattern::Variable(v) => variable_expression(rdf_node_types, v, name),
     }
 }
 
-fn named_node_series(nn: &NamedNode, name: &str, len: usize) -> (Series, RDFNodeType) {
-    let mut ser = Series::from_iter([nn.to_string().as_str()].repeat(len));
-    ser.rename(name);
-    (ser, RDFNodeType::IRI)
+fn named_node_lit(nn: &NamedNode, name: &str) -> (Expr, RDFNodeType) {
+    (
+        lit(sparql_named_node_to_polars_literal_value(nn)).alias(name),
+        RDFNodeType::IRI,
+    )
 }
 
-fn variable_series(
-    df: &DataFrame,
+fn variable_expression(
     rdf_node_types: &HashMap<String, RDFNodeType>,
     v: &Variable,
     name: &str,
-) -> (Series, RDFNodeType) {
-    let mut ser = df.column(v.as_str()).unwrap().clone();
-    ser.rename(name);
-    (ser, rdf_node_types.get(v.as_str()).unwrap().clone())
+) -> (Expr, RDFNodeType) {
+    (
+        col(v.as_str()).alias(name),
+        rdf_node_types.get(v.as_str()).unwrap().clone(),
+    )
 }
 
 fn cats_to_strings(df: DataFrame) -> DataFrame {

@@ -44,9 +44,11 @@ use triplestore::sparql::{QueryResult as SparqlQueryResult, QueryResult};
 #[cfg(target_os = "linux")]
 use jemallocator::Jemalloc;
 use oxrdf::vocab::xsd;
-use polars::prelude::{IntoLazy, DataFrame};
+use polars::prelude::{DataFrame, IntoLazy};
 use pyo3::types::PyList;
-use representation::multitype::{compress_actual_multitypes, lf_column_from_categorical, multi_columns_to_string_cols};
+use representation::multitype::{
+    compress_actual_multitypes, lf_column_from_categorical, multi_columns_to_string_cols,
+};
 use representation::polars_to_sparql::primitive_polars_type_to_literal_type;
 use representation::solution_mapping::EagerSolutionMappings;
 use representation::RDFNodeType;
@@ -103,7 +105,10 @@ impl ExpandOptions {
 #[pymethods]
 impl Mapping {
     #[new]
-    fn new(documents: Option<&Bound<'_, PyAny>>, caching_folder: Option<&Bound<'_, PyAny>>) -> PyResult<Mapping> {
+    fn new(
+        documents: Option<&Bound<'_, PyAny>>,
+        caching_folder: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<Mapping> {
         let documents = if let Some(documents) = documents {
             if documents.is_instance_of::<PyList>() {
                 let mut strs = vec![];
@@ -241,21 +246,38 @@ impl Mapping {
         query_to_result(res, multi_as_strings.unwrap_or(true), py)
     }
 
-    fn validate(&mut self, py: Python<'_>, multi_as_strings: Option<bool>) -> PyResult<ValidationReport> {
-        let shacl::ValidationReport { conforms, df, rdf_node_types } =
-            self.inner.validate().map_err(PyMaplibError::from)?;
-
-        let report = if let Some(mut df) = df {
-            (df, _) = fix_cats_and_multicolumns(df, rdf_node_types.unwrap(), multi_as_strings.unwrap_or(true));
-            Some(df_to_py_df(df, HashMap::new(), py)?)
-        } else {
-            None
-        };
-
-        Ok(ValidationReport { conforms, report })
+    fn validate(
+        &mut self,
+        py: Python<'_>,
+        multi_as_strings: Option<bool>,
+    ) -> PyResult<ValidationReport> {
+        let shacl::ValidationReport {
+            conforms,
+            df,
+            rdf_node_types,
+        } = self.inner.validate().map_err(PyMaplibError::from)?;
+        finish_report(conforms, df, rdf_node_types, multi_as_strings, py)
     }
 
-    fn insert(&mut self, query: String, parameters: Option<HashMap<String, Bound<'_, PyAny>>>, transient: Option<bool>) -> PyResult<()> {
+    fn validate_shacl(
+        &mut self,
+        py: Python<'_>,
+        multi_as_strings: Option<bool>,
+    ) -> PyResult<ValidationReport> {
+        let shacl::ValidationReport {
+            conforms,
+            df,
+            rdf_node_types,
+        } = self.inner.validate_shacl().map_err(PyMaplibError::from)?;
+        finish_report(conforms, df, rdf_node_types, multi_as_strings, py)
+    }
+
+    fn insert(
+        &mut self,
+        query: String,
+        parameters: Option<HashMap<String, Bound<'_, PyAny>>>,
+        transient: Option<bool>,
+    ) -> PyResult<()> {
         let mapped_parameters = map_parameters(parameters)?;
         self.inner
             .triplestore
@@ -267,7 +289,12 @@ impl Mapping {
         Ok(())
     }
 
-    fn insert_sprout(&mut self, query: String, parameters: Option<HashMap<String, Bound<'_, PyAny>>>, transient: Option<bool>) -> PyResult<()> {
+    fn insert_sprout(
+        &mut self,
+        query: String,
+        parameters: Option<HashMap<String, Bound<'_, PyAny>>>,
+        transient: Option<bool>,
+    ) -> PyResult<()> {
         let mapped_parameters = map_parameters(parameters)?;
         if self.sprout.is_none() {
             self.create_sprout()?;
@@ -358,20 +385,57 @@ fn _maplib(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     Ok(())
 }
 
-fn fix_cats_and_multicolumns(mut df: DataFrame, mut dts: HashMap<String, RDFNodeType>, multi_to_strings:bool) -> (DataFrame, HashMap<String, RDFNodeType>)  {
-    let column_ordering: Vec<_> = df.get_column_names().iter().map(|x|x.to_string()).collect();
-    for (c,_) in &dts {
-        df = lf_column_from_categorical(df.lazy(), c, &dts).collect().unwrap();
+fn finish_report(
+    conforms: bool,
+    df: Option<DataFrame>,
+    rdf_node_types: Option<HashMap<String, RDFNodeType>>,
+    multi_as_strings: Option<bool>,
+    py: Python<'_>,
+) -> PyResult<ValidationReport> {
+    let report = if let Some(mut df) = df {
+        (df, _) = fix_cats_and_multicolumns(
+            df,
+            rdf_node_types.unwrap(),
+            multi_as_strings.unwrap_or(true),
+        );
+        Some(df_to_py_df(df, HashMap::new(), py)?)
+    } else {
+        None
+    };
+
+    Ok(ValidationReport { conforms, report })
+}
+
+fn fix_cats_and_multicolumns(
+    mut df: DataFrame,
+    mut dts: HashMap<String, RDFNodeType>,
+    multi_to_strings: bool,
+) -> (DataFrame, HashMap<String, RDFNodeType>) {
+    let column_ordering: Vec<_> = df
+        .get_column_names()
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+    for (c, _) in &dts {
+        df = lf_column_from_categorical(df.lazy(), c, &dts)
+            .collect()
+            .unwrap();
     }
     (df, dts) = compress_actual_multitypes(df, dts);
     if multi_to_strings {
-        df = multi_columns_to_string_cols(df.lazy(), &dts).collect().unwrap();
+        df = multi_columns_to_string_cols(df.lazy(), &dts)
+            .collect()
+            .unwrap();
     }
     df = df.select(column_ordering.as_slice()).unwrap();
     (df, dts)
 }
 
-fn query_to_result(res: SparqlQueryResult, multi_as_strings:bool, py: Python<'_>) -> PyResult<PyObject> {
+fn query_to_result(
+    res: SparqlQueryResult,
+    multi_as_strings: bool,
+    py: Python<'_>,
+) -> PyResult<PyObject> {
     match res {
         SparqlQueryResult::Select(mut df, mut datatypes) => {
             (df, datatypes) = fix_cats_and_multicolumns(df, datatypes, multi_as_strings);
@@ -441,12 +505,11 @@ fn map_parameters(
     }
 }
 
-
-fn resolve_format(format:&str) -> TripleFormat {
+fn resolve_format(format: &str) -> TripleFormat {
     match format.to_lowercase().as_str() {
         "ntriples" => TripleFormat::NTriples,
         "turtle" => TripleFormat::Turtle,
         "rdf/xml" | "xml" | "rdfxml" => TripleFormat::RDFXML,
-        _ => unimplemented!("Unknown format {}", format)
+        _ => unimplemented!("Unknown format {}", format),
     }
 }

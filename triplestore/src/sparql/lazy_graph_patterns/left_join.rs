@@ -46,7 +46,6 @@ impl Triplestore {
             right_solution_mappings =
                 drop_inner_contexts(right_solution_mappings, &vec![&expression_context]);
         }
-
         let left_solution_mappings = join(
             left_solution_mappings,
             right_solution_mappings,
