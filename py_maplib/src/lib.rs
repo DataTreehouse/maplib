@@ -5,7 +5,7 @@ mod error;
 use crate::error::PyMaplibError;
 use pydf_io::to_rust::polars_df_to_rust_df;
 
-use log::warn;
+use log::{info, warn};
 use maplib::document::document_from_str;
 use maplib::errors::MaplibError;
 use maplib::mapping::errors::MappingError;
@@ -49,7 +49,7 @@ use pyo3::types::PyList;
 use representation::multitype::{
     compress_actual_multitypes, lf_column_from_categorical, multi_columns_to_string_cols,
 };
-use representation::polars_to_sparql::primitive_polars_type_to_literal_type;
+use representation::polars_to_sparql::polars_type_to_literal_type;
 use representation::solution_mapping::EagerSolutionMappings;
 use representation::RDFNodeType;
 use triplestore::TripleFormat;
@@ -473,24 +473,9 @@ fn map_parameters(
             let df = polars_df_to_rust_df(&pydf)?;
             let names = df.get_column_names();
             for c in df.columns(names).unwrap() {
-                let dt = primitive_polars_type_to_literal_type(c.dtype()).unwrap();
-
-                let mut rdf_node_type = None;
-
-                if dt == xsd::STRING {
-                    let ch = c.str().unwrap();
-                    if let Some(s) = ch.first_non_null() {
-                        let f = ch.get(s).unwrap();
-                        if f.starts_with("<") {
-                            rdf_node_type = Some(RDFNodeType::IRI);
-                        }
-                    }
-                }
-
-                if rdf_node_type.is_none() {
-                    rdf_node_type = Some(RDFNodeType::Literal(dt.into_owned()))
-                }
-                rdf_node_types.insert(c.name().to_string(), rdf_node_type.unwrap());
+                let dt = polars_type_to_literal_type(c.dtype(), Some(c)).unwrap();
+                info!("Parsed column {} as {}", c.name(), dt);
+                rdf_node_types.insert(c.name().to_string(), dt);
             }
             let m = EagerSolutionMappings {
                 mappings: df,

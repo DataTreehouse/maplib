@@ -1,11 +1,12 @@
 use super::Mapping;
 use crate::ast::{has_iritype, PType, Parameter, Signature};
 
+use crate::constants::OTTR_IRI;
 use crate::mapping::errors::MappingError;
 use crate::mapping::{PrimitiveColumn, RDFNodeType};
 use oxrdf::NamedNode;
-use polars::prelude::{DataFrame, DataType};
-use representation::polars_to_sparql::primitive_polars_type_to_literal_type;
+use polars::prelude::{DataFrame, DataType, Series};
+use representation::polars_to_sparql::polars_type_to_literal_type;
 use std::collections::{HashMap, HashSet};
 
 impl Mapping {
@@ -59,7 +60,7 @@ fn validate_infer_column_data_type(
         validate_datatype(series.name(), dtype, ptype)?;
         ptype.clone()
     } else {
-        polars_datatype_to_xsd_datatype(dtype)
+        polars_datatype_to_xsd_datatype(dtype, Some(series))
     };
     let rdf_node_type = infer_rdf_node_type(&ptype);
 
@@ -140,17 +141,24 @@ fn validate_basic_datatype(
     Ok(())
 }
 
-pub fn polars_datatype_to_xsd_datatype(datatype: &DataType) -> PType {
-    if let Some(nn) = primitive_polars_type_to_literal_type(datatype) {
-        return PType::Basic(nn.into_owned(), nn.to_string());
+pub fn polars_datatype_to_xsd_datatype(datatype: &DataType, series: Option<&Series>) -> PType {
+    if let Some(rdf_node_type) = polars_type_to_literal_type(datatype, series) {
+        let nn = match rdf_node_type {
+            RDFNodeType::IRI => NamedNode::new_unchecked(OTTR_IRI),
+            RDFNodeType::Literal(l) => l,
+            _ => unimplemented!("Unsupported datatype:{}", datatype),
+        };
+        let nn_string = nn.to_string();
+        return PType::Basic(nn, nn_string);
     }
 
     match datatype {
         DataType::List(inner) => {
-            return PType::List(Box::new(polars_datatype_to_xsd_datatype(inner)))
+            //Todo: possible to pass Series?
+            return PType::List(Box::new(polars_datatype_to_xsd_datatype(inner, None)));
         }
         _ => {
-            panic!("Unsupported datatype:{}", datatype)
+            unimplemented!("Unsupported datatype:{}", datatype)
         }
     };
 }

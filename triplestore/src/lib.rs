@@ -500,8 +500,10 @@ pub fn prepare_triples(
                 let any_predicate = part.column(VERB_COL_NAME).unwrap().get(0);
                 if let Ok(AnyValue::String(p)) = any_predicate {
                     predicate = literal_iri_to_namednode(p);
+                } else if let Ok(AnyValue::Categorical(a, b, _0)) = any_predicate {
+                    predicate = literal_iri_to_namednode(b.get(a));
                 } else {
-                    panic!()
+                    panic!("Predicate: {:?}", any_predicate);
                 }
             }
             part = part.select([SUBJECT_COL_NAME, OBJECT_COL_NAME]).unwrap();
