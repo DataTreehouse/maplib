@@ -15,6 +15,7 @@ use crate::TriplesToAdd;
 use polars::frame::DataFrame;
 use polars::prelude::{col, lit, DataType, Expr, IntoLazy};
 use polars_core::enable_string_cache;
+use polars_core::frame::UniqueKeepStrategy;
 use query_processing::expressions::col_null_expr;
 use representation::multitype::{split_df_multicols, unique_workaround};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
@@ -201,7 +202,7 @@ fn triple_to_df(
                 .and(col_null_expr(VERB_COL_NAME, &triple_types).not())
                 .and(col_null_expr(OBJECT_COL_NAME, &triple_types).not()),
         );
-    lf = unique_workaround(lf, &triple_types, None, false);
+    lf = unique_workaround(lf, &triple_types, None, false, UniqueKeepStrategy::Any);
 
     let df = lf.collect().unwrap();
     if df.height() > 0 {

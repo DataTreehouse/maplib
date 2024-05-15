@@ -29,6 +29,6 @@ impl Triplestore {
         Ok(union(vec![
             left_solution_mappings,
             right_solution_mappings,
-        ])?)
+        ], true)?)
     }
 }

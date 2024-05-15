@@ -324,7 +324,7 @@ impl Triplestore {
             }
         }
         Ok(if !solution_mappings.is_empty() {
-            let sm = union(solution_mappings)?;
+            let sm = union(solution_mappings, true)?;
             (sm, false)
         } else {
             create_empty_lf_datatypes(

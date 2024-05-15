@@ -624,10 +624,11 @@ impl U32DataFrameCreator {
 
             soln_mappings.push(SolutionMappings::new(lf, types));
         }
+        //TODO: Consider if rechunk is necessary?
         let SolutionMappings {
             mut mappings,
             rdf_node_types,
-        } = union(soln_mappings)?;
+        } = union(soln_mappings, false)?;
 
         let row_index = uuid::Uuid::new_v4().to_string();
         mappings = mappings.with_row_index(&row_index, None);
@@ -688,7 +689,7 @@ impl U32DataFrameCreator {
         let SolutionMappings {
             mut mappings,
             rdf_node_types: lookup_df_types,
-        } = union(vec![subj_soln_mappings, obj_soln_mappings])?;
+        } = union(vec![subj_soln_mappings, obj_soln_mappings], false)?;
         let (mappings_grby, maps) =
             group_by_workaround(mappings, &lookup_df_types, vec![VALUE_COLUMN.to_string()]);
         mappings = mappings_grby.agg([

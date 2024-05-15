@@ -61,7 +61,7 @@ pub fn multiple_tt_to_lf(
     if filtered.is_empty() {
         Ok(None)
     } else {
-        let sm = union(filtered)?;
+        let sm = union(filtered, true)?;
         Ok(Some(sm))
     }
 }

@@ -72,6 +72,8 @@ pub struct ValidationReport {
     pub conforms: bool,
     #[pyo3(get)]
     pub report: Option<PyObject>,
+    #[pyo3(get)]
+    pub details: Option<PyObject>,
 }
 
 #[pyclass]
@@ -255,8 +257,9 @@ impl Mapping {
             conforms,
             df,
             rdf_node_types,
+            details,
         } = self.inner.validate().map_err(PyMaplibError::from)?;
-        finish_report(conforms, df, rdf_node_types, multi_as_strings, py)
+        finish_report(conforms, df, rdf_node_types, multi_as_strings, details, py)
     }
 
     fn validate_shacl(
@@ -268,8 +271,9 @@ impl Mapping {
             conforms,
             df,
             rdf_node_types,
+            details,
         } = self.inner.validate_shacl().map_err(PyMaplibError::from)?;
-        finish_report(conforms, df, rdf_node_types, multi_as_strings, py)
+        finish_report(conforms, df, rdf_node_types, multi_as_strings, details, py)
     }
 
     fn insert(
@@ -390,6 +394,7 @@ fn finish_report(
     df: Option<DataFrame>,
     rdf_node_types: Option<HashMap<String, RDFNodeType>>,
     multi_as_strings: Option<bool>,
+    details: Option<EagerSolutionMappings>,
     py: Python<'_>,
 ) -> PyResult<ValidationReport> {
     let report = if let Some(mut df) = df {
@@ -403,7 +408,23 @@ fn finish_report(
         None
     };
 
-    Ok(ValidationReport { conforms, report })
+    let details = if let Some(EagerSolutionMappings {
+        mut mappings,
+        rdf_node_types,
+    }) = details
+    {
+        (mappings, _) =
+            fix_cats_and_multicolumns(mappings, rdf_node_types, multi_as_strings.unwrap_or(true));
+        Some(df_to_py_df(mappings, HashMap::new(), py)?)
+    } else {
+        None
+    };
+
+    Ok(ValidationReport {
+        conforms,
+        report,
+        details,
+    })
 }
 
 fn fix_cats_and_multicolumns(
