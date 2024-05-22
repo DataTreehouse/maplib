@@ -43,7 +43,7 @@ use triplestore::sparql::{QueryResult as SparqlQueryResult, QueryResult};
 // SOFTWARE.
 #[cfg(target_os = "linux")]
 use jemallocator::Jemalloc;
-use oxrdf::vocab::xsd;
+use oxrdf::NamedNode;
 use polars::prelude::{DataFrame, IntoLazy};
 use pyo3::types::PyList;
 use representation::multitype::{
@@ -238,12 +238,13 @@ impl Mapping {
         parameters: Option<HashMap<String, Bound<'_, PyAny>>>,
         include_datatypes: Option<bool>,
         multi_as_strings: Option<bool>,
+        graph: Option<String>
     ) -> PyResult<PyObject> {
+        let graph = parse_optional_graph(graph)?;
         let mapped_parameters = map_parameters(parameters)?;
         let res = self
             .inner
-            .triplestore
-            .query(&query, &mapped_parameters)
+            .query(&query, &mapped_parameters, graph)
             .map_err(PyMaplibError::from)?;
         query_to_result(res, multi_as_strings.unwrap_or(true), py)
     }
@@ -251,28 +252,32 @@ impl Mapping {
     fn validate(
         &mut self,
         py: Python<'_>,
+        shape_graph: String,
         multi_as_strings: Option<bool>,
     ) -> PyResult<ValidationReport> {
+        let shape_graph = NamedNode::new(shape_graph).map_err(PyMaplibError::from)?;
         let shacl::ValidationReport {
             conforms,
             df,
             rdf_node_types,
             details,
-        } = self.inner.validate().map_err(PyMaplibError::from)?;
+        } = self.inner.validate(&shape_graph).map_err(PyMaplibError::from)?;
         finish_report(conforms, df, rdf_node_types, multi_as_strings, details, py)
     }
 
     fn validate_shacl(
         &mut self,
         py: Python<'_>,
+        shape_graph: Option<String>,
         multi_as_strings: Option<bool>,
     ) -> PyResult<ValidationReport> {
+        let shape_graph = parse_optional_graph(shape_graph)?;
         let shacl::ValidationReport {
             conforms,
             df,
             rdf_node_types,
             details,
-        } = self.inner.validate_shacl().map_err(PyMaplibError::from)?;
+        } = self.inner.validate_shacl(shape_graph).map_err(PyMaplibError::from)?;
         finish_report(conforms, df, rdf_node_types, multi_as_strings, details, py)
     }
 
@@ -281,12 +286,22 @@ impl Mapping {
         query: String,
         parameters: Option<HashMap<String, Bound<'_, PyAny>>>,
         transient: Option<bool>,
+        source_graph: Option<String>,
+        target_graph: Option<String>,
     ) -> PyResult<()> {
         let mapped_parameters = map_parameters(parameters)?;
-        self.inner
-            .triplestore
-            .insert(&query, &mapped_parameters, transient.unwrap_or(false))
+        let source_graph = parse_optional_graph(source_graph)?;
+        let target_graph = parse_optional_graph(target_graph)?;
+        let res = self.inner
+            .query(&query, &mapped_parameters, source_graph)
             .map_err(PyMaplibError::from)?;
+        if let QueryResult::Construct(dfs_and_dts) = res {
+            self.inner
+                .insert_construct_result(dfs_and_dts, transient.unwrap_or(false), target_graph)
+                .map_err(PyMaplibError::from)?;
+        } else {
+            todo!("Handle this error..")
+        }
         if self.sprout.is_some() {
             self.sprout.as_mut().unwrap().blank_node_counter = self.inner.blank_node_counter;
         }
@@ -298,22 +313,24 @@ impl Mapping {
         query: String,
         parameters: Option<HashMap<String, Bound<'_, PyAny>>>,
         transient: Option<bool>,
+        source_graph: Option<String>,
+        target_graph: Option<String>,
     ) -> PyResult<()> {
         let mapped_parameters = map_parameters(parameters)?;
+        let source_graph = parse_optional_graph(source_graph)?;
+        let target_graph = parse_optional_graph(target_graph)?;
         if self.sprout.is_none() {
             self.create_sprout()?;
         }
         let res = self
             .inner
-            .triplestore
-            .query(&query, &mapped_parameters)
+            .query(&query, &mapped_parameters, source_graph)
             .map_err(PyMaplibError::from)?;
         if let QueryResult::Construct(dfs_and_dts) = res {
             self.sprout
                 .as_mut()
                 .unwrap()
-                .triplestore
-                .insert_construct_result(dfs_and_dts, transient.unwrap_or(false))
+                .insert_construct_result(dfs_and_dts, transient.unwrap_or(false), target_graph)
                 .map_err(PyMaplibError::from)?;
         } else {
             todo!("Handle this error..")
@@ -329,7 +346,9 @@ impl Mapping {
         format: Option<String>,
         base_iri: Option<String>,
         transient: Option<bool>,
+        graph:Option<String>,
     ) -> PyResult<()> {
+        let graph = parse_optional_graph(graph)?;
         let file_path = file_path.str()?.to_string();
         let path = Path::new(&file_path);
         let format = if let Some(format) = format {
@@ -338,7 +357,7 @@ impl Mapping {
             None
         };
         self.inner
-            .read_triples(path, format, base_iri, transient.unwrap_or(false))
+            .read_triples(path, format, base_iri, transient.unwrap_or(false), graph)
             .map_err(|x| PyMaplibError::from(x))?;
         Ok(())
     }
@@ -349,10 +368,12 @@ impl Mapping {
         format: &str,
         base_iri: Option<String>,
         transient: Option<bool>,
+        graph: Option<String>,
     ) -> PyResult<()> {
+        let graph = parse_optional_graph(graph)?;
         let format = resolve_format(&format);
         self.inner
-            .read_triples_string(s, format, base_iri, transient.unwrap_or(false))
+            .read_triples_string(s, format, base_iri, transient.unwrap_or(false), graph)
             .map_err(|x| PyMaplibError::from(x))?;
         Ok(())
     }
@@ -518,4 +539,13 @@ fn resolve_format(format: &str) -> TripleFormat {
         "rdf/xml" | "xml" | "rdfxml" => TripleFormat::RDFXML,
         _ => unimplemented!("Unknown format {}", format),
     }
+}
+
+fn parse_optional_graph(graph:Option<String>) -> PyResult<Option<NamedNode>> {
+    let graph = if let Some(graph) = graph {
+        Some(NamedNode::new(graph).map_err(PyMaplibError::from)?)
+    } else {
+        None
+    };
+    Ok(graph)
 }

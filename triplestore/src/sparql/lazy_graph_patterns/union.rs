@@ -26,9 +26,9 @@ impl Triplestore {
         let right_solution_mappings =
             self.lazy_graph_pattern(right, solution_mappings, &right_context, parameters)?;
 
-        Ok(union(vec![
-            left_solution_mappings,
-            right_solution_mappings,
-        ], true)?)
+        Ok(union(
+            vec![left_solution_mappings, right_solution_mappings],
+            true,
+        )?)
     }
 }

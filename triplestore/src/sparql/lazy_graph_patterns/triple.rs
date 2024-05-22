@@ -285,11 +285,10 @@ impl Triplestore {
                         &RDFNodeType::MultiType(..)
                     )
                 {
-                    lf = convert_lf_col_to_multitype(
-                        lf,
+                    lf = lf.with_column(convert_lf_col_to_multitype(
                         subj_col,
                         datatypes_map.get(subj_col).unwrap(),
-                    );
+                    ));
                     let existing_type =
                         BaseRDFNodeType::from_rdf_node_type(datatypes_map.get(subj_col).unwrap());
                     datatypes_map.insert(
@@ -307,11 +306,10 @@ impl Triplestore {
                         &RDFNodeType::MultiType(..)
                     )
                 {
-                    lf = convert_lf_col_to_multitype(
-                        lf,
+                    lf = lf.with_column(convert_lf_col_to_multitype(
                         obj_col,
                         datatypes_map.get(obj_col).unwrap(),
-                    );
+                    ));
                     let existing_type =
                         BaseRDFNodeType::from_rdf_node_type(datatypes_map.get(obj_col).unwrap());
                     datatypes_map

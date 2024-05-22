@@ -247,7 +247,12 @@ fn pattern_list(p: &str) -> IResult<&str, Vec<UnresolvedInstance>> {
     Ok((p, unresolved))
 }
 
-fn assemble_parameter(opt_mode:Option<&str>, ptype:Option<UnresolvedPType>, variable:StottrVariable, default_value: Option<UnresolvedDefaultValue>) -> UnresolvedParameter {
+fn assemble_parameter(
+    opt_mode: Option<&str>,
+    ptype: Option<UnresolvedPType>,
+    variable: StottrVariable,
+    default_value: Option<UnresolvedDefaultValue>,
+) -> UnresolvedParameter {
     let mut optional = false;
     let mut non_blank = false;
     if let Some(mode) = opt_mode {
@@ -268,9 +273,9 @@ fn assemble_parameter(opt_mode:Option<&str>, ptype:Option<UnresolvedPType>, vari
     }
 }
 
-fn parameter(p:&str) -> IResult<&str, UnresolvedParameter> {
+fn parameter(p: &str) -> IResult<&str, UnresolvedParameter> {
     let (p, param) = alt((parameter_alt1, parameter_alt2))(p)?;
-    Ok((p,param))
+    Ok((p, param))
 }
 
 fn parameter_alt1(p: &str) -> IResult<&str, UnresolvedParameter> {
@@ -299,10 +304,7 @@ fn parameter_alt1(p: &str) -> IResult<&str, UnresolvedParameter> {
 
     let (p, (_, opt_mode, _, ptype, _, variable, _, default_value, _)) = alt((path1, path2))(p)?;
     let param = assemble_parameter(opt_mode, ptype, variable, default_value);
-    Ok((
-        p,
-        param
-    ))
+    Ok((p, param))
 }
 
 fn parameter_alt2(p: &str) -> IResult<&str, UnresolvedParameter> {
@@ -329,12 +331,9 @@ fn parameter_alt2(p: &str) -> IResult<&str, UnresolvedParameter> {
         multispace0,
     ));
 
-    let (p, (_, ptype, _, opt_mode , _, variable, _, default_value, _)) = alt((path1, path2))(p)?;
+    let (p, (_, ptype, _, opt_mode, _, variable, _, default_value, _)) = alt((path1, path2))(p)?;
     let param = assemble_parameter(Some(opt_mode), Some(ptype), variable, default_value);
-    Ok((
-        p,
-        param
-    ))
+    Ok((p, param))
 }
 
 fn ptype(p: &str) -> IResult<&str, UnresolvedPType> {

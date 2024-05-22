@@ -1,9 +1,9 @@
 pub mod errors;
 use errors::ShaclError;
 use polars::prelude::DataFrame;
+use representation::solution_mapping::EagerSolutionMappings;
 use representation::RDFNodeType;
 use std::collections::HashMap;
-use representation::solution_mapping::EagerSolutionMappings;
 use triplestore::Triplestore;
 
 pub struct ValidationReport {
@@ -13,10 +13,13 @@ pub struct ValidationReport {
     pub details: Option<EagerSolutionMappings>,
 }
 
-pub fn validate(_triplestore: &mut Triplestore) -> Result<ValidationReport, ShaclError> {
+pub fn validate(
+    _data_triplestore: &mut Triplestore,
+    _shape_triplestore: &mut Triplestore,
+) -> Result<ValidationReport, ShaclError> {
     unimplemented!("Contact Data Treehouse to try")
 }
 
-pub fn validate_shacl(_triplestore: &mut Triplestore) -> Result<ValidationReport, ShaclError> {
+pub fn validate_shacl(_data_triplestore: &mut Triplestore) -> Result<ValidationReport, ShaclError> {
     unimplemented!("Contact Data Treehouse to try")
 }

@@ -2,6 +2,7 @@ from pathlib import Path
 from typing import Union, List, Dict
 from polars import DataFrame
 
+
 class ValidationReport:
     """
     SHACL Validation report.
@@ -12,6 +13,7 @@ class ValidationReport:
         conforms = conforms
         df = df
         ...
+
 
 class Mapping:
     """
@@ -68,7 +70,8 @@ class Mapping:
         :return: The generated template
         """
 
-    def query(self, query: str, parameters: Dict[str, DataFrame] = None, include_datatypes=False, multi_as_strings=True) -> Union[
+    def query(self, query: str, parameters: Dict[str, DataFrame] = None, include_datatypes=False, multi_as_strings=True,
+              graph: str = None) -> Union[
         DataFrame,
         Dict[str, Union[DataFrame, Dict[str, str]]],
         List[Union[DataFrame, Dict[str, Union[DataFrame, Dict[str, str]]]]],
@@ -89,11 +92,16 @@ class Mapping:
         :param parameters: PVALUES Parameters, a DataFrame containing the value bindings in the custom PVALUES construction.
         :param multi_as_strings: Columns with multiple types are by default converted to their string representations, set to False to get the native Polars types in a struct.
         :param include_datatypes: Datatypes are not returned by default, set to true to return a dict with the solution mappings and the datatypes.
+        :param graph: The IRI of the graph to query.
         :return: DataFrame (Select), list of DataFrames (Construct) containing results, or None for Insert-queries
 
         """
 
-    def insert(self, query: str, parameters: Dict[str, DataFrame] = None, transient: bool = False):
+    def insert(self, query: str,
+               parameters: Dict[str, DataFrame] = None,
+               transient: bool = False,
+               source_graph: str = None,
+               target_graph: str = None):
         """
         Insert the results of a Construct query in the graph.
         Useful for being able to use the same query for inspecting what will be inserted and actually inserting.
@@ -114,25 +122,32 @@ class Mapping:
         :param query: The SPARQL Insert query string
         :param parameters: PVALUES Parameters, a DataFrame containing the value bindings in the custom PVALUES construction.
         :param transient: Should the inserted triples be included in exports?
+        :param source_graph: The IRI of the source graph to execute the construct query.
+        :param target_graph: The IRI of the target graph to insert into.
         :return: None
         """
 
-    def validate(self) -> ValidationReport:
+    def validate(self, shape_graph: str, multi_as_strings: bool = True) -> ValidationReport:
         """
         Validate the contained knowledge graph using SHACL
         Assumes that the contained knowledge graph also contains SHACL Shapes.
 
+        :param shape_graph: The IRI of the Shape Graph.
+        :param multi_as_strings: Return columns with multiple datatypes as strings instead of as struct-columns.
         :return: Validation report containing a report (report.df) and whether the graph conforms (report.conforms)
         """
 
-    def validate_shacl(self) -> ValidationReport:
+    def validate_shacl(self, shape_graph: str = None, multi_as_strings: bool = True) -> ValidationReport:
         """
         Validate the shapes in the contained knowledge graph using the SHACL-SHACL shapes
 
+        :param shape_graph: The IRI of the Shape Graph.
+        :param multi_as_strings: Return columns with multiple datatypes as strings instead of as struct-columns.
         :return: Validation report containing a report (report.df) and whether the graph conforms (report.conforms)
         """
 
-    def read_triples(self, file_path: Union[str, Path], format: str=None, base_iri: str=None, transient: bool = False) -> None:
+    def read_triples(self, file_path: Union[str, Path], format: str = None, base_iri: str = None,
+                     transient: bool = False, graph: str = None) -> None:
         """
         Reads triples from a file path.
         You can specify the format, or it will be derived using file extension, e.g. filename.ttl or filename.nt.
@@ -141,15 +156,17 @@ class Mapping:
 
         Usage:
 
-        >>> m.read_triples("my_triples.ttl", transient=True)
+        >>> m.read_triples("my_triples.ttl")
 
         :param file_path: The path of the file containing triples
         :param format: One of "ntriples", "turtle", "rdf/xml", otherwise it is inferred from the file extension.
         :param base_iri: Base iri
         :param transient: Should these triples be included when writing the graph to the file system?
+        :param graph: The IRI of the graph to read the triples into.
         """
 
-    def read_triples_string(self, s: str, format: str, base_iri: str=None, transient: bool = False) -> None:
+    def read_triples_string(self, s: str, format: str, base_iri: str = None, transient: bool = False,
+                            graph: str = None) -> None:
         """
         Reads triples from a string.
         Specify transient if you only want the triples to be available for further querying and validation,
@@ -157,12 +174,13 @@ class Mapping:
 
         Usage:
 
-        >>> m.read_triples("my_triples.ttl", transient=True)
+        >>> m.read_triples(my_ntriples_string, format="ntriples")
 
         :param s: String containing serialized triples.
         :param format: One of "ntriples", "turtle", "rdf/xml".
         :param base_iri: Base iri
         :param transient: Should these triples be included when writing the graph to the file system?
+        :param graph: The IRI of the graph to read the triples into.
         """
 
     def write_ntriples(self, file_path: Union[str, Path]) -> None:
@@ -206,7 +224,11 @@ class Mapping:
         :return:
         """
 
-    def insert_sprout(self, query: str, parameters: Dict[str, DataFrame] = None, transient: bool = False):
+    def insert_sprout(self, query: str,
+                      parameters: Dict[str, DataFrame] = None,
+                      transient: bool = False,
+                      source_graph: str = None,
+                      target_graph: str = None):
         """
         Insert the results of a Construct query in a sprouted graph, which is created if no sprout is active.
         Sprouts are simplified way of dealing with multiple graphs.
@@ -231,6 +253,8 @@ class Mapping:
         :param query: The SPARQL Insert query string
         :param parameters: PVALUES Parameters, a DataFrame containing the value bindings in the custom PVALUES construction.
         :param transient: Should the inserted triples be included in exports?
+        :param source_graph: The IRI of the source graph to execute the construct query.
+        :param target_graph: The IRI of the target graph to insert into.
         :return: None
         """
 

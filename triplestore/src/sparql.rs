@@ -216,16 +216,6 @@ fn triple_to_df(
     }
 }
 
-fn triple_has_variable(t: &TriplePattern) -> bool {
-    if let TermPattern::Variable(_) = t.subject {
-        return true;
-    }
-    if let TermPattern::Variable(_) = t.object {
-        return true;
-    }
-    false
-}
-
 fn term_pattern_expression(
     rdf_node_types: &HashMap<String, RDFNodeType>,
     tp: &TermPattern,

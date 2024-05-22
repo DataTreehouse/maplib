@@ -170,7 +170,7 @@ fn write_ntriples_for_df<W: Write + ?Sized>(
                             write_string_property_triple(&mut write_buffer, any_values, verb);
                         }
                         TripleType::LangStringProperty => {
-                            write_string_property_triple(&mut write_buffer, any_values, verb);
+                            write_lang_string_property_triple(&mut write_buffer, any_values, verb);
                         }
                         TripleType::NonStringProperty => {
                             write_non_string_property_triple(
@@ -204,6 +204,25 @@ fn write_ntriples_for_df<W: Write + ?Sized>(
         n_rows_finished += total_rows_per_pool_iter;
     }
     Ok(())
+}
+
+fn write_lang_string_property_triple(f: &mut Vec<u8>, mut any_values: Vec<AnyValue>, v: &str) {
+    let lex = if let AnyValue::String(lex) = any_values.pop().unwrap() {
+        lex
+    } else {
+        panic!()
+    };
+    let s = if let AnyValue::String(s) = any_values.pop().unwrap() {
+        s
+    } else {
+        panic!()
+    };
+    write_iri_or_blanknode(f, s);
+    write!(f, " ").unwrap();
+    write_iri(f, v);
+    write!(f, " ").unwrap();
+    write_lang_string(f, lex);
+    writeln!(f, " .").unwrap();
 }
 
 fn write_string_property_triple(f: &mut Vec<u8>, mut any_values: Vec<AnyValue>, v: &str) {
@@ -296,31 +315,53 @@ fn write_iri(f: &mut Vec<u8>, s: &str) {
     write!(f, ">").unwrap();
 }
 
+fn write_lang_string(f: &mut Vec<u8>, s: &str) {
+    let s_len_minus4 = s.len() - 4;
+    let mut chars = s.chars();
+    let mut i = 0;
+    loop {
+        if let Some(c) = chars.next() {
+            if i > 0 && i <= s_len_minus4 {
+                write_escaped_char(c, f);
+            } else {
+                write!(f, "{c}").unwrap();
+            }
+            i = i + 1;
+        } else {
+            break;
+        }
+    }
+}
+
 fn write_string(f: &mut Vec<u8>, s: &str) {
     write!(f, "\"").unwrap();
     let mut chars = s.chars();
     loop {
         if let Some(c) = chars.next() {
-            match c {
-                '\n' => {
-                    write!(f, "\\n").unwrap();
-                }
-                '\t' => {
-                    write!(f, "\\t").unwrap();
-                }
-                '\r' => {
-                    write!(f, "\\r").unwrap();
-                }
-                '"' | '\\' => {
-                    write!(f, "\\{c}").unwrap();
-                }
-                _ => {
-                    write!(f, "{c}").unwrap();
-                }
-            }
+            write_escaped_char(c, f);
         } else {
             break;
         }
     }
     write!(f, "\"").unwrap();
+}
+
+fn write_escaped_char(c: char, f: &mut Vec<u8>) {
+    match c {
+        '\n' => {
+            write!(f, "\\n").unwrap();
+        }
+        '\t' => {
+            write!(f, "\\t").unwrap();
+        }
+        '\r' => {
+            write!(f, "\\r").unwrap();
+        }
+        '"' | '\\' => {
+            write!(f, "\\{c}").unwrap();
+        }
+        _ => {
+            write!(f, "{c}").unwrap();
+        }
+    }
 }

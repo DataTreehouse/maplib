@@ -28,6 +28,7 @@ use polars::prelude::PolarsError;
 use pyo3::{create_exception, exceptions::PyException, prelude::*};
 use shacl::errors::ShaclError;
 use std::fmt::Debug;
+use oxrdf::IriParseError;
 use thiserror::Error;
 use triplestore::errors::TriplestoreError;
 use triplestore::sparql::errors::SparqlError;
@@ -48,6 +49,8 @@ pub enum PyMaplibError {
     TriplestoreError(#[from] TriplestoreError),
     #[error(transparent)]
     ShaclError(#[from] ShaclError),
+    #[error(transparent)]
+    IriParseError(#[from] IriParseError),
 }
 
 impl std::convert::From<PyMaplibError> for PyErr {
@@ -64,6 +67,7 @@ impl std::convert::From<PyMaplibError> for PyErr {
                 TriplestoreErrorException::new_err(format!("{}", err))
             }
             PyMaplibError::ShaclError(err) => ShaclErrorException::new_err(format!("{}", err)),
+            PyMaplibError::IriParseError(err) => IriParseErrorException::new_err(format!("{}", err)),
         }
     }
 }
@@ -75,3 +79,5 @@ create_exception!(exceptions, SparqlErrorException, PyException);
 create_exception!(exceptions, TemplateErrorException, PyException);
 create_exception!(exceptions, TriplestoreErrorException, PyException);
 create_exception!(exceptions, ShaclErrorException, PyException);
+create_exception!(exceptions, IriParseErrorException, PyException);
+

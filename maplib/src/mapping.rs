@@ -20,6 +20,7 @@ use polars::prelude::{lit, DataFrame, IntoLazy, NamedFrom, Series};
 use rayon::iter::IndexedParallelIterator;
 use rayon::iter::ParallelDrainRange;
 use rayon::iter::ParallelIterator;
+use representation::solution_mapping::EagerSolutionMappings;
 use representation::RDFNodeType;
 use shacl::errors::ShaclError;
 use shacl::{validate, validate_shacl, ValidationReport};
@@ -29,13 +30,16 @@ use std::io::Write;
 use std::path::Path;
 use std::time::Instant;
 use triplestore::constants::{OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME};
+use triplestore::sparql::errors::SparqlError;
+use triplestore::sparql::QueryResult;
 use triplestore::TripleFormat;
 use triplestore::{TriplesToAdd, Triplestore};
 use uuid::Uuid;
 
 pub struct Mapping {
     pub template_dataset: TemplateDataset,
-    pub triplestore: Triplestore,
+    pub base_triplestore: Triplestore,
+    pub triplestores_map: HashMap<NamedNode, Triplestore>,
     use_caching: bool,
     pub blank_node_counter: usize,
 }
@@ -79,8 +83,9 @@ impl Mapping {
         let use_caching = caching_folder.is_some();
         Ok(Mapping {
             template_dataset: template_dataset.clone(),
-            triplestore: Triplestore::new(caching_folder)
+            base_triplestore: Triplestore::new(caching_folder)
                 .map_err(MappingError::TriplestoreError)?,
+            triplestores_map: Default::default(),
             use_caching,
             blank_node_counter: 0,
         })
@@ -127,8 +132,10 @@ impl Mapping {
         triple_format: Option<TripleFormat>,
         base_iri: Option<String>,
         transient: bool,
+        graph: Option<NamedNode>,
     ) -> Result<(), MappingError> {
-        self.triplestore
+        let triplestore = self.get_triplestore(graph);
+        triplestore
             .read_triples_from_path(p, triple_format, base_iri, transient)
             .map_err(MappingError::TriplestoreError)
     }
@@ -139,27 +146,61 @@ impl Mapping {
         triple_format: TripleFormat,
         base_iri: Option<String>,
         transient: bool,
+        graph: Option<NamedNode>,
     ) -> Result<(), MappingError> {
-        self.triplestore
+        let triplestore = self.get_triplestore(graph);
+        triplestore
             .read_triples_from_string(s, triple_format, base_iri, transient)
             .map_err(MappingError::TriplestoreError)
     }
 
+    pub fn get_triplestore(&mut self, graph: Option<NamedNode>) -> &mut Triplestore {
+        if let Some(graph) = graph {
+            if !self.triplestores_map.contains_key(&graph) {
+                self.triplestores_map
+                    .insert(graph.clone(), Triplestore::new(None).unwrap());
+            }
+            self.triplestores_map.get_mut(&graph).unwrap()
+        } else {
+            &mut self.base_triplestore
+        }
+    }
+
+    pub fn query(
+        &mut self,
+        query: &str,
+        parameters: &Option<HashMap<String, EagerSolutionMappings>>,
+        graph: Option<NamedNode>,
+    ) -> Result<QueryResult, SparqlError> {
+        let use_triplestore = self.get_triplestore(graph);
+        use_triplestore.query(query, parameters)
+    }
+
+    pub fn insert_construct_result(
+        &mut self,
+        dfs: Vec<(DataFrame, RDFNodeType, RDFNodeType)>,
+        transient: bool,
+        target_graph: Option<NamedNode>,
+    ) -> Result<(), SparqlError> {
+        let use_triplestore = self.get_triplestore(target_graph);
+        use_triplestore.insert_construct_result(dfs, transient)
+    }
+
     pub fn write_n_triples(&mut self, buffer: &mut dyn Write) -> Result<(), MappingError> {
-        self.triplestore
+        self.base_triplestore
             .write_n_triples_all_dfs(buffer, 1024)
             .unwrap();
         Ok(())
     }
 
     pub fn write_native_parquet(&mut self, path: &str) -> Result<(), MappingError> {
-        self.triplestore
+        self.base_triplestore
             .write_native_parquet(Path::new(path))
             .map_err(MappingError::TriplestoreError)
     }
 
     pub fn export_oxrdf_triples(&mut self) -> Result<Vec<Triple>, MappingError> {
-        self.triplestore
+        self.base_triplestore
             .export_oxrdf_triples()
             .map_err(MappingError::TriplestoreError)
     }
@@ -252,12 +293,27 @@ impl Mapping {
         Ok(MappingReport {})
     }
 
-    pub fn validate(&mut self) -> Result<ValidationReport, ShaclError> {
-        validate(&mut self.triplestore)
+    pub fn validate(&mut self, shape_graph: &NamedNode) -> Result<ValidationReport, ShaclError> {
+        let (shape_graph, mut shape_triplestore) =
+            self.triplestores_map.remove_entry(&shape_graph).unwrap();
+        match { validate(&mut self.base_triplestore, &mut shape_triplestore) } {
+            Ok(vr) => {
+                self.triplestores_map.insert(shape_graph, shape_triplestore);
+                Ok(vr)
+            }
+            Err(e) => {
+                self.triplestores_map.insert(shape_graph, shape_triplestore);
+                Err(e)
+            }
+        }
     }
 
-    pub fn validate_shacl(&mut self) -> Result<ValidationReport, ShaclError> {
-        validate_shacl(&mut self.triplestore)
+    pub fn validate_shacl(
+        &mut self,
+        data_graph: Option<NamedNode>,
+    ) -> Result<ValidationReport, ShaclError> {
+        let use_triplestore = self.get_triplestore(data_graph);
+        validate_shacl(use_triplestore)
     }
 
     fn _expand(
@@ -419,7 +475,7 @@ impl Mapping {
                 has_unique_subset,
             });
         }
-        self.triplestore
+        self.base_triplestore
             .add_triples_vec(all_triples_to_add, call_uuid, false)
             .map_err(MappingError::TriplestoreError)?;
 
