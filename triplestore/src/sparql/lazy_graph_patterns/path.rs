@@ -7,6 +7,7 @@ use polars::prelude::{
     col, lit, AnyValue, DataFrame, DataFrameJoinOps, IntoLazy, IntoSeries, JoinArgs, JoinType,
     Series, UniqueKeepStrategy,
 };
+use polars_core::prelude::SortMultipleOptions;
 use query_processing::errors::QueryProcessingError;
 use query_processing::graph_patterns::{join, union};
 use representation::multitype::{
@@ -372,8 +373,9 @@ fn to_csr(df: &DataFrame, max_index: usize) -> SparseMatrix {
     let df = df
         .sort(
             vec![SUBJECT_COL_NAME, SUBJECT_COL_NAME],
-            vec![false, false],
-            false,
+            SortMultipleOptions::default()
+                .with_maintain_order(false)
+                .with_order_descendings(vec![false, false]),
         )
         .unwrap();
     let subject = df.column(SUBJECT_COL_NAME).unwrap();
@@ -613,7 +615,7 @@ impl U32DataFrameCreator {
         for (nn, (df, subject_dt, object_dt)) in self.named_nodes {
             let nn_idx = nns.iter().position(|x| x == &nn).unwrap();
             let mut lf = df.lazy();
-            lf = lf.with_column(lit(nn_idx as u8).alias(NAMED_NODE_INDEX_COL));
+            lf = lf.with_column(lit(nn_idx as i32).alias(NAMED_NODE_INDEX_COL));
             let mut types = HashMap::new();
             types.insert(
                 NAMED_NODE_INDEX_COL.to_string(),
@@ -706,7 +708,7 @@ impl U32DataFrameCreator {
         let mut out_df_map = HashMap::new();
         for mut df in out_dfs {
             let nn_ser = df.drop_in_place(NAMED_NODE_INDEX_COL).unwrap();
-            let nn_idx = nn_ser.u8().unwrap().get(0).unwrap();
+            let nn_idx = nn_ser.i32().unwrap().get(0).unwrap();
             let mut lf = df.select([&row_index]).unwrap().lazy();
             lf = lf
                 .join(
