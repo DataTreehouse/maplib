@@ -31,9 +31,9 @@ impl Triplestore {
         context: &Context,
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
     ) -> Result<SolutionMappings, SparqlError> {
-        debug!("Processing graph pattern at context: {}", context.as_str());
+        debug!("Start processing graph pattern {} at context: {}", graph_pattern, context.as_str());
 
-        match graph_pattern {
+        let mut sm = match graph_pattern {
             GraphPattern::Bgp { patterns } => {
                 let mut updated_solution_mappings = solution_mappings;
                 let bgp_context = context.extension_with(PathEntry::BGP);
@@ -158,6 +158,7 @@ impl Triplestore {
                 context,
                 parameters,
             ),
-        }
+        };
+        sm
     }
 }

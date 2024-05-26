@@ -7,6 +7,7 @@ mod lazy_order;
 use oxrdf::{NamedNode, Variable};
 use representation::query_context::Context;
 use std::collections::HashMap;
+use log::debug;
 
 use super::Triplestore;
 use crate::constants::{OBJECT_COL_NAME, OTTR_IRI, SUBJECT_COL_NAME, VERB_COL_NAME};
@@ -82,6 +83,7 @@ impl Triplestore {
                     rdf_node_types: types,
                 } = self.lazy_graph_pattern(pattern, None, &context, parameters)?;
                 let mut df = mappings.collect().unwrap();
+                //TODO: This should be optional
                 df = cats_to_strings(df);
 
                 Ok(QueryResult::Select(df, types))
@@ -96,7 +98,9 @@ impl Triplestore {
                     mappings,
                     rdf_node_types,
                 } = self.lazy_graph_pattern(pattern, None, &context, parameters)?;
+                debug!("Before mappings collect");
                 let df = mappings.collect().unwrap();
+                debug!("Before triple to df");
                 let mut dfs = vec![];
                 for t in template {
                     if let Some(df_and_types) = triple_to_df(&df, &rdf_node_types, t)? {
@@ -202,6 +206,7 @@ fn triple_to_df(
                 .and(col_null_expr(VERB_COL_NAME, &triple_types).not())
                 .and(col_null_expr(OBJECT_COL_NAME, &triple_types).not()),
         );
+    debug!("Before dedup");
     lf = unique_workaround(lf, &triple_types, None, false, UniqueKeepStrategy::Any);
 
     let df = lf.collect().unwrap();

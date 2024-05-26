@@ -581,7 +581,13 @@ fn deduplicate_map(
                     for lf_res in lf_results {
                         lfs.push(lf_res.map_err(TriplestoreError::ParquetIOError)?);
                     }
-                    let unique_df = concat(lfs, UnionArgs::default())
+                    let unique_df = concat(lfs, UnionArgs{
+                        parallel: true,
+                        rechunk: true,
+                        to_supertypes: false,
+                        diagonal: false,
+                        from_partitioned_ds: false,
+                    })
                         .unwrap()
                         .unique(None, UniqueKeepStrategy::First)
                         .collect()
@@ -613,7 +619,13 @@ fn deduplicate_map(
                         .drain(..)
                         .map(|x| x.lazy())
                         .collect();
-                    let mut lf = concat(drained.as_slice(), UnionArgs::default()).unwrap();
+                    let mut lf = concat(drained.as_slice(), UnionArgs{
+                        parallel: true,
+                        rechunk: true,
+                        to_supertypes: false,
+                        diagonal: false,
+                        from_partitioned_ds: false,
+                    }).unwrap();
                     lf = lf.unique(None, UniqueKeepStrategy::First);
                     v.dfs.as_mut().unwrap().push(lf.collect().unwrap());
                     v.unique = true;
