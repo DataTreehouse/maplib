@@ -8,6 +8,7 @@ use representation::query_context::Context;
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 
 use std::collections::{HashMap, HashSet};
+use log::debug;
 
 impl Triplestore {
     pub(crate) fn lazy_pvalues(
@@ -41,6 +42,8 @@ impl Triplestore {
             todo!("Handle this error")
         };
         if let Some(mut mappings) = solution_mappings {
+            //TODO: Remove this workaround
+            mappings = mappings.as_eager().as_lazy();
             mappings = join(mappings, sm, JoinType::Inner)?;
             Ok(mappings)
         } else {

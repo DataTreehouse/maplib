@@ -43,9 +43,6 @@ pub fn convert_to_string(series: &Series) -> Option<Series> {
                 .unwrap();
             return Some(df.drop_in_place(series.name()).unwrap());
         }
-        DataType::Unknown => {
-            panic!("Not supported")
-        }
         _ => {}
     }
     Some(series.cast(&DataType::String).unwrap())
