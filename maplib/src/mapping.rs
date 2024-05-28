@@ -186,15 +186,21 @@ impl Mapping {
         use_triplestore.insert_construct_result(dfs, transient)
     }
 
-    pub fn write_n_triples(&mut self, buffer: &mut dyn Write, graph:Option<NamedNode>) -> Result<(), MappingError> {
+    pub fn write_n_triples(
+        &mut self,
+        buffer: &mut dyn Write,
+        graph: Option<NamedNode>,
+    ) -> Result<(), MappingError> {
         let triplestore = self.get_triplestore(graph);
-        triplestore
-            .write_n_triples_all_dfs(buffer, 1024)
-            .unwrap();
+        triplestore.write_n_triples_all_dfs(buffer, 1024).unwrap();
         Ok(())
     }
 
-    pub fn write_native_parquet(&mut self, path: &str, graph:Option<NamedNode>) -> Result<(), MappingError> {
+    pub fn write_native_parquet(
+        &mut self,
+        path: &str,
+        graph: Option<NamedNode>,
+    ) -> Result<(), MappingError> {
         let triplestore = self.get_triplestore(graph);
         triplestore
             .write_native_parquet(Path::new(path))
