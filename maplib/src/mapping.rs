@@ -23,7 +23,7 @@ use rayon::iter::ParallelIterator;
 use representation::solution_mapping::EagerSolutionMappings;
 use representation::RDFNodeType;
 use shacl::errors::ShaclError;
-use shacl::{validate, validate_shacl, ValidationReport};
+use shacl::{validate, ValidationReport};
 use std::cmp::{max, min};
 use std::collections::{HashMap, HashSet};
 use std::io::Write;
@@ -186,15 +186,17 @@ impl Mapping {
         use_triplestore.insert_construct_result(dfs, transient)
     }
 
-    pub fn write_n_triples(&mut self, buffer: &mut dyn Write) -> Result<(), MappingError> {
-        self.base_triplestore
+    pub fn write_n_triples(&mut self, buffer: &mut dyn Write, graph:Option<NamedNode>) -> Result<(), MappingError> {
+        let triplestore = self.get_triplestore(graph);
+        triplestore
             .write_n_triples_all_dfs(buffer, 1024)
             .unwrap();
         Ok(())
     }
 
-    pub fn write_native_parquet(&mut self, path: &str) -> Result<(), MappingError> {
-        self.base_triplestore
+    pub fn write_native_parquet(&mut self, path: &str, graph:Option<NamedNode>) -> Result<(), MappingError> {
+        let triplestore = self.get_triplestore(graph);
+        triplestore
             .write_native_parquet(Path::new(path))
             .map_err(MappingError::TriplestoreError)
     }
@@ -306,14 +308,6 @@ impl Mapping {
                 Err(e)
             }
         }
-    }
-
-    pub fn validate_shacl(
-        &mut self,
-        data_graph: Option<NamedNode>,
-    ) -> Result<ValidationReport, ShaclError> {
-        let use_triplestore = self.get_triplestore(data_graph);
-        validate_shacl(use_triplestore)
     }
 
     fn _expand(

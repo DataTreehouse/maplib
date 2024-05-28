@@ -18,10 +18,12 @@ use super::Triplestore;
 use crate::sparql::errors::SparqlError;
 use log::{debug, info};
 
+use polars::prelude::ParquetWriter;
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use spargebra::algebra::GraphPattern;
 use std::collections::HashMap;
+use std::fs::File;
 
 impl Triplestore {
     pub fn lazy_graph_pattern(
@@ -31,8 +33,11 @@ impl Triplestore {
         context: &Context,
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
     ) -> Result<SolutionMappings, SparqlError> {
-        debug!("Start processing graph pattern {} at context: {}", graph_pattern, context.as_str());
-
+        debug!(
+            "Start processing graph pattern {:?} at context: {}",
+            graph_pattern,
+            context.as_str()
+        );
         let mut sm = match graph_pattern {
             GraphPattern::Bgp { patterns } => {
                 let mut updated_solution_mappings = solution_mappings;
@@ -159,6 +164,11 @@ impl Triplestore {
                 parameters,
             ),
         };
+        debug!(
+            "Finish processing graph pattern {:?} at context: {}",
+            graph_pattern,
+            context.as_str()
+        );
         sm
     }
 }

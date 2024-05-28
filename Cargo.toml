@@ -9,10 +9,10 @@ members=[
 
 [workspace.dependencies]
 #representation = {path="../representation"}
-representation = { git = "https://github.com/DataTreehouse/representation", tag="v0.6.2"}
+representation = { git = "https://github.com/DataTreehouse/representation", tag="v0.6.4"}
 spargebra = { git = "https://github.com/DataTreehouse/spargebra", tag = "v0.2.8"}
 #query_processing = {path="../query_processing"}
-query_processing = { git = "https://github.com/DataTreehouse/query_processing", tag="v0.3.2"}
+query_processing = { git = "https://github.com/DataTreehouse/query_processing", tag="v0.3.5"}
 polars = {version= "0.40.0" }
 polars-utils = "0.40.0"
 polars-core = "0.40.0"
@@ -31,3 +31,7 @@ uuid = {version="1.8.0", features = [
 ]}
 thiserror="1.0.58"
 
+[patch.crates-io]
+polars = { git = 'https://github.com/pola-rs/polars.git', rev = "805acd81cfed82248d34fa69875cbe04730f74ce"}
+polars-core = { git = 'https://github.com/pola-rs/polars.git', rev = "805acd81cfed82248d34fa69875cbe04730f74ce"}
+polars-utils = { git = 'https://github.com/pola-rs/polars.git', rev = "805acd81cfed82248d34fa69875cbe04730f74ce"}

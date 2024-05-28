@@ -472,7 +472,7 @@ fn need_sparse_matrix(ppe: &PropertyPathExpression) -> bool {
         PropertyPathExpression::ZeroOrMore(_) => true,
         PropertyPathExpression::OneOrMore(_) => true,
         PropertyPathExpression::ZeroOrOne(_) => true,
-        PropertyPathExpression::NegatedPropertySet(_) => false,
+        PropertyPathExpression::NegatedPropertySet(_) => todo!("Not supported yet"),
     }
 }
 
@@ -626,11 +626,10 @@ impl U32DataFrameCreator {
 
             soln_mappings.push(SolutionMappings::new(lf, types));
         }
-        //TODO: Consider if rechunk is necessary?
         let SolutionMappings {
             mut mappings,
             rdf_node_types,
-        } = union(soln_mappings, true)?;
+        } = union(soln_mappings, false)?;
 
         let row_index = uuid::Uuid::new_v4().to_string();
         mappings = mappings.with_row_index(&row_index, None);
@@ -688,11 +687,10 @@ impl U32DataFrameCreator {
 
         let obj_soln_mappings = SolutionMappings::new(df_subj.lazy(), subj_types);
         let subj_soln_mappings = SolutionMappings::new(df_obj.lazy(), obj_types);
-        //TODO: Check if this rechunk is necessary
         let SolutionMappings {
             mut mappings,
             rdf_node_types: lookup_df_types,
-        } = union(vec![subj_soln_mappings, obj_soln_mappings], true)?;
+        } = union(vec![subj_soln_mappings, obj_soln_mappings], false)?;
         let (mappings_grby, maps) =
             group_by_workaround(mappings, &lookup_df_types, vec![VALUE_COLUMN.to_string()]);
         mappings = mappings_grby.agg([
@@ -710,7 +708,13 @@ impl U32DataFrameCreator {
         for mut df in out_dfs {
             let nn_ser = df.drop_in_place(NAMED_NODE_INDEX_COL).unwrap();
             //TODO: Investigate why cast is needed..
-            let nn_idx = nn_ser.cast(&DataType::UInt32).unwrap().u32().unwrap().get(0).unwrap();
+            let nn_idx = nn_ser
+                .cast(&DataType::UInt32)
+                .unwrap()
+                .u32()
+                .unwrap()
+                .get(0)
+                .unwrap();
             let mut lf = df.select([&row_index]).unwrap().lazy();
             lf = lf
                 .join(

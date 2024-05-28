@@ -7,8 +7,8 @@ use query_processing::graph_patterns::join;
 use representation::query_context::Context;
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 
-use std::collections::{HashMap, HashSet};
 use log::debug;
+use std::collections::{HashMap, HashSet};
 
 impl Triplestore {
     pub(crate) fn lazy_pvalues(

@@ -70,7 +70,9 @@ class Mapping:
         :return: The generated template
         """
 
-    def query(self, query: str, parameters: Dict[str, DataFrame] = None, include_datatypes=False, multi_as_strings=True,
+    def query(self, query: str,
+              parameters: Dict[str, DataFrame] = None,
+              include_datatypes=False, multi_as_strings=True,
               graph: str = None) -> Union[
         DataFrame,
         Dict[str, Union[DataFrame, Dict[str, str]]],
@@ -137,15 +139,6 @@ class Mapping:
         :return: Validation report containing a report (report.df) and whether the graph conforms (report.conforms)
         """
 
-    def validate_shacl(self, shape_graph: str = None, multi_as_strings: bool = True) -> ValidationReport:
-        """
-        Validate the shapes in the contained knowledge graph using the SHACL-SHACL shapes
-
-        :param shape_graph: The IRI of the Shape Graph.
-        :param multi_as_strings: Return columns with multiple datatypes as strings instead of as struct-columns.
-        :return: Validation report containing a report (report.df) and whether the graph conforms (report.conforms)
-        """
-
     def read_triples(self, file_path: Union[str, Path], format: str = None, base_iri: str = None,
                      transient: bool = False, graph: str = None) -> None:
         """
@@ -183,7 +176,7 @@ class Mapping:
         :param graph: The IRI of the graph to read the triples into.
         """
 
-    def write_ntriples(self, file_path: Union[str, Path]) -> None:
+    def write_ntriples(self, file_path: Union[str, Path], graph: str = None) -> None:
         """
         Write the non-transient triples to the file path specified in the NTriples format.
 
@@ -192,9 +185,10 @@ class Mapping:
         >>> m.write_ntriples("my_triples.nt")
 
         :param file_path: The path of the file containing triples
+        :param graph: The IRI of the graph to write.
         """
 
-    def write_ntriples_string(self) -> str:
+    def write_ntriples_string(self, graph: str = None) -> str:
         """
         Write the non-transient triples to a string in memory.
 
@@ -202,10 +196,11 @@ class Mapping:
 
         >>> s = m.write_ntriples_string()
 
+        :param graph: The IRI of the graph to write.
         :return Triples in mapping in the NTriples format (potentially a large string)
         """
 
-    def write_native_parquet(self, folder_path: Union[str, Path]) -> None:
+    def write_native_parquet(self, folder_path: Union[str, Path], graph: str = None) -> None:
         """
         Write non-transient triples using the internal native Parquet format.
 
@@ -214,6 +209,7 @@ class Mapping:
         >>> m.write_native_parquet("output_folder")
 
         :param folder_path: The path of the folder to write triples in the native format.
+        :param graph: The IRI of the graph to write.
         """
 
     def create_sprout(self):

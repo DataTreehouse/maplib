@@ -10,13 +10,15 @@ pyo3 = {version = "0.21.2", features = ["extension-module"] }
 maplib = {path="../maplib"}
 triplestore = {path="../triplestore"}
 #representation = {path="../../representation"}
-representation = { git = "https://github.com/DataTreehouse/representation", tag="v0.6.2"}
+representation = { git = "https://github.com/DataTreehouse/representation", tag="v0.6.4"}
 shacl = {path="../shacl"}
 oxrdf = {version="0.1.7"}
 #pydf_io = {path = "../../pydf_io"}
-pydf_io = { git = "https://github.com/DataTreehouse/pydf_io", tag="v0.7.3"}
+pydf_io = { git = "https://github.com/DataTreehouse/pydf_io", tag="v0.7.6"}
 thiserror="1.0.58"
-polars = {version= "0.40.0", features=["dtype-array", "dtype-categorical", "dtype-date", "dtype-datetime",
+polars = {version= "0.40.0", features=[
+    "nightly", "performant", "cse",
+    "dtype-array", "dtype-categorical", "dtype-date", "dtype-datetime",
     "dtype-decimal", "dtype-duration", "dtype-i8", "dtype-i16", "dtype-struct", "dtype-time", "dtype-u8", "dtype-u16"]}
 log ="0.4.21"
 
@@ -31,3 +33,8 @@ mimalloc = { version = "0.1", default-features = false }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 jemallocator = { version = "0.5", features = ["disable_initial_exec_tls"] }
+
+[patch.crates-io]
+polars = { git = 'https://github.com/pola-rs/polars.git', rev = "805acd81cfed82248d34fa69875cbe04730f74ce"}
+polars-core = { git = 'https://github.com/pola-rs/polars.git', rev = "805acd81cfed82248d34fa69875cbe04730f74ce"}
+polars-utils = { git = 'https://github.com/pola-rs/polars.git', rev = "805acd81cfed82248d34fa69875cbe04730f74ce"}

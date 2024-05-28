@@ -4,10 +4,10 @@ mod lazy_expressions;
 pub(crate) mod lazy_graph_patterns;
 mod lazy_order;
 
+use log::debug;
 use oxrdf::{NamedNode, Variable};
 use representation::query_context::Context;
 use std::collections::HashMap;
-use log::debug;
 
 use super::Triplestore;
 use crate::constants::{OBJECT_COL_NAME, OTTR_IRI, SUBJECT_COL_NAME, VERB_COL_NAME};
@@ -98,9 +98,7 @@ impl Triplestore {
                     mappings,
                     rdf_node_types,
                 } = self.lazy_graph_pattern(pattern, None, &context, parameters)?;
-                debug!("Before mappings collect");
                 let df = mappings.collect().unwrap();
-                debug!("Before triple to df");
                 let mut dfs = vec![];
                 for t in template {
                     if let Some(df_and_types) = triple_to_df(&df, &rdf_node_types, t)? {

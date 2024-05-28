@@ -10,16 +10,18 @@ use std::collections::HashMap;
 fn single_tt_to_lf(tt: &TripleTable) -> Result<LazyFrame, SparqlError> {
     assert!(tt.unique, "Should be deduplicated");
     //TODO: Check if this rechunk is needed
-    let mut lfs = tt.get_lazy_frames().map_err(SparqlError::TripleTableReadError)?;
+    let mut lfs = tt
+        .get_lazy_frames()
+        .map_err(SparqlError::TripleTableReadError)?;
 
     if lfs.len() == 1 {
-        return Ok(lfs.remove(0))
+        return Ok(lfs.remove(0));
     }
 
     let lf = concat(
         tt.get_lazy_frames()
             .map_err(SparqlError::TripleTableReadError)?,
-        UnionArgs{
+        UnionArgs {
             parallel: true,
             rechunk: true,
             to_supertypes: false,
@@ -74,7 +76,7 @@ pub fn multiple_tt_to_lf(
     if filtered.is_empty() {
         Ok(None)
     } else {
-        let sm = union(filtered, true)?;
+        let sm = union(filtered, false)?;
         Ok(Some(sm))
     }
 }

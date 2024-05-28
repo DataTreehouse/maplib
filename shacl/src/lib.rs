@@ -19,7 +19,3 @@ pub fn validate(
 ) -> Result<ValidationReport, ShaclError> {
     unimplemented!("Contact Data Treehouse to try")
 }
-
-pub fn validate_shacl(_data_triplestore: &mut Triplestore) -> Result<ValidationReport, ShaclError> {
-    unimplemented!("Contact Data Treehouse to try")
-}

@@ -265,22 +265,6 @@ impl Mapping {
         finish_report(conforms, df, rdf_node_types, multi_as_strings, details, py)
     }
 
-    fn validate_shacl(
-        &mut self,
-        py: Python<'_>,
-        shape_graph: Option<String>,
-        multi_as_strings: Option<bool>,
-    ) -> PyResult<ValidationReport> {
-        let shape_graph = parse_optional_graph(shape_graph)?;
-        let shacl::ValidationReport {
-            conforms,
-            df,
-            rdf_node_types,
-            details,
-        } = self.inner.validate_shacl(shape_graph).map_err(PyMaplibError::from)?;
-        finish_report(conforms, df, rdf_node_types, multi_as_strings, details, py)
-    }
-
     fn insert(
         &mut self,
         query: String,
@@ -378,25 +362,30 @@ impl Mapping {
         Ok(())
     }
 
-    fn write_ntriples(&mut self, file_path: &Bound<'_, PyAny>) -> PyResult<()> {
+    fn write_ntriples(&mut self, file_path: &Bound<'_, PyAny>,         graph: Option<String>,
+    ) -> PyResult<()> {
         let file_path = file_path.str()?.to_string();
         let path_buf = PathBuf::from(file_path);
         let mut actual_file = File::create(path_buf.as_path())
             .map_err(|x| PyMaplibError::from(MappingError::FileCreateIOError(x)))?;
-        self.inner.write_n_triples(&mut actual_file).unwrap();
+        let graph = parse_optional_graph(graph)?;
+        self.inner.write_n_triples(&mut actual_file, graph).unwrap();
         Ok(())
     }
 
-    fn write_ntriples_string(&mut self) -> PyResult<String> {
+    fn write_ntriples_string(&mut self,         graph: Option<String>,
+    ) -> PyResult<String> {
         let mut out = vec![];
-        self.inner.write_n_triples(&mut out).unwrap();
+        let graph = parse_optional_graph(graph)?;
+        self.inner.write_n_triples(&mut out, graph).unwrap();
         Ok(String::from_utf8(out).unwrap())
     }
 
-    fn write_native_parquet(&mut self, folder_path: &Bound<'_, PyAny>) -> PyResult<()> {
+    fn write_native_parquet(&mut self, folder_path: &Bound<'_, PyAny>,  graph: Option<String>) -> PyResult<()> {
         let folder_path = folder_path.str()?.to_string();
+        let graph = parse_optional_graph(graph)?;
         self.inner
-            .write_native_parquet(&folder_path)
+            .write_native_parquet(&folder_path, graph)
             .map_err(|x| PyMaplibError::MappingError(x))?;
         Ok(())
     }
