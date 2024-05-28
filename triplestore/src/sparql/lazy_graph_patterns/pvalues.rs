@@ -6,8 +6,6 @@ use polars::prelude::{IntoLazy, JoinType};
 use query_processing::graph_patterns::join;
 use representation::query_context::Context;
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
-
-use log::debug;
 use std::collections::{HashMap, HashSet};
 
 impl Triplestore {

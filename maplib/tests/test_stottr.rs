@@ -54,7 +54,7 @@ fn test_maplib_easy_case(testdata_path: PathBuf) {
     let mut actual_file_path = testdata_path.clone();
     actual_file_path.push("actual_easy_case.ttl");
     let mut actual_file = File::create(actual_file_path.as_path()).expect("could not open file");
-    mapping.write_n_triples(&mut actual_file).unwrap();
+    mapping.write_n_triples(&mut actual_file, None).unwrap();
     let actual_file = File::open(actual_file_path.as_path()).expect("Could not open file");
     let actual_triples = triples_from_file(actual_file);
 
