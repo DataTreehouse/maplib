@@ -6,9 +6,14 @@ use oxiri::Iri;
 use crate::constants::{OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::NamedNode;
-use polars::prelude::{AnyValue, DataFrame, Series};
-use representation::literals::sparql_literal_to_any_value;
-use representation::RDFNodeType;
+use polars::prelude::{as_struct, col, DataFrame, IntoLazy, LiteralValue, Series};
+use polars_core::prelude::AnyValue;
+use representation::sparql_to_polars::{
+    polars_literal_values_to_series, sparql_blank_node_to_polars_literal_value,
+    sparql_literal_to_polars_literal_value, sparql_named_node_to_polars_literal_value,
+    sparql_term_to_polars_expr,
+};
+use representation::{RDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD};
 use rio_api::parser::TriplesParser;
 use rio_turtle::{NTriplesParser, TurtleError, TurtleParser};
 use rio_xml::{RdfXmlError, RdfXmlParser};
@@ -135,24 +140,53 @@ impl Triplestore {
                 let mut subjects_ser = Series::from_iter(strings_iter);
                 subjects_ser.rename(SUBJECT_COL_NAME);
 
-                let any_iter: Vec<AnyValue> = objects
-                    .into_iter()
-                    .map(|t| match t {
-                        oxrdf::Term::NamedNode(nn) => AnyValue::StringOwned(nn.to_string().into()),
-                        oxrdf::Term::BlankNode(bb) => AnyValue::StringOwned(bb.to_string().into()),
-                        oxrdf::Term::Literal(l) => {
-                            sparql_literal_to_any_value(
-                                l.value(),
-                                l.language(),
-                                &Some(l.datatype()),
-                            )
-                            .0
-                        }
-                    })
-                    .collect();
-
-                let objects_ser =
-                    Series::from_any_values(OBJECT_COL_NAME, any_iter.as_slice(), false).unwrap();
+                let objects_ser = if object_dt.is_lang_string() {
+                    let vals = objects
+                        .iter()
+                        .map(|t| match t {
+                            oxrdf::Term::Literal(l) => LiteralValue::String(l.value().to_string()),
+                            _ => panic!("Should never happen"),
+                        })
+                        .collect();
+                    let langs = objects
+                        .into_iter()
+                        .map(|t| match t {
+                            oxrdf::Term::Literal(l) => {
+                                LiteralValue::String(l.language().unwrap().to_string())
+                            }
+                            _ => panic!("Should never happen"),
+                        })
+                        .collect();
+                    let val_ser = polars_literal_values_to_series(vals, LANG_STRING_VALUE_FIELD);
+                    let lang_ser = polars_literal_values_to_series(langs, LANG_STRING_LANG_FIELD);
+                    let mut df = DataFrame::new(vec![val_ser, lang_ser])
+                        .unwrap()
+                        .lazy()
+                        .with_column(
+                            as_struct(vec![
+                                col(LANG_STRING_VALUE_FIELD),
+                                col(LANG_STRING_LANG_FIELD),
+                            ])
+                            .alias(OBJECT_COL_NAME),
+                        )
+                        .collect()
+                        .unwrap();
+                    df.drop_in_place(OBJECT_COL_NAME).unwrap()
+                } else {
+                    let any_iter: Vec<_> = objects
+                        .into_iter()
+                        .map(|t| match t {
+                            oxrdf::Term::NamedNode(nn) => {
+                                sparql_named_node_to_polars_literal_value(&nn)
+                            }
+                            oxrdf::Term::BlankNode(bb) => {
+                                sparql_blank_node_to_polars_literal_value(&bb)
+                            }
+                            oxrdf::Term::Literal(l) => sparql_literal_to_polars_literal_value(&l),
+                        })
+                        .collect();
+                    polars_literal_values_to_series(any_iter, OBJECT_COL_NAME)
+                };
 
                 let all_series = vec![subjects_ser, objects_ser];
                 let df = DataFrame::new(all_series).unwrap();

@@ -9,10 +9,10 @@ members=[
 
 [workspace.dependencies]
 #representation = {path="../representation"}
-representation = { git = "https://github.com/DataTreehouse/representation", tag="v0.6.4"}
+representation = { git = "https://github.com/DataTreehouse/representation", tag="v0.6.6"}
 spargebra = { git = "https://github.com/DataTreehouse/spargebra", tag = "v0.2.8"}
 #query_processing = {path="../query_processing"}
-query_processing = { git = "https://github.com/DataTreehouse/query_processing", tag="v0.3.5"}
+query_processing = { git = "https://github.com/DataTreehouse/query_processing", tag="v0.3.7"}
 polars = {version= "0.40.0" }
 polars-utils = "0.40.0"
 polars-core = "0.40.0"

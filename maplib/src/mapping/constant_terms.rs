@@ -3,15 +3,14 @@ use crate::constants::{BLANK_NODE_IRI, NONE_IRI, OTTR_IRI};
 use crate::mapping::errors::MappingError;
 use crate::mapping::RDFNodeType;
 
-use oxrdf::NamedNode;
+use oxrdf::{Literal, NamedNode};
 use polars::prelude::{
     concat_list, lit, AnyValue, DataType, Expr, IntoSeries, ListChunked, LiteralValue, Series,
-    SpecialEq,
 };
 use rayon::iter::ParallelIterator;
 use rayon::prelude::IntoParallelIterator;
-use representation::literals::sparql_literal_to_any_value;
 use std::ops::Deref;
+use representation::sparql_to_polars::{sparql_literal_to_polars_literal_value, sparql_named_node_to_polars_literal_value};
 
 const BLANK_NODE_SERIES_NAME: &str = "blank_node_series";
 
@@ -21,34 +20,34 @@ pub fn constant_to_expr(
 ) -> Result<(Expr, PType, RDFNodeType), MappingError> {
     let (expr, ptype, rdf_node_type) = match constant_term {
         ConstantTerm::Constant(c) => match c {
-            ConstantLiteral::Iri(iri) => (
-                Expr::Literal(LiteralValue::String(iri.as_str().to_string())),
+            ConstantLiteral::Iri(iri) => {
+                let polars_literal = sparql_named_node_to_polars_literal_value(iri);
+                (
+                Expr::Literal(polars_literal),
                 PType::Basic(NamedNode::new_unchecked(OTTR_IRI), "ottr:IRI".to_string()),
                 RDFNodeType::IRI,
-            ),
+            )},
             ConstantLiteral::BlankNode(_) => {
                 panic!("Should never happen")
             }
             ConstantLiteral::Literal(lit) => {
                 let dt = lit.data_type_iri.as_ref().map(|nn| nn.as_ref());
                 let language = lit.language.as_deref();
-                let (mut any, dt) = sparql_literal_to_any_value(&lit.value, language, &dt);
-                //Workaround for owned utf 8..
-                let value_series = if let AnyValue::StringOwned(s) = any {
-                    any = AnyValue::String(&s);
-                    let mut value_series = Series::new_empty("literal", &DataType::String);
-                    value_series = value_series.extend_constant(any, 1).unwrap();
-                    value_series
+                let rdf_lit = if let Some(language) = language {
+                    Literal::new_language_tagged_literal(&lit.value, language).unwrap()
+                } else if let Some(dt) = dt {
+                    Literal::new_typed_literal(&lit.value, dt)
                 } else {
-                    Series::from_any_values("literal", &[any], false).unwrap()
+                    Literal::new_simple_literal(&lit.value)
                 };
+                let polars_lit = sparql_literal_to_polars_literal_value(&rdf_lit);
                 (
-                    Expr::Literal(LiteralValue::Series(SpecialEq::new(value_series))),
+                    Expr::Literal(polars_lit),
                     PType::Basic(
                         lit.data_type_iri.as_ref().unwrap().clone(),
                         lit.data_type_iri.as_ref().unwrap().to_string(),
                     ),
-                    RDFNodeType::Literal(dt.into()),
+                    RDFNodeType::Literal(rdf_lit.datatype().into_owned()),
                 )
             }
             ConstantLiteral::None => (
