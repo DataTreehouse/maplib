@@ -7,11 +7,9 @@ use crate::constants::{OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::NamedNode;
 use polars::prelude::{as_struct, col, DataFrame, IntoLazy, LiteralValue, Series};
-use polars_core::prelude::AnyValue;
 use representation::sparql_to_polars::{
     polars_literal_values_to_series, sparql_blank_node_to_polars_literal_value,
     sparql_literal_to_polars_literal_value, sparql_named_node_to_polars_literal_value,
-    sparql_term_to_polars_expr,
 };
 use representation::{RDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD};
 use rio_api::parser::TriplesParser;

@@ -3,14 +3,14 @@ use crate::constants::{BLANK_NODE_IRI, NONE_IRI, OTTR_IRI};
 use crate::mapping::errors::MappingError;
 use crate::mapping::RDFNodeType;
 
-use oxrdf::{Literal, NamedNode};
+use oxrdf::{Literal, NamedNode, Term};
 use polars::prelude::{
     concat_list, lit, AnyValue, DataType, Expr, IntoSeries, ListChunked, LiteralValue, Series,
 };
 use rayon::iter::ParallelIterator;
 use rayon::prelude::IntoParallelIterator;
+use representation::sparql_to_polars::{polars_literal_values_to_series, sparql_literal_to_polars_literal_value, sparql_named_node_to_polars_literal_value, sparql_term_to_polars_expr};
 use std::ops::Deref;
-use representation::sparql_to_polars::{sparql_literal_to_polars_literal_value, sparql_named_node_to_polars_literal_value};
 
 const BLANK_NODE_SERIES_NAME: &str = "blank_node_series";
 
@@ -23,10 +23,11 @@ pub fn constant_to_expr(
             ConstantLiteral::Iri(iri) => {
                 let polars_literal = sparql_named_node_to_polars_literal_value(iri);
                 (
-                Expr::Literal(polars_literal),
-                PType::Basic(NamedNode::new_unchecked(OTTR_IRI), "ottr:IRI".to_string()),
-                RDFNodeType::IRI,
-            )},
+                    Expr::Literal(polars_literal),
+                    PType::Basic(NamedNode::new_unchecked(OTTR_IRI), "ottr:IRI".to_string()),
+                    RDFNodeType::IRI,
+                )
+            }
             ConstantLiteral::BlankNode(_) => {
                 panic!("Should never happen")
             }
@@ -40,14 +41,15 @@ pub fn constant_to_expr(
                 } else {
                     Literal::new_simple_literal(&lit.value)
                 };
-                let polars_lit = sparql_literal_to_polars_literal_value(&rdf_lit);
+                let the_dt = rdf_lit.datatype().into_owned();
+                let expr = sparql_term_to_polars_expr(&Term::Literal(rdf_lit));
                 (
-                    Expr::Literal(polars_lit),
+                    expr,
                     PType::Basic(
                         lit.data_type_iri.as_ref().unwrap().clone(),
                         lit.data_type_iri.as_ref().unwrap().to_string(),
                     ),
-                    RDFNodeType::Literal(rdf_lit.datatype().into_owned()),
+                    RDFNodeType::Literal(the_dt),
                 )
             }
             ConstantLiteral::None => (
@@ -84,7 +86,10 @@ pub fn constant_to_expr(
                         if let LiteralValue::Series(series) = inner {
                             all_series.push(series.deref().clone())
                         } else {
-                            panic!("Should never happen");
+                            all_series.push(polars_literal_values_to_series(
+                                vec![inner.clone()],
+                                "dummy",
+                            ))
                         }
                     } else {
                         panic!("Should also never happen");
