@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Union, List, Dict
+from typing import Union, List, Dict, Optional
 from polars import DataFrame
 
 
@@ -8,11 +8,9 @@ class ValidationReport:
     SHACL Validation report.
     Only constructed by maplib.
     """
-
-    def __init__(self, df: DataFrame, conforms: bool) -> ValidationReport:
-        conforms = conforms
-        df = df
-        ...
+    conforms:bool
+    report:Optional[DataFrame]
+    details:Optional[DataFrame]
 
 
 class Mapping:
