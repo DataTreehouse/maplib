@@ -85,32 +85,32 @@ jobs:
           maturin-version: ${{ env.MATURIN_VERSION }}
           rust-toolchain: ${{ env.RUST_TOOLCHAIN }}
 
-  macos-aarch64:
-    needs: security_audit
-    runs-on: macos-latest
-    environment: release
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: [ '3.9', '3.10', '3.11' ]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v4
-        with:
-          python-version: ${{ matrix.python-version }}
-
-      - name: Fix README symlink
-        run: |
-          rm py_maplib/README.md
-          cp README.md py_maplib/README.md
-
-      - name: Set up Rust targets
-        run: rustup target add aarch64-apple-darwin
-
-      - name: Publish wheel
-        uses: PyO3/maturin-action@v1
-        with:
-          command: publish
-          args: -m py_maplib/Cargo.toml --target aarch64-apple-darwin --no-sdist -o wheels -i python${{ matrix.python-version }} -u magbak
-          maturin-version: ${{ env.MATURIN_VERSION }}
-          rust-toolchain: ${{ env.RUST_TOOLCHAIN }}
+#  macos-aarch64:
+#    needs: security_audit
+#    runs-on: macos-latest
+#    environment: release
+#    strategy:
+#      fail-fast: false
+#      matrix:
+#        python-version: [ '3.9', '3.10', '3.11' ]
+#    steps:
+#      - uses: actions/checkout@v4
+#      - uses: actions/setup-python@v4
+#        with:
+#          python-version: ${{ matrix.python-version }}
+#
+#      - name: Fix README symlink
+#        run: |
+#          rm py_maplib/README.md
+#          cp README.md py_maplib/README.md
+#
+#      - name: Set up Rust targets
+#        run: rustup target add aarch64-apple-darwin
+#
+#      - name: Publish wheel
+#        uses: PyO3/maturin-action@v1
+#        with:
+#          command: publish
+#          args: -m py_maplib/Cargo.toml --target aarch64-apple-darwin --no-sdist -o wheels -i python${{ matrix.python-version }} -u magbak
+#          maturin-version: ${{ env.MATURIN_VERSION }}
+#          rust-toolchain: ${{ env.RUST_TOOLCHAIN }}
