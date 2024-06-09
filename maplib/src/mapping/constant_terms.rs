@@ -9,7 +9,10 @@ use polars::prelude::{
 };
 use rayon::iter::ParallelIterator;
 use rayon::prelude::IntoParallelIterator;
-use representation::sparql_to_polars::{polars_literal_values_to_series, sparql_literal_to_polars_literal_value, sparql_named_node_to_polars_literal_value, sparql_term_to_polars_expr};
+use representation::rdf_to_polars::{
+    polars_literal_values_to_series, rdf_named_node_to_polars_literal_value,
+    rdf_term_to_polars_expr,
+};
 use std::ops::Deref;
 
 const BLANK_NODE_SERIES_NAME: &str = "blank_node_series";
@@ -21,7 +24,7 @@ pub fn constant_to_expr(
     let (expr, ptype, rdf_node_type) = match constant_term {
         ConstantTerm::Constant(c) => match c {
             ConstantLiteral::Iri(iri) => {
-                let polars_literal = sparql_named_node_to_polars_literal_value(iri);
+                let polars_literal = rdf_named_node_to_polars_literal_value(iri);
                 (
                     Expr::Literal(polars_literal),
                     PType::Basic(NamedNode::new_unchecked(OTTR_IRI), "ottr:IRI".to_string()),
@@ -42,7 +45,7 @@ pub fn constant_to_expr(
                     Literal::new_simple_literal(&lit.value)
                 };
                 let the_dt = rdf_lit.datatype().into_owned();
-                let expr = sparql_term_to_polars_expr(&Term::Literal(rdf_lit));
+                let expr = rdf_term_to_polars_expr(&Term::Literal(rdf_lit));
                 (
                     expr,
                     PType::Basic(
@@ -135,7 +138,7 @@ pub fn constant_blank_node_to_series(
                 .into_par_iter()
                 .map(|i| {
                     AnyValue::StringOwned(
-                        format!("_:{}_l{}_p{}_r{}", bl.as_str(), layer, pattern_num, i).into(),
+                        format!("{}_l{}_p{}_r{}", bl.as_str(), layer, pattern_num, i).into(),
                     )
                 })
                 .collect();

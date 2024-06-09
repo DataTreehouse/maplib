@@ -15,10 +15,10 @@ use representation::multitype::{
     implode_multicolumns,
 };
 use representation::query_context::{Context, PathEntry};
-use representation::solution_mapping::SolutionMappings;
-use representation::sparql_to_polars::{
-    sparql_literal_to_polars_literal_value, sparql_named_node_to_polars_literal_value,
+use representation::rdf_to_polars::{
+    rdf_literal_to_polars_literal_value, rdf_named_node_to_polars_literal_value,
 };
+use representation::solution_mapping::SolutionMappings;
 use representation::{BaseRDFNodeType, RDFNodeType};
 use spargebra::algebra::{GraphPattern, PropertyPathExpression};
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
@@ -229,7 +229,7 @@ impl Triplestore {
         let mut var_cols = vec![];
         match subject {
             TermPattern::NamedNode(nn) => {
-                let l = sparql_named_node_to_polars_literal_value(nn);
+                let l = rdf_named_node_to_polars_literal_value(nn);
                 out_df = out_df
                     .lazy()
                     .filter(col(SUBJECT_COL_NAME).eq(lit(l)))
@@ -242,7 +242,7 @@ impl Triplestore {
                 out_df.rename(SUBJECT_COL_NAME, b.as_str()).unwrap();
             }
             TermPattern::Literal(l) => {
-                let l = sparql_literal_to_polars_literal_value(l);
+                let l = rdf_literal_to_polars_literal_value(l);
                 out_df = out_df
                     .lazy()
                     .filter(col(SUBJECT_COL_NAME).eq(lit(l)))
@@ -258,7 +258,7 @@ impl Triplestore {
 
         match object {
             TermPattern::NamedNode(nn) => {
-                let l = sparql_named_node_to_polars_literal_value(nn);
+                let l = rdf_named_node_to_polars_literal_value(nn);
                 out_df = out_df
                     .lazy()
                     .filter(col(OBJECT_COL_NAME).eq(lit(l)))
@@ -271,7 +271,7 @@ impl Triplestore {
                 out_df.rename(OBJECT_COL_NAME, b.as_str()).unwrap();
             }
             TermPattern::Literal(l) => {
-                let l = sparql_literal_to_polars_literal_value(l);
+                let l = rdf_literal_to_polars_literal_value(l);
                 out_df = out_df
                     .lazy()
                     .filter(col(OBJECT_COL_NAME).eq(lit(l)))

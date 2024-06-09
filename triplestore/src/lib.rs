@@ -3,10 +3,10 @@ extern crate core;
 pub mod constants;
 pub mod conversion;
 pub mod errors;
-mod export_triples;
 mod io_funcs;
 pub mod native_parquet_write;
 mod ntriples_write;
+pub mod query_solutions;
 pub mod rdfs_inferencing;
 pub mod sparql;
 pub mod triples_read;
@@ -37,12 +37,6 @@ use std::path::Path;
 use std::time::Instant;
 use uuid::Uuid;
 
-pub enum TripleFormat {
-    NTriples,
-    Turtle,
-    RDFXML,
-}
-
 pub struct Triplestore {
     deduplicated: bool,
     pub(crate) caching_folder: Option<String>,
@@ -56,39 +50,9 @@ pub struct TripleTable {
     df_paths: Option<Vec<String>>,
     unique: bool,
     call_uuid: String,
-    tmp_df: Option<DataFrame>,
 }
 
 impl TripleTable {
-    pub(crate) fn len(&self) -> usize {
-        if let Some(dfs) = &self.dfs {
-            dfs.len()
-        } else if let Some(paths) = &self.df_paths {
-            paths.len()
-        } else {
-            panic!("TripleTable in invalid state")
-        }
-    }
-
-    pub(crate) fn get_df(&mut self, idx: usize) -> Result<&DataFrame, TriplestoreError> {
-        if let Some(dfs) = &self.dfs {
-            Ok(dfs.get(idx).unwrap())
-        } else if let Some(paths) = &self.df_paths {
-            let tmp_df = scan_parquet(paths.get(idx).unwrap())
-                .map_err(TriplestoreError::ParquetIOError)?
-                .collect()
-                .unwrap();
-            self.tmp_df = Some(tmp_df);
-            Ok(self.tmp_df.as_ref().unwrap())
-        } else {
-            panic!("TripleTable in invalid state")
-        }
-    }
-
-    pub(crate) fn forget_tmp_df(&mut self) {
-        self.tmp_df = None;
-    }
-
     pub(crate) fn get_lazy_frames(&self) -> Result<Vec<LazyFrame>, TriplestoreError> {
         if let Some(dfs) = &self.dfs {
             Ok(vec![concat_df(dfs).unwrap().lazy()])
@@ -264,7 +228,6 @@ impl Triplestore {
                             df_paths: Some(vec![file_path]),
                             unique: true,
                             call_uuid: call_uuid.clone(),
-                            tmp_df: None,
                         },
                     );
                 }
@@ -278,7 +241,6 @@ impl Triplestore {
                             df_paths: Some(vec![file_path]),
                             unique: true,
                             call_uuid: call_uuid.clone(),
-                            tmp_df: None,
                         },
                     )]),
                 );
@@ -341,7 +303,6 @@ impl Triplestore {
                             df_paths: None,
                             unique: true,
                             call_uuid: call_uuid.clone(),
-                            tmp_df: None,
                         },
                     );
                 }
@@ -355,7 +316,6 @@ impl Triplestore {
                             df_paths: None,
                             unique: true,
                             call_uuid: call_uuid.clone(),
-                            tmp_df: None,
                         },
                     )]),
                 );

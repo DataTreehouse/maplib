@@ -23,7 +23,7 @@ use super::Triplestore;
 use crate::constants::OBJECT_COL_NAME;
 use crate::conversion::convert_to_string;
 use crate::errors::TriplestoreError;
-use oxrdf::NamedNode;
+use oxrdf::vocab::xsd;
 use parquet_io::scan_parquet;
 use polars::export::rayon::iter::{IntoParallelIterator, ParallelIterator};
 use polars::export::rayon::prelude::ParallelExtend;
@@ -31,7 +31,7 @@ use polars::prelude::{AnyValue, DataFrame, Series};
 use polars_core::series::SeriesIter;
 use polars_core::POOL;
 use polars_utils::contention_pool::LowContentionPool;
-use representation::{RDFNodeType, TripleType};
+use representation::BaseRDFNodeType;
 use std::io::Write;
 
 impl Triplestore {
@@ -45,23 +45,20 @@ impl Triplestore {
         let mut any_value_iter_pool = LowContentionPool::<Vec<_>>::new(n_threads);
         let mut write_buffer_pool = LowContentionPool::<Vec<_>>::new(n_threads);
         for (property, map) in &mut self.df_map {
-            for ((_rdf_node_type_k, rdf_node_type_o), tt) in map {
-                let dt = if let RDFNodeType::Literal(dt) = rdf_node_type_o {
-                    Some(dt.clone())
-                } else {
-                    None
-                };
-                let triple_type = rdf_node_type_o.find_triple_type();
+            for ((subj_type, obj_type), tt) in map {
+                let subj_type = BaseRDFNodeType::from_rdf_node_type(subj_type);
+                let obj_type = BaseRDFNodeType::from_rdf_node_type(obj_type);
+
                 if let Some(dfs) = &mut tt.dfs {
                     for df in dfs {
                         df.as_single_chunk_par();
                         write_ntriples_for_df(
                             df,
-                            &property.to_string(),
-                            &dt,
+                            property.as_str(),
                             writer,
                             chunk_size,
-                            triple_type.clone(),
+                            &subj_type,
+                            &obj_type,
                             n_threads,
                             &mut any_value_iter_pool,
                             &mut write_buffer_pool,
@@ -75,11 +72,11 @@ impl Triplestore {
                             .unwrap();
                         write_ntriples_for_df(
                             &df,
-                            &property.to_string(),
-                            &dt,
+                            property.as_str(),
                             writer,
                             chunk_size,
-                            triple_type.clone(),
+                            &subj_type,
+                            &obj_type,
                             n_threads,
                             &mut any_value_iter_pool,
                             &mut write_buffer_pool,
@@ -95,24 +92,14 @@ impl Triplestore {
 fn write_ntriples_for_df<W: Write + ?Sized>(
     df: &DataFrame,
     verb: &str,
-    dt: &Option<NamedNode>,
     writer: &mut W,
     chunk_size: usize,
-    triple_type: TripleType,
+    subj_type: &BaseRDFNodeType,
+    obj_type: &BaseRDFNodeType,
     n_threads: usize,
     any_value_iter_pool: &mut LowContentionPool<Vec<SeriesIter>>,
     write_buffer_pool: &mut LowContentionPool<Vec<u8>>,
 ) -> Result<(), TriplestoreError> {
-    let dt_str = if triple_type == TripleType::NonStringProperty {
-        if let Some(nn) = dt {
-            Some(nn.as_str())
-        } else {
-            panic!("Must have datatype for non string property")
-        }
-    } else {
-        None
-    };
-
     let len = df.height();
 
     let total_rows_per_pool_iter = n_threads * chunk_size;
@@ -130,6 +117,14 @@ fn write_ntriples_for_df<W: Write + ?Sized>(
             if let Some(s) = convert_to_string(df.column(OBJECT_COL_NAME).unwrap()) {
                 df.with_column(s).unwrap();
             }
+            let subject_blank = matches!(subj_type, BaseRDFNodeType::BlankNode);
+            let is_plain_string = if let BaseRDFNodeType::Literal(l) = obj_type {
+                l.as_ref() == xsd::STRING
+            } else {
+                false
+            };
+            let is_lang_string = obj_type.is_lang_string();
+
             let cols = df.get_columns();
 
             // Safety:
@@ -162,24 +157,51 @@ fn write_ntriples_for_df<W: Write + ?Sized>(
                     }
                 }
                 if !any_values.is_empty() {
-                    match triple_type {
-                        TripleType::ObjectProperty => {
-                            write_object_property_triple(&mut write_buffer, any_values, verb);
-                        }
-                        TripleType::StringProperty => {
-                            write_string_property_triple(&mut write_buffer, any_values, verb);
-                        }
-                        TripleType::LangStringProperty => {
-                            write_lang_string_property_triple(&mut write_buffer, any_values, verb);
-                        }
-                        TripleType::NonStringProperty => {
-                            write_non_string_property_triple(
+                    match obj_type {
+                        BaseRDFNodeType::IRI => {
+                            write_object_property_triple(
                                 &mut write_buffer,
-                                dt_str.unwrap(),
                                 any_values,
                                 verb,
+                                subject_blank,
+                                false,
                             );
                         }
+                        BaseRDFNodeType::BlankNode => {
+                            write_object_property_triple(
+                                &mut write_buffer,
+                                any_values,
+                                verb,
+                                subject_blank,
+                                true,
+                            );
+                        }
+                        BaseRDFNodeType::Literal(nn) => {
+                            if is_plain_string {
+                                write_string_property_triple(
+                                    &mut write_buffer,
+                                    any_values,
+                                    verb,
+                                    subject_blank,
+                                );
+                            } else if is_lang_string {
+                                write_lang_string_property_triple(
+                                    &mut write_buffer,
+                                    any_values,
+                                    verb,
+                                    subject_blank,
+                                );
+                            } else {
+                                write_non_string_property_triple(
+                                    &mut write_buffer,
+                                    nn.as_str(),
+                                    any_values,
+                                    verb,
+                                    subject_blank,
+                                );
+                            }
+                        }
+                        BaseRDFNodeType::None => panic!("Should never happen"),
                     }
                 }
             }
@@ -206,7 +228,12 @@ fn write_ntriples_for_df<W: Write + ?Sized>(
     Ok(())
 }
 
-fn write_lang_string_property_triple(f: &mut Vec<u8>, mut any_values: Vec<AnyValue>, v: &str) {
+fn write_lang_string_property_triple(
+    f: &mut Vec<u8>,
+    mut any_values: Vec<AnyValue>,
+    v: &str,
+    subject_blank: bool,
+) {
     let lex = if let AnyValue::String(lex) = any_values.pop().unwrap() {
         lex
     } else {
@@ -217,7 +244,7 @@ fn write_lang_string_property_triple(f: &mut Vec<u8>, mut any_values: Vec<AnyVal
     } else {
         panic!()
     };
-    write_iri_or_blanknode(f, s);
+    write_iri_or_blanknode(f, s, subject_blank);
     write!(f, " ").unwrap();
     write_iri(f, v);
     write!(f, " ").unwrap();
@@ -225,7 +252,12 @@ fn write_lang_string_property_triple(f: &mut Vec<u8>, mut any_values: Vec<AnyVal
     writeln!(f, " .").unwrap();
 }
 
-fn write_string_property_triple(f: &mut Vec<u8>, mut any_values: Vec<AnyValue>, v: &str) {
+fn write_string_property_triple(
+    f: &mut Vec<u8>,
+    mut any_values: Vec<AnyValue>,
+    v: &str,
+    subject_blank: bool,
+) {
     let lex = if let AnyValue::String(lex) = any_values.pop().unwrap() {
         lex
     } else {
@@ -236,7 +268,7 @@ fn write_string_property_triple(f: &mut Vec<u8>, mut any_values: Vec<AnyValue>, 
     } else {
         panic!()
     };
-    write_iri_or_blanknode(f, s);
+    write_iri_or_blanknode(f, s, subject_blank);
     write!(f, " ").unwrap();
     write_iri(f, v);
     write!(f, " ").unwrap();
@@ -250,6 +282,7 @@ fn write_non_string_property_triple(
     dt: &str,
     mut any_values: Vec<AnyValue>,
     v: &str,
+    subject_blank: bool,
 ) {
     let lex = if let AnyValue::String(lex) = any_values.pop().unwrap() {
         lex
@@ -261,7 +294,7 @@ fn write_non_string_property_triple(
     } else {
         panic!()
     };
-    write_iri_or_blanknode(f, s);
+    write_iri_or_blanknode(f, s, subject_blank);
     write!(f, " ").unwrap();
     write_iri(f, v);
     write!(f, " ").unwrap();
@@ -269,7 +302,13 @@ fn write_non_string_property_triple(
     writeln!(f, "^^<{}> .", dt).unwrap();
 }
 
-fn write_object_property_triple(f: &mut Vec<u8>, mut any_values: Vec<AnyValue>, v: &str) {
+fn write_object_property_triple(
+    f: &mut Vec<u8>,
+    mut any_values: Vec<AnyValue>,
+    v: &str,
+    subject_blank: bool,
+    object_blank: bool,
+) {
     let o = if let AnyValue::String(o) = any_values.pop().unwrap() {
         o
     } else {
@@ -280,39 +319,24 @@ fn write_object_property_triple(f: &mut Vec<u8>, mut any_values: Vec<AnyValue>, 
     } else {
         panic!()
     };
-    write_iri_or_blanknode(f, s);
+    write_iri_or_blanknode(f, s, subject_blank);
     write!(f, " ").unwrap();
     write_iri(f, v);
     write!(f, " ").unwrap();
-    write_iri_or_blanknode(f, o);
+    write_iri_or_blanknode(f, o, object_blank);
     writeln!(f, " .").unwrap();
 }
 
-fn write_iri_or_blanknode(f: &mut Vec<u8>, s: &str) {
-    if s.starts_with('_') {
-        write!(f, "{}", s).unwrap();
+fn write_iri_or_blanknode(f: &mut Vec<u8>, s: &str, blank: bool) {
+    if blank {
+        write!(f, "_:{}", s).unwrap();
     } else {
         write_iri(f, s);
     }
 }
 
 fn write_iri(f: &mut Vec<u8>, s: &str) {
-    let mut chars = s[1..(s.len() - 1)].chars();
-    write!(f, "<").unwrap();
-    loop {
-        if let Some(c) = chars.next() {
-            match c {
-                '>' => write!(f, "\\>").unwrap(),
-                '\\' => write!(f, "\\\\").unwrap(),
-                _ => {
-                    write!(f, "{}", c).unwrap();
-                }
-            }
-        } else {
-            break;
-        }
-    }
-    write!(f, ">").unwrap();
+    write!(f, "<{}>", s).unwrap();
 }
 
 fn write_lang_string(f: &mut Vec<u8>, s: &str) {

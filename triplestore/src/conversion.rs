@@ -1,6 +1,6 @@
 use polars::prelude::{col, lit, IntoLazy};
 use polars::prelude::{DataFrame, DataType, Series};
-use representation::polars_to_sparql::{date_series_to_strings, datetime_series_to_strings};
+use representation::polars_to_rdf::{date_series_to_strings, datetime_series_to_strings};
 use representation::{LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD};
 
 pub fn convert_to_string(series: &Series) -> Option<Series> {

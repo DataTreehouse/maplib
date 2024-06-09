@@ -19,10 +19,10 @@ use polars_core::enable_string_cache;
 use polars_core::frame::UniqueKeepStrategy;
 use query_processing::expressions::col_null_expr;
 use representation::multitype::{split_df_multicols, unique_workaround};
-use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
-use representation::sparql_to_polars::{
-    sparql_literal_to_polars_literal_value, sparql_named_node_to_polars_literal_value,
+use representation::rdf_to_polars::{
+    rdf_literal_to_polars_literal_value, rdf_named_node_to_polars_literal_value,
 };
+use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use representation::RDFNodeType;
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 use spargebra::Query;
@@ -31,7 +31,7 @@ use uuid::Uuid;
 #[derive(Debug)]
 pub enum QueryResult {
     Select(DataFrame, HashMap<String, RDFNodeType>),
-    Construct(Vec<(DataFrame, RDFNodeType, RDFNodeType)>),
+    Construct(Vec<(DataFrame, HashMap<String, RDFNodeType>)>),
 }
 
 impl Triplestore {
@@ -132,20 +132,22 @@ impl Triplestore {
     }
     pub fn insert_construct_result(
         &mut self,
-        dfs: Vec<(DataFrame, RDFNodeType, RDFNodeType)>,
+        dfs: Vec<(DataFrame, HashMap<String, RDFNodeType>)>,
         transient: bool,
     ) -> Result<(), SparqlError> {
         let call_uuid = Uuid::new_v4().to_string();
         let mut all_triples_to_add = vec![];
 
-        for (df, subj_dt, obj_dt) in dfs {
+        for (df, map) in dfs {
             if df.height() == 0 {
                 continue;
             }
             let mut multicols = HashMap::new();
+            let subj_dt = map.get(SUBJECT_COL_NAME).unwrap();
             if matches!(subj_dt, RDFNodeType::MultiType(..)) {
                 multicols.insert(SUBJECT_COL_NAME.to_string(), subj_dt.clone());
             }
+            let obj_dt = map.get(OBJECT_COL_NAME).unwrap();
             if matches!(obj_dt, RDFNodeType::MultiType(..)) {
                 multicols.insert(OBJECT_COL_NAME.to_string(), obj_dt.clone());
             }
@@ -165,8 +167,8 @@ impl Triplestore {
             } else {
                 all_triples_to_add.push(TriplesToAdd {
                     df,
-                    subject_type: subj_dt,
-                    object_type: obj_dt,
+                    subject_type: subj_dt.clone(),
+                    object_type: obj_dt.clone(),
                     static_verb_column: None,
                     has_unique_subset: false,
                 });
@@ -184,7 +186,7 @@ fn triple_to_df(
     df: &DataFrame,
     rdf_node_types: &HashMap<String, RDFNodeType>,
     t: &TriplePattern,
-) -> Result<Option<(DataFrame, RDFNodeType, RDFNodeType)>, SparqlError> {
+) -> Result<Option<(DataFrame, HashMap<String, RDFNodeType>)>, SparqlError> {
     let mut triple_types = HashMap::new();
     let (subj_expr, subj_dt) =
         term_pattern_expression(rdf_node_types, &t.subject, SUBJECT_COL_NAME);
@@ -204,16 +206,11 @@ fn triple_to_df(
                 .and(col_null_expr(VERB_COL_NAME, &triple_types).not())
                 .and(col_null_expr(OBJECT_COL_NAME, &triple_types).not()),
         );
-    debug!("Before dedup");
     lf = unique_workaround(lf, &triple_types, None, false, UniqueKeepStrategy::Any);
 
     let df = lf.collect().unwrap();
     if df.height() > 0 {
-        Ok(Some((
-            df,
-            triple_types.remove(SUBJECT_COL_NAME).unwrap(),
-            triple_types.remove(OBJECT_COL_NAME).unwrap(),
-        )))
+        Ok(Some((df, triple_types)))
     } else {
         Ok(None)
     }
@@ -233,7 +230,7 @@ fn term_pattern_expression(
             if thelit.datatype().as_str() == OTTR_IRI {
                 named_node_lit(&NamedNode::new(thelit.to_string()).unwrap(), name)
             } else {
-                let l = lit(sparql_literal_to_polars_literal_value(thelit)).alias(name);
+                let l = lit(rdf_literal_to_polars_literal_value(thelit)).alias(name);
                 (l, RDFNodeType::Literal(thelit.datatype().into_owned()))
             }
         }
@@ -254,7 +251,7 @@ fn named_node_pattern_expr(
 
 fn named_node_lit(nn: &NamedNode, name: &str) -> (Expr, RDFNodeType) {
     (
-        lit(sparql_named_node_to_polars_literal_value(nn)).alias(name),
+        lit(rdf_named_node_to_polars_literal_value(nn)).alias(name),
         RDFNodeType::IRI,
     )
 }

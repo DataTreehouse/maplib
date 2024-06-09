@@ -16,14 +16,12 @@ polars = {workspace=true, features=["zip_with", "nightly", "performant", "cse", 
 polars-utils = { workspace=true }
 polars-core = {workspace=true}
 log= {workspace=true}
-rio_turtle = {workspace=true}
-rio_xml = { workspace=true }
-rio_api = { workspace=true }
 chrono = { workspace=true }
 uuid = {workspace=true}
 thiserror={ workspace= true }
 env_logger = { workspace=true }
 oxiri = "0.2.2"
+oxrdfio = { workspace = true}
 
 [dev-dependencies]
 rstest = "0.18.2"

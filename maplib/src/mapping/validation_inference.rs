@@ -5,8 +5,8 @@ use crate::constants::OTTR_IRI;
 use crate::mapping::errors::MappingError;
 use crate::mapping::{PrimitiveColumn, RDFNodeType};
 use oxrdf::NamedNode;
-use polars::prelude::{DataFrame, DataType, Series};
-use representation::polars_to_sparql::polars_type_to_literal_type;
+use polars::prelude::{DataFrame, DataType};
+use representation::polars_to_rdf::polars_type_to_literal_type;
 use std::collections::{HashMap, HashSet};
 
 impl Mapping {
@@ -60,7 +60,7 @@ fn validate_infer_column_data_type(
         validate_datatype(series.name(), dtype, ptype)?;
         ptype.clone()
     } else {
-        polars_datatype_to_xsd_datatype(dtype, Some(series))
+        polars_datatype_to_xsd_datatype(dtype)
     };
     let rdf_node_type = infer_rdf_node_type(&ptype);
 
@@ -141,8 +141,8 @@ fn validate_basic_datatype(
     Ok(())
 }
 
-pub fn polars_datatype_to_xsd_datatype(datatype: &DataType, series: Option<&Series>) -> PType {
-    if let Some(rdf_node_type) = polars_type_to_literal_type(datatype, series) {
+pub fn polars_datatype_to_xsd_datatype(datatype: &DataType) -> PType {
+    if let Some(rdf_node_type) = polars_type_to_literal_type(datatype) {
         let nn = match rdf_node_type {
             RDFNodeType::IRI => NamedNode::new_unchecked(OTTR_IRI),
             RDFNodeType::Literal(l) => l,
@@ -154,8 +154,7 @@ pub fn polars_datatype_to_xsd_datatype(datatype: &DataType, series: Option<&Seri
 
     match datatype {
         DataType::List(inner) => {
-            //Todo: possible to pass Series?
-            return PType::List(Box::new(polars_datatype_to_xsd_datatype(inner, None)));
+            return PType::List(Box::new(polars_datatype_to_xsd_datatype(inner)));
         }
         _ => {
             unimplemented!("Unsupported datatype:{}", datatype)

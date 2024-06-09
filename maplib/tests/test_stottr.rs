@@ -1,17 +1,49 @@
 extern crate core;
 
-#[cfg(test)]
-mod utils;
-
-use crate::utils::triples_from_file;
 use maplib::mapping::{ExpandOptions, Mapping};
 use oxrdf::{Literal, NamedNode, Subject, Term, Triple};
 use polars::prelude::{col, AnyValue, DataFrame, IntoLazy, Series, TimeUnit};
+use representation::polars_to_rdf::df_as_result;
 use rstest::*;
 use serial_test::serial;
 use std::collections::HashSet;
-use std::fs::File;
 use std::path::PathBuf;
+use triplestore::sparql::QueryResult;
+
+// TODO: Legacy functionality, these tests should move to Python.
+fn get_triples(mapping: &mut Mapping) -> Vec<Triple> {
+    let res = mapping
+        .query(
+            "SELECT ?subject ?verb ?object WHERE {?subject ?verb ?object}",
+            &None,
+            None,
+        )
+        .unwrap();
+    let mut triples = vec![];
+    if let QueryResult::Select(df, types) = res {
+        let solns = df_as_result(df, &types);
+        for s in solns.solutions {
+            let (subject, verb, object) = triplestore::query_solutions::get_three_query_solutions(
+                s,
+                &solns.variables,
+                "subject",
+                "verb",
+                "object",
+            );
+            let subject = match subject.unwrap() {
+                Term::NamedNode(nn) => Subject::NamedNode(nn),
+                Term::BlankNode(bn) => Subject::BlankNode(bn),
+                _ => panic!(),
+            };
+            let verb = match verb.unwrap() {
+                Term::NamedNode(nn) => nn,
+                _ => panic!(),
+            };
+            triples.push(Triple::new(subject, verb, object.unwrap()))
+        }
+    }
+    triples
+}
 
 #[fixture]
 fn testdata_path() -> PathBuf {
@@ -21,48 +53,6 @@ fn testdata_path() -> PathBuf {
     testdata_path.push("tests");
     testdata_path.push("stottr_testdata");
     testdata_path
-}
-
-#[rstest]
-#[serial]
-fn test_maplib_easy_case(testdata_path: PathBuf) {
-    let t_str = r#"
-    @prefix ex:<http://example.net/ns#>.
-
-    ex:ExampleTemplate [?myVar1 , ?myVar2]
-      :: {
-        ottr:Triple(ex:anObject, ex:hasNumber, ?myVar1) ,
-        ottr:Triple(ex:anObject, ex:hasOtherNumber, ?myVar2)
-      } .
-    "#;
-
-    let mut v1 = Series::from_iter(&[1, 2i32]);
-    v1.rename("myVar1");
-    let mut v2 = Series::from_iter(&[3, 4i32]);
-    v2.rename("myVar2");
-    let series = [v1, v2];
-    let df = DataFrame::from_iter(series);
-
-    let mut mapping = Mapping::from_str(t_str, None).unwrap();
-    let _report = mapping
-        .expand(
-            "http://example.net/ns#ExampleTemplate",
-            Some(df),
-            Default::default(),
-        )
-        .expect("");
-    let mut actual_file_path = testdata_path.clone();
-    actual_file_path.push("actual_easy_case.ttl");
-    let mut actual_file = File::create(actual_file_path.as_path()).expect("could not open file");
-    mapping.write_n_triples(&mut actual_file, None).unwrap();
-    let actual_file = File::open(actual_file_path.as_path()).expect("Could not open file");
-    let actual_triples = triples_from_file(actual_file);
-
-    let mut expected_file_path = testdata_path.clone();
-    expected_file_path.push("expected_easy_case.ttl");
-    let expected_file = File::open(expected_file_path.as_path()).expect("Could not open file");
-    let expected_triples = triples_from_file(expected_file);
-    assert_eq!(expected_triples, actual_triples);
 }
 
 #[rstest]
@@ -93,7 +83,7 @@ fn test_all_iri_case() {
             Default::default(),
         )
         .expect("");
-    let triples = mapping.export_oxrdf_triples().unwrap();
+    let triples = get_triples(&mut mapping);
     //println!("{:?}", triples);
     let actual_triples_set: HashSet<Triple> = HashSet::from_iter(triples);
     let expected_triples_set = HashSet::from([
@@ -141,7 +131,7 @@ fn test_string_language_tag_cases() {
             },
         )
         .expect("");
-    let triples = mapping.export_oxrdf_triples().unwrap();
+    let triples = get_triples(&mut mapping);
     //println!("{:?}", triples);
     let actual_triples_set: HashSet<Triple> = HashSet::from_iter(triples);
     let expected_triples_set = HashSet::from([
@@ -194,7 +184,7 @@ fn test_const_list_case() {
             Default::default(),
         )
         .expect("");
-    let triples = mapping.export_oxrdf_triples().unwrap();
+    let triples = get_triples(&mut mapping);
     //println!("{:?}", triples);
     let actual_triples_set: HashSet<Triple> = HashSet::from_iter(triples);
     let expected_triples_set = HashSet::from([
@@ -265,7 +255,7 @@ ex:Nested [?myVar] :: {
             Default::default(),
         )
         .unwrap();
-    let triples = mapping.export_oxrdf_triples().unwrap();
+    let triples = get_triples(&mut mapping);
     //println!("{:?}", triples);
     let actual_triples_set: HashSet<Triple> = HashSet::from_iter(triples);
     let expected_triples_set = HashSet::from([
@@ -403,7 +393,7 @@ ex:ExampleTemplate [
             Default::default(),
         )
         .unwrap();
-    let mut actual_triples = mapping.export_oxrdf_triples().unwrap();
+    let mut actual_triples = get_triples(&mut mapping);
     let mut expected_triples = vec![
         Triple {
             subject: Subject::NamedNode(NamedNode::new_unchecked("http://example.net/ns#anObject")),
@@ -634,7 +624,7 @@ ex:AnotherExampleTemplate [?object, ?predicate, ?myList] :: {
             Default::default(),
         )
         .unwrap();
-    let triples = mapping.export_oxrdf_triples().unwrap();
+    let triples = get_triples(&mut mapping);
     //println!("{:?}", triples);
     let actual_triples_set: HashSet<Triple> = HashSet::from_iter(triples);
     let expected_triples_set = HashSet::from([
@@ -717,7 +707,7 @@ ex:AnotherExampleTemplate [?subject, ?myList1, ?myList2] :: {
             Default::default(),
         )
         .unwrap();
-    let triples = mapping.export_oxrdf_triples().unwrap();
+    let triples = get_triples(&mut mapping);
     //println!("{:?}", triples);
     let actual_triples_set: HashSet<Triple> = HashSet::from_iter(triples);
     let expected_triples_set = HashSet::from([
@@ -825,7 +815,7 @@ fn test_default() {
             Default::default(),
         )
         .unwrap();
-    let triples = mapping.export_oxrdf_triples().unwrap();
+    let triples = get_triples(&mut mapping);
     //println!("{:?}", triples);
     let actual_triples_set: HashSet<Triple> = HashSet::from_iter(triples);
     let expected_triples_set = HashSet::from([
@@ -919,7 +909,7 @@ fn test_default_list() {
             Default::default(),
         )
         .unwrap();
-    let triples = mapping.export_oxrdf_triples().unwrap();
+    let triples = get_triples(&mut mapping);
     //println!("{:?}", triples);
     let actual_triples_set: HashSet<Triple> = HashSet::from_iter(triples);
     let expected_triples_set = HashSet::from([

@@ -8,7 +8,7 @@ use query_processing::aggregates::{
 };
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
-use spargebra::algebra::AggregateExpression;
+use spargebra::algebra::{AggregateExpression, AggregateFunction};
 use std::collections::HashMap;
 
 impl Triplestore {
@@ -25,93 +25,17 @@ impl Triplestore {
         let column_context;
         let out_rdf_node_type;
         match aggregate_expression {
-            AggregateExpression::Count { expr, distinct } => {
-                if let Some(some_expr) = expr {
-                    column_context = Some(context.extension_with(PathEntry::AggregationOperation));
-                    output_solution_mappings = self.lazy_expression(
-                        some_expr,
-                        solution_mappings,
-                        column_context.as_ref().unwrap(),
-                        parameters,
-                    )?;
-                    (out_expr, out_rdf_node_type) =
-                        count_with_expression(column_context.as_ref().unwrap(), *distinct);
-                } else {
-                    output_solution_mappings = solution_mappings;
-                    column_context = None;
-                    (out_expr, out_rdf_node_type) =
-                        count_without_expression(&output_solution_mappings, *distinct);
-                }
-            }
-            AggregateExpression::Sum { expr, distinct } => {
-                column_context = Some(context.extension_with(PathEntry::AggregationOperation));
-
-                output_solution_mappings = self.lazy_expression(
-                    expr,
-                    solution_mappings,
-                    column_context.as_ref().unwrap(),
-                    parameters,
-                )?;
-                (out_expr, out_rdf_node_type) = sum(
-                    &output_solution_mappings,
-                    column_context.as_ref().unwrap(),
-                    *distinct,
-                );
-            }
-            AggregateExpression::Avg { expr, distinct } => {
-                column_context = Some(context.extension_with(PathEntry::AggregationOperation));
-                output_solution_mappings = self.lazy_expression(
-                    expr,
-                    solution_mappings,
-                    column_context.as_ref().unwrap(),
-                    parameters,
-                )?;
-                (out_expr, out_rdf_node_type) = avg(
-                    &output_solution_mappings,
-                    column_context.as_ref().unwrap(),
-                    *distinct,
-                );
-            }
-            AggregateExpression::Min { expr, distinct: _ } => {
-                column_context = Some(context.extension_with(PathEntry::AggregationOperation));
-                output_solution_mappings = self.lazy_expression(
-                    expr,
-                    solution_mappings,
-                    column_context.as_ref().unwrap(),
-                    parameters,
-                )?;
+            AggregateExpression::CountSolutions { distinct } => {
+                output_solution_mappings = solution_mappings;
+                column_context = None;
                 (out_expr, out_rdf_node_type) =
-                    min(&output_solution_mappings, column_context.as_ref().unwrap());
+                    count_without_expression(&output_solution_mappings, *distinct);
             }
-            AggregateExpression::Max { expr, distinct: _ } => {
-                column_context = Some(context.extension_with(PathEntry::AggregationOperation));
-
-                output_solution_mappings = self.lazy_expression(
-                    expr,
-                    solution_mappings,
-                    column_context.as_ref().unwrap(),
-                    parameters,
-                )?;
-                (out_expr, out_rdf_node_type) =
-                    max(&output_solution_mappings, column_context.as_ref().unwrap());
-            }
-            AggregateExpression::GroupConcat {
+            AggregateExpression::FunctionCall {
+                name,
                 expr,
                 distinct,
-                separator,
             } => {
-                column_context = Some(context.extension_with(PathEntry::AggregationOperation));
-
-                output_solution_mappings = self.lazy_expression(
-                    expr,
-                    solution_mappings,
-                    column_context.as_ref().unwrap(),
-                    parameters,
-                )?;
-                (out_expr, out_rdf_node_type) =
-                    group_concat(column_context.as_ref().unwrap(), separator, *distinct);
-            }
-            AggregateExpression::Sample { expr, distinct: _ } => {
                 column_context = Some(context.extension_with(PathEntry::AggregationOperation));
                 output_solution_mappings = self.lazy_expression(
                     expr,
@@ -119,15 +43,45 @@ impl Triplestore {
                     column_context.as_ref().unwrap(),
                     parameters,
                 )?;
-                (out_expr, out_rdf_node_type) =
-                    sample(&output_solution_mappings, column_context.as_ref().unwrap());
-            }
-            AggregateExpression::Custom {
-                name,
-                expr: _,
-                distinct: _,
-            } => {
-                panic!("Custom aggregation {} not supported", name);
+                match name {
+                    AggregateFunction::Count => {
+                        (out_expr, out_rdf_node_type) =
+                            count_with_expression(column_context.as_ref().unwrap(), *distinct);
+                    }
+                    AggregateFunction::Sum => {
+                        (out_expr, out_rdf_node_type) = sum(
+                            &output_solution_mappings,
+                            column_context.as_ref().unwrap(),
+                            *distinct,
+                        );
+                    }
+                    AggregateFunction::Avg => {
+                        (out_expr, out_rdf_node_type) = avg(
+                            &output_solution_mappings,
+                            column_context.as_ref().unwrap(),
+                            *distinct,
+                        );
+                    }
+                    AggregateFunction::Min => {
+                        (out_expr, out_rdf_node_type) =
+                            min(&output_solution_mappings, column_context.as_ref().unwrap());
+                    }
+                    AggregateFunction::Max => {
+                        (out_expr, out_rdf_node_type) =
+                            max(&output_solution_mappings, column_context.as_ref().unwrap());
+                    }
+                    AggregateFunction::GroupConcat { separator } => {
+                        (out_expr, out_rdf_node_type) =
+                            group_concat(column_context.as_ref().unwrap(), separator, *distinct);
+                    }
+                    AggregateFunction::Sample => {
+                        (out_expr, out_rdf_node_type) =
+                            sample(&output_solution_mappings, column_context.as_ref().unwrap());
+                    }
+                    AggregateFunction::Custom(name) => {
+                        panic!("Custom aggregation {} not supported", name);
+                    }
+                }
             }
         }
         out_expr = out_expr.alias(variable.as_str());

@@ -16,13 +16,12 @@ oxrdf = {workspace=true}
 polars = {workspace=true, features=["semi_anti_join", "abs", "round_series", "lazy", "concat_str", "is_in", "dtype-full", "strings", "rows", "timezones", "polars-time", "temporal", "list_eval", "partition_by", "parquet", "cse", "nightly", "performant"] }
 unic-char-range = "0.9.0"
 log= { workspace=true }
-rio_turtle = {workspace=true}
-rio_api = {workspace=true}
 chrono = {workspace=true}
 chrono-tz = {workspace=true}
 uuid = {workspace=true}
 thiserror={ workspace= true }
 env_logger = {workspace=true}
+oxrdfio = { workspace=true }
 
 #Force higher version due to RUSTSEC-2024-0019
 mio = ">0.8.10"

@@ -18,8 +18,13 @@ use super::Triplestore;
 use crate::sparql::errors::SparqlError;
 use log::{debug, info};
 
+use oxrdf::vocab::xsd;
+use polars::prelude::IntoLazy;
+use polars_core::frame::DataFrame;
+use polars_core::prelude::{NamedFrom, Series};
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
+use representation::RDFNodeType;
 use spargebra::algebra::GraphPattern;
 use std::collections::HashMap;
 
@@ -47,7 +52,21 @@ impl Triplestore {
                         &bgp_context,
                     )?);
                 }
-                Ok(updated_solution_mappings.unwrap())
+                if let Some(updated_solution_mappings) = updated_solution_mappings {
+                    Ok(updated_solution_mappings)
+                } else {
+                    //TODO: FIX THIS PROPERLY
+                    let ser = Series::new("DUMMYDUMMY", vec![true]);
+                    let mut map = HashMap::new();
+                    map.insert(
+                        "DUMMYDUMMY".to_string(),
+                        RDFNodeType::Literal(xsd::BOOLEAN.into_owned()),
+                    );
+                    Ok(SolutionMappings {
+                        mappings: DataFrame::new(vec![ser]).unwrap().lazy(),
+                        rdf_node_types: map,
+                    })
+                }
             }
             GraphPattern::Path {
                 subject,

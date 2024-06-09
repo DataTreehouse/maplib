@@ -1,10 +1,10 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
 use representation::query_context::Context;
-use representation::solution_mapping::SolutionMappings;
-use representation::sparql_to_polars::{
-    sparql_literal_to_polars_literal_value, sparql_named_node_to_polars_literal_value,
+use representation::rdf_to_polars::{
+    rdf_literal_to_polars_literal_value, rdf_named_node_to_polars_literal_value,
 };
+use representation::solution_mapping::SolutionMappings;
 
 use crate::constants::{OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use crate::sparql::lazy_graph_patterns::load_tt::multiple_tt_to_lf;
@@ -220,7 +220,9 @@ impl Triplestore {
                     drop.push(use_object_col_name)
                 }
                 if let Some(renamed) = verb_keep_rename {
-                    lf = lf.with_column(lit(verb_uri.to_string()).alias(renamed));
+                    lf = lf.with_column(
+                        lit(rdf_named_node_to_polars_literal_value(verb_uri)).alias(renamed),
+                    );
                     out_datatypes.insert(renamed.clone(), RDFNodeType::IRI);
                 }
                 lf = lf.drop(drop);
@@ -413,9 +415,9 @@ pub fn create_empty_lf_datatypes(
 
 pub fn create_term_pattern_filter(term_pattern: &TermPattern, target_col: &str) -> Option<Expr> {
     if let TermPattern::Literal(l) = term_pattern {
-        return Some(col(target_col).eq(lit(sparql_literal_to_polars_literal_value(l))));
+        return Some(col(target_col).eq(lit(rdf_literal_to_polars_literal_value(l))));
     } else if let TermPattern::NamedNode(nn) = term_pattern {
-        return Some(col(target_col).eq(lit(sparql_named_node_to_polars_literal_value(nn))));
+        return Some(col(target_col).eq(lit(rdf_named_node_to_polars_literal_value(nn))));
     }
     None
 }

@@ -8,19 +8,18 @@ members=[
 ]
 
 [workspace.dependencies]
-#representation = {path="../representation"}
-representation = { git = "https://github.com/DataTreehouse/representation", tag="v0.6.8"}
-spargebra = { git = "https://github.com/DataTreehouse/spargebra", tag = "v0.2.8"}
-#query_processing = {path="../query_processing"}
-query_processing = { git = "https://github.com/DataTreehouse/query_processing", tag="v0.3.10"}
+representation = {path="../representation"}
+#representation = { git = "https://github.com/DataTreehouse/representation", tag="v0.6.8"}
+spargebra = { path="../spargebra" }
+#spargebra = { git = "https://github.com/DataTreehouse/spargebra", tag = "v0.2.8"}
+query_processing = {path="../query_processing"}
+#query_processing = { git = "https://github.com/DataTreehouse/query_processing", tag="v0.3.10"}
 polars = {version= "0.40.0" }
 polars-utils = "0.40.0"
 polars-core = "0.40.0"
 rayon = "1.10.0"
-oxrdf = "0.1.7"
-rio_turtle = "0.8.4"
-rio_api = "0.8.4"
-rio_xml = "0.8.4"
+oxrdf = "0.2.0-alpha.5"
+oxrdfio = "0.1.0-alpha.6"
 env_logger = "0.11.3"
 log="0.4.21"
 chrono = "0.4.37"

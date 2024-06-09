@@ -14,7 +14,8 @@ use crate::mapping::constant_terms::{constant_blank_node_to_series, constant_to_
 use crate::mapping::errors::MappingError;
 use crate::templates::TemplateDataset;
 use log::debug;
-use oxrdf::{NamedNode, Triple};
+use oxrdf::NamedNode;
+use oxrdfio::RdfFormat;
 use polars::lazy::prelude::{col, Expr};
 use polars::prelude::{lit, DataFrame, IntoLazy, NamedFrom, Series};
 use rayon::iter::IndexedParallelIterator;
@@ -32,7 +33,6 @@ use std::time::Instant;
 use triplestore::constants::{OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME};
 use triplestore::sparql::errors::SparqlError;
 use triplestore::sparql::QueryResult;
-use triplestore::TripleFormat;
 use triplestore::{TriplesToAdd, Triplestore};
 use uuid::Uuid;
 
@@ -129,28 +129,28 @@ impl Mapping {
     pub fn read_triples(
         &mut self,
         p: &Path,
-        triple_format: Option<TripleFormat>,
+        rdf_format: Option<RdfFormat>,
         base_iri: Option<String>,
         transient: bool,
         graph: Option<NamedNode>,
     ) -> Result<(), MappingError> {
         let triplestore = self.get_triplestore(graph);
         triplestore
-            .read_triples_from_path(p, triple_format, base_iri, transient)
+            .read_triples_from_path(p, rdf_format, base_iri, transient)
             .map_err(MappingError::TriplestoreError)
     }
 
     pub fn read_triples_string(
         &mut self,
         s: &str,
-        triple_format: TripleFormat,
+        rdf_format: RdfFormat,
         base_iri: Option<String>,
         transient: bool,
         graph: Option<NamedNode>,
     ) -> Result<(), MappingError> {
         let triplestore = self.get_triplestore(graph);
         triplestore
-            .read_triples_from_string(s, triple_format, base_iri, transient)
+            .read_triples_from_string(s, rdf_format, base_iri, transient)
             .map_err(MappingError::TriplestoreError)
     }
 
@@ -178,7 +178,7 @@ impl Mapping {
 
     pub fn insert_construct_result(
         &mut self,
-        dfs: Vec<(DataFrame, RDFNodeType, RDFNodeType)>,
+        dfs: Vec<(DataFrame, HashMap<String, RDFNodeType>)>,
         transient: bool,
         target_graph: Option<NamedNode>,
     ) -> Result<(), SparqlError> {
@@ -204,12 +204,6 @@ impl Mapping {
         let triplestore = self.get_triplestore(graph);
         triplestore
             .write_native_parquet(Path::new(path))
-            .map_err(MappingError::TriplestoreError)
-    }
-
-    pub fn export_oxrdf_triples(&mut self) -> Result<Vec<Triple>, MappingError> {
-        self.base_triplestore
-            .export_oxrdf_triples()
             .map_err(MappingError::TriplestoreError)
     }
 
@@ -301,10 +295,20 @@ impl Mapping {
         Ok(MappingReport {})
     }
 
-    pub fn validate(&mut self, shape_graph: &NamedNode) -> Result<ValidationReport, ShaclError> {
+    pub fn validate(
+        &mut self,
+        shape_graph: &NamedNode,
+        include_details: bool,
+    ) -> Result<ValidationReport, ShaclError> {
         let (shape_graph, mut shape_triplestore) =
             self.triplestores_map.remove_entry(&shape_graph).unwrap();
-        match { validate(&mut self.base_triplestore, &mut shape_triplestore) } {
+        match {
+            validate(
+                &mut self.base_triplestore,
+                &mut shape_triplestore,
+                include_details,
+            )
+        } {
             Ok(vr) => {
                 self.triplestores_map.insert(shape_graph, shape_triplestore);
                 Ok(vr)
@@ -454,7 +458,7 @@ impl Mapping {
                     if let Some(i) = nonnull {
                         let first_iri = df.column(colname).unwrap().str().unwrap().get(i).unwrap();
                         {
-                            if !first_iri.starts_with('<') {
+                            if first_iri.starts_with('<') {
                                 fix_iris.push(colname);
                             }
                         }
@@ -463,7 +467,13 @@ impl Mapping {
             }
             let mut lf = df.lazy();
             for colname in fix_iris {
-                lf = lf.with_column((lit("<") + col(colname) + lit(">")).alias(colname));
+                lf = lf.with_column(
+                    col(colname)
+                        .str()
+                        .strip_prefix(lit("<"))
+                        .str()
+                        .strip_suffix(lit(">")),
+                );
             }
             df = lf.collect().unwrap();
 
@@ -552,7 +562,7 @@ fn create_triples(
         lf = lf.with_column(e);
     }
 
-    let mut keep_cols = vec![col("subject"), col(OBJECT_COL_NAME)];
+    let mut keep_cols = vec![col(SUBJECT_COL_NAME), col(OBJECT_COL_NAME)];
     if verb.is_none() {
         keep_cols.push(col(VERB_COL_NAME));
     }
@@ -560,7 +570,7 @@ fn create_triples(
     let df = lf.collect().expect("Collect problem");
     let PrimitiveColumn {
         rdf_node_type: subj_rdf_node_type,
-    } = dynamic_columns.remove("subject").unwrap();
+    } = dynamic_columns.remove(SUBJECT_COL_NAME).unwrap();
     let PrimitiveColumn {
         rdf_node_type: obj_rdf_node_type,
     } = dynamic_columns.remove(OBJECT_COL_NAME).unwrap();

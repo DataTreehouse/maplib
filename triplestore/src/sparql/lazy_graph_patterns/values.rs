@@ -4,11 +4,11 @@ use oxrdf::Variable;
 use polars::prelude::{DataFrame, IntoLazy, JoinType};
 use query_processing::graph_patterns::join;
 use representation::query_context::Context;
-use representation::solution_mapping::SolutionMappings;
-use representation::sparql_to_polars::{
-    polars_literal_values_to_series, sparql_literal_to_polars_literal_value,
-    sparql_named_node_to_polars_literal_value,
+use representation::rdf_to_polars::{
+    polars_literal_values_to_series, rdf_literal_to_polars_literal_value,
+    rdf_named_node_to_polars_literal_value,
 };
+use representation::solution_mapping::SolutionMappings;
 use representation::RDFNodeType;
 use spargebra::term::GroundTerm;
 use std::collections::HashMap;
@@ -36,7 +36,7 @@ impl Triplestore {
                             } else if datatypes.get(&j).unwrap() != &RDFNodeType::IRI {
                                 todo!("No support yet for values of same variables having different types")
                             }
-                            sparql_named_node_to_polars_literal_value(nn)
+                            rdf_named_node_to_polars_literal_value(nn)
                         }
                         GroundTerm::Literal(l) => {
                             let dt = l.datatype();
@@ -55,7 +55,7 @@ impl Triplestore {
                                     }
                                 }
                             }
-                            sparql_literal_to_polars_literal_value(l)
+                            rdf_literal_to_polars_literal_value(l)
                         }
                         _ => {
                             todo!()
