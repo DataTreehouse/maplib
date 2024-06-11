@@ -2,6 +2,15 @@ from pathlib import Path
 from typing import Union, List, Dict, Optional, Callable, Tuple
 from polars import DataFrame
 
+class RDFType:
+    """
+    The type of a column containing a RDF variable.
+    """
+    IRI:Callable[[], "RDFType"]
+    Blank:Callable[[], "RDFType"]
+    Literal:Callable[[str], "RDFType"]
+    Unknown:Callable[[], "RDFType"]
+
 ParametersType = Dict[str, Tuple[DataFrame, Dict[str, RDFType]]]
 
 class ValidationReport:
@@ -260,13 +269,4 @@ class Mapping:
 
         @return: The sprout as its own Mapping.
         """
-
-class RDFType:
-    """
-    The type of a column containing a RDF variable.
-    """
-    IRI:Callable[[], "RDFType"]
-    Blank:Callable[[], "RDFType"]
-    Literal:Callable[[str], "RDFType"]
-    Unknown:Callable[[], "RDFType"]
 
