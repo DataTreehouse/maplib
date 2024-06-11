@@ -4,24 +4,24 @@ version = "0.5.2"
 edition = "2021"
 
 [dependencies]
-triplestore = {path="../triplestore"}
-parquet_io = {path="../parquet_io"}
-shacl = {path="../shacl"}
-representation = { workspace= true }
+triplestore = { path = "../triplestore" }
+parquet_io = { path = "../parquet_io" }
+shacl = { path = "../shacl" }
+representation = { workspace = true }
 
-rayon = {workspace=true}
-nom={version="7.1.3", features=["alloc"]}
-spargebra = { workspace=true}
-oxrdf = {workspace=true}
-polars = {workspace=true, features=["semi_anti_join", "abs", "round_series", "lazy", "concat_str", "is_in", "dtype-full", "strings", "rows", "timezones", "polars-time", "temporal", "list_eval", "partition_by", "parquet", "cse", "nightly", "performant"] }
+rayon = { workspace = true }
+spargebra = { workspace = true }
+oxrdf = { workspace = true }
+polars = { workspace = true, features = ["semi_anti_join", "abs", "round_series", "lazy", "concat_str", "is_in", "dtype-full", "strings", "rows", "timezones", "polars-time", "temporal", "list_eval", "partition_by", "parquet", "cse", "nightly", "performant"] }
 unic-char-range = "0.9.0"
-log= { workspace=true }
-chrono = {workspace=true}
-chrono-tz = {workspace=true}
-uuid = {workspace=true}
-thiserror={ workspace= true }
-env_logger = {workspace=true}
-oxrdfio = { workspace=true }
+log = { workspace = true }
+chrono = { workspace = true }
+chrono-tz = { workspace = true }
+uuid = { workspace = true }
+thiserror = { workspace = true }
+env_logger = { workspace = true }
+oxrdfio = { workspace = true }
+nom = { workspace = true }
 
 #Force higher version due to RUSTSEC-2024-0019
 mio = ">0.8.10"

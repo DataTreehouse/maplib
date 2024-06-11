@@ -24,7 +24,7 @@ use polars::prelude::{
     col, concat, AnyValue, DataFrame, IntoLazy, JoinArgs, JoinType, LazyFrame, UnionArgs,
     UniqueKeepStrategy,
 };
-use polars_core::prelude::DataType;
+use polars_core::prelude::{DataType, SortMultipleOptions};
 use polars_core::utils::concat_df;
 use rayon::iter::ParallelIterator;
 use rayon::iter::{IntoParallelRefIterator, ParallelDrainRange};
@@ -35,6 +35,8 @@ use std::fs::remove_file;
 use std::io;
 use std::path::Path;
 use std::time::Instant;
+use polars_core::enable_string_cache;
+use representation::multitype::{lf_column_from_categorical, lf_column_to_categorical};
 use uuid::Uuid;
 
 pub struct Triplestore {
@@ -263,27 +265,20 @@ impl Triplestore {
             object_type,
         } in triples_df
         {
-            let k = (subject_type, object_type);
             let use_map = if transient {
                 &mut self.transient_df_map
             } else {
                 &mut self.df_map
             };
-
-            let mut cast_str_cols = vec![];
-            if let DataType::Categorical(_, _) = df.column(SUBJECT_COL_NAME).unwrap().dtype() {
-                cast_str_cols.push(SUBJECT_COL_NAME);
+            let mut lf = df.lazy();
+            let mut map = HashMap::new();
+            map.insert(SUBJECT_COL_NAME.to_string(), subject_type.clone());
+            map.insert(OBJECT_COL_NAME.to_string(), object_type.clone());
+            for c in map.keys() {
+                lf = lf_column_to_categorical(lf, c, &map)
             }
-            if let DataType::Categorical(_, _) = df.column(OBJECT_COL_NAME).unwrap().dtype() {
-                cast_str_cols.push(OBJECT_COL_NAME);
-            }
-            if !cast_str_cols.is_empty() {
-                let mut lf = df.lazy();
-                for c in cast_str_cols {
-                    lf = lf.with_column(col(c).cast(DataType::String));
-                }
-                df = lf.collect().unwrap();
-            }
+            df = lf.collect().unwrap();
+            let k = (subject_type, object_type);
 
             if let Some(m) = use_map.get_mut(&predicate) {
                 if let Some(v) = m.get_mut(&k) {
@@ -504,6 +499,7 @@ fn prepare_triples_df(
     if !has_unique_subset {
         df = df.unique(None, UniqueKeepStrategy::First, None).unwrap();
     }
+
     //TODO: add polars datatype harmonization here.
     debug!(
         "Prepare single triple df before it is added took {} seconds",

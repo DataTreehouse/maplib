@@ -265,3 +265,4 @@ fn get_term_datatype_ref(t: &Term) -> BaseRDFNodeTypeRef {
         }
     }
 }
+

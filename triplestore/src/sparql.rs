@@ -70,7 +70,6 @@ impl Triplestore {
         query: &Query,
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
     ) -> Result<QueryResult, SparqlError> {
-        enable_string_cache();
         let context = Context::new();
         match query {
             Query::Select {
