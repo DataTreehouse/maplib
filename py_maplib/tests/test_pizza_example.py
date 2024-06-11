@@ -2,7 +2,7 @@ import polars as pl
 import pytest
 from polars.testing import assert_frame_equal
 
-from maplib import Mapping
+from maplib import Mapping, RDFType
 
 pl.Config.set_fmt_str_lengths(300)
 
@@ -71,7 +71,7 @@ def test_construct_pvalues(pizzas_mapping):
     } WHERE {
         PVALUES (?h1 ?h2) h
     }
-    """, parameters={"h":h_df})
+    """, parameters={"h":(h_df, {"h1":RDFType.IRI(), "h2":RDFType.IRI()})})
     res0 = res[0]
     expected_dtypes = {'object': 'IRI', 'subject': 'IRI'}
     #assert res0.rdf_datatypes == expected_dtypes
@@ -93,7 +93,7 @@ def test_construct_pvalues2(pizzas_mapping):
         ?h1 pizza:hasIngredient ?i .
         PVALUES (?h1) h
     }
-    """, parameters={"h":h_df})
+    """, parameters={"h":(h_df,{"h1":RDFType.IRI()})})
     res0 = res[0]
     expected_dtypes = {'object': 'IRI', 'subject': 'IRI'}
     #assert res0.rdf_datatypes == expected_dtypes

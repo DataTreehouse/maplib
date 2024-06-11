@@ -1,3 +1,4 @@
+use polars::enable_string_cache;
 extern crate core;
 
 mod error;
@@ -44,15 +45,17 @@ use triplestore::sparql::{QueryResult as SparqlQueryResult, QueryResult};
 #[cfg(target_os = "linux")]
 use jemallocator::Jemalloc;
 use oxrdf::NamedNode;
-use polars::prelude::{DataFrame, IntoLazy};
+use oxrdfio::RdfFormat;
+use polars::prelude::{col, DataFrame, IntoLazy, lit};
 use pyo3::types::PyList;
+use representation::formatting::format_iris_and_blank_nodes;
 use representation::multitype::{
     compress_actual_multitypes, lf_column_from_categorical, multi_columns_to_string_cols,
 };
-use representation::polars_to_sparql::polars_type_to_literal_type;
+use representation::polars_to_rdf::polars_type_to_literal_type;
+use representation::python::RDFType;
 use representation::solution_mapping::EagerSolutionMappings;
-use representation::RDFNodeType;
-use triplestore::TripleFormat;
+use representation::{BaseRDFNodeType, RDFNodeType};
 
 #[cfg(not(target_os = "linux"))]
 use mimalloc::MiMalloc;
@@ -103,6 +106,9 @@ impl ExpandOptions {
         }
     }
 }
+
+type ParametersType<'a> = HashMap<String, (Bound<'a, PyAny>, HashMap<String, RDFType>)>;
+
 
 #[pymethods]
 impl Mapping {
@@ -235,10 +241,10 @@ impl Mapping {
         &mut self,
         py: Python<'_>,
         query: String,
-        parameters: Option<HashMap<String, Bound<'_, PyAny>>>,
+        parameters: Option<ParametersType>,
         include_datatypes: Option<bool>,
         multi_as_strings: Option<bool>,
-        graph: Option<String>
+        graph: Option<String>,
     ) -> PyResult<PyObject> {
         let graph = parse_optional_graph(graph)?;
         let mapped_parameters = map_parameters(parameters)?;
@@ -254,6 +260,7 @@ impl Mapping {
         py: Python<'_>,
         shape_graph: String,
         multi_as_strings: Option<bool>,
+        include_details: Option<bool>,
     ) -> PyResult<ValidationReport> {
         let shape_graph = NamedNode::new(shape_graph).map_err(PyMaplibError::from)?;
         let shacl::ValidationReport {
@@ -261,14 +268,17 @@ impl Mapping {
             df,
             rdf_node_types,
             details,
-        } = self.inner.validate(&shape_graph).map_err(PyMaplibError::from)?;
+        } = self
+            .inner
+            .validate(&shape_graph, include_details.unwrap_or(false))
+            .map_err(PyMaplibError::from)?;
         finish_report(conforms, df, rdf_node_types, multi_as_strings, details, py)
     }
 
     fn insert(
         &mut self,
         query: String,
-        parameters: Option<HashMap<String, Bound<'_, PyAny>>>,
+        parameters: Option<ParametersType>,
         transient: Option<bool>,
         source_graph: Option<String>,
         target_graph: Option<String>,
@@ -276,7 +286,8 @@ impl Mapping {
         let mapped_parameters = map_parameters(parameters)?;
         let source_graph = parse_optional_graph(source_graph)?;
         let target_graph = parse_optional_graph(target_graph)?;
-        let res = self.inner
+        let res = self
+            .inner
             .query(&query, &mapped_parameters, source_graph)
             .map_err(PyMaplibError::from)?;
         if let QueryResult::Construct(dfs_and_dts) = res {
@@ -295,7 +306,7 @@ impl Mapping {
     fn insert_sprout(
         &mut self,
         query: String,
-        parameters: Option<HashMap<String, Bound<'_, PyAny>>>,
+        parameters: Option<ParametersType>,
         transient: Option<bool>,
         source_graph: Option<String>,
         target_graph: Option<String>,
@@ -330,7 +341,7 @@ impl Mapping {
         format: Option<String>,
         base_iri: Option<String>,
         transient: Option<bool>,
-        graph:Option<String>,
+        graph: Option<String>,
     ) -> PyResult<()> {
         let graph = parse_optional_graph(graph)?;
         let file_path = file_path.str()?.to_string();
@@ -362,7 +373,10 @@ impl Mapping {
         Ok(())
     }
 
-    fn write_ntriples(&mut self, file_path: &Bound<'_, PyAny>,         graph: Option<String>,
+    fn write_ntriples(
+        &mut self,
+        file_path: &Bound<'_, PyAny>,
+        graph: Option<String>,
     ) -> PyResult<()> {
         let file_path = file_path.str()?.to_string();
         let path_buf = PathBuf::from(file_path);
@@ -373,15 +387,18 @@ impl Mapping {
         Ok(())
     }
 
-    fn write_ntriples_string(&mut self,         graph: Option<String>,
-    ) -> PyResult<String> {
+    fn write_ntriples_string(&mut self, graph: Option<String>) -> PyResult<String> {
         let mut out = vec![];
         let graph = parse_optional_graph(graph)?;
         self.inner.write_n_triples(&mut out, graph).unwrap();
         Ok(String::from_utf8(out).unwrap())
     }
 
-    fn write_native_parquet(&mut self, folder_path: &Bound<'_, PyAny>,  graph: Option<String>) -> PyResult<()> {
+    fn write_native_parquet(
+        &mut self,
+        folder_path: &Bound<'_, PyAny>,
+        graph: Option<String>,
+    ) -> PyResult<()> {
         let folder_path = folder_path.str()?.to_string();
         let graph = parse_optional_graph(graph)?;
         self.inner
@@ -394,8 +411,10 @@ impl Mapping {
 #[pymodule]
 #[pyo3(name = "maplib")]
 fn _maplib(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
+    enable_string_cache();
     m.add_class::<Mapping>()?;
     m.add_class::<ValidationReport>()?;
+    m.add_class::<RDFType>()?;
     Ok(())
 }
 
@@ -447,12 +466,14 @@ fn fix_cats_and_multicolumns(
         .iter()
         .map(|x| x.to_string())
         .collect();
-    for (c, _) in &dts {
-        df = lf_column_from_categorical(df.lazy(), c, &dts)
-            .collect()
-            .unwrap();
-    }
+    //Important that column compression happen before decisions are made based on column type.
     (df, dts) = compress_actual_multitypes(df, dts);
+    let mut lf = df.lazy();
+    for (c, _) in &dts {
+        lf = lf_column_from_categorical(lf.lazy(), c, &dts);
+    }
+    lf = format_iris_and_blank_nodes(lf, &dts, !multi_to_strings);
+    df = lf.collect().unwrap();
     if multi_to_strings {
         df = multi_columns_to_string_cols(df.lazy(), &dts)
             .collect()
@@ -475,12 +496,7 @@ fn query_to_result(
         }
         SparqlQueryResult::Construct(dfs) => {
             let mut query_results = vec![];
-            for (mut df, subj_type, obj_type) in dfs {
-                let mut datatypes: HashMap<_, _> = [
-                    (SUBJECT_COL_NAME.to_string(), subj_type),
-                    (OBJECT_COL_NAME.to_string(), obj_type),
-                ]
-                .into();
+            for (mut df, mut datatypes) in dfs {
                 (df, datatypes) = fix_cats_and_multicolumns(df, datatypes, multi_as_strings);
                 let pydf = df_to_py_df(df, dtypes_map(datatypes), py)?;
                 query_results.push(pydf);
@@ -495,21 +511,29 @@ fn dtypes_map(map: HashMap<String, RDFNodeType>) -> HashMap<String, String> {
 }
 
 fn map_parameters(
-    parameters: Option<HashMap<String, Bound<'_, PyAny>>>,
+    parameters: Option<HashMap<String, (Bound<'_, PyAny>, HashMap<String, RDFType>),>>,
 ) -> PyResult<Option<HashMap<String, EagerSolutionMappings>>> {
     if let Some(parameters) = parameters {
         let mut mapped_parameters = HashMap::new();
-        for (k, pydf) in parameters {
-            let mut rdf_node_types = HashMap::new();
+        for (k, (pydf, map)) in parameters {
             let df = polars_df_to_rust_df(&pydf)?;
-            let names = df.get_column_names();
-            for c in df.columns(names).unwrap() {
-                let dt = polars_type_to_literal_type(c.dtype(), Some(c)).unwrap();
-                info!("Parsed column {} as {}", c.name(), dt);
-                rdf_node_types.insert(c.name().to_string(), dt);
+            let mut rdf_node_types = HashMap::new();
+            let mut lf = df.lazy();
+            for (k,v) in map {
+                let t = v.to_rust().unwrap();
+                match &t {
+                    BaseRDFNodeType::IRI => {
+                        lf = lf.with_column(col(&k).str().strip_prefix(lit("<")).str().strip_suffix(lit(">")));
+                    }
+                    BaseRDFNodeType::BlankNode => {
+                        lf = lf.with_column(col(&k).str().strip_prefix(lit("_:")));
+                    }
+                    _ => {}
+                }
+                rdf_node_types.insert(k, t.as_rdf_node_type());
             }
             let m = EagerSolutionMappings {
-                mappings: df,
+                mappings: lf.collect().unwrap(),
                 rdf_node_types,
             };
             mapped_parameters.insert(k, m);
@@ -521,16 +545,16 @@ fn map_parameters(
     }
 }
 
-fn resolve_format(format: &str) -> TripleFormat {
+fn resolve_format(format: &str) -> RdfFormat {
     match format.to_lowercase().as_str() {
-        "ntriples" => TripleFormat::NTriples,
-        "turtle" => TripleFormat::Turtle,
-        "rdf/xml" | "xml" | "rdfxml" => TripleFormat::RDFXML,
+        "ntriples" => RdfFormat::NTriples,
+        "turtle" => RdfFormat::Turtle,
+        "rdf/xml" | "xml" | "rdfxml" => RdfFormat::RdfXml,
         _ => unimplemented!("Unknown format {}", format),
     }
 }
 
-fn parse_optional_graph(graph:Option<String>) -> PyResult<Option<NamedNode>> {
+fn parse_optional_graph(graph: Option<String>) -> PyResult<Option<NamedNode>> {
     let graph = if let Some(graph) = graph {
         Some(NamedNode::new(graph).map_err(PyMaplibError::from)?)
     } else {

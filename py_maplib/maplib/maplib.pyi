@@ -1,7 +1,8 @@
 from pathlib import Path
-from typing import Union, List, Dict, Optional
+from typing import Union, List, Dict, Optional, Callable, Tuple
 from polars import DataFrame
 
+ParametersType = Dict[str, Tuple[DataFrame, Dict[str, RDFType]]]
 
 class ValidationReport:
     """
@@ -69,7 +70,7 @@ class Mapping:
         """
 
     def query(self, query: str,
-              parameters: Dict[str, DataFrame] = None,
+              parameters: ParametersType = None,
               include_datatypes=False, multi_as_strings=True,
               graph: str = None) -> Union[
         DataFrame,
@@ -98,7 +99,7 @@ class Mapping:
         """
 
     def insert(self, query: str,
-               parameters: Dict[str, DataFrame] = None,
+               parameters: ParametersType = None,
                transient: bool = False,
                source_graph: str = None,
                target_graph: str = None):
@@ -127,13 +128,14 @@ class Mapping:
         :return: None
         """
 
-    def validate(self, shape_graph: str, multi_as_strings: bool = True) -> ValidationReport:
+    def validate(self, shape_graph: str, multi_as_strings: bool = True, include_details: bool = False) -> ValidationReport:
         """
         Validate the contained knowledge graph using SHACL
         Assumes that the contained knowledge graph also contains SHACL Shapes.
 
         :param shape_graph: The IRI of the Shape Graph.
         :param multi_as_strings: Return columns with multiple datatypes as strings instead of as struct-columns.
+        :param include_details: Include details of SHACL evaluation alongside the report. Currently uses a lot of memory.
         :return: Validation report containing a report (report.df) and whether the graph conforms (report.conforms)
         """
 
@@ -219,7 +221,7 @@ class Mapping:
         """
 
     def insert_sprout(self, query: str,
-                      parameters: Dict[str, DataFrame] = None,
+                      parameters: ParametersType = None,
                       transient: bool = False,
                       source_graph: str = None,
                       target_graph: str = None):
@@ -258,3 +260,13 @@ class Mapping:
 
         @return: The sprout as its own Mapping.
         """
+
+class RDFType:
+    """
+    The type of a column containing a RDF variable.
+    """
+    IRI:Callable[[], RDFType]
+    Blank:Callable[[], RDFType]
+    Literal:Callable[[str], RDFType]
+    Unknown:Callable[[], RDFType]
+
