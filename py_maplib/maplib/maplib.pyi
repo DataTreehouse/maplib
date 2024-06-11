@@ -265,8 +265,8 @@ class RDFType:
     """
     The type of a column containing a RDF variable.
     """
-    IRI:Callable[[], RDFType]
-    Blank:Callable[[], RDFType]
-    Literal:Callable[[str], RDFType]
-    Unknown:Callable[[], RDFType]
+    IRI:Callable[[], "RDFType"]
+    Blank:Callable[[], "RDFType"]
+    Literal:Callable[[str], "RDFType"]
+    Unknown:Callable[[], "RDFType"]
 
