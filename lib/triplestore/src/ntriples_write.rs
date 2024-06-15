@@ -27,7 +27,7 @@ use oxrdf::vocab::xsd;
 use parquet_io::scan_parquet;
 use polars::export::rayon::iter::{IntoParallelIterator, ParallelIterator};
 use polars::export::rayon::prelude::ParallelExtend;
-use polars::prelude::{AnyValue, DataFrame, IntoLazy, Series};
+use polars::prelude::{AnyValue, DataFrame, Series};
 use polars_core::series::SeriesIter;
 use polars_core::POOL;
 use polars_utils::contention_pool::LowContentionPool;

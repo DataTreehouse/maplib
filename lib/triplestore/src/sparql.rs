@@ -4,7 +4,6 @@ mod lazy_expressions;
 pub(crate) mod lazy_graph_patterns;
 mod lazy_order;
 
-use log::debug;
 use oxrdf::{NamedNode, Variable};
 use representation::query_context::Context;
 use std::collections::HashMap;

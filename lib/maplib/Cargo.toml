@@ -7,10 +7,10 @@ edition = "2021"
 triplestore = { path = "../triplestore" }
 parquet_io = { path = "../parquet_io" }
 shacl = { path = "../shacl" }
-representation = { workspace = true }
+representation = { path = "../representation" }
+spargebra = { path = "../spargebra" }
 
 rayon = { workspace = true }
-spargebra = { workspace = true }
 oxrdf = { workspace = true }
 polars = { workspace = true, features = ["semi_anti_join", "abs", "round_series", "lazy", "concat_str", "is_in", "dtype-full", "strings", "rows", "timezones", "polars-time", "temporal", "list_eval", "partition_by", "parquet", "cse", "nightly", "performant"] }
 unic-char-range = "0.9.0"
@@ -21,7 +21,7 @@ uuid = { workspace = true }
 thiserror = { workspace = true }
 env_logger = { workspace = true }
 oxrdfio = { workspace = true }
-nom = { workspace = true }
+nom = { workspace = true, features = ["alloc"] }
 
 #Force higher version due to RUSTSEC-2024-0019
 mio = ">0.8.10"
@@ -29,5 +29,5 @@ mio = ">0.8.10"
 iana-time-zone = ">0.1.59"
 
 [dev-dependencies]
-rstest = "0.18.2"
-serial_test = "2.0.0"
+rstest.workspace=true
+serial_test.workspace = true

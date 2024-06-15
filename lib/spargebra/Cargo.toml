@@ -1,0 +1,35 @@
+[package]
+name = "spargebra"
+version = "0.3.0-alpha.5-parparse"
+authors = ["Tpt <thomas@pellissier-tanon.fr>"]
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+keywords = ["SPARQL"]
+repository = "https://github.com/oxigraph/oxigraph/tree/main/lib/spargebra"
+homepage = "https://oxigraph.org/"
+documentation = "https://docs.rs/spargebra"
+description = """
+A SPARQL parser
+"""
+edition = "2021"
+rust-version = "1.60"
+
+[features]
+default = []
+rdf-star = ["oxrdf/rdf-star"]
+sep-0002 = []
+sep-0006 = []
+
+[dependencies]
+rand.workspace = true
+peg.workspace = true
+oxrdf.workspace = true
+oxiri.workspace = true
+oxilangtag.workspace = true
+chrono.workspace = true
+datetimeparse = { workspace=true, features = ["chrono"] }
+fundu = { workspace=true, features = ["custom", "chrono"] }
+thiserror.workspace = true
+
+[package.metadata.docs.rs]
+all-features = true

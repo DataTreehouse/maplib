@@ -1,0 +1,45 @@
+[package]
+name = "query_processing"
+version = "0.3.12"
+edition = "2021"
+
+[dependencies]
+representation = { path = "../representation"}
+spargebra = { path = "../spargebra"}
+
+rayon.workspace = true
+oxrdf.workspace = true
+polars = {workspace=true, features=[
+    "performant",
+    "nightly",
+    "cse",
+    "regex",
+    "zip_with",
+    "semi_anti_join",
+    "abs",
+    "round_series",
+    "lazy",
+    "concat_str",
+    "is_in",
+    "dtype-full",
+    "strings",
+    "rows",
+    "timezones",
+    "polars-time",
+    "temporal",
+    "list_eval",
+    "partition_by",
+    "parquet",
+    "diagonal_concat",
+    "cross_join",
+    "cum_agg",
+    "coalesce"] }
+log.workspace = true
+chrono.workspace = true
+chrono-tz.workspace = true
+uuid.workspace = true
+thiserror.workspace = true
+env_logger.workspace = true
+
+[dev-dependencies]
+rstest.workspace = true

@@ -1,19 +1,19 @@
 [workspace]
 resolver = "2"
 members = [
-    "maplib",
-    "triplestore",
-    "parquet_io",
-    "shacl",
+    "lib/representation",
+    "lib/maplib",
+    "lib/triplestore",
+    "lib/parquet_io",
+    "lib/pydf_io",
+    "lib/query_processing",
+    "lib/spargebra",
+    "lib/shacl",
+    "py_maplib",
 ]
 
 [workspace.dependencies]
-#representation = { path = "../representation" }
-representation = { git = "https://github.com/DataTreehouse/representation", tag="v0.6.10"}
-#spargebra = { path = "../spargebra" }
-spargebra = { git = "https://github.com/DataTreehouse/spargebra", tag = "0.3.0-alpha.5-parparse"}
-#query_processing = { path = "../query_processing" }
-query_processing = { git = "https://github.com/DataTreehouse/query_processing", tag="v0.3.12"}
+pyo3 = {version = "0.21.2"}
 polars = { version = "0.40.0" }
 polars-utils = "0.40.0"
 polars-core = "0.40.0"
@@ -35,7 +35,19 @@ uuid = { version = "1.8.0", features = [
     "fast-rng", # Use a faster (but still sufficiently random) RNG
 ] }
 thiserror = "1.0.58"
-nom = { version = "7.1.3", features = ["alloc"] }
+nom = { version = "7.1.3" }
+serde = { version = "1.0.203" }
+peg = "0.8"
+rand = "0.8"
+oxilangtag = "0.1.5"
+datetimeparse = "0.3.0"
+fundu = "2.0.0"
+memmap2 = "0.9.4"
+sprs = "0.11.1"
+
+#dev-dependencies
+rstest = "0.18.2"
+serial_test = "2.0.0"
 
 [patch.crates-io]
 polars = { git = 'https://github.com/pola-rs/polars.git', rev = "805acd81cfed82248d34fa69875cbe04730f74ce" }
