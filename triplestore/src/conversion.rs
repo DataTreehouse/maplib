@@ -17,9 +17,7 @@ pub fn convert_to_string(series: &Series) -> Series {
         DataType::List(_) => {
             panic!("Not supported")
         }
-        DataType::Categorical(..) => {
-            series.cast(&DataType::String).unwrap()
-        }
+        DataType::Categorical(..) => series.cast(&DataType::String).unwrap(),
         DataType::Struct(_) => {
             let mut df = DataFrame::new(vec![series.clone()]).unwrap();
             df = df
@@ -41,6 +39,6 @@ pub fn convert_to_string(series: &Series) -> Series {
                 .unwrap();
             return df.drop_in_place(series.name()).unwrap();
         }
-        _ => series.cast(&DataType::String).unwrap()
+        _ => series.cast(&DataType::String).unwrap(),
     }
 }

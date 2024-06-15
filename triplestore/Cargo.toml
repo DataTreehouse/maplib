@@ -20,8 +20,10 @@ chrono = { workspace=true }
 uuid = {workspace=true}
 thiserror={ workspace= true }
 env_logger = { workspace=true }
-oxiri = "0.2.2"
+oxiri = {workspace=true}
 oxrdfio = { workspace = true}
+oxttl = {workspace=true}
+memmap2 = "0.9.4"
 
 [dev-dependencies]
 rstest = "0.18.2"

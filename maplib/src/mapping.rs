@@ -132,11 +132,13 @@ impl Mapping {
         rdf_format: Option<RdfFormat>,
         base_iri: Option<String>,
         transient: bool,
+        parallel: bool,
+        checked: bool,
         graph: Option<NamedNode>,
     ) -> Result<(), MappingError> {
         let triplestore = self.get_triplestore(graph);
         triplestore
-            .read_triples_from_path(p, rdf_format, base_iri, transient)
+            .read_triples_from_path(p, rdf_format, base_iri, transient, parallel, checked)
             .map_err(MappingError::TriplestoreError)
     }
 
@@ -146,11 +148,13 @@ impl Mapping {
         rdf_format: RdfFormat,
         base_iri: Option<String>,
         transient: bool,
+        parallel: bool,
+        checked: bool,
         graph: Option<NamedNode>,
     ) -> Result<(), MappingError> {
         let triplestore = self.get_triplestore(graph);
         triplestore
-            .read_triples_from_string(s, rdf_format, base_iri, transient)
+            .read_triples_from_string(s, rdf_format, base_iri, transient, parallel, checked)
             .map_err(MappingError::TriplestoreError)
     }
 
