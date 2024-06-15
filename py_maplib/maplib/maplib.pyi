@@ -2,25 +2,17 @@ from pathlib import Path
 from typing import Union, List, Dict, Optional, Callable, Tuple
 from polars import DataFrame
 
-class RDFType:
-    """
-    The type of a column containing a RDF variable.
-    """
-    IRI:Callable[[], "RDFType"]
-    Blank:Callable[[], "RDFType"]
-    Literal:Callable[[str], "RDFType"]
-    Unknown:Callable[[], "RDFType"]
-
 ParametersType = Dict[str, Tuple[DataFrame, Dict[str, RDFType]]]
+
 
 class ValidationReport:
     """
     SHACL Validation report.
     Only constructed by maplib.
     """
-    conforms:bool
-    report:Optional[DataFrame]
-    details:Optional[DataFrame]
+    conforms: bool
+    report: Optional[DataFrame]
+    details: Optional[DataFrame]
 
 
 class Mapping:
@@ -137,7 +129,8 @@ class Mapping:
         :return: None
         """
 
-    def validate(self, shape_graph: str, multi_as_strings: bool = True, include_details: bool = False) -> ValidationReport:
+    def validate(self, shape_graph: str, multi_as_strings: bool = True,
+                 include_details: bool = False) -> ValidationReport:
         """
         Validate the contained knowledge graph using SHACL
         Assumes that the contained knowledge graph also contains SHACL Shapes.
@@ -149,7 +142,8 @@ class Mapping:
         """
 
     def read_triples(self, file_path: Union[str, Path], format: str = None, base_iri: str = None,
-                     transient: bool = False, graph: str = None) -> None:
+                     transient: bool = False, parallel: bool = False,
+                     checked: bool = True, graph: str = None) -> None:
         """
         Reads triples from a file path.
         You can specify the format, or it will be derived using file extension, e.g. filename.ttl or filename.nt.
@@ -164,10 +158,14 @@ class Mapping:
         :param format: One of "ntriples", "turtle", "rdf/xml", otherwise it is inferred from the file extension.
         :param base_iri: Base iri
         :param transient: Should these triples be included when writing the graph to the file system?
+        :param parallel: Parse triples in parallel, currently only NTRiples. Assumes all prefixes are in the beginning of the document.
+        :param checked: Check IRIs etc.
         :param graph: The IRI of the graph to read the triples into.
         """
 
     def read_triples_string(self, s: str, format: str, base_iri: str = None, transient: bool = False,
+                            parallel: bool = False,
+                            checked: bool = True,
                             graph: str = None) -> None:
         """
         Reads triples from a string.
@@ -182,6 +180,8 @@ class Mapping:
         :param format: One of "ntriples", "turtle", "rdf/xml".
         :param base_iri: Base iri
         :param transient: Should these triples be included when writing the graph to the file system?
+        :param parallel: Parse triples in parallel, currently only NTRiples. Assumes all prefixes are in the beginning of the document.
+        :param checked: Check IRIs etc.
         :param graph: The IRI of the graph to read the triples into.
         """
 
@@ -270,3 +270,12 @@ class Mapping:
         @return: The sprout as its own Mapping.
         """
 
+
+class RDFType:
+    """
+    The type of a column containing a RDF variable.
+    """
+    IRI: Callable[[], RDFType]
+    Blank: Callable[[], RDFType]
+    Literal: Callable[[str], RDFType]
+    Unknown: Callable[[], RDFType]

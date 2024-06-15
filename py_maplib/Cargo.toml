@@ -10,8 +10,10 @@ pyo3 = {version = "0.21.2", features = ["extension-module"] }
 maplib = {path="../maplib"}
 triplestore = {path="../triplestore"}
 #representation = {path="../../representation"}
-representation = { git = "https://github.com/DataTreehouse/representation", tag="v0.6.9"}
+representation = { git = "https://github.com/DataTreehouse/representation", tag="v0.6.10"}
 shacl = {path="../shacl"}
+#oxrdf = {path="../../oxigraph/lib/oxrdf"}
+#oxrdfio = {path="../../oxigraph/lib/oxrdfio"}
 oxrdf = {version="0.2.0-alpha.5"}
 oxrdfio = "0.1.0-alpha.6"
 #pydf_io = {path = "../../pydf_io"}
@@ -39,3 +41,6 @@ jemallocator = { version = "0.5", features = ["disable_initial_exec_tls"] }
 polars = { git = 'https://github.com/pola-rs/polars.git', rev = "805acd81cfed82248d34fa69875cbe04730f74ce"}
 polars-core = { git = 'https://github.com/pola-rs/polars.git', rev = "805acd81cfed82248d34fa69875cbe04730f74ce"}
 polars-utils = { git = 'https://github.com/pola-rs/polars.git', rev = "805acd81cfed82248d34fa69875cbe04730f74ce"}
+oxrdf = { git = 'https://github.com/magbak/oxigraph.git', rev = "df36c05bb0905882a6e088c7ab9b7dd83e54ab58"}
+oxrdfio = { git = 'https://github.com/magbak/oxigraph.git', rev = "df36c05bb0905882a6e088c7ab9b7dd83e54ab58"}
+oxttl = { git = 'https://github.com/magbak/oxigraph.git', rev = "df36c05bb0905882a6e088c7ab9b7dd83e54ab58"}

@@ -341,6 +341,8 @@ impl Mapping {
         format: Option<String>,
         base_iri: Option<String>,
         transient: Option<bool>,
+        parallel: Option<bool>,
+        checked: Option<bool>,
         graph: Option<String>,
     ) -> PyResult<()> {
         let graph = parse_optional_graph(graph)?;
@@ -352,7 +354,7 @@ impl Mapping {
             None
         };
         self.inner
-            .read_triples(path, format, base_iri, transient.unwrap_or(false), graph)
+            .read_triples(path, format, base_iri, transient.unwrap_or(false), parallel.unwrap_or(false), checked.unwrap_or(true), graph)
             .map_err(|x| PyMaplibError::from(x))?;
         Ok(())
     }
@@ -363,12 +365,14 @@ impl Mapping {
         format: &str,
         base_iri: Option<String>,
         transient: Option<bool>,
+        parallel: Option<bool>,
+        checked: Option<bool>,
         graph: Option<String>,
     ) -> PyResult<()> {
         let graph = parse_optional_graph(graph)?;
         let format = resolve_format(&format);
         self.inner
-            .read_triples_string(s, format, base_iri, transient.unwrap_or(false), graph)
+            .read_triples_string(s, format, base_iri, transient.unwrap_or(false), parallel.unwrap_or(false), checked.unwrap_or(true), graph)
             .map_err(|x| PyMaplibError::from(x))?;
         Ok(())
     }
