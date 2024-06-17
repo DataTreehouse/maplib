@@ -14,7 +14,7 @@ members = [
 
 [workspace.dependencies]
 pyo3 = {version = "0.21.2"}
-polars = { version = "0.40.0" }
+polars = { version = "0.40.0", features = ["nightly", "performant", "cse"] }
 polars-utils = "0.40.0"
 polars-core = "0.40.0"
 polars-time = "0.40.0"
