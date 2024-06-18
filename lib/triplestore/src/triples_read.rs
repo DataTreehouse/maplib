@@ -6,8 +6,9 @@ use crate::constants::{OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use log::debug;
 use memmap2::{Mmap, MmapOptions};
 use oxrdf::{BlankNode, NamedNode, Quad, Subject, Term, Triple};
-use oxrdfio::{RdfFormat, RdfParser};
-use oxttl::ParallelTurtleParser;
+use oxrdfio::{FromReadQuadReader, FromSliceQuadReader, ParallelRdfParser, RdfFormat, RdfParser, RdfSyntaxError};
+use oxttl::turtle::FromSliceTurtleReader;
+use oxttl::{ParallelTurtleParser, TurtleSyntaxError};
 use polars::prelude::{as_struct, col, DataFrame, IntoLazy, LiteralValue, Series};
 use rayon::iter::ParallelIterator;
 use rayon::prelude::{IntoParallelIterator, IntoParallelRefIterator};
@@ -91,15 +92,13 @@ impl Triplestore {
         parallel: bool,
         checked: bool,
     ) -> Result<(), TriplestoreError> {
-        let start_parse_now = Instant::now();
-        let quads = if parallel && rdf_format == RdfFormat::Turtle {
-            let mut parser = ParallelTurtleParser::new();
+        let start_quadproc_now = Instant::now();
+        let readers: Vec<_> = if parallel && rdf_format == RdfFormat::Turtle {
+            let mut parser = ParallelRdfParser::from(rdf_format);
             if !checked {
                 parser = parser.unchecked();
             }
-            parser
-                .par_parse_slice(slice)
-                .map_err(|x| TriplestoreError::NTriplesParsingError(x.to_string()))?
+            parser.parse_slice(slice).map_err(|x|TriplestoreError::TurtleParsingError(x.to_string()))?
         } else {
             let mut parser = RdfParser::from_format(rdf_format);
             if !checked {
@@ -108,76 +107,18 @@ impl Triplestore {
             if let Some(base_iri) = base_iri {
                 parser = parser.with_base_iri(base_iri).unwrap();
             }
-            let quads: Vec<_> = parser
-                .parse_slice(slice)
-                .map(|x| Triple::from(x.unwrap()))
-                .collect();
-            vec![quads]
+            vec![parser.parse_slice(slice)]
         };
 
-        debug!(
-            "Parsing {} quads took {} seconds",
-            quads.len(),
-            start_parse_now.elapsed().as_secs_f64()
-        );
-
         let parser_call = self.parser_call.to_string();
-        let start_quadproc_now = Instant::now();
-        let predicate_maps: Vec<_> = quads
-            .into_par_iter()
-            .map(|qs| {
-                let mut predicate_map = HashMap::new();
-                for q in qs {
-                    let Triple {
-                        subject,
-                        predicate,
-                        object,
-                    } = q;
-                    let type_map: &mut HashMap<_, HashMap<_, (Vec<Subject>, Vec<Term>)>> =
-                        if let Some(type_map) = predicate_map.get_mut(predicate.as_str()) {
-                            type_map
-                        } else {
-                            let verb_key = predicate.into_string();
-                            predicate_map.insert(verb_key.clone(), HashMap::new());
-                            predicate_map.get_mut(&verb_key).unwrap()
-                        };
-
-                    let subject_to_insert = subject_to_oxrdf_subject(subject, &parser_call);
-                    let object_to_insert = term_to_oxrdf_term(object, &parser_call);
-                    let subject_datatype = get_subject_datatype_ref(&subject_to_insert);
-                    let object_datatype = get_term_datatype_ref(&object_to_insert);
-                    if let Some(obj_type_map) = type_map.get_mut(subject_datatype.as_str()) {
-                        if let Some((subjects, objects)) =
-                            obj_type_map.get_mut(object_datatype.as_str())
-                        {
-                            subjects.push(subject_to_insert);
-                            objects.push(object_to_insert);
-                        } else {
-                            obj_type_map.insert(
-                                object_datatype.as_str().to_string(),
-                                (vec![subject_to_insert], vec![object_to_insert]),
-                            );
-                        }
-                    } else {
-                        let mut obj_type_map = HashMap::new();
-                        let subject_datatype_string = subject_datatype.as_str().to_string();
-                        obj_type_map.insert(
-                            object_datatype.as_str().to_string(),
-                            (vec![subject_to_insert], vec![object_to_insert]),
-                        );
-                        type_map.insert(subject_datatype_string, obj_type_map);
-                    }
-                }
-                predicate_map
-            })
-            .collect();
+        let predicate_maps :Vec<_> = readers.into_par_iter().map(|r| create_predicate_map(r, &parser_call)).collect();
 
         let mut par_predicate_map: HashMap<
             String,
             Vec<HashMap<String, HashMap<String, (Vec<Subject>, Vec<Term>)>>>,
         > = HashMap::new();
         for m in predicate_maps {
-            for (verb, map) in m {
+            for (verb, map) in m? {
                 if let Some(v) = par_predicate_map.get_mut(&verb) {
                     v.push(map);
                 } else {
@@ -358,4 +299,54 @@ fn get_term_datatype_ref(t: &Term) -> BaseRDFNodeTypeRef {
             todo!()
         }
     }
+}
+
+fn create_predicate_map(r:FromSliceQuadReader, parser_call:&str) -> Result<
+    HashMap<String, HashMap<String, HashMap<String, (Vec<Subject>, Vec<Term>)>>>,
+    TriplestoreError,
+> {
+    let mut predicate_map = HashMap::new();
+    for q in r {
+        let Quad {
+            subject,
+            predicate,
+            object,
+            ..
+        } = q.map_err(|x|TriplestoreError::TurtleParsingError(x.to_string()))?;
+        let type_map: &mut HashMap<_, HashMap<_, (Vec<Subject>, Vec<Term>)>> =
+            if let Some(type_map) = predicate_map.get_mut(predicate.as_str()) {
+                type_map
+            } else {
+                let verb_key = predicate.into_string();
+                predicate_map.insert(verb_key.clone(), HashMap::new());
+                predicate_map.get_mut(&verb_key).unwrap()
+            };
+
+        let subject_to_insert = subject_to_oxrdf_subject(subject, parser_call);
+        let object_to_insert = term_to_oxrdf_term(object, parser_call);
+        let subject_datatype = get_subject_datatype_ref(&subject_to_insert);
+        let object_datatype = get_term_datatype_ref(&object_to_insert);
+        if let Some(obj_type_map) = type_map.get_mut(subject_datatype.as_str()) {
+            if let Some((subjects, objects)) =
+                obj_type_map.get_mut(object_datatype.as_str())
+            {
+                subjects.push(subject_to_insert);
+                objects.push(object_to_insert);
+            } else {
+                obj_type_map.insert(
+                    object_datatype.as_str().to_string(),
+                    (vec![subject_to_insert], vec![object_to_insert]),
+                );
+            }
+        } else {
+            let mut obj_type_map = HashMap::new();
+            let subject_datatype_string = subject_datatype.as_str().to_string();
+            obj_type_map.insert(
+                object_datatype.as_str().to_string(),
+                (vec![subject_to_insert], vec![object_to_insert]),
+            );
+            type_map.insert(subject_datatype_string, obj_type_map);
+        }
+    }
+    Ok(predicate_map)
 }

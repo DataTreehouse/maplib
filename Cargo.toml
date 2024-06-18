@@ -57,3 +57,6 @@ polars-time = { git = 'https://github.com/pola-rs/polars.git', rev = "805acd81cf
 oxrdf = { git = 'https://github.com/magbak/oxigraph.git', rev = "2be51f4e0a0a3692ad6ca33589bee44eb62546b5"}
 oxttl = { git = 'https://github.com/magbak/oxigraph.git', rev = "2be51f4e0a0a3692ad6ca33589bee44eb62546b5"}
 oxrdfio = { git = 'https://github.com/magbak/oxigraph.git', rev = "2be51f4e0a0a3692ad6ca33589bee44eb62546b5"}
+#oxrdf = { path = "../oxigraph/lib/oxrdf" }
+#oxttl = { path  = "../oxigraph/lib/oxttl" }
+#oxrdfio = { path  = "../oxigraph/lib/oxrdfio" }
