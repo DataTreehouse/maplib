@@ -54,7 +54,7 @@ pub fn polars_df_to_rust_df(df: &Bound<'_, PyAny>) -> PyResult<DataFrame> {
     let l: u32 = batches_len.extract()?;
     let mut batches_vec = vec![];
     for i in 0..l {
-        let batch = batches.call_method1("__getitem__", (i, ))?;
+        let batch = batches.call_method1("__getitem__", (i,))?;
         batches_vec.push(batch);
     }
     array_to_rust_df(batches_vec.as_slice())

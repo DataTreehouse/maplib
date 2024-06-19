@@ -6,9 +6,8 @@ use crate::constants::{OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use log::debug;
 use memmap2::{Mmap, MmapOptions};
 use oxrdf::{BlankNode, NamedNode, Quad, Subject, Term, Triple};
-use oxrdfio::{FromReadQuadReader, FromSliceQuadReader, ParallelRdfParser, RdfFormat, RdfParser, RdfSyntaxError};
+use oxrdfio::{FromReadQuadReader, FromSliceQuadReader, RdfFormat, RdfParser, RdfSyntaxError};
 use oxttl::turtle::FromSliceTurtleReader;
-use oxttl::{ParallelTurtleParser, TurtleSyntaxError};
 use polars::prelude::{as_struct, col, DataFrame, IntoLazy, LiteralValue, Series};
 use rayon::iter::ParallelIterator;
 use rayon::prelude::{IntoParallelIterator, IntoParallelRefIterator};
@@ -93,25 +92,32 @@ impl Triplestore {
         checked: bool,
     ) -> Result<(), TriplestoreError> {
         let start_quadproc_now = Instant::now();
-        let readers: Vec<_> = if parallel && rdf_format == RdfFormat::Turtle {
-            let mut parser = ParallelRdfParser::from(rdf_format);
-            if !checked {
-                parser = parser.unchecked();
-            }
-            parser.parse_slice(slice).map_err(|x|TriplestoreError::TurtleParsingError(x.to_string()))?
+        let mut parser = RdfParser::from(rdf_format);
+        if !checked {
+            parser = parser.unchecked();
+        }
+        if let Some(base_iri) = base_iri {
+            parser = parser.with_base_iri(base_iri).unwrap();
+        }
+
+        let readers: Vec<_> = if parallel {
+            let threads = if let Ok(threads) = std::thread::available_parallelism() {
+                threads.get()
+            } else {
+                1
+            };
+            parser
+                .split_slice_for_parsing(slice, threads)
+                .map_err(|x| TriplestoreError::TurtleParsingError(x.to_string()))?
         } else {
-            let mut parser = RdfParser::from_format(rdf_format);
-            if !checked {
-                parser = parser.unchecked();
-            }
-            if let Some(base_iri) = base_iri {
-                parser = parser.with_base_iri(base_iri).unwrap();
-            }
             vec![parser.parse_slice(slice)]
         };
 
         let parser_call = self.parser_call.to_string();
-        let predicate_maps :Vec<_> = readers.into_par_iter().map(|r| create_predicate_map(r, &parser_call)).collect();
+        let predicate_maps: Vec<_> = readers
+            .into_par_iter()
+            .map(|r| create_predicate_map(r, &parser_call))
+            .collect();
 
         let mut par_predicate_map: HashMap<
             String,
@@ -301,7 +307,10 @@ fn get_term_datatype_ref(t: &Term) -> BaseRDFNodeTypeRef {
     }
 }
 
-fn create_predicate_map(r:FromSliceQuadReader, parser_call:&str) -> Result<
+fn create_predicate_map(
+    r: FromSliceQuadReader,
+    parser_call: &str,
+) -> Result<
     HashMap<String, HashMap<String, HashMap<String, (Vec<Subject>, Vec<Term>)>>>,
     TriplestoreError,
 > {
@@ -312,7 +321,7 @@ fn create_predicate_map(r:FromSliceQuadReader, parser_call:&str) -> Result<
             predicate,
             object,
             ..
-        } = q.map_err(|x|TriplestoreError::TurtleParsingError(x.to_string()))?;
+        } = q.map_err(|x| TriplestoreError::TurtleParsingError(x.to_string()))?;
         let type_map: &mut HashMap<_, HashMap<_, (Vec<Subject>, Vec<Term>)>> =
             if let Some(type_map) = predicate_map.get_mut(predicate.as_str()) {
                 type_map
@@ -327,9 +336,7 @@ fn create_predicate_map(r:FromSliceQuadReader, parser_call:&str) -> Result<
         let subject_datatype = get_subject_datatype_ref(&subject_to_insert);
         let object_datatype = get_term_datatype_ref(&object_to_insert);
         if let Some(obj_type_map) = type_map.get_mut(subject_datatype.as_str()) {
-            if let Some((subjects, objects)) =
-                obj_type_map.get_mut(object_datatype.as_str())
-            {
+            if let Some((subjects, objects)) = obj_type_map.get_mut(object_datatype.as_str()) {
                 subjects.push(subject_to_insert);
                 objects.push(object_to_insert);
             } else {

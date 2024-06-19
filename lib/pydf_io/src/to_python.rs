@@ -2,21 +2,27 @@
 // Edited to remove dependencies on py-polars, and added specific functionality for RDF.
 // Original licence in ../licensing/POLARS_LICENSE
 
-use polars_core::frame::{DataFrame};
+use polars::prelude::IntoLazy;
+use polars_core::frame::DataFrame;
 use polars_core::prelude::{ArrayRef, ArrowField};
 use polars_core::utils::arrow::ffi;
-use polars::prelude::IntoLazy;
+use polars_core::utils::arrow::record_batch::RecordBatch;
 use pyo3::ffi::Py_uintptr_t;
 use pyo3::prelude::*;
 use pyo3::types::PyList;
-use std::collections::HashMap;
-use polars_core::utils::arrow::record_batch::RecordBatch;
 use representation::formatting::format_iris_and_blank_nodes;
-use representation::multitype::{compress_actual_multitypes, lf_column_from_categorical, multi_columns_to_string_cols};
+use representation::multitype::{
+    compress_actual_multitypes, lf_column_from_categorical, multi_columns_to_string_cols,
+};
 use representation::RDFNodeType;
+use std::collections::HashMap;
 
 /// Arrow array to Python.
-pub(crate) fn to_py_array(array: ArrayRef, py: Python, pyarrow: &Bound<'_, PyModule>) -> PyResult<PyObject> {
+pub(crate) fn to_py_array(
+    array: ArrayRef,
+    py: Python,
+    pyarrow: &Bound<'_, PyModule>,
+) -> PyResult<PyObject> {
     let schema = Box::new(ffi::export_field_to_c(&ArrowField::new(
         "",
         array.data_type().clone(),
@@ -90,7 +96,6 @@ pub fn df_to_py_df(
     let polars = PyModule::import_bound(py, "polars")?;
     to_py_df(&chunk, names.as_slice(), py, &pyarrow, &polars, types)
 }
-
 
 pub fn fix_cats_and_multicolumns(
     mut df: DataFrame,

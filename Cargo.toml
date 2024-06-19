@@ -54,9 +54,9 @@ polars = { git = 'https://github.com/pola-rs/polars.git', rev = "805acd81cfed822
 polars-core = { git = 'https://github.com/pola-rs/polars.git', rev = "805acd81cfed82248d34fa69875cbe04730f74ce" }
 polars-utils = { git = 'https://github.com/pola-rs/polars.git', rev = "805acd81cfed82248d34fa69875cbe04730f74ce" }
 polars-time = { git = 'https://github.com/pola-rs/polars.git', rev = "805acd81cfed82248d34fa69875cbe04730f74ce" }
-oxrdf = { git = 'https://github.com/magbak/oxigraph.git', rev = "662a2a92892a41b1efb167b3a46ad434e3ecbe73"}
-oxttl = { git = 'https://github.com/magbak/oxigraph.git', rev = "662a2a92892a41b1efb167b3a46ad434e3ecbe73"}
-oxrdfio = { git = 'https://github.com/magbak/oxigraph.git', rev = "662a2a92892a41b1efb167b3a46ad434e3ecbe73"}
+oxrdf = { git = 'https://github.com/magbak/oxigraph.git', rev = "58f18929a991004226b38695239e95bb68c377d0"}
+oxttl = { git = 'https://github.com/magbak/oxigraph.git', rev = "58f18929a991004226b38695239e95bb68c377d0"}
+oxrdfio = { git = 'https://github.com/magbak/oxigraph.git', rev = "58f18929a991004226b38695239e95bb68c377d0"}
 #oxrdf = { path = "../oxigraph/lib/oxrdf" }
 #oxttl = { path  = "../oxigraph/lib/oxttl" }
 #oxrdfio = { path  = "../oxigraph/lib/oxrdfio" }

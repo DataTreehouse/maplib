@@ -882,9 +882,7 @@ pub fn func_expression(
                     let mut exprs = vec![];
                     for t in types {
                         if let BaseRDFNodeType::Literal(l) = t {
-                            exprs.push(
-                                lit(rdf_named_node_to_polars_literal_value(l)),
-                            );
+                            exprs.push(lit(rdf_named_node_to_polars_literal_value(l)));
                         }
                     }
                     if !exprs.is_empty() {
@@ -899,10 +897,9 @@ pub fn func_expression(
             solution_mappings.mappings = solution_mappings
                 .mappings
                 .with_column(expr.alias(outer_context.as_str()));
-            solution_mappings.rdf_node_types.insert(
-                outer_context.as_str().to_string(),
-                RDFNodeType::IRI,
-            );
+            solution_mappings
+                .rdf_node_types
+                .insert(outer_context.as_str().to_string(), RDFNodeType::IRI);
         }
         _ => {
             todo!("{}", func)
