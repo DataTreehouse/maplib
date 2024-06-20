@@ -2,6 +2,7 @@ import polars as pl
 from maplib import Mapping
 from polars.testing import assert_frame_equal
 
+
 def test_create_mapping_from_empty_polars_df():
     doc = """
     @prefix ex:<http://example.net/ns#>.
@@ -28,15 +29,15 @@ def test_create_mapping_with_optional_value_missing_df():
     mapping = Mapping([doc])
     mapping.expand("http://example.net/ns#ExampleTemplate", df)
     qres = mapping.query(
-    """
-    PREFIX ex:<http://example.net/ns#>
-    
-    SELECT ?A WHERE {
-    ?obj1 ex:hasValue ?A
-    } 
-    """
+        """
+        PREFIX ex:<http://example.net/ns#>
+        
+        SELECT ?A WHERE {
+        ?obj1 ex:hasValue ?A
+        } 
+        """
     )
-    expected_df = pl.DataFrame({"A":["A"],})
+    expected_df = pl.DataFrame({"A": ["A"], })
     assert_frame_equal(qres, expected_df)
 
     qres = mapping.query(
@@ -70,8 +71,8 @@ def test_create_mapping_from_empty_signature():
         } 
         """
     )
-    expected_df = pl.DataFrame({"obj1":"<http://example.net/ns#myObject>",
-                                "obj2":"<http://example.net/ns#myOtherObject>"})
+    expected_df = pl.DataFrame({"obj1": "<http://example.net/ns#myObject>",
+                                "obj2": "<http://example.net/ns#myOtherObject>"})
 
     assert_frame_equal(qres, expected_df)
 
@@ -95,9 +96,35 @@ def test_uri_subject_query():
         } 
         """
     )
-    expected_df = pl.DataFrame({"obj2":"<http://example.net/ns#myOtherObject>"})
+    expected_df = pl.DataFrame({"obj2": "<http://example.net/ns#myOtherObject>"})
 
     assert_frame_equal(qres, expected_df)
+
+
+def test_missing_variable_query():
+    doc = """
+    @prefix ex:<http://example.net/ns#>.
+    ex:ExampleTemplate [] :: {
+    ottr:Triple(ex:myObject, ex:hasObj, ex:myOtherObject)
+    } .
+    """
+
+    mapping = Mapping([doc])
+    mapping.expand("http://example.net/ns#ExampleTemplate")
+    qres = mapping.query(
+        """
+        PREFIX ex:<http://example.net/ns#>
+
+        SELECT ?obj2 ?missing WHERE {
+        ex:myObject ex:hasObj ?obj2
+        } 
+        """
+    )
+    expected_df = pl.DataFrame({"obj2": "<http://example.net/ns#myOtherObject>", "missing": [None]}).cast(
+        {"missing": bool})
+
+    assert_frame_equal(qres, expected_df)
+
 
 def test_create_and_write_no_bug_string_lit_df():
     doc = """
@@ -119,6 +146,7 @@ def test_create_and_write_no_bug_string_lit_df():
     assert lines == ['<http://example.net/ns#myObject> <http://example.net/ns#hasValue> "ABC#123\\n\\t\\r" .\n',
                      '<http://example.net/ns#myObject> <http://example.net/ns#hasValue> "\\"!!\\n#\\"" .\n']
 
+
 def test_create_and_write_no_bug_bool_lit_df():
     doc = """
     @prefix ex:<http://example.net/ns#>.
@@ -136,5 +164,6 @@ def test_create_and_write_no_bug_bool_lit_df():
         lines = f.readlines()
 
     lines.sort()
-    assert lines == ['<http://example.net/ns#myObject> <http://example.net/ns#hasValue> "false"^^<http://www.w3.org/2001/XMLSchema#boolean> .\n',
-                     '<http://example.net/ns#myObject> <http://example.net/ns#hasValue> "true"^^<http://www.w3.org/2001/XMLSchema#boolean> .\n']
+    assert lines == [
+        '<http://example.net/ns#myObject> <http://example.net/ns#hasValue> "false"^^<http://www.w3.org/2001/XMLSchema#boolean> .\n',
+        '<http://example.net/ns#myObject> <http://example.net/ns#hasValue> "true"^^<http://www.w3.org/2001/XMLSchema#boolean> .\n']

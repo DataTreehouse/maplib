@@ -3,9 +3,7 @@ use log::warn;
 use oxrdf::Variable;
 use polars::datatypes::{CategoricalOrdering, DataType};
 use polars::frame::UniqueKeepStrategy;
-use polars::prelude::{
-    col, concat_lf_diagonal, lit, Expr, JoinArgs, JoinType, SortMultipleOptions, UnionArgs,
-};
+use polars::prelude::{col, concat_lf_diagonal, lit, Expr, JoinArgs, JoinType, SortMultipleOptions, UnionArgs, LiteralValue};
 use representation::multitype::{
     convert_lf_col_to_multitype, create_join_compatible_solution_mappings, explode_multicols,
     implode_multicolumns, lf_column_to_categorical,
@@ -233,11 +231,12 @@ pub fn project(
         rdf_node_types: mut datatypes,
     } = solution_mappings;
     let cols: Vec<Expr> = variables.iter().map(|c| col(c.as_str())).collect();
-    mappings = mappings.select(cols.as_slice());
     let mut new_datatypes = HashMap::new();
     for v in variables {
         if !datatypes.contains_key(v.as_str()) {
-            warn!("Datatypes does not contain {}", v);
+            warn!("The variable {} does not exist in the solution mappings, adding as an unbound variable", v);
+            mappings = mappings.with_column(lit(LiteralValue::Null).cast(BaseRDFNodeType::None.polars_data_type()).alias(v.as_str()));
+            datatypes.insert(v.as_str().to_string(), RDFNodeType::None);
         } else {
             new_datatypes.insert(
                 v.as_str().to_string(),
@@ -245,6 +244,7 @@ pub fn project(
             );
         }
     }
+    mappings = mappings.select(cols.as_slice());
     Ok(SolutionMappings::new(mappings, new_datatypes))
 }
 

@@ -80,10 +80,7 @@ impl Triplestore {
                     mappings,
                     rdf_node_types: types,
                 } = self.lazy_graph_pattern(pattern, None, &context, parameters)?;
-                let mut df = mappings.collect().unwrap();
-                //TODO: This should be optional
-                df = cats_to_strings(df);
-
+                let df = mappings.collect().unwrap();
                 Ok(QueryResult::Select(df, types))
             }
             Query::Construct {

@@ -92,7 +92,7 @@ def windpower_mapping():
                    df=maximum_power)
 
     def add_aspect_labeling_by_source(df: pl.DataFrame, prefix: str) -> pl.DataFrame:
-        label_df = df.group_by("SourceIRI", maintain_order=True).apply(
+        label_df = df.group_by("SourceIRI", maintain_order=True).map_groups(
             lambda x: pl.DataFrame({"Label": [prefix + str(i) for i in range(1, x.height + 1)]}))
         df = df.with_columns(label_df["Label"])
         return df
