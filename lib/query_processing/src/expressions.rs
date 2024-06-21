@@ -9,9 +9,10 @@ use oxrdf::{Literal, NamedNode, NamedNodeRef, Variable};
 use polars::datatypes::{DataType, TimeUnit};
 use polars::frame::UniqueKeepStrategy;
 use polars::prelude::{
-    coalesce, col, concat_str, is_in, lit, Expr, IntoLazy, LazyFrame, LiteralValue, Operator,
+    coalesce, col, concat_str, is_in, lit, when, Expr, IntoLazy, LazyFrame, LiteralValue, Operator,
     Series,
 };
+use rayon::iter::split;
 use representation::multitype::{all_multi_main_cols, multi_has_this_type_column};
 use representation::multitype::{non_multi_type_string, sparql_str_function};
 use representation::query_context::Context;
@@ -21,7 +22,7 @@ use representation::rdf_to_polars::{
 use representation::solution_mapping::SolutionMappings;
 use representation::{
     literal_is_boolean, literal_is_datetime, literal_is_numeric, literal_is_string,
-    BaseRDFNodeType, RDFNodeType, LANG_STRING_VALUE_FIELD,
+    BaseRDFNodeType, RDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD,
 };
 use spargebra::algebra::{Expression, Function};
 use std::collections::HashMap;
@@ -536,6 +537,115 @@ pub fn func_expression(
                 RDFNodeType::Literal(xsd::STRING.into_owned()),
             );
         }
+        Function::Lang => {
+            assert_eq!(args.len(), 1);
+            let first_context = args_contexts.get(&0).unwrap();
+            let dt = solution_mappings
+                .rdf_node_types
+                .get(first_context.as_str())
+                .unwrap();
+            match dt {
+                RDFNodeType::Literal(l) => {
+                    if l.as_ref() == rdf::LANG_STRING {
+                        solution_mappings.mappings = solution_mappings.mappings.with_column(
+                            col(first_context.as_str())
+                                .struct_()
+                                .field_by_name(LANG_STRING_LANG_FIELD)
+                                .cast(DataType::String)
+                                .alias(outer_context.as_str()),
+                        )
+                    } else {
+                        solution_mappings.mappings = solution_mappings
+                            .mappings
+                            .with_column(lit("").alias(outer_context.as_str()));
+                    }
+                }
+                RDFNodeType::MultiType(ts) => {
+                    let mut exprs = vec![];
+                    //Prioritize column that is lang string
+                    for t in ts {
+                        if t.is_lang_string() {
+                            exprs.push(
+                                col(first_context.as_str())
+                                    .struct_()
+                                    .field_by_name(LANG_STRING_LANG_FIELD)
+                                    .cast(DataType::String),
+                            )
+                        }
+                    }
+                    //Then the rest..
+                    for t in ts {
+                        if !t.is_lang_string() && matches!(t, BaseRDFNodeType::Literal(_)) {
+                            exprs.push(
+                                when(
+                                    col(first_context.as_str())
+                                        .struct_()
+                                        .field_by_name(&non_multi_type_string(t))
+                                        .is_null()
+                                        .not(),
+                                )
+                                .then(lit(""))
+                                .otherwise(lit(LiteralValue::Null).cast(DataType::String)),
+                            )
+                        } else {
+                            exprs.push(lit(LiteralValue::Null).cast(DataType::String))
+                        }
+                    }
+                    solution_mappings.mappings = solution_mappings
+                        .mappings
+                        .with_column(coalesce(exprs.as_slice()).alias(outer_context.as_str()));
+                }
+                _ => {
+                    solution_mappings.mappings = solution_mappings.mappings.with_column(
+                        lit(LiteralValue::Null)
+                            .cast(DataType::String)
+                            .alias(outer_context.as_str()),
+                    );
+                }
+            }
+            solution_mappings.rdf_node_types.insert(
+                outer_context.as_str().to_string(),
+                RDFNodeType::Literal(xsd::STRING.into_owned()),
+            );
+        }
+        Function::LangMatches => {
+            assert!(args.len() == 2);
+            let literal_to_check = args_contexts.get(&0).unwrap();
+            let lang_expr = get_lang_expr(
+                literal_to_check.as_str(),
+                solution_mappings
+                    .rdf_node_types
+                    .get(args_contexts.get(&0).unwrap().as_str())
+                    .unwrap(),
+            );
+            if let Expression::Literal(l) = args.get(1).unwrap() {
+                if l.value() == "*" {
+                    solution_mappings.mappings = solution_mappings
+                        .mappings
+                        .with_column(lang_expr.is_null().not().alias(outer_context.as_str()));
+                } else {
+                    solution_mappings.mappings = solution_mappings.mappings.with_column(
+                        lang_expr
+                            .clone()
+                            .str()
+                            .to_lowercase()
+                            .eq(lit(l.value().to_lowercase()))
+                            .or(lang_expr
+                                .str()
+                                .to_lowercase()
+                                .str()
+                                .starts_with(lit(format!("{}-", l.value().to_lowercase()))))
+                            .alias(outer_context.as_str()),
+                    );
+                }
+                solution_mappings.rdf_node_types.insert(
+                    outer_context.as_str().to_string(),
+                    RDFNodeType::Literal(xsd::BOOLEAN.into_owned()),
+                );
+            } else {
+                todo!("Handle this error.. ")
+            }
+        }
         Function::Regex => {
             assert!(args.len() == 2 || args.len() == 3);
             let text_context = args_contexts.get(&0).unwrap();
@@ -907,6 +1017,32 @@ pub fn func_expression(
     }
     solution_mappings = drop_inner_contexts(solution_mappings, &args_contexts.values().collect());
     Ok(solution_mappings)
+}
+
+fn get_lang_expr(c: &str, dt: &RDFNodeType) -> Expr {
+    match dt {
+        RDFNodeType::Literal(l) => {
+            if l.as_ref() == rdf::LANG_STRING {
+                return col(c)
+                    .struct_()
+                    .field_by_name(LANG_STRING_LANG_FIELD)
+                    .cast(DataType::String);
+            }
+        }
+        RDFNodeType::MultiType(ts) => {
+            //Prioritize column that is lang string
+            for t in ts {
+                if t.is_lang_string() {
+                    return col(c)
+                        .struct_()
+                        .field_by_name(LANG_STRING_LANG_FIELD)
+                        .cast(DataType::String);
+                }
+            }
+        }
+        _ => {}
+    }
+    lit(LiteralValue::Null).cast(DataType::String)
 }
 
 pub fn in_expression(
