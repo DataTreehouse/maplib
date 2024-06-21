@@ -236,7 +236,7 @@ pub fn project(
         if !datatypes.contains_key(v.as_str()) {
             warn!("The variable {} does not exist in the solution mappings, adding as an unbound variable", v);
             mappings = mappings.with_column(lit(LiteralValue::Null).cast(BaseRDFNodeType::None.polars_data_type()).alias(v.as_str()));
-            datatypes.insert(v.as_str().to_string(), RDFNodeType::None);
+            new_datatypes.insert(v.as_str().to_string(), RDFNodeType::None);
         } else {
             new_datatypes.insert(
                 v.as_str().to_string(),
@@ -379,6 +379,7 @@ pub fn union(
             }
         }
     }
+
     let mut output_mappings = concat_lf_diagonal(
         to_concat,
         UnionArgs {
