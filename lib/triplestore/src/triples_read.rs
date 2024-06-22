@@ -109,8 +109,7 @@ impl Triplestore {
                 1
             };
             parser
-                .split_slice_for_parsing(slice, threads)
-                .map_err(|x| TriplestoreError::TurtleParsingError(x.to_string()))?
+                .split_slice_for_parallel_parsing(slice, threads)
         } else {
             vec![parser.parse_slice(slice)]
         };
