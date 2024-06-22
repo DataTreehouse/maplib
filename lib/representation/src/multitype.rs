@@ -1038,7 +1038,7 @@ pub fn sparql_str_function(c: &str, t: &RDFNodeType) -> Expr {
                     .struct_()
                     .field_by_name(MULTI_BLANK_DT)
                     .cast(DataType::String),
-                BaseRDFNodeType::Literal(l) => col(c)
+                BaseRDFNodeType::Literal(_) => col(c)
                     .struct_()
                     .field_by_name(&non_multi_type_string(t))
                     .cast(DataType::String),
@@ -1051,7 +1051,7 @@ pub fn sparql_str_function(c: &str, t: &RDFNodeType) -> Expr {
         match &t {
             BaseRDFNodeType::IRI => col(c).cast(DataType::String),
             BaseRDFNodeType::BlankNode => col(c).cast(DataType::String),
-            BaseRDFNodeType::Literal(l) => {
+            BaseRDFNodeType::Literal(_) => {
                 if t.is_lang_string() {
                     col(c)
                         .struct_()

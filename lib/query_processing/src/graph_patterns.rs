@@ -3,7 +3,10 @@ use log::warn;
 use oxrdf::Variable;
 use polars::datatypes::{CategoricalOrdering, DataType};
 use polars::frame::UniqueKeepStrategy;
-use polars::prelude::{col, concat_lf_diagonal, lit, Expr, JoinArgs, JoinType, SortMultipleOptions, UnionArgs, LiteralValue};
+use polars::prelude::{
+    col, concat_lf_diagonal, lit, Expr, JoinArgs, JoinType, LiteralValue, SortMultipleOptions,
+    UnionArgs,
+};
 use representation::multitype::{
     convert_lf_col_to_multitype, create_join_compatible_solution_mappings, explode_multicols,
     implode_multicolumns, lf_column_to_categorical,
@@ -235,7 +238,11 @@ pub fn project(
     for v in variables {
         if !datatypes.contains_key(v.as_str()) {
             warn!("The variable {} does not exist in the solution mappings, adding as an unbound variable", v);
-            mappings = mappings.with_column(lit(LiteralValue::Null).cast(BaseRDFNodeType::None.polars_data_type()).alias(v.as_str()));
+            mappings = mappings.with_column(
+                lit(LiteralValue::Null)
+                    .cast(BaseRDFNodeType::None.polars_data_type())
+                    .alias(v.as_str()),
+            );
             new_datatypes.insert(v.as_str().to_string(), RDFNodeType::None);
         } else {
             new_datatypes.insert(

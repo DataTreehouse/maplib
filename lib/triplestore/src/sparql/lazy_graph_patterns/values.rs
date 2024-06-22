@@ -57,9 +57,6 @@ impl Triplestore {
                             }
                             rdf_literal_to_polars_literal_value(l)
                         }
-                        _ => {
-                            todo!()
-                        }
                     };
                     col_vecs.get_mut(&j).unwrap().push(t);
                     if i + 1 == bindings.len() {

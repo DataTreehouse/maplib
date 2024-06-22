@@ -22,9 +22,6 @@ pub fn rdf_term_to_polars_expr(term: &Term) -> Expr {
             }
         }
         Term::BlankNode(bl) => lit(rdf_blank_node_to_polars_literal_value(bl)),
-        _ => {
-            panic!("Not supported")
-        }
     }
 }
 

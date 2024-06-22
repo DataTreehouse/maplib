@@ -765,7 +765,7 @@ impl U32DataFrameCreator {
                         mappings,
                         mut rdf_node_types,
                     },
-                    is_empty,
+                    _is_empty,
                 ) = triplestore.get_predicate_lf(
                     nn,
                     &Some(SUBJECT_COL_NAME.to_string()),

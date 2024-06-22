@@ -4,16 +4,14 @@ use crate::TriplesToAdd;
 
 use crate::constants::{OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use log::debug;
-use memmap2::{Mmap, MmapOptions};
-use oxrdf::{BlankNode, NamedNode, Quad, Subject, Term, Triple};
-use oxrdfio::{FromReadQuadReader, FromSliceQuadReader, RdfFormat, RdfParser, RdfSyntaxError};
-use oxttl::turtle::FromSliceTurtleReader;
+use memmap2::MmapOptions;
+use oxrdf::{BlankNode, NamedNode, Quad, Subject, Term};
+use oxrdfio::{FromSliceQuadReader, RdfFormat, RdfParser};
 use polars::prelude::{as_struct, col, DataFrame, IntoLazy, LiteralValue, Series};
 use rayon::iter::ParallelIterator;
 use rayon::prelude::{IntoParallelIterator, IntoParallelRefIterator};
 use representation::rdf_to_polars::{
-    polars_literal_values_to_series, rdf_blank_node_to_polars_literal_value,
-    rdf_literal_to_polars_literal_value, rdf_named_node_to_polars_literal_value,
+    polars_literal_values_to_series, rdf_literal_to_polars_literal_value,
     rdf_owned_blank_node_to_polars_literal_value, rdf_owned_named_node_to_polars_literal_value,
 };
 use representation::{
@@ -21,7 +19,6 @@ use representation::{
 };
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{BufReader, Read};
 use std::ops::Deref;
 use std::path::Path;
 use std::time::Instant;
@@ -35,6 +32,7 @@ impl Triplestore {
         transient: bool,
         parallel: bool,
         checked: bool,
+        deduplicate: bool,
     ) -> Result<(), TriplestoreError> {
         let rdf_format = if let Some(rdf_format) = rdf_format {
             rdf_format
@@ -60,6 +58,7 @@ impl Triplestore {
             transient,
             parallel,
             checked,
+            deduplicate,
         )
     }
 
@@ -71,6 +70,7 @@ impl Triplestore {
         transient: bool,
         parallel: bool,
         checked: bool,
+        deduplicate: bool,
     ) -> Result<(), TriplestoreError> {
         self.read_triples(
             s.as_bytes(),
@@ -79,6 +79,7 @@ impl Triplestore {
             transient,
             parallel,
             checked,
+            deduplicate,
         )
     }
 
@@ -90,6 +91,7 @@ impl Triplestore {
         transient: bool,
         parallel: bool,
         checked: bool,
+        deduplicate: bool,
     ) -> Result<(), TriplestoreError> {
         let start_quadproc_now = Instant::now();
         let mut parser = RdfParser::from(rdf_format);
@@ -133,7 +135,7 @@ impl Triplestore {
             }
         }
 
-        let mut predicate_map: HashMap<
+        let predicate_map: HashMap<
             String,
             HashMap<String, HashMap<String, (Vec<Subject>, Vec<Term>)>>,
         > = par_predicate_map
@@ -167,7 +169,7 @@ impl Triplestore {
         );
 
         let start_tripleproc_now = Instant::now();
-        let mut triples_to_add: Vec<_> = predicate_map
+        let triples_to_add: Vec<_> = predicate_map
             .into_par_iter()
             .map(|(k, map)| {
                 let mut triples_to_add = vec![];
@@ -248,7 +250,7 @@ impl Triplestore {
                             subject_type: subject_dt.as_rdf_node_type(),
                             object_type: object_dt.as_rdf_node_type(),
                             static_verb_column: Some(NamedNode::new_unchecked(k.clone())),
-                            has_unique_subset: true,
+                            has_unique_subset: !deduplicate,
                         });
                     }
                 }
@@ -290,9 +292,6 @@ fn get_subject_datatype_ref(s: &Subject) -> BaseRDFNodeTypeRef {
     match s {
         Subject::NamedNode(_) => BaseRDFNodeTypeRef::IRI,
         Subject::BlankNode(_) => BaseRDFNodeTypeRef::BlankNode,
-        _ => {
-            todo!()
-        }
     }
 }
 
@@ -301,9 +300,6 @@ fn get_term_datatype_ref(t: &Term) -> BaseRDFNodeTypeRef {
         Term::NamedNode(_) => BaseRDFNodeTypeRef::IRI,
         Term::BlankNode(_) => BaseRDFNodeTypeRef::BlankNode,
         Term::Literal(l) => BaseRDFNodeTypeRef::Literal(l.datatype()),
-        _ => {
-            todo!()
-        }
     }
 }
 

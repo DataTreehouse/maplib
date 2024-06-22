@@ -12,7 +12,6 @@ use polars::prelude::{
     coalesce, col, concat_str, is_in, lit, when, Expr, IntoLazy, LazyFrame, LiteralValue, Operator,
     Series,
 };
-use rayon::iter::split;
 use representation::multitype::{all_multi_main_cols, multi_has_this_type_column};
 use representation::multitype::{non_multi_type_string, sparql_str_function};
 use representation::query_context::Context;

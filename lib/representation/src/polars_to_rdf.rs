@@ -392,7 +392,7 @@ pub fn hack_format_timestamp_with_timezone(series: &Series, tz: &mut TimeZone) -
                 None => AnyValue::Null,
             })
             .collect();
-        let mut ser = Series::from_any_values_and_dtype(
+        let ser = Series::from_any_values_and_dtype(
             &name,
             &datetime_strings_vec,
             &DataType::String,

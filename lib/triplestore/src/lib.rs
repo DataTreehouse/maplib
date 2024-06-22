@@ -24,12 +24,10 @@ use polars::prelude::{
     col, concat, AnyValue, DataFrame, IntoLazy, JoinArgs, JoinType, LazyFrame, UnionArgs,
     UniqueKeepStrategy,
 };
-use polars_core::enable_string_cache;
-use polars_core::prelude::{DataType, SortMultipleOptions};
 use polars_core::utils::concat_df;
 use rayon::iter::ParallelIterator;
 use rayon::iter::{IntoParallelRefIterator, ParallelDrainRange};
-use representation::multitype::{lf_column_from_categorical, lf_column_to_categorical};
+use representation::multitype::lf_column_to_categorical;
 use representation::solution_mapping::SolutionMappings;
 use representation::{literal_iri_to_namednode, RDFNodeType};
 use std::collections::HashMap;

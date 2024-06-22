@@ -67,7 +67,7 @@ pub fn to_py_df(
     py: Python,
     pyarrow: &Bound<'_, PyModule>,
     polars: &Bound<'_, PyModule>,
-    types: HashMap<String, String>,
+    _types: HashMap<String, String>,
 ) -> PyResult<PyObject> {
     let py_rb = to_py_rb(rb, names, py, pyarrow)?;
     let py_rb_list = PyList::empty_bound(py);

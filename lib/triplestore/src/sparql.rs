@@ -13,8 +13,7 @@ use crate::constants::{OBJECT_COL_NAME, OTTR_IRI, SUBJECT_COL_NAME, VERB_COL_NAM
 use crate::sparql::errors::SparqlError;
 use crate::TriplesToAdd;
 use polars::frame::DataFrame;
-use polars::prelude::{col, lit, DataType, Expr, IntoLazy};
-use polars_core::enable_string_cache;
+use polars::prelude::{col, lit, Expr, IntoLazy};
 use polars_core::frame::UniqueKeepStrategy;
 use query_processing::expressions::col_null_expr;
 use representation::multitype::{split_df_multicols, unique_workaround};
@@ -260,18 +259,4 @@ fn variable_expression(
         col(v.as_str()).alias(name),
         rdf_node_types.get(v.as_str()).unwrap().clone(),
     )
-}
-
-fn cats_to_strings(df: DataFrame) -> DataFrame {
-    let mut cats = vec![];
-    for c in df.columns(df.get_column_names()).unwrap() {
-        if let DataType::Categorical(_, _) = c.dtype() {
-            cats.push(c.name().to_string());
-        }
-    }
-    let mut lf = df.lazy();
-    for c in cats {
-        lf = lf.with_column(col(&c).cast(DataType::String))
-    }
-    lf.collect().unwrap()
 }

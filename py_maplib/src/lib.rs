@@ -6,19 +6,18 @@ mod error;
 use crate::error::PyMaplibError;
 use pydf_io::to_rust::polars_df_to_rust_df;
 
-use log::{info, warn};
+use log::warn;
 use maplib::document::document_from_str;
 use maplib::errors::MaplibError;
 use maplib::mapping::errors::MappingError;
 use maplib::mapping::ExpandOptions as RustExpandOptions;
 use maplib::mapping::Mapping as InnerMapping;
 use maplib::templates::TemplateDataset;
-use pydf_io::to_python::{df_to_py_df, dtypes_map, fix_cats_and_multicolumns};
+use pydf_io::to_python::df_to_py_df;
 use pyo3::prelude::*;
 use std::collections::HashMap;
 use std::fs::File;
 use std::path::{Path, PathBuf};
-use triplestore::constants::{OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use triplestore::sparql::{QueryResult as SparqlQueryResult, QueryResult};
 
 //The below snippet controlling alloc-library is from https://github.com/pola-rs/polars/blob/main/py-polars/src/lib.rs
@@ -46,13 +45,12 @@ use triplestore::sparql::{QueryResult as SparqlQueryResult, QueryResult};
 use jemallocator::Jemalloc;
 use oxrdf::NamedNode;
 use oxrdfio::RdfFormat;
-use polars::prelude::{col, DataFrame, IntoLazy, lit};
+use polars::prelude::{col, lit, DataFrame, IntoLazy};
 use pyo3::types::PyList;
 use representation::formatting::format_iris_and_blank_nodes;
 use representation::multitype::{
     compress_actual_multitypes, lf_column_from_categorical, multi_columns_to_string_cols,
 };
-use representation::polars_to_rdf::polars_type_to_literal_type;
 use representation::python::RDFType;
 use representation::solution_mapping::EagerSolutionMappings;
 use representation::{BaseRDFNodeType, RDFNodeType};
@@ -108,7 +106,6 @@ impl ExpandOptions {
 }
 
 type ParametersType<'a> = HashMap<String, (Bound<'a, PyAny>, HashMap<String, RDFType>)>;
-
 
 #[pymethods]
 impl Mapping {
@@ -242,7 +239,7 @@ impl Mapping {
         py: Python<'_>,
         query: String,
         parameters: Option<ParametersType>,
-        include_datatypes: Option<bool>,
+        _include_datatypes: Option<bool>,
         multi_as_strings: Option<bool>,
         graph: Option<String>,
     ) -> PyResult<PyObject> {
@@ -343,6 +340,7 @@ impl Mapping {
         transient: Option<bool>,
         parallel: Option<bool>,
         checked: Option<bool>,
+        deduplicate: Option<bool>,
         graph: Option<String>,
     ) -> PyResult<()> {
         let graph = parse_optional_graph(graph)?;
@@ -354,7 +352,16 @@ impl Mapping {
             None
         };
         self.inner
-            .read_triples(path, format, base_iri, transient.unwrap_or(false), parallel.unwrap_or(false), checked.unwrap_or(true), graph)
+            .read_triples(
+                path,
+                format,
+                base_iri,
+                transient.unwrap_or(false),
+                parallel.unwrap_or(false),
+                checked.unwrap_or(true),
+                deduplicate.unwrap_or(true),
+                graph,
+            )
             .map_err(|x| PyMaplibError::from(x))?;
         Ok(())
     }
@@ -367,12 +374,22 @@ impl Mapping {
         transient: Option<bool>,
         parallel: Option<bool>,
         checked: Option<bool>,
+        deduplicate: Option<bool>,
         graph: Option<String>,
     ) -> PyResult<()> {
         let graph = parse_optional_graph(graph)?;
         let format = resolve_format(&format);
         self.inner
-            .read_triples_string(s, format, base_iri, transient.unwrap_or(false), parallel.unwrap_or(false), checked.unwrap_or(true), graph)
+            .read_triples_string(
+                s,
+                format,
+                base_iri,
+                transient.unwrap_or(false),
+                parallel.unwrap_or(false),
+                checked.unwrap_or(true),
+                deduplicate.unwrap_or(true),
+                graph,
+            )
             .map_err(|x| PyMaplibError::from(x))?;
         Ok(())
     }
@@ -460,8 +477,62 @@ fn finish_report(
     })
 }
 
+fn fix_cats_and_multicolumns(
+    mut df: DataFrame,
+    mut dts: HashMap<String, RDFNodeType>,
+    multi_to_strings: bool,
+) -> (DataFrame, HashMap<String, RDFNodeType>) {
+    let column_ordering: Vec<_> = df
+        .get_column_names()
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+    //Important that column compression happen before decisions are made based on column type.
+    (df, dts) = compress_actual_multitypes(df, dts);
+    let mut lf = df.lazy();
+    for (c, _) in &dts {
+        lf = lf_column_from_categorical(lf.lazy(), c, &dts);
+    }
+    lf = format_iris_and_blank_nodes(lf, &dts, !multi_to_strings);
+    df = lf.collect().unwrap();
+    if multi_to_strings {
+        df = multi_columns_to_string_cols(df.lazy(), &dts)
+            .collect()
+            .unwrap();
+    }
+    df = df.select(column_ordering.as_slice()).unwrap();
+    (df, dts)
+}
+
+fn query_to_result(
+    res: SparqlQueryResult,
+    multi_as_strings: bool,
+    py: Python<'_>,
+) -> PyResult<PyObject> {
+    match res {
+        SparqlQueryResult::Select(mut df, mut datatypes) => {
+            (df, datatypes) = fix_cats_and_multicolumns(df, datatypes, multi_as_strings);
+            let pydf = df_to_py_df(df, dtypes_map(datatypes), py)?;
+            Ok(pydf)
+        }
+        SparqlQueryResult::Construct(dfs) => {
+            let mut query_results = vec![];
+            for (mut df, mut datatypes) in dfs {
+                (df, datatypes) = fix_cats_and_multicolumns(df, datatypes, multi_as_strings);
+                let pydf = df_to_py_df(df, dtypes_map(datatypes), py)?;
+                query_results.push(pydf);
+            }
+            Ok(PyList::new_bound(py, query_results).into())
+        }
+    }
+}
+
+fn dtypes_map(map: HashMap<String, RDFNodeType>) -> HashMap<String, String> {
+    map.into_iter().map(|(x, y)| (x, y.to_string())).collect()
+}
+
 fn map_parameters(
-    parameters: Option<HashMap<String, (Bound<'_, PyAny>, HashMap<String, RDFType>),>>,
+    parameters: Option<HashMap<String, (Bound<'_, PyAny>, HashMap<String, RDFType>)>>,
 ) -> PyResult<Option<HashMap<String, EagerSolutionMappings>>> {
     if let Some(parameters) = parameters {
         let mut mapped_parameters = HashMap::new();
@@ -469,11 +540,17 @@ fn map_parameters(
             let df = polars_df_to_rust_df(&pydf)?;
             let mut rdf_node_types = HashMap::new();
             let mut lf = df.lazy();
-            for (k,v) in map {
+            for (k, v) in map {
                 let t = v.to_rust().unwrap();
                 match &t {
                     BaseRDFNodeType::IRI => {
-                        lf = lf.with_column(col(&k).str().strip_prefix(lit("<")).str().strip_suffix(lit(">")));
+                        lf = lf.with_column(
+                            col(&k)
+                                .str()
+                                .strip_prefix(lit("<"))
+                                .str()
+                                .strip_suffix(lit(">")),
+                        );
                     }
                     BaseRDFNodeType::BlankNode => {
                         lf = lf.with_column(col(&k).str().strip_prefix(lit("_:")));
@@ -501,30 +578,6 @@ fn resolve_format(format: &str) -> RdfFormat {
         "turtle" => RdfFormat::Turtle,
         "rdf/xml" | "xml" | "rdfxml" => RdfFormat::RdfXml,
         _ => unimplemented!("Unknown format {}", format),
-    }
-}
-
-
-fn query_to_result(
-    res: SparqlQueryResult,
-    multi_as_strings: bool,
-    py: Python<'_>,
-) -> PyResult<PyObject> {
-    match res {
-        SparqlQueryResult::Select(mut df, mut datatypes) => {
-            (df, datatypes) = fix_cats_and_multicolumns(df, datatypes, multi_as_strings);
-            let pydf = df_to_py_df(df, dtypes_map(datatypes), py)?;
-            Ok(pydf)
-        }
-        SparqlQueryResult::Construct(dfs) => {
-            let mut query_results = vec![];
-            for (mut df, mut datatypes) in dfs {
-                (df, datatypes) = fix_cats_and_multicolumns(df, datatypes, multi_as_strings);
-                let pydf = df_to_py_df(df, dtypes_map(datatypes), py)?;
-                query_results.push(pydf);
-            }
-            Ok(PyList::new_bound(py, query_results).into())
-        }
     }
 }
 
