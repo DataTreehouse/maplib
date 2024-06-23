@@ -38,7 +38,7 @@ pub struct ExpandOptions {
 
 struct OTTRTripleInstance {
     df: DataFrame,
-    dynamic_columns: HashMap<String, PrimitiveColumn>,
+    dynamic_columns: HashMap<String, MappingColumnType>,
     static_columns: HashMap<String, StaticColumn>,
     has_unique_subset: bool,
 }
@@ -50,8 +50,9 @@ struct StaticColumn {
 }
 
 #[derive(Clone, Debug)]
-pub struct PrimitiveColumn {
-    pub rdf_node_type: RDFNodeType,
+pub enum MappingColumnType {
+    Nested(Box<MappingColumnType>),
+    Flat(RDFNodeType),
 }
 
 #[derive(Debug, PartialEq)]
@@ -96,7 +97,8 @@ impl Mapping {
 
     pub fn from_str(s: &str, caching_folder: Option<String>) -> Result<Mapping, MaplibError> {
         let doc = document_from_str(s)?;
-        let dataset = TemplateDataset::new(vec![doc]).map_err(MaplibError::TemplateError)?;
+        let dataset =
+            TemplateDataset::from_documents(vec![doc]).map_err(MaplibError::TemplateError)?;
         Mapping::new(&dataset, caching_folder)
     }
 
@@ -109,7 +111,7 @@ impl Mapping {
             let doc = document_from_str(s)?;
             docs.push(doc);
         }
-        let dataset = TemplateDataset::new(docs).map_err(MaplibError::TemplateError)?;
+        let dataset = TemplateDataset::from_documents(docs).map_err(MaplibError::TemplateError)?;
         Mapping::new(&dataset, caching_folder)
     }
 

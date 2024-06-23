@@ -108,8 +108,7 @@ impl Triplestore {
             } else {
                 1
             };
-            parser
-                .split_slice_for_parallel_parsing(slice, threads)
+            parser.split_slice_for_parallel_parsing(slice, threads)
         } else {
             vec![parser.parse_slice(slice)]
         };

@@ -22,8 +22,33 @@ class ValidationReport:
     Only constructed by maplib.
     """
     conforms: bool
-    report: Optional[DataFrame]
-    details: Optional[DataFrame]
+
+    def results(self,
+               multi_as_strings: bool = True) -> Optional[DataFrame]:
+        """
+        Return the results of the validation report, if they exist.
+
+        :param multi_as_strings: Return columns with multiple datatypes as strings instead of as struct-columns.
+        :return: The SHACL validation report, as a DataFrame
+        """
+
+    def details(self,
+                multi_as_strings: bool = True) -> Optional[DataFrame]:
+        """
+        Returns the details of the validation report.
+        Only available if validation was called with include_details=True.
+
+        :param multi_as_strings: Return columns with multiple datatypes as strings instead of as struct-columns.
+        :return: Details of the SHACL validation report, as a DataFrame
+        """
+
+    def graph(self, include_details: bool = False) -> "Mapping":
+        """
+        Creates a new mapping object where the base graph is the validation report with results.
+
+        :param include_details: Include the details of the validation report in the new graph.
+        :return:
+        """
 
 
 class Mapping:
@@ -83,7 +108,8 @@ class Mapping:
 
     def query(self, query: str,
               parameters: ParametersType = None,
-              include_datatypes=False, multi_as_strings=True,
+              include_datatypes=False,
+              multi_as_strings=True,
               graph: str = None) -> Union[
         DataFrame,
         Dict[str, Union[DataFrame, Dict[str, str]]],
@@ -142,14 +168,12 @@ class Mapping:
 
     def validate(self,
                  shape_graph: str,
-                 multi_as_strings: bool = True,
                  include_details: bool = False) -> ValidationReport:
         """
         Validate the contained knowledge graph using SHACL
         Assumes that the contained knowledge graph also contains SHACL Shapes.
 
         :param shape_graph: The IRI of the Shape Graph.
-        :param multi_as_strings: Return columns with multiple datatypes as strings instead of as struct-columns.
         :param include_details: Include details of SHACL evaluation alongside the report. Currently uses a lot of memory.
         :return: Validation report containing a report (report.df) and whether the graph conforms (report.conforms)
         """

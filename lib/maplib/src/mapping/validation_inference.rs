@@ -1,10 +1,8 @@
 use super::Mapping;
 use crate::ast::{has_iritype, PType, Parameter, Signature};
 
-use crate::constants::OTTR_IRI;
 use crate::mapping::errors::MappingError;
-use crate::mapping::{PrimitiveColumn, RDFNodeType};
-use oxrdf::NamedNode;
+use crate::mapping::{MappingColumnType, RDFNodeType};
 use polars::prelude::{DataFrame, DataType};
 use representation::polars_to_rdf::polars_type_to_literal_type;
 use std::collections::{HashMap, HashSet};
@@ -14,7 +12,7 @@ impl Mapping {
         &self,
         signature: &Signature,
         df: &Option<DataFrame>,
-    ) -> Result<HashMap<String, PrimitiveColumn>, MappingError> {
+    ) -> Result<HashMap<String, MappingColumnType>, MappingError> {
         let mut map = HashMap::new();
         if let Some(df) = df {
             let mut df_columns = HashSet::new();
@@ -53,32 +51,30 @@ fn validate_infer_column_data_type(
     dataframe: &DataFrame,
     parameter: &Parameter,
     column_name: &str,
-) -> Result<PrimitiveColumn, MappingError> {
+) -> Result<MappingColumnType, MappingError> {
     let series = dataframe.column(column_name).unwrap();
     let dtype = series.dtype();
-    let ptype = if let Some(ptype) = &parameter.ptype {
+    let mapping_column_type = if let Some(ptype) = &parameter.ptype {
         validate_datatype(series.name(), dtype, ptype)?;
-        ptype.clone()
+        infer_rdf_node_type(&ptype)
     } else {
-        polars_datatype_to_xsd_datatype(dtype)
+        polars_datatype_to_mapping_column_datatype(dtype)?
     };
-    let rdf_node_type = infer_rdf_node_type(&ptype);
-
-    Ok(PrimitiveColumn { rdf_node_type })
+    Ok(mapping_column_type)
 }
 
-fn infer_rdf_node_type(ptype: &PType) -> RDFNodeType {
+fn infer_rdf_node_type(ptype: &PType) -> MappingColumnType {
     match ptype {
         PType::Basic(b, _) => {
             if has_iritype(b.as_str()) {
-                RDFNodeType::IRI
+                MappingColumnType::Flat(RDFNodeType::IRI)
             } else {
-                RDFNodeType::Literal(b.clone())
+                MappingColumnType::Flat(RDFNodeType::Literal(b.clone()))
             }
         }
-        PType::Lub(l) => infer_rdf_node_type(l),
-        PType::List(l) => infer_rdf_node_type(l),
-        PType::NEList(l) => infer_rdf_node_type(l),
+        PType::Lub(l) => MappingColumnType::Nested(Box::new(infer_rdf_node_type(l))),
+        PType::List(l) => MappingColumnType::Nested(Box::new(infer_rdf_node_type(l))),
+        PType::NEList(l) => MappingColumnType::Nested(Box::new(infer_rdf_node_type(l))),
     }
 }
 
@@ -114,11 +110,11 @@ fn validate_datatype(
         }
     };
     match target_ptype {
-        PType::Basic(bt, _) => {
+        PType::Basic(_, _) => {
             if let DataType::List(_) = datatype {
                 mismatch_error()
             } else {
-                Ok(validate_basic_datatype(column_name, datatype, bt)?)
+                Ok(())
             }
         }
         PType::Lub(inner) => validate_if_series_list(inner),
@@ -127,37 +123,16 @@ fn validate_datatype(
     }
 }
 
-fn validate_basic_datatype(
-    _column_name: &str,
-    _datatype: &DataType,
-    _rdf_datatype: &NamedNode,
-) -> Result<(), MappingError> {
-    // match rdf_datatype.as_ref() {
-    //     xsd::INT => {
-    //         Ok(());
-    //
-    //     }
-    // }
-    Ok(())
-}
-
-pub fn polars_datatype_to_xsd_datatype(datatype: &DataType) -> PType {
-    if let Some(rdf_node_type) = polars_type_to_literal_type(datatype) {
-        let nn = match rdf_node_type {
-            RDFNodeType::IRI => NamedNode::new_unchecked(OTTR_IRI),
-            RDFNodeType::Literal(l) => l,
-            _ => unimplemented!("Unsupported datatype:{}", datatype),
-        };
-        let nn_string = nn.to_string();
-        return PType::Basic(nn, nn_string);
+pub fn polars_datatype_to_mapping_column_datatype(
+    datatype: &DataType,
+) -> Result<MappingColumnType, MappingError> {
+    if let DataType::List(dt) = datatype {
+        Ok(MappingColumnType::Nested(Box::new(
+            polars_datatype_to_mapping_column_datatype(dt)?,
+        )))
+    } else {
+        let dt = polars_type_to_literal_type(datatype)
+            .map_err(|x| MappingError::DatatypeInferenceError(x))?;
+        Ok(MappingColumnType::Flat(dt))
     }
-
-    match datatype {
-        DataType::List(inner) => {
-            return PType::List(Box::new(polars_datatype_to_xsd_datatype(inner)));
-        }
-        _ => {
-            unimplemented!("Unsupported datatype:{}", datatype)
-        }
-    };
 }

@@ -27,7 +27,7 @@ use polars::prelude::{
 use polars_core::utils::concat_df;
 use rayon::iter::ParallelIterator;
 use rayon::iter::{IntoParallelRefIterator, ParallelDrainRange};
-use representation::multitype::lf_column_to_categorical;
+use representation::multitype::{lf_column_to_categorical};
 use representation::solution_mapping::SolutionMappings;
 use representation::{literal_iri_to_namednode, RDFNodeType};
 use std::collections::HashMap;
@@ -327,7 +327,7 @@ impl Triplestore {
                 if let Some(m) = self.df_map.get(&tdf.predicate) {
                     if let Some(SolutionMappings {
                         mappings: lf,
-                        rdf_node_types,
+                        rdf_node_types: _,
                     }) = multiple_tt_to_lf(
                         m,
                         None,
@@ -371,7 +371,7 @@ impl Triplestore {
                 if let Some(m) = self.transient_df_map.get(&tdf.predicate) {
                     if let Some(SolutionMappings {
                         mappings: lf,
-                        rdf_node_types,
+                        rdf_node_types: _,
                     }) = multiple_tt_to_lf(
                         m,
                         None,

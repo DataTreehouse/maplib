@@ -5,7 +5,7 @@ use representation::solution_mapping::EagerSolutionMappings;
 use representation::RDFNodeType;
 use std::collections::HashMap;
 use triplestore::Triplestore;
-
+#[derive(Debug, Clone)]
 pub struct ValidationReport {
     pub conforms: bool,
     pub df: Option<DataFrame>,

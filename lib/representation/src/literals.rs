@@ -1,4 +1,4 @@
-use crate::RepresentationError;
+use crate::errors::RepresentationError;
 use oxrdf::{Literal, Term};
 
 pub fn parse_literal_as_primitive<T: std::str::FromStr>(

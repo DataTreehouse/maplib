@@ -23,7 +23,9 @@ pub struct TemplateDataset {
 }
 
 impl TemplateDataset {
-    pub fn new(mut documents: Vec<StottrDocument>) -> Result<TemplateDataset, TemplateError> {
+    pub fn from_documents(
+        mut documents: Vec<StottrDocument>,
+    ) -> Result<TemplateDataset, TemplateError> {
         let mut templates = vec![];
         let mut ground_instances = vec![];
         let mut prefix_map = HashMap::new();
@@ -128,12 +130,12 @@ impl TemplateDataset {
                 }
             }
         }
-        TemplateDataset::new(docs)
+        TemplateDataset::from_documents(docs)
     }
 
     pub fn from_file<P: AsRef<Path>>(path: P) -> Result<TemplateDataset, TemplateError> {
         let doc = document_from_file(path)?;
-        TemplateDataset::new(vec![doc])
+        TemplateDataset::from_documents(vec![doc])
     }
 
     pub fn get(&self, template: &str) -> Option<&Template> {

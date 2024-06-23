@@ -1,3 +1,4 @@
+use crate::errors::RepresentationError;
 use crate::multitype::{
     all_multi_main_cols, multi_has_this_type_column, MULTI_BLANK_DT, MULTI_IRI_DT, MULTI_NONE_DT,
 };
@@ -7,7 +8,6 @@ use crate::{
 };
 use chrono::TimeZone as ChronoTimeZone;
 use chrono::{Datelike, Timelike};
-use log::debug;
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{Literal, NamedNode, Variable};
 use polars::export::rayon::iter::ParallelIterator;
@@ -228,27 +228,29 @@ pub fn basic_rdf_node_type_series_to_term_vec(
 }
 
 //TODO: add exceptions with messages..
-pub fn polars_type_to_literal_type(data_type: &DataType) -> Option<RDFNodeType> {
+pub fn polars_type_to_literal_type(
+    data_type: &DataType,
+) -> Result<RDFNodeType, RepresentationError> {
     match data_type {
-        DataType::Boolean => Some(RDFNodeType::Literal(xsd::BOOLEAN.into_owned())),
-        DataType::Int8 => Some(RDFNodeType::Literal(xsd::BYTE.into_owned())),
-        DataType::Int16 => Some(RDFNodeType::Literal(xsd::SHORT.into_owned())),
-        DataType::UInt8 => Some(RDFNodeType::Literal(xsd::UNSIGNED_BYTE.into_owned())),
-        DataType::UInt16 => Some(RDFNodeType::Literal(xsd::UNSIGNED_SHORT.into_owned())),
-        DataType::UInt32 => Some(RDFNodeType::Literal(xsd::UNSIGNED_INT.into_owned())),
-        DataType::UInt64 => Some(RDFNodeType::Literal(xsd::UNSIGNED_LONG.into_owned())),
-        DataType::Int32 => Some(RDFNodeType::Literal(xsd::INT.into_owned())),
-        DataType::Int64 => Some(RDFNodeType::Literal(xsd::LONG.into_owned())),
-        DataType::Float32 => Some(RDFNodeType::Literal(xsd::FLOAT.into_owned())),
-        DataType::Float64 => Some(RDFNodeType::Literal(xsd::DOUBLE.into_owned())),
-        DataType::String => Some(RDFNodeType::Literal(xsd::STRING.into_owned())),
-        DataType::Date => Some(RDFNodeType::Literal(xsd::DATE.into_owned())),
+        DataType::Boolean => Ok(RDFNodeType::Literal(xsd::BOOLEAN.into_owned())),
+        DataType::Int8 => Ok(RDFNodeType::Literal(xsd::BYTE.into_owned())),
+        DataType::Int16 => Ok(RDFNodeType::Literal(xsd::SHORT.into_owned())),
+        DataType::UInt8 => Ok(RDFNodeType::Literal(xsd::UNSIGNED_BYTE.into_owned())),
+        DataType::UInt16 => Ok(RDFNodeType::Literal(xsd::UNSIGNED_SHORT.into_owned())),
+        DataType::UInt32 => Ok(RDFNodeType::Literal(xsd::UNSIGNED_INT.into_owned())),
+        DataType::UInt64 => Ok(RDFNodeType::Literal(xsd::UNSIGNED_LONG.into_owned())),
+        DataType::Int32 => Ok(RDFNodeType::Literal(xsd::INT.into_owned())),
+        DataType::Int64 => Ok(RDFNodeType::Literal(xsd::LONG.into_owned())),
+        DataType::Float32 => Ok(RDFNodeType::Literal(xsd::FLOAT.into_owned())),
+        DataType::Float64 => Ok(RDFNodeType::Literal(xsd::DOUBLE.into_owned())),
+        DataType::String => Ok(RDFNodeType::Literal(xsd::STRING.into_owned())),
+        DataType::Date => Ok(RDFNodeType::Literal(xsd::DATE.into_owned())),
         DataType::Datetime(_, Some(_)) => {
-            Some(RDFNodeType::Literal(xsd::DATE_TIME_STAMP.into_owned()))
+            Ok(RDFNodeType::Literal(xsd::DATE_TIME_STAMP.into_owned()))
         }
-        DataType::Datetime(_, None) => Some(RDFNodeType::Literal(xsd::DATE_TIME.into_owned())),
-        DataType::Duration(_) => Some(RDFNodeType::Literal(xsd::DURATION.into_owned())),
-        DataType::Categorical(_, _) => Some(RDFNodeType::Literal(xsd::STRING.into_owned())),
+        DataType::Datetime(_, None) => Ok(RDFNodeType::Literal(xsd::DATE_TIME.into_owned())),
+        DataType::Duration(_) => Ok(RDFNodeType::Literal(xsd::DURATION.into_owned())),
+        DataType::Categorical(_, _) => Ok(RDFNodeType::Literal(xsd::STRING.into_owned())),
         DataType::Struct(fields) => {
             let names: Vec<_> = fields.iter().map(|x| x.name.as_str()).collect();
             let mut dts = vec![];
@@ -302,39 +304,40 @@ pub fn polars_type_to_literal_type(data_type: &DataType) -> Option<RDFNodeType> 
                 }
             }
             if found_lang_string_value ^ found_lang_string_lang {
-                debug!("Found just one of the lang string cols");
-                return None;
+                return Err(RepresentationError::DatatypeError(
+                    "Found just one of the lang string cols".into(),
+                ));
             }
 
             for dt in &dts {
                 let expect = multi_has_this_type_column(dt);
                 if !unknown_fields.remove(&expect) {
-                    debug!(
+                    return Err(RepresentationError::DatatypeError(format!(
                         "Expected indicator field {}, could not find datatype",
                         expect
-                    );
-                    return None;
+                    )));
                 }
             }
 
             if !unknown_fields.is_empty() {
                 let unknown: Vec<_> = unknown_fields.into_iter().collect();
-                debug!(
+                return Err(RepresentationError::DatatypeError(format!(
                     "Unknown fields remain, could not determine type, remaining: {}",
                     unknown.join(", ")
-                );
-                return None;
+                )));
             }
 
             if only_lang_string {
-                Some(RDFNodeType::Literal(rdf::LANG_STRING.into_owned()))
+                Ok(RDFNodeType::Literal(rdf::LANG_STRING.into_owned()))
             } else {
-                Some(RDFNodeType::MultiType(dts))
+                Ok(RDFNodeType::MultiType(dts))
             }
         }
         dt => {
-            debug!("Unknown datatype {:?}", dt);
-            return None;
+            return Err(RepresentationError::DatatypeError(format!(
+                "Unknown datatype {:?}",
+                dt
+            )));
         }
     }
 }

@@ -1,7 +1,7 @@
 use crate::ast::{ConstantLiteral, ConstantTerm, PType};
 use crate::constants::{BLANK_NODE_IRI, NONE_IRI, OTTR_IRI};
 use crate::mapping::errors::MappingError;
-use crate::mapping::RDFNodeType;
+use crate::mapping::{MappingColumnType, RDFNodeType};
 
 use oxrdf::{Literal, NamedNode, Term};
 use polars::prelude::{
@@ -20,7 +20,7 @@ const BLANK_NODE_SERIES_NAME: &str = "blank_node_series";
 pub fn constant_to_expr(
     constant_term: &ConstantTerm,
     ptype_opt: &Option<PType>,
-) -> Result<(Expr, PType, RDFNodeType), MappingError> {
+) -> Result<(Expr, PType, MappingColumnType), MappingError> {
     let (expr, ptype, rdf_node_type) = match constant_term {
         ConstantTerm::Constant(c) => match c {
             ConstantLiteral::Iri(iri) => {
@@ -28,7 +28,7 @@ pub fn constant_to_expr(
                 (
                     Expr::Literal(polars_literal),
                     PType::Basic(NamedNode::new_unchecked(OTTR_IRI), "ottr:IRI".to_string()),
-                    RDFNodeType::IRI,
+                    MappingColumnType::Flat(RDFNodeType::IRI),
                 )
             }
             ConstantLiteral::BlankNode(_) => {
@@ -52,21 +52,21 @@ pub fn constant_to_expr(
                         lit.data_type_iri.as_ref().unwrap().clone(),
                         lit.data_type_iri.as_ref().unwrap().to_string(),
                     ),
-                    RDFNodeType::Literal(the_dt),
+                    MappingColumnType::Flat(RDFNodeType::Literal(the_dt)),
                 )
             }
             ConstantLiteral::None => (
                 Expr::Literal(LiteralValue::Null),
                 PType::Basic(NamedNode::new_unchecked(NONE_IRI), NONE_IRI.to_string()),
-                RDFNodeType::None,
+                MappingColumnType::Flat(RDFNodeType::None),
             ),
         },
         ConstantTerm::ConstantList(inner) => {
             let mut expressions = vec![];
             let mut last_ptype = None;
-            let mut last_rdf_node_type = None;
+            let mut last_mapping_col_type = None;
             for ct in inner {
-                let (constant_expr, actual_ptype, rdf_node_type) = constant_to_expr(ct, ptype_opt)?;
+                let (constant_expr, actual_ptype, mapping_col_type) = constant_to_expr(ct, ptype_opt)?;
                 if last_ptype.is_none() {
                     last_ptype = Some(actual_ptype);
                 } else if last_ptype.as_ref().unwrap() != &actual_ptype {
@@ -76,13 +76,13 @@ pub fn constant_to_expr(
                         actual_ptype.clone(),
                     ));
                 }
-                last_rdf_node_type = Some(rdf_node_type);
+                last_mapping_col_type = Some(mapping_col_type);
                 expressions.push(constant_expr);
             }
             let out_ptype = PType::List(Box::new(last_ptype.unwrap()));
-            let out_rdf_node_type = last_rdf_node_type.as_ref().unwrap().clone();
+            let out_rdf_node_type = MappingColumnType::Nested(Box::new(last_mapping_col_type.as_ref().unwrap().clone()));
 
-            if let RDFNodeType::Literal(_lit) = last_rdf_node_type.as_ref().unwrap() {
+            if let MappingColumnType::Flat(RDFNodeType::Literal(_lit)) = last_mapping_col_type.as_ref().unwrap() {
                 let mut all_series = vec![];
                 for ex in &expressions {
                     if let Expr::Literal(inner) = ex {

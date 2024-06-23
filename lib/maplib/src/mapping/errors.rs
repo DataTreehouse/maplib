@@ -1,6 +1,7 @@
 use crate::ast::{ConstantTerm, PType};
 use oxrdf::IriParseError;
 use polars::prelude::{DataFrame, DataType, PolarsError};
+use representation::errors::RepresentationError;
 use std::fmt::{Display, Formatter};
 use std::io;
 use thiserror::Error;
@@ -31,6 +32,8 @@ pub enum MappingError {
     TriplestoreError(TriplestoreError),
     MissingDataFrameForNonEmptySignature,
     TurtleParsingError(String),
+    TooDeeplyNestedError(String),
+    DatatypeInferenceError(RepresentationError),
 }
 
 impl Display for MappingError {
@@ -141,6 +144,12 @@ impl Display for MappingError {
             }
             MappingError::TurtleParsingError(t) => {
                 write!(f, "Turtle parsing error: {}", t)
+            }
+            MappingError::TooDeeplyNestedError(s) => {
+                write!(f, "{s}")
+            }
+            MappingError::DatatypeInferenceError(d) => {
+                write!(f, "{d}")
             }
         }
     }

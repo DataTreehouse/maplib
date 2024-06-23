@@ -80,6 +80,7 @@ fn test_all_iri_case() {
         .expand(
             "http://example.net/ns#ExampleTemplate",
             Some(df),
+            None,
             Default::default(),
         )
         .expect("");
@@ -126,6 +127,7 @@ fn test_string_language_tag_cases() {
         .expand(
             "http://example.net/ns#ExampleTemplate",
             Some(df),
+            None,
             ExpandOptions {
                 ..Default::default()
             },
@@ -181,6 +183,7 @@ fn test_const_list_case() {
         .expand(
             "http://example.net/ns#ExampleTemplate",
             Some(df),
+            None,
             Default::default(),
         )
         .expect("");
@@ -252,6 +255,7 @@ ex:Nested [?myVar] :: {
         .expand(
             "http://example.net/ns#ExampleTemplate",
             Some(df),
+            None,
             Default::default(),
         )
         .unwrap();
@@ -390,6 +394,7 @@ ex:ExampleTemplate [
         .expand(
             "http://example.net/ns#ExampleTemplate",
             Some(df),
+            None,
             Default::default(),
         )
         .unwrap();
@@ -621,6 +626,7 @@ ex:AnotherExampleTemplate [?object, ?predicate, ?myList] :: {
         .expand(
             "http://example.net/ns#AnotherExampleTemplate",
             Some(df),
+            None,
             Default::default(),
         )
         .unwrap();
@@ -704,6 +710,7 @@ ex:AnotherExampleTemplate [?subject, ?myList1, ?myList2] :: {
         .expand(
             "http://example.net/ns#AnotherExampleTemplate",
             Some(df),
+            None,
             Default::default(),
         )
         .unwrap();

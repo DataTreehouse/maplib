@@ -2,10 +2,12 @@ use polars::enable_string_cache;
 extern crate core;
 
 mod error;
+mod shacl;
 
 use crate::error::PyMaplibError;
 use pydf_io::to_rust::polars_df_to_rust_df;
 
+use crate::shacl::ValidationReport;
 use log::warn;
 use maplib::document::document_from_str;
 use maplib::errors::MaplibError;
@@ -67,17 +69,6 @@ static GLOBAL: Jemalloc = Jemalloc;
 static GLOBAL: MiMalloc = MiMalloc;
 
 #[pyclass]
-#[derive(Debug, Clone)]
-pub struct ValidationReport {
-    #[pyo3(get)]
-    pub conforms: bool,
-    #[pyo3(get)]
-    pub report: Option<PyObject>,
-    #[pyo3(get)]
-    pub details: Option<PyObject>,
-}
-
-#[pyclass]
 pub struct Mapping {
     inner: InnerMapping,
     sprout: Option<InnerMapping>,
@@ -136,7 +127,7 @@ impl Mapping {
                 parsed_documents.push(parsed_doc);
             }
         }
-        let template_dataset = TemplateDataset::new(parsed_documents)
+        let template_dataset = TemplateDataset::from_documents(parsed_documents)
             .map_err(MaplibError::from)
             .map_err(PyMaplibError::from)?;
         let caching_folder = if let Some(c) = caching_folder {
@@ -190,7 +181,7 @@ impl Mapping {
 
                 let _report = self
                     .inner
-                    .expand(template, Some(df), options.to_rust_expand_options())
+                    .expand(template, Some(df), None, options.to_rust_expand_options())
                     .map_err(MaplibError::from)
                     .map_err(PyMaplibError::from)?;
             } else {
@@ -199,7 +190,7 @@ impl Mapping {
         } else {
             let _report = self
                 .inner
-                .expand(template, None, options.to_rust_expand_options())
+                .expand(template, None, None, options.to_rust_expand_options())
                 .map_err(MaplibError::from)
                 .map_err(PyMaplibError::from)?;
         }
@@ -254,22 +245,15 @@ impl Mapping {
 
     fn validate(
         &mut self,
-        py: Python<'_>,
         shape_graph: String,
-        multi_as_strings: Option<bool>,
         include_details: Option<bool>,
     ) -> PyResult<ValidationReport> {
         let shape_graph = NamedNode::new(shape_graph).map_err(PyMaplibError::from)?;
-        let shacl::ValidationReport {
-            conforms,
-            df,
-            rdf_node_types,
-            details,
-        } = self
+        let report = self
             .inner
             .validate(&shape_graph, include_details.unwrap_or(false))
             .map_err(PyMaplibError::from)?;
-        finish_report(conforms, df, rdf_node_types, multi_as_strings, details, py)
+        Ok(ValidationReport::new(report))
     }
 
     fn insert(
@@ -437,44 +421,6 @@ fn _maplib(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<ValidationReport>()?;
     m.add_class::<RDFType>()?;
     Ok(())
-}
-
-fn finish_report(
-    conforms: bool,
-    df: Option<DataFrame>,
-    rdf_node_types: Option<HashMap<String, RDFNodeType>>,
-    multi_as_strings: Option<bool>,
-    details: Option<EagerSolutionMappings>,
-    py: Python<'_>,
-) -> PyResult<ValidationReport> {
-    let report = if let Some(mut df) = df {
-        (df, _) = fix_cats_and_multicolumns(
-            df,
-            rdf_node_types.unwrap(),
-            multi_as_strings.unwrap_or(true),
-        );
-        Some(df_to_py_df(df, HashMap::new(), py)?)
-    } else {
-        None
-    };
-
-    let details = if let Some(EagerSolutionMappings {
-        mut mappings,
-        rdf_node_types,
-    }) = details
-    {
-        (mappings, _) =
-            fix_cats_and_multicolumns(mappings, rdf_node_types, multi_as_strings.unwrap_or(true));
-        Some(df_to_py_df(mappings, HashMap::new(), py)?)
-    } else {
-        None
-    };
-
-    Ok(ValidationReport {
-        conforms,
-        report,
-        details,
-    })
 }
 
 fn fix_cats_and_multicolumns(

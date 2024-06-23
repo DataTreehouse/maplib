@@ -4,6 +4,7 @@ pub mod query_context;
 pub mod rdf_to_polars;
 pub mod solution_mapping;
 
+pub mod errors;
 pub mod formatting;
 pub mod literals;
 pub mod python;
@@ -16,13 +17,6 @@ use serde::de::{Error, Visitor};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use spargebra::term::TermPattern;
 use std::fmt::{Display, Formatter};
-use thiserror::*;
-
-#[derive(Debug, Error)]
-pub enum RepresentationError {
-    #[error("Invalid literal `{0}`")]
-    InvalidLiteralError(String),
-}
 
 pub const LANG_STRING_VALUE_FIELD: &str = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>";
 pub const LANG_STRING_LANG_FIELD: &str = "l";
@@ -183,7 +177,6 @@ impl BaseRDFNodeType {
             Term::NamedNode(_) => BaseRDFNodeType::IRI,
             Term::BlankNode(_) => BaseRDFNodeType::BlankNode,
             Term::Literal(l) => BaseRDFNodeType::Literal(l.datatype().into_owned()),
-            _ => todo!(),
         }
     }
 
@@ -278,9 +271,6 @@ impl RDFNodeType {
             TermPattern::BlankNode(_) => None,
             TermPattern::Literal(l) => Some(RDFNodeType::Literal(l.datatype().into_owned())),
             TermPattern::Variable(_v) => None,
-            _ => {
-                unimplemented!()
-            }
         }
     }
 

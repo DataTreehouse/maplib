@@ -1,5 +1,5 @@
 use super::{
-    ExpandOptions, Mapping, MappingReport, OTTRTripleInstance, PrimitiveColumn, StaticColumn,
+    ExpandOptions, Mapping, MappingColumnType, MappingReport, OTTRTripleInstance, StaticColumn,
 };
 use crate::ast::{
     ConstantLiteral, ConstantTerm, Instance, ListExpanderType, PType, Signature, StottrTerm,
@@ -10,8 +10,9 @@ use crate::mapping::constant_terms::{constant_blank_node_to_series, constant_to_
 use crate::mapping::errors::MappingError;
 use log::debug;
 use oxrdf::NamedNode;
-use polars::prelude::{col, lit, DataFrame, Expr, IntoLazy, NamedFrom, Series};
+use polars::prelude::{col, lit, DataFrame, DataType, Expr, IntoLazy, NamedFrom, Series};
 use rayon::iter::{IndexedParallelIterator, ParallelDrainRange, ParallelIterator};
+use representation::multitype::split_df_multicols;
 use representation::RDFNodeType;
 use std::cmp::{max, min};
 use std::collections::{HashMap, HashSet};
@@ -25,13 +26,18 @@ impl Mapping {
         &mut self,
         template: &str,
         df: Option<DataFrame>,
+        mapping_column_types: Option<HashMap<String, MappingColumnType>>,
         options: ExpandOptions,
     ) -> Result<MappingReport, MappingError> {
         let now = Instant::now();
         let target_template = self.resolve_template(template)?.clone();
         let target_template_name = target_template.signature.template_name.as_str().to_string();
 
-        let columns = self.validate_infer_dataframe_columns(&target_template.signature, &df)?;
+        let columns = if let Some(mapping_column_types) = mapping_column_types {
+            mapping_column_types
+        } else {
+            self.validate_infer_dataframe_columns(&target_template.signature, &df)?
+        };
         let ExpandOptions {
             unique_subsets: unique_subsets_opt,
         } = options;
@@ -94,7 +100,7 @@ impl Mapping {
         name: &str,
         df: Option<DataFrame>,
         calling_signature: &Signature,
-        dynamic_columns: HashMap<String, PrimitiveColumn>,
+        dynamic_columns: HashMap<String, MappingColumnType>,
         static_columns: HashMap<String, StaticColumn>,
         unique_subsets: Vec<Vec<String>>,
     ) -> Result<(Vec<OTTRTripleInstance>, usize), MappingError> {
@@ -220,12 +226,15 @@ impl Mapping {
             let mut fix_iris = vec![];
             for (coltype, colname) in coltypes_names {
                 if coltype == &RDFNodeType::IRI {
-                    let nonnull = df.column(colname).unwrap().str().unwrap().first_non_null();
-                    if let Some(i) = nonnull {
-                        let first_iri = df.column(colname).unwrap().str().unwrap().get(i).unwrap();
-                        {
-                            if first_iri.starts_with('<') {
-                                fix_iris.push(colname);
+                    if matches!(df.column(colname).unwrap().dtype(), DataType::String) {
+                        let nonnull = df.column(colname).unwrap().str().unwrap().first_non_null();
+                        if let Some(i) = nonnull {
+                            let first_iri =
+                                df.column(colname).unwrap().str().unwrap().get(i).unwrap();
+                            {
+                                if first_iri.starts_with('<') {
+                                    fix_iris.push(colname);
+                                }
                             }
                         }
                     }
@@ -243,13 +252,27 @@ impl Mapping {
             }
             df = lf.collect().unwrap();
 
-            all_triples_to_add.push(TriplesToAdd {
-                df,
-                subject_type: subj_rdf_node_type,
-                object_type: obj_rdf_node_type,
-                static_verb_column: verb,
-                has_unique_subset,
-            });
+            let has_multi = matches!(subj_rdf_node_type, RDFNodeType::MultiType(_))
+                || matches!(obj_rdf_node_type, RDFNodeType::MultiType(_));
+
+            let types = HashMap::from([
+                (SUBJECT_COL_NAME.to_string(), subj_rdf_node_type),
+                (OBJECT_COL_NAME.to_string(), obj_rdf_node_type),
+            ]);
+            let dfs = if has_multi {
+                split_df_multicols(df, &types)
+            } else {
+                vec![(df, types)]
+            };
+            for (df, mut types) in dfs {
+                all_triples_to_add.push(TriplesToAdd {
+                    df,
+                    subject_type: types.remove(SUBJECT_COL_NAME).unwrap(),
+                    object_type: types.remove(OBJECT_COL_NAME).unwrap(),
+                    static_verb_column: verb.clone(),
+                    has_unique_subset,
+                });
+            }
         }
         self.base_triplestore
             .add_triples_vec(all_triples_to_add, call_uuid, false)
@@ -334,12 +357,22 @@ fn create_triples(
     }
     lf = lf.select(keep_cols.as_slice());
     let df = lf.collect().expect("Collect problem");
-    let PrimitiveColumn {
-        rdf_node_type: subj_rdf_node_type,
-    } = dynamic_columns.remove(SUBJECT_COL_NAME).unwrap();
-    let PrimitiveColumn {
-        rdf_node_type: obj_rdf_node_type,
-    } = dynamic_columns.remove(OBJECT_COL_NAME).unwrap();
+    let subj_t = dynamic_columns.remove(SUBJECT_COL_NAME).unwrap();
+    let subj_rdf_node_type = if let MappingColumnType::Flat(t) = subj_t {
+        t
+    } else {
+        return Err(MappingError::TooDeeplyNestedError(format!(
+            "Expected subject of ottr:Triple to be non-nested, but was {subj_t:?}"
+        )));
+    };
+    let obj_t = dynamic_columns.remove(OBJECT_COL_NAME).unwrap();
+    let obj_rdf_node_type = if let MappingColumnType::Flat(t) = obj_t {
+        t
+    } else {
+        return Err(MappingError::TooDeeplyNestedError(format!(
+            "Expected object of ottr:Triple to be non-nested, but was {obj_t:?}"
+        )));
+    };
     Ok((
         df,
         subj_rdf_node_type,
@@ -353,9 +386,8 @@ fn create_dynamic_expression_from_static(
     column_name: &str,
     constant_term: &ConstantTerm,
     ptype: &Option<PType>,
-) -> Result<(Expr, PrimitiveColumn), MappingError> {
-    let (mut expr, _, rdf_node_type) = constant_to_expr(constant_term, ptype)?;
-    let mapped_column = PrimitiveColumn { rdf_node_type };
+) -> Result<(Expr, MappingColumnType), MappingError> {
+    let (mut expr, _, mapped_column) = constant_to_expr(constant_term, ptype)?;
     expr = expr.alias(column_name);
     Ok((expr, mapped_column))
 }
@@ -367,7 +399,7 @@ fn create_series_from_blank_node_constant(
     column_name: &str,
     constant_term: &ConstantTerm,
     n_rows: usize,
-) -> Result<(Series, PrimitiveColumn), MappingError> {
+) -> Result<(Series, MappingColumnType), MappingError> {
     let (mut series, _, rdf_node_type) = constant_blank_node_to_series(
         layer,
         pattern_num,
@@ -376,7 +408,7 @@ fn create_series_from_blank_node_constant(
         n_rows,
     )?;
     series.rename(column_name);
-    let mapped_column = PrimitiveColumn { rdf_node_type };
+    let mapped_column = MappingColumnType::Flat(rdf_node_type);
     Ok((series, mapped_column))
 }
 
@@ -388,14 +420,14 @@ fn create_remapped(
     signature: &Signature,
     calling_signature: &Signature,
     mut series_vec: Vec<Series>,
-    dynamic_columns: &HashMap<String, PrimitiveColumn>,
+    dynamic_columns: &HashMap<String, MappingColumnType>,
     constant_columns: &HashMap<String, StaticColumn>,
     unique_subsets: &Vec<Vec<String>>,
     input_df_height: usize,
 ) -> Result<
     Option<(
         DataFrame,
-        HashMap<String, PrimitiveColumn>,
+        HashMap<String, MappingColumnType>,
         HashMap<String, StaticColumn>,
         Vec<Vec<String>>,
         usize,
@@ -509,6 +541,17 @@ fn create_remapped(
 
     let mut new_unique_subsets = vec![];
     if let Some(le) = &instance.list_expander {
+        for e in &to_expand {
+            if let Some((k, v)) = new_dynamic_columns.remove_entry(e) {
+                if let MappingColumnType::Nested(v) = v {
+                    new_dynamic_columns.insert(k, *v);
+                } else {
+                    todo!()
+                }
+            } else {
+                todo!()
+            }
+        }
         let to_expand_cols: Vec<Expr> = to_expand.iter().map(|x| col(x)).collect();
         match le {
             ListExpanderType::Cross => {
