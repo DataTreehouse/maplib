@@ -1186,7 +1186,7 @@ pub fn drop_inner_contexts(mut sm: SolutionMappings, contexts: &Vec<&Context>) -
         sm.rdf_node_types.remove(cstr);
         inner.push(cstr.to_string());
     }
-    sm.mappings = sm.mappings.drop(inner);
+    sm.mappings = sm.mappings.drop_no_validate(inner);
     sm
 }
 

@@ -14,14 +14,11 @@ members = [
 
 [workspace.dependencies]
 pyo3 = {version = "0.21.2"}
-polars = { version = "0.40.0", features = ["nightly", "performant", "cse"] }
-polars-utils = "0.40.0"
-polars-core = "0.40.0"
-polars-time = "0.40.0"
+polars = { version = "0.41.1", features = ["nightly", "performant", "cse"] }
+polars-utils = "0.41.1"
+polars-core = "0.41.1"
+polars-time = "0.41.1"
 rayon = "1.10.0"
-#oxrdf = {path = "../oxigraph/lib/oxrdf"}
-#oxrdfio = {path = "../oxigraph/lib/oxrdfio"}
-#oxttl = {path="../oxigraph/lib/oxttl"}
 oxrdf = "0.2.0-alpha.5"
 oxrdfio = "0.1.0-alpha.6"
 oxttl = "0.1.0-alpha.6"
@@ -50,10 +47,6 @@ rstest = "0.18.2"
 serial_test = "2.0.0"
 
 [patch.crates-io]
-polars = { git = 'https://github.com/pola-rs/polars.git', rev = "805acd81cfed82248d34fa69875cbe04730f74ce" }
-polars-core = { git = 'https://github.com/pola-rs/polars.git', rev = "805acd81cfed82248d34fa69875cbe04730f74ce" }
-polars-utils = { git = 'https://github.com/pola-rs/polars.git', rev = "805acd81cfed82248d34fa69875cbe04730f74ce" }
-polars-time = { git = 'https://github.com/pola-rs/polars.git', rev = "805acd81cfed82248d34fa69875cbe04730f74ce" }
 oxrdf = { git = 'https://github.com/magbak/oxigraph.git', rev = "e29004cb3e69a8c4157a2e28e6a213f7df7e8dfe"}
 oxttl = { git = 'https://github.com/magbak/oxigraph.git', rev = "e29004cb3e69a8c4157a2e28e6a213f7df7e8dfe"}
 oxrdfio = { git = 'https://github.com/magbak/oxigraph.git', rev = "e29004cb3e69a8c4157a2e28e6a213f7df7e8dfe"}

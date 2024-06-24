@@ -1,6 +1,8 @@
 use oxrdf::vocab::xsd;
 use polars::datatypes::DataType;
-use polars::prelude::{col, cols, str_concat, Expr, GetOutput, IntoSeries};
+use polars::prelude::{
+    col, cols, Expr, ListNameSpaceExtension,
+};
 use representation::query_context::Context;
 use representation::solution_mapping::SolutionMappings;
 use representation::RDFNodeType;
@@ -124,38 +126,15 @@ pub fn group_concat(
         col(column_context.as_str())
             .cast(DataType::String)
             .list()
-            .0
-            .apply(
-                move |s| {
-                    Ok(Some(
-                        str_concat(
-                            s.unique_stable()
-                                .expect("Unique stable error")
-                                .str()
-                                .unwrap(),
-                            use_sep.as_str(),
-                            true,
-                        )
-                        .into_series(),
-                    ))
-                },
-                GetOutput::from_type(DataType::String),
+            .eval(
+                col("").unique_stable().str().join(use_sep.as_str(), true),
+                true,
             )
-            .first()
     } else {
         col(column_context.as_str())
             .cast(DataType::String)
             .list()
-            .0
-            .apply(
-                move |s| {
-                    Ok(Some(
-                        str_concat(s.str().unwrap(), use_sep.as_str(), true).into_series(),
-                    ))
-                },
-                GetOutput::from_type(DataType::String),
-            )
-            .first()
+            .eval(col("").str().join(use_sep.as_str(), true), true)
     };
     (out_expr, out_rdf_node_type)
 }

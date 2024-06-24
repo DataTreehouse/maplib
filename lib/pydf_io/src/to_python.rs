@@ -91,7 +91,7 @@ pub fn df_to_py_df(
         .map(|x| x.to_string())
         .collect();
     let names: Vec<&str> = names_vec.iter().map(|x| x.as_str()).collect();
-    let chunk = df.as_single_chunk().iter_chunks(false).next().unwrap();
+    let chunk = df.as_single_chunk().iter_chunks(false, true).next().unwrap();
     let pyarrow = PyModule::import_bound(py, "pyarrow")?;
     let polars = PyModule::import_bound(py, "polars")?;
     to_py_df(&chunk, names.as_slice(), py, &pyarrow, &polars, types)

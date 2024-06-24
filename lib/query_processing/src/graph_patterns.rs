@@ -170,20 +170,19 @@ pub fn minus(
                 );
             }
         }
-        let all_false = [false].repeat(join_on_cols.len());
         right_mappings = right_mappings.sort_by_exprs(
             join_on_cols.as_slice(),
             SortMultipleOptions::default()
                 .with_maintain_order(false)
                 .with_nulls_last(true)
-                .with_order_descendings(all_false.clone()),
+                .with_order_descending(false),
         );
         left_solution_mappings.mappings = left_solution_mappings.mappings.sort_by_exprs(
             join_on_cols.as_slice(),
             SortMultipleOptions::default()
                 .with_maintain_order(false)
                 .with_nulls_last(true)
-                .with_order_descendings(all_false),
+                .with_order_descending(false),
         );
         left_solution_mappings.mappings = left_solution_mappings.mappings.join(
             right_mappings,
@@ -211,7 +210,7 @@ pub fn order_by(
             .map(|c| col(c.as_str()))
             .collect::<Vec<Expr>>(),
         SortMultipleOptions::default()
-            .with_order_descendings(asc_ordering.iter().map(|asc| !asc).collect::<Vec<bool>>())
+            .with_order_descending_multi(asc_ordering.iter().map(|asc| !asc).collect::<Vec<bool>>())
             .with_nulls_last(true)
             .with_maintain_order(false),
     );

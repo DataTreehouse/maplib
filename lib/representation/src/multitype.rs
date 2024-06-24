@@ -840,7 +840,7 @@ pub fn join_workaround(
         };
         left_mappings = left_mappings.join(right_mappings, &on, &on, join_args);
     } else {
-        left_mappings = left_mappings.cross_join(right_mappings);
+        left_mappings = left_mappings.cross_join(right_mappings, None);
     }
 
     let mut unified_exploded = HashMap::new();
