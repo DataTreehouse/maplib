@@ -27,7 +27,7 @@ use polars::prelude::{
 use polars_core::utils::concat_df;
 use rayon::iter::ParallelIterator;
 use rayon::iter::{IntoParallelRefIterator, ParallelDrainRange};
-use representation::multitype::{lf_column_to_categorical};
+use representation::multitype::lf_column_to_categorical;
 use representation::solution_mapping::SolutionMappings;
 use representation::{literal_iri_to_namednode, RDFNodeType};
 use std::collections::HashMap;

@@ -138,3 +138,15 @@ def test_create_and_write_no_bug_bool_lit_df():
     lines.sort()
     assert lines == ['<http://example.net/ns#myObject> <http://example.net/ns#hasValue> "false"^^<http://www.w3.org/2001/XMLSchema#boolean> .\n',
                      '<http://example.net/ns#myObject> <http://example.net/ns#hasValue> "true"^^<http://www.w3.org/2001/XMLSchema#boolean> .\n']
+
+
+def test_create_and_write_no_bug_lang_string_lit_df():
+    mapping = Mapping()
+    mapping.read_triples_string('<http://example.net/ns#myObject> <http://example.net/ns#hasValue> "HELLO!!"@en .', format="ntriples")
+    ntfile = "create_and_write_no_bug_string_lit.nt"
+    mapping.write_ntriples(ntfile)
+    with open(ntfile) as f:
+        lines = f.readlines()
+
+    lines.sort()
+    assert lines == ['<http://example.net/ns#myObject> <http://example.net/ns#hasValue> "HELLO!!"@en .\n']

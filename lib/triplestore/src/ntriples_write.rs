@@ -27,11 +27,12 @@ use oxrdf::vocab::xsd;
 use parquet_io::scan_parquet;
 use polars::export::rayon::iter::{IntoParallelIterator, ParallelIterator};
 use polars::export::rayon::prelude::ParallelExtend;
-use polars::prelude::{AnyValue, DataFrame, Series};
+use polars::prelude::{col, lit, AnyValue, DataFrame, IntoLazy, Series};
+use polars_core::datatypes::DataType;
 use polars_core::series::SeriesIter;
 use polars_core::POOL;
 use polars_utils::contention_pool::LowContentionPool;
-use representation::BaseRDFNodeType;
+use representation::{BaseRDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD};
 use std::io::Write;
 
 impl Triplestore {
@@ -113,11 +114,35 @@ fn write_ntriples_for_df<W: Write + ?Sized>(
             let thread_offset = thread_no * chunk_size;
             let total_offset = n_rows_finished + thread_offset;
             let mut df = df.slice(total_offset as i64, chunk_size);
-            //We force all objects to string-representations here
+
             let s = convert_to_string(df.column(SUBJECT_COL_NAME).unwrap());
-            let o = convert_to_string(df.column(OBJECT_COL_NAME).unwrap());
             df.with_column(s).unwrap();
-            df.with_column(o).unwrap();
+            if obj_type.is_lang_string() {
+                df = df
+                    .lazy()
+                    .with_columns([
+                        col(OBJECT_COL_NAME)
+                            .struct_()
+                            .field_by_name(LANG_STRING_VALUE_FIELD)
+                            .cast(DataType::String)
+                            .alias(LANG_STRING_VALUE_FIELD),
+                        col(OBJECT_COL_NAME)
+                            .struct_()
+                            .field_by_name(LANG_STRING_LANG_FIELD)
+                            .cast(DataType::String)
+                            .alias(LANG_STRING_LANG_FIELD),
+                    ])
+                    .select([
+                        col(SUBJECT_COL_NAME),
+                        col(LANG_STRING_VALUE_FIELD),
+                        col(LANG_STRING_LANG_FIELD),
+                    ])
+                    .collect()
+                    .unwrap();
+            } else {
+                let o = convert_to_string(df.column(OBJECT_COL_NAME).unwrap());
+                df.with_column(o).unwrap();
+            }
 
             let subject_blank = matches!(subj_type, BaseRDFNodeType::BlankNode);
             let is_plain_string = if let BaseRDFNodeType::Literal(l) = obj_type {
@@ -236,6 +261,11 @@ fn write_lang_string_property_triple(
     v: &str,
     subject_blank: bool,
 ) {
+    let lang = if let AnyValue::String(lang) = any_values.pop().unwrap() {
+        lang
+    } else {
+        panic!()
+    };
     let lex = if let AnyValue::String(lex) = any_values.pop().unwrap() {
         lex
     } else {
@@ -250,7 +280,7 @@ fn write_lang_string_property_triple(
     write!(f, " ").unwrap();
     write_iri(f, v);
     write!(f, " ").unwrap();
-    write_lang_string(f, lex);
+    write_lang_string(f, lex, lang);
     writeln!(f, " .").unwrap();
 }
 
@@ -341,22 +371,9 @@ fn write_iri(f: &mut Vec<u8>, s: &str) {
     write!(f, "<{}>", s).unwrap();
 }
 
-fn write_lang_string(f: &mut Vec<u8>, s: &str) {
-    let s_len_minus4 = s.len() - 4;
-    let mut chars = s.chars();
-    let mut i = 0;
-    loop {
-        if let Some(c) = chars.next() {
-            if i > 0 && i <= s_len_minus4 {
-                write_escaped_char(c, f);
-            } else {
-                write!(f, "{c}").unwrap();
-            }
-            i = i + 1;
-        } else {
-            break;
-        }
-    }
+fn write_lang_string(f: &mut Vec<u8>, lex: &str, lang: &str) {
+    write_string(f, lex);
+    write!(f, "@{}", lang).unwrap();
 }
 
 fn write_string(f: &mut Vec<u8>, s: &str) {

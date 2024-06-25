@@ -66,7 +66,8 @@ pub fn constant_to_expr(
             let mut last_ptype = None;
             let mut last_mapping_col_type = None;
             for ct in inner {
-                let (constant_expr, actual_ptype, mapping_col_type) = constant_to_expr(ct, ptype_opt)?;
+                let (constant_expr, actual_ptype, mapping_col_type) =
+                    constant_to_expr(ct, ptype_opt)?;
                 if last_ptype.is_none() {
                     last_ptype = Some(actual_ptype);
                 } else if last_ptype.as_ref().unwrap() != &actual_ptype {
@@ -80,9 +81,13 @@ pub fn constant_to_expr(
                 expressions.push(constant_expr);
             }
             let out_ptype = PType::List(Box::new(last_ptype.unwrap()));
-            let out_rdf_node_type = MappingColumnType::Nested(Box::new(last_mapping_col_type.as_ref().unwrap().clone()));
+            let out_rdf_node_type = MappingColumnType::Nested(Box::new(
+                last_mapping_col_type.as_ref().unwrap().clone(),
+            ));
 
-            if let MappingColumnType::Flat(RDFNodeType::Literal(_lit)) = last_mapping_col_type.as_ref().unwrap() {
+            if let MappingColumnType::Flat(RDFNodeType::Literal(_lit)) =
+                last_mapping_col_type.as_ref().unwrap()
+            {
                 let mut all_series = vec![];
                 for ex in &expressions {
                     if let Expr::Literal(inner) = ex {

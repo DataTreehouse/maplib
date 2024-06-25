@@ -1,8 +1,6 @@
 use oxrdf::vocab::xsd;
 use polars::datatypes::DataType;
-use polars::prelude::{
-    col, cols, Expr, ListNameSpaceExtension,
-};
+use polars::prelude::{col, cols, Expr, ListNameSpaceExtension};
 use representation::query_context::Context;
 use representation::solution_mapping::SolutionMappings;
 use representation::RDFNodeType;
