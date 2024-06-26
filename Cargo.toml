@@ -14,10 +14,10 @@ members = [
 
 [workspace.dependencies]
 pyo3 = {version = "0.21.2"}
-polars = { version = "0.41.1", features = ["nightly", "performant", "cse"] }
-polars-utils = "0.41.1"
-polars-core = "0.41.1"
-polars-time = "0.41.1"
+polars = { version = "0.41.2", features = ["nightly", "performant", "cse"] }
+polars-utils = "0.41.2"
+polars-core = "0.41.2"
+polars-time = "0.41.2"
 rayon = "1.10.0"
 regex = "1.10.5"
 oxrdf = "0.2.0-alpha.5"
