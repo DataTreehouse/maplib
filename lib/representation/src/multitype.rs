@@ -6,6 +6,7 @@ use polars::prelude::{
     JoinArgs, JoinType, LazyFrame, LazyGroupBy, LiteralValue, UniqueKeepStrategy,
 };
 
+use crate::RDFNodeTypeRef::BlankNode;
 use std::collections::{HashMap, HashSet};
 
 pub const MULTI_IRI_DT: &str = "I";
@@ -583,6 +584,13 @@ pub fn compress_actual_multitypes(
                     updated_types.insert(c, RDFNodeType::None);
                 } else if keep_types.len() == 1 {
                     let t = keep_types.pop().unwrap();
+                    to_single.push((c, t));
+                } else if keep_types.len() == 2 && keep_types.contains(&BaseRDFNodeType::None) {
+                    let t = keep_types
+                        .iter()
+                        .find(|x| *x != &BaseRDFNodeType::None)
+                        .unwrap()
+                        .clone();
                     to_single.push((c, t));
                 } else {
                     let all_cols_exprs: Vec<_> = all_multi_and_is_cols(&keep_types)
