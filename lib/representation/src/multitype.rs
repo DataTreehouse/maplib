@@ -6,7 +6,6 @@ use polars::prelude::{
     JoinArgs, JoinType, LazyFrame, LazyGroupBy, LiteralValue, UniqueKeepStrategy,
 };
 
-use crate::RDFNodeTypeRef::BlankNode;
 use std::collections::{HashMap, HashSet};
 
 pub const MULTI_IRI_DT: &str = "I";

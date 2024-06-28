@@ -52,42 +52,56 @@ pub fn rdf_literal_to_polars_literal_value(lit: &Literal) -> LiteralValue {
         if let Ok(u) = u32::from_str(value) {
             LiteralValue::UInt32(u)
         } else {
+            warn!("Could not parse xsd:unsignedInt {}", value);
             LiteralValue::Null
         }
     } else if datatype == xsd::UNSIGNED_LONG {
         if let Ok(u) = u64::from_str(value) {
             LiteralValue::UInt64(u)
         } else {
+            warn!("Could not parse xsd:unsignedLong {}", value);
             LiteralValue::Null
         }
-    } else if datatype == xsd::INTEGER || datatype == xsd::LONG {
+    } else if datatype == xsd::INTEGER {
         if let Ok(i) = i64::from_str(value) {
             LiteralValue::Int64(i)
         } else {
+            warn!("Could not parse xsd:integer {}", value);
+            LiteralValue::Null
+        }
+    } else if datatype == xsd::LONG {
+        if let Ok(i) = i64::from_str(value) {
+            LiteralValue::Int64(i)
+        } else {
+            warn!("Could not parse xsd:long {}", value);
             LiteralValue::Null
         }
     } else if datatype == xsd::INT {
         if let Ok(i) = i32::from_str(value) {
             LiteralValue::Int32(i)
         } else {
+            warn!("Could not parse xsd:int {}", value);
             LiteralValue::Null
         }
     } else if datatype == xsd::DOUBLE {
         if let Ok(d) = f64::from_str(value) {
             LiteralValue::Float64(d)
         } else {
+            warn!("Could not parse xsd:double {}", value);
             LiteralValue::Null
         }
     } else if datatype == xsd::FLOAT {
         if let Ok(f) = f32::from_str(value) {
             LiteralValue::Float32(f)
         } else {
+            warn!("Could not parse xsd:float {}", value);
             LiteralValue::Null
         }
     } else if datatype == xsd::BOOLEAN {
         if let Ok(b) = bool::from_str(value) {
             LiteralValue::Boolean(b)
         } else {
+            warn!("Could not parse xsd:boolean {}", value);
             LiteralValue::Null
         }
     } else if datatype == xsd::DATE_TIME {
@@ -107,7 +121,7 @@ pub fn rdf_literal_to_polars_literal_value(lit: &Literal) -> LiteralValue {
                     None,
                 )
             } else {
-                warn!("Could not parse datetime: {}", value);
+                warn!("Could not parse xsd:datetime {}", value);
                 LiteralValue::Null
             }
         }
@@ -117,12 +131,14 @@ pub fn rdf_literal_to_polars_literal_value(lit: &Literal) -> LiteralValue {
             let l = LiteralValue::Date(dur.num_days() as i32);
             l
         } else {
+            warn!("Could not parse xsd:date {}", value);
             LiteralValue::Null
         }
     } else if datatype == xsd::DECIMAL {
         if let Ok(d) = f64::from_str(value) {
             LiteralValue::Float64(d)
         } else {
+            warn!("Could not parse xsd:decimal {}", value);
             LiteralValue::Null
         }
     } else {
