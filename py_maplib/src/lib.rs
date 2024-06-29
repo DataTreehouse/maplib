@@ -247,11 +247,16 @@ impl Mapping {
         &mut self,
         shape_graph: String,
         include_details: Option<bool>,
+        include_conforms: Option<bool>,
     ) -> PyResult<ValidationReport> {
         let shape_graph = NamedNode::new(shape_graph).map_err(PyMaplibError::from)?;
         let report = self
             .inner
-            .validate(&shape_graph, include_details.unwrap_or(false))
+            .validate(
+                &shape_graph,
+                include_details.unwrap_or(false),
+                include_conforms.unwrap_or(false),
+            )
             .map_err(PyMaplibError::from)?;
         Ok(ValidationReport::new(report))
     }

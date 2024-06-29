@@ -42,11 +42,11 @@ class ValidationReport:
         :return: Details of the SHACL validation report, as a DataFrame
         """
 
-    def graph(self, include_details: bool = False) -> "Mapping":
+    def graph(self) -> "Mapping":
         """
         Creates a new mapping object where the base graph is the validation report with results.
+        Includes the details of the validation report in the new graph if they exist.
 
-        :param include_details: Include the details of the validation report in the new graph.
         :return:
         """
 
@@ -168,13 +168,16 @@ class Mapping:
 
     def validate(self,
                  shape_graph: str,
-                 include_details: bool = False) -> ValidationReport:
+                 include_details: bool = False,
+                 include_conforms: bool = False,
+                 ) -> ValidationReport:
         """
         Validate the contained knowledge graph using SHACL
         Assumes that the contained knowledge graph also contains SHACL Shapes.
 
         :param shape_graph: The IRI of the Shape Graph.
         :param include_details: Include details of SHACL evaluation alongside the report. Currently uses a lot of memory.
+        :param include_conforms: Include those results that conformed. Also applies to details.
         :return: Validation report containing a report (report.df) and whether the graph conforms (report.conforms)
         """
 

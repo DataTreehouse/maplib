@@ -32,6 +32,13 @@ ottr:Triple(?report, sh:conforms, ?conforms),
 cross | ottr:Triple(?report, sh:result, ++?result),
 } .
 
+maplib:ShaclConformantResultTemplate [
+    ?report,
+    ?result,
+    ] :: {
+ottr:Triple(?report, maplib:conformantResult, ?result),
+} .
+
 maplib:ShaclResultTemplate [
     ?result,
     ?source_shape,
@@ -42,6 +49,7 @@ maplib:ShaclResultTemplate [
     ? ottr:IRI ?details,
     ?result_severity,
     ? ?result_path,
+    ?conforms,
     ? ?details,
     ] :: {
 ottr:Triple(?result, a, sh:ValidationResult),
@@ -52,6 +60,7 @@ ottr:Triple(?result, sh:focusNode, ?focus_node),
 ottr:Triple(?result, sh:resultMessage, ?message),
 ottr:Triple(?result, sh:resultSeverity, ?result_severity),
 ottr:Triple(?result, sh:resultPath, ?result_path),
+ottr:Triple(?result, maplib:resultConforms, ?conforms),
 cross | ottr:Triple(?result, maplib:details, ++?details),
 } .
 "#;
@@ -115,7 +124,7 @@ impl ValidationReport {
         Ok(details)
     }
 
-    pub fn graph(&self, include_details: Option<bool>) -> PyResult<Option<Mapping>> {
+    pub fn graph(&self) -> PyResult<Option<Mapping>> {
         let mut new_mapping = RustMapping::from_str(SHACL_DOC, None).unwrap();
         if let Some(df) = &self.inner.df {
             let (df, column_types) =
@@ -179,25 +188,22 @@ impl ValidationReport {
                     },
                 )
                 .unwrap();
-            if include_details.unwrap_or(false) {
-                if let Some(EagerSolutionMappings {
-                    mappings: details_df,
-                    rdf_node_types: details_types,
-                }) = &self.inner.details
-                {
-                    let (details_df, details_types) =
-                        create_results_input(details_df, details_types);
-                    new_mapping
-                        .expand(
-                            SHACL_RESULT_TEMPLATE,
-                            Some(details_df),
-                            Some(details_types),
-                            RustExpandOptions {
-                                unique_subsets: Some(vec![vec!["result".to_string()]]),
-                            },
-                        )
-                        .unwrap();
-                }
+            if let Some(EagerSolutionMappings {
+                mappings: details_df,
+                rdf_node_types: details_types,
+            }) = &self.inner.details
+            {
+                let (details_df, details_types) = create_results_input(details_df, details_types);
+                new_mapping
+                    .expand(
+                        SHACL_RESULT_TEMPLATE,
+                        Some(details_df),
+                        Some(details_types),
+                        RustExpandOptions {
+                            unique_subsets: Some(vec![vec!["result".to_string()]]),
+                        },
+                    )
+                    .unwrap();
             }
             Ok(Some(Mapping::from_inner_mapping(new_mapping)))
         } else {

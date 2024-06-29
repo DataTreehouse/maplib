@@ -17,6 +17,7 @@ pub fn validate(
     _data_triplestore: &mut Triplestore,
     _shape_triplestore: &mut Triplestore,
     _include_details: bool,
+    _include_conforms: bool,
 ) -> Result<ValidationReport, ShaclError> {
     unimplemented!("Contact Data Treehouse to try")
 }
