@@ -245,6 +245,7 @@ impl Mapping {
         &mut self,
         shape_graph: &NamedNode,
         include_details: bool,
+        include_conforms: bool,
     ) -> Result<ValidationReport, ShaclError> {
         let (shape_graph, mut shape_triplestore) =
             self.triplestores_map.remove_entry(&shape_graph).unwrap();
@@ -253,6 +254,7 @@ impl Mapping {
                 &mut self.base_triplestore,
                 &mut shape_triplestore,
                 include_details,
+                include_conforms,
             )
         } {
             Ok(vr) => {
