@@ -18,6 +18,9 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use spargebra::term::TermPattern;
 use std::fmt::{Display, Formatter};
 
+pub const VERB_COL_NAME: &str = "verb";
+pub const OBJECT_COL_NAME: &str = "object";
+pub const SUBJECT_COL_NAME: &str = "subject";
 pub const LANG_STRING_VALUE_FIELD: &str = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>";
 pub const LANG_STRING_LANG_FIELD: &str = "l";
 

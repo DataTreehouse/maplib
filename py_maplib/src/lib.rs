@@ -9,12 +9,12 @@ use pydf_io::to_rust::polars_df_to_rust_df;
 
 use crate::shacl::ValidationReport;
 use log::warn;
-use maplib::document::document_from_str;
+use templates::dataset::TemplateDataset;
+use templates::document::document_from_str;
 use maplib::errors::MaplibError;
 use maplib::mapping::errors::MappingError;
 use maplib::mapping::ExpandOptions as RustExpandOptions;
 use maplib::mapping::Mapping as InnerMapping;
-use maplib::templates::TemplateDataset;
 use pydf_io::to_python::df_to_py_df;
 use pyo3::prelude::*;
 use std::collections::HashMap;

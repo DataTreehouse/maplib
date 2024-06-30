@@ -1,9 +1,9 @@
 use super::Mapping;
-use crate::ast::{
+use templates::ast::{
     Argument, ConstantLiteral, ConstantTerm, Instance, ListExpanderType, PType, Parameter,
     Signature, StottrTerm, StottrVariable, Template,
 };
-use crate::constants::{
+use templates::constants::{
     DEFAULT_PREDICATE_URI_PREFIX, DEFAULT_TEMPLATE_PREFIX, OTTR_IRI, OTTR_TRIPLE,
 };
 use crate::mapping::errors::MappingError;

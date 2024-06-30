@@ -1,6 +1,6 @@
 [package]
 name = "py_maplib"
-version = "0.10.3"
+version = "0.10.4"
 edition = "2021"
 
 [dependencies]
@@ -9,6 +9,9 @@ triplestore = { path = "../lib/triplestore" }
 representation = { path = "../lib/representation" }
 shacl = { path = "../lib/shacl" }
 pydf_io = { path = "../lib/pydf_io" }
+report_mapping = {path = "../lib/report_mapping"}
+templates = {path= "../lib/templates"}
+
 pyo3.workspace = true
 #oxrdf = {path="../../oxigraph/lib/oxrdf"}
 #oxrdfio = {path="../../oxigraph/lib/oxrdfio"}

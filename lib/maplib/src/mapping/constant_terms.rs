@@ -1,5 +1,5 @@
-use crate::ast::{ConstantLiteral, ConstantTerm, PType};
-use crate::constants::{BLANK_NODE_IRI, NONE_IRI, OTTR_IRI};
+use templates::ast::{ConstantLiteral, ConstantTerm, PType};
+use templates::constants::{BLANK_NODE_IRI, NONE_IRI, OTTR_IRI};
 use crate::mapping::errors::MappingError;
 use crate::mapping::{MappingColumnType, RDFNodeType};
 

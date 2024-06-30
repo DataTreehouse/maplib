@@ -1,4 +1,4 @@
-use crate::constants::{OBJECT_COL_NAME, SUBJECT_COL_NAME};
+use representation::{OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use crate::sparql::errors::SparqlError;
 use crate::TripleTable;
 use polars::prelude::{col, concat, Expr, LazyFrame, UnionArgs};

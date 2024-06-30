@@ -1,11 +1,11 @@
 use super::{
     ExpandOptions, Mapping, MappingColumnType, MappingReport, OTTRTripleInstance, StaticColumn,
 };
-use crate::ast::{
+use templates::ast::{
     ConstantLiteral, ConstantTerm, Instance, ListExpanderType, PType, Signature, StottrTerm,
     StottrVariable,
 };
-use crate::constants::OTTR_TRIPLE;
+use templates::constants::OTTR_TRIPLE;
 use crate::mapping::constant_terms::{constant_blank_node_to_series, constant_to_expr};
 use crate::mapping::errors::MappingError;
 use log::debug;
@@ -17,7 +17,7 @@ use representation::RDFNodeType;
 use std::cmp::{max, min};
 use std::collections::{HashMap, HashSet};
 use std::time::Instant;
-use triplestore::constants::{OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME};
+use representation::{OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME};
 use triplestore::TriplesToAdd;
 use uuid::Uuid;
 

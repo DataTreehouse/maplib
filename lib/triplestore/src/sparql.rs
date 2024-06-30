@@ -9,7 +9,6 @@ use representation::query_context::Context;
 use std::collections::HashMap;
 
 use super::Triplestore;
-use crate::constants::{OBJECT_COL_NAME, OTTR_IRI, SUBJECT_COL_NAME, VERB_COL_NAME};
 use crate::sparql::errors::SparqlError;
 use crate::TriplesToAdd;
 use polars::frame::DataFrame;
@@ -22,6 +21,7 @@ use representation::rdf_to_polars::{
 };
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use representation::RDFNodeType;
+use representation::{OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME};
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 use spargebra::Query;
 use uuid::Uuid;
@@ -221,12 +221,8 @@ fn term_pattern_expression(
             unimplemented!("Blank node term pattern not supported")
         }
         TermPattern::Literal(thelit) => {
-            if thelit.datatype().as_str() == OTTR_IRI {
-                named_node_lit(&NamedNode::new(thelit.to_string()).unwrap(), name)
-            } else {
-                let l = lit(rdf_literal_to_polars_literal_value(thelit)).alias(name);
-                (l, RDFNodeType::Literal(thelit.datatype().into_owned()))
-            }
+            let l = lit(rdf_literal_to_polars_literal_value(thelit)).alias(name);
+            (l, RDFNodeType::Literal(thelit.datatype().into_owned()))
         }
         TermPattern::Variable(v) => variable_expression(rdf_node_types, v, name),
     }

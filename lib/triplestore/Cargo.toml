@@ -17,13 +17,9 @@ polars = {workspace=true, features=["zip_with", "nightly", "performant", "cse", 
 polars-utils = { workspace=true }
 polars-core = {workspace=true}
 log= {workspace=true}
-chrono = { workspace=true }
 uuid = {workspace=true}
 thiserror={ workspace= true }
-env_logger = { workspace=true }
-oxiri = {workspace=true}
 oxrdfio = { workspace = true}
-oxttl = {workspace=true}
 memmap2 = {workspace=true}
 
 [dev-dependencies]

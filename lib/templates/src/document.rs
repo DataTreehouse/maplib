@@ -1,7 +1,7 @@
 use crate::ast::StottrDocument;
+use crate::dataset::errors::TemplateError;
 use crate::parsing::whole_stottr_doc;
 use crate::resolver::resolve_document;
-use crate::templates::errors::TemplateError;
 use std::fs::read_to_string;
 use std::path::Path;
 

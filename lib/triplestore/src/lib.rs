@@ -1,6 +1,5 @@
 extern crate core;
 
-pub mod constants;
 pub mod conversion;
 pub mod errors;
 mod io_funcs;
@@ -11,7 +10,6 @@ pub mod rdfs_inferencing;
 pub mod sparql;
 pub mod triples_read;
 
-use crate::constants::{OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME};
 use crate::errors::TriplestoreError;
 use crate::io_funcs::{create_folder_if_not_exists, delete_tmp_parquets_in_caching_folder};
 use crate::sparql::lazy_graph_patterns::load_tt::multiple_tt_to_lf;
@@ -29,7 +27,9 @@ use rayon::iter::ParallelIterator;
 use rayon::iter::{IntoParallelRefIterator, ParallelDrainRange};
 use representation::multitype::lf_column_to_categorical;
 use representation::solution_mapping::SolutionMappings;
-use representation::{literal_iri_to_namednode, RDFNodeType};
+use representation::{
+    literal_iri_to_namednode, RDFNodeType, OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME,
+};
 use std::collections::HashMap;
 use std::fs::remove_file;
 use std::io;
@@ -421,18 +421,6 @@ pub fn prepare_triples(
     if df.height() == 0 {
         return vec![];
     }
-
-    let map_literal_variants_to_iri = |t: &RDFNodeType| match t {
-        RDFNodeType::Literal(l) => match l.as_str() {
-            constants::OTTR_IRI => RDFNodeType::IRI,
-            _ => RDFNodeType::Literal(l.clone()),
-        },
-        _ => t.clone(),
-    };
-
-    //Important in order to consistently handle URIs
-    let subject_type = map_literal_variants_to_iri(subject_type);
-    let object_type = map_literal_variants_to_iri(object_type);
 
     if let Some(static_verb_column) = static_verb_column {
         df = df.select([SUBJECT_COL_NAME, OBJECT_COL_NAME]).unwrap();

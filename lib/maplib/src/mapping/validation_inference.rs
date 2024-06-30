@@ -1,5 +1,5 @@
 use super::Mapping;
-use crate::ast::{has_iritype, PType, Parameter, Signature};
+use templates::ast::{has_iritype, PType, Parameter, Signature};
 
 use crate::mapping::errors::MappingError;
 use crate::mapping::{MappingColumnType, RDFNodeType};

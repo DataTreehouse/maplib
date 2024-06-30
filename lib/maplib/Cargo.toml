@@ -4,16 +4,14 @@ version = "0.5.2"
 edition = "2021"
 
 [dependencies]
+templates = {path = "../templates"}
 triplestore = { path = "../triplestore" }
-parquet_io = { path = "../parquet_io" }
 shacl = { path = "../shacl" }
 representation = { path = "../representation" }
-spargebra = { path = "../spargebra" }
 
 rayon = { workspace = true }
 oxrdf = { workspace = true }
 polars = { workspace = true, features = ["semi_anti_join", "abs", "round_series", "lazy", "concat_str", "is_in", "dtype-full", "strings", "rows", "timezones", "polars-time", "temporal", "list_eval", "partition_by", "parquet", "cse", "nightly", "performant"] }
-unic-char-range = "0.9.0"
 log = { workspace = true }
 chrono = { workspace = true }
 chrono-tz = { workspace = true }
@@ -21,12 +19,6 @@ uuid = { workspace = true }
 thiserror = { workspace = true }
 env_logger = { workspace = true }
 oxrdfio = { workspace = true }
-nom = { workspace = true, features = ["alloc"] }
-
-#Force higher version due to RUSTSEC-2024-0019
-mio = ">0.8.10"
-#Force higher version as this one is yanked
-iana-time-zone = ">0.1.59"
 
 [dev-dependencies]
 rstest.workspace=true

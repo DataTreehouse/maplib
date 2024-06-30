@@ -4,11 +4,11 @@ pub mod errors;
 pub mod expansion;
 mod validation_inference;
 
-use crate::ast::{ConstantTerm, PType, Template};
-use crate::document::document_from_str;
+use templates::ast::{ConstantTerm, PType, Template};
+use templates::document::document_from_str;
 use crate::errors::MaplibError;
 use crate::mapping::errors::MappingError;
-use crate::templates::TemplateDataset;
+use templates::dataset::TemplateDataset;
 use oxrdf::NamedNode;
 use oxrdfio::RdfFormat;
 use polars::prelude::DataFrame;

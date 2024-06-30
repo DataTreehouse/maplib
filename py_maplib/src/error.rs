@@ -21,9 +21,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+use templates::dataset::errors::TemplateError;
 use maplib::errors::MaplibError;
 use maplib::mapping::errors::MappingError;
-use maplib::templates::errors::TemplateError;
 use oxrdf::IriParseError;
 use polars::prelude::PolarsError;
 use pyo3::{create_exception, exceptions::PyException, prelude::*};

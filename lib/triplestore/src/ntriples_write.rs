@@ -20,7 +20,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 use super::Triplestore;
-use crate::constants::{OBJECT_COL_NAME, SUBJECT_COL_NAME};
+use representation::{OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use crate::conversion::convert_to_string;
 use crate::errors::TriplestoreError;
 use oxrdf::vocab::xsd;

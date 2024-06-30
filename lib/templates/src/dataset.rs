@@ -6,14 +6,14 @@ use crate::ast::{
 };
 use crate::constants::{OTTR_IRI, OTTR_TRIPLE};
 use crate::document::document_from_file;
-use crate::templates::errors::TemplateError;
+use errors::TemplateError;
 use log::warn;
 
 use oxrdf::NamedNode;
 use std::collections::{HashMap, HashSet};
 use std::fs::read_dir;
 use std::path::Path;
-use triplestore::constants::{OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME};
+use representation::{OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME};
 
 #[derive(Clone, Debug)]
 pub struct TemplateDataset {

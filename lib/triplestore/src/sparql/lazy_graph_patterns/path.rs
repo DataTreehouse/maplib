@@ -1,5 +1,5 @@
 use super::Triplestore;
-use crate::constants::{OBJECT_COL_NAME, SUBJECT_COL_NAME};
+use representation::{OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use crate::sparql::errors::SparqlError;
 use oxrdf::vocab::xsd;
 use oxrdf::{NamedNode, Variable};

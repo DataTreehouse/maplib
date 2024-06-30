@@ -7,7 +7,6 @@ edition = "2021"
 representation = { path = "../representation"}
 spargebra = { path = "../spargebra"}
 
-rayon.workspace = true
 oxrdf.workspace = true
 polars = {workspace=true, features=[
     "performant",
@@ -35,11 +34,8 @@ polars = {workspace=true, features=[
     "cum_agg",
     "coalesce"] }
 log.workspace = true
-chrono.workspace = true
-chrono-tz.workspace = true
 uuid.workspace = true
 thiserror.workspace = true
-env_logger.workspace = true
 
 [dev-dependencies]
 rstest.workspace = true

@@ -1,4 +1,4 @@
-use crate::ast::{ConstantTerm, PType};
+use templates::ast::{ConstantTerm, PType};
 use oxrdf::IriParseError;
 use polars::prelude::{DataFrame, DataType, PolarsError};
 use representation::errors::RepresentationError;

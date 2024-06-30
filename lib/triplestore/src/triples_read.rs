@@ -2,7 +2,6 @@ use super::Triplestore;
 use crate::errors::TriplestoreError;
 use crate::TriplesToAdd;
 
-use crate::constants::{OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use log::debug;
 use memmap2::MmapOptions;
 use oxrdf::{BlankNode, NamedNode, Quad, Subject, Term};
@@ -17,6 +16,7 @@ use representation::rdf_to_polars::{
 use representation::{
     BaseRDFNodeType, BaseRDFNodeTypeRef, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD,
 };
+use representation::{OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use std::collections::HashMap;
 use std::fs::File;
 use std::ops::Deref;

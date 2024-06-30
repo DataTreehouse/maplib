@@ -1,5 +1,5 @@
 use crate::mapping::errors::MappingError;
-use crate::templates::errors::TemplateError;
+use templates::dataset::errors::TemplateError;
 use thiserror::Error;
 
 #[derive(Error, Debug)]

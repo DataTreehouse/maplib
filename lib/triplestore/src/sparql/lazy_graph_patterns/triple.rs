@@ -6,7 +6,7 @@ use representation::rdf_to_polars::{
 };
 use representation::solution_mapping::SolutionMappings;
 
-use crate::constants::{OBJECT_COL_NAME, SUBJECT_COL_NAME};
+use representation::{OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use crate::sparql::lazy_graph_patterns::load_tt::multiple_tt_to_lf;
 use log::debug;
 use oxrdf::NamedNode;
