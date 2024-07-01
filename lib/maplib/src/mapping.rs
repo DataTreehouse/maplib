@@ -4,11 +4,8 @@ pub mod errors;
 pub mod expansion;
 mod validation_inference;
 
-use templates::ast::{ConstantTerm, PType, Template};
-use templates::document::document_from_str;
 use crate::errors::MaplibError;
 use crate::mapping::errors::MappingError;
-use templates::dataset::TemplateDataset;
 use oxrdf::NamedNode;
 use oxrdfio::RdfFormat;
 use polars::prelude::DataFrame;
@@ -19,6 +16,10 @@ use shacl::{validate, ValidationReport};
 use std::collections::HashMap;
 use std::io::Write;
 use std::path::Path;
+use templates::ast::{ConstantTermOrList, PType, Template};
+use templates::dataset::TemplateDataset;
+use templates::document::document_from_str;
+use templates::MappingColumnType;
 use triplestore::sparql::errors::SparqlError;
 use triplestore::sparql::QueryResult;
 use triplestore::Triplestore;
@@ -45,14 +46,8 @@ struct OTTRTripleInstance {
 
 #[derive(Clone, Debug)]
 struct StaticColumn {
-    constant_term: ConstantTerm,
+    constant_term: ConstantTermOrList,
     ptype: Option<PType>,
-}
-
-#[derive(Clone, Debug)]
-pub enum MappingColumnType {
-    Nested(Box<MappingColumnType>),
-    Flat(RDFNodeType),
 }
 
 #[derive(Debug, PartialEq)]
@@ -113,6 +108,13 @@ impl Mapping {
         }
         let dataset = TemplateDataset::from_documents(docs).map_err(MaplibError::TemplateError)?;
         Mapping::new(&dataset, caching_folder)
+    }
+
+    pub fn add_template(&mut self, template: Template) -> Result<(), MaplibError> {
+        self.template_dataset
+            .add_template(template)
+            .map_err(|x| MaplibError::TemplateError(x))?;
+        Ok(())
     }
 
     pub fn read_triples(

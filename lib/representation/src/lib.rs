@@ -161,6 +161,12 @@ impl BaseRDFNodeType {
             }
         }
     }
+    pub fn is_iri(&self) -> bool {
+        self == &BaseRDFNodeType::IRI
+    }
+    pub fn is_blank_node(&self) -> bool {
+        self == &BaseRDFNodeType::BlankNode
+    }
 
     pub fn is_lang_string(&self) -> bool {
         self.as_ref().is_lang_string()
@@ -275,6 +281,13 @@ impl RDFNodeType {
             TermPattern::Literal(l) => Some(RDFNodeType::Literal(l.datatype().into_owned())),
             TermPattern::Variable(_v) => None,
         }
+    }
+
+    pub fn is_iri(&self) -> bool {
+        self == &RDFNodeType::IRI
+    }
+    pub fn is_blank_node(&self) -> bool {
+        self == &RDFNodeType::BlankNode
     }
 
     pub fn is_lang_string(&self) -> bool {

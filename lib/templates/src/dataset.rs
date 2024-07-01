@@ -4,16 +4,16 @@ use crate::ast::{
     Instance, PType, Parameter, Signature, Statement, StottrDocument, StottrTerm, StottrVariable,
     Template,
 };
-use crate::constants::{OTTR_IRI, OTTR_TRIPLE};
+use crate::constants::OTTR_TRIPLE;
 use crate::document::document_from_file;
 use errors::TemplateError;
 use log::warn;
 
 use oxrdf::NamedNode;
+use representation::{BaseRDFNodeType, OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME};
 use std::collections::{HashMap, HashSet};
 use std::fs::read_dir;
 use std::path::Path;
-use representation::{OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME};
 
 #[derive(Clone, Debug)]
 pub struct TemplateDataset {
@@ -69,8 +69,8 @@ impl TemplateDataset {
             optional: false,
             non_blank: false,
             ptype: Some(PType::Basic(
-                NamedNode::new_unchecked(OTTR_IRI),
-                "ottr:IRI".to_string(),
+                BaseRDFNodeType::IRI,
+                Some("ottr:IRI".to_string()),
             )),
             stottr_variable: StottrVariable {
                 name: SUBJECT_COL_NAME.to_string(),
@@ -81,8 +81,8 @@ impl TemplateDataset {
             optional: false,
             non_blank: false,
             ptype: Some(PType::Basic(
-                NamedNode::new_unchecked(OTTR_IRI),
-                "ottr:IRI".to_string(),
+                BaseRDFNodeType::IRI,
+                Some("ottr:IRI".to_string()),
             )),
             stottr_variable: StottrVariable {
                 name: VERB_COL_NAME.to_string(),
@@ -102,7 +102,7 @@ impl TemplateDataset {
         let ottr_template = Template {
             signature: Signature {
                 template_name: NamedNode::new_unchecked(OTTR_TRIPLE),
-                template_prefixed_name: "ottr:Triple".to_string(),
+                template_prefixed_name: Some("ottr:Triple".to_string()),
                 parameter_list: vec![ottr_triple_subject, ottr_triple_verb, ottr_triple_object],
                 annotation_list: None,
             },
@@ -161,6 +161,22 @@ impl TemplateDataset {
                 changed = false;
             }
         }
+        Ok(())
+    }
+
+    pub fn add_template(&mut self, template: Template) -> Result<(), TemplateError> {
+        if let Some(prefix) = &template.signature.template_prefixed_name {
+            self.prefix_map
+                .insert(prefix.clone(), template.signature.template_name.clone());
+        }
+        if let Some(pos) = self
+            .templates
+            .iter()
+            .position(|x| x.signature.template_name == template.signature.template_name)
+        {
+            self.templates.remove(pos);
+        }
+        self.templates.push(template);
         Ok(())
     }
 }

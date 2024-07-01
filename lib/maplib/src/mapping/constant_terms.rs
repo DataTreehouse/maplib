@@ -1,9 +1,8 @@
-use templates::ast::{ConstantLiteral, ConstantTerm, PType};
-use templates::constants::{BLANK_NODE_IRI, NONE_IRI, OTTR_IRI};
 use crate::mapping::errors::MappingError;
 use crate::mapping::{MappingColumnType, RDFNodeType};
+use templates::ast::{ConstantTerm, ConstantTermOrList, PType};
 
-use oxrdf::{Literal, NamedNode, Term};
+use oxrdf::{Literal, Term};
 use polars::prelude::{
     concat_list, lit, AnyValue, DataType, Expr, IntoSeries, ListChunked, LiteralValue, Series,
 };
@@ -13,28 +12,29 @@ use representation::rdf_to_polars::{
     polars_literal_values_to_series, rdf_named_node_to_polars_literal_value,
     rdf_term_to_polars_expr,
 };
+use representation::BaseRDFNodeType;
 use std::ops::Deref;
 
 const BLANK_NODE_SERIES_NAME: &str = "blank_node_series";
 
 pub fn constant_to_expr(
-    constant_term: &ConstantTerm,
+    constant_term: &ConstantTermOrList,
     ptype_opt: &Option<PType>,
 ) -> Result<(Expr, PType, MappingColumnType), MappingError> {
     let (expr, ptype, rdf_node_type) = match constant_term {
-        ConstantTerm::Constant(c) => match c {
-            ConstantLiteral::Iri(iri) => {
+        ConstantTermOrList::ConstantTerm(c) => match c {
+            ConstantTerm::Iri(iri) => {
                 let polars_literal = rdf_named_node_to_polars_literal_value(iri);
                 (
                     Expr::Literal(polars_literal),
-                    PType::Basic(NamedNode::new_unchecked(OTTR_IRI), "ottr:IRI".to_string()),
+                    PType::Basic(BaseRDFNodeType::IRI, Some("ottr:IRI".to_string())),
                     MappingColumnType::Flat(RDFNodeType::IRI),
                 )
             }
-            ConstantLiteral::BlankNode(_) => {
+            ConstantTerm::BlankNode(_) => {
                 panic!("Should never happen")
             }
-            ConstantLiteral::Literal(lit) => {
+            ConstantTerm::Literal(lit) => {
                 let dt = lit.data_type_iri.as_ref().map(|nn| nn.as_ref());
                 let language = lit.language.as_deref();
                 let rdf_lit = if let Some(language) = language {
@@ -48,20 +48,17 @@ pub fn constant_to_expr(
                 let expr = rdf_term_to_polars_expr(&Term::Literal(rdf_lit));
                 (
                     expr,
-                    PType::Basic(
-                        lit.data_type_iri.as_ref().unwrap().clone(),
-                        lit.data_type_iri.as_ref().unwrap().to_string(),
-                    ),
+                    PType::Basic(BaseRDFNodeType::Literal(the_dt.clone()), None),
                     MappingColumnType::Flat(RDFNodeType::Literal(the_dt)),
                 )
             }
-            ConstantLiteral::None => (
+            ConstantTerm::None => (
                 Expr::Literal(LiteralValue::Null),
-                PType::Basic(NamedNode::new_unchecked(NONE_IRI), NONE_IRI.to_string()),
+                PType::Basic(BaseRDFNodeType::None, None),
                 MappingColumnType::Flat(RDFNodeType::None),
             ),
         },
-        ConstantTerm::ConstantList(inner) => {
+        ConstantTermOrList::ConstantList(inner) => {
             let mut expressions = vec![];
             let mut last_ptype = None;
             let mut last_mapping_col_type = None;
@@ -134,11 +131,11 @@ pub fn constant_blank_node_to_series(
     layer: usize,
     pattern_num: usize,
     blank_node_counter: usize,
-    constant_term: &ConstantTerm,
+    constant_term: &ConstantTermOrList,
     n_rows: usize,
 ) -> Result<(Series, PType, RDFNodeType), MappingError> {
     Ok(match constant_term {
-        ConstantTerm::Constant(ConstantLiteral::BlankNode(bl)) => {
+        ConstantTermOrList::ConstantTerm(ConstantTerm::BlankNode(bl)) => {
             let any_value_vec: Vec<_> = (blank_node_counter..(blank_node_counter + n_rows))
                 .into_par_iter()
                 .map(|i| {
@@ -156,14 +153,11 @@ pub fn constant_blank_node_to_series(
                     false,
                 )
                 .unwrap(),
-                PType::Basic(
-                    NamedNode::new_unchecked(BLANK_NODE_IRI),
-                    BLANK_NODE_IRI.to_string(),
-                ),
+                PType::Basic(BaseRDFNodeType::BlankNode, None),
                 RDFNodeType::BlankNode,
             )
         }
-        ConstantTerm::ConstantList(_) => {
+        ConstantTermOrList::ConstantList(_) => {
             todo!("Not yet implemented support for lists of blank nodes")
         }
         _ => {

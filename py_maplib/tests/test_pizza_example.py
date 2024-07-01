@@ -14,7 +14,7 @@ def pizzas_mapping():
     @prefix xsd:<http://www.w3.org/2001/XMLSchema#>.
     @prefix ex:<https://github.com/magbak/maplib/pizza#>.
 
-    ex:Pizza[?p, xsd:anyURI ?c, List<xsd:anyURI> ?is] :: {
+    ex:Pizza[?p, xsd:anyURI ?c, List<ottr:IRI> ?is] :: {
     ottr:Triple(?p, a, pizza:Pizza),
     ottr:Triple(?p, pizza:fromCountry, ?c),
     cross | ottr:Triple(?p, pizza:hasIngredient, ++?is)

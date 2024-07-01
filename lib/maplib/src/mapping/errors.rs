@@ -1,9 +1,9 @@
-use templates::ast::{ConstantTerm, PType};
 use oxrdf::IriParseError;
 use polars::prelude::{DataFrame, DataType, PolarsError};
 use representation::errors::RepresentationError;
 use std::fmt::{Display, Formatter};
 use std::io;
+use templates::ast::{ConstantTermOrList, PType};
 use thiserror::Error;
 use triplestore::errors::TriplestoreError;
 
@@ -16,12 +16,12 @@ pub enum MappingError {
     ContainsIrrelevantColumns(Vec<String>),
     CouldNotInferStottrDatatypeForColumn(String, DataType),
     ColumnDataTypeMismatch(String, DataType, PType),
-    InvalidPredicateConstant(ConstantTerm),
+    InvalidPredicateConstant(ConstantTermOrList),
     PTypeNotSupported(String, PType),
     UnknownTimeZoneError(String),
     UnknownVariableError(String),
-    ConstantDoesNotMatchDataType(ConstantTerm, PType, PType),
-    ConstantListHasInconsistentPType(ConstantTerm, PType, PType),
+    ConstantDoesNotMatchDataType(ConstantTermOrList, PType, PType),
+    ConstantListHasInconsistentPType(ConstantTermOrList, PType, PType),
     NoTemplateForTemplateNameFromPrefix(String),
     FileCreateIOError(io::Error),
     WriteParquetError(PolarsError),

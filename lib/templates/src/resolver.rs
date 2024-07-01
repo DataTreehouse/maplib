@@ -1,10 +1,10 @@
 use crate::ast::{
-    Annotation, Argument, ConstantLiteral, ConstantTerm, DefaultValue, Directive, Instance, PType,
-    Parameter, Signature, Statement, StottrDocument, StottrLiteral, StottrTerm, Template,
+    Annotation, Argument, ConstantTerm, ConstantTermOrList, DefaultValue, Directive, Instance,
+    PType, Parameter, Signature, Statement, StottrDocument, StottrLiteral, StottrTerm, Template,
 };
 use crate::constants::{
-    OTTR_IRI, OTTR_PREFIX, OTTR_PREFIX_IRI, RDFS_PREFIX, RDFS_PREFIX_IRI, RDF_PREFIX,
-    RDF_PREFIX_IRI, XSD_PREFIX, XSD_PREFIX_IRI,
+    OTTR_IRI, OTTR_PREFIX, OTTR_PREFIX_IRI, OWL_PREFIX_IRI, RDFS_PREFIX, RDFS_PREFIX_IRI,
+    RDF_PREFIX, RDF_PREFIX_IRI, XSD_PREFIX, XSD_PREFIX_IRI,
 };
 use crate::parsing::parsing_ast::{
     ResolvesToNamedNode, UnresolvedAnnotation, UnresolvedArgument, UnresolvedBaseTemplate,
@@ -13,8 +13,8 @@ use crate::parsing::parsing_ast::{
     UnresolvedStottrDocument, UnresolvedStottrLiteral, UnresolvedStottrTerm, UnresolvedTemplate,
 };
 use log::warn;
-use oxrdf::vocab::xsd;
 use oxrdf::{IriParseError, NamedNode};
+use representation::BaseRDFNodeType;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
@@ -133,12 +133,12 @@ fn resolve_signature(
     })
 }
 
-fn get_name(resolves_to_name: &ResolvesToNamedNode) -> String {
+fn get_name(resolves_to_name: &ResolvesToNamedNode) -> Option<String> {
     match &resolves_to_name {
         ResolvesToNamedNode::PrefixedName(pname) => {
-            format!("{}:{}", pname.prefix, pname.name)
+            Some(format!("{}:{}", pname.prefix, pname.name))
         }
-        ResolvesToNamedNode::NamedNode(nn) => nn.to_string(),
+        ResolvesToNamedNode::NamedNode(_) => None,
     }
 }
 
@@ -199,17 +199,17 @@ fn resolve_stottr_term(
 fn resolve_constant_term(
     unresolved_constant_term: &UnresolvedConstantTerm,
     prefix_map: &mut HashMap<String, NamedNode>,
-) -> Result<ConstantTerm, ResolutionError> {
+) -> Result<ConstantTermOrList, ResolutionError> {
     Ok(match unresolved_constant_term {
         UnresolvedConstantTerm::Constant(c) => {
-            ConstantTerm::Constant(resolve_constant_literal(c, prefix_map)?)
+            ConstantTermOrList::ConstantTerm(resolve_constant_literal(c, prefix_map)?)
         }
         UnresolvedConstantTerm::ConstantList(cl) => {
             let mut constant_terms = vec![];
             for uct in cl {
                 constant_terms.push(resolve_constant_term(uct, prefix_map)?);
             }
-            ConstantTerm::ConstantList(constant_terms)
+            ConstantTermOrList::ConstantList(constant_terms)
         }
     })
 }
@@ -217,15 +217,15 @@ fn resolve_constant_term(
 fn resolve_constant_literal(
     unresolved_constant_literal: &UnresolvedConstantLiteral,
     prefix_map: &HashMap<String, NamedNode>,
-) -> Result<ConstantLiteral, ResolutionError> {
+) -> Result<ConstantTerm, ResolutionError> {
     Ok(match unresolved_constant_literal {
-        UnresolvedConstantLiteral::Iri(iri) => ConstantLiteral::Iri(resolve(iri, prefix_map)?),
-        UnresolvedConstantLiteral::BlankNode(bn) => ConstantLiteral::BlankNode(bn.clone()),
+        UnresolvedConstantLiteral::Iri(iri) => ConstantTerm::Iri(resolve(iri, prefix_map)?),
+        UnresolvedConstantLiteral::BlankNode(bn) => ConstantTerm::BlankNode(bn.clone()),
         UnresolvedConstantLiteral::Literal(lit) => {
             let resolved_lit = resolve_stottr_literal(lit, prefix_map)?;
-            ConstantLiteral::Literal(resolved_lit)
+            ConstantTerm::Literal(resolved_lit)
         }
-        UnresolvedConstantLiteral::None => ConstantLiteral::None,
+        UnresolvedConstantLiteral::None => ConstantTerm::None,
     })
 }
 
@@ -282,12 +282,15 @@ fn resolve_ptype(
 ) -> Result<PType, ResolutionError> {
     Ok(match unresolved_ptype {
         UnresolvedPType::Basic(b) => {
-            let mut resolved = resolve(b, prefix_map)?;
-            if resolved.as_ref() == xsd::ANY_URI {
-                warn!("To resolve an inconsistency, xsd:anyURI will in the future used to represent literal IRI/URIs while ottr:IRI is used as the type of actual IRI/URIs.\nPlease replace xsd:anyURI with ottr:IRI to get rid of this warning.");
-                resolved = NamedNode::new_unchecked(OTTR_IRI);
-            }
-            PType::Basic(resolved, get_name(b))
+            let resolved = resolve(b, prefix_map)?;
+            //TODO: Fix this hack properly..
+            let t =
+                if resolved.as_str() == OTTR_IRI || resolved.as_str().starts_with(OWL_PREFIX_IRI) {
+                    BaseRDFNodeType::IRI
+                } else {
+                    BaseRDFNodeType::Literal(resolved)
+                };
+            PType::Basic(t, get_name(b))
         }
         UnresolvedPType::Lub(l) => PType::Lub(Box::new(resolve_ptype(l, prefix_map)?)),
         UnresolvedPType::List(l) => PType::List(Box::new(resolve_ptype(l, prefix_map)?)),

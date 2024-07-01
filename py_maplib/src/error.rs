@@ -21,7 +21,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-use templates::dataset::errors::TemplateError;
 use maplib::errors::MaplibError;
 use maplib::mapping::errors::MappingError;
 use oxrdf::IriParseError;
@@ -29,6 +28,7 @@ use polars::prelude::PolarsError;
 use pyo3::{create_exception, exceptions::PyException, prelude::*};
 use shacl::errors::ShaclError;
 use std::fmt::Debug;
+use templates::dataset::errors::TemplateError;
 use thiserror::Error;
 use triplestore::errors::TriplestoreError;
 use triplestore::sparql::errors::SparqlError;
@@ -51,6 +51,8 @@ pub enum PyMaplibError {
     ShaclError(#[from] ShaclError),
     #[error(transparent)]
     IriParseError(#[from] IriParseError),
+    #[error("Function argument error: `{0}`")]
+    FunctionArgumentError(String),
 }
 
 impl std::convert::From<PyMaplibError> for PyErr {
@@ -70,6 +72,9 @@ impl std::convert::From<PyMaplibError> for PyErr {
             PyMaplibError::IriParseError(err) => {
                 IriParseErrorException::new_err(format!("{}", err))
             }
+            PyMaplibError::FunctionArgumentError(s) => {
+                FunctionArgumentErrorException::new_err(s.clone())
+            }
         }
     }
 }
@@ -82,3 +87,4 @@ create_exception!(exceptions, TemplateErrorException, PyException);
 create_exception!(exceptions, TriplestoreErrorException, PyException);
 create_exception!(exceptions, ShaclErrorException, PyException);
 create_exception!(exceptions, IriParseErrorException, PyException);
+create_exception!(exceptions, FunctionArgumentErrorException, PyException);

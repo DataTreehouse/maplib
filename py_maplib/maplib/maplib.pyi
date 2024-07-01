@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Union, List, Dict, Optional, Callable, Tuple
+from typing import Union, List, Dict, Optional, Callable, Tuple, Literal as LiteralType
 from polars import DataFrame
 
 
@@ -13,6 +13,151 @@ class RDFType:
     Unknown: Callable[[], "RDFType"]
 
 
+class NestedRDFType:
+    """
+    The type of a variable in a template. Can be nested (lists).
+    """
+    Flat: Callable[[RDFType], "NestedRDFType"]
+    Nested: Callable[["NestedRDFType"], "NestedRDFType"]
+
+
+class Variable:
+    """
+    A variable in a template.
+    """
+
+    def __init__(self, name: str):
+        """
+        Create a new variable.
+        :param name: The name of the variable.
+        """
+        ...
+
+
+class IRI:
+    """
+    An IRI.
+    """
+
+    def __init__(self, iri: str):
+        """
+        Create a new IRI
+        :param iri: IRI (without < and >).
+        """
+
+
+class Prefix:
+    """
+    A prefix that can be used to ergonomically build iris.
+    """
+
+    def __init__(self, prefix, iri):
+        """
+        Create a new prefix.
+        :param prefix: The name of the prefix
+        :param iri: The prefix IRI.
+        """
+
+    def suf(self, suffix: str) -> IRI:
+        """
+        Create a IRI by appending the suffix.
+        :param suffix: The suffix to append.
+        :return:
+        """
+
+
+class Literal:
+    """
+    An RDF literal.
+    """
+
+    def __init__(self, value: str, data_type: IRI = None, language: str = None):
+        """
+        Create a new RDF Literal
+        :param value: The lexical representation of the value.
+        :param data_type: The data type of the value (an IRI).
+        :param language: The language tag of the value.
+        """
+
+
+class Parameter:
+    def __init__(self,
+                 variable: Variable,
+                 optional: bool = False,
+                 allow_blank: bool = True,
+                 rdf_type: Union[NestedRDFType, RDFType] = None):
+        """
+        Create a new parameter.
+        :param variable: The variable.
+        :param optional: Can the variable be unbound?
+        :param allow_blank: Can the variable be bound to a blank node?
+        :param rdf_type: The type of the variable. Can be nested.
+        """
+
+
+class Argument:
+    def __init__(self, term: Union[Variable, IRI, Literal], list_expand: bool):
+        """
+        An argument for a template instance.
+        :param term: The term.
+        :param list_expand: Should the argument be expanded? Used with the list_expander argument of instance.
+        """
+
+
+class Instance:
+    def __init__(self,
+                 iri: IRI,
+                 arguments: List[Union[Argument, Variable, IRI, Literal]],
+                 list_expander: LiteralType["cross", "zipMin", "zipMax"] = None):
+        """
+        A template instance.
+        :param iri: The IRI of the template to be instantiated.
+        :param arguments: The arguments for template instantiation.
+        :param list_expander: (How) should we do list expansion?
+        """
+
+    @staticmethod
+    def triple(subject: Union[Argument, Variable, IRI],
+               predicate: Union[Argument, Variable, IRI],
+               object: Union[Argument, Variable, IRI, Literal],
+               list_expander: LiteralType["cross", "zipMin", "zipMax"] = None) -> Instance:
+        """
+        Instantiate the ottr:Triple-template.
+        :param subject: The predicate of the triple.
+        :param predicate: The predicate of the triple.
+        :param object: The object of the triple.
+        :param list_expander: (How) should we do list-expansion?
+        :return:
+        """
+
+
+class Template:
+    """
+    An OTTR Template.
+    """
+
+    def __init__(self,
+                 iri: IRI,
+                 parameters: List[Parameter],
+                 instances: List[Instance]):
+        """
+        Create a new OTTR Template
+        :param iri: The IRI of the template
+        :param parameters:
+        :param instances:
+        """
+
+    def instance(self,
+                 arguments: List[Union[Argument, Variable, IRI, Literal]],
+                 list_expander: LiteralType["cross", "zipMin", "zipMax"] = None) -> Instance:
+        """
+
+        :param arguments: The arguments to the template.
+        :param list_expander: (How) should we list-expand?
+        :return:
+        """
+
+
 ParametersType = Dict[str, Tuple[DataFrame, Dict[str, RDFType]]]
 
 
@@ -24,7 +169,7 @@ class ValidationReport:
     conforms: bool
 
     def results(self,
-               multi_as_strings: bool = True) -> Optional[DataFrame]:
+                multi_as_strings: bool = True) -> Optional[DataFrame]:
         """
         Return the results of the validation report, if they exist.
 
@@ -75,7 +220,15 @@ class Mapping:
 
     def __init__(self, documents: Union[str, List[str]] = None, caching_folder: str = None) -> Mapping: ...
 
-    def expand(self, template: str, df: DataFrame = None, unique_subset: List[str] = None) -> None:
+    def add_template(self, template: Template):
+        """
+        Add a template to the mapping. Overwrites any existing template with the same IRI.
+        :param template: The template to add.
+        :return:
+        """
+
+    def expand(self, template: Union[str, Template, IRI],
+               df: DataFrame = None, unique_subset: List[str] = None) -> None:
         """
         Expand a template using a DataFrame
         Usage:
@@ -85,7 +238,7 @@ class Mapping:
 
         If the template has no arguments, the df argument is not necessary.
 
-        :param template: String identifying the template: prefix:name or full IRI
+        :param template: Template, IRI, IRI string or prefixed template name.
         :param df: DataFrame where the columns have the same names as the template arguments
         :param unique_subset: DataFrame column names known to be unique e.g. ["colA", "colB"], for a performance boost (reduce costly deduplication)
         """
@@ -183,7 +336,7 @@ class Mapping:
 
     def read_triples(self,
                      file_path: Union[str, Path],
-                     format: str = None,
+                     format: LiteralType["ntriples", "turtle", "rdf/xml", "xml", "rdfxml"] = None,
                      base_iri: str = None,
                      transient: bool = False,
                      parallel: bool = False,
@@ -212,7 +365,7 @@ class Mapping:
 
     def read_triples_string(self,
                             s: str,
-                            format: str,
+                            format: LiteralType["ntriples", "turtle", "rdf/xml", "xml", "rdfxml"],
                             base_iri: str = None,
                             transient: bool = False,
                             parallel: bool = False,

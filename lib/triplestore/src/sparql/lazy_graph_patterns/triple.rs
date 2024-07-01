@@ -6,7 +6,6 @@ use representation::rdf_to_polars::{
 };
 use representation::solution_mapping::SolutionMappings;
 
-use representation::{OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use crate::sparql::lazy_graph_patterns::load_tt::multiple_tt_to_lf;
 use log::debug;
 use oxrdf::NamedNode;
@@ -15,6 +14,7 @@ use polars::prelude::{col, lit, AnyValue, DataFrame, DataType, Expr, JoinType, S
 use query_processing::graph_patterns::{join, union};
 use representation::multitype::convert_lf_col_to_multitype;
 use representation::{literal_iri_to_namednode, BaseRDFNodeType, RDFNodeType};
+use representation::{OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 use std::collections::{HashMap, HashSet};
 

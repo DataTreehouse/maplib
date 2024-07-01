@@ -1,11 +1,11 @@
 use super::Mapping;
-use templates::ast::{has_iritype, PType, Parameter, Signature};
+use templates::ast::{PType, Parameter, Signature};
 
 use crate::mapping::errors::MappingError;
-use crate::mapping::{MappingColumnType, RDFNodeType};
 use polars::prelude::{DataFrame, DataType};
 use representation::polars_to_rdf::polars_type_to_literal_type;
 use std::collections::{HashMap, HashSet};
+use templates::MappingColumnType;
 
 impl Mapping {
     pub fn validate_infer_dataframe_columns(
@@ -65,13 +65,7 @@ fn validate_infer_column_data_type(
 
 fn infer_rdf_node_type(ptype: &PType) -> MappingColumnType {
     match ptype {
-        PType::Basic(b, _) => {
-            if has_iritype(b.as_str()) {
-                MappingColumnType::Flat(RDFNodeType::IRI)
-            } else {
-                MappingColumnType::Flat(RDFNodeType::Literal(b.clone()))
-            }
-        }
+        PType::Basic(b, _) => MappingColumnType::Flat(b.as_rdf_node_type()),
         PType::Lub(l) => MappingColumnType::Nested(Box::new(infer_rdf_node_type(l))),
         PType::List(l) => MappingColumnType::Nested(Box::new(infer_rdf_node_type(l))),
         PType::NEList(l) => MappingColumnType::Nested(Box::new(infer_rdf_node_type(l))),

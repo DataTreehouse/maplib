@@ -1,11 +1,4 @@
-use super::{
-    ExpandOptions, Mapping, MappingColumnType, MappingReport, OTTRTripleInstance, StaticColumn,
-};
-use templates::ast::{
-    ConstantLiteral, ConstantTerm, Instance, ListExpanderType, PType, Signature, StottrTerm,
-    StottrVariable,
-};
-use templates::constants::OTTR_TRIPLE;
+use super::{ExpandOptions, Mapping, MappingReport, OTTRTripleInstance, StaticColumn};
 use crate::mapping::constant_terms::{constant_blank_node_to_series, constant_to_expr};
 use crate::mapping::errors::MappingError;
 use log::debug;
@@ -14,10 +7,16 @@ use polars::prelude::{col, lit, DataFrame, DataType, Expr, IntoLazy, NamedFrom, 
 use rayon::iter::{IndexedParallelIterator, ParallelDrainRange, ParallelIterator};
 use representation::multitype::split_df_multicols;
 use representation::RDFNodeType;
+use representation::{OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME};
 use std::cmp::{max, min};
 use std::collections::{HashMap, HashSet};
 use std::time::Instant;
-use representation::{OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME};
+use templates::ast::{
+    ConstantTerm, ConstantTermOrList, Instance, ListExpanderType, PType, Signature, StottrTerm,
+    StottrVariable,
+};
+use templates::constants::OTTR_TRIPLE;
+use templates::MappingColumnType;
 use triplestore::TriplesToAdd;
 use uuid::Uuid;
 
@@ -330,7 +329,7 @@ fn create_triples(
 
     for (k, sc) in static_columns {
         if k == VERB_COL_NAME {
-            if let ConstantTerm::Constant(ConstantLiteral::Iri(nn)) = &sc.constant_term {
+            if let ConstantTermOrList::ConstantTerm(ConstantTerm::Iri(nn)) = &sc.constant_term {
                 verb = Some(nn.clone());
             } else {
                 return Err(MappingError::InvalidPredicateConstant(
@@ -384,7 +383,7 @@ fn create_triples(
 
 fn create_dynamic_expression_from_static(
     column_name: &str,
-    constant_term: &ConstantTerm,
+    constant_term: &ConstantTermOrList,
     ptype: &Option<PType>,
 ) -> Result<(Expr, MappingColumnType), MappingError> {
     let (mut expr, _, mapped_column) = constant_to_expr(constant_term, ptype)?;
@@ -397,7 +396,7 @@ fn create_series_from_blank_node_constant(
     pattern_num: usize,
     blank_node_counter: usize,
     column_name: &str,
-    constant_term: &ConstantTerm,
+    constant_term: &ConstantTermOrList,
     n_rows: usize,
 ) -> Result<(Series, MappingColumnType), MappingError> {
     let (mut series, _, rdf_node_type) = constant_blank_node_to_series(

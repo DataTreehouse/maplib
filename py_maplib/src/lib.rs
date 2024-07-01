@@ -9,8 +9,6 @@ use pydf_io::to_rust::polars_df_to_rust_df;
 
 use crate::shacl::ValidationReport;
 use log::warn;
-use templates::dataset::TemplateDataset;
-use templates::document::document_from_str;
 use maplib::errors::MaplibError;
 use maplib::mapping::errors::MappingError;
 use maplib::mapping::ExpandOptions as RustExpandOptions;
@@ -20,6 +18,8 @@ use pyo3::prelude::*;
 use std::collections::HashMap;
 use std::fs::File;
 use std::path::{Path, PathBuf};
+use templates::dataset::TemplateDataset;
+use templates::document::document_from_str;
 use triplestore::sparql::{QueryResult as SparqlQueryResult, QueryResult};
 
 //The below snippet controlling alloc-library is from https://github.com/pola-rs/polars/blob/main/py-polars/src/lib.rs
@@ -27,7 +27,7 @@ use triplestore::sparql::{QueryResult as SparqlQueryResult, QueryResult};
 //Copyright (c) 2020 Ritchie Vink
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
+// of this software and associated documentation files (the "Software"), to deapub pub l
 // in the Software without restriction, including without limitation the rights
 // to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 // copies of the Software, and to permit persons to whom the Software is
@@ -53,12 +53,16 @@ use representation::formatting::format_iris_and_blank_nodes;
 use representation::multitype::{
     compress_actual_multitypes, lf_column_from_categorical, multi_columns_to_string_cols,
 };
-use representation::python::RDFType;
+use representation::python::PyRDFType;
 use representation::solution_mapping::EagerSolutionMappings;
 use representation::{BaseRDFNodeType, RDFNodeType};
 
 #[cfg(not(target_os = "linux"))]
 use mimalloc::MiMalloc;
+use templates::python::{
+    PyArgument, PyIRI, PyInstance, PyLiteral, PyNestedRDFType, PyParameter, PyPrefix, PyTemplate,
+    PyVariable,
+};
 
 #[cfg(target_os = "linux")]
 #[global_allocator]
@@ -96,7 +100,7 @@ impl ExpandOptions {
     }
 }
 
-type ParametersType<'a> = HashMap<String, (Bound<'a, PyAny>, HashMap<String, RDFType>)>;
+type ParametersType<'a> = HashMap<String, (Bound<'a, PyAny>, HashMap<String, PyRDFType>)>;
 
 #[pymethods]
 impl Mapping {
@@ -142,6 +146,13 @@ impl Mapping {
         })
     }
 
+    fn add_template(&mut self, template: PyTemplate) -> PyResult<()> {
+        self.inner
+            .add_template(template.into_inner())
+            .map_err(PyMaplibError::from)?;
+        Ok(())
+    }
+
     fn create_sprout(&mut self) -> PyResult<()> {
         let mut sprout =
             InnerMapping::new(&self.inner.template_dataset, None).map_err(PyMaplibError::from)?;
@@ -164,10 +175,25 @@ impl Mapping {
 
     fn expand(
         &mut self,
-        template: &str,
+        template: &Bound<'_, PyAny>,
         df: Option<&Bound<'_, PyAny>>,
         unique_subset: Option<Vec<String>>,
     ) -> PyResult<Option<PyObject>> {
+        let template = if let Ok(i) = template.extract::<PyIRI>() {
+            i.into_inner().to_string()
+        } else if let Ok(t) = template.extract::<PyTemplate>() {
+            let t_string = t.template.signature.template_name.as_str().to_string();
+            self.add_template(t)?;
+            t_string
+        } else if let Ok(s) = template.extract::<String>() {
+            s
+        } else {
+            return Err(PyMaplibError::FunctionArgumentError(
+                "Template must be IRI or str".to_string(),
+            )
+            .into());
+        };
+
         let unique_subsets = if let Some(unique_subset) = unique_subset {
             Some(vec![unique_subset.into_iter().collect()])
         } else {
@@ -181,7 +207,7 @@ impl Mapping {
 
                 let _report = self
                     .inner
-                    .expand(template, Some(df), None, options.to_rust_expand_options())
+                    .expand(&template, Some(df), None, options.to_rust_expand_options())
                     .map_err(MaplibError::from)
                     .map_err(PyMaplibError::from)?;
             } else {
@@ -190,7 +216,7 @@ impl Mapping {
         } else {
             let _report = self
                 .inner
-                .expand(template, None, None, options.to_rust_expand_options())
+                .expand(&template, None, None, options.to_rust_expand_options())
                 .map_err(MaplibError::from)
                 .map_err(PyMaplibError::from)?;
         }
@@ -424,7 +450,16 @@ fn _maplib(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     enable_string_cache();
     m.add_class::<Mapping>()?;
     m.add_class::<ValidationReport>()?;
-    m.add_class::<RDFType>()?;
+    m.add_class::<PyRDFType>()?;
+    m.add_class::<PyPrefix>()?;
+    m.add_class::<PyNestedRDFType>()?;
+    m.add_class::<PyVariable>()?;
+    m.add_class::<PyLiteral>()?;
+    m.add_class::<PyIRI>()?;
+    m.add_class::<PyParameter>()?;
+    m.add_class::<PyArgument>()?;
+    m.add_class::<PyTemplate>()?;
+    m.add_class::<PyInstance>()?;
     Ok(())
 }
 
@@ -483,7 +518,7 @@ fn dtypes_map(map: HashMap<String, RDFNodeType>) -> HashMap<String, String> {
 }
 
 fn map_parameters(
-    parameters: Option<HashMap<String, (Bound<'_, PyAny>, HashMap<String, RDFType>)>>,
+    parameters: Option<HashMap<String, (Bound<'_, PyAny>, HashMap<String, PyRDFType>)>>,
 ) -> PyResult<Option<HashMap<String, EagerSolutionMappings>>> {
     if let Some(parameters) = parameters {
         let mut mapped_parameters = HashMap::new();

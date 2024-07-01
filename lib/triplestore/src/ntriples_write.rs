@@ -20,7 +20,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 use super::Triplestore;
-use representation::{OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use crate::conversion::convert_to_string;
 use crate::errors::TriplestoreError;
 use oxrdf::vocab::xsd;
@@ -33,6 +32,7 @@ use polars_core::series::SeriesIter;
 use polars_core::POOL;
 use polars_utils::contention_pool::LowContentionPool;
 use representation::{BaseRDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD};
+use representation::{OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use std::io::Write;
 
 impl Triplestore {

@@ -26,7 +26,7 @@ def blank_person_mapping():
     @prefix ottr: 	<http://ns.ottr.xyz/0.4/> . 
     @prefix ax: 	<http://tpl.ottr.xyz/owl/axiom/0.1/> . 
     @prefix rstr: 	<http://tpl.ottr.xyz/owl/restriction/0.1/> .
-    ex:Person[ ?firstName, ?lastName, xsd:anyURI ?email ] :: {
+    ex:Person[ ?firstName, ?lastName, ottr:IRI ?email ] :: {
       ottr:Triple(_:person, rdf:type, foaf:Person ),
       ottr:Triple(_:person, foaf:firstName, ?firstName ),
       ottr:Triple(_:person, foaf:lastName, ?lastName ),

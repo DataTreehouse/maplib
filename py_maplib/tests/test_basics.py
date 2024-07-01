@@ -1,5 +1,5 @@
 import polars as pl
-from maplib import Mapping
+from maplib import Mapping, Template, IRI, Instance, Prefix
 from polars.testing import assert_frame_equal
 
 def test_create_mapping_from_empty_polars_df():
@@ -13,7 +13,6 @@ def test_create_mapping_from_empty_polars_df():
     df = pl.DataFrame({"MyValue": []})
     mapping = Mapping([doc])
     mapping.expand("http://example.net/ns#ExampleTemplate", df)
-
 
 def test_create_mapping_with_optional_value_missing_df():
     doc = """
@@ -98,6 +97,80 @@ def test_uri_subject_query():
     expected_df = pl.DataFrame({"obj2":"<http://example.net/ns#myOtherObject>"})
 
     assert_frame_equal(qres, expected_df)
+
+
+def test_programmatic_mapping():
+    example_template = Template(
+        iri=IRI("http://example.net/ns#ExampleTemplate"),
+        parameters=[],
+        instances=[Instance.triple(
+            IRI("http://example.net/ns#myObject"),
+            IRI("http://example.net/ns#hasObj"),
+            IRI("http://example.net/ns#myOtherObject"),
+        )]
+    )
+
+    mapping = Mapping()
+    mapping.add_template(example_template)
+    mapping.expand("http://example.net/ns#ExampleTemplate")
+    qres = mapping.query(
+        """
+        PREFIX ex:<http://example.net/ns#>
+
+        SELECT ?obj2 WHERE {
+        ex:myObject ex:hasObj ?obj2
+        } 
+        """
+    )
+    expected_df = pl.DataFrame({"obj2":"<http://example.net/ns#myOtherObject>"})
+
+    assert_frame_equal(qres, expected_df)
+
+
+def test_programmatic_mapping_to_string():
+    ex = Prefix("ex", "http://example.net/ns#")
+    example_template = Template(
+        iri=ex.suf("ExampleTemplate"),
+        parameters=[],
+        instances=[Instance.triple(
+            ex.suf("myObject"),
+            ex.suf("hasObj"),
+            ex.suf("myOtherObject"),
+        )]
+    )
+    assert str(example_template) == """<http://example.net/ns#ExampleTemplate> [ ] :: {
+  <http://ns.ottr.xyz/0.4/Triple>(<http://example.net/ns#myObject>,<http://example.net/ns#hasObj>,<http://example.net/ns#myOtherObject>)
+} . 
+"""
+
+
+def test_programmatic_mapping_with_prefix():
+    ex = Prefix("ex", "http://example.net/ns#")
+    example_template = Template(
+        iri=ex.suf("ExampleTemplate"),
+        parameters=[],
+        instances=[Instance.triple(
+            ex.suf("myObject"),
+            ex.suf("hasObj"),
+            ex.suf("myOtherObject"),
+        )]
+    )
+
+    mapping = Mapping()
+    mapping.expand(example_template)
+    qres = mapping.query(
+        """
+        PREFIX ex:<http://example.net/ns#>
+
+        SELECT ?obj2 WHERE {
+        ex:myObject ex:hasObj ?obj2
+        } 
+        """
+    )
+    expected_df = pl.DataFrame({"obj2":"<http://example.net/ns#myOtherObject>"})
+
+    assert_frame_equal(qres, expected_df)
+
 
 def test_create_and_write_no_bug_string_lit_df():
     doc = """

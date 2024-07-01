@@ -1,17 +1,16 @@
 use super::Mapping;
-use templates::ast::{
-    Argument, ConstantLiteral, ConstantTerm, Instance, ListExpanderType, PType, Parameter,
-    Signature, StottrTerm, StottrVariable, Template,
-};
-use templates::constants::{
-    DEFAULT_PREDICATE_URI_PREFIX, DEFAULT_TEMPLATE_PREFIX, OTTR_IRI, OTTR_TRIPLE,
-};
 use crate::mapping::errors::MappingError;
 use crate::mapping::ExpandOptions;
 use log::warn;
+use templates::ast::{
+    Argument, ConstantTerm, ConstantTermOrList, Instance, ListExpanderType, PType, Parameter,
+    Signature, StottrTerm, StottrVariable, Template,
+};
+use templates::constants::{DEFAULT_PREDICATE_URI_PREFIX, DEFAULT_TEMPLATE_PREFIX, OTTR_TRIPLE};
 
 use oxrdf::NamedNode;
 use polars::prelude::{col, DataFrame, DataType, IntoLazy};
+use representation::BaseRDFNodeType;
 use uuid::Uuid;
 
 impl Mapping {
@@ -56,8 +55,8 @@ impl Mapping {
                     optional: has_null,
                     non_blank: false,
                     ptype: Some(PType::Basic(
-                        NamedNode::new_unchecked(OTTR_IRI),
-                        "ottr:IRI".to_string(),
+                        BaseRDFNodeType::IRI,
+                        Some("ottr:IRI".to_string()),
                     )),
                     stottr_variable: StottrVariable {
                         name: c.to_string(),
@@ -85,8 +84,8 @@ impl Mapping {
                     optional: has_null,
                     non_blank: false,
                     ptype: Some(PType::Basic(
-                        NamedNode::new_unchecked(OTTR_IRI),
-                        "ottr:IRI".to_string(),
+                        BaseRDFNodeType::IRI,
+                        Some("ottr:IRI".to_string()),
                     )),
                     stottr_variable: StottrVariable {
                         name: c.to_string(),
@@ -118,7 +117,7 @@ impl Mapping {
                 patterns.push(Instance {
                     list_expander: list_expander.clone(),
                     template_name: NamedNode::new(OTTR_TRIPLE).unwrap(),
-                    prefixed_template_name: "ottr:Triple".to_string(),
+                    prefixed_template_name: Some("ottr:Triple".to_string()),
                     argument_list: vec![
                         Argument {
                             list_expand: false,
@@ -128,8 +127,8 @@ impl Mapping {
                         },
                         Argument {
                             list_expand: false,
-                            term: StottrTerm::ConstantTerm(ConstantTerm::Constant(
-                                ConstantLiteral::Iri(
+                            term: StottrTerm::ConstantTerm(ConstantTermOrList::ConstantTerm(
+                                ConstantTerm::Iri(
                                     NamedNode::new(format!("{}{}", &use_predicate_uri_prefix, c))
                                         .unwrap(),
                                 ),
@@ -149,7 +148,7 @@ impl Mapping {
         let template = Template {
             signature: Signature {
                 template_name: NamedNode::new(template_name.clone()).unwrap(),
-                template_prefixed_name: format!("prefix:{}", template_uuid),
+                template_prefixed_name: Some(format!("prefix:{}", template_uuid)),
                 parameter_list: params,
                 annotation_list: None,
             },

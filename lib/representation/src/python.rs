@@ -1,22 +1,22 @@
 use oxrdf::{IriParseError, NamedNode};
 use pyo3::pyclass;
 
-#[pyclass]
-#[derive(Clone)]
-pub enum RDFType {
+#[derive(Clone, Debug)]
+#[pyclass(name = "RDFType")]
+pub enum PyRDFType {
     IRI {},
     Blank {},
     Literal { iri: String },
     Unknown {},
 }
 
-impl RDFType {
+impl PyRDFType {
     pub fn to_rust(&self) -> Result<crate::BaseRDFNodeType, IriParseError> {
         Ok(match self {
-            RDFType::IRI { .. } => crate::BaseRDFNodeType::IRI,
-            RDFType::Blank { .. } => crate::BaseRDFNodeType::BlankNode,
-            RDFType::Literal { iri } => crate::BaseRDFNodeType::Literal(NamedNode::new(iri)?),
-            RDFType::Unknown { .. } => crate::BaseRDFNodeType::None,
+            PyRDFType::IRI { .. } => crate::BaseRDFNodeType::IRI,
+            PyRDFType::Blank { .. } => crate::BaseRDFNodeType::BlankNode,
+            PyRDFType::Literal { iri } => crate::BaseRDFNodeType::Literal(NamedNode::new(iri)?),
+            PyRDFType::Unknown { .. } => crate::BaseRDFNodeType::None,
         })
     }
 }

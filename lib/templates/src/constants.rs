@@ -7,13 +7,11 @@ pub const RDFS_PREFIX: &str = "rdfs";
 pub const RDFS_PREFIX_IRI: &str = "http://www.w3.org/2000/01/rdf-schema#";
 pub const XSD_PREFIX: &str = "xsd";
 pub const XSD_PREFIX_IRI: &str = "http://www.w3.org/2001/XMLSchema#";
-pub const BLANK_NODE_IRI: &str = "BLANK_NODE_IRI";
-pub const NONE_IRI: &str = "NONE_IRI";
 pub const DEFAULT_PREDICATE_URI_PREFIX: &str = "https://github.com/magbak/maplib/Predicates#";
 pub const DEFAULT_TEMPLATE_PREFIX: &str = "default:";
 
 pub const OTTR_IRI: &str = "http://ns.ottr.xyz/0.4/IRI";
 
-pub const OWL: &str = "http://www.w3.org/2002/07/owl#";
+pub const OWL_PREFIX_IRI: &str = "http://www.w3.org/2002/07/owl#";
 
 pub const XSD_ANY_URI: &str = "http://www.w3.org/2001/XMLSchema#anyURI";

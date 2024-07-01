@@ -31,7 +31,7 @@ def windpower_mapping():
         ottr:Triple(?TargetAspectNodeIRI, rdfs:label, ?Label)
     } .
     
-    tpl:RDSSystem [?SystemIRI, xsd:anyURI ?RDSType, ?Label] :: {
+    tpl:RDSSystem [?SystemIRI, ottr:IRI ?RDSType, ?Label] :: {
         ottr:Triple(?SystemIRI, rdf:type, ?RDSType),
         ottr:Triple(?SystemIRI, rdfs:label, ?Label)
     } .
@@ -42,7 +42,7 @@ def windpower_mapping():
         ottr:Triple(?ValueNodeIRI, ct:hasStaticValue, ?Value)
     } .
     
-    tpl:Timeseries [?ParentIRI, ?TimeseriesNodeIRI, ?Label, ?ExternalId, xsd:anyURI ?Datatype] :: {
+    tpl:Timeseries [?ParentIRI, ?TimeseriesNodeIRI, ?Label, ?ExternalId, ottr:IRI ?Datatype] :: {
         ottr:Triple(?ParentIRI, ct:hasTimeseries, ?TimeseriesNodeIRI),
         ottr:Triple(?TimeseriesNodeIRI, ct:hasExternalId, ?ExternalId),
         ottr:Triple(?TimeseriesNodeIRI, ct:hasDatatype, ?Datatype),

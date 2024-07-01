@@ -1,8 +1,9 @@
 #[cfg(test)]
 use crate::constants::OTTR_TRIPLE;
-use crate::constants::{BLANK_NODE_IRI, OTTR_IRI, OWL, XSD_ANY_URI};
+use crate::constants::{OTTR_IRI, OWL_PREFIX_IRI, XSD_ANY_URI};
 use oxrdf::vocab::xsd;
 use oxrdf::{BlankNode, NamedNode};
+use representation::BaseRDFNodeType;
 use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter};
 
@@ -48,14 +49,18 @@ impl Display for Template {
 #[derive(PartialEq, Debug, Clone)]
 pub struct Signature {
     pub template_name: NamedNode,
-    pub template_prefixed_name: String,
+    pub template_prefixed_name: Option<String>,
     pub parameter_list: Vec<Parameter>,
     pub annotation_list: Option<Vec<Annotation>>,
 }
 
 impl Display for Signature {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        std::fmt::Display::fmt(&self.template_prefixed_name, f)?;
+        if let Some(template_prefixed_name) = &self.template_prefixed_name {
+            write!(f, "{}", template_prefixed_name)?;
+        } else {
+            write!(f, "{}", &self.template_name)?;
+        }
         write!(f, " [")?;
         for (idx, p) in self.parameter_list.iter().enumerate() {
             std::fmt::Display::fmt(p, f)?;
@@ -106,7 +111,7 @@ impl Display for Parameter {
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum PType {
-    Basic(NamedNode, String),
+    Basic(BaseRDFNodeType, Option<String>),
     Lub(Box<PType>),
     List(Box<PType>),
     NEList(Box<PType>),
@@ -114,31 +119,35 @@ pub enum PType {
 
 impl PType {
     pub fn is_blank_node(&self) -> bool {
-        if let PType::Basic(nn, _) = &self {
-            if nn.as_str() == BLANK_NODE_IRI {
-                return true;
-            }
+        if let PType::Basic(t, _) = &self {
+            t.is_blank_node()
+        } else {
+            false
         }
-        false
     }
 
     pub fn is_iri(&self) -> bool {
-        if let PType::Basic(nn, _) = self {
-            return has_iritype(nn.as_str());
+        if let PType::Basic(t, _) = self {
+            t.is_iri()
+        } else {
+            false
         }
-        false
     }
 }
 
 pub fn has_iritype(s: &str) -> bool {
-    matches!(s, XSD_ANY_URI | OTTR_IRI) || s.starts_with(OWL)
+    matches!(s, XSD_ANY_URI | OTTR_IRI) || s.starts_with(OWL_PREFIX_IRI)
 }
 
 impl Display for PType {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            PType::Basic(_nn, s) => {
-                write!(f, "{}", s)
+            PType::Basic(nn, s) => {
+                if let Some(s) = s {
+                    write!(f, "{}", s)
+                } else {
+                    write!(f, "{}", nn)
+                }
             }
             PType::Lub(lt) => {
                 let s = lt.to_string();
@@ -169,7 +178,7 @@ impl Display for StottrVariable {
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct DefaultValue {
-    pub constant_term: ConstantTerm,
+    pub constant_term: ConstantTermOrList,
 }
 
 impl Display for DefaultValue {
@@ -179,16 +188,16 @@ impl Display for DefaultValue {
 }
 
 #[derive(PartialEq, Debug, Clone)]
-pub enum ConstantTerm {
-    Constant(ConstantLiteral),
-    ConstantList(Vec<ConstantTerm>),
+pub enum ConstantTermOrList {
+    ConstantTerm(ConstantTerm),
+    ConstantList(Vec<ConstantTermOrList>),
 }
 
-impl ConstantTerm {
+impl ConstantTermOrList {
     pub fn has_blank_node(&self) -> bool {
         match self {
-            ConstantTerm::Constant(c) => c.is_blank_node(),
-            ConstantTerm::ConstantList(l) => {
+            ConstantTermOrList::ConstantTerm(c) => c.is_blank_node(),
+            ConstantTermOrList::ConstantList(l) => {
                 for c in l {
                     if c.has_blank_node() {
                         return true;
@@ -200,11 +209,11 @@ impl ConstantTerm {
     }
 }
 
-impl Display for ConstantTerm {
+impl Display for ConstantTermOrList {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            ConstantTerm::Constant(c) => std::fmt::Display::fmt(c, f),
-            ConstantTerm::ConstantList(l) => {
+            ConstantTermOrList::ConstantTerm(c) => std::fmt::Display::fmt(c, f),
+            ConstantTermOrList::ConstantList(l) => {
                 write!(f, "(")?;
                 for (idx, ct) in l.iter().enumerate() {
                     std::fmt::Display::fmt(ct, f)?;
@@ -219,26 +228,26 @@ impl Display for ConstantTerm {
 }
 
 #[derive(PartialEq, Debug, Clone)]
-pub enum ConstantLiteral {
+pub enum ConstantTerm {
     Iri(NamedNode),
     BlankNode(BlankNode),
     Literal(StottrLiteral),
     None,
 }
 
-impl ConstantLiteral {
+impl ConstantTerm {
     pub fn is_blank_node(&self) -> bool {
-        matches!(self, ConstantLiteral::BlankNode(_))
+        matches!(self, ConstantTerm::BlankNode(_))
     }
 }
 
-impl Display for ConstantLiteral {
+impl Display for ConstantTerm {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            ConstantLiteral::Iri(i) => std::fmt::Display::fmt(i, f),
-            ConstantLiteral::BlankNode(bn) => std::fmt::Display::fmt(bn, f),
-            ConstantLiteral::Literal(lit) => std::fmt::Display::fmt(lit, f),
-            ConstantLiteral::None => {
+            ConstantTerm::Iri(i) => std::fmt::Display::fmt(i, f),
+            ConstantTerm::BlankNode(bn) => std::fmt::Display::fmt(bn, f),
+            ConstantTerm::Literal(lit) => std::fmt::Display::fmt(lit, f),
+            ConstantTerm::None => {
                 write!(f, "none")
             }
         }
@@ -273,7 +282,7 @@ impl Display for StottrLiteral {
 pub struct Instance {
     pub list_expander: Option<ListExpanderType>,
     pub template_name: NamedNode,
-    pub prefixed_template_name: String,
+    pub prefixed_template_name: Option<String>,
     pub argument_list: Vec<Argument>,
 }
 
@@ -283,7 +292,11 @@ impl Display for Instance {
             std::fmt::Display::fmt(le, f)?;
             write!(f, " | ")?;
         }
-        write!(f, "{}", &self.prefixed_template_name)?;
+        if let Some(prefixed_template_name) = &self.prefixed_template_name {
+            write!(f, "{}", prefixed_template_name)?;
+        } else {
+            write!(f, "{}", &self.template_name)?;
+        }
         write!(f, "(")?;
         for (idx, a) in self.argument_list.iter().enumerate() {
             std::fmt::Display::fmt(a, f)?;
@@ -352,7 +365,7 @@ impl Display for ListExpanderType {
 #[derive(PartialEq, Debug, Clone)]
 pub enum StottrTerm {
     Variable(StottrVariable),
-    ConstantTerm(ConstantTerm),
+    ConstantTerm(ConstantTermOrList),
     List(Vec<StottrTerm>),
 }
 
@@ -387,19 +400,19 @@ fn test_display_easy_template() {
     let template = Template {
         signature: Signature {
             template_name: NamedNode::new("http://MYTEMPLATEURI#Templ").unwrap(),
-            template_prefixed_name: "prefix:Templ".to_string(),
+            template_prefixed_name: Some("prefix:Templ".to_string()),
             parameter_list: vec![Parameter {
                 optional: true,
                 non_blank: true,
                 ptype: Some(PType::Basic(
-                    xsd::DOUBLE.into_owned(),
-                    "xsd:double".to_string(),
+                    BaseRDFNodeType::Literal(xsd::DOUBLE.into_owned()),
+                    Some("xsd:double".to_string()),
                 )),
                 stottr_variable: StottrVariable {
                     name: "myVar".to_string(),
                 },
                 default_value: Some(DefaultValue {
-                    constant_term: ConstantTerm::Constant(ConstantLiteral::Literal(
+                    constant_term: ConstantTermOrList::ConstantTerm(ConstantTerm::Literal(
                         StottrLiteral {
                             value: "0.1".to_string(),
                             language: None,
@@ -413,7 +426,7 @@ fn test_display_easy_template() {
         pattern_list: vec![Instance {
             list_expander: None,
             template_name: NamedNode::new(OTTR_TRIPLE).unwrap(),
-            prefixed_template_name: "ottr:Triple".to_string(),
+            prefixed_template_name: Some("ottr:Triple".to_string()),
             argument_list: vec![Argument {
                 list_expand: false,
                 term: StottrTerm::Variable(StottrVariable {

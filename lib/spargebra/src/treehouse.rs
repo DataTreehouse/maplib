@@ -148,17 +148,6 @@ impl Display for SimpleTimestampExpression {
 }
 
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub struct WindowExpression {
-    duration: Duration,
-}
-
-impl Display for WindowExpression {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.duration)
-    }
-}
-
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum TimestampBinaryOperator {
     Plus,
     Minus,
