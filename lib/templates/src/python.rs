@@ -163,10 +163,10 @@ impl PyParameter {
                     PyNestedRDFType::Flat { rdf_type: r }
                         .as_inner(py)
                         .map_err(PyTemplateError::from)?
-                        .as_pvtype(),
+                        .as_ptype(),
                 )
             } else if let Ok(r) = data_type.extract::<PyNestedRDFType>() {
-                Some(r.as_inner(py).map_err(PyTemplateError::from)?.as_pvtype())
+                Some(r.as_inner(py).map_err(PyTemplateError::from)?.as_ptype())
             } else {
                 panic!("Handle error")
             }
