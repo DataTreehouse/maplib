@@ -609,14 +609,8 @@ pub fn func_expression(
         }
         Function::LangMatches => {
             assert!(args.len() == 2);
-            let literal_to_check = args_contexts.get(&0).unwrap();
-            let lang_expr = get_lang_expr(
-                literal_to_check.as_str(),
-                solution_mappings
-                    .rdf_node_types
-                    .get(args_contexts.get(&0).unwrap().as_str())
-                    .unwrap(),
-            );
+            let lang_expr = col(args_contexts.get(&0).unwrap().as_str());
+
             if let Expression::Literal(l) = args.get(1).unwrap() {
                 if l.value() == "*" {
                     solution_mappings.mappings = solution_mappings
@@ -1016,32 +1010,6 @@ pub fn func_expression(
     }
     solution_mappings = drop_inner_contexts(solution_mappings, &args_contexts.values().collect());
     Ok(solution_mappings)
-}
-
-fn get_lang_expr(c: &str, dt: &RDFNodeType) -> Expr {
-    match dt {
-        RDFNodeType::Literal(l) => {
-            if l.as_ref() == rdf::LANG_STRING {
-                return col(c)
-                    .struct_()
-                    .field_by_name(LANG_STRING_LANG_FIELD)
-                    .cast(DataType::String);
-            }
-        }
-        RDFNodeType::MultiType(ts) => {
-            //Prioritize column that is lang string
-            for t in ts {
-                if t.is_lang_string() {
-                    return col(c)
-                        .struct_()
-                        .field_by_name(LANG_STRING_LANG_FIELD)
-                        .cast(DataType::String);
-                }
-            }
-        }
-        _ => {}
-    }
-    lit(LiteralValue::Null).cast(DataType::String)
 }
 
 pub fn in_expression(

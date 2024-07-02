@@ -260,20 +260,6 @@ impl PyInstance {
         };
         Ok(PyInstance { instance })
     }
-
-    #[staticmethod]
-    pub fn triple<'py>(
-        subject: Bound<'py, PyAny>,
-        predicate: Bound<'py, PyAny>,
-        object: Bound<'py, PyAny>,
-        list_expander: Option<String>,
-    ) -> PyResult<Self> {
-        Self::new(
-            PyIRI::new(OTTR_TRIPLE.to_string())?,
-            vec![subject, predicate, object],
-            list_expander,
-        )
-    }
 }
 
 impl PyInstance {
@@ -342,4 +328,18 @@ impl PyTemplate {
     pub fn into_inner(self) -> Template {
         self.template
     }
+}
+
+#[pyfunction(name = "triple")]
+pub fn py_triple<'py>(
+    subject: Bound<'py, PyAny>,
+    predicate: Bound<'py, PyAny>,
+    object: Bound<'py, PyAny>,
+    list_expander: Option<String>,
+) -> PyResult<PyInstance> {
+    PyInstance::new(
+        PyIRI::new(OTTR_TRIPLE.to_string())?,
+        vec![subject, predicate, object],
+        list_expander,
+    )
 }
