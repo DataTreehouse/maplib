@@ -45,21 +45,21 @@ use triplestore::sparql::{QueryResult as SparqlQueryResult, QueryResult};
 // SOFTWARE.
 #[cfg(target_os = "linux")]
 use jemallocator::Jemalloc;
-use oxrdf::vocab::rdf;
 use oxrdf::NamedNode;
+use oxrdf::vocab::rdf;
 use oxrdfio::RdfFormat;
-use polars::prelude::IntoLazy;
+use polars::prelude::{IntoLazy};
 use pyo3::types::PyList;
 use representation::python::PyRDFType;
 use representation::solution_mapping::EagerSolutionMappings;
-use representation::RDFNodeType;
+use representation::{RDFNodeType};
 
 #[cfg(not(target_os = "linux"))]
 use mimalloc::MiMalloc;
 
 use templates::python::{
-    py_triple, PyArgument, PyIRI, PyInstance, PyLiteral, PyParameter, PyPrefix, PyTemplate,
-    PyVariable, PyXSD,
+    py_triple, PyArgument, PyIRI, PyInstance, PyLiteral, PyParameter, PyPrefix,
+    PyTemplate, PyVariable, PyXSD
 };
 
 #[cfg(target_os = "linux")]
