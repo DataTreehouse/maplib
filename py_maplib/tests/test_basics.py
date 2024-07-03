@@ -1,5 +1,5 @@
 import polars as pl
-from maplib import Mapping, Template, IRI, Prefix, triple
+from maplib import Mapping, Template, IRI, Prefix, triple, Variable, Parameter
 from polars.testing import assert_frame_equal
 
 def test_create_mapping_from_empty_polars_df():
@@ -49,6 +49,45 @@ def test_create_mapping_with_optional_value_missing_df():
     )
     assert qres.height == 0
 
+
+def test_create_programmatic_mapping_with_optional_value_missing_df():
+    df = pl.DataFrame({"MyValue": ["A"]})
+    mapping = Mapping()
+    ex = Prefix("ex","http://example.net/ns#")
+    my_value = Variable("MyValue")
+    my_other_value = Variable("MyOtherValue")
+    my_object = ex.suf("MyObject")
+    template = Template(
+        ex.suf("ExampleTemplate"),
+        [Parameter(my_value), Parameter(my_other_value, optional=True)],
+        [
+            triple(my_object, ex.suf("hasValue"), my_value),
+            triple(my_object, ex.suf("hasOtherValue"), my_other_value)
+         ]
+    )
+    mapping.expand(template, df)
+    qres = mapping.query(
+        """
+        PREFIX ex:<http://example.net/ns#>
+        
+        SELECT ?A WHERE {
+        ?obj1 ex:hasValue ?A
+        } 
+        """
+    )
+    expected_df = pl.DataFrame({"A":["A"],})
+    assert_frame_equal(qres, expected_df)
+
+    qres = mapping.query(
+        """
+        PREFIX ex:<http://example.net/ns#>
+        
+        SELECT ?A WHERE {
+        ?obj1 ex:hasOtherValue ?A
+        } 
+        """
+    )
+    assert qres.height == 0
 
 def test_create_mapping_from_empty_signature():
     doc = """
