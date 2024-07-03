@@ -1,15 +1,12 @@
-use crate::ast::{
-    Argument, ConstantTerm, ConstantTermOrList, Instance, ListExpanderType, Parameter, Signature,
-    StottrLiteral, StottrTerm, StottrVariable, Template,
-};
-use crate::constants::OTTR_TRIPLE;
-use crate::MappingColumnType;
+use crate::ast::{Argument, ConstantTerm, ConstantTermOrList, Instance, ListExpanderType, Parameter, Signature, StottrLiteral, StottrTerm, StottrVariable, Template};
+use crate::constants::{OTTR_TRIPLE, XSD_PREFIX};
 use oxrdf::{IriParseError, NamedNode};
 use pyo3::create_exception;
 use pyo3::exceptions::PyException;
 use pyo3::prelude::*;
 use representation::python::PyRDFType;
 use thiserror::Error;
+use crate::MappingColumnType;
 
 #[derive(Error, Debug)]
 pub enum PyTemplateError {
@@ -46,26 +43,6 @@ impl PyPrefix {
 
     fn suf(&self, suffix: String) -> PyResult<PyIRI> {
         PyIRI::new(format!("{}{}", self.iri.as_str(), suffix))
-    }
-}
-
-#[derive(Clone, Debug)]
-#[pyclass(name = "NestedRDFType")]
-pub enum PyNestedRDFType {
-    Flat { rdf_type: PyRDFType },
-    Nested { nested_type: Py<PyNestedRDFType> },
-}
-
-impl PyNestedRDFType {
-    pub fn as_inner(&self, py: Python) -> Result<MappingColumnType, IriParseError> {
-        match self {
-            PyNestedRDFType::Flat { rdf_type } => Ok(MappingColumnType::Flat(
-                rdf_type.to_rust()?.as_rdf_node_type(),
-            )),
-            PyNestedRDFType::Nested { nested_type } => Ok(MappingColumnType::Nested(Box::new(
-                Py::borrow(nested_type, py).as_inner(py)?,
-            ))),
-        }
     }
 }
 
@@ -160,13 +137,10 @@ impl PyParameter {
         let data_type = if let Some(data_type) = rdf_type {
             if let Ok(r) = data_type.extract::<PyRDFType>() {
                 Some(
-                    PyNestedRDFType::Flat { rdf_type: r }
-                        .as_inner(py)
+                    py_rdf_type_to_mapping_column_type(&r, py)
                         .map_err(PyTemplateError::from)?
                         .as_ptype(),
                 )
-            } else if let Ok(r) = data_type.extract::<PyNestedRDFType>() {
-                Some(r.as_inner(py).map_err(PyTemplateError::from)?.as_ptype())
             } else {
                 panic!("Handle error")
             }
@@ -342,4 +316,40 @@ pub fn py_triple<'py>(
         vec![subject, predicate, object],
         list_expander,
     )
+}
+
+pub fn py_rdf_type_to_mapping_column_type(py_rdf_type: &PyRDFType ,py: Python) -> Result<MappingColumnType, IriParseError> {
+    match py_rdf_type {
+        PyRDFType::Nested { rdf_type } => Ok(MappingColumnType::Nested(Box::new(
+            MappingColumnType::Flat(Py::borrow(rdf_type, py).as_rdf_node_type()?),
+        ))),
+        t => Ok(MappingColumnType::Flat(
+            t.as_rdf_node_type()?
+        )),
+
+    }
+}
+
+#[derive(Clone, Debug)]
+#[pyclass(name= "XSD")]
+pub struct PyXSD {
+    prefix: PyPrefix
+}
+
+#[pymethods]
+impl PyXSD {
+    #[new]
+    pub fn new() -> PyXSD {
+        PyXSD{prefix:PyPrefix::new("xsd".to_string(), XSD_PREFIX.to_string()).unwrap()}
+    }
+
+    #[getter]
+    fn boolean(&self) -> PyIRI {
+        self.prefix.suf("boolean".to_string()).unwrap()
+    }
+
+    #[getter]
+    fn double(&self) -> PyIRI {
+        self.prefix.suf("double".to_string()).unwrap()
+    }
 }

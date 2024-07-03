@@ -10,15 +10,8 @@ class RDFType:
     IRI: Callable[[], "RDFType"]
     Blank: Callable[[], "RDFType"]
     Literal: Callable[[str], "RDFType"]
+    Nested: Callable[["RDFType"], "RDFType"]
     Unknown: Callable[[], "RDFType"]
-
-
-class NestedRDFType:
-    """
-    The type of a variable in a template. Can be nested (lists).
-    """
-    Flat: Callable[[RDFType], "NestedRDFType"]
-    Nested: Callable[["NestedRDFType"], "NestedRDFType"]
 
 
 class Variable:
@@ -474,4 +467,9 @@ def triple(subject: Union[Argument, Variable, IRI],
     :param object: The object of the triple.
     :param list_expander: (How) should we do list-expansion?
     :return:
+    """
+
+def a() -> IRI:
+    """
+    :return: IRI("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
     """

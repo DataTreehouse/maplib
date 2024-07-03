@@ -12,61 +12,77 @@ The package is published on [PyPi](https://pypi.org/project/maplib/) and the API
 ```shell
 pip install maplib
 ```
-Please send us a message on our [webpage](https://www.data-treehouse.com/contact-8) if you want to try out SHACL.  
+Please send us a message, e.g. on LinkedIn (search for Data Treehouse) or on our [webpage](https://www.data-treehouse.com/contact-8) if you want to try out SHACL.  
 
 ## Mapping
 We can easily map DataFrames to RDF-graphs using the Python library. Below is a reproduction of the example in the paper [1]. Assume that we have a DataFrame given by: 
 
 ```python
-ex = "https://github.com/DataTreehouse/maplib/example#"
-co = "https://github.com/DataTreehouse/maplib/countries#"
-pi = "https://github.com/DataTreehouse/maplib/pizza#"
-ing = "https://github.com/DataTreehouse/maplib/pizza/ingredients#"
-
+from maplib import Mapping, Prefix, Template, Argument, Parameter, Variable, RDFType, triple, a
 import polars as pl
-df = pl.DataFrame({"p":[pi + "Hawaiian", pi + "Grandiosa"],
-                   "c":[co + "CAN", co + "NOR"],
-                   "is": [[ing + "Pineapple", ing + "Ham"],
-                          [ing + "Pepper", ing + "Meat"]]})
-df
+pl.Config.set_fmt_str_lengths(150)
+
+pi = "https://github.com/DataTreehouse/maplib/pizza#"
+df = pl.DataFrame({
+    "p":[pi + "Hawaiian", pi + "Grandiosa"],
+    "c":[pi + "CAN", pi + "NOR"],
+    "ings": [[pi + "Pineapple", pi + "Ham"],
+             [pi + "Pepper", pi + "Meat"]]
+})
+print(df)
 ```
 That is, our DataFrame is:
 
-| p                             | c                                  | is                                                   |
-|-------------------------------|------------------------------------|------------------------------------------------------|
-| str                           | str                                | list[str]                                            |
-| "https://.../pizza#Hawaiian"  | "https://.../maplib/countries#CAN" | [".../ingredients#Pineapple", ".../ingredients#Ham"] |
-| "https://.../pizza#Grandiosa" | "https://.../maplib/countries#NOR" | [".../ingredients#Pepper", ".../ingredients#Meat"]   |
+| p                             | c                              | ings                                     |
+|-------------------------------|--------------------------------|------------------------------------------|
+| str                           | str                            | list[str]                                |
+| "https://.../pizza#Hawaiian"  | "https://.../maplib/pizza#CAN" | [".../pizza#Pineapple", ".../pizza#Ham"] |
+| "https://.../pizza#Grandiosa" | "https://.../maplib/pizza#NOR" | [".../pizza#Pepper", ".../pizza#Meat"]   |
 
 Then we can define a OTTR template, and create our knowledge graph by expanding this template with our DataFrame as input:
 ```python
-from maplib import Mapping
-pl.Config.set_fmt_str_lengths(150)
+from maplib import Mapping, Prefix, Template, Argument, Parameter, Variable, RDFType, triple, a
+pi = Prefix("pi", pi)
 
-doc = """
-@prefix pizza:<https://github.com/DataTreehouse/maplib/pizza#>.
-@prefix xsd:<http://www.w3.org/2001/XMLSchema#>.
-@prefix ex:<https://github.com/DataTreehouse/maplib/pizza#>.
+p_var = Variable("p")
+c_var = Variable("c")
+ings_var = Variable("ings")
 
-ex:Pizza[?p, xsd:anyURI ?c, List<xsd:anyURI> ?is] :: {
-ottr:Triple(?p, a, pizza:Pizza),
-ottr:Triple(?p, pizza:fromCountry, ?c),
-cross | ottr:Triple(?p, pizza:hasIngredient, ++?is)
-}.
-"""
+template = Template(
+    iri= pi.suf("PizzaTemplate"),
+    parameters= [
+        Parameter(variable=p_var, rdf_type=RDFType.IRI()),
+        Parameter(variable=c_var, rdf_type=RDFType.IRI()),
+        Parameter(variable=ings_var, rdf_type=RDFType.Nested(RDFType.IRI()))
+    ],
+    instances= [
+        triple(p_var, a(), pi.suf("Pizza")),
+        triple(p_var, pi.suf("fromCountry"), c_var),
+        triple(p_var, pi.suf("hasIngredient"), Argument(term=ings_var, list_expand=True), list_expander="cross")
+    ]
+)
 
-m = Mapping([doc])
-m.expand("ex:Pizza", df)
+m = Mapping()
+m.expand(template, df)
+hpizzas = """
+    PREFIX pi:<https://github.com/DataTreehouse/maplib/pizza#>
+    CONSTRUCT { ?p a pi:HeterodoxPizza } 
+    WHERE {
+        ?p a pi:Pizza .
+        ?p pi:hasIngredient pi:Pineapple .
+    }"""
+m.insert(hpizzas)
+return m
 ```
 
 We can immediately query the mapped knowledge graph:
 
 ```python
 m.query("""
-PREFIX pizza:<https://github.com/DataTreehouse/maplib/pizza#>
+PREFIX pi:<https://github.com/DataTreehouse/maplib/pizza#>
 SELECT ?p ?i WHERE {
-?p a pizza:Pizza .
-?p pizza:hasIngredient ?i .
+?p a pi:Pizza .
+?p pi:hasIngredient ?i .
 }
 """)
 ```
@@ -76,21 +92,20 @@ The query gives the following result (a DataFrame):
 | p                               | i                                     |
 |---------------------------------|---------------------------------------|
 | str                             | str                                   |
-| "<https://.../pizza#Grandiosa>" | "<https://.../ingredients#Meat>"      |
-| "<https://.../pizza#Grandiosa>" | "<https://.../ingredients#Pepper>"    |
-| "<https://.../pizza#Hawaiian>"  | "<https://.../ingredients#Pineapple>" |
-| "<https://.../pizza#Hawaiian>"  | "<https://.../ingredients#Ham>"       |
+| "<https://.../pizza#Grandiosa>" | "<https://.../pizza#Meat>"      |
+| "<https://.../pizza#Grandiosa>" | "<https://.../pizza#Pepper>"    |
+| "<https://.../pizza#Hawaiian>"  | "<https://.../pizza#Pineapple>" |
+| "<https://.../pizza#Hawaiian>"  | "<https://.../pizza#Ham>"       |
 
 Next, we are able to perform a construct query, which creates new triples but does not insert them. 
 
 ```python
 hpizzas = """
-PREFIX pizza:<https://github.com/DataTreehouse/maplib/pizza#>
-PREFIX ing:<https://github.com/DataTreehouse/maplib/pizza/ingredients#>
-CONSTRUCT { ?p a pizza:UnorthodoxPizza } 
+PREFIX pi:<https://github.com/DataTreehouse/maplib/pizza#>
+CONSTRUCT { ?p a pi:UnorthodoxPizza } 
 WHERE {
-    ?p a pizza:Pizza .
-    ?p pizza:hasIngredient ing:Pineapple .
+    ?p a pi:Pizza .
+    ?p pi:hasIngredient pi:Pineapple .
 }"""
 res = m.query(hpizzas)
 res[0]
@@ -108,10 +123,10 @@ If we are happy with the output of this construct-query, we can insert it in the
 ```python
 m.insert(hpizzas)
 m.query("""
-PREFIX pizza:<https://github.com/DataTreehouse/maplib/pizza#>
+PREFIX pi:<https://github.com/DataTreehouse/maplib/pizza#>
 
 SELECT ?p WHERE {
-?p a pizza:UnorthodoxPizza
+?p a pi:UnorthodoxPizza
 }
 """)
 ```
@@ -126,10 +141,11 @@ Indeed, we have added the triple:
 ## API
 The [API](https://datatreehouse.github.io/maplib/maplib/maplib.html) is simple, and contains only one class and a few methods for:
 - expanding templates
-- querying
-- validating
-- importing triples
-- writing triples
+- querying with SPARQL
+- validating SHACL
+- importing triples (Turtle, RDF/XML, NTriples)
+- writing triples (NTriples)
+- creating a new Mapping object (sprout) based on queries over the current Mapping object.
 
 The API is documented [HERE](https://datatreehouse.github.io/maplib/maplib/maplib.html)
 

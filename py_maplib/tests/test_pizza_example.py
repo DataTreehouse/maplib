@@ -23,7 +23,6 @@ def pizzas_mapping():
 
     m = Mapping([doc])
 
-    ex = "https://github.com/magbak/maplib/example#"
     co = "https://github.com/magbak/maplib/countries#"
     pi = "https://github.com/magbak/maplib/pizza#"
     ing = "https://github.com/magbak/maplib/pizza/ingredients#"
@@ -59,8 +58,8 @@ def test_simple_query_no_error(pizzas_mapping):
 
 
 def test_construct_pvalues(pizzas_mapping):
-    h_df = pl.DataFrame({"h1": ["<https://github.com/magbak/maplib/pizza#Hawaiian1>", "<https://github.com/magbak/maplib/pizza#Hawaiian2>"],
-                         "h2": ["<https://github.com/magbak/maplib/pizza#Hawaiian3>", "<https://github.com/magbak/maplib/pizza#Hawaiian4>"]})
+    h_df = pl.DataFrame({"h1": ["https://github.com/magbak/maplib/pizza#Hawaiian1", "https://github.com/magbak/maplib/pizza#Hawaiian2"],
+                         "h2": ["https://github.com/magbak/maplib/pizza#Hawaiian3", "https://github.com/magbak/maplib/pizza#Hawaiian4"]})
 
     res = pizzas_mapping.query("""
     PREFIX pizza:<https://github.com/magbak/maplib/pizza#>
@@ -82,7 +81,7 @@ def test_construct_pvalues(pizzas_mapping):
 
 
 def test_construct_pvalues2(pizzas_mapping):
-    h_df = pl.DataFrame({"h1": ["<https://github.com/magbak/maplib/pizza#Hawaiian>", "<https://github.com/magbak/maplib/pizza#Hawaiian2>"]})
+    h_df = pl.DataFrame({"h1": ["https://github.com/magbak/maplib/pizza#Hawaiian", "https://github.com/magbak/maplib/pizza#Hawaiian2"]})
     res = pizzas_mapping.query("""
     PREFIX pizza:<https://github.com/magbak/maplib/pizza#>
 

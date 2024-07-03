@@ -46,21 +46,20 @@ use triplestore::sparql::{QueryResult as SparqlQueryResult, QueryResult};
 #[cfg(target_os = "linux")]
 use jemallocator::Jemalloc;
 use oxrdf::NamedNode;
+use oxrdf::vocab::rdf;
 use oxrdfio::RdfFormat;
-use polars::prelude::{col, lit, DataFrame, IntoLazy};
+use polars::prelude::{IntoLazy};
 use pyo3::types::PyList;
-use representation::multitype::{
-    compress_actual_multitypes, lf_column_from_categorical,
-};
 use representation::python::PyRDFType;
 use representation::solution_mapping::EagerSolutionMappings;
-use representation::{BaseRDFNodeType, RDFNodeType};
+use representation::{RDFNodeType};
 
 #[cfg(not(target_os = "linux"))]
 use mimalloc::MiMalloc;
+
 use templates::python::{
-    py_triple, PyArgument, PyIRI, PyInstance, PyLiteral, PyNestedRDFType, PyParameter, PyPrefix,
-    PyTemplate, PyVariable,
+    py_triple, PyArgument, PyIRI, PyInstance, PyLiteral, PyParameter, PyPrefix,
+    PyTemplate, PyVariable, PyXSD
 };
 
 #[cfg(target_os = "linux")]
@@ -443,6 +442,16 @@ impl Mapping {
     }
 }
 
+#[pyfunction]
+fn a() -> PyIRI {
+    PyIRI::new(rdf::TYPE.as_str().to_string()).unwrap()
+}
+
+#[pyfunction]
+fn xsd() -> PyXSD {
+    PyXSD::new()
+}
+
 #[pymodule]
 #[pyo3(name = "maplib")]
 fn _maplib(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -451,7 +460,6 @@ fn _maplib(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<ValidationReport>()?;
     m.add_class::<PyRDFType>()?;
     m.add_class::<PyPrefix>()?;
-    m.add_class::<PyNestedRDFType>()?;
     m.add_class::<PyVariable>()?;
     m.add_class::<PyLiteral>()?;
     m.add_class::<PyIRI>()?;
@@ -460,6 +468,8 @@ fn _maplib(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyTemplate>()?;
     m.add_class::<PyInstance>()?;
     m.add_function(wrap_pyfunction!(py_triple, m)?)?;
+    m.add_function(wrap_pyfunction!(a, m)?)?;
+    m.add_function(wrap_pyfunction!(xsd, m)?)?;
     Ok(())
 }
 
@@ -500,23 +510,8 @@ fn map_parameters(
             let mut rdf_node_types = HashMap::new();
             let mut lf = df.lazy();
             for (k, v) in map {
-                let t = v.to_rust().unwrap();
-                match &t {
-                    BaseRDFNodeType::IRI => {
-                        lf = lf.with_column(
-                            col(&k)
-                                .str()
-                                .strip_prefix(lit("<"))
-                                .str()
-                                .strip_suffix(lit(">")),
-                        );
-                    }
-                    BaseRDFNodeType::BlankNode => {
-                        lf = lf.with_column(col(&k).str().strip_prefix(lit("_:")));
-                    }
-                    _ => {}
-                }
-                rdf_node_types.insert(k, t.as_rdf_node_type());
+                let t = v.as_rdf_node_type().unwrap();
+                rdf_node_types.insert(k, t);
             }
             let m = EagerSolutionMappings {
                 mappings: lf.collect().unwrap(),
