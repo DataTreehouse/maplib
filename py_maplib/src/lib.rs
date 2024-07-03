@@ -13,7 +13,7 @@ use maplib::errors::MaplibError;
 use maplib::mapping::errors::MappingError;
 use maplib::mapping::ExpandOptions as RustExpandOptions;
 use maplib::mapping::Mapping as InnerMapping;
-use pydf_io::to_python::df_to_py_df;
+use pydf_io::to_python::{df_to_py_df, fix_cats_and_multicolumns};
 use pyo3::prelude::*;
 use std::collections::HashMap;
 use std::fs::File;
@@ -49,9 +49,8 @@ use oxrdf::NamedNode;
 use oxrdfio::RdfFormat;
 use polars::prelude::{col, lit, DataFrame, IntoLazy};
 use pyo3::types::PyList;
-use representation::formatting::format_iris_and_blank_nodes;
 use representation::multitype::{
-    compress_actual_multitypes, lf_column_from_categorical, multi_columns_to_string_cols,
+    compress_actual_multitypes, lf_column_from_categorical,
 };
 use representation::python::PyRDFType;
 use representation::solution_mapping::EagerSolutionMappings;
@@ -257,7 +256,7 @@ impl Mapping {
         query: String,
         parameters: Option<ParametersType>,
         _include_datatypes: Option<bool>,
-        multi_as_strings: Option<bool>,
+        native_dataframe: Option<bool>,
         graph: Option<String>,
     ) -> PyResult<PyObject> {
         let graph = parse_optional_graph(graph)?;
@@ -266,7 +265,7 @@ impl Mapping {
             .inner
             .query(&query, &mapped_parameters, graph)
             .map_err(PyMaplibError::from)?;
-        query_to_result(res, multi_as_strings.unwrap_or(true), py)
+        query_to_result(res, native_dataframe.unwrap_or(false), py)
     }
 
     fn validate(
@@ -464,48 +463,21 @@ fn _maplib(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     Ok(())
 }
 
-fn fix_cats_and_multicolumns(
-    mut df: DataFrame,
-    mut dts: HashMap<String, RDFNodeType>,
-    multi_to_strings: bool,
-) -> (DataFrame, HashMap<String, RDFNodeType>) {
-    let column_ordering: Vec<_> = df
-        .get_column_names()
-        .iter()
-        .map(|x| x.to_string())
-        .collect();
-    //Important that column compression happen before decisions are made based on column type.
-    (df, dts) = compress_actual_multitypes(df, dts);
-    let mut lf = df.lazy();
-    for (c, _) in &dts {
-        lf = lf_column_from_categorical(lf.lazy(), c, &dts);
-    }
-    lf = format_iris_and_blank_nodes(lf, &dts, !multi_to_strings);
-    df = lf.collect().unwrap();
-    if multi_to_strings {
-        df = multi_columns_to_string_cols(df.lazy(), &dts)
-            .collect()
-            .unwrap();
-    }
-    df = df.select(column_ordering.as_slice()).unwrap();
-    (df, dts)
-}
-
 fn query_to_result(
     res: SparqlQueryResult,
-    multi_as_strings: bool,
+    native_dataframe: bool,
     py: Python<'_>,
 ) -> PyResult<PyObject> {
     match res {
         SparqlQueryResult::Select(mut df, mut datatypes) => {
-            (df, datatypes) = fix_cats_and_multicolumns(df, datatypes, multi_as_strings);
+            (df, datatypes) = fix_cats_and_multicolumns(df, datatypes, native_dataframe);
             let pydf = df_to_py_df(df, dtypes_map(datatypes), py)?;
             Ok(pydf)
         }
         SparqlQueryResult::Construct(dfs) => {
             let mut query_results = vec![];
             for (mut df, mut datatypes) in dfs {
-                (df, datatypes) = fix_cats_and_multicolumns(df, datatypes, multi_as_strings);
+                (df, datatypes) = fix_cats_and_multicolumns(df, datatypes, native_dataframe);
                 let pydf = df_to_py_df(df, dtypes_map(datatypes), py)?;
                 query_results.push(pydf);
             }

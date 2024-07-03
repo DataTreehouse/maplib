@@ -18,27 +18,7 @@ pub fn convert_to_string(series: &Series) -> Series {
             panic!("Not supported")
         }
         DataType::Categorical(..) => series.cast(&DataType::String).unwrap(),
-        DataType::Struct(_) => {
-            let mut df = DataFrame::new(vec![series.clone()]).unwrap();
-            df = df
-                .lazy()
-                .with_column(
-                    (lit("\"")
-                        + col(series.name())
-                            .struct_()
-                            .field_by_name(LANG_STRING_VALUE_FIELD)
-                            .cast(DataType::String)
-                        + lit("\"@")
-                        + col(series.name())
-                            .struct_()
-                            .field_by_name(LANG_STRING_LANG_FIELD))
-                    .cast(DataType::String)
-                    .alias(series.name()),
-                )
-                .collect()
-                .unwrap();
-            return df.drop_in_place(series.name()).unwrap();
-        }
+        DataType::Struct(_) => panic!("Not supported"),
         _ => series.cast(&DataType::String).unwrap(),
     }
 }

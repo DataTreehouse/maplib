@@ -155,21 +155,21 @@ class ValidationReport:
     conforms: bool
 
     def results(self,
-                multi_as_strings: bool = True) -> Optional[DataFrame]:
+                native_dataframe: bool = False) -> Optional[DataFrame]:
         """
         Return the results of the validation report, if they exist.
 
-        :param multi_as_strings: Return columns with multiple datatypes as strings instead of as struct-columns.
+        :param native_dataframe: Return columns with maplib-native formatting. Useful for round-trips.
         :return: The SHACL validation report, as a DataFrame
         """
 
     def details(self,
-                multi_as_strings: bool = True) -> Optional[DataFrame]:
+                native_dataframe: bool = False) -> Optional[DataFrame]:
         """
         Returns the details of the validation report.
         Only available if validation was called with include_details=True.
 
-        :param multi_as_strings: Return columns with multiple datatypes as strings instead of as struct-columns.
+        :param native_dataframe: Return columns with maplib-native formatting. Useful for round-trips.
         :return: Details of the SHACL validation report, as a DataFrame
         """
 
@@ -247,8 +247,8 @@ class Mapping:
 
     def query(self, query: str,
               parameters: ParametersType = None,
-              include_datatypes=False,
-              multi_as_strings=True,
+              include_datatypes:bool = False,
+              native_dataframe:bool = False,
               graph: str = None) -> Union[
         DataFrame,
         Dict[str, Union[DataFrame, Dict[str, str]]],
@@ -268,7 +268,7 @@ class Mapping:
 
         :param query: The SPARQL query string
         :param parameters: PVALUES Parameters, a DataFrame containing the value bindings in the custom PVALUES construction.
-        :param multi_as_strings: Columns with multiple types are by default converted to their string representations, set to False to get the native Polars types in a struct.
+        :param native_dataframe: Return columns with maplib-native formatting. Useful for round-trips.
         :param include_datatypes: Datatypes are not returned by default, set to true to return a dict with the solution mappings and the datatypes.
         :param graph: The IRI of the graph to query.
         :return: DataFrame (Select), list of DataFrames (Construct) containing results, or None for Insert-queries

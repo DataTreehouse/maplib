@@ -2,7 +2,7 @@
 // Edited to remove dependencies on py-polars, and added specific functionality for RDF.
 // Original licence in ../licensing/POLARS_LICENSE
 
-use polars::prelude::IntoLazy;
+use polars::prelude::{col, IntoLazy};
 use polars_core::frame::DataFrame;
 use polars_core::prelude::{ArrayRef, ArrowField};
 use polars_core::utils::arrow::ffi;
@@ -10,9 +10,9 @@ use polars_core::utils::arrow::record_batch::RecordBatch;
 use pyo3::ffi::Py_uintptr_t;
 use pyo3::prelude::*;
 use pyo3::types::PyList;
-use representation::formatting::format_iris_and_blank_nodes;
+use representation::formatting::{format_columns};
 use representation::multitype::{
-    compress_actual_multitypes, lf_column_from_categorical, multi_columns_to_string_cols,
+    compress_actual_multitypes, lf_column_from_categorical,
 };
 use representation::RDFNodeType;
 use std::collections::HashMap;
@@ -101,15 +101,16 @@ pub fn df_to_py_df(
     to_py_df(&chunk, names.as_slice(), py, &pyarrow, &polars, types)
 }
 
+
 pub fn fix_cats_and_multicolumns(
     mut df: DataFrame,
     mut dts: HashMap<String, RDFNodeType>,
-    multi_to_strings: bool,
+    native_dataframe: bool,
 ) -> (DataFrame, HashMap<String, RDFNodeType>) {
     let column_ordering: Vec<_> = df
         .get_column_names()
         .iter()
-        .map(|x| x.to_string())
+        .map(|x| col(x))
         .collect();
     //Important that column compression happen before decisions are made based on column type.
     (df, dts) = compress_actual_multitypes(df, dts);
@@ -117,14 +118,10 @@ pub fn fix_cats_and_multicolumns(
     for (c, _) in &dts {
         lf = lf_column_from_categorical(lf.lazy(), c, &dts);
     }
-    lf = format_iris_and_blank_nodes(lf, &dts, !multi_to_strings);
-    df = lf.collect().unwrap();
-    if multi_to_strings {
-        df = multi_columns_to_string_cols(df.lazy(), &dts)
-            .collect()
-            .unwrap();
+    if !native_dataframe {
+        lf = format_columns(lf, &dts)
     }
-    df = df.select(column_ordering.as_slice()).unwrap();
+    df = lf.select(column_ordering).collect().unwrap();
     (df, dts)
 }
 

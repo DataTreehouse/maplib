@@ -27,14 +27,14 @@ impl ValidationReport {
 
     pub fn results(
         &self,
-        multi_as_strings: Option<bool>,
+        native_dataframe: Option<bool>,
         py: Python<'_>,
     ) -> PyResult<Option<PyObject>> {
         let report = if let Some(mut df) = self.inner.df.clone() {
             (df, _) = fix_cats_and_multicolumns(
                 df,
                 self.inner.rdf_node_types.as_ref().unwrap().clone(),
-                multi_as_strings.unwrap_or(true),
+                native_dataframe.unwrap_or(false),
             );
             Some(df_to_py_df(df, HashMap::new(), py)?)
         } else {
@@ -45,7 +45,7 @@ impl ValidationReport {
 
     pub fn details(
         &self,
-        multi_as_strings: Option<bool>,
+        native_dataframe: Option<bool>,
         py: Python<'_>,
     ) -> PyResult<Option<PyObject>> {
         let details = if let Some(EagerSolutionMappings {
@@ -56,7 +56,7 @@ impl ValidationReport {
             (mappings, _) = fix_cats_and_multicolumns(
                 mappings,
                 rdf_node_types,
-                multi_as_strings.unwrap_or(true),
+                native_dataframe.unwrap_or(false),
             );
             Some(df_to_py_df(mappings, HashMap::new(), py)?)
         } else {
