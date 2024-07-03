@@ -1,4 +1,4 @@
-## maplib: High-performance RDF knowledge graph construction, validation and enrichment in Python
+## maplib: High-performance RDF knowledge graph construction, SHACL validation and SPARQL-based enrichment in Python
 maplib is a knowledge graph construction library for building RDF knowledge graphs using template expansion ([OTTR](https://ottr.xyz/) Templates). Maplib features SPARQL- and SHACL-engines that are available as the graph is being constructed, allowing enrichment and validation. It can construct and validate knowledge graphs with millions of nodes in seconds.
 
 maplib allows you to leverage your existing skills with Pandas or Polars to extract and wrangle data from existing databases and spreadsheets, before applying simple templates to them to build a knowledge graph. 
