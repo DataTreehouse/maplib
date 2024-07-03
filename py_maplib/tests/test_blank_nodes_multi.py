@@ -109,6 +109,26 @@ def test_multi_datatype_union_query_no_error(blank_person_mapping):
     assert_frame_equal(df, expected_df)
 
 
+
+
+def test_multi_datatype_union_query_native_df(blank_person_mapping):
+    res = blank_person_mapping.query("""
+        PREFIX foaf:<http://xmlns.com/foaf/0.1/>
+
+        SELECT ?s ?o WHERE {
+        {?s foaf:firstName ?o .}
+        UNION {
+        ?s a ?o .
+        }
+        } 
+        """, native_dataframe=True)
+    by = ["s","o"]
+    df = res.sort(by=by)
+    filename = TESTDATA_PATH / "multi_datatype_union_query_native_df.parquet"
+    #df.write_parquet(filename)
+    expected_df = pl.scan_parquet(filename).sort(by).collect()
+    assert_frame_equal(df, expected_df)
+
 def test_multi_datatype_left_join_query_no_error(blank_person_mapping):
     res = blank_person_mapping.query("""
         PREFIX foaf:<http://xmlns.com/foaf/0.1/>
