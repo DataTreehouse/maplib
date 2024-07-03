@@ -1,5 +1,5 @@
 import polars as pl
-from maplib import Mapping, Template, IRI, Instance, Prefix
+from maplib import Mapping, Template, IRI, Prefix, triple
 from polars.testing import assert_frame_equal
 
 def test_create_mapping_from_empty_polars_df():
@@ -103,7 +103,7 @@ def test_programmatic_mapping():
     example_template = Template(
         iri=IRI("http://example.net/ns#ExampleTemplate"),
         parameters=[],
-        instances=[Instance.triple(
+        instances=[triple(
             IRI("http://example.net/ns#myObject"),
             IRI("http://example.net/ns#hasObj"),
             IRI("http://example.net/ns#myOtherObject"),
@@ -132,7 +132,7 @@ def test_programmatic_mapping_to_string():
     example_template = Template(
         iri=ex.suf("ExampleTemplate"),
         parameters=[],
-        instances=[Instance.triple(
+        instances=[triple(
             ex.suf("myObject"),
             ex.suf("hasObj"),
             ex.suf("myOtherObject"),
@@ -149,7 +149,7 @@ def test_programmatic_mapping_with_prefix():
     example_template = Template(
         iri=ex.suf("ExampleTemplate"),
         parameters=[],
-        instances=[Instance.triple(
+        instances=[triple(
             ex.suf("myObject"),
             ex.suf("hasObj"),
             ex.suf("myOtherObject"),

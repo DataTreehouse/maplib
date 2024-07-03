@@ -116,20 +116,6 @@ class Instance:
         :param list_expander: (How) should we do list expansion?
         """
 
-    @staticmethod
-    def triple(subject: Union[Argument, Variable, IRI],
-               predicate: Union[Argument, Variable, IRI],
-               object: Union[Argument, Variable, IRI, Literal],
-               list_expander: LiteralType["cross", "zipMin", "zipMax"] = None) -> Instance:
-        """
-        Instantiate the ottr:Triple-template.
-        :param subject: The predicate of the triple.
-        :param predicate: The predicate of the triple.
-        :param object: The object of the triple.
-        :param list_expander: (How) should we do list-expansion?
-        :return:
-        """
-
 
 class Template:
     """
@@ -475,3 +461,17 @@ class Mapping:
 
         @return: The sprout as its own Mapping.
         """
+
+
+def triple(subject: Union[Argument, Variable, IRI],
+           predicate: Union[Argument, Variable, IRI],
+           object: Union[Argument, Variable, IRI, Literal],
+           list_expander: LiteralType["cross", "zipMin", "zipMax"] = None) -> Instance:
+    """
+    Instantiate the ottr:Triple-template.
+    :param subject: The predicate of the triple.
+    :param predicate: The predicate of the triple.
+    :param object: The object of the triple.
+    :param list_expander: (How) should we do list-expansion?
+    :return:
+    """
