@@ -1,12 +1,15 @@
-use crate::ast::{Argument, ConstantTerm, ConstantTermOrList, Instance, ListExpanderType, Parameter, Signature, StottrLiteral, StottrTerm, StottrVariable, Template};
+use crate::ast::{
+    Argument, ConstantTerm, ConstantTermOrList, Instance, ListExpanderType, Parameter, Signature,
+    StottrLiteral, StottrTerm, StottrVariable, Template,
+};
 use crate::constants::{OTTR_TRIPLE, XSD_PREFIX};
+use crate::MappingColumnType;
 use oxrdf::{IriParseError, NamedNode};
 use pyo3::create_exception;
 use pyo3::exceptions::PyException;
 use pyo3::prelude::*;
 use representation::python::PyRDFType;
 use thiserror::Error;
-use crate::MappingColumnType;
 
 #[derive(Error, Debug)]
 pub enum PyTemplateError {
@@ -318,29 +321,31 @@ pub fn py_triple<'py>(
     )
 }
 
-pub fn py_rdf_type_to_mapping_column_type(py_rdf_type: &PyRDFType ,py: Python) -> Result<MappingColumnType, IriParseError> {
+pub fn py_rdf_type_to_mapping_column_type(
+    py_rdf_type: &PyRDFType,
+    py: Python,
+) -> Result<MappingColumnType, IriParseError> {
     match py_rdf_type {
         PyRDFType::Nested { rdf_type } => Ok(MappingColumnType::Nested(Box::new(
             MappingColumnType::Flat(Py::borrow(rdf_type, py).as_rdf_node_type()?),
         ))),
-        t => Ok(MappingColumnType::Flat(
-            t.as_rdf_node_type()?
-        )),
-
+        t => Ok(MappingColumnType::Flat(t.as_rdf_node_type()?)),
     }
 }
 
 #[derive(Clone, Debug)]
-#[pyclass(name= "XSD")]
+#[pyclass(name = "XSD")]
 pub struct PyXSD {
-    prefix: PyPrefix
+    prefix: PyPrefix,
 }
 
 #[pymethods]
 impl PyXSD {
     #[new]
     pub fn new() -> PyXSD {
-        PyXSD{prefix:PyPrefix::new("xsd".to_string(), XSD_PREFIX.to_string()).unwrap()}
+        PyXSD {
+            prefix: PyPrefix::new("xsd".to_string(), XSD_PREFIX.to_string()).unwrap(),
+        }
     }
 
     #[getter]

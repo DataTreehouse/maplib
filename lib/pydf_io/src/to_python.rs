@@ -10,10 +10,8 @@ use polars_core::utils::arrow::record_batch::RecordBatch;
 use pyo3::ffi::Py_uintptr_t;
 use pyo3::prelude::*;
 use pyo3::types::PyList;
-use representation::formatting::{format_columns};
-use representation::multitype::{
-    compress_actual_multitypes, lf_column_from_categorical,
-};
+use representation::formatting::format_columns;
+use representation::multitype::{compress_actual_multitypes, lf_column_from_categorical};
 use representation::RDFNodeType;
 use std::collections::HashMap;
 
@@ -101,17 +99,12 @@ pub fn df_to_py_df(
     to_py_df(&chunk, names.as_slice(), py, &pyarrow, &polars, types)
 }
 
-
 pub fn fix_cats_and_multicolumns(
     mut df: DataFrame,
     mut dts: HashMap<String, RDFNodeType>,
     native_dataframe: bool,
 ) -> (DataFrame, HashMap<String, RDFNodeType>) {
-    let column_ordering: Vec<_> = df
-        .get_column_names()
-        .iter()
-        .map(|x| col(x))
-        .collect();
+    let column_ordering: Vec<_> = df.get_column_names().iter().map(|x| col(x)).collect();
     //Important that column compression happen before decisions are made based on column type.
     (df, dts) = compress_actual_multitypes(df, dts);
     let mut lf = df.lazy();

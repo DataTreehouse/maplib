@@ -1,6 +1,6 @@
-use oxrdf::{IriParseError, NamedNode};
-use pyo3::{Py, pyclass};
 use crate::RDFNodeType;
+use oxrdf::{IriParseError, NamedNode};
+use pyo3::{pyclass, Py};
 
 #[derive(Clone, Debug)]
 #[pyclass(name = "RDFType")]
@@ -8,7 +8,7 @@ pub enum PyRDFType {
     IRI {},
     Blank {},
     Literal { iri: String },
-    Nested {rdf_type: Py<PyRDFType>},
+    Nested { rdf_type: Py<PyRDFType> },
     Unknown {},
 }
 
@@ -19,7 +19,7 @@ impl PyRDFType {
             PyRDFType::Blank { .. } => RDFNodeType::BlankNode,
             PyRDFType::Literal { iri } => RDFNodeType::Literal(NamedNode::new(iri)?),
             PyRDFType::Unknown { .. } => RDFNodeType::None,
-            PyRDFType::Nested { .. } => todo!("Support for natively represented lists")
+            PyRDFType::Nested { .. } => todo!("Support for natively represented lists"),
         })
     }
 }

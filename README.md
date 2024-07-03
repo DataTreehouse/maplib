@@ -58,7 +58,11 @@ template = Template(
     instances= [
         triple(p_var, a(), pi.suf("Pizza")),
         triple(p_var, pi.suf("fromCountry"), c_var),
-        triple(p_var, pi.suf("hasIngredient"), Argument(term=ings_var, list_expand=True), list_expander="cross")
+        triple(
+            p_var, 
+            pi.suf("hasIngredient"), 
+            Argument(term=ings_var, list_expand=True), 
+            list_expander="cross")
     ]
 )
 
