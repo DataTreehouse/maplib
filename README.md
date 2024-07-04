@@ -18,7 +18,6 @@ Please send us a message, e.g. on LinkedIn (search for Data Treehouse) or on our
 We can easily map DataFrames to RDF-graphs using the Python library. Below is a reproduction of the example in the paper [1]. Assume that we have a DataFrame given by: 
 
 ```python
-from maplib import Mapping, Prefix, Template, Argument, Parameter, Variable, RDFType, triple, a
 import polars as pl
 pl.Config.set_fmt_str_lengths(150)
 
