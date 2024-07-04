@@ -4,24 +4,25 @@ version = "0.5.0"
 edition = "2021"
 
 [dependencies]
-query_processing = {path = "../query_processing" }
+query_processing = { path = "../query_processing" }
 representation = { path = "../representation" }
-parquet_io = {path="../parquet_io"}
-spargebra = {path="../spargebra"}
+parquet_io = { path = "../parquet_io" }
+spargebra = { path = "../spargebra" }
 
-rayon = {workspace=true}
-sprs = {workspace=true, features=["multi_thread"]}
-oxrdf = {workspace=true}
-polars = {workspace=true, features=["zip_with", "nightly", "performant", "cse", "semi_anti_join","abs", "round_series", "lazy", "concat_str", "is_in", "dtype-full", "strings", "rows", "timezones", "polars-time", "temporal", "list_eval", "partition_by", "parquet", "diagonal_concat", "cross_join", "cum_agg"] }
+rayon.workspace = true
+sprs = { workspace = true, features = ["multi_thread"] }
+oxrdf.workspace = true
+polars = { workspace = true, features = ["zip_with", "nightly", "performant", "cse", "semi_anti_join", "abs", "round_series", "lazy", "concat_str", "is_in", "dtype-full", "strings", "rows", "timezones", "polars-time", "temporal", "list_eval", "partition_by", "parquet", "diagonal_concat", "cross_join", "cum_agg"] }
 #TODO: Due to ntriples write using pool-functionality, should be refactored. Also concat df usage in lib.rs.
-polars-utils = { workspace=true }
-polars-core = {workspace=true}
-log= {workspace=true}
-uuid = {workspace=true}
-thiserror={ workspace= true }
-oxrdfio = { workspace = true}
-memmap2 = {workspace=true}
+polars-utils.workspace = true
+polars-core.workspace = true
+log.workspace = true
+uuid.workspace = true
+thiserror.workspace = true
+oxrdfio.workspace = true
+oxttl.workspace = true
+memmap2.workspace = true
 
 [dev-dependencies]
-rstest.workspace=true
+rstest.workspace = true
 serial_test.workspace = true

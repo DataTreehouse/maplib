@@ -13,7 +13,7 @@ members = [
 ]
 
 [workspace.dependencies]
-pyo3 = {version = "0.21.2"}
+pyo3 = {version = "0.22.0", features = ["py-clone"] }
 polars = { version = "0.41.2", features = ["nightly", "performant", "cse"] }
 polars-utils = "0.41.2"
 polars-core = "0.41.2"
@@ -44,13 +44,13 @@ memmap2 = "0.9.4"
 sprs = "0.11.1"
 
 #dev-dependencies
-rstest = "0.18.2"
-serial_test = "2.0.0"
+rstest = "0.21.0"
+serial_test = "3.1.1"
 
 [patch.crates-io]
-oxrdf = { git = 'https://github.com/magbak/oxigraph.git', rev = "e29004cb3e69a8c4157a2e28e6a213f7df7e8dfe"}
-oxttl = { git = 'https://github.com/magbak/oxigraph.git', rev = "e29004cb3e69a8c4157a2e28e6a213f7df7e8dfe"}
-oxrdfio = { git = 'https://github.com/magbak/oxigraph.git', rev = "e29004cb3e69a8c4157a2e28e6a213f7df7e8dfe"}
+oxrdf = { git = 'https://github.com/oxigraph/oxigraph.git', rev = "1e08089454a9aa8b3f66f4a422aed27e73faae84"}
+oxttl = { git = 'https://github.com/oxigraph/oxigraph.git', rev = "1e08089454a9aa8b3f66f4a422aed27e73faae84"}
+oxrdfio = { git = 'https://github.com/oxigraph/oxigraph.git', rev = "1e08089454a9aa8b3f66f4a422aed27e73faae84"}
 #oxrdf = { path = "../oxigraph/lib/oxrdf" }
 #oxttl = { path  = "../oxigraph/lib/oxttl" }
 #oxrdfio = { path  = "../oxigraph/lib/oxrdfio" }

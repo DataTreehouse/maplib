@@ -15,5 +15,5 @@ chrono.workspace = true
 chrono-tz.workspace = true
 thiserror.workspace = true
 uuid.workspace = true
-pyo3 = {version = "0.21.2"}
+pyo3.workspace = true
 serde = {workspace = true, features = ["derive"]}

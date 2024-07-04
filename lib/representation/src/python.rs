@@ -2,7 +2,7 @@ use crate::RDFNodeType;
 use oxrdf::{IriParseError, NamedNode};
 use pyo3::{pyclass, Py};
 
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 #[pyclass(name = "RDFType")]
 pub enum PyRDFType {
     IRI {},
