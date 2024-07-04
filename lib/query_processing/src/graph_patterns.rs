@@ -56,7 +56,8 @@ pub fn filter(
     solution_mappings.mappings = solution_mappings
         .mappings
         .filter(col(expression_context.as_str()))
-        .drop([&expression_context.as_str()]);
+        .drop_no_validate([&expression_context.as_str()]);
+    solution_mappings.rdf_node_types.remove(expression_context.as_str()).unwrap();
     Ok(solution_mappings)
 }
 
@@ -97,7 +98,7 @@ pub fn group_by(
         datatypes.insert(k, v);
     }
     if let Some(dummy_varname) = dummy_varname {
-        mappings = mappings.drop([dummy_varname]);
+        mappings = mappings.drop_no_validate([dummy_varname]);
     }
     Ok(SolutionMappings::new(mappings, datatypes))
 }
@@ -214,7 +215,7 @@ pub fn order_by(
             .with_nulls_last(true)
             .with_maintain_order(false),
     );
-    mappings = mappings.drop(
+    mappings = mappings.drop_no_validate(
         inner_contexts
             .iter()
             .map(|x| x.as_str())

@@ -745,7 +745,7 @@ pub fn explode_multicols<'a>(
         }
     }
     mappings = mappings.with_columns(exprs);
-    mappings = mappings.drop(drop_cols);
+    mappings = mappings.drop_no_validate(drop_cols);
     (mappings, out_map)
 }
 
@@ -763,7 +763,7 @@ pub fn implode_multicolumns(
         drop_cols.extend(prefixed_inner_cols);
         structs.push(as_struct(struct_exprs).alias(&c));
     }
-    mapping.with_columns(structs).drop(drop_cols)
+    mapping.with_columns(structs).drop_no_validate(drop_cols)
 }
 
 pub fn join_workaround(
@@ -828,14 +828,14 @@ pub fn join_workaround(
                 }
             }
         }
-        right_mappings = right_mappings.drop(to_drop_right);
+        right_mappings = right_mappings.drop_no_validate(to_drop_right);
         left_mappings = left_mappings.join(
             right_mappings,
             &[col(&dummycol)],
             &[col(&dummycol)],
             join_type.into(),
         );
-        left_mappings = left_mappings.drop([dummycol]);
+        left_mappings = left_mappings.drop_no_validate([dummycol]);
     } else if !on.is_empty() {
         let join_args = JoinArgs {
             how: join_type,

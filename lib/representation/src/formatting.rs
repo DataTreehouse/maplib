@@ -1,6 +1,6 @@
 use crate::multitype::non_multi_type_string;
 use crate::polars_to_rdf::{
-    datetime_series_to_strings, hack_format_timestamp_with_timezone, XSD_DATETIME_WITH_TZ_FORMAT,
+    datetime_series_to_strings, XSD_DATETIME_WITH_TZ_FORMAT,
     XSD_DATE_WITHOUT_TZ_FORMAT,
 };
 use crate::{BaseRDFNodeType, RDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD};
