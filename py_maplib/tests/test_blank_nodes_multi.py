@@ -109,6 +109,21 @@ def test_multi_datatype_union_query_no_error(blank_person_mapping):
     assert_frame_equal(df, expected_df)
 
 
+def test_multi_datatype_union_query_no_error(blank_person_mapping):
+    df = blank_person_mapping.query("""
+        PREFIX foaf:<http://xmlns.com/foaf/0.1/>
+
+        SELECT ?s ?o WHERE {
+        {?s foaf:firstName ?o .}
+        UNION {
+        ?s a ?o .
+        }
+        } ORDER BY ?o ?s
+        """)
+    filename = TESTDATA_PATH / "multi_datatype_union_sort_query.csv"
+    #df.write_csv(filename)
+    expected_df = pl.scan_csv(filename).collect()
+    assert_frame_equal(df, expected_df)
 
 
 def test_multi_datatype_union_query_native_df(blank_person_mapping):

@@ -210,7 +210,8 @@ pub fn order_by(
     } = solution_mappings;
 
     let mut order_exprs = vec![];
-    for c in inner_contexts {
+    let mut asc_bools = vec![];
+    for (c,a) in inner_contexts.iter().zip(asc_ordering) {
         let c_str = c.as_str();
         let t = rdf_node_types.get(c_str).unwrap();
         match t {
@@ -218,6 +219,7 @@ pub fn order_by(
                 order_exprs.push(
                     col(c_str).cast(DataType::Categorical(None, CategoricalOrdering::Lexical)),
                 );
+                asc_bools.push(a);
             }
             RDFNodeType::Literal(l) => {
                 if string_rdf_literal(l.as_ref()) {
@@ -227,8 +229,12 @@ pub fn order_by(
                 } else {
                     order_exprs.push(col(c_str))
                 }
+                asc_bools.push(a);
             }
-            RDFNodeType::None => order_exprs.push(col(c_str)),
+            RDFNodeType::None => {
+                order_exprs.push(col(c_str));
+                asc_bools.push(a);
+            },
             RDFNodeType::MultiType(ts) => {
                 let mut ts = ts.clone();
                 ts.sort_by_key(|x| match x {
@@ -237,7 +243,12 @@ pub fn order_by(
                     BaseRDFNodeType::Literal(_) => 3,
                     BaseRDFNodeType::None => 0,
                 });
+                // A bit complicated:
+                // Nulls are first in ascending sort
+                // By placing literals first, we are using the subsequent types to break ties where the literal is null.
+                ts.reverse();
                 for t in ts {
+                    asc_bools.push(a);
                     match &t {
                         BaseRDFNodeType::IRI | BaseRDFNodeType::BlankNode => {
                             order_exprs.push(
@@ -285,7 +296,7 @@ pub fn order_by(
     mappings = mappings.sort_by_exprs(
         order_exprs,
         SortMultipleOptions::default()
-            .with_order_descending_multi(asc_ordering.iter().map(|asc| !asc).collect::<Vec<bool>>())
+            .with_order_descending_multi(asc_bools.iter().map(|asc| !asc).collect::<Vec<bool>>())
             .with_nulls_last(false)
             .with_maintain_order(false),
     );
