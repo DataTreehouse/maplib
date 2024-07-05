@@ -807,7 +807,7 @@ fn dt_to_ret(
     if let Some(aggs) = aggregation {
         for (_, v) in values {
             for name in &aggs {
-                let agg_v = Variable::new_unchecked(format!("{}_{}", v.as_str(), name));
+                let agg_v = Variable::new_unchecked(format!("{}_{}", v.as_str(), name.to_string().to_lowercase()));
                 let a = AggregateExpression::FunctionCall {
                     name: name.clone(),
                     expr: Expression::Variable(v.clone()),
