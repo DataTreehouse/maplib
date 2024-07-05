@@ -224,7 +224,7 @@ pub fn order_by(
             RDFNodeType::Literal(l) => {
                 if string_rdf_literal(l.as_ref()) {
                     order_exprs.push(
-                        col(c_str).cast(DataType::Categorical(None, CategoricalOrdering::Physical)),
+                        col(c_str).cast(DataType::Categorical(None, CategoricalOrdering::Lexical)),
                     )
                 } else {
                     order_exprs.push(col(c_str))
@@ -297,7 +297,7 @@ pub fn order_by(
         order_exprs,
         SortMultipleOptions::default()
             .with_order_descending_multi(asc_bools.iter().map(|asc| !asc).collect::<Vec<bool>>())
-            .with_nulls_last(false)
+            .with_nulls_last_multi(asc_bools.iter().map(|asc|!asc).collect::<Vec<bool>>())
             .with_maintain_order(false),
     );
     mappings = mappings.drop_no_validate(
