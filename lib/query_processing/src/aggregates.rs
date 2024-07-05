@@ -1,6 +1,6 @@
 use oxrdf::vocab::xsd;
 use polars::datatypes::DataType;
-use polars::prelude::{col, cols, Expr, ListNameSpaceExtension};
+use polars::prelude::{col, cols, Expr};
 use representation::query_context::Context;
 use representation::solution_mapping::SolutionMappings;
 use representation::RDFNodeType;
@@ -123,16 +123,14 @@ pub fn group_concat(
     let out_expr = if distinct {
         col(column_context.as_str())
             .cast(DataType::String)
-            .list()
-            .eval(
-                col("").unique_stable().str().join(use_sep.as_str(), true),
-                true,
-            )
+            .unique_stable()
+            .str()
+            .join(use_sep.as_str(), true)
     } else {
         col(column_context.as_str())
             .cast(DataType::String)
-            .list()
-            .eval(col("").str().join(use_sep.as_str(), true), true)
+            .str()
+            .join(use_sep.as_str(), true)
     };
     (out_expr, out_rdf_node_type)
 }

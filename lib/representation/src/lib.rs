@@ -186,6 +186,8 @@ impl BaseRDFNodeType {
             Term::NamedNode(_) => BaseRDFNodeType::IRI,
             Term::BlankNode(_) => BaseRDFNodeType::BlankNode,
             Term::Literal(l) => BaseRDFNodeType::Literal(l.datatype().into_owned()),
+            #[cfg(feature = "rdf-star")]
+            Term::Triple(_) => todo!(),
         }
     }
 
@@ -280,6 +282,8 @@ impl RDFNodeType {
             TermPattern::BlankNode(_) => None,
             TermPattern::Literal(l) => Some(RDFNodeType::Literal(l.datatype().into_owned())),
             TermPattern::Variable(_v) => None,
+            #[cfg(feature = "rdf-star")]
+            TermPattern::Triple(_) => todo!(),
         }
     }
 

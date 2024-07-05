@@ -2,7 +2,7 @@ use crate::{LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD};
 use chrono::NaiveDate;
 use log::warn;
 use oxrdf::vocab::{rdf, xsd};
-use oxrdf::{BlankNode, Literal, NamedNode, Term};
+use oxrdf::{BlankNode, Literal, NamedNode, NamedNodeRef, Term};
 use polars::export::chrono::{DateTime, NaiveDateTime, Utc};
 use polars::prelude::{as_struct, lit, DataType, Expr, LiteralValue, NamedFrom, Series, TimeUnit};
 use std::str::FromStr;
@@ -22,6 +22,8 @@ pub fn rdf_term_to_polars_expr(term: &Term) -> Expr {
             }
         }
         Term::BlankNode(bl) => lit(rdf_blank_node_to_polars_literal_value(bl)),
+        #[cfg(feature = "rdf-star")]
+        Term::Triple(_) => todo!(),
     }
 }
 
@@ -39,6 +41,29 @@ pub fn rdf_blank_node_to_polars_literal_value(blank_node: &BlankNode) -> Literal
 
 pub fn rdf_owned_blank_node_to_polars_literal_value(blank_node: BlankNode) -> LiteralValue {
     LiteralValue::String(blank_node.into_string())
+}
+
+//TODO: Sort and check..
+pub fn string_rdf_literal(dt: NamedNodeRef) -> bool {
+    !matches!(
+        dt,
+        xsd::BOOLEAN
+            | xsd::LONG
+            | xsd::INTEGER
+            | xsd::INT
+            | xsd::FLOAT
+            | xsd::DATE_TIME
+            | xsd::DATE_TIME_STAMP
+            | xsd::UNSIGNED_INT
+            | xsd::UNSIGNED_SHORT
+            | xsd::UNSIGNED_BYTE
+            | xsd::UNSIGNED_LONG
+            | xsd::BYTE
+            | xsd::DECIMAL
+            | xsd::DOUBLE
+            | xsd::DURATION
+            | xsd::DATE
+    )
 }
 
 pub fn rdf_literal_to_polars_literal_value(lit: &Literal) -> LiteralValue {

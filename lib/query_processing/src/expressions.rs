@@ -328,7 +328,7 @@ pub fn exists(
 ) -> Result<SolutionMappings, QueryProcessingError> {
     let SolutionMappings {
         mappings,
-        rdf_node_types,
+        mut rdf_node_types,
     } = solution_mappings;
     let mut df = mappings.collect().unwrap();
     let exists_df = exists_lf
@@ -345,6 +345,10 @@ pub fn exists(
         .unwrap(),
     );
     ser.rename(outer_context.as_str());
+    rdf_node_types.insert(
+        outer_context.as_str().to_string(),
+        RDFNodeType::Literal(xsd::BOOLEAN.into_owned()),
+    );
     df.with_column(ser).unwrap();
     let mut solution_mappings = SolutionMappings::new(df.lazy(), rdf_node_types);
     solution_mappings = drop_inner_contexts(solution_mappings, &vec![inner_context]);
