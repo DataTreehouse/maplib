@@ -7,7 +7,7 @@ use memmap2::MmapOptions;
 use oxrdf::{BlankNode, GraphName, NamedNode, Quad, Subject, Term};
 use oxrdfio::{FromSliceQuadReader, RdfFormat, RdfParser, RdfSyntaxError};
 use oxttl::turtle::FromSliceTurtleReader;
-use oxttl::{NTriplesParser, TurtleParser};
+use oxttl::{TurtleParser};
 use polars::prelude::{as_struct, col, DataFrame, IntoLazy, LiteralValue, Series};
 use rayon::iter::ParallelIterator;
 use rayon::prelude::{IntoParallelIterator, IntoParallelRefIterator};
