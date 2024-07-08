@@ -211,7 +211,7 @@ pub fn order_by(
 
     let mut order_exprs = vec![];
     let mut asc_bools = vec![];
-    for (c,a) in inner_contexts.iter().zip(asc_ordering) {
+    for (c, a) in inner_contexts.iter().zip(asc_ordering) {
         let c_str = c.as_str();
         let t = rdf_node_types.get(c_str).unwrap();
         match t {
@@ -234,7 +234,7 @@ pub fn order_by(
             RDFNodeType::None => {
                 order_exprs.push(col(c_str));
                 asc_bools.push(a);
-            },
+            }
             RDFNodeType::MultiType(ts) => {
                 let mut ts = ts.clone();
                 ts.sort_by_key(|x| match x {
