@@ -1,8 +1,7 @@
 #[cfg(test)]
 use crate::constants::OTTR_TRIPLE;
 use crate::constants::{OTTR_IRI, OWL_PREFIX_IRI, XSD_ANY_URI};
-use oxrdf::vocab::xsd;
-use oxrdf::{BlankNode, NamedNode};
+use oxrdf::{BlankNode, NamedNode, Literal, Variable};
 use representation::BaseRDFNodeType;
 use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter};
@@ -80,7 +79,7 @@ pub struct Parameter {
     pub optional: bool,
     pub non_blank: bool,
     pub ptype: Option<PType>,
-    pub stottr_variable: StottrVariable,
+    pub variable: Variable,
     pub default_value: Option<DefaultValue>,
 }
 
@@ -99,7 +98,7 @@ impl Display for Parameter {
             write!(f, " ")?;
         }
 
-        std::fmt::Display::fmt(&self.stottr_variable, f)?;
+        std::fmt::Display::fmt(&self.variable, f)?;
 
         if let Some(def) = &self.default_value {
             write!(f, " = ")?;
@@ -166,17 +165,6 @@ impl Display for PType {
 }
 
 #[derive(PartialEq, Debug, Clone)]
-pub struct StottrVariable {
-    pub name: String,
-}
-
-impl Display for StottrVariable {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "?{}", &self.name)
-    }
-}
-
-#[derive(PartialEq, Debug, Clone)]
 pub struct DefaultValue {
     pub constant_term: ConstantTermOrList,
 }
@@ -231,7 +219,7 @@ impl Display for ConstantTermOrList {
 pub enum ConstantTerm {
     Iri(NamedNode),
     BlankNode(BlankNode),
-    Literal(StottrLiteral),
+    Literal(Literal),
     None,
 }
 
@@ -250,30 +238,6 @@ impl Display for ConstantTerm {
             ConstantTerm::None => {
                 write!(f, "none")
             }
-        }
-    }
-}
-
-#[derive(PartialEq, Debug, Clone)]
-pub struct StottrLiteral {
-    pub value: String,
-    pub language: Option<String>,
-    pub data_type_iri: Option<NamedNode>,
-}
-
-impl Display for StottrLiteral {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        if let Some(dt) = &self.data_type_iri {
-            let dt_ref = dt.as_ref();
-            if dt_ref == xsd::INTEGER {
-                write!(f, "{}", self.value)
-            } else {
-                write!(f, "\"{}\"^^{}", self.value, dt)
-            }
-        } else if let Some(lang_tag) = &self.language {
-            write!(f, "\"{}\"@{}", &self.value, lang_tag)
-        } else {
-            write!(f, "\"{}\"", &self.value)
         }
     }
 }
@@ -364,7 +328,7 @@ impl Display for ListExpanderType {
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum StottrTerm {
-    Variable(StottrVariable),
+    Variable(Variable),
     ConstantTerm(ConstantTermOrList),
     List(Vec<StottrTerm>),
 }
@@ -408,9 +372,7 @@ fn test_display_easy_template() {
                     BaseRDFNodeType::Literal(xsd::DOUBLE.into_owned()),
                     Some("xsd:double".to_string()),
                 )),
-                stottr_variable: StottrVariable {
-                    name: "myVar".to_string(),
-                },
+                stottr_variable: Variable::new("myVar").unwrap(),
                 default_value: Some(DefaultValue {
                     constant_term: ConstantTermOrList::ConstantTerm(ConstantTerm::Literal(
                         StottrLiteral {
@@ -429,9 +391,7 @@ fn test_display_easy_template() {
             prefixed_template_name: Some("ottr:Triple".to_string()),
             argument_list: vec![Argument {
                 list_expand: false,
-                term: StottrTerm::Variable(StottrVariable {
-                    name: "myVar".to_string(),
-                }),
+                term: StottrTerm::Variable(Variable::new_unchecked("myVar")),
             }],
         }],
     };

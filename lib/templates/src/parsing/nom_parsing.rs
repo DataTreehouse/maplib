@@ -7,7 +7,7 @@ use nom::branch::alt;
 use nom::bytes::complete::{escaped, is_not, tag};
 use nom::character::complete::char as char_func;
 
-use crate::ast::{Directive, ListExpanderType, Prefix, StottrVariable};
+use crate::ast::{Directive, ListExpanderType, Prefix};
 use crate::parsing::parsing_ast::{
     PrefixedName, ResolvesToNamedNode, UnresolvedAnnotation, UnresolvedArgument,
     UnresolvedBaseTemplate, UnresolvedConstantLiteral, UnresolvedConstantTerm,
@@ -22,7 +22,7 @@ use nom::sequence::tuple;
 use nom::IResult;
 use oxrdf::vocab::rdf::LANG_STRING;
 use oxrdf::vocab::{rdf, xsd};
-use oxrdf::{BlankNode, NamedNode};
+use oxrdf::{BlankNode, NamedNode, Variable};
 
 enum DirectiveStatement {
     Directive(Directive),
@@ -250,7 +250,7 @@ fn pattern_list(p: &str) -> IResult<&str, Vec<UnresolvedInstance>> {
 fn assemble_parameter(
     opt_mode: Option<&str>,
     ptype: Option<UnresolvedPType>,
-    variable: StottrVariable,
+    variable: Variable,
     default_value: Option<UnresolvedDefaultValue>,
 ) -> UnresolvedParameter {
     let mut optional = false;
@@ -268,7 +268,7 @@ fn assemble_parameter(
         optional,
         non_blank,
         ptype,
-        stottr_variable: variable,
+        variable,
         default_value,
     }
 }
@@ -364,9 +364,10 @@ fn basic_type(b: &str) -> IResult<&str, UnresolvedPType> {
     ))
 }
 
-fn variable(v: &str) -> IResult<&str, StottrVariable> {
+fn variable(v: &str) -> IResult<&str, Variable> {
     let (v, (_, _, name, _)) = tuple((multispace0, tag("?"), b_node_label, multispace0))(v)?;
-    Ok((v, StottrVariable { name }))
+    //Parser ensures valid variable
+    Ok((v, Variable::new_unchecked(name)))
 }
 
 fn default_value(d: &str) -> IResult<&str, UnresolvedDefaultValue> {

@@ -78,7 +78,7 @@ class Parameter:
                  variable: Variable,
                  optional: bool = False,
                  allow_blank: bool = True,
-                 rdf_type: Union[RDFType] = None):
+                 rdf_type: RDFType = None):
         """
         Create a new parameter.
         :param variable: The variable.

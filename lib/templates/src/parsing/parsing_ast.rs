@@ -1,5 +1,5 @@
-use crate::ast::{Directive, ListExpanderType, StottrVariable};
-use oxrdf::{BlankNode, NamedNode};
+use crate::ast::{Directive, ListExpanderType};
+use oxrdf::{BlankNode, NamedNode, Variable};
 
 #[derive(PartialEq, Debug)]
 pub enum UnresolvedStatement {
@@ -32,7 +32,7 @@ pub struct UnresolvedParameter {
     pub optional: bool,
     pub non_blank: bool,
     pub ptype: Option<UnresolvedPType>,
-    pub stottr_variable: StottrVariable,
+    pub variable: Variable,
     pub default_value: Option<UnresolvedDefaultValue>,
 }
 
@@ -102,7 +102,7 @@ pub struct UnresolvedArgument {
 
 #[derive(PartialEq, Debug)]
 pub enum UnresolvedStottrTerm {
-    Variable(StottrVariable),
+    Variable(Variable),
     ConstantTerm(UnresolvedConstantTerm),
     List(Vec<UnresolvedStottrTerm>),
 }

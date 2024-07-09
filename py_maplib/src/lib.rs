@@ -57,7 +57,7 @@ use representation::RDFNodeType;
 use mimalloc::MiMalloc;
 
 use templates::python::{
-    py_triple, PyArgument, PyIRI, PyInstance, PyLiteral, PyParameter, PyPrefix, PyTemplate,
+    a, py_triple, xsd, PyArgument, PyIRI, PyInstance, PyLiteral, PyParameter, PyPrefix, PyTemplate,
     PyVariable, PyXSD,
 };
 
@@ -439,16 +439,6 @@ impl Mapping {
             .map_err(|x| PyMaplibError::MappingError(x))?;
         Ok(())
     }
-}
-
-#[pyfunction]
-fn a() -> PyIRI {
-    PyIRI::new(rdf::TYPE.as_str().to_string()).unwrap()
-}
-
-#[pyfunction]
-fn xsd() -> PyXSD {
-    PyXSD::new()
 }
 
 #[pymodule]

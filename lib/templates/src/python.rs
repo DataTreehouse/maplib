@@ -1,14 +1,15 @@
 use crate::ast::{
     Argument, ConstantTerm, ConstantTermOrList, Instance, ListExpanderType, Parameter, Signature,
-    StottrLiteral, StottrTerm, StottrVariable, Template,
+    StottrTerm, Template,
 };
-use crate::constants::{OTTR_TRIPLE, XSD_PREFIX};
+use crate::constants::{OTTR_TRIPLE, XSD_PREFIX_IRI};
 use crate::MappingColumnType;
-use oxrdf::{IriParseError, NamedNode};
+use oxrdf::vocab::rdf;
+use oxrdf::{IriParseError};
 use pyo3::create_exception;
 use pyo3::exceptions::PyException;
 use pyo3::prelude::*;
-use representation::python::PyRDFType;
+use representation::python::{PyRDFType, PyIRI, PyVariable, PyPrefix, PyLiteral};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -29,97 +30,6 @@ impl From<PyTemplateError> for PyErr {
 
 create_exception!(exceptions, IriParseErrorException, PyException);
 
-#[derive(Clone, Debug)]
-#[pyclass(name = "Prefix")]
-pub struct PyPrefix {
-    pub prefix: String,
-    pub iri: NamedNode,
-}
-
-#[pymethods]
-impl PyPrefix {
-    #[new]
-    pub fn new(prefix: String, iri: String) -> PyResult<Self> {
-        let iri = NamedNode::new(iri).map_err(PyTemplateError::from)?;
-        Ok(PyPrefix { prefix, iri })
-    }
-
-    fn suf(&self, suffix: String) -> PyResult<PyIRI> {
-        PyIRI::new(format!("{}{}", self.iri.as_str(), suffix))
-    }
-}
-
-#[derive(Clone)]
-#[pyclass(name = "Variable")]
-pub struct PyVariable {
-    variable: StottrVariable,
-}
-
-#[pymethods]
-impl PyVariable {
-    #[new]
-    pub fn new(name: String) -> Self {
-        let variable = StottrVariable { name };
-        PyVariable { variable }
-    }
-}
-
-impl PyVariable {
-    pub fn into_inner(self) -> StottrVariable {
-        self.variable
-    }
-}
-
-#[derive(Clone)]
-#[pyclass(name = "IRI")]
-pub struct PyIRI {
-    iri: NamedNode,
-}
-
-#[pymethods]
-impl PyIRI {
-    #[new]
-    pub fn new(iri: String) -> PyResult<Self> {
-        let iri = NamedNode::new(iri).map_err(PyTemplateError::from)?;
-        Ok(PyIRI { iri })
-    }
-}
-
-impl PyIRI {
-    pub fn into_inner(self) -> NamedNode {
-        self.iri
-    }
-}
-
-#[derive(Clone)]
-#[pyclass(name = "Literal")]
-pub struct PyLiteral {
-    literal: StottrLiteral,
-}
-
-#[pymethods]
-impl PyLiteral {
-    #[new]
-    pub fn new(value: String, data_type: Option<PyIRI>, language: Option<String>) -> Self {
-        let data_type_iri = if let Some(data_type) = data_type {
-            Some(data_type.iri)
-        } else {
-            None
-        };
-        let literal = StottrLiteral {
-            value,
-            language,
-            data_type_iri,
-        };
-        PyLiteral { literal }
-    }
-}
-
-impl PyLiteral {
-    pub fn into_inner(self) -> StottrLiteral {
-        self.literal
-    }
-}
 
 #[derive(Clone)]
 #[pyclass(name = "Parameter")]
@@ -138,7 +48,7 @@ impl PyParameter {
         py: Python<'py>,
     ) -> PyResult<Self> {
         let data_type = if let Some(data_type) = rdf_type {
-            if let Ok(r) = data_type.extract::<PyRDFType>() {
+            if let Ok(r) = data_type.extract::<Py<PyRDFType>>() {
                 Some(
                     py_rdf_type_to_mapping_column_type(&r, py)
                         .map_err(PyTemplateError::from)?
@@ -156,7 +66,7 @@ impl PyParameter {
             optional,
             non_blank,
             ptype: data_type,
-            stottr_variable: variable.into_inner(),
+            variable: variable.into_inner(),
             default_value: None,
         };
         Ok(PyParameter { parameter })
@@ -188,7 +98,7 @@ impl PyArgument {
             )))
         } else if let Ok(r) = term.extract::<PyLiteral>() {
             StottrTerm::ConstantTerm(ConstantTermOrList::ConstantTerm(ConstantTerm::Literal(
-                r.into_inner(),
+                r.literal,
             )))
         } else if let Ok(a) = term.extract::<PyArgument>() {
             return Ok(a);
@@ -322,14 +232,15 @@ pub fn py_triple<'py>(
 }
 
 pub fn py_rdf_type_to_mapping_column_type(
-    py_rdf_type: &PyRDFType,
+    py_rdf_type: &Py<PyRDFType>,
     py: Python,
 ) -> Result<MappingColumnType, IriParseError> {
-    match py_rdf_type {
-        PyRDFType::Nested { rdf_type } => Ok(MappingColumnType::Nested(Box::new(
-            MappingColumnType::Flat(Py::borrow(rdf_type, py).as_rdf_node_type()?),
-        ))),
-        t => Ok(MappingColumnType::Flat(t.as_rdf_node_type()?)),
+    if let Some(nested) = &py_rdf_type.borrow(py).nested {
+        Ok(MappingColumnType::Nested(Box::new(
+            py_rdf_type_to_mapping_column_type(nested, py)?,
+        )))
+    } else {
+        Ok(MappingColumnType::Flat(py_rdf_type.borrow(py).as_rdf_node_type()))
     }
 }
 
@@ -344,7 +255,7 @@ impl PyXSD {
     #[new]
     pub fn new() -> PyXSD {
         PyXSD {
-            prefix: PyPrefix::new("xsd".to_string(), XSD_PREFIX.to_string()).unwrap(),
+            prefix: PyPrefix::new("xsd".to_string(), XSD_PREFIX_IRI.to_string()).unwrap(),
         }
     }
 
@@ -357,4 +268,25 @@ impl PyXSD {
     fn double(&self) -> PyIRI {
         self.prefix.suf("double".to_string()).unwrap()
     }
+
+    #[getter]
+    fn string(&self) -> PyIRI {
+        self.prefix.suf("string".to_string()).unwrap()
+    }
+
+    #[getter]
+    #[pyo3(name = "dateTime")]
+    fn date_time(&self) -> PyIRI {
+        self.prefix.suf("dateTime".to_string()).unwrap()
+    }
+}
+
+#[pyfunction]
+pub fn a() -> PyIRI {
+    PyIRI::new(rdf::TYPE.as_str().to_string()).unwrap()
+}
+
+#[pyfunction]
+pub fn xsd() -> PyXSD {
+    PyXSD::new()
 }

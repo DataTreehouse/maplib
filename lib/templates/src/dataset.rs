@@ -1,15 +1,14 @@
 pub mod errors;
 
 use crate::ast::{
-    Instance, PType, Parameter, Signature, Statement, StottrDocument, StottrTerm, StottrVariable,
-    Template,
+    Instance, PType, Parameter, Signature, Statement, StottrDocument, StottrTerm, Template,
 };
 use crate::constants::OTTR_TRIPLE;
 use crate::document::document_from_file;
 use errors::TemplateError;
 use log::warn;
 
-use oxrdf::NamedNode;
+use oxrdf::{NamedNode, Variable};
 use representation::{BaseRDFNodeType, OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME};
 use std::collections::{HashMap, HashSet};
 use std::fs::read_dir;
@@ -72,9 +71,7 @@ impl TemplateDataset {
                 BaseRDFNodeType::IRI,
                 Some("ottr:IRI".to_string()),
             )),
-            stottr_variable: StottrVariable {
-                name: SUBJECT_COL_NAME.to_string(),
-            },
+            variable: Variable::new_unchecked(SUBJECT_COL_NAME),
             default_value: None,
         };
         let ottr_triple_verb = Parameter {
@@ -84,18 +81,14 @@ impl TemplateDataset {
                 BaseRDFNodeType::IRI,
                 Some("ottr:IRI".to_string()),
             )),
-            stottr_variable: StottrVariable {
-                name: VERB_COL_NAME.to_string(),
-            },
+            variable: Variable::new_unchecked(VERB_COL_NAME),
             default_value: None,
         };
         let ottr_triple_object = Parameter {
             optional: false,
             non_blank: false,
             ptype: None,
-            stottr_variable: StottrVariable {
-                name: OBJECT_COL_NAME.to_string(),
-            },
+            variable: Variable::new_unchecked(OBJECT_COL_NAME),
             default_value: None,
         };
 
@@ -207,7 +200,7 @@ fn infer_template_types(
             match &argument.term {
                 StottrTerm::Variable(v) => {
                     for my_parameter in &mut template.signature.parameter_list {
-                        if &my_parameter.stottr_variable == v {
+                        if &my_parameter.variable == v {
                             if let Some(other_ptype) = &other_parameter.ptype {
                                 if argument.list_expand {
                                     if !other_parameter.optional {
@@ -250,7 +243,7 @@ fn infer_template_types(
 
 fn lub_update(
     template_name: &NamedNode,
-    variable: &StottrVariable,
+    variable: &Variable,
     my_parameter: &mut Parameter,
     right: &PType,
 ) -> Result<bool, TemplateError> {
@@ -278,7 +271,7 @@ fn lub_update(
 //TODO: LUB ptype...
 fn lub(
     template_name: &NamedNode,
-    variable: &StottrVariable,
+    variable: &Variable,
     left: &PType,
     right: &PType,
 ) -> Result<PType, TemplateError> {

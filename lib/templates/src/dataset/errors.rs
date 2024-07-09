@@ -1,13 +1,13 @@
-use crate::ast::StottrVariable;
 use crate::resolver::ResolutionError;
 use std::fmt::{Display, Formatter};
 use std::io;
 use thiserror::Error;
+use oxrdf::Variable;
 
 #[derive(Error, Debug)]
 pub enum TemplateError {
     InconsistentNumberOfArguments(String, String, usize, usize),
-    IncompatibleTypes(String, StottrVariable, String, String),
+    IncompatibleTypes(String, Variable, String, String),
     ReadTemplateFileError(io::Error),
     ResolveDirectoryEntryError(io::Error),
     ReadTemplateDirectoryError(io::Error),
@@ -29,7 +29,7 @@ impl Display for TemplateError {
                 write!(
                     f,
                     "Template {} variable {} was given argument of type {:?} but expected {:?}",
-                    nn, var.name, given, expected
+                    nn, var, given, expected
                 )
             }
             TemplateError::ReadTemplateFileError(e) => {

@@ -1,6 +1,6 @@
 use crate::ast::{
     Annotation, Argument, ConstantTerm, ConstantTermOrList, DefaultValue, Directive, Instance,
-    PType, Parameter, Signature, Statement, StottrDocument, StottrLiteral, StottrTerm, Template,
+    PType, Parameter, Signature, Statement, StottrDocument, StottrTerm, Template,
 };
 use crate::constants::{
     OTTR_IRI, OTTR_PREFIX, OTTR_PREFIX_IRI, OWL_PREFIX_IRI, RDFS_PREFIX, RDFS_PREFIX_IRI,
@@ -13,7 +13,7 @@ use crate::parsing::parsing_ast::{
     UnresolvedStottrDocument, UnresolvedStottrLiteral, UnresolvedStottrTerm, UnresolvedTemplate,
 };
 use log::warn;
-use oxrdf::{IriParseError, NamedNode};
+use oxrdf::{IriParseError, NamedNode, Literal};
 use representation::BaseRDFNodeType;
 use std::collections::HashMap;
 use std::error::Error;
@@ -232,18 +232,26 @@ fn resolve_constant_literal(
 fn resolve_stottr_literal(
     unresolved_stottr_literal: &UnresolvedStottrLiteral,
     prefix_map: &HashMap<String, NamedNode>,
-) -> Result<StottrLiteral, ResolutionError> {
-    Ok(StottrLiteral {
-        value: unresolved_stottr_literal.value.clone(),
-        language: unresolved_stottr_literal.language.clone(),
-        data_type_iri: if let Some(unresolved_data_type_uri) =
+) -> Result<Literal, ResolutionError> {
+    let value = unresolved_stottr_literal.value.clone();
+    let language = unresolved_stottr_literal.language.clone();
+    let data_type_iri = if let Some(unresolved_data_type_uri) =
             &unresolved_stottr_literal.data_type_iri
         {
             Some(resolve(unresolved_data_type_uri, prefix_map)?)
         } else {
             None
-        },
-    })
+        };
+
+    let literal = if let Some(language) = language {
+        Literal::new_language_tagged_literal_unchecked(value, language)
+    } else if let Some(data_type_iri) = data_type_iri {
+        Literal::new_typed_literal(value, data_type_iri)
+    } else {
+        Literal::new_simple_literal(value)
+    };
+    Ok(literal)
+
 }
 
 fn resolve_parameter(
@@ -258,7 +266,7 @@ fn resolve_parameter(
         } else {
             None
         },
-        stottr_variable: unresolved_parameter.stottr_variable.clone(),
+        variable: unresolved_parameter.variable.clone(),
         default_value: if let Some(udefault_value) = &unresolved_parameter.default_value {
             Some(resolve_default_value(udefault_value, prefix_map)?)
         } else {
