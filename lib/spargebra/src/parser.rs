@@ -7,8 +7,8 @@ use crate::treehouse::{
     DataTreehousePattern, SimpleTimestampExpression, TimestampBinaryOperator, TimestampExpression,
 };
 use crate::update::*;
-use chrono::Duration;
-use datetimeparse::parse_rfc3339_datetime;
+use chrono::offset::Utc;
+use chrono::{DateTime, Duration, NaiveDateTime};
 use fundu::{DurationParser, SaturatingInto};
 use oxilangtag::LanguageTag;
 use oxiri::{Iri, IriParseError};
@@ -1403,7 +1403,17 @@ parser! {
             SimpleTimestampExpression::To
         }
         /  s:String() {?
-            Ok(SimpleTimestampExpression::DateTime(parse_rfc3339_datetime(&s).unwrap().try_into().map_err(|_|"Datetime conversion failed")?))
+            let dt_with_tz = s.parse::<DateTime<Utc>>();
+            if let Ok(dt) = dt_with_tz {
+                Ok(SimpleTimestampExpression::DateTimeUtc(dt))
+            } else {
+                let dt_without_tz = s.parse::<NaiveDateTime>();
+                if let Ok(dt) = dt_without_tz {
+                    Err("Found datetime without timezone, this is not supported in DT")
+                } else {
+                    Err("Could not parse datetime")
+                }
+            }
         }
 
         rule DTTimestampBinaryOperator() -> TimestampBinaryOperator = "+" {

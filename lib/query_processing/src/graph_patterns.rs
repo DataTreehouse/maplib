@@ -204,6 +204,9 @@ pub fn order_by(
     inner_contexts: &Vec<Context>,
     asc_ordering: Vec<bool>,
 ) -> Result<SolutionMappings, QueryProcessingError> {
+    if inner_contexts.is_empty() {
+        return Ok(solution_mappings);
+    }
     let SolutionMappings {
         mut mappings,
         rdf_node_types,
@@ -297,7 +300,7 @@ pub fn order_by(
         order_exprs,
         SortMultipleOptions::default()
             .with_order_descending_multi(asc_bools.iter().map(|asc| !asc).collect::<Vec<bool>>())
-            .with_nulls_last_multi(asc_bools.iter().map(|asc|!asc).collect::<Vec<bool>>())
+            .with_nulls_last_multi(asc_bools.iter().map(|asc| !asc).collect::<Vec<bool>>())
             .with_maintain_order(false),
     );
     mappings = mappings.drop_no_validate(

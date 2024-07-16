@@ -245,6 +245,7 @@ pub fn polars_type_to_literal_type(
         DataType::Float64 => Ok(RDFNodeType::Literal(xsd::DOUBLE.into_owned())),
         DataType::String => Ok(RDFNodeType::Literal(xsd::STRING.into_owned())),
         DataType::Date => Ok(RDFNodeType::Literal(xsd::DATE.into_owned())),
+        DataType::Decimal(_, Some(0)) => Ok(RDFNodeType::Literal(xsd::INTEGER.into_owned())),
         DataType::Datetime(_, Some(_)) => {
             Ok(RDFNodeType::Literal(xsd::DATE_TIME_STAMP.into_owned()))
         }

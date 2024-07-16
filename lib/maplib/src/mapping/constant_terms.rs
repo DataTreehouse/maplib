@@ -2,7 +2,7 @@ use crate::mapping::errors::MappingError;
 use crate::mapping::{MappingColumnType, RDFNodeType};
 use templates::ast::{ConstantTerm, ConstantTermOrList, PType};
 
-use oxrdf::{Literal, Term};
+use oxrdf::Term;
 use polars::prelude::{
     concat_list, lit, AnyValue, DataType, Expr, IntoSeries, ListChunked, LiteralValue, Series,
 };
@@ -35,17 +35,8 @@ pub fn constant_to_expr(
                 panic!("Should never happen")
             }
             ConstantTerm::Literal(lit) => {
-                let dt = lit.data_type_iri.as_ref().map(|nn| nn.as_ref());
-                let language = lit.language.as_deref();
-                let rdf_lit = if let Some(language) = language {
-                    Literal::new_language_tagged_literal(&lit.value, language).unwrap()
-                } else if let Some(dt) = dt {
-                    Literal::new_typed_literal(&lit.value, dt)
-                } else {
-                    Literal::new_simple_literal(&lit.value)
-                };
-                let the_dt = rdf_lit.datatype().into_owned();
-                let expr = rdf_term_to_polars_expr(&Term::Literal(rdf_lit));
+                let the_dt = lit.datatype().into_owned();
+                let expr = rdf_term_to_polars_expr(&Term::Literal(lit.clone()));
                 (
                     expr,
                     PType::Basic(BaseRDFNodeType::Literal(the_dt.clone()), None),

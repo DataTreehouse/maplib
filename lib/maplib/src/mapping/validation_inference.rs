@@ -19,9 +19,9 @@ impl Mapping {
             df_columns.extend(df.get_column_names().into_iter().map(|x| x.to_string()));
 
             for parameter in &signature.parameter_list {
-                let variable_name = &parameter.stottr_variable.name;
-                if df_columns.contains(variable_name.as_str()) {
-                    df_columns.remove(variable_name.as_str());
+                let variable_name = parameter.variable.as_str();
+                if df_columns.contains(variable_name) {
+                    df_columns.remove(variable_name);
                     if !parameter.optional {
                         validate_non_optional_parameter(df, variable_name)?;
                     }

@@ -2,7 +2,7 @@ use super::{ExpandOptions, Mapping, MappingReport, OTTRTripleInstance, StaticCol
 use crate::mapping::constant_terms::{constant_blank_node_to_series, constant_to_expr};
 use crate::mapping::errors::MappingError;
 use log::debug;
-use oxrdf::NamedNode;
+use oxrdf::{NamedNode, Variable};
 use polars::prelude::{col, lit, DataFrame, DataType, Expr, IntoLazy, NamedFrom, Series};
 use rayon::iter::{IndexedParallelIterator, ParallelDrainRange, ParallelIterator};
 use representation::multitype::split_df_multicols;
@@ -13,7 +13,6 @@ use std::collections::{HashMap, HashSet};
 use std::time::Instant;
 use templates::ast::{
     ConstantTerm, ConstantTermOrList, Instance, ListExpanderType, PType, Signature, StottrTerm,
-    StottrVariable,
 };
 use templates::constants::OTTR_TRIPLE;
 use templates::MappingColumnType;
@@ -286,7 +285,7 @@ impl Mapping {
     }
 }
 
-fn get_variable_names(i: &Instance) -> Vec<&String> {
+fn get_variable_names(i: &Instance) -> Vec<&str> {
     let mut out_vars = vec![];
     for a in &i.argument_list {
         get_term_names(&mut out_vars, &a.term)
@@ -294,11 +293,11 @@ fn get_variable_names(i: &Instance) -> Vec<&String> {
     out_vars
 }
 
-fn get_variable_name<'a>(out_vars: &mut Vec<&'a String>, var: &'a StottrVariable) {
-    out_vars.push(&var.name);
+fn get_variable_name<'a>(out_vars: &mut Vec<&'a str>, var: &'a Variable) {
+    out_vars.push(var.as_str());
 }
 
-fn get_term_names<'a>(out_vars: &mut Vec<&'a String>, term: &'a StottrTerm) {
+fn get_term_names<'a>(out_vars: &mut Vec<&'a str>, term: &'a StottrTerm) {
     if let StottrTerm::Variable(v) = term {
         get_variable_name(out_vars, v);
     } else if let StottrTerm::List(l) = term {
@@ -443,7 +442,7 @@ fn create_remapped(
     let mut expressions = vec![];
     let mut existing = vec![];
     let mut new = vec![];
-    let mut rename_map: HashMap<&String, Vec<&String>> = HashMap::new();
+    let mut rename_map: HashMap<&str, Vec<&str>> = HashMap::new();
     let mut out_blank_node_counter = blank_node_counter;
 
     for (original, target) in instance
@@ -451,29 +450,29 @@ fn create_remapped(
         .iter()
         .zip(signature.parameter_list.iter())
     {
-        let target_colname = &target.stottr_variable.name;
+        let target_colname = target.variable.as_str();
         if original.list_expand {
-            to_expand.push(target_colname.clone());
+            to_expand.push(target_colname);
         }
         match &original.term {
             StottrTerm::Variable(v) => {
-                if let Some(c) = dynamic_columns.get(&v.name) {
-                    if let Some(target_names) = rename_map.get_mut(&&v.name) {
+                if let Some(c) = dynamic_columns.get(v.as_str()) {
+                    if let Some(target_names) = rename_map.get_mut(&v.as_str()) {
                         target_names.push(target_colname)
                     } else {
-                        rename_map.insert(&v.name, vec![target_colname]);
+                        rename_map.insert(v.as_str(), vec![target_colname]);
                     }
 
-                    existing.push(&v.name);
+                    existing.push(v.as_str());
                     new.push(target_colname);
-                    new_dynamic_columns.insert(target_colname.clone(), c.clone());
-                } else if let Some(c) = constant_columns.get(&v.name) {
-                    new_constant_columns.insert(target_colname.clone(), c.clone());
+                    new_dynamic_columns.insert(target_colname.to_string(), c.clone());
+                } else if let Some(c) = constant_columns.get(v.as_str()) {
+                    new_constant_columns.insert(target_colname.to_string(), c.clone());
                 } else {
                     if let Some(calling_formal_arg) = calling_signature
                         .parameter_list
                         .iter()
-                        .find(|x| x.stottr_variable.name == v.name)
+                        .find(|x| x.variable.as_str() == v.as_str())
                     {
                         if target.optional {
                             continue;
@@ -481,7 +480,7 @@ fn create_remapped(
                             return Ok(None);
                         }
                     }
-                    return Err(MappingError::UnknownVariableError(v.name.clone()));
+                    return Err(MappingError::UnknownVariableError(v.as_str().to_string()));
                 }
             }
             StottrTerm::ConstantTerm(ct) => {
@@ -495,7 +494,7 @@ fn create_remapped(
                         input_df_height,
                     )?;
                     new_series.push(series);
-                    new_dynamic_columns.insert(target_colname.clone(), primitive_column);
+                    new_dynamic_columns.insert(target_colname.to_string(), primitive_column);
                     new_dynamic_from_constant.push(target_colname);
                     out_blank_node_counter =
                         max(out_blank_node_counter, blank_node_counter + input_df_height);
@@ -503,14 +502,14 @@ fn create_remapped(
                     let (expr, primitive_column) =
                         create_dynamic_expression_from_static(target_colname, ct, &target.ptype)?;
                     expressions.push(expr);
-                    new_dynamic_columns.insert(target_colname.clone(), primitive_column);
+                    new_dynamic_columns.insert(target_colname.to_string(), primitive_column);
                     new_dynamic_from_constant.push(target_colname);
                 } else {
                     let static_column = StaticColumn {
                         constant_term: ct.clone(),
                         ptype: target.ptype.clone(),
                     };
-                    new_constant_columns.insert(target_colname.clone(), static_column);
+                    new_constant_columns.insert(target_colname.to_string(), static_column);
                 }
             }
             StottrTerm::List(_l) => {
@@ -521,7 +520,7 @@ fn create_remapped(
 
     for s in &mut series_vec {
         let sname = s.name().to_string();
-        s.rename(rename_map.get_mut(&sname).unwrap().pop().unwrap());
+        s.rename(rename_map.get_mut(sname.as_str()).unwrap().pop().unwrap());
     }
     for s in new_series {
         series_vec.push(s);
@@ -541,7 +540,7 @@ fn create_remapped(
     let mut new_unique_subsets = vec![];
     if let Some(le) = &instance.list_expander {
         for e in &to_expand {
-            if let Some((k, v)) = new_dynamic_columns.remove_entry(e) {
+            if let Some((k, v)) = new_dynamic_columns.remove_entry(*e) {
                 if let MappingColumnType::Nested(v) = v {
                     new_dynamic_columns.insert(k, *v);
                 } else {
@@ -569,7 +568,7 @@ fn create_remapped(
         //Todo: List expanders for constant terms..
     } else {
         for unique_subset in unique_subsets {
-            if unique_subset.iter().all(|x| existing.contains(&x)) {
+            if unique_subset.iter().all(|x| existing.contains(&x.as_str())) {
                 let mut new_subset = vec![];
                 for x in unique_subset.iter() {
                     new_subset.push(

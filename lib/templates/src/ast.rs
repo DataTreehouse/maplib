@@ -1,7 +1,9 @@
 #[cfg(test)]
 use crate::constants::OTTR_TRIPLE;
 use crate::constants::{OTTR_IRI, OWL_PREFIX_IRI, XSD_ANY_URI};
-use oxrdf::{BlankNode, NamedNode, Literal, Variable};
+#[cfg(test)]
+use oxrdf::vocab::xsd;
+use oxrdf::{BlankNode, Literal, NamedNode, Variable};
 use representation::BaseRDFNodeType;
 use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter};
@@ -372,14 +374,10 @@ fn test_display_easy_template() {
                     BaseRDFNodeType::Literal(xsd::DOUBLE.into_owned()),
                     Some("xsd:double".to_string()),
                 )),
-                stottr_variable: Variable::new("myVar").unwrap(),
+                variable: Variable::new_unchecked("myVar"),
                 default_value: Some(DefaultValue {
                     constant_term: ConstantTermOrList::ConstantTerm(ConstantTerm::Literal(
-                        StottrLiteral {
-                            value: "0.1".to_string(),
-                            language: None,
-                            data_type_iri: Some(xsd::DOUBLE.into_owned()),
-                        },
+                        Literal::new_typed_literal("0.1", xsd::DOUBLE),
                     )),
                 }),
             }],

@@ -5,11 +5,11 @@ use crate::ast::{
 use crate::constants::{OTTR_TRIPLE, XSD_PREFIX_IRI};
 use crate::MappingColumnType;
 use oxrdf::vocab::rdf;
-use oxrdf::{IriParseError};
+use oxrdf::IriParseError;
 use pyo3::create_exception;
 use pyo3::exceptions::PyException;
 use pyo3::prelude::*;
-use representation::python::{PyRDFType, PyIRI, PyVariable, PyPrefix, PyLiteral};
+use representation::python::{PyIRI, PyLiteral, PyPrefix, PyRDFType, PyVariable};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -29,7 +29,6 @@ impl From<PyTemplateError> for PyErr {
 }
 
 create_exception!(exceptions, IriParseErrorException, PyException);
-
 
 #[derive(Clone)]
 #[pyclass(name = "Parameter")]
@@ -240,7 +239,9 @@ pub fn py_rdf_type_to_mapping_column_type(
             py_rdf_type_to_mapping_column_type(nested, py)?,
         )))
     } else {
-        Ok(MappingColumnType::Flat(py_rdf_type.borrow(py).as_rdf_node_type()))
+        Ok(MappingColumnType::Flat(
+            py_rdf_type.borrow(py).as_rdf_node_type(),
+        ))
     }
 }
 

@@ -138,12 +138,12 @@ pub fn rdf_literal_to_polars_literal_value(lit: &Literal) -> LiteralValue {
                 None,
             )
         } else {
-            let dt_without_tz = value.parse::<DateTime<Utc>>();
-            if let Ok(dt) = dt_without_tz {
+            let dt_with_tz = value.parse::<DateTime<Utc>>();
+            if let Ok(dt) = dt_with_tz {
                 LiteralValue::DateTime(
                     dt.naive_utc().and_utc().timestamp_nanos_opt().unwrap(),
                     TimeUnit::Nanoseconds,
-                    None,
+                    Some(dt.timezone().to_string()),
                 )
             } else {
                 warn!("Could not parse xsd:datetime {}", value);

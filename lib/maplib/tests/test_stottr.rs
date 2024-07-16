@@ -152,7 +152,7 @@ fn test_string_language_tag_cases() {
                 "http://example.net/ns#anotherObject",
             )),
             predicate: NamedNode::new_unchecked("http://example.net/ns#hasString"),
-            object: Term::Literal(Literal::new_language_tagged_literal_unchecked("", "ar-sa")),
+            object: Term::Literal(Literal::new_language_tagged_literal_unchecked("", "ar-SA")),
         },
     ]);
     assert_eq!(expected_triples_set, actual_triples_set);

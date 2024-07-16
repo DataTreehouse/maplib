@@ -4,11 +4,11 @@ use crate::mapping::ExpandOptions;
 use log::warn;
 use templates::ast::{
     Argument, ConstantTerm, ConstantTermOrList, Instance, ListExpanderType, PType, Parameter,
-    Signature, StottrTerm, StottrVariable, Template,
+    Signature, StottrTerm, Template,
 };
 use templates::constants::{DEFAULT_PREDICATE_URI_PREFIX, DEFAULT_TEMPLATE_PREFIX, OTTR_TRIPLE};
 
-use oxrdf::NamedNode;
+use oxrdf::{NamedNode, Variable};
 use polars::prelude::{col, DataFrame, DataType, IntoLazy};
 use representation::BaseRDFNodeType;
 use uuid::Uuid;
@@ -58,9 +58,7 @@ impl Mapping {
                         BaseRDFNodeType::IRI,
                         Some("ottr:IRI".to_string()),
                     )),
-                    stottr_variable: StottrVariable {
-                        name: c.to_string(),
-                    },
+                    variable: Variable::new_unchecked(c),
                     default_value: None,
                 })
             } else if fk_cols.contains(c) {
@@ -87,9 +85,7 @@ impl Mapping {
                         BaseRDFNodeType::IRI,
                         Some("ottr:IRI".to_string()),
                     )),
-                    stottr_variable: StottrVariable {
-                        name: c.to_string(),
-                    },
+                    variable: Variable::new_unchecked(c),
                     default_value: None,
                 })
             } else {
@@ -97,9 +93,7 @@ impl Mapping {
                     optional: has_null,
                     non_blank: false,
                     ptype: None,
-                    stottr_variable: StottrVariable {
-                        name: c.to_string(),
-                    },
+                    variable: Variable::new_unchecked(c),
                     default_value: None,
                 });
             }
@@ -121,9 +115,7 @@ impl Mapping {
                     argument_list: vec![
                         Argument {
                             list_expand: false,
-                            term: StottrTerm::Variable(StottrVariable {
-                                name: pk_col.clone(),
-                            }),
+                            term: StottrTerm::Variable(Variable::new_unchecked(&pk_col)),
                         },
                         Argument {
                             list_expand: false,
@@ -136,7 +128,7 @@ impl Mapping {
                         },
                         Argument {
                             list_expand: list_expander.is_some(),
-                            term: StottrTerm::Variable(StottrVariable { name: c.clone() }),
+                            term: StottrTerm::Variable(Variable::new_unchecked(c)),
                         },
                     ],
                 })

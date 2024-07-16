@@ -1,8 +1,8 @@
 use crate::resolver::ResolutionError;
+use oxrdf::Variable;
 use std::fmt::{Display, Formatter};
 use std::io;
 use thiserror::Error;
-use oxrdf::Variable;
 
 #[derive(Error, Debug)]
 pub enum TemplateError {

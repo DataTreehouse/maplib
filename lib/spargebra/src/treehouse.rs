@@ -125,7 +125,7 @@ pub enum SimpleTimestampExpression {
     Now,
     From,
     To,
-    DateTime(DateTime<Utc>),
+    DateTimeUtc(DateTime<Utc>),
 }
 
 impl Display for SimpleTimestampExpression {
@@ -140,7 +140,7 @@ impl Display for SimpleTimestampExpression {
             SimpleTimestampExpression::To => {
                 write!(f, "to")
             }
-            SimpleTimestampExpression::DateTime(dt) => {
+            SimpleTimestampExpression::DateTimeUtc(dt) => {
                 write!(f, "{}", dt.to_rfc3339())
             }
         }

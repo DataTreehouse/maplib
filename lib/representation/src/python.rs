@@ -1,14 +1,17 @@
+use crate::rdf_to_polars::rdf_literal_to_polars_literal_value;
+use crate::RDFNodeType;
 use chrono::{NaiveDateTime, TimeDelta, TimeZone};
 use chrono_tz::Tz;
-use crate::RDFNodeType;
 use oxrdf::{IriParseError, Literal, NamedNode, Variable, VariableNameParseError};
 use polars::datatypes::TimeUnit;
 use polars::prelude::LiteralValue;
 use pyo3::exceptions::PyException;
 use pyo3::prelude::PyAnyMethods;
-use pyo3::{create_exception, pyclass, pymethods, Bound, Py, PyAny, PyErr, PyResult, Python, IntoPy, PyObject};
+use pyo3::{
+    create_exception, pyclass, pymethods, Bound, IntoPy, Py, PyAny, PyErr, PyObject, PyResult,
+    Python,
+};
 use thiserror::*;
-use crate::rdf_to_polars::rdf_literal_to_polars_literal_value;
 
 #[derive(Error, Debug)]
 pub enum PyRepresentationError {
@@ -203,27 +206,29 @@ impl PyLiteral {
         PyLiteral { literal }
     }
 
-    pub fn to_native<'py>(&self, py:Python<'py>) -> PyResult<PyObject> {
+    pub fn to_native<'py>(&self, py: Python<'py>) -> PyResult<PyObject> {
         Ok(match rdf_literal_to_polars_literal_value(&self.literal) {
-            LiteralValue::Boolean(b) => {b.into_py(py)}
-            LiteralValue::String(s) => {s.into_py(py)}
-            LiteralValue::UInt8(u) => {u.into_py(py)}
-            LiteralValue::UInt16(u) => {u.into_py(py)}
-            LiteralValue::UInt32(u) => {u.into_py(py)}
-            LiteralValue::UInt64(u) => {u.into_py(py)}
-            LiteralValue::Int8(i) => {i.into_py(py)}
-            LiteralValue::Int16(i) => {i.into_py(py)}
-            LiteralValue::Int32(i) => {i.into_py(py)}
-            LiteralValue::Int64(i) => {i.into_py(py)}
-            LiteralValue::Float32(f) => {f.into_py(py)}
-            LiteralValue::Float64(f) => {f.into_py(py)}
-            LiteralValue::Date(d) => {todo!()}
+            LiteralValue::Boolean(b) => b.into_py(py),
+            LiteralValue::String(s) => s.into_py(py),
+            LiteralValue::UInt8(u) => u.into_py(py),
+            LiteralValue::UInt16(u) => u.into_py(py),
+            LiteralValue::UInt32(u) => u.into_py(py),
+            LiteralValue::UInt64(u) => u.into_py(py),
+            LiteralValue::Int8(i) => i.into_py(py),
+            LiteralValue::Int16(i) => i.into_py(py),
+            LiteralValue::Int32(i) => i.into_py(py),
+            LiteralValue::Int64(i) => i.into_py(py),
+            LiteralValue::Float32(f) => f.into_py(py),
+            LiteralValue::Float64(f) => f.into_py(py),
+            LiteralValue::Date(d) => {
+                todo!()
+            }
             LiteralValue::DateTime(i, tu, tz) => {
                 //From temporal conversion in polars
                 let delta = match tu {
-                    TimeUnit::Nanoseconds => {TimeDelta::nanoseconds(i)}
-                    TimeUnit::Microseconds => {TimeDelta::microseconds(i)}
-                    TimeUnit::Milliseconds => {TimeDelta::milliseconds(i)}
+                    TimeUnit::Nanoseconds => TimeDelta::nanoseconds(i),
+                    TimeUnit::Microseconds => TimeDelta::microseconds(i),
+                    TimeUnit::Milliseconds => TimeDelta::milliseconds(i),
                 };
                 let dt = NaiveDateTime::UNIX_EPOCH.checked_add_signed(delta).unwrap();
                 if let Some(tz) = tz {
@@ -234,7 +239,7 @@ impl PyLiteral {
                     dt.into_py(py)
                 }
             }
-            _ => todo!()
+            _ => todo!(),
         })
     }
 }

@@ -13,7 +13,7 @@ use crate::parsing::parsing_ast::{
     UnresolvedStottrDocument, UnresolvedStottrLiteral, UnresolvedStottrTerm, UnresolvedTemplate,
 };
 use log::warn;
-use oxrdf::{IriParseError, NamedNode, Literal};
+use oxrdf::{IriParseError, Literal, NamedNode};
 use representation::BaseRDFNodeType;
 use std::collections::HashMap;
 use std::error::Error;
@@ -235,9 +235,8 @@ fn resolve_stottr_literal(
 ) -> Result<Literal, ResolutionError> {
     let value = unresolved_stottr_literal.value.clone();
     let language = unresolved_stottr_literal.language.clone();
-    let data_type_iri = if let Some(unresolved_data_type_uri) =
-            &unresolved_stottr_literal.data_type_iri
-        {
+    let data_type_iri =
+        if let Some(unresolved_data_type_uri) = &unresolved_stottr_literal.data_type_iri {
             Some(resolve(unresolved_data_type_uri, prefix_map)?)
         } else {
             None
@@ -251,7 +250,6 @@ fn resolve_stottr_literal(
         Literal::new_simple_literal(value)
     };
     Ok(literal)
-
 }
 
 fn resolve_parameter(

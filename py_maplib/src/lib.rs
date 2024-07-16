@@ -45,11 +45,10 @@ use triplestore::sparql::{QueryResult as SparqlQueryResult, QueryResult};
 // SOFTWARE.
 #[cfg(target_os = "linux")]
 use jemallocator::Jemalloc;
-use oxrdf::vocab::rdf;
 use oxrdf::NamedNode;
 use oxrdfio::RdfFormat;
 use pyo3::types::PyList;
-use representation::python::PyRDFType;
+use representation::python::{PyIRI, PyLiteral, PyPrefix, PyRDFType, PyVariable};
 use representation::solution_mapping::EagerSolutionMappings;
 use representation::RDFNodeType;
 
@@ -57,8 +56,7 @@ use representation::RDFNodeType;
 use mimalloc::MiMalloc;
 
 use templates::python::{
-    a, py_triple, xsd, PyArgument, PyIRI, PyInstance, PyLiteral, PyParameter, PyPrefix, PyTemplate,
-    PyVariable, PyXSD,
+    a, py_triple, xsd, PyArgument, PyInstance, PyParameter, PyTemplate, PyXSD,
 };
 
 #[cfg(target_os = "linux")]
@@ -498,7 +496,7 @@ fn map_parameters(
             let df = polars_df_to_rust_df(&pydf)?;
             let mut rdf_node_types = HashMap::new();
             for (k, v) in map {
-                let t = v.as_rdf_node_type().unwrap();
+                let t = v.as_rdf_node_type();
                 rdf_node_types.insert(k, t);
             }
             let m = EagerSolutionMappings {

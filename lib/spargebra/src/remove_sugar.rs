@@ -974,7 +974,7 @@ fn eval_simple_timestamp_expression(
                 panic!()
             }
         }
-        SimpleTimestampExpression::DateTime(dt) => Some(dt.clone()),
+        SimpleTimestampExpression::DateTimeUtc(dt) => Some(dt.clone()),
     }
 }
 

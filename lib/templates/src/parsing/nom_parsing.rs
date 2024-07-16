@@ -1025,9 +1025,7 @@ fn test_instance() {
             },
             UnresolvedArgument {
                 list_expand: false,
-                term: UnresolvedStottrTerm::Variable(StottrVariable {
-                    name: "var".to_string(),
-                }),
+                term: UnresolvedStottrTerm::Variable(Variable::new_unchecked("var")),
             },
         ],
     };

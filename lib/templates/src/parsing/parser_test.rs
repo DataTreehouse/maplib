@@ -1,5 +1,5 @@
 #[cfg(test)]
-use crate::ast::{Directive, ListExpanderType, Prefix, StottrVariable};
+use crate::ast::{Directive, ListExpanderType, Prefix};
 #[cfg(test)]
 use crate::parsing::parsing_ast::{
     PrefixedName, ResolvesToNamedNode, UnresolvedAnnotation, UnresolvedArgument,
@@ -11,6 +11,8 @@ use crate::parsing::parsing_ast::{
 use crate::parsing::whole_stottr_doc;
 #[cfg(test)]
 use oxrdf::vocab::xsd;
+#[cfg(test)]
+use oxrdf::Variable;
 #[cfg(test)]
 use oxrdf::{BlankNode, NamedNode};
 
@@ -43,27 +45,21 @@ fn test_easy_template() {
                         optional: false,
                         non_blank: false,
                         ptype: None,
-                        stottr_variable: StottrVariable {
-                            name: "firstName".to_string(),
-                        },
+                        variable: Variable::new_unchecked("firstName"),
                         default_value: None,
                     },
                     UnresolvedParameter {
                         optional: false,
                         non_blank: false,
                         ptype: None,
-                        stottr_variable: StottrVariable {
-                            name: "lastName".to_string(),
-                        },
+                        variable: Variable::new_unchecked("lastName"),
                         default_value: None,
                     },
                     UnresolvedParameter {
                         optional: false,
                         non_blank: false,
                         ptype: None,
-                        stottr_variable: StottrVariable {
-                            name: "email".to_string(),
-                        },
+                        variable: Variable::new_unchecked("email"),
                         default_value: None,
                     },
                 ],
@@ -131,27 +127,21 @@ fn test_easy_template_extra_comma() {
                         optional: false,
                         non_blank: false,
                         ptype: None,
-                        stottr_variable: StottrVariable {
-                            name: "firstName".to_string(),
-                        },
+                        variable: Variable::new_unchecked("firstName"),
                         default_value: None,
                     },
                     UnresolvedParameter {
                         optional: false,
                         non_blank: false,
                         ptype: None,
-                        stottr_variable: StottrVariable {
-                            name: "lastName".to_string(),
-                        },
+                        variable: Variable::new_unchecked("lastName"),
                         default_value: None,
                     },
                     UnresolvedParameter {
                         optional: false,
                         non_blank: false,
                         ptype: None,
-                        stottr_variable: StottrVariable {
-                            name: "email".to_string(),
-                        },
+                        variable: Variable::new_unchecked("email"),
                         default_value: None,
                     },
                 ],
@@ -213,9 +203,7 @@ fn test_spec_modifiers_1() {
                 optional: true,
                 non_blank: false,
                 ptype: None,
-                stottr_variable: StottrVariable {
-                    name: "pizza".to_string(),
-                },
+                variable: Variable::new_unchecked("pizza"),
                 default_value: None,
             }],
             annotation_list: None,
@@ -248,9 +236,7 @@ fn test_spec_modifiers_2() {
                 optional: false,
                 non_blank: true,
                 ptype: None,
-                stottr_variable: StottrVariable {
-                    name: "pizza".to_string(),
-                },
+                variable: Variable::new_unchecked("pizza"),
                 default_value: None,
             }],
             annotation_list: None,
@@ -283,9 +269,7 @@ fn test_spec_modifiers_3() {
                 optional: true,
                 non_blank: true,
                 ptype: None,
-                stottr_variable: StottrVariable {
-                    name: "pizza".to_string(),
-                },
+                variable: Variable::new_unchecked("pizza"),
                 default_value: None,
             }],
             annotation_list: None,
@@ -318,9 +302,7 @@ fn test_spec_modifiers_4() {
                 optional: true,
                 non_blank: true,
                 ptype: None,
-                stottr_variable: StottrVariable {
-                    name: "pizza".to_string(),
-                },
+                variable: Variable::new_unchecked("pizza"),
                 default_value: None,
             }],
             annotation_list: None,
@@ -358,9 +340,7 @@ fn test_spec_type_1() {
                         name: "Class".to_string(),
                     },
                 ))),
-                stottr_variable: StottrVariable {
-                    name: "pizza".to_string(),
-                },
+                variable: Variable::new_unchecked("pizza"),
                 default_value: None,
             }],
             annotation_list: None,
@@ -398,9 +378,7 @@ fn test_spec_type_2() {
                         name: "Class".to_string(),
                     },
                 ))),
-                stottr_variable: StottrVariable {
-                    name: "pizza".to_string(),
-                },
+                variable: Variable::new_unchecked("pizza"),
                 default_value: None,
             }],
             annotation_list: None,
@@ -438,9 +416,7 @@ fn test_spec_type_3() {
                         name: "Class".to_string(),
                     },
                 ))),
-                stottr_variable: StottrVariable {
-                    name: "pizza".to_string(),
-                },
+                variable: Variable::new_unchecked("pizza"),
                 default_value: None,
             }],
             annotation_list: None,
@@ -482,9 +458,7 @@ fn test_spec_default_value_1() {
                         name: "Class".to_string(),
                     },
                 ))),
-                stottr_variable: StottrVariable {
-                    name: "pizza".to_string(),
-                },
+                variable: Variable::new_unchecked("pizza"),
                 default_value: Some(UnresolvedDefaultValue {
                     constant_term: UnresolvedConstantTerm::Constant(
                         UnresolvedConstantLiteral::Iri(ResolvesToNamedNode::PrefixedName(
@@ -535,9 +509,7 @@ fn test_spec_default_value_2() {
                         name: "Class".to_string(),
                     },
                 ))),
-                stottr_variable: StottrVariable {
-                    name: "pizza".to_string(),
-                },
+                variable: Variable::new_unchecked("pizza"),
                 default_value: Some(UnresolvedDefaultValue {
                     constant_term: UnresolvedConstantTerm::Constant(
                         UnresolvedConstantLiteral::Literal(UnresolvedStottrLiteral {
@@ -589,9 +561,7 @@ fn test_spec_default_value_3() {
                         name: "Class".to_string(),
                     },
                 ))),
-                stottr_variable: StottrVariable {
-                    name: "pizza".to_string(),
-                },
+                variable: Variable::new_unchecked("pizza"),
                 default_value: Some(UnresolvedDefaultValue {
                     constant_term: UnresolvedConstantTerm::Constant(
                         UnresolvedConstantLiteral::Literal(UnresolvedStottrLiteral {
@@ -639,27 +609,21 @@ fn test_spec_more_parameters() {
                     optional: false,
                     non_blank: false,
                     ptype: None,
-                    stottr_variable: StottrVariable {
-                        name: "pizza".to_string(),
-                    },
+                    variable: Variable::new_unchecked("pizza"),
                     default_value: None,
                 },
                 UnresolvedParameter {
                     optional: false,
                     non_blank: false,
                     ptype: None,
-                    stottr_variable: StottrVariable {
-                        name: "country".to_string(),
-                    },
+                    variable: Variable::new_unchecked("country"),
                     default_value: None,
                 },
                 UnresolvedParameter {
                     optional: false,
                     non_blank: false,
                     ptype: None,
-                    stottr_variable: StottrVariable {
-                        name: "toppings".to_string(),
-                    },
+                    variable: Variable::new_unchecked("toppings"),
                     default_value: None,
                 },
             ],
@@ -698,9 +662,7 @@ fn test_spec_lists() {
                     optional: false,
                     non_blank: false,
                     ptype: None,
-                    stottr_variable: StottrVariable {
-                        name: "pizza".to_string(),
-                    },
+                    variable: Variable::new_unchecked("pizza"),
                     default_value: Some(UnresolvedDefaultValue {
                         constant_term: UnresolvedConstantTerm::Constant(
                             UnresolvedConstantLiteral::Literal(UnresolvedStottrLiteral {
@@ -719,9 +681,7 @@ fn test_spec_lists() {
                     optional: false,
                     non_blank: false,
                     ptype: None,
-                    stottr_variable: StottrVariable {
-                        name: "country".to_string(),
-                    },
+                    variable: Variable::new_unchecked("country"),
                     default_value: Some(UnresolvedDefaultValue {
                         constant_term: UnresolvedConstantTerm::ConstantList(vec![
                             UnresolvedConstantTerm::Constant(UnresolvedConstantLiteral::Literal(
@@ -753,9 +713,7 @@ fn test_spec_lists() {
                     optional: false,
                     non_blank: false,
                     ptype: None,
-                    stottr_variable: StottrVariable {
-                        name: "toppings".to_string(),
-                    },
+                    variable: Variable::new_unchecked("toppings"),
                     default_value: Some(UnresolvedDefaultValue {
                         constant_term: UnresolvedConstantTerm::ConstantList(vec![
                             UnresolvedConstantTerm::ConstantList(vec![
@@ -809,9 +767,7 @@ fn test_spec_more_complex_types() {
                             name: "Class".to_string(),
                         },
                     ))),
-                    stottr_variable: StottrVariable {
-                        name: "pizza".to_string(),
-                    },
+                    variable: Variable::new_unchecked("pizza"),
                     default_value: None,
                 },
                 UnresolvedParameter {
@@ -823,9 +779,7 @@ fn test_spec_more_complex_types() {
                             name: "NamedIndividual".to_string(),
                         },
                     ))),
-                    stottr_variable: StottrVariable {
-                        name: "country".to_string(),
-                    },
+                    variable: Variable::new_unchecked("country"),
                     default_value: Some(UnresolvedDefaultValue {
                         constant_term: UnresolvedConstantTerm::Constant(
                             UnresolvedConstantLiteral::Iri(ResolvesToNamedNode::PrefixedName(
@@ -848,9 +802,7 @@ fn test_spec_more_complex_types() {
                             }),
                         )))),
                     )))),
-                    stottr_variable: StottrVariable {
-                        name: "toppings".to_string(),
-                    },
+                    variable: Variable::new_unchecked("toppings"),
                     default_value: None,
                 },
             ],
@@ -942,9 +894,7 @@ fn test_spec_example_2() {
                     optional: true,
                     non_blank: true,
                     ptype: None,
-                    stottr_variable: StottrVariable {
-                        name: "var".to_string(),
-                    },
+                    variable: Variable::new_unchecked("var"),
                     default_value: None,
                 }],
                 annotation_list: None,
@@ -1075,7 +1025,7 @@ fn test_spec_example_4() {
                             prefix: "owl".to_string(),
                             name: "Class".to_string(),
                         }))),
-                        stottr_variable: StottrVariable { name: "pizza".to_string() },
+                        variable: Variable::new_unchecked("pizza"),
                         default_value: Some(UnresolvedDefaultValue {
                             constant_term: UnresolvedConstantTerm::Constant(UnresolvedConstantLiteral::Iri(ResolvesToNamedNode::PrefixedName(PrefixedName {
                                 prefix: "p".to_string(),
@@ -1090,7 +1040,7 @@ fn test_spec_example_4() {
                             prefix: "owl".to_string(),
                             name: "NamedIndividual".to_string(),
                         }))))),
-                        stottr_variable: StottrVariable { name: "country".to_string() },
+                        variable: Variable::new_unchecked("country"),
                         default_value: None,
                     },
                     UnresolvedParameter {
@@ -1100,7 +1050,7 @@ fn test_spec_example_4() {
                             prefix: "owl".to_string(),
                             name: "Class".to_string(),
                         }))))),
-                        stottr_variable: StottrVariable { name: "toppings".to_string() },
+                        variable: Variable::new_unchecked("toppings"),
                         default_value: None,
                     },
                 ],
@@ -1199,11 +1149,12 @@ fn test_spec_example_4() {
                     argument_list: vec![
                         UnresolvedArgument {
                             list_expand: false,
-                            term: UnresolvedStottrTerm::Variable(StottrVariable { name: "pizza".to_string() }),
+                            term: UnresolvedStottrTerm::Variable(                        Variable::new_unchecked("pizza"), ),
                         },
                         UnresolvedArgument {
                             list_expand: true,
-                            term: UnresolvedStottrTerm::Variable(StottrVariable { name: "toppings".to_string() }),
+                            term: UnresolvedStottrTerm::Variable(                  Variable::new_unchecked("toppings"),
+                            ),
                         },
                     ],
                 },
@@ -1283,7 +1234,7 @@ fn test_spec_example_4() {
                         },
                         UnresolvedArgument {
                             list_expand: false,
-                            term: UnresolvedStottrTerm::Variable(StottrVariable { name: "pizza".to_string() }),
+                            term: UnresolvedStottrTerm::Variable(Variable::new_unchecked("pizza")),
                         },
                         UnresolvedArgument {
                             list_expand: true,
