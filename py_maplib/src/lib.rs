@@ -56,7 +56,7 @@ use representation::RDFNodeType;
 use mimalloc::MiMalloc;
 
 use templates::python::{
-    a, py_triple, xsd, PyArgument, PyInstance, PyParameter, PyTemplate, PyXSD,
+    a, py_triple, PyArgument, PyInstance, PyParameter, PyTemplate, PyXSD,
 };
 
 #[cfg(target_os = "linux")]
@@ -456,7 +456,6 @@ fn _maplib(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyInstance>()?;
     m.add_function(wrap_pyfunction!(py_triple, m)?)?;
     m.add_function(wrap_pyfunction!(a, m)?)?;
-    m.add_function(wrap_pyfunction!(xsd, m)?)?;
     Ok(())
 }
 
