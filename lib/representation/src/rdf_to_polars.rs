@@ -295,8 +295,8 @@ pub fn polars_literal_values_to_series(literal_values: Vec<LiteralValue>, name: 
                 literal_values
                     .into_iter()
                     .map(|x| {
-                        if let LiteralValue::DateTime(n, t_prime, None) = x {
-                            assert_eq!(t, &t_prime);
+                        if let LiteralValue::DateTime(n, _tz_prime, _) = x {
+                            //assert_eq!(t, &t_prime);
                             n
                         } else {
                             panic!("Not possible")

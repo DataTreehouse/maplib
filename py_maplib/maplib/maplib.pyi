@@ -1,23 +1,25 @@
 from pathlib import Path
 from typing import Union, List, Dict, Optional, Callable, Tuple, Literal as LiteralType
 from polars import DataFrame
+from datetime import datetime, date
 
 
 class RDFType:
     """
     The type of a column containing a RDF variable.
+    For instance, xsd:string is RDFType.Literal("http://www.w3.org/2001/XMLSchema#string")
     """
     IRI: Callable[[], "RDFType"]
     Blank: Callable[[], "RDFType"]
-    Literal: Callable[[str], "RDFType"]
+    Literal: Callable[[Union[str, "IRI"]], "RDFType"]
     Nested: Callable[["RDFType"], "RDFType"]
     Unknown: Callable[[], "RDFType"]
-
 
 class Variable:
     """
     A variable in a template.
     """
+    name:str
 
     def __init__(self, name: str):
         """
@@ -58,11 +60,13 @@ class Prefix:
         :return:
         """
 
-
 class Literal:
     """
     An RDF literal.
     """
+    value: str
+    data_type: Optional[IRI]
+    language: Optional[str]
 
     def __init__(self, value: str, data_type: IRI = None, language: str = None):
         """
@@ -70,6 +74,12 @@ class Literal:
         :param value: The lexical representation of the value.
         :param data_type: The data type of the value (an IRI).
         :param language: The language tag of the value.
+        """
+
+    def to_native(self) -> Union[int, float, bool, str, datetime, date]:
+        """
+
+        :return:
         """
 
 
@@ -80,7 +90,7 @@ class Parameter:
                  allow_blank: bool = True,
                  rdf_type: RDFType = None):
         """
-        Create a new parameter.
+        Create a new parameter for a Template.
         :param variable: The variable.
         :param optional: Can the variable be unbound?
         :param allow_blank: Can the variable be bound to a blank node?
@@ -136,6 +146,56 @@ class Template:
         :return:
         """
 
+def Triple(subject:Union["Argument", IRI, Variable],
+           predicate:Union["Argument", IRI,Variable],
+           object:Union["Argument", IRI, Variable, Literal],
+           list_expander:Optional[LiteralType["cross", "zipMin", "zipMax"]]=None):
+    """
+    An OTTR Triple Pattern used for creating templates.
+    This is the basis pattern which all template instances are rewritten into.
+    Equivalent to:
+
+    >>> ottr = Prefix("http://ns.ottr.xyz/0.4/")
+    ... Instance(ottr.suf("Triple"), subject, predicate, object, list_expander)
+
+    :param subject:
+    :param predicate:
+    :param object:
+    :param list_expander:
+    :return:
+    """
+
+class XSD():
+    """
+    The xsd namespace, for convenience.
+    """
+    boolean:IRI
+    byte:IRI
+    date:IRI
+    dateTime:IRI
+    dateTimeStamp:IRI
+    decimal:IRI
+    double:IRI
+    duration:IRI
+    float:IRI
+    int_:IRI
+    integer:IRI
+    language:IRI
+    long:IRI
+    short:IRI
+    string:IRI
+
+    def __init__(self):
+        """
+        Create the xsd namespace helper.
+        """
+
+def a() -> IRI:
+    """
+    :return: IRI("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
+    """
+
+# END COMMON WITH CHRONTEXT
 
 ParametersType = Dict[str, Tuple[DataFrame, Dict[str, RDFType]]]
 
@@ -199,14 +259,14 @@ class Mapping:
 
     def __init__(self, documents: Union[str, List[str]] = None, caching_folder: str = None) -> Mapping: ...
 
-    def add_template(self, template: Template):
+    def add_template(self, template: "Template"):
         """
         Add a template to the mapping. Overwrites any existing template with the same IRI.
         :param template: The template to add.
         :return:
         """
 
-    def expand(self, template: Union[str, Template, IRI],
+    def expand(self, template: Union[str, "Template", IRI],
                df: DataFrame = None, unique_subset: List[str] = None) -> None:
         """
         Expand a template using a DataFrame
@@ -454,22 +514,3 @@ class Mapping:
 
         @return: The sprout as its own Mapping.
         """
-
-
-def triple(subject: Union[Argument, Variable, IRI],
-           predicate: Union[Argument, Variable, IRI],
-           object: Union[Argument, Variable, IRI, Literal],
-           list_expander: LiteralType["cross", "zipMin", "zipMax"] = None) -> Instance:
-    """
-    Instantiate the ottr:Triple-template.
-    :param subject: The predicate of the triple.
-    :param predicate: The predicate of the triple.
-    :param object: The object of the triple.
-    :param list_expander: (How) should we do list-expansion?
-    :return:
-    """
-
-def a() -> IRI:
-    """
-    :return: IRI("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
-    """
