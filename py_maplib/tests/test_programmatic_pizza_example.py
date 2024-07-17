@@ -6,7 +6,7 @@ pl.Config.set_fmt_str_lengths(300)
 
 @pytest.fixture(scope="function")
 def pizzas_mapping():
-    from maplib import Mapping, Prefix, Template, Argument, Parameter, Variable, RDFType, triple, a
+    from maplib import Mapping, Prefix, Template, Argument, Parameter, Variable, RDFType, Triple, a
     import polars as pl
     pl.Config.set_fmt_str_lengths(150)
 
@@ -33,9 +33,9 @@ def pizzas_mapping():
             Parameter(variable=ings_var, rdf_type=RDFType.Nested(RDFType.IRI()))
         ],
         instances= [
-            triple(p_var, a(), pi.suf("Pizza")),
-            triple(p_var, pi.suf("fromCountry"), c_var),
-            triple(p_var, pi.suf("hasIngredient"), Argument(term=ings_var, list_expand=True), list_expander="cross")
+            Triple(p_var, a(), pi.suf("Pizza")),
+            Triple(p_var, pi.suf("fromCountry"), c_var),
+            Triple(p_var, pi.suf("hasIngredient"), Argument(term=ings_var, list_expand=True), list_expander="cross")
         ]
     )
 

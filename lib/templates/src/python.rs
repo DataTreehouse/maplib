@@ -5,7 +5,7 @@ use crate::ast::{
 use crate::constants::{OTTR_TRIPLE, XSD_PREFIX_IRI};
 use crate::MappingColumnType;
 use oxrdf::vocab::rdf;
-use oxrdf::IriParseError;
+use oxrdf::{IriParseError, NamedNodeRef};
 use pyo3::create_exception;
 use pyo3::exceptions::PyException;
 use pyo3::prelude::*;
@@ -216,7 +216,7 @@ impl PyTemplate {
     }
 }
 
-#[pyfunction(name = "triple")]
+#[pyfunction(name = "Triple")]
 pub fn py_triple<'py>(
     subject: Bound<'py, PyAny>,
     predicate: Bound<'py, PyAny>,
@@ -266,13 +266,13 @@ impl PyXSD {
     }
 
     #[getter]
-    fn double(&self) -> PyIRI {
-        self.prefix.suf("double".to_string()).unwrap()
+    fn byte(&self) -> PyIRI {
+        self.prefix.suf("byte".to_string()).unwrap()
     }
 
     #[getter]
-    fn string(&self) -> PyIRI {
-        self.prefix.suf("string".to_string()).unwrap()
+    fn date(&self) -> PyIRI {
+        self.prefix.suf("date".to_string()).unwrap()
     }
 
     #[getter]
@@ -280,14 +280,65 @@ impl PyXSD {
     fn date_time(&self) -> PyIRI {
         self.prefix.suf("dateTime".to_string()).unwrap()
     }
+
+    #[getter]
+    #[pyo3(name = "dateTimeStamp")]
+    fn date_time_stamp(&self) -> PyIRI {
+        self.prefix.suf("dateTimeStamp".to_string()).unwrap()
+    }
+
+    #[getter]
+    fn decimal(&self) -> PyIRI {
+        self.prefix.suf("decimal".to_string()).unwrap()
+    }
+
+    #[getter]
+    fn double(&self) -> PyIRI {
+        self.prefix.suf("double".to_string()).unwrap()
+    }
+
+    #[getter]
+    fn duration(&self) -> PyIRI {
+        self.prefix.suf("duration".to_string()).unwrap()
+    }
+
+    #[getter]
+    fn float(&self) -> PyIRI {
+        self.prefix.suf("float".to_string()).unwrap()
+    }
+
+    #[getter]
+    fn int_(&self) -> PyIRI {
+        self.prefix.suf("int".to_string()).unwrap()
+    }
+
+    #[getter]
+    fn integer(&self) -> PyIRI {
+        self.prefix.suf("integer".to_string()).unwrap()
+    }
+
+    #[getter]
+    fn language(&self) -> PyIRI {
+        self.prefix.suf("language".to_string()).unwrap()
+    }
+
+    #[getter]
+    fn long(&self) -> PyIRI {
+        self.prefix.suf("long".to_string()).unwrap()
+    }
+
+    #[getter]
+    fn short(&self) -> PyIRI {
+        self.prefix.suf("short".to_string()).unwrap()
+    }
+
+    #[getter]
+    fn string(&self) -> PyIRI {
+        self.prefix.suf("string".to_string()).unwrap()
+    }
 }
 
 #[pyfunction]
 pub fn a() -> PyIRI {
     PyIRI::new(rdf::TYPE.as_str().to_string()).unwrap()
-}
-
-#[pyfunction]
-pub fn xsd() -> PyXSD {
-    PyXSD::new()
 }
