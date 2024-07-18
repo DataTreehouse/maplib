@@ -450,6 +450,7 @@ fn _maplib(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyVariable>()?;
     m.add_class::<PyLiteral>()?;
     m.add_class::<PyIRI>()?;
+    m.add_class::<PyXSD>()?;
     m.add_class::<PyParameter>()?;
     m.add_class::<PyArgument>()?;
     m.add_class::<PyTemplate>()?;
