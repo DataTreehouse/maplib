@@ -1,25 +1,27 @@
-use crate::{fix_cats_and_multicolumns, Mapping};
+use crate::{fix_cats_and_multicolumns, PyMapping};
 use pydf_io::to_python::df_to_py_df;
 use pyo3::{pyclass, pymethods, PyObject, PyResult, Python};
 use report_mapping::report_to_mapping;
 use representation::solution_mapping::EagerSolutionMappings;
 use shacl::ValidationReport as RustValidationReport;
 use std::collections::HashMap;
+use triplestore::Triplestore;
 
-#[derive(Debug, Clone)]
-#[pyclass]
-pub struct ValidationReport {
+#[derive(Clone)]
+#[pyclass(name="ValidationReport")]
+pub struct PyValidationReport {
+    shape_graph: Option<Triplestore>,
     inner: RustValidationReport,
 }
 
-impl ValidationReport {
-    pub fn new(inner: RustValidationReport) -> ValidationReport {
-        ValidationReport { inner }
+impl PyValidationReport {
+    pub fn new(inner: RustValidationReport, shape_graph:Option<Triplestore>) -> PyValidationReport {
+        PyValidationReport { shape_graph, inner }
     }
 }
 
 #[pymethods]
-impl ValidationReport {
+impl PyValidationReport {
     #[getter]
     pub fn conforms(&self) -> bool {
         self.inner.conforms
@@ -65,8 +67,8 @@ impl ValidationReport {
         Ok(details)
     }
 
-    pub fn graph(&self) -> Mapping {
-        let m = report_to_mapping(&self.inner);
-        Mapping::from_inner_mapping(m)
+    pub fn graph(&self) -> PyMapping {
+        let m = report_to_mapping(&self.inner, &self.shape_graph);
+        PyMapping::from_inner_mapping(m)
     }
 }

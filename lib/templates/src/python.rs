@@ -5,7 +5,7 @@ use crate::ast::{
 use crate::constants::{OTTR_TRIPLE, XSD_PREFIX_IRI};
 use crate::MappingColumnType;
 use oxrdf::vocab::rdf;
-use oxrdf::{IriParseError, NamedNodeRef};
+use oxrdf::{IriParseError};
 use pyo3::create_exception;
 use pyo3::exceptions::PyException;
 use pyo3::prelude::*;

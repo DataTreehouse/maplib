@@ -7,6 +7,7 @@ edition = "2021"
 maplib = {path="../maplib"}
 representation = {path ="../representation"}
 shacl = {path = "../shacl"}
+triplestore = {path = "../triplestore"}
 
 polars.workspace = true
 oxrdf.workspace = true

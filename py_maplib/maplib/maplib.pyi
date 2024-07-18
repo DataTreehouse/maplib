@@ -362,6 +362,7 @@ class Mapping:
                  shape_graph: str,
                  include_details: bool = False,
                  include_conforms: bool = False,
+                 include_shape_graph: bool = True,
                  ) -> ValidationReport:
         """
         Validate the contained knowledge graph using SHACL
@@ -370,6 +371,7 @@ class Mapping:
         :param shape_graph: The IRI of the Shape Graph.
         :param include_details: Include details of SHACL evaluation alongside the report. Currently uses a lot of memory.
         :param include_conforms: Include those results that conformed. Also applies to details.
+        :param include_shape_graph: Include the shape graph in the report, useful when creating the graph from the report.
         :return: Validation report containing a report (report.df) and whether the graph conforms (report.conforms)
         """
 

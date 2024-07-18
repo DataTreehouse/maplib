@@ -7,7 +7,7 @@ mod shacl;
 use crate::error::PyMaplibError;
 use pydf_io::to_rust::polars_df_to_rust_df;
 
-use crate::shacl::ValidationReport;
+use crate::shacl::PyValidationReport;
 use log::warn;
 use maplib::errors::MaplibError;
 use maplib::mapping::errors::MappingError;
@@ -67,15 +67,15 @@ static GLOBAL: Jemalloc = Jemalloc;
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
 
-#[pyclass]
-pub struct Mapping {
+#[pyclass(name="Mapping")]
+pub struct PyMapping {
     inner: InnerMapping,
     sprout: Option<InnerMapping>,
 }
 
-impl Mapping {
-    pub fn from_inner_mapping(inner: InnerMapping) -> Mapping {
-        Mapping {
+impl PyMapping {
+    pub fn from_inner_mapping(inner: InnerMapping) -> PyMapping {
+        PyMapping {
             inner,
             sprout: None,
         }
@@ -98,12 +98,12 @@ impl ExpandOptions {
 type ParametersType<'a> = HashMap<String, (Bound<'a, PyAny>, HashMap<String, PyRDFType>)>;
 
 #[pymethods]
-impl Mapping {
+impl PyMapping {
     #[new]
     fn new(
         documents: Option<&Bound<'_, PyAny>>,
         caching_folder: Option<&Bound<'_, PyAny>>,
-    ) -> PyResult<Mapping> {
+    ) -> PyResult<PyMapping> {
         let documents = if let Some(documents) = documents {
             if documents.is_instance_of::<PyList>() {
                 let mut strs = vec![];
@@ -134,7 +134,7 @@ impl Mapping {
         } else {
             None
         };
-        Ok(Mapping {
+        Ok(PyMapping {
             inner: InnerMapping::new(&template_dataset, caching_folder)
                 .map_err(PyMaplibError::from)?,
             sprout: None,
@@ -156,9 +156,9 @@ impl Mapping {
         Ok(())
     }
 
-    fn detach_sprout(&mut self) -> PyResult<Option<Mapping>> {
+    fn detach_sprout(&mut self) -> PyResult<Option<PyMapping>> {
         if let Some(sprout) = self.sprout.take() {
-            let m = Mapping {
+            let m = PyMapping {
                 inner: sprout,
                 sprout: None,
             };
@@ -269,7 +269,8 @@ impl Mapping {
         shape_graph: String,
         include_details: Option<bool>,
         include_conforms: Option<bool>,
-    ) -> PyResult<ValidationReport> {
+        include_shape_graph: Option<bool>,
+    ) -> PyResult<PyValidationReport> {
         let shape_graph = NamedNode::new(shape_graph).map_err(PyMaplibError::from)?;
         let report = self
             .inner
@@ -279,7 +280,12 @@ impl Mapping {
                 include_conforms.unwrap_or(false),
             )
             .map_err(PyMaplibError::from)?;
-        Ok(ValidationReport::new(report))
+        let shape_graph_triplestore = if include_shape_graph.unwrap_or(true) {
+            Some(self.inner.triplestores_map.get(&shape_graph).unwrap().clone())
+        } else {
+            None
+        };
+        Ok(PyValidationReport::new(report, shape_graph_triplestore))
     }
 
     fn insert(
@@ -443,8 +449,8 @@ impl Mapping {
 #[pyo3(name = "maplib")]
 fn _maplib(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     enable_string_cache();
-    m.add_class::<Mapping>()?;
-    m.add_class::<ValidationReport>()?;
+    m.add_class::<PyMapping>()?;
+    m.add_class::<PyValidationReport>()?;
     m.add_class::<PyRDFType>()?;
     m.add_class::<PyPrefix>()?;
     m.add_class::<PyVariable>()?;
