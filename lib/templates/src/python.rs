@@ -1,11 +1,8 @@
-use crate::ast::{
-    Argument, ConstantTerm, ConstantTermOrList, Instance, ListExpanderType, Parameter, Signature,
-    StottrTerm, Template,
-};
+use crate::ast::{Argument, ConstantTerm, ConstantTermOrList, Instance, ListExpanderType, Parameter, PType, Signature, StottrTerm, Template};
 use crate::constants::{OTTR_TRIPLE, XSD_PREFIX_IRI};
 use crate::MappingColumnType;
 use oxrdf::vocab::rdf;
-use oxrdf::{IriParseError, NamedNodeRef};
+use oxrdf::IriParseError;
 use pyo3::create_exception;
 use pyo3::exceptions::PyException;
 use pyo3::prelude::*;
@@ -16,6 +13,8 @@ use thiserror::Error;
 pub enum PyTemplateError {
     #[error(transparent)]
     IriParseError(#[from] IriParseError),
+    #[error("Bad argument: `{0}`")]
+    BadTemplateArgumentError(String),
 }
 
 impl From<PyTemplateError> for PyErr {
@@ -24,11 +23,15 @@ impl From<PyTemplateError> for PyErr {
             PyTemplateError::IriParseError(err) => {
                 IriParseErrorException::new_err(format!("{}", err))
             }
+            PyTemplateError::BadTemplateArgumentError(err) => {
+                IriParseErrorException::new_err(format!("{}", err))
+            }
         }
     }
 }
 
 create_exception!(exceptions, IriParseErrorException, PyException);
+create_exception!(exceptions, BadTemplateArgumentErrorException, PyException);
 
 #[derive(Clone)]
 #[pyclass(name = "Parameter")]
@@ -70,11 +73,80 @@ impl PyParameter {
         };
         Ok(PyParameter { parameter })
     }
+
+    #[getter]
+    fn get_rdf_type(&self) -> Option<PyRDFType> {
+        if let Some(ptype) = &self.parameter.ptype {
+            let py_rdf_type = ptype_to_py_rdf_type(ptype);
+            Some(py_rdf_type)
+        } else {
+            None
+        }
+    }
+
+    #[setter]
+    fn set_rdf_type(&mut self, py: Python, rdf_type: Option<Py<PyRDFType>>) -> PyResult<()> {
+        if let Some(rdf_type) = rdf_type {
+            self.parameter.ptype = Some(py_rdf_type_to_mapping_column_type(&rdf_type, py)
+                .map_err(PyTemplateError::from)?
+                .as_ptype());
+        } else {
+            self.parameter.ptype = None;
+        }
+        Ok(())
+    }
+
+    #[getter]
+    fn get_optional(&self) -> bool {
+        self.parameter.optional
+    }
+
+    #[setter]
+    fn set_optional(&mut self, optional:bool) {
+        self.parameter.optional = optional;
+    }
+
+    #[getter]
+    fn get_allow_blank(&self) -> bool {
+        !self.parameter.non_blank
+    }
+
+    #[setter]
+    fn set_allow_blank(&mut self, allow_blank:bool) {
+        self.parameter.non_blank = !allow_blank;
+    }
+
+    #[getter]
+    fn get_variable(&self) -> PyResult<PyVariable> {
+        PyVariable::new(self.parameter.variable.as_str().to_string())
+    }
+
+    #[setter]
+    fn set_variable(&mut self, variable:PyVariable) {
+        self.parameter.variable = variable.variable;
+    }
+}
+
+fn ptype_to_py_rdf_type(ptype:&PType) -> PyRDFType {
+    match ptype {
+        PType::Basic(b, s) => {
+            PyRDFType { flat: Some(b.as_rdf_node_type()), nested: None }
+        }
+        PType::Lub(_) => { todo!() }
+        PType::List(l) => { ptype_to_py_rdf_type(l) }
+        PType::NEList(_) => { todo!() }
+    }
 }
 
 impl PyParameter {
     pub fn into_inner(self) -> Parameter {
         self.parameter
+    }
+}
+
+impl From<Parameter> for PyParameter {
+    fn from(parameter: Parameter) -> Self {
+        PyParameter { parameter }
     }
 }
 
@@ -154,6 +226,14 @@ impl PyInstance {
     }
 }
 
+impl From<Instance> for PyInstance {
+    fn from(instance: Instance) -> Self {
+        PyInstance {
+            instance
+        }
+    }
+}
+
 #[derive(Clone)]
 #[pyclass(name = "Template")]
 pub struct PyTemplate {
@@ -165,14 +245,24 @@ impl PyTemplate {
     #[new]
     pub fn new<'py>(
         iri: PyIRI,
-        parameters: Vec<Bound<'py, PyParameter>>,
+        parameters: Vec<Bound<'py, PyAny>>,
         instances: Vec<Bound<'py, PyInstance>>,
         prefixed_iri: Option<String>,
-    ) -> PyTemplate {
-        let parameters: Vec<_> = parameters
-            .into_iter()
-            .map(|x| x.borrow().clone().into_inner())
-            .collect();
+        py: Python,
+    ) -> PyResult<PyTemplate> {
+        let mut parameter_list = vec![];
+        for p in parameters {
+            if let Ok(parameter) = p.extract::<PyParameter>() {
+                parameter_list.push(parameter.into_inner());
+            } else if let Ok(variable) = p.extract::<PyVariable>() {
+                parameter_list.push(PyParameter::new(variable, None, None, None, py)?.into_inner());
+            } else {
+                return Err(PyTemplateError::BadTemplateArgumentError(
+                    "Parameter list should be only parameters or variables".to_string(),
+                )
+                .into());
+            }
+        }
         let instances: Vec<_> = instances
             .into_iter()
             .map(|x| x.borrow().clone().into_inner())
@@ -181,12 +271,12 @@ impl PyTemplate {
             signature: Signature {
                 template_name: iri.iri,
                 template_prefixed_name: prefixed_iri,
-                parameter_list: parameters,
+                parameter_list,
                 annotation_list: None,
             },
             pattern_list: instances,
         };
-        PyTemplate { template }
+        Ok(PyTemplate { template })
     }
 
     pub fn instance<'py>(
@@ -207,6 +297,47 @@ impl PyTemplate {
 
     fn __str__(&self) -> String {
         self.template.to_string()
+    }
+
+    #[getter]
+    fn iri(&self) -> PyIRI {
+        PyIRI::from(self.template.signature.template_name.clone())
+    }
+
+    #[getter]
+    fn get_instances(&self) -> Vec<PyInstance> {
+        let mut instances = vec![];
+        for i in &self.template.pattern_list {
+            instances.push(PyInstance::from(i.clone()));
+        }
+        instances
+    }
+
+    #[setter]
+    fn set_instances(&mut self, instances:Vec<PyInstance>) {
+        let mut inner_instances = vec![];
+        for i in instances {
+            inner_instances.push(i.instance);
+        }
+        self.template.pattern_list = inner_instances;
+    }
+
+    #[getter]
+    fn get_parameters(&self) -> Vec<PyParameter> {
+        let mut parameters = vec![];
+        for p in &self.template.signature.parameter_list {
+            parameters.push(PyParameter::from(p.clone()))
+        }
+        parameters
+    }
+
+    #[setter]
+    fn set_parameters(&mut self, parameters:Vec<PyParameter>) {
+        let mut inner_parameters = vec![];
+        for a in parameters {
+            inner_parameters.push(a.parameter);
+        }
+        self.template.signature.parameter_list = inner_parameters;
     }
 }
 

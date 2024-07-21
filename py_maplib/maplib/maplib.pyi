@@ -84,6 +84,14 @@ class Literal:
 
 
 class Parameter:
+    variable: Variable
+    optional: bool
+    allow_blank: bool
+    rdf_type: Optional[RDFType]
+    """
+    Parameters for template signatures.
+    """
+
     def __init__(self,
                  variable: Variable,
                  optional: bool = False,
@@ -121,13 +129,18 @@ class Instance:
 
 
 class Template:
+    iri: str
+    parameters: List[Parameter]
+    instances: List[Instance]
     """
     An OTTR Template.
+    Note that accessing parameters- or instances-fields returns copies. 
+    To change these fields, you must assign new lists of parameters or instances.  
     """
 
     def __init__(self,
                  iri: IRI,
-                 parameters: List[Parameter],
+                 parameters: List[Union[Parameter, Variable]],
                  instances: List[Instance]):
         """
         Create a new OTTR Template

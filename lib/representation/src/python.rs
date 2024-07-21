@@ -114,6 +114,12 @@ impl PyRDFType {
     }
 }
 
+impl From<RDFNodeType> for PyRDFType {
+    fn from(rdf_node_type: RDFNodeType) -> Self {
+        PyRDFType { flat: None, nested: None }
+    }
+}
+
 #[derive(Clone)]
 #[pyclass(name = "IRI")]
 pub struct PyIRI {
@@ -132,6 +138,12 @@ impl PyIRI {
 impl PyIRI {
     pub fn into_inner(self) -> NamedNode {
         self.iri
+    }
+}
+
+impl From<NamedNode> for PyIRI {
+    fn from(iri: NamedNode) -> Self {
+        PyIRI { iri }
     }
 }
 

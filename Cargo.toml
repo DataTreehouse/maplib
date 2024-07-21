@@ -51,6 +51,3 @@ serial_test = "3.1.1"
 oxrdf = { git = 'https://github.com/oxigraph/oxigraph.git', rev = "1e08089454a9aa8b3f66f4a422aed27e73faae84"}
 oxttl = { git = 'https://github.com/oxigraph/oxigraph.git', rev = "1e08089454a9aa8b3f66f4a422aed27e73faae84"}
 oxrdfio = { git = 'https://github.com/oxigraph/oxigraph.git', rev = "1e08089454a9aa8b3f66f4a422aed27e73faae84"}
-#oxrdf = { path = "../oxigraph/lib/oxrdf" }
-#oxttl = { path  = "../oxigraph/lib/oxttl" }
-#oxrdfio = { path  = "../oxigraph/lib/oxrdfio" }

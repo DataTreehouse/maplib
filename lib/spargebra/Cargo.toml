@@ -27,7 +27,6 @@ oxrdf.workspace = true
 oxiri.workspace = true
 oxilangtag.workspace = true
 chrono.workspace = true
-datetimeparse = { workspace=true, features = ["chrono"] }
 fundu = { workspace=true, features = ["custom", "chrono"] }
 thiserror.workspace = true
 
