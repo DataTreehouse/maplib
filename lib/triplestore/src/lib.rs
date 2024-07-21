@@ -37,6 +37,7 @@ use std::path::Path;
 use std::time::Instant;
 use uuid::Uuid;
 
+#[derive(Clone)]
 pub struct Triplestore {
     deduplicated: bool,
     pub(crate) caching_folder: Option<String>,
@@ -45,6 +46,7 @@ pub struct Triplestore {
     parser_call: usize,
 }
 
+#[derive(Clone)]
 pub struct TripleTable {
     dfs: Option<Vec<DataFrame>>,
     df_paths: Option<Vec<String>>,
