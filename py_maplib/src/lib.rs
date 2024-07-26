@@ -55,9 +55,7 @@ use representation::RDFNodeType;
 #[cfg(not(target_os = "linux"))]
 use mimalloc::MiMalloc;
 
-use templates::python::{
-    a, py_triple, PyArgument, PyInstance, PyParameter, PyTemplate, PyXSD,
-};
+use templates::python::{a, py_triple, PyArgument, PyInstance, PyParameter, PyTemplate, PyXSD};
 
 #[cfg(target_os = "linux")]
 #[global_allocator]
@@ -67,7 +65,7 @@ static GLOBAL: Jemalloc = Jemalloc;
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
 
-#[pyclass(name="Mapping")]
+#[pyclass(name = "Mapping")]
 pub struct PyMapping {
     inner: InnerMapping,
     sprout: Option<InnerMapping>,
@@ -281,7 +279,13 @@ impl PyMapping {
             )
             .map_err(PyMaplibError::from)?;
         let shape_graph_triplestore = if include_shape_graph.unwrap_or(true) {
-            Some(self.inner.triplestores_map.get(&shape_graph).unwrap().clone())
+            Some(
+                self.inner
+                    .triplestores_map
+                    .get(&shape_graph)
+                    .unwrap()
+                    .clone(),
+            )
         } else {
             None
         };

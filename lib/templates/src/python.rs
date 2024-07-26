@@ -1,4 +1,7 @@
-use crate::ast::{Argument, ConstantTerm, ConstantTermOrList, Instance, ListExpanderType, Parameter, PType, Signature, StottrTerm, Template};
+use crate::ast::{
+    Argument, ConstantTerm, ConstantTermOrList, Instance, ListExpanderType, PType, Parameter,
+    Signature, StottrTerm, Template,
+};
 use crate::constants::{OTTR_TRIPLE, XSD_PREFIX_IRI};
 use crate::MappingColumnType;
 use oxrdf::vocab::rdf;
@@ -87,9 +90,11 @@ impl PyParameter {
     #[setter]
     fn set_rdf_type(&mut self, py: Python, rdf_type: Option<Py<PyRDFType>>) -> PyResult<()> {
         if let Some(rdf_type) = rdf_type {
-            self.parameter.ptype = Some(py_rdf_type_to_mapping_column_type(&rdf_type, py)
-                .map_err(PyTemplateError::from)?
-                .as_ptype());
+            self.parameter.ptype = Some(
+                py_rdf_type_to_mapping_column_type(&rdf_type, py)
+                    .map_err(PyTemplateError::from)?
+                    .as_ptype(),
+            );
         } else {
             self.parameter.ptype = None;
         }
@@ -102,7 +107,7 @@ impl PyParameter {
     }
 
     #[setter]
-    fn set_optional(&mut self, optional:bool) {
+    fn set_optional(&mut self, optional: bool) {
         self.parameter.optional = optional;
     }
 
@@ -112,7 +117,7 @@ impl PyParameter {
     }
 
     #[setter]
-    fn set_allow_blank(&mut self, allow_blank:bool) {
+    fn set_allow_blank(&mut self, allow_blank: bool) {
         self.parameter.non_blank = !allow_blank;
     }
 
@@ -122,19 +127,24 @@ impl PyParameter {
     }
 
     #[setter]
-    fn set_variable(&mut self, variable:PyVariable) {
+    fn set_variable(&mut self, variable: PyVariable) {
         self.parameter.variable = variable.variable;
     }
 }
 
-fn ptype_to_py_rdf_type(ptype:&PType) -> PyRDFType {
+fn ptype_to_py_rdf_type(ptype: &PType) -> PyRDFType {
     match ptype {
-        PType::Basic(b, s) => {
-            PyRDFType { flat: Some(b.as_rdf_node_type()), nested: None }
+        PType::Basic(b, s) => PyRDFType {
+            flat: Some(b.as_rdf_node_type()),
+            nested: None,
+        },
+        PType::Lub(_) => {
+            todo!()
         }
-        PType::Lub(_) => { todo!() }
-        PType::List(l) => { ptype_to_py_rdf_type(l) }
-        PType::NEList(_) => { todo!() }
+        PType::List(l) => ptype_to_py_rdf_type(l),
+        PType::NEList(_) => {
+            todo!()
+        }
     }
 }
 
@@ -228,9 +238,7 @@ impl PyInstance {
 
 impl From<Instance> for PyInstance {
     fn from(instance: Instance) -> Self {
-        PyInstance {
-            instance
-        }
+        PyInstance { instance }
     }
 }
 
@@ -314,7 +322,7 @@ impl PyTemplate {
     }
 
     #[setter]
-    fn set_instances(&mut self, instances:Vec<PyInstance>) {
+    fn set_instances(&mut self, instances: Vec<PyInstance>) {
         let mut inner_instances = vec![];
         for i in instances {
             inner_instances.push(i.instance);
@@ -332,7 +340,7 @@ impl PyTemplate {
     }
 
     #[setter]
-    fn set_parameters(&mut self, parameters:Vec<PyParameter>) {
+    fn set_parameters(&mut self, parameters: Vec<PyParameter>) {
         let mut inner_parameters = vec![];
         for a in parameters {
             inner_parameters.push(a.parameter);

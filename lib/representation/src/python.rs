@@ -116,7 +116,10 @@ impl PyRDFType {
 
 impl From<RDFNodeType> for PyRDFType {
     fn from(rdf_node_type: RDFNodeType) -> Self {
-        PyRDFType { flat: None, nested: None }
+        PyRDFType {
+            flat: None,
+            nested: None,
+        }
     }
 }
 

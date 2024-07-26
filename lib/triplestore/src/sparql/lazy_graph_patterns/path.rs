@@ -3,8 +3,8 @@ use crate::sparql::errors::SparqlError;
 use oxrdf::vocab::xsd;
 use oxrdf::{NamedNode, Variable};
 use polars::prelude::{
-    col, lit, AnyValue, DataFrame, DataFrameJoinOps, IntoLazy, IntoSeries, JoinArgs, JoinType,
-    Series, UniqueKeepStrategy,
+    col, lit, AnyValue, DataFrame, IntoLazy, IntoSeries, JoinArgs, JoinType, Series,
+    UniqueKeepStrategy,
 };
 use polars_core::prelude::{DataType, SortMultipleOptions};
 use query_processing::errors::QueryProcessingError;
@@ -116,34 +116,32 @@ impl Triplestore {
                 subject_series.rename("subject_key");
                 let mut object_series = Series::from_iter(object_vec);
                 object_series.rename("object_key");
-                out_df = DataFrame::new(vec![subject_series, object_series]).unwrap();
+                let mut out_lf = DataFrame::new(vec![subject_series, object_series])
+                    .unwrap()
+                    .lazy();
+                let lookup_subject_lf = lookup_df
+                    .clone()
+                    .lazy()
+                    .rename([VALUE_COLUMN], [SUBJECT_COL_NAME]);
+                out_lf = out_lf
+                    .join(
+                        lookup_subject_lf,
+                        &[col("subject_key")],
+                        &[col(LOOKUP_COLUMN)],
+                        JoinArgs::new(JoinType::Inner),
+                    )
+                    .drop(["subject_key"]);
+                let lookup_object_lf = lookup_df.lazy().rename([VALUE_COLUMN], [OBJECT_COL_NAME]);
+                out_lf = out_lf
+                    .join(
+                        lookup_object_lf,
+                        &[col("object_key")],
+                        &[col(LOOKUP_COLUMN)],
+                        JoinArgs::new(JoinType::Inner),
+                    )
+                    .drop(["object_key"]);
+                out_df = out_lf.collect().unwrap();
 
-                lookup_df.rename(VALUE_COLUMN, SUBJECT_COL_NAME).unwrap();
-                out_df = out_df
-                    .join(
-                        &lookup_df,
-                        &["subject_key"],
-                        &[LOOKUP_COLUMN],
-                        JoinArgs::new(JoinType::Inner),
-                    )
-                    .unwrap()
-                    .drop("subject_key")
-                    .unwrap()
-                    .drop("is_subject")
-                    .unwrap();
-                lookup_df.rename(SUBJECT_COL_NAME, OBJECT_COL_NAME).unwrap();
-                out_df = out_df
-                    .join(
-                        &lookup_df,
-                        &["object_key"],
-                        &[LOOKUP_COLUMN],
-                        JoinArgs::new(JoinType::Inner),
-                    )
-                    .unwrap()
-                    .drop("object_key")
-                    .unwrap()
-                    .drop("is_subject")
-                    .unwrap();
                 let mut dtypes = HashMap::new();
                 dtypes.insert(
                     SUBJECT_COL_NAME.to_string(),
@@ -619,7 +617,7 @@ impl U32DataFrameCreator {
             let mut types = HashMap::new();
             types.insert(
                 NAMED_NODE_INDEX_COL.to_string(),
-                RDFNodeType::Literal(xsd::UNSIGNED_BYTE.into_owned()),
+                RDFNodeType::Literal(xsd::UNSIGNED_INT.into_owned()),
             );
             types.insert(SUBJECT_COL_NAME.to_string(), subject_dt);
             types.insert(OBJECT_COL_NAME.to_string(), object_dt);
@@ -628,34 +626,29 @@ impl U32DataFrameCreator {
         }
         let SolutionMappings {
             mut mappings,
-            rdf_node_types,
+            mut rdf_node_types,
         } = union(soln_mappings, false)?;
 
-        let row_index = uuid::Uuid::new_v4().to_string();
-        mappings = mappings.with_row_index(&row_index, None);
-        let df = mappings.collect().unwrap();
+        let subject_row_index = uuid::Uuid::new_v4().to_string();
+        let object_row_index = uuid::Uuid::new_v4().to_string();
+        let mut df = mappings.collect().unwrap();
+        let df_height = df.height();
+        mappings = df.lazy();
+        mappings = mappings
+            .with_row_index(&subject_row_index, None)
+            .with_column(
+                (col(&subject_row_index) + lit(df_height as u32)).alias(&object_row_index),
+            );
+        df = mappings.collect().unwrap();
 
-        // Stack subject and object cols - deduplicate - add row index.
-        let df_subj = df
-            .clone()
-            .lazy()
-            .select([
-                col(SUBJECT_COL_NAME).alias(VALUE_COLUMN),
-                col(&row_index),
-                lit(true).alias("is_subject"),
-            ])
-            .collect()
-            .unwrap();
-        let df_obj = df
-            .clone()
-            .lazy()
-            .select([
-                col(OBJECT_COL_NAME).alias(VALUE_COLUMN),
-                col(&row_index),
-                lit(false).alias("is_subject"),
-            ])
-            .collect()
-            .unwrap();
+        let lf_subj = df.clone().lazy().select([
+            col(SUBJECT_COL_NAME).alias(VALUE_COLUMN),
+            col(&subject_row_index),
+        ]);
+        let lf_obj = df.clone().lazy().select([
+            col(OBJECT_COL_NAME).alias(VALUE_COLUMN),
+            col(&object_row_index),
+        ]);
 
         let mut subj_types = HashMap::new();
         subj_types.insert(
@@ -663,12 +656,8 @@ impl U32DataFrameCreator {
             rdf_node_types.get(SUBJECT_COL_NAME).unwrap().clone(),
         );
         subj_types.insert(
-            row_index.clone(),
+            subject_row_index.clone(),
             RDFNodeType::Literal(xsd::UNSIGNED_INT.into_owned()),
-        );
-        subj_types.insert(
-            "is_subject".to_string(),
-            RDFNodeType::Literal(xsd::BOOLEAN.into_owned()),
         );
 
         let mut obj_types = HashMap::new();
@@ -677,16 +666,12 @@ impl U32DataFrameCreator {
             rdf_node_types.get(OBJECT_COL_NAME).unwrap().clone(),
         );
         obj_types.insert(
-            row_index.clone(),
+            object_row_index.clone(),
             RDFNodeType::Literal(xsd::UNSIGNED_INT.into_owned()),
         );
-        obj_types.insert(
-            "is_subject".to_string(),
-            RDFNodeType::Literal(xsd::BOOLEAN.into_owned()),
-        );
 
-        let obj_soln_mappings = SolutionMappings::new(df_subj.lazy(), subj_types);
-        let subj_soln_mappings = SolutionMappings::new(df_obj.lazy(), obj_types);
+        let obj_soln_mappings = SolutionMappings::new(lf_subj, subj_types);
+        let subj_soln_mappings = SolutionMappings::new(lf_obj.lazy(), obj_types);
         let SolutionMappings {
             mut mappings,
             rdf_node_types: lookup_df_types,
@@ -694,13 +679,13 @@ impl U32DataFrameCreator {
         let (mappings_grby, maps) =
             group_by_workaround(mappings, &lookup_df_types, vec![VALUE_COLUMN.to_string()]);
         mappings = mappings_grby.agg([
-            col(&row_index).alias(&row_index),
-            col("is_subject").alias("is_subject"),
+            col(&subject_row_index).alias(&subject_row_index),
+            col(&object_row_index).alias(&object_row_index),
         ]);
         mappings = implode_multicolumns(mappings, maps);
 
         mappings = mappings.with_row_index(LOOKUP_COLUMN, None);
-        mappings = mappings.explode([col(&row_index), col("is_subject")]);
+        mappings = mappings.explode([col(&subject_row_index), col(&object_row_index)]);
         let mut lookup_df = mappings.collect().unwrap();
 
         let out_dfs = df.partition_by([NAMED_NODE_INDEX_COL], true).unwrap();
@@ -715,17 +700,19 @@ impl U32DataFrameCreator {
                 .unwrap()
                 .get(0)
                 .unwrap();
-            let mut lf = df.select([&row_index]).unwrap().lazy();
+            let mut lf = df
+                .select([&subject_row_index, &object_row_index])
+                .unwrap()
+                .lazy();
             lf = lf
                 .join(
                     lookup_df
                         .clone()
                         .lazy()
                         .rename([LOOKUP_COLUMN], [SUBJECT_COL_NAME])
-                        .filter(col("is_subject"))
-                        .select([col(&row_index), col(SUBJECT_COL_NAME)]),
-                    [col(&row_index)],
-                    [col(&row_index)],
+                        .select([col(&subject_row_index), col(SUBJECT_COL_NAME)]),
+                    [col(&subject_row_index)],
+                    [col(&subject_row_index)],
                     JoinType::Inner.into(),
                 )
                 .join(
@@ -733,10 +720,9 @@ impl U32DataFrameCreator {
                         .clone()
                         .lazy()
                         .rename([LOOKUP_COLUMN], [OBJECT_COL_NAME])
-                        .filter(col("is_subject").not())
-                        .select([col(&row_index), col(OBJECT_COL_NAME)]),
-                    [col(&row_index)],
-                    [col(&row_index)],
+                        .select([col(&object_row_index), col(OBJECT_COL_NAME)]),
+                    [col(&object_row_index)],
+                    [col(&object_row_index)],
                     JoinType::Inner.into(),
                 )
                 .select([col(SUBJECT_COL_NAME), col(OBJECT_COL_NAME)]);
@@ -746,7 +732,9 @@ impl U32DataFrameCreator {
             );
         }
         lookup_df = lookup_df
-            .drop(&row_index)
+            .drop(&subject_row_index)
+            .unwrap()
+            .drop(&object_row_index)
             .unwrap()
             .unique(None, UniqueKeepStrategy::Any, None)
             .unwrap();

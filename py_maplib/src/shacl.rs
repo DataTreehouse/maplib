@@ -8,14 +8,17 @@ use std::collections::HashMap;
 use triplestore::Triplestore;
 
 #[derive(Clone)]
-#[pyclass(name="ValidationReport")]
+#[pyclass(name = "ValidationReport")]
 pub struct PyValidationReport {
     shape_graph: Option<Triplestore>,
     inner: RustValidationReport,
 }
 
 impl PyValidationReport {
-    pub fn new(inner: RustValidationReport, shape_graph:Option<Triplestore>) -> PyValidationReport {
+    pub fn new(
+        inner: RustValidationReport,
+        shape_graph: Option<Triplestore>,
+    ) -> PyValidationReport {
         PyValidationReport { shape_graph, inner }
     }
 }
