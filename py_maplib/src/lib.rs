@@ -48,7 +48,7 @@ use jemallocator::Jemalloc;
 use oxrdf::NamedNode;
 use oxrdfio::RdfFormat;
 use pyo3::types::PyList;
-use representation::python::{PyIRI, PyLiteral, PyPrefix, PyRDFType, PyVariable};
+use representation::python::{PyBlankNode, PyIRI, PyLiteral, PyPrefix, PyRDFType, PyVariable};
 use representation::solution_mapping::EagerSolutionMappings;
 use representation::RDFNodeType;
 
@@ -459,6 +459,7 @@ fn _maplib(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyPrefix>()?;
     m.add_class::<PyVariable>()?;
     m.add_class::<PyLiteral>()?;
+    m.add_class::<PyBlankNode>()?;
     m.add_class::<PyIRI>()?;
     m.add_class::<PyXSD>()?;
     m.add_class::<PyParameter>()?;

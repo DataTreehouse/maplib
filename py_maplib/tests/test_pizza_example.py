@@ -10,9 +10,9 @@ pl.Config.set_fmt_str_lengths(300)
 @pytest.fixture(scope="function")
 def pizzas_mapping():
     doc = """
-    @prefix pizza:<https://github.com/DataTreehouse/maplib/pizza#>.
+    @prefix pizza:<https://github.com/magbak/maplib/pizza#>.
     @prefix xsd:<http://www.w3.org/2001/XMLSchema#>.
-    @prefix ex:<https://github.com/DataTreehouse/maplib/pizza#>.
+    @prefix ex:<https://github.com/magbak/maplib/pizza#>.
 
     ex:Pizza[?p, xsd:anyURI ?c, List<ottr:IRI> ?is] :: {
     ottr:Triple(?p, a, pizza:Pizza),
@@ -23,9 +23,9 @@ def pizzas_mapping():
 
     m = Mapping([doc])
 
-    co = "https://github.com/DataTreehouse/maplib/countries#"
-    pi = "https://github.com/DataTreehouse/maplib/pizza#"
-    ing = "https://github.com/DataTreehouse/maplib/pizza/ingredients#"
+    co = "https://github.com/magbak/maplib/countries#"
+    pi = "https://github.com/magbak/maplib/pizza#"
+    ing = "https://github.com/magbak/maplib/pizza/ingredients#"
 
     df = pl.DataFrame({"p": [pi + "Hawaiian", pi + "Grandiosa"],
                        "c": [co + "CAN", co + "NOR"],
@@ -33,8 +33,8 @@ def pizzas_mapping():
                               [ing + "Pepper", ing + "Meat"]]})
     m.expand("ex:Pizza", df)
     hpizzas = """
-    PREFIX pizza:<https://github.com/DataTreehouse/maplib/pizza#>
-    PREFIX ing:<https://github.com/DataTreehouse/maplib/pizza/ingredients#>
+    PREFIX pizza:<https://github.com/magbak/maplib/pizza#>
+    PREFIX ing:<https://github.com/magbak/maplib/pizza/ingredients#>
     CONSTRUCT { ?p a pizza:HeterodoxPizza } 
     WHERE {
         ?p a pizza:Pizza .
@@ -46,23 +46,23 @@ def pizzas_mapping():
 
 def test_simple_query_no_error(pizzas_mapping):
     res = pizzas_mapping.query("""
-    PREFIX pizza:<https://github.com/DataTreehouse/maplib/pizza#>
+    PREFIX pizza:<https://github.com/magbak/maplib/pizza#>
 
     SELECT ?p WHERE {
     ?p a pizza:HeterodoxPizza
     }
     """)
 
-    expected_df = pl.DataFrame({"p": ["<https://github.com/DataTreehouse/maplib/pizza#Hawaiian>"]})
+    expected_df = pl.DataFrame({"p": ["<https://github.com/magbak/maplib/pizza#Hawaiian>"]})
     assert_frame_equal(res, expected_df)
 
 
 def test_construct_pvalues(pizzas_mapping):
-    h_df = pl.DataFrame({"h1": ["https://github.com/DataTreehouse/maplib/pizza#Hawaiian1", "https://github.com/DataTreehouse/maplib/pizza#Hawaiian2"],
-                         "h2": ["https://github.com/DataTreehouse/maplib/pizza#Hawaiian3", "https://github.com/DataTreehouse/maplib/pizza#Hawaiian4"]})
+    h_df = pl.DataFrame({"h1": ["https://github.com/magbak/maplib/pizza#Hawaiian1", "https://github.com/magbak/maplib/pizza#Hawaiian2"],
+                         "h2": ["https://github.com/magbak/maplib/pizza#Hawaiian3", "https://github.com/magbak/maplib/pizza#Hawaiian4"]})
 
     res = pizzas_mapping.query("""
-    PREFIX pizza:<https://github.com/DataTreehouse/maplib/pizza#>
+    PREFIX pizza:<https://github.com/magbak/maplib/pizza#>
 
     CONSTRUCT {
         ?h1 a pizza:Pizza . 
@@ -81,9 +81,9 @@ def test_construct_pvalues(pizzas_mapping):
 
 
 def test_construct_pvalues2(pizzas_mapping):
-    h_df = pl.DataFrame({"h1": ["https://github.com/DataTreehouse/maplib/pizza#Hawaiian", "https://github.com/DataTreehouse/maplib/pizza#Hawaiian2"]})
+    h_df = pl.DataFrame({"h1": ["https://github.com/magbak/maplib/pizza#Hawaiian", "https://github.com/magbak/maplib/pizza#Hawaiian2"]})
     res = pizzas_mapping.query("""
-    PREFIX pizza:<https://github.com/DataTreehouse/maplib/pizza#>
+    PREFIX pizza:<https://github.com/magbak/maplib/pizza#>
 
     CONSTRUCT {
         ?h1 a pizza:Pizza . 

@@ -1,6 +1,9 @@
 import polars as pl
 import pytest
 from polars.testing import assert_frame_equal
+
+from maplib import BlankNode
+
 pl.Config.set_fmt_str_lengths(300)
 
 
@@ -35,6 +38,7 @@ def pizzas_mapping():
         instances= [
             Triple(p_var, a(), pi.suf("Pizza")),
             Triple(p_var, pi.suf("fromCountry"), c_var),
+            Triple(p_var, pi.suf("hasBlank"), BlankNode("MyBlank")),
             Triple(p_var, pi.suf("hasIngredient"), Argument(term=ings_var, list_expand=True), list_expander="cross")
         ]
     )

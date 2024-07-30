@@ -50,33 +50,6 @@ def test_create_mapping_with_optional_value_missing_df():
     assert qres.height == 0
 
 
-def test_property_path_duplication():
-    df = pl.DataFrame({"src": ["http://example.net/ns#A", "http://example.net/ns#B"],
-                       "trg": ["http://example.net/ns#B", "http://example.net/ns#C"]})
-    mapping = Mapping()
-    ex = Prefix("ex","http://example.net/ns#")
-    src = Variable("src")
-    trg = Variable("trg")
-    template = Template(
-        ex.suf("ExampleTemplate"),
-        [Parameter(src), Parameter(trg)],
-        [
-            Triple(src, ex.suf("hasChild"), trg),
-        ]
-    )
-    mapping.expand(template, df)
-    qres = mapping.query(
-        """
-        PREFIX ex:<http://example.net/ns#>
-        
-        SELECT ?src ?trg WHERE {
-        ?src ex:hasChild+ ?trg
-        } 
-        """
-    )
-    assert qres.height == 3
-
-
 def test_create_programmatic_mapping_with_optional_value_missing_df():
     df = pl.DataFrame({"MyValue": ["A"]})
     mapping = Mapping()

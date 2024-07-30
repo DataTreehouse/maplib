@@ -10,7 +10,7 @@ class RDFType:
     For instance, xsd:string is RDFType.Literal("http://www.w3.org/2001/XMLSchema#string")
     """
     IRI: Callable[[], "RDFType"]
-    Blank: Callable[[], "RDFType"]
+    BlankNode: Callable[[], "RDFType"]
     Literal: Callable[[Union[str, "IRI"]], "RDFType"]
     Nested: Callable[["RDFType"], "RDFType"]
     Unknown: Callable[[], "RDFType"]
@@ -40,6 +40,17 @@ class IRI:
         :param iri: IRI (without < and >).
         """
 
+class BlankNode:
+    """
+    A Blank Node.
+    """
+    name: str
+
+    def __init__(self, name: str):
+        """
+        Create a new Blank Node
+        :param name: Name of blank node (without _:).
+        """
 
 class Prefix:
     """
@@ -107,7 +118,7 @@ class Parameter:
 
 
 class Argument:
-    def __init__(self, term: Union[Variable, IRI, Literal], list_expand: bool):
+    def __init__(self, term: Union[Variable, IRI, Literal], list_expand: Optional[bool] = False):
         """
         An argument for a template instance.
         :param term: The term.
@@ -118,8 +129,8 @@ class Argument:
 class Instance:
     def __init__(self,
                  iri: IRI,
-                 arguments: List[Union[Argument, Variable, IRI, Literal]],
-                 list_expander: LiteralType["cross", "zipMin", "zipMax"] = None):
+                 arguments: List[Union[Argument, Variable, IRI, Literal, BlankNode]],
+                 list_expander: Optional[LiteralType["cross", "zipMin", "zipMax"]] = None):
         """
         A template instance.
         :param iri: The IRI of the template to be instantiated.
@@ -159,9 +170,9 @@ class Template:
         :return:
         """
 
-def Triple(subject:Union["Argument", IRI, Variable],
-           predicate:Union["Argument", IRI,Variable],
-           object:Union["Argument", IRI, Variable, Literal],
+def Triple(subject:Union["Argument", IRI, Variable, BlankNode],
+           predicate:Union["Argument", IRI,Variable, BlankNode],
+           object:Union["Argument", IRI, Variable, Literal, BlankNode],
            list_expander:Optional[LiteralType["cross", "zipMin", "zipMax"]]=None):
     """
     An OTTR Triple Pattern used for creating templates.

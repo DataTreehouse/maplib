@@ -2,7 +2,10 @@ use crate::rdf_to_polars::rdf_literal_to_polars_literal_value;
 use crate::RDFNodeType;
 use chrono::{NaiveDateTime, TimeDelta, TimeZone};
 use chrono_tz::Tz;
-use oxrdf::{IriParseError, Literal, NamedNode, Variable, VariableNameParseError};
+use oxrdf::{
+    BlankNode, BlankNodeIdParseError, IriParseError, Literal, NamedNode, Variable,
+    VariableNameParseError,
+};
 use polars::datatypes::TimeUnit;
 use polars::prelude::LiteralValue;
 use pyo3::exceptions::PyException;
@@ -18,6 +21,8 @@ pub enum PyRepresentationError {
     #[error(transparent)]
     IriParseError(#[from] IriParseError),
     #[error(transparent)]
+    BlankNodeIdParseError(#[from] BlankNodeIdParseError),
+    #[error(transparent)]
     VariableNameParseError(#[from] VariableNameParseError),
     #[error("Bad arguments: `{0}`")]
     BadArgumentError(String),
@@ -28,6 +33,9 @@ impl From<PyRepresentationError> for PyErr {
         match &err {
             PyRepresentationError::IriParseError(err) => {
                 IriParseErrorException::new_err(format!("{}", err))
+            }
+            PyRepresentationError::BlankNodeIdParseError(err) => {
+                BlankNodeIdParseErrorException::new_err(format!("{}", err))
             }
             PyRepresentationError::BadArgumentError(err) => {
                 BadArgumentErrorException::new_err(format!("{}", err))
@@ -40,6 +48,7 @@ impl From<PyRepresentationError> for PyErr {
 }
 
 create_exception!(exceptions, IriParseErrorException, PyException);
+create_exception!(exceptions, BlankNodeIdParseErrorException, PyException);
 create_exception!(exceptions, BadArgumentErrorException, PyException);
 create_exception!(exceptions, VariableNameParseErrorException, PyException);
 
@@ -61,7 +70,7 @@ impl PyRDFType {
         } else if let Ok(s) = iri.extract::<String>() {
             Ok(PyRDFType {
                 flat: Some(RDFNodeType::Literal(
-                    NamedNode::new(s).map_err(PyRepresentationError::from)?,
+                    NamedNode::new(s).map_err(|x| PyRepresentationError::IriParseError(x))?,
                 )),
                 nested: None,
             })
@@ -81,7 +90,7 @@ impl PyRDFType {
     }
 
     #[staticmethod]
-    fn Blank() -> PyRDFType {
+    fn BlankNode() -> PyRDFType {
         PyRDFType {
             flat: Some(RDFNodeType::BlankNode),
             nested: None,
@@ -117,7 +126,7 @@ impl PyRDFType {
 impl From<RDFNodeType> for PyRDFType {
     fn from(rdf_node_type: RDFNodeType) -> Self {
         PyRDFType {
-            flat: None,
+            flat: Some(rdf_node_type),
             nested: None,
         }
     }
@@ -133,7 +142,7 @@ pub struct PyIRI {
 impl PyIRI {
     #[new]
     pub fn new(iri: String) -> PyResult<Self> {
-        let iri = NamedNode::new(iri).map_err(PyRepresentationError::from)?;
+        let iri = NamedNode::new(iri).map_err(|x| PyRepresentationError::IriParseError(x))?;
         Ok(PyIRI { iri })
     }
 }
@@ -161,7 +170,7 @@ pub struct PyPrefix {
 impl PyPrefix {
     #[new]
     pub fn new(prefix: String, iri: String) -> PyResult<Self> {
-        let iri = NamedNode::new(iri).map_err(PyRepresentationError::from)?;
+        let iri = NamedNode::new(iri).map_err(|x| PyRepresentationError::IriParseError(x))?;
         Ok(PyPrefix { prefix, iri })
     }
 
@@ -180,7 +189,8 @@ pub struct PyVariable {
 impl PyVariable {
     #[new]
     pub fn new(name: String) -> PyResult<Self> {
-        let variable = Variable::new(name).map_err(PyRepresentationError::from)?;
+        let variable =
+            Variable::new(name).map_err(|e| PyRepresentationError::VariableNameParseError(e))?;
         Ok(PyVariable { variable })
     }
 
@@ -262,5 +272,28 @@ impl PyLiteral {
 impl PyLiteral {
     pub fn from_literal(literal: Literal) -> PyLiteral {
         PyLiteral { literal }
+    }
+}
+
+#[derive(Clone)]
+#[pyclass]
+#[pyo3(name = "BlankNode")]
+pub struct PyBlankNode {
+    pub inner: BlankNode,
+}
+
+#[pymethods]
+impl PyBlankNode {
+    #[new]
+    fn new(name: &str) -> PyResult<Self> {
+        Ok(PyBlankNode {
+            inner: BlankNode::new(name)
+                .map_err(|x| PyRepresentationError::BlankNodeIdParseError(x))?,
+        })
+    }
+
+    #[getter]
+    fn name(&self) -> &str {
+        &self.inner.as_str()
     }
 }

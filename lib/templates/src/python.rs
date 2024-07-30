@@ -9,7 +9,7 @@ use oxrdf::IriParseError;
 use pyo3::create_exception;
 use pyo3::exceptions::PyException;
 use pyo3::prelude::*;
-use representation::python::{PyIRI, PyLiteral, PyPrefix, PyRDFType, PyVariable};
+use representation::python::{PyBlankNode, PyIRI, PyLiteral, PyPrefix, PyRDFType, PyVariable};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -173,6 +173,10 @@ impl PyArgument {
         let list_expand = list_expand.unwrap_or(false);
         let term = if let Ok(r) = term.extract::<PyVariable>() {
             StottrTerm::Variable(r.clone().into_inner())
+        } else if let Ok(b) = term.extract::<PyBlankNode>() {
+            StottrTerm::ConstantTerm(ConstantTermOrList::ConstantTerm(ConstantTerm::BlankNode(
+                b.inner.clone(),
+            )))
         } else if let Ok(r) = term.extract::<PyIRI>() {
             StottrTerm::ConstantTerm(ConstantTermOrList::ConstantTerm(ConstantTerm::Iri(
                 r.into_inner(),
@@ -188,6 +192,14 @@ impl PyArgument {
         };
         let argument = Argument { list_expand, term };
         Ok(PyArgument { argument })
+    }
+
+    #[getter]
+    pub fn variable(&self) -> PyResult<Option<PyVariable>> {
+        match &self.argument.term {
+            StottrTerm::Variable(v) => Ok(Some(PyVariable::new(v.as_str().to_string())?)),
+            _ => Ok(None),
+        }
     }
 }
 
@@ -227,6 +239,11 @@ impl PyInstance {
             argument_list: new_arguments,
         };
         Ok(PyInstance { instance })
+    }
+
+    #[getter]
+    fn iri(&self) -> &str {
+        self.instance.template_name.as_str()
     }
 }
 
@@ -287,7 +304,7 @@ impl PyTemplate {
         Ok(PyTemplate { template })
     }
 
-    pub fn instance<'py>(
+    fn instance<'py>(
         &self,
         arguments: Vec<Bound<'py, PyAny>>,
         list_expander: Option<String>,

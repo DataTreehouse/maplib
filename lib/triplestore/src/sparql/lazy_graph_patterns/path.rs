@@ -626,7 +626,7 @@ impl U32DataFrameCreator {
         }
         let SolutionMappings {
             mut mappings,
-            mut rdf_node_types,
+            rdf_node_types,
         } = union(soln_mappings, false)?;
 
         let subject_row_index = uuid::Uuid::new_v4().to_string();
