@@ -209,9 +209,7 @@ impl BaseRDFNodeType {
                     Field::new(LANG_STRING_LANG_FIELD, DataType::String),
                 ]),
                 xsd::DATE_TIME => DataType::Datetime(TimeUnit::Nanoseconds, None),
-                n => {
-                    todo!("Datatype {} not supported yet", n)
-                }
+                _ => DataType::String,
             },
             BaseRDFNodeType::None => DataType::Boolean,
         }

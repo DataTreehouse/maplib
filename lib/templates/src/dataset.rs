@@ -67,20 +67,14 @@ impl TemplateDataset {
         let ottr_triple_subject = Parameter {
             optional: false,
             non_blank: false,
-            ptype: Some(PType::Basic(
-                BaseRDFNodeType::IRI,
-                Some("ottr:IRI".to_string()),
-            )),
+            ptype: Some(PType::Basic(BaseRDFNodeType::IRI)),
             variable: Variable::new_unchecked(SUBJECT_COL_NAME),
             default_value: None,
         };
         let ottr_triple_verb = Parameter {
             optional: false,
             non_blank: false,
-            ptype: Some(PType::Basic(
-                BaseRDFNodeType::IRI,
-                Some("ottr:IRI".to_string()),
-            )),
+            ptype: Some(PType::Basic(BaseRDFNodeType::IRI)),
             variable: Variable::new_unchecked(VERB_COL_NAME),
             default_value: None,
         };

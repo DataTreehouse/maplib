@@ -27,7 +27,7 @@ pub fn constant_to_expr(
                 let polars_literal = rdf_named_node_to_polars_literal_value(iri);
                 (
                     Expr::Literal(polars_literal),
-                    PType::Basic(BaseRDFNodeType::IRI, Some("ottr:IRI".to_string())),
+                    PType::Basic(BaseRDFNodeType::IRI),
                     MappingColumnType::Flat(RDFNodeType::IRI),
                 )
             }
@@ -39,13 +39,13 @@ pub fn constant_to_expr(
                 let expr = rdf_term_to_polars_expr(&Term::Literal(lit.clone()));
                 (
                     expr,
-                    PType::Basic(BaseRDFNodeType::Literal(the_dt.clone()), None),
+                    PType::Basic(BaseRDFNodeType::Literal(the_dt.clone())),
                     MappingColumnType::Flat(RDFNodeType::Literal(the_dt)),
                 )
             }
             ConstantTerm::None => (
                 Expr::Literal(LiteralValue::Null),
-                PType::Basic(BaseRDFNodeType::None, None),
+                PType::Basic(BaseRDFNodeType::None),
                 MappingColumnType::Flat(RDFNodeType::None),
             ),
         },
@@ -144,7 +144,7 @@ pub fn constant_blank_node_to_series(
                     false,
                 )
                 .unwrap(),
-                PType::Basic(BaseRDFNodeType::BlankNode, None),
+                PType::Basic(BaseRDFNodeType::BlankNode),
                 RDFNodeType::BlankNode,
             )
         }

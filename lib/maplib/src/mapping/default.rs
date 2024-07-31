@@ -54,10 +54,7 @@ impl Mapping {
                 params.push(Parameter {
                     optional: has_null,
                     non_blank: false,
-                    ptype: Some(PType::Basic(
-                        BaseRDFNodeType::IRI,
-                        Some("ottr:IRI".to_string()),
-                    )),
+                    ptype: Some(PType::Basic(BaseRDFNodeType::IRI)),
                     variable: Variable::new_unchecked(c),
                     default_value: None,
                 })
@@ -81,10 +78,7 @@ impl Mapping {
                 params.push(Parameter {
                     optional: has_null,
                     non_blank: false,
-                    ptype: Some(PType::Basic(
-                        BaseRDFNodeType::IRI,
-                        Some("ottr:IRI".to_string()),
-                    )),
+                    ptype: Some(PType::Basic(BaseRDFNodeType::IRI)),
                     variable: Variable::new_unchecked(c),
                     default_value: None,
                 })

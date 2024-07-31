@@ -134,7 +134,7 @@ impl PyParameter {
 
 fn ptype_to_py_rdf_type(ptype: &PType) -> PyRDFType {
     match ptype {
-        PType::Basic(b, s) => PyRDFType {
+        PType::Basic(b) => PyRDFType {
             flat: Some(b.as_rdf_node_type()),
             nested: None,
         },

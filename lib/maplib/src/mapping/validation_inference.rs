@@ -65,7 +65,7 @@ fn validate_infer_column_data_type(
 
 fn infer_rdf_node_type(ptype: &PType) -> MappingColumnType {
     match ptype {
-        PType::Basic(b, _) => MappingColumnType::Flat(b.as_rdf_node_type()),
+        PType::Basic(b) => MappingColumnType::Flat(b.as_rdf_node_type()),
         PType::Lub(l) => MappingColumnType::Nested(Box::new(infer_rdf_node_type(l))),
         PType::List(l) => MappingColumnType::Nested(Box::new(infer_rdf_node_type(l))),
         PType::NEList(l) => MappingColumnType::Nested(Box::new(infer_rdf_node_type(l))),
@@ -89,26 +89,39 @@ fn validate_datatype(
     datatype: &DataType,
     target_ptype: &PType,
 ) -> Result<(), MappingError> {
-    let mismatch_error = || {
-        Err(MappingError::ColumnDataTypeMismatch(
-            column_name.to_string(),
-            datatype.clone(),
-            target_ptype.clone(),
-        ))
-    };
     let validate_if_series_list = |inner| {
         if let DataType::List(dt) = datatype {
             validate_datatype(column_name, dt, inner)
         } else {
-            mismatch_error()
+            Err(MappingError::ColumnDataTypeMismatch(
+                column_name.to_string(),
+                datatype.clone(),
+                target_ptype.clone(),
+                None,
+            ))
         }
     };
     match target_ptype {
-        PType::Basic(_, _) => {
+        PType::Basic(b) => {
             if let DataType::List(_) = datatype {
-                mismatch_error()
+                Err(MappingError::ColumnDataTypeMismatch(
+                    column_name.to_string(),
+                    datatype.clone(),
+                    target_ptype.clone(),
+                    None,
+                ))
             } else {
-                Ok(())
+                let expected = b.polars_data_type();
+                if &expected != datatype {
+                    Err(MappingError::ColumnDataTypeMismatch(
+                        column_name.to_string(),
+                        datatype.clone(),
+                        target_ptype.clone(),
+                        Some(expected),
+                    ))
+                } else {
+                    Ok(())
+                }
             }
         }
         PType::Lub(inner) => validate_if_series_list(inner),

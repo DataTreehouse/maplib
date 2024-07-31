@@ -296,7 +296,7 @@ fn resolve_ptype(
                 } else {
                     BaseRDFNodeType::Literal(resolved)
                 };
-            PType::Basic(t, get_name(b))
+            PType::Basic(t)
         }
         UnresolvedPType::Lub(l) => PType::Lub(Box::new(resolve_ptype(l, prefix_map)?)),
         UnresolvedPType::List(l) => PType::List(Box::new(resolve_ptype(l, prefix_map)?)),

@@ -14,8 +14,8 @@ pub enum MappingError {
     NonOptionalColumnHasNull(String, DataFrame),
     MissingParameterColumn(String),
     ContainsIrrelevantColumns(Vec<String>),
-    CouldNotInferStottrDatatypeForColumn(String, DataType),
-    ColumnDataTypeMismatch(String, DataType, PType),
+    CouldNotInferOTTRDatatypeForColumn(String, DataType),
+    ColumnDataTypeMismatch(String, DataType, PType, Option<DataType>),
     InvalidPredicateConstant(ConstantTermOrList),
     PTypeNotSupported(String, PType),
     UnknownTimeZoneError(String),
@@ -55,24 +55,32 @@ impl Display for MappingError {
             MappingError::ContainsIrrelevantColumns(irr) => {
                 write!(f, "Unexpected columns: {}", irr.join(","))
             }
-            MappingError::CouldNotInferStottrDatatypeForColumn(col, dt) => {
+            MappingError::CouldNotInferOTTRDatatypeForColumn(col, dt) => {
                 write!(
                     f,
-                    "Could not infer stottr type for column {} with polars datatype {}",
+                    "Could not infer OTTR type for column {} with polars datatype {}",
                     col, dt
                 )
             }
-            MappingError::ColumnDataTypeMismatch(col, dt, ptype) => {
-                write!(
-                    f,
-                    "Column {} had datatype {} which was incompatible with the stottr datatype {}",
-                    col, dt, ptype
-                )
+            MappingError::ColumnDataTypeMismatch(col, dt, ptype, expected) => {
+                if let Some(expected) = expected {
+                    write!(
+                        f,
+                        "Column {} had datatype {} which was incompatible with the OTTR datatype {}, which expects {}",
+                        col, dt, ptype, expected
+                    )
+                } else {
+                    write!(
+                        f,
+                        "Column {} had datatype {} which was incompatible with the OTTR datatype {}",
+                        col, dt, ptype
+                    )
+                }
             }
             MappingError::PTypeNotSupported(name, ptype) => {
                 write!(
                     f,
-                    "Found value {} with unsupported stottr datatype {}",
+                    "Found value {} with unsupported OTTR datatype {}",
                     name, ptype
                 )
             }
@@ -82,7 +90,7 @@ impl Display for MappingError {
             MappingError::UnknownVariableError(v) => {
                 write!(
                     f,
-                    "Could not find variable {}, is the stottr template invalid?",
+                    "Could not find variable {}, is the OTTR template invalid?",
                     v
                 )
             }

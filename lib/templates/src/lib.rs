@@ -21,9 +21,7 @@ pub enum MappingColumnType {
 impl MappingColumnType {
     pub fn as_ptype(&self) -> PType {
         match self {
-            MappingColumnType::Flat(f) => {
-                PType::Basic(BaseRDFNodeType::from_rdf_node_type(f), None)
-            }
+            MappingColumnType::Flat(f) => PType::Basic(BaseRDFNodeType::from_rdf_node_type(f)),
             MappingColumnType::Nested(n) => PType::List(Box::new(n.as_ptype())),
         }
     }

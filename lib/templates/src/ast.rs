@@ -112,7 +112,7 @@ impl Display for Parameter {
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum PType {
-    Basic(BaseRDFNodeType, Option<String>),
+    Basic(BaseRDFNodeType),
     Lub(Box<PType>),
     List(Box<PType>),
     NEList(Box<PType>),
@@ -120,7 +120,7 @@ pub enum PType {
 
 impl PType {
     pub fn is_blank_node(&self) -> bool {
-        if let PType::Basic(t, _) = &self {
+        if let PType::Basic(t) = &self {
             t.is_blank_node()
         } else {
             false
@@ -128,7 +128,7 @@ impl PType {
     }
 
     pub fn is_iri(&self) -> bool {
-        if let PType::Basic(t, _) = self {
+        if let PType::Basic(t) = self {
             t.is_iri()
         } else {
             false
@@ -143,12 +143,8 @@ pub fn has_iritype(s: &str) -> bool {
 impl Display for PType {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            PType::Basic(nn, s) => {
-                if let Some(s) = s {
-                    write!(f, "{}", s)
-                } else {
-                    write!(f, "{}", nn)
-                }
+            PType::Basic(t) => {
+                write!(f, "{}", t)
             }
             PType::Lub(lt) => {
                 let s = lt.to_string();
@@ -370,10 +366,9 @@ fn test_display_easy_template() {
             parameter_list: vec![Parameter {
                 optional: true,
                 non_blank: true,
-                ptype: Some(PType::Basic(
-                    BaseRDFNodeType::Literal(xsd::DOUBLE.into_owned()),
-                    Some("xsd:double".to_string()),
-                )),
+                ptype: Some(PType::Basic(BaseRDFNodeType::Literal(
+                    xsd::DOUBLE.into_owned(),
+                ))),
                 variable: Variable::new_unchecked("myVar"),
                 default_value: Some(DefaultValue {
                     constant_term: ConstantTermOrList::ConstantTerm(ConstantTerm::Literal(
@@ -394,5 +389,5 @@ fn test_display_easy_template() {
         }],
     };
 
-    assert_eq!(format!("{}", template), "prefix:Templ [?! xsd:double ?myVar = \"0.1\"^^<http://www.w3.org/2001/XMLSchema#double> ] :: {\n  ottr:Triple(?myVar)\n} . \n".to_string());
+    assert_eq!(format!("{}", template), "prefix:Templ [?! <http://www.w3.org/2001/XMLSchema#double> ?myVar = \"0.1\"^^<http://www.w3.org/2001/XMLSchema#double> ] :: {\n  ottr:Triple(?myVar)\n} . \n".to_string());
 }
