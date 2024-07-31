@@ -145,6 +145,11 @@ impl PyIRI {
         let iri = NamedNode::new(iri).map_err(|x| PyRepresentationError::IriParseError(x))?;
         Ok(PyIRI { iri })
     }
+
+    #[getter]
+    fn get_iri(&self) -> &str {
+        self.iri.as_str()
+    }
 }
 
 impl PyIRI {

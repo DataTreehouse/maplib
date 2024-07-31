@@ -4,6 +4,7 @@ use representation::errors::RepresentationError;
 use std::fmt::{Display, Formatter};
 use std::io;
 use templates::ast::{ConstantTermOrList, PType};
+use templates::MappingColumnType;
 use thiserror::Error;
 use triplestore::errors::TriplestoreError;
 
@@ -16,6 +17,7 @@ pub enum MappingError {
     ContainsIrrelevantColumns(Vec<String>),
     CouldNotInferOTTRDatatypeForColumn(String, DataType),
     ColumnDataTypeMismatch(String, DataType, PType, Option<DataType>),
+    DefaultDataTypeMismatch(MappingColumnType, MappingColumnType),
     InvalidPredicateConstant(ConstantTermOrList),
     PTypeNotSupported(String, PType),
     UnknownTimeZoneError(String),
@@ -158,6 +160,9 @@ impl Display for MappingError {
             }
             MappingError::DatatypeInferenceError(d) => {
                 write!(f, "{d}")
+            }
+            MappingError::DefaultDataTypeMismatch(expected, actual) => {
+                write!(f, "Default value data type {actual:?} does not correspond to data type provided: {expected:?}")
             }
         }
     }

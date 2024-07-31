@@ -1,40 +1,15 @@
 use crate::ast::{
-    Argument, ConstantTerm, ConstantTermOrList, Instance, ListExpanderType, PType, Parameter,
-    Signature, StottrTerm, Template,
+    Argument, ConstantTerm, ConstantTermOrList, DefaultValue, Instance, ListExpanderType, PType,
+    Parameter, Signature, StottrTerm, Template,
 };
 use crate::constants::{OTTR_TRIPLE, XSD_PREFIX_IRI};
 use crate::MappingColumnType;
 use oxrdf::vocab::rdf;
 use oxrdf::IriParseError;
-use pyo3::create_exception;
-use pyo3::exceptions::PyException;
 use pyo3::prelude::*;
-use representation::python::{PyBlankNode, PyIRI, PyLiteral, PyPrefix, PyRDFType, PyVariable};
-use thiserror::Error;
-
-#[derive(Error, Debug)]
-pub enum PyTemplateError {
-    #[error(transparent)]
-    IriParseError(#[from] IriParseError),
-    #[error("Bad argument: `{0}`")]
-    BadTemplateArgumentError(String),
-}
-
-impl From<PyTemplateError> for PyErr {
-    fn from(err: PyTemplateError) -> PyErr {
-        match &err {
-            PyTemplateError::IriParseError(err) => {
-                IriParseErrorException::new_err(format!("{}", err))
-            }
-            PyTemplateError::BadTemplateArgumentError(err) => {
-                IriParseErrorException::new_err(format!("{}", err))
-            }
-        }
-    }
-}
-
-create_exception!(exceptions, IriParseErrorException, PyException);
-create_exception!(exceptions, BadTemplateArgumentErrorException, PyException);
+use representation::python::{
+    PyBlankNode, PyIRI, PyLiteral, PyPrefix, PyRDFType, PyRepresentationError, PyVariable,
+};
 
 #[derive(Clone)]
 #[pyclass(name = "Parameter")]
@@ -50,21 +25,26 @@ impl PyParameter {
         optional: Option<bool>,
         allow_blank: Option<bool>,
         rdf_type: Option<&Bound<'py, PyAny>>,
+        default_value: Option<&Bound<'py, PyAny>>,
         py: Python<'py>,
     ) -> PyResult<Self> {
         let data_type = if let Some(data_type) = rdf_type {
             if let Ok(r) = data_type.extract::<Py<PyRDFType>>() {
                 Some(
                     py_rdf_type_to_mapping_column_type(&r, py)
-                        .map_err(PyTemplateError::from)?
+                        .map_err(PyRepresentationError::from)?
                         .as_ptype(),
                 )
             } else {
-                panic!("Handle error")
+                return Err(PyRepresentationError::BadArgumentError(
+                    "rdf_type should be RDFType, e.g. RDFType.IRI()".to_string(),
+                )
+                .into());
             }
         } else {
             None
         };
+
         let optional = optional.unwrap_or(false);
         let non_blank = !allow_blank.unwrap_or(true);
         let parameter = Parameter {
@@ -74,7 +54,9 @@ impl PyParameter {
             variable: variable.into_inner(),
             default_value: None,
         };
-        Ok(PyParameter { parameter })
+        let mut p = PyParameter { parameter };
+        p.set_default_value(default_value)?;
+        Ok(p)
     }
 
     #[getter]
@@ -92,7 +74,7 @@ impl PyParameter {
         if let Some(rdf_type) = rdf_type {
             self.parameter.ptype = Some(
                 py_rdf_type_to_mapping_column_type(&rdf_type, py)
-                    .map_err(PyTemplateError::from)?
+                    .map_err(PyRepresentationError::from)?
                     .as_ptype(),
             );
         } else {
@@ -129,6 +111,54 @@ impl PyParameter {
     #[setter]
     fn set_variable(&mut self, variable: PyVariable) {
         self.parameter.variable = variable.variable;
+    }
+
+    #[getter]
+    fn get_default_value(&self, py: Python) -> PyResult<Option<Py<PyAny>>> {
+        match &self.parameter.default_value {
+            None => Ok(None),
+            Some(def) => match &def.constant_term {
+                ConstantTermOrList::ConstantTerm(ct) => match ct {
+                    ConstantTerm::Iri(i) => {
+                        Ok(Some(Py::new(py, PyIRI::from(i.clone()))?.as_any().clone()))
+                    }
+                    ConstantTerm::BlankNode(bl) => Ok(Some(
+                        Py::new(py, PyBlankNode { inner: bl.clone() })?
+                            .as_any()
+                            .clone(),
+                    )),
+                    ConstantTerm::Literal(l) => Ok(Some(
+                        Py::new(py, PyLiteral::from_literal(l.clone()))?
+                            .as_any()
+                            .clone(),
+                    )),
+                    ConstantTerm::None => Ok(None),
+                },
+                ConstantTermOrList::ConstantList(_) => {
+                    todo!()
+                }
+            },
+        }
+    }
+
+    #[setter]
+    fn set_default_value(&mut self, default_value: Option<&Bound<PyAny>>) -> PyResult<()> {
+        let default = if let Some(default) = default_value {
+            if let Some(ct) = extract_constant_term(default) {
+                Some(DefaultValue {
+                    constant_term: ConstantTermOrList::ConstantTerm(ct),
+                })
+            } else {
+                return Err(PyRepresentationError::BadArgumentError(
+                    "default_value should be IRI, BlankNode, Literal or None".to_string(),
+                )
+                .into());
+            }
+        } else {
+            None
+        };
+        self.parameter.default_value = default;
+        Ok(())
     }
 }
 
@@ -173,22 +203,15 @@ impl PyArgument {
         let list_expand = list_expand.unwrap_or(false);
         let term = if let Ok(r) = term.extract::<PyVariable>() {
             StottrTerm::Variable(r.clone().into_inner())
-        } else if let Ok(b) = term.extract::<PyBlankNode>() {
-            StottrTerm::ConstantTerm(ConstantTermOrList::ConstantTerm(ConstantTerm::BlankNode(
-                b.inner.clone(),
-            )))
-        } else if let Ok(r) = term.extract::<PyIRI>() {
-            StottrTerm::ConstantTerm(ConstantTermOrList::ConstantTerm(ConstantTerm::Iri(
-                r.into_inner(),
-            )))
-        } else if let Ok(r) = term.extract::<PyLiteral>() {
-            StottrTerm::ConstantTerm(ConstantTermOrList::ConstantTerm(ConstantTerm::Literal(
-                r.literal,
-            )))
+        } else if let Some(ct) = extract_constant_term(term) {
+            StottrTerm::ConstantTerm(ConstantTermOrList::ConstantTerm(ct))
         } else if let Ok(a) = term.extract::<PyArgument>() {
             return Ok(a);
         } else {
-            todo!("{:?}", term)
+            return Err(PyRepresentationError::BadArgumentError(
+                "rdf_type should be RDFType, e.g. RDFType.IRI()".to_string(),
+            )
+            .into());
         };
         let argument = Argument { list_expand, term };
         Ok(PyArgument { argument })
@@ -280,10 +303,11 @@ impl PyTemplate {
             if let Ok(parameter) = p.extract::<PyParameter>() {
                 parameter_list.push(parameter.into_inner());
             } else if let Ok(variable) = p.extract::<PyVariable>() {
-                parameter_list.push(PyParameter::new(variable, None, None, None, py)?.into_inner());
+                parameter_list
+                    .push(PyParameter::new(variable, None, None, None, None, py)?.into_inner());
             } else {
-                return Err(PyTemplateError::BadTemplateArgumentError(
-                    "Parameter list should be only parameters or variables".to_string(),
+                return Err(PyRepresentationError::BadArgumentError(
+                    "parameters should be a list of Parameter or Variable".to_string(),
                 )
                 .into());
             }
@@ -497,4 +521,18 @@ impl PyXSD {
 #[pyfunction]
 pub fn a() -> PyIRI {
     PyIRI::new(rdf::TYPE.as_str().to_string()).unwrap()
+}
+
+fn extract_constant_term(term: &Bound<PyAny>) -> Option<ConstantTerm> {
+    if let Ok(b) = term.extract::<PyBlankNode>() {
+        Some(ConstantTerm::BlankNode(b.inner.clone()))
+    } else if let Ok(r) = term.extract::<PyIRI>() {
+        Some(ConstantTerm::Iri(r.into_inner()))
+    } else if let Ok(r) = term.extract::<PyLiteral>() {
+        Some(ConstantTerm::Literal(r.literal))
+    } else if term.is_none() {
+        Some(ConstantTerm::None)
+    } else {
+        None
+    }
 }

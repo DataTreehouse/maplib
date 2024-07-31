@@ -30,6 +30,7 @@ class Variable:
 
 
 class IRI:
+    iri:str
     """
     An IRI.
     """
@@ -99,21 +100,24 @@ class Parameter:
     optional: bool
     allow_blank: bool
     rdf_type: Optional[RDFType]
+    default_value: Optional[Union[Literal, IRI, BlankNode]]
     """
     Parameters for template signatures.
     """
 
     def __init__(self,
                  variable: Variable,
-                 optional: bool = False,
-                 allow_blank: bool = True,
-                 rdf_type: RDFType = None):
+                 optional: Optional[bool] = False,
+                 allow_blank: Optional[bool] = True,
+                 rdf_type: Optional[RDFType] = None,
+                 default_value: Optional[Union[Literal, IRI, BlankNode]] = None):
         """
         Create a new parameter for a Template.
         :param variable: The variable.
         :param optional: Can the variable be unbound?
         :param allow_blank: Can the variable be bound to a blank node?
         :param rdf_type: The type of the variable. Can be nested.
+        :param default_value: Default value when no value provided.
         """
 
 
@@ -129,7 +133,7 @@ class Argument:
 class Instance:
     def __init__(self,
                  iri: IRI,
-                 arguments: List[Union[Argument, Variable, IRI, Literal, BlankNode]],
+                 arguments: List[Union[Argument, Variable, IRI, Literal, BlankNode, None]],
                  list_expander: Optional[LiteralType["cross", "zipMin", "zipMax"]] = None):
         """
         A template instance.
@@ -161,7 +165,7 @@ class Template:
         """
 
     def instance(self,
-                 arguments: List[Union[Argument, Variable, IRI, Literal]],
+                 arguments: List[Union[Argument, Variable, IRI, Literal, None]],
                  list_expander: LiteralType["cross", "zipMin", "zipMax"] = None) -> Instance:
         """
 

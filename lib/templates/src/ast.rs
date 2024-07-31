@@ -193,6 +193,26 @@ impl ConstantTermOrList {
             }
         }
     }
+
+    pub fn ptype(&self) -> PType {
+        match self {
+            ConstantTermOrList::ConstantTerm(ct) => ct.ptype(),
+            ConstantTermOrList::ConstantList(cl) => {
+                let mut inner_type = None;
+                for p in cl {
+                    let p_ptype = p.ptype();
+                    if let Some(inner_type) = &inner_type {
+                        assert_eq!(inner_type, &p_ptype);
+                    } else {
+                        inner_type = Some(p_ptype);
+                    }
+                }
+                PType::List(Box::new(
+                    inner_type.unwrap_or(PType::Basic(BaseRDFNodeType::None)),
+                ))
+            }
+        }
+    }
 }
 
 impl Display for ConstantTermOrList {
@@ -224,6 +244,14 @@ pub enum ConstantTerm {
 impl ConstantTerm {
     pub fn is_blank_node(&self) -> bool {
         matches!(self, ConstantTerm::BlankNode(_))
+    }
+    pub fn ptype(&self) -> PType {
+        PType::Basic(match self {
+            ConstantTerm::Iri(_) => BaseRDFNodeType::IRI,
+            ConstantTerm::BlankNode(_) => BaseRDFNodeType::BlankNode,
+            ConstantTerm::Literal(l) => BaseRDFNodeType::Literal(l.datatype().into_owned()),
+            ConstantTerm::None => BaseRDFNodeType::None,
+        })
     }
 }
 

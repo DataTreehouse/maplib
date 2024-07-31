@@ -3,16 +3,19 @@ use crate::mapping::constant_terms::{constant_blank_node_to_series, constant_to_
 use crate::mapping::errors::MappingError;
 use log::debug;
 use oxrdf::{NamedNode, Variable};
-use polars::prelude::{col, lit, DataFrame, DataType, Expr, IntoLazy, NamedFrom, Series};
+use polars::prelude::{
+    col, lit, DataFrame, DataType, Expr, IntoLazy, LazyFrame, NamedFrom, Series,
+};
 use rayon::iter::{IndexedParallelIterator, ParallelDrainRange, ParallelIterator};
 use representation::multitype::split_df_multicols;
-use representation::RDFNodeType;
+use representation::{BaseRDFNodeType, RDFNodeType};
 use representation::{OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME};
 use std::cmp::{max, min};
 use std::collections::{HashMap, HashSet};
 use std::time::Instant;
 use templates::ast::{
-    ConstantTerm, ConstantTermOrList, Instance, ListExpanderType, PType, Signature, StottrTerm,
+    ConstantTerm, ConstantTermOrList, DefaultValue, Instance, ListExpanderType, PType, Signature,
+    StottrTerm,
 };
 use templates::constants::OTTR_TRIPLE;
 use templates::MappingColumnType;
@@ -23,7 +26,7 @@ impl Mapping {
     pub fn expand(
         &mut self,
         template: &str,
-        df: Option<DataFrame>,
+        mut df: Option<DataFrame>,
         mapping_column_types: Option<HashMap<String, MappingColumnType>>,
         options: ExpandOptions,
     ) -> Result<MappingReport, MappingError> {
@@ -31,7 +34,7 @@ impl Mapping {
         let target_template = self.resolve_template(template)?.clone();
         let target_template_name = target_template.signature.template_name.as_str().to_string();
 
-        let columns = if let Some(mapping_column_types) = mapping_column_types {
+        let mut columns = if let Some(mapping_column_types) = mapping_column_types {
             mapping_column_types
         } else {
             self.validate_infer_dataframe_columns(&target_template.signature, &df)?
@@ -45,6 +48,32 @@ impl Mapping {
             vec![]
         };
         let call_uuid = Uuid::new_v4().to_string();
+
+        let mut static_columns = HashMap::new();
+        let mut lf = if let Some(df) = df {
+            Some(df.lazy())
+        } else {
+            None
+        };
+        for p in &target_template.signature.parameter_list {
+            if let Some(default) = &p.default_value {
+                if lf.is_none() || !columns.contains_key(p.variable.as_str()) {
+                    add_default_value(&mut static_columns, p.variable.as_str(), default);
+                } else {
+                    lf = Some(fill_nulls_with_defaults(
+                        lf.unwrap(),
+                        &mut columns,
+                        p.variable.as_str(),
+                        default,
+                    )?);
+                }
+            }
+        }
+        df = if let Some(lf) = lf {
+            Some(lf.collect().unwrap())
+        } else {
+            None
+        };
 
         if self.use_caching && df.is_some() {
             let df = df.unwrap();
@@ -63,7 +92,7 @@ impl Mapping {
                     Some(df_slice),
                     &target_template.signature,
                     columns.clone(),
-                    HashMap::new(),
+                    static_columns.clone(),
                     unique_subsets.clone(),
                 )?;
                 self.process_results(result_vec, &call_uuid, new_blank_node_counter)?;
@@ -81,7 +110,7 @@ impl Mapping {
                 df,
                 &target_template.signature,
                 columns,
-                HashMap::new(),
+                static_columns,
                 unique_subsets,
             )?;
             self.process_results(result_vec, &call_uuid, new_blank_node_counter)?;
@@ -283,6 +312,32 @@ impl Mapping {
         );
         Ok(())
     }
+}
+
+fn fill_nulls_with_defaults(
+    mut lf: LazyFrame,
+    current_types: &mut HashMap<String, MappingColumnType>,
+    c: &str,
+    default: &DefaultValue,
+) -> Result<LazyFrame, MappingError> {
+    let (expr, _, mct) = constant_to_expr(&default.constant_term, &None)?;
+    if matches!(
+        current_types.get(c).unwrap(),
+        MappingColumnType::Flat(RDFNodeType::None)
+    ) {
+        current_types.insert(c.to_string(), mct);
+        lf = lf.with_column(expr.alias(c));
+    } else {
+        let current_mct = current_types.get(c).unwrap();
+        if current_mct != &mct {
+            return Err(MappingError::DefaultDataTypeMismatch(
+                current_mct.clone(),
+                mct,
+            ));
+        }
+        lf = lf.with_column(col(c).fill_null(expr));
+    }
+    Ok(lf)
 }
 
 fn get_variable_names(i: &Instance) -> Vec<&str> {
@@ -505,11 +560,20 @@ fn create_remapped(
                     new_dynamic_columns.insert(target_colname.to_string(), primitive_column);
                     new_dynamic_from_constant.push(target_colname);
                 } else {
-                    let static_column = StaticColumn {
-                        constant_term: ct.clone(),
-                        ptype: target.ptype.clone(),
-                    };
-                    new_constant_columns.insert(target_colname.to_string(), static_column);
+                    let mut added_default_static = false;
+                    if matches!(ct.ptype(), PType::Basic(BaseRDFNodeType::None)) {
+                        if let Some(default) = &target.default_value {
+                            add_default_value(&mut new_constant_columns, target_colname, default);
+                            added_default_static = true;
+                        }
+                    }
+                    if !added_default_static {
+                        let static_column = StaticColumn {
+                            constant_term: ct.clone(),
+                            ptype: target.ptype.clone(),
+                        };
+                        new_constant_columns.insert(target_colname.to_string(), static_column);
+                    }
                 }
             }
             StottrTerm::List(_l) => {
@@ -581,6 +645,20 @@ fn create_remapped(
             }
         }
     }
+
+    for p in &signature.parameter_list {
+        if dynamic_columns.contains_key(p.variable.as_str()) {
+            if let Some(default) = &p.default_value {
+                lf = fill_nulls_with_defaults(
+                    lf,
+                    &mut new_dynamic_columns,
+                    p.variable.as_str(),
+                    default,
+                )?;
+            }
+        }
+    }
+
     debug!(
         "Creating remapped took {} seconds",
         now.elapsed().as_secs_f32()
@@ -592,6 +670,20 @@ fn create_remapped(
         new_unique_subsets,
         out_blank_node_counter,
     )))
+}
+
+fn add_default_value(
+    static_columns: &mut HashMap<String, StaticColumn>,
+    name: &str,
+    default: &DefaultValue,
+) {
+    static_columns.insert(
+        name.to_string(),
+        StaticColumn {
+            constant_term: default.constant_term.clone(),
+            ptype: Some(default.constant_term.ptype()),
+        },
+    );
 }
 
 //From: https://users.rust-lang.org/t/flatten-a-vec-vec-t-to-a-vec-t/24526/3

@@ -22,14 +22,14 @@ impl Mapping {
                 let variable_name = parameter.variable.as_str();
                 if df_columns.contains(variable_name) {
                     df_columns.remove(variable_name);
-                    if !parameter.optional {
+                    if !parameter.optional && parameter.default_value.is_none() {
                         validate_non_optional_parameter(df, variable_name)?;
                     }
                     let column_data_type =
                         validate_infer_column_data_type(df, parameter, variable_name)?;
 
                     map.insert(variable_name.to_string(), column_data_type);
-                } else if !parameter.optional {
+                } else if !parameter.optional && parameter.default_value.is_none() {
                     return Err(MappingError::MissingParameterColumn(
                         variable_name.to_string(),
                     ));

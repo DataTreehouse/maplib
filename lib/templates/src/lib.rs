@@ -12,7 +12,7 @@ mod parsing;
 pub mod python;
 mod resolver;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum MappingColumnType {
     Flat(RDFNodeType),
     Nested(Box<MappingColumnType>),
