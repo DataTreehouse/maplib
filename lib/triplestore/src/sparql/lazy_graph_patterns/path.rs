@@ -95,7 +95,7 @@ impl Triplestore {
 
         let mut df_creator = U32DataFrameCreator::new();
         df_creator.gather_namednode_dfs(ppe, &self)?;
-        let (mut lookup_df, lookup_dtypes, namednode_dfs) = df_creator.create_u32_dfs()?;
+        let (lookup_df, lookup_dtypes, namednode_dfs) = df_creator.create_u32_dfs()?;
         let max_index: Option<u32> = lookup_df.column(LOOKUP_COLUMN).unwrap().max().unwrap();
 
         if let Some(max_index) = max_index {

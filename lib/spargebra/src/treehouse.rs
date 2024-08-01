@@ -1,5 +1,5 @@
 use crate::algebra::{AggregateFunction, Expression};
-use chrono::{DateTime, Duration, Utc};
+use chrono::{DateTime, Duration, SecondsFormat, Utc};
 use oxrdf::Variable;
 use std::fmt::{Display, Formatter};
 
@@ -141,7 +141,7 @@ impl Display for SimpleTimestampExpression {
                 write!(f, "to")
             }
             SimpleTimestampExpression::DateTimeUtc(dt) => {
-                write!(f, "{}", dt.to_rfc3339())
+                write!(f, "{}", dt.to_rfc3339_opts(SecondsFormat::Millis, true))
             }
         }
     }

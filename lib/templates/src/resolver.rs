@@ -2,10 +2,7 @@ use crate::ast::{
     Annotation, Argument, ConstantTerm, ConstantTermOrList, DefaultValue, Directive, Instance,
     PType, Parameter, Signature, Statement, StottrDocument, StottrTerm, Template,
 };
-use crate::constants::{
-    OTTR_IRI, OTTR_PREFIX, OTTR_PREFIX_IRI, OWL_PREFIX_IRI, RDFS_PREFIX, RDFS_PREFIX_IRI,
-    RDF_PREFIX, RDF_PREFIX_IRI, XSD_PREFIX, XSD_PREFIX_IRI,
-};
+use crate::constants::{OTTR_IRI, OTTR_PREFIX, OTTR_PREFIX_IRI, OWL_PREFIX_IRI, RDFS_PREFIX, RDFS_PREFIX_IRI, RDF_PREFIX, RDF_PREFIX_IRI, XSD_PREFIX, XSD_PREFIX_IRI, OTTR_BLANK_NODE};
 use crate::parsing::parsing_ast::{
     ResolvesToNamedNode, UnresolvedAnnotation, UnresolvedArgument, UnresolvedBaseTemplate,
     UnresolvedConstantLiteral, UnresolvedConstantTerm, UnresolvedDefaultValue, UnresolvedInstance,
@@ -293,6 +290,8 @@ fn resolve_ptype(
             let t =
                 if resolved.as_str() == OTTR_IRI || resolved.as_str().starts_with(OWL_PREFIX_IRI) {
                     BaseRDFNodeType::IRI
+                } else if resolved.as_str() == OTTR_BLANK_NODE {
+                    BaseRDFNodeType::BlankNode
                 } else {
                     BaseRDFNodeType::Literal(resolved)
                 };
