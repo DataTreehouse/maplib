@@ -37,7 +37,7 @@ impl Mapping {
         let mut columns = if let Some(mapping_column_types) = mapping_column_types {
             mapping_column_types
         } else {
-            self.validate_infer_dataframe_columns(&target_template.signature, &df)?
+            self.validate_infer_dataframe_columns(&target_template.signature, &mut df)?
         };
         let ExpandOptions {
             unique_subsets: unique_subsets_opt,
@@ -320,6 +320,14 @@ fn fill_nulls_with_defaults(
     c: &str,
     default: &DefaultValue,
 ) -> Result<LazyFrame, MappingError> {
+    if default.constant_term.has_blank_node() {
+        let df = lf.collect().unwrap();
+        if df.column(c).unwrap().is_null().any() {
+            todo!();
+        } else {
+            return Ok(df.lazy());
+        }
+    }
     let (expr, _, mct) = constant_to_expr(&default.constant_term, &None)?;
     if matches!(
         current_types.get(c).unwrap(),

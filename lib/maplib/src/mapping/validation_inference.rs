@@ -11,7 +11,7 @@ impl Mapping {
     pub fn validate_infer_dataframe_columns(
         &self,
         signature: &Signature,
-        df: &Option<DataFrame>,
+        df: &mut Option<DataFrame>,
     ) -> Result<HashMap<String, MappingColumnType>, MappingError> {
         let mut map = HashMap::new();
         if let Some(df) = df {
@@ -48,14 +48,23 @@ impl Mapping {
 }
 
 fn validate_infer_column_data_type(
-    dataframe: &DataFrame,
+    dataframe: &mut DataFrame,
     parameter: &Parameter,
     column_name: &str,
 ) -> Result<MappingColumnType, MappingError> {
-    let series = dataframe.column(column_name).unwrap();
-    let dtype = series.dtype();
+    let dtype = dataframe.column(column_name).unwrap().dtype();
     let mapping_column_type = if let Some(ptype) = &parameter.ptype {
-        validate_datatype(series.name(), dtype, ptype)?;
+        if let Some(adjust_dtype) = validate_datatype(column_name, dtype, ptype)? {
+            dataframe
+                .with_column(
+                    dataframe
+                        .column(column_name)
+                        .unwrap()
+                        .cast(&adjust_dtype)
+                        .unwrap(),
+                )
+                .unwrap();
+        }
         infer_rdf_node_type(&ptype)
     } else {
         polars_datatype_to_mapping_column_datatype(dtype)?
@@ -88,10 +97,14 @@ fn validate_datatype(
     column_name: &str,
     datatype: &DataType,
     target_ptype: &PType,
-) -> Result<(), MappingError> {
+) -> Result<Option<DataType>, MappingError> {
     let validate_if_series_list = |inner| {
         if let DataType::List(dt) = datatype {
-            validate_datatype(column_name, dt, inner)
+            if let Some(res) = validate_datatype(column_name, dt, inner)? {
+                Ok(Some(DataType::List(Box::new(res))))
+            } else {
+                Ok(None)
+            }
         } else {
             Err(MappingError::ColumnDataTypeMismatch(
                 column_name.to_string(),
@@ -113,14 +126,18 @@ fn validate_datatype(
             } else {
                 let expected = b.polars_data_type();
                 if &expected != datatype {
-                    Err(MappingError::ColumnDataTypeMismatch(
-                        column_name.to_string(),
-                        datatype.clone(),
-                        target_ptype.clone(),
-                        Some(expected),
-                    ))
+                    if datatype == &DataType::Null {
+                        Ok(Some(expected))
+                    } else {
+                        Err(MappingError::ColumnDataTypeMismatch(
+                            column_name.to_string(),
+                            datatype.clone(),
+                            target_ptype.clone(),
+                            Some(expected),
+                        ))
+                    }
                 } else {
-                    Ok(())
+                    Ok(None)
                 }
             }
         }
