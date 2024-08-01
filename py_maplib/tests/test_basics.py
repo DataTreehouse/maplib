@@ -166,6 +166,49 @@ def test_create_programmatic_mapping_with_nested_default():
     expected_df = pl.DataFrame({"A":["123"], "B":[123]})
     assert_frame_equal(qres, expected_df)
 
+def test_create_programmatic_mapping_with_nested_default_and_missing_column():
+    xsd = XSD()
+    df = pl.DataFrame({"MyValue": ["A"]})
+    mapping = Mapping()
+    ex = Prefix("ex","http://example.net/ns#")
+    my_value = Variable("MyValue")
+    my_other_value = Variable("MyOtherValue")
+    yet_another_value = Variable("YetAnotherValue")
+    my_object = ex.suf("MyObject")
+    template = Template(
+        ex.suf("ExampleTemplate"),
+        [Parameter(my_value),
+         Parameter(my_other_value, default_value=Literal("123")),
+         Parameter(yet_another_value, default_value=Literal("123", data_type=xsd.integer))],
+        [
+            Triple(my_object, ex.suf("hasValue"), my_value),
+            Triple(my_object, ex.suf("hasOtherValue"), my_other_value),
+            Triple(my_object, ex.suf("hasYetAnotherValue"), yet_another_value)
+        ]
+    )
+    template2 = Template(
+        ex.suf("ExampleTemplate2"),
+        [Parameter(my_value), Parameter(my_other_value, optional=True), Parameter(yet_another_value, optional=True)],
+        [template.instance([my_value, my_other_value, yet_another_value])]
+    )
+    mapping.add_template(template)
+    mapping.expand(template2, df)
+    qres = mapping.query(
+        """
+        PREFIX ex:<http://example.net/ns#>
+        
+        SELECT ?A ?B WHERE {
+        ?obj1 ex:hasOtherValue ?A .
+        ?obj1 ex:hasYetAnotherValue ?B .
+        } 
+        """
+    )
+    print(qres)
+    expected_df = pl.DataFrame({"A":["123"], "B":[123]})
+    assert_frame_equal(qres, expected_df)
+
+
+
 def test_create_programmatic_mapping_with_nested_partial_default():
     xsd = XSD()
     df = pl.DataFrame({"MyValue": ["A", "B"],

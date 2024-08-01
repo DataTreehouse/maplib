@@ -523,6 +523,8 @@ fn create_remapped(
                     new_dynamic_columns.insert(target_colname.to_string(), c.clone());
                 } else if let Some(c) = constant_columns.get(v.as_str()) {
                     new_constant_columns.insert(target_colname.to_string(), c.clone());
+                } else if let Some(default) = &target.default_value {
+                    add_default_value(&mut new_constant_columns, target_colname, default)
                 } else {
                     if let Some(calling_formal_arg) = calling_signature
                         .parameter_list
