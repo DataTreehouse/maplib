@@ -6,8 +6,9 @@ use log::debug;
 use memmap2::MmapOptions;
 use oxrdf::{BlankNode, GraphName, NamedNode, Quad, Subject, Term};
 use oxrdfio::{FromSliceQuadReader, RdfFormat, RdfParser, RdfSyntaxError};
+use oxttl::ntriples::FromSliceNTriplesReader;
 use oxttl::turtle::FromSliceTurtleReader;
-use oxttl::TurtleParser;
+use oxttl::{NTriplesParser, TurtleParser};
 use polars::prelude::{as_struct, col, DataFrame, IntoLazy, LiteralValue, Series};
 use rayon::iter::ParallelIterator;
 use rayon::prelude::{IntoParallelIterator, IntoParallelRefIterator};
@@ -96,38 +97,53 @@ impl Triplestore {
         deduplicate: bool,
     ) -> Result<(), TriplestoreError> {
         let start_quadproc_now = Instant::now();
-        let readers = if rdf_format == RdfFormat::Turtle && parallel {
-            let mut parser = TurtleParser::new();
-            if !checked {
-                parser = parser.unchecked();
-            }
-            if let Some(base_iri) = base_iri {
-                parser = parser.with_base_iri(base_iri).unwrap();
-            }
-            let mut readers = vec![];
-            let threads = if let Ok(threads) = std::thread::available_parallelism() {
-                threads.get()
+        let readers =
+            if (rdf_format == RdfFormat::Turtle || rdf_format == RdfFormat::NTriples) && parallel {
+                let threads = if let Ok(threads) = std::thread::available_parallelism() {
+                    threads.get()
+                } else {
+                    1
+                };
+
+                let mut readers = vec![];
+                if rdf_format == RdfFormat::Turtle {
+                    let mut parser = TurtleParser::new();
+                    if !checked {
+                        parser = parser.unchecked();
+                    }
+                    if let Some(base_iri) = base_iri {
+                        parser = parser.with_base_iri(base_iri).unwrap();
+                    }
+                    for r in parser.split_slice_for_parallel_parsing(slice, threads) {
+                        readers.push(MyFromSliceQuadReader {
+                            parser: MyFromSliceQuadReaderKind::TurtlePar(r),
+                        });
+                    }
+                } else if rdf_format == RdfFormat::NTriples {
+                    let mut parser = NTriplesParser::new();
+                    if !checked {
+                        parser = parser.unchecked();
+                    }
+                    for r in parser.split_slice_for_parallel_parsing(slice, threads) {
+                        readers.push(MyFromSliceQuadReader {
+                            parser: MyFromSliceQuadReaderKind::NTriplesPar(r),
+                        });
+                    }
+                }
+                readers
             } else {
-                1
+                let mut parser = RdfParser::from(rdf_format);
+                if !checked {
+                    parser = parser.unchecked();
+                }
+                if let Some(base_iri) = base_iri {
+                    parser = parser.with_base_iri(base_iri).unwrap();
+                }
+                vec![MyFromSliceQuadReader {
+                    parser: MyFromSliceQuadReaderKind::Other(parser.parse_slice(slice)),
+                }]
             };
-            for r in parser.split_slice_for_parallel_parsing(slice, threads) {
-                readers.push(MyFromSliceQuadReader {
-                    parser: MyFromSliceQuadReaderKind::TurtlePar(r),
-                });
-            }
-            readers
-        } else {
-            let mut parser = RdfParser::from(rdf_format);
-            if !checked {
-                parser = parser.unchecked();
-            }
-            if let Some(base_iri) = base_iri {
-                parser = parser.with_base_iri(base_iri).unwrap();
-            }
-            vec![MyFromSliceQuadReader {
-                parser: MyFromSliceQuadReaderKind::Other(parser.parse_slice(slice)),
-            }]
-        };
+        debug!("Effective parallelization for reading is {}", readers.len());
 
         let parser_call = self.parser_call.to_string();
         let predicate_maps: Vec<_> = readers
@@ -377,6 +393,7 @@ pub struct MyFromSliceQuadReader<'a> {
 pub enum MyFromSliceQuadReaderKind<'a> {
     Other(FromSliceQuadReader<'a>),
     TurtlePar(FromSliceTurtleReader<'a>),
+    NTriplesPar(FromSliceNTriplesReader<'a>),
 }
 
 impl<'a> Iterator for MyFromSliceQuadReader<'a> {
@@ -386,6 +403,10 @@ impl<'a> Iterator for MyFromSliceQuadReader<'a> {
         Some(match &mut self.parser {
             MyFromSliceQuadReaderKind::Other(parser) => parser.next()?,
             MyFromSliceQuadReaderKind::TurtlePar(parser) => match parser.next()? {
+                Ok(triple) => Ok(triple.in_graph(GraphName::default())),
+                Err(e) => Err(e.into()),
+            },
+            MyFromSliceQuadReaderKind::NTriplesPar(parser) => match parser.next()? {
                 Ok(triple) => Ok(triple.in_graph(GraphName::default())),
                 Err(e) => Err(e.into()),
             },

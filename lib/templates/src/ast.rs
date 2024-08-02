@@ -139,25 +139,20 @@ impl PType {
 impl Display for PType {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            PType::Basic(t) => {
-
-
-                match t {
-                    BaseRDFNodeType::IRI => {
-                        write!(f, "ottr:IRI")
-                    }
-                    BaseRDFNodeType::BlankNode => {
-                        write!(f, "ottr:BlankNode")
-                    }
-                    BaseRDFNodeType::Literal(l) => {
-                        write!(f, "{}", l)
-
-                    }
-                    BaseRDFNodeType::None => {
-                        write!(f, "")
-                    }
+            PType::Basic(t) => match t {
+                BaseRDFNodeType::IRI => {
+                    write!(f, "ottr:IRI")
                 }
-            }
+                BaseRDFNodeType::BlankNode => {
+                    write!(f, "ottr:BlankNode")
+                }
+                BaseRDFNodeType::Literal(l) => {
+                    write!(f, "{}", l)
+                }
+                BaseRDFNodeType::None => {
+                    write!(f, "")
+                }
+            },
             PType::Lub(lt) => {
                 let s = lt.to_string();
                 write!(f, "LUBType({})", s)

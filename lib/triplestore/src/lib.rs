@@ -40,10 +40,20 @@ use uuid::Uuid;
 #[derive(Clone)]
 pub struct Triplestore {
     deduplicated: bool,
-    pub(crate) caching_folder: Option<String>,
+    pub caching_folder: Option<String>,
     df_map: HashMap<NamedNode, HashMap<(RDFNodeType, RDFNodeType), TripleTable>>,
     transient_df_map: HashMap<NamedNode, HashMap<(RDFNodeType, RDFNodeType), TripleTable>>,
     parser_call: usize,
+}
+
+impl Triplestore {
+    pub fn truncate(&mut self) {
+        if self.caching_folder.is_some() {
+            todo!("Should drop this folder.. ")
+        }
+        self.df_map = HashMap::new();
+        self.transient_df_map = HashMap::new();
+    }
 }
 
 #[derive(Clone)]

@@ -362,6 +362,7 @@ impl PyMapping {
         checked: Option<bool>,
         deduplicate: Option<bool>,
         graph: Option<String>,
+        replace_graph: Option<bool>,
     ) -> PyResult<()> {
         let graph = parse_optional_graph(graph)?;
         let file_path = file_path.str()?.to_string();
@@ -381,6 +382,7 @@ impl PyMapping {
                 checked.unwrap_or(true),
                 deduplicate.unwrap_or(true),
                 graph,
+                replace_graph.unwrap_or(false),
             )
             .map_err(|x| PyMaplibError::from(x))?;
         Ok(())
@@ -396,6 +398,7 @@ impl PyMapping {
         checked: Option<bool>,
         deduplicate: Option<bool>,
         graph: Option<String>,
+        replace_graph: Option<bool>,
     ) -> PyResult<()> {
         let graph = parse_optional_graph(graph)?;
         let format = resolve_format(&format);
@@ -409,6 +412,7 @@ impl PyMapping {
                 checked.unwrap_or(true),
                 deduplicate.unwrap_or(true),
                 graph,
+                replace_graph.unwrap_or(false),
             )
             .map_err(|x| PyMaplibError::from(x))?;
         Ok(())

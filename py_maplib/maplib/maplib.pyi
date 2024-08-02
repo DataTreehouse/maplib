@@ -411,7 +411,9 @@ class Mapping:
                      parallel: bool = False,
                      checked: bool = True,
                      deduplicate: bool = True,
-                     graph: str = None) -> None:
+                     graph: str = None,
+                     replace_graph: bool = False,
+                     ) -> None:
         """
         Reads triples from a file path.
         You can specify the format, or it will be derived using file extension, e.g. filename.ttl or filename.nt.
@@ -429,7 +431,8 @@ class Mapping:
         :param parallel: Parse triples in parallel, currently only NTRiples. Assumes all prefixes are in the beginning of the document.
         :param checked: Check IRIs etc.
         :param deduplicate: Set to true by default, disable to increase throughput for large files containing only unique triples.
-        :param graph: The IRI of the graph to read the triples into.
+        :param graph: The IRI of the graph to read the triples into, if None, it will be the default graph.
+        :param replace_graph: Replace the graph with these triples? Will replace the default graph if no graph is specified.
         """
 
     def read_triples_string(self,
@@ -440,7 +443,9 @@ class Mapping:
                             parallel: bool = False,
                             checked: bool = True,
                             deduplicate: bool = True,
-                            graph: str = None) -> None:
+                            graph: str = None,
+                            replace_graph: bool = False,
+                            ) -> None:
         """
         Reads triples from a string.
         Specify transient if you only want the triples to be available for further querying and validation,
@@ -458,6 +463,7 @@ class Mapping:
         :param checked: Check IRIs etc.
         :param deduplicate: Set to true by default, disable to increase throughput for large files containing only unique triples.
         :param graph: The IRI of the graph to read the triples into.
+        :param replace_graph: Replace the graph with these triples? Will replace the default graph if no graph is specified.
         """
 
     def write_ntriples(self, file_path: Union[str, Path], graph: str = None) -> None:

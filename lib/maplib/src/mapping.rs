@@ -127,8 +127,12 @@ impl Mapping {
         checked: bool,
         deduplicate: bool,
         graph: Option<NamedNode>,
+        replace_graph: bool,
     ) -> Result<(), MappingError> {
-        let triplestore = self.get_triplestore(graph);
+        if replace_graph == true {
+            self.truncate_graph(&graph)
+        }
+        let triplestore = self.get_triplestore(&graph);
         triplestore
             .read_triples_from_path(
                 p,
@@ -152,8 +156,12 @@ impl Mapping {
         checked: bool,
         deduplicate: bool,
         graph: Option<NamedNode>,
+        replace_graph: bool,
     ) -> Result<(), MappingError> {
-        let triplestore = self.get_triplestore(graph);
+        if replace_graph == true {
+            self.truncate_graph(&graph)
+        }
+        let triplestore = self.get_triplestore(&graph);
         triplestore
             .read_triples_from_string(
                 s,
@@ -167,13 +175,13 @@ impl Mapping {
             .map_err(MappingError::TriplestoreError)
     }
 
-    pub fn get_triplestore(&mut self, graph: Option<NamedNode>) -> &mut Triplestore {
+    pub fn get_triplestore(&mut self, graph: &Option<NamedNode>) -> &mut Triplestore {
         if let Some(graph) = graph {
-            if !self.triplestores_map.contains_key(&graph) {
+            if !self.triplestores_map.contains_key(graph) {
                 self.triplestores_map
                     .insert(graph.clone(), Triplestore::new(None).unwrap());
             }
-            self.triplestores_map.get_mut(&graph).unwrap()
+            self.triplestores_map.get_mut(graph).unwrap()
         } else {
             &mut self.base_triplestore
         }
@@ -185,7 +193,7 @@ impl Mapping {
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         graph: Option<NamedNode>,
     ) -> Result<QueryResult, SparqlError> {
-        let use_triplestore = self.get_triplestore(graph);
+        let use_triplestore = self.get_triplestore(&graph);
         use_triplestore.query(query, parameters)
     }
 
@@ -195,7 +203,7 @@ impl Mapping {
         transient: bool,
         target_graph: Option<NamedNode>,
     ) -> Result<(), SparqlError> {
-        let use_triplestore = self.get_triplestore(target_graph);
+        let use_triplestore = self.get_triplestore(&target_graph);
         use_triplestore.insert_construct_result(dfs, transient)
     }
 
@@ -204,7 +212,7 @@ impl Mapping {
         buffer: &mut dyn Write,
         graph: Option<NamedNode>,
     ) -> Result<(), MappingError> {
-        let triplestore = self.get_triplestore(graph);
+        let triplestore = self.get_triplestore(&graph);
         triplestore.write_n_triples_all_dfs(buffer, 1024).unwrap();
         Ok(())
     }
@@ -214,7 +222,7 @@ impl Mapping {
         path: &str,
         graph: Option<NamedNode>,
     ) -> Result<(), MappingError> {
-        let triplestore = self.get_triplestore(graph);
+        let triplestore = self.get_triplestore(&graph);
         triplestore
             .write_native_parquet(Path::new(path))
             .map_err(MappingError::TriplestoreError)
@@ -268,5 +276,9 @@ impl Mapping {
                 Err(e)
             }
         }
+    }
+
+    fn truncate_graph(&mut self, graph: &Option<NamedNode>) {
+        self.get_triplestore(graph).truncate();
     }
 }
