@@ -129,7 +129,7 @@ impl Mapping {
         graph: Option<NamedNode>,
         replace_graph: bool,
     ) -> Result<(), MappingError> {
-        if replace_graph == true {
+        if replace_graph {
             self.truncate_graph(&graph)
         }
         let triplestore = self.get_triplestore(&graph);
@@ -158,7 +158,7 @@ impl Mapping {
         graph: Option<NamedNode>,
         replace_graph: bool,
     ) -> Result<(), MappingError> {
-        if replace_graph == true {
+        if replace_graph {
             self.truncate_graph(&graph)
         }
         let triplestore = self.get_triplestore(&graph);

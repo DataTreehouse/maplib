@@ -48,6 +48,6 @@ rstest = "0.21.0"
 serial_test = "3.1.1"
 
 [patch.crates-io]
-oxrdf = { git = 'https://github.com/magbak/oxigraph.git', rev = "12b4cf2d19dd4277b9478234d69db61718bd0483"}
-oxttl = { git = 'https://github.com/magbak/oxigraph.git', rev = "12b4cf2d19dd4277b9478234d69db61718bd0483"}
-oxrdfio = { git = 'https://github.com/magbak/oxigraph.git', rev = "12b4cf2d19dd4277b9478234d69db61718bd0483"}
+oxrdf = { git = 'https://github.com/magbak/oxigraph.git', rev = "676207f568d57c60c8335cfa9bc5d073dbc20c5b"}
+oxttl = { git = 'https://github.com/magbak/oxigraph.git', rev = "676207f568d57c60c8335cfa9bc5d073dbc20c5b"}
+oxrdfio = { git = 'https://github.com/magbak/oxigraph.git', rev = "676207f568d57c60c8335cfa9bc5d073dbc20c5b"}
