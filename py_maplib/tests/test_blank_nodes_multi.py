@@ -3,13 +3,13 @@ import pytest
 import rdflib
 from polars.testing import assert_frame_equal
 import pathlib
-from maplib import Mapping
+from maplib import Mapping, RDFType
 
 pl.Config.set_fmt_str_lengths(300)
 
-
 PATH_HERE = pathlib.Path(__file__).parent
 TESTDATA_PATH = PATH_HERE / "testdata"
+
 
 @pytest.fixture(scope="function")
 def blank_person_mapping():
@@ -51,7 +51,7 @@ def test_simple_query_no_error(blank_person_mapping):
         ?p foaf:firstName ?firstName .
         } ORDER BY ?firstName ?lastName
         """).sort(["firstName", "lastName"])
-    #Todo: Fix multitype sorting
+    # Todo: Fix multitype sorting
     expected_df = pl.DataFrame({"firstName": ["Ann", "Bob"],
                                 "lastName": ["Strong", "Brite"]})
 
@@ -75,17 +75,21 @@ def test_simple_query_blank_node_output_no_error(blank_person_mapping):
 
 
 def test_multi_datatype_query_no_error(blank_person_mapping):
-    res = blank_person_mapping.query("""
+    sm = blank_person_mapping.query("""
         PREFIX foaf:<http://xmlns.com/foaf/0.1/>
 
         SELECT ?s ?v ?o WHERE {
         ?s ?v ?o .
         } 
-        """)
-    by = ["s","v","o"]
-    df = res.sort(by=by)
+        """, include_datatypes=True)
+    by = ["s", "v", "o"]
+    df = sm.mappings.sort(by=by)
+    assert sm.rdf_types == {
+        'o': RDFType.Multi([RDFType.IRI(), RDFType.Literal("http://www.w3.org/2001/XMLSchema#string")]),
+        's': RDFType.BlankNode(),
+        'v': RDFType.IRI()}
     filename = TESTDATA_PATH / "multi_datatype_query.csv"
-    #df.write_csv(filename)
+    # df.write_csv(filename)
     expected_df = pl.scan_csv(filename).sort(by).collect()
     assert_frame_equal(df, expected_df)
 
@@ -101,10 +105,10 @@ def test_multi_datatype_union_query_no_error(blank_person_mapping):
         }
         } 
         """)
-    by = ["s","o"]
+    by = ["s", "o"]
     df = res.sort(by=by)
     filename = TESTDATA_PATH / "multi_datatype_union_query.csv"
-    #df.write_csv(filename)
+    # df.write_csv(filename)
     expected_df = pl.scan_csv(filename).sort(by).collect()
     assert_frame_equal(df, expected_df)
 
@@ -121,7 +125,7 @@ def test_multi_datatype_union_sort_query(blank_person_mapping):
         } ORDER BY ?o ?s
         """)
     filename = TESTDATA_PATH / "multi_datatype_union_sort_query.csv"
-    #df.write_csv(filename)
+    # df.write_csv(filename)
     expected_df = pl.scan_csv(filename).collect()
     assert_frame_equal(df, expected_df)
 
@@ -138,9 +142,10 @@ def test_multi_datatype_union_sort_desc1_query(blank_person_mapping):
         } ORDER BY DESC(?o) ?s
         """)
     filename = TESTDATA_PATH / "multi_datatype_union_sort_desc1_query.csv"
-    #df.write_csv(filename)
+    # df.write_csv(filename)
     expected_df = pl.scan_csv(filename).collect()
     assert_frame_equal(df, expected_df)
+
 
 def test_multi_datatype_union_query_native_df(blank_person_mapping):
     res = blank_person_mapping.query("""
@@ -153,12 +158,13 @@ def test_multi_datatype_union_query_native_df(blank_person_mapping):
         }
         } 
         """, native_dataframe=True)
-    by = ["s","o"]
+    by = ["s", "o"]
     df = res.sort(by=by)
     filename = TESTDATA_PATH / "multi_datatype_union_query_native_df.parquet"
-    #df.write_parquet(filename)
+    # df.write_parquet(filename)
     expected_df = pl.scan_parquet(filename).sort(by).collect()
     assert_frame_equal(df, expected_df)
+
 
 def test_multi_datatype_left_join_query_no_error(blank_person_mapping):
     res = blank_person_mapping.query("""
@@ -171,14 +177,15 @@ def test_multi_datatype_left_join_query_no_error(blank_person_mapping):
         }
         } 
         """)
-    by = ["s","o"]
+    by = ["s", "o"]
     df = res.sort(by=by)
     filename = TESTDATA_PATH / "multi_datatype_leftjoin_query.csv"
-    #df.write_csv(filename)
+    # df.write_csv(filename)
     expected_df = pl.scan_csv(filename).sort(by).collect()
     assert_frame_equal(df, expected_df)
 
-#This test is skipped due to a bug in Polars.
+
+# This test is skipped due to a bug in Polars.
 def test_multi_datatype_join_query_two_vars_no_error(blank_person_mapping):
     res = blank_person_mapping.query("""
         PREFIX foaf:<http://xmlns.com/foaf/0.1/>
@@ -192,12 +199,13 @@ def test_multi_datatype_join_query_two_vars_no_error(blank_person_mapping):
         }
         } 
         """)
-    by = ["s","o"]
+    by = ["s", "o"]
     df = res.sort(by=by)
     filename = TESTDATA_PATH / "multi_datatype_join_query_two_vars.csv"
-    #df.write_csv(filename)
+    # df.write_csv(filename)
     expected_df = pl.scan_csv(filename).sort(by).collect()
     assert_frame_equal(df, expected_df)
+
 
 def test_multi_datatype_join_query_no_error(blank_person_mapping):
     res = blank_person_mapping.query("""
@@ -212,10 +220,10 @@ def test_multi_datatype_join_query_no_error(blank_person_mapping):
         }
         } 
         """)
-    by = ["s1", "s2","o"]
+    by = ["s1", "s2", "o"]
     df = res.sort(by=by)
     filename = TESTDATA_PATH / "multi_datatype_join_query.csv"
-    #df.write_csv(filename)
+    # df.write_csv(filename)
     expected_df = pl.scan_csv(filename).sort(by).collect()
     assert_frame_equal(df, expected_df)
 
@@ -228,8 +236,8 @@ def test_multi_datatype_query_sorting_sorting(blank_person_mapping):
         ?s ?v ?o .
         } ORDER BY ?s ?v ?o
         """).sort(["s", "v", "o"])
-    #TODO: Fix multitype sorting
+    # TODO: Fix multitype sorting
     filename = TESTDATA_PATH / "multi_datatype_query_sorting.csv"
-    #res.write_csv(filename)
+    # res.write_csv(filename)
     expected_df = pl.scan_csv(filename).collect()
     assert_frame_equal(res, expected_df)

@@ -33,15 +33,22 @@ impl PyValidationReport {
     pub fn results(
         &self,
         native_dataframe: Option<bool>,
+        include_datatypes: Option<bool>,
         py: Python<'_>,
     ) -> PyResult<Option<PyObject>> {
-        let report = if let Some(mut df) = self.inner.df.clone() {
-            (df, _) = fix_cats_and_multicolumns(
+        let report = if let Some(df) = self.inner.df.clone() {
+            let (df, rdf_node_types) = fix_cats_and_multicolumns(
                 df,
                 self.inner.rdf_node_types.as_ref().unwrap().clone(),
                 native_dataframe.unwrap_or(false),
             );
-            Some(df_to_py_df(df, HashMap::new(), py)?)
+            Some(df_to_py_df(
+                df,
+                rdf_node_types,
+                None,
+                include_datatypes.unwrap_or(false),
+                py,
+            )?)
         } else {
             None
         };
@@ -51,19 +58,26 @@ impl PyValidationReport {
     pub fn details(
         &self,
         native_dataframe: Option<bool>,
+        include_datatypes: Option<bool>,
         py: Python<'_>,
     ) -> PyResult<Option<PyObject>> {
         let details = if let Some(EagerSolutionMappings {
             mut mappings,
-            rdf_node_types,
+            mut rdf_node_types,
         }) = self.inner.details.clone()
         {
-            (mappings, _) = fix_cats_and_multicolumns(
+            (mappings, rdf_node_types) = fix_cats_and_multicolumns(
                 mappings,
                 rdf_node_types,
                 native_dataframe.unwrap_or(false),
             );
-            Some(df_to_py_df(mappings, HashMap::new(), py)?)
+            Some(df_to_py_df(
+                mappings,
+                rdf_node_types,
+                None,
+                include_datatypes.unwrap_or(false),
+                py,
+            )?)
         } else {
             None
         };

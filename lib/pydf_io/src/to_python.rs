@@ -12,6 +12,8 @@ use pyo3::prelude::*;
 use pyo3::types::PyList;
 use representation::formatting::format_columns;
 use representation::multitype::{compress_actual_multitypes, lf_column_from_categorical};
+use representation::python::PySolutionMappings;
+use representation::query_context::Context;
 use representation::RDFNodeType;
 use std::collections::HashMap;
 
@@ -65,7 +67,6 @@ pub fn to_py_df(
     py: Python,
     pyarrow: &Bound<'_, PyModule>,
     polars: &Bound<'_, PyModule>,
-    _types: HashMap<String, String>,
 ) -> PyResult<PyObject> {
     let py_rb = to_py_rb(rb, names, py, pyarrow)?;
     let py_rb_list = PyList::empty_bound(py);
@@ -80,7 +81,9 @@ pub fn to_py_df(
 
 pub fn df_to_py_df(
     mut df: DataFrame,
-    types: HashMap<String, String>,
+    rdf_node_types: HashMap<String, RDFNodeType>,
+    pushdown_paths: Option<Vec<Vec<Context>>>,
+    include_details: bool,
     py: Python,
 ) -> PyResult<PyObject> {
     let names_vec: Vec<String> = df
@@ -96,7 +99,20 @@ pub fn df_to_py_df(
         .unwrap();
     let pyarrow = PyModule::import_bound(py, "pyarrow")?;
     let polars = PyModule::import_bound(py, "polars")?;
-    to_py_df(&chunk, names.as_slice(), py, &pyarrow, &polars, types)
+    let py_df = to_py_df(&chunk, names.as_slice(), py, &pyarrow, &polars)?;
+    if include_details {
+        Ok(Py::new(
+            py,
+            PySolutionMappings {
+                mappings: py_df.into_any(),
+                rdf_node_types,
+                pushdown_paths,
+            },
+        )?
+        .to_object(py))
+    } else {
+        Ok(py_df)
+    }
 }
 
 pub fn fix_cats_and_multicolumns(
@@ -116,8 +132,4 @@ pub fn fix_cats_and_multicolumns(
     }
     df = lf.select(column_ordering).collect().unwrap();
     (df, dts)
-}
-
-pub fn dtypes_map(map: HashMap<String, RDFNodeType>) -> HashMap<String, String> {
-    map.into_iter().map(|(x, y)| (x, y.to_string())).collect()
 }

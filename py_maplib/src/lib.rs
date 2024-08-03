@@ -48,7 +48,9 @@ use jemallocator::Jemalloc;
 use oxrdf::NamedNode;
 use oxrdfio::RdfFormat;
 use pyo3::types::PyList;
-use representation::python::{PyBlankNode, PyIRI, PyLiteral, PyPrefix, PyRDFType, PyVariable};
+use representation::python::{
+    PyBlankNode, PyIRI, PyLiteral, PyPrefix, PyRDFType, PySolutionMappings, PyVariable,
+};
 use representation::solution_mapping::EagerSolutionMappings;
 use representation::RDFNodeType;
 
@@ -249,7 +251,7 @@ impl PyMapping {
         py: Python<'_>,
         query: String,
         parameters: Option<ParametersType>,
-        _include_datatypes: Option<bool>,
+        include_datatypes: Option<bool>,
         native_dataframe: Option<bool>,
         graph: Option<String>,
     ) -> PyResult<PyObject> {
@@ -259,7 +261,12 @@ impl PyMapping {
             .inner
             .query(&query, &mapped_parameters, graph)
             .map_err(PyMaplibError::from)?;
-        query_to_result(res, native_dataframe.unwrap_or(false), py)
+        query_to_result(
+            res,
+            native_dataframe.unwrap_or(false),
+            include_datatypes.unwrap_or(false),
+            py,
+        )
     }
 
     fn validate(
@@ -459,6 +466,7 @@ fn _maplib(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     enable_string_cache();
     m.add_class::<PyMapping>()?;
     m.add_class::<PyValidationReport>()?;
+    m.add_class::<PySolutionMappings>()?;
     m.add_class::<PyRDFType>()?;
     m.add_class::<PyPrefix>()?;
     m.add_class::<PyVariable>()?;
@@ -478,19 +486,20 @@ fn _maplib(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
 fn query_to_result(
     res: SparqlQueryResult,
     native_dataframe: bool,
+    include_details: bool,
     py: Python<'_>,
 ) -> PyResult<PyObject> {
     match res {
         SparqlQueryResult::Select(mut df, mut datatypes) => {
             (df, datatypes) = fix_cats_and_multicolumns(df, datatypes, native_dataframe);
-            let pydf = df_to_py_df(df, dtypes_map(datatypes), py)?;
+            let pydf = df_to_py_df(df, datatypes, None, include_details, py)?;
             Ok(pydf)
         }
         SparqlQueryResult::Construct(dfs) => {
             let mut query_results = vec![];
             for (mut df, mut datatypes) in dfs {
                 (df, datatypes) = fix_cats_and_multicolumns(df, datatypes, native_dataframe);
-                let pydf = df_to_py_df(df, dtypes_map(datatypes), py)?;
+                let pydf = df_to_py_df(df, datatypes, None, include_details, py)?;
                 query_results.push(pydf);
             }
             Ok(PyList::new_bound(py, query_results).into())

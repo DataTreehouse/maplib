@@ -12,8 +12,16 @@ class RDFType:
     IRI: Callable[[], "RDFType"]
     BlankNode: Callable[[], "RDFType"]
     Literal: Callable[[Union[str, "IRI"]], "RDFType"]
+    Multi: Callable[[List["RDFType"]], "RDFType"]
     Nested: Callable[["RDFType"], "RDFType"]
     Unknown: Callable[[], "RDFType"]
+
+class SolutionMappings:
+    """
+    Detailed information about the solution mappings and the types of the variables.
+    """
+    mappings: DataFrame
+    rdf_types: Dict[str, RDFType]
 
 class Variable:
     """
@@ -236,21 +244,27 @@ class ValidationReport:
     conforms: bool
 
     def results(self,
-                native_dataframe: bool = False) -> Optional[DataFrame]:
+                native_dataframe: bool = False,
+                include_datatypes: bool = False,
+                ) -> Optional[Union[DataFrame, SolutionMappings]]:
         """
         Return the results of the validation report, if they exist.
 
         :param native_dataframe: Return columns with maplib-native formatting. Useful for round-trips.
+        :param include_datatypes: Return datatypes of the results DataFrame (returns SolutionMappings instead of DataFrame).
         :return: The SHACL validation report, as a DataFrame
         """
 
     def details(self,
-                native_dataframe: bool = False) -> Optional[DataFrame]:
+                native_dataframe: bool = False,
+                include_datatypes: bool = False,
+                ) -> Optional[DataFrame]:
         """
         Returns the details of the validation report.
         Only available if validation was called with include_details=True.
 
         :param native_dataframe: Return columns with maplib-native formatting. Useful for round-trips.
+        :param include_datatypes: Return datatypes of the results DataFrame (returns SolutionMappings instead of DataFrame).
         :return: Details of the SHACL validation report, as a DataFrame
         """
 
@@ -331,9 +345,8 @@ class Mapping:
               include_datatypes:bool = False,
               native_dataframe:bool = False,
               graph: str = None) -> Union[
-        DataFrame,
-        Dict[str, Union[DataFrame, Dict[str, str]]],
-        List[Union[DataFrame, Dict[str, Union[DataFrame, Dict[str, str]]]]],
+        DataFrame, SolutionMappings,
+        List[Union[DataFrame, SolutionMappings]],
         None]:
         """
         Query the contained knowledge graph using SPARQL
@@ -400,6 +413,7 @@ class Mapping:
         :param include_details: Include details of SHACL evaluation alongside the report. Currently uses a lot of memory.
         :param include_conforms: Include those results that conformed. Also applies to details.
         :param include_shape_graph: Include the shape graph in the report, useful when creating the graph from the report.
+        :param include_datatypes: Return the datatypes of the validation report (and details).
         :return: Validation report containing a report (report.df) and whether the graph conforms (report.conforms)
         """
 
