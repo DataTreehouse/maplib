@@ -83,7 +83,7 @@ pub fn df_to_py_df(
     mut df: DataFrame,
     rdf_node_types: HashMap<String, RDFNodeType>,
     pushdown_paths: Option<Vec<Context>>,
-    include_details: bool,
+    include_datatypes: bool,
     py: Python,
 ) -> PyResult<PyObject> {
     let names_vec: Vec<String> = df
@@ -100,7 +100,7 @@ pub fn df_to_py_df(
     let pyarrow = PyModule::import_bound(py, "pyarrow")?;
     let polars = PyModule::import_bound(py, "polars")?;
     let py_df = to_py_df(&chunk, names.as_slice(), py, &pyarrow, &polars)?;
-    if include_details {
+    if include_datatypes {
         Ok(Py::new(
             py,
             PySolutionMappings {
