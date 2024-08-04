@@ -12,13 +12,12 @@ use polars::prelude::LiteralValue;
 use pyo3::basic::CompareOp;
 use pyo3::exceptions::PyException;
 use pyo3::prelude::PyAnyMethods;
-use pyo3::types::PyDict;
 use pyo3::{
-    create_exception, pyclass, pymethods, Bound, FromPyObject, IntoPy, Py, PyAny, PyErr, PyObject,
-    PyResult, Python, ToPyObject,
+    create_exception, pyclass, pymethods, Bound, IntoPy, Py, PyAny, PyErr, PyObject,
+    PyResult, Python,
 };
 use std::collections::HashMap;
-use std::fmt::{write, Display, Formatter};
+use std::fmt::{Display, Formatter};
 use thiserror::*;
 
 #[derive(Error, Debug)]
@@ -400,7 +399,7 @@ impl PyBlankNode {
 pub struct PySolutionMappings {
     pub mappings: Py<PyAny>,
     pub rdf_node_types: HashMap<String, RDFNodeType>,
-    pub pushdown_paths: Option<Vec<Vec<Context>>>,
+    pub pushdown_paths: Option<Vec<Context>>,
 }
 
 #[pymethods]
@@ -431,8 +430,8 @@ impl PySolutionMappings {
             let mut all_paths = vec![];
             for p in paths {
                 let mut paths = vec![];
-                for c in p {
-                    paths.push(c.as_str().to_string());
+                for pe in &p.path {
+                    paths.push(pe.to_string());
                 }
                 all_paths.push(paths);
             }

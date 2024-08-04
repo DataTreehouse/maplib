@@ -1,6 +1,5 @@
 #[cfg(test)]
 use crate::constants::OTTR_TRIPLE;
-use crate::constants::{OTTR_IRI, OWL_PREFIX_IRI, XSD_ANY_URI};
 #[cfg(test)]
 use oxrdf::vocab::xsd;
 use oxrdf::{BlankNode, Literal, NamedNode, Variable};

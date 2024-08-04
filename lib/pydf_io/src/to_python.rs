@@ -82,7 +82,7 @@ pub fn to_py_df(
 pub fn df_to_py_df(
     mut df: DataFrame,
     rdf_node_types: HashMap<String, RDFNodeType>,
-    pushdown_paths: Option<Vec<Vec<Context>>>,
+    pushdown_paths: Option<Vec<Context>>,
     include_details: bool,
     py: Python,
 ) -> PyResult<PyObject> {
