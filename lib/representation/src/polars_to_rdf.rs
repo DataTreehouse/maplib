@@ -347,7 +347,7 @@ pub fn date_series_to_strings(series: &Series) -> Series {
     return series
         .date()
         .unwrap()
-        .strftime(XSD_DATE_WITHOUT_TZ_FORMAT).unwrap()
+        .strftime(XSD_DATE_WITHOUT_TZ_FORMAT)
         .into_series();
 }
 

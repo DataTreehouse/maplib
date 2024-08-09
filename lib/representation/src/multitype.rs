@@ -739,7 +739,7 @@ pub fn explode_multicols<'a>(
                 prefixed_inner_cols.push(prefixed_inner);
             }
             out_map.insert(c.clone(), (inner_cols, prefixed_inner_cols));
-            drop_cols.push(col(c));
+            drop_cols.push(c);
         } else {
             //No action
         }
@@ -822,9 +822,9 @@ pub fn join_workaround(
         for k in right_datatypes.keys() {
             if left_datatypes.contains_key(k) {
                 if let Some((_, right_prefixed_inner_columns)) = right_exploded.get(k) {
-                    to_drop_right.extend(right_prefixed_inner_columns.iter().map(|x|col(x)));
+                    to_drop_right.extend(right_prefixed_inner_columns);
                 } else {
-                    to_drop_right.push(col(k));
+                    to_drop_right.push(k);
                 }
             }
         }

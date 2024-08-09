@@ -13,8 +13,8 @@ use pyo3::basic::CompareOp;
 use pyo3::exceptions::PyException;
 use pyo3::prelude::PyAnyMethods;
 use pyo3::{
-    create_exception, pyclass, pymethods, Bound, IntoPy, Py, PyAny, PyErr, PyObject,
-    PyResult, Python,
+    create_exception, pyclass, pymethods, Bound, IntoPy, Py, PyAny, PyErr, PyObject, PyResult,
+    Python,
 };
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
