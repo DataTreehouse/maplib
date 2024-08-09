@@ -14,10 +14,10 @@ members = [
 
 [workspace.dependencies]
 pyo3 = {version = "0.22.1", features = ["py-clone"] }
-polars = { version = "0.41.2", features = ["nightly", "performant", "cse"] }
-polars-utils = "0.41.2"
-polars-core = "0.41.2"
-polars-time = "0.41.2"
+polars = { version = "0.41.3", features = ["nightly", "performant", "cse"] }
+polars-utils = "0.41.3"
+polars-core = "0.41.3"
+polars-time = "0.41.3"
 rayon = "1.10.0"
 regex = "=1.10.5"
 oxrdf = "0.2.0-alpha.5"
@@ -51,3 +51,7 @@ serial_test = "3.1.1"
 oxrdf = { git = 'https://github.com/magbak/oxigraph.git', rev = "70028ad09cfa29e62bce0d3920717c0a09b939d0"}
 oxttl = { git = 'https://github.com/magbak/oxigraph.git', rev = "70028ad09cfa29e62bce0d3920717c0a09b939d0"}
 oxrdfio = { git = 'https://github.com/magbak/oxigraph.git', rev = "70028ad09cfa29e62bce0d3920717c0a09b939d0"}
+polars = { git = "https://github.com/pola-rs/polars.git",  rev = "0c2b5d82fd2726df7d7b318e5c21581a27fffdba"}
+polars-utils = { git = "https://github.com/pola-rs/polars.git",  rev = "0c2b5d82fd2726df7d7b318e5c21581a27fffdba"}
+polars-core = { git = "https://github.com/pola-rs/polars.git",  rev = "0c2b5d82fd2726df7d7b318e5c21581a27fffdba"}
+polars-time = { git = "https://github.com/pola-rs/polars.git",  rev = "0c2b5d82fd2726df7d7b318e5c21581a27fffdba"}

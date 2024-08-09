@@ -126,12 +126,12 @@ impl Triplestore {
             let overlap: Vec<_> = colnames
                 .iter()
                 .filter(|x| rdf_node_types.contains_key(*x))
-                .cloned()
+                .map(|x|col(x))
                 .collect();
             if height_0 {
                 // Important that overlapping cols are dropped from mappings and not from lf,
                 // since we also overwrite rdf_node_types with dts correspondingly below.
-                mappings = mappings.drop(overlap.as_slice());
+                mappings = mappings.drop(overlap);
                 if colnames.is_empty() {
                     mappings = mappings.filter(lit(false));
                 } else {

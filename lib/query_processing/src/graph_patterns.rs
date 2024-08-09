@@ -57,7 +57,7 @@ pub fn filter(
     solution_mappings.mappings = solution_mappings
         .mappings
         .filter(col(expression_context.as_str()))
-        .drop_no_validate([&expression_context.as_str()]);
+        .drop_no_validate([col(expression_context.as_str())]);
     solution_mappings
         .rdf_node_types
         .remove(expression_context.as_str())
