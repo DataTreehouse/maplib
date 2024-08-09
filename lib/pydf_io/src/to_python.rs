@@ -94,7 +94,7 @@ pub fn df_to_py_df(
     let names: Vec<&str> = names_vec.iter().map(|x| x.as_str()).collect();
     let chunk = df
         .as_single_chunk()
-        .iter_chunks(CompatLevel::newest(), true)
+        .iter_chunks(CompatLevel::oldest(), true)
         .next()
         .unwrap();
     let pyarrow = PyModule::import_bound(py, "pyarrow")?;
