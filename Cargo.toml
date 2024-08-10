@@ -48,9 +48,9 @@ rstest = "0.21.0"
 serial_test = "3.1.1"
 
 [patch.crates-io]
-oxrdf = { git = 'https://github.com/magbak/oxigraph.git', rev = "70028ad09cfa29e62bce0d3920717c0a09b939d0"}
-oxttl = { git = 'https://github.com/magbak/oxigraph.git', rev = "70028ad09cfa29e62bce0d3920717c0a09b939d0"}
-oxrdfio = { git = 'https://github.com/magbak/oxigraph.git', rev = "70028ad09cfa29e62bce0d3920717c0a09b939d0"}
+oxrdf = { git = 'https://github.com/magbak/oxigraph.git', rev = "b13df973ed2785de2ac41066ca4b62d88d3f5d40"}
+oxttl = { git = 'https://github.com/magbak/oxigraph.git', rev = "b13df973ed2785de2ac41066ca4b62d88d3f5d40"}
+oxrdfio = { git = 'https://github.com/magbak/oxigraph.git', rev = "b13df973ed2785de2ac41066ca4b62d88d3f5d40"}
 #polars = { git = "https://github.com/pola-rs/polars.git",  rev = "0c2b5d82fd2726df7d7b318e5c21581a27fffdba"}
 #polars-utils = { git = "https://github.com/pola-rs/polars.git",  rev = "0c2b5d82fd2726df7d7b318e5c21581a27fffdba"}
 #polars-core = { git = "https://github.com/pola-rs/polars.git",  rev = "0c2b5d82fd2726df7d7b318e5c21581a27fffdba"}

@@ -1222,7 +1222,7 @@ checksum = "d05417ee46e2eb40dd9d590b4d67fc2408208b3a48a6b7f71d2bc1d7ce12a3e0"
 [[package]]
 name = "oxrdf"
 version = "0.2.0-alpha.5"
-source = "git+https://github.com/magbak/oxigraph.git?rev=70028ad09cfa29e62bce0d3920717c0a09b939d0#70028ad09cfa29e62bce0d3920717c0a09b939d0"
+source = "git+https://github.com/magbak/oxigraph.git?rev=b13df973ed2785de2ac41066ca4b62d88d3f5d40#b13df973ed2785de2ac41066ca4b62d88d3f5d40"
 dependencies = [
  "oxilangtag",
  "oxiri",
@@ -1234,7 +1234,7 @@ dependencies = [
 [[package]]
 name = "oxrdfio"
 version = "0.1.0-alpha.6"
-source = "git+https://github.com/magbak/oxigraph.git?rev=70028ad09cfa29e62bce0d3920717c0a09b939d0#70028ad09cfa29e62bce0d3920717c0a09b939d0"
+source = "git+https://github.com/magbak/oxigraph.git?rev=b13df973ed2785de2ac41066ca4b62d88d3f5d40#b13df973ed2785de2ac41066ca4b62d88d3f5d40"
 dependencies = [
  "oxrdf",
  "oxrdfxml",
@@ -1245,7 +1245,7 @@ dependencies = [
 [[package]]
 name = "oxrdfxml"
 version = "0.1.0-alpha.6"
-source = "git+https://github.com/magbak/oxigraph.git?rev=70028ad09cfa29e62bce0d3920717c0a09b939d0#70028ad09cfa29e62bce0d3920717c0a09b939d0"
+source = "git+https://github.com/magbak/oxigraph.git?rev=b13df973ed2785de2ac41066ca4b62d88d3f5d40#b13df973ed2785de2ac41066ca4b62d88d3f5d40"
 dependencies = [
  "oxilangtag",
  "oxiri",
@@ -1257,7 +1257,7 @@ dependencies = [
 [[package]]
 name = "oxsdatatypes"
 version = "0.2.0-alpha.2"
-source = "git+https://github.com/magbak/oxigraph.git?rev=70028ad09cfa29e62bce0d3920717c0a09b939d0#70028ad09cfa29e62bce0d3920717c0a09b939d0"
+source = "git+https://github.com/magbak/oxigraph.git?rev=b13df973ed2785de2ac41066ca4b62d88d3f5d40#b13df973ed2785de2ac41066ca4b62d88d3f5d40"
 dependencies = [
  "thiserror",
 ]
@@ -1265,7 +1265,7 @@ dependencies = [
 [[package]]
 name = "oxttl"
 version = "0.1.0-alpha.6"
-source = "git+https://github.com/magbak/oxigraph.git?rev=70028ad09cfa29e62bce0d3920717c0a09b939d0#70028ad09cfa29e62bce0d3920717c0a09b939d0"
+source = "git+https://github.com/magbak/oxigraph.git?rev=b13df973ed2785de2ac41066ca4b62d88d3f5d40#b13df973ed2785de2ac41066ca4b62d88d3f5d40"
 dependencies = [
  "memchr",
  "oxilangtag",
