@@ -3,12 +3,12 @@ from typing import Union, List, Dict, Optional, Callable, Tuple, Literal as Lite
 from polars import DataFrame
 from datetime import datetime, date
 
-
 class RDFType:
     """
     The type of a column containing a RDF variable.
     For instance, xsd:string is RDFType.Literal("http://www.w3.org/2001/XMLSchema#string")
     """
+
     IRI: Callable[[], "RDFType"]
     BlankNode: Callable[[], "RDFType"]
     Literal: Callable[[Union[str, "IRI"]], "RDFType"]
@@ -20,6 +20,7 @@ class SolutionMappings:
     """
     Detailed information about the solution mappings and the types of the variables.
     """
+
     mappings: DataFrame
     rdf_types: Dict[str, RDFType]
 
@@ -27,7 +28,8 @@ class Variable:
     """
     A variable in a template.
     """
-    name:str
+
+    name: str
 
     def __init__(self, name: str):
         """
@@ -36,9 +38,8 @@ class Variable:
         """
         ...
 
-
 class IRI:
-    iri:str
+    iri: str
     """
     An IRI.
     """
@@ -53,6 +54,7 @@ class BlankNode:
     """
     A Blank Node.
     """
+
     name: str
 
     def __init__(self, name: str):
@@ -84,6 +86,7 @@ class Literal:
     """
     An RDF literal.
     """
+
     value: str
     data_type: Optional[IRI]
     language: Optional[str]
@@ -102,7 +105,6 @@ class Literal:
         :return:
         """
 
-
 class Parameter:
     variable: Variable
     optional: bool
@@ -113,12 +115,14 @@ class Parameter:
     Parameters for template signatures.
     """
 
-    def __init__(self,
-                 variable: Variable,
-                 optional: Optional[bool] = False,
-                 allow_blank: Optional[bool] = True,
-                 rdf_type: Optional[RDFType] = None,
-                 default_value: Optional[Union[Literal, IRI, BlankNode]] = None):
+    def __init__(
+        self,
+        variable: Variable,
+        optional: Optional[bool] = False,
+        allow_blank: Optional[bool] = True,
+        rdf_type: Optional[RDFType] = None,
+        default_value: Optional[Union[Literal, IRI, BlankNode]] = None,
+    ):
         """
         Create a new parameter for a Template.
         :param variable: The variable.
@@ -128,28 +132,29 @@ class Parameter:
         :param default_value: Default value when no value provided.
         """
 
-
 class Argument:
-    def __init__(self, term: Union[Variable, IRI, Literal], list_expand: Optional[bool] = False):
+    def __init__(
+        self, term: Union[Variable, IRI, Literal], list_expand: Optional[bool] = False
+    ):
         """
         An argument for a template instance.
         :param term: The term.
         :param list_expand: Should the argument be expanded? Used with the list_expander argument of instance.
         """
 
-
 class Instance:
-    def __init__(self,
-                 iri: IRI,
-                 arguments: List[Union[Argument, Variable, IRI, Literal, BlankNode, None]],
-                 list_expander: Optional[LiteralType["cross", "zipMin", "zipMax"]] = None):
+    def __init__(
+        self,
+        iri: IRI,
+        arguments: List[Union[Argument, Variable, IRI, Literal, BlankNode, None]],
+        list_expander: Optional[LiteralType["cross", "zipMin", "zipMax"]] = None,
+    ):
         """
         A template instance.
         :param iri: The IRI of the template to be instantiated.
         :param arguments: The arguments for template instantiation.
         :param list_expander: (How) should we do list expansion?
         """
-
 
 class Template:
     iri: str
@@ -161,10 +166,12 @@ class Template:
     To change these fields, you must assign new lists of parameters or instances.  
     """
 
-    def __init__(self,
-                 iri: IRI,
-                 parameters: List[Union[Parameter, Variable]],
-                 instances: List[Instance]):
+    def __init__(
+        self,
+        iri: IRI,
+        parameters: List[Union[Parameter, Variable]],
+        instances: List[Instance],
+    ):
         """
         Create a new OTTR Template
         :param iri: The IRI of the template
@@ -172,9 +179,11 @@ class Template:
         :param instances:
         """
 
-    def instance(self,
-                 arguments: List[Union[Argument, Variable, IRI, Literal, None]],
-                 list_expander: LiteralType["cross", "zipMin", "zipMax"] = None) -> Instance:
+    def instance(
+        self,
+        arguments: List[Union[Argument, Variable, IRI, Literal, None]],
+        list_expander: LiteralType["cross", "zipMin", "zipMax"] = None,
+    ) -> Instance:
         """
 
         :param arguments: The arguments to the template.
@@ -182,10 +191,12 @@ class Template:
         :return:
         """
 
-def Triple(subject:Union["Argument", IRI, Variable, BlankNode],
-           predicate:Union["Argument", IRI,Variable, BlankNode],
-           object:Union["Argument", IRI, Variable, Literal, BlankNode],
-           list_expander:Optional[LiteralType["cross", "zipMin", "zipMax"]]=None):
+def Triple(
+    subject: Union["Argument", IRI, Variable, BlankNode],
+    predicate: Union["Argument", IRI, Variable, BlankNode],
+    object: Union["Argument", IRI, Variable, Literal, BlankNode],
+    list_expander: Optional[LiteralType["cross", "zipMin", "zipMax"]] = None,
+):
     """
     An OTTR Triple Pattern used for creating templates.
     This is the basis pattern which all template instances are rewritten into.
@@ -201,25 +212,26 @@ def Triple(subject:Union["Argument", IRI, Variable, BlankNode],
     :return:
     """
 
-class XSD():
+class XSD:
     """
     The xsd namespace, for convenience.
     """
-    boolean:IRI
-    byte:IRI
-    date:IRI
-    dateTime:IRI
-    dateTimeStamp:IRI
-    decimal:IRI
-    double:IRI
-    duration:IRI
-    float:IRI
-    int_:IRI
-    integer:IRI
-    language:IRI
-    long:IRI
-    short:IRI
-    string:IRI
+
+    boolean: IRI
+    byte: IRI
+    date: IRI
+    dateTime: IRI
+    dateTimeStamp: IRI
+    decimal: IRI
+    double: IRI
+    duration: IRI
+    float: IRI
+    int_: IRI
+    integer: IRI
+    language: IRI
+    long: IRI
+    short: IRI
+    string: IRI
 
     def __init__(self):
         """
@@ -235,18 +247,19 @@ def a() -> IRI:
 
 ParametersType = Dict[str, Tuple[DataFrame, Dict[str, RDFType]]]
 
-
 class ValidationReport:
     """
     SHACL Validation report.
     Only constructed by maplib.
     """
+
     conforms: bool
 
-    def results(self,
-                native_dataframe: bool = False,
-                include_datatypes: bool = False,
-                ) -> Optional[Union[DataFrame, SolutionMappings]]:
+    def results(
+        self,
+        native_dataframe: bool = False,
+        include_datatypes: bool = False,
+    ) -> Optional[Union[DataFrame, SolutionMappings]]:
         """
         Return the results of the validation report, if they exist.
 
@@ -255,10 +268,11 @@ class ValidationReport:
         :return: The SHACL validation report, as a DataFrame
         """
 
-    def details(self,
-                native_dataframe: bool = False,
-                include_datatypes: bool = False,
-                ) -> Optional[DataFrame]:
+    def details(
+        self,
+        native_dataframe: bool = False,
+        include_datatypes: bool = False,
+    ) -> Optional[DataFrame]:
         """
         Returns the details of the validation report.
         Only available if validation was called with include_details=True.
@@ -275,7 +289,6 @@ class ValidationReport:
 
         :return:
         """
-
 
 class Mapping:
     """
@@ -299,8 +312,9 @@ class Mapping:
     :param caching_folder: a folder to cache the triples as Parquet files
     """
 
-    def __init__(self, documents: Union[str, List[str]] = None, caching_folder: str = None) -> Mapping: ...
-
+    def __init__(
+        self, documents: Union[str, List[str]] = None, caching_folder: str = None
+    ) -> Mapping: ...
     def add_template(self, template: "Template"):
         """
         Add a template to the mapping. Overwrites any existing template with the same IRI.
@@ -308,8 +322,12 @@ class Mapping:
         :return:
         """
 
-    def expand(self, template: Union[str, "Template", IRI],
-               df: DataFrame = None, unique_subset: List[str] = None) -> None:
+    def expand(
+        self,
+        template: Union[str, "Template", IRI],
+        df: DataFrame = None,
+        unique_subset: List[str] = None,
+    ) -> None:
         """
         Expand a template using a DataFrame
         Usage:
@@ -324,8 +342,13 @@ class Mapping:
         :param unique_subset: DataFrame column names known to be unique e.g. ["colA", "colB"], for a performance boost (reduce costly deduplication)
         """
 
-    def expand_default(self, df: DataFrame, primary_key_column: str, template_prefix: str = None,
-                       predicate_uri_prefix: str = None) -> str:
+    def expand_default(
+        self,
+        df: DataFrame,
+        primary_key_column: str,
+        template_prefix: str = None,
+        predicate_uri_prefix: str = None,
+    ) -> str:
         """
         Create a default template and expand it based on a dataframe.
         Usage:
@@ -340,14 +363,16 @@ class Mapping:
         :return: The generated template
         """
 
-    def query(self, query: str,
-              parameters: ParametersType = None,
-              include_datatypes:bool = False,
-              native_dataframe:bool = False,
-              graph: str = None) -> Union[
-        DataFrame, SolutionMappings,
-        List[Union[DataFrame, SolutionMappings]],
-        None]:
+    def query(
+        self,
+        query: str,
+        parameters: ParametersType = None,
+        include_datatypes: bool = False,
+        native_dataframe: bool = False,
+        graph: str = None,
+    ) -> Union[
+        DataFrame, SolutionMappings, List[Union[DataFrame, SolutionMappings]], None
+    ]:
         """
         Query the contained knowledge graph using SPARQL
         Currently, SELECT, CONSTRUCT and INSERT are supported.
@@ -369,11 +394,14 @@ class Mapping:
 
         """
 
-    def insert(self, query: str,
-               parameters: ParametersType = None,
-               transient: bool = False,
-               source_graph: str = None,
-               target_graph: str = None):
+    def insert(
+        self,
+        query: str,
+        parameters: ParametersType = None,
+        transient: bool = False,
+        source_graph: str = None,
+        target_graph: str = None,
+    ):
         """
         Insert the results of a Construct query in the graph.
         Useful for being able to use the same query for inspecting what will be inserted and actually inserting.
@@ -399,12 +427,13 @@ class Mapping:
         :return: None
         """
 
-    def validate(self,
-                 shape_graph: str,
-                 include_details: bool = False,
-                 include_conforms: bool = False,
-                 include_shape_graph: bool = True,
-                 ) -> ValidationReport:
+    def validate(
+        self,
+        shape_graph: str,
+        include_details: bool = False,
+        include_conforms: bool = False,
+        include_shape_graph: bool = True,
+    ) -> ValidationReport:
         """
         Validate the contained knowledge graph using SHACL
         Assumes that the contained knowledge graph also contains SHACL Shapes.
@@ -417,17 +446,18 @@ class Mapping:
         :return: Validation report containing a report (report.df) and whether the graph conforms (report.conforms)
         """
 
-    def read_triples(self,
-                     file_path: Union[str, Path],
-                     format: LiteralType["ntriples", "turtle", "rdf/xml", "xml", "rdfxml"] = None,
-                     base_iri: str = None,
-                     transient: bool = False,
-                     parallel: bool = False,
-                     checked: bool = True,
-                     deduplicate: bool = True,
-                     graph: str = None,
-                     replace_graph: bool = False,
-                     ) -> None:
+    def read_triples(
+        self,
+        file_path: Union[str, Path],
+        format: LiteralType["ntriples", "turtle", "rdf/xml", "xml", "rdfxml"] = None,
+        base_iri: str = None,
+        transient: bool = False,
+        parallel: bool = False,
+        checked: bool = True,
+        deduplicate: bool = True,
+        graph: str = None,
+        replace_graph: bool = False,
+    ) -> None:
         """
         Reads triples from a file path.
         You can specify the format, or it will be derived using file extension, e.g. filename.ttl or filename.nt.
@@ -449,17 +479,18 @@ class Mapping:
         :param replace_graph: Replace the graph with these triples? Will replace the default graph if no graph is specified.
         """
 
-    def read_triples_string(self,
-                            s: str,
-                            format: LiteralType["ntriples", "turtle", "rdf/xml", "xml", "rdfxml"],
-                            base_iri: str = None,
-                            transient: bool = False,
-                            parallel: bool = False,
-                            checked: bool = True,
-                            deduplicate: bool = True,
-                            graph: str = None,
-                            replace_graph: bool = False,
-                            ) -> None:
+    def read_triples_string(
+        self,
+        s: str,
+        format: LiteralType["ntriples", "turtle", "rdf/xml", "xml", "rdfxml"],
+        base_iri: str = None,
+        transient: bool = False,
+        parallel: bool = False,
+        checked: bool = True,
+        deduplicate: bool = True,
+        graph: str = None,
+        replace_graph: bool = False,
+    ) -> None:
         """
         Reads triples from a string.
         Specify transient if you only want the triples to be available for further querying and validation,
@@ -504,7 +535,9 @@ class Mapping:
         :return Triples in mapping in the NTriples format (potentially a large string)
         """
 
-    def write_native_parquet(self, folder_path: Union[str, Path], graph: str = None) -> None:
+    def write_native_parquet(
+        self, folder_path: Union[str, Path], graph: str = None
+    ) -> None:
         """
         Write non-transient triples using the internal native Parquet format.
 
@@ -524,11 +557,14 @@ class Mapping:
         :return:
         """
 
-    def insert_sprout(self, query: str,
-                      parameters: ParametersType = None,
-                      transient: bool = False,
-                      source_graph: str = None,
-                      target_graph: str = None):
+    def insert_sprout(
+        self,
+        query: str,
+        parameters: ParametersType = None,
+        transient: bool = False,
+        source_graph: str = None,
+        target_graph: str = None,
+    ):
         """
         Insert the results of a Construct query in a sprouted graph, which is created if no sprout is active.
         Sprouts are simplified way of dealing with multiple graphs.

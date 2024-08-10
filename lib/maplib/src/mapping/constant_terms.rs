@@ -107,7 +107,7 @@ pub fn constant_to_expr(
         }
     };
     if let Some(ptype_inferred) = ptype_opt {
-        if ptype_inferred != &ptype {
+        if !matches!(ptype, PType::Basic(BaseRDFNodeType::None)) && ptype_inferred != &ptype {
             return Err(MappingError::ConstantDoesNotMatchDataType(
                 constant_term.clone(),
                 ptype_inferred.clone(),

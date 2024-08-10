@@ -61,23 +61,35 @@ def mapping() -> Mapping:
     SHAPE_ID_PREFIX = TRANS_LINKED_ES + "madrid/metro/shape/"
     SHAPE_POINT_PREFIX = TRANS_LINKED_ES + "madrid/metro/shape_point/"
     FREQUENCY_ID_PREFIX = TRANS_LINKED_ES + "madrid/metro/frequency/"
-    WHEELCHAIR_ACCESSIBLE_PREFIX = TRANS_LINKED_ES + "resource/WheelchairBoardingStatus/"
+    WHEELCHAIR_ACCESSIBLE_PREFIX = (
+        TRANS_LINKED_ES + "resource/WheelchairBoardingStatus/"
+    )
     LOCATION_TYPE_PREFIX = TRANS_LINKED_ES + "resource/LocationType/"
     CALENDAR_DATE_RULES_PREFIX = TRANS_LINKED_ES + "madrid/metro/calendar_date_rule/"
     CALENDAR_RULES_PREFIX = TRANS_LINKED_ES + "madrid/metro/calendar_rules/"
     FEED_PUBLISHER_PREFIX = TRANS_LINKED_ES + "madrid/metro/feed/"
 
-    stop_times_mut = stop_times.with_columns([
-        pl.col("stop_sequence").cast(pl.Int32),
-        (STOPTIMES_PREFIX + pl.col("trip_id") + '-' + pl.col("stop_id") + "-" + pl.col("arrival_time")).alias(
-            "subject"),
-        (PICKUP_TYPE_PREFIX + pl.col("pickup_type")).alias("pickup_type"),
-        (DROPOFF_TYPE_PREFIX + pl.col("drop_off_type")).alias("drop_off_type"),
-        (TRIP_ID_PREFIX + pl.col("trip_id")).alias("trip_id"),
-        (STOP_ID_PREFIX + pl.col("stop_id")).alias("stop_id")
-    ]).collect()
+    stop_times_mut = stop_times.with_columns(
+        [
+            pl.col("stop_sequence").cast(pl.Int32),
+            (
+                STOPTIMES_PREFIX
+                + pl.col("trip_id")
+                + "-"
+                + pl.col("stop_id")
+                + "-"
+                + pl.col("arrival_time")
+            ).alias("subject"),
+            (PICKUP_TYPE_PREFIX + pl.col("pickup_type")).alias("pickup_type"),
+            (DROPOFF_TYPE_PREFIX + pl.col("drop_off_type")).alias("drop_off_type"),
+            (TRIP_ID_PREFIX + pl.col("trip_id")).alias("trip_id"),
+            (STOP_ID_PREFIX + pl.col("stop_id")).alias("stop_id"),
+        ]
+    ).collect()
 
-    stop_times_mapping = mapping_prefixes + """
+    stop_times_mapping = (
+        mapping_prefixes
+        + """
     t:StopTimes [xsd:anyURI ?trip_id, ?arrival_time, ?departure_time, xsd:anyURI ?stop_id, ??stop_sequence, 
                  ?stop_headsign, ?pickup_type, ?drop_off_type, ?shape_dist_traveled,  xsd:anyURI ?subject ] :: { 
       ottr:Triple(?subject,rdf:type, gtfs:StopTime),
@@ -92,16 +104,23 @@ def mapping() -> Mapping:
       ottr:Triple(?subject,gtfs:distanceTraveled,?shape_dist_traveled)
     }.
     """
+    )
 
-    trips_mut = trips.with_columns([
-        (TRIP_ID_PREFIX + pl.col("trip_id")).alias("trip_id"),
-        (WHEELCHAIR_ACCESSIBLE_PREFIX + pl.col("wheelchair_accessible")).alias("wheelchair_accessible"),
-        (SERVICE_ID_PREFIX + pl.col("service_id")).alias("service_id"),
-        (ROUTE_ID_PREFIX + pl.col("route_id")).alias("route_id"),
-        (SHAPE_ID_PREFIX + pl.col("shape_id")).alias("shape_id")
-    ]).collect()
+    trips_mut = trips.with_columns(
+        [
+            (TRIP_ID_PREFIX + pl.col("trip_id")).alias("trip_id"),
+            (WHEELCHAIR_ACCESSIBLE_PREFIX + pl.col("wheelchair_accessible")).alias(
+                "wheelchair_accessible"
+            ),
+            (SERVICE_ID_PREFIX + pl.col("service_id")).alias("service_id"),
+            (ROUTE_ID_PREFIX + pl.col("route_id")).alias("route_id"),
+            (SHAPE_ID_PREFIX + pl.col("shape_id")).alias("shape_id"),
+        ]
+    ).collect()
 
-    trips_mapping = mapping_prefixes + """
+    trips_mapping = (
+        mapping_prefixes
+        + """
     t:Trips [xsd:anyURI ?route_id, xsd:anyURI ?service_id,  xsd:anyURI ?trip_id, ?trip_headsign, ?trip_short_name, 
              xsd:anyURI ?direction_id, xsd:anyURI ?block_id, xsd:anyURI ?shape_id, ?wheelchair_accessible ] :: {
       ottr:Triple(?trip_id, rdf:type, gtfs:Trip) ,
@@ -114,14 +133,19 @@ def mapping() -> Mapping:
       ottr:Triple(?trip_id, gtfs:shape, ?shape_id) ,
       ottr:Triple(?trip_id, gtfs:wheelchairAccessible, ?wheelchair_accessible)
     } . """
+    )
 
-    routes_mut = routes.with_columns([
-        (ROUTE_ID_PREFIX + pl.col("route_id")).alias("route_id"),
-        (ROUTE_TYPE_PREFIX + pl.col("route_type")).alias("route_type"),
-        (AGENCY_ID_PREFIX + pl.col("agency_id")).alias("agency_id")
-    ]).collect()
+    routes_mut = routes.with_columns(
+        [
+            (ROUTE_ID_PREFIX + pl.col("route_id")).alias("route_id"),
+            (ROUTE_TYPE_PREFIX + pl.col("route_type")).alias("route_type"),
+            (AGENCY_ID_PREFIX + pl.col("agency_id")).alias("agency_id"),
+        ]
+    ).collect()
 
-    routes_mapping = mapping_prefixes + """
+    routes_mapping = (
+        mapping_prefixes
+        + """
     t:Routes [ xsd:anyURI ?route_id, xsd:anyURI ?agency_id, ?route_short_name, ?route_long_name, ?route_desc, 
                ?route_type, xsd:anyURI ?route_url, ?route_color, ?route_text_color ] :: {
       ottr:Triple(?route_id, rdf:type, gtfs:Route) ,
@@ -135,13 +159,18 @@ def mapping() -> Mapping:
       ottr:Triple(?route_id, gtfs:textColor, ?route_text_color)
     } . 
     """
+    )
 
-    agency_mut = agency.with_columns([
-        (AGENCY_ID_PREFIX + pl.col("agency_id")).alias("agency_id"),
-        pl.col("agency_name").cast(pl.String)
-    ]).collect()
+    agency_mut = agency.with_columns(
+        [
+            (AGENCY_ID_PREFIX + pl.col("agency_id")).alias("agency_id"),
+            pl.col("agency_name").cast(pl.String),
+        ]
+    ).collect()
 
-    agency_mapping = mapping_prefixes + """
+    agency_mapping = (
+        mapping_prefixes
+        + """
     t:Agency [ xsd:anyURI ?agency_id, ?agency_name, xsd:anyURI ?agency_url, ?agency_timezone, ?agency_lang, 
                ?agency_phone, xsd:anyURI ?agency_fare_url ] :: {
       ottr:Triple(?agency_id,rdf:type, gtfs:Agency) ,
@@ -152,17 +181,24 @@ def mapping() -> Mapping:
       ottr:Triple(?agency_id,foaf:phone,?agency_phone) ,
       ottr:Triple(?agency_id,gtfs:fareUrl,?agency_fare_url)
     } ."""
+    )
 
-    stops_mut = stops.with_columns([
-        (STOP_ID_PREFIX + pl.col("stop_id")).alias("stop_id"),
-        (WHEELCHAIR_ACCESSIBLE_PREFIX + pl.col("wheelchair_boarding")).alias("wheelchair_boarding"),
-        (LOCATION_TYPE_PREFIX + pl.col("location_type")).alias("location_type"),
-        (STOP_ID_PREFIX + pl.col("parent_station")).alias("parent_station"),
-        pl.col("stop_lat").cast(pl.Float64),
-        pl.col("stop_lon").cast(pl.Float64)
-    ]).collect()
+    stops_mut = stops.with_columns(
+        [
+            (STOP_ID_PREFIX + pl.col("stop_id")).alias("stop_id"),
+            (WHEELCHAIR_ACCESSIBLE_PREFIX + pl.col("wheelchair_boarding")).alias(
+                "wheelchair_boarding"
+            ),
+            (LOCATION_TYPE_PREFIX + pl.col("location_type")).alias("location_type"),
+            (STOP_ID_PREFIX + pl.col("parent_station")).alias("parent_station"),
+            pl.col("stop_lat").cast(pl.Float64),
+            pl.col("stop_lon").cast(pl.Float64),
+        ]
+    ).collect()
 
-    stops_mapping = mapping_prefixes + """
+    stops_mapping = (
+        mapping_prefixes
+        + """
     t:Stops [ xsd:anyURI ?stop_id, ?stop_code, ?stop_name, ?stop_desc, ?stop_lat, ?stop_lon, ??zone_id, 
               xsd:anyURI ?stop_url, xsd:anyURI ?location_type, ? xsd:anyURI ?parent_station, ??stop_timezone, 
               ?wheelchair_boarding ] :: {
@@ -180,16 +216,29 @@ def mapping() -> Mapping:
       ottr:Triple(?stop_id, gtfs:wheelchairAccessible, ?wheelchair_boarding)
     } . 
     """
+    )
     #  ottr:Triple(?stop_id, dct:identifier, ?stop_id) ,
 
-    calendar_dates_mut = calendar_dates.with_columns([
-        (CALENDAR_DATE_RULES_PREFIX + pl.col("service_id") + "-" + pl.col("date")).alias("subject"),
-        (SERVICE_ID_PREFIX + pl.col("service_id")).alias("service_id"),
-        (pl.col("date").str.strptime(pl.Date, "%Y-%m-%d"))
-    ]).select(["subject", "service_id", "date", "exception_type"
-               ]).collect()
+    calendar_dates_mut = (
+        calendar_dates.with_columns(
+            [
+                (
+                    CALENDAR_DATE_RULES_PREFIX
+                    + pl.col("service_id")
+                    + "-"
+                    + pl.col("date")
+                ).alias("subject"),
+                (SERVICE_ID_PREFIX + pl.col("service_id")).alias("service_id"),
+                (pl.col("date").str.strptime(pl.Date, "%Y-%m-%d")),
+            ]
+        )
+        .select(["subject", "service_id", "date", "exception_type"])
+        .collect()
+    )
 
-    calendar_dates_mapping = mapping_prefixes + """
+    calendar_dates_mapping = (
+        mapping_prefixes
+        + """
     t:CalendarDateRules [?date, ?exception_type,  xsd:anyURI ?subject, xsd:anyURI ?service_id ] :: {
       ottr:Triple(?service_id, rdf:type, gtfs:Service),
       ottr:Triple(?service_id, gtfs:serviceRule, ?subject) ,
@@ -197,19 +246,33 @@ def mapping() -> Mapping:
       ottr:Triple(?subject,dct:date,?date) ,
       ottr:Triple(?subject,gtfs:dateAddition,?exception_type)
     } . """
+    )
 
     tobools = []
-    for d in ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]:
+    for d in [
+        "monday",
+        "tuesday",
+        "wednesday",
+        "thursday",
+        "friday",
+        "saturday",
+        "sunday",
+    ]:
         tobools.append(pl.col(d).cast(pl.Boolean))
 
-    calendar_mut = calendar.with_columns([
-                                             (CALENDAR_RULES_PREFIX + pl.col("service_id")).alias("subject"),
-                                             (SERVICE_ID_PREFIX + pl.col("service_id")).alias("service_id"),
-                                             (pl.col("start_date").str.strptime(pl.Date, "%Y-%m-%d")),
-                                             (pl.col("end_date").str.strptime(pl.Date, "%Y-%m-%d")),
-                                         ] + tobools).collect()
+    calendar_mut = calendar.with_columns(
+        [
+            (CALENDAR_RULES_PREFIX + pl.col("service_id")).alias("subject"),
+            (SERVICE_ID_PREFIX + pl.col("service_id")).alias("service_id"),
+            (pl.col("start_date").str.strptime(pl.Date, "%Y-%m-%d")),
+            (pl.col("end_date").str.strptime(pl.Date, "%Y-%m-%d")),
+        ]
+        + tobools
+    ).collect()
 
-    calendar_mapping = mapping_prefixes + """
+    calendar_mapping = (
+        mapping_prefixes
+        + """
     t:CalendarRules [ xsd:anyURI ?subject, xsd:anyURI ?service_id, ?monday, ?tuesday, ?wednesday, ?thursday, ?friday, 
                       ?saturday, ?sunday, ?start_date, ?end_date ] :: {
       ottr:Triple(?service_id, rdf:type, gtfs:Service),
@@ -226,14 +289,19 @@ def mapping() -> Mapping:
       ottr:Triple(?subject,schema:endDate, ?end_date)
     } . 
     """
+    )
 
-    feed_info_mut = feed_info.with_columns([
-        (FEED_PUBLISHER_PREFIX + pl.col("feed_publisher_name")).alias("subject"),
-        (pl.col("feed_start_date").str.strptime(pl.Date, "%Y-%m-%d")),
-        (pl.col("feed_end_date").str.strptime(pl.Date, "%Y-%m-%d"))]
+    feed_info_mut = feed_info.with_columns(
+        [
+            (FEED_PUBLISHER_PREFIX + pl.col("feed_publisher_name")).alias("subject"),
+            (pl.col("feed_start_date").str.strptime(pl.Date, "%Y-%m-%d")),
+            (pl.col("feed_end_date").str.strptime(pl.Date, "%Y-%m-%d")),
+        ]
     ).collect()
 
-    feed_info_mapping = mapping_prefixes + """
+    feed_info_mapping = (
+        mapping_prefixes
+        + """
     t:Feed [?feed_publisher_name, xsd:anyURI ?feed_publisher_url, ?feed_lang, ?feed_start_date, ?feed_end_date, 
             ?feed_version,  xsd:anyURI ?subject ] :: {
       ottr:Triple(?subject,rdf:type, gtfs:Feed) ,
@@ -245,26 +313,54 @@ def mapping() -> Mapping:
       ottr:Triple(?subject,schema:version,?feed_version)
     } . 
     """
+    )
 
-    shapes_mut = shapes.with_columns([
-        (SHAPE_POINT_PREFIX + pl.col("shape_id") + "-" + pl.col("shape_pt_sequence")).alias("point"),
-        (SHAPE_ID_PREFIX + pl.col("shape_id")).alias("shape_id")
-    ]).select(["shape_id", "point"]).collect()
+    shapes_mut = (
+        shapes.with_columns(
+            [
+                (
+                    SHAPE_POINT_PREFIX
+                    + pl.col("shape_id")
+                    + "-"
+                    + pl.col("shape_pt_sequence")
+                ).alias("point"),
+                (SHAPE_ID_PREFIX + pl.col("shape_id")).alias("shape_id"),
+            ]
+        )
+        .select(["shape_id", "point"])
+        .collect()
+    )
 
-    shapes_mapping = mapping_prefixes + """
+    shapes_mapping = (
+        mapping_prefixes
+        + """
     t:Shapes [ xsd:anyURI ?shape_id, xsd:anyURI ?point] :: {
       ottr:Triple(?shape_id, rdf:type, gtfs:Shape) ,
       ottr:Triple(?shape_id, gtfs:shapePoint, ?point) 
       } . 
     """
+    )
 
-    shape_points_mut = shapes.with_columns([
-        (SHAPE_POINT_PREFIX + pl.col("shape_id") + "-" + pl.col("shape_pt_sequence")).alias("subject"),
-        pl.col("shape_pt_lat").cast(pl.Float64),
-        pl.col("shape_pt_lon").cast(pl.Float64)
-    ]).drop(["shape_id"]).collect()
+    shape_points_mut = (
+        shapes.with_columns(
+            [
+                (
+                    SHAPE_POINT_PREFIX
+                    + pl.col("shape_id")
+                    + "-"
+                    + pl.col("shape_pt_sequence")
+                ).alias("subject"),
+                pl.col("shape_pt_lat").cast(pl.Float64),
+                pl.col("shape_pt_lon").cast(pl.Float64),
+            ]
+        )
+        .drop(["shape_id"])
+        .collect()
+    )
 
-    shape_points_mapping = mapping_prefixes + """
+    shape_points_mapping = (
+        mapping_prefixes
+        + """
     t:ShapePoints [?shape_pt_lat, ?shape_pt_lon, ?shape_pt_sequence, ?shape_dist_traveled,  xsd:anyURI ?subject ] :: {
       ottr:Triple(?subject, rdf:type, gtfs:ShapePoint) ,
       ottr:Triple(?subject,geo:lat,?shape_pt_lat) ,
@@ -273,14 +369,21 @@ def mapping() -> Mapping:
       ottr:Triple(?subject,gtfs:distanceTraveled,?shape_dist_traveled)
     } . 
     """
+    )
 
-    frequencies_mut = frequencies.with_columns([
-        (FREQUENCY_ID_PREFIX + pl.col("trip_id") + "-" + pl.col("start_time")).alias("subject"),
-        (TRIP_ID_PREFIX + pl.col("trip_id")).alias("trip_id"),
-        pl.col("exact_times").cast(pl.Boolean)
-    ]).collect()
+    frequencies_mut = frequencies.with_columns(
+        [
+            (
+                FREQUENCY_ID_PREFIX + pl.col("trip_id") + "-" + pl.col("start_time")
+            ).alias("subject"),
+            (TRIP_ID_PREFIX + pl.col("trip_id")).alias("trip_id"),
+            pl.col("exact_times").cast(pl.Boolean),
+        ]
+    ).collect()
 
-    frequencies_mapping = mapping_prefixes + """
+    frequencies_mapping = (
+        mapping_prefixes
+        + """
     t:Frequencies [xsd:anyURI ?trip_id, ?start_time, ?end_time, ?headway_secs, ?exact_times,  xsd:anyURI ?subject ] :: {
       ottr:Triple(?subject,rdf:type, gtfs:Frequency) ,
       ottr:Triple(?subject,gtfs:trip,?trip_id) ,
@@ -290,18 +393,23 @@ def mapping() -> Mapping:
       ottr:Triple(?subject,gtfs:exactTimes,?exact_times)
     } . 
     """
+    )
 
-    m = Mapping([stop_times_mapping,
-                 trips_mapping,
-                 routes_mapping,
-                 agency_mapping,
-                 stops_mapping,
-                 calendar_dates_mapping,
-                 calendar_mapping,
-                 feed_info_mapping,
-                 shapes_mapping,
-                 shape_points_mapping,
-                 frequencies_mapping])
+    m = Mapping(
+        [
+            stop_times_mapping,
+            trips_mapping,
+            routes_mapping,
+            agency_mapping,
+            stops_mapping,
+            calendar_dates_mapping,
+            calendar_mapping,
+            feed_info_mapping,
+            shapes_mapping,
+            shape_points_mapping,
+            frequencies_mapping,
+        ]
+    )
 
     m.expand("t:StopTimes", stop_times_mut, ["subject"])
     m.expand("t:Trips", trips_mut, ["trip_id"])
@@ -337,6 +445,7 @@ SELECT * WHERE {
 }
 """
     print(mapping.query(query))
+
 
 @pytest.mark.skip("dataset not yet in git")
 def test_q7(mapping):
@@ -377,15 +486,20 @@ WHERE {
 }
 """
     print(mapping.query(query))
+
+
 @pytest.mark.skip("dataset not yet in git")
 def test_queries(mapping):
     query_path = GTFS_PATH / "queries"
     errors = 0
     perf = []
-    #10 is not relevant as the data type is wrong in the test data
-    #7 is crashing with sigkill
+    # 10 is not relevant as the data type is wrong in the test data
+    # 7 is crashing with sigkill
     for fname in os.listdir(query_path):
-        if fname in [f'q{str(i)}.rq' for i in [1,2,3,4,5,6,8,9,11,12,13,14,15,16,17,18]]:
+        if fname in [
+            f"q{str(i)}.rq"
+            for i in [1, 2, 3, 4, 5, 6, 8, 9, 11, 12, 13, 14, 15, 16, 17, 18]
+        ]:
             with open(query_path / fname) as f:
                 q = f.read()
                 print(fname.replace(".rq", "\n"))
@@ -393,18 +507,15 @@ def test_queries(mapping):
                 start = time.time()
                 try:
                     res = mapping.query(q)
-                    used_time = round(time.time()-start,2)
+                    used_time = round(time.time() - start, 2)
                     perf.append((fname, used_time))
                     print(f"Took {used_time} seconds")
                     print(f"Ok {res.height}")
 
                 except:
                     print("Error")
-                    errors+=1
+                    errors += 1
                 print("\n")
-
 
     print(f"N errors {errors}\n")
     print(f"Perf: {perf}")
-
-
