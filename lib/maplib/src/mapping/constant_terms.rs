@@ -2,7 +2,7 @@ use crate::mapping::errors::MappingError;
 use crate::mapping::{MappingColumnType, RDFNodeType};
 use templates::ast::{ConstantTerm, ConstantTermOrList, PType};
 
-use oxrdf::Term;
+use oxrdf::{NamedNode, Term};
 use polars::prelude::{
     concat_list, lit, AnyValue, DataType, Expr, IntoSeries, ListChunked, LiteralValue, Series,
 };
@@ -14,6 +14,7 @@ use representation::rdf_to_polars::{
 };
 use representation::BaseRDFNodeType;
 use std::ops::Deref;
+use templates::constants::{OTTR_BLANK_NODE, OTTR_IRI};
 
 const BLANK_NODE_SERIES_NAME: &str = "blank_node_series";
 
@@ -27,7 +28,7 @@ pub fn constant_to_expr(
                 let polars_literal = rdf_named_node_to_polars_literal_value(iri);
                 (
                     Expr::Literal(polars_literal),
-                    PType::Basic(BaseRDFNodeType::IRI),
+                    PType::Basic(NamedNode::new_unchecked(OTTR_IRI)),
                     MappingColumnType::Flat(RDFNodeType::IRI),
                 )
             }
@@ -39,13 +40,13 @@ pub fn constant_to_expr(
                 let expr = rdf_term_to_polars_expr(&Term::Literal(lit.clone()));
                 (
                     expr,
-                    PType::Basic(BaseRDFNodeType::Literal(the_dt.clone())),
+                    PType::Basic(the_dt.clone()),
                     MappingColumnType::Flat(RDFNodeType::Literal(the_dt)),
                 )
             }
             ConstantTerm::None => (
                 Expr::Literal(LiteralValue::Null),
-                PType::Basic(BaseRDFNodeType::None),
+                PType::None,
                 MappingColumnType::Flat(RDFNodeType::None),
             ),
         },
@@ -107,7 +108,7 @@ pub fn constant_to_expr(
         }
     };
     if let Some(ptype_inferred) = ptype_opt {
-        if !matches!(ptype, PType::Basic(BaseRDFNodeType::None)) && ptype_inferred != &ptype {
+        if !matches!(ptype, PType::None) && ptype_inferred != &ptype {
             return Err(MappingError::ConstantDoesNotMatchDataType(
                 constant_term.clone(),
                 ptype_inferred.clone(),
@@ -144,7 +145,7 @@ pub fn constant_blank_node_to_series(
                     false,
                 )
                 .unwrap(),
-                PType::Basic(BaseRDFNodeType::BlankNode),
+                PType::Basic(NamedNode::new_unchecked(OTTR_BLANK_NODE)),
                 RDFNodeType::BlankNode,
             )
         }

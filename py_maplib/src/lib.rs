@@ -506,11 +506,6 @@ fn query_to_result(
         }
     }
 }
-
-fn dtypes_map(map: HashMap<String, RDFNodeType>) -> HashMap<String, String> {
-    map.into_iter().map(|(x, y)| (x, y.to_string())).collect()
-}
-
 fn map_parameters(
     parameters: Option<HashMap<String, (Bound<'_, PyAny>, HashMap<String, PyRDFType>)>>,
 ) -> PyResult<Option<HashMap<String, EagerSolutionMappings>>> {

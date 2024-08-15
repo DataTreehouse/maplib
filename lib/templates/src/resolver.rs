@@ -289,16 +289,7 @@ fn resolve_ptype(
     Ok(match unresolved_ptype {
         UnresolvedPType::Basic(b) => {
             let resolved = resolve(b, prefix_map)?;
-            //TODO: Fix this hack properly..
-            let t =
-                if resolved.as_str() == OTTR_IRI || resolved.as_str().starts_with(OWL_PREFIX_IRI) {
-                    BaseRDFNodeType::IRI
-                } else if resolved.as_str() == OTTR_BLANK_NODE {
-                    BaseRDFNodeType::BlankNode
-                } else {
-                    BaseRDFNodeType::Literal(resolved)
-                };
-            PType::Basic(t)
+            PType::Basic(resolved)
         }
         UnresolvedPType::Lub(l) => PType::Lub(Box::new(resolve_ptype(l, prefix_map)?)),
         UnresolvedPType::List(l) => PType::List(Box::new(resolve_ptype(l, prefix_map)?)),

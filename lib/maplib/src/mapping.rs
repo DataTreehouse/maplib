@@ -2,7 +2,6 @@ mod constant_terms;
 pub mod default;
 pub mod errors;
 pub mod expansion;
-mod validation_inference;
 
 use crate::errors::MaplibError;
 use crate::mapping::errors::MappingError;
@@ -76,9 +75,11 @@ impl Mapping {
 
     pub fn from_folder<P: AsRef<Path>>(
         path: P,
+        recursive: bool,
         caching_folder: Option<String>,
     ) -> Result<Mapping, MaplibError> {
-        let dataset = TemplateDataset::from_folder(path).map_err(MaplibError::TemplateError)?;
+        let dataset =
+            TemplateDataset::from_folder(path, recursive).map_err(MaplibError::TemplateError)?;
         Mapping::new(&dataset, caching_folder)
     }
 

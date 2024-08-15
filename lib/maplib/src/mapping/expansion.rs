@@ -1,6 +1,9 @@
+mod validation;
+
 use super::{ExpandOptions, Mapping, MappingReport, OTTRTripleInstance, StaticColumn};
 use crate::mapping::constant_terms::{constant_blank_node_to_series, constant_to_expr};
 use crate::mapping::errors::MappingError;
+use crate::mapping::expansion::validation::validate;
 use log::debug;
 use oxrdf::{NamedNode, Variable};
 use polars::prelude::{
@@ -34,11 +37,7 @@ impl Mapping {
         let target_template = self.resolve_template(template)?.clone();
         let target_template_name = target_template.signature.template_name.as_str().to_string();
 
-        let mut columns = if let Some(mapping_column_types) = mapping_column_types {
-            mapping_column_types
-        } else {
-            self.validate_infer_dataframe_columns(&target_template.signature, &mut df)?
-        };
+        let (mut df, mut columns) = validate(df, mapping_column_types, &target_template)?;
         let ExpandOptions {
             unique_subsets: unique_subsets_opt,
         } = options;
@@ -571,7 +570,7 @@ fn create_remapped(
                     new_dynamic_from_constant.push(target_colname);
                 } else {
                     let mut added_default_static = false;
-                    if matches!(ct.ptype(), PType::Basic(BaseRDFNodeType::None)) {
+                    if matches!(ct.ptype(), PType::None) {
                         if let Some(default) = &target.default_value {
                             add_default_value(&mut new_constant_columns, target_colname, default);
                             added_default_static = true;

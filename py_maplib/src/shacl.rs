@@ -4,7 +4,6 @@ use pyo3::{pyclass, pymethods, PyObject, PyResult, Python};
 use report_mapping::report_to_mapping;
 use representation::solution_mapping::EagerSolutionMappings;
 use shacl::ValidationReport as RustValidationReport;
-use std::collections::HashMap;
 use triplestore::Triplestore;
 
 #[derive(Clone)]

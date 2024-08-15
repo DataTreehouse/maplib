@@ -12,3 +12,4 @@ log = { workspace = true }
 thiserror = { workspace = true }
 nom = { workspace = true, features = ["alloc"] }
 pyo3.workspace = true
+walkdir.workspace = true

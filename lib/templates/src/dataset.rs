@@ -3,7 +3,7 @@ pub mod errors;
 use crate::ast::{
     Instance, PType, Parameter, Signature, Statement, StottrDocument, StottrTerm, Template,
 };
-use crate::constants::OTTR_TRIPLE;
+use crate::constants::{OTTR_IRI, OTTR_TRIPLE};
 use crate::document::document_from_file;
 use errors::TemplateError;
 use log::warn;
@@ -13,6 +13,7 @@ use representation::{BaseRDFNodeType, OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_CO
 use std::collections::{HashMap, HashSet};
 use std::fs::read_dir;
 use std::path::Path;
+use walkdir::WalkDir;
 
 #[derive(Clone, Debug)]
 pub struct TemplateDataset {
@@ -67,14 +68,14 @@ impl TemplateDataset {
         let ottr_triple_subject = Parameter {
             optional: false,
             non_blank: false,
-            ptype: Some(PType::Basic(BaseRDFNodeType::IRI)),
+            ptype: Some(PType::Basic(NamedNode::new_unchecked(OTTR_IRI))),
             variable: Variable::new_unchecked(SUBJECT_COL_NAME),
             default_value: None,
         };
         let ottr_triple_verb = Parameter {
             optional: false,
             non_blank: false,
-            ptype: Some(PType::Basic(BaseRDFNodeType::IRI)),
+            ptype: Some(PType::Basic(NamedNode::new_unchecked(OTTR_IRI))),
             variable: Variable::new_unchecked(VERB_COL_NAME),
             default_value: None,
         };
@@ -102,10 +103,17 @@ impl TemplateDataset {
         Ok(td)
     }
 
-    pub fn from_folder<P: AsRef<Path>>(path: P) -> Result<TemplateDataset, TemplateError> {
+    pub fn from_folder<P: AsRef<Path>>(
+        path: P,
+        recursive: bool,
+    ) -> Result<TemplateDataset, TemplateError> {
         let mut docs = vec![];
-        let files_result = read_dir(path).map_err(TemplateError::ReadTemplateDirectoryError)?;
-        for f in files_result {
+        let mut walk_dir = WalkDir::new(path);
+        walk_dir = walk_dir.min_depth(0);
+        if !recursive {
+            walk_dir = walk_dir.max_depth(1);
+        }
+        for f in walk_dir {
             let f = f.map_err(TemplateError::ResolveDirectoryEntryError)?;
             if let Some(e) = f.path().extension() {
                 if let Some(s) = e.to_str() {

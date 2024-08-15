@@ -1,11 +1,19 @@
 #[cfg(test)]
 use crate::constants::OTTR_TRIPLE;
+use crate::constants::{OTTR_BLANK_NODE, OTTR_IRI};
+use oxrdf::vocab::rdfs;
 #[cfg(test)]
 use oxrdf::vocab::xsd;
 use oxrdf::{BlankNode, Literal, NamedNode, Variable};
-use representation::BaseRDFNodeType;
+use representation::{BaseRDFNodeType, RDFNodeType};
 use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter};
+
+const OWL_CLASS: &str = "http://www.w3.org/2002/07/owl#Class";
+const OWL_NAMED_INDIVIDUAL: &str = "http://www.w3.org/2002/07/owl#NamedIndividual";
+const OWL_OBJECT_PROPERTY: &str = "http://www.w3.org/2002/07/owl#ObjectProperty";
+const OWL_DATATYPE_PROPERTY: &str = "http://www.w3.org/2002/07/owl#DatatypeProperty";
+const OWL_ANNOTATION_PROPERTY: &str = "http://www.w3.org/2002/07/owl#AnnotationProperty";
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct Prefix {
@@ -111,7 +119,8 @@ impl Display for Parameter {
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum PType {
-    Basic(BaseRDFNodeType),
+    None,
+    Basic(NamedNode),
     Lub(Box<PType>),
     List(Box<PType>),
     NEList(Box<PType>),
@@ -120,7 +129,7 @@ pub enum PType {
 impl PType {
     pub fn is_blank_node(&self) -> bool {
         if let PType::Basic(t) = &self {
-            t.is_blank_node()
+            ptype_is_blank(t)
         } else {
             false
         }
@@ -128,30 +137,60 @@ impl PType {
 
     pub fn is_iri(&self) -> bool {
         if let PType::Basic(t) = self {
-            t.is_iri()
+            ptype_is_iri(t)
         } else {
             false
         }
     }
 }
 
+impl From<&RDFNodeType> for PType {
+    fn from(value: &RDFNodeType) -> Self {
+        match value {
+            RDFNodeType::IRI => PType::Basic(NamedNode::new_unchecked(OTTR_IRI)),
+            RDFNodeType::BlankNode => PType::Basic(NamedNode::new_unchecked(OTTR_BLANK_NODE)),
+            RDFNodeType::Literal(l) => PType::Basic(l.to_owned()),
+            RDFNodeType::None => PType::None,
+            RDFNodeType::MultiType(_) => PType::Basic(rdfs::RESOURCE.into_owned()),
+        }
+    }
+}
+
+// Implements part of https://spec.ottr.xyz/rOTTR/0.2.0/#2.1_Basic_types
+pub fn ptype_is_iri(nn: &NamedNode) -> bool {
+    if matches!(
+        nn.as_str(),
+        OTTR_IRI
+            | OWL_CLASS
+            | OWL_NAMED_INDIVIDUAL
+            | OWL_OBJECT_PROPERTY
+            | OWL_DATATYPE_PROPERTY
+            | OWL_ANNOTATION_PROPERTY
+    ) {
+        true
+    } else {
+        matches!(nn.as_ref(), rdfs::CLASS | rdfs::DATATYPE)
+    }
+}
+
+pub fn ptype_is_blank(nn: &NamedNode) -> bool {
+    nn.as_str() == OTTR_BLANK_NODE
+}
+
+pub fn ptype_nn_to_rdf_node_type(nn: &NamedNode) -> RDFNodeType {
+    if ptype_is_blank(nn) {
+        RDFNodeType::BlankNode
+    } else if ptype_is_iri(nn) {
+        RDFNodeType::IRI
+    } else {
+        RDFNodeType::Literal(nn.clone())
+    }
+}
+
 impl Display for PType {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            PType::Basic(t) => match t {
-                BaseRDFNodeType::IRI => {
-                    write!(f, "ottr:IRI")
-                }
-                BaseRDFNodeType::BlankNode => {
-                    write!(f, "ottr:BlankNode")
-                }
-                BaseRDFNodeType::Literal(l) => {
-                    write!(f, "{}", l)
-                }
-                BaseRDFNodeType::None => {
-                    write!(f, "")
-                }
-            },
+            PType::Basic(t) => write!(f, "{}", t),
             PType::Lub(lt) => {
                 let s = lt.to_string();
                 write!(f, "LUBType({})", s)
@@ -163,6 +202,9 @@ impl Display for PType {
             PType::NEList(lt) => {
                 let s = lt.to_string();
                 write!(f, "NEListType({})", s)
+            }
+            PType::None => {
+                write!(f, "")
             }
         }
     }
@@ -213,9 +255,7 @@ impl ConstantTermOrList {
                         inner_type = Some(p_ptype);
                     }
                 }
-                PType::List(Box::new(
-                    inner_type.unwrap_or(PType::Basic(BaseRDFNodeType::None)),
-                ))
+                PType::List(Box::new(inner_type.unwrap_or(PType::None)))
             }
         }
     }
@@ -252,12 +292,12 @@ impl ConstantTerm {
         matches!(self, ConstantTerm::BlankNode(_))
     }
     pub fn ptype(&self) -> PType {
-        PType::Basic(match self {
-            ConstantTerm::Iri(_) => BaseRDFNodeType::IRI,
-            ConstantTerm::BlankNode(_) => BaseRDFNodeType::BlankNode,
-            ConstantTerm::Literal(l) => BaseRDFNodeType::Literal(l.datatype().into_owned()),
-            ConstantTerm::None => BaseRDFNodeType::None,
-        })
+        match self {
+            ConstantTerm::Iri(_) => PType::Basic(NamedNode::new_unchecked(OTTR_IRI)),
+            ConstantTerm::BlankNode(_) => PType::Basic(NamedNode::new_unchecked(OTTR_BLANK_NODE)),
+            ConstantTerm::Literal(l) => PType::Basic(l.datatype().into_owned()),
+            ConstantTerm::None => PType::None,
+        }
     }
 }
 
@@ -400,9 +440,7 @@ fn test_display_easy_template() {
             parameter_list: vec![Parameter {
                 optional: true,
                 non_blank: true,
-                ptype: Some(PType::Basic(BaseRDFNodeType::Literal(
-                    xsd::DOUBLE.into_owned(),
-                ))),
+                ptype: Some(PType::Basic(xsd::DOUBLE.into_owned())),
                 variable: Variable::new_unchecked("myVar"),
                 default_value: Some(DefaultValue {
                     constant_term: ConstantTermOrList::ConstantTerm(ConstantTerm::Literal(

@@ -1,7 +1,7 @@
 #[cfg(test)]
 #[macro_use]
 extern crate unic_char_range;
-use crate::ast::PType;
+use crate::ast::{ptype_nn_to_rdf_node_type, PType};
 use representation::{BaseRDFNodeType, RDFNodeType};
 
 pub mod ast;
@@ -21,7 +21,7 @@ pub enum MappingColumnType {
 impl MappingColumnType {
     pub fn as_ptype(&self) -> PType {
         match self {
-            MappingColumnType::Flat(f) => PType::Basic(BaseRDFNodeType::from_rdf_node_type(f)),
+            MappingColumnType::Flat(f) => PType::from(f),
             MappingColumnType::Nested(n) => PType::List(Box::new(n.as_ptype())),
         }
     }

@@ -42,6 +42,7 @@ datetimeparse = "0.3.0"
 fundu = "2.0.0"
 memmap2 = "0.9.4"
 sprs = "0.11.1"
+walkdir = "2.5.0"
 
 #dev-dependencies
 rstest = "0.21.0"

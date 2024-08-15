@@ -9,8 +9,7 @@ pub enum TemplateError {
     InconsistentNumberOfArguments(String, String, usize, usize),
     IncompatibleTypes(String, Variable, String, String),
     ReadTemplateFileError(io::Error),
-    ResolveDirectoryEntryError(io::Error),
-    ReadTemplateDirectoryError(io::Error),
+    ResolveDirectoryEntryError(walkdir::Error),
     ParsingError(crate::parsing::errors::ParsingError),
     ResolutionError(ResolutionError),
 }
@@ -37,9 +36,6 @@ impl Display for TemplateError {
             }
             TemplateError::ResolveDirectoryEntryError(e) => {
                 write!(f, "Resolve template directory entry error {}", e)
-            }
-            TemplateError::ReadTemplateDirectoryError(e) => {
-                write!(f, "Read template directory error: {}", e)
             }
             TemplateError::ParsingError(p) => {
                 write!(f, "Template parsing error: {}", p)

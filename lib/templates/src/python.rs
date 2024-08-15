@@ -1,6 +1,6 @@
 use crate::ast::{
-    Argument, ConstantTerm, ConstantTermOrList, DefaultValue, Instance, ListExpanderType, PType,
-    Parameter, Signature, StottrTerm, Template,
+    ptype_nn_to_rdf_node_type, Argument, ConstantTerm, ConstantTermOrList, DefaultValue, Instance,
+    ListExpanderType, PType, Parameter, Signature, StottrTerm, Template,
 };
 use crate::constants::{OTTR_TRIPLE, XSD_PREFIX_IRI};
 use crate::MappingColumnType;
@@ -10,6 +10,7 @@ use pyo3::prelude::*;
 use representation::python::{
     PyBlankNode, PyIRI, PyLiteral, PyPrefix, PyRDFType, PyRepresentationError, PyVariable,
 };
+use representation::RDFNodeType;
 
 #[derive(Clone)]
 #[pyclass(name = "Parameter")]
@@ -165,7 +166,11 @@ impl PyParameter {
 fn ptype_to_py_rdf_type(ptype: &PType) -> PyRDFType {
     match ptype {
         PType::Basic(b) => PyRDFType {
-            flat: Some(b.as_rdf_node_type()),
+            flat: Some(ptype_nn_to_rdf_node_type(b)),
+            nested: None,
+        },
+        PType::None => PyRDFType {
+            flat: Some(RDFNodeType::None),
             nested: None,
         },
         PType::Lub(_) => {
