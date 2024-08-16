@@ -74,6 +74,8 @@ impl Triplestore {
                             let predicates_series = mappings_df
                                 .column(v.as_str())
                                 .unwrap()
+                                .unique()
+                                .unwrap()
                                 .cast(&DataType::String)
                                 .unwrap();
                             let predicates_iter = predicates_series.iter();

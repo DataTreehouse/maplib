@@ -1901,7 +1901,7 @@ dependencies = [
 
 [[package]]
 name = "py_maplib"
-version = "0.12.8"
+version = "0.12.9"
 dependencies = [
  "jemallocator",
  "log",
@@ -2192,7 +2192,11 @@ name = "report_mapping"
 version = "0.1.0"
 dependencies = [
  "maplib",
+ "oxrdf",
+ "polars",
+ "representation",
  "shacl",
+ "templates",
  "triplestore",
 ]
 
@@ -2366,10 +2370,17 @@ dependencies = [
 name = "shacl"
 version = "0.1.0"
 dependencies = [
+ "log",
+ "oxrdf",
  "polars",
+ "query_processing",
+ "regex",
  "representation",
+ "spargebra",
+ "templates",
  "thiserror",
  "triplestore",
+ "uuid",
 ]
 
 [[package]]
