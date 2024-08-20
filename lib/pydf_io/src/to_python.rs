@@ -4,7 +4,7 @@
 
 use polars::prelude::{col, IntoLazy};
 use polars_core::frame::DataFrame;
-use polars_core::prelude::{ArrayRef, ArrowField};
+use polars_core::prelude::{ArrayRef, ArrowField, CompatLevel};
 use polars_core::utils::arrow::ffi;
 use polars_core::utils::arrow::record_batch::RecordBatch;
 use pyo3::ffi::Py_uintptr_t;
@@ -94,7 +94,7 @@ pub fn df_to_py_df(
     let names: Vec<&str> = names_vec.iter().map(|x| x.as_str()).collect();
     let chunk = df
         .as_single_chunk()
-        .iter_chunks(false, true)
+        .iter_chunks(CompatLevel::oldest(), true)
         .next()
         .unwrap();
     let pyarrow = PyModule::import_bound(py, "pyarrow")?;

@@ -133,7 +133,7 @@ impl Triplestore {
             if height_0 {
                 // Important that overlapping cols are dropped from mappings and not from lf,
                 // since we also overwrite rdf_node_types with dts correspondingly below.
-                mappings = mappings.drop(overlap.as_slice());
+                mappings = mappings.drop(overlap.iter().map(|x|col(x)));
                 if colnames.is_empty() {
                     mappings = mappings.filter(lit(false));
                 } else {
