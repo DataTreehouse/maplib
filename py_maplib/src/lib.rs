@@ -52,7 +52,6 @@ use representation::python::{
     PyBlankNode, PyIRI, PyLiteral, PyPrefix, PyRDFType, PySolutionMappings, PyVariable,
 };
 use representation::solution_mapping::EagerSolutionMappings;
-use representation::RDFNodeType;
 
 #[cfg(not(target_os = "linux"))]
 use mimalloc::MiMalloc;

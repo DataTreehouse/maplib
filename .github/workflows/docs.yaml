@@ -14,7 +14,7 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
   RUST_LOG: debug
-  MATURIN_VERSION: '1.5.1'
+  MATURIN_VERSION: '1.7.1'
   RUST_TOOLCHAIN: nightly-2024-06-23
 
 jobs:

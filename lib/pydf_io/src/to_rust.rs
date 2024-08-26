@@ -21,8 +21,6 @@ use thiserror::Error;
 pub enum ToRustError {
     #[error(transparent)]
     PolarsError(#[from] PolarsError),
-    #[error("Empty table")]
-    EmptyTableError,
 }
 
 pub fn array_to_rust(obj: &Bound<'_, PyAny>) -> PyResult<ArrayRef> {
@@ -61,10 +59,10 @@ pub fn polars_df_to_rust_df(df: &Bound<'_, PyAny>) -> PyResult<DataFrame> {
 }
 
 pub fn array_to_rust_df(rb: &[Bound<'_, PyAny>]) -> PyResult<DataFrame> {
-    let schema = rb
-        .first()
-        .ok_or_else(|| ToRustError::EmptyTableError)?
-        .getattr("schema")?;
+    if rb.is_empty() {
+        return Ok(DataFrame::empty());
+    }
+    let schema = rb.first().unwrap().getattr("schema")?;
     let names = schema.getattr("names")?.extract::<Vec<String>>()?;
 
     let dfs = rb
