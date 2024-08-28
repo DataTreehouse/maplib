@@ -1161,7 +1161,6 @@ pub fn drop_inner_contexts(mut sm: SolutionMappings, contexts: &Vec<&Context>) -
 }
 
 pub fn compatible_operation(expression: Expression, l1: NamedNodeRef, l2: NamedNodeRef) -> bool {
-    
     match expression {
         Expression::Equal(..)
         | Expression::LessOrEqual(..)

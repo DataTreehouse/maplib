@@ -1,8 +1,8 @@
 #[cfg(test)]
 #[macro_use]
 extern crate unic_char_range;
-use crate::ast::{ptype_nn_to_rdf_node_type, PType};
-use representation::{BaseRDFNodeType, RDFNodeType};
+use crate::ast::PType;
+use representation::RDFNodeType;
 
 pub mod ast;
 pub mod constants;

@@ -87,7 +87,7 @@ pub struct ExpandOptions {
 }
 
 impl ExpandOptions {
-    fn to_rust_expand_options(self) -> RustExpandOptions {
+    fn into_rust_expand_options(self) -> RustExpandOptions {
         RustExpandOptions {
             unique_subsets: self.unique_subsets,
         }
@@ -188,7 +188,8 @@ impl PyMapping {
             .into());
         };
 
-        let unique_subsets = unique_subset.map(|unique_subset| vec![unique_subset.into_iter().collect()]);
+        let unique_subsets =
+            unique_subset.map(|unique_subset| vec![unique_subset.into_iter().collect()]);
         let options = ExpandOptions { unique_subsets };
 
         if let Some(df) = df {
@@ -197,7 +198,12 @@ impl PyMapping {
 
                 let _report = self
                     .inner
-                    .expand(&template, Some(df), None, options.to_rust_expand_options())
+                    .expand(
+                        &template,
+                        Some(df),
+                        None,
+                        options.into_rust_expand_options(),
+                    )
                     .map_err(MaplibError::from)
                     .map_err(PyMaplibError::from)?;
             } else {
@@ -206,7 +212,7 @@ impl PyMapping {
         } else {
             let _report = self
                 .inner
-                .expand(&template, None, None, options.to_rust_expand_options())
+                .expand(&template, None, None, options.into_rust_expand_options())
                 .map_err(MaplibError::from)
                 .map_err(PyMaplibError::from)?;
         }
@@ -234,7 +240,7 @@ impl PyMapping {
                 vec![],
                 template_prefix,
                 predicate_uri_prefix,
-                options.to_rust_expand_options(),
+                options.into_rust_expand_options(),
             )
             .map_err(MaplibError::from)
             .map_err(PyMaplibError::from)?;
@@ -499,6 +505,9 @@ fn query_to_result(
         }
     }
 }
+
+//Allowing complex type as it is not used anywhere else.
+#[allow(clippy::type_complexity)]
 fn map_parameters(
     parameters: Option<HashMap<String, (Bound<'_, PyAny>, HashMap<String, PyRDFType>)>>,
 ) -> PyResult<Option<HashMap<String, EagerSolutionMappings>>> {

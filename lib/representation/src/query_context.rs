@@ -494,7 +494,6 @@ impl VariableInContext {
     }
 
     pub fn equivalent(&self, variable: &Variable, context: &Context) -> bool {
-        
         self.same_name(variable) && self.in_scope(context, false)
     }
 

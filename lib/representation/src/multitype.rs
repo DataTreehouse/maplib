@@ -730,12 +730,7 @@ pub fn explode_multicols<'a>(
             let mut prefixed_inner_cols = vec![];
             for inner in &inner_cols {
                 let prefixed_inner = format!("{c}{inner}");
-                exprs.push(
-                    col(c)
-                        .struct_()
-                        .field_by_name(inner)
-                        .alias(&prefixed_inner),
-                );
+                exprs.push(col(c).struct_().field_by_name(inner).alias(&prefixed_inner));
                 prefixed_inner_cols.push(prefixed_inner);
             }
             out_map.insert(c.clone(), (inner_cols, prefixed_inner_cols));

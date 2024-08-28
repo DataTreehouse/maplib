@@ -106,6 +106,7 @@ impl Mapping {
         Ok(MappingReport {})
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn _expand(
         &self,
         layer: usize,
@@ -239,11 +240,12 @@ impl Mapping {
             }
             let mut fix_iris = vec![];
             for (coltype, colname) in coltypes_names {
-                if coltype == &RDFNodeType::IRI && matches!(df.column(colname).unwrap().dtype(), DataType::String) {
+                if coltype == &RDFNodeType::IRI
+                    && matches!(df.column(colname).unwrap().dtype(), DataType::String)
+                {
                     let nonnull = df.column(colname).unwrap().str().unwrap().first_non_null();
                     if let Some(i) = nonnull {
-                        let first_iri =
-                            df.column(colname).unwrap().str().unwrap().get(i).unwrap();
+                        let first_iri = df.column(colname).unwrap().str().unwrap().get(i).unwrap();
                         {
                             if first_iri.starts_with('<') {
                                 fix_iris.push(colname);
@@ -458,6 +460,7 @@ fn create_series_from_blank_node_constant(
     Ok((series, mapped_column))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn create_remapped(
     blank_node_counter: usize,
     layer: usize,
@@ -631,7 +634,7 @@ fn create_remapped(
                 let mut new_subset = vec![];
                 for x in unique_subset.iter() {
                     new_subset.push(
-                        new.get(existing.iter().position(|e| e == &x).unwrap())
+                        new.get(existing.iter().position(|e| e == x).unwrap())
                             .unwrap()
                             .to_string(),
                     );

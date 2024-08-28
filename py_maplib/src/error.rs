@@ -34,6 +34,7 @@ use triplestore::errors::TriplestoreError;
 use triplestore::sparql::errors::SparqlError;
 
 #[derive(Error, Debug)]
+#[allow(clippy::enum_variant_names)]
 pub enum PyMaplibError {
     #[error(transparent)]
     MaplibError(#[from] MaplibError),

@@ -118,6 +118,7 @@ impl Mapping {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn read_triples(
         &mut self,
         p: &Path,
@@ -147,6 +148,7 @@ impl Mapping {
             .map_err(MappingError::TriplestoreError)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn read_triples_string(
         &mut self,
         s: &str,

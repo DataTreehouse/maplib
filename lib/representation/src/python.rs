@@ -185,7 +185,8 @@ impl PyRDFType {
     }
 
     #[staticmethod]
-    fn Nested(rdf_type: Py<PyRDFType>) -> PyRDFType {
+    #[pyo3(name = "Nested")]
+    fn nested(rdf_type: Py<PyRDFType>) -> PyRDFType {
         PyRDFType {
             flat: None,
             nested: Some(rdf_type),
@@ -193,7 +194,8 @@ impl PyRDFType {
     }
 
     #[staticmethod]
-    fn Multi(rdf_types: Vec<Py<PyRDFType>>, py: Python) -> PyRDFType {
+    #[pyo3(name = "Multi")]
+    fn multi(rdf_types: Vec<Py<PyRDFType>>, py: Python) -> PyRDFType {
         let mut mapped = vec![];
         for r in rdf_types {
             mapped.push(BaseRDFNodeType::from_rdf_node_type(
@@ -387,8 +389,7 @@ impl PyBlankNode {
     #[new]
     fn new(name: &str) -> PyResult<Self> {
         Ok(PyBlankNode {
-            inner: BlankNode::new(name)
-                .map_err(PyRepresentationError::BlankNodeIdParseError)?,
+            inner: BlankNode::new(name).map_err(PyRepresentationError::BlankNodeIdParseError)?,
         })
     }
 
@@ -409,7 +410,7 @@ pub struct PySolutionMappings {
 #[pymethods]
 impl PySolutionMappings {
     #[getter]
-    fn mappings(&self, py: Python) -> &Py<PyAny> {
+    fn mappings(&self) -> &Py<PyAny> {
         &self.mappings
     }
 

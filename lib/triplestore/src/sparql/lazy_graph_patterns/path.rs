@@ -100,7 +100,7 @@ impl Triplestore {
 
         if let Some(max_index) = max_index {
             if let Some(SparsePathReturn { sparmat }) =
-                sparse_path(ppe, &namednode_dfs, max_index as usize, false)
+                sparse_path(ppe, &namednode_dfs, max_index as usize)
             {
                 let mut subject_vec = vec![];
                 let mut object_vec = vec![];
@@ -478,7 +478,6 @@ fn sparse_path(
     ppe: &PropertyPathExpression,
     namednode_map: &HashMap<NamedNode, DataFrame>,
     max_index: usize,
-    reflexive: bool,
 ) -> Option<SparsePathReturn> {
     match ppe {
         PropertyPathExpression::NamedNode(nn) => {
@@ -490,8 +489,7 @@ fn sparse_path(
             }
         }
         PropertyPathExpression::Reverse(inner) => {
-            if let Some(SparsePathReturn { sparmat }) =
-                sparse_path(inner, namednode_map, max_index, reflexive)
+            if let Some(SparsePathReturn { sparmat }) = sparse_path(inner, namednode_map, max_index)
             {
                 Some(SparsePathReturn {
                     sparmat: sparmat.transpose_into(),
@@ -501,8 +499,8 @@ fn sparse_path(
             }
         }
         PropertyPathExpression::Sequence(left, right) => {
-            let res_left = sparse_path(left, namednode_map, max_index, false);
-            let res_right = sparse_path(right, namednode_map, max_index, false);
+            let res_left = sparse_path(left, namednode_map, max_index);
+            let res_right = sparse_path(right, namednode_map, max_index);
             if let Some(SparsePathReturn {
                 sparmat: sparmat_left,
             }) = res_left
@@ -521,8 +519,8 @@ fn sparse_path(
             }
         }
         PropertyPathExpression::Alternative(left, right) => {
-            let res_left = sparse_path(left, namednode_map, max_index, reflexive);
-            let res_right = sparse_path(right, namednode_map, max_index, reflexive);
+            let res_left = sparse_path(left, namednode_map, max_index);
+            let res_right = sparse_path(right, namednode_map, max_index);
             if let Some(SparsePathReturn {
                 sparmat: sparmat_left,
             }) = res_left
@@ -547,7 +545,7 @@ fn sparse_path(
         PropertyPathExpression::ZeroOrMore(inner) => {
             if let Some(SparsePathReturn {
                 sparmat: sparmat_inner,
-            }) = sparse_path(inner, namednode_map, max_index, true)
+            }) = sparse_path(inner, namednode_map, max_index)
             {
                 let sparmat = zero_or_more(sparmat_inner);
                 Some(SparsePathReturn { sparmat })
@@ -558,7 +556,7 @@ fn sparse_path(
         PropertyPathExpression::OneOrMore(inner) => {
             if let Some(SparsePathReturn {
                 sparmat: sparmat_inner,
-            }) = sparse_path(inner, namednode_map, max_index, false)
+            }) = sparse_path(inner, namednode_map, max_index)
             {
                 let sparmat = one_or_more(sparmat_inner);
                 Some(SparsePathReturn { sparmat })
@@ -569,7 +567,7 @@ fn sparse_path(
         PropertyPathExpression::ZeroOrOne(inner) => {
             if let Some(SparsePathReturn {
                 sparmat: sparmat_inner,
-            }) = sparse_path(inner, namednode_map, max_index, true)
+            }) = sparse_path(inner, namednode_map, max_index)
             {
                 let sparmat = zero_or_one(sparmat_inner);
                 Some(SparsePathReturn { sparmat })

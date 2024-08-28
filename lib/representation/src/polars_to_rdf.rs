@@ -330,12 +330,10 @@ pub fn polars_type_to_literal_type(
                 Ok(RDFNodeType::MultiType(dts))
             }
         }
-        dt => {
-            Err(RepresentationError::DatatypeError(format!(
-                "Unknown datatype {:?}",
-                dt
-            )))
-        }
+        dt => Err(RepresentationError::DatatypeError(format!(
+            "Unknown datatype {:?}",
+            dt
+        ))),
     }
 }
 
@@ -392,14 +390,9 @@ pub fn hack_format_timestamp_with_timezone(series: &Series, tz: &mut TimeZone) -
                 None => AnyValue::Null,
             })
             .collect();
-        
-        Series::from_any_values_and_dtype(
-            &name,
-            &datetime_strings_vec,
-            &DataType::String,
-            false,
-        )
-        .unwrap()
+
+        Series::from_any_values_and_dtype(&name, &datetime_strings_vec, &DataType::String, false)
+            .unwrap()
     } else {
         panic!("Unknown timezone{}", tz);
     }

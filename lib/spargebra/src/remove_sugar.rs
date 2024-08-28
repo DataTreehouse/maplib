@@ -45,7 +45,7 @@ impl SyntacticSugarRemover {
                 base_iri,
             } => {
                 let gp = self.remove_sugar_from_graph_pattern(pattern, vec![], &Context::new());
-                
+
                 Query::Select {
                     dataset,
                     pattern: gp.gp.unwrap(),
@@ -131,10 +131,12 @@ impl SyntacticSugarRemover {
                     ts_tps_in_scope,
                     &context.extension_with(PathEntry::LeftJoinRightSide),
                 );
-                let preprocessed_expression = expression.map(|e| self.remove_sugar_from_expression(
+                let preprocessed_expression = expression.map(|e| {
+                    self.remove_sugar_from_expression(
                         e,
                         &context.extension_with(PathEntry::LeftJoinExpression),
-                    ));
+                    )
+                });
                 let mut out = RemoveSugarGraphPatternReturn::from_pattern(GraphPattern::LeftJoin {
                     left: Box::new(left.gp.take().unwrap()),
                     right: Box::new(right.gp.take().unwrap()),
@@ -404,10 +406,7 @@ impl SyntacticSugarRemover {
                 });
                 inner
             }
-            GraphPattern::DT { dt } => {
-                
-                dt_to_ret(dt, ts_tps_in_scope, context)
-            }
+            GraphPattern::DT { dt } => dt_to_ret(dt, ts_tps_in_scope, context),
             GraphPattern::PValues {
                 bindings_parameter,
                 variables,
@@ -538,11 +537,7 @@ impl SyntacticSugarRemover {
 }
 
 fn is_order_by(gp: &GraphPattern) -> bool {
-    if let GraphPattern::OrderBy { .. } = gp {
-        true
-    } else {
-        false
-    }
+    matches!(gp, GraphPattern::OrderBy { .. })
 }
 
 fn add_filter_and_bindings(

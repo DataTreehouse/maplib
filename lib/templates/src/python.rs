@@ -204,7 +204,7 @@ pub struct PyArgument {
 #[pymethods]
 impl PyArgument {
     #[new]
-    pub fn new<'py>(term: &Bound<'py, PyAny>, list_expand: Option<bool>) -> PyResult<Self> {
+    pub fn new(term: &Bound<'_, PyAny>, list_expand: Option<bool>) -> PyResult<Self> {
         let list_expand = list_expand.unwrap_or(false);
         let term = if let Ok(r) = term.extract::<PyVariable>() {
             StottrTerm::Variable(r.clone().into_inner())
@@ -246,16 +246,12 @@ pub struct PyInstance {
 #[pymethods]
 impl PyInstance {
     #[new]
-    pub fn new<'py>(
+    pub fn new(
         iri: PyIRI,
-        arguments: Vec<Bound<'py, PyAny>>,
+        arguments: Vec<Bound<'_, PyAny>>,
         list_expander: Option<String>,
     ) -> PyResult<Self> {
-        let list_expander = if let Some(s) = list_expander {
-            Some(ListExpanderType::from(&s))
-        } else {
-            None
-        };
+        let list_expander = list_expander.map(|x| ListExpanderType::from(&x));
         let mut new_arguments = vec![];
         for a in arguments {
             new_arguments.push(PyArgument::new(&a, None)?.into_inner());
@@ -333,9 +329,9 @@ impl PyTemplate {
         Ok(PyTemplate { template })
     }
 
-    fn instance<'py>(
+    fn instance(
         &self,
-        arguments: Vec<Bound<'py, PyAny>>,
+        arguments: Vec<Bound<'_, PyAny>>,
         list_expander: Option<String>,
     ) -> PyResult<PyInstance> {
         PyInstance::new(
@@ -439,6 +435,7 @@ pub struct PyXSD {
 #[pymethods]
 impl PyXSD {
     #[new]
+    #[allow(clippy::new_without_default)]
     pub fn new() -> PyXSD {
         PyXSD {
             prefix: PyPrefix::new("xsd".to_string(), XSD_PREFIX_IRI.to_string()).unwrap(),

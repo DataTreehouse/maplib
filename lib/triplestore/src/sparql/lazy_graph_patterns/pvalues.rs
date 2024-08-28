@@ -12,7 +12,7 @@ impl Triplestore {
     pub(crate) fn lazy_pvalues(
         &self,
         solution_mappings: Option<SolutionMappings>,
-        variables: &Vec<Variable>,
+        variables: &[Variable],
         bindings_name: &String,
         _context: &Context,
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,

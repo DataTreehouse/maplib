@@ -69,7 +69,7 @@ pub fn string_rdf_literal(dt: NamedNodeRef) -> bool {
 pub fn rdf_literal_to_polars_literal_value(lit: &Literal) -> LiteralValue {
     let datatype = lit.datatype();
     let value = lit.value();
-    
+
     if datatype == xsd::STRING {
         LiteralValue::String(value.to_string())
     } else if datatype == rdf::LANG_STRING {
@@ -154,7 +154,7 @@ pub fn rdf_literal_to_polars_literal_value(lit: &Literal) -> LiteralValue {
     } else if datatype == xsd::DATE {
         if let Ok(parsed) = NaiveDate::parse_from_str(value, "%Y-%m-%d") {
             let dur = parsed.signed_duration_since(NaiveDate::from_ymd_opt(1970, 1, 1).unwrap());
-            
+
             LiteralValue::Date(dur.num_days() as i32)
         } else {
             warn!("Could not parse xsd:date {}", value);

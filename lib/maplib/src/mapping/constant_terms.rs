@@ -51,20 +51,21 @@ pub fn constant_to_expr(
         },
         ConstantTermOrList::ConstantList(inner) => {
             let mut expressions = vec![];
-            let mut last_ptype = None;
+            let mut last_ptype: Option<PType> = None;
             let mut last_mapping_col_type = None;
             for ct in inner {
                 let (constant_expr, actual_ptype, mapping_col_type) =
                     constant_to_expr(ct, ptype_opt)?;
-                if last_ptype.is_none() {
-                    last_ptype = Some(actual_ptype);
-                } else if last_ptype.as_ref().unwrap() != &actual_ptype {
-                    return Err(MappingError::ConstantListHasInconsistentPType(
-                        constant_term.clone(),
-                        last_ptype.as_ref().unwrap().clone(),
-                        actual_ptype.clone(),
-                    ));
+                if let Some(last_ptype) = &last_ptype {
+                    if last_ptype != &actual_ptype {
+                        return Err(MappingError::ConstantListHasInconsistentPType(
+                            constant_term.clone(),
+                            last_ptype.clone(),
+                            actual_ptype.clone(),
+                        ));
+                    }
                 }
+                last_ptype = Some(actual_ptype);
                 last_mapping_col_type = Some(mapping_col_type);
                 expressions.push(constant_expr);
             }

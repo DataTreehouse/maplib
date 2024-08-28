@@ -26,7 +26,10 @@ use std::ops::Deref;
 use std::path::Path;
 use std::time::Instant;
 
+type MapType = HashMap<String, HashMap<String, (Vec<Subject>, Vec<Term>)>>;
+
 impl Triplestore {
+    #[allow(clippy::too_many_arguments)]
     pub fn read_triples_from_path(
         &mut self,
         path: &Path,
@@ -63,6 +66,7 @@ impl Triplestore {
         )
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn read_triples_from_string(
         &mut self,
         s: &str,
@@ -84,6 +88,7 @@ impl Triplestore {
         )
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn read_triples(
         &mut self,
         slice: &[u8],
@@ -149,10 +154,7 @@ impl Triplestore {
             .map(|r| create_predicate_map(r, &parser_call))
             .collect();
 
-        let mut par_predicate_map: HashMap<
-            String,
-            Vec<HashMap<String, HashMap<String, (Vec<Subject>, Vec<Term>)>>>,
-        > = HashMap::new();
+        let mut par_predicate_map: HashMap<String, Vec<MapType>> = HashMap::new();
         for m in predicate_maps {
             for (verb, map) in m? {
                 if let Some(v) = par_predicate_map.get_mut(&verb) {
@@ -163,14 +165,10 @@ impl Triplestore {
             }
         }
 
-        let predicate_map: HashMap<
-            String,
-            HashMap<String, HashMap<String, (Vec<Subject>, Vec<Term>)>>,
-        > = par_predicate_map
+        let predicate_map: HashMap<String, MapType> = par_predicate_map
             .into_par_iter()
             .map(|(verb, maps)| {
-                let mut subject_map: HashMap<String, HashMap<String, (Vec<Subject>, Vec<Term>)>> =
-                    HashMap::new();
+                let mut subject_map: MapType = HashMap::new();
                 for new_subject_map in maps {
                     for (subject_dt, new_object_map) in new_subject_map {
                         if let Some(object_map) = subject_map.get_mut(&subject_dt) {
@@ -334,10 +332,7 @@ fn get_term_datatype_ref(t: &Term) -> BaseRDFNodeTypeRef {
 fn create_predicate_map(
     r: MyFromSliceQuadReader,
     parser_call: &str,
-) -> Result<
-    HashMap<String, HashMap<String, HashMap<String, (Vec<Subject>, Vec<Term>)>>>,
-    TriplestoreError,
-> {
+) -> Result<HashMap<String, MapType>, TriplestoreError> {
     let mut predicate_map = HashMap::new();
     for q in r {
         let Quad {

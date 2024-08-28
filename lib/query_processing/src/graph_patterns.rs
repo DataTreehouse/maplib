@@ -381,10 +381,8 @@ pub fn union(
                         let mut left_set: HashSet<_> = left_types.iter().collect();
                         if let RDFNodeType::MultiType(right_types) = right_type {
                             let right_set: HashSet<_> = right_types.iter().collect();
-                            let mut union: Vec<_> = left_set
-                                .union(&right_set)
-                                .map(|x| (*x).clone())
-                                .collect();
+                            let mut union: Vec<_> =
+                                left_set.union(&right_set).map(|x| (*x).clone()).collect();
                             union.sort();
                             updated_target_types
                                 .insert(right_col.clone(), RDFNodeType::MultiType(union));
@@ -392,8 +390,7 @@ pub fn union(
                             //Right not multi
                             let base_right = BaseRDFNodeType::from_rdf_node_type(right_type);
                             left_set.insert(&base_right);
-                            let mut new_types: Vec<_> =
-                                left_set.into_iter().cloned().collect();
+                            let mut new_types: Vec<_> = left_set.into_iter().cloned().collect();
                             new_types.sort();
                             let new_type = RDFNodeType::MultiType(new_types);
                             updated_target_types.insert(right_col.clone(), new_type);
@@ -404,8 +401,7 @@ pub fn union(
                             let mut right_set: HashSet<_> = right_types.iter().collect();
                             let base_left = BaseRDFNodeType::from_rdf_node_type(left_type);
                             right_set.insert(&base_left);
-                            let mut new_types: Vec<_> =
-                                right_set.into_iter().cloned().collect();
+                            let mut new_types: Vec<_> = right_set.into_iter().cloned().collect();
                             new_types.sort();
                             let new_type = RDFNodeType::MultiType(new_types);
                             updated_target_types.insert(right_col.clone(), new_type);

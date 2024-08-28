@@ -3,8 +3,8 @@ use crate::ast::{
     PType, Parameter, Signature, Statement, StottrDocument, StottrTerm, Template,
 };
 use crate::constants::{
-    OTTR_BLANK_NODE, OTTR_IRI, OTTR_PREFIX, OTTR_PREFIX_IRI, OWL_PREFIX_IRI, RDFS_PREFIX,
-    RDFS_PREFIX_IRI, RDF_PREFIX, RDF_PREFIX_IRI, XSD_PREFIX, XSD_PREFIX_IRI,
+    OTTR_PREFIX, OTTR_PREFIX_IRI, RDFS_PREFIX, RDFS_PREFIX_IRI, RDF_PREFIX, RDF_PREFIX_IRI,
+    XSD_PREFIX, XSD_PREFIX_IRI,
 };
 use crate::parsing::parsing_ast::{
     ResolvesToNamedNode, UnresolvedAnnotation, UnresolvedArgument, UnresolvedBaseTemplate,
@@ -14,7 +14,6 @@ use crate::parsing::parsing_ast::{
 };
 use log::warn;
 use oxrdf::{IriParseError, Literal, NamedNode};
-use representation::BaseRDFNodeType;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};

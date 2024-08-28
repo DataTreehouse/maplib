@@ -9,9 +9,8 @@ use errors::TemplateError;
 use log::warn;
 
 use oxrdf::{NamedNode, Variable};
-use representation::{BaseRDFNodeType, OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME};
+use representation::{OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME};
 use std::collections::{HashMap, HashSet};
-use std::fs::read_dir;
 use std::path::Path;
 use walkdir::WalkDir;
 

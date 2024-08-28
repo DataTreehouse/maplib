@@ -12,7 +12,7 @@ impl Triplestore {
     pub(crate) fn lazy_order_by(
         &self,
         inner: &GraphPattern,
-        expression: &Vec<OrderExpression>,
+        expression: &[OrderExpression],
         solution_mappings: Option<SolutionMappings>,
         context: &Context,
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,

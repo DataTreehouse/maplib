@@ -370,13 +370,7 @@ impl Triplestore {
                     )?;
                     args_contexts.insert(i, arg_context);
                 }
-                func_expression(
-                    output_solution_mappings,
-                    func,
-                    args,
-                    args_contexts,
-                    context,
-                )?
+                func_expression(output_solution_mappings, func, args, args_contexts, context)?
             }
         };
         Ok(output_solution_mappings)

@@ -124,7 +124,7 @@ pub fn fix_cats_and_multicolumns(
     //Important that column compression happen before decisions are made based on column type.
     (df, dts) = compress_actual_multitypes(df, dts);
     let mut lf = df.lazy();
-    for (c, _) in &dts {
+    for c in dts.keys() {
         lf = lf_column_from_categorical(lf.lazy(), c, &dts);
     }
     if !native_dataframe {

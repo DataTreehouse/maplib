@@ -35,9 +35,7 @@ impl Triplestore {
         let object_datatype_req = match &triple_pattern.object {
             TermPattern::NamedNode(_nn) => Some(RDFNodeType::IRI),
             TermPattern::BlankNode(_) => None,
-            TermPattern::Literal(l) => match l.datatype() {
-                _ => Some(RDFNodeType::Literal(l.datatype().into_owned())),
-            },
+            TermPattern::Literal(l) => Some(RDFNodeType::Literal(l.datatype().into_owned())),
             TermPattern::Variable(_) => None,
         };
         let subject_rename = get_keep_rename_term_pattern(&triple_pattern.subject);
@@ -168,6 +166,7 @@ impl Triplestore {
         Ok(solution_mappings.unwrap())
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn get_predicate_lf(
         &self,
         verb_uri: &NamedNode,
@@ -247,6 +246,7 @@ impl Triplestore {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn get_predicates_lf(
         &self,
         predicate_uris: Vec<NamedNode>,

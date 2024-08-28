@@ -156,11 +156,9 @@ fn infer_validate_mapping_column_type_from_ptype(
                 } else {
                     let ptype_rdf_node_type = BaseRDFNodeType::Literal(nn.clone());
                     let ptype_dt = ptype_rdf_node_type.polars_data_type();
-                    if ptype_dt.is_string() && (datatype.is_string() || datatype.is_categorical()) {
-                        Ok(MappingColumnType::Flat(
-                            ptype_rdf_node_type.as_rdf_node_type(),
-                        ))
-                    } else if &ptype_dt == datatype {
+                    if ptype_dt.is_string() && (datatype.is_string() || datatype.is_categorical())
+                        || &ptype_dt == datatype
+                    {
                         Ok(MappingColumnType::Flat(
                             ptype_rdf_node_type.as_rdf_node_type(),
                         ))
@@ -299,8 +297,8 @@ pub fn polars_datatype_to_mapping_column_datatype(
             polars_datatype_to_mapping_column_datatype(dt)?,
         )))
     } else {
-        let dt = polars_type_to_literal_type(datatype)
-            .map_err(MappingError::DatatypeInferenceError)?;
+        let dt =
+            polars_type_to_literal_type(datatype).map_err(MappingError::DatatypeInferenceError)?;
         Ok(MappingColumnType::Flat(dt))
     }
 }
