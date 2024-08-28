@@ -114,7 +114,7 @@ impl Mapping {
     pub fn add_template(&mut self, template: Template) -> Result<(), MaplibError> {
         self.template_dataset
             .add_template(template)
-            .map_err(|x| MaplibError::TemplateError(x))?;
+            .map_err(MaplibError::TemplateError)?;
         Ok(())
     }
 
@@ -259,15 +259,13 @@ impl Mapping {
         include_conforms: bool,
     ) -> Result<ValidationReport, ShaclError> {
         let (shape_graph, mut shape_triplestore) =
-            self.triplestores_map.remove_entry(&shape_graph).unwrap();
-        match {
-            validate(
-                &mut self.base_triplestore,
-                &mut shape_triplestore,
-                include_details,
-                include_conforms,
-            )
-        } {
+            self.triplestores_map.remove_entry(shape_graph).unwrap();
+        match validate(
+            &mut self.base_triplestore,
+            &mut shape_triplestore,
+            include_details,
+            include_conforms,
+        ) {
             Ok(vr) => {
                 self.triplestores_map.insert(shape_graph, shape_triplestore);
                 Ok(vr)

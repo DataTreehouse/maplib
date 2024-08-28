@@ -47,7 +47,7 @@ pub fn sum(
     column_context: &Context,
     distinct: bool,
 ) -> (Expr, RDFNodeType) {
-    let expr_rdf_node_type = rdf_node_type_from_context(column_context, &solution_mappings);
+    let expr_rdf_node_type = rdf_node_type_from_context(column_context, solution_mappings);
     let out_rdf_node_type = if expr_rdf_node_type.is_bool() {
         RDFNodeType::Literal(xsd::UNSIGNED_LONG.into_owned())
     } else {
@@ -67,7 +67,7 @@ pub fn avg(
     column_context: &Context,
     distinct: bool,
 ) -> (Expr, RDFNodeType) {
-    let expr_rdf_node_type = rdf_node_type_from_context(column_context, &solution_mappings);
+    let expr_rdf_node_type = rdf_node_type_from_context(column_context, solution_mappings);
     let out_rdf_node_type = if expr_rdf_node_type.is_bool() {
         RDFNodeType::Literal(xsd::UNSIGNED_LONG.into_owned())
     } else {
@@ -83,7 +83,7 @@ pub fn avg(
 }
 
 pub fn min(solution_mappings: &SolutionMappings, column_context: &Context) -> (Expr, RDFNodeType) {
-    let expr_rdf_node_type = rdf_node_type_from_context(column_context, &solution_mappings);
+    let expr_rdf_node_type = rdf_node_type_from_context(column_context, solution_mappings);
     let out_rdf_node_type = if expr_rdf_node_type.is_bool() {
         RDFNodeType::Literal(xsd::UNSIGNED_LONG.into_owned())
     } else {
@@ -96,7 +96,7 @@ pub fn min(solution_mappings: &SolutionMappings, column_context: &Context) -> (E
 }
 
 pub fn max(solution_mappings: &SolutionMappings, column_context: &Context) -> (Expr, RDFNodeType) {
-    let expr_rdf_node_type = rdf_node_type_from_context(column_context, &solution_mappings);
+    let expr_rdf_node_type = rdf_node_type_from_context(column_context, solution_mappings);
     let out_rdf_node_type = if expr_rdf_node_type.is_bool() {
         RDFNodeType::Literal(xsd::UNSIGNED_LONG.into_owned())
     } else {
@@ -139,7 +139,7 @@ pub fn sample(
     solution_mappings: &SolutionMappings,
     column_context: &Context,
 ) -> (Expr, RDFNodeType) {
-    let out_rdf_node_type = rdf_node_type_from_context(column_context, &solution_mappings).clone();
+    let out_rdf_node_type = rdf_node_type_from_context(column_context, solution_mappings).clone();
 
     let out_expr = col(column_context.as_str()).first();
     (out_expr, out_rdf_node_type)

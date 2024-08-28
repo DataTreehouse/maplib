@@ -26,6 +26,12 @@ use oxrdf::{Literal, NamedNode};
 
 pub struct SyntacticSugarRemover {}
 
+impl Default for SyntacticSugarRemover {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SyntacticSugarRemover {
     pub fn new() -> SyntacticSugarRemover {
         SyntacticSugarRemover {}
@@ -39,12 +45,12 @@ impl SyntacticSugarRemover {
                 base_iri,
             } => {
                 let gp = self.remove_sugar_from_graph_pattern(pattern, vec![], &Context::new());
-                let new_query = Query::Select {
+                
+                Query::Select {
                     dataset,
                     pattern: gp.gp.unwrap(),
                     base_iri,
-                };
-                new_query
+                }
             }
             q => q,
         }
@@ -125,14 +131,10 @@ impl SyntacticSugarRemover {
                     ts_tps_in_scope,
                     &context.extension_with(PathEntry::LeftJoinRightSide),
                 );
-                let preprocessed_expression = if let Some(e) = expression {
-                    Some(self.remove_sugar_from_expression(
+                let preprocessed_expression = expression.map(|e| self.remove_sugar_from_expression(
                         e,
                         &context.extension_with(PathEntry::LeftJoinExpression),
-                    ))
-                } else {
-                    None
-                };
+                    ));
                 let mut out = RemoveSugarGraphPatternReturn::from_pattern(GraphPattern::LeftJoin {
                     left: Box::new(left.gp.take().unwrap()),
                     right: Box::new(right.gp.take().unwrap()),
@@ -397,14 +399,14 @@ impl SyntacticSugarRemover {
                 );
                 inner.gp = Some(GraphPattern::Service {
                     inner: Box::new(inner.gp.unwrap()),
-                    name: name,
-                    silent: silent,
+                    name,
+                    silent,
                 });
                 inner
             }
             GraphPattern::DT { dt } => {
-                let ret = dt_to_ret(dt, ts_tps_in_scope, context);
-                ret
+                
+                dt_to_ret(dt, ts_tps_in_scope, context)
             }
             GraphPattern::PValues {
                 bindings_parameter,
@@ -731,30 +733,26 @@ fn dt_to_ret(
     }
     let from_ts_datetime_opt = if let Some(from) = from_ts_datetime_opt {
         Some(from)
-    } else {
-        if let Some(from) = &from {
-            if let Some(to) = &to_ts_datetime_opt {
-                eval_timestamp_expression(from, Some(to))
-            } else {
-                panic!()
-            }
+    } else if let Some(from) = &from {
+        if let Some(to) = &to_ts_datetime_opt {
+            eval_timestamp_expression(from, Some(to))
         } else {
-            None
+            panic!()
         }
+    } else {
+        None
     };
 
     let to_ts_datetime_opt = if let Some(to) = to_ts_datetime_opt {
         Some(to)
-    } else {
-        if let Some(to) = &to {
-            if let Some(from) = &from_ts_datetime_opt {
-                eval_timestamp_expression(to, Some(from))
-            } else {
-                panic!()
-            }
+    } else if let Some(to) = &to {
+        if let Some(from) = &from_ts_datetime_opt {
+            eval_timestamp_expression(to, Some(from))
         } else {
-            None
+            panic!()
         }
+    } else {
+        None
     };
     let mut expr = None;
     if let Some(to) = to_ts_datetime_opt {
@@ -951,8 +949,8 @@ fn eval_timestamp_expression(
         TimestampExpression::Binary(s, op, d) => {
             if let Some(dt) = eval_simple_timestamp_expression(s, from_or_to_expression) {
                 match op {
-                    TimestampBinaryOperator::Plus => Some(dt + d.clone()),
-                    TimestampBinaryOperator::Minus => Some(dt - d.clone()),
+                    TimestampBinaryOperator::Plus => Some(dt + *d),
+                    TimestampBinaryOperator::Minus => Some(dt - *d),
                 }
             } else {
                 None
@@ -969,12 +967,12 @@ fn eval_simple_timestamp_expression(
         SimpleTimestampExpression::Now => Some(Utc::now()),
         SimpleTimestampExpression::From | SimpleTimestampExpression::To => {
             if let Some(from_or_to) = from_or_to_expression {
-                Some(from_or_to.clone())
+                Some(*from_or_to)
             } else {
                 panic!()
             }
         }
-        SimpleTimestampExpression::DateTimeUtc(dt) => Some(dt.clone()),
+        SimpleTimestampExpression::DateTimeUtc(dt) => Some(*dt),
     }
 }
 
@@ -1016,8 +1014,8 @@ impl RemoveSugarGraphPatternReturn {
     }
 
     pub fn projections_from(&mut self, p: &mut RemoveSugarGraphPatternReturn) {
-        self.aggregations.extend(p.aggregations.drain(..));
-        self.vars_to_project.extend(p.vars_to_project.drain(..));
-        self.vars_to_group_by.extend(p.vars_to_group_by.drain(..));
+        self.aggregations.append(&mut p.aggregations);
+        self.vars_to_project.append(&mut p.vars_to_project);
+        self.vars_to_group_by.append(&mut p.vars_to_group_by);
     }
 }

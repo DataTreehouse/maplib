@@ -69,7 +69,8 @@ pub fn string_rdf_literal(dt: NamedNodeRef) -> bool {
 pub fn rdf_literal_to_polars_literal_value(lit: &Literal) -> LiteralValue {
     let datatype = lit.datatype();
     let value = lit.value();
-    let literal_value = if datatype == xsd::STRING {
+    
+    if datatype == xsd::STRING {
         LiteralValue::String(value.to_string())
     } else if datatype == rdf::LANG_STRING {
         panic!("Should never be called with lang string")
@@ -153,8 +154,8 @@ pub fn rdf_literal_to_polars_literal_value(lit: &Literal) -> LiteralValue {
     } else if datatype == xsd::DATE {
         if let Ok(parsed) = NaiveDate::parse_from_str(value, "%Y-%m-%d") {
             let dur = parsed.signed_duration_since(NaiveDate::from_ymd_opt(1970, 1, 1).unwrap());
-            let l = LiteralValue::Date(dur.num_days() as i32);
-            l
+            
+            LiteralValue::Date(dur.num_days() as i32)
         } else {
             warn!("Could not parse xsd:date {}", value);
             LiteralValue::Null
@@ -168,8 +169,7 @@ pub fn rdf_literal_to_polars_literal_value(lit: &Literal) -> LiteralValue {
         }
     } else {
         LiteralValue::String(value.to_string())
-    };
-    literal_value
+    }
 }
 
 pub fn polars_literal_values_to_series(literal_values: Vec<LiteralValue>, name: &str) -> Series {
@@ -304,7 +304,7 @@ pub fn polars_literal_values_to_series(literal_values: Vec<LiteralValue>, name: 
                     })
                     .collect::<Vec<i64>>(),
             )
-            .cast(&DataType::Datetime(t.clone(), tz.clone()))
+            .cast(&DataType::Datetime(*t, tz.clone()))
             .unwrap(),
             LiteralValue::Date(_) => Series::new(
                 name,

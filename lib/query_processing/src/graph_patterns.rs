@@ -366,7 +366,7 @@ pub fn union(
     mappings = cat_mappings;
 
     // Compute the target types
-    let mut target_types = mappings.get(0).unwrap().rdf_node_types.clone();
+    let mut target_types = mappings.first().unwrap().rdf_node_types.clone();
 
     for m in &mappings[1..mappings.len()] {
         let mut updated_target_types = HashMap::new();
@@ -383,7 +383,6 @@ pub fn union(
                             let right_set: HashSet<_> = right_types.iter().collect();
                             let mut union: Vec<_> = left_set
                                 .union(&right_set)
-                                .into_iter()
                                 .map(|x| (*x).clone())
                                 .collect();
                             union.sort();
@@ -394,7 +393,7 @@ pub fn union(
                             let base_right = BaseRDFNodeType::from_rdf_node_type(right_type);
                             left_set.insert(&base_right);
                             let mut new_types: Vec<_> =
-                                left_set.into_iter().map(|x| x.clone()).collect();
+                                left_set.into_iter().cloned().collect();
                             new_types.sort();
                             let new_type = RDFNodeType::MultiType(new_types);
                             updated_target_types.insert(right_col.clone(), new_type);
@@ -406,7 +405,7 @@ pub fn union(
                             let base_left = BaseRDFNodeType::from_rdf_node_type(left_type);
                             right_set.insert(&base_left);
                             let mut new_types: Vec<_> =
-                                right_set.into_iter().map(|x| x.clone()).collect();
+                                right_set.into_iter().cloned().collect();
                             new_types.sort();
                             let new_type = RDFNodeType::MultiType(new_types);
                             updated_target_types.insert(right_col.clone(), new_type);
@@ -439,14 +438,12 @@ pub fn union(
         let mut new_multi = HashMap::new();
         for (c, t) in &rdf_node_types {
             let target_type = target_types.get(c).unwrap();
-            if t != target_type {
-                if !matches!(t, RDFNodeType::MultiType(..)) {
-                    mappings = mappings.with_column(convert_lf_col_to_multitype(c, t));
-                    new_multi.insert(
-                        c.clone(),
-                        RDFNodeType::MultiType(vec![BaseRDFNodeType::from_rdf_node_type(t)]),
-                    );
-                }
+            if t != target_type && !matches!(t, RDFNodeType::MultiType(..)) {
+                mappings = mappings.with_column(convert_lf_col_to_multitype(c, t));
+                new_multi.insert(
+                    c.clone(),
+                    RDFNodeType::MultiType(vec![BaseRDFNodeType::from_rdf_node_type(t)]),
+                );
             }
         }
         rdf_node_types.extend(new_multi);

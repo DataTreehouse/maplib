@@ -11,7 +11,7 @@ use polars::prelude::{
 };
 use rayon::iter::{IndexedParallelIterator, ParallelDrainRange, ParallelIterator};
 use representation::multitype::split_df_multicols;
-use representation::{BaseRDFNodeType, RDFNodeType};
+use representation::RDFNodeType;
 use representation::{OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME};
 use std::cmp::{max, min};
 use std::collections::{HashMap, HashSet};
@@ -29,7 +29,7 @@ impl Mapping {
     pub fn expand(
         &mut self,
         template: &str,
-        mut df: Option<DataFrame>,
+        df: Option<DataFrame>,
         mapping_column_types: Option<HashMap<String, MappingColumnType>>,
         options: ExpandOptions,
     ) -> Result<MappingReport, MappingError> {
@@ -41,19 +41,11 @@ impl Mapping {
         let ExpandOptions {
             unique_subsets: unique_subsets_opt,
         } = options;
-        let unique_subsets = if let Some(unique_subsets) = unique_subsets_opt {
-            unique_subsets
-        } else {
-            vec![]
-        };
+        let unique_subsets = unique_subsets_opt.unwrap_or_default();
         let call_uuid = Uuid::new_v4().to_string();
 
         let mut static_columns = HashMap::new();
-        let mut lf = if let Some(df) = df {
-            Some(df.lazy())
-        } else {
-            None
-        };
+        let mut lf = df.map(|df| df.lazy());
         for p in &target_template.signature.parameter_list {
             if let Some(default) = &p.default_value {
                 if lf.is_none() || !columns.contains_key(p.variable.as_str()) {
@@ -68,11 +60,7 @@ impl Mapping {
                 }
             }
         }
-        df = if let Some(lf) = lf {
-            Some(lf.collect().unwrap())
-        } else {
-            None
-        };
+        df = lf.map(|lf| lf.collect().unwrap());
 
         if self.use_caching && df.is_some() {
             let df = df.unwrap();
@@ -251,16 +239,14 @@ impl Mapping {
             }
             let mut fix_iris = vec![];
             for (coltype, colname) in coltypes_names {
-                if coltype == &RDFNodeType::IRI {
-                    if matches!(df.column(colname).unwrap().dtype(), DataType::String) {
-                        let nonnull = df.column(colname).unwrap().str().unwrap().first_non_null();
-                        if let Some(i) = nonnull {
-                            let first_iri =
-                                df.column(colname).unwrap().str().unwrap().get(i).unwrap();
-                            {
-                                if first_iri.starts_with('<') {
-                                    fix_iris.push(colname);
-                                }
+                if coltype == &RDFNodeType::IRI && matches!(df.column(colname).unwrap().dtype(), DataType::String) {
+                    let nonnull = df.column(colname).unwrap().str().unwrap().first_non_null();
+                    if let Some(i) = nonnull {
+                        let first_iri =
+                            df.column(colname).unwrap().str().unwrap().get(i).unwrap();
+                        {
+                            if first_iri.starts_with('<') {
+                                fix_iris.push(colname);
                             }
                         }
                     }

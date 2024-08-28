@@ -39,16 +39,14 @@ impl Triplestore {
     ) -> Result<(), TriplestoreError> {
         let rdf_format = if let Some(rdf_format) = rdf_format {
             rdf_format
+        } else if path.extension() == Some("ttl".as_ref()) {
+            RdfFormat::Turtle
+        } else if path.extension() == Some("nt".as_ref()) {
+            RdfFormat::NTriples
+        } else if path.extension() == Some("xml".as_ref()) {
+            RdfFormat::RdfXml
         } else {
-            if path.extension() == Some("ttl".as_ref()) {
-                RdfFormat::Turtle
-            } else if path.extension() == Some("nt".as_ref()) {
-                RdfFormat::NTriples
-            } else if path.extension() == Some("xml".as_ref()) {
-                RdfFormat::RdfXml
-            } else {
-                todo!("Have not implemented file format {:?}", path);
-            }
+            todo!("Have not implemented file format {:?}", path);
         };
         let file = File::open(path).map_err(TriplestoreError::ReadTriplesFileError)?;
         let mut opt = MmapOptions::new();

@@ -302,7 +302,7 @@ pub fn create_join_compatible_solution_mappings(
                                     new_left_datatypes.insert(v.clone(), RDFNodeType::None);
                                     new_right_datatypes.insert(v.clone(), RDFNodeType::None);
                                 } else if keep.len() == 1 {
-                                    let t = keep.get(0).unwrap();
+                                    let t = keep.first().unwrap();
                                     left_mappings =
                                         force_convert_multicol_to_single_col(left_mappings, v, t);
                                     right_mappings =
@@ -361,7 +361,7 @@ pub fn create_join_compatible_solution_mappings(
                                     );
                                     new_right_datatypes.insert(v.to_string(), RDFNodeType::None);
                                 } else if right_keep.len() == 1 {
-                                    let t = right_keep.get(0).unwrap();
+                                    let t = right_keep.first().unwrap();
                                     right_mappings =
                                         force_convert_multicol_to_single_col(right_mappings, v, t);
                                     new_right_datatypes.insert(v.to_string(), t.as_rdf_node_type());
@@ -710,7 +710,7 @@ pub fn known_convert_lf_multicol_to_single(
         lf = lf.with_column(
             col(c)
                 .struct_()
-                .field_by_name(&non_multi_type_string(&dt))
+                .field_by_name(&non_multi_type_string(dt))
                 .alias(c),
         )
     }
@@ -733,7 +733,7 @@ pub fn explode_multicols<'a>(
                 exprs.push(
                     col(c)
                         .struct_()
-                        .field_by_name(&inner)
+                        .field_by_name(inner)
                         .alias(&prefixed_inner),
                 );
                 prefixed_inner_cols.push(prefixed_inner);
@@ -796,7 +796,7 @@ pub fn join_workaround(
                     if let Some((_, right_prefixed_inner_columns)) = right_exploded.get(c) {
                         let left_set: HashSet<_> = left_prefixed_inner_columns.iter().collect();
                         let right_set: HashSet<_> = right_prefixed_inner_columns.iter().collect();
-                        left_set.intersection(&right_set).map(|x| col(*x)).collect()
+                        left_set.intersection(&right_set).map(|x| col(x)).collect()
                     } else {
                         vec![]
                     }
@@ -866,14 +866,12 @@ pub fn join_workaround(
         }
         unified_exploded.insert(c, (left_inner_columns, left_prefixed_inner_columns));
     }
-    unified_exploded.extend(right_exploded.into_iter());
+    unified_exploded.extend(right_exploded);
 
     left_mappings = implode_multicolumns(left_mappings, unified_exploded);
 
     for (c, dt) in right_datatypes {
-        if !left_datatypes.contains_key(&c) {
-            left_datatypes.insert(c, dt);
-        }
+        left_datatypes.entry(c).or_insert(dt);
     }
 
     SolutionMappings::new(left_mappings, left_datatypes)
@@ -886,7 +884,7 @@ pub fn unique_workaround(
     stable: bool,
     unique_keep_strategy: UniqueKeepStrategy,
 ) -> LazyFrame {
-    let (mut lf, maps) = explode_multicols(lf, &rdf_node_types);
+    let (mut lf, maps) = explode_multicols(lf, rdf_node_types);
     let unique_set = if let Some(subset) = subset {
         let mut u = vec![];
         for s in subset {
@@ -938,7 +936,7 @@ pub fn coalesce_workaround(mut sm: SolutionMappings, cols: Vec<&str>, c: &str) -
     for c in &cols {
         let current_dt = sm.rdf_node_types.get(*c).unwrap();
         if let RDFNodeType::MultiType(types) = current_dt {
-            basic_type_set.extend(types.iter().map(|x| x.clone()));
+            basic_type_set.extend(types.iter().cloned());
         } else {
             basic_type_set.insert(BaseRDFNodeType::from_rdf_node_type(current_dt));
         }
@@ -949,7 +947,7 @@ pub fn coalesce_workaround(mut sm: SolutionMappings, cols: Vec<&str>, c: &str) -
         let mut exprs = vec![];
         for c in &cols {
             exprs.push(convert_lf_col_to_multitype(
-                *c,
+                c,
                 sm.rdf_node_types.get(*c).unwrap(),
             ))
         }
@@ -957,7 +955,7 @@ pub fn coalesce_workaround(mut sm: SolutionMappings, cols: Vec<&str>, c: &str) -
             .insert(c.to_string(), RDFNodeType::MultiType(basic_types));
         exprs
     } else {
-        let ext = *cols.get(0).unwrap();
+        let ext = *cols.first().unwrap();
         sm.rdf_node_types
             .insert(c.to_string(), sm.rdf_node_types.get(ext).unwrap().clone());
         cols.iter().map(|x| col(x)).collect()

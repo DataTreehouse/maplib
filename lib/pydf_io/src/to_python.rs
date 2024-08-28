@@ -51,7 +51,7 @@ pub(crate) fn to_py_rb(
     let mut arrays = Vec::with_capacity(rb.len());
 
     for array in rb.columns() {
-        let array_object = to_py_array(array.clone(), py, &pyarrow)?;
+        let array_object = to_py_array(array.clone(), py, pyarrow)?;
         arrays.push(array_object);
     }
 

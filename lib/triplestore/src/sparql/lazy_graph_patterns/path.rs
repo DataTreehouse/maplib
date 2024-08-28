@@ -94,7 +94,7 @@ impl Triplestore {
         let out_dt_obj;
 
         let mut df_creator = U32DataFrameCreator::new();
-        df_creator.gather_namednode_dfs(ppe, &self)?;
+        df_creator.gather_namednode_dfs(ppe, self)?;
         let (lookup_df, lookup_dtypes, namednode_dfs) = df_creator.create_u32_dfs()?;
         let max_index: Option<u32> = lookup_df.column(LOOKUP_COLUMN).unwrap().max().unwrap();
 
@@ -319,7 +319,7 @@ fn create_graph_pattern(
             create_graph_pattern(r, object, subject, intermediaries)
         }
         PropertyPathExpression::Sequence(l, r) => {
-            let intermediary = format!("v{}", uuid::Uuid::new_v4().to_string());
+            let intermediary = format!("v{}", uuid::Uuid::new_v4());
             let intermediary_tp = TermPattern::Variable(Variable::new_unchecked(&intermediary));
             intermediaries.push(intermediary);
             GraphPattern::Join {
@@ -482,7 +482,7 @@ fn sparse_path(
 ) -> Option<SparsePathReturn> {
     match ppe {
         PropertyPathExpression::NamedNode(nn) => {
-            if let Some(df) = namednode_map.get(&nn) {
+            if let Some(df) = namednode_map.get(nn) {
                 let sparmat = to_csr(df, max_index);
                 Some(SparsePathReturn { sparmat })
             } else {
@@ -606,7 +606,7 @@ impl U32DataFrameCreator {
     > {
         // TODO! Possible to constrain lookup to only nodes that may occur as subj/obj in path expr.
         // Can reduce size of a join
-        let mut nns: Vec<_> = self.named_nodes.keys().map(|x| x.clone()).collect();
+        let mut nns: Vec<_> = self.named_nodes.keys().cloned().collect();
         nns.sort();
 
         let mut soln_mappings = vec![];

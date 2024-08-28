@@ -42,7 +42,7 @@ impl From<PyRepresentationError> for PyErr {
                 BlankNodeIdParseErrorException::new_err(format!("{}", err))
             }
             PyRepresentationError::BadArgumentError(err) => {
-                BadArgumentErrorException::new_err(format!("{}", err))
+                BadArgumentErrorException::new_err(err.to_string())
             }
             PyRepresentationError::VariableNameParseError(err) => {
                 VariableNameParseErrorException::new_err(format!("{}", err))
@@ -136,7 +136,8 @@ impl PyRDFType {
     }
 
     #[staticmethod]
-    fn Literal<'py>(iri: Bound<'py, PyAny>) -> PyResult<PyRDFType> {
+    #[pyo3(name = "Literal")]
+    fn literal(iri: Bound<'_, PyAny>) -> PyResult<PyRDFType> {
         if let Ok(pyiri) = iri.extract::<PyIRI>() {
             Ok(PyRDFType {
                 flat: Some(RDFNodeType::Literal(pyiri.iri)),
@@ -145,7 +146,7 @@ impl PyRDFType {
         } else if let Ok(s) = iri.extract::<String>() {
             Ok(PyRDFType {
                 flat: Some(RDFNodeType::Literal(
-                    NamedNode::new(s).map_err(|x| PyRepresentationError::IriParseError(x))?,
+                    NamedNode::new(s).map_err(PyRepresentationError::IriParseError)?,
                 )),
                 nested: None,
             })
@@ -157,7 +158,8 @@ impl PyRDFType {
         }
     }
     #[staticmethod]
-    fn IRI() -> PyRDFType {
+    #[pyo3(name = "IRI")]
+    fn iri() -> PyRDFType {
         PyRDFType {
             flat: Some(RDFNodeType::IRI),
             nested: None,
@@ -165,7 +167,8 @@ impl PyRDFType {
     }
 
     #[staticmethod]
-    fn BlankNode() -> PyRDFType {
+    #[pyo3(name = "BlankNode")]
+    fn blank_node() -> PyRDFType {
         PyRDFType {
             flat: Some(RDFNodeType::BlankNode),
             nested: None,
@@ -173,7 +176,8 @@ impl PyRDFType {
     }
 
     #[staticmethod]
-    fn Unknown() -> PyRDFType {
+    #[pyo3(name = "Unknown")]
+    fn unknown() -> PyRDFType {
         PyRDFType {
             flat: Some(RDFNodeType::None),
             nested: None,
@@ -233,7 +237,7 @@ pub struct PyIRI {
 impl PyIRI {
     #[new]
     pub fn new(iri: String) -> PyResult<Self> {
-        let iri = NamedNode::new(iri).map_err(|x| PyRepresentationError::IriParseError(x))?;
+        let iri = NamedNode::new(iri).map_err(PyRepresentationError::IriParseError)?;
         Ok(PyIRI { iri })
     }
 
@@ -266,7 +270,7 @@ pub struct PyPrefix {
 impl PyPrefix {
     #[new]
     pub fn new(prefix: String, iri: String) -> PyResult<Self> {
-        let iri = NamedNode::new(iri).map_err(|x| PyRepresentationError::IriParseError(x))?;
+        let iri = NamedNode::new(iri).map_err(PyRepresentationError::IriParseError)?;
         Ok(PyPrefix { prefix, iri })
     }
 
@@ -286,7 +290,7 @@ impl PyVariable {
     #[new]
     pub fn new(name: String) -> PyResult<Self> {
         let variable =
-            Variable::new(name).map_err(|e| PyRepresentationError::VariableNameParseError(e))?;
+            Variable::new(name).map_err(PyRepresentationError::VariableNameParseError)?;
         Ok(PyVariable { variable })
     }
 
@@ -327,7 +331,7 @@ impl PyLiteral {
         PyLiteral { literal }
     }
 
-    pub fn to_native<'py>(&self, py: Python<'py>) -> PyResult<PyObject> {
+    pub fn to_native(&self, py: Python<'_>) -> PyResult<PyObject> {
         Ok(match rdf_literal_to_polars_literal_value(&self.literal) {
             LiteralValue::Boolean(b) => b.into_py(py),
             LiteralValue::String(s) => s.into_py(py),
@@ -384,13 +388,13 @@ impl PyBlankNode {
     fn new(name: &str) -> PyResult<Self> {
         Ok(PyBlankNode {
             inner: BlankNode::new(name)
-                .map_err(|x| PyRepresentationError::BlankNodeIdParseError(x))?,
+                .map_err(PyRepresentationError::BlankNodeIdParseError)?,
         })
     }
 
     #[getter]
     fn name(&self) -> &str {
-        &self.inner.as_str()
+        self.inner.as_str()
     }
 }
 

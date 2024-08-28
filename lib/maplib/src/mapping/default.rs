@@ -12,7 +12,6 @@ use templates::constants::{
 
 use oxrdf::{NamedNode, Variable};
 use polars::prelude::{col, DataFrame, DataType, IntoLazy};
-use representation::BaseRDFNodeType;
 use uuid::Uuid;
 
 impl Mapping {
