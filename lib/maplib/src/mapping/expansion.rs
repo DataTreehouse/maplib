@@ -167,13 +167,13 @@ impl Mapping {
                             .template_dataset
                             .get(instance.template_name.as_str())
                             .unwrap();
-                        if let Some((
-                            instance_df,
-                            instance_dynamic_columns,
-                            instance_static_columns,
-                            new_unique_subsets,
-                            updated_blank_node_counter,
-                        )) = create_remapped(
+                        if let Some(RemapResult {
+                            df: instance_df,
+                            dynamic_columns: instance_dynamic_columns,
+                            constant_columns: instance_constant_columns,
+                            unique_subsets: new_unique_subsets,
+                            blank_node_counter,
+                        }) = create_remapped(
                             self.blank_node_counter,
                             layer,
                             pattern_num,
@@ -189,12 +189,12 @@ impl Mapping {
                             Ok::<_, MappingError>(Some(self._expand(
                                 layer + 1,
                                 i,
-                                updated_blank_node_counter,
+                                blank_node_counter,
                                 instance.template_name.as_str(),
                                 Some(instance_df),
                                 &target_template.signature,
                                 instance_dynamic_columns,
-                                instance_static_columns,
+                                instance_constant_columns,
                                 new_unique_subsets,
                             )?))
                         } else {
@@ -473,16 +473,7 @@ fn create_remapped(
     constant_columns: &HashMap<String, StaticColumn>,
     unique_subsets: &Vec<Vec<String>>,
     input_df_height: usize,
-) -> Result<
-    Option<(
-        DataFrame,
-        HashMap<String, MappingColumnType>,
-        HashMap<String, StaticColumn>,
-        Vec<Vec<String>>,
-        usize,
-    )>,
-    MappingError,
-> {
+) -> Result<Option<RemapResult>, MappingError> {
     let now = Instant::now();
     let mut new_dynamic_columns = HashMap::new();
     let mut new_constant_columns = HashMap::new();
@@ -661,13 +652,13 @@ fn create_remapped(
         "Creating remapped took {} seconds",
         now.elapsed().as_secs_f32()
     );
-    Ok(Some((
-        lf.collect().unwrap(),
-        new_dynamic_columns,
-        new_constant_columns,
-        new_unique_subsets,
-        out_blank_node_counter,
-    )))
+    Ok(Some(RemapResult {
+        df: lf.collect().unwrap(),
+        dynamic_columns: new_dynamic_columns,
+        constant_columns: new_constant_columns,
+        unique_subsets: new_unique_subsets,
+        blank_node_counter: out_blank_node_counter,
+    }))
 }
 
 fn add_default_value(
@@ -687,4 +678,12 @@ fn add_default_value(
 //From: https://users.rust-lang.org/t/flatten-a-vec-vec-t-to-a-vec-t/24526/3
 fn flatten<T>(nested: Vec<Vec<T>>) -> Vec<T> {
     nested.into_iter().flatten().collect()
+}
+
+struct RemapResult {
+    df: DataFrame,
+    dynamic_columns: HashMap<String, MappingColumnType>,
+    constant_columns: HashMap<String, StaticColumn>,
+    unique_subsets: Vec<Vec<String>>,
+    blank_node_counter: usize,
 }

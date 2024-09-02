@@ -257,7 +257,7 @@ impl PyInstance {
             new_arguments.push(PyArgument::new(&a, None)?.into_inner());
         }
         let instance = Instance {
-            list_expander: list_expander,
+            list_expander,
             template_name: iri.iri,
             prefixed_template_name: None,
             argument_list: new_arguments,

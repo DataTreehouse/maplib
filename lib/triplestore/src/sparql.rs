@@ -93,13 +93,17 @@ impl Triplestore {
                     rdf_node_types,
                 } = self.lazy_graph_pattern(pattern, None, &context, parameters)?;
                 let df = mappings.collect().unwrap();
-                let mut dfs = vec![];
+                let mut solutions = vec![];
                 for t in template {
-                    if let Some(df_and_types) = triple_to_df(&df, &rdf_node_types, t)? {
-                        dfs.push(df_and_types);
+                    if let Some(EagerSolutionMappings {
+                        mappings,
+                        rdf_node_types,
+                    }) = triple_to_df(&df, &rdf_node_types, t)?
+                    {
+                        solutions.push((mappings, rdf_node_types));
                     }
                 }
-                Ok(QueryResult::Construct(dfs))
+                Ok(QueryResult::Construct(solutions))
             }
             _ => Err(SparqlError::QueryTypeNotSupported),
         }
@@ -180,7 +184,7 @@ fn triple_to_df(
     df: &DataFrame,
     rdf_node_types: &HashMap<String, RDFNodeType>,
     t: &TriplePattern,
-) -> Result<Option<(DataFrame, HashMap<String, RDFNodeType>)>, SparqlError> {
+) -> Result<Option<EagerSolutionMappings>, SparqlError> {
     let mut triple_types = HashMap::new();
     let (subj_expr, subj_dt) =
         term_pattern_expression(rdf_node_types, &t.subject, SUBJECT_COL_NAME);
@@ -204,7 +208,7 @@ fn triple_to_df(
 
     let df = lf.collect().unwrap();
     if df.height() > 0 {
-        Ok(Some((df, triple_types)))
+        Ok(Some(EagerSolutionMappings::new(df, triple_types)))
     } else {
         Ok(None)
     }

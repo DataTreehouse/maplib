@@ -12,6 +12,9 @@ members = [
     "py_maplib",
 ]
 
+[workspace.package]
+rust-version = "1.81.0"
+
 [workspace.dependencies]
 pyo3 = {version = "0.22.1", features = ["py-clone"] }
 polars = { version = "0.41.3", features = ["nightly", "performant", "cse"] }

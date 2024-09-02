@@ -8,6 +8,7 @@ use oxrdf::{
     BlankNode, BlankNodeIdParseError, IriParseError, Literal, NamedNode, Variable,
     VariableNameParseError,
 };
+use oxsdatatypes::Duration;
 use polars::datatypes::TimeUnit;
 use polars::prelude::LiteralValue;
 use pyo3::basic::CompareOp;
@@ -20,7 +21,6 @@ use pyo3::{
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
-use oxsdatatypes::Duration;
 use thiserror::*;
 
 #[derive(Error, Debug)]
@@ -340,7 +340,7 @@ impl PyLiteral {
         self.literal.value()
     }
 
-    pub fn data_type(&self) -> PyResult<PyIRI> {
+    pub fn datatype(&self) -> PyResult<PyIRI> {
         PyIRI::new(self.literal.datatype().as_str().to_string())
     }
 
@@ -351,7 +351,7 @@ impl PyLiteral {
     pub fn to_native(&self, py: Python<'_>) -> PyResult<PyObject> {
         if self.literal.datatype() == xsd::DURATION {
             let duration = Duration::from_str(self.literal.value()).unwrap();
-            return Ok(PyXSDDuration{duration}.into_py(py))
+            return Ok(PyXSDDuration { duration }.into_py(py));
         }
 
         Ok(match rdf_literal_to_polars_literal_value(&self.literal) {
@@ -367,7 +367,7 @@ impl PyLiteral {
             LiteralValue::Int64(i) => i.into_py(py),
             LiteralValue::Float32(f) => f.into_py(py),
             LiteralValue::Float64(f) => f.into_py(py),
-            LiteralValue::Date(d) => {
+            LiteralValue::Date(_d) => {
                 todo!()
             }
             LiteralValue::DateTime(i, tu, tz) => {
@@ -398,9 +398,9 @@ impl PyLiteral {
 }
 
 #[pyclass]
-#[pyo3(name="XSDDuration")]
+#[pyo3(name = "XSDDuration")]
 pub struct PyXSDDuration {
-    pub duration:Duration
+    pub duration: Duration,
 }
 
 #[pymethods]
@@ -425,7 +425,7 @@ impl PyXSDDuration {
         self.duration.minutes()
     }
 
-    fn seconds(&self) -> (i64,i64) {
+    fn seconds(&self) -> (i64, i64) {
         let duration_seconds_string = self.duration.seconds().to_string();
         let mut split_dot = duration_seconds_string.split(".");
         let whole = split_dot.next().unwrap().parse::<i64>().unwrap();
