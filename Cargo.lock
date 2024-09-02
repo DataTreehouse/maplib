@@ -1226,7 +1226,7 @@ source = "git+https://github.com/magbak/oxigraph.git?rev=b13df973ed2785de2ac4106
 dependencies = [
  "oxilangtag",
  "oxiri",
- "oxsdatatypes",
+ "oxsdatatypes 0.2.0-alpha.2",
  "rand",
  "thiserror",
 ]
@@ -1258,6 +1258,15 @@ dependencies = [
 name = "oxsdatatypes"
 version = "0.2.0-alpha.2"
 source = "git+https://github.com/magbak/oxigraph.git?rev=b13df973ed2785de2ac41066ca4b62d88d3f5d40#b13df973ed2785de2ac41066ca4b62d88d3f5d40"
+dependencies = [
+ "thiserror",
+]
+
+[[package]]
+name = "oxsdatatypes"
+version = "0.2.0-rc.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e271a6a4c3d1976adbb0c4be135fc80d2059f20f8263e22d8330518d794b6390"
 dependencies = [
  "thiserror",
 ]
@@ -2204,6 +2213,7 @@ dependencies = [
  "chrono-tz 0.9.0",
  "log",
  "oxrdf",
+ "oxsdatatypes 0.2.0-rc.1",
  "polars",
  "pyo3",
  "serde",

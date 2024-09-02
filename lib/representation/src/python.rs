@@ -19,6 +19,8 @@ use pyo3::{
 };
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
+use std::str::FromStr;
+use oxsdatatypes::Duration;
 use thiserror::*;
 
 #[derive(Error, Debug)]
@@ -347,6 +349,11 @@ impl PyLiteral {
     }
 
     pub fn to_native(&self, py: Python<'_>) -> PyResult<PyObject> {
+        if self.literal.datatype() == xsd::DURATION {
+            let duration = Duration::from_str(self.literal.value()).unwrap();
+            return Ok(PyXSDDuration{duration}.into_py(py))
+        }
+
         Ok(match rdf_literal_to_polars_literal_value(&self.literal) {
             LiteralValue::Boolean(b) => b.into_py(py),
             LiteralValue::String(s) => s.into_py(py),
@@ -387,6 +394,47 @@ impl PyLiteral {
 impl PyLiteral {
     pub fn from_literal(literal: Literal) -> PyLiteral {
         PyLiteral { literal }
+    }
+}
+
+#[pyclass]
+#[pyo3(name="XSDDuration")]
+pub struct PyXSDDuration {
+    pub duration:Duration
+}
+
+#[pymethods]
+impl PyXSDDuration {
+    fn years(&self) -> i64 {
+        self.duration.years()
+    }
+
+    fn months(&self) -> i64 {
+        self.duration.months()
+    }
+
+    fn days(&self) -> i64 {
+        self.duration.days()
+    }
+
+    fn hours(&self) -> i64 {
+        self.duration.hours()
+    }
+
+    fn minutes(&self) -> i64 {
+        self.duration.minutes()
+    }
+
+    fn seconds(&self) -> (i64,i64) {
+        let duration_seconds_string = self.duration.seconds().to_string();
+        let mut split_dot = duration_seconds_string.split(".");
+        let whole = split_dot.next().unwrap().parse::<i64>().unwrap();
+        let fraction = if let Some(second) = split_dot.next() {
+            second.parse::<i64>().unwrap()
+        } else {
+            0
+        };
+        (whole, fraction)
     }
 }
 
