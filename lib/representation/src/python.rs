@@ -3,6 +3,7 @@ use crate::rdf_to_polars::rdf_literal_to_polars_literal_value;
 use crate::{BaseRDFNodeType, RDFNodeType};
 use chrono::{NaiveDateTime, TimeDelta, TimeZone};
 use chrono_tz::Tz;
+use oxrdf::vocab::xsd;
 use oxrdf::{
     BlankNode, BlankNodeIdParseError, IriParseError, Literal, NamedNode, Variable,
     VariableNameParseError,
@@ -331,6 +332,18 @@ impl PyLiteral {
             Literal::new_simple_literal(value)
         };
         PyLiteral { literal }
+    }
+
+    pub fn value(&self) -> &str {
+        self.literal.value()
+    }
+
+    pub fn data_type(&self) -> PyResult<PyIRI> {
+        PyIRI::new(self.literal.datatype().as_str().to_string())
+    }
+
+    pub fn language(&self) -> Option<&str> {
+        self.literal.language()
     }
 
     pub fn to_native(&self, py: Python<'_>) -> PyResult<PyObject> {
