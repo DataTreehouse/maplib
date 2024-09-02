@@ -336,14 +336,17 @@ impl PyLiteral {
         PyLiteral { literal }
     }
 
+    #[getter]
     pub fn value(&self) -> &str {
         self.literal.value()
     }
 
+    #[getter]
     pub fn datatype(&self) -> PyResult<PyIRI> {
         PyIRI::new(self.literal.datatype().as_str().to_string())
     }
 
+    #[getter]
     pub fn language(&self) -> Option<&str> {
         self.literal.language()
     }
@@ -405,26 +408,32 @@ pub struct PyXSDDuration {
 
 #[pymethods]
 impl PyXSDDuration {
+    #[getter]
     fn years(&self) -> i64 {
         self.duration.years()
     }
 
+    #[getter]
     fn months(&self) -> i64 {
         self.duration.months()
     }
 
+    #[getter]
     fn days(&self) -> i64 {
         self.duration.days()
     }
 
+    #[getter]
     fn hours(&self) -> i64 {
         self.duration.hours()
     }
 
+    #[getter]
     fn minutes(&self) -> i64 {
         self.duration.minutes()
     }
 
+    #[getter]
     fn seconds(&self) -> (i64, i64) {
         let duration_seconds_string = self.duration.seconds().to_string();
         let mut split_dot = duration_seconds_string.split(".");
