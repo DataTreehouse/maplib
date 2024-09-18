@@ -314,7 +314,7 @@ class Mapping:
 
     def __init__(
         self, documents: Union[str, List[str]] = None, caching_folder: str = None
-    ) -> Mapping: ...
+    ) -> "Mapping": ...
     def add_template(self, template: "Template"):
         """
         Add a template to the mapping. Overwrites any existing template with the same IRI.
@@ -594,7 +594,7 @@ class Mapping:
         :return: None
         """
 
-    def detach_sprout(self) -> Mapping:
+    def detach_sprout(self) -> "Mapping":
         """
         Detaches and returns the sprout from the mapping.
 
