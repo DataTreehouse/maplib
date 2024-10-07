@@ -88,14 +88,14 @@ class Literal:
     """
 
     value: str
-    data_type: Optional[IRI]
+    datatype: Optional[IRI]
     language: Optional[str]
 
-    def __init__(self, value: str, data_type: IRI = None, language: str = None):
+    def __init__(self, value: str, datatype: IRI = None, language: str = None):
         """
         Create a new RDF Literal
         :param value: The lexical representation of the value.
-        :param data_type: The data type of the value (an IRI).
+        :param datatype: The data type of the value (an IRI).
         :param language: The language tag of the value.
         """
 
@@ -314,7 +314,7 @@ class Mapping:
 
     def __init__(
         self, documents: Union[str, List[str]] = None, caching_folder: str = None
-    ) -> Mapping: ...
+    ) -> "Mapping": ...
     def add_template(self, template: "Template"):
         """
         Add a template to the mapping. Overwrites any existing template with the same IRI.
@@ -594,7 +594,7 @@ class Mapping:
         :return: None
         """
 
-    def detach_sprout(self) -> Mapping:
+    def detach_sprout(self) -> "Mapping":
         """
         Detaches and returns the sprout from the mapping.
 

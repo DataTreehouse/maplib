@@ -52,7 +52,6 @@ use representation::python::{
     PyBlankNode, PyIRI, PyLiteral, PyPrefix, PyRDFType, PySolutionMappings, PyVariable,
 };
 use representation::solution_mapping::EagerSolutionMappings;
-use representation::RDFNodeType;
 
 #[cfg(not(target_os = "linux"))]
 use mimalloc::MiMalloc;
@@ -88,7 +87,7 @@ pub struct ExpandOptions {
 }
 
 impl ExpandOptions {
-    fn to_rust_expand_options(self) -> RustExpandOptions {
+    fn into_rust_expand_options(self) -> RustExpandOptions {
         RustExpandOptions {
             unique_subsets: self.unique_subsets,
         }
@@ -189,20 +188,22 @@ impl PyMapping {
             .into());
         };
 
-        let unique_subsets = if let Some(unique_subset) = unique_subset {
-            Some(vec![unique_subset.into_iter().collect()])
-        } else {
-            None
-        };
+        let unique_subsets =
+            unique_subset.map(|unique_subset| vec![unique_subset.into_iter().collect()]);
         let options = ExpandOptions { unique_subsets };
 
         if let Some(df) = df {
             if df.getattr("height")?.gt(0).unwrap() {
-                let df = polars_df_to_rust_df(&df)?;
+                let df = polars_df_to_rust_df(df)?;
 
                 let _report = self
                     .inner
-                    .expand(&template, Some(df), None, options.to_rust_expand_options())
+                    .expand(
+                        &template,
+                        Some(df),
+                        None,
+                        options.into_rust_expand_options(),
+                    )
                     .map_err(MaplibError::from)
                     .map_err(PyMaplibError::from)?;
             } else {
@@ -211,7 +212,7 @@ impl PyMapping {
         } else {
             let _report = self
                 .inner
-                .expand(&template, None, None, options.to_rust_expand_options())
+                .expand(&template, None, None, options.into_rust_expand_options())
                 .map_err(MaplibError::from)
                 .map_err(PyMaplibError::from)?;
         }
@@ -226,7 +227,7 @@ impl PyMapping {
         template_prefix: Option<String>,
         predicate_uri_prefix: Option<String>,
     ) -> PyResult<String> {
-        let df = polars_df_to_rust_df(&df)?;
+        let df = polars_df_to_rust_df(df)?;
         let options = ExpandOptions {
             unique_subsets: Some(vec![vec![primary_key_column.clone()]]),
         };
@@ -239,11 +240,11 @@ impl PyMapping {
                 vec![],
                 template_prefix,
                 predicate_uri_prefix,
-                options.to_rust_expand_options(),
+                options.into_rust_expand_options(),
             )
             .map_err(MaplibError::from)
             .map_err(PyMaplibError::from)?;
-        return Ok(format!("{}", tmpl));
+        Ok(format!("{}", tmpl))
     }
 
     fn query(
@@ -359,6 +360,7 @@ impl PyMapping {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn read_triples(
         &mut self,
         file_path: &Bound<'_, PyAny>,
@@ -374,11 +376,7 @@ impl PyMapping {
         let graph = parse_optional_graph(graph)?;
         let file_path = file_path.str()?.to_string();
         let path = Path::new(&file_path);
-        let format = if let Some(format) = format {
-            Some(resolve_format(&format))
-        } else {
-            None
-        };
+        let format = format.map(|format| resolve_format(&format));
         self.inner
             .read_triples(
                 path,
@@ -391,10 +389,11 @@ impl PyMapping {
                 graph,
                 replace_graph.unwrap_or(false),
             )
-            .map_err(|x| PyMaplibError::from(x))?;
+            .map_err(PyMaplibError::from)?;
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn read_triples_string(
         &mut self,
         s: &str,
@@ -408,7 +407,7 @@ impl PyMapping {
         replace_graph: Option<bool>,
     ) -> PyResult<()> {
         let graph = parse_optional_graph(graph)?;
-        let format = resolve_format(&format);
+        let format = resolve_format(format);
         self.inner
             .read_triples_string(
                 s,
@@ -421,7 +420,7 @@ impl PyMapping {
                 graph,
                 replace_graph.unwrap_or(false),
             )
-            .map_err(|x| PyMaplibError::from(x))?;
+            .map_err(PyMaplibError::from)?;
         Ok(())
     }
 
@@ -455,7 +454,7 @@ impl PyMapping {
         let graph = parse_optional_graph(graph)?;
         self.inner
             .write_native_parquet(&folder_path, graph)
-            .map_err(|x| PyMaplibError::MappingError(x))?;
+            .map_err(PyMaplibError::MappingError)?;
         Ok(())
     }
 }
@@ -506,6 +505,9 @@ fn query_to_result(
         }
     }
 }
+
+//Allowing complex type as it is not used anywhere else.
+#[allow(clippy::type_complexity)]
 fn map_parameters(
     parameters: Option<HashMap<String, (Bound<'_, PyAny>, HashMap<String, PyRDFType>)>>,
 ) -> PyResult<Option<HashMap<String, EagerSolutionMappings>>> {

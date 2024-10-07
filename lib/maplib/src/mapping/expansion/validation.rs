@@ -119,7 +119,7 @@ fn infer_validate_mapping_column_type_from_ptype(
     match ptype {
         PType::None => {
             let series_inferred_rdf_node_type = polars_type_to_literal_type(datatype)
-                .map_err(|x| MappingError::DatatypeInferenceError(x))?;
+                .map_err(MappingError::DatatypeInferenceError)?;
             Ok(MappingColumnType::Flat(series_inferred_rdf_node_type))
         }
         PType::Basic(nn) => {
@@ -151,23 +151,21 @@ fn infer_validate_mapping_column_type_from_ptype(
                 //literal
                 if matches!(nn.as_ref(), rdfs::LITERAL | rdfs::RESOURCE) {
                     let series_inferred_rdf_node_type = polars_type_to_literal_type(datatype)
-                        .map_err(|x| MappingError::DatatypeInferenceError(x))?;
+                        .map_err(MappingError::DatatypeInferenceError)?;
                     Ok(MappingColumnType::Flat(series_inferred_rdf_node_type))
                 } else {
                     let ptype_rdf_node_type = BaseRDFNodeType::Literal(nn.clone());
                     let ptype_dt = ptype_rdf_node_type.polars_data_type();
-                    if ptype_dt.is_string() && (datatype.is_string() || datatype.is_categorical()) {
-                        Ok(MappingColumnType::Flat(
-                            ptype_rdf_node_type.as_rdf_node_type(),
-                        ))
-                    } else if &ptype_dt == datatype {
+                    if ptype_dt.is_string() && (datatype.is_string() || datatype.is_categorical())
+                        || &ptype_dt == datatype
+                    {
                         Ok(MappingColumnType::Flat(
                             ptype_rdf_node_type.as_rdf_node_type(),
                         ))
                     } else {
                         let series_inferred_rdf_node_type =
                             polars_type_to_literal_type(datatype)
-                                .map_err(|x| MappingError::DatatypeInferenceError(x))?;
+                                .map_err(MappingError::DatatypeInferenceError)?;
                         if let RDFNodeType::Literal(inferred_nn) = &series_inferred_rdf_node_type {
                             if is_literal_subtype(inferred_nn, nn) {
                                 Ok(MappingColumnType::Flat(series_inferred_rdf_node_type))
@@ -299,8 +297,8 @@ pub fn polars_datatype_to_mapping_column_datatype(
             polars_datatype_to_mapping_column_datatype(dt)?,
         )))
     } else {
-        let dt = polars_type_to_literal_type(datatype)
-            .map_err(|x| MappingError::DatatypeInferenceError(x))?;
+        let dt =
+            polars_type_to_literal_type(datatype).map_err(MappingError::DatatypeInferenceError)?;
         Ok(MappingColumnType::Flat(dt))
     }
 }

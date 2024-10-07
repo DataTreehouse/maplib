@@ -25,7 +25,7 @@ pub fn query_select(query: &str, triplestore: &Triplestore, deduplicate: bool) -
 
 pub fn get_seven_query_solutions(
     query_solution: Vec<Option<Term>>,
-    variables: &Vec<Variable>,
+    variables: &[Variable],
     first: &str,
     second: &str,
     third: &str,
@@ -73,7 +73,7 @@ pub fn get_seven_query_solutions(
 
 pub fn get_four_query_solutions(
     query_solution: Vec<Option<Term>>,
-    variables: &Vec<Variable>,
+    variables: &[Variable],
     first: &str,
     second: &str,
     third: &str,
@@ -101,7 +101,7 @@ pub fn get_four_query_solutions(
 
 pub fn get_three_query_solutions(
     query_solution: Vec<Option<Term>>,
-    variables: &Vec<Variable>,
+    variables: &[Variable],
     first: &str,
     second: &str,
     third: &str,
@@ -125,7 +125,7 @@ pub fn get_three_query_solutions(
 
 pub fn get_two_query_solutions(
     query_solution: Vec<Option<Term>>,
-    variables: &Vec<Variable>,
+    variables: &[Variable],
     first: &str,
     second: &str,
 ) -> (Option<Term>, Option<Term>) {

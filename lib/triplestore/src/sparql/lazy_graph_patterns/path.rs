@@ -94,13 +94,13 @@ impl Triplestore {
         let out_dt_obj;
 
         let mut df_creator = U32DataFrameCreator::new();
-        df_creator.gather_namednode_dfs(ppe, &self)?;
+        df_creator.gather_namednode_dfs(ppe, self)?;
         let (lookup_df, lookup_dtypes, namednode_dfs) = df_creator.create_u32_dfs()?;
         let max_index: Option<u32> = lookup_df.column(LOOKUP_COLUMN).unwrap().max().unwrap();
 
         if let Some(max_index) = max_index {
             if let Some(SparsePathReturn { sparmat }) =
-                sparse_path(ppe, &namednode_dfs, max_index as usize, false)
+                sparse_path(ppe, &namednode_dfs, max_index as usize)
             {
                 let mut subject_vec = vec![];
                 let mut object_vec = vec![];
@@ -319,7 +319,7 @@ fn create_graph_pattern(
             create_graph_pattern(r, object, subject, intermediaries)
         }
         PropertyPathExpression::Sequence(l, r) => {
-            let intermediary = format!("v{}", uuid::Uuid::new_v4().to_string());
+            let intermediary = format!("v{}", uuid::Uuid::new_v4());
             let intermediary_tp = TermPattern::Variable(Variable::new_unchecked(&intermediary));
             intermediaries.push(intermediary);
             GraphPattern::Join {
@@ -478,11 +478,10 @@ fn sparse_path(
     ppe: &PropertyPathExpression,
     namednode_map: &HashMap<NamedNode, DataFrame>,
     max_index: usize,
-    reflexive: bool,
 ) -> Option<SparsePathReturn> {
     match ppe {
         PropertyPathExpression::NamedNode(nn) => {
-            if let Some(df) = namednode_map.get(&nn) {
+            if let Some(df) = namednode_map.get(nn) {
                 let sparmat = to_csr(df, max_index);
                 Some(SparsePathReturn { sparmat })
             } else {
@@ -490,8 +489,7 @@ fn sparse_path(
             }
         }
         PropertyPathExpression::Reverse(inner) => {
-            if let Some(SparsePathReturn { sparmat }) =
-                sparse_path(inner, namednode_map, max_index, reflexive)
+            if let Some(SparsePathReturn { sparmat }) = sparse_path(inner, namednode_map, max_index)
             {
                 Some(SparsePathReturn {
                     sparmat: sparmat.transpose_into(),
@@ -501,8 +499,8 @@ fn sparse_path(
             }
         }
         PropertyPathExpression::Sequence(left, right) => {
-            let res_left = sparse_path(left, namednode_map, max_index, false);
-            let res_right = sparse_path(right, namednode_map, max_index, false);
+            let res_left = sparse_path(left, namednode_map, max_index);
+            let res_right = sparse_path(right, namednode_map, max_index);
             if let Some(SparsePathReturn {
                 sparmat: sparmat_left,
             }) = res_left
@@ -521,8 +519,8 @@ fn sparse_path(
             }
         }
         PropertyPathExpression::Alternative(left, right) => {
-            let res_left = sparse_path(left, namednode_map, max_index, reflexive);
-            let res_right = sparse_path(right, namednode_map, max_index, reflexive);
+            let res_left = sparse_path(left, namednode_map, max_index);
+            let res_right = sparse_path(right, namednode_map, max_index);
             if let Some(SparsePathReturn {
                 sparmat: sparmat_left,
             }) = res_left
@@ -547,7 +545,7 @@ fn sparse_path(
         PropertyPathExpression::ZeroOrMore(inner) => {
             if let Some(SparsePathReturn {
                 sparmat: sparmat_inner,
-            }) = sparse_path(inner, namednode_map, max_index, true)
+            }) = sparse_path(inner, namednode_map, max_index)
             {
                 let sparmat = zero_or_more(sparmat_inner);
                 Some(SparsePathReturn { sparmat })
@@ -558,7 +556,7 @@ fn sparse_path(
         PropertyPathExpression::OneOrMore(inner) => {
             if let Some(SparsePathReturn {
                 sparmat: sparmat_inner,
-            }) = sparse_path(inner, namednode_map, max_index, false)
+            }) = sparse_path(inner, namednode_map, max_index)
             {
                 let sparmat = one_or_more(sparmat_inner);
                 Some(SparsePathReturn { sparmat })
@@ -569,7 +567,7 @@ fn sparse_path(
         PropertyPathExpression::ZeroOrOne(inner) => {
             if let Some(SparsePathReturn {
                 sparmat: sparmat_inner,
-            }) = sparse_path(inner, namednode_map, max_index, true)
+            }) = sparse_path(inner, namednode_map, max_index)
             {
                 let sparmat = zero_or_one(sparmat_inner);
                 Some(SparsePathReturn { sparmat })
@@ -606,7 +604,7 @@ impl U32DataFrameCreator {
     > {
         // TODO! Possible to constrain lookup to only nodes that may occur as subj/obj in path expr.
         // Can reduce size of a join
-        let mut nns: Vec<_> = self.named_nodes.keys().map(|x| x.clone()).collect();
+        let mut nns: Vec<_> = self.named_nodes.keys().cloned().collect();
         nns.sort();
 
         let mut soln_mappings = vec![];

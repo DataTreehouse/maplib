@@ -15,7 +15,7 @@ impl Triplestore {
         &self,
         inner: &GraphPattern,
         variables: &Vec<Variable>,
-        aggregates: &Vec<(Variable, AggregateExpression)>,
+        aggregates: &[(Variable, AggregateExpression)],
         solution_mapping: Option<SolutionMappings>,
         context: &Context,
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,

@@ -3,10 +3,12 @@ use crate::rdf_to_polars::rdf_literal_to_polars_literal_value;
 use crate::{BaseRDFNodeType, RDFNodeType};
 use chrono::{NaiveDateTime, TimeDelta, TimeZone};
 use chrono_tz::Tz;
+use oxrdf::vocab::xsd;
 use oxrdf::{
     BlankNode, BlankNodeIdParseError, IriParseError, Literal, NamedNode, Variable,
     VariableNameParseError,
 };
+use oxsdatatypes::Duration;
 use polars::datatypes::TimeUnit;
 use polars::prelude::LiteralValue;
 use pyo3::basic::CompareOp;
@@ -18,6 +20,7 @@ use pyo3::{
 };
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
+use std::str::FromStr;
 use thiserror::*;
 
 #[derive(Error, Debug)]
@@ -42,7 +45,7 @@ impl From<PyRepresentationError> for PyErr {
                 BlankNodeIdParseErrorException::new_err(format!("{}", err))
             }
             PyRepresentationError::BadArgumentError(err) => {
-                BadArgumentErrorException::new_err(format!("{}", err))
+                BadArgumentErrorException::new_err(err.to_string())
             }
             PyRepresentationError::VariableNameParseError(err) => {
                 VariableNameParseErrorException::new_err(format!("{}", err))
@@ -136,7 +139,8 @@ impl PyRDFType {
     }
 
     #[staticmethod]
-    fn Literal<'py>(iri: Bound<'py, PyAny>) -> PyResult<PyRDFType> {
+    #[pyo3(name = "Literal")]
+    fn literal(iri: Bound<'_, PyAny>) -> PyResult<PyRDFType> {
         if let Ok(pyiri) = iri.extract::<PyIRI>() {
             Ok(PyRDFType {
                 flat: Some(RDFNodeType::Literal(pyiri.iri)),
@@ -145,7 +149,7 @@ impl PyRDFType {
         } else if let Ok(s) = iri.extract::<String>() {
             Ok(PyRDFType {
                 flat: Some(RDFNodeType::Literal(
-                    NamedNode::new(s).map_err(|x| PyRepresentationError::IriParseError(x))?,
+                    NamedNode::new(s).map_err(PyRepresentationError::IriParseError)?,
                 )),
                 nested: None,
             })
@@ -157,7 +161,8 @@ impl PyRDFType {
         }
     }
     #[staticmethod]
-    fn IRI() -> PyRDFType {
+    #[pyo3(name = "IRI")]
+    fn iri() -> PyRDFType {
         PyRDFType {
             flat: Some(RDFNodeType::IRI),
             nested: None,
@@ -165,7 +170,8 @@ impl PyRDFType {
     }
 
     #[staticmethod]
-    fn BlankNode() -> PyRDFType {
+    #[pyo3(name = "BlankNode")]
+    fn blank_node() -> PyRDFType {
         PyRDFType {
             flat: Some(RDFNodeType::BlankNode),
             nested: None,
@@ -173,7 +179,8 @@ impl PyRDFType {
     }
 
     #[staticmethod]
-    fn Unknown() -> PyRDFType {
+    #[pyo3(name = "Unknown")]
+    fn unknown() -> PyRDFType {
         PyRDFType {
             flat: Some(RDFNodeType::None),
             nested: None,
@@ -181,7 +188,8 @@ impl PyRDFType {
     }
 
     #[staticmethod]
-    fn Nested(rdf_type: Py<PyRDFType>) -> PyRDFType {
+    #[pyo3(name = "Nested")]
+    fn nested(rdf_type: Py<PyRDFType>) -> PyRDFType {
         PyRDFType {
             flat: None,
             nested: Some(rdf_type),
@@ -189,7 +197,8 @@ impl PyRDFType {
     }
 
     #[staticmethod]
-    fn Multi(rdf_types: Vec<Py<PyRDFType>>, py: Python) -> PyRDFType {
+    #[pyo3(name = "Multi")]
+    fn multi(rdf_types: Vec<Py<PyRDFType>>, py: Python) -> PyRDFType {
         let mut mapped = vec![];
         for r in rdf_types {
             mapped.push(BaseRDFNodeType::from_rdf_node_type(
@@ -233,7 +242,7 @@ pub struct PyIRI {
 impl PyIRI {
     #[new]
     pub fn new(iri: String) -> PyResult<Self> {
-        let iri = NamedNode::new(iri).map_err(|x| PyRepresentationError::IriParseError(x))?;
+        let iri = NamedNode::new(iri).map_err(PyRepresentationError::IriParseError)?;
         Ok(PyIRI { iri })
     }
 
@@ -266,7 +275,7 @@ pub struct PyPrefix {
 impl PyPrefix {
     #[new]
     pub fn new(prefix: String, iri: String) -> PyResult<Self> {
-        let iri = NamedNode::new(iri).map_err(|x| PyRepresentationError::IriParseError(x))?;
+        let iri = NamedNode::new(iri).map_err(PyRepresentationError::IriParseError)?;
         Ok(PyPrefix { prefix, iri })
     }
 
@@ -286,7 +295,7 @@ impl PyVariable {
     #[new]
     pub fn new(name: String) -> PyResult<Self> {
         let variable =
-            Variable::new(name).map_err(|e| PyRepresentationError::VariableNameParseError(e))?;
+            Variable::new(name).map_err(PyRepresentationError::VariableNameParseError)?;
         Ok(PyVariable { variable })
     }
 
@@ -327,7 +336,27 @@ impl PyLiteral {
         PyLiteral { literal }
     }
 
-    pub fn to_native<'py>(&self, py: Python<'py>) -> PyResult<PyObject> {
+    #[getter]
+    pub fn value(&self) -> &str {
+        self.literal.value()
+    }
+
+    #[getter]
+    pub fn datatype(&self) -> PyResult<PyIRI> {
+        PyIRI::new(self.literal.datatype().as_str().to_string())
+    }
+
+    #[getter]
+    pub fn language(&self) -> Option<&str> {
+        self.literal.language()
+    }
+
+    pub fn to_native(&self, py: Python<'_>) -> PyResult<PyObject> {
+        if self.literal.datatype() == xsd::DURATION {
+            let duration = Duration::from_str(self.literal.value()).unwrap();
+            return Ok(PyXSDDuration { duration }.into_py(py));
+        }
+
         Ok(match rdf_literal_to_polars_literal_value(&self.literal) {
             LiteralValue::Boolean(b) => b.into_py(py),
             LiteralValue::String(s) => s.into_py(py),
@@ -341,7 +370,7 @@ impl PyLiteral {
             LiteralValue::Int64(i) => i.into_py(py),
             LiteralValue::Float32(f) => f.into_py(py),
             LiteralValue::Float64(f) => f.into_py(py),
-            LiteralValue::Date(d) => {
+            LiteralValue::Date(_d) => {
                 todo!()
             }
             LiteralValue::DateTime(i, tu, tz) => {
@@ -371,6 +400,53 @@ impl PyLiteral {
     }
 }
 
+#[pyclass]
+#[pyo3(name = "XSDDuration")]
+pub struct PyXSDDuration {
+    pub duration: Duration,
+}
+
+#[pymethods]
+impl PyXSDDuration {
+    #[getter]
+    fn years(&self) -> i64 {
+        self.duration.years()
+    }
+
+    #[getter]
+    fn months(&self) -> i64 {
+        self.duration.months()
+    }
+
+    #[getter]
+    fn days(&self) -> i64 {
+        self.duration.days()
+    }
+
+    #[getter]
+    fn hours(&self) -> i64 {
+        self.duration.hours()
+    }
+
+    #[getter]
+    fn minutes(&self) -> i64 {
+        self.duration.minutes()
+    }
+
+    #[getter]
+    fn seconds(&self) -> (i64, i64) {
+        let duration_seconds_string = self.duration.seconds().to_string();
+        let mut split_dot = duration_seconds_string.split(".");
+        let whole = split_dot.next().unwrap().parse::<i64>().unwrap();
+        let fraction = if let Some(second) = split_dot.next() {
+            second.parse::<i64>().unwrap()
+        } else {
+            0
+        };
+        (whole, fraction)
+    }
+}
+
 #[derive(Clone)]
 #[pyclass]
 #[pyo3(name = "BlankNode")]
@@ -383,14 +459,13 @@ impl PyBlankNode {
     #[new]
     fn new(name: &str) -> PyResult<Self> {
         Ok(PyBlankNode {
-            inner: BlankNode::new(name)
-                .map_err(|x| PyRepresentationError::BlankNodeIdParseError(x))?,
+            inner: BlankNode::new(name).map_err(PyRepresentationError::BlankNodeIdParseError)?,
         })
     }
 
     #[getter]
     fn name(&self) -> &str {
-        &self.inner.as_str()
+        self.inner.as_str()
     }
 }
 
@@ -405,7 +480,7 @@ pub struct PySolutionMappings {
 #[pymethods]
 impl PySolutionMappings {
     #[getter]
-    fn mappings(&self, py: Python) -> &Py<PyAny> {
+    fn mappings(&self) -> &Py<PyAny> {
         &self.mappings
     }
 

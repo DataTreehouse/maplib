@@ -5,7 +5,7 @@ use oxrdf::vocab::rdfs;
 #[cfg(test)]
 use oxrdf::vocab::xsd;
 use oxrdf::{BlankNode, Literal, NamedNode, Variable};
-use representation::{BaseRDFNodeType, RDFNodeType};
+use representation::RDFNodeType;
 use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter};
 

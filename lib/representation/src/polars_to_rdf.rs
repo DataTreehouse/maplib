@@ -283,11 +283,7 @@ pub fn polars_type_to_literal_type(
                     }
                     f => {
                         let stripped = if let Some(f_pre) = f.strip_prefix("<") {
-                            if let Some(f_suf) = f_pre.strip_suffix(">") {
-                                Some(f_suf)
-                            } else {
-                                None
-                            }
+                            f_pre.strip_suffix(">")
                         } else {
                             None
                         };
@@ -334,12 +330,10 @@ pub fn polars_type_to_literal_type(
                 Ok(RDFNodeType::MultiType(dts))
             }
         }
-        dt => {
-            return Err(RepresentationError::DatatypeError(format!(
-                "Unknown datatype {:?}",
-                dt
-            )));
-        }
+        dt => Err(RepresentationError::DatatypeError(format!(
+            "Unknown datatype {:?}",
+            dt
+        ))),
     }
 }
 
@@ -353,7 +347,7 @@ pub fn date_series_to_strings(series: &Series) -> Series {
 
 pub fn datetime_series_to_strings(series: &Series, tz_opt: &Option<TimeZone>) -> Series {
     if let Some(tz) = tz_opt {
-        return hack_format_timestamp_with_timezone(series, &mut tz.clone());
+        hack_format_timestamp_with_timezone(series, &mut tz.clone())
     } else {
         return series
             .datetime()
@@ -396,14 +390,9 @@ pub fn hack_format_timestamp_with_timezone(series: &Series, tz: &mut TimeZone) -
                 None => AnyValue::Null,
             })
             .collect();
-        let ser = Series::from_any_values_and_dtype(
-            &name,
-            &datetime_strings_vec,
-            &DataType::String,
-            false,
-        )
-        .unwrap();
-        ser
+
+        Series::from_any_values_and_dtype(&name, &datetime_strings_vec, &DataType::String, false)
+            .unwrap()
     } else {
         panic!("Unknown timezone{}", tz);
     }

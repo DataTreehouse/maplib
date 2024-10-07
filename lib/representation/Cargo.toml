@@ -17,6 +17,7 @@ thiserror.workspace = true
 uuid.workspace = true
 pyo3 = {workspace = true, features = ["chrono-tz", "chrono"]}
 serde = {workspace = true, features = ["derive"]}
+oxsdatatypes.workspace = true
 
 [features]
 rdf-star = ["oxrdf/rdf-star"]

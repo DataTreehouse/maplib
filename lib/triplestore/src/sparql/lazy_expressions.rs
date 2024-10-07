@@ -185,7 +185,7 @@ impl Triplestore {
                     output_solution_mappings,
                     &left_context,
                     &right_contexts,
-                    &context,
+                    context,
                 )?
             }
             Expression::Add(left, right) => {
@@ -311,10 +311,10 @@ impl Triplestore {
                     output_solution_mappings,
                     exists_lf,
                     &exists_context,
-                    &context,
+                    context,
                 )?
             }
-            Expression::Bound(v) => bound(solution_mappings, v, &context)?,
+            Expression::Bound(v) => bound(solution_mappings, v, context)?,
             Expression::If(left, middle, right) => {
                 let left_context = context.extension_with(PathEntry::IfLeft);
                 let mut output_solution_mappings =
@@ -338,7 +338,7 @@ impl Triplestore {
                     &left_context,
                     &middle_context,
                     &right_context,
-                    &context,
+                    context,
                 )?
             }
             Expression::Coalesce(inner) => {
@@ -355,7 +355,7 @@ impl Triplestore {
                         parameters,
                     )?;
                 }
-                coalesce_expression(output_solution_mappings, inner_contexts, &context)?
+                coalesce_expression(output_solution_mappings, inner_contexts, context)?
             }
             Expression::FunctionCall(func, args) => {
                 let mut args_contexts: HashMap<usize, Context> = HashMap::new();
@@ -370,13 +370,7 @@ impl Triplestore {
                     )?;
                     args_contexts.insert(i, arg_context);
                 }
-                func_expression(
-                    output_solution_mappings,
-                    func,
-                    args,
-                    args_contexts,
-                    &context,
-                )?
+                func_expression(output_solution_mappings, func, args, args_contexts, context)?
             }
         };
         Ok(output_solution_mappings)

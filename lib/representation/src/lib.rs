@@ -63,7 +63,14 @@ impl<'de> Visitor<'de> for StringVisitor {
     where
         E: Error,
     {
-        Ok(NamedNode::new(v).map_err(|x| E::custom(x.to_string()))?)
+        NamedNode::new(v).map_err(|x| E::custom(x.to_string()))
+    }
+
+    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+    where
+        E: Error,
+    {
+        NamedNode::new(v).map_err(|x| E::custom(x.to_string()))
     }
 }
 
@@ -129,9 +136,9 @@ pub enum BaseRDFNodeType {
     None,
 }
 
-impl Into<RDFNodeType> for BaseRDFNodeType {
-    fn into(self) -> RDFNodeType {
-        match self {
+impl From<BaseRDFNodeType> for RDFNodeType {
+    fn from(val: BaseRDFNodeType) -> Self {
+        match val {
             BaseRDFNodeType::IRI => RDFNodeType::IRI,
             BaseRDFNodeType::BlankNode => RDFNodeType::BlankNode,
             BaseRDFNodeType::Literal(l) => RDFNodeType::Literal(l),

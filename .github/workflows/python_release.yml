@@ -14,7 +14,7 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
   RUST_TOOLCHAIN: nightly-2024-06-23
-  MATURIN_VERSION: '1.5.1'
+  MATURIN_VERSION: '1.7.1'
   MATURIN_PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
 
 jobs:
@@ -33,7 +33,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: [ '3.9', '3.10', '3.11' ]
+        python-version: [ '3.9', '3.10', '3.11', '3.12' ]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v4
@@ -61,7 +61,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: [ '3.9', '3.10', '3.11' ]
+        python-version: [ '3.9', '3.10', '3.11', '3.12' ]
         os: [ macos-latest, windows-latest ]
     environment: release
     steps:

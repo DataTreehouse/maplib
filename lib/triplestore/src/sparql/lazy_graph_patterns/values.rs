@@ -17,8 +17,8 @@ impl Triplestore {
     pub(crate) fn lazy_values(
         &self,
         solution_mappings: Option<SolutionMappings>,
-        variables: &Vec<Variable>,
-        bindings: &Vec<Vec<Option<GroundTerm>>>,
+        variables: &[Variable],
+        bindings: &[Vec<Option<GroundTerm>>],
         _context: &Context,
     ) -> Result<SolutionMappings, SparqlError> {
         let mut col_vecs = HashMap::new();

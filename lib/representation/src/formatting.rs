@@ -47,15 +47,15 @@ pub fn base_expression_to_string(
                         },
                         GetOutput::from_type(DataType::String),
                     )
-                    + lit(format!("\"^^{}", l.to_string()))
+                    + lit(format!("\"^^{}", l))
             } else if l.as_ref() == xsd::DATE_TIME_STAMP {
                 lit("\"")
                     + expr.dt().strftime(XSD_DATETIME_WITH_TZ_FORMAT)
-                    + lit(format!("\"^^{}", l.to_string()))
+                    + lit(format!("\"^^{}", l))
             } else if l.as_ref() == xsd::DATE {
                 lit("\"")
                     + expr.dt().strftime(XSD_DATE_WITHOUT_TZ_FORMAT)
-                    + lit(format!("\"^^{}", l.to_string()))
+                    + lit(format!("\"^^{}", l))
             } else if l.as_ref() == rdf::LANG_STRING {
                 lit("\"")
                     + expr
@@ -71,7 +71,7 @@ pub fn base_expression_to_string(
             } else if l.as_ref() == xsd::STRING {
                 lit("\"") + expr.cast(DataType::String) + lit("\"")
             } else {
-                lit("\"") + expr.cast(DataType::String) + lit(format!("\"^^{}", l.to_string()))
+                lit("\"") + expr.cast(DataType::String) + lit(format!("\"^^{}", l))
             }
         }
         BaseRDFNodeType::None => lit(LiteralValue::Null).cast(DataType::String),

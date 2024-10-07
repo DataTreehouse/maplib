@@ -5,10 +5,10 @@ use std::cmp::Ordering;
 use std::collections::HashSet;
 
 pub fn order_triple_patterns(
-    tps: &Vec<TriplePattern>,
+    tps: &[TriplePattern],
     sm: &Option<SolutionMappings>,
 ) -> Vec<TriplePattern> {
-    let mut candidates = tps.clone();
+    let mut candidates = tps.to_owned();
     let mut ordering = vec![];
     let mut visited: HashSet<_> = if let Some(sm) = sm {
         sm.rdf_node_types

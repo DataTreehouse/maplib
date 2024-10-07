@@ -439,8 +439,8 @@ pub fn prepare_triples(
         if let Some(tdf) = prepare_triples_df(
             df,
             static_verb_column,
-            &subject_type,
-            &object_type,
+            subject_type,
+            object_type,
             has_unique_subset,
         ) {
             out_df_vec.push(tdf);
@@ -463,8 +463,8 @@ pub fn prepare_triples(
             if let Some(tdf) = prepare_triples_df(
                 part,
                 predicate,
-                &subject_type,
-                &object_type,
+                subject_type,
+                object_type,
                 has_unique_subset,
             ) {
                 out_df_vec.push(tdf);

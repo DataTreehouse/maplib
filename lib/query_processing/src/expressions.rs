@@ -750,7 +750,7 @@ pub fn func_expression(
                 assert_eq!(args.len(), 1);
                 let first_context = args_contexts.get(&0).unwrap();
                 solution_mappings.mappings = solution_mappings.mappings.with_column(
-                    col(&first_context.as_str())
+                    col(first_context.as_str())
                         .cast(DataType::Datetime(TimeUnit::Nanoseconds, None))
                         .cast(DataType::UInt64)
                         .alias(outer_context.as_str()),
@@ -763,7 +763,7 @@ pub fn func_expression(
                 assert_eq!(args.len(), 1);
                 let first_context = args_contexts.get(&0).unwrap();
                 solution_mappings.mappings = solution_mappings.mappings.with_column(
-                    col(&first_context.as_str())
+                    col(first_context.as_str())
                         .cast(DataType::Datetime(TimeUnit::Milliseconds, None))
                         .cast(DataType::UInt64)
                         .div(lit(1000))
@@ -777,7 +777,7 @@ pub fn func_expression(
                 assert_eq!(args.len(), 1);
                 let first_context = args_contexts.get(&0).unwrap();
                 solution_mappings.mappings = solution_mappings.mappings.with_column(
-                    col(&first_context.as_str())
+                    col(first_context.as_str())
                         .cast(DataType::Datetime(TimeUnit::Nanoseconds, None))
                         .alias(outer_context.as_str()),
                 );
@@ -789,7 +789,7 @@ pub fn func_expression(
                 assert_eq!(args.len(), 1);
                 let first_context = args_contexts.get(&0).unwrap();
                 solution_mappings.mappings = solution_mappings.mappings.with_column(
-                    col(&first_context.as_str())
+                    col(first_context.as_str())
                         .mul(Expr::Literal(LiteralValue::UInt64(1000)))
                         .cast(DataType::Datetime(TimeUnit::Milliseconds, None))
                         .alias(outer_context.as_str()),
@@ -804,7 +804,7 @@ pub fn func_expression(
                 let second_context = args_contexts.get(&1).unwrap();
 
                 solution_mappings.mappings = solution_mappings.mappings.with_column(
-                    (col(&first_context.as_str()) % col(&second_context.as_str()))
+                    (col(first_context.as_str()) % col(second_context.as_str()))
                         .alias(outer_context.as_str()),
                 );
                 solution_mappings.rdf_node_types.insert(
@@ -816,14 +816,14 @@ pub fn func_expression(
                 let first_context = args_contexts.get(&0).unwrap();
                 let second_context = args_contexts.get(&1).unwrap();
 
-                let first_as_seconds = col(&first_context.as_str())
+                let first_as_seconds = col(first_context.as_str())
                     .cast(DataType::Datetime(TimeUnit::Milliseconds, None))
                     .cast(DataType::UInt64)
                     .div(lit(1000));
 
                 solution_mappings.mappings = solution_mappings.mappings.with_column(
                     ((first_as_seconds.clone()
-                        - (first_as_seconds % col(&second_context.as_str())))
+                        - (first_as_seconds % col(second_context.as_str())))
                     .mul(Expr::Literal(LiteralValue::UInt64(1000)))
                     .cast(DataType::Datetime(TimeUnit::Milliseconds, None)))
                     .alias(outer_context.as_str()),
@@ -842,9 +842,9 @@ pub fn func_expression(
             let second_context = args_contexts.get(&1).unwrap();
 
             solution_mappings.mappings = solution_mappings.mappings.with_column(
-                (col(&first_context.as_str())
+                (col(first_context.as_str())
                     .str()
-                    .contains_literal(col(&second_context.as_str())))
+                    .contains_literal(col(second_context.as_str())))
                 .alias(outer_context.as_str()),
             );
             solution_mappings.rdf_node_types.insert(
@@ -858,9 +858,9 @@ pub fn func_expression(
             let second_context = args_contexts.get(&1).unwrap();
 
             solution_mappings.mappings = solution_mappings.mappings.with_column(
-                (col(&first_context.as_str())
+                (col(first_context.as_str())
                     .str()
-                    .starts_with(col(&second_context.as_str())))
+                    .starts_with(col(second_context.as_str())))
                 .alias(outer_context.as_str()),
             );
             solution_mappings.rdf_node_types.insert(
@@ -874,9 +874,9 @@ pub fn func_expression(
             let second_context = args_contexts.get(&1).unwrap();
 
             solution_mappings.mappings = solution_mappings.mappings.with_column(
-                (col(&first_context.as_str())
+                (col(first_context.as_str())
                     .str()
-                    .ends_with(col(&second_context.as_str())))
+                    .ends_with(col(second_context.as_str())))
                 .alias(outer_context.as_str()),
             );
             solution_mappings.rdf_node_types.insert(
@@ -956,7 +956,7 @@ pub fn func_expression(
                             exprs.push(
                                 col(first_context.as_str())
                                     .struct_()
-                                    .field_by_name(&multi_has_this_type_column(&t))
+                                    .field_by_name(&multi_has_this_type_column(t))
                                     .fill_null(lit(false)),
                             );
                         }
@@ -1142,12 +1142,10 @@ fn typed_equals_expr(
         } else {
             lit(false)
         }
+    } else if left_type == right_type {
+        col(left_col).eq(col(right_col))
     } else {
-        if left_type == right_type {
-            col(left_col).eq(col(right_col))
-        } else {
-            lit(false)
-        }
+        lit(false)
     }
 }
 
@@ -1163,7 +1161,7 @@ pub fn drop_inner_contexts(mut sm: SolutionMappings, contexts: &Vec<&Context>) -
 }
 
 pub fn compatible_operation(expression: Expression, l1: NamedNodeRef, l2: NamedNodeRef) -> bool {
-    let compat = match expression {
+    match expression {
         Expression::Equal(..)
         | Expression::LessOrEqual(..)
         | Expression::GreaterOrEqual(..)
@@ -1182,8 +1180,7 @@ pub fn compatible_operation(expression: Expression, l1: NamedNodeRef, l2: NamedN
         | Expression::Multiply(..)
         | Expression::Divide(..) => literal_is_numeric(l1) && literal_is_numeric(l2),
         _ => todo!(),
-    };
-    compat
+    }
 }
 
 pub fn create_all_types_null_expression(c: &str, types: &Vec<BaseRDFNodeType>) -> Expr {

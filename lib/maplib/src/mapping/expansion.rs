@@ -11,7 +11,7 @@ use polars::prelude::{
 };
 use rayon::iter::{IndexedParallelIterator, ParallelDrainRange, ParallelIterator};
 use representation::multitype::split_df_multicols;
-use representation::{BaseRDFNodeType, RDFNodeType};
+use representation::RDFNodeType;
 use representation::{OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME};
 use std::cmp::{max, min};
 use std::collections::{HashMap, HashSet};
@@ -29,7 +29,7 @@ impl Mapping {
     pub fn expand(
         &mut self,
         template: &str,
-        mut df: Option<DataFrame>,
+        df: Option<DataFrame>,
         mapping_column_types: Option<HashMap<String, MappingColumnType>>,
         options: ExpandOptions,
     ) -> Result<MappingReport, MappingError> {
@@ -41,19 +41,11 @@ impl Mapping {
         let ExpandOptions {
             unique_subsets: unique_subsets_opt,
         } = options;
-        let unique_subsets = if let Some(unique_subsets) = unique_subsets_opt {
-            unique_subsets
-        } else {
-            vec![]
-        };
+        let unique_subsets = unique_subsets_opt.unwrap_or_default();
         let call_uuid = Uuid::new_v4().to_string();
 
         let mut static_columns = HashMap::new();
-        let mut lf = if let Some(df) = df {
-            Some(df.lazy())
-        } else {
-            None
-        };
+        let mut lf = df.map(|df| df.lazy());
         for p in &target_template.signature.parameter_list {
             if let Some(default) = &p.default_value {
                 if lf.is_none() || !columns.contains_key(p.variable.as_str()) {
@@ -68,11 +60,7 @@ impl Mapping {
                 }
             }
         }
-        df = if let Some(lf) = lf {
-            Some(lf.collect().unwrap())
-        } else {
-            None
-        };
+        df = lf.map(|lf| lf.collect().unwrap());
 
         if self.use_caching && df.is_some() {
             let df = df.unwrap();
@@ -118,6 +106,7 @@ impl Mapping {
         Ok(MappingReport {})
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn _expand(
         &self,
         layer: usize,
@@ -178,13 +167,13 @@ impl Mapping {
                             .template_dataset
                             .get(instance.template_name.as_str())
                             .unwrap();
-                        if let Some((
-                            instance_df,
-                            instance_dynamic_columns,
-                            instance_static_columns,
-                            new_unique_subsets,
-                            updated_blank_node_counter,
-                        )) = create_remapped(
+                        if let Some(RemapResult {
+                            df: instance_df,
+                            dynamic_columns: instance_dynamic_columns,
+                            constant_columns: instance_constant_columns,
+                            unique_subsets: new_unique_subsets,
+                            blank_node_counter,
+                        }) = create_remapped(
                             self.blank_node_counter,
                             layer,
                             pattern_num,
@@ -200,12 +189,12 @@ impl Mapping {
                             Ok::<_, MappingError>(Some(self._expand(
                                 layer + 1,
                                 i,
-                                updated_blank_node_counter,
+                                blank_node_counter,
                                 instance.template_name.as_str(),
                                 Some(instance_df),
                                 &target_template.signature,
                                 instance_dynamic_columns,
-                                instance_static_columns,
+                                instance_constant_columns,
                                 new_unique_subsets,
                             )?))
                         } else {
@@ -251,16 +240,15 @@ impl Mapping {
             }
             let mut fix_iris = vec![];
             for (coltype, colname) in coltypes_names {
-                if coltype == &RDFNodeType::IRI {
-                    if matches!(df.column(colname).unwrap().dtype(), DataType::String) {
-                        let nonnull = df.column(colname).unwrap().str().unwrap().first_non_null();
-                        if let Some(i) = nonnull {
-                            let first_iri =
-                                df.column(colname).unwrap().str().unwrap().get(i).unwrap();
-                            {
-                                if first_iri.starts_with('<') {
-                                    fix_iris.push(colname);
-                                }
+                if coltype == &RDFNodeType::IRI
+                    && matches!(df.column(colname).unwrap().dtype(), DataType::String)
+                {
+                    let nonnull = df.column(colname).unwrap().str().unwrap().first_non_null();
+                    if let Some(i) = nonnull {
+                        let first_iri = df.column(colname).unwrap().str().unwrap().get(i).unwrap();
+                        {
+                            if first_iri.starts_with('<') {
+                                fix_iris.push(colname);
                             }
                         }
                     }
@@ -472,6 +460,7 @@ fn create_series_from_blank_node_constant(
     Ok((series, mapped_column))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn create_remapped(
     blank_node_counter: usize,
     layer: usize,
@@ -484,16 +473,7 @@ fn create_remapped(
     constant_columns: &HashMap<String, StaticColumn>,
     unique_subsets: &Vec<Vec<String>>,
     input_df_height: usize,
-) -> Result<
-    Option<(
-        DataFrame,
-        HashMap<String, MappingColumnType>,
-        HashMap<String, StaticColumn>,
-        Vec<Vec<String>>,
-        usize,
-    )>,
-    MappingError,
-> {
+) -> Result<Option<RemapResult>, MappingError> {
     let now = Instant::now();
     let mut new_dynamic_columns = HashMap::new();
     let mut new_constant_columns = HashMap::new();
@@ -645,7 +625,7 @@ fn create_remapped(
                 let mut new_subset = vec![];
                 for x in unique_subset.iter() {
                     new_subset.push(
-                        new.get(existing.iter().position(|e| e == &x).unwrap())
+                        new.get(existing.iter().position(|e| e == x).unwrap())
                             .unwrap()
                             .to_string(),
                     );
@@ -672,13 +652,13 @@ fn create_remapped(
         "Creating remapped took {} seconds",
         now.elapsed().as_secs_f32()
     );
-    Ok(Some((
-        lf.collect().unwrap(),
-        new_dynamic_columns,
-        new_constant_columns,
-        new_unique_subsets,
-        out_blank_node_counter,
-    )))
+    Ok(Some(RemapResult {
+        df: lf.collect().unwrap(),
+        dynamic_columns: new_dynamic_columns,
+        constant_columns: new_constant_columns,
+        unique_subsets: new_unique_subsets,
+        blank_node_counter: out_blank_node_counter,
+    }))
 }
 
 fn add_default_value(
@@ -698,4 +678,12 @@ fn add_default_value(
 //From: https://users.rust-lang.org/t/flatten-a-vec-vec-t-to-a-vec-t/24526/3
 fn flatten<T>(nested: Vec<Vec<T>>) -> Vec<T> {
     nested.into_iter().flatten().collect()
+}
+
+struct RemapResult {
+    df: DataFrame,
+    dynamic_columns: HashMap<String, MappingColumnType>,
+    constant_columns: HashMap<String, StaticColumn>,
+    unique_subsets: Vec<Vec<String>>,
+    blank_node_counter: usize,
 }
