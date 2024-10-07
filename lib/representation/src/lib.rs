@@ -212,8 +212,8 @@ impl BaseRDFNodeType {
                 xsd::FLOAT => DataType::Float32,
                 xsd::BOOLEAN => DataType::Boolean,
                 rdf::LANG_STRING => DataType::Struct(vec![
-                    Field::new(LANG_STRING_VALUE_FIELD, DataType::String),
-                    Field::new(LANG_STRING_LANG_FIELD, DataType::String),
+                    Field::new(LANG_STRING_VALUE_FIELD.into(), DataType::String),
+                    Field::new(LANG_STRING_LANG_FIELD.into(), DataType::String),
                 ]),
                 xsd::DATE_TIME => DataType::Datetime(TimeUnit::Nanoseconds, None),
                 _ => DataType::String,

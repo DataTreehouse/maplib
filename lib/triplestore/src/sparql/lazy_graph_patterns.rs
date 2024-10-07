@@ -59,7 +59,7 @@ impl Triplestore {
                     Ok(updated_solution_mappings)
                 } else {
                     //TODO: FIX THIS PROPERLY
-                    let ser = Series::new("DUMMYDUMMY", vec![true]);
+                    let ser = Series::new("DUMMYDUMMY".into(), vec![true]);
                     let mut map = HashMap::new();
                     map.insert(
                         "DUMMYDUMMY".to_string(),

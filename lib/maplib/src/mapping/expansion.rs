@@ -372,7 +372,7 @@ fn create_triples(
     let mut verb = None;
 
     if dynamic_columns.is_empty() && df.height() == 0 {
-        df.with_column(Series::new("dummy_column", vec!["dummy_row"]))
+        df.with_column(Series::new("dummy_column".into(), vec!["dummy_row"]))
             .unwrap();
     }
 
@@ -455,7 +455,7 @@ fn create_series_from_blank_node_constant(
         constant_term,
         n_rows,
     )?;
-    series.rename(column_name);
+    series.rename(column_name.into());
     let mapped_column = MappingColumnType::Flat(rdf_node_type);
     Ok((series, mapped_column))
 }
@@ -573,7 +573,7 @@ fn create_remapped(
 
     for s in &mut series_vec {
         let sname = s.name().to_string();
-        s.rename(rename_map.get_mut(sname.as_str()).unwrap().pop().unwrap());
+        s.rename(rename_map.get_mut(sname.as_str()).unwrap().pop().unwrap().into());
     }
     for s in new_series {
         series_vec.push(s);
@@ -586,7 +586,7 @@ fn create_remapped(
     let new_column_expressions: Vec<Expr> = new
         .iter()
         .chain(new_dynamic_from_constant.iter())
-        .map(|x| col(x))
+        .map(|x| col(*x))
         .collect();
     lf = lf.select(new_column_expressions.as_slice());
 
@@ -603,7 +603,7 @@ fn create_remapped(
                 todo!()
             }
         }
-        let to_expand_cols: Vec<Expr> = to_expand.iter().map(|x| col(x)).collect();
+        let to_expand_cols: Vec<Expr> = to_expand.iter().map(|x| col(*x)).collect();
         match le {
             ListExpanderType::Cross => {
                 for c in to_expand_cols {

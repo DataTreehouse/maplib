@@ -341,7 +341,8 @@ pub fn date_series_to_strings(series: &Series) -> Series {
     return series
         .date()
         .unwrap()
-        .strftime(XSD_DATE_WITHOUT_TZ_FORMAT).unwrap()
+        .strftime(XSD_DATE_WITHOUT_TZ_FORMAT)
+        .unwrap()
         .into_series();
 }
 
@@ -391,8 +392,13 @@ pub fn hack_format_timestamp_with_timezone(series: &Series, tz: &mut TimeZone) -
             })
             .collect();
 
-        Series::from_any_values_and_dtype(&name, &datetime_strings_vec, &DataType::String, false)
-            .unwrap()
+        Series::from_any_values_and_dtype(
+            name.into(),
+            &datetime_strings_vec,
+            &DataType::String,
+            false,
+        )
+        .unwrap()
     } else {
         panic!("Unknown timezone{}", tz);
     }

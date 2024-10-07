@@ -1,6 +1,7 @@
 use crate::solution_mapping::SolutionMappings;
 use crate::{BaseRDFNodeType, RDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD};
 use oxrdf::vocab::{rdf, xsd};
+use polars::datatypes::PlSmallStr;
 use polars::prelude::{
     as_struct, coalesce, col, lit, CategoricalOrdering, DataFrame, DataType, Expr, IntoLazy,
     JoinArgs, JoinType, LazyFrame, LazyGroupBy, LiteralValue, UniqueKeepStrategy,
@@ -791,7 +792,10 @@ pub fn join_workaround(
                     if let Some((_, right_prefixed_inner_columns)) = right_exploded.get(c) {
                         let left_set: HashSet<_> = left_prefixed_inner_columns.iter().collect();
                         let right_set: HashSet<_> = right_prefixed_inner_columns.iter().collect();
-                        left_set.intersection(&right_set).map(|x| col(x)).collect()
+                        left_set
+                            .intersection(&right_set)
+                            .map(|x| col(PlSmallStr::from_str(x)))
+                            .collect()
                     } else {
                         vec![]
                     }
@@ -817,7 +821,7 @@ pub fn join_workaround(
         for k in right_datatypes.keys() {
             if left_datatypes.contains_key(k) {
                 if let Some((_, right_prefixed_inner_columns)) = right_exploded.get(k) {
-                    to_drop_right.extend(right_prefixed_inner_columns.iter().map(|x|col(x)));
+                    to_drop_right.extend(right_prefixed_inner_columns.iter().map(|x| col(x)));
                 } else {
                     to_drop_right.push(col(k));
                 }
@@ -894,7 +898,10 @@ pub fn unique_workaround(
         None
     };
     if stable {
-        lf = lf.unique_stable(unique_set, unique_keep_strategy);
+        lf = lf.unique_stable(
+            unique_set.map(|x| x.iter().map(|x| PlSmallStr::from_str(x)).collect()),
+            unique_keep_strategy,
+        );
     } else {
         lf = lf.unique(unique_set, unique_keep_strategy);
     }
@@ -953,7 +960,7 @@ pub fn coalesce_workaround(mut sm: SolutionMappings, cols: Vec<&str>, c: &str) -
         let ext = *cols.first().unwrap();
         sm.rdf_node_types
             .insert(c.to_string(), sm.rdf_node_types.get(ext).unwrap().clone());
-        cols.iter().map(|x| col(x)).collect()
+        cols.iter().map(|x| col(PlSmallStr::from_str(x))).collect()
     };
     sm.mappings = sm.mappings.with_column(coalesce(&exprs).alias(c));
     sm

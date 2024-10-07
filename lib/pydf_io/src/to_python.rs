@@ -24,8 +24,8 @@ pub(crate) fn to_py_array(
     pyarrow: &Bound<'_, PyModule>,
 ) -> PyResult<PyObject> {
     let schema = Box::new(ffi::export_field_to_c(&ArrowField::new(
-        "",
-        array.data_type().clone(),
+        "".into(),
+        array.dtype().clone(),
         true,
     )));
     let array = Box::new(ffi::export_array_to_c(array));
@@ -120,7 +120,7 @@ pub fn fix_cats_and_multicolumns(
     mut dts: HashMap<String, RDFNodeType>,
     native_dataframe: bool,
 ) -> (DataFrame, HashMap<String, RDFNodeType>) {
-    let column_ordering: Vec<_> = df.get_column_names().iter().map(|x| col(x)).collect();
+    let column_ordering: Vec<_> = df.get_column_names().iter().map(|x| col(x.as_str())).collect();
     //Important that column compression happen before decisions are made based on column type.
     (df, dts) = compress_actual_multitypes(df, dts);
     let mut lf = df.lazy();

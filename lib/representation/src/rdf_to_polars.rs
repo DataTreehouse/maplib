@@ -28,19 +28,19 @@ pub fn rdf_term_to_polars_expr(term: &Term) -> Expr {
 }
 
 pub fn rdf_named_node_to_polars_literal_value(named_node: &NamedNode) -> LiteralValue {
-    LiteralValue::String(named_node.as_str().to_string())
+    LiteralValue::String(named_node.as_str().into())
 }
 
 pub fn rdf_owned_named_node_to_polars_literal_value(named_node: NamedNode) -> LiteralValue {
-    LiteralValue::String(named_node.into_string())
+    LiteralValue::String(named_node.into_string().into())
 }
 
 pub fn rdf_blank_node_to_polars_literal_value(blank_node: &BlankNode) -> LiteralValue {
-    LiteralValue::String(blank_node.as_str().to_string())
+    LiteralValue::String(blank_node.as_str().into())
 }
 
 pub fn rdf_owned_blank_node_to_polars_literal_value(blank_node: BlankNode) -> LiteralValue {
-    LiteralValue::String(blank_node.into_string())
+    LiteralValue::String(blank_node.into_string().into())
 }
 
 //TODO: Sort and check..
@@ -71,7 +71,7 @@ pub fn rdf_literal_to_polars_literal_value(lit: &Literal) -> LiteralValue {
     let value = lit.value();
 
     if datatype == xsd::STRING {
-        LiteralValue::String(value.to_string())
+        LiteralValue::String(value.to_string().into())
     } else if datatype == rdf::LANG_STRING {
         panic!("Should never be called with lang string")
     } else if datatype == xsd::UNSIGNED_INT {
@@ -144,7 +144,7 @@ pub fn rdf_literal_to_polars_literal_value(lit: &Literal) -> LiteralValue {
                 LiteralValue::DateTime(
                     dt.naive_utc().and_utc().timestamp_nanos_opt().unwrap(),
                     TimeUnit::Nanoseconds,
-                    Some(dt.timezone().to_string()),
+                    Some(dt.timezone().to_string().into()),
                 )
             } else {
                 warn!("Could not parse xsd:datetime {}", value);
@@ -168,7 +168,7 @@ pub fn rdf_literal_to_polars_literal_value(lit: &Literal) -> LiteralValue {
             LiteralValue::Null
         }
     } else {
-        LiteralValue::String(value.to_string())
+        LiteralValue::String(value.to_string().into())
     }
 }
 
@@ -184,7 +184,7 @@ pub fn polars_literal_values_to_series(literal_values: Vec<LiteralValue>, name: 
     if let (Some(first_non_null), None) = (&first_non_null_opt, &first_null_opt) {
         match first_non_null {
             LiteralValue::Boolean(_) => Series::new(
-                name,
+                name.into(),
                 literal_values
                     .into_iter()
                     .map(|x| {
@@ -197,12 +197,12 @@ pub fn polars_literal_values_to_series(literal_values: Vec<LiteralValue>, name: 
                     .collect::<Vec<bool>>(),
             ),
             LiteralValue::String(_) => Series::new(
-                name,
+                name.into(),
                 literal_values
                     .into_iter()
                     .map(|x| {
                         if let LiteralValue::String(u) = x {
-                            u
+                            u.to_string()
                         } else {
                             panic!("Not possible")
                         }
@@ -210,7 +210,7 @@ pub fn polars_literal_values_to_series(literal_values: Vec<LiteralValue>, name: 
                     .collect::<Vec<String>>(),
             ),
             LiteralValue::UInt32(_) => Series::new(
-                name,
+                name.into(),
                 literal_values
                     .into_iter()
                     .map(|x| {
@@ -223,7 +223,7 @@ pub fn polars_literal_values_to_series(literal_values: Vec<LiteralValue>, name: 
                     .collect::<Vec<u32>>(),
             ),
             LiteralValue::UInt64(_) => Series::new(
-                name,
+                name.into(),
                 literal_values
                     .into_iter()
                     .map(|x| {
@@ -236,7 +236,7 @@ pub fn polars_literal_values_to_series(literal_values: Vec<LiteralValue>, name: 
                     .collect::<Vec<u64>>(),
             ),
             LiteralValue::Int32(_) => Series::new(
-                name,
+                name.into(),
                 literal_values
                     .into_iter()
                     .map(|x| {
@@ -249,7 +249,7 @@ pub fn polars_literal_values_to_series(literal_values: Vec<LiteralValue>, name: 
                     .collect::<Vec<i32>>(),
             ),
             LiteralValue::Int64(_) => Series::new(
-                name,
+                name.into(),
                 literal_values
                     .into_iter()
                     .map(|x| {
@@ -262,7 +262,7 @@ pub fn polars_literal_values_to_series(literal_values: Vec<LiteralValue>, name: 
                     .collect::<Vec<i64>>(),
             ),
             LiteralValue::Float32(_) => Series::new(
-                name,
+                name.into(),
                 literal_values
                     .into_iter()
                     .map(|x| {
@@ -275,7 +275,7 @@ pub fn polars_literal_values_to_series(literal_values: Vec<LiteralValue>, name: 
                     .collect::<Vec<f32>>(),
             ),
             LiteralValue::Float64(_) => Series::new(
-                name,
+                name.into(),
                 literal_values
                     .into_iter()
                     .map(|x| {
@@ -291,7 +291,7 @@ pub fn polars_literal_values_to_series(literal_values: Vec<LiteralValue>, name: 
                 todo!()
             }
             LiteralValue::DateTime(_, t, tz) => Series::new(
-                name,
+                name.into(),
                 literal_values
                     .into_iter()
                     .map(|x| {
@@ -307,7 +307,7 @@ pub fn polars_literal_values_to_series(literal_values: Vec<LiteralValue>, name: 
             .cast(&DataType::Datetime(*t, tz.clone()))
             .unwrap(),
             LiteralValue::Date(_) => Series::new(
-                name,
+                name.into(),
                 literal_values
                     .into_iter()
                     .map(|x| {
@@ -334,7 +334,7 @@ pub fn polars_literal_values_to_series(literal_values: Vec<LiteralValue>, name: 
     } else if let (Some(first_non_null), Some(_)) = (&first_non_null_opt, &first_null_opt) {
         match first_non_null {
             LiteralValue::Boolean(_) => Series::new(
-                name,
+                name.into(),
                 literal_values
                     .into_iter()
                     .map(|x| {
@@ -347,12 +347,12 @@ pub fn polars_literal_values_to_series(literal_values: Vec<LiteralValue>, name: 
                     .collect::<Vec<Option<bool>>>(),
             ),
             LiteralValue::String(_) => Series::new(
-                name,
+                name.into(),
                 literal_values
                     .into_iter()
                     .map(|x| {
                         if let LiteralValue::String(u) = x {
-                            Some(u)
+                            Some(u.to_string())
                         } else {
                             None
                         }
@@ -360,7 +360,7 @@ pub fn polars_literal_values_to_series(literal_values: Vec<LiteralValue>, name: 
                     .collect::<Vec<Option<String>>>(),
             ),
             LiteralValue::UInt32(_) => Series::new(
-                name,
+                name.into(),
                 literal_values
                     .into_iter()
                     .map(|x| {
@@ -373,7 +373,7 @@ pub fn polars_literal_values_to_series(literal_values: Vec<LiteralValue>, name: 
                     .collect::<Vec<Option<u32>>>(),
             ),
             LiteralValue::UInt64(_) => Series::new(
-                name,
+                name.into(),
                 literal_values
                     .into_iter()
                     .map(|x| {
@@ -386,7 +386,7 @@ pub fn polars_literal_values_to_series(literal_values: Vec<LiteralValue>, name: 
                     .collect::<Vec<Option<u64>>>(),
             ),
             LiteralValue::Int32(_) => Series::new(
-                name,
+                name.into(),
                 literal_values
                     .into_iter()
                     .map(|x| {
@@ -399,7 +399,7 @@ pub fn polars_literal_values_to_series(literal_values: Vec<LiteralValue>, name: 
                     .collect::<Vec<Option<i32>>>(),
             ),
             LiteralValue::Int64(_) => Series::new(
-                name,
+                name.into(),
                 literal_values
                     .into_iter()
                     .map(|x| {
@@ -412,7 +412,7 @@ pub fn polars_literal_values_to_series(literal_values: Vec<LiteralValue>, name: 
                     .collect::<Vec<Option<i64>>>(),
             ),
             LiteralValue::Float32(_) => Series::new(
-                name,
+                name.into(),
                 literal_values
                     .into_iter()
                     .map(|x| {
@@ -425,7 +425,7 @@ pub fn polars_literal_values_to_series(literal_values: Vec<LiteralValue>, name: 
                     .collect::<Vec<Option<f32>>>(),
             ),
             LiteralValue::Float64(_) => Series::new(
-                name,
+                name.into(),
                 literal_values
                     .into_iter()
                     .map(|x| {
@@ -444,7 +444,7 @@ pub fn polars_literal_values_to_series(literal_values: Vec<LiteralValue>, name: 
             //TODO: Assert time unit lik??
             {
                 Series::new(
-                    name,
+                    name.into(),
                     literal_values
                         .into_iter()
                         .map(|x| {
@@ -470,7 +470,7 @@ pub fn polars_literal_values_to_series(literal_values: Vec<LiteralValue>, name: 
         }
     } else {
         Series::new(
-            name,
+            name.into(),
             literal_values
                 .iter()
                 .map(|_| None)

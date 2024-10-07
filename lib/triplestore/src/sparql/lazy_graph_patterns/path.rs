@@ -7,6 +7,7 @@ use polars::prelude::{
     UniqueKeepStrategy,
 };
 use polars_core::prelude::{DataType, SortMultipleOptions};
+use polars_utils::pl_str::PlSmallStr;
 use query_processing::errors::QueryProcessingError;
 use query_processing::graph_patterns::{join, union};
 use representation::multitype::{
@@ -113,9 +114,9 @@ impl Triplestore {
                     }
                 }
                 let mut subject_series = Series::from_iter(subject_vec);
-                subject_series.rename("subject_key");
+                subject_series.rename("subject_key".into());
                 let mut object_series = Series::from_iter(object_vec);
-                object_series.rename("object_key");
+                object_series.rename("object_key".into());
                 let mut out_lf = DataFrame::new(vec![subject_series, object_series])
                     .unwrap()
                     .lazy();
@@ -208,8 +209,14 @@ impl Triplestore {
                 out_dt_obj = dtypes.remove(OBJECT_COL_NAME).unwrap();
             } else {
                 out_df = DataFrame::new(vec![
-                    Series::new_empty(SUBJECT_COL_NAME, &BaseRDFNodeType::None.polars_data_type()),
-                    Series::new_empty(OBJECT_COL_NAME, &BaseRDFNodeType::None.polars_data_type()),
+                    Series::new_empty(
+                        SUBJECT_COL_NAME.into(),
+                        &BaseRDFNodeType::None.polars_data_type(),
+                    ),
+                    Series::new_empty(
+                        OBJECT_COL_NAME.into(),
+                        &BaseRDFNodeType::None.polars_data_type(),
+                    ),
                 ])
                 .unwrap();
                 out_dt_obj = RDFNodeType::None;
@@ -217,8 +224,14 @@ impl Triplestore {
             }
         } else {
             out_df = DataFrame::new(vec![
-                Series::new_empty(SUBJECT_COL_NAME, &BaseRDFNodeType::None.polars_data_type()),
-                Series::new_empty(OBJECT_COL_NAME, &BaseRDFNodeType::None.polars_data_type()),
+                Series::new_empty(
+                    SUBJECT_COL_NAME.into(),
+                    &BaseRDFNodeType::None.polars_data_type(),
+                ),
+                Series::new_empty(
+                    OBJECT_COL_NAME.into(),
+                    &BaseRDFNodeType::None.polars_data_type(),
+                ),
             ])
             .unwrap();
             out_dt_obj = RDFNodeType::None;
@@ -237,7 +250,7 @@ impl Triplestore {
             }
             TermPattern::BlankNode(b) => {
                 var_cols.push(b.as_str().to_string());
-                out_df.rename(SUBJECT_COL_NAME, b.as_str()).unwrap();
+                out_df.rename(SUBJECT_COL_NAME, b.as_str().into()).unwrap();
             }
             TermPattern::Literal(l) => {
                 let l = rdf_literal_to_polars_literal_value(l);
@@ -250,7 +263,7 @@ impl Triplestore {
             }
             TermPattern::Variable(v) => {
                 var_cols.push(v.as_str().to_string());
-                out_df.rename(SUBJECT_COL_NAME, v.as_str()).unwrap();
+                out_df.rename(SUBJECT_COL_NAME, v.as_str().into()).unwrap();
             }
         }
 
@@ -266,7 +279,7 @@ impl Triplestore {
             }
             TermPattern::BlankNode(b) => {
                 var_cols.push(b.as_str().to_string());
-                out_df.rename(OBJECT_COL_NAME, b.as_str()).unwrap();
+                out_df.rename(OBJECT_COL_NAME, b.as_str().into()).unwrap();
             }
             TermPattern::Literal(l) => {
                 let l = rdf_literal_to_polars_literal_value(l);
@@ -279,7 +292,9 @@ impl Triplestore {
             }
             TermPattern::Variable(v) => {
                 var_cols.push(v.as_str().to_string());
-                out_df.rename(OBJECT_COL_NAME, v.as_str()).unwrap();
+                out_df
+                    .rename(OBJECT_COL_NAME, PlSmallStr::from_str(v.as_str()))
+                    .unwrap();
             }
         }
         let mut datatypes = HashMap::new();
@@ -734,7 +749,7 @@ impl U32DataFrameCreator {
             .unwrap()
             .drop(&object_row_index)
             .unwrap()
-            .unique(None, UniqueKeepStrategy::Any, None)
+            .unique::<(), ()>(None, UniqueKeepStrategy::Any, None)
             .unwrap();
         Ok((lookup_df, lookup_df_types, out_df_map))
     }

@@ -10,6 +10,7 @@ use oxttl::ntriples::FromSliceNTriplesReader;
 use oxttl::turtle::FromSliceTurtleReader;
 use oxttl::{NTriplesParser, TurtleParser};
 use polars::prelude::{as_struct, col, DataFrame, IntoLazy, LiteralValue, Series};
+use polars_utils::pl_str::PlSmallStr;
 use rayon::iter::ParallelIterator;
 use rayon::prelude::{IntoParallelIterator, IntoParallelRefIterator};
 use representation::rdf_to_polars::{
@@ -208,15 +209,15 @@ impl Triplestore {
                             Subject::BlankNode(bl) => bl.into_string(),
                         });
                         let mut subjects_ser = Series::from_iter(strings_iter);
-                        subjects_ser.rename(SUBJECT_COL_NAME);
+                        subjects_ser.rename(SUBJECT_COL_NAME.into());
 
                         let objects_ser = if object_dt.is_lang_string() {
                             let langs = objects
                                 .par_iter()
                                 .map(|t| match t {
-                                    Term::Literal(l) => {
-                                        LiteralValue::String(l.language().unwrap().to_string())
-                                    }
+                                    Term::Literal(l) => LiteralValue::String(
+                                        l.language().unwrap().to_string().into(),
+                                    ),
                                     _ => panic!("Should never happen"),
                                 })
                                 .collect();
@@ -225,7 +226,7 @@ impl Triplestore {
                                 .map(|t| match t {
                                     Term::Literal(l) => {
                                         let (s, _, _) = l.destruct();
-                                        LiteralValue::String(s)
+                                        LiteralValue::String(s.into())
                                     }
                                     _ => panic!("Should never happen"),
                                 })
@@ -268,7 +269,10 @@ impl Triplestore {
                         let mut df = DataFrame::new(all_series).unwrap();
                         // TODO: Include bad data also
                         df = df
-                            .drop_nulls(Some(&[SUBJECT_COL_NAME, OBJECT_COL_NAME]))
+                            .drop_nulls(Some(&[
+                                SUBJECT_COL_NAME.to_string(),
+                                OBJECT_COL_NAME.to_string(),
+                            ]))
                             .unwrap();
 
                         triples_to_add.push(TriplesToAdd {

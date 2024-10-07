@@ -131,7 +131,7 @@ impl Triplestore {
             if height_0 {
                 // Important that overlapping cols are dropped from mappings and not from lf,
                 // since we also overwrite rdf_node_types with dts correspondingly below.
-                mappings = mappings.drop(overlap.iter().map(|x|col(x)));
+                mappings = mappings.drop(overlap.iter().map(|x| col(x)));
                 if colnames.is_empty() {
                     mappings = mappings.filter(lit(false));
                 } else {
@@ -386,14 +386,14 @@ pub fn create_empty_lf_datatypes(
     if let Some(subject_rename) = subject_keep_rename {
         out_datatypes.insert(subject_rename.to_string(), RDFNodeType::None);
         series_vec.push(Series::new_empty(
-            subject_rename,
+            subject_rename.into(),
             &BaseRDFNodeType::None.polars_data_type(),
         ))
     }
     if let Some(verb_rename) = verb_keep_rename {
         out_datatypes.insert(verb_rename.to_string(), RDFNodeType::None);
         series_vec.push(Series::new_empty(
-            verb_rename,
+            verb_rename.into(),
             &BaseRDFNodeType::None.polars_data_type(),
         ))
     }
@@ -407,7 +407,10 @@ pub fn create_empty_lf_datatypes(
             (dt.as_rdf_node_type(), polars_dt)
         };
         out_datatypes.insert(object_rename.to_string(), use_datatype);
-        series_vec.push(Series::new_empty(object_rename, &use_polars_datatype))
+        series_vec.push(Series::new_empty(
+            object_rename.into(),
+            &use_polars_datatype,
+        ))
     }
     (
         SolutionMappings::new(DataFrame::new(series_vec).unwrap().lazy(), out_datatypes),

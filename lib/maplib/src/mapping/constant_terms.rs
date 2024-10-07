@@ -139,7 +139,7 @@ pub fn constant_blank_node_to_series(
 
             (
                 Series::from_any_values_and_dtype(
-                    BLANK_NODE_SERIES_NAME,
+                    BLANK_NODE_SERIES_NAME.into(),
                     any_value_vec.as_slice(),
                     &DataType::String,
                     false,

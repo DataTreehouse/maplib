@@ -495,7 +495,9 @@ fn prepare_triples_df(
         now.elapsed().as_secs_f32()
     );
     if !has_unique_subset {
-        df = df.unique(None, UniqueKeepStrategy::First, None).unwrap();
+        df = df
+            .unique::<(), ()>(None, UniqueKeepStrategy::First, None)
+            .unwrap();
     }
 
     //TODO: add polars datatype harmonization here.

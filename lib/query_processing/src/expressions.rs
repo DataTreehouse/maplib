@@ -344,7 +344,7 @@ pub fn exists(
         )
         .unwrap(),
     );
-    ser.rename(outer_context.as_str());
+    ser.rename(outer_context.as_str().into());
     rdf_node_types.insert(
         outer_context.as_str().to_string(),
         RDFNodeType::Literal(xsd::BOOLEAN.into_owned()),
