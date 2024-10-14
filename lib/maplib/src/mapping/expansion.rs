@@ -163,12 +163,14 @@ impl Mapping {
                     .par_drain(..)
                     .enumerate()
                     .map(|(i, (instance, series_vec))| {
-                        let target_template = if let Some(target_template) = self
-                            .template_dataset
-                            .get(instance.template_name.as_str()) {
+                        let target_template = if let Some(target_template) =
+                            self.template_dataset.get(instance.template_name.as_str())
+                        {
                             target_template
                         } else {
-                            return Err(MappingError::TemplateNotFound(instance.template_name.to_string()))
+                            return Err(MappingError::TemplateNotFound(
+                                instance.template_name.to_string(),
+                            ));
                         };
                         if let Some(RemapResult {
                             df: instance_df,
