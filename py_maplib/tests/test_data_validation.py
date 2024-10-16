@@ -363,7 +363,7 @@ def test_nested_template_both_are_general_and_compatible_2():
     """, include_datatypes=True)
     assert r.rdf_types["c"] == RDFType.Literal(XSD().long)
 
-def test_nested_template_both_are_general_and_possibly_but_not_necessarily_incompatible():
+def test_nested_template_both_are_general_and_possibly_but_not_necessarily_incompatible_list():
     df = pl.DataFrame({"MyValue": [[1]]})
 
     templates = """
