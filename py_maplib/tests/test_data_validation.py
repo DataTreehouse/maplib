@@ -140,7 +140,6 @@ def test_nested_template_more_general():
         ?a ?b ?c
     }
     """, include_datatypes=True)
-    print(r.mappings)
     assert r.rdf_types["c"] == RDFType.Literal(XSD().string)
 
 
@@ -167,7 +166,6 @@ def test_nested_template_more_specific():
         ?a ?b ?c
     }
     """, include_datatypes=True)
-    print(r.mappings)
     assert r.rdf_types["c"] == RDFType.Literal(XSD().string)
 
 
@@ -256,7 +254,6 @@ def test_nested_template_both_are_general_literal_and_compatible():
         ?a ?b ?c
     }
     """, include_datatypes=True)
-    print(r.mappings)
     assert r.rdf_types["c"] == RDFType.Literal(XSD().long)
 
 def test_nested_template_both_are_general_literal_and_compatible_2():
@@ -283,7 +280,6 @@ def test_nested_template_both_are_general_literal_and_compatible_2():
         ?a ?b ?c
     }
     """, include_datatypes=True)
-    print(r.mappings)
     assert r.rdf_types["c"] == RDFType.Literal(XSD().long)
 
 
@@ -311,5 +307,86 @@ def test_nested_template_both_are_general_literal_and_possibly_but_not_necessari
         ?a ?b ?c
     }
     """, include_datatypes=True)
-    print(r.mappings)
     assert r.rdf_types["c"] == RDFType.Literal(XSD().long)
+
+
+
+def test_nested_template_both_are_general_and_possibly_but_not_necessarily_incompatible():
+    df = pl.DataFrame({"MyValue": [1]})
+
+    templates = """
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+
+<http://example.net/ns#ExampleNestedTemplate> [ owl:real ?MyValue ] :: {
+  <http://ns.ottr.xyz/0.4/Triple>(<http://example.net/ns#MyObject>,<http://example.net/ns#hasValue>,?MyValue)
+} . 
+
+<http://example.net/ns#ExampleTemplate> [ rdfs:Resource ?MyValue ] :: {
+  <http://example.net/ns#ExampleNestedTemplate>(?MyValue)
+} . 
+
+    """
+    mapping = Mapping(templates)
+    mapping.expand("http://example.net/ns#ExampleTemplate", df)
+    r = mapping.query("""
+    SELECT ?a ?b ?c WHERE {
+        ?a ?b ?c
+    }
+    """, include_datatypes=True)
+    assert r.rdf_types["c"] == RDFType.Literal(XSD().long)
+
+def test_nested_template_both_are_general_and_compatible_2():
+    df = pl.DataFrame({"MyValue": [1]})
+
+    templates = """
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+
+<http://example.net/ns#ExampleNestedTemplate> [ rdfs:Resource ?MyValue ] :: {
+  <http://ns.ottr.xyz/0.4/Triple>(<http://example.net/ns#MyObject>,<http://example.net/ns#hasValue>,?MyValue)
+} . 
+
+<http://example.net/ns#ExampleTemplate> [ owl:real ?MyValue ] :: {
+  <http://example.net/ns#ExampleNestedTemplate>(?MyValue)
+} . 
+
+    """
+    mapping = Mapping(templates)
+    mapping.expand("http://example.net/ns#ExampleTemplate", df)
+    r = mapping.query("""
+    SELECT ?a ?b ?c WHERE {
+        ?a ?b ?c
+    }
+    """, include_datatypes=True)
+    assert r.rdf_types["c"] == RDFType.Literal(XSD().long)
+
+def test_nested_template_both_are_general_and_possibly_but_not_necessarily_incompatible():
+    df = pl.DataFrame({"MyValue": [[1]]})
+
+    templates = """
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+
+<http://example.net/ns#ExampleNestedTemplate> [ owl:real ?MyValue ] :: {
+  <http://ns.ottr.xyz/0.4/Triple>(<http://example.net/ns#MyObject>,<http://example.net/ns#hasValue>,?MyValue)
+} . 
+
+<http://example.net/ns#ExampleTemplate> [ List<rdfs:Resource> ?MyValue ] :: {
+  cross | <http://example.net/ns#ExampleNestedTemplate>(++?MyValue)
+} . 
+
+    """
+    mapping = Mapping(templates)
+    mapping.expand("http://example.net/ns#ExampleTemplate", df)
+    r = mapping.query("""
+    SELECT ?a ?b ?c WHERE {
+        ?a ?b ?c
+    }
+    """, include_datatypes=True)
+    assert r.rdf_types["c"] == RDFType.Literal(XSD().long)
+
+

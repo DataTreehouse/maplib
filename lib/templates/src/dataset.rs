@@ -283,7 +283,11 @@ fn lub(
     } else if left.is_iri() && right.is_iri() {
         return Ok(left.clone());
     } else if let (PType::Basic(left_basic), PType::Basic(right_basic)) = (left, right) {
-        if is_literal_subtype(left_basic, right_basic) {
+        if left_basic.as_ref() == rdfs::RESOURCE {
+            return Ok(left.clone());
+        } else if right_basic.as_ref() == rdfs::RESOURCE {
+            return Ok(left.clone());
+        } else if is_literal_subtype(left_basic, right_basic) {
             return Ok(left.clone());
         } else if is_literal_subtype(right_basic, left_basic) {
             return Ok(left.clone());
