@@ -5,12 +5,14 @@ use crate::mapping::constant_terms::{constant_blank_node_to_series, constant_to_
 use crate::mapping::errors::MappingError;
 use crate::mapping::expansion::validation::validate;
 use log::debug;
+use oxrdf::vocab::rdf;
 use oxrdf::{NamedNode, Variable};
 use polars::prelude::{
     col, lit, DataFrame, DataType, Expr, IntoLazy, LazyFrame, NamedFrom, Series,
 };
 use rayon::iter::{IndexedParallelIterator, ParallelDrainRange, ParallelIterator};
 use representation::multitype::split_df_multicols;
+use representation::rdf_to_polars::rdf_named_node_to_polars_literal_value;
 use representation::RDFNodeType;
 use representation::{OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME};
 use std::cmp::{max, min};
@@ -24,6 +26,11 @@ use templates::constants::OTTR_TRIPLE;
 use templates::MappingColumnType;
 use triplestore::TriplesToAdd;
 use uuid::Uuid;
+
+const LIST_COL: &str = "list";
+const FIRST_COL: &str = "first";
+
+const REST_COL: &str = "rest";
 
 impl Mapping {
     pub fn expand(
@@ -226,19 +233,32 @@ impl Mapping {
         &mut self,
         mut result_vec: Vec<OTTRTripleInstance>,
         call_uuid: &String,
-        new_blank_node_counter: usize,
+        mut new_blank_node_counter: usize,
     ) -> Result<(), MappingError> {
         let now = Instant::now();
-        let triples: Vec<_> = result_vec.par_drain(..).map(create_triples).collect();
+        let triples: Vec<_> = result_vec
+            .par_drain(..)
+            .enumerate()
+            .map(|(i, x)| create_triples(i * 2, new_blank_node_counter, x))
+            .collect();
         let mut ok_triples = vec![];
         for t in triples {
-            ok_triples.push(t?);
+            let (rs, updated_blank_node_counter) = t?;
+            new_blank_node_counter = max(new_blank_node_counter, updated_blank_node_counter);
+            ok_triples.extend(rs);
         }
         let mut all_triples_to_add = vec![];
-        for (mut df, subj_rdf_node_type, obj_rdf_node_type, verb, has_unique_subset) in ok_triples {
+        for CreateTriplesResult {
+            mut df,
+            subject_type,
+            object_type,
+            verb,
+            has_unique_subset,
+        } in ok_triples
+        {
             let mut coltypes_names = vec![
-                (&subj_rdf_node_type, SUBJECT_COL_NAME),
-                (&obj_rdf_node_type, OBJECT_COL_NAME),
+                (&subject_type, SUBJECT_COL_NAME),
+                (&object_type, OBJECT_COL_NAME),
             ];
             if verb.is_none() {
                 coltypes_names.push((&RDFNodeType::IRI, VERB_COL_NAME));
@@ -271,12 +291,12 @@ impl Mapping {
             }
             df = lf.collect().unwrap();
 
-            let has_multi = matches!(subj_rdf_node_type, RDFNodeType::MultiType(_))
-                || matches!(obj_rdf_node_type, RDFNodeType::MultiType(_));
+            let has_multi = matches!(subject_type, RDFNodeType::MultiType(_))
+                || matches!(object_type, RDFNodeType::MultiType(_));
 
             let types = HashMap::from([
-                (SUBJECT_COL_NAME.to_string(), subj_rdf_node_type),
-                (OBJECT_COL_NAME.to_string(), obj_rdf_node_type),
+                (SUBJECT_COL_NAME.to_string(), subject_type),
+                (OBJECT_COL_NAME.to_string(), object_type),
             ]);
             let dfs = if has_multi {
                 split_df_multicols(df, &types)
@@ -362,16 +382,30 @@ fn get_term_names<'a>(out_vars: &mut Vec<&'a str>, term: &'a StottrTerm) {
     }
 }
 
+struct CreateTriplesResult {
+    df: DataFrame,
+    subject_type: RDFNodeType,
+    object_type: RDFNodeType,
+    verb: Option<NamedNode>,
+    has_unique_subset: bool,
+}
+
 fn create_triples(
-    i: OTTRTripleInstance,
-) -> Result<(DataFrame, RDFNodeType, RDFNodeType, Option<NamedNode>, bool), MappingError> {
+    i: usize,
+    blank_node_counter: usize,
+    triple_instance: OTTRTripleInstance,
+) -> Result<(Vec<CreateTriplesResult>, usize), MappingError> {
+    let mut new_subject_blank_node_counter = blank_node_counter;
+    let mut new_object_blank_node_counter = blank_node_counter;
+
     let OTTRTripleInstance {
         mut df,
         mut dynamic_columns,
         static_columns,
         has_unique_subset,
-    } = i;
+    } = triple_instance;
 
+    let mut results = vec![];
     let mut expressions = vec![];
 
     let mut verb = None;
@@ -409,30 +443,151 @@ fn create_triples(
         keep_cols.push(col(VERB_COL_NAME));
     }
     lf = lf.select(keep_cols.as_slice());
-    let df = lf.collect().expect("Collect problem");
+    let mut df = lf.collect().expect("Collect problem");
     let subj_t = dynamic_columns.remove(SUBJECT_COL_NAME).unwrap();
-    let subj_rdf_node_type = if let MappingColumnType::Flat(t) = subj_t {
-        t
-    } else {
-        return Err(MappingError::TooDeeplyNestedError(format!(
-            "Expected subject of ottr:Triple to be non-nested, but was {subj_t:?}"
-        )));
+    let subj_rdf_node_type = match subj_t {
+        MappingColumnType::Flat(f) => f,
+        MappingColumnType::Nested(n) => {
+            if let MappingColumnType::Flat(r) = *n {
+                results.extend(create_list_triples(
+                    &mut df,
+                    SUBJECT_COL_NAME,
+                    &r,
+                    i,
+                    &mut new_subject_blank_node_counter,
+                )?);
+                RDFNodeType::BlankNode
+            } else {
+                return Err(MappingError::TooDeeplyNestedError(format!(
+                    "Expected subject of ottr:Triple to be flat or nested in one layer, but was list containing {n:?}"
+                )));
+            }
+        }
     };
     let obj_t = dynamic_columns.remove(OBJECT_COL_NAME).unwrap();
-    let obj_rdf_node_type = if let MappingColumnType::Flat(t) = obj_t {
-        t
-    } else {
-        return Err(MappingError::TooDeeplyNestedError(format!(
-            "Expected object of ottr:Triple to be non-nested, but was {obj_t:?}"
-        )));
+    let obj_rdf_node_type = match obj_t {
+        MappingColumnType::Flat(f) => f,
+        MappingColumnType::Nested(n) => {
+            if let MappingColumnType::Flat(r) = *n {
+                results.extend(create_list_triples(
+                    &mut df,
+                    OBJECT_COL_NAME,
+                    &r,
+                    i+1,
+                    &mut new_object_blank_node_counter,
+                )?);
+                RDFNodeType::BlankNode
+            } else {
+                return Err(MappingError::TooDeeplyNestedError(format!(
+                    "Expected object of ottr:Triple to be flat or nested in one layer, but was list containing {n:?}"
+                )));
+            }
+        }
     };
-    Ok((
+
+    results.push(CreateTriplesResult {
         df,
-        subj_rdf_node_type,
-        obj_rdf_node_type,
+        subject_type: subj_rdf_node_type,
+        object_type: obj_rdf_node_type,
         verb,
         has_unique_subset,
-    ))
+    });
+    Ok((results, max(new_subject_blank_node_counter, new_object_blank_node_counter)))
+}
+
+fn create_list_triples(
+    df: &mut DataFrame,
+    c: &str,
+    rdf_node_type: &RDFNodeType,
+    i: usize,
+    blank_node_counter: &mut usize,
+) -> Result<Vec<CreateTriplesResult>, MappingError> {
+    let my_df = df.with_row_index(LIST_COL, None).unwrap();
+    let mut list_df = my_df.select([c, LIST_COL]).unwrap();
+    list_df = list_df
+        .explode([c])
+        .unwrap()
+        .with_row_index(FIRST_COL, None)
+        .unwrap();
+    list_df = list_df
+        .lazy()
+        .with_column(
+            (lit(format!("l_{i}_"))
+                + (col(LIST_COL) + lit(*blank_node_counter as u32)).cast(DataType::String))
+            .alias(LIST_COL),
+        )
+        .with_column((col(LIST_COL) + lit("_") + col(FIRST_COL).cast(DataType::String)).alias(FIRST_COL))
+        .with_column(col(FIRST_COL).shift(lit(-1)).alias(REST_COL))
+        .collect()
+        .unwrap();
+    *df = my_df
+        .lazy()
+        .drop([c])
+        .with_column(
+            (lit(format!("l_{i}_"))
+                + (col(LIST_COL) + lit(*blank_node_counter as u32)).cast(DataType::String)
+                + lit("_0"))
+            .alias(c),
+        )
+        .collect()
+        .unwrap();
+
+    let mut first_df = list_df.select([FIRST_COL, c]).unwrap();
+    first_df
+        .rename(c, OBJECT_COL_NAME)
+        .unwrap()
+        .rename(FIRST_COL, SUBJECT_COL_NAME)
+        .unwrap();
+
+    let mut rest_df = list_df
+        .lazy()
+        .select([
+            col(FIRST_COL).alias(SUBJECT_COL_NAME),
+            col(REST_COL).alias(OBJECT_COL_NAME),
+        ])
+        .collect()
+        .unwrap();
+
+    let rest_nil_df = rest_df
+        .clone()
+        .lazy()
+        .filter(col(OBJECT_COL_NAME).is_null())
+        .with_column(
+            lit(rdf_named_node_to_polars_literal_value(
+                &rdf::NIL.into_owned(),
+            ))
+            .alias(OBJECT_COL_NAME),
+        )
+        .collect()
+        .unwrap();
+
+    let rest_df = rest_df.lazy().drop_nulls(None).collect().unwrap();
+
+    let results = vec![
+        CreateTriplesResult {
+            df: rest_df,
+            subject_type: RDFNodeType::BlankNode,
+            object_type: RDFNodeType::BlankNode,
+            verb: Some(rdf::REST.into_owned()),
+            has_unique_subset: false,
+        },
+        CreateTriplesResult {
+            df: rest_nil_df,
+            subject_type: RDFNodeType::BlankNode,
+            object_type: RDFNodeType::IRI,
+            verb: Some(rdf::REST.into_owned()),
+            has_unique_subset: false,
+        },
+        CreateTriplesResult {
+            df: first_df,
+            subject_type: RDFNodeType::BlankNode,
+            object_type: rdf_node_type.clone(),
+            verb: Some(rdf::FIRST.into_owned()),
+            has_unique_subset: false,
+        },
+    ];
+    *blank_node_counter = *blank_node_counter + df.height();
+    Ok(results)
 }
 
 fn create_dynamic_expression_from_static(

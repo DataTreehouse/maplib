@@ -13,7 +13,7 @@ from maplib import (
     RDFType,
 )
 from polars.testing import assert_frame_equal
-
+pl.Config.set_fmt_str_lengths(100)
 
 def test_want_float_got_int64():
     xsd = XSD()
@@ -389,4 +389,77 @@ def test_nested_template_both_are_general_and_possibly_but_not_necessarily_incom
     """, include_datatypes=True)
     assert r.rdf_types["c"] == RDFType.Literal(XSD().long)
 
+def test_list_arg_to_ottr_triple_should_get_rdf_representation():
+    df = pl.DataFrame({"MyValue": [[1]]})
+
+    templates = """
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+
+<http://example.net/ns#ExampleTemplate> [ List<rdfs:Resource> ?MyValue ] :: {
+  ottr:Triple(<http://example.net/ns#MyObject>,<http://example.net/ns#hasValueList>,?MyValue)
+} . 
+
+    """
+    mapping = Mapping(templates)
+    mapping.expand("http://example.net/ns#ExampleTemplate", df)
+    r = mapping.query("""
+    SELECT ?a ?b ?c WHERE {
+        ?a ?b ?c
+    }
+    """, include_datatypes=True)
+    assert r.rdf_types["c"] == RDFType.Multi([RDFType.IRI(), RDFType.BlankNode(), RDFType.Literal(XSD().long)])
+
+
+def test_list_arg_to_ottr_triple_should_get_rdf_representation_nested():
+    df = pl.DataFrame({"MyValue": [[1,2]]})
+
+    templates = """
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+
+<http://example.net/ns#ExampleNestedTemplate> [ ?a, ?b, rdfs:Resource ?c ] :: {
+  ottr:Triple(?a, ?b, ?c)
+} . 
+
+<http://example.net/ns#ExampleTemplate> [ List<rdfs:Resource> ?MyValue ] :: {
+    <http://example.net/ns#ExampleNestedTemplate>(<http://example.net/ns#MyObject>,<http://example.net/ns#hasValueList>,?MyValue)
+} . 
+
+    """
+    mapping = Mapping(templates)
+    mapping.expand("http://example.net/ns#ExampleTemplate", df)
+    r = mapping.query("""
+    SELECT ?a ?b ?c WHERE {
+        ?a ?b ?c
+    }
+    """, include_datatypes=True)
+    assert r.rdf_types["c"] == RDFType.Multi([RDFType.IRI(), RDFType.BlankNode(), RDFType.Literal(XSD().long)])
+
+
+def test_list_arg_to_ottr_triple_should_get_rdf_representation_multiple_executions():
+    df1 = pl.DataFrame({"MyValue": [[1,2]]})
+    df2 = pl.DataFrame({"MyValue": [[3,4]]})
+    templates = """
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+
+<http://example.net/ns#ExampleTemplate> [ List<rdfs:Resource> ?MyValue ] :: {
+  ottr:Triple(<http://example.net/ns#MyObject>,<http://example.net/ns#hasValueList>,?MyValue)
+} . 
+
+    """
+    mapping = Mapping(templates)
+    mapping.expand("http://example.net/ns#ExampleTemplate", df1)
+    mapping.expand("http://example.net/ns#ExampleTemplate", df2)
+
+    r = mapping.query("""
+    SELECT ?a ?b ?c WHERE {
+        ?a ?b ?c
+    }
+    """, include_datatypes=True)
+    assert r.rdf_types["c"] == RDFType.Multi([RDFType.IRI(), RDFType.BlankNode(), RDFType.Literal(XSD().long)])
 
