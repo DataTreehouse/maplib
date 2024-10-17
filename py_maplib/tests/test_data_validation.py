@@ -409,6 +409,7 @@ def test_list_arg_to_ottr_triple_should_get_rdf_representation():
         ?a ?b ?c
     }
     """, include_datatypes=True)
+    assert r.mappings.height == 3
     assert r.rdf_types["c"] == RDFType.Multi([RDFType.IRI(), RDFType.BlankNode(), RDFType.Literal(XSD().long)])
 
 
@@ -436,6 +437,7 @@ def test_list_arg_to_ottr_triple_should_get_rdf_representation_nested():
         ?a ?b ?c
     }
     """, include_datatypes=True)
+    assert r.mappings.height == 5
     assert r.rdf_types["c"] == RDFType.Multi([RDFType.IRI(), RDFType.BlankNode(), RDFType.Literal(XSD().long)])
 
 
@@ -461,5 +463,6 @@ def test_list_arg_to_ottr_triple_should_get_rdf_representation_multiple_executio
         ?a ?b ?c
     }
     """, include_datatypes=True)
+    assert r.mappings.height == 10
     assert r.rdf_types["c"] == RDFType.Multi([RDFType.IRI(), RDFType.BlankNode(), RDFType.Literal(XSD().long)])
 
