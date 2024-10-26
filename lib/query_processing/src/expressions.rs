@@ -302,20 +302,38 @@ pub fn coalesce_expression(
 ) -> Result<SolutionMappings, QueryProcessingError> {
     let mut coal_exprs = vec![];
     for c in &inner_contexts {
-        coal_exprs.push(col(c.as_str()));
+        if solution_mappings
+            .rdf_node_types
+            .get(c.as_str())
+            .unwrap()
+            != &RDFNodeType::None
+        {
+            coal_exprs.push(col(c.as_str()));
+        }
     }
 
-    solution_mappings.mappings = solution_mappings
-        .mappings
-        .with_column(coalesce(coal_exprs.as_slice()).alias(outer_context.as_str()));
-    //TODO: generalize
-    let existing_type = solution_mappings
-        .rdf_node_types
-        .get(inner_contexts.first().unwrap().as_str())
-        .unwrap();
-    solution_mappings
-        .rdf_node_types
-        .insert(outer_context.as_str().to_string(), existing_type.clone());
+    if coal_exprs.is_empty() {
+        solution_mappings.mappings = solution_mappings.mappings.with_column(
+            lit(LiteralValue::Null)
+                .cast(BaseRDFNodeType::None.polars_data_type())
+                .alias(outer_context.as_str()),
+        );
+        solution_mappings
+            .rdf_node_types
+            .insert(outer_context.as_str().to_string(), RDFNodeType::None);
+    } else {
+        solution_mappings.mappings = solution_mappings
+            .mappings
+            .with_column(coalesce(coal_exprs.as_slice()).alias(outer_context.as_str()));
+        //TODO: generalize
+        let existing_type = solution_mappings
+            .rdf_node_types
+            .get(inner_contexts.first().unwrap().as_str())
+            .unwrap();
+        solution_mappings
+            .rdf_node_types
+            .insert(outer_context.as_str().to_string(), existing_type.clone());
+    }
     solution_mappings = drop_inner_contexts(solution_mappings, &inner_contexts.iter().collect());
     Ok(solution_mappings)
 }
