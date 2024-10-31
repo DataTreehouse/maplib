@@ -16,11 +16,11 @@ members = [
 rust-version = "1.81.0"
 
 [workspace.dependencies]
-pyo3 = {version = "0.22.1", features = ["py-clone"] }
-polars = { version = "0.43.1", features = ["nightly", "performant", "cse"] }
-polars-utils = "0.43.1"
-polars-core = "0.43.1"
-polars-time = "0.43.1"
+pyo3 = {version = "0.21.0" }
+polars = { version = "0.44.1", features = ["nightly", "performant", "cse"] }
+polars-utils = "0.44.1"
+polars-core = "0.44.1"
+polars-time = "0.44.1"
 rayon = "1.10.0"
 regex = "1.10.6"
 oxrdf = "0.2.0-alpha.5"
@@ -31,7 +31,7 @@ oxsdatatypes = "0.2.0-alpha.2"
 env_logger = "0.11.3"
 log = "0.4.21"
 chrono = "0.4.37"
-chrono-tz = "0.9.0"
+chrono-tz = "0.10.0"
 uuid = { version = "1.8.0", features = [
     "v4", # Lets you generate random UUIDs
     "fast-rng", # Use a faster (but still sufficiently random) RNG

@@ -5,7 +5,7 @@ use crate::polars_to_rdf::{
 use crate::{BaseRDFNodeType, RDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD};
 use oxrdf::vocab::{rdf, xsd};
 use polars::datatypes::DataType;
-use polars::prelude::{coalesce, col, lit, Expr, GetOutput, LazyFrame, LiteralValue};
+use polars::prelude::{coalesce, col, lit, Expr, GetOutput, IntoColumn, LazyFrame, LiteralValue};
 use std::collections::HashMap;
 
 pub fn format_columns(
@@ -43,7 +43,7 @@ pub fn base_expression_to_string(
                             } else {
                                 panic!()
                             };
-                            Ok(Some(datetime_series_to_strings(&x, tz)))
+                            Ok(Some(datetime_series_to_strings(x.as_series().unwrap(), tz).into_column()))
                         },
                         GetOutput::from_type(DataType::String),
                     )

@@ -20,6 +20,7 @@ use pyo3::{
 };
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
+use std::ops::Deref;
 use std::str::FromStr;
 use thiserror::*;
 
