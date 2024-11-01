@@ -5,9 +5,9 @@ use crate::TriplesToAdd;
 use log::debug;
 use memmap2::MmapOptions;
 use oxrdf::{BlankNode, GraphName, NamedNode, Quad, Subject, Term};
-use oxrdfio::{FromSliceQuadReader, RdfFormat, RdfParser, RdfSyntaxError};
-use oxttl::ntriples::FromSliceNTriplesReader;
-use oxttl::turtle::FromSliceTurtleReader;
+use oxrdfio::{SliceQuadParser, RdfFormat, RdfParser, RdfSyntaxError};
+use oxttl::ntriples::SliceNTriplesParser;
+use oxttl::turtle::SliceTurtleParser;
 use oxttl::{NTriplesParser, TurtleParser};
 use polars::prelude::{as_struct, col, DataFrame, IntoLazy, LiteralValue, Series};
 use rayon::iter::ParallelIterator;
@@ -143,7 +143,7 @@ impl Triplestore {
                     parser = parser.with_base_iri(base_iri).unwrap();
                 }
                 vec![MyFromSliceQuadReader {
-                    parser: MyFromSliceQuadReaderKind::Other(parser.parse_slice(slice)),
+                    parser: MyFromSliceQuadReaderKind::Other(parser.for_slice(slice)),
                 }]
             };
         debug!("Effective parallelization for reading is {}", readers.len());
@@ -384,9 +384,9 @@ pub struct MyFromSliceQuadReader<'a> {
 }
 
 pub enum MyFromSliceQuadReaderKind<'a> {
-    Other(FromSliceQuadReader<'a>),
-    TurtlePar(FromSliceTurtleReader<'a>),
-    NTriplesPar(FromSliceNTriplesReader<'a>),
+    Other(SliceQuadParser<'a>),
+    TurtlePar(SliceTurtleParser<'a>),
+    NTriplesPar(SliceNTriplesParser<'a>),
 }
 
 impl<'a> Iterator for MyFromSliceQuadReader<'a> {

@@ -23,14 +23,14 @@ polars-core = "0.41.3"
 polars-time = "0.41.3"
 rayon = "1.10.0"
 regex = "=1.10.5"
-oxrdf = "0.2.0-alpha.5"
-oxrdfio = "0.1.0-alpha.6"
-oxttl = "0.1.0-alpha.6"
-oxiri = "0.2.2"
-oxsdatatypes = "0.2.0-alpha.2"
-env_logger = "0.11.3"
+oxrdf = "0.2.2"
+oxrdfio = "0.1.2"
+oxttl = "0.1.2"
+oxiri = "0.2.8"
+oxsdatatypes = "0.2.0"
+env_logger = "0.11.5"
 log = "0.4.21"
-chrono = "0.4.37"
+chrono = "0.4.38"
 chrono-tz = "0.9.0"
 uuid = { version = "1.8.0", features = [
     "v4", # Lets you generate random UUIDs
@@ -45,19 +45,12 @@ oxilangtag = "0.1.5"
 datetimeparse = "0.3.0"
 fundu = "2.0.0"
 memmap2 = "0.9.4"
-sprs = "0.11.1"
+sprs = "0.11.2"
 walkdir = "2.5.0"
 
 #dev-dependencies
 rstest = "0.21.0"
 serial_test = "3.1.1"
-
-[patch.crates-io]
-oxrdf = { git = 'https://github.com/magbak/oxigraph.git', rev = "b13df973ed2785de2ac41066ca4b62d88d3f5d40"}
-oxttl = { git = 'https://github.com/magbak/oxigraph.git', rev = "b13df973ed2785de2ac41066ca4b62d88d3f5d40"}
-oxrdfio = { git = 'https://github.com/magbak/oxigraph.git', rev = "b13df973ed2785de2ac41066ca4b62d88d3f5d40"}
-oxsdatatypes = { git = 'https://github.com/magbak/oxigraph.git', rev = "b13df973ed2785de2ac41066ca4b62d88d3f5d40"}
-
 #polars = { git = "https://github.com/pola-rs/polars.git",  rev = "0c2b5d82fd2726df7d7b318e5c21581a27fffdba"}
 #polars-utils = { git = "https://github.com/pola-rs/polars.git",  rev = "0c2b5d82fd2726df7d7b318e5c21581a27fffdba"}
 #polars-core = { git = "https://github.com/pola-rs/polars.git",  rev = "0c2b5d82fd2726df7d7b318e5c21581a27fffdba"}
