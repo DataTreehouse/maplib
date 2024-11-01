@@ -473,7 +473,7 @@ fn create_triples(
                     &mut df,
                     OBJECT_COL_NAME,
                     &r,
-                    i+1,
+                    i + 1,
                     &mut new_object_blank_node_counter,
                 )?);
                 RDFNodeType::BlankNode
@@ -492,7 +492,13 @@ fn create_triples(
         verb,
         has_unique_subset,
     });
-    Ok((results, max(new_subject_blank_node_counter, new_object_blank_node_counter)))
+    Ok((
+        results,
+        max(
+            new_subject_blank_node_counter,
+            new_object_blank_node_counter,
+        ),
+    ))
 }
 
 fn create_list_triples(
@@ -516,7 +522,9 @@ fn create_list_triples(
                 + (col(LIST_COL) + lit(*blank_node_counter as u32)).cast(DataType::String))
             .alias(LIST_COL),
         )
-        .with_column((col(LIST_COL) + lit("_") + col(FIRST_COL).cast(DataType::String)).alias(FIRST_COL))
+        .with_column(
+            (col(LIST_COL) + lit("_") + col(FIRST_COL).cast(DataType::String)).alias(FIRST_COL),
+        )
         .with_column(col(FIRST_COL).shift(lit(-1)).alias(REST_COL))
         .collect()
         .unwrap();

@@ -302,12 +302,7 @@ pub fn coalesce_expression(
 ) -> Result<SolutionMappings, QueryProcessingError> {
     let mut coal_exprs = vec![];
     for c in &inner_contexts {
-        if solution_mappings
-            .rdf_node_types
-            .get(c.as_str())
-            .unwrap()
-            != &RDFNodeType::None
-        {
+        if solution_mappings.rdf_node_types.get(c.as_str()).unwrap() != &RDFNodeType::None {
             coal_exprs.push(col(c.as_str()));
         }
     }

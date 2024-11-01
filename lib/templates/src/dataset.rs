@@ -297,7 +297,7 @@ fn lub(
     } else if let PType::NEList(left_inner) = left {
         if let PType::Basic(nn) = right {
             if nn.as_ref() == rdfs::RESOURCE {
-                return Ok(left.clone())
+                return Ok(left.clone());
             }
         } else if let PType::List(right_inner) = right {
             return Ok(PType::NEList(Box::new(lub(
@@ -317,7 +317,7 @@ fn lub(
     } else if let PType::List(left_inner) = left {
         if let PType::Basic(nn) = right {
             if nn.as_ref() == rdfs::RESOURCE {
-                return Ok(left.clone())
+                return Ok(left.clone());
             }
         } else if let PType::NEList(right_inner) = right {
             return Ok(PType::NEList(Box::new(lub(

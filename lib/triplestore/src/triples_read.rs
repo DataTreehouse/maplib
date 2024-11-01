@@ -5,7 +5,7 @@ use crate::TriplesToAdd;
 use log::debug;
 use memmap2::MmapOptions;
 use oxrdf::{BlankNode, GraphName, NamedNode, Quad, Subject, Term};
-use oxrdfio::{SliceQuadParser, RdfFormat, RdfParser, RdfSyntaxError};
+use oxrdfio::{RdfFormat, RdfParser, RdfSyntaxError, SliceQuadParser};
 use oxttl::ntriples::SliceNTriplesParser;
 use oxttl::turtle::SliceTurtleParser;
 use oxttl::{NTriplesParser, TurtleParser};
