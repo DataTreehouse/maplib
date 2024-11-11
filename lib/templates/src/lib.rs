@@ -5,6 +5,7 @@ use crate::ast::PType;
 use representation::RDFNodeType;
 
 pub mod ast;
+mod compatible;
 pub mod constants;
 pub mod dataset;
 pub mod document;

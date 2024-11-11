@@ -12,7 +12,10 @@ spargebra = { path = "../spargebra" }
 rayon.workspace = true
 sprs = { workspace = true, features = ["multi_thread"] }
 oxrdf.workspace = true
-polars = { workspace = true, features = ["zip_with", "nightly", "performant", "cse", "semi_anti_join", "abs", "round_series", "lazy", "concat_str", "is_in", "dtype-full", "strings", "rows", "timezones", "polars-time", "temporal", "list_eval", "partition_by", "parquet", "diagonal_concat", "cross_join", "cum_agg"] }
+polars = { workspace = true, features = [
+    "streaming", "zip_with", "nightly", "performant", "cse", "semi_anti_join", "abs", "round_series", "lazy", "concat_str", "is_in",
+    "dtype-full", "strings", "rows", "timezones", "polars-time", "temporal", "list_eval", "partition_by", "parquet",
+    "diagonal_concat", "cross_join", "cum_agg"] }
 #TODO: Due to ntriples write using pool-functionality, should be refactored. Also concat df usage in lib.rs.
 polars-utils.workspace = true
 polars-core.workspace = true

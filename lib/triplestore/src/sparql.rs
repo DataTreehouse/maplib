@@ -37,36 +37,40 @@ impl Triplestore {
         &self,
         query: &str,
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
+        streaming: bool,
     ) -> Result<QueryResult, SparqlError> {
         let query = Query::parse(query, None).map_err(SparqlError::ParseError)?;
-        self.query_deduplicated_impl(&query, parameters)
+        self.query_deduplicated_impl(&query, parameters, streaming)
     }
 
     pub fn query(
         &mut self,
         query: &str,
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
+        streaming: bool,
     ) -> Result<QueryResult, SparqlError> {
         let query = Query::parse(query, None).map_err(SparqlError::ParseError)?;
-        self.query_impl(&query, parameters)
+        self.query_impl(&query, parameters, streaming)
     }
 
     fn query_impl(
         &mut self,
         query: &Query,
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
+        streaming: bool,
     ) -> Result<QueryResult, SparqlError> {
         if !self.deduplicated {
             self.deduplicate()
                 .map_err(SparqlError::DeduplicationError)?;
         }
-        self.query_deduplicated_impl(query, parameters)
+        self.query_deduplicated_impl(query, parameters, streaming)
     }
 
     fn query_deduplicated_impl(
         &self,
         query: &Query,
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
+        streaming: bool,
     ) -> Result<QueryResult, SparqlError> {
         let context = Context::new();
         match query {
@@ -79,7 +83,7 @@ impl Triplestore {
                     mappings,
                     rdf_node_types: types,
                 } = self.lazy_graph_pattern(pattern, None, &context, parameters)?;
-                let df = mappings.collect().unwrap();
+                let df = mappings.with_streaming(streaming).collect().unwrap();
                 Ok(QueryResult::Select(df, types))
             }
             Query::Construct {
@@ -114,10 +118,11 @@ impl Triplestore {
         query: &str,
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         transient: bool,
+        streaming: bool,
     ) -> Result<(), SparqlError> {
         let query = Query::parse(query, None).map_err(SparqlError::ParseError)?;
         if let Query::Construct { .. } = &query {
-            let res = self.query_impl(&query, parameters)?;
+            let res = self.query_impl(&query, parameters, streaming)?;
             match res {
                 QueryResult::Select(_, _) => {
                     panic!("Should never happen")

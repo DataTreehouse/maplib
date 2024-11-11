@@ -7,8 +7,15 @@ use crate::sparql::QueryResult;
 use crate::Triplestore;
 use representation::polars_to_rdf::{df_as_result, QuerySolutions};
 
-pub fn query_select(query: &str, triplestore: &Triplestore, deduplicate: bool) -> QuerySolutions {
-    let qres = triplestore.query_deduplicated(query, &None).unwrap();
+pub fn query_select(
+    query: &str,
+    triplestore: &Triplestore,
+    deduplicate: bool,
+    streaming: bool,
+) -> QuerySolutions {
+    let qres = triplestore
+        .query_deduplicated(query, &None, streaming)
+        .unwrap();
 
     let (df, types) = if let QueryResult::Select(mut df, types) = qres {
         if deduplicate {

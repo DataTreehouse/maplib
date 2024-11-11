@@ -255,12 +255,18 @@ impl PyMapping {
         include_datatypes: Option<bool>,
         native_dataframe: Option<bool>,
         graph: Option<String>,
+        streaming: Option<bool>,
     ) -> PyResult<PyObject> {
         let graph = parse_optional_graph(graph)?;
         let mapped_parameters = map_parameters(parameters)?;
         let res = self
             .inner
-            .query(&query, &mapped_parameters, graph)
+            .query(
+                &query,
+                &mapped_parameters,
+                graph,
+                streaming.unwrap_or(false),
+            )
             .map_err(PyMaplibError::from)?;
         query_to_result(
             res,
@@ -276,6 +282,7 @@ impl PyMapping {
         include_details: Option<bool>,
         include_conforms: Option<bool>,
         include_shape_graph: Option<bool>,
+        streaming: Option<bool>,
     ) -> PyResult<PyValidationReport> {
         let shape_graph = NamedNode::new(shape_graph).map_err(PyMaplibError::from)?;
         let report = self
@@ -284,6 +291,7 @@ impl PyMapping {
                 &shape_graph,
                 include_details.unwrap_or(false),
                 include_conforms.unwrap_or(false),
+                streaming.unwrap_or(false),
             )
             .map_err(PyMaplibError::from)?;
         let shape_graph_triplestore = if include_shape_graph.unwrap_or(true) {
@@ -305,6 +313,7 @@ impl PyMapping {
         query: String,
         parameters: Option<ParametersType>,
         transient: Option<bool>,
+        streaming: Option<bool>,
         source_graph: Option<String>,
         target_graph: Option<String>,
     ) -> PyResult<()> {
@@ -313,7 +322,12 @@ impl PyMapping {
         let target_graph = parse_optional_graph(target_graph)?;
         let res = self
             .inner
-            .query(&query, &mapped_parameters, source_graph)
+            .query(
+                &query,
+                &mapped_parameters,
+                source_graph,
+                streaming.unwrap_or(false),
+            )
             .map_err(PyMaplibError::from)?;
         if let QueryResult::Construct(dfs_and_dts) = res {
             self.inner
@@ -333,6 +347,7 @@ impl PyMapping {
         query: String,
         parameters: Option<ParametersType>,
         transient: Option<bool>,
+        streaming: Option<bool>,
         source_graph: Option<String>,
         target_graph: Option<String>,
     ) -> PyResult<()> {
@@ -344,7 +359,12 @@ impl PyMapping {
         }
         let res = self
             .inner
-            .query(&query, &mapped_parameters, source_graph)
+            .query(
+                &query,
+                &mapped_parameters,
+                source_graph,
+                streaming.unwrap_or(false),
+            )
             .map_err(PyMaplibError::from)?;
         if let QueryResult::Construct(dfs_and_dts) = res {
             self.sprout

@@ -195,9 +195,10 @@ impl Mapping {
         query: &str,
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         graph: Option<NamedNode>,
+        streaming: bool,
     ) -> Result<QueryResult, SparqlError> {
         let use_triplestore = self.get_triplestore(&graph);
-        use_triplestore.query(query, parameters)
+        use_triplestore.query(query, parameters, streaming)
     }
 
     pub fn insert_construct_result(
@@ -259,6 +260,7 @@ impl Mapping {
         shape_graph: &NamedNode,
         include_details: bool,
         include_conforms: bool,
+        streaming: bool,
     ) -> Result<ValidationReport, ShaclError> {
         let (shape_graph, mut shape_triplestore) =
             self.triplestores_map.remove_entry(shape_graph).unwrap();
@@ -267,6 +269,7 @@ impl Mapping {
             &mut shape_triplestore,
             include_details,
             include_conforms,
+            streaming,
         ) {
             Ok(vr) => {
                 self.triplestores_map.insert(shape_graph, shape_triplestore);
