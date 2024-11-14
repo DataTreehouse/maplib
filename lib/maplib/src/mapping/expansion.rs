@@ -677,7 +677,18 @@ fn create_remapped(
                     new.push(target_colname);
                     new_dynamic_columns.insert(target_colname.to_string(), c.clone());
                 } else if let Some(c) = constant_columns.get(v.as_str()) {
-                    new_constant_columns.insert(target_colname.to_string(), c.clone());
+                    if original.list_expand {
+                        let (expr, primitive_column) = create_dynamic_expression_from_static(
+                            target_colname,
+                            &c.constant_term,
+                            &target.ptype,
+                        )?;
+                        expressions.push(expr);
+                        new_dynamic_columns.insert(target_colname.to_string(), primitive_column);
+                        new_dynamic_from_constant.push(target_colname);
+                    } else {
+                        new_constant_columns.insert(target_colname.to_string(), c.clone());
+                    }
                 } else if let Some(default) = &target.default_value {
                     add_default_value(&mut new_constant_columns, target_colname, default)
                 } else {
@@ -765,10 +776,10 @@ fn create_remapped(
                 if let MappingColumnType::Nested(v) = v {
                     new_dynamic_columns.insert(k, *v);
                 } else {
-                    todo!()
+                    panic!("This situation should never arise")
                 }
             } else {
-                todo!()
+                panic!("This situation should never arise")
             }
         }
         let to_expand_cols: Vec<Expr> = to_expand.iter().map(|x| col(x)).collect();

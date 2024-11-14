@@ -603,3 +603,28 @@ def test_create_and_write_no_bug_lang_string_lit_df():
     assert lines == [
         '<http://example.net/ns#myObject> <http://example.net/ns#hasValue> "HELLO!!"@en .\n'
     ]
+
+
+def test_nested_template_empty_list():
+    templates = """
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+<http://example.net/ns#ExampleNestedTemplate> [ ?MyValue ] :: {
+  cross | <http://ns.ottr.xyz/0.4/Triple>(<http://example.net/ns#MyObject>,<http://example.net/ns#hasValue>,++?MyValue)
+} . 
+<http://example.net/ns#ExampleTemplate> [] :: {
+   <http://example.net/ns#ExampleNestedTemplate>((1,2))
+} . 
+    """
+    mapping = Mapping(templates)
+    mapping.expand("http://example.net/ns#ExampleTemplate")
+    r = mapping.query(
+        """
+    SELECT ?a ?b ?c WHERE {
+        ?a ?b ?c
+    }
+    """,
+        include_datatypes=True,
+    )
+    assert r.rdf_types["c"] == RDFType.Literal(XSD().integer)
