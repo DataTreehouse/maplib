@@ -17,6 +17,7 @@ fn get_triples(mapping: &mut Mapping) -> Vec<Triple> {
             "SELECT ?subject ?verb ?object WHERE {?subject ?verb ?object}",
             &None,
             None,
+            false,
         )
         .unwrap();
     let mut triples = vec![];
