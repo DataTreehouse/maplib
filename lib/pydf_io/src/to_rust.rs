@@ -4,7 +4,7 @@
 
 use polars::prelude::PlSmallStr;
 use polars_core::error::PolarsError;
-use polars_core::prelude::{ArrayRef, ArrowDataType, DataFrame, Series};
+use polars_core::prelude::{ArrayRef, ArrowDataType, DataFrame, IntoColumn, Series};
 use polars_core::utils::accumulate_dataframes_vertical;
 use polars_core::utils::arrow::ffi;
 use polars_core::utils::rayon::iter::{
@@ -95,7 +95,7 @@ pub fn array_to_rust_df(rb: &[Bound<'_, PyAny>]) -> PyResult<DataFrame> {
                             let s =
                                 Series::try_from((PlSmallStr::from_str(names[i].as_str()), arr))
                                     .map_err(ToRustError::from)?;
-                            Ok(s)
+                            Ok(s.into_column())
                         })
                         .collect::<PyResult<Vec<_>>>()
                 })
@@ -106,7 +106,7 @@ pub fn array_to_rust_df(rb: &[Bound<'_, PyAny>]) -> PyResult<DataFrame> {
                     .map(|(i, arr)| {
                         let s = Series::try_from((PlSmallStr::from_str(names[i].as_str()), arr))
                             .map_err(ToRustError::from)?;
-                        Ok(s)
+                        Ok(s.into_column())
                     })
                     .collect::<PyResult<Vec<_>>>()
             }?;

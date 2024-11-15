@@ -173,6 +173,10 @@ pub fn ptype_is_iri(nn: &NamedNode) -> bool {
     }
 }
 
+pub fn ptype_is_possibly_literal(nn: &NamedNode) -> bool {
+    !ptype_is_blank(nn) && !ptype_is_iri(nn)
+}
+
 pub fn ptype_is_blank(nn: &NamedNode) -> bool {
     nn.as_str() == OTTR_BLANK_NODE
 }

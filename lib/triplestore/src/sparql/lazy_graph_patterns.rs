@@ -66,7 +66,7 @@ impl Triplestore {
                         RDFNodeType::Literal(xsd::BOOLEAN.into_owned()),
                     );
                     Ok(SolutionMappings {
-                        mappings: DataFrame::new(vec![ser]).unwrap().lazy(),
+                        mappings: DataFrame::new(vec![ser.into()]).unwrap().lazy(),
                         rdf_node_types: map,
                     })
                 }

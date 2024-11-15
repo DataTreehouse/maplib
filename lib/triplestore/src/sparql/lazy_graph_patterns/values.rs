@@ -12,6 +12,7 @@ use representation::solution_mapping::SolutionMappings;
 use representation::RDFNodeType;
 use spargebra::term::GroundTerm;
 use std::collections::HashMap;
+use polars_core::prelude::IntoColumn;
 
 impl Triplestore {
     pub(crate) fn lazy_values(
@@ -69,7 +70,7 @@ impl Triplestore {
         for (i, var) in variables.iter().enumerate() {
             let series =
                 polars_literal_values_to_series(col_vecs.remove(&i).unwrap(), var.as_str());
-            all_series.push(series);
+            all_series.push(series.into_column());
         }
         let df = DataFrame::new(all_series).unwrap();
         let mut rdf_node_types = HashMap::new();

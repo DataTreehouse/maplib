@@ -10,7 +10,7 @@ spargebra = {path = "../spargebra"}
 
 log.workspace = true
 oxrdf = {workspace = true, features = ["oxsdatatypes"]}
-polars = {workspace = true, features=["performant", "lazy", "dtype-full", "timezones", "polars-time", "partition_by", "cross_join", "strings"] }
+polars = {workspace = true, features=["performant", "lazy", "dtype-full", "timezones", "polars-time", "partition_by", "cross_join", "strings"], default-features = false }
 chrono.workspace = true
 chrono-tz.workspace = true
 thiserror.workspace = true

@@ -108,13 +108,14 @@ pub fn constant_to_expr(
         }
     };
     if let Some(ptype_inferred) = ptype_opt {
-        if !matches!(ptype, PType::None) && ptype_inferred != &ptype {
-            return Err(MappingError::ConstantDoesNotMatchDataType(
-                constant_term.clone(),
-                ptype_inferred.clone(),
-                ptype,
-            ));
-        }
+        // TODO: General validation logic for dynamic and constant data variables.
+        // if !matches!(ptype, PType::None) && ptype_inferred != &ptype {
+        //     return Err(MappingError::ConstantDoesNotMatchDataType(
+        //         constant_term.clone(),
+        //         ptype_inferred.clone(),
+        //         ptype,
+        //     ));
+        // }
     }
     Ok((expr, ptype, rdf_node_type))
 }

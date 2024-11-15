@@ -302,20 +302,33 @@ pub fn coalesce_expression(
 ) -> Result<SolutionMappings, QueryProcessingError> {
     let mut coal_exprs = vec![];
     for c in &inner_contexts {
-        coal_exprs.push(col(c.as_str()));
+        if solution_mappings.rdf_node_types.get(c.as_str()).unwrap() != &RDFNodeType::None {
+            coal_exprs.push(col(c.as_str()));
+        }
     }
 
-    solution_mappings.mappings = solution_mappings
-        .mappings
-        .with_column(coalesce(coal_exprs.as_slice()).alias(outer_context.as_str()));
-    //TODO: generalize
-    let existing_type = solution_mappings
-        .rdf_node_types
-        .get(inner_contexts.first().unwrap().as_str())
-        .unwrap();
-    solution_mappings
-        .rdf_node_types
-        .insert(outer_context.as_str().to_string(), existing_type.clone());
+    if coal_exprs.is_empty() {
+        solution_mappings.mappings = solution_mappings.mappings.with_column(
+            lit(LiteralValue::Null)
+                .cast(BaseRDFNodeType::None.polars_data_type())
+                .alias(outer_context.as_str()),
+        );
+        solution_mappings
+            .rdf_node_types
+            .insert(outer_context.as_str().to_string(), RDFNodeType::None);
+    } else {
+        solution_mappings.mappings = solution_mappings
+            .mappings
+            .with_column(coalesce(coal_exprs.as_slice()).alias(outer_context.as_str()));
+        //TODO: generalize
+        let existing_type = solution_mappings
+            .rdf_node_types
+            .get(inner_contexts.first().unwrap().as_str())
+            .unwrap();
+        solution_mappings
+            .rdf_node_types
+            .insert(outer_context.as_str().to_string(), existing_type.clone());
+    }
     solution_mappings = drop_inner_contexts(solution_mappings, &inner_contexts.iter().collect());
     Ok(solution_mappings)
 }
@@ -327,30 +340,26 @@ pub fn exists(
     outer_context: &Context,
 ) -> Result<SolutionMappings, QueryProcessingError> {
     let SolutionMappings {
-        mappings,
+        mut mappings,
         mut rdf_node_types,
     } = solution_mappings;
-    let mut df = mappings.collect().unwrap();
-    let exists_df = exists_lf
+    let mut exists_df = exists_lf
         .select([col(inner_context.as_str())])
         .unique(None, UniqueKeepStrategy::First)
         .collect()
         .expect("Collect lazy exists error");
-    let mut ser = Series::from(
-        is_in(
-            //TODO: Fix - this can now work in lazy
-            df.column(inner_context.as_str()).unwrap(),
-            exists_df.column(inner_context.as_str()).unwrap(),
-        )
-        .unwrap(),
+    let inner_context_col = exists_df.drop_in_place(inner_context.as_str()).unwrap();
+    mappings = mappings.with_column(
+        col(inner_context.as_str())
+            .is_in(lit(inner_context_col.take_materialized_series()))
+            .alias(outer_context.as_str()),
     );
-    ser.rename(outer_context.as_str().into());
+
     rdf_node_types.insert(
         outer_context.as_str().to_string(),
         RDFNodeType::Literal(xsd::BOOLEAN.into_owned()),
     );
-    df.with_column(ser).unwrap();
-    let mut solution_mappings = SolutionMappings::new(df.lazy(), rdf_node_types);
+    let mut solution_mappings = SolutionMappings::new(mappings, rdf_node_types);
     solution_mappings = drop_inner_contexts(solution_mappings, &vec![inner_context]);
     Ok(solution_mappings)
 }

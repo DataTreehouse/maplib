@@ -5,9 +5,9 @@ use crate::TriplesToAdd;
 use log::debug;
 use memmap2::MmapOptions;
 use oxrdf::{BlankNode, GraphName, NamedNode, Quad, Subject, Term};
-use oxrdfio::{FromSliceQuadReader, RdfFormat, RdfParser, RdfSyntaxError};
-use oxttl::ntriples::FromSliceNTriplesReader;
-use oxttl::turtle::FromSliceTurtleReader;
+use oxrdfio::{RdfFormat, RdfParser, RdfSyntaxError, SliceQuadParser};
+use oxttl::ntriples::SliceNTriplesParser;
+use oxttl::turtle::SliceTurtleParser;
 use oxttl::{NTriplesParser, TurtleParser};
 use polars::prelude::{as_struct, col, DataFrame, IntoLazy, LiteralValue, Series};
 use polars_utils::pl_str::PlSmallStr;
@@ -26,6 +26,7 @@ use std::fs::File;
 use std::ops::Deref;
 use std::path::Path;
 use std::time::Instant;
+use polars_core::prelude::IntoColumn;
 
 type MapType = HashMap<String, HashMap<String, (Vec<Subject>, Vec<Term>)>>;
 
@@ -144,7 +145,7 @@ impl Triplestore {
                     parser = parser.with_base_iri(base_iri).unwrap();
                 }
                 vec![MyFromSliceQuadReader {
-                    parser: MyFromSliceQuadReaderKind::Other(parser.parse_slice(slice)),
+                    parser: MyFromSliceQuadReaderKind::Other(parser.for_slice(slice)),
                 }]
             };
         debug!("Effective parallelization for reading is {}", readers.len());
@@ -236,7 +237,7 @@ impl Triplestore {
                                 polars_literal_values_to_series(vals, LANG_STRING_VALUE_FIELD);
                             let lang_ser =
                                 polars_literal_values_to_series(langs, LANG_STRING_LANG_FIELD);
-                            let mut df = DataFrame::new(vec![val_ser, lang_ser])
+                            let mut df = DataFrame::new(vec![val_ser.into(), lang_ser.into()])
                                 .unwrap()
                                 .lazy()
                                 .with_column(
@@ -248,7 +249,7 @@ impl Triplestore {
                                 )
                                 .collect()
                                 .unwrap();
-                            df.drop_in_place(OBJECT_COL_NAME).unwrap()
+                            df.drop_in_place(OBJECT_COL_NAME).unwrap().take_materialized_series()
                         } else {
                             let any_iter: Vec<_> = objects
                                 .into_par_iter()
@@ -265,7 +266,7 @@ impl Triplestore {
                             polars_literal_values_to_series(any_iter, OBJECT_COL_NAME)
                         };
 
-                        let all_series = vec![subjects_ser, objects_ser];
+                        let all_series = vec![subjects_ser.into_column(), objects_ser.into_column()];
                         let mut df = DataFrame::new(all_series).unwrap();
                         // TODO: Include bad data also
                         df = df
@@ -388,9 +389,9 @@ pub struct MyFromSliceQuadReader<'a> {
 }
 
 pub enum MyFromSliceQuadReaderKind<'a> {
-    Other(FromSliceQuadReader<'a>),
-    TurtlePar(FromSliceTurtleReader<'a>),
-    NTriplesPar(FromSliceNTriplesReader<'a>),
+    Other(SliceQuadParser<'a>),
+    TurtlePar(SliceTurtleParser<'a>),
+    NTriplesPar(SliceNTriplesParser<'a>),
 }
 
 impl<'a> Iterator for MyFromSliceQuadReader<'a> {

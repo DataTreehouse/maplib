@@ -12,7 +12,7 @@ WHERE {
 
 impl Triplestore {
     pub fn rdfs_class_inheritance(&mut self) -> Result<(), TriplestoreError> {
-        self.insert(SUBCLASS_INFERENCING, &None, true)
+        self.insert(SUBCLASS_INFERENCING, &None, true, false)
             .map_err(|x| TriplestoreError::RDFSClassInheritanceError(x.to_string()))?;
         Ok(())
     }

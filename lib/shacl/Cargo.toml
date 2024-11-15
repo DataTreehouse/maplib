@@ -7,4 +7,4 @@ edition = "2021"
 representation = { path = "../representation" }
 triplestore = {path="../triplestore"}
 thiserror = { workspace= true }
-polars = { workspace= true }
+polars = { workspace= true, default-features = false }

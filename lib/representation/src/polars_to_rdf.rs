@@ -11,7 +11,10 @@ use chrono::{Datelike, Timelike};
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{Literal, NamedNode, Variable};
 use polars::export::rayon::iter::ParallelIterator;
-use polars::prelude::{as_struct, col, AnyValue, DataFrame, DataType, IntoColumn, IntoLazy, IntoSeries, Series, TimeZone};
+use polars::prelude::{
+    as_struct, col, AnyValue, DataFrame, DataType, IntoColumn, IntoLazy, IntoSeries, Series,
+    TimeZone,
+};
 use spargebra::term::Term;
 use std::collections::{HashMap, HashSet};
 use std::vec::IntoIter;
@@ -60,14 +63,16 @@ pub fn df_as_result(df: DataFrame, dtypes: &HashMap<String, RDFNodeType>) -> Que
                                     .unwrap()
                                     .cast(&DataType::String)
                                     .unwrap()
-                                    .clone().into_column(),
+                                    .clone()
+                                    .into_column(),
                                 ser.struct_()
                                     .unwrap()
                                     .field_by_name(LANG_STRING_LANG_FIELD)
                                     .unwrap()
                                     .cast(&DataType::String)
                                     .unwrap()
-                                    .clone().into_column(),
+                                    .clone()
+                                    .into_column(),
                             ])
                             .unwrap()
                             .lazy();

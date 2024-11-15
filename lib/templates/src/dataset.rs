@@ -8,6 +8,8 @@ use crate::document::document_from_file;
 use errors::TemplateError;
 use log::warn;
 
+use crate::subtypes::is_literal_subtype;
+use oxrdf::vocab::rdfs;
 use oxrdf::{NamedNode, Variable};
 use representation::{OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME};
 use std::collections::{HashMap, HashSet};
@@ -276,10 +278,28 @@ fn lub(
     left: &PType,
     right: &PType,
 ) -> Result<PType, TemplateError> {
-    if left == right || left.is_iri() && right.is_iri() {
+    if left == right {
         return Ok(left.clone());
+    } else if left.is_iri() && right.is_iri() {
+        return Ok(left.clone());
+    } else if let (PType::Basic(left_basic), PType::Basic(right_basic)) = (left, right) {
+        if left_basic.as_ref() == rdfs::RESOURCE {
+            return Ok(left.clone());
+        } else if right_basic.as_ref() == rdfs::RESOURCE {
+            return Ok(left.clone());
+        } else if is_literal_subtype(left_basic, right_basic) {
+            return Ok(left.clone());
+        } else if is_literal_subtype(right_basic, left_basic) {
+            return Ok(left.clone());
+        } else {
+            // Returns error
+        }
     } else if let PType::NEList(left_inner) = left {
-        if let PType::List(right_inner) = right {
+        if let PType::Basic(nn) = right {
+            if nn.as_ref() == rdfs::RESOURCE {
+                return Ok(left.clone());
+            }
+        } else if let PType::List(right_inner) = right {
             return Ok(PType::NEList(Box::new(lub(
                 template_name,
                 variable,
@@ -295,7 +315,11 @@ fn lub(
             )?)));
         }
     } else if let PType::List(left_inner) = left {
-        if let PType::NEList(right_inner) = right {
+        if let PType::Basic(nn) = right {
+            if nn.as_ref() == rdfs::RESOURCE {
+                return Ok(left.clone());
+            }
+        } else if let PType::NEList(right_inner) = right {
             return Ok(PType::NEList(Box::new(lub(
                 template_name,
                 variable,

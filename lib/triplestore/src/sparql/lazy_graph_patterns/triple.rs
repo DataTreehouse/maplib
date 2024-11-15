@@ -17,6 +17,7 @@ use representation::{literal_iri_to_namednode, BaseRDFNodeType, RDFNodeType};
 use representation::{OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 use std::collections::{HashMap, HashSet};
+use polars_core::prelude::IntoColumn;
 
 impl Triplestore {
     pub fn lazy_triple_pattern(
@@ -75,7 +76,7 @@ impl Triplestore {
                                 .unique()
                                 .unwrap()
                                 .cast(&DataType::String)
-                                .unwrap();
+                                .unwrap().take_materialized_series();
                             let predicates_iter = predicates_series.iter();
                             predicates = predicates_iter
                                 .filter_map(|x| match x {
@@ -199,11 +200,12 @@ impl Triplestore {
                 lf = lf.rename(
                     [SUBJECT_COL_NAME, OBJECT_COL_NAME],
                     [&use_subject_col_name, &use_object_col_name],
+                    true,
                 );
 
                 let mut drop = vec![];
                 if let Some(renamed) = subject_keep_rename {
-                    lf = lf.rename([&use_subject_col_name], [renamed]);
+                    lf = lf.rename([&use_subject_col_name], [renamed], true);
                     out_datatypes.insert(
                         renamed.to_string(),
                         rdf_node_types.remove(SUBJECT_COL_NAME).unwrap(),
@@ -212,7 +214,7 @@ impl Triplestore {
                     drop.push(use_subject_col_name);
                 }
                 if let Some(renamed) = object_keep_rename {
-                    lf = lf.rename([&use_object_col_name], [renamed]);
+                    lf = lf.rename([&use_object_col_name], [renamed], true);
                     out_datatypes.insert(
                         renamed.to_string(),
                         rdf_node_types.remove(OBJECT_COL_NAME).unwrap(),
@@ -388,14 +390,14 @@ pub fn create_empty_lf_datatypes(
         series_vec.push(Series::new_empty(
             subject_rename.into(),
             &BaseRDFNodeType::None.polars_data_type(),
-        ))
+        ).into_column())
     }
     if let Some(verb_rename) = verb_keep_rename {
         out_datatypes.insert(verb_rename.to_string(), RDFNodeType::None);
         series_vec.push(Series::new_empty(
             verb_rename.into(),
             &BaseRDFNodeType::None.polars_data_type(),
-        ))
+        ).into_column())
     }
     if let Some(object_rename) = object_keep_rename {
         let (use_datatype, use_polars_datatype) = if let Some(dt) = object_datatype_req {
@@ -410,7 +412,7 @@ pub fn create_empty_lf_datatypes(
         series_vec.push(Series::new_empty(
             object_rename.into(),
             &use_polars_datatype,
-        ))
+        ).into_column())
     }
     (
         SolutionMappings::new(DataFrame::new(series_vec).unwrap().lazy(), out_datatypes),

@@ -39,7 +39,7 @@ pub fn extend(
 ) -> Result<SolutionMappings, QueryProcessingError> {
     solution_mappings.mappings = solution_mappings
         .mappings
-        .rename([expression_context.as_str()], [variable.as_str()]);
+        .rename([expression_context.as_str()], [variable.as_str()], true);
     let existing_rdf_node_type = solution_mappings
         .rdf_node_types
         .remove(expression_context.as_str())

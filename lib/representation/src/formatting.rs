@@ -43,7 +43,10 @@ pub fn base_expression_to_string(
                             } else {
                                 panic!()
                             };
-                            Ok(Some(datetime_series_to_strings(x.as_series().unwrap(), tz).into_column()))
+                            Ok(Some(
+                                datetime_series_to_strings(x.as_series().unwrap(), tz)
+                                    .into_column(),
+                            ))
                         },
                         GetOutput::from_type(DataType::String),
                     )

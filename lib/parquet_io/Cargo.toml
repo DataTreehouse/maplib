@@ -4,6 +4,6 @@ version = "0.5.0"
 edition = "2021"
 
 [dependencies]
-polars = {workspace=true, features=["parquet"] }
+polars = {workspace=true, features=["parquet"], default-features = false }
 thiserror={ workspace= true }
 uuid = {workspace=true}

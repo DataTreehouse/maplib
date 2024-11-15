@@ -19,7 +19,7 @@ thiserror.workspace = true
 polars = { workspace = true, features = [
     "nightly", "performant", "cse",
     "dtype-array", "dtype-categorical", "dtype-date", "dtype-datetime",
-    "dtype-decimal", "dtype-duration", "dtype-i8", "dtype-i16", "dtype-struct", "dtype-time", "dtype-u8", "dtype-u16"] }
+    "dtype-decimal", "dtype-duration", "dtype-i8", "dtype-i16", "dtype-struct", "dtype-time", "dtype-u8", "dtype-u16"], default-features = false }
 log.workspace = true
 
 [lib]

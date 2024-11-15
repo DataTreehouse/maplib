@@ -370,6 +370,7 @@ class Mapping:
         include_datatypes: bool = False,
         native_dataframe: bool = False,
         graph: str = None,
+        streaming: bool = False,
     ) -> Union[
         DataFrame, SolutionMappings, List[Union[DataFrame, SolutionMappings]], None
     ]:
@@ -390,6 +391,7 @@ class Mapping:
         :param native_dataframe: Return columns with maplib-native formatting. Useful for round-trips.
         :param include_datatypes: Datatypes are not returned by default, set to true to return a dict with the solution mappings and the datatypes.
         :param graph: The IRI of the graph to query.
+        :param streaming: Use Polars streaming
         :return: DataFrame (Select), list of DataFrames (Construct) containing results, or None for Insert-queries
 
         """
@@ -399,6 +401,7 @@ class Mapping:
         query: str,
         parameters: ParametersType = None,
         transient: bool = False,
+        streaming: bool = False,
         source_graph: str = None,
         target_graph: str = None,
     ):
@@ -424,6 +427,7 @@ class Mapping:
         :param transient: Should the inserted triples be included in exports?
         :param source_graph: The IRI of the source graph to execute the construct query.
         :param target_graph: The IRI of the target graph to insert into.
+        :param streaming: Use Polars streaming
         :return: None
         """
 
@@ -433,6 +437,7 @@ class Mapping:
         include_details: bool = False,
         include_conforms: bool = False,
         include_shape_graph: bool = True,
+        streaming: bool = False,
     ) -> ValidationReport:
         """
         Validate the contained knowledge graph using SHACL
@@ -443,6 +448,7 @@ class Mapping:
         :param include_conforms: Include those results that conformed. Also applies to details.
         :param include_shape_graph: Include the shape graph in the report, useful when creating the graph from the report.
         :param include_datatypes: Return the datatypes of the validation report (and details).
+        :param streaming: Use Polars streaming
         :return: Validation report containing a report (report.df) and whether the graph conforms (report.conforms)
         """
 
@@ -562,6 +568,7 @@ class Mapping:
         query: str,
         parameters: ParametersType = None,
         transient: bool = False,
+        streaming: bool = False,
         source_graph: str = None,
         target_graph: str = None,
     ):
@@ -591,6 +598,7 @@ class Mapping:
         :param transient: Should the inserted triples be included in exports?
         :param source_graph: The IRI of the source graph to execute the construct query.
         :param target_graph: The IRI of the target graph to insert into.
+        :param streaming: Use Polars streaming
         :return: None
         """
 

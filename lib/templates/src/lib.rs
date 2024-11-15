@@ -5,12 +5,14 @@ use crate::ast::PType;
 use representation::RDFNodeType;
 
 pub mod ast;
+mod compatible;
 pub mod constants;
 pub mod dataset;
 pub mod document;
 mod parsing;
 pub mod python;
 mod resolver;
+pub mod subtypes;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum MappingColumnType {
