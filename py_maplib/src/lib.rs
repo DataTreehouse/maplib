@@ -84,12 +84,14 @@ impl PyMapping {
 #[derive(Debug, Clone)]
 pub struct ExpandOptions {
     pub unique_subsets: Option<Vec<Vec<String>>>,
+    pub graph: Option<NamedNode>,
 }
 
 impl ExpandOptions {
     fn into_rust_expand_options(self) -> RustExpandOptions {
         RustExpandOptions {
             unique_subsets: self.unique_subsets,
+            graph: self.graph,
         }
     }
 }
@@ -172,6 +174,7 @@ impl PyMapping {
         template: &Bound<'_, PyAny>,
         df: Option<&Bound<'_, PyAny>>,
         unique_subset: Option<Vec<String>>,
+        graph: Option<String>,
     ) -> PyResult<Option<PyObject>> {
         let template = if let Ok(i) = template.extract::<PyIRI>() {
             i.into_inner().to_string()
@@ -190,7 +193,10 @@ impl PyMapping {
 
         let unique_subsets =
             unique_subset.map(|unique_subset| vec![unique_subset.into_iter().collect()]);
-        let options = ExpandOptions { unique_subsets };
+
+        let options = ExpandOptions {
+            unique_subsets, graph:parse_optional_graph(graph)?
+        };
 
         if let Some(df) = df {
             if df.getattr("height")?.gt(0).unwrap() {
@@ -226,10 +232,12 @@ impl PyMapping {
         primary_key_column: String,
         template_prefix: Option<String>,
         predicate_uri_prefix: Option<String>,
+        graph: Option<String>,
     ) -> PyResult<String> {
         let df = polars_df_to_rust_df(df)?;
         let options = ExpandOptions {
             unique_subsets: Some(vec![vec![primary_key_column.clone()]]),
+            graph:parse_optional_graph(graph)?,
         };
 
         let tmpl = self

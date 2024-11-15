@@ -327,6 +327,7 @@ class Mapping:
         template: Union[str, "Template", IRI],
         df: DataFrame = None,
         unique_subset: List[str] = None,
+        graph: str = None,
     ) -> None:
         """
         Expand a template using a DataFrame
@@ -340,6 +341,7 @@ class Mapping:
         :param template: Template, IRI, IRI string or prefixed template name.
         :param df: DataFrame where the columns have the same names as the template arguments
         :param unique_subset: DataFrame column names known to be unique e.g. ["colA", "colB"], for a performance boost (reduce costly deduplication)
+        :param graph: The IRI of the graph to add triples to.
         """
 
     def expand_default(
@@ -348,6 +350,7 @@ class Mapping:
         primary_key_column: str,
         template_prefix: str = None,
         predicate_uri_prefix: str = None,
+        graph: str = None,
     ) -> str:
         """
         Create a default template and expand it based on a dataframe.
@@ -360,6 +363,7 @@ class Mapping:
         :param primary_key_column: This column will be the subject of all triples in the generated template.
         :param template_prefix: Prefix of the template - the name is auto-generated.
         :param predicate_uri_prefix: Prefix of the predicates/verbs in the generated template, names are derived from column names.
+        :param graph: The IRI of the graph to add triples to.
         :return: The generated template
         """
 

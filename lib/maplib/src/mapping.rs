@@ -34,6 +34,7 @@ pub struct Mapping {
 #[derive(Clone, Default)]
 pub struct ExpandOptions {
     pub unique_subsets: Option<Vec<Vec<String>>>,
+    pub graph: Option<NamedNode>,
 }
 
 struct OTTRTripleInstance {

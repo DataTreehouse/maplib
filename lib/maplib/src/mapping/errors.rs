@@ -36,6 +36,7 @@ pub enum MappingError {
     TurtleParsingError(String),
     TooDeeplyNestedError(String),
     DatatypeInferenceError(RepresentationError),
+    TriplestoreNotFoundError(String),
 }
 
 impl Display for MappingError {
@@ -163,6 +164,9 @@ impl Display for MappingError {
             }
             MappingError::DefaultDataTypeMismatch(expected, actual) => {
                 write!(f, "Default value data type {actual:?} does not correspond to data type provided: {expected:?}")
+            }
+            MappingError::TriplestoreNotFoundError(x) => {
+                write!(f, "Could not find triplestore {x}")
             }
         }
     }
