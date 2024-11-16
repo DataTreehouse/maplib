@@ -24,7 +24,7 @@ use templates::ast::{
 };
 use templates::constants::OTTR_TRIPLE;
 use templates::MappingColumnType;
-use triplestore::TriplesToAdd;
+use triplestore::{TriplesToAdd, Triplestore};
 use uuid::Uuid;
 
 const LIST_COL: &str = "list";
@@ -316,11 +316,10 @@ impl Mapping {
             }
         }
         let mut use_triplestore = if let Some(graph) = graph {
-            if let Some(triplestore) = self.triplestores_map.get_mut(graph) {
-                triplestore
-            } else {
-                return Err(MappingError::TriplestoreNotFoundError(graph.to_string()))
+            if !self.triplestores_map.contains_key(graph) {
+                self.triplestores_map.insert(graph.clone(), Triplestore::new(None).unwrap());
             }
+            self.triplestores_map.get_mut(graph).unwrap()
         } else {
             &mut self.base_triplestore
         };
