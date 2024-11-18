@@ -352,17 +352,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "chrono-tz"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cd6dd8046d00723a59a2f8c5f295c515b9bb9a331ee4f8f3d4dd49e428acd3b6"
-dependencies = [
- "chrono",
- "chrono-tz-build 0.4.0",
- "phf",
-]
-
-[[package]]
 name = "chrono-tz-build"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -381,16 +370,6 @@ checksum = "0c088aee841df9c3041febbb73934cfc39708749bf96dc827e3359cd39ef11b1"
 dependencies = [
  "parse-zoneinfo",
  "phf",
- "phf_codegen",
-]
-
-[[package]]
-name = "chrono-tz-build"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e94fea34d77a245229e7746bd2beb786cd2a896f306ff491fb8cecb3074b10a7"
-dependencies = [
- "parse-zoneinfo",
  "phf_codegen",
 ]
 
@@ -1003,7 +982,7 @@ name = "maplib"
 version = "0.6.0"
 dependencies = [
  "chrono",
- "chrono-tz 0.10.0",
+ "chrono-tz 0.9.0",
  "env_logger",
  "log",
  "oxrdf",
@@ -1015,7 +994,7 @@ dependencies = [
  "serial_test",
  "shacl",
  "templates",
- "thiserror 2.0.3",
+ "thiserror",
  "triplestore",
  "uuid",
 ]
@@ -1250,7 +1229,7 @@ dependencies = [
  "oxiri",
  "oxsdatatypes",
  "rand",
- "thiserror 1.0.63",
+ "thiserror",
 ]
 
 [[package]]
@@ -1262,7 +1241,7 @@ dependencies = [
  "oxrdf",
  "oxrdfxml",
  "oxttl",
- "thiserror 1.0.63",
+ "thiserror",
 ]
 
 [[package]]
@@ -1275,7 +1254,7 @@ dependencies = [
  "oxiri",
  "oxrdf",
  "quick-xml",
- "thiserror 1.0.63",
+ "thiserror",
 ]
 
 [[package]]
@@ -1284,7 +1263,7 @@ version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2aded4e13b58cbac3d7541ddd42b2b583323d2fcf4f9b2250394c6a07a39d51f"
 dependencies = [
- "thiserror 1.0.63",
+ "thiserror",
 ]
 
 [[package]]
@@ -1297,7 +1276,7 @@ dependencies = [
  "oxilangtag",
  "oxiri",
  "oxrdf",
- "thiserror 1.0.63",
+ "thiserror",
 ]
 
 [[package]]
@@ -1338,7 +1317,7 @@ name = "parquet_io"
 version = "0.5.0"
 dependencies = [
  "polars",
- "thiserror 2.0.3",
+ "thiserror",
  "uuid",
 ]
 
@@ -1558,7 +1537,7 @@ dependencies = [
  "rayon",
  "regex",
  "smartstring",
- "thiserror 1.0.63",
+ "thiserror",
  "version_check",
  "xxhash-rust",
 ]
@@ -1572,7 +1551,7 @@ dependencies = [
  "polars-arrow-format",
  "regex",
  "simdutf8",
- "thiserror 1.0.63",
+ "thiserror",
 ]
 
 [[package]]
@@ -1942,7 +1921,7 @@ dependencies = [
  "representation",
  "shacl",
  "templates",
- "thiserror 2.0.3",
+ "thiserror",
  "triplestore",
 ]
 
@@ -1954,7 +1933,7 @@ dependencies = [
  "polars-core",
  "pyo3",
  "representation",
- "thiserror 2.0.3",
+ "thiserror",
 ]
 
 [[package]]
@@ -2032,7 +2011,7 @@ dependencies = [
  "representation",
  "rstest",
  "spargebra",
- "thiserror 2.0.3",
+ "thiserror",
  "uuid",
 ]
 
@@ -2227,7 +2206,7 @@ name = "representation"
 version = "0.6.10"
 dependencies = [
  "chrono",
- "chrono-tz 0.10.0",
+ "chrono-tz 0.9.0",
  "log",
  "oxrdf",
  "oxsdatatypes",
@@ -2235,7 +2214,7 @@ dependencies = [
  "pyo3",
  "serde",
  "spargebra",
- "thiserror 2.0.3",
+ "thiserror",
  "uuid",
 ]
 
@@ -2395,7 +2374,7 @@ version = "0.1.0"
 dependencies = [
  "polars",
  "representation",
- "thiserror 2.0.3",
+ "thiserror",
  "triplestore",
 ]
 
@@ -2482,7 +2461,7 @@ dependencies = [
  "oxrdf",
  "peg",
  "rand",
- "thiserror 2.0.3",
+ "thiserror",
 ]
 
 [[package]]
@@ -2625,7 +2604,7 @@ dependencies = [
  "oxrdf",
  "pyo3",
  "representation",
- "thiserror 2.0.3",
+ "thiserror",
  "unic-char-range",
  "walkdir",
 ]
@@ -2636,16 +2615,7 @@ version = "1.0.63"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c0342370b38b6a11b6cc11d6a805569958d54cfa061a29969c3b5ce2ea405724"
 dependencies = [
- "thiserror-impl 1.0.63",
-]
-
-[[package]]
-name = "thiserror"
-version = "2.0.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c006c85c7651b3cf2ada4584faa36773bd07bac24acfb39f3c431b36d7e667aa"
-dependencies = [
- "thiserror-impl 2.0.3",
+ "thiserror-impl",
 ]
 
 [[package]]
@@ -2653,17 +2623,6 @@ name = "thiserror-impl"
 version = "1.0.63"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a4558b58466b9ad7ca0f102865eccc95938dca1a74a856f2b57b6629050da261"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.87",
-]
-
-[[package]]
-name = "thiserror-impl"
-version = "2.0.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f077553d607adc1caf65430528a576c757a71ed73944b66ebb58ef2bbd243568"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2735,7 +2694,7 @@ dependencies = [
  "serial_test",
  "spargebra",
  "sprs",
- "thiserror 2.0.3",
+ "thiserror",
  "uuid",
 ]
 

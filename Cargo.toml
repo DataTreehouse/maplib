@@ -16,7 +16,7 @@ members = [
 rust-version = "1.81.0"
 
 [workspace.dependencies]
-pyo3 = {version = "0.22.6", features = ["py-clone"] }
+pyo3 = {version = "0.22.4", features = ["py-clone"] }
 polars = { version = "0.41.3", features = ["nightly", "performant", "cse"] }
 polars-utils = "0.41.3"
 polars-core = "0.41.3"
@@ -31,12 +31,12 @@ oxsdatatypes = "0.2.0"
 env_logger = "0.11.5"
 log = "0.4.21"
 chrono = "0.4.38"
-chrono-tz = "0.10.0"
+chrono-tz = "0.9.0"
 uuid = { version = "1.8.0", features = [
     "v4", # Lets you generate random UUIDs
     "fast-rng", # Use a faster (but still sufficiently random) RNG
 ] }
-thiserror = "2.0.3"
+thiserror = "1.0.58"
 nom = { version = "7.1.3" }
 serde = { version = "1.0.203" }
 peg = "0.8"
