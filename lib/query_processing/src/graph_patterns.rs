@@ -1,5 +1,5 @@
 use crate::errors::QueryProcessingError;
-use log::warn;
+use log::{debug, warn};
 use oxrdf::Variable;
 use polars::datatypes::{CategoricalOrdering, DataType};
 use polars::frame::UniqueKeepStrategy;
