@@ -99,4 +99,3 @@ fn xsd_int_subtype(s: &NamedNode) -> bool {
 fn xsd_short_subtype(s: &NamedNode) -> bool {
     matches!(s.as_ref(), xsd::BYTE)
 }
-

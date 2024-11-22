@@ -317,7 +317,8 @@ impl Mapping {
         }
         let mut use_triplestore = if let Some(graph) = graph {
             if !self.triplestores_map.contains_key(graph) {
-                self.triplestores_map.insert(graph.clone(), Triplestore::new(None).unwrap());
+                self.triplestores_map
+                    .insert(graph.clone(), Triplestore::new(None).unwrap());
             }
             self.triplestores_map.get_mut(graph).unwrap()
         } else {

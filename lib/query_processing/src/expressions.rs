@@ -845,6 +845,31 @@ pub fn func_expression(
                     outer_context.as_str().to_string(),
                     RDFNodeType::Literal(xsd::DATE_TIME.into_owned()),
                 );
+            } else if iri == xsd::BOOLEAN {
+                assert_eq!(args.len(), 1);
+                let first_context = args_contexts.get(&0).unwrap();
+                //Workaround for casting utf8 views
+                if solution_mappings
+                    .rdf_node_types
+                    .get(first_context.as_str())
+                    .unwrap()
+                    .is_lit_type(xsd::STRING)
+                {
+                    solution_mappings.mappings = solution_mappings.mappings.with_column(
+                        col(first_context.as_str()).str().to_lowercase().eq(lit("true"))
+                            .alias(outer_context.as_str()),
+                    );
+                } else {
+                    solution_mappings.mappings = solution_mappings.mappings.with_column(
+                        col(first_context.as_str())
+                            .cast(DataType::Boolean)
+                            .alias(outer_context.as_str()),
+                    );
+                }
+                solution_mappings.rdf_node_types.insert(
+                    outer_context.as_str().to_string(),
+                    RDFNodeType::Literal(xsd::BOOLEAN.into_owned()),
+                );
             } else {
                 todo!("{:?}", nn)
             }

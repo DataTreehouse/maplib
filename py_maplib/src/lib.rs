@@ -47,7 +47,7 @@ use triplestore::sparql::{QueryResult as SparqlQueryResult, QueryResult};
 use jemallocator::Jemalloc;
 use oxrdf::NamedNode;
 use oxrdfio::RdfFormat;
-use pyo3::types::PyList;
+use pyo3::types::{PyList, PyString};
 use representation::python::{
     PyBlankNode, PyIRI, PyLiteral, PyPrefix, PyRDFType, PySolutionMappings, PyVariable,
 };
@@ -195,7 +195,8 @@ impl PyMapping {
             unique_subset.map(|unique_subset| vec![unique_subset.into_iter().collect()]);
 
         let options = ExpandOptions {
-            unique_subsets, graph:parse_optional_graph(graph)?
+            unique_subsets,
+            graph: parse_optional_graph(graph)?,
         };
 
         if let Some(df) = df {
@@ -237,7 +238,7 @@ impl PyMapping {
         let df = polars_df_to_rust_df(df)?;
         let options = ExpandOptions {
             unique_subsets: Some(vec![vec![primary_key_column.clone()]]),
-            graph:parse_optional_graph(graph)?,
+            graph: parse_optional_graph(graph)?,
         };
 
         let tmpl = self
@@ -264,6 +265,7 @@ impl PyMapping {
         native_dataframe: Option<bool>,
         graph: Option<String>,
         streaming: Option<bool>,
+        return_json: Option<bool>,
     ) -> PyResult<PyObject> {
         let graph = parse_optional_graph(graph)?;
         let mapped_parameters = map_parameters(parameters)?;
@@ -280,6 +282,7 @@ impl PyMapping {
             res,
             native_dataframe.unwrap_or(false),
             include_datatypes.unwrap_or(false),
+            return_json.unwrap_or(false),
             py,
         )
     }
@@ -514,8 +517,13 @@ fn query_to_result(
     res: SparqlQueryResult,
     native_dataframe: bool,
     include_details: bool,
+    return_json: bool,
     py: Python<'_>,
 ) -> PyResult<PyObject> {
+    if return_json {
+        let json = res.json();
+        return Ok(PyString::new_bound(py, &json).into());
+    }
     match res {
         SparqlQueryResult::Select(mut df, mut datatypes) => {
             (df, datatypes) = fix_cats_and_multicolumns(df, datatypes, native_dataframe);

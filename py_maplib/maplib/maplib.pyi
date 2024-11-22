@@ -91,11 +91,11 @@ class Literal:
     datatype: Optional[IRI]
     language: Optional[str]
 
-    def __init__(self, value: str, datatype: IRI = None, language: str = None):
+    def __init__(self, value: str, data_type: IRI = None, language: str = None):
         """
         Create a new RDF Literal
         :param value: The lexical representation of the value.
-        :param datatype: The data type of the value (an IRI).
+        :param data_type: The data type of the value (an IRI).
         :param language: The language tag of the value.
         """
 
@@ -375,8 +375,9 @@ class Mapping:
         native_dataframe: bool = False,
         graph: str = None,
         streaming: bool = False,
+        return_json: bool = False,
     ) -> Union[
-        DataFrame, SolutionMappings, List[Union[DataFrame, SolutionMappings]], None
+        DataFrame, SolutionMappings, List[Union[DataFrame, SolutionMappings], str], None
     ]:
         """
         Query the contained knowledge graph using SPARQL
@@ -396,6 +397,7 @@ class Mapping:
         :param include_datatypes: Datatypes are not returned by default, set to true to return a dict with the solution mappings and the datatypes.
         :param graph: The IRI of the graph to query.
         :param streaming: Use Polars streaming
+        :param return_json: Return JSON string.
         :return: DataFrame (Select), list of DataFrames (Construct) containing results, or None for Insert-queries
 
         """
