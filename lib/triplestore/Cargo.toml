@@ -25,6 +25,7 @@ thiserror.workspace = true
 oxrdfio.workspace = true
 oxttl.workspace = true
 memmap2.workspace = true
+sparesults.workspace = true
 
 [dev-dependencies]
 rstest.workspace = true

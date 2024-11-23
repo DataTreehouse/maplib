@@ -8,6 +8,8 @@ const OWL_RATIONAL: &str = "http://www.w3.org/2002/07/owl#rational";
 pub fn is_literal_subtype(s: &NamedNode, t: &NamedNode) -> bool {
     if !ptype_is_possibly_literal(s) || !ptype_is_possibly_literal(t) {
         false
+    } else if s == t {
+        true
     } else if t.as_ref() == rdfs::LITERAL {
         true
     } else if t.as_str() == OWL_REAL {

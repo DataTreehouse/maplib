@@ -47,7 +47,7 @@ use triplestore::sparql::{QueryResult as SparqlQueryResult, QueryResult};
 use jemallocator::Jemalloc;
 use oxrdf::NamedNode;
 use oxrdfio::RdfFormat;
-use pyo3::types::PyList;
+use pyo3::types::{PyList, PyString};
 use representation::python::{
     PyBlankNode, PyIRI, PyLiteral, PyPrefix, PyRDFType, PySolutionMappings, PyVariable,
 };
@@ -84,12 +84,14 @@ impl PyMapping {
 #[derive(Debug, Clone)]
 pub struct ExpandOptions {
     pub unique_subsets: Option<Vec<Vec<String>>>,
+    pub graph: Option<NamedNode>,
 }
 
 impl ExpandOptions {
     fn into_rust_expand_options(self) -> RustExpandOptions {
         RustExpandOptions {
             unique_subsets: self.unique_subsets,
+            graph: self.graph,
         }
     }
 }
@@ -172,6 +174,7 @@ impl PyMapping {
         template: &Bound<'_, PyAny>,
         df: Option<&Bound<'_, PyAny>>,
         unique_subset: Option<Vec<String>>,
+        graph: Option<String>,
     ) -> PyResult<Option<PyObject>> {
         let template = if let Ok(i) = template.extract::<PyIRI>() {
             i.into_inner().to_string()
@@ -190,7 +193,11 @@ impl PyMapping {
 
         let unique_subsets =
             unique_subset.map(|unique_subset| vec![unique_subset.into_iter().collect()]);
-        let options = ExpandOptions { unique_subsets };
+
+        let options = ExpandOptions {
+            unique_subsets,
+            graph: parse_optional_graph(graph)?,
+        };
 
         if let Some(df) = df {
             if df.getattr("height")?.gt(0).unwrap() {
@@ -226,10 +233,12 @@ impl PyMapping {
         primary_key_column: String,
         template_prefix: Option<String>,
         predicate_uri_prefix: Option<String>,
+        graph: Option<String>,
     ) -> PyResult<String> {
         let df = polars_df_to_rust_df(df)?;
         let options = ExpandOptions {
             unique_subsets: Some(vec![vec![primary_key_column.clone()]]),
+            graph: parse_optional_graph(graph)?,
         };
 
         let tmpl = self
@@ -256,6 +265,7 @@ impl PyMapping {
         native_dataframe: Option<bool>,
         graph: Option<String>,
         streaming: Option<bool>,
+        return_json: Option<bool>,
     ) -> PyResult<PyObject> {
         let graph = parse_optional_graph(graph)?;
         let mapped_parameters = map_parameters(parameters)?;
@@ -272,6 +282,7 @@ impl PyMapping {
             res,
             native_dataframe.unwrap_or(false),
             include_datatypes.unwrap_or(false),
+            return_json.unwrap_or(false),
             py,
         )
     }
@@ -506,8 +517,13 @@ fn query_to_result(
     res: SparqlQueryResult,
     native_dataframe: bool,
     include_details: bool,
+    return_json: bool,
     py: Python<'_>,
 ) -> PyResult<PyObject> {
+    if return_json {
+        let json = res.json();
+        return Ok(PyString::new_bound(py, &json).into());
+    }
     match res {
         SparqlQueryResult::Select(mut df, mut datatypes) => {
             (df, datatypes) = fix_cats_and_multicolumns(df, datatypes, native_dataframe);

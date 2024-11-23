@@ -24,7 +24,7 @@ use templates::ast::{
 };
 use templates::constants::OTTR_TRIPLE;
 use templates::MappingColumnType;
-use triplestore::TriplesToAdd;
+use triplestore::{TriplesToAdd, Triplestore};
 use uuid::Uuid;
 
 const LIST_COL: &str = "list";
@@ -47,6 +47,7 @@ impl Mapping {
         let (mut df, mut columns) = validate(df, mapping_column_types, &target_template)?;
         let ExpandOptions {
             unique_subsets: unique_subsets_opt,
+            graph,
         } = options;
         let unique_subsets = unique_subsets_opt.unwrap_or_default();
         let call_uuid = Uuid::new_v4().to_string();
@@ -89,7 +90,7 @@ impl Mapping {
                     static_columns.clone(),
                     unique_subsets.clone(),
                 )?;
-                self.process_results(result_vec, &call_uuid, new_blank_node_counter)?;
+                self.process_results(result_vec, &call_uuid, new_blank_node_counter, &graph)?;
                 debug!("Finished processing {} rows", to_row);
                 if offset >= df.height() as i64 {
                     break;
@@ -107,7 +108,7 @@ impl Mapping {
                 static_columns,
                 unique_subsets,
             )?;
-            self.process_results(result_vec, &call_uuid, new_blank_node_counter)?;
+            self.process_results(result_vec, &call_uuid, new_blank_node_counter, &graph)?;
             debug!("Expansion took {} seconds", now.elapsed().as_secs_f32());
         }
         Ok(MappingReport {})
@@ -234,6 +235,7 @@ impl Mapping {
         mut result_vec: Vec<OTTRTripleInstance>,
         call_uuid: &String,
         mut new_blank_node_counter: usize,
+        graph: &Option<NamedNode>,
     ) -> Result<(), MappingError> {
         let now = Instant::now();
         let triples: Vec<_> = result_vec
@@ -313,7 +315,17 @@ impl Mapping {
                 });
             }
         }
-        self.base_triplestore
+        let mut use_triplestore = if let Some(graph) = graph {
+            if !self.triplestores_map.contains_key(graph) {
+                self.triplestores_map
+                    .insert(graph.clone(), Triplestore::new(None).unwrap());
+            }
+            self.triplestores_map.get_mut(graph).unwrap()
+        } else {
+            &mut self.base_triplestore
+        };
+
+        use_triplestore
             .add_triples_vec(all_triples_to_add, call_uuid, false)
             .map_err(MappingError::TriplestoreError)?;
 

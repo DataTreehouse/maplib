@@ -91,11 +91,11 @@ class Literal:
     datatype: Optional[IRI]
     language: Optional[str]
 
-    def __init__(self, value: str, datatype: IRI = None, language: str = None):
+    def __init__(self, value: str, data_type: IRI = None, language: str = None):
         """
         Create a new RDF Literal
         :param value: The lexical representation of the value.
-        :param datatype: The data type of the value (an IRI).
+        :param data_type: The data type of the value (an IRI).
         :param language: The language tag of the value.
         """
 
@@ -327,6 +327,7 @@ class Mapping:
         template: Union[str, "Template", IRI],
         df: DataFrame = None,
         unique_subset: List[str] = None,
+        graph: str = None,
     ) -> None:
         """
         Expand a template using a DataFrame
@@ -340,6 +341,7 @@ class Mapping:
         :param template: Template, IRI, IRI string or prefixed template name.
         :param df: DataFrame where the columns have the same names as the template arguments
         :param unique_subset: DataFrame column names known to be unique e.g. ["colA", "colB"], for a performance boost (reduce costly deduplication)
+        :param graph: The IRI of the graph to add triples to.
         """
 
     def expand_default(
@@ -348,6 +350,7 @@ class Mapping:
         primary_key_column: str,
         template_prefix: str = None,
         predicate_uri_prefix: str = None,
+        graph: str = None,
     ) -> str:
         """
         Create a default template and expand it based on a dataframe.
@@ -360,6 +363,7 @@ class Mapping:
         :param primary_key_column: This column will be the subject of all triples in the generated template.
         :param template_prefix: Prefix of the template - the name is auto-generated.
         :param predicate_uri_prefix: Prefix of the predicates/verbs in the generated template, names are derived from column names.
+        :param graph: The IRI of the graph to add triples to.
         :return: The generated template
         """
 
@@ -371,8 +375,9 @@ class Mapping:
         native_dataframe: bool = False,
         graph: str = None,
         streaming: bool = False,
+        return_json: bool = False,
     ) -> Union[
-        DataFrame, SolutionMappings, List[Union[DataFrame, SolutionMappings]], None
+        DataFrame, SolutionMappings, List[Union[DataFrame, SolutionMappings], str], None
     ]:
         """
         Query the contained knowledge graph using SPARQL
@@ -392,6 +397,7 @@ class Mapping:
         :param include_datatypes: Datatypes are not returned by default, set to true to return a dict with the solution mappings and the datatypes.
         :param graph: The IRI of the graph to query.
         :param streaming: Use Polars streaming
+        :param return_json: Return JSON string.
         :return: DataFrame (Select), list of DataFrames (Construct) containing results, or None for Insert-queries
 
         """

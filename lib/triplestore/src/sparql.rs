@@ -4,32 +4,103 @@ mod lazy_expressions;
 pub(crate) mod lazy_graph_patterns;
 mod lazy_order;
 
-use oxrdf::{NamedNode, Variable};
-use representation::query_context::Context;
-use std::collections::HashMap;
-
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
 use crate::TriplesToAdd;
+use oxrdf::{NamedNode, Subject, Term, Triple, Variable};
+use oxttl::TurtleSerializer;
 use polars::frame::DataFrame;
 use polars::prelude::{col, lit, Expr, IntoLazy};
 use polars_core::frame::UniqueKeepStrategy;
 use query_processing::expressions::col_null_expr;
 use representation::multitype::{split_df_multicols, unique_workaround};
+use representation::polars_to_rdf::{df_as_result, QuerySolutions};
+use representation::query_context::Context;
 use representation::rdf_to_polars::{
     rdf_literal_to_polars_literal_value, rdf_named_node_to_polars_literal_value,
 };
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use representation::RDFNodeType;
 use representation::{OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME};
+use sparesults::QueryResultsSerializer;
+use sparesults::{QueryResultsFormat, QuerySolution};
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 use spargebra::Query;
+use std::collections::HashMap;
 use uuid::Uuid;
 
 #[derive(Debug)]
 pub enum QueryResult {
     Select(DataFrame, HashMap<String, RDFNodeType>),
     Construct(Vec<(DataFrame, HashMap<String, RDFNodeType>)>),
+}
+
+impl QueryResult {
+    pub fn json(&self) -> String {
+        match self {
+            QueryResult::Select(df, map) => {
+                let QuerySolutions {
+                    variables,
+                    solutions,
+                } = df_as_result(df.clone(), map);
+                let mut json_serializer =
+                    QueryResultsSerializer::from_format(QueryResultsFormat::Json);
+                let mut buffer = vec![];
+                let mut serializer = json_serializer
+                    .serialize_solutions_to_writer(&mut buffer, variables.clone())
+                    .unwrap();
+                for s in solutions {
+                    let mut solvec = vec![];
+                    for (i, t) in s.iter().enumerate() {
+                        if let Some(t) = t {
+                            solvec.push((variables.get(i).unwrap(), t.as_ref()));
+                        }
+                    }
+                    serializer.serialize(solvec).unwrap()
+                }
+                serializer.finish().unwrap();
+                String::from_utf8(buffer).unwrap()
+            }
+            QueryResult::Construct(c) => {
+                let mut ser = TurtleSerializer::new().for_writer(vec![]);
+                for (df, types) in c {
+                    let QuerySolutions {
+                        variables,
+                        solutions,
+                    } = df_as_result(df.clone(), types);
+                    for s in solutions {
+                        let mut subject = None;
+                        let mut verb = None;
+                        let mut object = None;
+                        for (i, t) in s.into_iter().enumerate() {
+                            let t = t.unwrap();
+                            let v = variables.get(i).unwrap();
+                            if v.as_str() == SUBJECT_COL_NAME {
+                                subject = Some(match t {
+                                    Term::NamedNode(nn) => Subject::NamedNode(nn),
+                                    Term::BlankNode(bl) => Subject::BlankNode(bl),
+                                    _ => todo!(),
+                                });
+                            } else if v.as_str() == VERB_COL_NAME {
+                                verb = Some(match t {
+                                    Term::NamedNode(nn) => nn,
+                                    _ => panic!("Should never happen"),
+                                });
+                            } else if v.as_str() == OBJECT_COL_NAME {
+                                object = Some(t);
+                            } else {
+                                panic!("Should never happen");
+                            }
+                        }
+                        let t = Triple::new(subject.unwrap(), verb.unwrap(), object.unwrap());
+                        ser.serialize_triple(t.as_ref()).unwrap();
+                    }
+                }
+                let res = ser.finish().unwrap();
+                String::from_utf8(res).unwrap()
+            }
+        }
+    }
 }
 
 impl Triplestore {
