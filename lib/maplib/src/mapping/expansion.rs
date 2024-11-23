@@ -8,7 +8,7 @@ use log::debug;
 use oxrdf::vocab::rdf;
 use oxrdf::{NamedNode, Variable};
 use polars::prelude::{
-    col, lit, DataFrame, DataType, Expr, IntoLazy, LazyFrame, NamedFrom, Series,
+    col, lit, Column, DataFrame, DataType, Expr, IntoColumn, IntoLazy, LazyFrame, NamedFrom, Series,
 };
 use rayon::iter::{IndexedParallelIterator, ParallelDrainRange, ParallelIterator};
 use representation::multitype::split_df_multicols;
@@ -153,16 +153,16 @@ impl Mapping {
                     Default::default()
                 };
                 for i in &template.pattern_list {
-                    let mut instance_series = vec![];
+                    let mut instance_columns = vec![];
                     let vs = get_variable_names(i);
                     if let Some(df) = &df {
                         for v in vs {
                             if colnames.contains(v) {
-                                instance_series.push(df.column(v).unwrap().clone());
+                                instance_columns.push(df.column(v).unwrap().clone());
                             }
                         }
                     }
-                    expand_params_vec.push((i, instance_series));
+                    expand_params_vec.push((i, instance_columns));
                 }
 
                 let use_df_height = if let Some(df) = &df { df.height() } else { 1 };
@@ -520,12 +520,12 @@ fn create_list_triples(
     i: usize,
     blank_node_counter: &mut usize,
 ) -> Result<Vec<CreateTriplesResult>, MappingError> {
-    let my_df = df.with_row_index(LIST_COL, None).unwrap();
+    let my_df = df.with_row_index(LIST_COL.into(), None).unwrap();
     let mut list_df = my_df.select([c, LIST_COL]).unwrap();
     list_df = list_df
         .explode([c])
         .unwrap()
-        .with_row_index(FIRST_COL, None)
+        .with_row_index(FIRST_COL.into(), None)
         .unwrap();
     list_df = list_df
         .lazy()
@@ -554,9 +554,9 @@ fn create_list_triples(
 
     let mut first_df = list_df.select([FIRST_COL, c]).unwrap();
     first_df
-        .rename(c, OBJECT_COL_NAME)
+        .rename(c, OBJECT_COL_NAME.into())
         .unwrap()
-        .rename(FIRST_COL, SUBJECT_COL_NAME)
+        .rename(FIRST_COL, SUBJECT_COL_NAME.into())
         .unwrap();
 
     let mut rest_df = list_df
@@ -648,7 +648,7 @@ fn create_remapped(
     instance: &Instance,
     signature: &Signature,
     calling_signature: &Signature,
-    mut series_vec: Vec<Series>,
+    mut columns_vec: Vec<Column>,
     dynamic_columns: &HashMap<String, MappingColumnType>,
     constant_columns: &HashMap<String, StaticColumn>,
     unique_subsets: &Vec<Vec<String>>,
@@ -657,7 +657,7 @@ fn create_remapped(
     let now = Instant::now();
     let mut new_dynamic_columns = HashMap::new();
     let mut new_constant_columns = HashMap::new();
-    let mut new_series = vec![];
+    let mut new_columns = vec![];
 
     let mut new_dynamic_from_constant = vec![];
     let mut to_expand = vec![];
@@ -728,7 +728,7 @@ fn create_remapped(
                         ct,
                         input_df_height,
                     )?;
-                    new_series.push(series);
+                    new_columns.push(series.into_column());
                     new_dynamic_columns.insert(target_colname.to_string(), primitive_column);
                     new_dynamic_from_constant.push(target_colname);
                     out_blank_node_counter =
@@ -762,7 +762,7 @@ fn create_remapped(
         }
     }
 
-    for s in &mut series_vec {
+    for s in &mut columns_vec {
         let sname = s.name().to_string();
         s.rename(
             rename_map
@@ -773,10 +773,15 @@ fn create_remapped(
                 .into(),
         );
     }
-    for s in new_series {
-        series_vec.push(s);
+    for s in new_columns {
+        columns_vec.push(s);
     }
-    let mut lf = DataFrame::new(series_vec).unwrap().lazy();
+    let mut column_vec = Vec::new();
+    for s in columns_vec {
+        column_vec.push(s.into_column());
+    }
+
+    let mut lf = DataFrame::new(column_vec).unwrap().lazy();
 
     for expr in expressions {
         lf = lf.with_column(expr);

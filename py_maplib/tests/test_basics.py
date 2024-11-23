@@ -146,7 +146,6 @@ def test_create_programmatic_mapping_with_default():
         } 
         """
     )
-    print(qres)
     expected_df = pl.DataFrame({"A": ["123"], "B": [123]})
     assert_frame_equal(qres, expected_df)
 
@@ -192,7 +191,6 @@ def test_create_programmatic_mapping_with_nested_default():
         } 
         """
     )
-    print(qres)
     expected_df = pl.DataFrame({"A": ["123"], "B": [123]})
     assert_frame_equal(qres, expected_df)
 
@@ -242,7 +240,6 @@ def test_create_programmatic_mapping_with_nested_default_and_missing_column():
         } 
         """
     )
-    print(qres)
     expected_df = pl.DataFrame({"A": ["123"], "B": [123]})
     assert_frame_equal(qres, expected_df)
 
@@ -298,7 +295,6 @@ def test_create_programmatic_mapping_with_nested_partial_default():
         } ORDER BY ?S ?A ?B
         """
     )
-    print(qres)
     expected_df = pl.DataFrame(
         {
             "S": [f"<{my_object.iri}>"] * 4,
@@ -347,7 +343,6 @@ def test_create_programmatic_mapping_with_nested_none_optional():
         } ORDER BY ?S ?A ?B
         """
     )
-    print(qres)
     expected_df = pl.DataFrame(
         {"S": [f"<{my_object.iri}>"] * 2, "A": ["A", "B"], "B": [None, None]}
     )
@@ -396,7 +391,6 @@ def test_create_programmatic_mapping_with_partial_default():
         } ORDER BY ?S ?A ?B
         """
     )
-    print(qres)
     expected_df = pl.DataFrame(
         {
             "S": [f"<{my_object.iri}>"] * 4,

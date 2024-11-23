@@ -3,7 +3,7 @@ use oxrdf::vocab::{rdfs, xsd};
 use oxrdf::NamedNode;
 use polars::datatypes::DataType;
 use polars::frame::DataFrame;
-use polars::prelude::Series;
+use polars::prelude::{Column, Series};
 use representation::polars_to_rdf::polars_type_to_literal_type;
 use representation::{BaseRDFNodeType, RDFNodeType};
 use std::collections::{HashMap, HashSet};
@@ -32,8 +32,8 @@ pub fn validate(
                 }
             }
             if !found_column_type {
-                if let Ok(ser) = df.column(name) {
-                    let t = infer_mapping_column_type(p, ser)?;
+                if let Ok(c) = df.column(name) {
+                    let t = infer_mapping_column_type(p, c)?;
                     map.insert(name.to_string(), t);
                 }
             }
@@ -94,17 +94,17 @@ fn validate_column_existence(
 
 fn infer_mapping_column_type(
     p: &Parameter,
-    series: &Series,
+    column: &Column,
 ) -> Result<MappingColumnType, MappingError> {
     if let Some(ptype) = &p.ptype {
         Ok(infer_validate_mapping_column_type_from_ptype(
-            series.name(),
-            series.dtype(),
+            column.name(),
+            column.dtype(),
             ptype,
         )?)
     } else {
         let series_inferred_mapping_column_type =
-            polars_datatype_to_mapping_column_datatype(series.dtype())?;
+            polars_datatype_to_mapping_column_datatype(column.dtype())?;
         Ok(series_inferred_mapping_column_type)
     }
 }

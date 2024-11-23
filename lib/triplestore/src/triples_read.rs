@@ -10,6 +10,7 @@ use oxttl::ntriples::SliceNTriplesParser;
 use oxttl::turtle::SliceTurtleParser;
 use oxttl::{NTriplesParser, TurtleParser};
 use polars::prelude::{as_struct, col, DataFrame, IntoLazy, LiteralValue, Series};
+use polars_core::prelude::IntoColumn;
 use polars_utils::pl_str::PlSmallStr;
 use rayon::iter::ParallelIterator;
 use rayon::prelude::{IntoParallelIterator, IntoParallelRefIterator};
@@ -26,7 +27,6 @@ use std::fs::File;
 use std::ops::Deref;
 use std::path::Path;
 use std::time::Instant;
-use polars_core::prelude::IntoColumn;
 
 type MapType = HashMap<String, HashMap<String, (Vec<Subject>, Vec<Term>)>>;
 
@@ -249,7 +249,9 @@ impl Triplestore {
                                 )
                                 .collect()
                                 .unwrap();
-                            df.drop_in_place(OBJECT_COL_NAME).unwrap().take_materialized_series()
+                            df.drop_in_place(OBJECT_COL_NAME)
+                                .unwrap()
+                                .take_materialized_series()
                         } else {
                             let any_iter: Vec<_> = objects
                                 .into_par_iter()
@@ -266,7 +268,8 @@ impl Triplestore {
                             polars_literal_values_to_series(any_iter, OBJECT_COL_NAME)
                         };
 
-                        let all_series = vec![subjects_ser.into_column(), objects_ser.into_column()];
+                        let all_series =
+                            vec![subjects_ser.into_column(), objects_ser.into_column()];
                         let mut df = DataFrame::new(all_series).unwrap();
                         // TODO: Include bad data also
                         df = df

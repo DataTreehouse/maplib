@@ -236,7 +236,11 @@ pub fn bound(
     v: &Variable,
     outer_context: &Context,
 ) -> Result<SolutionMappings, QueryProcessingError> {
-    let expr = col_null_expr(v.as_str(), &solution_mappings.rdf_node_types).not();
+    let expr = expr_is_null_workaround(
+        col(v.as_str()),
+        solution_mappings.rdf_node_types.get(v.as_str()).unwrap(),
+    )
+    .not();
     solution_mappings.mappings = solution_mappings
         .mappings
         .with_column(expr.alias(outer_context.as_str()));
@@ -247,21 +251,19 @@ pub fn bound(
     Ok(solution_mappings)
 }
 
-pub fn col_null_expr(c: &str, rdf_node_types: &HashMap<String, RDFNodeType>) -> Expr {
-    match rdf_node_types.get(c).unwrap() {
+pub fn expr_is_null_workaround(expr: Expr, rdf_node_type: &RDFNodeType) -> Expr {
+    match rdf_node_type {
         RDFNodeType::Literal(l) => {
             if l.as_ref() == rdf::LANG_STRING {
-                col(c)
-                    .struct_()
+                expr.struct_()
                     .field_by_name(LANG_STRING_VALUE_FIELD)
                     .is_null()
             } else {
-                col(c).is_null()
+                expr.is_null()
             }
         }
-        RDFNodeType::MultiType(t) => create_all_types_null_expression(c, t),
-        RDFNodeType::None => lit(true),
-        _ => col(c).is_null(),
+        RDFNodeType::MultiType(t) => create_all_types_null_expression(expr, t),
+        _ => expr.is_null(),
     }
 }
 
@@ -852,7 +854,10 @@ pub fn func_expression(
                     .is_lit_type(xsd::STRING)
                 {
                     solution_mappings.mappings = solution_mappings.mappings.with_column(
-                        col(first_context.as_str()).str().to_lowercase().eq(lit("true"))
+                        col(first_context.as_str())
+                            .str()
+                            .to_lowercase()
+                            .eq(lit("true"))
                             .alias(outer_context.as_str()),
                     );
                 } else {
@@ -870,49 +875,84 @@ pub fn func_expression(
                 todo!("{:?}", nn)
             }
         }
-        Function::Contains => {
+        Function::StrStarts | Function::StrEnds | Function::Contains => {
             assert_eq!(args.len(), 2);
             let first_context = args_contexts.get(&0).unwrap();
             let second_context = args_contexts.get(&1).unwrap();
 
-            solution_mappings.mappings = solution_mappings.mappings.with_column(
-                (col(first_context.as_str())
-                    .str()
-                    .contains_literal(col(second_context.as_str())))
-                .alias(outer_context.as_str()),
-            );
-            solution_mappings.rdf_node_types.insert(
-                outer_context.as_str().to_string(),
-                RDFNodeType::Literal(xsd::BOOLEAN.into_owned()),
-            );
-        }
-        Function::StrStarts => {
-            assert_eq!(args.len(), 2);
-            let first_context = args_contexts.get(&0).unwrap();
-            let second_context = args_contexts.get(&1).unwrap();
-
-            solution_mappings.mappings = solution_mappings.mappings.with_column(
-                (col(first_context.as_str())
-                    .str()
-                    .starts_with(col(second_context.as_str())))
-                .alias(outer_context.as_str()),
-            );
-            solution_mappings.rdf_node_types.insert(
-                outer_context.as_str().to_string(),
-                RDFNodeType::Literal(xsd::BOOLEAN.into_owned()),
-            );
-        }
-        Function::StrEnds => {
-            assert_eq!(args.len(), 2);
-            let first_context = args_contexts.get(&0).unwrap();
-            let second_context = args_contexts.get(&1).unwrap();
-
-            solution_mappings.mappings = solution_mappings.mappings.with_column(
-                (col(first_context.as_str())
-                    .str()
-                    .ends_with(col(second_context.as_str())))
-                .alias(outer_context.as_str()),
-            );
+            let t = solution_mappings
+                .rdf_node_types
+                .get(first_context.as_str())
+                .unwrap();
+            if t.is_lit_type(xsd::STRING) {
+                match func {
+                    Function::StrStarts => {
+                        solution_mappings.mappings = solution_mappings.mappings.with_column(
+                            col(first_context.as_str())
+                                .str()
+                                .starts_with(col(second_context.as_str()))
+                                .alias(outer_context.as_str()),
+                        );
+                    }
+                    Function::StrEnds => {
+                        solution_mappings.mappings = solution_mappings.mappings.with_column(
+                            col(first_context.as_str())
+                                .str()
+                                .ends_with(col(second_context.as_str()))
+                                .alias(outer_context.as_str()),
+                        );
+                    }
+                    Function::Contains => {
+                        solution_mappings.mappings = solution_mappings.mappings.with_column(
+                            col(first_context.as_str())
+                                .str()
+                                .contains_literal(col(second_context.as_str()))
+                                .alias(outer_context.as_str()),
+                        );
+                    }
+                    _ => panic!("Should never happen"),
+                }
+            } else if t.is_lang_string() {
+                match func {
+                    Function::StrStarts => {
+                        solution_mappings.mappings = solution_mappings.mappings.with_column(
+                            col(first_context.as_str())
+                                .struct_()
+                                .field_by_name(LANG_STRING_VALUE_FIELD)
+                                .str()
+                                .starts_with(col(second_context.as_str()))
+                                .alias(outer_context.as_str()),
+                        );
+                    }
+                    Function::StrEnds => {
+                        solution_mappings.mappings = solution_mappings.mappings.with_column(
+                            col(first_context.as_str())
+                                .struct_()
+                                .field_by_name(LANG_STRING_VALUE_FIELD)
+                                .str()
+                                .ends_with(col(second_context.as_str()))
+                                .alias(outer_context.as_str()),
+                        );
+                    }
+                    Function::Contains => {
+                        solution_mappings.mappings = solution_mappings.mappings.with_column(
+                            col(first_context.as_str())
+                                .struct_()
+                                .field_by_name(LANG_STRING_VALUE_FIELD)
+                                .str()
+                                .contains_literal(col(second_context.as_str()))
+                                .alias(outer_context.as_str()),
+                        );
+                    }
+                    _ => panic!("Should never happen"),
+                }
+            } else if t == &RDFNodeType::None {
+                solution_mappings.mappings = solution_mappings
+                    .mappings
+                    .with_column(col(first_context.as_str()).alias(outer_context.as_str()));
+            } else {
+                todo!()
+            }
             solution_mappings.rdf_node_types.insert(
                 outer_context.as_str().to_string(),
                 RDFNodeType::Literal(xsd::BOOLEAN.into_owned()),
@@ -1217,10 +1257,10 @@ pub fn compatible_operation(expression: Expression, l1: NamedNodeRef, l2: NamedN
     }
 }
 
-pub fn create_all_types_null_expression(c: &str, types: &Vec<BaseRDFNodeType>) -> Expr {
+pub fn create_all_types_null_expression(expr: Expr, types: &Vec<BaseRDFNodeType>) -> Expr {
     let mut all_types_null: Option<Expr> = None;
     for x in all_multi_main_cols(types) {
-        let e = col(c).struct_().field_by_name(&x).is_null();
+        let e = expr.clone().struct_().field_by_name(&x).is_null();
         all_types_null = if let Some(all_types_null) = all_types_null {
             Some(all_types_null.and(e))
         } else {

@@ -97,7 +97,12 @@ impl Triplestore {
         let mut df_creator = U32DataFrameCreator::new();
         df_creator.gather_namednode_dfs(ppe, self)?;
         let (lookup_df, lookup_dtypes, namednode_dfs) = df_creator.create_u32_dfs()?;
-        let max_index: Option<u32> = lookup_df.column(LOOKUP_COLUMN).unwrap().as_materialized_series().max().unwrap();
+        let max_index: Option<u32> = lookup_df
+            .column(LOOKUP_COLUMN)
+            .unwrap()
+            .as_materialized_series()
+            .max()
+            .unwrap();
 
         if let Some(max_index) = max_index {
             if let Some(SparsePathReturn { sparmat }) =
@@ -120,10 +125,11 @@ impl Triplestore {
                 let mut out_lf = DataFrame::new(vec![subject_series.into(), object_series.into()])
                     .unwrap()
                     .lazy();
-                let lookup_subject_lf = lookup_df
-                    .clone()
-                    .lazy()
-                    .rename([VALUE_COLUMN], [SUBJECT_COL_NAME], true);
+                let lookup_subject_lf =
+                    lookup_df
+                        .clone()
+                        .lazy()
+                        .rename([VALUE_COLUMN], [SUBJECT_COL_NAME], true);
                 out_lf = out_lf
                     .join(
                         lookup_subject_lf,
@@ -132,7 +138,10 @@ impl Triplestore {
                         JoinArgs::new(JoinType::Inner),
                     )
                     .drop(["subject_key"]);
-                let lookup_object_lf = lookup_df.lazy().rename([VALUE_COLUMN], [OBJECT_COL_NAME], true);
+                let lookup_object_lf =
+                    lookup_df
+                        .lazy()
+                        .rename([VALUE_COLUMN], [OBJECT_COL_NAME], true);
                 out_lf = out_lf
                     .join(
                         lookup_object_lf,
@@ -212,11 +221,13 @@ impl Triplestore {
                     Series::new_empty(
                         SUBJECT_COL_NAME.into(),
                         &BaseRDFNodeType::None.polars_data_type(),
-                    ).into(),
+                    )
+                    .into(),
                     Series::new_empty(
                         OBJECT_COL_NAME.into(),
                         &BaseRDFNodeType::None.polars_data_type(),
-                    ).into(),
+                    )
+                    .into(),
                 ])
                 .unwrap();
                 out_dt_obj = RDFNodeType::None;
@@ -227,11 +238,13 @@ impl Triplestore {
                 Series::new_empty(
                     SUBJECT_COL_NAME.into(),
                     &BaseRDFNodeType::None.polars_data_type(),
-                ).into(),
+                )
+                .into(),
                 Series::new_empty(
                     OBJECT_COL_NAME.into(),
                     &BaseRDFNodeType::None.polars_data_type(),
-                ).into(),
+                )
+                .into(),
             ])
             .unwrap();
             out_dt_obj = RDFNodeType::None;
@@ -391,7 +404,10 @@ fn to_csr(df: &DataFrame, max_index: usize) -> SparseMatrix {
                 .with_order_descending(false),
         )
         .unwrap();
-    let subject = df.column(SUBJECT_COL_NAME).unwrap().as_materialized_series();
+    let subject = df
+        .column(SUBJECT_COL_NAME)
+        .unwrap()
+        .as_materialized_series();
     let object = df.column(OBJECT_COL_NAME).unwrap().as_materialized_series();
     let mut subjects_vec = vec![];
     let mut objects_vec = vec![];

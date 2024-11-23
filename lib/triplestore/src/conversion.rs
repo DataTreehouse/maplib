@@ -1,11 +1,12 @@
 use polars::prelude::{DataType, Series};
-use representation::polars_to_rdf::{date_series_to_strings, datetime_series_to_strings};
+use polars_core::prelude::Column;
+use representation::polars_to_rdf::{date_column_to_strings, datetime_column_to_strings};
 
-pub fn convert_to_string(series: &Series) -> Series {
-    match series.dtype() {
-        DataType::String => series.clone(),
-        DataType::Date => date_series_to_strings(series),
-        DataType::Datetime(_, tz_opt) => datetime_series_to_strings(series, tz_opt),
+pub fn convert_to_string(column: &Column) -> Column {
+    match column.dtype() {
+        DataType::String => column.clone(),
+        DataType::Date => date_column_to_strings(column),
+        DataType::Datetime(_, tz_opt) => datetime_column_to_strings(column, tz_opt),
         DataType::Duration(_) => {
             todo!()
         }
@@ -15,8 +16,8 @@ pub fn convert_to_string(series: &Series) -> Series {
         DataType::List(_) => {
             panic!("Not supported")
         }
-        DataType::Categorical(..) => series.cast(&DataType::String).unwrap(),
+        DataType::Categorical(..) => column.cast(&DataType::String).unwrap(),
         DataType::Struct(_) => panic!("Not supported"),
-        _ => series.cast(&DataType::String).unwrap(),
+        _ => column.cast(&DataType::String).unwrap(),
     }
 }

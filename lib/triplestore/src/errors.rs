@@ -5,7 +5,7 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum TriplestoreError {
-    WriteNTriplesError(io::Error),
+    WriteNTriplesError(String),
     PathDoesNotExist(String),
     ParquetIOError(ParquetIOError),
     RemoveParquetFileError(io::Error),

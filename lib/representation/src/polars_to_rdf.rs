@@ -4,16 +4,18 @@ use crate::multitype::{
 };
 use crate::{
     literal_blanknode_to_blanknode, literal_iri_to_namednode, BaseRDFNodeType, RDFNodeType,
-    LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD,
+    LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD, OBJECT_COL_NAME, SUBJECT_COL_NAME,
 };
 use chrono::TimeZone as ChronoTimeZone;
 use chrono::{Datelike, Timelike};
 use oxrdf::vocab::{rdf, xsd};
-use oxrdf::{Literal, NamedNode, Variable};
+use oxrdf::{Literal, NamedNode, Subject, Triple, Variable};
+use polars::export::rayon::iter::IndexedParallelIterator;
 use polars::export::rayon::iter::ParallelIterator;
+use polars::export::rayon::prelude::IntoParallelIterator;
 use polars::prelude::{
-    as_struct, col, AnyValue, DataFrame, DataType, IntoColumn, IntoLazy, IntoSeries, Series,
-    TimeZone,
+    as_struct, col, AnyValue, Column, DataFrame, DataType, IntoColumn, IntoLazy, IntoSeries,
+    Series, TimeZone,
 };
 use spargebra::term::Term;
 use std::collections::{HashMap, HashSet};
@@ -29,6 +31,83 @@ pub struct QuerySolutions {
     pub variables: Vec<Variable>,
     pub solutions: Vec<Vec<Option<Term>>>,
 }
+
+fn column_as_terms(column: &Column, t: &RDFNodeType) -> Vec<Option<Term>> {
+    let height = column.len();
+    let terms: Vec<_> = match t {
+        RDFNodeType::None
+        | RDFNodeType::IRI
+        | RDFNodeType::BlankNode
+        | RDFNodeType::Literal(..) => {
+            basic_rdf_node_type_column_to_term_vec(column, &BaseRDFNodeType::from_rdf_node_type(t))
+        }
+        RDFNodeType::MultiType(types) => {
+            let mut iters: Vec<IntoIter<Option<Term>>> = vec![];
+            for (t, colname) in types.iter().zip(all_multi_main_cols(types)) {
+                let v = if t.is_lang_string() {
+                    let mut lf = DataFrame::new(vec![
+                        column
+                            .struct_()
+                            .unwrap()
+                            .field_by_name(LANG_STRING_VALUE_FIELD)
+                            .unwrap()
+                            .cast(&DataType::String)
+                            .unwrap()
+                            .clone()
+                            .into_column(),
+                        column
+                            .struct_()
+                            .unwrap()
+                            .field_by_name(LANG_STRING_LANG_FIELD)
+                            .unwrap()
+                            .cast(&DataType::String)
+                            .unwrap()
+                            .clone()
+                            .into_column(),
+                    ])
+                    .unwrap()
+                    .lazy();
+                    lf = lf.with_column(
+                        as_struct(vec![
+                            col(LANG_STRING_LANG_FIELD),
+                            col(LANG_STRING_VALUE_FIELD),
+                        ])
+                        .alias(&colname),
+                    );
+                    let df = lf.collect();
+                    let ser = df.unwrap().drop_in_place(&colname).unwrap();
+                    basic_rdf_node_type_column_to_term_vec(&ser, t)
+                } else {
+                    basic_rdf_node_type_column_to_term_vec(
+                        &column
+                            .struct_()
+                            .unwrap()
+                            .field_by_name(&colname)
+                            .unwrap()
+                            .into_column(),
+                        t,
+                    )
+                };
+                iters.push(v.into_iter())
+            }
+            let mut final_terms = vec![];
+            for _ in 0..height {
+                let mut use_term = None;
+                for iter in iters.iter_mut() {
+                    if let Some(term) = iter.next() {
+                        if let Some(term) = term {
+                            use_term = Some(term);
+                        }
+                    }
+                }
+                final_terms.push(use_term);
+            }
+            final_terms
+        }
+    };
+    terms
+}
+
 pub fn df_as_result(df: DataFrame, dtypes: &HashMap<String, RDFNodeType>) -> QuerySolutions {
     if df.height() == 0 {
         let variables = dtypes.keys().map(|x| Variable::new(x).unwrap()).collect();
@@ -40,75 +119,11 @@ pub fn df_as_result(df: DataFrame, dtypes: &HashMap<String, RDFNodeType>) -> Que
     let mut all_terms = vec![];
     let mut variables = vec![];
     let height = df.height();
-    for (k, v) in dtypes {
+    for (k, t) in dtypes {
         if let Ok(ser) = df.column(k) {
             //TODO: Perhaps correct this upstream?
             variables.push(Variable::new_unchecked(k));
-            let terms: Vec<_> = match v {
-                RDFNodeType::None
-                | RDFNodeType::IRI
-                | RDFNodeType::BlankNode
-                | RDFNodeType::Literal(..) => basic_rdf_node_type_series_to_term_vec(
-                    ser.as_series().unwrap(),
-                    &BaseRDFNodeType::from_rdf_node_type(v),
-                ),
-                RDFNodeType::MultiType(types) => {
-                    let mut iters: Vec<IntoIter<Option<Term>>> = vec![];
-                    for (t, colname) in types.iter().zip(all_multi_main_cols(types)) {
-                        let v = if t.is_lang_string() {
-                            let mut lf = DataFrame::new(vec![
-                                ser.struct_()
-                                    .unwrap()
-                                    .field_by_name(LANG_STRING_VALUE_FIELD)
-                                    .unwrap()
-                                    .cast(&DataType::String)
-                                    .unwrap()
-                                    .clone()
-                                    .into_column(),
-                                ser.struct_()
-                                    .unwrap()
-                                    .field_by_name(LANG_STRING_LANG_FIELD)
-                                    .unwrap()
-                                    .cast(&DataType::String)
-                                    .unwrap()
-                                    .clone()
-                                    .into_column(),
-                            ])
-                            .unwrap()
-                            .lazy();
-                            lf = lf.with_column(
-                                as_struct(vec![
-                                    col(LANG_STRING_LANG_FIELD),
-                                    col(LANG_STRING_VALUE_FIELD),
-                                ])
-                                .alias(&colname),
-                            );
-                            let df = lf.collect();
-                            let ser = df.unwrap().drop_in_place(&colname).unwrap();
-                            basic_rdf_node_type_series_to_term_vec(ser.as_series().unwrap(), t)
-                        } else {
-                            basic_rdf_node_type_series_to_term_vec(
-                                &ser.struct_().unwrap().field_by_name(&colname).unwrap(),
-                                t,
-                            )
-                        };
-                        iters.push(v.into_iter())
-                    }
-                    let mut final_terms = vec![];
-                    for _ in 0..height {
-                        let mut use_term = None;
-                        for iter in iters.iter_mut() {
-                            if let Some(term) = iter.next() {
-                                if let Some(term) = term {
-                                    use_term = Some(term);
-                                }
-                            }
-                        }
-                        final_terms.push(use_term);
-                    }
-                    final_terms
-                }
-            };
+            let terms = column_as_terms(ser, t);
             all_terms.push(terms);
         }
     }
@@ -127,12 +142,34 @@ pub fn df_as_result(df: DataFrame, dtypes: &HashMap<String, RDFNodeType>) -> Que
     }
 }
 
-pub fn basic_rdf_node_type_series_to_term_vec(
-    ser: &Series,
+pub fn df_as_triples(
+    df: DataFrame,
+    subject_type: &RDFNodeType,
+    object_type: &RDFNodeType,
+    verb: &NamedNode,
+) -> Vec<Triple> {
+    let subjects = column_as_terms(df.column(SUBJECT_COL_NAME).unwrap(), subject_type);
+    let objects = column_as_terms(df.column(OBJECT_COL_NAME).unwrap(), object_type);
+    subjects
+        .into_par_iter()
+        .zip(objects.into_par_iter())
+        .map(|(subject, object)| {
+            let subject = match subject.unwrap() {
+                Term::NamedNode(nn) => Subject::NamedNode(nn),
+                Term::BlankNode(bl) => Subject::BlankNode(bl),
+                _ => todo!(),
+            };
+            Triple::new(subject, verb.clone(), object.unwrap())
+        })
+        .collect()
+}
+
+pub fn basic_rdf_node_type_column_to_term_vec(
+    column: &Column,
     base_rdf_node_type: &BaseRDFNodeType,
 ) -> Vec<Option<Term>> {
     match base_rdf_node_type {
-        BaseRDFNodeType::IRI => ser
+        BaseRDFNodeType::IRI => column
             .cast(&DataType::String)
             .unwrap()
             .str()
@@ -140,7 +177,7 @@ pub fn basic_rdf_node_type_series_to_term_vec(
             .par_iter()
             .map(|x| x.map(|x| Term::NamedNode(literal_iri_to_namednode(x))))
             .collect(),
-        BaseRDFNodeType::BlankNode => ser
+        BaseRDFNodeType::BlankNode => column
             .cast(&DataType::String)
             .unwrap()
             .str()
@@ -150,7 +187,7 @@ pub fn basic_rdf_node_type_series_to_term_vec(
             .collect(),
         BaseRDFNodeType::Literal(l) => match l.as_ref() {
             rdf::LANG_STRING => {
-                let value_ser = ser
+                let value_ser = column
                     .struct_()
                     .unwrap()
                     .field_by_name(LANG_STRING_VALUE_FIELD)
@@ -158,7 +195,7 @@ pub fn basic_rdf_node_type_series_to_term_vec(
                     .cast(&DataType::String)
                     .unwrap();
                 let value_iter = value_ser.str().unwrap().into_iter();
-                let lang_ser = ser
+                let lang_ser = column
                     .struct_()
                     .unwrap()
                     .field_by_name(LANG_STRING_LANG_FIELD)
@@ -183,7 +220,7 @@ pub fn basic_rdf_node_type_series_to_term_vec(
                     })
                     .collect()
             }
-            xsd::STRING => ser
+            xsd::STRING => column
                 .cast(&DataType::String)
                 .unwrap()
                 .str()
@@ -192,7 +229,7 @@ pub fn basic_rdf_node_type_series_to_term_vec(
                 .map(|x| x.map(|x| Term::Literal(Literal::new_simple_literal(x))))
                 .collect(),
             xsd::DATE => {
-                let ser = date_series_to_strings(ser);
+                let ser = date_column_to_strings(column);
                 ser.str()
                     .unwrap()
                     .par_iter()
@@ -200,18 +237,18 @@ pub fn basic_rdf_node_type_series_to_term_vec(
                     .collect()
             }
             xsd::DATE_TIME | xsd::DATE_TIME_STAMP => {
-                if let DataType::Datetime(_, tz) = ser.dtype() {
-                    let ser = datetime_series_to_strings(ser, tz);
+                if let DataType::Datetime(_, tz) = column.dtype() {
+                    let ser = datetime_column_to_strings(column, tz);
                     ser.str()
                         .unwrap()
                         .par_iter()
                         .map(|x| x.map(|x| Term::Literal(Literal::new_typed_literal(x, l.clone()))))
                         .collect()
                 } else {
-                    panic!("Invalid state {:?}", ser.dtype())
+                    panic!("Invalid state {:?}", column.dtype())
                 }
             }
-            dt => ser
+            dt => column
                 .cast(&DataType::String)
                 .unwrap()
                 .str()
@@ -222,7 +259,7 @@ pub fn basic_rdf_node_type_series_to_term_vec(
         },
         BaseRDFNodeType::None => {
             let mut v = vec![];
-            for _ in 0..ser.len() {
+            for _ in 0..column.len() {
                 v.push(None);
             }
             v
@@ -340,33 +377,33 @@ pub fn polars_type_to_literal_type(
     }
 }
 
-pub fn date_series_to_strings(series: &Series) -> Series {
-    return series
+pub fn date_column_to_strings(column: &Column) -> Column {
+    column
         .date()
         .unwrap()
         .strftime(XSD_DATE_WITHOUT_TZ_FORMAT)
         .unwrap()
-        .into_series();
+        .into_column()
 }
 
-pub fn datetime_series_to_strings(series: &Series, tz_opt: &Option<TimeZone>) -> Series {
+pub fn datetime_column_to_strings(column: &Column, tz_opt: &Option<TimeZone>) -> Column {
     if let Some(tz) = tz_opt {
-        hack_format_timestamp_with_timezone(series, &mut tz.clone())
+        hack_format_timestamp_with_timezone(column, &mut tz.clone())
     } else {
-        return series
+        return column
             .datetime()
             .unwrap()
             .strftime(XSD_DATETIME_WITHOUT_TZ_FORMAT)
             .expect("Conversion OK")
-            .into_series();
+            .into_column();
     }
 }
 
-pub fn hack_format_timestamp_with_timezone(series: &Series, tz: &mut TimeZone) -> Series {
-    let name = series.name().to_string();
+pub fn hack_format_timestamp_with_timezone(column: &Column, tz: &mut TimeZone) -> Column {
+    let name = column.name().to_string();
     let timezone_opt: Result<chrono_tz::Tz, _> = tz.parse();
     if let Ok(timezone) = timezone_opt {
-        let datetime_strings_vec: Vec<_> = series
+        let datetime_strings_vec: Vec<_> = column
             .datetime()
             .unwrap()
             .as_datetime_iter()
@@ -402,6 +439,7 @@ pub fn hack_format_timestamp_with_timezone(series: &Series, tz: &mut TimeZone) -
             false,
         )
         .unwrap()
+        .into_column()
     } else {
         panic!("Unknown timezone{}", tz);
     }

@@ -218,7 +218,7 @@ impl Mapping {
         graph: Option<NamedNode>,
     ) -> Result<(), MappingError> {
         let triplestore = self.get_triplestore(&graph);
-        triplestore.write_n_triples_all_dfs(buffer, 1024).unwrap();
+        triplestore.write_ntriples(buffer).unwrap();
         Ok(())
     }
 

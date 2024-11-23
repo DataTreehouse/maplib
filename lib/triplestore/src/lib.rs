@@ -4,11 +4,11 @@ pub mod conversion;
 pub mod errors;
 mod io_funcs;
 pub mod native_parquet_write;
-mod ntriples_write;
 pub mod query_solutions;
 pub mod rdfs_inferencing;
 pub mod sparql;
 pub mod triples_read;
+pub mod triples_write;
 
 use crate::errors::TriplestoreError;
 use crate::io_funcs::{create_folder_if_not_exists, delete_tmp_parquets_in_caching_folder};
@@ -455,6 +455,8 @@ pub fn prepare_triples(
                     predicate = literal_iri_to_namednode(p);
                 } else if let Ok(AnyValue::Categorical(a, b, _0)) = any_predicate {
                     predicate = literal_iri_to_namednode(b.get(a));
+                } else if let Ok(AnyValue::StringOwned(s)) = any_predicate {
+                    predicate = literal_iri_to_namednode(s.as_str());
                 } else {
                     panic!("Predicate: {:?}", any_predicate);
                 }

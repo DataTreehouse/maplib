@@ -12,7 +12,7 @@ use oxttl::TurtleSerializer;
 use polars::frame::DataFrame;
 use polars::prelude::{col, lit, Expr, IntoLazy};
 use polars_core::frame::UniqueKeepStrategy;
-use query_processing::expressions::col_null_expr;
+use query_processing::expressions::expr_is_null_workaround;
 use representation::multitype::{split_df_multicols, unique_workaround};
 use representation::polars_to_rdf::{df_as_result, QuerySolutions};
 use representation::query_context::Context;
@@ -275,10 +275,25 @@ fn triple_to_df(
         .lazy()
         .select(vec![subj_expr, verb_expr, obj_expr])
         .filter(
-            col_null_expr(SUBJECT_COL_NAME, &triple_types)
-                .not()
-                .and(col_null_expr(VERB_COL_NAME, &triple_types).not())
-                .and(col_null_expr(OBJECT_COL_NAME, &triple_types).not()),
+            expr_is_null_workaround(
+                col(SUBJECT_COL_NAME),
+                triple_types.get(SUBJECT_COL_NAME).unwrap(),
+            )
+            .not()
+            .and(
+                expr_is_null_workaround(
+                    col(VERB_COL_NAME),
+                    triple_types.get(VERB_COL_NAME).unwrap(),
+                )
+                .not(),
+            )
+            .and(
+                expr_is_null_workaround(
+                    col(OBJECT_COL_NAME),
+                    triple_types.get(OBJECT_COL_NAME).unwrap(),
+                )
+                .not(),
+            ),
         );
     lf = unique_workaround(lf, &triple_types, None, false, UniqueKeepStrategy::Any);
 

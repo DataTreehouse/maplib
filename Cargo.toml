@@ -17,12 +17,12 @@ rust-version = "1.81.0"
 
 [workspace.dependencies]
 pyo3 = {version = "0.22.6", features = ["py-clone"] }
-polars = { version = "0.44.2", features = ["nightly", "performant", "cse"], default-features = false }
+polars = { version = "0.44.2", features = ["nightly", "performant", "cse", "fmt"], default-features = false }
 polars-utils = { version = "0.44.2", default-features = false }
 polars-core = { version = "0.44.2", default-features = false }
 polars-time = { version = "0.44.2", default-features = false }
 rayon = "1.10.0"
-regex = "=1.10.5"
+regex = "1.11.1"
 oxrdf = "0.2.2"
 oxrdfio = "0.1.2"
 oxttl = "0.1.2"

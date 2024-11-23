@@ -2,6 +2,7 @@ use super::Triplestore;
 use crate::sparql::errors::SparqlError;
 use oxrdf::Variable;
 use polars::prelude::{DataFrame, IntoLazy, JoinType};
+use polars_core::prelude::IntoColumn;
 use query_processing::graph_patterns::join;
 use representation::query_context::Context;
 use representation::rdf_to_polars::{
@@ -12,7 +13,6 @@ use representation::solution_mapping::SolutionMappings;
 use representation::RDFNodeType;
 use spargebra::term::GroundTerm;
 use std::collections::HashMap;
-use polars_core::prelude::IntoColumn;
 
 impl Triplestore {
     pub(crate) fn lazy_values(
