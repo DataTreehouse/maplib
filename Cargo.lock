@@ -2795,7 +2795,6 @@ dependencies = [
  "parquet_io",
  "polars",
  "polars-core",
- "polars-utils",
  "query_processing",
  "rayon",
  "representation",

@@ -2,12 +2,8 @@ use super::Triplestore;
 use crate::sparql::errors::SparqlError;
 use oxrdf::vocab::xsd;
 use oxrdf::{NamedNode, Variable};
-use polars::prelude::{
-    col, lit, AnyValue, DataFrame, IntoLazy, IntoSeries, JoinArgs, JoinType, Series,
-    UniqueKeepStrategy,
-};
+use polars::prelude::{col, lit, AnyValue, DataFrame, IntoLazy, IntoSeries, JoinArgs, JoinType, PlSmallStr, Series, UniqueKeepStrategy};
 use polars_core::prelude::{DataType, SortMultipleOptions};
-use polars_utils::pl_str::PlSmallStr;
 use query_processing::errors::QueryProcessingError;
 use query_processing::graph_patterns::{join, union};
 use representation::multitype::{

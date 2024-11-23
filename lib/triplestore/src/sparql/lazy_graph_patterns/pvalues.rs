@@ -3,7 +3,6 @@ use crate::sparql::errors::SparqlError;
 use oxrdf::Variable;
 use polars::prelude::{IntoLazy, JoinType};
 
-use polars_utils::pl_str::PlSmallStr;
 use query_processing::graph_patterns::join;
 use representation::query_context::Context;
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};

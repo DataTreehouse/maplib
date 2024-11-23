@@ -17,7 +17,6 @@ polars = { workspace = true, features = [
     "dtype-full", "strings", "rows", "timezones", "polars-time", "temporal", "list_eval", "partition_by", "parquet",
     "diagonal_concat", "cross_join", "cum_agg"], default-features = false }
 #TODO: Due to ntriples write using pool-functionality, should be refactored. Also concat df usage in lib.rs.
-polars-utils = { workspace = true, default-features = false}
 polars-core = {workspace = true, default-features = false}
 log.workspace = true
 uuid.workspace = true
