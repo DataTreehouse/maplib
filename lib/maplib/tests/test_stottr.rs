@@ -2,7 +2,7 @@ extern crate core;
 
 use maplib::mapping::{ExpandOptions, Mapping};
 use oxrdf::{Literal, NamedNode, Subject, Term, Triple};
-use polars::prelude::{col, AnyValue, DataFrame, IntoLazy, Series, TimeUnit};
+use polars::prelude::{col, AnyValue, DataFrame, IntoLazy, PlSmallStr, Series, TimeUnit};
 use representation::polars_to_rdf::df_as_result;
 use rstest::*;
 use serial_test::serial;
@@ -72,7 +72,7 @@ fn test_all_iri_case() {
         "http://example.net/ns#OneThing",
         "http://example.net/ns#AnotherThing",
     ]);
-    v1.rename("myVar1");
+    v1.rename("myVar1".into());
     let series = [v1];
     let df = DataFrame::from_iter(series);
 
@@ -119,7 +119,7 @@ fn test_string_language_tag_cases() {
     "#;
 
     let mut my_string = Series::from_iter(["one", "two"]);
-    my_string.rename("myString");
+    my_string.rename("myString".into());
     let series = [my_string];
     let df = DataFrame::from_iter(series);
 
@@ -175,7 +175,7 @@ fn test_const_list_case() {
         "http://example.net/ns#OneThing",
         "http://example.net/ns#AnotherThing",
     ]);
-    v1.rename("var1");
+    v1.rename("var1".into());
     let series = [v1];
     let df = DataFrame::from_iter(series);
 
@@ -247,9 +247,9 @@ ex:Nested [?myVar] :: {
 "#;
     let mut mapping = Mapping::from_str(stottr, None).unwrap();
     let mut v1 = Series::from_iter(&[1, 2i32]);
-    v1.rename("myVar1");
+    v1.rename("myVar1".into());
     let mut v2 = Series::from_iter(&[3, 4i32]);
-    v2.rename("myVar2");
+    v2.rename("myVar2".into());
     let series = [v1, v2];
     let df = DataFrame::from_iter(series);
     let _report = mapping
@@ -336,43 +336,43 @@ ex:ExampleTemplate [
 "#;
     let mut mapping = Mapping::from_str(stottr, None).unwrap();
     let mut boolean = Series::from_iter(&[true, false]);
-    boolean.rename("Boolean");
+    boolean.rename("Boolean".into());
     let mut uint32 = Series::from_iter(&[5u32, 6u32]);
-    uint32.rename("UInt32");
+    uint32.rename("UInt32".into());
     let mut uint64 = Series::from_iter(&[7u64, 8u64]);
-    uint64.rename("UInt64");
+    uint64.rename("UInt64".into());
     let mut int32 = Series::from_iter(&[-13i32, -14i32]);
-    int32.rename("Int32");
+    int32.rename("Int32".into());
     let mut int64 = Series::from_iter(&[-15i64, -16i64]);
-    int64.rename("Int64");
+    int64.rename("Int64".into());
     let mut float32 = Series::from_iter(&[17.18f32, 19.20f32]);
-    float32.rename("Float32");
+    float32.rename("Float32".into());
     let mut float64 = Series::from_iter(&[21.22f64, 23.24f64]);
-    float64.rename("Float64");
+    float64.rename("Float64".into());
     let mut string = Series::from_iter(["abcde", "fghij"]);
-    string.rename("String");
+    string.rename("String".into());
     let datetime_ms_tz = Series::from_any_values(
-        "Datetime_ms_tz",
+        "Datetime_ms_tz".into(),
         &[
             AnyValue::Datetime(
                 1656842780123,
                 TimeUnit::Milliseconds,
-                &Some("Europe/Oslo".to_string()),
+                Some(&PlSmallStr::from_str("Europe/Oslo")),
             ),
             AnyValue::Datetime(
                 1656842781456,
                 TimeUnit::Milliseconds,
-                &Some("Europe/Oslo".to_string()),
+                Some(&PlSmallStr::from_str("Europe/Oslo")),
             ),
         ],
         false,
     )
     .unwrap();
     let datetime_ms = Series::from_any_values(
-        "Datetime_ms",
+        PlSmallStr::from_str("Datetime_ms"),
         &[
-            AnyValue::Datetime(1656842790789, TimeUnit::Milliseconds, &None),
-            AnyValue::Datetime(1656842791101, TimeUnit::Milliseconds, &None),
+            AnyValue::Datetime(1656842790789, TimeUnit::Milliseconds, None),
+            AnyValue::Datetime(1656842791101, TimeUnit::Milliseconds, None),
         ],
         false,
     )
@@ -604,16 +604,16 @@ ex:AnotherExampleTemplate [?object, ?predicate, ?myList] :: {
         "http://example.net/ns#obj2",
         "http://example.net/ns#obj2",
     ]);
-    object.rename("object");
+    object.rename("object".into());
     let mut predicate = Series::from_iter([
         "http://example.net/ns#hasNumberFromList1",
         "http://example.net/ns#hasNumberFromList1",
         "http://example.net/ns#hasNumberFromList2",
         "http://example.net/ns#hasNumberFromList2",
     ]);
-    predicate.rename("predicate");
+    predicate.rename("predicate".into());
     let mut my_list = Series::from_iter([1i32, 2, 3, 4]);
-    my_list.rename("myList");
+    my_list.rename("myList".into());
     let series = [object, predicate, my_list];
     let mut df = DataFrame::from_iter(series);
     df = df
@@ -692,11 +692,11 @@ ex:AnotherExampleTemplate [?subject, ?myList1, ?myList2] :: {
         "http://example.net/ns#obj2",
         "http://example.net/ns#obj2",
     ]);
-    subject.rename("subject");
+    subject.rename("subject".into());
     let mut my_list1 = Series::from_iter([Some(1i32), Some(2), Some(3), Some(4), None]);
-    my_list1.rename("myList1");
+    my_list1.rename("myList1".into());
     let mut my_list2 = Series::from_iter([5i32, 6, 7, 8, 9]);
-    my_list2.rename("myList2");
+    my_list2.rename("myList2".into());
     let series = [subject, my_list1, my_list2];
     let mut df = DataFrame::from_iter(series);
     df = df
@@ -804,11 +804,11 @@ fn test_default() {
         "http://example.net/ns#obj1",
         "http://example.net/ns#obj2",
     ]);
-    subject.rename("subject");
+    subject.rename("subject".into());
     let mut my_var1 = Series::from_iter([Some(1i32), Some(2), None]);
-    my_var1.rename("myVar1");
+    my_var1.rename("myVar1".into());
     let mut my_var2 = Series::from_iter([5i32, 6, 7]);
-    my_var2.rename("myVar2");
+    my_var2.rename("myVar2".into());
     let series = [subject, my_var1, my_var2];
     let df = DataFrame::from_iter(series);
 
@@ -890,11 +890,11 @@ fn test_default_list() {
         "http://example.net/ns#obj1",
         "http://example.net/ns#obj2",
     ]);
-    subject.rename("subject");
+    subject.rename("subject".into());
     let mut my_list1 = Series::from_iter([Some(1i32), Some(2), None]);
-    my_list1.rename("myList1");
+    my_list1.rename("myList1".into());
     let mut my_list2 = Series::from_iter([5i32, 6, 7]);
-    my_list2.rename("myList2");
+    my_list2.rename("myList2".into());
     let series = [subject, my_list1, my_list2];
     let mut df = DataFrame::from_iter(series);
     df = df

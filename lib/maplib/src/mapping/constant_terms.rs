@@ -13,6 +13,7 @@ use representation::rdf_to_polars::{
     rdf_term_to_polars_expr,
 };
 use std::ops::Deref;
+use log::debug;
 use templates::constants::{OTTR_BLANK_NODE, OTTR_IRI};
 
 const BLANK_NODE_SERIES_NAME: &str = "blank_node_series";
@@ -97,7 +98,8 @@ pub fn constant_to_expr(
                     first.append(s).unwrap();
                 }
                 let out_series = ListChunked::from_iter([first]).into_series();
-                (lit(out_series), out_ptype, out_rdf_node_type)
+                //.first() is important to ensure broadcast is done
+                (lit(out_series).first(), out_ptype, out_rdf_node_type)
             } else {
                 (
                     concat_list(expressions).expect("Concat OK"),
