@@ -377,7 +377,7 @@ class Mapping:
         streaming: bool = False,
         return_json: bool = False,
     ) -> Union[
-        DataFrame, SolutionMappings, List[Union[DataFrame, SolutionMappings], str], None
+        DataFrame, SolutionMappings, List[Union[DataFrame, SolutionMappings, str]], None
     ]:
         """
         Query the contained knowledge graph using SPARQL
