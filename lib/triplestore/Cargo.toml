@@ -2,6 +2,7 @@
 name = "triplestore"
 version = "0.5.0"
 edition = "2021"
+rust-version.workspace = true
 
 [dependencies]
 query_processing = { path = "../query_processing" }
@@ -16,7 +17,6 @@ polars = { workspace = true, features = [
     "streaming", "zip_with", "nightly", "performant", "cse", "semi_anti_join", "abs", "round_series", "lazy", "concat_str", "is_in",
     "dtype-full", "strings", "rows", "timezones", "polars-time", "temporal", "list_eval", "partition_by", "parquet",
     "diagonal_concat", "cross_join", "cum_agg"], default-features = false }
-#TODO: Due to ntriples write using pool-functionality, should be refactored. Also concat df usage in lib.rs.
 polars-core = {workspace = true, default-features = false}
 log.workspace = true
 uuid.workspace = true

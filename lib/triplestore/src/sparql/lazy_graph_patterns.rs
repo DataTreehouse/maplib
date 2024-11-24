@@ -4,7 +4,6 @@ mod filter;
 mod group;
 mod join;
 mod left_join;
-pub(crate) mod load_tt;
 mod minus;
 mod order_by;
 mod path;

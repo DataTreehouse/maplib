@@ -2,6 +2,7 @@ use crate::mapping::errors::MappingError;
 use crate::mapping::{MappingColumnType, RDFNodeType};
 use templates::ast::{ConstantTerm, ConstantTermOrList, PType};
 
+use log::debug;
 use oxrdf::{NamedNode, Term};
 use polars::prelude::{
     concat_list, lit, AnyValue, DataType, Expr, IntoSeries, ListChunked, LiteralValue, Series,
@@ -13,7 +14,6 @@ use representation::rdf_to_polars::{
     rdf_term_to_polars_expr,
 };
 use std::ops::Deref;
-use log::debug;
 use templates::constants::{OTTR_BLANK_NODE, OTTR_IRI};
 
 const BLANK_NODE_SERIES_NAME: &str = "blank_node_series";

@@ -202,10 +202,10 @@ pub fn minus(
 
 pub fn order_by(
     solution_mappings: SolutionMappings,
-    inner_contexts: &Vec<Context>,
+    columns: &Vec<String>,
     asc_ordering: Vec<bool>,
 ) -> Result<SolutionMappings, QueryProcessingError> {
-    if inner_contexts.is_empty() {
+    if columns.is_empty() {
         return Ok(solution_mappings);
     }
     let SolutionMappings {
@@ -215,28 +215,26 @@ pub fn order_by(
 
     let mut order_exprs = vec![];
     let mut asc_bools = vec![];
-    for (c, a) in inner_contexts.iter().zip(asc_ordering) {
-        let c_str = c.as_str();
-        let t = rdf_node_types.get(c_str).unwrap();
+    for (c, a) in columns.iter().zip(asc_ordering) {
+        let t = rdf_node_types.get(c).unwrap();
         match t {
             RDFNodeType::IRI | RDFNodeType::BlankNode => {
-                order_exprs.push(
-                    col(c_str).cast(DataType::Categorical(None, CategoricalOrdering::Lexical)),
-                );
+                order_exprs
+                    .push(col(c).cast(DataType::Categorical(None, CategoricalOrdering::Lexical)));
                 asc_bools.push(a);
             }
             RDFNodeType::Literal(l) => {
                 if string_rdf_literal(l.as_ref()) {
                     order_exprs.push(
-                        col(c_str).cast(DataType::Categorical(None, CategoricalOrdering::Lexical)),
+                        col(c).cast(DataType::Categorical(None, CategoricalOrdering::Lexical)),
                     )
                 } else {
-                    order_exprs.push(col(c_str))
+                    order_exprs.push(col(c))
                 }
                 asc_bools.push(a);
             }
             RDFNodeType::None => {
-                order_exprs.push(col(c_str));
+                order_exprs.push(col(c));
                 asc_bools.push(a);
             }
             RDFNodeType::MultiType(ts) => {
@@ -256,7 +254,7 @@ pub fn order_by(
                     match &t {
                         BaseRDFNodeType::IRI | BaseRDFNodeType::BlankNode => {
                             order_exprs.push(
-                                col(c_str)
+                                col(c)
                                     .struct_()
                                     .field_by_name(&non_multi_type_string(&t))
                                     .cast(DataType::Categorical(
@@ -268,7 +266,7 @@ pub fn order_by(
                         BaseRDFNodeType::Literal(dt) => {
                             if string_rdf_literal(dt.as_ref()) {
                                 order_exprs.push(
-                                    col(c_str)
+                                    col(c)
                                         .struct_()
                                         .field_by_name(&non_multi_type_string(&t))
                                         .cast(DataType::Categorical(
@@ -278,18 +276,13 @@ pub fn order_by(
                                 );
                             } else {
                                 order_exprs.push(
-                                    col(c_str)
-                                        .struct_()
-                                        .field_by_name(&non_multi_type_string(&t)),
+                                    col(c).struct_().field_by_name(&non_multi_type_string(&t)),
                                 );
                             }
                         }
                         BaseRDFNodeType::None => {
-                            order_exprs.push(
-                                col(c_str)
-                                    .struct_()
-                                    .field_by_name(&non_multi_type_string(&t)),
-                            );
+                            order_exprs
+                                .push(col(c).struct_().field_by_name(&non_multi_type_string(&t)));
                         }
                     }
                 }
@@ -303,12 +296,6 @@ pub fn order_by(
             .with_order_descending_multi(asc_bools.iter().map(|asc| !asc).collect::<Vec<bool>>())
             .with_nulls_last_multi(asc_bools.iter().map(|asc| !asc).collect::<Vec<bool>>())
             .with_maintain_order(false),
-    );
-    mappings = mappings.drop_no_validate(
-        inner_contexts
-            .iter()
-            .map(|x| x.as_str())
-            .collect::<Vec<&str>>(),
     );
 
     Ok(SolutionMappings::new(mappings, rdf_node_types))
@@ -360,7 +347,12 @@ pub fn union(
     } in mappings
     {
         for c in rdf_node_types.keys() {
-            mappings = lf_column_to_categorical(mappings, c, &rdf_node_types);
+            mappings = lf_column_to_categorical(
+                mappings,
+                c,
+                rdf_node_types.get(c).unwrap(),
+                CategoricalOrdering::Physical,
+            );
         }
         cat_mappings.push(SolutionMappings::new(mappings, rdf_node_types));
     }

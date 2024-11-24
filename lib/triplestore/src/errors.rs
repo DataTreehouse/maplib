@@ -19,6 +19,7 @@ pub enum TriplestoreError {
     SubtractTransientTriplesError(String),
     RDFSClassInheritanceError(String),
     NTriplesParsingError(String),
+    IndexingError(String),
 }
 
 impl Display for TriplestoreError {
@@ -65,6 +66,9 @@ impl Display for TriplestoreError {
             }
             TriplestoreError::NTriplesParsingError(xp) => {
                 write!(f, "NTriples parsing error {}", xp)
+            }
+            TriplestoreError::IndexingError(x) => {
+                write!(f, "Indexing error {}", x)
             }
         }
     }

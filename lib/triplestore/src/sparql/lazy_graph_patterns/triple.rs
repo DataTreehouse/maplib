@@ -6,9 +6,9 @@ use representation::rdf_to_polars::{
 };
 use representation::solution_mapping::SolutionMappings;
 
-use crate::sparql::lazy_graph_patterns::load_tt::multiple_tt_to_lf;
+use crate::dblf::{create_empty_lf_datatypes, multiple_tt_to_lf};
 use log::debug;
-use oxrdf::NamedNode;
+use oxrdf::{NamedNode, Term};
 use polars::prelude::IntoLazy;
 use polars::prelude::{col, lit, AnyValue, DataFrame, DataType, Expr, JoinType, Series};
 use polars_core::prelude::IntoColumn;
@@ -31,12 +31,12 @@ impl Triplestore {
             triple_pattern,
             context.as_str()
         );
-        let subject_filter = create_term_pattern_filter(&triple_pattern.subject, SUBJECT_COL_NAME);
-        let object_filter = create_term_pattern_filter(&triple_pattern.object, OBJECT_COL_NAME);
+        let subject_term = create_term_pattern_term(&triple_pattern.subject);
+        let object_term = create_term_pattern_term(&triple_pattern.object);
         let object_datatype_req = match &triple_pattern.object {
-            TermPattern::NamedNode(_nn) => Some(RDFNodeType::IRI),
+            TermPattern::NamedNode(_nn) => Some(BaseRDFNodeType::IRI),
             TermPattern::BlankNode(_) => None,
-            TermPattern::Literal(l) => Some(RDFNodeType::Literal(l.datatype().into_owned())),
+            TermPattern::Literal(l) => Some(BaseRDFNodeType::Literal(l.datatype().into_owned())),
             TermPattern::Variable(_) => None,
         };
         let subject_rename = get_keep_rename_term_pattern(&triple_pattern.subject);
@@ -55,13 +55,13 @@ impl Triplestore {
                 &subject_rename,
                 &verb_rename,
                 &object_rename,
-                subject_filter,
-                object_filter,
+                subject_term,
+                object_term,
                 None, //TODO!
                 object_datatype_req.as_ref(),
             )?,
             NamedNodePattern::Variable(v) => {
-                let predicates: HashSet<NamedNode>;
+                let predicates: Option<HashSet<NamedNode>>;
                 if let Some(SolutionMappings {
                     mappings,
                     rdf_node_types,
@@ -79,20 +79,24 @@ impl Triplestore {
                                 .unwrap()
                                 .take_materialized_series();
                             let predicates_iter = predicates_series.iter();
-                            predicates = predicates_iter
-                                .filter_map(|x| match x {
-                                    AnyValue::Null => None,
-                                    AnyValue::String(s) => Some(literal_iri_to_namednode(s)),
-                                    AnyValue::StringOwned(s) => Some(literal_iri_to_namednode(&s)),
-                                    x => panic!("Should never happen: {}", x),
-                                })
-                                .collect();
+                            predicates = Some(
+                                predicates_iter
+                                    .filter_map(|x| match x {
+                                        AnyValue::Null => None,
+                                        AnyValue::String(s) => Some(literal_iri_to_namednode(s)),
+                                        AnyValue::StringOwned(s) => {
+                                            Some(literal_iri_to_namednode(&s))
+                                        }
+                                        x => panic!("Should never happen: {}", x),
+                                    })
+                                    .collect(),
+                            );
                             solution_mappings = Some(SolutionMappings {
                                 mappings: mappings_df.lazy(),
                                 rdf_node_types,
                             })
                         } else {
-                            predicates = HashSet::new();
+                            predicates = Some(HashSet::new());
                             solution_mappings = Some(SolutionMappings {
                                 mappings,
                                 rdf_node_types,
@@ -103,18 +107,23 @@ impl Triplestore {
                             mappings,
                             rdf_node_types,
                         });
-                        predicates = self.all_predicates();
+                        predicates = None;
                     }
                 } else {
-                    predicates = self.all_predicates();
+                    predicates = None;
                 }
+                let predicates: Option<Vec<_>> = if let Some(predicates) = predicates {
+                    Some(predicates.into_iter().collect())
+                } else {
+                    None
+                };
                 self.get_predicates_lf(
-                    predicates.into_iter().collect(),
+                    predicates,
                     &subject_rename,
                     &verb_rename,
                     &object_rename,
-                    subject_filter,
-                    object_filter,
+                    subject_term,
+                    object_term,
                     object_datatype_req.as_ref(),
                 )?
             }
@@ -167,270 +176,16 @@ impl Triplestore {
         }
         Ok(solution_mappings.unwrap())
     }
-
-    #[allow(clippy::too_many_arguments)]
-    pub fn get_predicate_lf(
-        &self,
-        verb_uri: &NamedNode,
-        subject_keep_rename: &Option<String>,
-        verb_keep_rename: &Option<String>,
-        object_keep_rename: &Option<String>,
-        subject_filter: Option<Expr>,
-        object_filter: Option<Expr>,
-        subject_datatype_req: Option<&RDFNodeType>,
-        object_datatype_req: Option<&RDFNodeType>,
-    ) -> Result<(SolutionMappings, bool), SparqlError> {
-        if let Some(m) = self.df_map.get(verb_uri) {
-            if m.is_empty() {
-                panic!("Empty map should never happen");
-            }
-            if let Some(SolutionMappings {
-                mappings: mut lf,
-                mut rdf_node_types,
-            }) = multiple_tt_to_lf(
-                m,
-                self.transient_df_map.get(verb_uri),
-                subject_datatype_req,
-                object_datatype_req,
-                subject_filter,
-                object_filter,
-            )? {
-                let mut out_datatypes = HashMap::new();
-                let use_subject_col_name = uuid::Uuid::new_v4().to_string();
-                let use_object_col_name = uuid::Uuid::new_v4().to_string();
-                lf = lf.rename(
-                    [SUBJECT_COL_NAME, OBJECT_COL_NAME],
-                    [&use_subject_col_name, &use_object_col_name],
-                    true,
-                );
-
-                let mut drop = vec![];
-                if let Some(renamed) = subject_keep_rename {
-                    lf = lf.rename([&use_subject_col_name], [renamed], true);
-                    out_datatypes.insert(
-                        renamed.to_string(),
-                        rdf_node_types.remove(SUBJECT_COL_NAME).unwrap(),
-                    );
-                } else {
-                    drop.push(use_subject_col_name);
-                }
-                if let Some(renamed) = object_keep_rename {
-                    lf = lf.rename([&use_object_col_name], [renamed], true);
-                    out_datatypes.insert(
-                        renamed.to_string(),
-                        rdf_node_types.remove(OBJECT_COL_NAME).unwrap(),
-                    );
-                } else {
-                    drop.push(use_object_col_name)
-                }
-                if let Some(renamed) = verb_keep_rename {
-                    lf = lf.with_column(
-                        lit(rdf_named_node_to_polars_literal_value(verb_uri)).alias(renamed),
-                    );
-                    out_datatypes.insert(renamed.clone(), RDFNodeType::IRI);
-                }
-                lf = lf.drop(drop);
-                Ok((SolutionMappings::new(lf, out_datatypes), false))
-            } else {
-                Ok(create_empty_lf_datatypes(
-                    subject_keep_rename,
-                    verb_keep_rename,
-                    object_keep_rename,
-                    object_datatype_req,
-                ))
-            }
-        } else {
-            Ok(create_empty_lf_datatypes(
-                subject_keep_rename,
-                verb_keep_rename,
-                object_keep_rename,
-                object_datatype_req,
-            ))
-        }
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    fn get_predicates_lf(
-        &self,
-        predicate_uris: Vec<NamedNode>,
-        subject_keep_rename: &Option<String>,
-        verb_keep_rename: &Option<String>,
-        object_keep_rename: &Option<String>,
-        subject_filter: Option<Expr>,
-        object_filter: Option<Expr>,
-        object_datatype_req: Option<&RDFNodeType>,
-    ) -> Result<(SolutionMappings, bool), SparqlError> {
-        let mut solution_mappings = vec![];
-
-        let need_multi_subject =
-            self.partial_check_need_multi(&predicate_uris, object_datatype_req, true);
-        let need_multi_object =
-            self.partial_check_need_multi(&predicate_uris, object_datatype_req, false);
-
-        for v in predicate_uris {
-            let (
-                SolutionMappings {
-                    mappings: mut lf,
-                    rdf_node_types: mut datatypes_map,
-                },
-                height_0,
-            ) = self.get_predicate_lf(
-                &v,
-                subject_keep_rename,
-                verb_keep_rename,
-                object_keep_rename,
-                subject_filter.clone(),
-                object_filter.clone(),
-                None, //TODO!
-                object_datatype_req,
-            )?;
-            if let Some(subj_col) = subject_keep_rename {
-                if !height_0
-                    && need_multi_subject
-                    && !matches!(
-                        datatypes_map.get(subj_col).unwrap(),
-                        &RDFNodeType::MultiType(..)
-                    )
-                {
-                    lf = lf.with_column(convert_lf_col_to_multitype(
-                        subj_col,
-                        datatypes_map.get(subj_col).unwrap(),
-                    ));
-                    let existing_type =
-                        BaseRDFNodeType::from_rdf_node_type(datatypes_map.get(subj_col).unwrap());
-                    datatypes_map.insert(
-                        subj_col.clone(),
-                        RDFNodeType::MultiType(vec![existing_type]),
-                    );
-                }
-            }
-
-            if let Some(obj_col) = object_keep_rename {
-                if !height_0
-                    && need_multi_object
-                    && !matches!(
-                        datatypes_map.get(obj_col).unwrap(),
-                        &RDFNodeType::MultiType(..)
-                    )
-                {
-                    lf = lf.with_column(convert_lf_col_to_multitype(
-                        obj_col,
-                        datatypes_map.get(obj_col).unwrap(),
-                    ));
-                    let existing_type =
-                        BaseRDFNodeType::from_rdf_node_type(datatypes_map.get(obj_col).unwrap());
-                    datatypes_map
-                        .insert(obj_col.clone(), RDFNodeType::MultiType(vec![existing_type]));
-                }
-            }
-
-            if !height_0 {
-                solution_mappings.push(SolutionMappings::new(lf, datatypes_map));
-            }
-        }
-        Ok(if !solution_mappings.is_empty() {
-            let sm = union(solution_mappings, false)?;
-            (sm, false)
-        } else {
-            create_empty_lf_datatypes(
-                subject_keep_rename,
-                verb_keep_rename,
-                object_keep_rename,
-                object_datatype_req,
-            )
-        })
-    }
-
-    fn all_predicates(&self) -> HashSet<NamedNode> {
-        let mut strs = HashSet::new();
-        for k in self.df_map.keys() {
-            strs.insert(k.clone());
-        }
-        strs
-    }
-    fn partial_check_need_multi(
-        &self,
-        predicates: &Vec<NamedNode>,
-        object_datatype_req: Option<&RDFNodeType>,
-        subject: bool,
-    ) -> bool {
-        if !subject && object_datatype_req.is_some() {
-            return false;
-        }
-
-        let mut first_datatype = None;
-        for p in predicates {
-            if let Some(tt_map) = self.df_map.get(p) {
-                for (subject_dt, object_dt) in tt_map.keys() {
-                    let use_dt = if subject { subject_dt } else { object_dt };
-                    if let Some(first) = &first_datatype {
-                        if first != &use_dt {
-                            return true;
-                        }
-                    } else {
-                        first_datatype = Some(use_dt);
-                    }
-                }
-            }
-        }
-        false
-    }
 }
 
-pub fn create_empty_lf_datatypes(
-    subject_keep_rename: &Option<String>,
-    verb_keep_rename: &Option<String>,
-    object_keep_rename: &Option<String>,
-    object_datatype_req: Option<&RDFNodeType>,
-) -> (SolutionMappings, bool) {
-    let mut series_vec = vec![];
-    let mut out_datatypes = HashMap::new();
-
-    if let Some(subject_rename) = subject_keep_rename {
-        out_datatypes.insert(subject_rename.to_string(), RDFNodeType::None);
-        series_vec.push(
-            Series::new_empty(
-                subject_rename.into(),
-                &BaseRDFNodeType::None.polars_data_type(),
-            )
-            .into_column(),
-        )
-    }
-    if let Some(verb_rename) = verb_keep_rename {
-        out_datatypes.insert(verb_rename.to_string(), RDFNodeType::None);
-        series_vec.push(
-            Series::new_empty(
-                verb_rename.into(),
-                &BaseRDFNodeType::None.polars_data_type(),
-            )
-            .into_column(),
-        )
-    }
-    if let Some(object_rename) = object_keep_rename {
-        let (use_datatype, use_polars_datatype) = if let Some(dt) = object_datatype_req {
-            let polars_dt = BaseRDFNodeType::from_rdf_node_type(dt).polars_data_type();
-            (dt.clone(), polars_dt)
-        } else {
-            let dt = BaseRDFNodeType::None;
-            let polars_dt = dt.polars_data_type();
-            (dt.as_rdf_node_type(), polars_dt)
-        };
-        out_datatypes.insert(object_rename.to_string(), use_datatype);
-        series_vec.push(Series::new_empty(object_rename.into(), &use_polars_datatype).into_column())
-    }
-    (
-        SolutionMappings::new(DataFrame::new(series_vec).unwrap().lazy(), out_datatypes),
-        true,
-    )
-}
-
-pub fn create_term_pattern_filter(term_pattern: &TermPattern, target_col: &str) -> Option<Expr> {
+pub fn create_term_pattern_term(term_pattern: &TermPattern) -> Option<Term> {
     if let TermPattern::Literal(l) = term_pattern {
-        return Some(col(target_col).eq(lit(rdf_literal_to_polars_literal_value(l))));
+        Some(Term::Literal(l.clone()))
     } else if let TermPattern::NamedNode(nn) = term_pattern {
-        return Some(col(target_col).eq(lit(rdf_named_node_to_polars_literal_value(nn))));
+        Some(Term::NamedNode(nn.clone()))
+    } else {
+        None
     }
-    None
 }
 
 pub fn get_keep_rename_term_pattern(term_pattern: &TermPattern) -> Option<String> {

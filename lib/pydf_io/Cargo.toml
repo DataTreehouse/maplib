@@ -2,6 +2,7 @@
 name = "pydf_io"
 version = "0.7.6"
 edition = "2021"
+rust-version.workspace = true
 
 [dependencies]
 representation = {path = "../representation"}

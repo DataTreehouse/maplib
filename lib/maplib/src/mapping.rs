@@ -19,6 +19,7 @@ use templates::ast::{ConstantTermOrList, PType, Template};
 use templates::dataset::TemplateDataset;
 use templates::document::document_from_str;
 use templates::MappingColumnType;
+use triplestore::errors::TriplestoreError;
 use triplestore::sparql::errors::SparqlError;
 use triplestore::sparql::QueryResult;
 use triplestore::Triplestore;
@@ -200,6 +201,11 @@ impl Mapping {
     ) -> Result<QueryResult, SparqlError> {
         let use_triplestore = self.get_triplestore(&graph);
         use_triplestore.query(query, parameters, streaming)
+    }
+
+    pub fn create_index(&mut self, graph: Option<NamedNode>) -> Result<(), TriplestoreError> {
+        let use_triplestore = self.get_triplestore(&graph);
+        use_triplestore.create_index()
     }
 
     pub fn insert_construct_result(

@@ -51,10 +51,12 @@ impl Triplestore {
             inner_contexts.push(inner_context);
             asc_ordering.push(reverse);
         }
-        Ok(order_by(
-            output_solution_mappings,
-            &inner_contexts,
-            asc_ordering,
-        )?)
+        let sort_columns: Vec<_> = inner_contexts
+            .iter()
+            .map(|x| x.as_str().to_string())
+            .collect();
+        output_solution_mappings = order_by(output_solution_mappings, &sort_columns, asc_ordering)?;
+        output_solution_mappings.mappings = output_solution_mappings.mappings.drop(sort_columns);
+        Ok(output_solution_mappings)
     }
 }

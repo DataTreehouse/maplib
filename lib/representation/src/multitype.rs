@@ -161,33 +161,41 @@ pub fn lf_column_from_categorical(
     lf
 }
 
+pub fn lf_columns_to_categorical(
+    mut lf: LazyFrame,
+    rdf_node_types: &HashMap<String, RDFNodeType>,
+    cat_order: CategoricalOrdering,
+) -> LazyFrame {
+    for c in rdf_node_types.keys() {
+        lf = lf_column_to_categorical(lf, c, rdf_node_types.get(c).unwrap(), cat_order);
+    }
+    lf
+}
+
 pub fn lf_column_to_categorical(
     mut lf: LazyFrame,
     c: &str,
-    rdf_node_types: &HashMap<String, RDFNodeType>,
+    rdf_node_type: &RDFNodeType,
+    cat_order: CategoricalOrdering,
 ) -> LazyFrame {
-    match rdf_node_types.get(c).unwrap() {
+    match rdf_node_type {
         RDFNodeType::IRI | RDFNodeType::BlankNode => {
-            lf = lf.with_column(
-                col(c).cast(DataType::Categorical(None, CategoricalOrdering::Physical)),
-            )
+            lf = lf.with_column(col(c).cast(DataType::Categorical(None, cat_order)))
         }
         RDFNodeType::Literal(l) => {
             if l.as_ref() == xsd::STRING {
-                lf = lf.with_column(
-                    col(c).cast(DataType::Categorical(None, CategoricalOrdering::Physical)),
-                )
+                lf = lf.with_column(col(c).cast(DataType::Categorical(None, cat_order)))
             } else if l.as_ref() == rdf::LANG_STRING {
                 lf = lf.with_column(
                     as_struct(vec![
                         col(c)
                             .struct_()
                             .field_by_name(LANG_STRING_VALUE_FIELD)
-                            .cast(DataType::Categorical(None, CategoricalOrdering::Physical)),
+                            .cast(DataType::Categorical(None, cat_order)),
                         col(c)
                             .struct_()
                             .field_by_name(LANG_STRING_LANG_FIELD)
-                            .cast(DataType::Categorical(None, CategoricalOrdering::Physical)),
+                            .cast(DataType::Categorical(None, cat_order)),
                     ])
                     .alias(c),
                 )
@@ -205,7 +213,7 @@ pub fn lf_column_to_categorical(
                             col(c)
                                 .struct_()
                                 .field_by_name(MULTI_IRI_DT)
-                                .cast(DataType::Categorical(None, CategoricalOrdering::Physical)),
+                                .cast(DataType::Categorical(None, cat_order)),
                         )
                     }
                     BaseRDFNodeType::BlankNode => {
@@ -214,7 +222,7 @@ pub fn lf_column_to_categorical(
                             col(c)
                                 .struct_()
                                 .field_by_name(MULTI_BLANK_DT)
-                                .cast(DataType::Categorical(None, CategoricalOrdering::Physical)),
+                                .cast(DataType::Categorical(None, cat_order)),
                         )
                     }
                     BaseRDFNodeType::Literal(l) => {
@@ -241,9 +249,10 @@ pub fn lf_column_to_categorical(
                                     )),
                             );
                             fields.push(
-                                col(c).struct_().field_by_name(LANG_STRING_LANG_FIELD).cast(
-                                    DataType::Categorical(None, CategoricalOrdering::Physical),
-                                ),
+                                col(c)
+                                    .struct_()
+                                    .field_by_name(LANG_STRING_LANG_FIELD)
+                                    .cast(DataType::Categorical(None, cat_order)),
                             );
                         } else {
                             fields.push(col(c).struct_().field_by_name(&non_multi_type_string(t)));
@@ -772,8 +781,18 @@ pub fn join_workaround(
     assert!(matches!(join_type, JoinType::Left | JoinType::Inner));
     for c in left_datatypes.keys() {
         if right_datatypes.contains_key(c) {
-            left_mappings = lf_column_to_categorical(left_mappings, c, &left_datatypes);
-            right_mappings = lf_column_to_categorical(right_mappings, c, &right_datatypes);
+            left_mappings = lf_column_to_categorical(
+                left_mappings,
+                c,
+                left_datatypes.get(c).unwrap(),
+                CategoricalOrdering::Physical,
+            );
+            right_mappings = lf_column_to_categorical(
+                right_mappings,
+                c,
+                right_datatypes.get(c).unwrap(),
+                CategoricalOrdering::Physical,
+            );
         }
     }
 

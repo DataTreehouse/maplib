@@ -1,7 +1,9 @@
 extern crate core;
 
 pub mod conversion;
+mod dblf;
 pub mod errors;
+pub mod indexing;
 mod io_funcs;
 pub mod native_parquet_write;
 pub mod query_solutions;
@@ -11,24 +13,27 @@ pub mod triples_read;
 pub mod triples_write;
 
 use crate::errors::TriplestoreError;
+use crate::indexing::TriplestoreIndex;
 use crate::io_funcs::{create_folder_if_not_exists, delete_tmp_parquets_in_caching_folder};
-use crate::sparql::lazy_graph_patterns::load_tt::multiple_tt_to_lf;
 use log::debug;
 use oxrdf::NamedNode;
 use parquet_io::{
     property_to_filename, scan_parquet, split_write_tmp_df, write_parquet, ParquetIOError,
 };
 use polars::prelude::{
-    col, concat, AnyValue, DataFrame, IntoLazy, JoinArgs, JoinType, LazyFrame, UnionArgs,
-    UniqueKeepStrategy,
+    col, concat, concat_lf_diagonal, lit, AnyValue, DataFrame, IntoLazy, JoinArgs, JoinType,
+    LazyFrame, UnionArgs, UniqueKeepStrategy,
 };
+use polars_core::datatypes::CategoricalOrdering;
 use polars_core::utils::concat_df;
 use rayon::iter::ParallelIterator;
 use rayon::iter::{IntoParallelRefIterator, ParallelDrainRange};
-use representation::multitype::lf_column_to_categorical;
+use representation::multitype::{lf_column_to_categorical, lf_columns_to_categorical};
+use representation::rdf_to_polars::rdf_named_node_to_polars_literal_value;
 use representation::solution_mapping::SolutionMappings;
 use representation::{
-    literal_iri_to_namednode, RDFNodeType, OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME,
+    literal_iri_to_namednode, BaseRDFNodeType, RDFNodeType, OBJECT_COL_NAME, SUBJECT_COL_NAME,
+    VERB_COL_NAME,
 };
 use std::collections::HashMap;
 use std::fs::remove_file;
@@ -36,14 +41,16 @@ use std::io;
 use std::path::Path;
 use std::time::Instant;
 use uuid::Uuid;
+use crate::dblf::multiple_tt_to_lf;
 
 #[derive(Clone)]
 pub struct Triplestore {
     deduplicated: bool,
     pub caching_folder: Option<String>,
-    df_map: HashMap<NamedNode, HashMap<(RDFNodeType, RDFNodeType), TripleTable>>,
-    transient_df_map: HashMap<NamedNode, HashMap<(RDFNodeType, RDFNodeType), TripleTable>>,
+    df_map: HashMap<NamedNode, HashMap<(BaseRDFNodeType, BaseRDFNodeType), TripleTable>>,
+    transient_df_map: HashMap<NamedNode, HashMap<(BaseRDFNodeType, BaseRDFNodeType), TripleTable>>,
     parser_call: usize,
+    index: Option<TriplestoreIndex>,
 }
 
 impl Triplestore {
@@ -80,6 +87,30 @@ impl TripleTable {
             panic!("TripleTable in invalid state")
         }
     }
+
+    pub(crate) fn get_solution_mappings(
+        &self,
+        subject_type: &BaseRDFNodeType,
+        object_type: &BaseRDFNodeType,
+        named_node: Option<&NamedNode>,
+    ) -> Result<SolutionMappings, TriplestoreError> {
+        let lfs = self.get_lazy_frames()?;
+        let mut lf = concat_lf_diagonal(lfs, UnionArgs::default()).unwrap();
+        let mut map = HashMap::from([
+            (
+                SUBJECT_COL_NAME.to_string(),
+                subject_type.as_rdf_node_type(),
+            ),
+            (OBJECT_COL_NAME.to_string(), object_type.as_rdf_node_type()),
+        ]);
+        if let Some(named_node) = named_node {
+            lf = lf.with_column(
+                lit(rdf_named_node_to_polars_literal_value(named_node)).alias(VERB_COL_NAME),
+            );
+            map.insert(VERB_COL_NAME.to_string(), RDFNodeType::IRI);
+        }
+        Ok(SolutionMappings::new(lf, map))
+    }
 }
 
 pub struct TriplesToAdd {
@@ -94,8 +125,8 @@ pub struct TriplesToAdd {
 pub struct TripleDF {
     df: DataFrame,
     predicate: NamedNode,
-    subject_type: RDFNodeType,
-    object_type: RDFNodeType,
+    subject_type: BaseRDFNodeType,
+    object_type: BaseRDFNodeType,
 }
 
 impl Triplestore {
@@ -111,6 +142,7 @@ impl Triplestore {
             deduplicated: true,
             caching_folder,
             parser_call: 0,
+            index: None,
         })
     }
 
@@ -147,8 +179,8 @@ impl Triplestore {
                 assert!(!matches!(object_type, RDFNodeType::MultiType(..)));
                 prepare_triples(
                     df,
-                    &subject_type,
-                    &object_type,
+                    &BaseRDFNodeType::from_rdf_node_type(&subject_type),
+                    &BaseRDFNodeType::from_rdf_node_type(&object_type),
                     static_verb_column,
                     has_unique_subset,
                 )
@@ -282,11 +314,12 @@ impl Triplestore {
             };
             let mut lf = df.lazy();
             let mut map = HashMap::new();
-            map.insert(SUBJECT_COL_NAME.to_string(), subject_type.clone());
-            map.insert(OBJECT_COL_NAME.to_string(), object_type.clone());
-            for c in map.keys() {
-                lf = lf_column_to_categorical(lf, c, &map)
-            }
+            map.insert(
+                SUBJECT_COL_NAME.to_string(),
+                subject_type.as_rdf_node_type(),
+            );
+            map.insert(OBJECT_COL_NAME.to_string(), object_type.as_rdf_node_type());
+            lf = lf_columns_to_categorical(lf, &map, CategoricalOrdering::Physical);
             df = lf.collect().unwrap();
             let k = (subject_type, object_type);
 
@@ -423,8 +456,8 @@ impl Triplestore {
 
 pub fn prepare_triples(
     mut df: DataFrame,
-    subject_type: &RDFNodeType,
-    object_type: &RDFNodeType,
+    subject_type: &BaseRDFNodeType,
+    object_type: &BaseRDFNodeType,
     static_verb_column: Option<NamedNode>,
     has_unique_subset: bool,
 ) -> Vec<TripleDF> {
@@ -483,8 +516,8 @@ pub fn prepare_triples(
 fn prepare_triples_df(
     mut df: DataFrame,
     predicate: NamedNode,
-    subject_type: &RDFNodeType,
-    object_type: &RDFNodeType,
+    subject_type: &BaseRDFNodeType,
+    object_type: &BaseRDFNodeType,
     has_unique_subset: bool,
 ) -> Option<TripleDF> {
     let now = Instant::now();
@@ -521,7 +554,7 @@ fn flatten<T>(nested: Vec<Vec<T>>) -> Vec<T> {
 }
 
 fn deduplicate_map(
-    df_map: &mut HashMap<NamedNode, HashMap<(RDFNodeType, RDFNodeType), TripleTable>>,
+    df_map: &mut HashMap<NamedNode, HashMap<(BaseRDFNodeType, BaseRDFNodeType), TripleTable>>,
     caching_folder: &Option<String>,
 ) -> Result<(), TriplestoreError> {
     for (predicate, map) in df_map {

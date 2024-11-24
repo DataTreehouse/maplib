@@ -14,8 +14,7 @@ use polars::export::rayon::iter::IndexedParallelIterator;
 use polars::export::rayon::iter::ParallelIterator;
 use polars::export::rayon::prelude::IntoParallelIterator;
 use polars::prelude::{
-    as_struct, col, AnyValue, Column, DataFrame, DataType, IntoColumn, IntoLazy, IntoSeries,
-    Series, TimeZone,
+    as_struct, col, AnyValue, Column, DataFrame, DataType, IntoColumn, IntoLazy, Series, TimeZone,
 };
 use spargebra::term::Term;
 use std::collections::{HashMap, HashSet};

@@ -454,9 +454,11 @@ impl PyMapping {
             .map_err(PyMaplibError::from)?;
         Ok(())
     }
-    fn write_ntriples(&mut self,
-                      file_path: &Bound<'_, PyAny>,
-                      graph: Option<String>) -> PyResult<()> {
+    fn write_ntriples(
+        &mut self,
+        file_path: &Bound<'_, PyAny>,
+        graph: Option<String>,
+    ) -> PyResult<()> {
         warn!("use write_triples with format=\"ntriples\" instead");
         self.write_triples(file_path, Some("ntriples".to_string()), graph)
     }
@@ -477,7 +479,9 @@ impl PyMapping {
         let mut actual_file = File::create(path_buf.as_path())
             .map_err(|x| PyMaplibError::from(MappingError::FileCreateIOError(x)))?;
         let graph = parse_optional_graph(graph)?;
-        self.inner.write_triples(&mut actual_file, graph, format).unwrap();
+        self.inner
+            .write_triples(&mut actual_file, graph, format)
+            .unwrap();
         Ok(())
     }
 
@@ -486,7 +490,11 @@ impl PyMapping {
         self.write_triples_string(Some("ntriples".to_string()), graph)
     }
 
-    fn write_triples_string(&mut self, format: Option<String>, graph: Option<String>) -> PyResult<String> {
+    fn write_triples_string(
+        &mut self,
+        format: Option<String>,
+        graph: Option<String>,
+    ) -> PyResult<String> {
         let format = if let Some(format) = format {
             resolve_format(&format)
         } else {
