@@ -525,6 +525,7 @@ class Mapping:
 
     def write_ntriples(self, file_path: Union[str, Path], graph: str = None) -> None:
         """
+        DEPRECATED: use write_triples with format="ntriples"
         Write the non-transient triples to the file path specified in the NTriples format.
 
         Usage:
@@ -535,14 +536,47 @@ class Mapping:
         :param graph: The IRI of the graph to write.
         """
 
+    def write_triples(self,
+            file_path: Union[str, Path],
+            format=LiteralType["ntriples", "turtle", "rdf/xml"],
+            graph: str = None,
+            ) -> None:
+        """
+        Write the non-transient triples to the file path specified in the NTriples format.
+
+        Usage:
+
+        >>> m.write_triples("my_triples.nt", format="ntriples")
+
+        :param file_path: The path of the file containing triples
+        :param format: One of "ntriples", "turtle", "rdf/xml".
+        :param graph: The IRI of the graph to write.
+        """
+
+
     def write_ntriples_string(self, graph: str = None) -> str:
         """
+        DEPRECATED: use write_triples_string with format="ntriples"
         Write the non-transient triples to a string in memory.
 
         Usage:
 
         >>> s = m.write_ntriples_string()
 
+        :param graph: The IRI of the graph to write.
+        :return Triples in mapping in the NTriples format (potentially a large string)
+        """
+
+    def write_triples_string(self, format=LiteralType["ntriples", "turtle", "rdf/xml"], graph: str = None) -> str:
+        """
+        DEPRECATED: use write_triples_string with format="ntriples"
+        Write the non-transient triples to a string in memory.
+
+        Usage:
+
+        >>> s = m.write_ntriples_string(format="turtle")
+
+        :param format: One of "ntriples", "turtle", "rdf/xml".
         :param graph: The IRI of the graph to write.
         :return Triples in mapping in the NTriples format (potentially a large string)
         """

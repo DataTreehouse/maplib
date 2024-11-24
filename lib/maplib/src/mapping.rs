@@ -212,13 +212,14 @@ impl Mapping {
         use_triplestore.insert_construct_result(dfs, transient)
     }
 
-    pub fn write_n_triples(
+    pub fn write_triples(
         &mut self,
         buffer: &mut dyn Write,
         graph: Option<NamedNode>,
+        rdf_format: RdfFormat,
     ) -> Result<(), MappingError> {
         let triplestore = self.get_triplestore(&graph);
-        triplestore.write_ntriples(buffer).unwrap();
+        triplestore.write_triples(buffer, rdf_format).unwrap();
         Ok(())
     }
 

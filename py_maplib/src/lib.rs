@@ -454,25 +454,47 @@ impl PyMapping {
             .map_err(PyMaplibError::from)?;
         Ok(())
     }
+    fn write_ntriples(&mut self,
+                      file_path: &Bound<'_, PyAny>,
+                      graph: Option<String>) -> PyResult<()> {
+        warn!("use write_triples with format=\"ntriples\" instead");
+        self.write_triples(file_path, Some("ntriples".to_string()), graph)
+    }
 
-    fn write_ntriples(
+    fn write_triples(
         &mut self,
         file_path: &Bound<'_, PyAny>,
+        format: Option<String>,
         graph: Option<String>,
     ) -> PyResult<()> {
+        let format = if let Some(format) = format {
+            resolve_format(&format)
+        } else {
+            RdfFormat::NTriples
+        };
         let file_path = file_path.str()?.to_string();
         let path_buf = PathBuf::from(file_path);
         let mut actual_file = File::create(path_buf.as_path())
             .map_err(|x| PyMaplibError::from(MappingError::FileCreateIOError(x)))?;
         let graph = parse_optional_graph(graph)?;
-        self.inner.write_n_triples(&mut actual_file, graph).unwrap();
+        self.inner.write_triples(&mut actual_file, graph, format).unwrap();
         Ok(())
     }
 
     fn write_ntriples_string(&mut self, graph: Option<String>) -> PyResult<String> {
+        warn!("use write_triples_string with format=\"ntriples\" instead");
+        self.write_triples_string(Some("ntriples".to_string()), graph)
+    }
+
+    fn write_triples_string(&mut self, format: Option<String>, graph: Option<String>) -> PyResult<String> {
+        let format = if let Some(format) = format {
+            resolve_format(&format)
+        } else {
+            RdfFormat::NTriples
+        };
         let mut out = vec![];
         let graph = parse_optional_graph(graph)?;
-        self.inner.write_n_triples(&mut out, graph).unwrap();
+        self.inner.write_triples(&mut out, graph, format).unwrap();
         Ok(String::from_utf8(out).unwrap())
     }
 

@@ -1,13 +1,12 @@
 use super::Triplestore;
 use crate::errors::TriplestoreError;
-use oxttl::NTriplesSerializer;
-use rayon::prelude::IntoParallelIterator;
 use representation::polars_to_rdf::df_as_triples;
 use std::io::Write;
+use oxrdfio::{RdfFormat, RdfSerializer};
 
 impl Triplestore {
-    pub fn write_ntriples(&self, buf: &mut dyn Write) -> Result<(), TriplestoreError> {
-        let mut writer = NTriplesSerializer::new().for_writer(buf);
+    pub fn write_triples(&self, buf:&mut dyn Write, format:RdfFormat) -> Result<(), TriplestoreError> {
+        let mut writer = RdfSerializer::from_format(format).for_writer(buf);
 
         for (verb, df_map) in &self.df_map {
             for ((subject_type, object_type), tt) in df_map {
@@ -20,6 +19,7 @@ impl Triplestore {
                 }
             }
         }
+        writer.finish().unwrap();
         Ok(())
     }
 }

@@ -55,9 +55,57 @@ def test_read_write_ntriples_string():
     with open(TESTDATA_PATH / "read_ntriples.nt") as f:
         ntstring = f.read()
     m.read_triples_string(ntstring, format="ntriples")
-    out_str = m.write_ntriples_string()
+    out_str = m.write_triples_string(format="ntriples")
     m2 = Mapping()
     m2.read_triples_string(out_str, format="ntriples")
+    res = m2.query(
+        """
+            PREFIX foaf:<http://xmlns.com/foaf/0.1/>
+
+            SELECT ?v ?o WHERE {
+            ?s ?v ?o .
+            } ORDER BY ?v ?o
+            """
+    ).sort(["v", "o"])
+    # TODO: Fix multitype sorting
+    filename = TESTDATA_PATH / "read_ntriples2.csv"
+    # res.write_csv(str(filename))
+    expected_df = pl.scan_csv(filename).select(["v", "o"]).sort(["v", "o"]).collect()
+    pl.testing.assert_frame_equal(res, expected_df)
+
+
+def test_read_write_turtle_string():
+    m = Mapping()
+    with open(TESTDATA_PATH / "read_ntriples.nt") as f:
+        ntstring = f.read()
+    m.read_triples_string(ntstring, format="ntriples")
+    out_str = m.write_triples_string(format="turtle")
+    m2 = Mapping()
+    m2.read_triples_string(out_str, format="turtle")
+    res = m2.query(
+        """
+            PREFIX foaf:<http://xmlns.com/foaf/0.1/>
+
+            SELECT ?v ?o WHERE {
+            ?s ?v ?o .
+            } ORDER BY ?v ?o
+            """
+    ).sort(["v", "o"])
+    # TODO: Fix multitype sorting
+    filename = TESTDATA_PATH / "read_ntriples2.csv"
+    # res.write_csv(str(filename))
+    expected_df = pl.scan_csv(filename).select(["v", "o"]).sort(["v", "o"]).collect()
+    pl.testing.assert_frame_equal(res, expected_df)
+
+
+def test_read_write_xml_string():
+    m = Mapping()
+    with open(TESTDATA_PATH / "read_ntriples.nt") as f:
+        ntstring = f.read()
+    m.read_triples_string(ntstring, format="ntriples")
+    out_str = m.write_triples_string(format="rdf/xml")
+    m2 = Mapping()
+    m2.read_triples_string(out_str, format="rdf/xml")
     res = m2.query(
         """
             PREFIX foaf:<http://xmlns.com/foaf/0.1/>

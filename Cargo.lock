@@ -1252,7 +1252,7 @@ dependencies = [
  "oxiri",
  "oxsdatatypes",
  "rand",
- "thiserror 1.0.63",
+ "thiserror 2.0.3",
 ]
 
 [[package]]
@@ -1264,7 +1264,7 @@ dependencies = [
  "oxrdf",
  "oxrdfxml",
  "oxttl",
- "thiserror 1.0.63",
+ "thiserror 2.0.3",
 ]
 
 [[package]]
@@ -1277,7 +1277,7 @@ dependencies = [
  "oxiri",
  "oxrdf",
  "quick-xml",
- "thiserror 1.0.63",
+ "thiserror 2.0.3",
 ]
 
 [[package]]
@@ -1286,7 +1286,7 @@ version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f3e0497e4fa5caa8e0d1cc750cb6546a98feb938f2d45db065aceb03210f741d"
 dependencies = [
- "thiserror 1.0.63",
+ "thiserror 2.0.3",
 ]
 
 [[package]]
@@ -1299,7 +1299,7 @@ dependencies = [
  "oxilangtag",
  "oxiri",
  "oxrdf",
- "thiserror 1.0.63",
+ "thiserror 2.0.3",
 ]
 
 [[package]]
@@ -2228,9 +2228,9 @@ dependencies = [
 
 [[package]]
 name = "regex"
-version = "1.10.5"
+version = "1.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b91213439dad192326a0d7c6ee3955910425f441d7038e0d6933b0aec5c4517f"
+checksum = "b544ef1b4eac5dc2db33ea63606ae9ffcfac26c1416a2806ae0bf5f56b201191"
 dependencies = [
  "aho-corasick",
  "memchr",
@@ -2240,9 +2240,9 @@ dependencies = [
 
 [[package]]
 name = "regex-automata"
-version = "0.4.7"
+version = "0.4.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "38caf58cc5ef2fed281f89292ef23f6365465ed9a41b7a7754eb4e26496c92df"
+checksum = "809e8dc61f6de73b46c85f4c96486310fe304c434cfa43669d7b40f711150908"
 dependencies = [
  "aho-corasick",
  "memchr",
@@ -2539,7 +2539,7 @@ dependencies = [
  "memchr",
  "oxrdf",
  "quick-xml",
- "thiserror 1.0.63",
+ "thiserror 2.0.3",
 ]
 
 [[package]]
@@ -2742,9 +2742,9 @@ dependencies = [
 
 [[package]]
 name = "tokio"
-version = "1.39.2"
+version = "1.41.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "daa4fb1bc778bd6f04cbfc4bb2d06a7396a8f299dc33ea1900cedaa316f467b1"
+checksum = "22cfb5bee7a6a52939ca9224d6ac897bb669134078daa8735560897f69de4d33"
 dependencies = [
  "backtrace",
  "bytes",
