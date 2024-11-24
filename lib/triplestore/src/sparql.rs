@@ -153,7 +153,7 @@ impl Triplestore {
                 let SolutionMappings {
                     mappings,
                     rdf_node_types: types,
-                } = self.lazy_graph_pattern(pattern, None, &context, parameters)?;
+                } = self.lazy_graph_pattern(&pattern, None, &context, parameters)?;
                 let df = mappings.with_streaming(streaming).collect().unwrap();
                 Ok(QueryResult::Select(df, types))
             }

@@ -5,7 +5,9 @@ use polars::prelude::{col, concat, lit, Expr, IntoLazy, LazyFrame, UnionArgs};
 use polars_core::prelude::{Column, DataFrame, IntoColumn, Series};
 use query_processing::graph_patterns::union;
 use representation::multitype::convert_lf_col_to_multitype;
-use representation::rdf_to_polars::{rdf_named_node_to_polars_literal_value, rdf_term_to_polars_expr};
+use representation::rdf_to_polars::{
+    rdf_named_node_to_polars_literal_value, rdf_term_to_polars_expr,
+};
 use representation::solution_mapping::SolutionMappings;
 use representation::{BaseRDFNodeType, RDFNodeType, OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use std::collections::{HashMap, HashSet};

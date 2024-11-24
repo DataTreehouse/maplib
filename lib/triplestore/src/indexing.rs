@@ -7,14 +7,16 @@ use polars_core::datatypes::{AnyValue, CategoricalOrdering};
 use polars_core::prelude::{CategoricalChunked, LogicalType, Series};
 use polars_core::utils::Container;
 use query_processing::graph_patterns::{filter, order_by, union};
-use representation::multitype::{force_convert_multicol_to_single_col, lf_columns_to_categorical, non_multi_type_string};
+use representation::multitype::{
+    force_convert_multicol_to_single_col, lf_columns_to_categorical, non_multi_type_string,
+};
+use representation::query_context::Context;
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use representation::{
     BaseRDFNodeType, RDFNodeType, OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME,
 };
-use std::collections::{BTreeMap, HashMap};
-use representation::query_context::Context;
 use spargebra::algebra::{Expression, GraphPattern};
+use std::collections::{BTreeMap, HashMap};
 
 #[derive(Clone)]
 pub struct TriplestoreIndex {
@@ -23,7 +25,12 @@ pub struct TriplestoreIndex {
 }
 
 impl Triplestore {
+    pub fn drop_index(&mut self) {
+        self.index = None;
+    }
+
     pub fn create_index(&mut self) -> Result<(), TriplestoreError> {
+        self.deduplicate()?;
         let mut keys_sorted = vec![];
         for k in self.df_map.keys() {
             keys_sorted.push(k.clone());
@@ -113,8 +120,17 @@ impl Triplestore {
                 let (bef, _) = aft.split_at(offset as i64);
                 let eager_sm = EagerSolutionMappings::new(bef, index.sop.rdf_node_types.clone());
                 let mut sm = eager_sm.as_lazy();
-                if matches!(sm.rdf_node_types.get(SUBJECT_COL_NAME).unwrap(), RDFNodeType::MultiType(..)) {
-                    sm.mappings = force_convert_multicol_to_single_col(sm.mappings, SUBJECT_COL_NAME, &BaseRDFNodeType::IRI);
+                if matches!(
+                    sm.rdf_node_types.get(SUBJECT_COL_NAME).unwrap(),
+                    RDFNodeType::MultiType(..)
+                ) {
+                    sm.mappings = force_convert_multicol_to_single_col(
+                        sm.mappings,
+                        SUBJECT_COL_NAME,
+                        &BaseRDFNodeType::IRI,
+                    );
+                    sm.rdf_node_types
+                        .insert(SUBJECT_COL_NAME.to_string(), RDFNodeType::IRI);
                 }
                 sm
             } else {
@@ -123,35 +139,37 @@ impl Triplestore {
             let dummy_gp = GraphPattern::Bgp { patterns: vec![] };
             if let Some(subject_term) = &subject_term {
                 let expression = match subject_term {
-                    Term::NamedNode(nn) => {
-                        Expression::NamedNode(nn.clone())
-                    }
-                    Term::Literal(l) => {
-                        Expression::Literal(l.clone())
-                    }
-                    _ => panic!()
+                    Term::NamedNode(nn) => Expression::NamedNode(nn.clone()),
+                    Term::Literal(l) => Expression::Literal(l.clone()),
+                    _ => panic!(),
                 };
                 sm = self.lazy_filter(
                     &dummy_gp,
-                    &Expression::Equal(Box::new(Expression::Variable(Variable::new_unchecked(SUBJECT_COL_NAME))), Box::new(expression)),
+                    &Expression::Equal(
+                        Box::new(Expression::Variable(Variable::new_unchecked(
+                            SUBJECT_COL_NAME,
+                        ))),
+                        Box::new(expression),
+                    ),
                     Some(sm),
                     &Context::new(),
-                    &None
+                    &None,
                 )?;
             }
             if let Some(object_term) = &object_term {
                 let expression = match object_term {
-                    Term::NamedNode(nn) => {
-                        Expression::NamedNode(nn.clone())
-                    }
-                    Term::Literal(l) => {
-                        Expression::Literal(l.clone())
-                    }
-                    _ => panic!()
+                    Term::NamedNode(nn) => Expression::NamedNode(nn.clone()),
+                    Term::Literal(l) => Expression::Literal(l.clone()),
+                    _ => panic!(),
                 };
                 sm = self.lazy_filter(
                     &dummy_gp,
-                    &Expression::Equal(Box::new(Expression::Variable(Variable::new_unchecked(OBJECT_COL_NAME))), Box::new(expression)),
+                    &Expression::Equal(
+                        Box::new(Expression::Variable(Variable::new_unchecked(
+                            OBJECT_COL_NAME,
+                        ))),
+                        Box::new(expression),
+                    ),
                     Some(sm),
                     &Context::new(),
                     &None,
@@ -163,7 +181,11 @@ impl Triplestore {
             let use_object_col_name = uuid::Uuid::new_v4().to_string();
             sm.mappings = sm.mappings.rename(
                 [SUBJECT_COL_NAME, VERB_COL_NAME, OBJECT_COL_NAME],
-                [&use_subject_col_name, &use_verb_col_name, &use_object_col_name],
+                [
+                    &use_subject_col_name,
+                    &use_verb_col_name,
+                    &use_object_col_name,
+                ],
                 true,
             );
 
@@ -204,10 +226,7 @@ impl Triplestore {
     }
 }
 
-fn get_iri_ser(
-    series: &Series,
-    is_rdf_node_type: &RDFNodeType,
-) -> Option<Series> {
+fn get_iri_ser(series: &Series, is_rdf_node_type: &RDFNodeType) -> Option<Series> {
     if matches!(is_rdf_node_type, RDFNodeType::MultiType(..)) {
         let subj_struct = series.struct_().unwrap();
         let subj_iri_ser = subj_struct

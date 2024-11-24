@@ -935,10 +935,9 @@ pub fn func_expression(
             } else {
                 todo!()
             }
-            solution_mappings.rdf_node_types.insert(
-                outer_context.as_str().to_string(),
-                t.clone(),
-            );
+            solution_mappings
+                .rdf_node_types
+                .insert(outer_context.as_str().to_string(), t.clone());
         }
         Function::StrStarts | Function::StrEnds | Function::Contains => {
             assert_eq!(args.len(), 2);

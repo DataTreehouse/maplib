@@ -12,6 +12,7 @@ pub mod sparql;
 pub mod triples_read;
 pub mod triples_write;
 
+use crate::dblf::multiple_tt_to_lf;
 use crate::errors::TriplestoreError;
 use crate::indexing::TriplestoreIndex;
 use crate::io_funcs::{create_folder_if_not_exists, delete_tmp_parquets_in_caching_folder};
@@ -41,7 +42,6 @@ use std::io;
 use std::path::Path;
 use std::time::Instant;
 use uuid::Uuid;
-use crate::dblf::multiple_tt_to_lf;
 
 #[derive(Clone)]
 pub struct Triplestore {
@@ -206,6 +206,7 @@ impl Triplestore {
         } else {
             self.add_triples_df_without_folder(triples_df, call_uuid, transient, overwrite);
         }
+        self.drop_index();
         Ok(())
     }
 
