@@ -1,6 +1,4 @@
 extern crate core;
-
-pub mod conversion;
 mod dblf;
 pub mod errors;
 pub mod indexing;

@@ -47,6 +47,9 @@ memmap2 = "0.9.4"
 sprs = "0.11.2"
 walkdir = "2.5.0"
 
+itoa = "1.0.11"
+ryu = "1.0.18"
+
 #dev-dependencies
 rstest = "0.21.0"
 serial_test = "3.1.1"

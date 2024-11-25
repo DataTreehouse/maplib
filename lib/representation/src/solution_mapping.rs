@@ -1,7 +1,6 @@
-use crate::multitype::lf_column_to_categorical;
 use crate::RDFNodeType;
 use oxrdf::vocab::xsd;
-use polars::prelude::{CategoricalOrdering, DataFrame, IntoLazy, LazyFrame};
+use polars::prelude::{DataFrame, IntoLazy, LazyFrame};
 use std::collections::HashMap;
 
 #[derive(Clone)]

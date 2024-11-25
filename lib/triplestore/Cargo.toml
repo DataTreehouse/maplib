@@ -26,6 +26,9 @@ oxttl.workspace = true
 memmap2.workspace = true
 sparesults.workspace = true
 
+itoa.workspace = true
+ryu.workspace = true
+
 [dev-dependencies]
 rstest.workspace = true
 serial_test.workspace = true

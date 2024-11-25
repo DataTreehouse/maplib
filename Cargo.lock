@@ -2789,6 +2789,7 @@ dependencies = [
 name = "triplestore"
 version = "0.5.0"
 dependencies = [
+ "itoa",
  "log",
  "memmap2 0.9.4",
  "oxrdf",
@@ -2801,6 +2802,7 @@ dependencies = [
  "rayon",
  "representation",
  "rstest",
+ "ryu",
  "serial_test",
  "sparesults",
  "spargebra",

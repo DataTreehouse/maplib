@@ -218,9 +218,9 @@ impl Mapping {
         use_triplestore.insert_construct_result(dfs, transient)
     }
 
-    pub fn write_triples(
+    pub fn write_triples<W: Write>(
         &mut self,
-        buffer: &mut dyn Write,
+        buffer: &mut W,
         graph: Option<NamedNode>,
         rdf_format: RdfFormat,
     ) -> Result<(), MappingError> {
