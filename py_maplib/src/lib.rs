@@ -287,6 +287,14 @@ impl PyMapping {
         )
     }
 
+    fn create_index(&mut self, graph: Option<String>) -> PyResult<()> {
+        let graph = parse_optional_graph(graph)?;
+        self.inner
+            .create_index(graph)
+            .map_err(PyMaplibError::from)?;
+        Ok(())
+    }
+
     fn validate(
         &mut self,
         shape_graph: String,
