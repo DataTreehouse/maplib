@@ -205,7 +205,7 @@ impl Mapping {
 
     pub fn create_index(&mut self, graph: Option<NamedNode>) -> Result<(), TriplestoreError> {
         let use_triplestore = self.get_triplestore(&graph);
-        use_triplestore.create_index()
+        use_triplestore.create_index(false)
     }
 
     pub fn insert_construct_result(

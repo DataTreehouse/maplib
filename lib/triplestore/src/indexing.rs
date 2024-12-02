@@ -1,8 +1,8 @@
+use std::cmp;
 use super::Triplestore;
 use crate::errors::TriplestoreError;
 use crate::sparql::errors::SparqlError;
-use oxrdf::{NamedNode, NamedOrBlankNode, Term, Variable};
-use polars::prelude::Expr;
+use oxrdf::{NamedNode, Term, Variable};
 use polars_core::datatypes::{AnyValue, CategoricalOrdering};
 use polars_core::prelude::{CategoricalChunked, LogicalType, Series};
 use polars_core::utils::Container;
@@ -17,11 +17,16 @@ use representation::{
 };
 use spargebra::algebra::{Expression, GraphPattern};
 use std::collections::{BTreeMap, HashMap};
+use log::debug;
+
+const OFFSET_STEP: usize = 1_000;
 
 #[derive(Clone)]
 pub struct TriplestoreIndex {
-    sop: EagerSolutionMappings,
-    sop_sparse: BTreeMap<String, usize>,
+    spo: EagerSolutionMappings,
+    spo_sparse: BTreeMap<String, usize>,
+    ops: Option<EagerSolutionMappings>,
+    ops_sparse: Option<BTreeMap<String, usize>>,
 }
 
 impl Triplestore {
@@ -29,7 +34,7 @@ impl Triplestore {
         self.index = None;
     }
 
-    pub fn create_index(&mut self) -> Result<(), TriplestoreError> {
+    pub fn create_index(&mut self, ops: bool) -> Result<(), TriplestoreError> {
         self.deduplicate()?;
         let mut keys_sorted = vec![];
         for k in self.df_map.keys() {
@@ -52,38 +57,47 @@ impl Triplestore {
             &sm.rdf_node_types,
             CategoricalOrdering::Lexical,
         );
+        sm = sm.as_eager().as_lazy();
 
-        let by = vec![
+        let spo_by = vec![
             SUBJECT_COL_NAME.to_string(),
-            OBJECT_COL_NAME.to_string(),
             VERB_COL_NAME.to_string(),
+            OBJECT_COL_NAME.to_string(),
         ];
-        let sm = order_by(sm, &by, vec![true, true, true]).unwrap();
-        let eager_sm = sm.as_eager();
-        let subj_ser = eager_sm
+        let spo_sm = order_by(sm.clone(), &spo_by, vec![true, true, true]).unwrap();
+        let eager_spo_sm = spo_sm.as_eager();
+        let subj_ser = eager_spo_sm
             .mappings
             .column(SUBJECT_COL_NAME)
             .unwrap()
             .as_materialized_series();
-        let subj_type = eager_sm.rdf_node_types.get(SUBJECT_COL_NAME).unwrap();
-        let subj_iri_ser = get_iri_ser(subj_ser, subj_type);
-        let subj_iri_cat_ser = if let Some(subj_iri_ser) = &subj_iri_ser {
-            Some(subj_iri_ser.categorical().unwrap())
-        } else {
-            None
-        };
+        let subj_type = eager_spo_sm.rdf_node_types.get(SUBJECT_COL_NAME).unwrap();
+        let subj_sparse_map = create_sparse_map(subj_ser, subj_type);
 
-        let mut sparse_map = BTreeMap::new();
-        let mut current_offset = 0;
-        while current_offset < subj_ser.len() {
-            if let Some(subj_iri_cat_ser) = subj_iri_cat_ser {
-                update_at_offset(subj_iri_cat_ser, current_offset, &mut sparse_map);
-            }
-            current_offset = current_offset + 1_000;
-        }
+        let (eager_ops_sm, obj_sparse_map) = if ops {
+            let ops_by = vec![
+                OBJECT_COL_NAME.to_string(),
+                VERB_COL_NAME.to_string(),
+                SUBJECT_COL_NAME.to_string(),
+            ];
+            let ops_sm = order_by(sm.clone(), &ops_by, vec![true, true, true]).unwrap();
+            let eager_ops_sm = ops_sm.as_eager();
+            let obj_ser = eager_ops_sm
+                .mappings
+                .column(OBJECT_COL_NAME)
+                .unwrap()
+                .as_materialized_series();
+            let obj_type = eager_ops_sm.rdf_node_types.get(OBJECT_COL_NAME).unwrap();
+            let obj_sparse_map = create_sparse_map(obj_ser, obj_type);
+            (Some(eager_ops_sm), Some(obj_sparse_map))
+        } else {
+            (None, None)
+        };
         self.index = Some(TriplestoreIndex {
-            sop: eager_sm,
-            sop_sparse: sparse_map,
+            spo: eager_spo_sm,
+            spo_sparse: subj_sparse_map,
+            ops: eager_ops_sm,
+            ops_sparse: obj_sparse_map,
         });
         Ok(())
     }
@@ -98,43 +112,27 @@ impl Triplestore {
     ) -> Result<SolutionMappings, SparqlError> {
         if let Some(index) = &self.index {
             let mut sm = if let Some(Term::NamedNode(subject_iri)) = &subject_term {
-                let subject_str = subject_iri.as_str();
-                let mut range = index.sop_sparse.range(subject_str.to_string()..);
-                let mut from = 0;
-                while let Some((s, prev)) = range.next_back() {
-                    if s != s {
-                        from = prev.clone();
-                    } else {
-                        break;
-                    }
+                get_exact_lookup(
+                    subject_iri,
+                    &index.spo,
+                    &index.spo_sparse,
+                    SUBJECT_COL_NAME
+                )
+            } else if self.index.as_ref().unwrap().ops.is_some()
+                && matches!(&object_term, Some(Term::NamedNode(_)))
+            {
+                if let Some(Term::NamedNode(object_iri)) = &object_term {
+                    get_exact_lookup(
+                        object_iri,
+                        index.ops.as_ref().unwrap(),
+                        index.ops_sparse.as_ref().unwrap(),
+                        OBJECT_COL_NAME,
+                    )
+                } else {
+                    panic!("Should never happen")
                 }
-                let mut offset = index.sop.mappings.height();
-                while let Some((s, next)) = range.next() {
-                    if s != s {
-                        offset = next.clone() - from;
-                    } else {
-                        break;
-                    }
-                }
-                let (_, aft) = index.sop.mappings.split_at(from as i64);
-                let (bef, _) = aft.split_at(offset as i64);
-                let eager_sm = EagerSolutionMappings::new(bef, index.sop.rdf_node_types.clone());
-                let mut sm = eager_sm.as_lazy();
-                if matches!(
-                    sm.rdf_node_types.get(SUBJECT_COL_NAME).unwrap(),
-                    RDFNodeType::MultiType(..)
-                ) {
-                    sm.mappings = force_convert_multicol_to_single_col(
-                        sm.mappings,
-                        SUBJECT_COL_NAME,
-                        &BaseRDFNodeType::IRI,
-                    );
-                    sm.rdf_node_types
-                        .insert(SUBJECT_COL_NAME.to_string(), RDFNodeType::IRI);
-                }
-                sm
             } else {
-                index.sop.clone().as_lazy()
+                index.spo.clone().as_lazy()
             };
             let dummy_gp = GraphPattern::Bgp { patterns: vec![] };
             if let Some(subject_term) = &subject_term {
@@ -226,6 +224,48 @@ impl Triplestore {
     }
 }
 
+fn get_exact_lookup(
+    iri: &NamedNode,
+    eager_sm: &EagerSolutionMappings,
+    sparse_map: &BTreeMap<String, usize>,
+    col_name: &str,
+) -> SolutionMappings {
+    debug!("Getting exact lookup for {}", iri);
+    let iri_str = iri.as_str();
+    let mut from = 0;
+    let mut range_backwards = sparse_map.range(..iri_str.to_string());
+    while let Some((s, prev)) = range_backwards.next_back() {
+        if s != iri_str {
+            from = prev.clone();
+            break;
+        }
+    }
+    let mut range_forwards = sparse_map.range(iri_str.to_string()..);
+    let height = eager_sm.mappings.height();
+    let mut offset = height - from;
+    while let Some((s, next)) = range_forwards.next() {
+        if s != iri_str {
+            offset = next.clone() - from;
+            break;
+        }
+    }
+    debug!("Len {} from {} offset {}", height, from, offset);
+    let (_, aft) = eager_sm.mappings.split_at(from as i64);
+    let (bef, _) = aft.split_at(offset as i64);
+    let eager_sm = EagerSolutionMappings::new(bef, eager_sm.rdf_node_types.clone());
+    let mut sm = eager_sm.as_lazy();
+    if matches!(
+        sm.rdf_node_types.get(col_name).unwrap(),
+        RDFNodeType::MultiType(..)
+    ) {
+        sm.mappings =
+            force_convert_multicol_to_single_col(sm.mappings, col_name, &BaseRDFNodeType::IRI);
+        sm.rdf_node_types
+            .insert(col_name.to_string(), RDFNodeType::IRI);
+    }
+    sm
+}
+
 fn get_iri_ser(series: &Series, is_rdf_node_type: &RDFNodeType) -> Option<Series> {
     if matches!(is_rdf_node_type, RDFNodeType::MultiType(..)) {
         let subj_struct = series.struct_().unwrap();
@@ -256,4 +296,22 @@ fn update_at_offset(
         let e = sparse_map.entry(s);
         e.or_insert(offset);
     }
+}
+
+fn create_sparse_map(ser: &Series, rdf_node_type: &RDFNodeType) -> BTreeMap<String, usize> {
+    let iri_ser = get_iri_ser(ser, rdf_node_type);
+    let iri_cat_ser = if let Some(iri_ser) = &iri_ser {
+        Some(iri_ser.categorical().unwrap())
+    } else {
+        None
+    };
+    let mut sparse_map = BTreeMap::new();
+    if let Some(iri_cat_ser) = iri_cat_ser {
+        let mut current_offset = 0;
+        while current_offset < ser.len() {
+            update_at_offset(iri_cat_ser, current_offset, &mut sparse_map);
+            current_offset = current_offset + OFFSET_STEP;
+        }
+    }
+    sparse_map
 }
