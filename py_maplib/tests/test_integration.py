@@ -6,14 +6,14 @@ from math import floor
 import pathlib
 import time
 
+from pyparsing import stringStart
+
 pl.Config.set_fmt_str_lengths(300)
 
 PATH_HERE = pathlib.Path(__file__).parent
 TESTDATA_PATH = PATH_HERE / "testdata"
-
-
-@pytest.fixture(scope="session")
-def windpower_mapping():
+@pytest.fixture(scope="session", params=[True, False])
+def windpower_mapping(request):
     instance_mapping = """
     @prefix tpl:<https://github.com/magbak/chrontext/templates#>.
     @prefix rds:<https://github.com/magbak/chrontext/rds_power#>.
@@ -249,6 +249,8 @@ def windpower_mapping():
     wind_turbine_has_wms = add_aspect_labeling_by_source(wind_turbine_has_wms, "LE")
 
     mapping.expand("tpl:FunctionalAspect", df=wind_turbine_has_wms)
+    if request.param:
+        mapping.create_index()
     return mapping
 
 
@@ -258,6 +260,15 @@ def test_simple_query(windpower_mapping):
     # df.write_csv(filename)
     expected_df = pl.scan_csv(filename).sort(["a", "b"]).collect()
     pl.testing.assert_frame_equal(df, expected_df)
+
+def test_everything_from_subject_query(windpower_mapping):
+    query = """
+SELECT ?b ?c WHERE {
+    <https://github.com/magbak/chrontext/windpower_example#Generator31> ?b ?c .
+} ORDER BY ?b ?c"""
+    df = windpower_mapping.query(query)
+    print(df)
+
 
 
 def test_larger_query(windpower_mapping):
@@ -494,3 +505,29 @@ def test_simple_insert_construct_query(windpower_mapping):
     assert_frame_equal(something, expected_something_df)
     expected_nothing_df = pl.scan_csv(filename_nothing).sort(["a"]).collect()
     assert_frame_equal(nothing, expected_nothing_df)
+
+
+def test_str_functions(windpower_mapping):
+    pl.Config.set_tbl_rows(20)
+    df = windpower_mapping.query(
+        """
+        PREFIX rdfs:<http://www.w3.org/2000/01/rdf-schema#>
+        SELECT 
+            ?label
+            (STRSTARTS(?label, "Wind turbine 3") AS ?strStarts)
+            (STRENDS(?label, "11") AS ?strEnds)
+            (CONTAINS(?label, "ind turbine 24") AS ?contains)
+            (STRBEFORE(?label, "urbine 24") AS ?strBefore)
+            (STRAFTER(?label, "Wind t") AS ?strAfter)
+        WHERE {
+        ?a rdfs:label ?label .
+        }
+        """
+    )
+    df = df.filter(
+        pl.col("strStarts") | pl.col("strEnds") | pl.col("contains")
+    ).sort(["label"])
+    filename = TESTDATA_PATH / "stringfuncs.csv"
+    #df.write_csv(filename)
+    expected_df = pl.scan_csv(filename).sort(["label"]).collect()
+    assert_frame_equal(df, expected_df)

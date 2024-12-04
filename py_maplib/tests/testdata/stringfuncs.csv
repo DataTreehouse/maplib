@@ -1,0 +1,14 @@
+label,strStarts,strEnds,contains,strBefore,strAfter
+Wind turbine 11,false,true,false,Wind turbine 11,urbine 11
+Wind turbine 24,false,false,true,Wind t,urbine 24
+Wind turbine 3,true,false,false,Wind turbine 3,urbine 3
+Wind turbine 30,true,false,false,Wind turbine 30,urbine 30
+Wind turbine 31,true,false,false,Wind turbine 31,urbine 31
+Wind turbine 32,true,false,false,Wind turbine 32,urbine 32
+Wind turbine 33,true,false,false,Wind turbine 33,urbine 33
+Wind turbine 34,true,false,false,Wind turbine 34,urbine 34
+Wind turbine 35,true,false,false,Wind turbine 35,urbine 35
+Wind turbine 36,true,false,false,Wind turbine 36,urbine 36
+Wind turbine 37,true,false,false,Wind turbine 37,urbine 37
+Wind turbine 38,true,false,false,Wind turbine 38,urbine 38
+Wind turbine 39,true,false,false,Wind turbine 39,urbine 39

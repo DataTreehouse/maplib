@@ -624,7 +624,7 @@ pub fn func_expression(
         }
         Function::LangMatches => {
             assert!(args.len() == 2);
-            let lang_expr = col(args_contexts.get(&0).unwrap().as_str());
+            let lang_expr = col(args_contexts.get(&0).unwrap().as_str()).cast(DataType::String);
 
             if let Expression::Literal(l) = args.get(1).unwrap() {
                 if l.value() == "*" {
@@ -889,6 +889,7 @@ pub fn func_expression(
                     Function::StrBefore => {
                         solution_mappings.mappings = solution_mappings.mappings.with_column(
                             col(first_context.as_str())
+                                .cast(DataType::String)
                                 .str()
                                 .strip_suffix(col(second_context.as_str()))
                                 .alias(outer_context.as_str()),
@@ -897,6 +898,7 @@ pub fn func_expression(
                     Function::StrAfter => {
                         solution_mappings.mappings = solution_mappings.mappings.with_column(
                             col(first_context.as_str())
+                                .cast(DataType::String)
                                 .str()
                                 .strip_prefix(col(second_context.as_str()))
                                 .alias(outer_context.as_str()),
@@ -953,6 +955,7 @@ pub fn func_expression(
                     Function::StrStarts => {
                         solution_mappings.mappings = solution_mappings.mappings.with_column(
                             col(first_context.as_str())
+                                .cast(DataType::String)
                                 .str()
                                 .starts_with(col(second_context.as_str()))
                                 .alias(outer_context.as_str()),
@@ -961,6 +964,7 @@ pub fn func_expression(
                     Function::StrEnds => {
                         solution_mappings.mappings = solution_mappings.mappings.with_column(
                             col(first_context.as_str())
+                                .cast(DataType::String)
                                 .str()
                                 .ends_with(col(second_context.as_str()))
                                 .alias(outer_context.as_str()),
@@ -969,6 +973,7 @@ pub fn func_expression(
                     Function::Contains => {
                         solution_mappings.mappings = solution_mappings.mappings.with_column(
                             col(first_context.as_str())
+                                .cast(DataType::String)
                                 .str()
                                 .contains_literal(col(second_context.as_str()))
                                 .alias(outer_context.as_str()),
@@ -983,6 +988,7 @@ pub fn func_expression(
                             col(first_context.as_str())
                                 .struct_()
                                 .field_by_name(LANG_STRING_VALUE_FIELD)
+                                .cast(DataType::String)
                                 .str()
                                 .starts_with(col(second_context.as_str()))
                                 .alias(outer_context.as_str()),
@@ -993,6 +999,7 @@ pub fn func_expression(
                             col(first_context.as_str())
                                 .struct_()
                                 .field_by_name(LANG_STRING_VALUE_FIELD)
+                                .cast(DataType::String)
                                 .str()
                                 .ends_with(col(second_context.as_str()))
                                 .alias(outer_context.as_str()),
@@ -1003,6 +1010,7 @@ pub fn func_expression(
                             col(first_context.as_str())
                                 .struct_()
                                 .field_by_name(LANG_STRING_VALUE_FIELD)
+                                .cast(DataType::String)
                                 .str()
                                 .contains_literal(col(second_context.as_str()))
                                 .alias(outer_context.as_str()),
