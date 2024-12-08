@@ -1,17 +1,21 @@
 use super::Triplestore;
 use crate::errors::TriplestoreError;
 use oxrdfio::{RdfFormat, RdfSerializer};
-use polars::prelude::{col};
-use representation::polars_to_rdf::{date_column_to_strings, datetime_column_to_strings, df_as_triples};
-use representation::{LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD, OBJECT_COL_NAME, SUBJECT_COL_NAME};
-use std::collections::HashMap;
-use std::io::Write;
+use polars::prelude::col;
 use polars_core::datatypes::DataType;
 use polars_core::frame::DataFrame;
 use polars_core::POOL;
+use representation::polars_to_rdf::{
+    date_column_to_strings, datetime_column_to_strings, df_as_triples,
+};
+use representation::{
+    LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD, OBJECT_COL_NAME, SUBJECT_COL_NAME,
+};
+use std::collections::HashMap;
+use std::io::Write;
 
-mod serializers;
 mod fast_ntriples;
+mod serializers;
 
 const CHUNK_SIZE: usize = 1_024;
 
@@ -44,8 +48,10 @@ impl Triplestore {
                                 ])
                                 .collect()
                                 .unwrap();
-                            fast_ntriples::write_triples_in_df(buf, &df, verb_bytes, &types, CHUNK_SIZE, n_threads)
-                                .unwrap();
+                            fast_ntriples::write_triples_in_df(
+                                buf, &df, verb_bytes, &types, CHUNK_SIZE, n_threads,
+                            )
+                            .unwrap();
                         }
                     } else {
                         let types = HashMap::from([
@@ -53,17 +59,13 @@ impl Triplestore {
                             (OBJECT_COL_NAME.to_string(), object_type.clone()),
                         ]);
                         for lf in tt.get_lazy_frames()? {
-                            let mut df = lf.select([col(SUBJECT_COL_NAME), col(OBJECT_COL_NAME)])
+                            let mut df = lf
+                                .select([col(SUBJECT_COL_NAME), col(OBJECT_COL_NAME)])
                                 .collect()
                                 .unwrap();
                             convert_datelike_to_string(&mut df, OBJECT_COL_NAME);
                             fast_ntriples::write_triples_in_df(
-                                buf,
-                                &df,
-                                verb_bytes,
-                                &types,
-                                CHUNK_SIZE,
-                                n_threads,
+                                buf, &df, verb_bytes, &types, CHUNK_SIZE, n_threads,
                             )
                             .unwrap();
                         }
@@ -94,14 +96,16 @@ impl Triplestore {
     }
 }
 
-pub fn convert_datelike_to_string(df: &mut DataFrame, c:&str) {
+pub fn convert_datelike_to_string(df: &mut DataFrame, c: &str) {
     match df.column(c).unwrap().dtype() {
         DataType::Date => {
-            df.with_column(date_column_to_strings(df.column(c).unwrap())).unwrap();
-        },
-        DataType::Datetime(_, tz_opt) =>  {
-            df.with_column(datetime_column_to_strings(df.column(c).unwrap(), tz_opt)).unwrap();
-        },
+            df.with_column(date_column_to_strings(df.column(c).unwrap()))
+                .unwrap();
+        }
+        DataType::Datetime(_, tz_opt) => {
+            df.with_column(datetime_column_to_strings(df.column(c).unwrap(), tz_opt))
+                .unwrap();
+        }
         _ => {}
     }
 }

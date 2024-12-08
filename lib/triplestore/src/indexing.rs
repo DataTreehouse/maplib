@@ -1,7 +1,7 @@
-use std::cmp;
 use super::Triplestore;
 use crate::errors::TriplestoreError;
 use crate::sparql::errors::SparqlError;
+use log::debug;
 use oxrdf::{NamedNode, Term, Variable};
 use polars_core::datatypes::{AnyValue, CategoricalOrdering};
 use polars_core::prelude::{CategoricalChunked, LogicalType, Series};
@@ -16,8 +16,8 @@ use representation::{
     BaseRDFNodeType, RDFNodeType, OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME,
 };
 use spargebra::algebra::{Expression, GraphPattern};
+use std::cmp;
 use std::collections::{BTreeMap, HashMap};
-use log::debug;
 
 const OFFSET_STEP: usize = 1_000;
 
@@ -112,12 +112,7 @@ impl Triplestore {
     ) -> Result<SolutionMappings, SparqlError> {
         if let Some(index) = &self.index {
             let mut sm = if let Some(Term::NamedNode(subject_iri)) = &subject_term {
-                get_exact_lookup(
-                    subject_iri,
-                    &index.spo,
-                    &index.spo_sparse,
-                    SUBJECT_COL_NAME
-                )
+                get_exact_lookup(subject_iri, &index.spo, &index.spo_sparse, SUBJECT_COL_NAME)
             } else if self.index.as_ref().unwrap().ops.is_some()
                 && matches!(&object_term, Some(Term::NamedNode(_)))
             {

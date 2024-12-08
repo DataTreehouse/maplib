@@ -328,6 +328,7 @@ class Mapping:
         df: DataFrame = None,
         unique_subset: List[str] = None,
         graph: str = None,
+        types: Dict[str, RDFType] = None
     ) -> None:
         """
         Expand a template using a DataFrame
@@ -342,6 +343,7 @@ class Mapping:
         :param df: DataFrame where the columns have the same names as the template arguments
         :param unique_subset: DataFrame column names known to be unique e.g. ["colA", "colB"], for a performance boost (reduce costly deduplication)
         :param graph: The IRI of the graph to add triples to.
+        :param types: The types of the columns.
         """
 
     def expand_default(
@@ -647,4 +649,15 @@ class Mapping:
         Detaches and returns the sprout from the mapping.
 
         @return: The sprout as its own Mapping.
+        """
+
+    def get_predicate_iris(self, graph: str = None) -> List["IRI"]:
+        """
+        :return: The IRIs of the predicates currently in the given graph.
+        """
+
+    def get_predicate(self, iri: "IRI", graph: str=None) -> List["SolutionMappings"]:
+        """
+        :param iri: The predicate IRI
+        :return: A list of the underlying tables that store a given predicate.
         """

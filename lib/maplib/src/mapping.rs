@@ -293,4 +293,18 @@ impl Mapping {
     fn truncate_graph(&mut self, graph: &Option<NamedNode>) {
         self.get_triplestore(graph).truncate();
     }
+
+    pub fn get_predicate_iris(&mut self, graph: &Option<NamedNode>) -> Result<Vec<NamedNode>, SparqlError> {
+        let triplestore = self.get_triplestore(&graph);
+        Ok(triplestore.get_predicate_iris())
+    }
+
+    pub fn get_predicate(
+        &mut self,
+        predicate: &NamedNode,
+        graph: Option<NamedNode>,
+    ) -> Result<Vec<EagerSolutionMappings>, SparqlError> {
+        let triplestore = self.get_triplestore(&graph);
+        Ok(triplestore.get_predicate_eager_solution_mappings(predicate)?)
+    }
 }

@@ -1,4 +1,5 @@
 use super::{TripleTable, Triplestore};
+use crate::errors::TriplestoreError;
 use crate::sparql::errors::SparqlError;
 use oxrdf::{NamedNode, Term};
 use polars::prelude::{col, concat, lit, Expr, IntoLazy, LazyFrame, UnionArgs};
@@ -8,11 +9,45 @@ use representation::multitype::convert_lf_col_to_multitype;
 use representation::rdf_to_polars::{
     rdf_named_node_to_polars_literal_value, rdf_term_to_polars_expr,
 };
-use representation::solution_mapping::SolutionMappings;
+use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use representation::{BaseRDFNodeType, RDFNodeType, OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use std::collections::{HashMap, HashSet};
 
 impl Triplestore {
+    pub fn get_predicate_iris(&self) -> Vec<NamedNode> {
+        let mut iris = vec![];
+        for nn in self.df_map.keys() {
+            iris.push(nn.clone());
+        }
+        iris
+    }
+
+    pub fn get_predicate_eager_solution_mappings(
+        &mut self,
+        predicate: &NamedNode,
+    ) -> Result<Vec<EagerSolutionMappings>, SparqlError> {
+        self.deduplicate()
+            .map_err(SparqlError::DeduplicationError)?;
+        let mut out = vec![];
+        if let Some(map) = self.df_map.get(predicate) {
+            for (subject_type, object_type) in map.keys() {
+                let (lf, _) = self.get_predicate_lf(
+                    predicate,
+                    &Some(SUBJECT_COL_NAME.to_string()),
+                    &None,
+                    &Some(OBJECT_COL_NAME.to_string()),
+                    None,
+                    None,
+                    Some(subject_type),
+                    Some(object_type),
+                )?;
+                let eager_lf = lf.as_eager();
+                out.push(eager_lf);
+            }
+        }
+        Ok(out)
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub fn get_predicate_lf(
         &self,

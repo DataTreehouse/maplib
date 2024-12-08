@@ -2,12 +2,12 @@
 // https://github.com/pola-rs/polars/blob/dc94be767d26943be11a40d6171ccc1c41a86c4f/crates/polars-io/src/csv/write/write_impl/serializer.rs
 // The Polars license can be found in the licensing folder.
 
-use std::fmt::LowerExp;
-use std::io::Write;
 use polars::export::arrow::array::{Array, BooleanArray, PrimitiveArray, Utf8ViewArray};
 use polars::export::arrow::types::NativeType;
 use polars_core::prelude::*;
-use representation::{BaseRDFNodeType};
+use representation::BaseRDFNodeType;
+use std::fmt::LowerExp;
+use std::io::Write;
 
 const TOO_MANY_MSG: &str = "too many items requested from CSV serializer";
 const ARRAY_MISMATCH_MSG: &str = "wrong array type";
@@ -332,7 +332,6 @@ fn quoted_serializer<'a>(serializer: impl Serializer<'a>) -> impl Serializer<'a>
     QuoteSerializer(serializer)
 }
 
-
 pub(super) fn serializer_for<'a>(
     array: &'a dyn Array,
     dtype: &'a DataType,
@@ -384,19 +383,16 @@ pub(super) fn serializer_for<'a>(
             },
             array,
         ),
-        (DataType::String, BaseRDFNodeType::Literal(_)) =>
-        {
-            string_serializer(
-                |iter| Iterator::next(iter).expect(TOO_MANY_MSG),
-                |arr| {
-                    arr.as_any()
-                        .downcast_ref::<Utf8ViewArray>()
-                        .expect(ARRAY_MISMATCH_MSG)
-                        .iter()
-                },
-                array,
-            )
-        }
+        (DataType::String, BaseRDFNodeType::Literal(_)) => string_serializer(
+            |iter| Iterator::next(iter).expect(TOO_MANY_MSG),
+            |arr| {
+                arr.as_any()
+                    .downcast_ref::<Utf8ViewArray>()
+                    .expect(ARRAY_MISMATCH_MSG)
+                    .iter()
+            },
+            array,
+        ),
         (DataType::String, BaseRDFNodeType::Literal(_)) if is_lang_tag => lang_serializer(
             |iter| Iterator::next(iter).expect(TOO_MANY_MSG),
             |arr| {

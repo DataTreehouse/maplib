@@ -1,17 +1,19 @@
 // The following code is based on the code below from Polars by Ritchie Vink and other contributors.
 // https://github.com/pola-rs/polars/blob/dc94be767d26943be11a40d6171ccc1c41a86c4f/crates/polars-io/src/csv/write/write_impl.rs
 // The Polars license can be found in the licensing folder.
-use std::collections::HashMap;
-use std::io::Write;
-use oxrdf::NamedNode;
+use crate::triples_write::serializers::serializer_for;
 use oxrdf::vocab::{rdf, xsd};
+use oxrdf::NamedNode;
 use polars_core::prelude::*;
 use polars_core::POOL;
 use rayon::prelude::*;
-use representation::{BaseRDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD, OBJECT_COL_NAME};
-use crate::triples_write::serializers::serializer_for;
+use representation::{
+    BaseRDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD, OBJECT_COL_NAME,
+};
+use std::collections::HashMap;
+use std::io::Write;
 
-const LINE_TERMINATOR: [u8;2] = [b'.', b'\n'];
+const LINE_TERMINATOR: [u8; 2] = [b'.', b'\n'];
 const SEPARATOR: u8 = b' ';
 const DATA_TYPE_SEP_CHARS: [u8; 2] = [b'^', b'^'];
 
@@ -27,22 +29,30 @@ pub(crate) fn write_triples_in_df<W: Write>(
     let total_rows_per_pool_iter = n_threads * chunk_size;
 
     let mut n_rows_finished = 0;
-    let use_suffix = df.get_columns().iter().map(|x| if x.name() == LANG_STRING_VALUE_FIELD {
-        vec![]
-    } else if x.name() == OBJECT_COL_NAME {
-        if let BaseRDFNodeType::Literal(nn) = rdf_node_types.get(OBJECT_COL_NAME).unwrap() {
-            if needs_explicit_datatype(nn) {
-                let mut suffix: Vec<_> = DATA_TYPE_SEP_CHARS.iter().cloned().collect();
-                suffix.extend_from_slice(nn.to_string().as_bytes());
-                suffix.push(SEPARATOR);
-                suffix
+    let use_suffix = df
+        .get_columns()
+        .iter()
+        .map(|x| {
+            if x.name() == LANG_STRING_VALUE_FIELD {
+                vec![]
+            } else if x.name() == OBJECT_COL_NAME {
+                if let BaseRDFNodeType::Literal(nn) = rdf_node_types.get(OBJECT_COL_NAME).unwrap() {
+                    if needs_explicit_datatype(nn) {
+                        let mut suffix: Vec<_> = DATA_TYPE_SEP_CHARS.iter().cloned().collect();
+                        suffix.extend_from_slice(nn.to_string().as_bytes());
+                        suffix.push(SEPARATOR);
+                        suffix
+                    } else {
+                        vec![SEPARATOR]
+                    }
+                } else {
+                    vec![SEPARATOR]
+                }
             } else {
                 vec![SEPARATOR]
             }
-        } else {
-            vec![SEPARATOR]
-        }
-    } else { vec![SEPARATOR] }).collect::<Vec<_>>();
+        })
+        .collect::<Vec<_>>();
 
     let mut buffers: Vec<_> = (0..n_threads).map(|_| (Vec::new(), Vec::new())).collect();
     while n_rows_finished < len {
@@ -97,7 +107,7 @@ pub(crate) fn write_triples_in_df<W: Write>(
                 write_buffer.push(SEPARATOR);
                 write_buffer.extend_from_slice(verb);
                 write_buffer.push(SEPARATOR);
-                for (serializer,suffix_use) in serializers[1..].iter_mut().zip(&use_suffix[1..]) {
+                for (serializer, suffix_use) in serializers[1..].iter_mut().zip(&use_suffix[1..]) {
                     serializer.serialize(write_buffer);
                     write_buffer.extend_from_slice(suffix_use);
                 }

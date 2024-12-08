@@ -47,15 +47,15 @@ use triplestore::sparql::{QueryResult as SparqlQueryResult, QueryResult};
 use jemallocator::Jemalloc;
 use oxrdf::NamedNode;
 use oxrdfio::RdfFormat;
-use pyo3::types::{PyList, PyString};
+use pyo3::types::{PyDict, PyList, PyString};
 use representation::python::{
     PyBlankNode, PyIRI, PyLiteral, PyPrefix, PyRDFType, PySolutionMappings, PyVariable,
 };
-use representation::solution_mapping::EagerSolutionMappings;
+use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 
 #[cfg(not(target_os = "linux"))]
 use mimalloc::MiMalloc;
-
+use templates::MappingColumnType;
 use templates::python::{a, py_triple, PyArgument, PyInstance, PyParameter, PyTemplate, PyXSD};
 
 #[cfg(target_os = "linux")]
@@ -175,6 +175,7 @@ impl PyMapping {
         df: Option<&Bound<'_, PyAny>>,
         unique_subset: Option<Vec<String>>,
         graph: Option<String>,
+        types: Option<HashMap<String, PyRDFType>>,
     ) -> PyResult<Option<PyObject>> {
         let template = if let Ok(i) = template.extract::<PyIRI>() {
             i.into_inner().to_string()
@@ -199,6 +200,16 @@ impl PyMapping {
             graph: parse_optional_graph(graph)?,
         };
 
+        let types = if let Some(types) = types {
+            let mut new_types = HashMap::new();
+            for (k,v) in types {
+                new_types.insert(k, MappingColumnType::Flat(v.as_rdf_node_type()));
+            }
+            Some(new_types)
+        } else {
+            None
+        };
+
         if let Some(df) = df {
             if df.getattr("height")?.gt(0).unwrap() {
                 let df = polars_df_to_rust_df(df)?;
@@ -208,7 +219,7 @@ impl PyMapping {
                     .expand(
                         &template,
                         Some(df),
-                        None,
+                        types,
                         options.into_rust_expand_options(),
                     )
                     .map_err(MaplibError::from)
@@ -525,6 +536,34 @@ impl PyMapping {
             .write_native_parquet(&folder_path, graph)
             .map_err(PyMaplibError::MappingError)?;
         Ok(())
+    }
+
+    fn get_predicate_iris(&mut self, graph: Option<String>) -> PyResult<Vec<PyIRI>> {
+        let graph = parse_optional_graph(graph)?;
+        let nns = self.inner.get_predicate_iris(&graph).map_err(PyMaplibError::SparqlError)?;
+        Ok(nns.into_iter().map(|x|PyIRI::from(x)).collect())
+    }
+
+    fn get_predicate(
+        &mut self,
+        py: Python<'_>,
+        iri: PyIRI,
+        graph: Option<String>,
+    ) -> PyResult<Vec<PyObject>> {
+        let graph = parse_optional_graph(graph)?;
+        let eager_sms = self
+            .inner
+            .get_predicate(&iri.into_inner(), graph)
+            .map_err(|x| PyMaplibError::SparqlError(x))?;
+        let mut out = vec![];
+        for EagerSolutionMappings {
+            mappings,
+            rdf_node_types,
+        } in eager_sms {
+            let py_sm = df_to_py_df(mappings, rdf_node_types, None, true, py)?;
+            out.push(py_sm);
+        }
+        Ok(out)
     }
 }
 
