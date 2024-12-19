@@ -267,6 +267,7 @@ impl PyMapping {
         Ok(format!("{}", tmpl))
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn query(
         &mut self,
         py: Python<'_>,
