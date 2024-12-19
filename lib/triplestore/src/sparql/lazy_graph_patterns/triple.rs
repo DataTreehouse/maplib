@@ -1,23 +1,16 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
 use representation::query_context::Context;
-use representation::rdf_to_polars::{
-    rdf_literal_to_polars_literal_value, rdf_named_node_to_polars_literal_value,
-};
 use representation::solution_mapping::SolutionMappings;
 
-use crate::dblf::{create_empty_lf_datatypes, multiple_tt_to_lf};
 use log::debug;
 use oxrdf::{NamedNode, Term};
 use polars::prelude::IntoLazy;
-use polars::prelude::{col, lit, AnyValue, DataFrame, DataType, Expr, JoinType, Series};
-use polars_core::prelude::IntoColumn;
-use query_processing::graph_patterns::{join, union};
-use representation::multitype::convert_lf_col_to_multitype;
+use polars::prelude::{col, lit, AnyValue, DataType, JoinType};
+use query_processing::graph_patterns::join;
 use representation::{literal_iri_to_namednode, BaseRDFNodeType, RDFNodeType};
-use representation::{OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 impl Triplestore {
     pub fn lazy_triple_pattern(
@@ -112,11 +105,7 @@ impl Triplestore {
                 } else {
                     predicates = None;
                 }
-                let predicates: Option<Vec<_>> = if let Some(predicates) = predicates {
-                    Some(predicates.into_iter().collect())
-                } else {
-                    None
-                };
+                let predicates: Option<Vec<_>> = predicates.map(|predicates| predicates.into_iter().collect());
                 self.get_predicates_lf(
                     predicates,
                     &subject_rename,
@@ -142,7 +131,7 @@ impl Triplestore {
             if height_0 {
                 // Important that overlapping cols are dropped from mappings and not from lf,
                 // since we also overwrite rdf_node_types with dts correspondingly below.
-                mappings = mappings.drop(overlap.iter().map(|x| col(x)));
+                mappings = mappings.drop(overlap.iter().map(col));
                 if colnames.is_empty() {
                     mappings = mappings.filter(lit(false));
                 } else {

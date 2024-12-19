@@ -22,12 +22,12 @@ pub fn convert_lf_col_to_multitype(c: &str, dt: &RDFNodeType) -> Expr {
     match dt {
         RDFNodeType::IRI => as_struct(vec![
             col(c).alias(MULTI_IRI_DT),
-            lit(true).alias(&create_multi_has_this_type_column_name(MULTI_IRI_DT)),
+            lit(true).alias(create_multi_has_this_type_column_name(MULTI_IRI_DT)),
         ])
         .alias(c),
         RDFNodeType::BlankNode => as_struct(vec![
             col(c).alias(MULTI_BLANK_DT),
-            lit(true).alias(&create_multi_has_this_type_column_name(MULTI_BLANK_DT)),
+            lit(true).alias(create_multi_has_this_type_column_name(MULTI_BLANK_DT)),
         ])
         .alias(c),
         RDFNodeType::Literal(l) => {
@@ -41,7 +41,7 @@ pub fn convert_lf_col_to_multitype(c: &str, dt: &RDFNodeType) -> Expr {
                         .struct_()
                         .field_by_name(LANG_STRING_LANG_FIELD)
                         .alias(LANG_STRING_LANG_FIELD),
-                    lit(true).alias(&create_multi_has_this_type_column_name(
+                    lit(true).alias(create_multi_has_this_type_column_name(
                         LANG_STRING_VALUE_FIELD,
                     )),
                 ])
@@ -51,14 +51,14 @@ pub fn convert_lf_col_to_multitype(c: &str, dt: &RDFNodeType) -> Expr {
 
                 as_struct(vec![
                     col(c).alias(&colname),
-                    lit(true).alias(&create_multi_has_this_type_column_name(&colname)),
+                    lit(true).alias(create_multi_has_this_type_column_name(&colname)),
                 ])
                 .alias(c)
             }
         }
         RDFNodeType::None => as_struct(vec![
             col(c).alias(MULTI_NONE_DT),
-            lit(true).alias(&create_multi_has_this_type_column_name(MULTI_NONE_DT)),
+            lit(true).alias(create_multi_has_this_type_column_name(MULTI_NONE_DT)),
         ])
         .alias(c),
         RDFNodeType::MultiType(..) => col(c),
@@ -837,7 +837,7 @@ pub fn join_workaround(
         for k in right_datatypes.keys() {
             if left_datatypes.contains_key(k) {
                 if let Some((_, right_prefixed_inner_columns)) = right_exploded.get(k) {
-                    to_drop_right.extend(right_prefixed_inner_columns.iter().map(|x| col(x)));
+                    to_drop_right.extend(right_prefixed_inner_columns.iter().map(col));
                 } else {
                     to_drop_right.push(col(k));
                 }
@@ -942,7 +942,7 @@ pub fn group_by_workaround(
     let mut new_by = vec![];
     for b in by {
         if let Some((_, cols)) = maps.get(&b) {
-            new_by.extend(cols.iter().map(|x| col(x)));
+            new_by.extend(cols.iter().map(col));
         } else {
             new_by.push(col(&b));
         }

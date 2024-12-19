@@ -389,12 +389,12 @@ pub fn datetime_column_to_strings(column: &Column, tz_opt: &Option<TimeZone>) ->
     if let Some(tz) = tz_opt {
         hack_format_timestamp_with_timezone(column, &mut tz.clone())
     } else {
-        return column
+        column
             .datetime()
             .unwrap()
             .strftime(XSD_DATETIME_WITHOUT_TZ_FORMAT)
             .expect("Conversion OK")
-            .into_column();
+            .into_column()
     }
 }
 

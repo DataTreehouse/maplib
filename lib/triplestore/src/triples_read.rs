@@ -396,7 +396,7 @@ pub enum MyFromSliceQuadReaderKind<'a> {
     NTriplesPar(SliceNTriplesParser<'a>),
 }
 
-impl<'a> Iterator for MyFromSliceQuadReader<'a> {
+impl Iterator for MyFromSliceQuadReader<'_> {
     type Item = Result<Quad, RdfSyntaxError>;
 
     fn next(&mut self) -> Option<Self::Item> {

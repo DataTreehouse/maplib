@@ -52,7 +52,7 @@ pub enum RDFNodeType {
 
 struct StringVisitor;
 
-impl<'de> Visitor<'de> for StringVisitor {
+impl Visitor<'_> for StringVisitor {
     type Value = NamedNode;
 
     fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {

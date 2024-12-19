@@ -283,7 +283,7 @@ impl FromStr for Query {
     }
 }
 
-impl<'a> TryFrom<&'a str> for Query {
+impl TryFrom<&str> for Query {
     type Error = SparqlSyntaxError;
 
     fn try_from(query: &str) -> Result<Self, Self::Error> {
@@ -291,7 +291,7 @@ impl<'a> TryFrom<&'a str> for Query {
     }
 }
 
-impl<'a> TryFrom<&'a String> for Query {
+impl TryFrom<&String> for Query {
     type Error = SparqlSyntaxError;
 
     fn try_from(query: &String) -> Result<Self, Self::Error> {

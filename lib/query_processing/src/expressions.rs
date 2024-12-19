@@ -9,8 +9,7 @@ use oxrdf::{Literal, NamedNode, NamedNodeRef, Variable};
 use polars::datatypes::{DataType, TimeUnit};
 use polars::frame::UniqueKeepStrategy;
 use polars::prelude::{
-    coalesce, col, concat_str, is_in, lit, when, Expr, IntoLazy, LazyFrame, LiteralValue, Operator,
-    Series,
+    coalesce, col, concat_str, lit, when, Expr, LazyFrame, LiteralValue, Operator,
 };
 use representation::multitype::{all_multi_main_cols, multi_has_this_type_column};
 use representation::multitype::{non_multi_type_string, sparql_str_function};

@@ -27,7 +27,7 @@ use polars_core::datatypes::CategoricalOrdering;
 use polars_core::utils::concat_df;
 use rayon::iter::ParallelIterator;
 use rayon::iter::{IntoParallelRefIterator, ParallelDrainRange};
-use representation::multitype::{lf_column_to_categorical, lf_columns_to_categorical};
+use representation::multitype::lf_columns_to_categorical;
 use representation::rdf_to_polars::rdf_named_node_to_polars_literal_value;
 use representation::solution_mapping::SolutionMappings;
 use representation::{

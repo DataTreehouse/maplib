@@ -315,7 +315,7 @@ impl Mapping {
                 });
             }
         }
-        let mut use_triplestore = if let Some(graph) = graph {
+        let use_triplestore = if let Some(graph) = graph {
             if !self.triplestores_map.contains_key(graph) {
                 self.triplestores_map
                     .insert(graph.clone(), Triplestore::new(None).unwrap());
@@ -559,7 +559,7 @@ fn create_list_triples(
         .rename(FIRST_COL, SUBJECT_COL_NAME.into())
         .unwrap();
 
-    let mut rest_df = list_df
+    let rest_df = list_df
         .lazy()
         .select([
             col(FIRST_COL).alias(SUBJECT_COL_NAME),
@@ -606,7 +606,7 @@ fn create_list_triples(
             has_unique_subset: false,
         },
     ];
-    *blank_node_counter = *blank_node_counter + df.height();
+    *blank_node_counter += df.height();
     Ok(results)
 }
 

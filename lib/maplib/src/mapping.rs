@@ -295,7 +295,7 @@ impl Mapping {
     }
 
     pub fn get_predicate_iris(&mut self, graph: &Option<NamedNode>) -> Result<Vec<NamedNode>, SparqlError> {
-        let triplestore = self.get_triplestore(&graph);
+        let triplestore = self.get_triplestore(graph);
         Ok(triplestore.get_predicate_iris())
     }
 
@@ -305,6 +305,6 @@ impl Mapping {
         graph: Option<NamedNode>,
     ) -> Result<Vec<EagerSolutionMappings>, SparqlError> {
         let triplestore = self.get_triplestore(&graph);
-        Ok(triplestore.get_predicate_eager_solution_mappings(predicate)?)
+        triplestore.get_predicate_eager_solution_mappings(predicate)
     }
 }

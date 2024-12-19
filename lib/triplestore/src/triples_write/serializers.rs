@@ -6,7 +6,6 @@ use polars::export::arrow::array::{Array, BooleanArray, PrimitiveArray, Utf8View
 use polars::export::arrow::types::NativeType;
 use polars_core::prelude::*;
 use representation::BaseRDFNodeType;
-use std::fmt::LowerExp;
 use std::io::Write;
 
 const TOO_MANY_MSG: &str = "too many items requested from CSV serializer";
@@ -47,11 +46,8 @@ fn make_serializer<'a, T, I: Iterator<Item = Option<T>>>(
     {
         fn serialize(&mut self, buf: &mut Vec<u8>) {
             let item = self.iter.next().expect(TOO_MANY_MSG);
-            match item {
-                Some(item) => {
-                    (self.f)(item, buf);
-                }
-                None => {} //buf.extend_from_slice(options.null.as_bytes()),
+            if let Some(item) = item {
+                (self.f)(item, buf);
             }
         }
 

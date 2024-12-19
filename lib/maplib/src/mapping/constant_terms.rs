@@ -108,7 +108,7 @@ pub fn constant_to_expr(
             }
         }
     };
-    if let Some(ptype_inferred) = ptype_opt {
+    if let Some(_ptype_inferred) = ptype_opt {
         // TODO: General validation logic for dynamic and constant data variables.
         // if !matches!(ptype, PType::None) && ptype_inferred != &ptype {
         //     return Err(MappingError::ConstantDoesNotMatchDataType(

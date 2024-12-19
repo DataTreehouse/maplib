@@ -4,7 +4,7 @@ use log::debug;
 use parquet_io::{property_to_filename, write_parquet, ParquetIOError};
 use rayon::iter::ParallelDrainRange;
 use rayon::iter::ParallelIterator;
-use representation::{BaseRDFNodeType, RDFNodeType};
+use representation::BaseRDFNodeType;
 use std::path::Path;
 use std::time::Instant;
 

@@ -23,7 +23,7 @@ use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use representation::RDFNodeType;
 use representation::{OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME};
 use sparesults::QueryResultsSerializer;
-use sparesults::{QueryResultsFormat, QuerySolution};
+use sparesults::QueryResultsFormat;
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 use spargebra::Query;
 use std::collections::HashMap;
@@ -43,7 +43,7 @@ impl QueryResult {
                     variables,
                     solutions,
                 } = df_as_result(df.clone(), map);
-                let mut json_serializer =
+                let json_serializer =
                     QueryResultsSerializer::from_format(QueryResultsFormat::Json);
                 let mut buffer = vec![];
                 let mut serializer = json_serializer
@@ -153,7 +153,7 @@ impl Triplestore {
                 let SolutionMappings {
                     mappings,
                     rdf_node_types: types,
-                } = self.lazy_graph_pattern(&pattern, None, &context, parameters)?;
+                } = self.lazy_graph_pattern(pattern, None, &context, parameters)?;
                 let df = mappings.with_streaming(streaming).collect().unwrap();
                 Ok(QueryResult::Select(df, types))
             }

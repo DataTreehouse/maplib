@@ -6,7 +6,7 @@ use oxrdf::{NamedNode, Term, Variable};
 use polars_core::datatypes::{AnyValue, CategoricalOrdering};
 use polars_core::prelude::{CategoricalChunked, LogicalType, Series};
 use polars_core::utils::Container;
-use query_processing::graph_patterns::{filter, order_by, union};
+use query_processing::graph_patterns::{order_by, union};
 use representation::multitype::{
     force_convert_multicol_to_single_col, lf_columns_to_categorical, non_multi_type_string,
 };
@@ -16,7 +16,6 @@ use representation::{
     BaseRDFNodeType, RDFNodeType, OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME,
 };
 use spargebra::algebra::{Expression, GraphPattern};
-use std::cmp;
 use std::collections::{BTreeMap, HashMap};
 
 const OFFSET_STEP: usize = 1_000;
@@ -231,16 +230,16 @@ fn get_exact_lookup(
     let mut range_backwards = sparse_map.range(..iri_str.to_string());
     while let Some((s, prev)) = range_backwards.next_back() {
         if s != iri_str {
-            from = prev.clone();
+            from = *prev;
             break;
         }
     }
-    let mut range_forwards = sparse_map.range(iri_str.to_string()..);
+    let range_forwards = sparse_map.range(iri_str.to_string()..);
     let height = eager_sm.mappings.height();
     let mut offset = height - from;
-    while let Some((s, next)) = range_forwards.next() {
+    for (s, next) in range_forwards {
         if s != iri_str {
-            offset = next.clone() - from;
+            offset = *next - from;
             break;
         }
     }
@@ -295,17 +294,13 @@ fn update_at_offset(
 
 fn create_sparse_map(ser: &Series, rdf_node_type: &RDFNodeType) -> BTreeMap<String, usize> {
     let iri_ser = get_iri_ser(ser, rdf_node_type);
-    let iri_cat_ser = if let Some(iri_ser) = &iri_ser {
-        Some(iri_ser.categorical().unwrap())
-    } else {
-        None
-    };
+    let iri_cat_ser = iri_ser.as_ref().map(|iri_ser| iri_ser.categorical().unwrap());
     let mut sparse_map = BTreeMap::new();
     if let Some(iri_cat_ser) = iri_cat_ser {
         let mut current_offset = 0;
         while current_offset < ser.len() {
             update_at_offset(iri_cat_ser, current_offset, &mut sparse_map);
-            current_offset = current_offset + OFFSET_STEP;
+            current_offset += OFFSET_STEP;
         }
     }
     sparse_map
