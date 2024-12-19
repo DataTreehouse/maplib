@@ -2,10 +2,7 @@ use crate::solution_mapping::SolutionMappings;
 use crate::{BaseRDFNodeType, RDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD};
 use oxrdf::vocab::{rdf, xsd};
 use polars::datatypes::PlSmallStr;
-use polars::prelude::{
-    as_struct, coalesce, col, lit, CategoricalOrdering, DataFrame, DataType, Expr, IntoLazy,
-    JoinArgs, JoinType, LazyFrame, LazyGroupBy, LiteralValue, UniqueKeepStrategy,
-};
+use polars::prelude::{as_struct, coalesce, col, lit, CategoricalOrdering, DataFrame, DataType, Expr, IntoLazy, JoinArgs, JoinType, LazyFrame, LazyGroupBy, LiteralValue, MaintainOrderJoin, UniqueKeepStrategy};
 
 use std::collections::{HashMap, HashSet};
 
@@ -862,6 +859,7 @@ pub fn join_workaround(
             slice: None,
             join_nulls: true,
             coalesce: Default::default(),
+            maintain_order: MaintainOrderJoin::None,
         };
         left_mappings = left_mappings.join(right_mappings, &on, &on, join_args);
     } else {

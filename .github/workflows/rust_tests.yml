@@ -19,7 +19,7 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Upgrade rust with nightly and pull oxigraph and dremio image
+    - name: Upgrade rust with nightly
       run: |
         rustup update
         rustup toolchain install ${{ env.RUST_TOOLCHAIN }}

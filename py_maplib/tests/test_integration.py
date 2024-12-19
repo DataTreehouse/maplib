@@ -266,9 +266,7 @@ def test_everything_from_subject_query(windpower_mapping):
 SELECT ?b ?c WHERE {
     <https://github.com/magbak/chrontext/windpower_example#Generator31> ?b ?c .
 } ORDER BY ?b ?c"""
-    df = windpower_mapping.query(query)
-    print(df)
-
+    windpower_mapping.query(query)
 
 
 def test_larger_query(windpower_mapping):
@@ -366,10 +364,7 @@ SELECT ?site_label ?node WHERE {
     ?site (rds:hasFunctionalAspect / ^rds:hasFunctionalAspectNode)+ ?node .
 }"""
     by = ["site_label", "node"]
-    start = time.time()
     df = windpower_mapping.query(query).sort(by)
-    end = time.time()
-    print(f"Took {round(end-start, 3)}")
     filename = TESTDATA_PATH / "iterated_property_path_query.csv"
     # df.write_csv(filename)
     expected_df = pl.scan_csv(filename).sort(by).collect()
@@ -389,10 +384,7 @@ SELECT ?site_label WHERE {
     ?site (rds:hasFunctionalAspect / ^rds:hasFunctionalAspectNode)+ <https://github.com/magbak/chrontext/windpower_example#Generator40> .
 }"""
     by = ["site_label"]
-    start = time.time()
     df = windpower_mapping.query(query).sort(by)
-    end = time.time()
-    print(f"Took {round(end-start, 3)}")
     filename = TESTDATA_PATH / "iterated_property_path_constant_object_query.csv"
     # df.write_csv(filename)
     expected_df = pl.scan_csv(filename).sort(by).collect()

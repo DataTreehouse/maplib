@@ -1,9 +1,8 @@
 use crate::mapping::errors::MappingError;
-use oxrdf::vocab::{rdfs, xsd};
-use oxrdf::NamedNode;
+use oxrdf::vocab::{rdfs};
 use polars::datatypes::DataType;
 use polars::frame::DataFrame;
-use polars::prelude::{Column, Series};
+use polars::prelude::{Column};
 use representation::polars_to_rdf::polars_type_to_literal_type;
 use representation::{BaseRDFNodeType, RDFNodeType};
 use std::collections::{HashMap, HashSet};
