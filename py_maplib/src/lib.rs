@@ -47,11 +47,11 @@ use triplestore::sparql::{QueryResult as SparqlQueryResult, QueryResult};
 use jemallocator::Jemalloc;
 use oxrdf::NamedNode;
 use oxrdfio::RdfFormat;
-use pyo3::types::{PyDict, PyList, PyString};
+use pyo3::types::{PyList, PyString};
 use representation::python::{
     PyBlankNode, PyIRI, PyLiteral, PyPrefix, PyRDFType, PySolutionMappings, PyVariable,
 };
-use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
+use representation::solution_mapping::EagerSolutionMappings;
 
 #[cfg(not(target_os = "linux"))]
 use mimalloc::MiMalloc;
@@ -541,7 +541,7 @@ impl PyMapping {
     fn get_predicate_iris(&mut self, graph: Option<String>) -> PyResult<Vec<PyIRI>> {
         let graph = parse_optional_graph(graph)?;
         let nns = self.inner.get_predicate_iris(&graph).map_err(PyMaplibError::SparqlError)?;
-        Ok(nns.into_iter().map(|x|PyIRI::from(x)).collect())
+        Ok(nns.into_iter().map(PyIRI::from).collect())
     }
 
     fn get_predicate(
@@ -554,7 +554,7 @@ impl PyMapping {
         let eager_sms = self
             .inner
             .get_predicate(&iri.into_inner(), graph)
-            .map_err(|x| PyMaplibError::SparqlError(x))?;
+            .map_err(PyMaplibError::SparqlError)?;
         let mut out = vec![];
         for EagerSolutionMappings {
             mappings,
