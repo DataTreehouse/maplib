@@ -294,7 +294,9 @@ fn update_at_offset(
 
 fn create_sparse_map(ser: &Series, rdf_node_type: &RDFNodeType) -> BTreeMap<String, usize> {
     let iri_ser = get_iri_ser(ser, rdf_node_type);
-    let iri_cat_ser = iri_ser.as_ref().map(|iri_ser| iri_ser.categorical().unwrap());
+    let iri_cat_ser = iri_ser
+        .as_ref()
+        .map(|iri_ser| iri_ser.categorical().unwrap());
     let mut sparse_map = BTreeMap::new();
     if let Some(iri_cat_ser) = iri_cat_ser {
         let mut current_offset = 0;

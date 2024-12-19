@@ -105,7 +105,8 @@ impl Triplestore {
                 } else {
                     predicates = None;
                 }
-                let predicates: Option<Vec<_>> = predicates.map(|predicates| predicates.into_iter().collect());
+                let predicates: Option<Vec<_>> =
+                    predicates.map(|predicates| predicates.into_iter().collect());
                 self.get_predicates_lf(
                     predicates,
                     &subject_rename,

@@ -2,7 +2,11 @@ use crate::solution_mapping::SolutionMappings;
 use crate::{BaseRDFNodeType, RDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD};
 use oxrdf::vocab::{rdf, xsd};
 use polars::datatypes::PlSmallStr;
-use polars::prelude::{as_struct, coalesce, col, lit, CategoricalOrdering, DataFrame, DataType, Expr, IntoLazy, JoinArgs, JoinType, LazyFrame, LazyGroupBy, LiteralValue, MaintainOrderJoin, UniqueKeepStrategy};
+use polars::prelude::{
+    as_struct, coalesce, col, lit, CategoricalOrdering, DataFrame, DataType, Expr, IntoLazy,
+    JoinArgs, JoinType, LazyFrame, LazyGroupBy, LiteralValue, MaintainOrderJoin,
+    UniqueKeepStrategy,
+};
 
 use std::collections::{HashMap, HashSet};
 

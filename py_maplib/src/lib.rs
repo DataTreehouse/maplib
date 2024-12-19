@@ -55,8 +55,8 @@ use representation::solution_mapping::EagerSolutionMappings;
 
 #[cfg(not(target_os = "linux"))]
 use mimalloc::MiMalloc;
-use templates::MappingColumnType;
 use templates::python::{a, py_triple, PyArgument, PyInstance, PyParameter, PyTemplate, PyXSD};
+use templates::MappingColumnType;
 
 #[cfg(target_os = "linux")]
 #[global_allocator]
@@ -202,7 +202,7 @@ impl PyMapping {
 
         let types = if let Some(types) = types {
             let mut new_types = HashMap::new();
-            for (k,v) in types {
+            for (k, v) in types {
                 new_types.insert(k, MappingColumnType::Flat(v.as_rdf_node_type()));
             }
             Some(new_types)
@@ -540,7 +540,10 @@ impl PyMapping {
 
     fn get_predicate_iris(&mut self, graph: Option<String>) -> PyResult<Vec<PyIRI>> {
         let graph = parse_optional_graph(graph)?;
-        let nns = self.inner.get_predicate_iris(&graph).map_err(PyMaplibError::SparqlError)?;
+        let nns = self
+            .inner
+            .get_predicate_iris(&graph)
+            .map_err(PyMaplibError::SparqlError)?;
         Ok(nns.into_iter().map(PyIRI::from).collect())
     }
 
@@ -559,7 +562,8 @@ impl PyMapping {
         for EagerSolutionMappings {
             mappings,
             rdf_node_types,
-        } in eager_sms {
+        } in eager_sms
+        {
             let py_sm = df_to_py_df(mappings, rdf_node_types, None, true, py)?;
             out.push(py_sm);
         }

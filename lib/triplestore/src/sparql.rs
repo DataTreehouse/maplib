@@ -22,8 +22,8 @@ use representation::rdf_to_polars::{
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use representation::RDFNodeType;
 use representation::{OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME};
-use sparesults::QueryResultsSerializer;
 use sparesults::QueryResultsFormat;
+use sparesults::QueryResultsSerializer;
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 use spargebra::Query;
 use std::collections::HashMap;
@@ -43,8 +43,7 @@ impl QueryResult {
                     variables,
                     solutions,
                 } = df_as_result(df.clone(), map);
-                let json_serializer =
-                    QueryResultsSerializer::from_format(QueryResultsFormat::Json);
+                let json_serializer = QueryResultsSerializer::from_format(QueryResultsFormat::Json);
                 let mut buffer = vec![];
                 let mut serializer = json_serializer
                     .serialize_solutions_to_writer(&mut buffer, variables.clone())
