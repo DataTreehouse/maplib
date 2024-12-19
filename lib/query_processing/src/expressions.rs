@@ -368,7 +368,7 @@ pub fn exists(
 pub fn func_expression(
     mut solution_mappings: SolutionMappings,
     func: &Function,
-    args: &Vec<Expression>,
+    args: &[Expression],
     args_contexts: HashMap<usize, Context>,
     outer_context: &Context,
 ) -> Result<SolutionMappings, QueryProcessingError> {

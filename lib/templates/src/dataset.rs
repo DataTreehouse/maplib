@@ -278,18 +278,14 @@ fn lub(
     left: &PType,
     right: &PType,
 ) -> Result<PType, TemplateError> {
-    if left == right {
-        return Ok(left.clone());
-    } else if left.is_iri() && right.is_iri() {
+    if left == right || left.is_iri() && right.is_iri() {
         return Ok(left.clone());
     } else if let (PType::Basic(left_basic), PType::Basic(right_basic)) = (left, right) {
-        if left_basic.as_ref() == rdfs::RESOURCE {
-            return Ok(left.clone());
-        } else if right_basic.as_ref() == rdfs::RESOURCE {
-            return Ok(left.clone());
-        } else if is_literal_subtype(left_basic, right_basic) {
-            return Ok(left.clone());
-        } else if is_literal_subtype(right_basic, left_basic) {
+        if left_basic.as_ref() == rdfs::RESOURCE
+            || right_basic.as_ref() == rdfs::RESOURCE
+            || is_literal_subtype(left_basic, right_basic)
+            || is_literal_subtype(right_basic, left_basic)
+        {
             return Ok(left.clone());
         } else {
             // Returns error

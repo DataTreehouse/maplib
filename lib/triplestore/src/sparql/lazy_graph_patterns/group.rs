@@ -14,7 +14,7 @@ impl Triplestore {
     pub(crate) fn lazy_group(
         &self,
         inner: &GraphPattern,
-        variables: &Vec<Variable>,
+        variables: &[Variable],
         aggregates: &[(Variable, AggregateExpression)],
         solution_mapping: Option<SolutionMappings>,
         context: &Context,

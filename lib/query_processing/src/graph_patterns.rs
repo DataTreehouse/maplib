@@ -68,7 +68,7 @@ pub fn filter(
 
 pub fn prepare_group_by(
     mut solution_mappings: SolutionMappings,
-    variables: &Vec<Variable>,
+    variables: &[Variable],
 ) -> (SolutionMappings, Vec<Expr>, Option<String>) {
     let by: Vec<Expr>;
     let dummy_varname = if variables.is_empty() {
@@ -202,7 +202,7 @@ pub fn minus(
 
 pub fn order_by(
     solution_mappings: SolutionMappings,
-    columns: &Vec<String>,
+    columns: &[String],
     asc_ordering: Vec<bool>,
 ) -> Result<SolutionMappings, QueryProcessingError> {
     if columns.is_empty() {

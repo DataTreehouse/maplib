@@ -29,6 +29,7 @@ impl PyValidationReport {
         self.inner.conforms
     }
 
+    #[pyo3(signature = (native_dataframe=None, include_datatypes=None))]
     pub fn results(
         &self,
         native_dataframe: Option<bool>,
@@ -54,6 +55,7 @@ impl PyValidationReport {
         Ok(report)
     }
 
+    #[pyo3(signature = (native_dataframe=None, include_datatypes=None))]
     pub fn details(
         &self,
         native_dataframe: Option<bool>,

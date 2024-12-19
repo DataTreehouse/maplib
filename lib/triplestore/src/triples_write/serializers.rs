@@ -163,13 +163,9 @@ pub(super) fn string_serializer<'a, Iter: Send + 'a>(
         let Some(s) = f(iter) else {
             return;
         };
-        let mut chars = s.chars();
-        loop {
-            if let Some(c) = chars.next() {
-                write_escaped_char(c, buf);
-            } else {
-                break;
-            }
+        let chars = s.chars();
+        for c in chars {
+            write_escaped_char(c, buf);
         }
         buf.push(QUOTE_CHAR);
     };

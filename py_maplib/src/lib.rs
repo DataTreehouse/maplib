@@ -101,6 +101,7 @@ type ParametersType<'a> = HashMap<String, (Bound<'a, PyAny>, HashMap<String, PyR
 #[pymethods]
 impl PyMapping {
     #[new]
+    #[pyo3(signature = (documents=None, caching_folder=None))]
     fn new(
         documents: Option<&Bound<'_, PyAny>>,
         caching_folder: Option<&Bound<'_, PyAny>>,
@@ -169,6 +170,7 @@ impl PyMapping {
         }
     }
 
+    #[pyo3(signature = (template, df=None, unique_subset=None, graph=None, types=None))]
     fn expand(
         &mut self,
         template: &Bound<'_, PyAny>,
@@ -238,6 +240,7 @@ impl PyMapping {
         Ok(None)
     }
 
+    #[pyo3(signature = (df, primary_key_column, template_prefix=None, predicate_uri_prefix=None, graph=None))]
     fn expand_default(
         &mut self,
         df: &Bound<'_, PyAny>,
@@ -268,6 +271,7 @@ impl PyMapping {
     }
 
     #[allow(clippy::too_many_arguments)]
+    #[pyo3(signature = (query, parameters=None, include_datatypes=None, native_dataframe=None, graph=None, streaming=None, return_json=None))]
     fn query(
         &mut self,
         py: Python<'_>,
@@ -299,6 +303,7 @@ impl PyMapping {
         )
     }
 
+    #[pyo3(signature = (graph=None))]
     fn create_index(&mut self, graph: Option<String>) -> PyResult<()> {
         let graph = parse_optional_graph(graph)?;
         self.inner
@@ -307,6 +312,7 @@ impl PyMapping {
         Ok(())
     }
 
+    #[pyo3(signature = (shape_graph, include_details=None, include_conforms=None, include_shape_graph=None, streaming=None))]
     fn validate(
         &mut self,
         shape_graph: String,
@@ -339,6 +345,7 @@ impl PyMapping {
         Ok(PyValidationReport::new(report, shape_graph_triplestore))
     }
 
+    #[pyo3(signature = (query, parameters=None, transient=None, streaming=None, source_graph=None, target_graph=None))]
     fn insert(
         &mut self,
         query: String,
@@ -373,6 +380,7 @@ impl PyMapping {
         Ok(())
     }
 
+    #[pyo3(signature = (query, parameters=None, transient=None, streaming=None, source_graph=None, target_graph=None))]
     fn insert_sprout(
         &mut self,
         query: String,
@@ -412,6 +420,7 @@ impl PyMapping {
     }
 
     #[allow(clippy::too_many_arguments)]
+    #[pyo3(signature = (file_path, format=None, base_iri=None, transient=None, parallel=None, checked=None, deduplicate=None, graph=None, replace_graph=None))]
     fn read_triples(
         &mut self,
         file_path: &Bound<'_, PyAny>,
@@ -445,6 +454,7 @@ impl PyMapping {
     }
 
     #[allow(clippy::too_many_arguments)]
+    #[pyo3(signature = (s, format, base_iri=None, transient=None, parallel=None, checked=None, deduplicate=None, graph=None, replace_graph=None))]
     fn read_triples_string(
         &mut self,
         s: &str,
@@ -474,6 +484,8 @@ impl PyMapping {
             .map_err(PyMaplibError::from)?;
         Ok(())
     }
+
+    #[pyo3(signature = (file_path, graph=None))]
     fn write_ntriples(
         &mut self,
         file_path: &Bound<'_, PyAny>,
@@ -483,6 +495,7 @@ impl PyMapping {
         self.write_triples(file_path, Some("ntriples".to_string()), graph)
     }
 
+    #[pyo3(signature = (file_path, format=None, graph=None))]
     fn write_triples(
         &mut self,
         file_path: &Bound<'_, PyAny>,
@@ -505,11 +518,13 @@ impl PyMapping {
         Ok(())
     }
 
+    #[pyo3(signature = (graph=None))]
     fn write_ntriples_string(&mut self, graph: Option<String>) -> PyResult<String> {
         warn!("use write_triples_string with format=\"ntriples\" instead");
         self.write_triples_string(Some("ntriples".to_string()), graph)
     }
 
+    #[pyo3(signature = (format=None, graph=None))]
     fn write_triples_string(
         &mut self,
         format: Option<String>,
@@ -526,6 +541,7 @@ impl PyMapping {
         Ok(String::from_utf8(out).unwrap())
     }
 
+    #[pyo3(signature = (folder_path, graph=None))]
     fn write_native_parquet(
         &mut self,
         folder_path: &Bound<'_, PyAny>,
@@ -539,6 +555,7 @@ impl PyMapping {
         Ok(())
     }
 
+    #[pyo3(signature = (graph=None))]
     fn get_predicate_iris(&mut self, graph: Option<String>) -> PyResult<Vec<PyIRI>> {
         let graph = parse_optional_graph(graph)?;
         let nns = self
@@ -548,6 +565,7 @@ impl PyMapping {
         Ok(nns.into_iter().map(PyIRI::from).collect())
     }
 
+    #[pyo3(signature = (iri, graph=None))]
     fn get_predicate(
         &mut self,
         py: Python<'_>,

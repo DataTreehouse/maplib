@@ -30,6 +30,8 @@ pub fn query_select(
     df_as_result(df, &types)
 }
 
+#[allow(clippy::too_many_arguments)]
+#[allow(clippy::type_complexity)]
 pub fn get_seven_query_solutions(
     query_solution: Vec<Option<Term>>,
     variables: &[Variable],
@@ -78,6 +80,7 @@ pub fn get_seven_query_solutions(
     (s1, s2, s3, s4, s5, s6, s7)
 }
 
+#[allow(clippy::type_complexity)]
 pub fn get_five_query_solutions(
     query_solution: Vec<Option<Term>>,
     variables: &[Variable],

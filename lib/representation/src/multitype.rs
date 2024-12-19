@@ -728,7 +728,8 @@ pub fn known_convert_lf_multicol_to_single(
     lf
 }
 
-pub fn explode_multicols<'a>(
+#[allow(clippy::type_complexity)]
+pub fn explode_multicols(
     mut mappings: LazyFrame,
     rdf_node_types: &HashMap<String, RDFNodeType>,
 ) -> (LazyFrame, HashMap<String, (Vec<String>, Vec<String>)>) {
@@ -930,6 +931,7 @@ pub fn unique_workaround(
     lf
 }
 
+#[allow(clippy::type_complexity)]
 pub fn group_by_workaround(
     lf: LazyFrame,
     rdf_node_types: &HashMap<String, RDFNodeType>,

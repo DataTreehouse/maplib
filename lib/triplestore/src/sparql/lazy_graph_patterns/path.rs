@@ -622,6 +622,7 @@ impl U32DataFrameCreator {
         }
     }
 
+    #[allow(clippy::type_complexity)]
     pub fn create_u32_dfs(
         self,
     ) -> Result<

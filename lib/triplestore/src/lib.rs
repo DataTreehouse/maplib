@@ -359,6 +359,7 @@ impl Triplestore {
             }
         }
     }
+
     fn subtract_from_transient(
         &mut self,
         triples_df: Vec<TripleDF>,

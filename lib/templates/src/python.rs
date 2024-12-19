@@ -21,6 +21,7 @@ pub struct PyParameter {
 #[pymethods]
 impl PyParameter {
     #[new]
+    #[pyo3(signature = (variable, optional=None, allow_blank=None, rdf_type=None, default_value=None))]
     pub fn new<'py>(
         variable: PyVariable,
         optional: Option<bool>,
@@ -204,6 +205,7 @@ pub struct PyArgument {
 #[pymethods]
 impl PyArgument {
     #[new]
+    #[pyo3(signature = (term, list_expand=None))]
     pub fn new(term: &Bound<'_, PyAny>, list_expand: Option<bool>) -> PyResult<Self> {
         let list_expand = list_expand.unwrap_or(false);
         let term = if let Ok(r) = term.extract::<PyVariable>() {
@@ -246,6 +248,7 @@ pub struct PyInstance {
 #[pymethods]
 impl PyInstance {
     #[new]
+    #[pyo3(signature = (iri, arguments, list_expander=None))]
     pub fn new(
         iri: PyIRI,
         arguments: Vec<Bound<'_, PyAny>>,
@@ -292,6 +295,7 @@ pub struct PyTemplate {
 #[pymethods]
 impl PyTemplate {
     #[new]
+    #[pyo3(signature = (iri, parameters, instances, prefixed_iri=None))]
     pub fn new<'py>(
         iri: PyIRI,
         parameters: Vec<Bound<'py, PyAny>>,
@@ -329,6 +333,7 @@ impl PyTemplate {
         Ok(PyTemplate { template })
     }
 
+    #[pyo3(signature = (arguments, list_expander=None))]
     fn instance(
         &self,
         arguments: Vec<Bound<'_, PyAny>>,
@@ -398,6 +403,7 @@ impl PyTemplate {
 }
 
 #[pyfunction(name = "Triple")]
+#[pyo3(signature = (subject, predicate, object, list_expander=None))]
 pub fn py_triple<'py>(
     subject: Bound<'py, PyAny>,
     predicate: Bound<'py, PyAny>,

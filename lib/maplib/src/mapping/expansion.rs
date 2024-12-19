@@ -796,12 +796,8 @@ fn create_remapped(
     let mut new_unique_subsets = vec![];
     if let Some(le) = &instance.list_expander {
         for e in &to_expand {
-            if let Some((k, v)) = new_dynamic_columns.remove_entry(*e) {
-                if let MappingColumnType::Nested(v) = v {
-                    new_dynamic_columns.insert(k, *v);
-                } else {
-                    panic!("This situation should never arise")
-                }
+            if let Some((k, MappingColumnType::Nested(v))) = new_dynamic_columns.remove_entry(*e) {
+                new_dynamic_columns.insert(k, *v);
             } else {
                 panic!("This situation should never arise")
             }

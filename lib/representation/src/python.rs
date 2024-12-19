@@ -320,6 +320,7 @@ pub struct PyLiteral {
 #[pymethods]
 impl PyLiteral {
     #[new]
+    #[pyo3(signature = (value, data_type=None, language=None))]
     pub fn new(value: String, data_type: Option<PyIRI>, language: Option<String>) -> Self {
         let data_type_iri = if let Some(data_type) = data_type {
             Some(data_type.iri)

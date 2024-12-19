@@ -93,10 +93,8 @@ fn column_as_terms(column: &Column, t: &RDFNodeType) -> Vec<Option<Term>> {
             for _ in 0..height {
                 let mut use_term = None;
                 for iter in iters.iter_mut() {
-                    if let Some(term) = iter.next() {
-                        if let Some(term) = term {
-                            use_term = Some(term);
-                        }
+                    if let Some(Some(term)) = iter.next() {
+                        use_term = Some(term);
                     }
                 }
                 final_terms.push(use_term);
