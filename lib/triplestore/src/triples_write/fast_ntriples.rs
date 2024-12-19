@@ -81,8 +81,7 @@ pub(crate) fn write_triples_in_df<W: Write>(
             if serializers_vec.is_empty() {
                 *serializers_vec = cols
                     .iter()
-                    .enumerate()
-                    .map(|(i, col)| {
+                    .map(|col| {
                         let lang_tag = col.name() == LANG_STRING_LANG_FIELD;
                         serializer_for(
                             &*col.as_materialized_series().chunks()[0],
