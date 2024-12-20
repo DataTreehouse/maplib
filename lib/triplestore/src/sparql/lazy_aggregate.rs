@@ -13,7 +13,7 @@ use std::collections::HashMap;
 
 impl Triplestore {
     pub fn sparql_aggregate_expression_as_lazy_column_and_expression(
-        &self,
+        &mut self,
         variable: &Variable,
         aggregate_expression: &AggregateExpression,
         solution_mappings: SolutionMappings,

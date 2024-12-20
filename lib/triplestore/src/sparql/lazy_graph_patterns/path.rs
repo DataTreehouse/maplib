@@ -37,7 +37,7 @@ struct SparsePathReturn {
 
 impl Triplestore {
     pub fn lazy_path(
-        &self,
+        &mut self,
         subject: &TermPattern,
         ppe: &PropertyPathExpression,
         object: &TermPattern,
@@ -773,7 +773,7 @@ impl U32DataFrameCreator {
     fn gather_namednode_dfs(
         &mut self,
         ppe: &PropertyPathExpression,
-        triplestore: &Triplestore,
+        triplestore: &mut Triplestore,
     ) -> Result<(), SparqlError> {
         match ppe {
             PropertyPathExpression::NamedNode(nn) => {
@@ -783,7 +783,7 @@ impl U32DataFrameCreator {
                         mut rdf_node_types,
                     },
                     _is_empty,
-                ) = triplestore.get_predicate_lf(
+                ) = triplestore.get_deduplicated_predicate_lf(
                     nn,
                     &Some(SUBJECT_COL_NAME.to_string()),
                     &None,

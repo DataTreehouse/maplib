@@ -1,4 +1,4 @@
-use super::{TripleTable, Triplestore};
+use super::{Triples, Triplestore};
 use crate::sparql::errors::SparqlError;
 use oxrdf::{NamedNode, Term};
 use polars::prelude::{col, concat, lit, IntoLazy, LazyFrame, UnionArgs};
@@ -15,7 +15,7 @@ use std::collections::HashMap;
 impl Triplestore {
     pub fn get_predicate_iris(&self) -> Vec<NamedNode> {
         let mut iris = vec![];
-        for nn in self.df_map.keys() {
+        for nn in self.triples_map.keys() {
             iris.push(nn.clone());
         }
         iris
@@ -25,12 +25,15 @@ impl Triplestore {
         &mut self,
         predicate: &NamedNode,
     ) -> Result<Vec<EagerSolutionMappings>, SparqlError> {
-        self.deduplicate()
-            .map_err(SparqlError::DeduplicationError)?;
+        let mut types = vec![];
         let mut out = vec![];
-        if let Some(map) = self.df_map.get(predicate) {
+        if let Some(map) = self.triples_map.get(predicate) {
             for (subject_type, object_type) in map.keys() {
-                let (lf, _) = self.get_predicate_lf(
+                types.push((subject_type.clone(), object_type.clone()));
+            }
+        }
+        for (subject_type, object_type) in &types {
+                let (lf, _) = self.get_deduplicated_predicate_lf(
                     predicate,
                     &Some(SUBJECT_COL_NAME.to_string()),
                     &None,
@@ -43,13 +46,12 @@ impl Triplestore {
                 let eager_lf = lf.as_eager();
                 out.push(eager_lf);
             }
-        }
         Ok(out)
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub fn get_predicate_lf(
-        &self,
+    pub fn get_deduplicated_predicate_lf(
+        &mut self,
         verb_uri: &NamedNode,
         subject_keep_rename: &Option<String>,
         verb_keep_rename: &Option<String>,
@@ -59,20 +61,21 @@ impl Triplestore {
         subject_datatype_req: Option<&BaseRDFNodeType>,
         object_datatype_req: Option<&BaseRDFNodeType>,
     ) -> Result<(SolutionMappings, bool), SparqlError> {
-        if let Some(m) = self.df_map.get(verb_uri) {
+        if let Some(m) = self.triples_map.get_mut(verb_uri) {
             if m.is_empty() {
                 panic!("Empty map should never happen");
             }
             if let Some(SolutionMappings {
                 mappings: mut lf,
                 mut rdf_node_types,
-            }) = multiple_tt_to_lf(
+            }) = multiple_tt_to_deduplicated_lf(
                 m,
-                self.transient_df_map.get(verb_uri),
+                self.transient_triples_map.get_mut(verb_uri),
                 subject_datatype_req,
                 object_datatype_req,
                 subject_filter,
                 object_filter,
+                &self.caching_folder
             )? {
                 let mut out_datatypes = HashMap::new();
                 let use_subject_col_name = uuid::Uuid::new_v4().to_string();
@@ -130,7 +133,7 @@ impl Triplestore {
 
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn get_predicates_lf(
-        &self,
+        &mut self,
         predicate_uris: Option<Vec<NamedNode>>,
         subject_keep_rename: &Option<String>,
         verb_keep_rename: &Option<String>,
@@ -139,18 +142,6 @@ impl Triplestore {
         object_term: Option<Term>,
         object_datatype_req: Option<&BaseRDFNodeType>,
     ) -> Result<(SolutionMappings, bool), SparqlError> {
-        if self.index.is_some() && (subject_term.is_some() || object_term.is_some()) {
-            return Ok((
-                self.get_index_lf(
-                    subject_keep_rename,
-                    verb_keep_rename,
-                    object_keep_rename,
-                    subject_term,
-                    object_term,
-                )?,
-                false,
-            ));
-        }
         let predicate_uris = predicate_uris.unwrap_or(self.all_predicates());
         let mut solution_mappings = vec![];
 
@@ -166,7 +157,7 @@ impl Triplestore {
                     rdf_node_types: mut datatypes_map,
                 },
                 height_0,
-            ) = self.get_predicate_lf(
+            ) = self.get_deduplicated_predicate_lf(
                 &v,
                 subject_keep_rename,
                 verb_keep_rename,
@@ -235,7 +226,7 @@ impl Triplestore {
 
     pub(crate) fn all_predicates(&self) -> Vec<NamedNode> {
         let mut predicates = Vec::new();
-        for k in self.df_map.keys() {
+        for k in self.triples_map.keys() {
             predicates.push(k.clone());
         }
         predicates
@@ -253,7 +244,7 @@ impl Triplestore {
 
         let mut first_datatype = None;
         for p in predicates {
-            if let Some(tt_map) = self.df_map.get(p) {
+            if let Some(tt_map) = self.triples_map.get(p) {
                 for (subject_dt, object_dt) in tt_map.keys() {
                     let use_dt = if subject { subject_dt } else { object_dt };
                     if let Some(first) = &first_datatype {
@@ -270,7 +261,10 @@ impl Triplestore {
     }
 }
 
-fn single_tt_to_lf(tt: &TripleTable) -> Result<LazyFrame, SparqlError> {
+fn single_tt_to_deduplicated_lf(tt: &mut Triples, caching_folder:&Option<String>) -> Result<LazyFrame, SparqlError> {
+    if !tt.unique {
+        tt.deduplicate(caching_folder).map_err(SparqlError::DeduplicationError)?;
+    }
     assert!(tt.unique, "Should be deduplicated");
     //TODO: Check if this rechunk is needed
     let mut lfs = tt
@@ -286,7 +280,7 @@ fn single_tt_to_lf(tt: &TripleTable) -> Result<LazyFrame, SparqlError> {
             .map_err(SparqlError::TripleTableReadError)?,
         UnionArgs {
             parallel: true,
-            rechunk: true,
+            rechunk: false,
             to_supertypes: false,
             diagonal: false,
             from_partitioned_ds: false,
@@ -298,19 +292,20 @@ fn single_tt_to_lf(tt: &TripleTable) -> Result<LazyFrame, SparqlError> {
     Ok(lf)
 }
 
-pub fn multiple_tt_to_lf(
-    m1: &HashMap<(BaseRDFNodeType, BaseRDFNodeType), TripleTable>,
-    m2: Option<&HashMap<(BaseRDFNodeType, BaseRDFNodeType), TripleTable>>,
+pub fn multiple_tt_to_deduplicated_lf(
+    m1: &mut HashMap<(BaseRDFNodeType, BaseRDFNodeType), Triples>,
+    m2: Option<&mut HashMap<(BaseRDFNodeType, BaseRDFNodeType), Triples>>,
     subj_datatype_req: Option<&BaseRDFNodeType>,
     obj_datatype_req: Option<&BaseRDFNodeType>,
     subject_term: Option<Term>,
     object_term: Option<Term>,
+    caching_folder: &Option<String>,
 ) -> Result<Option<SolutionMappings>, SparqlError> {
     let mut filtered = vec![];
     let m: Vec<_> = if let Some(m2) = m2 {
-        m1.iter().chain(m2).collect()
+        m1.iter_mut().chain(m2).collect()
     } else {
-        m1.iter().collect()
+        m1.iter_mut().collect()
     };
     for ((subj_type, obj_type), tt) in m {
         let mut keep = true;
@@ -321,7 +316,7 @@ pub fn multiple_tt_to_lf(
             keep = keep && obj_req == obj_type;
         }
         if keep {
-            let mut lf = single_tt_to_lf(tt)?;
+            let mut lf = single_tt_to_deduplicated_lf(tt, caching_folder)?;
             if let Some(subject_term) = &subject_term {
                 lf = lf.filter(col(SUBJECT_COL_NAME).eq(rdf_term_to_polars_expr(subject_term)));
             }

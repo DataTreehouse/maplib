@@ -19,7 +19,6 @@ use templates::ast::{ConstantTermOrList, PType, Template};
 use templates::dataset::TemplateDataset;
 use templates::document::document_from_str;
 use templates::MappingColumnType;
-use triplestore::errors::TriplestoreError;
 use triplestore::sparql::errors::SparqlError;
 use triplestore::sparql::QueryResult;
 use triplestore::Triplestore;
@@ -36,6 +35,7 @@ pub struct Mapping {
 pub struct ExpandOptions {
     pub unique_subsets: Option<Vec<Vec<String>>>,
     pub graph: Option<NamedNode>,
+    pub deduplicate:bool
 }
 
 struct OTTRTripleInstance {
@@ -203,19 +203,15 @@ impl Mapping {
         use_triplestore.query(query, parameters, streaming)
     }
 
-    pub fn create_index(&mut self, graph: Option<NamedNode>) -> Result<(), TriplestoreError> {
-        let use_triplestore = self.get_triplestore(&graph);
-        use_triplestore.create_index(false)
-    }
-
     pub fn insert_construct_result(
         &mut self,
         dfs: Vec<(DataFrame, HashMap<String, RDFNodeType>)>,
         transient: bool,
         target_graph: Option<NamedNode>,
+        deduplicate:bool,
     ) -> Result<(), SparqlError> {
         let use_triplestore = self.get_triplestore(&target_graph);
-        use_triplestore.insert_construct_result(dfs, transient)
+        use_triplestore.insert_construct_result(dfs, transient, deduplicate)
     }
 
     pub fn write_triples<W: Write>(

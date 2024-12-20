@@ -10,7 +10,7 @@ use spargebra::algebra::GraphPattern;
 
 impl Triplestore {
     pub fn lazy_join(
-        &self,
+        &mut self,
         left: &GraphPattern,
         right: &GraphPattern,
         solution_mappings: Option<SolutionMappings>,

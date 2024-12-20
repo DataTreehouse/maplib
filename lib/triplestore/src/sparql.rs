@@ -103,16 +103,6 @@ impl QueryResult {
 }
 
 impl Triplestore {
-    pub fn query_deduplicated(
-        &self,
-        query: &str,
-        parameters: &Option<HashMap<String, EagerSolutionMappings>>,
-        streaming: bool,
-    ) -> Result<QueryResult, SparqlError> {
-        let query = Query::parse(query, None).map_err(SparqlError::ParseError)?;
-        self.query_deduplicated_impl(&query, parameters, streaming)
-    }
-
     pub fn query(
         &mut self,
         query: &str,
@@ -125,19 +115,6 @@ impl Triplestore {
 
     fn query_impl(
         &mut self,
-        query: &Query,
-        parameters: &Option<HashMap<String, EagerSolutionMappings>>,
-        streaming: bool,
-    ) -> Result<QueryResult, SparqlError> {
-        if !self.deduplicated {
-            self.deduplicate()
-                .map_err(SparqlError::DeduplicationError)?;
-        }
-        self.query_deduplicated_impl(query, parameters, streaming)
-    }
-
-    fn query_deduplicated_impl(
-        &self,
         query: &Query,
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         streaming: bool,
@@ -189,6 +166,7 @@ impl Triplestore {
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         transient: bool,
         streaming: bool,
+        deduplicate: bool,
     ) -> Result<(), SparqlError> {
         let query = Query::parse(query, None).map_err(SparqlError::ParseError)?;
         if let Query::Construct { .. } = &query {
@@ -197,7 +175,7 @@ impl Triplestore {
                 QueryResult::Select(_, _) => {
                     panic!("Should never happen")
                 }
-                QueryResult::Construct(dfs) => self.insert_construct_result(dfs, transient),
+                QueryResult::Construct(dfs) => self.insert_construct_result(dfs, transient, deduplicate),
             }
         } else {
             Err(SparqlError::QueryTypeNotSupported)
@@ -207,6 +185,7 @@ impl Triplestore {
         &mut self,
         dfs: Vec<(DataFrame, HashMap<String, RDFNodeType>)>,
         transient: bool,
+        deduplicate: bool,
     ) -> Result<(), SparqlError> {
         let call_uuid = Uuid::new_v4().to_string();
         let mut all_triples_to_add = vec![];
@@ -248,7 +227,7 @@ impl Triplestore {
             }
         }
         if !all_triples_to_add.is_empty() {
-            self.add_triples_vec(all_triples_to_add, &call_uuid, transient)
+            self.add_triples_vec(all_triples_to_add, &call_uuid, transient, deduplicate)
                 .map_err(SparqlError::StoreTriplesError)?;
         }
         Ok(())

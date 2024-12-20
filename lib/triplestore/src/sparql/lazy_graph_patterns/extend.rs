@@ -11,7 +11,7 @@ use std::collections::HashMap;
 
 impl Triplestore {
     pub(crate) fn lazy_extend(
-        &self,
+        &mut self,
         inner: &GraphPattern,
         variable: &Variable,
         expression: &Expression,

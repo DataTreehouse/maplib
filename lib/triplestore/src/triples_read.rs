@@ -296,7 +296,7 @@ impl Triplestore {
             start_tripleproc_now.elapsed().as_secs_f64()
         );
         self.parser_call += 1;
-        self.add_triples_vec(triples_to_add, &uuid::Uuid::new_v4().to_string(), transient)?;
+        self.add_triples_vec(triples_to_add, &uuid::Uuid::new_v4().to_string(), transient, deduplicate)?;
         Ok(())
     }
 }

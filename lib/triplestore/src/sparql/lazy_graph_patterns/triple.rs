@@ -14,7 +14,7 @@ use std::collections::HashSet;
 
 impl Triplestore {
     pub fn lazy_triple_pattern(
-        &self,
+        &mut self,
         mut solution_mappings: Option<SolutionMappings>,
         triple_pattern: &TriplePattern,
         context: &Context,
@@ -43,7 +43,7 @@ impl Triplestore {
             },
             height_0,
         ) = match &triple_pattern.predicate {
-            NamedNodePattern::NamedNode(n) => self.get_predicate_lf(
+            NamedNodePattern::NamedNode(n) => self.get_deduplicated_predicate_lf(
                 n,
                 &subject_rename,
                 &verb_rename,

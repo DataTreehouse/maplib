@@ -31,7 +31,7 @@ use std::collections::HashMap;
 
 impl Triplestore {
     pub fn lazy_graph_pattern(
-        &self,
+        &mut self,
         graph_pattern: &GraphPattern,
         solution_mappings: Option<SolutionMappings>,
         context: &Context,

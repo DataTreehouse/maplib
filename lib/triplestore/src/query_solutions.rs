@@ -9,12 +9,12 @@ use representation::polars_to_rdf::{df_as_result, QuerySolutions};
 
 pub fn query_select(
     query: &str,
-    triplestore: &Triplestore,
+    triplestore: &mut Triplestore,
     deduplicate: bool,
     streaming: bool,
 ) -> QuerySolutions {
     let qres = triplestore
-        .query_deduplicated(query, &None, streaming)
+        .query(query, &None, streaming)
         .unwrap();
 
     let (df, types) = if let QueryResult::Select(mut df, types) = qres {

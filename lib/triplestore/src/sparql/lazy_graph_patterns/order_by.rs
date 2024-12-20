@@ -10,7 +10,7 @@ use std::collections::HashMap;
 
 impl Triplestore {
     pub(crate) fn lazy_order_by(
-        &self,
+        &mut self,
         inner: &GraphPattern,
         expression: &[OrderExpression],
         solution_mappings: Option<SolutionMappings>,

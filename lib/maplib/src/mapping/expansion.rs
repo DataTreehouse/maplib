@@ -48,6 +48,7 @@ impl Mapping {
         let ExpandOptions {
             unique_subsets: unique_subsets_opt,
             graph,
+            deduplicate,
         } = options;
         let unique_subsets = unique_subsets_opt.unwrap_or_default();
         let call_uuid = Uuid::new_v4().to_string();
@@ -90,7 +91,7 @@ impl Mapping {
                     static_columns.clone(),
                     unique_subsets.clone(),
                 )?;
-                self.process_results(result_vec, &call_uuid, new_blank_node_counter, &graph)?;
+                self.process_results(result_vec, &call_uuid, new_blank_node_counter, &graph, deduplicate)?;
                 debug!("Finished processing {} rows", to_row);
                 if offset >= df.height() as i64 {
                     break;
@@ -108,7 +109,7 @@ impl Mapping {
                 static_columns,
                 unique_subsets,
             )?;
-            self.process_results(result_vec, &call_uuid, new_blank_node_counter, &graph)?;
+            self.process_results(result_vec, &call_uuid, new_blank_node_counter, &graph, deduplicate)?;
             debug!("Expansion took {} seconds", now.elapsed().as_secs_f32());
         }
         Ok(MappingReport {})
@@ -236,6 +237,7 @@ impl Mapping {
         call_uuid: &String,
         mut new_blank_node_counter: usize,
         graph: &Option<NamedNode>,
+        deduplicate:bool,
     ) -> Result<(), MappingError> {
         let now = Instant::now();
         let triples: Vec<_> = result_vec
@@ -326,7 +328,7 @@ impl Mapping {
         };
 
         use_triplestore
-            .add_triples_vec(all_triples_to_add, call_uuid, false)
+            .add_triples_vec(all_triples_to_add, call_uuid, false, deduplicate)
             .map_err(MappingError::TriplestoreError)?;
 
         self.blank_node_counter = new_blank_node_counter;

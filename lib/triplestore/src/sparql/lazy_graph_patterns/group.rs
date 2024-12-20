@@ -12,7 +12,7 @@ use std::collections::HashMap;
 
 impl Triplestore {
     pub(crate) fn lazy_group(
-        &self,
+        &mut self,
         inner: &GraphPattern,
         variables: &[Variable],
         aggregates: &[(Variable, AggregateExpression)],

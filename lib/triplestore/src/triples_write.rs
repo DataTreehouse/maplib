@@ -27,7 +27,7 @@ impl Triplestore {
     ) -> Result<(), TriplestoreError> {
         if RdfFormat::NTriples == format {
             let n_threads = POOL.current_num_threads();
-            for (verb, df_map) in &self.df_map {
+            for (verb, df_map) in &self.triples_map {
                 let verb_string = verb.to_string();
                 let verb_bytes = verb_string.as_bytes();
                 for ((subject_type, object_type), tt) in df_map {
@@ -75,7 +75,7 @@ impl Triplestore {
         } else {
             let mut writer = RdfSerializer::from_format(format).for_writer(buf);
 
-            for (verb, df_map) in &self.df_map {
+            for (verb, df_map) in &self.triples_map {
                 for ((subject_type, object_type), tt) in df_map {
                     for lf in tt.get_lazy_frames()? {
                         let triples = df_as_triples(
