@@ -13,9 +13,7 @@ pub fn query_select(
     deduplicate: bool,
     streaming: bool,
 ) -> QuerySolutions {
-    let qres = triplestore
-        .query(query, &None, streaming)
-        .unwrap();
+    let qres = triplestore.query(query, &None, streaming).unwrap();
 
     let (df, types) = if let QueryResult::Select(mut df, types) = qres {
         if deduplicate {

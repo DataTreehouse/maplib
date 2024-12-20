@@ -39,7 +39,8 @@ impl Triplestore {
                     let filename = format!("{filename}_part_{i}.parquet");
                     let mut file_path = file_path.clone();
                     file_path.push(filename);
-                    write_parquet(&mut lf.collect().unwrap(), file_path.as_path()).map_err(TriplestoreError::ParquetIOError)?
+                    write_parquet(&mut lf.collect().unwrap(), file_path.as_path())
+                        .map_err(TriplestoreError::ParquetIOError)?
                 }
             }
         }

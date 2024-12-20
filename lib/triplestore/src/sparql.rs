@@ -175,7 +175,9 @@ impl Triplestore {
                 QueryResult::Select(_, _) => {
                     panic!("Should never happen")
                 }
-                QueryResult::Construct(dfs) => self.insert_construct_result(dfs, transient, deduplicate),
+                QueryResult::Construct(dfs) => {
+                    self.insert_construct_result(dfs, transient, deduplicate)
+                }
             }
         } else {
             Err(SparqlError::QueryTypeNotSupported)

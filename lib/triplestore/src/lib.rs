@@ -14,13 +14,13 @@ use crate::errors::TriplestoreError;
 use crate::io_funcs::{create_folder_if_not_exists, delete_tmp_parquets_in_caching_folder};
 use log::debug;
 use oxrdf::NamedNode;
-use parquet_io::{
-    scan_parquet, write_parquet, ParquetIOError,
-};
+use parquet_io::{scan_parquet, write_parquet, ParquetIOError};
 use polars::prelude::{
-    concat, concat_lf_diagonal, lit, AnyValue, DataFrame, IntoLazy,
-    LazyFrame, UnionArgs, UniqueKeepStrategy,
+    concat, concat_lf_diagonal, lit, AnyValue, DataFrame, IntoLazy, LazyFrame, UnionArgs,
+    UniqueKeepStrategy,
 };
+use polars_core::datatypes::CategoricalOrdering;
+use polars_core::utils::concat_df;
 use rayon::iter::ParallelIterator;
 use rayon::iter::{IntoParallelRefIterator, ParallelDrainRange};
 use representation::multitype::lf_columns_to_categorical;
@@ -35,8 +35,6 @@ use std::fs::remove_file;
 use std::io;
 use std::path::Path;
 use std::time::Instant;
-use polars_core::datatypes::CategoricalOrdering;
-use polars_core::utils::concat_df;
 use uuid::Uuid;
 
 #[derive(Clone)]
@@ -65,8 +63,10 @@ struct Triples {
 }
 
 impl Triples {
-    pub(crate) fn deduplicate(&mut self,
-                              caching_folder: &Option<String>) -> Result<(), TriplestoreError> {
+    pub(crate) fn deduplicate(
+        &mut self,
+        caching_folder: &Option<String>,
+    ) -> Result<(), TriplestoreError> {
         if !self.unique {
             if let Some(unsorted) = &mut self.unsorted {
                 unsorted.deduplicate(caching_folder)?
@@ -155,9 +155,7 @@ impl StoredTriples {
         caching_folder: &Option<String>,
     ) -> Result<(), TriplestoreError> {
         match self {
-            StoredTriples::TriplesOnDisk(t) => {
-                t.deduplicate(caching_folder.as_ref().unwrap())?
-            }
+            StoredTriples::TriplesOnDisk(t) => t.deduplicate(caching_folder.as_ref().unwrap())?,
             StoredTriples::TriplesInMemory(t) => t.deduplicate(),
         }
         Ok(())
@@ -165,15 +163,9 @@ impl StoredTriples {
 }
 
 impl StoredTriples {
-    fn new(
-        df: DataFrame,
-        caching_folder: &Option<String>,
-    ) -> Result<Self, TriplestoreError> {
+    fn new(df: DataFrame, caching_folder: &Option<String>) -> Result<Self, TriplestoreError> {
         Ok(if let Some(caching_folder) = &caching_folder {
-            StoredTriples::TriplesOnDisk(TriplesOnDisk::new(
-                df,
-                caching_folder,
-            )?)
+            StoredTriples::TriplesOnDisk(TriplesOnDisk::new(df, caching_folder)?)
         } else {
             StoredTriples::TriplesInMemory(Box::new(TriplesInMemory::new(df)))
         })
@@ -194,9 +186,7 @@ impl StoredTriples {
         caching_folder: &Option<String>,
     ) -> Result<(), TriplestoreError> {
         match self {
-            StoredTriples::TriplesOnDisk(t) => {
-                t.add_triples(df, caching_folder.as_ref().unwrap())
-            }
+            StoredTriples::TriplesOnDisk(t) => t.add_triples(df, caching_folder.as_ref().unwrap()),
             StoredTriples::TriplesInMemory(t) => t.add_triples(df),
         }
     }
@@ -208,15 +198,9 @@ struct TriplesOnDisk {
 }
 
 impl TriplesOnDisk {
-    pub(crate) fn deduplicate(
-        &mut self,
-        caching_folder: &String,
-    ) -> Result<(), TriplestoreError> {
-        let lf_results: Vec<Result<LazyFrame, ParquetIOError>> = self
-            .df_paths
-            .par_iter()
-            .map(scan_parquet)
-            .collect();
+    pub(crate) fn deduplicate(&mut self, caching_folder: &String) -> Result<(), TriplestoreError> {
+        let lf_results: Vec<Result<LazyFrame, ParquetIOError>> =
+            self.df_paths.par_iter().map(scan_parquet).collect();
         let mut lfs = vec![];
         for lf_res in lf_results {
             lfs.push(lf_res.map_err(TriplestoreError::ParquetIOError)?);
@@ -244,18 +228,14 @@ impl TriplesOnDisk {
         for r in removed {
             r.map_err(TriplestoreError::RemoveParquetFileError)?
         }
-        let TriplesOnDisk { df_paths } =
-            TriplesOnDisk::new(unique_df, caching_folder)?;
+        let TriplesOnDisk { df_paths } = TriplesOnDisk::new(unique_df, caching_folder)?;
         self.df_paths = df_paths;
         Ok(())
     }
 }
 
 impl TriplesOnDisk {
-    fn new(
-        df: DataFrame,
-        caching_folder: &String,
-    ) -> Result<Self, TriplestoreError> {
+    fn new(df: DataFrame, caching_folder: &String) -> Result<Self, TriplestoreError> {
         let mut tod = TriplesOnDisk { df_paths: vec![] };
         tod.add_triples(df, caching_folder)?;
         Ok(tod)
@@ -279,10 +259,7 @@ impl TriplesOnDisk {
         caching_folder: &String,
     ) -> Result<(), TriplestoreError> {
         let folder_path = Path::new(caching_folder);
-        let file_name = format!(
-            "tmp_{}.parquet",
-            Uuid::new_v4()
-        );
+        let file_name = format!("tmp_{}.parquet", Uuid::new_v4());
         let mut file_path_buf = folder_path.to_path_buf();
         file_path_buf.push(file_name);
         let file_path = file_path_buf.as_path();
@@ -313,11 +290,7 @@ impl TriplesInMemory {
     }
 
     pub(crate) fn deduplicate(&mut self) {
-        let drained: Vec<LazyFrame> = self
-            .dfs
-            .drain(..)
-            .map(|x| x.lazy())
-            .collect();
+        let drained: Vec<LazyFrame> = self.dfs.drain(..).map(|x| x.lazy()).collect();
         let mut lf = concat(
             drained.as_slice(),
             UnionArgs {
@@ -373,7 +346,7 @@ impl Triplestore {
 
     pub fn deduplicate(&mut self) -> Result<(), TriplestoreError> {
         let now = Instant::now();
-        deduplicate_map(&mut self.triples_map,  &self.caching_folder)?;
+        deduplicate_map(&mut self.triples_map, &self.caching_folder)?;
         deduplicate_map(&mut self.transient_triples_map, &self.caching_folder)?;
         self.deduplicated = true;
         debug!("Deduplication took {} seconds", now.elapsed().as_secs_f64());
@@ -449,12 +422,7 @@ impl Triplestore {
                 } else {
                     m.insert(
                         k,
-                        Triples::new(
-                            df,
-                            unique,
-                            call_uuid,
-                            &self.caching_folder,
-                        )?,
+                        Triples::new(df, unique, call_uuid, &self.caching_folder)?,
                     );
                 }
             } else {
@@ -462,12 +430,7 @@ impl Triplestore {
                     predicate.clone(),
                     HashMap::from([(
                         k,
-                        Triples::new(
-                            df,
-                            unique,
-                            call_uuid,
-                            &self.caching_folder,
-                        )?,
+                        Triples::new(df, unique, call_uuid, &self.caching_folder)?,
                     )]),
                 );
             }

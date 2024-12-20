@@ -35,7 +35,7 @@ pub struct Mapping {
 pub struct ExpandOptions {
     pub unique_subsets: Option<Vec<Vec<String>>>,
     pub graph: Option<NamedNode>,
-    pub deduplicate:bool
+    pub deduplicate: bool,
 }
 
 struct OTTRTripleInstance {
@@ -208,7 +208,7 @@ impl Mapping {
         dfs: Vec<(DataFrame, HashMap<String, RDFNodeType>)>,
         transient: bool,
         target_graph: Option<NamedNode>,
-        deduplicate:bool,
+        deduplicate: bool,
     ) -> Result<(), SparqlError> {
         let use_triplestore = self.get_triplestore(&target_graph);
         use_triplestore.insert_construct_result(dfs, transient, deduplicate)

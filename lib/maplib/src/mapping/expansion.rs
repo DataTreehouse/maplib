@@ -91,7 +91,13 @@ impl Mapping {
                     static_columns.clone(),
                     unique_subsets.clone(),
                 )?;
-                self.process_results(result_vec, &call_uuid, new_blank_node_counter, &graph, deduplicate)?;
+                self.process_results(
+                    result_vec,
+                    &call_uuid,
+                    new_blank_node_counter,
+                    &graph,
+                    deduplicate,
+                )?;
                 debug!("Finished processing {} rows", to_row);
                 if offset >= df.height() as i64 {
                     break;
@@ -109,7 +115,13 @@ impl Mapping {
                 static_columns,
                 unique_subsets,
             )?;
-            self.process_results(result_vec, &call_uuid, new_blank_node_counter, &graph, deduplicate)?;
+            self.process_results(
+                result_vec,
+                &call_uuid,
+                new_blank_node_counter,
+                &graph,
+                deduplicate,
+            )?;
             debug!("Expansion took {} seconds", now.elapsed().as_secs_f32());
         }
         Ok(MappingReport {})
@@ -237,7 +249,7 @@ impl Mapping {
         call_uuid: &String,
         mut new_blank_node_counter: usize,
         graph: &Option<NamedNode>,
-        deduplicate:bool,
+        deduplicate: bool,
     ) -> Result<(), MappingError> {
         let now = Instant::now();
         let triples: Vec<_> = result_vec

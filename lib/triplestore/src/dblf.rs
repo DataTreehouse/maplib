@@ -33,19 +33,19 @@ impl Triplestore {
             }
         }
         for (subject_type, object_type) in &types {
-                let (lf, _) = self.get_deduplicated_predicate_lf(
-                    predicate,
-                    &Some(SUBJECT_COL_NAME.to_string()),
-                    &None,
-                    &Some(OBJECT_COL_NAME.to_string()),
-                    None,
-                    None,
-                    Some(subject_type),
-                    Some(object_type),
-                )?;
-                let eager_lf = lf.as_eager();
-                out.push(eager_lf);
-            }
+            let (lf, _) = self.get_deduplicated_predicate_lf(
+                predicate,
+                &Some(SUBJECT_COL_NAME.to_string()),
+                &None,
+                &Some(OBJECT_COL_NAME.to_string()),
+                None,
+                None,
+                Some(subject_type),
+                Some(object_type),
+            )?;
+            let eager_lf = lf.as_eager();
+            out.push(eager_lf);
+        }
         Ok(out)
     }
 
@@ -75,7 +75,7 @@ impl Triplestore {
                 object_datatype_req,
                 subject_filter,
                 object_filter,
-                &self.caching_folder
+                &self.caching_folder,
             )? {
                 let mut out_datatypes = HashMap::new();
                 let use_subject_col_name = uuid::Uuid::new_v4().to_string();
@@ -261,9 +261,13 @@ impl Triplestore {
     }
 }
 
-fn single_tt_to_deduplicated_lf(tt: &mut Triples, caching_folder:&Option<String>) -> Result<LazyFrame, SparqlError> {
+fn single_tt_to_deduplicated_lf(
+    tt: &mut Triples,
+    caching_folder: &Option<String>,
+) -> Result<LazyFrame, SparqlError> {
     if !tt.unique {
-        tt.deduplicate(caching_folder).map_err(SparqlError::DeduplicationError)?;
+        tt.deduplicate(caching_folder)
+            .map_err(SparqlError::DeduplicationError)?;
     }
     assert!(tt.unique, "Should be deduplicated");
     //TODO: Check if this rechunk is needed

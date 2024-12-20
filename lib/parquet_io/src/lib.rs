@@ -2,7 +2,7 @@ use polars::prelude::{
     DataFrame, LazyFrame, ParallelStrategy, ParquetWriter, PolarsError, ScanArgsParquet,
 };
 use std::fs::File;
-use std::path::{Path};
+use std::path::Path;
 
 use std::fmt::{Display, Formatter};
 use std::io;
