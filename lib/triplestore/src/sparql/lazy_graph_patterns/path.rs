@@ -24,6 +24,7 @@ use spargebra::algebra::{GraphPattern, PropertyPathExpression};
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 use sprs::{CsMatBase, TriMatBase};
 use std::collections::HashMap;
+use crate::sparql::pushdowns::Pushdowns;
 
 const NAMED_NODE_INDEX_COL: &str = "named_node_index_column";
 const VALUE_COLUMN: &str = "value";
@@ -43,6 +44,7 @@ impl Triplestore {
         object: &TermPattern,
         solution_mappings: Option<SolutionMappings>,
         context: &Context,
+        pushdowns: Pushdowns,
     ) -> Result<SolutionMappings, SparqlError> {
         let create_sparse = need_sparse_matrix(ppe);
 
@@ -78,6 +80,7 @@ impl Triplestore {
                 None,
                 &context.extension_with(PathEntry::PathRewrite),
                 &None,
+                pushdowns
             )?;
             for i in &intermediaries {
                 sms.rdf_node_types.remove(i).unwrap();
@@ -316,9 +319,11 @@ impl Triplestore {
         if let TermPattern::Variable(v) = object {
             datatypes.insert(v.as_str().to_string(), out_dt_obj);
         }
+        let out_df_height = out_df.height();
         let mut path_solution_mappings = SolutionMappings {
             mappings: out_df.lazy(),
             rdf_node_types: datatypes,
+            height_upper_bound: out_df_height
         };
 
         if let Some(mappings) = solution_mappings {
@@ -641,6 +646,7 @@ impl U32DataFrameCreator {
         let mut soln_mappings = vec![];
         for (nn, (df, subject_dt, object_dt)) in self.named_nodes {
             let nn_idx = nns.iter().position(|x| x == &nn).unwrap();
+            let df_height = df.height();
             let mut lf = df.lazy();
             lf = lf.with_column(lit(nn_idx as u32).alias(NAMED_NODE_INDEX_COL));
             let mut types = HashMap::new();
@@ -651,11 +657,12 @@ impl U32DataFrameCreator {
             types.insert(SUBJECT_COL_NAME.to_string(), subject_dt);
             types.insert(OBJECT_COL_NAME.to_string(), object_dt);
 
-            soln_mappings.push(SolutionMappings::new(lf, types));
+            soln_mappings.push(SolutionMappings::new(lf, types, df_height));
         }
         let SolutionMappings {
             mut mappings,
             rdf_node_types,
+            ..
         } = union(soln_mappings, false)?;
 
         let subject_row_index = uuid::Uuid::new_v4().to_string();
@@ -699,11 +706,12 @@ impl U32DataFrameCreator {
             RDFNodeType::Literal(xsd::UNSIGNED_INT.into_owned()),
         );
 
-        let obj_soln_mappings = SolutionMappings::new(lf_subj, subj_types);
-        let subj_soln_mappings = SolutionMappings::new(lf_obj.lazy(), obj_types);
+        let obj_soln_mappings = SolutionMappings::new(lf_subj, subj_types, df_height);
+        let subj_soln_mappings = SolutionMappings::new(lf_obj.lazy(), obj_types, df_height);
         let SolutionMappings {
             mut mappings,
             rdf_node_types: lookup_df_types,
+            ..
         } = union(vec![subj_soln_mappings, obj_soln_mappings], false)?;
         let (mappings_grby, maps) =
             group_by_workaround(mappings, &lookup_df_types, vec![VALUE_COLUMN.to_string()]);
@@ -777,18 +785,18 @@ impl U32DataFrameCreator {
     ) -> Result<(), SparqlError> {
         match ppe {
             PropertyPathExpression::NamedNode(nn) => {
-                let (
+                let
                     SolutionMappings {
                         mappings,
                         mut rdf_node_types,
-                    },
-                    _is_empty,
-                ) = triplestore.get_deduplicated_predicate_lf(
+                        ..
+                    }
+                 = triplestore.get_deduplicated_predicate_lf(
                     nn,
                     &Some(SUBJECT_COL_NAME.to_string()),
                     &None,
                     &Some(OBJECT_COL_NAME.to_string()),
-                    None,
+                    &None,
                     None,
                     None,
                     None,

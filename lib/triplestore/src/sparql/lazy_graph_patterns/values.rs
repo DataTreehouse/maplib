@@ -13,6 +13,7 @@ use representation::solution_mapping::SolutionMappings;
 use representation::RDFNodeType;
 use spargebra::term::GroundTerm;
 use std::collections::HashMap;
+use crate::sparql::pushdowns::Pushdowns;
 
 impl Triplestore {
     pub(crate) fn lazy_values(
@@ -21,6 +22,7 @@ impl Triplestore {
         variables: &[Variable],
         bindings: &[Vec<Option<GroundTerm>>],
         _context: &Context,
+        pushdowns: Pushdowns,
     ) -> Result<SolutionMappings, SparqlError> {
         let mut col_vecs = HashMap::new();
         for i in 0..variables.len() {
@@ -73,6 +75,7 @@ impl Triplestore {
             all_series.push(series.into_column());
         }
         let df = DataFrame::new(all_series).unwrap();
+        let height = df.height();
         let mut rdf_node_types = HashMap::new();
         for (k, v) in datatypes {
             let var = variables.get(k).unwrap();
@@ -81,6 +84,7 @@ impl Triplestore {
         let sm = SolutionMappings {
             mappings: df.lazy(),
             rdf_node_types,
+            height_upper_bound:height
         };
 
         if let Some(mut mappings) = solution_mappings {

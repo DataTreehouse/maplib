@@ -9,6 +9,7 @@ use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use spargebra::algebra::{Expression, GraphPattern};
 use std::collections::HashMap;
+use crate::sparql::pushdowns::Pushdowns;
 
 impl Triplestore {
     pub fn lazy_left_join(
@@ -19,20 +20,23 @@ impl Triplestore {
         solution_mappings: Option<SolutionMappings>,
         context: &Context,
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
+        mut pushdowns: Pushdowns,
     ) -> Result<SolutionMappings, SparqlError> {
         debug!("Processing left join graph pattern");
         let left_context = context.extension_with(PathEntry::LeftJoinLeftSide);
         let right_context = context.extension_with(PathEntry::LeftJoinRightSide);
         let expression_context = context.extension_with(PathEntry::LeftJoinExpression);
 
-        let left_solution_mappings =
-            self.lazy_graph_pattern(left, solution_mappings, &left_context, parameters)?;
+        let mut left_solution_mappings =
+            self.lazy_graph_pattern(left, solution_mappings, &left_context, parameters, pushdowns.clone())?;
 
+        left_solution_mappings = pushdowns.add_from_solution_mappings(left_solution_mappings);
         let mut right_solution_mappings = self.lazy_graph_pattern(
             right,
             Some(left_solution_mappings.clone()),
             &right_context,
             parameters,
+            pushdowns
         )?;
 
         if let Some(expr) = expression {

@@ -343,6 +343,7 @@ pub fn exists(
     let SolutionMappings {
         mut mappings,
         mut rdf_node_types,
+        height_upper_bound
     } = solution_mappings;
     let mut exists_df = exists_lf
         .select([col(inner_context.as_str())])
@@ -360,7 +361,7 @@ pub fn exists(
         outer_context.as_str().to_string(),
         RDFNodeType::Literal(xsd::BOOLEAN.into_owned()),
     );
-    let mut solution_mappings = SolutionMappings::new(mappings, rdf_node_types);
+    let mut solution_mappings = SolutionMappings::new(mappings, rdf_node_types, height_upper_bound);
     solution_mappings = drop_inner_contexts(solution_mappings, &vec![inner_context]);
     Ok(solution_mappings)
 }
@@ -504,13 +505,14 @@ pub fn func_expression(
             let SolutionMappings {
                 mappings,
                 rdf_node_types: datatypes,
+                height_upper_bound,
             } = solution_mappings;
             let cols: Vec<_> = (0..args.len())
                 .map(|i| col(args_contexts.get(&i).unwrap().as_str()))
                 .collect();
             let new_mappings =
                 mappings.with_column(concat_str(cols, "", true).alias(outer_context.as_str()));
-            solution_mappings = SolutionMappings::new(new_mappings, datatypes);
+            solution_mappings = SolutionMappings::new(new_mappings, datatypes, height_upper_bound);
             solution_mappings.rdf_node_types.insert(
                 outer_context.as_str().to_string(),
                 RDFNodeType::Literal(xsd::STRING.into_owned()),

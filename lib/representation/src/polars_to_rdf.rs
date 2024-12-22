@@ -31,7 +31,7 @@ pub struct QuerySolutions {
     pub solutions: Vec<Vec<Option<Term>>>,
 }
 
-fn column_as_terms(column: &Column, t: &RDFNodeType) -> Vec<Option<Term>> {
+pub fn column_as_terms(column: &Column, t: &RDFNodeType) -> Vec<Option<Term>> {
     let height = column.len();
     let terms: Vec<_> = match t {
         RDFNodeType::None

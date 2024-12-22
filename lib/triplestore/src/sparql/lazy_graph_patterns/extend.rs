@@ -3,6 +3,7 @@ use crate::sparql::errors::SparqlError;
 use log::debug;
 use oxrdf::Variable;
 
+use crate::sparql::pushdowns::Pushdowns;
 use query_processing::graph_patterns::extend;
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
@@ -18,13 +19,28 @@ impl Triplestore {
         input_solution_mappings: Option<SolutionMappings>,
         context: &Context,
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
+        mut pushdowns: Pushdowns,
     ) -> Result<SolutionMappings, SparqlError> {
         debug!("Processing extend graph pattern");
         let inner_context = context.extension_with(PathEntry::ExtendInner);
         let expression_context = context.extension_with(PathEntry::ExtendExpression);
 
-        let mut output_solution_mappings =
-            self.lazy_graph_pattern(inner, input_solution_mappings, &inner_context, parameters)?;
+        if let Expression::Variable(expr_variable) = expression {
+            if pushdowns.variables.contains_key(expr_variable.as_str()) {
+                pushdowns.variables.insert(
+                    variable.as_str().to_string(),
+                    pushdowns.variables.get(expr_variable.as_str()).unwrap().clone(),
+                );
+            }
+        }
+
+        let mut output_solution_mappings = self.lazy_graph_pattern(
+            inner,
+            input_solution_mappings,
+            &inner_context,
+            parameters,
+            pushdowns,
+        )?;
 
         output_solution_mappings = self.lazy_expression(
             expression,

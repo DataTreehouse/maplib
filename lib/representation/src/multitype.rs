@@ -776,10 +776,13 @@ pub fn implode_multicolumns(
 pub fn join_workaround(
     mut left_mappings: LazyFrame,
     mut left_datatypes: HashMap<String, RDFNodeType>,
+    left_height: usize,
     mut right_mappings: LazyFrame,
     right_datatypes: HashMap<String, RDFNodeType>,
+    right_height: usize,
     join_type: JoinType,
 ) -> SolutionMappings {
+    let height_upper_bound = left_height.saturating_mul(right_height);
     assert!(matches!(join_type, JoinType::Left | JoinType::Inner));
     for c in left_datatypes.keys() {
         if right_datatypes.contains_key(c) {
@@ -895,7 +898,7 @@ pub fn join_workaround(
         left_datatypes.entry(c).or_insert(dt);
     }
 
-    SolutionMappings::new(left_mappings, left_datatypes)
+    SolutionMappings::new(left_mappings, left_datatypes, height_upper_bound)
 }
 
 pub fn unique_workaround(

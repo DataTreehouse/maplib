@@ -28,6 +28,7 @@ use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use representation::RDFNodeType;
 use spargebra::algebra::GraphPattern;
 use std::collections::HashMap;
+use crate::sparql::pushdowns::Pushdowns;
 
 impl Triplestore {
     pub fn lazy_graph_pattern(
@@ -36,6 +37,7 @@ impl Triplestore {
         solution_mappings: Option<SolutionMappings>,
         context: &Context,
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
+        pushdowns: Pushdowns,
     ) -> Result<SolutionMappings, SparqlError> {
         debug!(
             "Start processing graph pattern {:?} at context: {}",
@@ -52,6 +54,7 @@ impl Triplestore {
                         updated_solution_mappings,
                         tp,
                         &bgp_context,
+                        &pushdowns,
                     )?);
                 }
                 if let Some(updated_solution_mappings) = updated_solution_mappings {
@@ -59,6 +62,7 @@ impl Triplestore {
                 } else {
                     //TODO: FIX THIS PROPERLY
                     let ser = Series::new("DUMMYDUMMY".into(), vec![true]);
+                    let height = ser.len();
                     let mut map = HashMap::new();
                     map.insert(
                         "DUMMYDUMMY".to_string(),
@@ -67,6 +71,7 @@ impl Triplestore {
                     Ok(SolutionMappings {
                         mappings: DataFrame::new(vec![ser.into()]).unwrap().lazy(),
                         rdf_node_types: map,
+                        height_upper_bound: height,
                     })
                 }
             }
@@ -74,9 +79,9 @@ impl Triplestore {
                 subject,
                 path,
                 object,
-            } => self.lazy_path(subject, path, object, solution_mappings, context),
+            } => self.lazy_path(subject, path, object, solution_mappings, context, pushdowns),
             GraphPattern::Join { left, right } => {
-                self.lazy_join(left, right, solution_mappings, context, parameters)
+                self.lazy_join(left, right, solution_mappings, context, parameters, pushdowns)
             }
             GraphPattern::LeftJoin {
                 left,
@@ -89,15 +94,16 @@ impl Triplestore {
                 solution_mappings,
                 context,
                 parameters,
+                pushdowns,
             ),
             GraphPattern::Filter { expr, inner } => {
-                self.lazy_filter(inner, expr, solution_mappings, context, parameters)
+                self.lazy_filter(inner, expr, solution_mappings, context, parameters, pushdowns)
             }
             GraphPattern::Union { left, right } => {
-                self.lazy_union(left, right, solution_mappings, context, parameters)
+                self.lazy_union(left, right, solution_mappings, context, parameters, pushdowns)
             }
             GraphPattern::Graph { name: _, inner: _ } => {
-                unimplemented!("Graphs not supported")
+                todo!("Graphs not supported yet")
             }
             GraphPattern::Extend {
                 inner,
@@ -110,22 +116,23 @@ impl Triplestore {
                 solution_mappings,
                 context,
                 parameters,
+                pushdowns,
             ),
             GraphPattern::Minus { left, right } => {
-                self.lazy_minus(left, right, solution_mappings, context, parameters)
+                self.lazy_minus(left, right, solution_mappings, context, parameters, pushdowns)
             }
             GraphPattern::Values {
                 variables,
                 bindings,
-            } => self.lazy_values(solution_mappings, variables, bindings, context),
+            } => self.lazy_values(solution_mappings, variables, bindings, context, pushdowns),
             GraphPattern::OrderBy { inner, expression } => {
-                self.lazy_order_by(inner, expression, solution_mappings, context, parameters)
+                self.lazy_order_by(inner, expression, solution_mappings, context, parameters, pushdowns)
             }
             GraphPattern::Project { inner, variables } => {
-                self.lazy_project(inner, variables, solution_mappings, context, parameters)
+                self.lazy_project(inner, variables, solution_mappings, context, parameters, pushdowns)
             }
             GraphPattern::Distinct { inner } => {
-                self.lazy_distinct(inner, solution_mappings, context, parameters)
+                self.lazy_distinct(inner, solution_mappings, context, parameters, pushdowns)
             }
             GraphPattern::Reduced { inner } => {
                 info!("Reduced has no practical effect in this implementation");
@@ -134,6 +141,7 @@ impl Triplestore {
                     solution_mappings,
                     &context.extension_with(PathEntry::ReducedInner),
                     parameters,
+                    pushdowns,
                 )
             }
             GraphPattern::Slice {
@@ -146,6 +154,7 @@ impl Triplestore {
                     solution_mappings,
                     &context.extension_with(PathEntry::ReducedInner),
                     parameters,
+                    pushdowns,
                 )?;
                 if let Some(length) = length {
                     newsols.mappings = newsols.mappings.slice(*start as i64, *length as u32);
@@ -165,6 +174,7 @@ impl Triplestore {
                 solution_mappings,
                 context,
                 parameters,
+                pushdowns,
             ),
             GraphPattern::Service { .. } => {
                 unimplemented!("Services are not implemented")
@@ -181,6 +191,7 @@ impl Triplestore {
                 bindings_parameter,
                 context,
                 parameters,
+                pushdowns,
             ),
         };
         debug!(

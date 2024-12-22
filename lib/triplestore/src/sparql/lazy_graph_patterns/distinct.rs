@@ -6,6 +6,7 @@ use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use spargebra::algebra::GraphPattern;
 use std::collections::HashMap;
+use crate::sparql::pushdowns::Pushdowns;
 
 impl Triplestore {
     pub(crate) fn lazy_distinct(
@@ -14,6 +15,7 @@ impl Triplestore {
         solution_mappings: Option<SolutionMappings>,
         context: &Context,
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
+        pushdowns: Pushdowns,
     ) -> Result<SolutionMappings, SparqlError> {
         debug!("Processing distinct graph pattern");
         let solution_mappings = self.lazy_graph_pattern(
@@ -21,6 +23,7 @@ impl Triplestore {
             solution_mappings,
             &context.extension_with(PathEntry::DistinctInner),
             parameters,
+            pushdowns,
         )?;
         Ok(distinct(solution_mappings)?)
     }

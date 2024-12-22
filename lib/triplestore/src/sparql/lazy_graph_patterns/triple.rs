@@ -4,13 +4,14 @@ use representation::query_context::Context;
 use representation::solution_mapping::SolutionMappings;
 
 use log::debug;
-use oxrdf::{NamedNode, Term};
+use oxrdf::{NamedNode, Subject, Term};
 use polars::prelude::IntoLazy;
 use polars::prelude::{col, lit, AnyValue, DataType, JoinType};
 use query_processing::graph_patterns::join;
 use representation::{literal_iri_to_namednode, BaseRDFNodeType, RDFNodeType};
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 use std::collections::HashSet;
+use crate::sparql::pushdowns::Pushdowns;
 
 impl Triplestore {
     pub fn lazy_triple_pattern(
@@ -18,13 +19,14 @@ impl Triplestore {
         mut solution_mappings: Option<SolutionMappings>,
         triple_pattern: &TriplePattern,
         context: &Context,
+        pushdowns: &Pushdowns,
     ) -> Result<SolutionMappings, SparqlError> {
         debug!(
             "Processing triple pattern {:?} at {}",
             triple_pattern,
             context.as_str()
         );
-        let subject_term = create_term_pattern_term(&triple_pattern.subject);
+        let subjects = create_subjects(&triple_pattern.subject);
         let object_term = create_term_pattern_term(&triple_pattern.object);
         let object_datatype_req = match &triple_pattern.object {
             TermPattern::NamedNode(_nn) => Some(BaseRDFNodeType::IRI),
@@ -36,19 +38,17 @@ impl Triplestore {
         let verb_rename = get_keep_rename_named_node_pattern(&triple_pattern.predicate);
         let object_rename = get_keep_rename_term_pattern(&triple_pattern.object);
 
-        let (
-            SolutionMappings {
+        let SolutionMappings {
                 mappings: lf,
                 rdf_node_types: dts,
-            },
-            height_0,
-        ) = match &triple_pattern.predicate {
+                height_upper_bound,
+            } = match &triple_pattern.predicate {
             NamedNodePattern::NamedNode(n) => self.get_deduplicated_predicate_lf(
                 n,
                 &subject_rename,
                 &verb_rename,
                 &object_rename,
-                subject_term,
+                &subjects,
                 object_term,
                 None, //TODO!
                 object_datatype_req.as_ref(),
@@ -58,6 +58,7 @@ impl Triplestore {
                 if let Some(SolutionMappings {
                     mappings,
                     rdf_node_types,
+                    height_upper_bound,
                 }) = solution_mappings
                 {
                     if let Some(dt) = rdf_node_types.get(v.as_str()) {
@@ -87,18 +88,21 @@ impl Triplestore {
                             solution_mappings = Some(SolutionMappings {
                                 mappings: mappings_df.lazy(),
                                 rdf_node_types,
+                                height_upper_bound
                             })
                         } else {
                             predicates = Some(HashSet::new());
                             solution_mappings = Some(SolutionMappings {
                                 mappings,
                                 rdf_node_types,
+                                height_upper_bound
                             })
                         };
                     } else {
                         solution_mappings = Some(SolutionMappings {
                             mappings,
                             rdf_node_types,
+                            height_upper_bound
                         });
                         predicates = None;
                     }
@@ -112,7 +116,7 @@ impl Triplestore {
                     &subject_rename,
                     &verb_rename,
                     &object_rename,
-                    subject_term,
+                    &subjects,
                     object_term,
                     object_datatype_req.as_ref(),
                 )?
@@ -122,6 +126,7 @@ impl Triplestore {
         if let Some(SolutionMappings {
             mut mappings,
             mut rdf_node_types,
+            height_upper_bound,
         }) = solution_mappings
         {
             let overlap: Vec<_> = colnames
@@ -129,7 +134,7 @@ impl Triplestore {
                 .filter(|x| rdf_node_types.contains_key(*x))
                 .cloned()
                 .collect();
-            if height_0 {
+            if height_upper_bound == 0 {
                 // Important that overlapping cols are dropped from mappings and not from lf,
                 // since we also overwrite rdf_node_types with dts correspondingly below.
                 mappings = mappings.drop(overlap.iter().map(col));
@@ -142,15 +147,18 @@ impl Triplestore {
                 solution_mappings = Some(SolutionMappings {
                     mappings,
                     rdf_node_types,
+                    height_upper_bound
                 });
             } else {
                 solution_mappings = Some(SolutionMappings {
                     mappings,
                     rdf_node_types,
+                    height_upper_bound
                 });
                 let new_solution_mappings = SolutionMappings {
                     mappings: lf,
                     rdf_node_types: dts,
+                    height_upper_bound
                 };
                 solution_mappings = Some(join(
                     solution_mappings.unwrap(),
@@ -162,6 +170,7 @@ impl Triplestore {
             solution_mappings = Some(SolutionMappings {
                 mappings: lf,
                 rdf_node_types: dts,
+                height_upper_bound
             })
         }
         Ok(solution_mappings.unwrap())
@@ -173,6 +182,14 @@ pub fn create_term_pattern_term(term_pattern: &TermPattern) -> Option<Term> {
         Some(Term::Literal(l.clone()))
     } else if let TermPattern::NamedNode(nn) = term_pattern {
         Some(Term::NamedNode(nn.clone()))
+    } else {
+        None
+    }
+}
+
+pub fn create_subjects(term_pattern: &TermPattern) -> Option<Vec<Subject>> {
+    if let TermPattern::NamedNode(nn) = term_pattern {
+        Some(vec![Subject::NamedNode(nn.clone())])
     } else {
         None
     }

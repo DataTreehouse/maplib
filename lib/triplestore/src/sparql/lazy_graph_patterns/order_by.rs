@@ -7,6 +7,7 @@ use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use spargebra::algebra::{GraphPattern, OrderExpression};
 use std::collections::HashMap;
+use crate::sparql::pushdowns::Pushdowns;
 
 impl Triplestore {
     pub(crate) fn lazy_order_by(
@@ -16,6 +17,7 @@ impl Triplestore {
         solution_mappings: Option<SolutionMappings>,
         context: &Context,
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
+        pushdowns: Pushdowns,
     ) -> Result<SolutionMappings, SparqlError> {
         debug!("Processing order by graph pattern");
         let mut output_solution_mappings = self.lazy_graph_pattern(
@@ -23,17 +25,8 @@ impl Triplestore {
             solution_mappings,
             &context.extension_with(PathEntry::OrderByInner),
             parameters,
+            pushdowns,
         )?;
-
-        let SolutionMappings {
-            mappings,
-            rdf_node_types,
-        } = output_solution_mappings;
-
-        output_solution_mappings = SolutionMappings {
-            mappings,
-            rdf_node_types,
-        };
 
         let order_expression_contexts: Vec<Context> = (0..expression.len())
             .map(|i| context.extension_with(PathEntry::OrderByExpression(i as u16)))

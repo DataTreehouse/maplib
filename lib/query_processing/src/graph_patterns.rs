@@ -95,6 +95,7 @@ pub fn group_by(
     let SolutionMappings {
         mut mappings,
         rdf_node_types: mut datatypes,
+        height_upper_bound
     } = solution_mappings;
     let grouped_mappings = mappings.group_by(by.as_slice());
 
@@ -105,7 +106,7 @@ pub fn group_by(
     if let Some(dummy_varname) = dummy_varname {
         mappings = mappings.drop_no_validate([dummy_varname]);
     }
-    Ok(SolutionMappings::new(mappings, datatypes))
+    Ok(SolutionMappings::new(mappings, datatypes, height_upper_bound))
 }
 
 pub fn join(
@@ -116,11 +117,13 @@ pub fn join(
     let SolutionMappings {
         mappings: right_mappings,
         rdf_node_types: right_datatypes,
+        height_upper_bound: right_height
     } = right_solution_mappings;
 
     let SolutionMappings {
         mappings: left_mappings,
         rdf_node_types: left_datatypes,
+        height_upper_bound: left_height
     } = left_solution_mappings;
 
     let (left_mappings, left_datatypes, right_mappings, right_datatypes) =
@@ -135,8 +138,10 @@ pub fn join(
     let solution_mappings = join_workaround(
         left_mappings,
         left_datatypes,
+        left_height,
         right_mappings,
         right_datatypes,
+        right_height,
         join_type,
     );
 
@@ -151,6 +156,7 @@ pub fn minus(
     let SolutionMappings {
         mappings: mut right_mappings,
         rdf_node_types: right_datatypes,
+        ..
     } = right_solution_mappings;
 
     let right_column_set: HashSet<_> = right_datatypes.keys().collect();
@@ -211,6 +217,7 @@ pub fn order_by(
     let SolutionMappings {
         mut mappings,
         rdf_node_types,
+        height_upper_bound,
     } = solution_mappings;
 
     let mut order_exprs = vec![];
@@ -298,7 +305,7 @@ pub fn order_by(
             .with_maintain_order(false),
     );
 
-    Ok(SolutionMappings::new(mappings, rdf_node_types))
+    Ok(SolutionMappings::new(mappings, rdf_node_types, height_upper_bound))
 }
 
 pub fn project(
@@ -308,6 +315,7 @@ pub fn project(
     let SolutionMappings {
         mut mappings,
         rdf_node_types: mut datatypes,
+        height_upper_bound
     } = solution_mappings;
     let cols: Vec<Expr> = variables.iter().map(|c| col(c.as_str())).collect();
     let mut new_datatypes = HashMap::new();
@@ -328,7 +336,7 @@ pub fn project(
         }
     }
     mappings = mappings.select(cols.as_slice());
-    Ok(SolutionMappings::new(mappings, new_datatypes))
+    Ok(SolutionMappings::new(mappings, new_datatypes, height_upper_bound))
 }
 
 pub fn union(
@@ -344,6 +352,7 @@ pub fn union(
     for SolutionMappings {
         mut mappings,
         rdf_node_types,
+        height_upper_bound,
     } in mappings
     {
         for c in rdf_node_types.keys() {
@@ -354,7 +363,7 @@ pub fn union(
                 CategoricalOrdering::Physical,
             );
         }
-        cat_mappings.push(SolutionMappings::new(mappings, rdf_node_types));
+        cat_mappings.push(SolutionMappings::new(mappings, rdf_node_types, height_upper_bound));
     }
     mappings = cat_mappings;
 
@@ -366,6 +375,7 @@ pub fn union(
         let SolutionMappings {
             mappings: _,
             rdf_node_types: right_datatypes,
+            ..
         } = m;
         for (right_col, right_type) in right_datatypes {
             if let Some(left_type) = target_types.get(right_col) {
@@ -418,12 +428,15 @@ pub fn union(
 
     let mut to_concat = vec![];
     let mut exploded_map: HashMap<String, (Vec<String>, Vec<String>)> = HashMap::new();
+    let mut new_height = 0usize;
     //Change the mappings
     for SolutionMappings {
         mut mappings,
         mut rdf_node_types,
+        height_upper_bound,
     } in mappings
     {
+        new_height = new_height.saturating_add(height_upper_bound);
         let mut new_multi = HashMap::new();
         for (c, t) in &rdf_node_types {
             let target_type = target_types.get(c).unwrap();
@@ -473,5 +486,5 @@ pub fn union(
     )
     .expect("Concat problem");
     output_mappings = implode_multicolumns(output_mappings, exploded_map);
-    Ok(SolutionMappings::new(output_mappings, target_types))
+    Ok(SolutionMappings::new(output_mappings, target_types, new_height))
 }

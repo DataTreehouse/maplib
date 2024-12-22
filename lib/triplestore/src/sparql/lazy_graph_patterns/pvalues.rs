@@ -7,6 +7,7 @@ use query_processing::graph_patterns::join;
 use representation::query_context::Context;
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use std::collections::{HashMap, HashSet};
+use crate::sparql::pushdowns::Pushdowns;
 
 impl Triplestore {
     pub(crate) fn lazy_pvalues(
@@ -16,7 +17,9 @@ impl Triplestore {
         bindings_name: &String,
         _context: &Context,
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
+        _pushdowns: Pushdowns,
     ) -> Result<SolutionMappings, SparqlError> {
+        //Todo: consider if pushdowns should be applied.
         let sm = if let Some(parameters) = parameters {
             if let Some(EagerSolutionMappings {
                 mappings,
@@ -32,10 +35,11 @@ impl Triplestore {
                 if mapping_vars != expected_vars {
                     todo!("Handle mismatching variables in PValues")
                 }
-
+                let height = mappings.height();
                 SolutionMappings {
                     mappings: mappings.clone().lazy(),
                     rdf_node_types: rdf_node_types.clone(),
+                    height_upper_bound: height
                 }
             } else {
                 todo!("Handle this error.. ")

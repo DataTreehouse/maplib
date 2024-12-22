@@ -14,6 +14,7 @@ use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use representation::RDFNodeType;
 use spargebra::algebra::Expression;
+use crate::sparql::pushdowns::Pushdowns;
 
 impl Triplestore {
     pub fn lazy_expression(
@@ -306,6 +307,8 @@ impl Triplestore {
                     Some(output_solution_mappings.clone()),
                     &exists_context,
                     parameters,
+                    //Todo: consider what can be pushed down
+                    Pushdowns::new()
                 )?;
                 exists(
                     output_solution_mappings,

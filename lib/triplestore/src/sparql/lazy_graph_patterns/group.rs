@@ -9,6 +9,7 @@ use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use spargebra::algebra::{AggregateExpression, GraphPattern};
 use std::collections::HashMap;
+use crate::sparql::pushdowns::Pushdowns;
 
 impl Triplestore {
     pub(crate) fn lazy_group(
@@ -19,11 +20,19 @@ impl Triplestore {
         solution_mapping: Option<SolutionMappings>,
         context: &Context,
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
+        mut pushdowns: Pushdowns,
     ) -> Result<SolutionMappings, SparqlError> {
         debug!("Processing group graph pattern");
         let inner_context = context.extension_with(PathEntry::GroupInner);
+        let mut new_pushdown_variables = HashMap::new();
+        for v in variables {
+            if let Some((k,v,)) = pushdowns.variables.remove_entry(v.as_str()) {
+                new_pushdown_variables.insert(k, v);
+            }
+        }
+        let new_pushdowns = Pushdowns { variables: new_pushdown_variables };
         let output_solution_mappings =
-            self.lazy_graph_pattern(inner, solution_mapping, &inner_context, parameters)?;
+            self.lazy_graph_pattern(inner, solution_mapping, &inner_context, parameters, new_pushdowns)?;
         let (mut output_solution_mappings, by, dummy_varname) =
             prepare_group_by(output_solution_mappings, variables);
 

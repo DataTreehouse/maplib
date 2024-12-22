@@ -21,7 +21,7 @@ use templates::document::document_from_str;
 use templates::MappingColumnType;
 use triplestore::sparql::errors::SparqlError;
 use triplestore::sparql::QueryResult;
-use triplestore::Triplestore;
+use triplestore::{CreateIndexOptions, Triplestore};
 
 pub struct Mapping {
     pub template_dataset: TemplateDataset,
@@ -30,6 +30,7 @@ pub struct Mapping {
     use_caching: bool,
     pub blank_node_counter: usize,
 }
+
 
 #[derive(Clone, Default)]
 pub struct ExpandOptions {
@@ -221,6 +222,7 @@ impl Mapping {
         rdf_format: RdfFormat,
     ) -> Result<(), MappingError> {
         let triplestore = self.get_triplestore(&graph);
+        triplestore.deduplicate().map_err(MappingError::TriplestoreError)?;
         triplestore.write_triples(buffer, rdf_format).unwrap();
         Ok(())
     }
@@ -305,5 +307,12 @@ impl Mapping {
     ) -> Result<Vec<EagerSolutionMappings>, SparqlError> {
         let triplestore = self.get_triplestore(&graph);
         triplestore.get_predicate_eager_solution_mappings(predicate)
+    }
+
+
+    pub fn create_index(&mut self, graph: Option<NamedNode>, cio:CreateIndexOptions) -> Result<(), MappingError> {
+        let triplestore = self.get_triplestore(&graph);
+        triplestore.create_index(cio).map_err(MappingError::TriplestoreError)
+
     }
 }

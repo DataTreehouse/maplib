@@ -7,6 +7,7 @@ use std::collections::HashMap;
 pub struct SolutionMappings {
     pub mappings: LazyFrame,
     pub rdf_node_types: HashMap<String, RDFNodeType>,
+    pub height_upper_bound: usize,
 }
 
 #[derive(Clone, Debug)]
@@ -30,7 +31,8 @@ impl EagerSolutionMappings {
             mappings,
             rdf_node_types,
         } = self;
-        SolutionMappings::new(mappings.lazy(), rdf_node_types)
+        let height = mappings.height();
+        SolutionMappings::new(mappings.lazy(), rdf_node_types, height)
     }
 }
 
@@ -38,10 +40,12 @@ impl SolutionMappings {
     pub fn new(
         mappings: LazyFrame,
         rdf_node_types: HashMap<String, RDFNodeType>,
+        height_upper_bound: usize
     ) -> SolutionMappings {
         SolutionMappings {
             mappings,
             rdf_node_types,
+            height_upper_bound,
         }
     }
 

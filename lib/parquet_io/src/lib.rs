@@ -55,7 +55,7 @@ pub fn scan_parquet(file_path: &String) -> Result<LazyFrame, ParquetIOError> {
             n_rows: None,
             cache: false,
             parallel: ParallelStrategy::Auto,
-            rechunk: true,
+            rechunk: false,
             low_memory: false,
             ..Default::default()
         },
