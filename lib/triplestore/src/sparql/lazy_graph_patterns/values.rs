@@ -1,5 +1,6 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
+use crate::sparql::pushdowns::Pushdowns;
 use oxrdf::Variable;
 use polars::prelude::{DataFrame, IntoLazy, JoinType};
 use polars_core::prelude::IntoColumn;
@@ -13,7 +14,6 @@ use representation::solution_mapping::SolutionMappings;
 use representation::RDFNodeType;
 use spargebra::term::GroundTerm;
 use std::collections::HashMap;
-use crate::sparql::pushdowns::Pushdowns;
 
 impl Triplestore {
     pub(crate) fn lazy_values(
@@ -22,8 +22,9 @@ impl Triplestore {
         variables: &[Variable],
         bindings: &[Vec<Option<GroundTerm>>],
         _context: &Context,
-        pushdowns: Pushdowns,
+        _pushdowns: Pushdowns,
     ) -> Result<SolutionMappings, SparqlError> {
+        //Todo: Consider need for pushdowns here
         let mut col_vecs = HashMap::new();
         for i in 0..variables.len() {
             col_vecs.insert(i, vec![]);
@@ -84,7 +85,7 @@ impl Triplestore {
         let sm = SolutionMappings {
             mappings: df.lazy(),
             rdf_node_types,
-            height_upper_bound:height
+            height_upper_bound: height,
         };
 
         if let Some(mut mappings) = solution_mappings {

@@ -3,11 +3,11 @@ use crate::sparql::errors::SparqlError;
 use oxrdf::Variable;
 use polars::prelude::{IntoLazy, JoinType};
 
+use crate::sparql::pushdowns::Pushdowns;
 use query_processing::graph_patterns::join;
 use representation::query_context::Context;
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use std::collections::{HashMap, HashSet};
-use crate::sparql::pushdowns::Pushdowns;
 
 impl Triplestore {
     pub(crate) fn lazy_pvalues(
@@ -19,7 +19,7 @@ impl Triplestore {
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         _pushdowns: Pushdowns,
     ) -> Result<SolutionMappings, SparqlError> {
-        //Todo: consider if pushdowns should be applied.
+        //Todo: apply pushdowns.
         let sm = if let Some(parameters) = parameters {
             if let Some(EagerSolutionMappings {
                 mappings,
@@ -39,7 +39,7 @@ impl Triplestore {
                 SolutionMappings {
                     mappings: mappings.clone().lazy(),
                     rdf_node_types: rdf_node_types.clone(),
-                    height_upper_bound: height
+                    height_upper_bound: height,
                 }
             } else {
                 todo!("Handle this error.. ")

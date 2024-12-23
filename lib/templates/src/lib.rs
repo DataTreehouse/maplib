@@ -12,7 +12,7 @@ pub mod document;
 mod parsing;
 pub mod python;
 mod resolver;
-pub mod subtypes;
+pub mod subtypes_ext;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum MappingColumnType {

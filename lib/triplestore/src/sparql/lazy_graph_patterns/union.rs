@@ -2,12 +2,12 @@ use super::Triplestore;
 use crate::sparql::errors::SparqlError;
 use log::debug;
 
+use crate::sparql::pushdowns::Pushdowns;
 use query_processing::graph_patterns::union;
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use spargebra::algebra::GraphPattern;
 use std::collections::HashMap;
-use crate::sparql::pushdowns::Pushdowns;
 
 impl Triplestore {
     pub(crate) fn lazy_union(
@@ -23,10 +23,20 @@ impl Triplestore {
         let left_context = context.extension_with(PathEntry::UnionLeftSide);
         let right_context = context.extension_with(PathEntry::UnionRightSide);
 
-        let left_solution_mappings =
-            self.lazy_graph_pattern(left, solution_mappings.clone(), &left_context, parameters, pushdowns.clone())?;
-        let right_solution_mappings =
-            self.lazy_graph_pattern(right, solution_mappings, &right_context, parameters, pushdowns)?;
+        let left_solution_mappings = self.lazy_graph_pattern(
+            left,
+            solution_mappings.clone(),
+            &left_context,
+            parameters,
+            pushdowns.clone(),
+        )?;
+        let right_solution_mappings = self.lazy_graph_pattern(
+            right,
+            solution_mappings,
+            &right_context,
+            parameters,
+            pushdowns,
+        )?;
 
         Ok(union(
             vec![left_solution_mappings, right_solution_mappings],

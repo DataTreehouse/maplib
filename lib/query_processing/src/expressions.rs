@@ -343,7 +343,7 @@ pub fn exists(
     let SolutionMappings {
         mut mappings,
         mut rdf_node_types,
-        height_upper_bound
+        height_upper_bound,
     } = solution_mappings;
     let mut exists_df = exists_lf
         .select([col(inner_context.as_str())])

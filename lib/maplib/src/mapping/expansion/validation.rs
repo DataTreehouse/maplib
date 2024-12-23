@@ -7,7 +7,7 @@ use representation::polars_to_rdf::polars_type_to_literal_type;
 use representation::{BaseRDFNodeType, RDFNodeType};
 use std::collections::{HashMap, HashSet};
 use templates::ast::{ptype_is_blank, ptype_is_iri, PType, Parameter, Template};
-use templates::subtypes::is_literal_subtype;
+use templates::subtypes_ext::is_literal_subtype_ext;
 use templates::MappingColumnType;
 
 pub fn validate(
@@ -164,7 +164,7 @@ fn infer_validate_mapping_column_type_from_ptype(
                             polars_type_to_literal_type(datatype)
                                 .map_err(MappingError::DatatypeInferenceError)?;
                         if let RDFNodeType::Literal(inferred_nn) = &series_inferred_rdf_node_type {
-                            if is_literal_subtype(inferred_nn, nn) {
+                            if is_literal_subtype_ext(inferred_nn, nn) {
                                 Ok(MappingColumnType::Flat(series_inferred_rdf_node_type))
                             } else {
                                 Err(MappingError::ColumnDataTypeMismatch(

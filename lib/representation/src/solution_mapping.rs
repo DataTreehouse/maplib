@@ -40,7 +40,7 @@ impl SolutionMappings {
     pub fn new(
         mappings: LazyFrame,
         rdf_node_types: HashMap<String, RDFNodeType>,
-        height_upper_bound: usize
+        height_upper_bound: usize,
     ) -> SolutionMappings {
         SolutionMappings {
             mappings,

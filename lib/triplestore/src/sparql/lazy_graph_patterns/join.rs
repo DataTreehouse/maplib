@@ -6,8 +6,8 @@ use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use std::collections::HashMap;
 
-use spargebra::algebra::GraphPattern;
 use crate::sparql::pushdowns::Pushdowns;
+use spargebra::algebra::GraphPattern;
 
 impl Triplestore {
     pub fn lazy_join(
@@ -23,8 +23,13 @@ impl Triplestore {
         let left_context = context.extension_with(PathEntry::JoinLeftSide);
         let right_context = context.extension_with(PathEntry::JoinRightSide);
 
-        let mut output_solution_mappings =
-            self.lazy_graph_pattern(left, solution_mappings, &left_context, parameters, pushdowns.clone())?;
+        let mut output_solution_mappings = self.lazy_graph_pattern(
+            left,
+            solution_mappings,
+            &left_context,
+            parameters,
+            pushdowns.clone(),
+        )?;
         output_solution_mappings = pushdowns.add_from_solution_mappings(output_solution_mappings);
 
         output_solution_mappings = self.lazy_graph_pattern(
@@ -32,7 +37,7 @@ impl Triplestore {
             Some(output_solution_mappings),
             &right_context,
             parameters,
-            pushdowns
+            pushdowns,
         )?;
         Ok(output_solution_mappings)
     }

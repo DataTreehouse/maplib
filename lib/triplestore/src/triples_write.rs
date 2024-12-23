@@ -38,8 +38,8 @@ impl Triplestore {
                             (LANG_STRING_VALUE_FIELD.to_string(), object_type.clone()),
                             (LANG_STRING_LANG_FIELD.to_string(), object_type.clone()),
                         ]);
-                        let lfs = tt.get_lazy_frames(&None)?;
-                        for (lf,_) in lfs {
+                        let lfs = tt.get_lazy_frames(&None, &None)?;
+                        for (lf, _) in lfs {
                             let df = lf
                                 .unnest([OBJECT_COL_NAME])
                                 .select([
@@ -59,7 +59,7 @@ impl Triplestore {
                             (SUBJECT_COL_NAME.to_string(), subject_type.clone()),
                             (OBJECT_COL_NAME.to_string(), object_type.clone()),
                         ]);
-                        for (lf,_) in tt.get_lazy_frames(&None)? {
+                        for (lf, _) in tt.get_lazy_frames(&None, &None)? {
                             let mut df = lf
                                 .select([col(SUBJECT_COL_NAME), col(OBJECT_COL_NAME)])
                                 .collect()
@@ -78,7 +78,7 @@ impl Triplestore {
 
             for (verb, df_map) in &self.triples_map {
                 for ((subject_type, object_type), tt) in df_map {
-                    for (lf,_) in tt.get_lazy_frames(&None)? {
+                    for (lf, _) in tt.get_lazy_frames(&None, &None)? {
                         let triples = df_as_triples(
                             lf.collect().unwrap(),
                             &subject_type.as_rdf_node_type(),

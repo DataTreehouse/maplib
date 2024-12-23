@@ -31,7 +31,6 @@ pub struct Mapping {
     pub blank_node_counter: usize,
 }
 
-
 #[derive(Clone, Default)]
 pub struct ExpandOptions {
     pub unique_subsets: Option<Vec<Vec<String>>>,
@@ -222,7 +221,9 @@ impl Mapping {
         rdf_format: RdfFormat,
     ) -> Result<(), MappingError> {
         let triplestore = self.get_triplestore(&graph);
-        triplestore.deduplicate().map_err(MappingError::TriplestoreError)?;
+        triplestore
+            .deduplicate()
+            .map_err(MappingError::TriplestoreError)?;
         triplestore.write_triples(buffer, rdf_format).unwrap();
         Ok(())
     }
@@ -304,15 +305,20 @@ impl Mapping {
         &mut self,
         predicate: &NamedNode,
         graph: Option<NamedNode>,
+        include_transient:bool
     ) -> Result<Vec<EagerSolutionMappings>, SparqlError> {
         let triplestore = self.get_triplestore(&graph);
-        triplestore.get_predicate_eager_solution_mappings(predicate)
+        triplestore.get_predicate_eager_solution_mappings(predicate, include_transient)
     }
 
-
-    pub fn create_index(&mut self, graph: Option<NamedNode>, cio:CreateIndexOptions) -> Result<(), MappingError> {
+    pub fn create_index(
+        &mut self,
+        graph: Option<NamedNode>,
+        cio: CreateIndexOptions,
+    ) -> Result<(), MappingError> {
         let triplestore = self.get_triplestore(&graph);
-        triplestore.create_index(cio).map_err(MappingError::TriplestoreError)
-
+        triplestore
+            .create_index(cio)
+            .map_err(MappingError::TriplestoreError)
     }
 }

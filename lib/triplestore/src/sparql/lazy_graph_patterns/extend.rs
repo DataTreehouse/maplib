@@ -24,16 +24,7 @@ impl Triplestore {
         debug!("Processing extend graph pattern");
         let inner_context = context.extension_with(PathEntry::ExtendInner);
         let expression_context = context.extension_with(PathEntry::ExtendExpression);
-
-        if let Expression::Variable(expr_variable) = expression {
-            if pushdowns.variables.contains_key(expr_variable.as_str()) {
-                pushdowns.variables.insert(
-                    variable.as_str().to_string(),
-                    pushdowns.variables.get(expr_variable.as_str()).unwrap().clone(),
-                );
-            }
-        }
-
+        pushdowns.remove_variable(variable);
         let mut output_solution_mappings = self.lazy_graph_pattern(
             inner,
             input_solution_mappings,

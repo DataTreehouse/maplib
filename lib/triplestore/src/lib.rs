@@ -7,21 +7,20 @@ pub mod native_parquet_write;
 pub mod query_solutions;
 pub mod rdfs_inferencing;
 pub mod sparql;
+mod storage;
 pub mod triples_read;
 pub mod triples_write;
-mod storage;
 
 use crate::errors::TriplestoreError;
 use crate::io_funcs::{create_folder_if_not_exists, delete_tmp_parquets_in_caching_folder};
+use crate::storage::Triples;
 use log::debug;
 use oxrdf::NamedNode;
-use polars::prelude::{
-    AnyValue, DataFrame, IntoLazy,
-    UniqueKeepStrategy,
-};
+use polars::prelude::{AnyValue, DataFrame, IntoLazy, UniqueKeepStrategy};
 use polars_core::datatypes::CategoricalOrdering;
+use rayon::iter::ParallelDrainRange;
 use rayon::iter::ParallelIterator;
-use rayon::iter::{ParallelDrainRange};
+use representation::multitype::lf_columns_to_categorical;
 use representation::{
     literal_iri_to_namednode, BaseRDFNodeType, RDFNodeType, OBJECT_COL_NAME, SUBJECT_COL_NAME,
     VERB_COL_NAME,
@@ -29,8 +28,6 @@ use representation::{
 use std::collections::HashMap;
 use std::path::Path;
 use std::time::Instant;
-use representation::multitype::lf_columns_to_categorical;
-use crate::storage::{Triples};
 
 #[derive(Clone)]
 pub struct Triplestore {
@@ -102,7 +99,7 @@ impl Triplestore {
         Ok(())
     }
 
-    pub fn create_index(&mut self, cio:CreateIndexOptions) -> Result<(), TriplestoreError> {
+    pub fn create_index(&mut self, cio: CreateIndexOptions) -> Result<(), TriplestoreError> {
         if cio.immediate {
             for m in self.triples_map.values_mut() {
                 for ts in m.values_mut() {

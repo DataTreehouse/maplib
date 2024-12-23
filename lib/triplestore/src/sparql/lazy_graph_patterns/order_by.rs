@@ -2,12 +2,12 @@ use super::Triplestore;
 use crate::sparql::errors::SparqlError;
 use log::debug;
 
+use crate::sparql::pushdowns::Pushdowns;
 use query_processing::graph_patterns::order_by;
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use spargebra::algebra::{GraphPattern, OrderExpression};
 use std::collections::HashMap;
-use crate::sparql::pushdowns::Pushdowns;
 
 impl Triplestore {
     pub(crate) fn lazy_order_by(

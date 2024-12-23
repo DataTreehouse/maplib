@@ -8,6 +8,7 @@ pub mod errors;
 pub mod formatting;
 pub mod literals;
 pub mod python;
+pub mod subtypes;
 
 use crate::multitype::{MULTI_BLANK_DT, MULTI_IRI_DT, MULTI_NONE_DT};
 use oxrdf::vocab::{rdf, xsd};

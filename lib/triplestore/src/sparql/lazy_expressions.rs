@@ -5,6 +5,7 @@ use crate::sparql::errors::SparqlError;
 use oxrdf::vocab::xsd;
 use polars::prelude::{col, Expr, LiteralValue, Operator};
 
+use crate::sparql::pushdowns::Pushdowns;
 use query_processing::exists_helper::rewrite_exists_graph_pattern;
 use query_processing::expressions::{
     binary_expression, bound, coalesce_expression, exists, func_expression, if_expression,
@@ -14,7 +15,6 @@ use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use representation::RDFNodeType;
 use spargebra::algebra::Expression;
-use crate::sparql::pushdowns::Pushdowns;
 
 impl Triplestore {
     pub fn lazy_expression(
@@ -308,7 +308,7 @@ impl Triplestore {
                     &exists_context,
                     parameters,
                     //Todo: consider what can be pushed down
-                    Pushdowns::new()
+                    Pushdowns::new(),
                 )?;
                 exists(
                     output_solution_mappings,

@@ -8,13 +8,13 @@ use crate::document::document_from_file;
 use errors::TemplateError;
 use log::warn;
 
-use crate::subtypes::is_literal_subtype;
 use oxrdf::vocab::rdfs;
 use oxrdf::{NamedNode, Variable};
 use representation::{OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use walkdir::WalkDir;
+use crate::subtypes_ext::is_literal_subtype_ext;
 
 #[derive(Clone, Debug)]
 pub struct TemplateDataset {
@@ -283,8 +283,8 @@ fn lub(
     } else if let (PType::Basic(left_basic), PType::Basic(right_basic)) = (left, right) {
         if left_basic.as_ref() == rdfs::RESOURCE
             || right_basic.as_ref() == rdfs::RESOURCE
-            || is_literal_subtype(left_basic, right_basic)
-            || is_literal_subtype(right_basic, left_basic)
+            || is_literal_subtype_ext(left_basic, right_basic)
+            || is_literal_subtype_ext(right_basic, left_basic)
         {
             return Ok(left.clone());
         } else {

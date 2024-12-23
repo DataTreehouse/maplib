@@ -1,14 +1,12 @@
-use crate::ast::ptype_is_possibly_literal;
 use oxrdf::vocab::{rdfs, xsd};
 use oxrdf::NamedNode;
 
 const OWL_REAL: &str = "http://www.w3.org/2002/07/owl#real";
 const OWL_RATIONAL: &str = "http://www.w3.org/2002/07/owl#rational";
 
+// s literal subtype of t
 pub fn is_literal_subtype(s: &NamedNode, t: &NamedNode) -> bool {
-    if !ptype_is_possibly_literal(s) || !ptype_is_possibly_literal(t) {
-        false
-    } else if s == t || t.as_ref() == rdfs::LITERAL {
+     if s == t || t.as_ref() == rdfs::LITERAL {
         true
     } else if t.as_str() == OWL_REAL {
         owl_real_subtype(s)

@@ -19,6 +19,7 @@ use crate::sparql::errors::SparqlError;
 use log::{debug, info};
 
 use crate::sparql::lazy_graph_patterns::triples_ordering::order_triple_patterns;
+use crate::sparql::pushdowns::Pushdowns;
 use oxrdf::vocab::xsd;
 use polars::prelude::IntoLazy;
 use polars_core::frame::DataFrame;
@@ -28,7 +29,6 @@ use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use representation::RDFNodeType;
 use spargebra::algebra::GraphPattern;
 use std::collections::HashMap;
-use crate::sparql::pushdowns::Pushdowns;
 
 impl Triplestore {
     pub fn lazy_graph_pattern(
@@ -37,7 +37,7 @@ impl Triplestore {
         solution_mappings: Option<SolutionMappings>,
         context: &Context,
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
-        pushdowns: Pushdowns,
+        mut pushdowns: Pushdowns,
     ) -> Result<SolutionMappings, SparqlError> {
         debug!(
             "Start processing graph pattern {:?} at context: {}",
@@ -46,6 +46,7 @@ impl Triplestore {
         );
         let sm = match graph_pattern {
             GraphPattern::Bgp { patterns } => {
+                pushdowns.add_patterns_pushdowns(patterns);
                 let mut updated_solution_mappings = solution_mappings;
                 let bgp_context = context.extension_with(PathEntry::BGP);
                 let ordered_patterns = order_triple_patterns(patterns, &updated_solution_mappings);
@@ -80,9 +81,14 @@ impl Triplestore {
                 path,
                 object,
             } => self.lazy_path(subject, path, object, solution_mappings, context, pushdowns),
-            GraphPattern::Join { left, right } => {
-                self.lazy_join(left, right, solution_mappings, context, parameters, pushdowns)
-            }
+            GraphPattern::Join { left, right } => self.lazy_join(
+                left,
+                right,
+                solution_mappings,
+                context,
+                parameters,
+                pushdowns,
+            ),
             GraphPattern::LeftJoin {
                 left,
                 right,
@@ -96,12 +102,22 @@ impl Triplestore {
                 parameters,
                 pushdowns,
             ),
-            GraphPattern::Filter { expr, inner } => {
-                self.lazy_filter(inner, expr, solution_mappings, context, parameters, pushdowns)
-            }
-            GraphPattern::Union { left, right } => {
-                self.lazy_union(left, right, solution_mappings, context, parameters, pushdowns)
-            }
+            GraphPattern::Filter { expr, inner } => self.lazy_filter(
+                inner,
+                expr,
+                solution_mappings,
+                context,
+                parameters,
+                pushdowns,
+            ),
+            GraphPattern::Union { left, right } => self.lazy_union(
+                left,
+                right,
+                solution_mappings,
+                context,
+                parameters,
+                pushdowns,
+            ),
             GraphPattern::Graph { name: _, inner: _ } => {
                 todo!("Graphs not supported yet")
             }
@@ -118,19 +134,34 @@ impl Triplestore {
                 parameters,
                 pushdowns,
             ),
-            GraphPattern::Minus { left, right } => {
-                self.lazy_minus(left, right, solution_mappings, context, parameters, pushdowns)
-            }
+            GraphPattern::Minus { left, right } => self.lazy_minus(
+                left,
+                right,
+                solution_mappings,
+                context,
+                parameters,
+                pushdowns,
+            ),
             GraphPattern::Values {
                 variables,
                 bindings,
             } => self.lazy_values(solution_mappings, variables, bindings, context, pushdowns),
-            GraphPattern::OrderBy { inner, expression } => {
-                self.lazy_order_by(inner, expression, solution_mappings, context, parameters, pushdowns)
-            }
-            GraphPattern::Project { inner, variables } => {
-                self.lazy_project(inner, variables, solution_mappings, context, parameters, pushdowns)
-            }
+            GraphPattern::OrderBy { inner, expression } => self.lazy_order_by(
+                inner,
+                expression,
+                solution_mappings,
+                context,
+                parameters,
+                pushdowns,
+            ),
+            GraphPattern::Project { inner, variables } => self.lazy_project(
+                inner,
+                variables,
+                solution_mappings,
+                context,
+                parameters,
+                pushdowns,
+            ),
             GraphPattern::Distinct { inner } => {
                 self.lazy_distinct(inner, solution_mappings, context, parameters, pushdowns)
             }

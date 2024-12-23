@@ -3,13 +3,13 @@ use crate::sparql::errors::SparqlError;
 use log::debug;
 use oxrdf::Variable;
 
+use crate::sparql::pushdowns::Pushdowns;
 use query_processing::aggregates::AggregateReturn;
 use query_processing::graph_patterns::{group_by, prepare_group_by};
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use spargebra::algebra::{AggregateExpression, GraphPattern};
 use std::collections::HashMap;
-use crate::sparql::pushdowns::Pushdowns;
 
 impl Triplestore {
     pub(crate) fn lazy_group(
@@ -24,15 +24,15 @@ impl Triplestore {
     ) -> Result<SolutionMappings, SparqlError> {
         debug!("Processing group graph pattern");
         let inner_context = context.extension_with(PathEntry::GroupInner);
-        let mut new_pushdown_variables = HashMap::new();
-        for v in variables {
-            if let Some((k,v,)) = pushdowns.variables.remove_entry(v.as_str()) {
-                new_pushdown_variables.insert(k, v);
-            }
-        }
-        let new_pushdowns = Pushdowns { variables: new_pushdown_variables };
-        let output_solution_mappings =
-            self.lazy_graph_pattern(inner, solution_mapping, &inner_context, parameters, new_pushdowns)?;
+        pushdowns.limit_to_variables(variables);
+        pushdowns.add_graph_pattern_pushdowns(inner);
+        let output_solution_mappings = self.lazy_graph_pattern(
+            inner,
+            solution_mapping,
+            &inner_context,
+            parameters,
+            pushdowns,
+        )?;
         let (mut output_solution_mappings, by, dummy_varname) =
             prepare_group_by(output_solution_mappings, variables);
 

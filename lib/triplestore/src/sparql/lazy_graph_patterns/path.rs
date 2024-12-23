@@ -1,5 +1,6 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
+use crate::sparql::pushdowns::Pushdowns;
 use oxrdf::vocab::xsd;
 use oxrdf::{NamedNode, Variable};
 use polars::prelude::{
@@ -24,7 +25,6 @@ use spargebra::algebra::{GraphPattern, PropertyPathExpression};
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 use sprs::{CsMatBase, TriMatBase};
 use std::collections::HashMap;
-use crate::sparql::pushdowns::Pushdowns;
 
 const NAMED_NODE_INDEX_COL: &str = "named_node_index_column";
 const VALUE_COLUMN: &str = "value";
@@ -80,7 +80,7 @@ impl Triplestore {
                 None,
                 &context.extension_with(PathEntry::PathRewrite),
                 &None,
-                pushdowns
+                pushdowns,
             )?;
             for i in &intermediaries {
                 sms.rdf_node_types.remove(i).unwrap();
@@ -323,7 +323,7 @@ impl Triplestore {
         let mut path_solution_mappings = SolutionMappings {
             mappings: out_df.lazy(),
             rdf_node_types: datatypes,
-            height_upper_bound: out_df_height
+            height_upper_bound: out_df_height,
         };
 
         if let Some(mappings) = solution_mappings {
@@ -785,21 +785,19 @@ impl U32DataFrameCreator {
     ) -> Result<(), SparqlError> {
         match ppe {
             PropertyPathExpression::NamedNode(nn) => {
-                let
-                    SolutionMappings {
-                        mappings,
-                        mut rdf_node_types,
-                        ..
-                    }
-                 = triplestore.get_deduplicated_predicate_lf(
+                let SolutionMappings {
+                    mappings,
+                    mut rdf_node_types,
+                    ..
+                } = triplestore.get_deduplicated_predicate_lf(
                     nn,
                     &Some(SUBJECT_COL_NAME.to_string()),
                     &None,
                     &Some(OBJECT_COL_NAME.to_string()),
                     &None,
-                    None,
-                    None,
-                    None,
+                    &None,
+                    &None,
+                    &None,
                 )?;
                 self.named_nodes.insert(
                     nn.clone(),

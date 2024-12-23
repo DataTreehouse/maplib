@@ -3,10 +3,11 @@ pub(crate) mod lazy_aggregate;
 mod lazy_expressions;
 pub(crate) mod lazy_graph_patterns;
 mod lazy_order;
-pub(crate) mod pushdowns;
+pub mod pushdowns;
 
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
+use crate::sparql::pushdowns::Pushdowns;
 use crate::TriplesToAdd;
 use oxrdf::{NamedNode, Subject, Term, Triple, Variable};
 use oxttl::TurtleSerializer;
@@ -29,7 +30,6 @@ use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 use spargebra::Query;
 use std::collections::HashMap;
 use uuid::Uuid;
-use crate::sparql::pushdowns::Pushdowns;
 
 #[derive(Debug)]
 pub enum QueryResult {
@@ -132,7 +132,8 @@ impl Triplestore {
                     mappings,
                     rdf_node_types: types,
                     ..
-                } = self.lazy_graph_pattern(pattern, None, &context, parameters, Pushdowns::new())?;
+                } =
+                    self.lazy_graph_pattern(pattern, None, &context, parameters, Pushdowns::new())?;
                 let df = mappings.with_streaming(streaming).collect().unwrap();
                 Ok(QueryResult::Select(df, types))
             }
@@ -146,7 +147,8 @@ impl Triplestore {
                     mappings,
                     rdf_node_types,
                     ..
-                } = self.lazy_graph_pattern(pattern, None, &context, parameters, Pushdowns::new())?;
+                } =
+                    self.lazy_graph_pattern(pattern, None, &context, parameters, Pushdowns::new())?;
                 let df = mappings.collect().unwrap();
                 let mut solutions = vec![];
                 for t in template {

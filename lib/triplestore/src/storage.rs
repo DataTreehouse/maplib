@@ -19,8 +19,9 @@ use representation::{
 use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
 use uuid::Uuid;
+use spargebra::term::GroundTerm;
 
-const OFFSET_STEP: usize = 1_000;
+const OFFSET_STEP: usize = 100;
 
 #[derive(Clone)]
 pub(crate) struct Triples {
@@ -95,7 +96,7 @@ impl Triples {
     ) -> Result<(), TriplestoreError> {
         if self.height_upper_bound > OFFSET_STEP * 10 && create_index_options.subject_object_sort {
             let mut lfs: Vec<_> = self
-                .get_lazy_frames(&None)?
+                .get_lazy_frames(&None, &None)?
                 .into_iter()
                 .map(|(lf, _)| lf)
                 .collect();
@@ -148,7 +149,9 @@ impl Triples {
     pub(crate) fn get_lazy_frames(
         &self,
         subjects: &Option<Vec<Subject>>,
+        _objects: &Option<Vec<GroundTerm>>,
     ) -> Result<Vec<(LazyFrame, usize)>, TriplestoreError> {
+        //Todo: handle object,subject sorted index..
         if let Some(unsorted) = &self.unsorted {
             let lfs: Result<Vec<_>, _> = unsorted
                 .par_iter()
@@ -186,7 +189,7 @@ impl Triples {
         object_type: &BaseRDFNodeType,
         named_node: Option<&NamedNode>,
     ) -> Result<SolutionMappings, TriplestoreError> {
-        let lfs_and_heights = self.get_lazy_frames(&None)?;
+        let lfs_and_heights = self.get_lazy_frames(&None, &None)?;
         let mut height = 0usize;
         let mut lfs = vec![];
         for (lf, lf_height) in lfs_and_heights {
@@ -220,6 +223,8 @@ impl Triples {
         if let Some(unsorted) = &mut self.unsorted {
             unsorted.push(new_stored);
             self.unique = false;
+        } else if let Some(sorted) = &self.subject_object_sort {
+            todo!()
         } else {
             self.unsorted = Some(vec![new_stored]);
             self.unique = unique;
@@ -271,8 +276,11 @@ impl StoredTriples {
                     diagonal: false,
                     from_partitioned_ds: false,
                 },
-            )
-            .unwrap();
+            ) //This collection is important for performance.. not quite sure why
+            .unwrap()
+            .collect()
+            .unwrap()
+            .lazy();
         }
         Ok((lf, height))
     }
@@ -328,7 +336,6 @@ fn get_lookup_interval(
     sparse_map: &BTreeMap<String, usize>,
     height: usize,
 ) -> (usize, usize) {
-    debug!("Getting exact lookup for {}", trg);
     let mut from = 0;
     //Todo: remove this clone..
     let mut range_backwards = sparse_map.range(..trg.to_string());

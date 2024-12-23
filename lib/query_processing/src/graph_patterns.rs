@@ -95,7 +95,7 @@ pub fn group_by(
     let SolutionMappings {
         mut mappings,
         rdf_node_types: mut datatypes,
-        height_upper_bound
+        height_upper_bound,
     } = solution_mappings;
     let grouped_mappings = mappings.group_by(by.as_slice());
 
@@ -106,7 +106,11 @@ pub fn group_by(
     if let Some(dummy_varname) = dummy_varname {
         mappings = mappings.drop_no_validate([dummy_varname]);
     }
-    Ok(SolutionMappings::new(mappings, datatypes, height_upper_bound))
+    Ok(SolutionMappings::new(
+        mappings,
+        datatypes,
+        height_upper_bound,
+    ))
 }
 
 pub fn join(
@@ -117,13 +121,13 @@ pub fn join(
     let SolutionMappings {
         mappings: right_mappings,
         rdf_node_types: right_datatypes,
-        height_upper_bound: right_height
+        height_upper_bound: right_height,
     } = right_solution_mappings;
 
     let SolutionMappings {
         mappings: left_mappings,
         rdf_node_types: left_datatypes,
-        height_upper_bound: left_height
+        height_upper_bound: left_height,
     } = left_solution_mappings;
 
     let (left_mappings, left_datatypes, right_mappings, right_datatypes) =
@@ -305,7 +309,11 @@ pub fn order_by(
             .with_maintain_order(false),
     );
 
-    Ok(SolutionMappings::new(mappings, rdf_node_types, height_upper_bound))
+    Ok(SolutionMappings::new(
+        mappings,
+        rdf_node_types,
+        height_upper_bound,
+    ))
 }
 
 pub fn project(
@@ -315,7 +323,7 @@ pub fn project(
     let SolutionMappings {
         mut mappings,
         rdf_node_types: mut datatypes,
-        height_upper_bound
+        height_upper_bound,
     } = solution_mappings;
     let cols: Vec<Expr> = variables.iter().map(|c| col(c.as_str())).collect();
     let mut new_datatypes = HashMap::new();
@@ -336,7 +344,11 @@ pub fn project(
         }
     }
     mappings = mappings.select(cols.as_slice());
-    Ok(SolutionMappings::new(mappings, new_datatypes, height_upper_bound))
+    Ok(SolutionMappings::new(
+        mappings,
+        new_datatypes,
+        height_upper_bound,
+    ))
 }
 
 pub fn union(
@@ -363,7 +375,11 @@ pub fn union(
                 CategoricalOrdering::Physical,
             );
         }
-        cat_mappings.push(SolutionMappings::new(mappings, rdf_node_types, height_upper_bound));
+        cat_mappings.push(SolutionMappings::new(
+            mappings,
+            rdf_node_types,
+            height_upper_bound,
+        ));
     }
     mappings = cat_mappings;
 
@@ -486,5 +502,9 @@ pub fn union(
     )
     .expect("Concat problem");
     output_mappings = implode_multicolumns(output_mappings, exploded_map);
-    Ok(SolutionMappings::new(output_mappings, target_types, new_height))
+    Ok(SolutionMappings::new(
+        output_mappings,
+        target_types,
+        new_height,
+    ))
 }
