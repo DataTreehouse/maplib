@@ -34,10 +34,8 @@ impl Triplestore {
             parameters,
             pushdowns.clone(),
         )?;
-        println!("Pushdowns before: {:?}", pushdowns);
         left_solution_mappings = pushdowns.add_from_solution_mappings(left_solution_mappings);
         pushdowns.add_graph_pattern_pushdowns(right);
-        println!("Pushdowns after: {:?}", pushdowns);
 
         if let Some(expr) = expression {
             pushdowns.add_filter_variable_pushdowns(expr);

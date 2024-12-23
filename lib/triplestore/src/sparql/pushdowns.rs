@@ -20,7 +20,6 @@ enum ConstraintExpr {
     Bottom,
     Top,
     Constraint(Box<BaseRDFNodeType>),
-    Not(Box<ConstraintExpr>),
     And(Box<ConstraintExpr>, Box<ConstraintExpr>),
     Or(Box<ConstraintExpr>, Box<ConstraintExpr>),
 }
@@ -44,7 +43,6 @@ impl ConstraintExpr {
                     panic!("Invalid state")
                 }
             },
-            ConstraintExpr::Not(c) => !c.compatible_with(t),
             ConstraintExpr::And(left, right) => left.compatible_with(t) && right.compatible_with(t),
             ConstraintExpr::Or(left, right) => left.compatible_with(t) || right.compatible_with(t),
         }
@@ -108,11 +106,6 @@ impl PossibleTypes {
             Box::new(old_e),
             Box::new(other.e.unwrap()),
         ));
-    }
-
-    pub(crate) fn negate(&mut self) {
-        let old_e = self.e.replace(ConstraintExpr::Bottom).unwrap();
-        self.e = Some(ConstraintExpr::Not(Box::new(old_e)));
     }
 }
 
@@ -443,14 +436,6 @@ fn find_variable_type_constraints(e: &Expression) -> Option<HashMap<String, Poss
                     v.as_str().to_string(),
                     PossibleTypes::singular(t),
                 )]));
-            }
-        }
-        Expression::Not(e) => {
-            if let Some(mut ctrs) = find_variable_type_constraints(e) {
-                for v in ctrs.values_mut() {
-                    v.negate()
-                }
-                return Some(ctrs);
             }
         }
         Expression::FunctionCall(f, args) => match f {
