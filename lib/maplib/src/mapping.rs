@@ -305,7 +305,7 @@ impl Mapping {
         &mut self,
         predicate: &NamedNode,
         graph: Option<NamedNode>,
-        include_transient:bool
+        include_transient: bool,
     ) -> Result<Vec<EagerSolutionMappings>, SparqlError> {
         let triplestore = self.get_triplestore(&graph);
         triplestore.get_predicate_eager_solution_mappings(predicate, include_transient)

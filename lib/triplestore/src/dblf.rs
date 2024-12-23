@@ -33,19 +33,25 @@ impl Triplestore {
     ) -> Result<Vec<EagerSolutionMappings>, SparqlError> {
         let mut types = vec![];
         if let Some(map) = self.triples_map.get(predicate) {
-            for (s,o) in map.keys() {
-                types.push((PossibleTypes::singular(s.clone()), PossibleTypes::singular(o.clone())));
+            for (s, o) in map.keys() {
+                types.push((
+                    PossibleTypes::singular(s.clone()),
+                    PossibleTypes::singular(o.clone()),
+                ));
             }
         }
         if include_transient {
             if let Some(map) = self.transient_triples_map.get(predicate) {
                 for (s, o) in map.keys() {
-                    types.push((PossibleTypes::singular(s.clone()), PossibleTypes::singular(o.clone())));
+                    types.push((
+                        PossibleTypes::singular(s.clone()),
+                        PossibleTypes::singular(o.clone()),
+                    ));
                 }
             }
         }
         let mut eager_sms = vec![];
-        for (s,o) in types {
+        for (s, o) in types {
             let sm = self.get_deduplicated_predicate_lf(
                 predicate,
                 &Some(SUBJECT_COL_NAME.to_string()),
@@ -70,7 +76,7 @@ impl Triplestore {
         verb_keep_rename: &Option<String>,
         object_keep_rename: &Option<String>,
         subjects: &Option<Vec<Subject>>,
-        objects: &Option<Vec<GroundTerm>>,
+        objects: &Option<Vec<Term>>,
         subject_datatype_ctr: &Option<PossibleTypes>,
         object_datatype_ctr: &Option<PossibleTypes>,
     ) -> Result<SolutionMappings, SparqlError> {
@@ -164,6 +170,7 @@ impl Triplestore {
                 subject_keep_rename,
                 verb_keep_rename,
                 object_keep_rename,
+                object_datatype_ctr,
             ))
         }
     }
@@ -176,7 +183,7 @@ impl Triplestore {
         verb_keep_rename: &Option<String>,
         object_keep_rename: &Option<String>,
         subjects: &Option<Vec<Subject>>,
-        objects: &Option<Vec<GroundTerm>>,
+        objects: &Option<Vec<Term>>,
         subject_datatype_ctr: &Option<PossibleTypes>,
         object_datatype_ctr: &Option<PossibleTypes>,
     ) -> Result<SolutionMappings, SparqlError> {
@@ -259,7 +266,12 @@ impl Triplestore {
             let sm = union(solution_mappings, true)?;
             sm
         } else {
-            create_empty_lf_datatypes(subject_keep_rename, verb_keep_rename, object_keep_rename)
+            create_empty_lf_datatypes(
+                subject_keep_rename,
+                verb_keep_rename,
+                object_keep_rename,
+                object_datatype_ctr,
+            )
         })
     }
 
@@ -331,7 +343,7 @@ fn single_tt_to_deduplicated_lf(
     tt: &mut Triples,
     caching_folder: &Option<String>,
     subjects: &Option<Vec<Subject>>,
-    objects: &Option<Vec<GroundTerm>>,
+    objects: &Option<Vec<Term>>,
 ) -> Result<(LazyFrame, usize), SparqlError> {
     if !tt.unique {
         tt.deduplicate(caching_folder)
@@ -368,7 +380,7 @@ pub fn multiple_tt_to_deduplicated_lf(
     triples: &mut HashMap<(BaseRDFNodeType, BaseRDFNodeType), Triples>,
     types: Option<HashSet<(BaseRDFNodeType, BaseRDFNodeType)>>,
     subjects: &Option<Vec<Subject>>,
-    objects: &Option<Vec<GroundTerm>>,
+    objects: &Option<Vec<Term>>,
     caching_folder: &Option<String>,
 ) -> Result<Option<Vec<SolutionMappings>>, SparqlError> {
     let mut filtered = vec![];
@@ -395,12 +407,7 @@ pub fn multiple_tt_to_deduplicated_lf(
             if let Some(object_terms) = &objects {
                 // Handles case where singular object from triple pattern.
                 if object_terms.len() == 1 {
-                    let term = match object_terms.get(0).unwrap() {
-                        GroundTerm::NamedNode(nn) => Term::NamedNode(nn.clone()),
-                        GroundTerm::Literal(lit) => Term::Literal(lit.clone()),
-                        _ => unimplemented!(),
-                    };
-                    lf = lf.filter(col(OBJECT_COL_NAME).eq(rdf_term_to_polars_expr(&term)));
+                    lf = lf.filter(col(OBJECT_COL_NAME).eq(rdf_term_to_polars_expr(&object_terms.get(0).unwrap())));
                 }
             }
             let rdf_node_types = HashMap::from([
@@ -422,6 +429,7 @@ pub fn create_empty_lf_datatypes(
     subject_keep_rename: &Option<String>,
     verb_keep_rename: &Option<String>,
     object_keep_rename: &Option<String>,
+    object_datatype: &Option<PossibleTypes>,
 ) -> SolutionMappings {
     let mut columns_vec = vec![];
     let mut out_datatypes = HashMap::new();
@@ -441,7 +449,11 @@ pub fn create_empty_lf_datatypes(
         ))
     }
     if let Some(object_rename) = object_keep_rename {
-        let dt = BaseRDFNodeType::None;
+        let dt = if let Some(object_datatype) = object_datatype {
+            object_datatype.get_witness()
+        } else {
+            BaseRDFNodeType::None
+        };
         let polars_dt = dt.polars_data_type();
         let use_datatype = dt.as_rdf_node_type();
 

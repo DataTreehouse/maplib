@@ -57,12 +57,18 @@ pub struct PossibleTypes {
 }
 
 impl PossibleTypes {
+    pub(crate) fn get_witness(&self) -> BaseRDFNodeType {
+        match self.e.as_ref().unwrap() {
+            ConstraintExpr::Bottom | ConstraintExpr::Top => BaseRDFNodeType::None,
+            ConstraintExpr::Constraint(c) => c.as_ref().clone(),
+            _ => BaseRDFNodeType::None, //Todo improve this..
+        }
+    }
+
     pub(crate) fn compatible_with(&self, t: &BaseRDFNodeType) -> bool {
         self.e.as_ref().unwrap().compatible_with(t)
     }
-}
 
-impl PossibleTypes {
     pub fn singular(t: BaseRDFNodeType) -> Self {
         PossibleTypes::singular_ctr(ConstraintExpr::Constraint(Box::new(t)))
     }
@@ -110,9 +116,9 @@ impl PossibleTypes {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Pushdowns {
-    pub variables_values: HashMap<String, HashSet<GroundTerm>>,
+    pub variables_values: HashMap<String, HashSet<Term>>,
     pub variables_type_constraints: HashMap<String, PossibleTypes>,
 }
 
@@ -147,12 +153,8 @@ impl Pushdowns {
                         column_as_terms(x, eager_sm.rdf_node_types.get(name).unwrap());
                     let terms: HashSet<_> = maybe_terms
                         .into_iter()
-                        .filter(|x| matches!(x, Some(Term::Literal(..)) | Some(Term::NamedNode(..))))
-                        .map(|x| match x.unwrap() {
-                            Term::NamedNode(nn) => GroundTerm::NamedNode(nn),
-                            Term::Literal(l) => GroundTerm::Literal(l),
-                            _ => panic!("Invalid state"),
-                        })
+                        .filter(|x| x.is_some())
+                        .map(|x| x.unwrap())
                         .collect();
                     (name.to_string(), terms)
                 })
@@ -192,7 +194,7 @@ impl Pushdowns {
                 self.add_graph_pattern_pushdowns(inner);
                 self.add_filter_variable_pushdowns(expr);
             }
-            GraphPattern::Union { left:_, right:_ } => {
+            GraphPattern::Union { left: _, right: _ } => {
                 //Todo: do disjunction..
             }
             GraphPattern::Extend {
@@ -236,11 +238,19 @@ impl Pushdowns {
                             }
                         }
                     }
-                    if !terms.is_empty() {
+                    let use_terms: HashSet<_> = terms
+                        .into_iter()
+                        .map(|x| match x {
+                            GroundTerm::NamedNode(nn) => Term::NamedNode(nn),
+                            GroundTerm::Literal(l) => Term::Literal(l),
+                        })
+                        .collect();
+                    if !use_terms.is_empty() {
                         if let Some(t) = self.variables_values.get_mut(v.as_str()) {
-                            t.extend(terms);
+                            t.extend(use_terms);
                         } else {
-                            self.variables_values.insert(v.as_str().to_string(), terms);
+                            self.variables_values
+                                .insert(v.as_str().to_string(), use_terms);
                         }
                     }
                     if !types.is_empty() {
@@ -269,9 +279,14 @@ impl Pushdowns {
                 self.add_graph_pattern_pushdowns(inner);
             }
             GraphPattern::Group {
-                inner:_, variables:_, ..
+                inner: _,
+                variables: _,
+                ..
             }
-            | GraphPattern::Project { inner:_, variables:_ } => {
+            | GraphPattern::Project {
+                inner: _,
+                variables: _,
+            } => {
                 //Todo..
             }
             _ => {}
@@ -321,7 +336,7 @@ impl Pushdowns {
     }
 }
 
-fn find_variable_pushdowns(e: &Expression) -> Option<HashMap<String, HashSet<GroundTerm>>> {
+fn find_variable_pushdowns(e: &Expression) -> Option<HashMap<String, HashSet<Term>>> {
     match e {
         Expression::If(_, left, right) | Expression::Or(left, right) => {
             let left = find_variable_pushdowns(left);
@@ -352,9 +367,9 @@ fn find_variable_pushdowns(e: &Expression) -> Option<HashMap<String, HashSet<Gro
             if let Expression::Variable(left) = left.as_ref() {
                 let mut terms = HashSet::new();
                 if let Expression::NamedNode(nn) = right.as_ref() {
-                    terms.insert(GroundTerm::NamedNode(nn.clone()));
+                    terms.insert(Term::NamedNode(nn.clone()));
                 } else if let Expression::Literal(l) = right.as_ref() {
-                    terms.insert(GroundTerm::Literal(l.clone()));
+                    terms.insert(Term::Literal(l.clone()));
                 } else {
                     return None;
                 }
@@ -362,9 +377,9 @@ fn find_variable_pushdowns(e: &Expression) -> Option<HashMap<String, HashSet<Gro
             } else if let Expression::Variable(right) = right.as_ref() {
                 let mut terms = HashSet::new();
                 if let Expression::NamedNode(nn) = left.as_ref() {
-                    terms.insert(GroundTerm::NamedNode(nn.clone()));
+                    terms.insert(Term::NamedNode(nn.clone()));
                 } else if let Expression::Literal(l) = left.as_ref() {
-                    terms.insert(GroundTerm::Literal(l.clone()));
+                    terms.insert(Term::Literal(l.clone()));
                 } else {
                     return None;
                 }
@@ -378,9 +393,9 @@ fn find_variable_pushdowns(e: &Expression) -> Option<HashMap<String, HashSet<Gro
                 let mut terms = HashSet::new();
                 for e in values {
                     if let Expression::NamedNode(nn) = e {
-                        terms.insert(GroundTerm::NamedNode(nn.clone()));
+                        terms.insert(Term::NamedNode(nn.clone()));
                     } else if let Expression::Literal(l) = e {
-                        terms.insert(GroundTerm::Literal(l.clone()));
+                        terms.insert(Term::Literal(l.clone()));
                     } else {
                         return None;
                     }
@@ -519,9 +534,9 @@ fn get_expression_rdf_type(e: &Expression) -> Option<BaseRDFNodeType> {
 }
 
 fn conjunction(
-    left: &mut HashMap<String, HashSet<GroundTerm>>,
-    mut right: HashMap<String, HashSet<GroundTerm>>,
-) -> HashMap<String, HashSet<GroundTerm>> {
+    left: &mut HashMap<String, HashSet<Term>>,
+    mut right: HashMap<String, HashSet<Term>>,
+) -> HashMap<String, HashSet<Term>> {
     let mut new_map = HashMap::new();
     for (k, v) in left.drain() {
         if let Some(vr) = right.remove(&k) {

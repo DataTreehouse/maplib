@@ -27,9 +27,15 @@ impl Triplestore {
             context.as_str()
         );
         let subjects = create_subjects(&triple_pattern.subject, &pushdowns.variables_values);
-        let subject_type_ctr = create_type_constraint(&triple_pattern.subject, &pushdowns.variables_type_constraints);
+        let subject_type_ctr = create_type_constraint(
+            &triple_pattern.subject,
+            &pushdowns.variables_type_constraints,
+        );
         let objects = create_objects(&triple_pattern.object, &pushdowns.variables_values);
-        let object_type_ctr = create_type_constraint(&triple_pattern.object, &pushdowns.variables_type_constraints);
+        let object_type_ctr = create_type_constraint(
+            &triple_pattern.object,
+            &pushdowns.variables_type_constraints,
+        );
 
         let subject_rename = get_keep_rename_term_pattern(&triple_pattern.subject);
         let verb_rename = get_keep_rename_named_node_pattern(&triple_pattern.predicate);
@@ -47,7 +53,7 @@ impl Triplestore {
                 &subjects,
                 &objects,
                 &subject_type_ctr,
-                &object_type_ctr
+                &object_type_ctr,
             )?,
             NamedNodePattern::Variable(v) => {
                 let predicates: Option<HashSet<NamedNode>>;
@@ -115,7 +121,7 @@ impl Triplestore {
                     &subjects,
                     &objects,
                     &subject_type_ctr,
-                    &object_type_ctr
+                    &object_type_ctr,
                 )?
             }
         };
@@ -174,10 +180,15 @@ impl Triplestore {
     }
 }
 
-fn create_type_constraint(term_pattern: &TermPattern, variable_type_constraint: &HashMap<String, PossibleTypes>) -> Option<PossibleTypes> {
+fn create_type_constraint(
+    term_pattern: &TermPattern,
+    variable_type_constraint: &HashMap<String, PossibleTypes>,
+) -> Option<PossibleTypes> {
     match term_pattern {
         TermPattern::NamedNode(_) => Some(PossibleTypes::singular(BaseRDFNodeType::IRI)),
-        TermPattern::Literal(l) => Some(PossibleTypes::singular(BaseRDFNodeType::Literal(l.datatype().into_owned()))),
+        TermPattern::Literal(l) => Some(PossibleTypes::singular(BaseRDFNodeType::Literal(
+            l.datatype().into_owned(),
+        ))),
         TermPattern::Variable(v) => {
             if let Some(pt) = variable_type_constraint.get(v.as_str()) {
                 Some(pt.clone())
@@ -185,23 +196,13 @@ fn create_type_constraint(term_pattern: &TermPattern, variable_type_constraint: 
                 None
             }
         }
-        _ => {None}
-    }
-}
-
-pub fn create_term_pattern_term(term_pattern: &TermPattern) -> Option<Term> {
-    if let TermPattern::Literal(l) = term_pattern {
-        Some(Term::Literal(l.clone()))
-    } else if let TermPattern::NamedNode(nn) = term_pattern {
-        Some(Term::NamedNode(nn.clone()))
-    } else {
-        None
+        _ => None,
     }
 }
 
 pub fn create_subjects(
     term_pattern: &TermPattern,
-    variable_pushdowns: &HashMap<String, HashSet<GroundTerm>>,
+    variable_pushdowns: &HashMap<String, HashSet<Term>>,
 ) -> Option<Vec<Subject>> {
     if let TermPattern::NamedNode(nn) = term_pattern {
         Some(vec![Subject::NamedNode(nn.clone())])
@@ -211,7 +212,8 @@ pub fn create_subjects(
                 terms
                     .iter()
                     .map(|x| match x {
-                        GroundTerm::NamedNode(nn) => Some(Subject::NamedNode(nn.clone())),
+                        Term::NamedNode(nn) => Some(Subject::NamedNode(nn.clone())),
+                        Term::BlankNode(bl) => Some(Subject::BlankNode(bl.clone())),
                         _ => None,
                     })
                     .filter(|x| x.is_some())
@@ -228,20 +230,19 @@ pub fn create_subjects(
 
 pub fn create_objects(
     term_pattern: &TermPattern,
-    variable_pushdowns: &HashMap<String, HashSet<GroundTerm>>,
-) -> Option<Vec<GroundTerm>> {
-    if let TermPattern::NamedNode(nn) = term_pattern {
-        Some(vec![GroundTerm::NamedNode(nn.clone())])
-    } else if let TermPattern::Literal(lit) = term_pattern {
-        Some(vec![GroundTerm::Literal(lit.clone())])
-    } else if let TermPattern::Variable(v) = term_pattern {
-        if let Some(terms) = variable_pushdowns.get(v.as_str()) {
-            Some(terms.iter().cloned().collect())
-        } else {
-            None
+    variable_pushdowns: &HashMap<String, HashSet<Term>>,
+) -> Option<Vec<Term>> {
+    match term_pattern {
+        TermPattern::NamedNode(nn) => Some(vec![Term::NamedNode(nn.clone())]),
+        TermPattern::Literal(lit) => Some(vec![Term::Literal(lit.clone())]),
+        TermPattern::Variable(v) => {
+            if let Some(terms) = variable_pushdowns.get(v.as_str()) {
+                Some(terms.iter().cloned().collect())
+            } else {
+                None
+            }
         }
-    } else {
-        None
+        _ => None,
     }
 }
 

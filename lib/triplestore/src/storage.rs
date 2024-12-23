@@ -1,7 +1,7 @@
 use crate::errors::TriplestoreError;
 use crate::CreateIndexOptions;
 use log::debug;
-use oxrdf::{NamedNode, Subject};
+use oxrdf::{NamedNode, Subject, Term};
 use parquet_io::{scan_parquet, write_parquet};
 use polars::prelude::{
     col, concat, concat_lf_diagonal, lit, IdxSize, IntoLazy, LazyFrame, PlSmallStr, UnionArgs,
@@ -16,10 +16,10 @@ use representation::solution_mapping::SolutionMappings;
 use representation::{
     BaseRDFNodeType, RDFNodeType, OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME,
 };
+use spargebra::term::GroundTerm;
 use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
 use uuid::Uuid;
-use spargebra::term::GroundTerm;
 
 const OFFSET_STEP: usize = 100;
 
@@ -149,7 +149,7 @@ impl Triples {
     pub(crate) fn get_lazy_frames(
         &self,
         subjects: &Option<Vec<Subject>>,
-        _objects: &Option<Vec<GroundTerm>>,
+        _objects: &Option<Vec<Term>>,
     ) -> Result<Vec<(LazyFrame, usize)>, TriplestoreError> {
         //Todo: handle object,subject sorted index..
         if let Some(unsorted) = &self.unsorted {
