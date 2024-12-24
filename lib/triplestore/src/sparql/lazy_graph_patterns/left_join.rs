@@ -12,6 +12,7 @@ use spargebra::algebra::{Expression, GraphPattern};
 use std::collections::HashMap;
 
 impl Triplestore {
+    #[allow(clippy::too_many_arguments)]
     pub fn lazy_left_join(
         &mut self,
         left: &GraphPattern,
