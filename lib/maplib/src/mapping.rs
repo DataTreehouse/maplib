@@ -296,9 +296,10 @@ impl Mapping {
     pub fn get_predicate_iris(
         &mut self,
         graph: &Option<NamedNode>,
+        include_transient: bool,
     ) -> Result<Vec<NamedNode>, SparqlError> {
         let triplestore = self.get_triplestore(graph);
-        Ok(triplestore.get_predicate_iris())
+        Ok(triplestore.get_predicate_iris(include_transient))
     }
 
     pub fn get_predicate(

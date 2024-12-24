@@ -153,7 +153,6 @@ impl Triplestore {
                     )
                     .drop(["object_key"]);
                 out_df = out_lf.collect().unwrap();
-
                 let mut dtypes = HashMap::new();
                 dtypes.insert(
                     SUBJECT_COL_NAME.to_string(),
@@ -706,8 +705,8 @@ impl U32DataFrameCreator {
             RDFNodeType::Literal(xsd::UNSIGNED_INT.into_owned()),
         );
 
-        let obj_soln_mappings = SolutionMappings::new(lf_subj, subj_types, df_height);
-        let subj_soln_mappings = SolutionMappings::new(lf_obj.lazy(), obj_types, df_height);
+        let subj_soln_mappings = SolutionMappings::new(lf_subj, subj_types, df_height);
+        let obj_soln_mappings = SolutionMappings::new(lf_obj, obj_types, df_height);
         let SolutionMappings {
             mut mappings,
             rdf_node_types: lookup_df_types,

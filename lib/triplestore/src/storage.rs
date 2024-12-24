@@ -110,7 +110,7 @@ impl Triples {
                         parallel: true,
                         rechunk: true,
                         to_supertypes: false,
-                        diagonal: true,
+                        diagonal: false,
                         from_partitioned_ds: false,
                     },
                 )
@@ -120,27 +120,8 @@ impl Triples {
                 lfs.remove(0)
             };
 
-            lf = lf.with_column(
-                col(SUBJECT_COL_NAME)
-                    .cast(DataType::Categorical(None, CategoricalOrdering::Lexical)),
-            );
-            lf = lf.sort(
-                vec![PlSmallStr::from_str(SUBJECT_COL_NAME)],
-                SortMultipleOptions {
-                    descending: vec![false],
-                    nulls_last: vec![false],
-                    multithreaded: true,
-                    maintain_order: false,
-                    limit: None,
-                },
-            );
-
-            let df = lf.collect().unwrap();
-            let subj_ser = df
-                .column(SUBJECT_COL_NAME)
-                .unwrap()
-                .as_materialized_series();
-            let subj_sparse_map = create_sparse_map(subj_ser);
+            lf = cast_subject_col_to_cat(lf);
+            let (df, subj_sparse_map) = create_sorted_df_and_sparse_map(lf);
             self.subject_object_sparse_index = Some(subj_sparse_map);
             self.subject_object_sort = Some(StoredTriples::new(df, caching_folder)?);
             self.unsorted = None;
@@ -191,13 +172,16 @@ impl Triples {
         unique: bool,
         caching_folder: &Option<String>,
     ) -> Result<(), TriplestoreError> {
-        let new_stored = StoredTriples::new(df, caching_folder)?;
         if let Some(unsorted) = &mut self.unsorted {
+            let new_stored = StoredTriples::new(df, caching_folder)?;
             unsorted.push(new_stored);
             self.unique = false;
         } else if let Some(sorted) = &self.subject_object_sort {
-            todo!()
+            let (stored, sparse) = update_subject_sorted_index(df, unique, caching_folder, sorted)?;
+            self.subject_object_sparse_index = Some(sparse);
+            self.subject_object_sort = Some(stored);
         } else {
+            let new_stored = StoredTriples::new(df, caching_folder)?;
             self.unsorted = Some(vec![new_stored]);
             self.unique = unique;
         }
@@ -375,6 +359,62 @@ fn update_at_offset(
         let e = sparse_map.entry(s);
         e.or_insert(offset);
     }
+}
+
+fn cast_subject_col_to_cat(mut lf: LazyFrame) -> LazyFrame {
+    lf = lf.with_column(
+        col(SUBJECT_COL_NAME).cast(DataType::Categorical(None, CategoricalOrdering::Lexical)),
+    );
+    lf
+}
+
+fn update_subject_sorted_index(
+    df: DataFrame,
+    unique: bool,
+    caching_folder: &Option<String>,
+    stored_triples: &StoredTriples,
+) -> Result<(StoredTriples, BTreeMap<String, usize>), TriplestoreError> {
+    let mut lf = df.lazy();
+    if !unique {
+        lf = lf.unique(None, UniqueKeepStrategy::Any);
+    }
+    lf = cast_subject_col_to_cat(lf);
+    let (existing_lf, _) = stored_triples.get_lazy_frame(None)?;
+    lf = concat(
+        vec![lf, existing_lf],
+        UnionArgs {
+            parallel: true,
+            rechunk: false,
+            to_supertypes: false,
+            diagonal: false,
+            from_partitioned_ds: false,
+        },
+    )
+    .unwrap();
+    let (df, sparse_map) = create_sorted_df_and_sparse_map(lf);
+    let stored = StoredTriples::new(df, caching_folder)?;
+    Ok((stored, sparse_map))
+}
+
+fn create_sorted_df_and_sparse_map(mut lf: LazyFrame) -> (DataFrame, BTreeMap<String, usize>) {
+    lf = lf.sort(
+        vec![PlSmallStr::from_str(SUBJECT_COL_NAME)],
+        SortMultipleOptions {
+            descending: vec![false],
+            nulls_last: vec![false],
+            multithreaded: true,
+            maintain_order: false,
+            limit: None,
+        },
+    );
+
+    let df = lf.collect().unwrap();
+    let subj_ser = df
+        .column(SUBJECT_COL_NAME)
+        .unwrap()
+        .as_materialized_series();
+    let subj_sparse_map = create_sparse_map(subj_ser);
+    (df, subj_sparse_map)
 }
 
 fn create_sparse_map(ser: &Series) -> BTreeMap<String, usize> {

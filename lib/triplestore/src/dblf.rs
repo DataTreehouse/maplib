@@ -14,10 +14,15 @@ use representation::{BaseRDFNodeType, RDFNodeType, OBJECT_COL_NAME, SUBJECT_COL_
 use std::collections::{HashMap, HashSet};
 
 impl Triplestore {
-    pub fn get_predicate_iris(&self) -> Vec<NamedNode> {
+    pub fn get_predicate_iris(&self, include_transient: bool) -> Vec<NamedNode> {
         let mut iris = vec![];
         for nn in self.triples_map.keys() {
             iris.push(nn.clone());
+        }
+        if include_transient {
+            for nn in self.transient_triples_map.keys() {
+                iris.push(nn.clone());
+            }
         }
         iris
     }
