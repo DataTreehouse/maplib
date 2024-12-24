@@ -15,7 +15,7 @@ pub const OWL_REAL: &str = "http://www.w3.org/2002/07/owl#real";
 
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
-enum ConstraintExpr {
+pub enum ConstraintExpr {
     Bottom,
     Top,
     Constraint(Box<BaseRDFNodeType>),

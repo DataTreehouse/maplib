@@ -1,21 +1,20 @@
 use crate::errors::TriplestoreError;
 use crate::CreateIndexOptions;
-use oxrdf::{NamedNode, Subject, Term};
+use oxrdf::{Subject, Term};
 use parquet_io::{scan_parquet, write_parquet};
 use polars::prelude::{
-    col, concat, concat_lf_diagonal, lit, IdxSize, IntoLazy, LazyFrame, PlSmallStr, UnionArgs,
+    col, concat, IdxSize, IntoLazy, LazyFrame, PlSmallStr, UnionArgs,
 };
 use polars_core::datatypes::{AnyValue, CategoricalChunked, LogicalType};
 use polars_core::frame::{DataFrame, UniqueKeepStrategy};
 use polars_core::prelude::{CategoricalOrdering, DataType, Series, SortMultipleOptions};
 use rayon::iter::ParallelIterator;
 use rayon::iter::{IntoParallelRefIterator, ParallelDrainRange};
-use representation::rdf_to_polars::rdf_named_node_to_polars_literal_value;
-use representation::solution_mapping::SolutionMappings;
+
 use representation::{
-    BaseRDFNodeType, RDFNodeType, OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME,
+    SUBJECT_COL_NAME
 };
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use std::path::Path;
 use uuid::Uuid;
 

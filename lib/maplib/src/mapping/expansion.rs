@@ -246,7 +246,7 @@ impl Mapping {
     fn process_results(
         &mut self,
         mut result_vec: Vec<OTTRTripleInstance>,
-        call_uuid: &String,
+        call_uuid: &str,
         mut new_blank_node_counter: usize,
         graph: &Option<NamedNode>,
         deduplicate: bool,

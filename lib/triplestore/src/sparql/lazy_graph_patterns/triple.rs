@@ -71,59 +71,57 @@ impl Triplestore {
                             })
                             .collect(),
                     )
-                } else {
-                    if let Some(SolutionMappings {
-                        mappings,
-                        rdf_node_types,
-                        height_upper_bound,
-                    }) = solution_mappings
-                    {
-                        if let Some(dt) = rdf_node_types.get(v.as_str()) {
-                            if let RDFNodeType::IRI = dt {
-                                let mappings_df = mappings.collect().unwrap();
-                                let predicates_series = mappings_df
-                                    .column(v.as_str())
-                                    .unwrap()
-                                    .unique()
-                                    .unwrap()
-                                    .cast(&DataType::String)
-                                    .unwrap()
-                                    .take_materialized_series();
-                                let predicates_iter = predicates_series.iter();
-                                predicates = Some(
-                                    predicates_iter
-                                        .filter_map(|x| match x {
-                                            AnyValue::Null => None,
-                                            AnyValue::String(s) => {
-                                                Some(literal_iri_to_namednode(s))
-                                            }
-                                            AnyValue::StringOwned(s) => {
-                                                Some(literal_iri_to_namednode(&s))
-                                            }
-                                            x => panic!("Should never happen: {}", x),
-                                        })
-                                        .collect(),
-                                );
-                                solution_mappings = Some(SolutionMappings {
-                                    mappings: mappings_df.lazy(),
-                                    rdf_node_types,
-                                    height_upper_bound,
-                                })
-                            } else {
-                                predicates = Some(HashSet::new());
-                                solution_mappings = Some(SolutionMappings {
-                                    mappings,
-                                    rdf_node_types,
-                                    height_upper_bound,
-                                })
-                            };
+                } else if let Some(SolutionMappings {
+                    mappings,
+                    rdf_node_types,
+                    height_upper_bound,
+                }) = solution_mappings
+                {
+                    if let Some(dt) = rdf_node_types.get(v.as_str()) {
+                        if let RDFNodeType::IRI = dt {
+                            let mappings_df = mappings.collect().unwrap();
+                            let predicates_series = mappings_df
+                                .column(v.as_str())
+                                .unwrap()
+                                .unique()
+                                .unwrap()
+                                .cast(&DataType::String)
+                                .unwrap()
+                                .take_materialized_series();
+                            let predicates_iter = predicates_series.iter();
+                            predicates = Some(
+                                predicates_iter
+                                    .filter_map(|x| match x {
+                                        AnyValue::Null => None,
+                                        AnyValue::String(s) => {
+                                            Some(literal_iri_to_namednode(s))
+                                        }
+                                        AnyValue::StringOwned(s) => {
+                                            Some(literal_iri_to_namednode(&s))
+                                        }
+                                        x => panic!("Should never happen: {}", x),
+                                    })
+                                    .collect(),
+                            );
+                            solution_mappings = Some(SolutionMappings {
+                                mappings: mappings_df.lazy(),
+                                rdf_node_types,
+                                height_upper_bound,
+                            })
                         } else {
+                            predicates = Some(HashSet::new());
                             solution_mappings = Some(SolutionMappings {
                                 mappings,
                                 rdf_node_types,
                                 height_upper_bound,
-                            });
-                        }
+                            })
+                        };
+                    } else {
+                        solution_mappings = Some(SolutionMappings {
+                            mappings,
+                            rdf_node_types,
+                            height_upper_bound,
+                        });
                     }
                 }
                 let predicates: Option<Vec<_>> =
