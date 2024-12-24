@@ -2,20 +2,16 @@ use super::{Triples, Triplestore};
 use crate::sparql::errors::SparqlError;
 use crate::sparql::pushdowns::PossibleTypes;
 use oxrdf::{NamedNode, Subject, Term};
-use polars::prelude::{col, concat, lit, Expr, IntoLazy, LazyFrame, UnionArgs};
-use polars_core::prelude::{Column, DataFrame};
+use polars::prelude::{col, concat, lit, IntoLazy, LazyFrame, PlSmallStr, UnionArgs};
+use polars_core::prelude::{Column, DataFrame, SortMultipleOptions};
 use query_processing::graph_patterns::union;
 use representation::multitype::convert_lf_col_to_multitype;
 use representation::rdf_to_polars::{
-    polars_literal_values_to_series, rdf_named_node_to_polars_literal_value,
-    rdf_term_to_polars_expr,
+    rdf_named_node_to_polars_literal_value, rdf_term_to_polars_expr,
 };
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use representation::{BaseRDFNodeType, RDFNodeType, OBJECT_COL_NAME, SUBJECT_COL_NAME};
-use spargebra::term::GroundTerm;
 use std::collections::{HashMap, HashSet};
-use std::iter::Chain;
-use std::slice::Iter;
 
 impl Triplestore {
     pub fn get_predicate_iris(&self) -> Vec<NamedNode> {
@@ -95,6 +91,7 @@ impl Triplestore {
                     subjects,
                     objects,
                     &self.caching_folder,
+                    subject_keep_rename.is_some(),
                 )? {
                     all_sms.extend(sms);
                 }
@@ -114,6 +111,7 @@ impl Triplestore {
                     subjects,
                     objects,
                     &self.caching_folder,
+                    subject_keep_rename.is_some(),
                 )? {
                     all_sms.extend(sms);
                 }
@@ -263,8 +261,7 @@ impl Triplestore {
             }
         }
         Ok(if !solution_mappings.is_empty() {
-            let sm = union(solution_mappings, true)?;
-            sm
+            union(solution_mappings, true)?
         } else {
             create_empty_lf_datatypes(
                 subject_keep_rename,
@@ -382,6 +379,7 @@ pub fn multiple_tt_to_deduplicated_lf(
     subjects: &Option<Vec<Subject>>,
     objects: &Option<Vec<Term>>,
     caching_folder: &Option<String>,
+    keep_subject: bool,
 ) -> Result<Option<Vec<SolutionMappings>>, SparqlError> {
     let mut filtered = vec![];
     for ((subj_type, obj_type), tt) in triples.iter_mut() {
@@ -394,12 +392,24 @@ pub fn multiple_tt_to_deduplicated_lf(
         if keep {
             let (mut lf, height) =
                 single_tt_to_deduplicated_lf(tt, caching_folder, subjects, objects)?;
+            if tt.output_sorted_subject() && keep_subject {
+                lf = lf.sort(
+                    vec![PlSmallStr::from_str(SUBJECT_COL_NAME)],
+                    SortMultipleOptions {
+                        descending: vec![true],
+                        nulls_last: vec![false],
+                        multithreaded: true,
+                        maintain_order: false,
+                        limit: None,
+                    },
+                );
+            }
             if let Some(subject_terms) = &subjects {
                 // Handles case where singular subject from triple pattern.
                 if subject_terms.len() == 1 {
                     lf = lf.filter(
                         col(SUBJECT_COL_NAME).eq(rdf_term_to_polars_expr(&Term::from(
-                            subject_terms.get(0).unwrap().as_ref(),
+                            subject_terms.first().unwrap().as_ref(),
                         ))),
                     );
                 }
@@ -407,7 +417,10 @@ pub fn multiple_tt_to_deduplicated_lf(
             if let Some(object_terms) = &objects {
                 // Handles case where singular object from triple pattern.
                 if object_terms.len() == 1 {
-                    lf = lf.filter(col(OBJECT_COL_NAME).eq(rdf_term_to_polars_expr(&object_terms.get(0).unwrap())));
+                    lf = lf.filter(
+                        col(OBJECT_COL_NAME)
+                            .eq(rdf_term_to_polars_expr(object_terms.first().unwrap())),
+                    );
                 }
             }
             let rdf_node_types = HashMap::from([

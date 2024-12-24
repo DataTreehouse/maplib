@@ -113,7 +113,7 @@ impl Triplestore {
     pub fn add_triples_vec(
         &mut self,
         mut ts: Vec<TriplesToAdd>,
-        call_uuid: &String,
+        call_uuid: &str,
         transient: bool,
         deduplicate: bool,
     ) -> Result<(), TriplestoreError> {

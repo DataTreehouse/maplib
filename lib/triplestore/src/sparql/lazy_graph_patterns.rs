@@ -49,7 +49,8 @@ impl Triplestore {
                 pushdowns.add_patterns_pushdowns(patterns);
                 let mut updated_solution_mappings = solution_mappings;
                 let bgp_context = context.extension_with(PathEntry::BGP);
-                let ordered_patterns = order_triple_patterns(patterns, &updated_solution_mappings);
+                let ordered_patterns =
+                    order_triple_patterns(patterns, &updated_solution_mappings, &pushdowns);
                 for tp in &ordered_patterns {
                     updated_solution_mappings = Some(self.lazy_triple_pattern(
                         updated_solution_mappings,

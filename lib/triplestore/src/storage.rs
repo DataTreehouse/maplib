@@ -1,6 +1,5 @@
 use crate::errors::TriplestoreError;
 use crate::CreateIndexOptions;
-use log::debug;
 use oxrdf::{NamedNode, Subject, Term};
 use parquet_io::{scan_parquet, write_parquet};
 use polars::prelude::{
@@ -16,7 +15,6 @@ use representation::solution_mapping::SolutionMappings;
 use representation::{
     BaseRDFNodeType, RDFNodeType, OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME,
 };
-use spargebra::term::GroundTerm;
 use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
 use uuid::Uuid;
@@ -34,6 +32,10 @@ pub(crate) struct Triples {
 }
 
 impl Triples {
+    pub fn output_sorted_subject(&self) -> bool {
+        self.subject_object_sort.is_some()
+    }
+
     pub(crate) fn deduplicate(
         &mut self,
         caching_folder: &Option<String>,
@@ -181,36 +183,6 @@ impl Triples {
         } else {
             panic!("Triplestore is in an invalid state")
         }
-    }
-
-    pub(crate) fn get_solution_mappings(
-        &self,
-        subject_type: &BaseRDFNodeType,
-        object_type: &BaseRDFNodeType,
-        named_node: Option<&NamedNode>,
-    ) -> Result<SolutionMappings, TriplestoreError> {
-        let lfs_and_heights = self.get_lazy_frames(&None, &None)?;
-        let mut height = 0usize;
-        let mut lfs = vec![];
-        for (lf, lf_height) in lfs_and_heights {
-            lfs.push(lf);
-            height += lf_height;
-        }
-        let mut lf = concat_lf_diagonal(lfs, UnionArgs::default()).unwrap();
-        let mut map = HashMap::from([
-            (
-                SUBJECT_COL_NAME.to_string(),
-                subject_type.as_rdf_node_type(),
-            ),
-            (OBJECT_COL_NAME.to_string(), object_type.as_rdf_node_type()),
-        ]);
-        if let Some(named_node) = named_node {
-            lf = lf.with_column(
-                lit(rdf_named_node_to_polars_literal_value(named_node)).alias(VERB_COL_NAME),
-            );
-            map.insert(VERB_COL_NAME.to_string(), RDFNodeType::IRI);
-        }
-        Ok(SolutionMappings::new(lf, map, height))
     }
 
     pub(crate) fn add_triples(
@@ -371,7 +343,7 @@ fn get_lookup_offsets(
     for (from, to) in offsets {
         if let Some((last_from, last_to)) = last_offset {
             if from <= last_to {
-                last_offset = Some((last_from.clone(), to));
+                last_offset = Some((last_from, to));
             } else {
                 out_offsets.push((last_from, last_to));
                 last_offset = Some((from, to));

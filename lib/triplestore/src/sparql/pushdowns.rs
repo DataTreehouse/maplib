@@ -1,7 +1,6 @@
 use oxrdf::vocab::{rdfs, xsd};
 use oxrdf::{NamedNode, Term, Variable};
 use representation::polars_to_rdf::column_as_terms;
-use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::SolutionMappings;
 use representation::subtypes::is_literal_subtype;
 use representation::BaseRDFNodeType;
@@ -122,6 +121,12 @@ impl Pushdowns {
     }
 }
 
+impl Default for Pushdowns {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Pushdowns {
     pub fn new() -> Pushdowns {
         Pushdowns {
@@ -144,11 +149,7 @@ impl Pushdowns {
                     let name = x.name().as_str();
                     let maybe_terms =
                         column_as_terms(x, eager_sm.rdf_node_types.get(name).unwrap());
-                    let terms: HashSet<_> = maybe_terms
-                        .into_iter()
-                        .filter(|x| x.is_some())
-                        .map(|x| x.unwrap())
-                        .collect();
+                    let terms: HashSet<_> = maybe_terms.into_iter().flatten().collect();
                     (name.to_string(), terms)
                 })
                 .collect();
@@ -161,13 +162,11 @@ impl Pushdowns {
 
     pub(crate) fn add_patterns_pushdowns(&mut self, patterns: &Vec<TriplePattern>) {
         for pattern in patterns {
-            match &pattern.subject {
-                TermPattern::Variable(v) => self.iri_or_blanknode_constraint(v),
-                _ => {}
+            if let TermPattern::Variable(v) = &pattern.subject {
+                self.iri_or_blanknode_constraint(v)
             }
-            match &pattern.predicate {
-                NamedNodePattern::Variable(v) => self.iri_or_blanknode_constraint(v),
-                _ => {}
+            if let NamedNodePattern::Variable(v) = &pattern.predicate {
+                self.iri_or_blanknode_constraint(v)
             }
         }
     }
@@ -441,7 +440,7 @@ fn find_variable_type_constraints(e: &Expression) -> Option<HashMap<String, Poss
         Expression::FunctionCall(f, args) => match f {
             Function::IsIri => {
                 if args.len() == 1 {
-                    if let Expression::Variable(v) = args.get(0).unwrap() {
+                    if let Expression::Variable(v) = args.first().unwrap() {
                         return Some(HashMap::from([(
                             v.as_str().to_string(),
                             PossibleTypes::singular(BaseRDFNodeType::IRI),
@@ -451,7 +450,7 @@ fn find_variable_type_constraints(e: &Expression) -> Option<HashMap<String, Poss
             }
             Function::IsBlank => {
                 if args.len() == 1 {
-                    if let Expression::Variable(v) = args.get(0).unwrap() {
+                    if let Expression::Variable(v) = args.first().unwrap() {
                         return Some(HashMap::from([(
                             v.as_str().to_string(),
                             PossibleTypes::singular(BaseRDFNodeType::BlankNode),
@@ -461,7 +460,7 @@ fn find_variable_type_constraints(e: &Expression) -> Option<HashMap<String, Poss
             }
             Function::IsLiteral => {
                 if args.len() == 1 {
-                    if let Expression::Variable(v) = args.get(0).unwrap() {
+                    if let Expression::Variable(v) = args.first().unwrap() {
                         return Some(HashMap::from([(
                             v.as_str().to_string(),
                             PossibleTypes::singular(BaseRDFNodeType::Literal(
@@ -531,7 +530,7 @@ fn conjunction(
             new_map.insert(k, v);
         }
     }
-    new_map.extend(right.into_iter());
+    new_map.extend(right);
     new_map
 }
 
@@ -547,6 +546,6 @@ fn conjunction_variable_type(
             new_map.insert(k, v);
         }
     }
-    new_map.extend(right.into_iter());
+    new_map.extend(right);
     new_map
 }

@@ -10,7 +10,7 @@ use polars::prelude::IntoLazy;
 use polars::prelude::{col, lit, AnyValue, DataType, JoinType};
 use query_processing::graph_patterns::join;
 use representation::{literal_iri_to_namednode, BaseRDFNodeType, RDFNodeType};
-use spargebra::term::{GroundTerm, NamedNodePattern, TermPattern, TriplePattern};
+use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 use std::collections::{HashMap, HashSet};
 
 impl Triplestore {
@@ -56,60 +56,75 @@ impl Triplestore {
                 &object_type_ctr,
             )?,
             NamedNodePattern::Variable(v) => {
-                let predicates: Option<HashSet<NamedNode>>;
-                if let Some(SolutionMappings {
-                    mappings,
-                    rdf_node_types,
-                    height_upper_bound,
-                }) = solution_mappings
-                {
-                    if let Some(dt) = rdf_node_types.get(v.as_str()) {
-                        if let RDFNodeType::IRI = dt {
-                            let mappings_df = mappings.collect().unwrap();
-                            let predicates_series = mappings_df
-                                .column(v.as_str())
-                                .unwrap()
-                                .unique()
-                                .unwrap()
-                                .cast(&DataType::String)
-                                .unwrap()
-                                .take_materialized_series();
-                            let predicates_iter = predicates_series.iter();
-                            predicates = Some(
-                                predicates_iter
-                                    .filter_map(|x| match x {
-                                        AnyValue::Null => None,
-                                        AnyValue::String(s) => Some(literal_iri_to_namednode(s)),
-                                        AnyValue::StringOwned(s) => {
-                                            Some(literal_iri_to_namednode(&s))
-                                        }
-                                        x => panic!("Should never happen: {}", x),
-                                    })
-                                    .collect(),
-                            );
-                            solution_mappings = Some(SolutionMappings {
-                                mappings: mappings_df.lazy(),
-                                rdf_node_types,
-                                height_upper_bound,
+                let mut predicates: Option<HashSet<NamedNode>> = None;
+                if let Some(values) = pushdowns.variables_values.get(v.as_str()) {
+                    predicates = Some(
+                        values
+                            .iter()
+                            .filter(|x| matches!(x, Term::NamedNode(_)))
+                            .map(|x| {
+                                if let Term::NamedNode(nn) = x {
+                                    nn.clone()
+                                } else {
+                                    panic!("Invalid state")
+                                }
                             })
+                            .collect(),
+                    )
+                } else {
+                    if let Some(SolutionMappings {
+                        mappings,
+                        rdf_node_types,
+                        height_upper_bound,
+                    }) = solution_mappings
+                    {
+                        if let Some(dt) = rdf_node_types.get(v.as_str()) {
+                            if let RDFNodeType::IRI = dt {
+                                let mappings_df = mappings.collect().unwrap();
+                                let predicates_series = mappings_df
+                                    .column(v.as_str())
+                                    .unwrap()
+                                    .unique()
+                                    .unwrap()
+                                    .cast(&DataType::String)
+                                    .unwrap()
+                                    .take_materialized_series();
+                                let predicates_iter = predicates_series.iter();
+                                predicates = Some(
+                                    predicates_iter
+                                        .filter_map(|x| match x {
+                                            AnyValue::Null => None,
+                                            AnyValue::String(s) => {
+                                                Some(literal_iri_to_namednode(s))
+                                            }
+                                            AnyValue::StringOwned(s) => {
+                                                Some(literal_iri_to_namednode(&s))
+                                            }
+                                            x => panic!("Should never happen: {}", x),
+                                        })
+                                        .collect(),
+                                );
+                                solution_mappings = Some(SolutionMappings {
+                                    mappings: mappings_df.lazy(),
+                                    rdf_node_types,
+                                    height_upper_bound,
+                                })
+                            } else {
+                                predicates = Some(HashSet::new());
+                                solution_mappings = Some(SolutionMappings {
+                                    mappings,
+                                    rdf_node_types,
+                                    height_upper_bound,
+                                })
+                            };
                         } else {
-                            predicates = Some(HashSet::new());
                             solution_mappings = Some(SolutionMappings {
                                 mappings,
                                 rdf_node_types,
                                 height_upper_bound,
-                            })
-                        };
-                    } else {
-                        solution_mappings = Some(SolutionMappings {
-                            mappings,
-                            rdf_node_types,
-                            height_upper_bound,
-                        });
-                        predicates = None;
+                            });
+                        }
                     }
-                } else {
-                    predicates = None;
                 }
                 let predicates: Option<Vec<_>> =
                     predicates.map(|predicates| predicates.into_iter().collect());
@@ -189,13 +204,7 @@ fn create_type_constraint(
         TermPattern::Literal(l) => Some(PossibleTypes::singular(BaseRDFNodeType::Literal(
             l.datatype().into_owned(),
         ))),
-        TermPattern::Variable(v) => {
-            if let Some(pt) = variable_type_constraint.get(v.as_str()) {
-                Some(pt.clone())
-            } else {
-                None
-            }
-        }
+        TermPattern::Variable(v) => variable_type_constraint.get(v.as_str()).cloned(),
         _ => None,
     }
 }
@@ -207,22 +216,16 @@ pub fn create_subjects(
     if let TermPattern::NamedNode(nn) = term_pattern {
         Some(vec![Subject::NamedNode(nn.clone())])
     } else if let TermPattern::Variable(v) = term_pattern {
-        if let Some(terms) = variable_pushdowns.get(v.as_str()) {
-            Some(
-                terms
-                    .iter()
-                    .map(|x| match x {
-                        Term::NamedNode(nn) => Some(Subject::NamedNode(nn.clone())),
-                        Term::BlankNode(bl) => Some(Subject::BlankNode(bl.clone())),
-                        _ => None,
-                    })
-                    .filter(|x| x.is_some())
-                    .map(|x| x.unwrap())
-                    .collect(),
-            )
-        } else {
-            None
-        }
+        variable_pushdowns.get(v.as_str()).map(|terms| {
+            terms
+                .iter()
+                .filter_map(|x| match x {
+                    Term::NamedNode(nn) => Some(Subject::NamedNode(nn.clone())),
+                    Term::BlankNode(bl) => Some(Subject::BlankNode(bl.clone())),
+                    _ => None,
+                })
+                .collect()
+        })
     } else {
         None
     }
@@ -235,13 +238,9 @@ pub fn create_objects(
     match term_pattern {
         TermPattern::NamedNode(nn) => Some(vec![Term::NamedNode(nn.clone())]),
         TermPattern::Literal(lit) => Some(vec![Term::Literal(lit.clone())]),
-        TermPattern::Variable(v) => {
-            if let Some(terms) = variable_pushdowns.get(v.as_str()) {
-                Some(terms.iter().cloned().collect())
-            } else {
-                None
-            }
-        }
+        TermPattern::Variable(v) => variable_pushdowns
+            .get(v.as_str())
+            .map(|terms| terms.iter().cloned().collect()),
         _ => None,
     }
 }

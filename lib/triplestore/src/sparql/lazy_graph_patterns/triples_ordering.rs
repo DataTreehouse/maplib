@@ -1,12 +1,14 @@
-use oxrdf::{BlankNode, Variable};
+use crate::sparql::pushdowns::Pushdowns;
+use oxrdf::{BlankNode, Term, Variable};
 use representation::solution_mapping::SolutionMappings;
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 use std::cmp::Ordering;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 pub fn order_triple_patterns(
     tps: &[TriplePattern],
     sm: &Option<SolutionMappings>,
+    pushdowns: &Pushdowns,
 ) -> Vec<TriplePattern> {
     let mut candidates = tps.to_owned();
     let mut ordering = vec![];
@@ -21,7 +23,7 @@ pub fn order_triple_patterns(
     while !candidates.is_empty() {
         let tp = candidates
             .iter()
-            .min_by(|t1, t2| strictly_before(t1, t2, &visited))
+            .min_by(|t1, t2| strictly_before(t1, t2, &visited, &pushdowns.variables_values))
             .unwrap();
         let pos = candidates.iter().position(|x| x == tp).unwrap();
         let tp = candidates.remove(pos);
@@ -37,7 +39,12 @@ pub fn order_triple_patterns(
 }
 
 // Metaphor here is that quantity is cost to include, so less is better.
-fn strictly_before(t1: &TriplePattern, t2: &TriplePattern, visited: &HashSet<String>) -> Ordering {
+fn strictly_before(
+    t1: &TriplePattern,
+    t2: &TriplePattern,
+    visited: &HashSet<String>,
+    variable_values: &HashMap<String, HashSet<Term>>,
+) -> Ordering {
     let t1_connected = is_connected(t1, visited);
     let t2_connected = is_connected(t2, visited);
     if t1_connected && !t2_connected {
@@ -49,6 +56,15 @@ fn strictly_before(t1: &TriplePattern, t2: &TriplePattern, visited: &HashSet<Str
 
     if let NamedNodePattern::Variable(v1) = &t1.predicate {
         if let NamedNodePattern::Variable(v2) = &t2.predicate {
+            if variable_values.contains_key(v1.as_str())
+                && !variable_values.contains_key(v2.as_str())
+            {
+                return Ordering::Less;
+            } else if !variable_values.contains_key(v1.as_str())
+                && variable_values.contains_key(v2.as_str())
+            {
+                return Ordering::Greater;
+            }
             if visited.contains(v1.as_str()) && !visited.contains(v2.as_str()) {
                 return Ordering::Less;
             }
