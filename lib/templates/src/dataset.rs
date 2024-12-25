@@ -283,8 +283,8 @@ fn lub(
     } else if let (PType::Basic(left_basic), PType::Basic(right_basic)) = (left, right) {
         if left_basic.as_ref() == rdfs::RESOURCE
             || right_basic.as_ref() == rdfs::RESOURCE
-            || is_literal_subtype_ext(left_basic, right_basic)
-            || is_literal_subtype_ext(right_basic, left_basic)
+            || is_literal_subtype_ext(left_basic.as_ref(), right_basic.as_ref())
+            || is_literal_subtype_ext(right_basic.as_ref(), left_basic.as_ref())
         {
             return Ok(left.clone());
         } else {

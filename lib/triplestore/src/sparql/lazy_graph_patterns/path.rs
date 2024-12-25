@@ -12,7 +12,7 @@ use query_processing::errors::QueryProcessingError;
 use query_processing::graph_patterns::{join, union};
 use representation::multitype::{
     compress_actual_multitypes, force_convert_multicol_to_single_col, group_by_workaround,
-    implode_multicolumns,
+    nest_multicolumns,
 };
 use representation::query_context::{Context, PathEntry};
 use representation::rdf_to_polars::{
@@ -718,7 +718,7 @@ impl U32DataFrameCreator {
             col(&subject_row_index).alias(&subject_row_index),
             col(&object_row_index).alias(&object_row_index),
         ]);
-        mappings = implode_multicolumns(mappings, maps);
+        mappings = nest_multicolumns(mappings, maps);
 
         mappings = mappings.with_row_index(LOOKUP_COLUMN, None);
         mappings = mappings.explode([col(&subject_row_index), col(&object_row_index)]);
@@ -788,8 +788,8 @@ impl U32DataFrameCreator {
                     mappings,
                     mut rdf_node_types,
                     ..
-                } = triplestore.get_deduplicated_predicate_lf(
-                    nn,
+                } = triplestore.get_multi_predicates_solution_mappings(
+                    Some(vec![nn.clone()]),
                     &Some(SUBJECT_COL_NAME.to_string()),
                     &None,
                     &Some(OBJECT_COL_NAME.to_string()),

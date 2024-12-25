@@ -4,7 +4,7 @@ use crate::constants::{OTTR_BLANK_NODE, OTTR_IRI};
 use oxrdf::vocab::rdfs;
 #[cfg(test)]
 use oxrdf::vocab::xsd;
-use oxrdf::{BlankNode, Literal, NamedNode, Variable};
+use oxrdf::{BlankNode, Literal, NamedNode, NamedNodeRef, Variable};
 use representation::RDFNodeType;
 use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter};
@@ -129,7 +129,7 @@ pub enum PType {
 impl PType {
     pub fn is_blank_node(&self) -> bool {
         if let PType::Basic(t) = &self {
-            ptype_is_blank(t)
+            ptype_is_blank(t.as_ref())
         } else {
             false
         }
@@ -137,7 +137,7 @@ impl PType {
 
     pub fn is_iri(&self) -> bool {
         if let PType::Basic(t) = self {
-            ptype_is_iri(t)
+            ptype_is_iri(t.as_ref())
         } else {
             false
         }
@@ -157,7 +157,7 @@ impl From<&RDFNodeType> for PType {
 }
 
 // Implements part of https://spec.ottr.xyz/rOTTR/0.2.0/#2.1_Basic_types
-pub fn ptype_is_iri(nn: &NamedNode) -> bool {
+pub fn ptype_is_iri(nn: NamedNodeRef) -> bool {
     if matches!(
         nn.as_str(),
         OTTR_IRI
@@ -169,25 +169,25 @@ pub fn ptype_is_iri(nn: &NamedNode) -> bool {
     ) {
         true
     } else {
-        matches!(nn.as_ref(), rdfs::CLASS | rdfs::DATATYPE)
+        matches!(nn, rdfs::CLASS | rdfs::DATATYPE)
     }
 }
 
-pub fn ptype_is_possibly_literal(nn: &NamedNode) -> bool {
+pub fn ptype_is_possibly_literal(nn: NamedNodeRef) -> bool {
     !ptype_is_blank(nn) && !ptype_is_iri(nn)
 }
 
-pub fn ptype_is_blank(nn: &NamedNode) -> bool {
+pub fn ptype_is_blank(nn: NamedNodeRef) -> bool {
     nn.as_str() == OTTR_BLANK_NODE
 }
 
-pub fn ptype_nn_to_rdf_node_type(nn: &NamedNode) -> RDFNodeType {
+pub fn ptype_nn_to_rdf_node_type(nn: NamedNodeRef) -> RDFNodeType {
     if ptype_is_blank(nn) {
         RDFNodeType::BlankNode
     } else if ptype_is_iri(nn) {
         RDFNodeType::IRI
     } else {
-        RDFNodeType::Literal(nn.clone())
+        RDFNodeType::Literal(nn.into_owned())
     }
 }
 

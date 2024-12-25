@@ -18,6 +18,7 @@ use serde::de::{Error, Visitor};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use spargebra::term::TermPattern;
 use std::fmt::{Display, Formatter};
+use crate::subtypes::{is_literal_subtype, OWL_REAL};
 
 pub const VERB_COL_NAME: &str = "verb";
 pub const OBJECT_COL_NAME: &str = "object";
@@ -217,6 +218,7 @@ impl BaseRDFNodeType {
                     Field::new(LANG_STRING_LANG_FIELD.into(), DataType::String),
                 ]),
                 xsd::DATE_TIME => DataType::Datetime(TimeUnit::Nanoseconds, None),
+                xsd::DATE => DataType::Date,
                 _ => DataType::String,
             },
             BaseRDFNodeType::None => DataType::Boolean,
@@ -357,18 +359,7 @@ pub fn owned_term_to_named_node(t: Term) -> Option<NamedNode> {
 }
 
 pub fn literal_is_numeric(l: NamedNodeRef) -> bool {
-    matches!(
-        l,
-        xsd::INT
-            | xsd::BYTE
-            | xsd::SHORT
-            | xsd::INTEGER
-            | xsd::UNSIGNED_BYTE
-            | xsd::UNSIGNED_INT
-            | xsd::DECIMAL
-            | xsd::FLOAT
-            | xsd::DOUBLE
-    )
+    is_literal_subtype(l, NamedNode::new_unchecked(OWL_REAL).as_ref())
 }
 
 pub fn literal_is_boolean(l: NamedNodeRef) -> bool {

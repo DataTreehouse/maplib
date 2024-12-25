@@ -8,8 +8,8 @@ use polars::prelude::{
     UnionArgs,
 };
 use representation::multitype::{
-    convert_lf_col_to_multitype, create_join_compatible_solution_mappings, explode_multicols,
-    implode_multicolumns, lf_column_to_categorical, non_multi_type_string,
+    convert_lf_col_to_multitype, create_join_compatible_solution_mappings, unnest_multicols,
+    nest_multicolumns, lf_column_to_categorical, non_multi_type_string,
 };
 use representation::multitype::{join_workaround, unique_workaround};
 use representation::query_context::Context;
@@ -465,7 +465,7 @@ pub fn union(
             }
         }
         rdf_node_types.extend(new_multi);
-        let (new_mappings, new_exploded_map) = explode_multicols(mappings, &rdf_node_types);
+        let (new_mappings, new_exploded_map) = unnest_multicols(mappings, &rdf_node_types);
 
         to_concat.push(new_mappings);
         for (c, (right_inner_columns, prefixed_right_inner_columns)) in new_exploded_map {
@@ -501,7 +501,7 @@ pub fn union(
         },
     )
     .expect("Concat problem");
-    output_mappings = implode_multicolumns(output_mappings, exploded_map);
+    output_mappings = nest_multicolumns(output_mappings, exploded_map);
     Ok(SolutionMappings::new(
         output_mappings,
         target_types,

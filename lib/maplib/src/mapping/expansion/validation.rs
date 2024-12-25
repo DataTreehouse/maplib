@@ -122,7 +122,7 @@ fn infer_validate_mapping_column_type_from_ptype(
         PType::Basic(nn) => {
             if datatype.is_null() {
                 Ok(MappingColumnType::Flat(RDFNodeType::None))
-            } else if ptype_is_iri(nn) {
+            } else if ptype_is_iri(nn.as_ref()) {
                 if datatype.is_string() || datatype.is_categorical() {
                     Ok(MappingColumnType::Flat(RDFNodeType::IRI))
                 } else {
@@ -133,7 +133,7 @@ fn infer_validate_mapping_column_type_from_ptype(
                         Some(DataType::String),
                     ))
                 }
-            } else if ptype_is_blank(nn) {
+            } else if ptype_is_blank(nn.as_ref()) {
                 if datatype.is_string() || datatype.is_categorical() {
                     Ok(MappingColumnType::Flat(RDFNodeType::BlankNode))
                 } else {
@@ -164,7 +164,7 @@ fn infer_validate_mapping_column_type_from_ptype(
                             polars_type_to_literal_type(datatype)
                                 .map_err(MappingError::DatatypeInferenceError)?;
                         if let RDFNodeType::Literal(inferred_nn) = &series_inferred_rdf_node_type {
-                            if is_literal_subtype_ext(inferred_nn, nn) {
+                            if is_literal_subtype_ext(inferred_nn.as_ref(), nn.as_ref()) {
                                 Ok(MappingColumnType::Flat(series_inferred_rdf_node_type))
                             } else {
                                 Err(MappingError::ColumnDataTypeMismatch(

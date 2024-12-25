@@ -2,18 +2,14 @@ use crate::errors::TriplestoreError;
 use crate::CreateIndexOptions;
 use oxrdf::{Subject, Term};
 use parquet_io::{scan_parquet, write_parquet};
-use polars::prelude::{
-    col, concat, IdxSize, IntoLazy, LazyFrame, PlSmallStr, UnionArgs,
-};
+use polars::prelude::{col, concat, IdxSize, IntoLazy, LazyFrame, PlSmallStr, UnionArgs};
 use polars_core::datatypes::{AnyValue, CategoricalChunked, LogicalType};
 use polars_core::frame::{DataFrame, UniqueKeepStrategy};
 use polars_core::prelude::{CategoricalOrdering, DataType, Series, SortMultipleOptions};
-use rayon::iter::ParallelIterator;
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use rayon::iter::{IntoParallelRefIterator, ParallelDrainRange};
 
-use representation::{
-    SUBJECT_COL_NAME
-};
+use representation::SUBJECT_COL_NAME;
 use std::collections::BTreeMap;
 use std::path::Path;
 use uuid::Uuid;
@@ -31,28 +27,29 @@ pub(crate) struct Triples {
 }
 
 impl Triples {
-    pub fn output_sorted_subject(&self) -> bool {
-        self.subject_object_sort.is_some()
-    }
-
     pub(crate) fn deduplicate(
         &mut self,
         caching_folder: &Option<String>,
     ) -> Result<(), TriplestoreError> {
         if !self.unique {
             if let Some(unsorted) = &mut self.unsorted {
-                let lfs: Result<Vec<_>, _> = unsorted
+                let lfs_heights: Result<Vec<_>, _> = unsorted
                     .par_drain(..)
                     .map(|x| {
-                        let (lf, _) = x.get_lazy_frame(None)?;
-                        Ok(lf)
+                        let lfs = x.get_lazy_frame(None)?;
+                        Ok(lfs)
                     })
                     .collect();
+                let lfs: Vec<_> = lfs_heights?
+                    .into_iter()
+                    .flatten()
+                    .map(|(lf, _)| lf)
+                    .collect();
                 let df = concat(
-                    lfs?,
+                    lfs,
                     UnionArgs {
                         parallel: true,
-                        rechunk: true,
+                        rechunk: false,
                         to_supertypes: false,
                         diagonal: false,
                         from_partitioned_ds: false,
@@ -95,7 +92,7 @@ impl Triples {
         create_index_options: CreateIndexOptions,
         caching_folder: &Option<String>,
     ) -> Result<(), TriplestoreError> {
-        if self.height_upper_bound > OFFSET_STEP * 10 && create_index_options.subject_object_sort {
+        if self.height_upper_bound > OFFSET_STEP * 3 && create_index_options.subject_object_sort {
             let mut lfs: Vec<_> = self
                 .get_lazy_frames(&None, &None)?
                 .into_iter()
@@ -119,8 +116,9 @@ impl Triples {
                 lfs.remove(0)
             };
 
-            lf = cast_subject_col_to_cat(lf);
-            let (df, subj_sparse_map) = create_sorted_df_and_sparse_map(lf);
+            lf = cast_subject_col_to_cat(lf, true);
+            let (mut df, subj_sparse_map) = create_sorted_df_and_sparse_map(lf);
+            df = cast_subject_col_to_cat(df.lazy(), false).collect().unwrap();
             self.subject_object_sparse_index = Some(subj_sparse_map);
             self.subject_object_sort = Some(StoredTriples::new(df, caching_folder)?);
             self.unsorted = None;
@@ -139,7 +137,8 @@ impl Triples {
                 .par_iter()
                 .map(|x| x.get_lazy_frame(None))
                 .collect();
-            lfs
+            let lfs: Vec<_> = lfs?.into_iter().flatten().collect();
+            Ok(lfs)
         } else if let Some(sorted) = &self.subject_object_sort {
             let offsets = if let Some(subjects) = subjects {
                 let strings: Vec<_> = subjects
@@ -158,8 +157,8 @@ impl Triples {
             } else {
                 None
             };
-            let (lf, height) = sorted.get_lazy_frame(offsets)?;
-            Ok(vec![(lf, height)])
+            let lfs = sorted.get_lazy_frame(offsets)?;
+            Ok(lfs)
         } else {
             panic!("Triplestore is in an invalid state")
         }
@@ -206,38 +205,25 @@ impl StoredTriples {
     pub(crate) fn get_lazy_frame(
         &self,
         offsets: Option<Vec<(usize, usize)>>,
-    ) -> Result<(LazyFrame, usize), TriplestoreError> {
-        let (mut lf, mut height) = match self {
+    ) -> Result<Vec<(LazyFrame, usize)>, TriplestoreError> {
+        let (lf, height) = match self {
             StoredTriples::TriplesOnDisk(t) => t.get_lazy_frame()?,
             StoredTriples::TriplesInMemory(t) => t.get_lazy_frame()?,
         };
         if let Some(offsets) = offsets {
-            height = offsets.iter().map(|(_, x)| x).sum();
-            let lfs: Result<Vec<_>, _> = offsets
-                .par_iter()
+            let output: Result<Vec<_>, _> = offsets
+                .into_par_iter()
                 .map(|(offset, len)| {
-                    let mut lf = lf.clone();
-                    lf = lf.slice(*offset as i64, *len as IdxSize);
-                    Ok(lf)
+                    let lf = lf
+                        .clone()
+                        .slice(offset as i64, len as IdxSize);
+                    Ok((lf, len))
                 })
                 .collect();
-
-            lf = concat(
-                lfs?,
-                UnionArgs {
-                    parallel: true,
-                    rechunk: true,
-                    to_supertypes: false,
-                    diagonal: false,
-                    from_partitioned_ds: false,
-                },
-            ) //This collection is important for performance.. not quite sure why
-            .unwrap()
-            .collect()
-            .unwrap()
-            .lazy();
+            Ok(output?)
+        } else {
+            Ok(vec![(lf, height)])
         }
-        Ok((lf, height))
     }
 }
 
@@ -360,10 +346,15 @@ fn update_at_offset(
     }
 }
 
-fn cast_subject_col_to_cat(mut lf: LazyFrame) -> LazyFrame {
-    lf = lf.with_column(
-        col(SUBJECT_COL_NAME).cast(DataType::Categorical(None, CategoricalOrdering::Lexical)),
-    );
+fn cast_subject_col_to_cat(mut lf: LazyFrame, lexsort: bool) -> LazyFrame {
+    lf = lf.with_column(col(SUBJECT_COL_NAME).cast(DataType::Categorical(
+        None,
+        if lexsort {
+            CategoricalOrdering::Lexical
+        } else {
+            CategoricalOrdering::Physical
+        },
+    )));
     lf
 }
 
@@ -377,20 +368,23 @@ fn update_subject_sorted_index(
     if !unique {
         lf = lf.unique(None, UniqueKeepStrategy::Any);
     }
-    lf = cast_subject_col_to_cat(lf);
-    let (existing_lf, _) = stored_triples.get_lazy_frame(None)?;
+    lf = cast_subject_col_to_cat(lf, true);
+    let existing_lfs_heights = stored_triples.get_lazy_frame(None)?;
+    let mut existing_lfs: Vec<_> = existing_lfs_heights.into_iter().map(|(lf, _)| lf).collect();
+    existing_lfs.push(lf);
     lf = concat(
-        vec![lf, existing_lf],
+        existing_lfs,
         UnionArgs {
             parallel: true,
-            rechunk: false,
+            rechunk: true,
             to_supertypes: false,
             diagonal: false,
             from_partitioned_ds: false,
         },
     )
     .unwrap();
-    let (df, sparse_map) = create_sorted_df_and_sparse_map(lf);
+    let (mut df, sparse_map) = create_sorted_df_and_sparse_map(lf);
+    df = cast_subject_col_to_cat(df.lazy(), false).collect().unwrap();
     let stored = StoredTriples::new(df, caching_folder)?;
     Ok((stored, sparse_map))
 }
@@ -406,7 +400,6 @@ fn create_sorted_df_and_sparse_map(mut lf: LazyFrame) -> (DataFrame, BTreeMap<St
             limit: None,
         },
     );
-
     let df = lf.collect().unwrap();
     let subj_ser = df
         .column(SUBJECT_COL_NAME)

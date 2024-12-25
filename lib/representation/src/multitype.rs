@@ -729,7 +729,7 @@ pub fn known_convert_lf_multicol_to_single(
 }
 
 #[allow(clippy::type_complexity)]
-pub fn explode_multicols(
+pub fn unnest_multicols(
     mut mappings: LazyFrame,
     rdf_node_types: &HashMap<String, RDFNodeType>,
 ) -> (LazyFrame, HashMap<String, (Vec<String>, Vec<String>)>) {
@@ -756,7 +756,7 @@ pub fn explode_multicols(
     (mappings, out_map)
 }
 
-pub fn implode_multicolumns(
+pub fn nest_multicolumns(
     mapping: LazyFrame,
     map: HashMap<String, (Vec<String>, Vec<String>)>,
 ) -> LazyFrame {
@@ -801,9 +801,9 @@ pub fn join_workaround(
         }
     }
 
-    let (mut left_mappings, left_exploded) = explode_multicols(left_mappings, &left_datatypes);
+    let (mut left_mappings, left_exploded) = unnest_multicols(left_mappings, &left_datatypes);
     let (mut right_mappings, mut right_exploded) =
-        explode_multicols(right_mappings, &right_datatypes);
+        unnest_multicols(right_mappings, &right_datatypes);
 
     let mut on = vec![];
     let mut no_join = false;
@@ -892,7 +892,7 @@ pub fn join_workaround(
     }
     unified_exploded.extend(right_exploded);
 
-    left_mappings = implode_multicolumns(left_mappings, unified_exploded);
+    left_mappings = nest_multicolumns(left_mappings, unified_exploded);
 
     for (c, dt) in right_datatypes {
         left_datatypes.entry(c).or_insert(dt);
@@ -908,7 +908,7 @@ pub fn unique_workaround(
     stable: bool,
     unique_keep_strategy: UniqueKeepStrategy,
 ) -> LazyFrame {
-    let (mut lf, maps) = explode_multicols(lf, rdf_node_types);
+    let (mut lf, maps) = unnest_multicols(lf, rdf_node_types);
     let unique_set = if let Some(subset) = subset {
         let mut u = vec![];
         for s in subset {
@@ -930,7 +930,7 @@ pub fn unique_workaround(
     } else {
         lf = lf.unique(unique_set, unique_keep_strategy);
     }
-    lf = implode_multicolumns(lf, maps);
+    lf = nest_multicolumns(lf, maps);
     lf
 }
 
@@ -947,7 +947,7 @@ pub fn group_by_workaround(
             to_explode.insert(c.clone(), t.clone());
         }
     }
-    let (lf, maps) = explode_multicols(lf, &to_explode);
+    let (lf, maps) = unnest_multicols(lf, &to_explode);
     let mut new_by = vec![];
     for b in by {
         if let Some((_, cols)) = maps.get(&b) {

@@ -27,7 +27,6 @@ impl Triplestore {
         let left_context = context.extension_with(PathEntry::LeftJoinLeftSide);
         let right_context = context.extension_with(PathEntry::LeftJoinRightSide);
         let expression_context = context.extension_with(PathEntry::LeftJoinExpression);
-
         let mut left_solution_mappings = self.lazy_graph_pattern(
             left,
             solution_mappings,
@@ -35,6 +34,7 @@ impl Triplestore {
             parameters,
             pushdowns.clone(),
         )?;
+
         left_solution_mappings = pushdowns.add_from_solution_mappings(left_solution_mappings);
         pushdowns.add_graph_pattern_pushdowns(right);
 
@@ -48,7 +48,6 @@ impl Triplestore {
             parameters,
             pushdowns,
         )?;
-
         if let Some(expr) = expression {
             right_solution_mappings = self.lazy_expression(
                 expr,
@@ -65,7 +64,6 @@ impl Triplestore {
             right_solution_mappings,
             JoinType::Left,
         )?;
-
         Ok(left_solution_mappings)
     }
 }

@@ -33,7 +33,7 @@ impl ConstraintExpr {
                 BaseRDFNodeType::BlankNode => t == &BaseRDFNodeType::BlankNode,
                 BaseRDFNodeType::Literal(l_ctr) => {
                     if let BaseRDFNodeType::Literal(l) = t {
-                        is_literal_subtype(l, l_ctr)
+                        is_literal_subtype(l.as_ref(), l_ctr.as_ref())
                     } else {
                         false
                     }

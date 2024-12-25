@@ -36,17 +36,16 @@ impl Triplestore {
             &triple_pattern.object,
             &pushdowns.variables_type_constraints,
         );
-
         let subject_rename = get_keep_rename_term_pattern(&triple_pattern.subject);
         let verb_rename = get_keep_rename_named_node_pattern(&triple_pattern.predicate);
         let object_rename = get_keep_rename_term_pattern(&triple_pattern.object);
         let SolutionMappings {
             mappings: lf,
             rdf_node_types: dts,
-            height_upper_bound,
+            height_upper_bound: new_height_upper_bound,
         } = match &triple_pattern.predicate {
-            NamedNodePattern::NamedNode(n) => self.get_deduplicated_predicate_lf(
-                n,
+            NamedNodePattern::NamedNode(n) => self.get_multi_predicates_solution_mappings(
+                Some(vec![n.to_owned()]),
                 &subject_rename,
                 &verb_rename,
                 &object_rename,
@@ -126,7 +125,7 @@ impl Triplestore {
                 }
                 let predicates: Option<Vec<_>> =
                     predicates.map(|predicates| predicates.into_iter().collect());
-                self.get_predicates_lf(
+                let sm = self.get_multi_predicates_solution_mappings(
                     predicates,
                     &subject_rename,
                     &verb_rename,
@@ -135,7 +134,8 @@ impl Triplestore {
                     &objects,
                     &subject_type_ctr,
                     &object_type_ctr,
-                )?
+                )?;
+                sm
             }
         };
         let colnames: Vec<_> = dts.keys().cloned().collect();
@@ -174,7 +174,7 @@ impl Triplestore {
                 let new_solution_mappings = SolutionMappings {
                     mappings: lf,
                     rdf_node_types: dts,
-                    height_upper_bound,
+                    height_upper_bound:new_height_upper_bound,
                 };
                 solution_mappings = Some(join(
                     solution_mappings.unwrap(),
@@ -186,7 +186,7 @@ impl Triplestore {
             solution_mappings = Some(SolutionMappings {
                 mappings: lf,
                 rdf_node_types: dts,
-                height_upper_bound,
+                height_upper_bound: new_height_upper_bound,
             })
         }
         Ok(solution_mappings.unwrap())
