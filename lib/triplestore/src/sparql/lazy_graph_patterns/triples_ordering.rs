@@ -53,7 +53,6 @@ fn strictly_before(
     if !t1_connected && t2_connected {
         return Ordering::Greater;
     }
-
     if let NamedNodePattern::Variable(v1) = &t1.predicate {
         if let NamedNodePattern::Variable(v2) = &t2.predicate {
             if variable_values.contains_key(v1.as_str())
@@ -68,13 +67,17 @@ fn strictly_before(
             if visited.contains(v1.as_str()) && !visited.contains(v2.as_str()) {
                 return Ordering::Less;
             }
+            if !visited.contains(v1.as_str()) && visited.contains(v2.as_str()) {
+                return Ordering::Greater;
+            }
+            //Todo find the least costly among the two
         } else {
             return Ordering::Greater;
         }
     } else if let NamedNodePattern::Variable(_) = &t2.predicate {
         return Ordering::Less;
     }
-    // at this point we know that none of the triple patterns have variable predicates
+
     // we rely on Polars to do the rest in the query optimizer.
     Ordering::Equal
 }
