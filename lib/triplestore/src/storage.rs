@@ -3,13 +3,12 @@ use crate::CreateIndexOptions;
 use oxrdf::{Subject, Term};
 use parquet_io::{scan_parquet, write_parquet};
 use polars::prelude::{col, concat, IdxSize, IntoLazy, LazyFrame, PlSmallStr, UnionArgs};
-use polars_core::datatypes::{AnyValue, CategoricalChunked, LogicalType};
 use polars_core::frame::{DataFrame, UniqueKeepStrategy};
-use polars_core::prelude::{CategoricalOrdering, DataType, Series, SortMultipleOptions};
+use polars_core::prelude::{CategoricalOrdering, DataType, Series, SortMultipleOptions, UInt32Chunked};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use rayon::iter::{IntoParallelRefIterator, ParallelDrainRange};
 
-use representation::SUBJECT_COL_NAME;
+use representation::{BaseRDFNodeType, OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use std::collections::BTreeMap;
 use std::path::Path;
 use uuid::Uuid;
@@ -20,10 +19,14 @@ const OFFSET_STEP: usize = 100;
 pub(crate) struct Triples {
     pub(crate) unique: bool,
     height_upper_bound: usize,
-    call_uuid: String,
+    call_uuid: String, //TODO: For uniqueness of blank nodes, an optimization
     unsorted: Option<Vec<StoredTriples>>,
-    subject_object_sort: Option<StoredTriples>,
-    subject_object_sparse_index: Option<BTreeMap<String, usize>>,
+    subject_sort: Option<StoredTriples>,
+    subject_sparse_index: Option<BTreeMap<u32, usize>>,
+    object_sort: Option<StoredTriples>,
+    object_sparse_index: Option<BTreeMap<u32, usize>>,
+    subject_type: BaseRDFNodeType,
+    object_type: BaseRDFNodeType,
 }
 
 impl Triples {
@@ -74,6 +77,8 @@ impl Triples {
         unique: bool,
         call_uuid: &str,
         caching_folder: &Option<String>,
+        subject_type: BaseRDFNodeType,
+        object_type: BaseRDFNodeType,
     ) -> Result<Self, TriplestoreError> {
         let height_upper_bound = df.height();
         let stored = StoredTriples::new(df, caching_folder)?;
@@ -82,14 +87,19 @@ impl Triples {
             unique,
             call_uuid: call_uuid.to_string(),
             unsorted: Some(vec![stored]),
-            subject_object_sparse_index: None,
-            subject_object_sort: None,
+            subject_sparse_index: None,
+            object_sort: None,
+            subject_sort: None,
+            object_sparse_index: None,
+            subject_type,
+            object_type,
         })
     }
 
     pub(crate) fn add_index(
         &mut self,
         create_index_options: CreateIndexOptions,
+        object_type: &BaseRDFNodeType,
         caching_folder: &Option<String>,
     ) -> Result<(), TriplestoreError> {
         if self.height_upper_bound > OFFSET_STEP * 3 && create_index_options.subject_object_sort {
@@ -116,11 +126,18 @@ impl Triples {
                 lfs.remove(0)
             };
 
-            lf = cast_subject_col_to_cat(lf, true);
-            let (mut df, subj_sparse_map) = create_sorted_df_and_sparse_map(lf);
-            df = cast_subject_col_to_cat(df.lazy(), false).collect().unwrap();
-            self.subject_object_sparse_index = Some(subj_sparse_map);
-            self.subject_object_sort = Some(StoredTriples::new(df, caching_folder)?);
+            lf = cast_col_to_cat(lf, SUBJECT_COL_NAME);
+            let (df, subj_sparse_map) = create_sorted_df_and_sparse_map(lf, SUBJECT_COL_NAME);
+            self.subject_sparse_index = Some(subj_sparse_map);
+            self.subject_sort = Some(StoredTriples::new(df.clone(), caching_folder)?);
+
+            if object_type.is_iri() || object_type.is_blank_node() {
+                lf = cast_col_to_cat(df.lazy(), OBJECT_COL_NAME);
+                let (mut df, obj_sparse_map) =
+                    create_sorted_df_and_sparse_map(lf, OBJECT_COL_NAME);
+                self.object_sparse_index = Some(obj_sparse_map);
+                self.object_sort = Some(StoredTriples::new(df, caching_folder)?);
+            }
             self.unsorted = None;
         }
         Ok(())
@@ -129,20 +146,29 @@ impl Triples {
     pub(crate) fn get_lazy_frames(
         &self,
         subjects: &Option<Vec<Subject>>,
-        _objects: &Option<Vec<Term>>,
+        objects: &Option<Vec<Term>>,
     ) -> Result<Vec<(LazyFrame, usize)>, TriplestoreError> {
-        //Todo: handle object,subject sorted index..
         if let Some(unsorted) = &self.unsorted {
             let lfs: Result<Vec<_>, _> = unsorted
                 .par_iter()
                 .map(|x| x.get_lazy_frame(None))
                 .collect();
             let lfs: Vec<_> = lfs?.into_iter().flatten().collect();
-            Ok(lfs)
-        } else if let Some(sorted) = &self.subject_object_sort {
-            let offsets = if let Some(subjects) = subjects {
+            return Ok(lfs);
+        } else if let Some(subjects) = subjects {
+            if let Some(sorted) = &self.subject_sort {
+                println!("Got from subjects! {:?}", subjects);
+                println!("Objects are.. {:?}", objects);
                 let strings: Vec<_> = subjects
-                    .iter()
+                    .iter().filter(|x| {
+                    if &self.subject_type == &BaseRDFNodeType::IRI {
+                        matches!(x, Subject::NamedNode(_))
+                    } else if &self.subject_type == &BaseRDFNodeType::BlankNode {
+                        matches!(x, Subject::BlankNode(_))
+                    } else {
+                        false
+                    }
+                })
                     .map(|x| match x {
                         Subject::NamedNode(nn) => nn.as_str(),
                         Subject::BlankNode(bl) => bl.as_str(),
@@ -150,18 +176,42 @@ impl Triples {
                     .collect();
                 let offsets = get_lookup_offsets(
                     strings,
-                    self.subject_object_sparse_index.as_ref().unwrap(),
+                    self.subject_sparse_index.as_ref().unwrap(),
                     self.height_upper_bound,
                 );
-                Some(offsets)
-            } else {
-                None
-            };
-            let lfs = sorted.get_lazy_frame(offsets)?;
-            Ok(lfs)
-        } else {
-            panic!("Triplestore is in an invalid state")
+                return Ok(sorted.get_lazy_frame(Some(offsets))?);
+            }
+        } else if let Some(objects) = objects {
+            println!("Got from objects! {:?}", objects);
+            if let Some(sorted) = &self.object_sort {
+                println!("Got from objects! inside stored");
+
+                let strings: Vec<_> = objects
+                    .iter()
+                    .filter(|x| {
+                        if &self.object_type == &BaseRDFNodeType::IRI {
+                            matches!(x, Term::NamedNode(_))
+                        } else if &self.object_type == &BaseRDFNodeType::BlankNode {
+                            matches!(x, Term::BlankNode(_))
+                        } else {
+                            false
+                        }
+                    })
+                    .map(|x| match x {
+                        Term::NamedNode(nn) => nn.as_str(),
+                        Term::BlankNode(bl) => bl.as_str(),
+                        _ => panic!("Invalid state")
+                    })
+                    .collect();
+                let offsets = get_lookup_offsets(
+                    strings,
+                    self.object_sparse_index.as_ref().unwrap(),
+                    self.height_upper_bound,
+                );
+                return Ok(sorted.get_lazy_frame(Some(offsets))?);
+            }
         }
+        Ok(self.subject_sort.as_ref().unwrap().get_lazy_frame(None)?)
     }
 
     pub(crate) fn add_triples(
@@ -174,10 +224,27 @@ impl Triples {
             let new_stored = StoredTriples::new(df, caching_folder)?;
             unsorted.push(new_stored);
             self.unique = false;
-        } else if let Some(sorted) = &self.subject_object_sort {
-            let (stored, sparse) = update_subject_sorted_index(df, unique, caching_folder, sorted)?;
-            self.subject_object_sparse_index = Some(sparse);
-            self.subject_object_sort = Some(stored);
+        } else if let Some(sorted) = &self.subject_sort {
+            let (stored, sparse) = update_column_sorted_index(
+                df.clone(),
+                unique,
+                caching_folder,
+                sorted,
+                SUBJECT_COL_NAME,
+            )?;
+            self.subject_sparse_index = Some(sparse);
+            self.subject_sort = Some(stored);
+            if let Some(sorted) = &self.object_sort {
+                let (stored, sparse) = update_column_sorted_index(
+                    df,
+                    unique,
+                    caching_folder,
+                    sorted,
+                    OBJECT_COL_NAME,
+                )?;
+                self.object_sparse_index = Some(sparse);
+                self.object_sort = Some(stored);
+            }
         } else {
             let new_stored = StoredTriples::new(df, caching_folder)?;
             self.unsorted = Some(vec![new_stored]);
@@ -204,7 +271,7 @@ impl StoredTriples {
 
     pub(crate) fn get_lazy_frame(
         &self,
-        offsets: Option<Vec<(usize, usize)>>,
+        offsets: Option<Vec<(u32, usize)>>,
     ) -> Result<Vec<(LazyFrame, usize)>, TriplestoreError> {
         let (lf, height) = match self {
             StoredTriples::TriplesOnDisk(t) => t.get_lazy_frame()?,
@@ -214,9 +281,7 @@ impl StoredTriples {
             let output: Result<Vec<_>, _> = offsets
                 .into_par_iter()
                 .map(|(offset, len)| {
-                    let lf = lf
-                        .clone()
-                        .slice(offset as i64, len as IdxSize);
+                    let lf = lf.clone().slice(offset as i64, len as IdxSize);
                     Ok((lf, len))
                 })
                 .collect();
@@ -273,24 +338,24 @@ impl TriplesInMemory {
 }
 
 fn get_lookup_interval(
-    trg: &str,
-    sparse_map: &BTreeMap<String, usize>,
+    trg: u32,
+    sparse_map: &BTreeMap<u32, usize>,
     height: usize,
-) -> (usize, usize) {
-    let mut from = 0;
+) -> (u32, usize) {
+    let mut from = 0u32;
     //Todo: remove this clone..
-    let mut range_backwards = sparse_map.range(..trg.to_string());
+    let mut range_backwards = sparse_map.range(..trg);
     while let Some((s, prev)) = range_backwards.next_back() {
-        if s != trg {
-            from = *prev;
+        if s != &trg {
+            from = *prev as u32;
             break;
         }
     }
     //Todo: remove this clone..
-    let range_forwards = sparse_map.range(trg.to_string()..);
+    let range_forwards = sparse_map.range(trg..);
     let mut to = height;
     for (s, next) in range_forwards {
-        if s != trg {
+        if s != &trg {
             to = *next;
             break;
         }
@@ -300,18 +365,19 @@ fn get_lookup_interval(
 
 fn get_lookup_offsets(
     mut trgs: Vec<&str>,
-    sparse_map: &BTreeMap<String, usize>,
+    sparse_map: &BTreeMap<u32, usize>,
     height: usize,
-) -> Vec<(usize, usize)> {
-    trgs.sort();
-    let offsets = trgs
+) -> Vec<(u32, usize)> {
+    let catser = Series::from_iter(trgs).cast(&DataType::Categorical(None,CategoricalOrdering::Physical)).unwrap();
+
+    let offsets = catser.categorical().unwrap().physical()
         .iter()
-        .map(|trg| get_lookup_interval(trg, sparse_map, height));
+        .map(|trg| get_lookup_interval(trg.unwrap(), sparse_map, height));
     let mut out_offsets = vec![];
-    let mut last_offset: Option<(usize, usize)> = None;
+    let mut last_offset: Option<(u32, usize)> = None;
     for (from, to) in offsets {
         if let Some((last_from, last_to)) = last_offset {
-            if from <= last_to {
+            if from as usize <= last_to {
                 last_offset = Some((last_from, to));
             } else {
                 out_offsets.push((last_from, last_to));
@@ -324,55 +390,43 @@ fn get_lookup_offsets(
     out_offsets.push(last_offset.unwrap());
     out_offsets
         .into_iter()
-        .map(|(from, to)| (from, to - from))
+        .map(|(from, to)| (from, to - from as usize))
         .collect()
 }
 
 fn update_at_offset(
-    cat_chunked: &CategoricalChunked,
+    cat_chunked: &UInt32Chunked,
     offset: usize,
-    sparse_map: &mut BTreeMap<String, usize>,
+    sparse_map: &mut BTreeMap<u32, usize>,
 ) {
-    let any = cat_chunked.get_any_value(offset).unwrap();
-    let s = match any {
-        AnyValue::Null => None,
-        AnyValue::Categorical(c, rev, _) => Some(rev.get(c).to_string()),
-        AnyValue::CategoricalOwned(c, rev, _) => Some(rev.get(c).to_string()),
-        _ => panic!(),
-    };
-    if let Some(s) = s {
-        let e = sparse_map.entry(s);
-        e.or_insert(offset);
-    }
+    let v = cat_chunked.get(offset).unwrap();
+    let e = sparse_map.entry(v);
+    e.or_insert(offset);
 }
 
-fn cast_subject_col_to_cat(mut lf: LazyFrame, lexsort: bool) -> LazyFrame {
-    lf = lf.with_column(col(SUBJECT_COL_NAME).cast(DataType::Categorical(
+fn cast_col_to_cat(mut lf: LazyFrame, c: &str) -> LazyFrame {
+    lf = lf.with_column(col(c).cast(DataType::Categorical(
         None,
-        if lexsort {
-            CategoricalOrdering::Lexical
-        } else {
-            CategoricalOrdering::Physical
-        },
+        CategoricalOrdering::Physical
     )));
     lf
 }
 
-fn update_subject_sorted_index(
+fn update_column_sorted_index(
     df: DataFrame,
     unique: bool,
     caching_folder: &Option<String>,
     stored_triples: &StoredTriples,
-) -> Result<(StoredTriples, BTreeMap<String, usize>), TriplestoreError> {
+    c: &str,
+) -> Result<(StoredTriples, BTreeMap<u32, usize>), TriplestoreError> {
     let mut lf = df.lazy();
     if !unique {
         lf = lf.unique(None, UniqueKeepStrategy::Any);
     }
-    lf = cast_subject_col_to_cat(lf, true);
     let existing_lfs_heights = stored_triples.get_lazy_frame(None)?;
     let mut existing_lfs: Vec<_> = existing_lfs_heights.into_iter().map(|(lf, _)| lf).collect();
     existing_lfs.push(lf);
-    lf = concat(
+    let mut lf = concat(
         existing_lfs,
         UnionArgs {
             parallel: true,
@@ -383,15 +437,20 @@ fn update_subject_sorted_index(
         },
     )
     .unwrap();
-    let (mut df, sparse_map) = create_sorted_df_and_sparse_map(lf);
-    df = cast_subject_col_to_cat(df.lazy(), false).collect().unwrap();
+    lf = cast_col_to_cat(lf, c);
+
+    let (mut df, sparse_map) = create_sorted_df_and_sparse_map(lf, c);
     let stored = StoredTriples::new(df, caching_folder)?;
+
     Ok((stored, sparse_map))
 }
 
-fn create_sorted_df_and_sparse_map(mut lf: LazyFrame) -> (DataFrame, BTreeMap<String, usize>) {
+fn create_sorted_df_and_sparse_map(
+    mut lf: LazyFrame,
+    c: &str,
+) -> (DataFrame, BTreeMap<u32, usize>) {
     lf = lf.sort(
-        vec![PlSmallStr::from_str(SUBJECT_COL_NAME)],
+        vec![PlSmallStr::from_str(c)],
         SortMultipleOptions {
             descending: vec![false],
             nulls_last: vec![false],
@@ -401,16 +460,13 @@ fn create_sorted_df_and_sparse_map(mut lf: LazyFrame) -> (DataFrame, BTreeMap<St
         },
     );
     let df = lf.collect().unwrap();
-    let subj_ser = df
-        .column(SUBJECT_COL_NAME)
-        .unwrap()
-        .as_materialized_series();
-    let subj_sparse_map = create_sparse_map(subj_ser);
-    (df, subj_sparse_map)
+    let ser = df.column(c).unwrap().as_materialized_series();
+    let sparse_map = create_sparse_map(ser);
+    (df, sparse_map)
 }
 
-fn create_sparse_map(ser: &Series) -> BTreeMap<String, usize> {
-    let cat = ser.categorical().unwrap();
+fn create_sparse_map(ser: &Series) -> BTreeMap<u32, usize> {
+    let cat = ser.categorical().unwrap().physical();
     let mut sparse_map = BTreeMap::new();
     let mut current_offset = 0;
     while current_offset < ser.len() {

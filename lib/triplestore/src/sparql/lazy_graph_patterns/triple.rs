@@ -92,9 +92,7 @@ impl Triplestore {
                                 predicates_iter
                                     .filter_map(|x| match x {
                                         AnyValue::Null => None,
-                                        AnyValue::String(s) => {
-                                            Some(literal_iri_to_namednode(s))
-                                        }
+                                        AnyValue::String(s) => Some(literal_iri_to_namednode(s)),
                                         AnyValue::StringOwned(s) => {
                                             Some(literal_iri_to_namednode(&s))
                                         }
@@ -174,7 +172,7 @@ impl Triplestore {
                 let new_solution_mappings = SolutionMappings {
                     mappings: lf,
                     rdf_node_types: dts,
-                    height_upper_bound:new_height_upper_bound,
+                    height_upper_bound: new_height_upper_bound,
                 };
                 solution_mappings = Some(join(
                     solution_mappings.unwrap(),

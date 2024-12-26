@@ -102,8 +102,8 @@ impl Triplestore {
     pub fn create_index(&mut self, cio: CreateIndexOptions) -> Result<(), TriplestoreError> {
         if cio.immediate {
             for m in self.triples_map.values_mut() {
-                for ts in m.values_mut() {
-                    ts.add_index(cio.clone(), &self.caching_folder)?
+                for ((_,object_type),ts) in m {
+                    ts.add_index(cio.clone(), object_type, &self.caching_folder)?
                 }
             }
         }
@@ -172,14 +172,14 @@ impl Triplestore {
             map.insert(OBJECT_COL_NAME.to_string(), object_type.as_rdf_node_type());
             lf = lf_columns_to_categorical(lf, &map, CategoricalOrdering::Physical);
             df = lf.collect().unwrap();
-            let k = (subject_type, object_type);
+            let k = (subject_type.clone(), object_type.clone());
             if let Some(m) = use_map.get_mut(&predicate) {
                 if let Some(t) = m.get_mut(&k) {
                     t.add_triples(df, unique, &self.caching_folder)?
                 } else {
                     m.insert(
                         k,
-                        Triples::new(df, unique, call_uuid, &self.caching_folder)?,
+                        Triples::new(df, unique, call_uuid, &self.caching_folder, subject_type, object_type)?,
                     );
                 }
             } else {
@@ -187,7 +187,7 @@ impl Triplestore {
                     predicate.clone(),
                     HashMap::from([(
                         k,
-                        Triples::new(df, unique, call_uuid, &self.caching_folder)?,
+                        Triples::new(df, unique, call_uuid, &self.caching_folder, subject_type, object_type)?,
                     )]),
                 );
             }

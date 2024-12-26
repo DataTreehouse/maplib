@@ -11,6 +11,7 @@ pub mod python;
 pub mod subtypes;
 
 use crate::multitype::{MULTI_BLANK_DT, MULTI_IRI_DT, MULTI_NONE_DT};
+use crate::subtypes::{is_literal_subtype, OWL_REAL};
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{BlankNode, NamedNode, NamedNodeRef, NamedOrBlankNode, Term};
 use polars::prelude::{DataType, Field, TimeUnit};
@@ -18,7 +19,6 @@ use serde::de::{Error, Visitor};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use spargebra::term::TermPattern;
 use std::fmt::{Display, Formatter};
-use crate::subtypes::{is_literal_subtype, OWL_REAL};
 
 pub const VERB_COL_NAME: &str = "verb";
 pub const OBJECT_COL_NAME: &str = "object";

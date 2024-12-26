@@ -187,7 +187,7 @@ impl Pushdowns {
                 self.add_filter_variable_pushdowns(expr);
             }
             GraphPattern::Union { left: _, right: _ } => {
-                //Todo: do disjunction..
+                //Consider what to do, must make corresponding change to graph pattern behaviour.
             }
             GraphPattern::Extend {
                 inner,

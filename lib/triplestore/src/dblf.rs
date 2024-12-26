@@ -2,19 +2,23 @@ use super::{Triples, Triplestore};
 use crate::sparql::errors::SparqlError;
 use crate::sparql::pushdowns::PossibleTypes;
 use oxrdf::{NamedNode, Subject, Term};
-use polars::prelude::{
-    as_struct, col, concat, lit, IntoLazy, LazyFrame, UnionArgs,
-};
+use polars::prelude::{as_struct, col, concat, lit, IntoLazy, LazyFrame, UnionArgs};
 use polars_core::datatypes::CategoricalOrdering;
 use polars_core::prelude::{Column, DataFrame, DataType};
 use rayon::iter::IntoParallelIterator;
 use rayon::iter::ParallelIterator;
-use representation::multitype::{all_multi_and_is_cols, all_multi_cols, lf_columns_to_categorical, multi_has_this_type_column, non_multi_type_string};
+use representation::multitype::{
+    all_multi_and_is_cols, all_multi_cols, lf_columns_to_categorical, multi_has_this_type_column,
+    non_multi_type_string,
+};
 use representation::rdf_to_polars::{
     rdf_named_node_to_polars_literal_value, rdf_term_to_polars_expr,
 };
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
-use representation::{BaseRDFNodeType, RDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD, OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME};
+use representation::{
+    BaseRDFNodeType, RDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD, OBJECT_COL_NAME,
+    SUBJECT_COL_NAME, VERB_COL_NAME,
+};
 use std::collections::{HashMap, HashSet};
 
 impl Triplestore {
@@ -151,7 +155,7 @@ impl Triplestore {
         object_datatype_ctr: &Option<PossibleTypes>,
     ) -> Result<SolutionMappings, SparqlError> {
         let predicate_uris = predicate_uris.unwrap_or(self.all_predicates());
-
+        let predicate_uris_len = predicate_uris.len();
         let mut sms = vec![];
         for nn in predicate_uris {
             if let Some(sm) = self.get_deduplicated_predicate_lf(
@@ -178,38 +182,65 @@ impl Triplestore {
             let mut object_types = HashSet::new();
             let mut accumulated_heights = 0usize;
 
-            // This part is to fix a performance bug in Polars.
-            sms = sms.into_par_iter().map(|sm| {
-                let HalfBakedSolutionMappings{
-                    mut mappings, verb, subject_type, object_type, height_upper_bound,
-                } = sm;
-                mappings = mappings.with_column(
-                    col(SUBJECT_COL_NAME).cast(DataType::String)
-                );
-                if object_type.is_lang_string() {
-                    mappings = mappings.with_column(
-                        as_struct(vec![
-                            col(OBJECT_COL_NAME).struct_().field_by_name(LANG_STRING_VALUE_FIELD).cast(DataType::String).alias(LANG_STRING_VALUE_FIELD),
-                            col(OBJECT_COL_NAME).struct_().field_by_name(LANG_STRING_LANG_FIELD).cast(DataType::String).alias(LANG_STRING_LANG_FIELD)
-                        ]).alias(OBJECT_COL_NAME)
-                    )
-                } else if object_type.polars_data_type() == DataType::String {
-                    mappings = mappings.with_column(col(OBJECT_COL_NAME).cast(DataType::String));
-                }
-                mappings = mappings.collect().unwrap().lazy();
-                let rdf_node_types = HashMap::from([
-                    (SUBJECT_COL_NAME.to_string(), subject_type.as_rdf_node_type()),
-                (OBJECT_COL_NAME.to_string(), object_type.as_rdf_node_type()),]);
-                mappings = lf_columns_to_categorical(mappings, &rdf_node_types, CategoricalOrdering::Physical);
+            // This part is to work around a performance bug in Polars.
+            if predicate_uris_len > 1 && (subjects.is_some() || objects.is_some()) {
+                sms = sms
+                    .into_par_iter()
+                    .map(|sm| {
+                        let HalfBakedSolutionMappings {
+                            mut mappings,
+                            verb,
+                            subject_type,
+                            object_type,
+                            height_upper_bound: _,
+                        } = sm;
+                        mappings = mappings.with_column(col(SUBJECT_COL_NAME).cast(DataType::String));
+                        if object_type.is_lang_string() {
+                            mappings = mappings.with_column(
+                                as_struct(vec![
+                                    col(OBJECT_COL_NAME)
+                                        .struct_()
+                                        .field_by_name(LANG_STRING_VALUE_FIELD)
+                                        .cast(DataType::String)
+                                        .alias(LANG_STRING_VALUE_FIELD),
+                                    col(OBJECT_COL_NAME)
+                                        .struct_()
+                                        .field_by_name(LANG_STRING_LANG_FIELD)
+                                        .cast(DataType::String)
+                                        .alias(LANG_STRING_LANG_FIELD),
+                                ])
+                                    .alias(OBJECT_COL_NAME),
+                            )
+                        } else if object_type.polars_data_type() == DataType::String {
+                            mappings =
+                                mappings.with_column(col(OBJECT_COL_NAME).cast(DataType::String));
+                        }
+                        let df = mappings.collect().unwrap();
+                        let height_upper_bound = df.height();
+                        mappings = df.lazy();
+                        let rdf_node_types = HashMap::from([
+                            (
+                                SUBJECT_COL_NAME.to_string(),
+                                subject_type.as_rdf_node_type(),
+                            ),
+                            (OBJECT_COL_NAME.to_string(), object_type.as_rdf_node_type()),
+                        ]);
+                        mappings = lf_columns_to_categorical(
+                            mappings,
+                            &rdf_node_types,
+                            CategoricalOrdering::Physical,
+                        );
 
-                HalfBakedSolutionMappings {
-                    mappings,
-                    verb,
-                    subject_type,
-                    object_type,
-                    height_upper_bound,
-                }
-            }).collect();
+                        HalfBakedSolutionMappings {
+                            mappings,
+                            verb,
+                            subject_type,
+                            object_type,
+                            height_upper_bound,
+                        }
+                    })
+                    .collect();
+            }
 
             for HalfBakedSolutionMappings {
                 mut mappings,
@@ -219,8 +250,6 @@ impl Triplestore {
                 height_upper_bound,
             } in sms
             {
-
-
                 if subject_need_multi {
                     mappings = unnest_non_multi_col(mappings, SUBJECT_COL_NAME, &subject_type);
                 }

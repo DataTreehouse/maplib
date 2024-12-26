@@ -8,8 +8,8 @@ use polars::prelude::{
     UnionArgs,
 };
 use representation::multitype::{
-    convert_lf_col_to_multitype, create_join_compatible_solution_mappings, unnest_multicols,
-    nest_multicolumns, lf_column_to_categorical, non_multi_type_string,
+    convert_lf_col_to_multitype, create_join_compatible_solution_mappings,
+    lf_column_to_categorical, nest_multicolumns, non_multi_type_string, unnest_multicols,
 };
 use representation::multitype::{join_workaround, unique_workaround};
 use representation::query_context::Context;

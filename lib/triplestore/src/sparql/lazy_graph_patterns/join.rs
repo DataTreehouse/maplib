@@ -2,11 +2,11 @@ use super::Triplestore;
 use crate::sparql::errors::SparqlError;
 use log::debug;
 
+use crate::sparql::pushdowns::Pushdowns;
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
-use std::collections::HashMap;
-use crate::sparql::pushdowns::Pushdowns;
 use spargebra::algebra::GraphPattern;
+use std::collections::HashMap;
 
 impl Triplestore {
     pub fn lazy_join(

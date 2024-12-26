@@ -1,5 +1,5 @@
 use oxrdf::vocab::{rdfs, xsd};
-use oxrdf::{NamedNodeRef};
+use oxrdf::NamedNodeRef;
 
 pub const OWL_REAL: &str = "http://www.w3.org/2002/07/owl#real";
 pub const OWL_RATIONAL: &str = "http://www.w3.org/2002/07/owl#rational";
@@ -26,10 +26,7 @@ pub fn is_literal_subtype(s: NamedNodeRef, t: NamedNodeRef) -> bool {
             xsd::UNSIGNED_SHORT => xsd_unsigned_short_subtype(s),
             xsd::NON_POSITIVE_INTEGER => xsd_non_positive_integer_subtype(s),
             xsd::DURATION => {
-                matches!(
-                    s,
-                    xsd::YEAR_MONTH_DURATION | xsd::DAY_TIME_DURATION
-                )
+                matches!(s, xsd::YEAR_MONTH_DURATION | xsd::DAY_TIME_DURATION)
             }
             xsd::DATE_TIME => {
                 matches!(s, xsd::DATE_TIME_STAMP)
