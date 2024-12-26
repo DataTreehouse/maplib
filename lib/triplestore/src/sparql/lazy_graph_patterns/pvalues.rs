@@ -39,7 +39,7 @@ impl Triplestore {
                 SolutionMappings {
                     mappings: mappings.clone().lazy(),
                     rdf_node_types: rdf_node_types.clone(),
-                    height_upper_bound: height,
+                    height_estimate: height,
                 }
             } else {
                 todo!("Handle this error.. ")

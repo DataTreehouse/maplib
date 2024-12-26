@@ -95,7 +95,7 @@ pub fn group_by(
     let SolutionMappings {
         mut mappings,
         rdf_node_types: mut datatypes,
-        height_upper_bound,
+        height_estimate: height_upper_bound,
     } = solution_mappings;
     let grouped_mappings = mappings.group_by(by.as_slice());
 
@@ -121,13 +121,13 @@ pub fn join(
     let SolutionMappings {
         mappings: right_mappings,
         rdf_node_types: right_datatypes,
-        height_upper_bound: right_height,
+        height_estimate: right_height,
     } = right_solution_mappings;
 
     let SolutionMappings {
         mappings: left_mappings,
         rdf_node_types: left_datatypes,
-        height_upper_bound: left_height,
+        height_estimate: left_height,
     } = left_solution_mappings;
 
     let (left_mappings, left_datatypes, right_mappings, right_datatypes) =
@@ -221,7 +221,7 @@ pub fn order_by(
     let SolutionMappings {
         mut mappings,
         rdf_node_types,
-        height_upper_bound,
+        height_estimate: height_upper_bound,
     } = solution_mappings;
 
     let mut order_exprs = vec![];
@@ -323,7 +323,7 @@ pub fn project(
     let SolutionMappings {
         mut mappings,
         rdf_node_types: mut datatypes,
-        height_upper_bound,
+        height_estimate: height_upper_bound,
     } = solution_mappings;
     let cols: Vec<Expr> = variables.iter().map(|c| col(c.as_str())).collect();
     let mut new_datatypes = HashMap::new();
@@ -364,7 +364,7 @@ pub fn union(
     for SolutionMappings {
         mut mappings,
         rdf_node_types,
-        height_upper_bound,
+        height_estimate: height_upper_bound,
     } in mappings
     {
         for c in rdf_node_types.keys() {
@@ -449,7 +449,7 @@ pub fn union(
     for SolutionMappings {
         mut mappings,
         mut rdf_node_types,
-        height_upper_bound,
+        height_estimate: height_upper_bound,
     } in mappings
     {
         new_height = new_height.saturating_add(height_upper_bound);

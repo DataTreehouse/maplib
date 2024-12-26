@@ -28,7 +28,7 @@ impl Triplestore {
         )?;
         let now = Instant::now();
         let sm = distinct(solution_mappings)?;
-        println!("sm height {}", sm.height_upper_bound);
+        println!("sm height {}", sm.height_estimate);
         let eager_sm = sm.as_eager();
         println!("eager sm height {}", eager_sm.mappings.height());
         let elapsed = now.elapsed();

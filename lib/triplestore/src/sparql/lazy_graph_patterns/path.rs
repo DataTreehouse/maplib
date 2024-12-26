@@ -322,7 +322,7 @@ impl Triplestore {
         let mut path_solution_mappings = SolutionMappings {
             mappings: out_df.lazy(),
             rdf_node_types: datatypes,
-            height_upper_bound: out_df_height,
+            height_estimate: out_df_height,
         };
 
         if let Some(mappings) = solution_mappings {

@@ -138,7 +138,7 @@ impl Pushdowns {
 
 impl Pushdowns {
     pub(crate) fn add_from_solution_mappings(&mut self, sm: SolutionMappings) -> SolutionMappings {
-        if sm.height_upper_bound <= SMALL_HEIGHT {
+        if sm.height_estimate <= SMALL_HEIGHT {
             let eager_sm = sm.as_eager();
             let colnames = eager_sm.mappings.get_column_names();
             let columns = eager_sm.mappings.columns(&colnames).unwrap();

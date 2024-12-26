@@ -42,7 +42,7 @@ impl Triplestore {
         let SolutionMappings {
             mappings: lf,
             rdf_node_types: dts,
-            height_upper_bound: new_height_upper_bound,
+            height_estimate: new_height_upper_bound,
         } = match &triple_pattern.predicate {
             NamedNodePattern::NamedNode(n) => self.get_multi_predicates_solution_mappings(
                 Some(vec![n.to_owned()]),
@@ -73,7 +73,7 @@ impl Triplestore {
                 } else if let Some(SolutionMappings {
                     mappings,
                     rdf_node_types,
-                    height_upper_bound,
+                                                                                                                        height_estimate: height_upper_bound,
                 }) = solution_mappings
                 {
                     if let Some(dt) = rdf_node_types.get(v.as_str()) {
@@ -103,21 +103,21 @@ impl Triplestore {
                             solution_mappings = Some(SolutionMappings {
                                 mappings: mappings_df.lazy(),
                                 rdf_node_types,
-                                height_upper_bound,
+                                height_estimate: height_upper_bound,
                             })
                         } else {
                             predicates = Some(HashSet::new());
                             solution_mappings = Some(SolutionMappings {
                                 mappings,
                                 rdf_node_types,
-                                height_upper_bound,
+                                height_estimate: height_upper_bound,
                             })
                         };
                     } else {
                         solution_mappings = Some(SolutionMappings {
                             mappings,
                             rdf_node_types,
-                            height_upper_bound,
+                            height_estimate: height_upper_bound,
                         });
                     }
                 }
@@ -140,7 +140,7 @@ impl Triplestore {
         if let Some(SolutionMappings {
             mut mappings,
             mut rdf_node_types,
-            height_upper_bound,
+                        height_estimate: height_upper_bound,
         }) = solution_mappings
         {
             let overlap: Vec<_> = colnames
@@ -161,18 +161,18 @@ impl Triplestore {
                 solution_mappings = Some(SolutionMappings {
                     mappings,
                     rdf_node_types,
-                    height_upper_bound,
+                    height_estimate: height_upper_bound,
                 });
             } else {
                 solution_mappings = Some(SolutionMappings {
                     mappings,
                     rdf_node_types,
-                    height_upper_bound,
+                    height_estimate: height_upper_bound,
                 });
                 let new_solution_mappings = SolutionMappings {
                     mappings: lf,
                     rdf_node_types: dts,
-                    height_upper_bound: new_height_upper_bound,
+                    height_estimate: new_height_upper_bound,
                 };
                 solution_mappings = Some(join(
                     solution_mappings.unwrap(),
@@ -184,7 +184,7 @@ impl Triplestore {
             solution_mappings = Some(SolutionMappings {
                 mappings: lf,
                 rdf_node_types: dts,
-                height_upper_bound: new_height_upper_bound,
+                height_estimate: new_height_upper_bound,
             })
         }
         Ok(solution_mappings.unwrap())

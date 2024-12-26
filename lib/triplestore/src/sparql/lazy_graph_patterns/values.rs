@@ -85,7 +85,7 @@ impl Triplestore {
         let sm = SolutionMappings {
             mappings: df.lazy(),
             rdf_node_types,
-            height_upper_bound: height,
+            height_estimate: height,
         };
 
         if let Some(mut mappings) = solution_mappings {

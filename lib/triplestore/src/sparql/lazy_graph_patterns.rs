@@ -73,7 +73,7 @@ impl Triplestore {
                     Ok(SolutionMappings {
                         mappings: DataFrame::new(vec![ser.into()]).unwrap().lazy(),
                         rdf_node_types: map,
-                        height_upper_bound: height,
+                        height_estimate: height,
                     })
                 }
             }

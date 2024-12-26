@@ -7,7 +7,7 @@ use std::collections::HashMap;
 pub struct SolutionMappings {
     pub mappings: LazyFrame,
     pub rdf_node_types: HashMap<String, RDFNodeType>,
-    pub height_upper_bound: usize,
+    pub height_estimate: usize,
 }
 
 #[derive(Clone, Debug)]
@@ -45,7 +45,7 @@ impl SolutionMappings {
         SolutionMappings {
             mappings,
             rdf_node_types,
-            height_upper_bound,
+            height_estimate: height_upper_bound,
         }
     }
 
