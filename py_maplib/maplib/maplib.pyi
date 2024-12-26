@@ -651,13 +651,23 @@ class Mapping:
         @return: The sprout as its own Mapping.
         """
 
-    def get_predicate_iris(self, graph: str = None) -> List["IRI"]:
+    def get_predicate_iris(self, graph: str = None, include_transient:bool=False) -> List["IRI"]:
         """
+        :param graph: The graph to get the predicate iris from.
+        :param include_transient: Should we include predicates only between transient triples?
         :return: The IRIs of the predicates currently in the given graph.
         """
 
-    def get_predicate(self, iri: "IRI", graph: str=None) -> List["SolutionMappings"]:
+    def get_predicate(self, iri: "IRI", graph: str=None, include_transient:bool=False) -> List["SolutionMappings"]:
         """
         :param iri: The predicate IRI
+        :param graph: The graph to get the predicate from.
+        :param include_transient: Should we include transient triples?
         :return: A list of the underlying tables that store a given predicate.
+        """
+
+    def create_index(self, graph: str=None):
+        """
+        :param graph: The graph where indexes should be added
+        :return:
         """

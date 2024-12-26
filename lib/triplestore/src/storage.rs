@@ -137,8 +137,7 @@ impl Triples {
 
             if object_type.is_iri() || object_type.is_blank_node() {
                 lf = cast_col_to_cat(df.lazy(), OBJECT_COL_NAME, true);
-                let (mut df, obj_sparse_map) =
-                    create_sorted_df_and_sparse_map(lf, OBJECT_COL_NAME);
+                let (mut df, obj_sparse_map) = create_sorted_df_and_sparse_map(lf, OBJECT_COL_NAME);
                 df = cast_col_to_cat(df.lazy(), OBJECT_COL_NAME, false)
                     .collect()
                     .unwrap();
@@ -164,18 +163,17 @@ impl Triples {
             return Ok(lfs);
         } else if let Some(subjects) = subjects {
             if let Some(sorted) = &self.subject_sort {
-                println!("Got from subjects! {:?}", subjects);
-                println!("Objects are.. {:?}", objects);
                 let strings: Vec<_> = subjects
-                    .iter().filter(|x| {
-                    if &self.subject_type == &BaseRDFNodeType::IRI {
-                        matches!(x, Subject::NamedNode(_))
-                    } else if &self.subject_type == &BaseRDFNodeType::BlankNode {
-                        matches!(x, Subject::BlankNode(_))
-                    } else {
-                        false
-                    }
-                })
+                    .iter()
+                    .filter(|x| {
+                        if &self.subject_type == &BaseRDFNodeType::IRI {
+                            matches!(x, Subject::NamedNode(_))
+                        } else if &self.subject_type == &BaseRDFNodeType::BlankNode {
+                            matches!(x, Subject::BlankNode(_))
+                        } else {
+                            false
+                        }
+                    })
                     .map(|x| match x {
                         Subject::NamedNode(nn) => nn.as_str(),
                         Subject::BlankNode(bl) => bl.as_str(),
@@ -189,10 +187,7 @@ impl Triples {
                 return Ok(sorted.get_lazy_frame(Some(offsets))?);
             }
         } else if let Some(objects) = objects {
-            println!("Got from objects! {:?}", objects);
             if let Some(sorted) = &self.object_sort {
-                println!("Got from objects! inside stored");
-
                 let strings: Vec<_> = objects
                     .iter()
                     .filter(|x| {
@@ -207,7 +202,7 @@ impl Triples {
                     .map(|x| match x {
                         Term::NamedNode(nn) => nn.as_str(),
                         Term::BlankNode(bl) => bl.as_str(),
-                        _ => panic!("Invalid state")
+                        _ => panic!("Invalid state"),
                     })
                     .collect();
                 let offsets = get_lookup_offsets(

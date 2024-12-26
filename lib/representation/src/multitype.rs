@@ -782,7 +782,6 @@ pub fn join_workaround(
     right_height: usize,
     join_type: JoinType,
 ) -> SolutionMappings {
-    let height_upper_bound = left_height.saturating_mul(right_height);
     assert!(matches!(join_type, JoinType::Left | JoinType::Inner));
     for c in left_datatypes.keys() {
         if right_datatypes.contains_key(c) {
@@ -836,6 +835,13 @@ pub fn join_workaround(
             }
         }
     }
+    let height_upper_bound = if no_join {
+        0
+    } else if on.is_empty() {
+        left_height.saturating_mul(right_height)
+    } else {
+        left_height.saturating_mul(1 + 4usize.saturating_sub(on.len()))
+    };
 
     if no_join {
         let dummycol = uuid::Uuid::new_v4().to_string();

@@ -57,6 +57,7 @@ use representation::solution_mapping::EagerSolutionMappings;
 use mimalloc::MiMalloc;
 use templates::python::{a, py_triple, PyArgument, PyInstance, PyParameter, PyTemplate, PyXSD};
 use templates::MappingColumnType;
+use triplestore::CreateIndexOptions;
 
 #[cfg(target_os = "linux")]
 #[global_allocator]
@@ -85,6 +86,7 @@ impl PyMapping {
 pub struct ExpandOptions {
     pub unique_subsets: Option<Vec<Vec<String>>>,
     pub graph: Option<NamedNode>,
+    pub deduplicate: bool,
 }
 
 impl ExpandOptions {
@@ -92,6 +94,7 @@ impl ExpandOptions {
         RustExpandOptions {
             unique_subsets: self.unique_subsets,
             graph: self.graph,
+            deduplicate: self.deduplicate,
         }
     }
 }
@@ -200,6 +203,7 @@ impl PyMapping {
         let options = ExpandOptions {
             unique_subsets,
             graph: parse_optional_graph(graph)?,
+            deduplicate: false,
         };
 
         let types = if let Some(types) = types {
@@ -253,6 +257,7 @@ impl PyMapping {
         let options = ExpandOptions {
             unique_subsets: Some(vec![vec![primary_key_column.clone()]]),
             graph: parse_optional_graph(graph)?,
+            deduplicate: false,
         };
 
         let tmpl = self
@@ -306,8 +311,12 @@ impl PyMapping {
     #[pyo3(signature = (graph=None))]
     fn create_index(&mut self, graph: Option<String>) -> PyResult<()> {
         let graph = parse_optional_graph(graph)?;
+        let cio = CreateIndexOptions {
+            immediate: true,
+            subject_object_sort: true,
+        };
         self.inner
-            .create_index(graph)
+            .create_index(graph, cio)
             .map_err(PyMaplibError::from)?;
         Ok(())
     }
@@ -369,7 +378,12 @@ impl PyMapping {
             .map_err(PyMaplibError::from)?;
         if let QueryResult::Construct(dfs_and_dts) = res {
             self.inner
-                .insert_construct_result(dfs_and_dts, transient.unwrap_or(false), target_graph)
+                .insert_construct_result(
+                    dfs_and_dts,
+                    transient.unwrap_or(false),
+                    target_graph,
+                    false,
+                )
                 .map_err(PyMaplibError::from)?;
         } else {
             todo!("Handle this error..")
@@ -409,7 +423,12 @@ impl PyMapping {
             self.sprout
                 .as_mut()
                 .unwrap()
-                .insert_construct_result(dfs_and_dts, transient.unwrap_or(false), target_graph)
+                .insert_construct_result(
+                    dfs_and_dts,
+                    transient.unwrap_or(false),
+                    target_graph,
+                    false,
+                )
                 .map_err(PyMaplibError::from)?;
         } else {
             todo!("Handle this error..")
@@ -555,27 +574,32 @@ impl PyMapping {
         Ok(())
     }
 
-    #[pyo3(signature = (graph=None))]
-    fn get_predicate_iris(&mut self, graph: Option<String>) -> PyResult<Vec<PyIRI>> {
+    #[pyo3(signature = (graph=None, include_transient=None))]
+    fn get_predicate_iris(
+        &mut self,
+        graph: Option<String>,
+        include_transient: Option<bool>,
+    ) -> PyResult<Vec<PyIRI>> {
         let graph = parse_optional_graph(graph)?;
         let nns = self
             .inner
-            .get_predicate_iris(&graph)
+            .get_predicate_iris(&graph, include_transient.unwrap_or(false))
             .map_err(PyMaplibError::SparqlError)?;
         Ok(nns.into_iter().map(PyIRI::from).collect())
     }
 
-    #[pyo3(signature = (iri, graph=None))]
+    #[pyo3(signature = (iri, graph=None, include_transient=None))]
     fn get_predicate(
         &mut self,
         py: Python<'_>,
         iri: PyIRI,
         graph: Option<String>,
+        include_transient: Option<bool>,
     ) -> PyResult<Vec<PyObject>> {
         let graph = parse_optional_graph(graph)?;
         let eager_sms = self
             .inner
-            .get_predicate(&iri.into_inner(), graph)
+            .get_predicate(&iri.into_inner(), graph, include_transient.unwrap_or(false))
             .map_err(PyMaplibError::SparqlError)?;
         let mut out = vec![];
         for EagerSolutionMappings {

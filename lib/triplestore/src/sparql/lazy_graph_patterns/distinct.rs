@@ -7,7 +7,6 @@ use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use spargebra::algebra::GraphPattern;
 use std::collections::HashMap;
-use std::time::Instant;
 
 impl Triplestore {
     pub(crate) fn lazy_distinct(
@@ -26,14 +25,7 @@ impl Triplestore {
             parameters,
             pushdowns,
         )?;
-        let now = Instant::now();
         let sm = distinct(solution_mappings)?;
-        println!("sm height {}", sm.height_estimate);
-        let eager_sm = sm.as_eager();
-        println!("eager sm height {}", eager_sm.mappings.height());
-        let elapsed = now.elapsed();
-        println!("Elapsed: {:.2?}", elapsed);
-        Ok(eager_sm.as_lazy())
-
+        Ok(sm)
     }
 }

@@ -8,7 +8,7 @@ use spargebra::algebra::{Expression, Function, GraphPattern};
 use spargebra::term::{GroundTerm, NamedNodePattern, TermPattern, TriplePattern};
 use std::collections::{HashMap, HashSet};
 
-pub const SMALL_HEIGHT: usize = 50;
+pub const SMALL_HEIGHT: usize = 100;
 pub const OWL_REAL: &str = "http://www.w3.org/2002/07/owl#real";
 
 //Todos: pushdowns from joins..

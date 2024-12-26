@@ -36,6 +36,7 @@ pub struct Triplestore {
     triples_map: HashMap<NamedNode, HashMap<(BaseRDFNodeType, BaseRDFNodeType), Triples>>,
     transient_triples_map: HashMap<NamedNode, HashMap<(BaseRDFNodeType, BaseRDFNodeType), Triples>>,
     parser_call: usize,
+    indexed: bool,
 }
 
 impl Triplestore {
@@ -83,6 +84,7 @@ impl Triplestore {
             deduplicated: true,
             caching_folder,
             parser_call: 0,
+            indexed: false,
         })
     }
 
@@ -102,10 +104,11 @@ impl Triplestore {
     pub fn create_index(&mut self, cio: CreateIndexOptions) -> Result<(), TriplestoreError> {
         if cio.immediate {
             for m in self.triples_map.values_mut() {
-                for ((_,object_type),ts) in m {
+                for ((_, object_type), ts) in m {
                     ts.add_index(cio.clone(), object_type, &self.caching_folder)?
                 }
             }
+            self.indexed = true;
         }
         Ok(())
     }
@@ -179,7 +182,14 @@ impl Triplestore {
                 } else {
                     m.insert(
                         k,
-                        Triples::new(df, unique, call_uuid, &self.caching_folder, subject_type, object_type)?,
+                        Triples::new(
+                            df,
+                            unique,
+                            call_uuid,
+                            &self.caching_folder,
+                            subject_type,
+                            object_type,
+                        )?,
                     );
                 }
             } else {
@@ -187,7 +197,14 @@ impl Triplestore {
                     predicate.clone(),
                     HashMap::from([(
                         k,
-                        Triples::new(df, unique, call_uuid, &self.caching_folder, subject_type, object_type)?,
+                        Triples::new(
+                            df,
+                            unique,
+                            call_uuid,
+                            &self.caching_folder,
+                            subject_type,
+                            object_type,
+                        )?,
                     )]),
                 );
             }

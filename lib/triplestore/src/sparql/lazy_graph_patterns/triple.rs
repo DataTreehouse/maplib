@@ -73,7 +73,7 @@ impl Triplestore {
                 } else if let Some(SolutionMappings {
                     mappings,
                     rdf_node_types,
-                                                                                                                        height_estimate: height_upper_bound,
+                    height_estimate: height_upper_bound,
                 }) = solution_mappings
                 {
                     if let Some(dt) = rdf_node_types.get(v.as_str()) {
@@ -140,7 +140,7 @@ impl Triplestore {
         if let Some(SolutionMappings {
             mut mappings,
             mut rdf_node_types,
-                        height_estimate: height_upper_bound,
+            height_estimate: height_upper_bound,
         }) = solution_mappings
         {
             let overlap: Vec<_> = colnames

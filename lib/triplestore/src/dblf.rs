@@ -194,7 +194,8 @@ impl Triplestore {
                             object_type,
                             height_upper_bound: _,
                         } = sm;
-                        mappings = mappings.with_column(col(SUBJECT_COL_NAME).cast(DataType::String));
+                        mappings =
+                            mappings.with_column(col(SUBJECT_COL_NAME).cast(DataType::String));
                         if object_type.is_lang_string() {
                             mappings = mappings.with_column(
                                 as_struct(vec![
@@ -209,7 +210,7 @@ impl Triplestore {
                                         .cast(DataType::String)
                                         .alias(LANG_STRING_LANG_FIELD),
                                 ])
-                                    .alias(OBJECT_COL_NAME),
+                                .alias(OBJECT_COL_NAME),
                             )
                         } else if object_type.polars_data_type() == DataType::String {
                             mappings =
