@@ -15,7 +15,7 @@ use maplib::mapping::ExpandOptions as RustExpandOptions;
 use maplib::mapping::Mapping as InnerMapping;
 use pydf_io::to_python::{df_to_py_df, fix_cats_and_multicolumns};
 use pyo3::prelude::*;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::path::{Path, PathBuf};
 use templates::dataset::TemplateDataset;
@@ -57,7 +57,7 @@ use representation::solution_mapping::EagerSolutionMappings;
 use mimalloc::MiMalloc;
 use templates::python::{a, py_triple, PyArgument, PyInstance, PyParameter, PyTemplate, PyXSD};
 use templates::MappingColumnType;
-use triplestore::CreateIndexOptions;
+use triplestore::IndexingOptions;
 
 #[cfg(target_os = "linux")]
 #[global_allocator]
@@ -78,6 +78,50 @@ impl PyMapping {
         PyMapping {
             inner,
             sprout: None,
+        }
+    }
+}
+
+#[derive(Clone)]
+#[pyclass(name = "IndexingOptions")]
+pub struct PyIndexingOptions {
+    inner: IndexingOptions,
+}
+
+#[pymethods]
+impl PyIndexingOptions {
+    #[new]
+    #[pyo3(signature = (enabled, object_sort_all=None, object_sort_some=None))]
+    pub fn new(
+        enabled: bool,
+        object_sort_all: Option<bool>,
+        object_sort_some: Option<Vec<PyIRI>>,
+    ) -> PyIndexingOptions {
+        let inner = if enabled {
+            if object_sort_all.is_none() && object_sort_some.is_none() {
+                IndexingOptions::default()
+            } else {
+                let object_sort_some: Option<HashSet<_>> = if let Some(object_sort_some) = object_sort_some {
+                    Some(object_sort_some.into_iter().map(|x|x.into_inner()).collect())
+                } else {
+                    None
+                };
+                IndexingOptions {
+                    enabled,
+                    object_sort_all: object_sort_all.unwrap_or(false),
+                    object_sort_some,
+                }
+            }
+        } else {
+            IndexingOptions {
+                enabled,
+                object_sort_all:false,
+                object_sort_some:None,
+            }
+        };
+
+        PyIndexingOptions {
+            inner
         }
     }
 }
@@ -104,10 +148,10 @@ type ParametersType<'a> = HashMap<String, (Bound<'a, PyAny>, HashMap<String, PyR
 #[pymethods]
 impl PyMapping {
     #[new]
-    #[pyo3(signature = (documents=None, caching_folder=None))]
+    #[pyo3(signature = (documents=None, indexing_options=None))]
     fn new(
         documents: Option<&Bound<'_, PyAny>>,
-        caching_folder: Option<&Bound<'_, PyAny>>,
+        indexing_options: Option<PyIndexingOptions>,
     ) -> PyResult<PyMapping> {
         let documents = if let Some(documents) = documents {
             if documents.is_instance_of::<PyList>() {
@@ -134,13 +178,14 @@ impl PyMapping {
         let template_dataset = TemplateDataset::from_documents(parsed_documents)
             .map_err(MaplibError::from)
             .map_err(PyMaplibError::from)?;
-        let caching_folder = if let Some(c) = caching_folder {
-            Some(c.str()?.to_string())
+
+        let indexing = if let Some(indexing_options) = indexing_options {
+            Some(indexing_options.inner)
         } else {
             None
         };
         Ok(PyMapping {
-            inner: InnerMapping::new(&template_dataset, caching_folder)
+            inner: InnerMapping::new(&template_dataset, None, indexing)
                 .map_err(PyMaplibError::from)?,
             sprout: None,
         })
@@ -154,8 +199,8 @@ impl PyMapping {
     }
 
     fn create_sprout(&mut self) -> PyResult<()> {
-        let mut sprout =
-            InnerMapping::new(&self.inner.template_dataset, None).map_err(PyMaplibError::from)?;
+        let mut sprout = InnerMapping::new(&self.inner.template_dataset, None, Some(self.inner.indexing.clone()))
+            .map_err(PyMaplibError::from)?;
         sprout.blank_node_counter = self.inner.blank_node_counter;
         self.sprout = Some(sprout);
         Ok(())
@@ -308,15 +353,16 @@ impl PyMapping {
         )
     }
 
-    #[pyo3(signature = (graph=None))]
-    fn create_index(&mut self, graph: Option<String>) -> PyResult<()> {
+    #[pyo3(signature = (options=None, all=None, graph=None))]
+    fn create_index(&mut self, options: Option<PyIndexingOptions>, all:Option<bool>, graph: Option<String>) -> PyResult<()> {
         let graph = parse_optional_graph(graph)?;
-        let cio = CreateIndexOptions {
-            immediate: true,
-            subject_object_sort: true,
+        let options = if let Some(options) = options {
+            options.inner
+        } else {
+            IndexingOptions::default()
         };
         self.inner
-            .create_index(graph, cio)
+            .create_index(options,all.unwrap_or(true), graph)
             .map_err(PyMaplibError::from)?;
         Ok(())
     }
@@ -351,7 +397,11 @@ impl PyMapping {
         } else {
             None
         };
-        Ok(PyValidationReport::new(report, shape_graph_triplestore))
+        Ok(PyValidationReport::new(
+            report,
+            shape_graph_triplestore,
+            self.inner.indexing.clone(),
+        ))
     }
 
     #[pyo3(signature = (query, parameters=None, transient=None, streaming=None, source_graph=None, target_graph=None))]
@@ -618,6 +668,7 @@ impl PyMapping {
 #[pyo3(name = "maplib")]
 fn _maplib(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     enable_string_cache();
+    m.add_class::<PyIndexingOptions>()?;
     m.add_class::<PyMapping>()?;
     m.add_class::<PyValidationReport>()?;
     m.add_class::<PySolutionMappings>()?;

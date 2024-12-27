@@ -245,6 +245,20 @@ def a() -> IRI:
 
 # END COMMON WITH CHRONTEXT
 
+class IndexingOptions:
+    """
+    Options for indexing
+    """
+
+    def __init__(self, enabled:bool=True, object_sort_all:bool=False, object_sort_some:List["IRI"]=None):
+        """
+        Defaults to indexing on subjects and objects for select types (e.g. rdf:type)
+
+        :param enabled: Enable indexing (this will enable indexing on subjects)
+        :param object_sort_all: Enable object-indexing for all suitable predicates (doubles memory requirement).
+        :param object_sort_some: Enable object-indexing for a selected list of predicates.
+        """
+
 ParametersType = Dict[str, Tuple[DataFrame, Dict[str, RDFType]]]
 
 class ValidationReport:
@@ -282,11 +296,13 @@ class ValidationReport:
         :return: Details of the SHACL validation report, as a DataFrame
         """
 
-    def graph(self) -> "Mapping":
+    def graph(self, indexing = None) -> "Mapping":
         """
         Creates a new mapping object where the base graph is the validation report with results.
         Includes the details of the validation report in the new graph if they exist.
 
+        :param indexing: Should the constructed graph be indexed?
+                         If not specified it is inherited from the mapping where validate was called.
         :return:
         """
 
@@ -309,11 +325,11 @@ class Mapping:
     ... m = Mapping(doc)
 
     :param documents: a stOTTR document or a list of these
-    :param caching_folder: a folder to cache the triples as Parquet files
+    :param indexing_options: options for indexing
     """
 
     def __init__(
-        self, documents: Union[str, List[str]] = None, caching_folder: str = None
+        self, documents: Union[str, List[str]] = None, indexing_options: "IndexingOptions" = None
     ) -> "Mapping": ...
     def add_template(self, template: "Template"):
         """
@@ -666,8 +682,10 @@ class Mapping:
         :return: A list of the underlying tables that store a given predicate.
         """
 
-    def create_index(self, graph: str=None):
+    def create_index(self, options: "IndexingOptions"=None, all:bool=True, graph: str=None):
         """
+        :param options: Indexing options
+        :param all: Apply to all existing and new graphs
         :param graph: The graph where indexes should be added
         :return:
         """

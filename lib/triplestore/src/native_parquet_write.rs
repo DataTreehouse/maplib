@@ -2,6 +2,7 @@ use super::Triplestore;
 use crate::errors::TriplestoreError;
 use log::debug;
 use parquet_io::{property_to_filename, write_parquet};
+use polars::prelude::ParquetCompression;
 use representation::BaseRDFNodeType;
 use std::path::Path;
 use std::time::Instant;
@@ -39,8 +40,12 @@ impl Triplestore {
                     let filename = format!("{filename}_part_{i}.parquet");
                     let mut file_path = file_path.clone();
                     file_path.push(filename);
-                    write_parquet(&mut lf.collect().unwrap(), file_path.as_path())
-                        .map_err(TriplestoreError::ParquetIOError)?
+                    write_parquet(
+                        &mut lf.collect().unwrap(),
+                        file_path.as_path(),
+                        ParquetCompression::default(),
+                    )
+                    .map_err(TriplestoreError::ParquetIOError)?
                 }
             }
         }

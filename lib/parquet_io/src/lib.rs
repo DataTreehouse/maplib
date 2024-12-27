@@ -1,5 +1,6 @@
 use polars::prelude::{
-    DataFrame, LazyFrame, ParallelStrategy, ParquetWriter, PolarsError, ScanArgsParquet,
+    DataFrame, LazyFrame, ParallelStrategy, ParquetCompression, ParquetWriter, PolarsError,
+    ScanArgsParquet,
 };
 use std::fs::File;
 use std::path::Path;
@@ -38,10 +39,15 @@ pub fn property_to_filename(property_name: &str) -> String {
         .collect()
 }
 
-pub fn write_parquet(df: &mut DataFrame, file_path: &Path) -> Result<(), ParquetIOError> {
+pub fn write_parquet(
+    df: &mut DataFrame,
+    file_path: &Path,
+    compression: ParquetCompression,
+) -> Result<(), ParquetIOError> {
     let file = File::create(file_path).map_err(ParquetIOError::FileCreateIOError)?;
     let mut writer = ParquetWriter::new(file);
     writer = writer.with_row_group_size(Some(1_000));
+    writer = writer.with_compression(compression);
     writer
         .finish(df)
         .map_err(ParquetIOError::WriteParquetError)?;

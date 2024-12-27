@@ -12,7 +12,7 @@ pub mod triples_read;
 pub mod triples_write;
 
 use crate::errors::TriplestoreError;
-use crate::io_funcs::{create_folder_if_not_exists, delete_tmp_parquets_in_caching_folder};
+use crate::io_funcs::{create_folder_if_not_exists, delete_tmp_parquets_in_storage_folder};
 use crate::storage::Triples;
 use log::debug;
 use oxrdf::NamedNode;
@@ -25,33 +25,48 @@ use representation::{
     literal_iri_to_namednode, BaseRDFNodeType, RDFNodeType, OBJECT_COL_NAME, SUBJECT_COL_NAME,
     VERB_COL_NAME,
 };
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::time::Instant;
+use oxrdf::vocab::{rdf, rdfs};
 
 #[derive(Clone)]
 pub struct Triplestore {
-    pub caching_folder: Option<String>,
+    pub storage_folder: Option<String>,
     deduplicated: bool,
     triples_map: HashMap<NamedNode, HashMap<(BaseRDFNodeType, BaseRDFNodeType), Triples>>,
     transient_triples_map: HashMap<NamedNode, HashMap<(BaseRDFNodeType, BaseRDFNodeType), Triples>>,
     parser_call: usize,
-    indexed: bool,
+    indexing: IndexingOptions,
 }
 
 impl Triplestore {
     pub fn truncate(&mut self) {
-        if self.caching_folder.is_some() {
+        if self.storage_folder.is_some() {
             todo!("Should drop this folder.. ")
         }
         self.triples_map = HashMap::new();
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct CreateIndexOptions {
-    pub immediate: bool,
-    pub subject_object_sort: bool,
+#[derive(Clone)]
+pub struct IndexingOptions {
+    pub enabled: bool,
+    pub object_sort_all: bool,
+    pub object_sort_some: Option<HashSet<NamedNode>>,
+}
+
+impl Default for IndexingOptions {
+    fn default() -> IndexingOptions {
+        IndexingOptions {
+            enabled: true,
+            object_sort_all: false,
+            object_sort_some: Some(HashSet::from([
+                rdfs::LABEL.into_owned(),
+                rdf::TYPE.into_owned()
+            ])),
+        }
+    }
 }
 
 pub struct TriplesToAdd {
@@ -72,19 +87,22 @@ pub struct TripleDF {
 }
 
 impl Triplestore {
-    pub fn new(caching_folder: Option<String>) -> Result<Triplestore, TriplestoreError> {
-        if let Some(caching_folder) = &caching_folder {
-            let path = Path::new(caching_folder);
+    pub fn new(
+        storage_folder: Option<String>,
+        indexing: Option<IndexingOptions>,
+    ) -> Result<Triplestore, TriplestoreError> {
+        if let Some(storage_folder) = &storage_folder {
+            let path = Path::new(storage_folder);
             create_folder_if_not_exists(path)?;
-            delete_tmp_parquets_in_caching_folder(path)?;
+            delete_tmp_parquets_in_storage_folder(path)?;
         }
         Ok(Triplestore {
             triples_map: HashMap::new(),
             transient_triples_map: HashMap::new(),
             deduplicated: true,
-            caching_folder,
+            storage_folder,
             parser_call: 0,
-            indexed: false,
+            indexing: indexing.unwrap_or(IndexingOptions::default()),
         })
     }
 
@@ -94,22 +112,22 @@ impl Triplestore {
 
     pub fn deduplicate(&mut self) -> Result<(), TriplestoreError> {
         let now = Instant::now();
-        deduplicate_map(&mut self.triples_map, &self.caching_folder)?;
-        deduplicate_map(&mut self.transient_triples_map, &self.caching_folder)?;
+        deduplicate_map(&mut self.triples_map, &self.storage_folder)?;
+        deduplicate_map(&mut self.transient_triples_map, &self.storage_folder)?;
         self.deduplicated = true;
         debug!("Deduplication took {} seconds", now.elapsed().as_secs_f64());
         Ok(())
     }
 
-    pub fn create_index(&mut self, cio: CreateIndexOptions) -> Result<(), TriplestoreError> {
-        if cio.immediate {
-            for m in self.triples_map.values_mut() {
+    pub fn create_index(&mut self, indexing: IndexingOptions) -> Result<(), TriplestoreError> {
+        if indexing.enabled {
+            for (k, m) in &mut self.triples_map {
                 for ((_, object_type), ts) in m {
-                    ts.add_index(cio.clone(), object_type, &self.caching_folder)?
+                    ts.add_index(object_type, &self.storage_folder, k, &indexing)?
                 }
             }
-            self.indexed = true;
         }
+        self.indexing = indexing;
         Ok(())
     }
 
@@ -178,7 +196,7 @@ impl Triplestore {
             let k = (subject_type.clone(), object_type.clone());
             if let Some(m) = use_map.get_mut(&predicate) {
                 if let Some(t) = m.get_mut(&k) {
-                    t.add_triples(df, unique, &self.caching_folder)?
+                    t.add_triples(df, unique, &self.storage_folder)?
                 } else {
                     m.insert(
                         k,
@@ -186,9 +204,11 @@ impl Triplestore {
                             df,
                             unique,
                             call_uuid,
-                            &self.caching_folder,
+                            &self.storage_folder,
                             subject_type,
                             object_type,
+                            &predicate,
+                            &self.indexing,
                         )?,
                     );
                 }
@@ -201,9 +221,11 @@ impl Triplestore {
                             df,
                             unique,
                             call_uuid,
-                            &self.caching_folder,
+                            &self.storage_folder,
                             subject_type,
                             object_type,
+                            &predicate,
+                            &self.indexing,
                         )?,
                     )]),
                 );
@@ -414,11 +436,11 @@ fn flatten<T>(nested: Vec<Vec<T>>) -> Vec<T> {
 
 fn deduplicate_map(
     df_map: &mut HashMap<NamedNode, HashMap<(BaseRDFNodeType, BaseRDFNodeType), Triples>>,
-    caching_folder: &Option<String>,
+    storage_folder: &Option<String>,
 ) -> Result<(), TriplestoreError> {
     for map in df_map.values_mut() {
         for v in map.values_mut() {
-            v.deduplicate(caching_folder)?;
+            v.deduplicate(storage_folder)?;
         }
     }
     Ok(())

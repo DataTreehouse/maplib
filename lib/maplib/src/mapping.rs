@@ -21,7 +21,7 @@ use templates::document::document_from_str;
 use templates::MappingColumnType;
 use triplestore::sparql::errors::SparqlError;
 use triplestore::sparql::QueryResult;
-use triplestore::{CreateIndexOptions, Triplestore};
+use triplestore::{IndexingOptions, Triplestore};
 
 pub struct Mapping {
     pub template_dataset: TemplateDataset,
@@ -29,6 +29,7 @@ pub struct Mapping {
     pub triplestores_map: HashMap<NamedNode, Triplestore>,
     use_caching: bool,
     pub blank_node_counter: usize,
+    pub indexing: IndexingOptions,
 }
 
 #[derive(Clone, Default)]
@@ -57,52 +58,57 @@ pub struct MappingReport {}
 impl Mapping {
     pub fn new(
         template_dataset: &TemplateDataset,
-        caching_folder: Option<String>,
+        storage_folder: Option<String>,
+        indexing: Option<IndexingOptions>,
     ) -> Result<Mapping, MaplibError> {
         #[allow(clippy::match_single_binding)]
         match env_logger::try_init() {
             _ => {}
         };
 
-        let use_caching = caching_folder.is_some();
+        let use_caching = storage_folder.is_some();
         Ok(Mapping {
             template_dataset: template_dataset.clone(),
-            base_triplestore: Triplestore::new(caching_folder)
+            base_triplestore: Triplestore::new(storage_folder, indexing.clone())
                 .map_err(MappingError::TriplestoreError)?,
             triplestores_map: Default::default(),
             use_caching,
             blank_node_counter: 0,
+            indexing: indexing.unwrap_or_default(),
         })
     }
 
     pub fn from_folder<P: AsRef<Path>>(
         path: P,
         recursive: bool,
-        caching_folder: Option<String>,
+        storage_folder: Option<String>,
     ) -> Result<Mapping, MaplibError> {
         let dataset =
             TemplateDataset::from_folder(path, recursive).map_err(MaplibError::TemplateError)?;
-        Mapping::new(&dataset, caching_folder)
+        Mapping::new(&dataset, storage_folder, None)
     }
 
     pub fn from_file<P: AsRef<Path>>(
         path: P,
-        caching_folder: Option<String>,
+        storage_folder: Option<String>,
     ) -> Result<Mapping, MaplibError> {
         let dataset = TemplateDataset::from_file(path).map_err(MaplibError::TemplateError)?;
-        Mapping::new(&dataset, caching_folder)
+        Mapping::new(&dataset, storage_folder, None)
     }
 
-    pub fn from_str(s: &str, caching_folder: Option<String>) -> Result<Mapping, MaplibError> {
+    pub fn from_str(
+        s: &str,
+        storage_folder: Option<String>,
+    ) -> Result<Mapping, MaplibError> {
         let doc = document_from_str(s)?;
         let dataset =
             TemplateDataset::from_documents(vec![doc]).map_err(MaplibError::TemplateError)?;
-        Mapping::new(&dataset, caching_folder)
+        Mapping::new(&dataset, storage_folder, None)
     }
 
     pub fn from_strs(
         ss: Vec<&str>,
-        caching_folder: Option<String>,
+        storage_folder: Option<String>,
     ) -> Result<Mapping, MaplibError> {
         let mut docs = vec![];
         for s in ss {
@@ -110,7 +116,7 @@ impl Mapping {
             docs.push(doc);
         }
         let dataset = TemplateDataset::from_documents(docs).map_err(MaplibError::TemplateError)?;
-        Mapping::new(&dataset, caching_folder)
+        Mapping::new(&dataset, storage_folder, None)
     }
 
     pub fn add_template(&mut self, template: Template) -> Result<(), MaplibError> {
@@ -184,7 +190,7 @@ impl Mapping {
         if let Some(graph) = graph {
             if !self.triplestores_map.contains_key(graph) {
                 self.triplestores_map
-                    .insert(graph.clone(), Triplestore::new(None).unwrap());
+                    .insert(graph.clone(), Triplestore::new(None, Some(self.indexing.clone())).unwrap());
             }
             self.triplestores_map.get_mut(graph).unwrap()
         } else {
@@ -312,14 +318,19 @@ impl Mapping {
         triplestore.get_predicate_eager_solution_mappings(predicate, include_transient)
     }
 
-    pub fn create_index(
-        &mut self,
-        graph: Option<NamedNode>,
-        cio: CreateIndexOptions,
-    ) -> Result<(), MappingError> {
-        let triplestore = self.get_triplestore(&graph);
-        triplestore
-            .create_index(cio)
-            .map_err(MappingError::TriplestoreError)
+    pub fn create_index(&mut self, indexing: IndexingOptions, all: bool, graph: Option<NamedNode>) -> Result<(), MappingError> {
+        if all {
+            for t in self.triplestores_map.values_mut() {
+                t.create_index(indexing.clone()).map_err(MappingError::TriplestoreError)?;
+            }
+            self.base_triplestore.create_index(indexing.clone()).map_err(MappingError::TriplestoreError)?;
+            self.indexing = indexing;
+        } else {
+            let triplestore = self.get_triplestore(&graph);
+            triplestore
+                .create_index(indexing)
+                .map_err(MappingError::TriplestoreError)?;
+        }
+        Ok(())
     }
 }

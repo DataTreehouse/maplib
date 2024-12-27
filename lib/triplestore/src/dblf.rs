@@ -83,7 +83,7 @@ impl Triplestore {
         verb_uri: &NamedNode,
         keep_subject: bool,
         keep_verb: bool,
-        keep_object: bool,
+        _keep_object: bool,
         subjects: &Option<Vec<Subject>>,
         objects: &Option<Vec<Term>>,
         subject_datatype_ctr: &Option<PossibleTypes>,
@@ -101,7 +101,7 @@ impl Triplestore {
                 if let Some(sms) = multiple_tt_to_deduplicated_lf(
                     m,
                     compatible_types,
-                    &self.caching_folder,
+                    &self.storage_folder,
                     subjects,
                     objects,
                     keep_subject,
@@ -121,7 +121,7 @@ impl Triplestore {
                 if let Some(sms) = multiple_tt_to_deduplicated_lf(
                     m,
                     compatible_types,
-                    &self.caching_folder,
+                    &self.storage_folder,
                     subjects,
                     objects,
                     keep_subject,
@@ -157,18 +157,22 @@ impl Triplestore {
         let predicate_uris = predicate_uris.unwrap_or(self.all_predicates());
         let predicate_uris_len = predicate_uris.len();
         let mut sms = vec![];
-        for nn in predicate_uris {
-            if let Some(sm) = self.get_deduplicated_predicate_lf(
-                &nn,
-                subject_keep_rename.is_some(),
-                verb_keep_rename.is_some(),
-                object_keep_rename.is_some(),
-                subjects,
-                objects,
-                subject_datatype_ctr,
-                object_datatype_ctr,
-            )? {
-                sms.extend(sm);
+        if !(objects.is_some() && objects.as_ref().unwrap().is_empty())
+            || !(subjects.is_some() && subjects.as_ref().unwrap().is_empty())
+        {
+            for nn in predicate_uris {
+                if let Some(sm) = self.get_deduplicated_predicate_lf(
+                    &nn,
+                    subject_keep_rename.is_some(),
+                    verb_keep_rename.is_some(),
+                    object_keep_rename.is_some(),
+                    subjects,
+                    objects,
+                    subject_datatype_ctr,
+                    object_datatype_ctr,
+                )? {
+                    sms.extend(sm);
+                }
             }
         }
 
@@ -465,19 +469,22 @@ fn partial_check_need_multi(
 
 fn single_tt_to_deduplicated_lf(
     tt: &mut Triples,
-    caching_folder: &Option<String>,
+    storage_folder: &Option<String>,
     subjects: &Option<Vec<Subject>>,
     objects: &Option<Vec<Term>>,
-    keep_subject: bool,
-) -> Result<(LazyFrame, usize), SparqlError> {
+    _keep_subject: bool,
+) -> Result<Option<(LazyFrame, usize)>, SparqlError> {
     if !tt.unique {
-        tt.deduplicate(caching_folder)
+        tt.deduplicate(storage_folder)
             .map_err(SparqlError::DeduplicationError)?;
     }
     assert!(tt.unique, "Should be deduplicated");
     let lfs_and_heights = tt
         .get_lazy_frames(subjects, objects)
         .map_err(SparqlError::TripleTableReadError)?;
+    if lfs_and_heights.is_empty() {
+        return Ok(None);
+    }
     let mut lfs = vec![];
     let mut new_height = 0usize;
     for (lf, height) in lfs_and_heights {
@@ -513,7 +520,7 @@ fn single_tt_to_deduplicated_lf(
             );
         }
     }
-    Ok((lf, new_height))
+    Ok(Some((lf, new_height)))
 }
 
 struct HalfBakedSolutionMappings {
@@ -527,7 +534,7 @@ struct HalfBakedSolutionMappings {
 fn multiple_tt_to_deduplicated_lf(
     triples: &mut HashMap<(BaseRDFNodeType, BaseRDFNodeType), Triples>,
     types: Option<HashSet<(BaseRDFNodeType, BaseRDFNodeType)>>,
-    caching_folder: &Option<String>,
+    storage_folder: &Option<String>,
     subjects: &Option<Vec<Subject>>,
     objects: &Option<Vec<Term>>,
     keep_subject: bool,
@@ -541,17 +548,18 @@ fn multiple_tt_to_deduplicated_lf(
             }
         }
         if keep {
-            let (lf, height) =
-                single_tt_to_deduplicated_lf(tt, caching_folder, subjects, objects, keep_subject)?;
-            if height > 0 {
-                let half_baked = HalfBakedSolutionMappings {
-                    mappings: lf,
-                    verb: None,
-                    subject_type: subj_type.clone(),
-                    object_type: obj_type.clone(),
-                    height_upper_bound: height,
-                };
-                filtered.push(half_baked);
+            if let Some((lf, height)) =
+                single_tt_to_deduplicated_lf(tt, storage_folder, subjects, objects, keep_subject)? {
+                if height > 0 {
+                    let half_baked = HalfBakedSolutionMappings {
+                        mappings: lf,
+                        verb: None,
+                        subject_type: subj_type.clone(),
+                        object_type: obj_type.clone(),
+                        height_upper_bound: height,
+                    };
+                    filtered.push(half_baked);
+                }
             }
         }
     }

@@ -1,4 +1,4 @@
-from maplib import Mapping
+from maplib import Mapping, IndexingOptions
 import pytest
 from polars.testing import assert_frame_equal
 import polars as pl
@@ -53,7 +53,10 @@ def windpower_mapping(request):
 
     n = 40
 
-    mapping = Mapping([instance_mapping])
+    mapping = Mapping(
+        [instance_mapping],
+        indexing_options=IndexingOptions(enabled=False)
+    )
     # Used as a prefix
     wpex = "https://github.com/magbak/chrontext/windpower_example#"
     rds = "https://github.com/magbak/chrontext/rds_power#"

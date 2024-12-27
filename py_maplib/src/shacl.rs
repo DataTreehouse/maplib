@@ -1,24 +1,30 @@
-use crate::{fix_cats_and_multicolumns, PyMapping};
+use crate::{fix_cats_and_multicolumns, PyIndexingOptions, PyMapping};
 use pydf_io::to_python::df_to_py_df;
 use pyo3::{pyclass, pymethods, PyObject, PyResult, Python};
 use report_mapping::report_to_mapping;
 use representation::solution_mapping::EagerSolutionMappings;
 use shacl::ValidationReport as RustValidationReport;
-use triplestore::Triplestore;
+use triplestore::{IndexingOptions, Triplestore};
 
 #[derive(Clone)]
 #[pyclass(name = "ValidationReport")]
 pub struct PyValidationReport {
     shape_graph: Option<Triplestore>,
     inner: RustValidationReport,
+    indexing: IndexingOptions,
 }
 
 impl PyValidationReport {
     pub fn new(
         inner: RustValidationReport,
         shape_graph: Option<Triplestore>,
+        indexing: IndexingOptions,
     ) -> PyValidationReport {
-        PyValidationReport { shape_graph, inner }
+        PyValidationReport {
+            shape_graph,
+            inner,
+            indexing,
+        }
     }
 }
 
@@ -85,8 +91,18 @@ impl PyValidationReport {
         Ok(details)
     }
 
-    pub fn graph(&self) -> PyMapping {
-        let m = report_to_mapping(&self.inner, &self.shape_graph);
+    #[pyo3(signature = (indexing=None))]
+    pub fn graph(&self, indexing: Option<PyIndexingOptions>) -> PyMapping {
+        let indexing = if let Some(indexing) = indexing {
+            Some(indexing.inner)
+        } else {
+            None
+        };
+        let m = report_to_mapping(
+            &self.inner,
+            &self.shape_graph,
+            Some(indexing.unwrap_or(self.indexing.clone())),
+        );
         PyMapping::from_inner_mapping(m)
     }
 }

@@ -3,10 +3,10 @@ use std::fs::{create_dir, read_dir, remove_file};
 use std::path::Path;
 
 //Based on: https://stackoverflow.com/posts/65573340/revisions
-pub(crate) fn delete_tmp_parquets_in_caching_folder(
-    caching_folder: &Path,
+pub(crate) fn delete_tmp_parquets_in_storage_folder(
+    storage_folder: &Path,
 ) -> Result<(), TriplestoreError> {
-    let contents = read_dir(caching_folder).map_err(TriplestoreError::ReadCachingDirectoryError)?;
+    let contents = read_dir(storage_folder).map_err(TriplestoreError::ReadCachingDirectoryError)?;
     for f in contents {
         let entry = f.map_err(TriplestoreError::ReadCachingDirectoryEntryError)?;
         let fname = entry.file_name().to_str().unwrap().to_string();
