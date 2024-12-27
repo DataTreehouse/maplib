@@ -13,7 +13,10 @@ representation = { path = "../representation" }
 rayon = { workspace = true }
 oxrdf = { workspace = true }
 oxiri = { workspace = true }
-polars = { workspace = true, default-features = false, features = ["semi_anti_join", "abs", "round_series", "lazy", "concat_str", "is_in", "dtype-full", "strings", "rows", "timezones", "polars-time", "temporal", "list_eval", "partition_by", "parquet", "cse", "nightly", "performant"] }
+polars = { workspace = true, default-features = false, features = [
+    "semi_anti_join", "abs", "round_series", "lazy", "concat_str", "is_in", "dtype-full", "strings", "rows",
+    "timezones", "polars-time", "temporal", "list_eval", "partition_by", "parquet", "cse", "nightly", "performant",
+] }
 log = { workspace = true }
 chrono = { workspace = true }
 chrono-tz = { workspace = true }

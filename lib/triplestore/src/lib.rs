@@ -112,8 +112,8 @@ impl Triplestore {
 
     pub fn deduplicate(&mut self) -> Result<(), TriplestoreError> {
         let now = Instant::now();
-        deduplicate_map(&mut self.triples_map, &self.storage_folder)?;
-        deduplicate_map(&mut self.transient_triples_map, &self.storage_folder)?;
+        deduplicate_and_index_map(&mut self.triples_map, &self.storage_folder)?;
+        deduplicate_and_index_map(&mut self.transient_triples_map, &self.storage_folder)?;
         self.deduplicated = true;
         debug!("Deduplication took {} seconds", now.elapsed().as_secs_f64());
         Ok(())
@@ -196,7 +196,7 @@ impl Triplestore {
             let k = (subject_type.clone(), object_type.clone());
             if let Some(m) = use_map.get_mut(&predicate) {
                 if let Some(t) = m.get_mut(&k) {
-                    t.add_triples(df, unique, &self.storage_folder)?
+                    t.add_triples(df, &self.storage_folder)?
                 } else {
                     m.insert(
                         k,
@@ -434,13 +434,13 @@ fn flatten<T>(nested: Vec<Vec<T>>) -> Vec<T> {
     nested.into_iter().flatten().collect()
 }
 
-fn deduplicate_map(
+fn deduplicate_and_index_map(
     df_map: &mut HashMap<NamedNode, HashMap<(BaseRDFNodeType, BaseRDFNodeType), Triples>>,
     storage_folder: &Option<String>,
 ) -> Result<(), TriplestoreError> {
     for map in df_map.values_mut() {
         for v in map.values_mut() {
-            v.deduplicate(storage_folder)?;
+            v.deduplicate_and_index(storage_folder)?;
         }
     }
     Ok(())

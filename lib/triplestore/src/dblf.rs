@@ -474,13 +474,11 @@ fn single_tt_to_deduplicated_lf(
     objects: &Option<Vec<Term>>,
     _keep_subject: bool,
 ) -> Result<Option<(LazyFrame, usize)>, SparqlError> {
-    if !tt.unique {
-        tt.deduplicate(storage_folder)
-            .map_err(SparqlError::DeduplicationError)?;
-    }
+    tt.deduplicate_and_index(storage_folder)
+        .map_err(SparqlError::DeduplicationError)?;
     assert!(tt.unique, "Should be deduplicated");
     let lfs_and_heights = tt
-        .get_lazy_frames(subjects, objects)
+        .get_lazy_frames_deduplicated(subjects, objects)
         .map_err(SparqlError::TripleTableReadError)?;
     if lfs_and_heights.is_empty() {
         return Ok(None);

@@ -3,7 +3,7 @@ mod validation;
 use super::{ExpandOptions, Mapping, MappingReport, OTTRTripleInstance, StaticColumn};
 use crate::mapping::constant_terms::{constant_blank_node_to_series, constant_to_expr};
 use crate::mapping::errors::MappingError;
-use crate::mapping::expansion::validation::{validate};
+use crate::mapping::expansion::validation::validate;
 use log::debug;
 use oxrdf::vocab::rdf;
 use oxrdf::{NamedNode, Variable};
@@ -49,9 +49,17 @@ impl Mapping {
             graph,
             deduplicate,
             validate_iris,
+            validate_unique_subsets,
         } = options;
-        let (mut df, mut columns) = validate(df, mapping_column_types, &target_template, validate_iris)?;
         let unique_subsets = unique_subsets_opt.unwrap_or_default();
+        let (mut df, mut columns) = validate(
+            df,
+            mapping_column_types,
+            &target_template,
+            validate_iris,
+            &unique_subsets,
+            validate_unique_subsets,
+        )?;
         let call_uuid = Uuid::new_v4().to_string();
 
         let mut static_columns = HashMap::new();
@@ -266,7 +274,7 @@ impl Mapping {
         }
         let mut all_triples_to_add = vec![];
         for CreateTriplesResult {
-            mut df,
+            df,
             subject_type,
             object_type,
             verb,
@@ -751,6 +759,22 @@ fn create_remapped(
             }
         }
     }
+    let mut new_unique_subsets = vec![];
+    if instance.list_expander.is_none() {
+        for unique_subset in unique_subsets {
+            let mut new_subset = vec![];
+            for x in unique_subset.iter() {
+                if let Some(renamed) = rename_map.get(x.as_str()) {
+                    for new_name in renamed {
+                        new_subset.push(new_name.to_string());
+                    }
+                }
+            }
+            if !new_subset.is_empty() {
+                new_unique_subsets.push(new_subset);
+            }
+        }
+    }
 
     for s in &mut columns_vec {
         let sname = s.name().to_string();
@@ -783,7 +807,6 @@ fn create_remapped(
         .collect();
     lf = lf.select(new_column_expressions.as_slice());
 
-    let mut new_unique_subsets = vec![];
     if let Some(le) = &instance.list_expander {
         for e in &to_expand {
             if let Some((k, MappingColumnType::Nested(v))) = new_dynamic_columns.remove_entry(*e) {
@@ -808,20 +831,6 @@ fn create_remapped(
             }
         }
         //Todo: List expanders for constant terms..
-    } else {
-        for unique_subset in unique_subsets {
-            if unique_subset.iter().all(|x| existing.contains(&x.as_str())) {
-                let mut new_subset = vec![];
-                for x in unique_subset.iter() {
-                    new_subset.push(
-                        new.get(existing.iter().position(|e| e == x).unwrap())
-                            .unwrap()
-                            .to_string(),
-                    );
-                }
-                new_unique_subsets.push(new_subset);
-            }
-        }
     }
 
     for p in &signature.parameter_list {

@@ -250,7 +250,9 @@ class IndexingOptions:
     Options for indexing
     """
 
-    def __init__(self, enabled:bool=True, object_sort_all:bool=False, object_sort_some:List["IRI"]=None):
+    def __init__(self, enabled:bool=True,
+                 object_sort_all:bool=False,
+                 object_sort_some:List["IRI"]=None):
         """
         Defaults to indexing on subjects and objects for select types (e.g. rdf:type)
 
@@ -346,6 +348,7 @@ class Mapping:
         graph: str = None,
         types: Dict[str, RDFType] = None,
         validate_iris: bool = True,
+        validate_unique_subset: bool = True,
     ) -> None:
         """
         Expand a template using a DataFrame
@@ -361,6 +364,7 @@ class Mapping:
         :param unique_subset: DataFrame column names known to be unique e.g. ["colA", "colB"], for a performance boost (reduce costly deduplication)
         :param graph: The IRI of the graph to add triples to.
         :param validate_iris: Validate any IRI-columns.
+        :param validate_unique_subset: Check that provided unique subset actually is unique.
         :param types: The types of the columns.
         """
 
@@ -372,6 +376,7 @@ class Mapping:
         predicate_uri_prefix: str = None,
         graph: str = None,
         validate_iris: bool = True,
+        validate_unique_subset: bool = True,
     ) -> str:
         """
         Create a default template and expand it based on a dataframe.
@@ -386,6 +391,7 @@ class Mapping:
         :param predicate_uri_prefix: Prefix of the predicates/verbs in the generated template, names are derived from column names.
         :param graph: The IRI of the graph to add triples to.
         :param validate_iris: Validate any IRI-columns.
+        :param validate_unique_subset: Check that provided unique subset actually is unique.
         :return: The generated template
         """
 
@@ -691,5 +697,12 @@ class Mapping:
         :param options: Indexing options
         :param all: Apply to all existing and new graphs
         :param graph: The graph where indexes should be added
+        :return:
+        """
+
+    def initialize(self):
+        """
+        Deduplicates and builds indices of all triplestores.
+        Happens automatically on first query or validation.
         :return:
         """

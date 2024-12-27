@@ -90,15 +90,18 @@ pub struct PyIndexingOptions {
 #[pymethods]
 impl PyIndexingOptions {
     #[new]
-    #[pyo3(signature = (enabled, object_sort_all=None, object_sort_some=None))]
+    #[pyo3(signature = (enabled, object_sort_all=false, object_sort_some=None))]
     pub fn new(
         enabled: bool,
         object_sort_all: Option<bool>,
         object_sort_some: Option<Vec<PyIRI>>,
     ) -> PyIndexingOptions {
-        let enabled = enabled || object_sort_all.is_some() || object_sort_some.is_some();
+        let object_sort_all = object_sort_all.unwrap_or(false);
+        let enabled = enabled
+            || object_sort_all
+            || object_sort_some.is_some();
         let inner = if enabled {
-            if object_sort_all.is_none() && object_sort_some.is_none() {
+            if object_sort_all && object_sort_some.is_none() {
                 IndexingOptions::default()
             } else {
                 let object_sort_some: Option<HashSet<_>> =
@@ -114,14 +117,14 @@ impl PyIndexingOptions {
                     };
                 IndexingOptions {
                     enabled,
-                    object_sort_all: object_sort_all.unwrap_or(false),
+                    object_sort_all,
                     object_sort_some,
                 }
             }
         } else {
             IndexingOptions {
                 enabled,
-                object_sort_all: false,
+                object_sort_all,
                 object_sort_some: None,
             }
         };
@@ -209,7 +212,8 @@ impl PyMapping {
         }
     }
 
-    #[pyo3(signature = (template, df=None, unique_subset=None, graph=None, types=None, validate_iris=None))]
+    #[pyo3(signature = (template, df=None, unique_subset=None, graph=None, types=None,
+                        validate_iris=true, validate_unique_subset=false))]
     fn expand(
         &mut self,
         template: &Bound<'_, PyAny>,
@@ -218,6 +222,7 @@ impl PyMapping {
         graph: Option<String>,
         types: Option<HashMap<String, PyRDFType>>,
         validate_iris: Option<bool>,
+        validate_unique_subset: Option<bool>,
     ) -> PyResult<Option<PyObject>> {
         let template = if let Ok(i) = template.extract::<PyIRI>() {
             i.into_inner().to_string()
@@ -242,6 +247,7 @@ impl PyMapping {
             graph: parse_optional_graph(graph)?,
             deduplicate: false,
             validate_iris: validate_iris.unwrap_or(true),
+            validate_unique_subsets: validate_unique_subset.unwrap_or(false),
         };
 
         let types = if let Some(types) = types {
@@ -260,12 +266,7 @@ impl PyMapping {
 
                 let _report = self
                     .inner
-                    .expand(
-                        &template,
-                        Some(df),
-                        types,
-                        options,
-                    )
+                    .expand(&template, Some(df), types, options)
                     .map_err(MaplibError::from)
                     .map_err(PyMaplibError::from)?;
             } else {
@@ -282,7 +283,8 @@ impl PyMapping {
         Ok(None)
     }
 
-    #[pyo3(signature = (df, primary_key_column, template_prefix=None, predicate_uri_prefix=None, graph=None, validate_iris=None))]
+    #[pyo3(signature = (df, primary_key_column, template_prefix=None, predicate_uri_prefix=None,
+                        graph=None, validate_iris=true, validate_unique_subset=false))]
     fn expand_default(
         &mut self,
         df: &Bound<'_, PyAny>,
@@ -291,6 +293,7 @@ impl PyMapping {
         predicate_uri_prefix: Option<String>,
         graph: Option<String>,
         validate_iris: Option<bool>,
+        validate_unique_subset: Option<bool>,
     ) -> PyResult<String> {
         let df = polars_df_to_rust_df(df)?;
         let options = ExpandOptions {
@@ -298,6 +301,7 @@ impl PyMapping {
             graph: parse_optional_graph(graph)?,
             deduplicate: false,
             validate_iris: validate_iris.unwrap_or(true),
+            validate_unique_subsets: validate_unique_subset.unwrap_or(false),
         };
 
         let tmpl = self
@@ -661,6 +665,13 @@ impl PyMapping {
             out.push(py_sm);
         }
         Ok(out)
+    }
+
+    fn initialize(&mut self) -> PyResult<()> {
+        self.inner
+            .initialize()
+            .map_err(PyMaplibError::MappingError)?;
+        Ok(())
     }
 }
 

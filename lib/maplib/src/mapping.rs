@@ -38,6 +38,7 @@ pub struct ExpandOptions {
     pub graph: Option<NamedNode>,
     pub deduplicate: bool,
     pub validate_iris: bool,
+    pub validate_unique_subsets: bool,
 }
 
 struct OTTRTripleInstance {
@@ -70,8 +71,11 @@ impl Mapping {
         let use_caching = storage_folder.is_some();
         Ok(Mapping {
             template_dataset: template_dataset.clone(),
-            base_triplestore: Triplestore::new(storage_folder, Some(indexing.clone().unwrap_or_default()))
-                .map_err(MappingError::TriplestoreError)?,
+            base_triplestore: Triplestore::new(
+                storage_folder,
+                Some(indexing.clone().unwrap_or_default()),
+            )
+            .map_err(MappingError::TriplestoreError)?,
             triplestores_map: Default::default(),
             use_caching,
             blank_node_counter: 0,
@@ -339,6 +343,16 @@ impl Mapping {
                 .create_index(indexing)
                 .map_err(MappingError::TriplestoreError)?;
         }
+        Ok(())
+    }
+
+    pub fn initialize(&mut self) -> Result<(), MappingError> {
+        for t in self.triplestores_map.values_mut() {
+            t.deduplicate().map_err(MappingError::TriplestoreError)?;
+        }
+        self.base_triplestore
+            .deduplicate()
+            .map_err(MappingError::TriplestoreError)?;
         Ok(())
     }
 }

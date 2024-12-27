@@ -37,6 +37,7 @@ pub enum MappingError {
     TooDeeplyNestedError(String),
     DatatypeInferenceError(RepresentationError),
     InvalidIRIError(String, usize, String),
+    UniqueSubsetHasDuplicateRows(u32, Vec<String>),
 }
 
 impl Display for MappingError {
@@ -167,6 +168,9 @@ impl Display for MappingError {
             }
             MappingError::InvalidIRIError(colname, n_errors, examples) => {
                 write!(f, "Found at least {n_errors} invalid IRIs for column {colname}, examples: {examples}")
+            }
+            MappingError::UniqueSubsetHasDuplicateRows(n, u) => {
+                write!(f, "Unique subset {:?} has {} duplicated rows", u, n)
             }
         }
     }
