@@ -173,6 +173,7 @@ impl TemplateDataset {
             self.templates.remove(pos);
         }
         self.templates.push(template);
+        self.infer_types()?;
         Ok(())
     }
 }

@@ -37,6 +37,7 @@ pub struct ExpandOptions {
     pub unique_subsets: Option<Vec<Vec<String>>>,
     pub graph: Option<NamedNode>,
     pub deduplicate: bool,
+    pub validate_iris: bool,
 }
 
 struct OTTRTripleInstance {
@@ -69,7 +70,7 @@ impl Mapping {
         let use_caching = storage_folder.is_some();
         Ok(Mapping {
             template_dataset: template_dataset.clone(),
-            base_triplestore: Triplestore::new(storage_folder, indexing.clone())
+            base_triplestore: Triplestore::new(storage_folder, Some(indexing.clone().unwrap_or_default()))
                 .map_err(MappingError::TriplestoreError)?,
             triplestores_map: Default::default(),
             use_caching,
@@ -96,10 +97,7 @@ impl Mapping {
         Mapping::new(&dataset, storage_folder, None)
     }
 
-    pub fn from_str(
-        s: &str,
-        storage_folder: Option<String>,
-    ) -> Result<Mapping, MaplibError> {
+    pub fn from_str(s: &str, storage_folder: Option<String>) -> Result<Mapping, MaplibError> {
         let doc = document_from_str(s)?;
         let dataset =
             TemplateDataset::from_documents(vec![doc]).map_err(MaplibError::TemplateError)?;
@@ -189,8 +187,10 @@ impl Mapping {
     pub fn get_triplestore(&mut self, graph: &Option<NamedNode>) -> &mut Triplestore {
         if let Some(graph) = graph {
             if !self.triplestores_map.contains_key(graph) {
-                self.triplestores_map
-                    .insert(graph.clone(), Triplestore::new(None, Some(self.indexing.clone())).unwrap());
+                self.triplestores_map.insert(
+                    graph.clone(),
+                    Triplestore::new(None, Some(self.indexing.clone())).unwrap(),
+                );
             }
             self.triplestores_map.get_mut(graph).unwrap()
         } else {
@@ -318,12 +318,20 @@ impl Mapping {
         triplestore.get_predicate_eager_solution_mappings(predicate, include_transient)
     }
 
-    pub fn create_index(&mut self, indexing: IndexingOptions, all: bool, graph: Option<NamedNode>) -> Result<(), MappingError> {
+    pub fn create_index(
+        &mut self,
+        indexing: IndexingOptions,
+        all: bool,
+        graph: Option<NamedNode>,
+    ) -> Result<(), MappingError> {
         if all {
             for t in self.triplestores_map.values_mut() {
-                t.create_index(indexing.clone()).map_err(MappingError::TriplestoreError)?;
+                t.create_index(indexing.clone())
+                    .map_err(MappingError::TriplestoreError)?;
             }
-            self.base_triplestore.create_index(indexing.clone()).map_err(MappingError::TriplestoreError)?;
+            self.base_triplestore
+                .create_index(indexing.clone())
+                .map_err(MappingError::TriplestoreError)?;
             self.indexing = indexing;
         } else {
             let triplestore = self.get_triplestore(&graph);

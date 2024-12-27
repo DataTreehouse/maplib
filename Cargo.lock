@@ -986,6 +986,7 @@ dependencies = [
  "chrono-tz 0.10.0",
  "env_logger",
  "log",
+ "oxiri",
  "oxrdf",
  "oxrdfio",
  "polars",

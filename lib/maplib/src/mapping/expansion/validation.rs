@@ -1,11 +1,16 @@
 use crate::mapping::errors::MappingError;
+use oxiri::Iri;
 use oxrdf::vocab::rdfs;
 use polars::datatypes::DataType;
 use polars::frame::DataFrame;
-use polars::prelude::Column;
+use polars::prelude::{ChunkApply, Column, Series};
 use representation::polars_to_rdf::polars_type_to_literal_type;
 use representation::{BaseRDFNodeType, RDFNodeType};
+use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
+use rayon::current_num_threads;
+use rayon::iter::IntoParallelIterator;
+use rayon::iter::ParallelIterator;
 use templates::ast::{ptype_is_blank, ptype_is_iri, PType, Parameter, Template};
 use templates::subtypes_ext::is_literal_subtype_ext;
 use templates::MappingColumnType;
@@ -14,6 +19,7 @@ pub fn validate(
     df: Option<DataFrame>,
     mut mapping_column_types: Option<HashMap<String, MappingColumnType>>,
     template: &Template,
+    validate_iris: bool,
 ) -> Result<(Option<DataFrame>, HashMap<String, MappingColumnType>), MappingError> {
     validate_column_existence(&df, template)?;
     let mut map = HashMap::new();
@@ -36,11 +42,98 @@ pub fn validate(
                     map.insert(name.to_string(), t);
                 }
             }
-            // Todo: check e.g. IRIs are valid..
+
+            if validate_iris {
+                if let Some(t) = map.get(name) {
+                    if let Ok(c) = df.column(name) {
+                        let ser = c.as_materialized_series();
+                        match t {
+                            MappingColumnType::Flat(t) => {
+                                let mut offsets = vec![];
+                                let threads = current_num_threads();
+                                let stride = ser.len() / threads;
+                                let mut last_end = 0;
+                                for i in 0..threads {
+                                    let stride = if i == threads - 1 {
+                                        ser.len()
+                                    } else {
+                                        stride
+                                    };
+                                    offsets.push((last_end, stride.clone()));
+                                    last_end = last_end + stride;
+                                }
+                                let res: Result<Vec<_>, MappingError> = offsets.into_par_iter().map(|(start, stride) | {
+                                    let ser = ser.slice(start as i64, stride);
+                                    validate_flat_iri_column(&ser, name, t)?;
+                                    Ok(())
+                                }).filter(|x|x.is_err()).collect();
+                                res?;
+                            }
+                            MappingColumnType::Nested(n) => {
+                                if let MappingColumnType::Flat(t) = n.as_ref() {
+                                    //To avoid a bit of unnecessary explode
+                                    if t.is_iri() {
+                                        let l = ser.list().unwrap();
+                                        let res:Result<Vec<_>, _> = l.par_iter().map(|ser| {
+                                            if let Some(ser) = ser {
+                                                validate_flat_iri_column(&ser, name, t)
+                                            } else {
+                                                Ok(())
+                                            }
+                                        }).filter(|x|x.is_err()).collect();
+                                        res?;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
         Ok((Some(df), map))
     } else {
         Ok((None, map))
+    }
+}
+
+pub fn validate_flat_iri_column(
+    ser: &Series,
+    colname: &str,
+    t: &RDFNodeType,
+) -> Result<(), MappingError> {
+    if t.is_iri() {
+        let c = ser
+            .cast(&DataType::String)
+            .unwrap()
+            .str()
+            .unwrap()
+            .apply(parse_iri);
+        let is_err = c.is_not_null();
+        if let Some(n_errs) = is_err.sum() {
+            if n_errs > 0 {
+                let errs_3 = ser.filter(&is_err).unwrap();
+                let errs = errs_3.head(Some(3));
+                let examples = errs.cast(&DataType::String).unwrap().fmt_list();
+                return Err(MappingError::InvalidIRIError(
+                    colname.to_string(),
+                    n_errs as usize,
+                    examples,
+                ));
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn parse_iri(iri: Option<&str>) -> Option<Cow<'_, str>> {
+    if let Some(iri) = iri {
+        match Iri::parse(iri) {
+            Ok(_) => None,
+            Err(_) => Some("".into()),
+        }
+    } else {
+        None
     }
 }
 

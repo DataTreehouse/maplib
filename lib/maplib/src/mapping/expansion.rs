@@ -3,7 +3,7 @@ mod validation;
 use super::{ExpandOptions, Mapping, MappingReport, OTTRTripleInstance, StaticColumn};
 use crate::mapping::constant_terms::{constant_blank_node_to_series, constant_to_expr};
 use crate::mapping::errors::MappingError;
-use crate::mapping::expansion::validation::validate;
+use crate::mapping::expansion::validation::{validate};
 use log::debug;
 use oxrdf::vocab::rdf;
 use oxrdf::{NamedNode, Variable};
@@ -44,12 +44,13 @@ impl Mapping {
         let target_template = self.resolve_template(template)?.clone();
         let target_template_name = target_template.signature.template_name.as_str().to_string();
 
-        let (mut df, mut columns) = validate(df, mapping_column_types, &target_template)?;
         let ExpandOptions {
             unique_subsets: unique_subsets_opt,
             graph,
             deduplicate,
+            validate_iris,
         } = options;
+        let (mut df, mut columns) = validate(df, mapping_column_types, &target_template, validate_iris)?;
         let unique_subsets = unique_subsets_opt.unwrap_or_default();
         let call_uuid = Uuid::new_v4().to_string();
 
@@ -279,33 +280,6 @@ impl Mapping {
             if verb.is_none() {
                 coltypes_names.push((&RDFNodeType::IRI, VERB_COL_NAME));
             }
-            let mut fix_iris = vec![];
-            for (coltype, colname) in coltypes_names {
-                if coltype == &RDFNodeType::IRI
-                    && matches!(df.column(colname).unwrap().dtype(), DataType::String)
-                {
-                    let nonnull = df.column(colname).unwrap().str().unwrap().first_non_null();
-                    if let Some(i) = nonnull {
-                        let first_iri = df.column(colname).unwrap().str().unwrap().get(i).unwrap();
-                        {
-                            if first_iri.starts_with('<') {
-                                fix_iris.push(colname);
-                            }
-                        }
-                    }
-                }
-            }
-            let mut lf = df.lazy();
-            for colname in fix_iris {
-                lf = lf.with_column(
-                    col(colname)
-                        .str()
-                        .strip_prefix(lit("<"))
-                        .str()
-                        .strip_suffix(lit(">")),
-                );
-            }
-            df = lf.collect().unwrap();
 
             let has_multi = matches!(subject_type, RDFNodeType::MultiType(_))
                 || matches!(object_type, RDFNodeType::MultiType(_));
@@ -331,8 +305,10 @@ impl Mapping {
         }
         let use_triplestore = if let Some(graph) = graph {
             if !self.triplestores_map.contains_key(graph) {
-                self.triplestores_map
-                    .insert(graph.clone(), Triplestore::new(None, Some(self.indexing.clone())).unwrap());
+                self.triplestores_map.insert(
+                    graph.clone(),
+                    Triplestore::new(None, Some(self.indexing.clone())).unwrap(),
+                );
             }
             self.triplestores_map.get_mut(graph).unwrap()
         } else {

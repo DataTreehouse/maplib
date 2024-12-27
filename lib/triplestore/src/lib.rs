@@ -15,6 +15,7 @@ use crate::errors::TriplestoreError;
 use crate::io_funcs::{create_folder_if_not_exists, delete_tmp_parquets_in_storage_folder};
 use crate::storage::Triples;
 use log::debug;
+use oxrdf::vocab::{rdf, rdfs};
 use oxrdf::NamedNode;
 use polars::prelude::{AnyValue, DataFrame, IntoLazy, UniqueKeepStrategy};
 use polars_core::datatypes::CategoricalOrdering;
@@ -28,7 +29,6 @@ use representation::{
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::time::Instant;
-use oxrdf::vocab::{rdf, rdfs};
 
 #[derive(Clone)]
 pub struct Triplestore {
@@ -63,7 +63,7 @@ impl Default for IndexingOptions {
             object_sort_all: false,
             object_sort_some: Some(HashSet::from([
                 rdfs::LABEL.into_owned(),
-                rdf::TYPE.into_owned()
+                rdf::TYPE.into_owned(),
             ])),
         }
     }

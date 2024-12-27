@@ -36,6 +36,7 @@ pub enum MappingError {
     TurtleParsingError(String),
     TooDeeplyNestedError(String),
     DatatypeInferenceError(RepresentationError),
+    InvalidIRIError(String, usize, String),
 }
 
 impl Display for MappingError {
@@ -163,6 +164,9 @@ impl Display for MappingError {
             }
             MappingError::DefaultDataTypeMismatch(expected, actual) => {
                 write!(f, "Default value data type {actual:?} does not correspond to data type provided: {expected:?}")
+            }
+            MappingError::InvalidIRIError(colname, n_errors, examples) => {
+                write!(f, "Found at least {n_errors} invalid IRIs for column {colname}, examples: {examples}")
             }
         }
     }

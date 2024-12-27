@@ -549,7 +549,8 @@ fn multiple_tt_to_deduplicated_lf(
         }
         if keep {
             if let Some((lf, height)) =
-                single_tt_to_deduplicated_lf(tt, storage_folder, subjects, objects, keep_subject)? {
+                single_tt_to_deduplicated_lf(tt, storage_folder, subjects, objects, keep_subject)?
+            {
                 if height > 0 {
                     let half_baked = HalfBakedSolutionMappings {
                         mappings: lf,
