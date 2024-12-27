@@ -11,8 +11,7 @@ use crate::shacl::PyValidationReport;
 use log::warn;
 use maplib::errors::MaplibError;
 use maplib::mapping::errors::MappingError;
-use maplib::mapping::ExpandOptions as RustExpandOptions;
-use maplib::mapping::Mapping as InnerMapping;
+use maplib::mapping::{ExpandOptions, Mapping as InnerMapping};
 use pydf_io::to_python::{df_to_py_df, fix_cats_and_multicolumns};
 use pyo3::prelude::*;
 use std::collections::{HashMap, HashSet};
@@ -97,15 +96,22 @@ impl PyIndexingOptions {
         object_sort_all: Option<bool>,
         object_sort_some: Option<Vec<PyIRI>>,
     ) -> PyIndexingOptions {
+        let enabled = enabled || object_sort_all.is_some() || object_sort_some.is_some();
         let inner = if enabled {
             if object_sort_all.is_none() && object_sort_some.is_none() {
                 IndexingOptions::default()
             } else {
-                let object_sort_some: Option<HashSet<_>> = if let Some(object_sort_some) = object_sort_some {
-                    Some(object_sort_some.into_iter().map(|x|x.into_inner()).collect())
-                } else {
-                    None
-                };
+                let object_sort_some: Option<HashSet<_>> =
+                    if let Some(object_sort_some) = object_sort_some {
+                        Some(
+                            object_sort_some
+                                .into_iter()
+                                .map(|x| x.into_inner())
+                                .collect(),
+                        )
+                    } else {
+                        None
+                    };
                 IndexingOptions {
                     enabled,
                     object_sort_all: object_sort_all.unwrap_or(false),
@@ -115,31 +121,12 @@ impl PyIndexingOptions {
         } else {
             IndexingOptions {
                 enabled,
-                object_sort_all:false,
-                object_sort_some:None,
+                object_sort_all: false,
+                object_sort_some: None,
             }
         };
 
-        PyIndexingOptions {
-            inner
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct ExpandOptions {
-    pub unique_subsets: Option<Vec<Vec<String>>>,
-    pub graph: Option<NamedNode>,
-    pub deduplicate: bool,
-}
-
-impl ExpandOptions {
-    fn into_rust_expand_options(self) -> RustExpandOptions {
-        RustExpandOptions {
-            unique_subsets: self.unique_subsets,
-            graph: self.graph,
-            deduplicate: self.deduplicate,
-        }
+        PyIndexingOptions { inner }
     }
 }
 
@@ -199,8 +186,12 @@ impl PyMapping {
     }
 
     fn create_sprout(&mut self) -> PyResult<()> {
-        let mut sprout = InnerMapping::new(&self.inner.template_dataset, None, Some(self.inner.indexing.clone()))
-            .map_err(PyMaplibError::from)?;
+        let mut sprout = InnerMapping::new(
+            &self.inner.template_dataset,
+            None,
+            Some(self.inner.indexing.clone()),
+        )
+        .map_err(PyMaplibError::from)?;
         sprout.blank_node_counter = self.inner.blank_node_counter;
         self.sprout = Some(sprout);
         Ok(())
@@ -218,7 +209,7 @@ impl PyMapping {
         }
     }
 
-    #[pyo3(signature = (template, df=None, unique_subset=None, graph=None, types=None))]
+    #[pyo3(signature = (template, df=None, unique_subset=None, graph=None, types=None, validate_iris=None))]
     fn expand(
         &mut self,
         template: &Bound<'_, PyAny>,
@@ -226,6 +217,7 @@ impl PyMapping {
         unique_subset: Option<Vec<String>>,
         graph: Option<String>,
         types: Option<HashMap<String, PyRDFType>>,
+        validate_iris: Option<bool>,
     ) -> PyResult<Option<PyObject>> {
         let template = if let Ok(i) = template.extract::<PyIRI>() {
             i.into_inner().to_string()
@@ -249,6 +241,7 @@ impl PyMapping {
             unique_subsets,
             graph: parse_optional_graph(graph)?,
             deduplicate: false,
+            validate_iris: validate_iris.unwrap_or(true),
         };
 
         let types = if let Some(types) = types {
@@ -271,7 +264,7 @@ impl PyMapping {
                         &template,
                         Some(df),
                         types,
-                        options.into_rust_expand_options(),
+                        options,
                     )
                     .map_err(MaplibError::from)
                     .map_err(PyMaplibError::from)?;
@@ -281,7 +274,7 @@ impl PyMapping {
         } else {
             let _report = self
                 .inner
-                .expand(&template, None, None, options.into_rust_expand_options())
+                .expand(&template, None, None, options)
                 .map_err(MaplibError::from)
                 .map_err(PyMaplibError::from)?;
         }
@@ -289,7 +282,7 @@ impl PyMapping {
         Ok(None)
     }
 
-    #[pyo3(signature = (df, primary_key_column, template_prefix=None, predicate_uri_prefix=None, graph=None))]
+    #[pyo3(signature = (df, primary_key_column, template_prefix=None, predicate_uri_prefix=None, graph=None, validate_iris=None))]
     fn expand_default(
         &mut self,
         df: &Bound<'_, PyAny>,
@@ -297,12 +290,14 @@ impl PyMapping {
         template_prefix: Option<String>,
         predicate_uri_prefix: Option<String>,
         graph: Option<String>,
+        validate_iris: Option<bool>,
     ) -> PyResult<String> {
         let df = polars_df_to_rust_df(df)?;
         let options = ExpandOptions {
             unique_subsets: Some(vec![vec![primary_key_column.clone()]]),
             graph: parse_optional_graph(graph)?,
             deduplicate: false,
+            validate_iris: validate_iris.unwrap_or(true),
         };
 
         let tmpl = self
@@ -313,7 +308,7 @@ impl PyMapping {
                 vec![],
                 template_prefix,
                 predicate_uri_prefix,
-                options.into_rust_expand_options(),
+                options,
             )
             .map_err(MaplibError::from)
             .map_err(PyMaplibError::from)?;
@@ -354,7 +349,12 @@ impl PyMapping {
     }
 
     #[pyo3(signature = (options=None, all=None, graph=None))]
-    fn create_index(&mut self, options: Option<PyIndexingOptions>, all:Option<bool>, graph: Option<String>) -> PyResult<()> {
+    fn create_index(
+        &mut self,
+        options: Option<PyIndexingOptions>,
+        all: Option<bool>,
+        graph: Option<String>,
+    ) -> PyResult<()> {
         let graph = parse_optional_graph(graph)?;
         let options = if let Some(options) = options {
             options.inner
@@ -362,7 +362,7 @@ impl PyMapping {
             IndexingOptions::default()
         };
         self.inner
-            .create_index(options,all.unwrap_or(true), graph)
+            .create_index(options, all.unwrap_or(true), graph)
             .map_err(PyMaplibError::from)?;
         Ok(())
     }

@@ -344,7 +344,8 @@ class Mapping:
         df: DataFrame = None,
         unique_subset: List[str] = None,
         graph: str = None,
-        types: Dict[str, RDFType] = None
+        types: Dict[str, RDFType] = None,
+        validate_iris: bool = True,
     ) -> None:
         """
         Expand a template using a DataFrame
@@ -359,6 +360,7 @@ class Mapping:
         :param df: DataFrame where the columns have the same names as the template arguments
         :param unique_subset: DataFrame column names known to be unique e.g. ["colA", "colB"], for a performance boost (reduce costly deduplication)
         :param graph: The IRI of the graph to add triples to.
+        :param validate_iris: Validate any IRI-columns.
         :param types: The types of the columns.
         """
 
@@ -369,6 +371,7 @@ class Mapping:
         template_prefix: str = None,
         predicate_uri_prefix: str = None,
         graph: str = None,
+        validate_iris: bool = True,
     ) -> str:
         """
         Create a default template and expand it based on a dataframe.
@@ -382,6 +385,7 @@ class Mapping:
         :param template_prefix: Prefix of the template - the name is auto-generated.
         :param predicate_uri_prefix: Prefix of the predicates/verbs in the generated template, names are derived from column names.
         :param graph: The IRI of the graph to add triples to.
+        :param validate_iris: Validate any IRI-columns.
         :return: The generated template
         """
 
