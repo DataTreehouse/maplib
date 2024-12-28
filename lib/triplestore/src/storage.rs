@@ -176,8 +176,8 @@ impl Triples {
 
     pub(crate) fn get_lazy_frames_deduplicated(
         &self,
-        subjects: &Option<Vec<Subject>>,
-        objects: &Option<Vec<Term>>,
+        subjects: &Option<Vec<&Subject>>,
+        objects: &Option<Vec<&Term>>,
     ) -> Result<Vec<(LazyFrame, usize)>, TriplestoreError> {
         if !self.unique || (self.indexing_enabled && self.subject_sort.is_none()) {
             panic!("Must deduplicate and/or build index first");
@@ -187,8 +187,8 @@ impl Triples {
 
     fn get_lazy_frames_impl(
         &self,
-        subjects: &Option<Vec<Subject>>,
-        objects: &Option<Vec<Term>>,
+        subjects: &Option<Vec<&Subject>>,
+        objects: &Option<Vec<&Term>>,
     ) -> Result<Vec<(LazyFrame, usize)>, TriplestoreError> {
         if let Some(unsorted) = &self.unsorted {
             let lfs: Result<Vec<_>, _> = unsorted
@@ -201,16 +201,7 @@ impl Triples {
             if let Some(sorted) = &self.subject_sort {
                 let strings: Vec<_> = subjects
                     .iter()
-                    .filter(|x| {
-                        if &self.subject_type == &BaseRDFNodeType::IRI {
-                            matches!(x, Subject::NamedNode(_))
-                        } else if &self.subject_type == &BaseRDFNodeType::BlankNode {
-                            matches!(x, Subject::BlankNode(_))
-                        } else {
-                            false
-                        }
-                    })
-                    .map(|x| match x {
+                    .map(|x| match *x {
                         Subject::NamedNode(nn) => nn.as_str(),
                         Subject::BlankNode(bl) => bl.as_str(),
                     })
@@ -224,37 +215,33 @@ impl Triples {
             }
         } else if let Some(objects) = objects {
             if let Some(sorted) = &self.object_sort {
-                #[allow(unreachable_patterns)]
-                let strings: Vec<_> = objects
-                    .iter()
-                    .filter(|x| {
-                        if &self.object_type == &BaseRDFNodeType::IRI {
-                            matches!(x, Term::NamedNode(_))
-                        } else if &self.object_type == &BaseRDFNodeType::BlankNode {
-                            matches!(x, Term::BlankNode(_))
-                        } else if let BaseRDFNodeType::Literal(t) = &self.object_type {
-                            if let Term::Literal(l) = x {
-                                l.datatype() == t.as_ref()
-                            } else {
-                                false
-                            }
-                        } else {
-                            false
-                        }
-                    })
-                    .map(|x| match x {
-                        Term::NamedNode(nn) => nn.as_str(),
-                        Term::BlankNode(bl) => bl.as_str(),
-                        Term::Literal(l) => l.value(),
-                        _ => panic!("Invalid state")
-                    })
-                    .collect();
-                let offsets = get_lookup_offsets(
-                    strings,
-                    self.object_sparse_index.as_ref().unwrap(),
-                    self.height,
-                );
-                return Ok(sorted.get_lazy_frames(Some(offsets))?);
+                let allow_pushdown = if let BaseRDFNodeType::Literal(t) = &self.object_type {
+                    t.as_ref() == xsd::STRING
+                } else {
+                    true
+                };
+
+                let offsets = if allow_pushdown {
+                    #[allow(unreachable_patterns)]
+                    let strings: Vec<_> = objects
+                        .iter()
+                        .map(|x| match *x {
+                            Term::NamedNode(nn) => nn.as_str(),
+                            Term::BlankNode(bl) => bl.as_str(),
+                            Term::Literal(l) => l.value(),
+                            _ => panic!("Invalid state")
+                        })
+                        .collect();
+                    let offsets = get_lookup_offsets(
+                        strings,
+                        self.object_sparse_index.as_ref().unwrap(),
+                        self.height,
+                    );
+                    Some(offsets)
+                } else {
+                    None
+                };
+                return Ok(sorted.get_lazy_frames(offsets)?);
             }
         }
         Ok(self.subject_sort.as_ref().unwrap().get_lazy_frames(None)?)

@@ -471,8 +471,8 @@ fn partial_check_need_multi(
 fn single_tt_to_deduplicated_lf(
     tt: &mut Triples,
     storage_folder: &Option<String>,
-    subjects: &Option<Vec<Subject>>,
-    objects: &Option<Vec<Term>>,
+    subjects: &Option<Vec<&Subject>>,
+    objects: &Option<Vec<&Term>>,
     _keep_subject: bool,
 ) -> Result<Option<(LazyFrame, usize)>, SparqlError> {
     tt.deduplicate_and_index(storage_folder)
@@ -540,26 +540,43 @@ fn multiple_tt_to_deduplicated_lf(
 ) -> Result<Option<Vec<HalfBakedSolutionMappings>>, SparqlError> {
     let mut filtered = vec![];
     for ((subj_type, obj_type), tt) in triples.iter_mut() {
-        let mut keep = true;
         if let Some(types) = &types {
             if !types.contains(&(subj_type.clone(), obj_type.clone())) {
-                keep = false;
+                continue;
             }
         }
-        if keep {
-            if let Some((lf, height)) =
-                single_tt_to_deduplicated_lf(tt, storage_folder, subjects, objects, keep_subject)?
-            {
-                if height > 0 {
-                    let half_baked = HalfBakedSolutionMappings {
-                        mappings: lf,
-                        verb: None,
-                        subject_type: subj_type.clone(),
-                        object_type: obj_type.clone(),
-                        height_upper_bound: height,
-                    };
-                    filtered.push(half_baked);
-                }
+        let filtered_subjects = if let Some(subjects) = subjects {
+            let filtered = filter_subjects(subj_type, subjects);
+            if filtered.is_empty() {
+                continue;
+            }
+            Some(filtered)
+        } else {
+            None
+        };
+
+        let filtered_objects = if let Some(objects) = objects {
+            let filtered = filter_objects(obj_type, objects);
+            if filtered.is_empty() {
+                continue;
+            }
+            Some(filtered)
+        } else {
+            None
+        };
+
+        if let Some((lf, height)) =
+            single_tt_to_deduplicated_lf(tt, storage_folder, &filtered_subjects, &filtered_objects, keep_subject)?
+        {
+            if height > 0 {
+                let half_baked = HalfBakedSolutionMappings {
+                    mappings: lf,
+                    verb: None,
+                    subject_type: subj_type.clone(),
+                    object_type: obj_type.clone(),
+                    height_upper_bound: height,
+                };
+                filtered.push(half_baked);
             }
         }
     }
@@ -568,6 +585,54 @@ fn multiple_tt_to_deduplicated_lf(
     } else {
         Ok(Some(filtered))
     }
+}
+
+fn filter_objects<'a>(object_type: &BaseRDFNodeType, objects: &'a Vec<Term>) -> Vec<&'a Term> {
+    let mut filtered = vec![];
+    for o in objects {
+        let ok = match object_type {
+            BaseRDFNodeType::IRI => {
+                matches!(o, Term::NamedNode(_))
+            }
+            BaseRDFNodeType::BlankNode => {
+                matches!(o, Term::BlankNode(_))
+            }
+            BaseRDFNodeType::Literal(l) => {
+                if let Term::Literal(tl) = o {
+                    tl.datatype() == l.as_ref()
+                } else {
+                    false
+                }
+            }
+            BaseRDFNodeType::None => {
+                panic!("Triplestore in invalid state")
+            }
+        };
+        if ok {
+            filtered.push(o);
+        }
+    }
+    filtered
+}
+
+fn filter_subjects<'a>(subject_type:&BaseRDFNodeType, subjects: &'a Vec<Subject>) -> Vec<&'a Subject> {
+    let mut filtered = vec![];
+    for s in subjects {
+        #[allow(unreachable_patterns)]
+        let ok = match s {
+            Subject::NamedNode(_) => {
+                subject_type == &BaseRDFNodeType::IRI
+            }
+            Subject::BlankNode(_) => {
+                subject_type == &BaseRDFNodeType::BlankNode
+            }
+            _ => unimplemented!("Only blank node and iri subjects")
+        };
+        if ok {
+            filtered.push(s);
+        }
+    }
+    filtered
 }
 
 pub fn create_empty_lf_datatypes(
