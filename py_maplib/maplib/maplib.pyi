@@ -251,10 +251,10 @@ class IndexingOptions:
     """
 
     def __init__(self, enabled:bool=True,
-                 object_sort_all:bool=False,
+                 object_sort_all:bool=None,
                  object_sort_some:List["IRI"]=None):
         """
-        Defaults to indexing on subjects and objects for select types (e.g. rdf:type)
+        Defaults to indexing on subjects and objects for select types (e.g. rdf:type and rdfs:label)
 
         :param enabled: Enable indexing (this will enable indexing on subjects)
         :param object_sort_all: Enable object-indexing for all suitable predicates (doubles memory requirement).
@@ -348,7 +348,7 @@ class Mapping:
         graph: str = None,
         types: Dict[str, RDFType] = None,
         validate_iris: bool = True,
-        validate_unique_subset: bool = True,
+        validate_unique_subset: bool = False,
     ) -> None:
         """
         Expand a template using a DataFrame
@@ -376,7 +376,7 @@ class Mapping:
         predicate_uri_prefix: str = None,
         graph: str = None,
         validate_iris: bool = True,
-        validate_unique_subset: bool = True,
+        validate_unique_subset: bool = False,
     ) -> str:
         """
         Create a default template and expand it based on a dataframe.

@@ -186,6 +186,7 @@ impl Triplestore {
             let mut object_types = HashSet::new();
             let mut accumulated_heights = 0usize;
 
+
             // This part is to work around a performance bug in Polars.
             if predicate_uris_len > 1 && (subjects.is_some() || objects.is_some()) {
                 sms = sms

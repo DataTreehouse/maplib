@@ -37,13 +37,13 @@ def windpower_mapping(request):
         ottr:Triple(?SystemIRI, rdfs:label, ?Label)
     } .
     
-    tpl:StaticProperty [?ParentIRI, ?ValueNodeIRI, ?Label, ?Value] :: {
+    tpl:StaticProperty [?ParentIRI, ottr:IRI ?ValueNodeIRI, ?Label, ?Value] :: {
         ottr:Triple(?ParentIRI, ct:hasStaticProperty, ?ValueNodeIRI),
         ottr:Triple(?ValueNodeIRI, rdfs:label, ?Label),
         ottr:Triple(?ValueNodeIRI, ct:hasStaticValue, ?Value)
     } .
     
-    tpl:Timeseries [?ParentIRI, ?TimeseriesNodeIRI, ?Label, ?ExternalId, ottr:IRI ?Datatype] :: {
+    tpl:Timeseries [?ParentIRI, ottr:IRI ?TimeseriesNodeIRI, ?Label, ?ExternalId, ottr:IRI ?Datatype] :: {
         ottr:Triple(?ParentIRI, ct:hasTimeseries, ?TimeseriesNodeIRI),
         ottr:Triple(?TimeseriesNodeIRI, ct:hasExternalId, ?ExternalId),
         ottr:Triple(?TimeseriesNodeIRI, ct:hasDatatype, ?Datatype),
@@ -301,6 +301,7 @@ SELECT ?site_label ?wtur_label ?ts ?ts_label WHERE {
     filename = TESTDATA_PATH / "larger_query.csv"
     # df.write_csv(filename)
     expected_df = pl.scan_csv(filename).sort(by).collect()
+    # Important assert for checking indexing by object string
     assert_frame_equal(df, expected_df)
 
 

@@ -90,46 +90,49 @@ pub struct PyIndexingOptions {
 #[pymethods]
 impl PyIndexingOptions {
     #[new]
-    #[pyo3(signature = (enabled, object_sort_all=false, object_sort_some=None))]
+    #[pyo3(signature = (enabled, object_sort_all=None, object_sort_some=None))]
     pub fn new(
         enabled: bool,
         object_sort_all: Option<bool>,
         object_sort_some: Option<Vec<PyIRI>>,
     ) -> PyIndexingOptions {
-        let object_sort_all = object_sort_all.unwrap_or(false);
-        let enabled = enabled
-            || object_sort_all
-            || object_sort_some.is_some();
-        let inner = if enabled {
-            if object_sort_all && object_sort_some.is_none() {
-                IndexingOptions::default()
+        let inner = if enabled && object_sort_all.is_none() && object_sort_some.is_none() {
+            IndexingOptions::default()
+        }
+        else {
+            let object_sort_all = object_sort_all.unwrap_or(false);
+            let enabled = enabled || object_sort_all || object_sort_some.is_some();
+            if enabled {
+                if object_sort_all && object_sort_some.is_none() {
+                    IndexingOptions::default()
+                } else {
+                    let object_sort_some: Option<HashSet<_>> =
+                        if let Some(object_sort_some) = object_sort_some {
+                            Some(
+                                object_sort_some
+                                    .into_iter()
+                                    .map(|x| x.into_inner())
+                                    .collect(),
+                            )
+                        } else {
+                            None
+                        };
+                    IndexingOptions {
+                        enabled,
+                        object_sort_all,
+                        object_sort_some,
+                    }
+                }
             } else {
-                let object_sort_some: Option<HashSet<_>> =
-                    if let Some(object_sort_some) = object_sort_some {
-                        Some(
-                            object_sort_some
-                                .into_iter()
-                                .map(|x| x.into_inner())
-                                .collect(),
-                        )
-                    } else {
-                        None
-                    };
                 IndexingOptions {
                     enabled,
                     object_sort_all,
-                    object_sort_some,
+                    object_sort_some: None,
                 }
             }
-        } else {
-            IndexingOptions {
-                enabled,
-                object_sort_all,
-                object_sort_some: None,
-            }
         };
-
         PyIndexingOptions { inner }
+
     }
 }
 
