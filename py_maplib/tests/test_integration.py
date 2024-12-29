@@ -304,6 +304,33 @@ SELECT ?site_label ?wtur_label ?ts ?ts_label WHERE {
     # Important assert for checking indexing by object string
     assert_frame_equal(df, expected_df)
 
+def test_bad_pushdown(windpower_mapping):
+    query = """PREFIX xsd:<http://www.w3.org/2001/XMLSchema#>
+PREFIX ct:<https://github.com/magbak/chrontext#>
+PREFIX wp:<https://github.com/magbak/chrontext/windpower_example#>
+PREFIX rdfs:<http://www.w3.org/2000/01/rdf-schema#>
+PREFIX rdf:<http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rds:<https://github.com/magbak/chrontext/rds_power#>
+SELECT ?site_label ?ts ?ts_label WHERE {
+    ?site a rds:Site .
+    ?site rdfs:label ?site_label .
+    ?site rds:hasFunctionalAspect ?wtur_asp .
+    ?wtur_asp rdfs:label 1 .
+    ?wtur rds:hasFunctionalAspectNode ?wtur_asp .
+    ?wtur rds:hasFunctionalAspect ?gensys_asp .
+    ?wtur a rds:A .
+    ?gensys rds:hasFunctionalAspectNode ?gensys_asp .
+    ?gensys a rds:RA .
+    ?gensys rds:hasFunctionalAspect ?generator_asp .
+    ?generator rds:hasFunctionalAspectNode ?generator_asp .
+    ?generator a rds:GAA .
+    ?generator ct:hasTimeseries ?ts .
+    ?ts rdfs:label ?ts_label .
+    FILTER(?site_label = "Wind Mountain") .
+}"""
+    df = windpower_mapping.query(query)
+    assert df.shape == (0,3)
+
 
 def test_larger_ordered_query(windpower_mapping):
     query = """PREFIX xsd:<http://www.w3.org/2001/XMLSchema#>

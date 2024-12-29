@@ -17,6 +17,93 @@ def test_multi_filter_equals():
     )
     assert_frame_equal(df, pl.DataFrame({"a": ["<http://example.net/hello2>"]}))
 
+def test_multi_filter_numerical_equals():
+    m = Mapping([])
+    df = m.query(
+        """
+    PREFIX : <http://example.net/> 
+    PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+    SELECT ?a ?b WHERE {
+    {VALUES (?a) { ("1"^^xsd:int) }}
+    {VALUES (?b) { ("1"^^xsd:integer) }}
+    FILTER(?a = ?b)
+    }
+    """
+    )
+    assert df.shape == (0,2)
+
+def test_multi_filter_numerical_cast_real_equals():
+    m = Mapping([])
+    df = m.query(
+        """
+    PREFIX : <http://example.net/> 
+    PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+    SELECT ?a ?b WHERE {
+    {VALUES (?a) { ("1"^^xsd:int) }}
+    {VALUES (?b) { ("1"^^xsd:integer) }}
+    FILTER(xsd:double(?a) = xsd:double(?b))
+    }
+    """
+    )
+    assert df.shape == (1,2)
+
+def test_multi_filter_numerical_cast_integer_equals():
+    m = Mapping([])
+    df = m.query(
+        """
+    PREFIX : <http://example.net/> 
+    PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+    SELECT ?a ?b WHERE {
+        {VALUES (?a) { ("1"^^xsd:int) }}
+        {VALUES (?b) { ("1"^^xsd:integer) }}
+    FILTER(xsd:integer(?a) = xsd:integer(?b))
+    }
+    """
+    )
+    assert df.shape == (1,2)
+
+def test_multi_filter_numerical_cast_string_equals():
+    m = Mapping([])
+    df = m.query(
+        """
+    PREFIX : <http://example.net/> 
+    PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+    SELECT ?a ?b WHERE {
+    VALUES (?a) { ("1"^^xsd:int)}
+    VALUES (?b) { ("1"^^xsd:integer)} 
+    FILTER(xsd:string(?a) = xsd:string(?b))
+    }
+    """
+    )
+    assert df.shape == (1,2)
+
+def test_multi_filter_uri_cast_string_equals():
+    m = Mapping([])
+    df = m.query(
+        """
+    PREFIX : <http://example.net/> 
+    PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+    SELECT ?a  WHERE {
+        { VALUES (?a) { ("1"^^xsd:int) }} UNION { VALUES (?a) { (:something) }}
+        FILTER(xsd:string(?a) = "http://example.net/something")
+    }
+    """
+    )
+    assert df.shape == (1,1)
+
+def test_filter_uri_cast_string_equals():
+    m = Mapping([])
+    df = m.query(
+        """
+    PREFIX : <http://example.net/> 
+    PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+    SELECT ?a  WHERE {
+        VALUES (?a) { (:something) }
+        FILTER(xsd:string(?a) = "http://example.net/something")
+    }
+    """
+    )
+    assert df.shape == (1,1)
 
 def test_multi_filter_equals_with_datatypes():
     m = Mapping([])

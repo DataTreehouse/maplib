@@ -30,6 +30,7 @@ impl Triplestore {
             col_vecs.insert(i, vec![]);
         }
         let mut datatypes = HashMap::new();
+
         for (i, row) in bindings.iter().enumerate() {
             for (j, col) in row.iter().enumerate() {
                 if let Some(gt) = col {

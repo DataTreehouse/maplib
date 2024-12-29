@@ -98,8 +98,7 @@ impl PyIndexingOptions {
     ) -> PyIndexingOptions {
         let inner = if enabled && object_sort_all.is_none() && object_sort_some.is_none() {
             IndexingOptions::default()
-        }
-        else {
+        } else {
             let object_sort_all = object_sort_all.unwrap_or(false);
             let enabled = enabled || object_sort_all || object_sort_some.is_some();
             if enabled {
@@ -132,7 +131,6 @@ impl PyIndexingOptions {
             }
         };
         PyIndexingOptions { inner }
-
     }
 }
 

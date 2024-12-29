@@ -11,8 +11,10 @@ use polars::frame::UniqueKeepStrategy;
 use polars::prelude::{
     coalesce, col, concat_str, lit, when, Expr, LazyFrame, LiteralValue, Operator,
 };
-use representation::multitype::{all_multi_main_cols, multi_has_this_type_column};
-use representation::multitype::{non_multi_type_string, sparql_str_function};
+use representation::multitype::non_multi_type_string;
+use representation::multitype::{
+    all_multi_main_cols, multi_has_this_type_column, MULTI_BLANK_DT, MULTI_IRI_DT,
+};
 use representation::query_context::Context;
 use representation::rdf_to_polars::{
     rdf_literal_to_polars_literal_value, rdf_named_node_to_polars_literal_value,
@@ -538,7 +540,7 @@ pub fn func_expression(
             assert_eq!(args.len(), 1);
             let first_context = args_contexts.get(&0).unwrap();
             solution_mappings.mappings = solution_mappings.mappings.with_column(
-                sparql_str_function(
+                str_function(
                     first_context.as_str(),
                     solution_mappings
                         .rdf_node_types
@@ -734,29 +736,38 @@ pub fn func_expression(
         }
         Function::Custom(nn) => {
             let iri = nn.as_str();
-            if iri == xsd::INTEGER.as_str() {
+            if matches!(
+                nn.as_ref(),
+                xsd::INT
+                    | xsd::LONG
+                    | xsd::INTEGER
+                    | xsd::BOOLEAN
+                    | xsd::UNSIGNED_LONG
+                    | xsd::UNSIGNED_INT
+                    | xsd::UNSIGNED_SHORT
+                    | xsd::UNSIGNED_BYTE
+                    | xsd::DECIMAL
+                    | xsd::DOUBLE
+                    | xsd::FLOAT
+                    | xsd::STRING
+            ) {
                 assert_eq!(args.len(), 1);
                 let first_context = args_contexts.get(&0).unwrap();
+                let src_type = solution_mappings
+                    .rdf_node_types
+                    .get(first_context.as_str())
+                    .unwrap();
                 solution_mappings.mappings = solution_mappings.mappings.with_column(
-                    col(first_context.as_str())
-                        .cast(DataType::Int64)
-                        .alias(outer_context.as_str()),
+                    xsd_cast_literal(
+                        first_context.as_str(),
+                        src_type,
+                        &BaseRDFNodeType::Literal(nn.to_owned()),
+                    )?
+                    .alias(outer_context.as_str()),
                 );
                 solution_mappings.rdf_node_types.insert(
                     outer_context.as_str().to_string(),
-                    RDFNodeType::Literal(xsd::INTEGER.into_owned()),
-                );
-            } else if iri == xsd::STRING.as_str() {
-                assert_eq!(args.len(), 1);
-                let first_context = args_contexts.get(&0).unwrap();
-                solution_mappings.mappings = solution_mappings.mappings.with_column(
-                    col(first_context.as_str())
-                        .cast(DataType::String)
-                        .alias(outer_context.as_str()),
-                );
-                solution_mappings.rdf_node_types.insert(
-                    outer_context.as_str().to_string(),
-                    RDFNodeType::Literal(xsd::STRING.into_owned()),
+                    RDFNodeType::Literal(nn.to_owned()),
                 );
             } else if iri == DATETIME_AS_NANOS {
                 assert_eq!(args.len(), 1);
@@ -844,36 +855,8 @@ pub fn func_expression(
                     outer_context.as_str().to_string(),
                     RDFNodeType::Literal(xsd::DATE_TIME.into_owned()),
                 );
-            } else if iri == xsd::BOOLEAN {
-                assert_eq!(args.len(), 1);
-                let first_context = args_contexts.get(&0).unwrap();
-                //Workaround for casting utf8 views
-                if solution_mappings
-                    .rdf_node_types
-                    .get(first_context.as_str())
-                    .unwrap()
-                    .is_lit_type(xsd::STRING)
-                {
-                    solution_mappings.mappings = solution_mappings.mappings.with_column(
-                        col(first_context.as_str())
-                            .str()
-                            .to_lowercase()
-                            .eq(lit("true"))
-                            .alias(outer_context.as_str()),
-                    );
-                } else {
-                    solution_mappings.mappings = solution_mappings.mappings.with_column(
-                        col(first_context.as_str())
-                            .cast(DataType::Boolean)
-                            .alias(outer_context.as_str()),
-                    );
-                }
-                solution_mappings.rdf_node_types.insert(
-                    outer_context.as_str().to_string(),
-                    RDFNodeType::Literal(xsd::BOOLEAN.into_owned()),
-                );
             } else {
-                todo!("{:?}", nn)
+                todo!("Function {nn} is not implemented yet")
             }
         }
         Function::StrBefore | Function::StrAfter => {
@@ -1351,3 +1334,158 @@ pub fn add_regex_feature_flags(pattern: &str, flags: Option<&str>) -> String {
         pattern.to_string()
     }
 }
+
+pub fn str_function(c: &str, t: &RDFNodeType) -> Expr {
+    if let RDFNodeType::MultiType(types) = t {
+        let mut to_coalesce = vec![];
+        for t in types {
+            to_coalesce.push(match t {
+                BaseRDFNodeType::IRI => col(c)
+                    .struct_()
+                    .field_by_name(MULTI_IRI_DT)
+                    .cast(DataType::String),
+                BaseRDFNodeType::BlankNode => col(c)
+                    .struct_()
+                    .field_by_name(MULTI_BLANK_DT)
+                    .cast(DataType::String),
+                BaseRDFNodeType::Literal(_) => {
+                    if t.is_lang_string() {
+                        cast_lang_string_to_string(c)
+                    } else {
+                        col(c)
+                            .struct_()
+                            .field_by_name(&non_multi_type_string(t))
+                            .cast(DataType::String)
+                    }
+                }
+                BaseRDFNodeType::None => lit(LiteralValue::Null).cast(DataType::String),
+            })
+        }
+        coalesce(to_coalesce.as_slice()).alias(c)
+    } else {
+        let t = BaseRDFNodeType::from_rdf_node_type(t);
+        match &t {
+            BaseRDFNodeType::IRI => col(c).cast(DataType::String),
+            BaseRDFNodeType::BlankNode => col(c).cast(DataType::String),
+            BaseRDFNodeType::Literal(_) => {
+                if t.is_lang_string() {
+                    cast_lang_string_to_string(c)
+                } else {
+                    col(c).cast(DataType::String)
+                }
+            }
+            BaseRDFNodeType::None => lit(LiteralValue::Null).cast(DataType::String),
+        }
+    }
+}
+
+fn cast_lang_string_to_string(c: &str) -> Expr {
+    col(c)
+        .struct_()
+        .field_by_name(LANG_STRING_VALUE_FIELD)
+        .cast(DataType::String)
+}
+
+pub fn xsd_cast_literal(
+    c: &str,
+    src: &RDFNodeType,
+    trg: &BaseRDFNodeType,
+) -> Result<Expr, QueryProcessingError> {
+    let trg_type = trg.polars_data_type();
+    let trg_nn = if let BaseRDFNodeType::Literal(nn) = trg {
+        nn.as_ref()
+    } else {
+        panic!("Invalid state")
+    };
+    if let RDFNodeType::MultiType(types) = src {
+        let mut to_coalesce = vec![];
+        for t in types {
+            to_coalesce.push(match t {
+                BaseRDFNodeType::IRI => cast_iri_to_xsd_literal(
+                    col(c).struct_().field_by_name(&non_multi_type_string(t)),
+                    c,
+                    t,
+                    trg,
+                    trg_nn,
+                    trg_type.clone(),
+                )?,
+                BaseRDFNodeType::BlankNode => {
+                    return Err(QueryProcessingError::BadCastDatatype(
+                        c.to_string(),
+                        trg.clone(),
+                        t.clone(),
+                    ))
+                }
+                BaseRDFNodeType::Literal(src_nn) => cast_literal(
+                    col(c).struct_().field_by_name(&non_multi_type_string(t)),
+                    src_nn.as_ref(),
+                    trg_nn,
+                    trg_type.clone(),
+                ),
+                BaseRDFNodeType::None => lit(LiteralValue::Null).cast(trg_type.clone()),
+            })
+        }
+        Ok(coalesce(to_coalesce.as_slice()).alias(c))
+    } else {
+        let t = BaseRDFNodeType::from_rdf_node_type(src);
+        match &t {
+            BaseRDFNodeType::IRI => {
+                cast_iri_to_xsd_literal(col(c), c, &t, trg, trg_nn, trg_type.clone())
+            }
+            BaseRDFNodeType::BlankNode => Err(QueryProcessingError::BadCastDatatype(
+                c.to_string(),
+                trg.clone(),
+                t.clone(),
+            )),
+            BaseRDFNodeType::Literal(src_nn) => Ok(cast_literal(
+                col(c),
+                src_nn.as_ref(),
+                trg_nn,
+                trg_type.clone(),
+            )),
+            BaseRDFNodeType::None => Ok(lit(LiteralValue::Null).cast(trg_type)),
+        }
+    }
+}
+
+fn cast_iri_to_xsd_literal(
+    e: Expr,
+    c: &str,
+    src: &BaseRDFNodeType,
+    trg: &BaseRDFNodeType,
+    trg_nn: NamedNodeRef,
+    trg_type: DataType,
+) -> Result<Expr, QueryProcessingError> {
+    if trg_nn == xsd::STRING {
+        Ok(cast_literal(e, xsd::STRING, trg_nn, trg_type.clone()))
+    } else {
+        Ok(lit(LiteralValue::Null).cast(trg_type.clone()))
+        // Err(QueryProcessingError::BadCastDatatype(
+        //     c.to_string(),
+        //     src.clone(),
+        //     trg.clone(),
+        // ))
+    }
+}
+
+fn cast_literal(c: Expr, src: NamedNodeRef, trg: NamedNodeRef, trg_type: DataType) -> Expr {
+    if src == xsd::STRING && trg == xsd::BOOLEAN {
+        c.str().to_lowercase().eq(lit("true"))
+    } else {
+        c.cast(trg_type)
+    }
+}
+
+//if solution_mappings
+//                     .rdf_node_types
+//                     .get(first_context.as_str())
+//                     .unwrap()
+//                     .is_lit_type(xsd::STRING)
+//                 {
+//                     solution_mappings.mappings = solution_mappings.mappings.with_column(
+//                         col(first_context.as_str())
+//                             .str()
+//                             .to_lowercase()
+//                             .eq(lit("true"))
+//                             .alias(outer_context.as_str()),
+//                     );

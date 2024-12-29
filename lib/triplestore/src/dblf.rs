@@ -1,6 +1,5 @@
 use super::{Triples, Triplestore};
 use crate::sparql::errors::SparqlError;
-use crate::sparql::pushdowns::PossibleTypes;
 use oxrdf::{NamedNode, Subject, Term};
 use polars::prelude::{as_struct, col, concat, lit, IntoLazy, LazyFrame, UnionArgs};
 use polars_core::datatypes::CategoricalOrdering;
@@ -20,6 +19,7 @@ use representation::{
     SUBJECT_COL_NAME, VERB_COL_NAME,
 };
 use std::collections::{HashMap, HashSet};
+use query_processing::type_constraints::PossibleTypes;
 
 impl Triplestore {
     pub fn get_predicate_iris(&self, include_transient: bool) -> Vec<NamedNode> {
@@ -185,7 +185,6 @@ impl Triplestore {
             let mut subject_types = HashSet::new();
             let mut object_types = HashSet::new();
             let mut accumulated_heights = 0usize;
-
 
             // This part is to work around a performance bug in Polars.
             if predicate_uris_len > 1 && (subjects.is_some() || objects.is_some()) {
@@ -565,9 +564,13 @@ fn multiple_tt_to_deduplicated_lf(
             None
         };
 
-        if let Some((lf, height)) =
-            single_tt_to_deduplicated_lf(tt, storage_folder, &filtered_subjects, &filtered_objects, keep_subject)?
-        {
+        if let Some((lf, height)) = single_tt_to_deduplicated_lf(
+            tt,
+            storage_folder,
+            &filtered_subjects,
+            &filtered_objects,
+            keep_subject,
+        )? {
             if height > 0 {
                 let half_baked = HalfBakedSolutionMappings {
                     mappings: lf,
@@ -615,18 +618,17 @@ fn filter_objects<'a>(object_type: &BaseRDFNodeType, objects: &'a Vec<Term>) -> 
     filtered
 }
 
-fn filter_subjects<'a>(subject_type:&BaseRDFNodeType, subjects: &'a Vec<Subject>) -> Vec<&'a Subject> {
+fn filter_subjects<'a>(
+    subject_type: &BaseRDFNodeType,
+    subjects: &'a Vec<Subject>,
+) -> Vec<&'a Subject> {
     let mut filtered = vec![];
     for s in subjects {
         #[allow(unreachable_patterns)]
         let ok = match s {
-            Subject::NamedNode(_) => {
-                subject_type == &BaseRDFNodeType::IRI
-            }
-            Subject::BlankNode(_) => {
-                subject_type == &BaseRDFNodeType::BlankNode
-            }
-            _ => unimplemented!("Only blank node and iri subjects")
+            Subject::NamedNode(_) => subject_type == &BaseRDFNodeType::IRI,
+            Subject::BlankNode(_) => subject_type == &BaseRDFNodeType::BlankNode,
+            _ => unimplemented!("Only blank node and iri subjects"),
         };
         if ok {
             filtered.push(s);

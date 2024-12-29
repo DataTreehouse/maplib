@@ -17,7 +17,10 @@ use representation::rdf_to_polars::string_rdf_literal;
 use representation::solution_mapping::{is_string_col, SolutionMappings};
 use representation::{BaseRDFNodeType, RDFNodeType};
 use std::collections::{HashMap, HashSet};
+use oxrdf::vocab::rdfs;
 use uuid::Uuid;
+use spargebra::algebra::{Expression, Function};
+use crate::type_constraints::{conjunction_variable_type, equal_variable_type, PossibleTypes};
 
 pub fn distinct(
     mut solution_mappings: SolutionMappings,
@@ -507,4 +510,87 @@ pub fn union(
         target_types,
         new_height,
     ))
+}
+
+#[allow(dead_code)]
+fn find_enforced_variable_type_constraints(e: &Expression) -> Option<HashMap<String, PossibleTypes>> {
+    match e {
+        Expression::If(_, left, right) | Expression::Or(left, right) => {
+            let left = find_enforced_variable_type_constraints(left);
+            let right = find_enforced_variable_type_constraints(right);
+            if let (Some(left), Some(mut right)) = (left, right) {
+                let mut new_map = HashMap::new();
+                for (k, mut v) in left {
+                    if let Some(vr) = right.remove(&k) {
+                        v.or_other(vr);
+                        new_map.insert(k, v);
+                    }
+                }
+                return Some(new_map);
+            }
+        }
+        Expression::And(left, right) => {
+            let left = find_enforced_variable_type_constraints(left);
+            let right = find_enforced_variable_type_constraints(right);
+            return if left.is_some() && right.is_some() {
+                let mut left = left.unwrap();
+                let right = right.unwrap();
+                Some(conjunction_variable_type(&mut left, right))
+            } else if left.is_some() {
+                left
+            } else {
+                right
+            };
+        }
+        Expression::Equal(left, right) => {
+            if let Some((v, t)) = equal_variable_type(left, right) {
+                return Some(HashMap::from([(
+                    v.as_str().to_string(),
+                    PossibleTypes::singular(t),
+                )]));
+            } else if let Some((v, t)) = equal_variable_type(right, left) {
+                return Some(HashMap::from([(
+                    v.as_str().to_string(),
+                    PossibleTypes::singular(t),
+                )]));
+            }
+        }
+        Expression::FunctionCall(f, args) => match f {
+            Function::IsIri => {
+                if args.len() == 1 {
+                    if let Expression::Variable(v) = args.first().unwrap() {
+                        return Some(HashMap::from([(
+                            v.as_str().to_string(),
+                            PossibleTypes::singular(BaseRDFNodeType::IRI),
+                        )]));
+                    }
+                }
+            }
+            Function::IsBlank => {
+                if args.len() == 1 {
+                    if let Expression::Variable(v) = args.first().unwrap() {
+                        return Some(HashMap::from([(
+                            v.as_str().to_string(),
+                            PossibleTypes::singular(BaseRDFNodeType::BlankNode),
+                        )]));
+                    }
+                }
+            }
+            Function::IsLiteral => {
+                if args.len() == 1 {
+                    if let Expression::Variable(v) = args.first().unwrap() {
+                        return Some(HashMap::from([(
+                            v.as_str().to_string(),
+                            PossibleTypes::singular(BaseRDFNodeType::Literal(
+                                rdfs::LITERAL.into_owned(),
+                            )),
+                        )]));
+                    }
+                }
+            }
+            _ => {}
+        },
+        _ => {}
+    }
+    None
 }

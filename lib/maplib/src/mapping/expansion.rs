@@ -763,14 +763,17 @@ fn create_remapped(
     if instance.list_expander.is_none() {
         for unique_subset in unique_subsets {
             let mut new_subset = vec![];
+            let mut aborted = false;
             for x in unique_subset.iter() {
                 if let Some(renamed) = rename_map.get(x.as_str()) {
                     for new_name in renamed {
                         new_subset.push(new_name.to_string());
                     }
+                } else {
+                    aborted = true;
                 }
             }
-            if !new_subset.is_empty() {
+            if !aborted && !new_subset.is_empty() {
                 new_unique_subsets.push(new_subset);
             }
         }

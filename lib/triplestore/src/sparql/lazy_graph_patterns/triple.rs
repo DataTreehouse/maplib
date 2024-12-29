@@ -3,7 +3,7 @@ use crate::sparql::errors::SparqlError;
 use representation::query_context::Context;
 use representation::solution_mapping::SolutionMappings;
 
-use crate::sparql::pushdowns::{PossibleTypes, Pushdowns};
+use crate::sparql::pushdowns::{Pushdowns};
 use log::debug;
 use oxrdf::{NamedNode, Subject, Term};
 use polars::prelude::IntoLazy;
@@ -12,6 +12,7 @@ use query_processing::graph_patterns::join;
 use representation::{literal_iri_to_namednode, BaseRDFNodeType, RDFNodeType};
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 use std::collections::{HashMap, HashSet};
+use query_processing::type_constraints::PossibleTypes;
 
 impl Triplestore {
     pub fn lazy_triple_pattern(

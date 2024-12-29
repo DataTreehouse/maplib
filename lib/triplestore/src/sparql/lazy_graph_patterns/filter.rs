@@ -35,6 +35,7 @@ impl Triplestore {
             &expression_context,
             parameters,
         )?;
-        Ok(filter(output_solution_mappings, &expression_context)?)
+        output_solution_mappings = filter(output_solution_mappings, &expression_context)?;
+        Ok(output_solution_mappings)
     }
 }
