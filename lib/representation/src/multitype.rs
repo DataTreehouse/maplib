@@ -689,18 +689,28 @@ pub fn nest_multicolumns(
     mapping.with_columns(structs).drop_no_validate(drop_cols)
 }
 
-pub fn set_all_indicator_false_or_null_row_null(sm: SolutionMappings) -> SolutionMappings {
+pub fn set_structs_all_null_to_null_row(sm: SolutionMappings) -> SolutionMappings {
     let SolutionMappings {
         mut mappings,
         rdf_node_types,
         height_estimate,
     } = sm;
     for (k, r) in &rdf_node_types {
+        let mut is_null_exprs = vec![];
         if let RDFNodeType::MultiType(ts) = r {
-            let mut is_null_exprs = vec![];
             for t in ts {
                 is_null_exprs.push(col(k).struct_().field_by_name(&base_col_name(t)).is_null());
             }
+        }
+        if r.is_lang_string() {
+            is_null_exprs.push(
+                col(k)
+                    .struct_()
+                    .field_by_name(LANG_STRING_VALUE_FIELD)
+                    .is_null(),
+            );
+        }
+        if !is_null_exprs.is_empty() {
             mappings = mappings.with_column(
                 when(all_horizontal(is_null_exprs).unwrap())
                     .then(lit(LiteralValue::Null).cast(r.polars_data_type()))

@@ -176,7 +176,6 @@ def test_coalesce_both_multi_same_types():
     """,
         include_datatypes=True,
     )
-    print(sm.mappings)
     assert sm.mappings.get_column("c").is_null().sum() == 0
 
 def test_coalesce_both_multi_different_types():
@@ -195,7 +194,6 @@ def test_coalesce_both_multi_different_types():
     """,
         include_datatypes=True,
     )
-    print(sm.mappings)
     assert sm.mappings.get_column("c").is_null().sum() == 0
 
 def test_coalesce_both_multi_different_types_rhs_less():
@@ -214,7 +212,6 @@ def test_coalesce_both_multi_different_types_rhs_less():
     """,
         include_datatypes=True,
     )
-    print(sm.mappings)
     assert sm.mappings.get_column("c").is_null().sum() == 0
 
 def test_coalesce_only_lhs_multi():
@@ -233,7 +230,6 @@ def test_coalesce_only_lhs_multi():
     """,
         include_datatypes=True,
     )
-    print(sm.mappings)
     assert sm.mappings.get_column("c").is_null().sum() == 0
 
 def test_coalesce_only_rhs_multi():
@@ -252,9 +248,27 @@ def test_coalesce_only_rhs_multi():
     """,
         include_datatypes=True,
     )
-    print(sm.mappings)
     assert sm.mappings.get_column("c").is_null().sum() == 0
 
+
+def test_coalesce_no_multi():
+    m = Mapping([])
+    sm = m.query(
+        """
+    PREFIX : <http://example.net/> 
+    PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+    SELECT ?a ?b (COALESCE(?b, ?a) AS ?c) WHERE {
+    VALUES (?a) { (:hello1) (:hello2) (:hello3)}
+    OPTIONAL {
+        VALUES (?b) { (:hello5) (:hello6) }
+        FILTER(?a = :hello1)
+    }
+    }
+    """,
+        include_datatypes=True,
+    )
+    assert sm.rdf_types == {'c': RDFType.IRI(), 'b': RDFType.IRI(), 'a': RDFType.IRI()}
+    assert sm.mappings.get_column("c").is_null().sum() == 0
 
 def test_multi_filter_equals_mirrored():
     m = Mapping([])

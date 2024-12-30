@@ -14,7 +14,7 @@ use polars::prelude::{
 use representation::multitype::{
     all_multi_main_cols, convert_lf_col_to_multitype, MULTI_BLANK_DT, MULTI_IRI_DT,
 };
-use representation::multitype::{base_col_name, set_all_indicator_false_or_null_row_null};
+use representation::multitype::{base_col_name, set_structs_all_null_to_null_row};
 use representation::query_context::Context;
 use representation::rdf_to_polars::{
     rdf_literal_to_polars_literal_value, rdf_named_node_to_polars_literal_value,
@@ -323,7 +323,7 @@ pub fn coalesce_expression(
     }
     let mut sorted_types: Vec<_> = basic_types.into_iter().collect();
     sorted_types.sort();
-    if sorted_types.len() > 0 {
+    if sorted_types.len() > 1 {
         for c in &inner_contexts {
             let dt = solution_mappings.rdf_node_types.get(c.as_str()).unwrap();
             if dt != &RDFNodeType::None {
@@ -341,7 +341,7 @@ pub fn coalesce_expression(
             }
         }
     }
-    solution_mappings = set_all_indicator_false_or_null_row_null(solution_mappings);
+    solution_mappings = set_structs_all_null_to_null_row(solution_mappings);
 
     if coal_exprs.is_empty() {
         solution_mappings.mappings = solution_mappings.mappings.with_column(
