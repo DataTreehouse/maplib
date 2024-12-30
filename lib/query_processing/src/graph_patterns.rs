@@ -5,7 +5,7 @@ use oxrdf::vocab::rdfs;
 use oxrdf::{Term, Variable};
 use polars::datatypes::{CategoricalOrdering, DataType, PlSmallStr};
 use polars::frame::{DataFrame, UniqueKeepStrategy};
-use polars::prelude::{as_struct, col, concat_lf_diagonal, lit, Expr, JoinArgs, JoinType, LiteralValue, SortMultipleOptions, UnionArgs};
+use polars::prelude::{as_struct, col, concat_lf_diagonal, lit, Expr, IntoColumn, IntoLazy, JoinArgs, JoinType, LiteralValue, SortMultipleOptions, UnionArgs};
 use representation::multitype::{
     base_col_name, convert_lf_col_to_multitype, create_join_compatible_solution_mappings,
     lf_column_to_categorical, nest_multicolumns, unnest_multicols,
@@ -702,4 +702,5 @@ pub fn values_pattern(
         .collect()
         .unwrap();
     let sm = EagerSolutionMappings::new(df, all_datatypes).as_lazy();
+    sm
 }
