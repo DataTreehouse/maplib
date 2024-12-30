@@ -12,8 +12,7 @@ use polars::prelude::{
     as_struct, coalesce, col, concat_str, lit, when, Expr, LazyFrame, LiteralValue, Operator,
 };
 use representation::multitype::{
-    all_multi_main_cols, convert_lf_col_to_multitype, create_multi_has_this_type_column_name,
-    multi_has_this_type_column, MULTI_BLANK_DT, MULTI_IRI_DT,
+    all_multi_main_cols, convert_lf_col_to_multitype, MULTI_BLANK_DT, MULTI_IRI_DT,
 };
 use representation::multitype::{base_col_name, set_all_indicator_false_or_null_row_null};
 use representation::query_context::Context;
@@ -343,7 +342,6 @@ pub fn coalesce_expression(
         }
     }
     solution_mappings = set_all_indicator_false_or_null_row_null(solution_mappings);
-    println!("S_olutions {:?}", solution_mappings.mappings.clone().collect().unwrap());
 
     if coal_exprs.is_empty() {
         solution_mappings.mappings = solution_mappings.mappings.with_column(
@@ -386,7 +384,6 @@ fn convert_multitype_col_to_wider(
         let mut struct_exprs = vec![];
         for t in sorted_types {
             let name = base_col_name(t);
-            let indicator = create_multi_has_this_type_column_name(&name);
             if existing_types.contains(t) {
                 if t.is_lang_string() {
                     struct_exprs.push(
@@ -404,7 +401,6 @@ fn convert_multitype_col_to_wider(
                 } else {
                     struct_exprs.push(col(c).struct_().field_by_name(&name).alias(&name));
                 }
-                struct_exprs.push(col(c).struct_().field_by_name(&indicator).alias(&indicator));
             } else {
                 if t.is_lang_string() {
                     struct_exprs.push(
@@ -424,11 +420,6 @@ fn convert_multitype_col_to_wider(
                             .alias(&name),
                     );
                 }
-                struct_exprs.push(
-                    lit(LiteralValue::Null)
-                        .cast(DataType::Boolean)
-                        .alias(&indicator),
-                );
             }
         }
         mappings = mappings.with_column(as_struct(struct_exprs).alias(c));
@@ -1128,13 +1119,12 @@ pub fn func_expression(
                     if types.contains(&BaseRDFNodeType::BlankNode) {
                         col(first_context.as_str())
                             .struct_()
-                            .field_by_name(&multi_has_this_type_column(&BaseRDFNodeType::BlankNode))
-                            .fill_null(lit(false))
+                            .field_by_name(&base_col_name(&BaseRDFNodeType::BlankNode)).is_not_null()
                     } else {
                         lit(false)
                     }
                 }
-                RDFNodeType::BlankNode => col(first_context.as_str()).is_null().not(),
+                RDFNodeType::BlankNode => col(first_context.as_str()).is_not_null(),
                 _ => lit(false),
             };
             solution_mappings.mappings = solution_mappings
@@ -1157,13 +1147,13 @@ pub fn func_expression(
                     if types.contains(&BaseRDFNodeType::IRI) {
                         col(first_context.as_str())
                             .struct_()
-                            .field_by_name(&multi_has_this_type_column(&BaseRDFNodeType::IRI))
-                            .fill_null(lit(false))
+                            .field_by_name(&base_col_name(&BaseRDFNodeType::IRI))
+                            .is_not_null()
                     } else {
                         lit(false)
                     }
                 }
-                RDFNodeType::IRI => col(first_context.as_str()).is_null().not(),
+                RDFNodeType::IRI => col(first_context.as_str()).is_not_null(),
                 _ => lit(false),
             };
             solution_mappings.mappings = solution_mappings
@@ -1189,8 +1179,7 @@ pub fn func_expression(
                             exprs.push(
                                 col(first_context.as_str())
                                     .struct_()
-                                    .field_by_name(&multi_has_this_type_column(t))
-                                    .fill_null(lit(false)),
+                                    .field_by_name(&base_col_name(t)).is_not_null()
                             );
                         }
                     }
@@ -1299,25 +1288,13 @@ fn typed_equals_expr(
                 if right_types.contains(lt) {
                     eq = eq.or(col(left_col)
                         .struct_()
-                        .field_by_name(&multi_has_this_type_column(lt))
-                        .is_null()
-                        .not()
-                        .and(
-                            col(left_col)
-                                .struct_()
-                                .field_by_name(&multi_has_this_type_column(lt)),
-                        )
+                        .field_by_name(&base_col_name(lt))
+                        .is_not_null()
                         .and(
                             col(right_col)
                                 .struct_()
-                                .field_by_name(&multi_has_this_type_column(lt))
-                                .is_null()
-                                .not()
-                                .and(
-                                    col(right_col)
-                                        .struct_()
-                                        .field_by_name(&multi_has_this_type_column(lt)),
-                                ),
+                                .field_by_name(&base_col_name(lt))
+                                .is_not_null()
                         )
                         .and(
                             col(left_col)
@@ -1333,14 +1310,8 @@ fn typed_equals_expr(
             if left_types.contains(&right_type) {
                 col(left_col)
                     .struct_()
-                    .field_by_name(&multi_has_this_type_column(&right_type))
-                    .is_null()
-                    .not()
-                    .and(
-                        col(left_col)
-                            .struct_()
-                            .field_by_name(&multi_has_this_type_column(&right_type)),
-                    )
+                    .field_by_name(&base_col_name(&right_type))
+                    .is_not_null()
                     .and(
                         col(left_col)
                             .struct_()
@@ -1356,14 +1327,8 @@ fn typed_equals_expr(
         if right_types.contains(&left_type) {
             col(right_col)
                 .struct_()
-                .field_by_name(&multi_has_this_type_column(&left_type))
-                .is_null()
-                .not()
-                .and(
-                    col(right_col)
-                        .struct_()
-                        .field_by_name(&multi_has_this_type_column(&left_type)),
-                )
+                .field_by_name(&base_col_name(&left_type))
+                .is_not_null()
                 .and(
                     col(right_col)
                         .struct_()

@@ -14,59 +14,19 @@ pub const MULTI_IRI_DT: &str = "I";
 pub const MULTI_BLANK_DT: &str = "B";
 pub const MULTI_NONE_DT: &str = "N";
 
-pub fn create_multi_has_this_type_column_name(s: &str) -> String {
-    format!("{s}_is")
-}
-
-pub fn multi_has_this_type_column(dt: &BaseRDFNodeType) -> String {
-    create_multi_has_this_type_column_name(&base_col_name(dt))
-}
-
 pub fn convert_lf_col_to_multitype(c: &str, dt: &RDFNodeType) -> Expr {
     match dt {
-        RDFNodeType::IRI => as_struct(vec![
-            col(c).alias(MULTI_IRI_DT),
-            col(c).is_null().alias(create_multi_has_this_type_column_name(MULTI_IRI_DT)),
-        ])
-        .alias(c),
-        RDFNodeType::BlankNode => as_struct(vec![
-            col(c).alias(MULTI_BLANK_DT),
-            col(c).is_null().alias(create_multi_has_this_type_column_name(MULTI_BLANK_DT)),
-        ])
-        .alias(c),
+        RDFNodeType::IRI => as_struct(vec![col(c).alias(MULTI_IRI_DT)]).alias(c),
+        RDFNodeType::BlankNode => as_struct(vec![col(c).alias(MULTI_BLANK_DT)]).alias(c),
         RDFNodeType::Literal(l) => {
             if rdf::LANG_STRING == l.as_ref() {
-                as_struct(vec![
-                    col(c)
-                        .struct_()
-                        .field_by_name(LANG_STRING_VALUE_FIELD)
-                        .alias(LANG_STRING_VALUE_FIELD),
-                    col(c)
-                        .struct_()
-                        .field_by_name(LANG_STRING_LANG_FIELD)
-                        .alias(LANG_STRING_LANG_FIELD),
-                    col(c)
-                        .struct_()
-                        .field_by_name(LANG_STRING_VALUE_FIELD).is_null().alias(create_multi_has_this_type_column_name(
-                        LANG_STRING_VALUE_FIELD,
-                    )),
-                ])
-                .alias(c)
+                col(c)
             } else {
                 let colname = base_col_name(&BaseRDFNodeType::from_rdf_node_type(dt));
-
-                as_struct(vec![
-                    col(c).alias(&colname),
-                    col(c).is_null().alias(create_multi_has_this_type_column_name(&colname)),
-                ])
-                .alias(c)
+                as_struct(vec![col(c).alias(&colname)]).alias(c)
             }
         }
-        RDFNodeType::None => as_struct(vec![
-            col(c).alias(MULTI_NONE_DT),
-            lit(true).alias(create_multi_has_this_type_column_name(MULTI_NONE_DT)),
-        ])
-        .alias(c),
+        RDFNodeType::None => as_struct(vec![col(c).alias(MULTI_NONE_DT)]).alias(c),
         RDFNodeType::MultiType(..) => col(c),
     }
 }
@@ -154,11 +114,6 @@ pub fn lf_column_from_categorical(
                         fields.push(col(c).struct_().field_by_name(MULTI_NONE_DT));
                     }
                 }
-                fields.push(
-                    col(c)
-                        .struct_()
-                        .field_by_name(&create_multi_has_this_type_column_name(&base_col_name(t))),
-                );
             }
             lf = lf.with_column(as_struct(fields).alias(c));
         }
@@ -263,11 +218,6 @@ pub fn lf_column_to_categorical(
                         fields.push(col(c).struct_().field_by_name(MULTI_NONE_DT));
                     }
                 }
-                fields.push(
-                    col(c)
-                        .struct_()
-                        .field_by_name(&create_multi_has_this_type_column_name(&base_col_name(t))),
-                );
             }
             if found_cat_expr {
                 lf = lf.with_column(as_struct(fields).alias(c));
@@ -326,9 +276,7 @@ pub fn create_join_compatible_solution_mappings(
                                     let all_main_cols = all_multi_main_cols(&keep);
                                     let mut is_col_expr: Option<Expr> = None;
                                     for c in all_main_cols {
-                                        let e = col(v).struct_().field_by_name(
-                                            &create_multi_has_this_type_column_name(&c),
-                                        );
+                                        let e = col(v).struct_().field_by_name(&c).is_not_null();
                                         is_col_expr = if let Some(is_col_expr) = is_col_expr {
                                             Some(is_col_expr.or(e))
                                         } else {
@@ -340,9 +288,6 @@ pub fn create_join_compatible_solution_mappings(
                                     for c in &all_cols {
                                         struct_cols
                                             .push(col(v).struct_().field_by_name(c).alias(c));
-                                        let is_col_name = create_multi_has_this_type_column_name(c);
-                                        struct_cols
-                                            .push(col(v).struct_().field_by_name(&is_col_name));
                                     }
 
                                     left_mappings = left_mappings
@@ -382,9 +327,7 @@ pub fn create_join_compatible_solution_mappings(
                                     let all_main_cols = all_multi_main_cols(&right_keep);
                                     let mut is_col_expr: Option<Expr> = None;
                                     for c in all_main_cols {
-                                        let e = col(v).struct_().field_by_name(
-                                            &create_multi_has_this_type_column_name(&c),
-                                        );
+                                        let e = col(v).struct_().field_by_name(&c).is_not_null();
                                         is_col_expr = if let Some(is_col_expr) = is_col_expr {
                                             Some(is_col_expr.or(e))
                                         } else {
@@ -395,9 +338,6 @@ pub fn create_join_compatible_solution_mappings(
                                     let mut struct_cols = vec![];
                                     for c in &all_cols {
                                         struct_cols.push(col(v).struct_().field_by_name(c));
-                                        let is_col_name = create_multi_has_this_type_column_name(c);
-                                        struct_cols
-                                            .push(col(v).struct_().field_by_name(&is_col_name));
                                     }
 
                                     right_mappings = right_mappings
@@ -569,16 +509,14 @@ pub fn compress_actual_multitypes(
 
             let main_cols = all_multi_main_cols(&types);
             for (t, ts) in types.into_iter().zip(main_cols.into_iter()) {
-                let is_col = create_multi_has_this_type_column_name(&ts);
                 let any_values = df
                     .column(&c)
                     .unwrap()
                     .struct_()
                     .unwrap()
-                    .field_by_name(&is_col)
+                    .field_by_name(&base_col_name(&t))
                     .unwrap()
-                    .bool()
-                    .unwrap()
+                    .is_not_null()
                     .any();
                 if !any_values {
                     any_dropped = true;
@@ -605,7 +543,7 @@ pub fn compress_actual_multitypes(
                         .clone();
                     to_single.push((c, t));
                 } else {
-                    let all_cols_exprs: Vec<_> = all_multi_and_is_cols(&keep_types)
+                    let all_cols_exprs: Vec<_> = all_multi_cols(&keep_types)
                         .into_iter()
                         .map(|x| col(&c).struct_().field_by_name(&x))
                         .collect();
@@ -679,30 +617,11 @@ pub fn all_multi_main_cols(dts: &Vec<BaseRDFNodeType>) -> Vec<String> {
     all_cols
 }
 
-pub fn all_multi_and_is_cols(dts: &Vec<BaseRDFNodeType>) -> Vec<String> {
-    let mut all_cols = vec![];
-
-    for d in dts {
-        let colname = base_col_name(d);
-        if d.is_lang_string() {
-            all_cols.push(LANG_STRING_LANG_FIELD.to_string());
-        }
-        all_cols.push(create_multi_has_this_type_column_name(&colname));
-        all_cols.push(colname);
-    }
-    all_cols
-}
-
 pub fn force_convert_multicol_to_single_col(
-    mut lf: LazyFrame,
+    lf: LazyFrame,
     c: &str,
     dt: &BaseRDFNodeType,
 ) -> LazyFrame {
-    lf = lf.filter(
-        col(c)
-            .struct_()
-            .field_by_name(&multi_has_this_type_column(dt)),
-    );
     known_convert_lf_multicol_to_single(lf, c, dt)
 }
 
@@ -735,7 +654,7 @@ pub fn unnest_multicols(
     let mut drop_cols = vec![];
     for (c, t) in rdf_node_types {
         if let RDFNodeType::MultiType(types) = t {
-            let inner_cols = all_multi_and_is_cols(types);
+            let inner_cols = all_multi_cols(types);
             let mut prefixed_inner_cols = vec![];
             for inner in &inner_cols {
                 let prefixed_inner = format!("{c}{inner}");
@@ -780,14 +699,7 @@ pub fn set_all_indicator_false_or_null_row_null(sm: SolutionMappings) -> Solutio
         if let RDFNodeType::MultiType(ts) = r {
             let mut is_null_exprs = vec![];
             for t in ts {
-                let i = multi_has_this_type_column(t);
-                is_null_exprs.push(
-                    col(k)
-                        .struct_()
-                        .field_by_name(&i)
-                        .is_null()
-                        .or(col(k).struct_().field_by_name(&i).not()),
-                );
+                is_null_exprs.push(col(k).struct_().field_by_name(&base_col_name(t)).is_null());
             }
             mappings = mappings.with_column(
                 when(all_horizontal(is_null_exprs).unwrap())

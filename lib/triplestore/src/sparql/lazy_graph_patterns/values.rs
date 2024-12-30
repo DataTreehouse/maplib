@@ -5,7 +5,7 @@ use oxrdf::{Term, Variable};
 use polars::prelude::{as_struct, col, DataFrame, IntoLazy, JoinType, PlSmallStr};
 use polars_core::prelude::IntoColumn;
 use query_processing::graph_patterns::join;
-use representation::multitype::{base_col_name, create_multi_has_this_type_column_name};
+use representation::multitype::{base_col_name};
 use representation::polars_to_rdf::particular_opt_term_vec_to_series;
 use representation::query_context::Context;
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
@@ -88,7 +88,6 @@ impl Triplestore {
                     let name = format!("c{i}");
                     c.rename(PlSmallStr::from_str(&name));
                     let tname = base_col_name(&t);
-                    let tname_indicator = create_multi_has_this_type_column_name(&tname);
                     if t.is_lang_string() {
                         struct_exprs.push(
                             col(&name)
@@ -102,16 +101,8 @@ impl Triplestore {
                                 .field_by_name(LANG_STRING_LANG_FIELD)
                                 .alias(LANG_STRING_LANG_FIELD),
                         );
-                        struct_exprs.push(
-                            col(&name)
-                                .struct_()
-                                .field_by_name(LANG_STRING_LANG_FIELD)
-                                .is_not_null()
-                                .alias(tname_indicator),
-                        )
                     } else {
                         struct_exprs.push(col(&name).alias(tname));
-                        struct_exprs.push(col(&name).is_not_null().alias(tname_indicator))
                     }
 
                     columns.push(c);
@@ -132,7 +123,6 @@ impl Triplestore {
                     .unwrap();
                 (t, column)
             } else {
-                println!("Variables {:?} i {}", variables, i);
                 let (t, mut column) = types_columns.pop().unwrap();
                 column.rename(PlSmallStr::from_str(variables.get(i).unwrap().as_str()));
                 (t.as_rdf_node_type(), column)

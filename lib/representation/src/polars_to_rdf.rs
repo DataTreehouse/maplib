@@ -1,6 +1,6 @@
 use crate::errors::RepresentationError;
 use crate::multitype::{
-    all_multi_main_cols, multi_has_this_type_column, MULTI_BLANK_DT, MULTI_IRI_DT, MULTI_NONE_DT,
+    all_multi_main_cols, MULTI_BLANK_DT, MULTI_IRI_DT, MULTI_NONE_DT,
 };
 use crate::rdf_to_polars::{
     polars_literal_values_to_series, rdf_literal_to_polars_literal_value,
@@ -347,16 +347,6 @@ pub fn polars_type_to_literal_type(
                 return Err(RepresentationError::DatatypeError(
                     "Found just one of the lang string cols".into(),
                 ));
-            }
-
-            for dt in &dts {
-                let expect = multi_has_this_type_column(dt);
-                if !unknown_fields.remove(&expect) {
-                    return Err(RepresentationError::DatatypeError(format!(
-                        "Expected indicator field {}, could not find datatype",
-                        expect
-                    )));
-                }
             }
 
             if !unknown_fields.is_empty() {

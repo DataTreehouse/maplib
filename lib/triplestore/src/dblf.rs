@@ -8,8 +8,7 @@ use query_processing::type_constraints::PossibleTypes;
 use rayon::iter::IntoParallelIterator;
 use rayon::iter::ParallelIterator;
 use representation::multitype::{
-    all_multi_and_is_cols, all_multi_cols, base_col_name, lf_columns_to_categorical,
-    multi_has_this_type_column,
+    all_multi_cols, base_col_name, lf_columns_to_categorical,
 };
 use representation::rdf_to_polars::{
     rdf_named_node_to_polars_literal_value, rdf_term_to_polars_expr,
@@ -299,7 +298,7 @@ impl Triplestore {
             sorted_object_types.sort();
 
             if subject_need_multi {
-                let multi_colnames = all_multi_and_is_cols(&sorted_subject_types);
+                let multi_colnames = all_multi_cols(&sorted_subject_types);
                 let mut struct_exprs = vec![];
                 for inner_col in &multi_colnames {
                     let prefixed_col = create_prefixed_multi_colname(SUBJECT_COL_NAME, inner_col);
@@ -308,7 +307,7 @@ impl Triplestore {
                 mappings = mappings.with_column(as_struct(struct_exprs).alias(SUBJECT_COL_NAME));
             }
             if object_need_multi {
-                let multi_colnames = all_multi_and_is_cols(&sorted_object_types);
+                let multi_colnames = all_multi_cols(&sorted_object_types);
                 let mut struct_exprs = vec![];
                 for inner_col in &multi_colnames {
                     let prefixed_col = create_prefixed_multi_colname(OBJECT_COL_NAME, inner_col);
@@ -429,8 +428,6 @@ pub fn unnest_non_multi_col(mut mappings: LazyFrame, c: &str, dt: &BaseRDFNodeTy
         let prefixed_inner = create_prefixed_multi_colname(c, &inner);
         exprs.push(col(c).alias(&prefixed_inner));
     }
-    let indicator_name = multi_has_this_type_column(dt);
-    exprs.push(lit(true).alias(create_prefixed_multi_colname(c, &indicator_name)));
     drop_cols.push(col(c));
 
     mappings = mappings.with_columns(exprs);

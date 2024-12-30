@@ -105,7 +105,6 @@ impl RDFNodeType {
                 let mut fields = Vec::new();
                 for t in types {
                     let n = base_col_name(t);
-                    let i = create_multi_has_this_type_column_name(&n);
                     if t.is_lang_string() {
                         fields.push(Field::new(
                             PlSmallStr::from_str(LANG_STRING_VALUE_FIELD),
@@ -118,7 +117,6 @@ impl RDFNodeType {
                     } else {
                         fields.push(Field::new(PlSmallStr::from_str(&n), t.polars_data_type()));
                     }
-                    fields.push(Field::new(PlSmallStr::from_str(&i), DataType::Boolean));
                 }
                 DataType::Struct(fields)
             }
