@@ -631,7 +631,7 @@ def test_bool_func():
     PREFIX : <http://example.net/> 
     PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
     SELECT ?a WHERE {
-    VALUES (?a) {("true") ("false")}
+    VALUES ?a {"true" "false"}
     FILTER(xsd:boolean(?a))
     }
     """

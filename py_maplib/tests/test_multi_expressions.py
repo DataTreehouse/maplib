@@ -1,7 +1,8 @@
 import polars as pl
-from maplib import Mapping, RDFType
+from maplib import Mapping, RDFType, XSD
 from polars.testing import assert_frame_equal
-
+import polars as pl
+pl.Config.set_fmt_str_lengths(200)
 
 def test_multi_filter_equals():
     m = Mapping([])
@@ -122,6 +123,137 @@ def test_multi_filter_equals_with_datatypes():
     assert_frame_equal(
         sm.mappings, pl.DataFrame({"a": ["<http://example.net/hello2>"]})
     )
+
+def test_multi_value_different_types_filter_equals_with_datatypes():
+    m = Mapping([])
+    sm = m.query(
+        """
+    PREFIX : <http://example.net/> 
+    PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+    SELECT ?a WHERE {
+    {VALUES (?a) { (:hello2) ("string") (1) (true) }}
+    FILTER(?a = true)
+    }
+    """,
+        include_datatypes=True,
+    )
+    assert sm.rdf_types == {"a": RDFType.Literal(XSD().boolean)}
+    assert_frame_equal(
+        sm.mappings, pl.DataFrame({"a": [True]})
+    )
+
+def test_multi_value_different_types_filter_isiri_or_equals_with_datatypes():
+    m = Mapping([])
+    sm = m.query(
+        """
+    PREFIX : <http://example.net/> 
+    PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+    SELECT ?a WHERE {
+    {VALUES (?a) { (:hello2) ("string") (1) (true) }}
+    FILTER(isIri(?a) || ?a = 1)
+    }
+    """,
+        include_datatypes=True,
+    )
+    assert sm.rdf_types == {"a": RDFType.Multi([RDFType.IRI(), RDFType.Literal(XSD().integer)])}
+    assert_frame_equal(
+        sm.mappings, pl.DataFrame({"a": ["<http://example.net/hello2>", '"1"^^<http://www.w3.org/2001/XMLSchema#integer>']})
+    )
+
+def test_coalesce_both_multi_same_types():
+    m = Mapping([])
+    sm = m.query(
+        """
+    PREFIX : <http://example.net/> 
+    PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+    SELECT ?a ?b (COALESCE(?b, ?a) AS ?c) WHERE {
+    {VALUES (?a) { (:hello1) ("string1") (1) (true) }}
+    OPTIONAL {
+        VALUES (?b) { (:hello2) ("string2") (1) (false) }
+        FILTER(isIri(?a))
+    }
+    }
+    """,
+        include_datatypes=True,
+    )
+    print(sm.mappings)
+    assert sm.mappings.get_column("c").is_null().sum() == 0
+
+def test_coalesce_both_multi_different_types():
+    m = Mapping([])
+    sm = m.query(
+        """
+    PREFIX : <http://example.net/> 
+    PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+    SELECT ?a ?b (COALESCE(?b, ?a) AS ?c) WHERE {
+    {VALUES (?a) { (:hello1) ("string1") }}
+    OPTIONAL {
+        VALUES (?b) { (:hello2) ("string2"@en) (1) (false) }
+        FILTER(isIri(?a))
+    }
+    }
+    """,
+        include_datatypes=True,
+    )
+    print(sm.mappings)
+    assert sm.mappings.get_column("c").is_null().sum() == 0
+
+def test_coalesce_both_multi_different_types_rhs_less():
+    m = Mapping([])
+    sm = m.query(
+        """
+    PREFIX : <http://example.net/> 
+    PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+    SELECT ?a ?b (COALESCE(?b, ?a) AS ?c) WHERE {
+    VALUES (?a) { (:hello1) ("string1") (1)}
+    OPTIONAL {
+        VALUES (?b) { (:hello2) ("string2") }
+        FILTER(isIri(?a))
+    }
+    }
+    """,
+        include_datatypes=True,
+    )
+    print(sm.mappings)
+    assert sm.mappings.get_column("c").is_null().sum() == 0
+
+def test_coalesce_only_lhs_multi():
+    m = Mapping([])
+    sm = m.query(
+        """
+    PREFIX : <http://example.net/> 
+    PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+    SELECT ?a ?b (COALESCE(?b, ?a) AS ?c) WHERE {
+    VALUES (?a) { (:hello1) ("string1") (1)}
+    OPTIONAL {
+        VALUES (?b) { (:hello2) (:hello3) }
+        FILTER(isIri(?a))
+    }
+    }
+    """,
+        include_datatypes=True,
+    )
+    print(sm.mappings)
+    assert sm.mappings.get_column("c").is_null().sum() == 0
+
+def test_coalesce_only_rhs_multi():
+    m = Mapping([])
+    sm = m.query(
+        """
+    PREFIX : <http://example.net/> 
+    PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+    SELECT ?a ?b (COALESCE(?b, ?a) AS ?c) WHERE {
+    VALUES (?a) { (:hello1) (:hello3) (:hello4)}
+    OPTIONAL {
+        VALUES (?b) { (:hello2) ("string2"@no) ("string3") }
+        FILTER(?a = :hello1)
+    }
+    }
+    """,
+        include_datatypes=True,
+    )
+    print(sm.mappings)
+    assert sm.mappings.get_column("c").is_null().sum() == 0
 
 
 def test_multi_filter_equals_mirrored():
