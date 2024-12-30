@@ -164,6 +164,8 @@ pub fn get_subject_datatype_ref(s: &Subject) -> BaseRDFNodeTypeRef {
     match s {
         Subject::NamedNode(_) => BaseRDFNodeTypeRef::IRI,
         Subject::BlankNode(_) => BaseRDFNodeTypeRef::BlankNode,
+        #[cfg(feature = "rdf-star")]
+        _ => unimplemented!()
     }
 }
 
@@ -172,6 +174,8 @@ pub fn get_term_datatype_ref(t: &Term) -> BaseRDFNodeTypeRef {
         Term::NamedNode(_) => BaseRDFNodeTypeRef::IRI,
         Term::BlankNode(_) => BaseRDFNodeTypeRef::BlankNode,
         Term::Literal(l) => BaseRDFNodeTypeRef::Literal(l.datatype()),
+        #[cfg(feature = "rdf-star")]
+        _ => unimplemented!()
     }
 }
 
@@ -179,6 +183,8 @@ pub fn get_ground_term_datatype_ref(t: &GroundTerm) -> BaseRDFNodeTypeRef {
     match t {
         GroundTerm::NamedNode(_) => BaseRDFNodeTypeRef::IRI,
         GroundTerm::Literal(l) => BaseRDFNodeTypeRef::Literal(l.datatype()),
+        #[cfg(feature = "rdf-star")]
+        _ => unimplemented!()
     }
 }
 
