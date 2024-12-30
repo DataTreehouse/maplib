@@ -1,9 +1,9 @@
-use std::collections::HashMap;
-use oxrdf::{NamedNode, Variable};
 use oxrdf::vocab::xsd;
-use representation::{BaseRDFNodeType};
+use oxrdf::{NamedNode, Variable};
 use representation::subtypes::{is_literal_subtype, OWL_REAL};
+use representation::BaseRDFNodeType;
 use spargebra::algebra::{Expression, Function};
+use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
@@ -100,7 +100,6 @@ impl PossibleTypes {
     }
 }
 
-
 pub fn conjunction_variable_type(
     left: &mut HashMap<String, PossibleTypes>,
     mut right: HashMap<String, PossibleTypes>,
@@ -116,7 +115,6 @@ pub fn conjunction_variable_type(
     new_map.extend(right);
     new_map
 }
-
 
 pub fn equal_variable_type(a: &Expression, b: &Expression) -> Option<(Variable, BaseRDFNodeType)> {
     if let Expression::Variable(v) = a {
@@ -153,53 +151,50 @@ pub fn get_expression_rdf_type(e: &Expression) -> Option<BaseRDFNodeType> {
         }
         //Expression::If(_, _, _) => {} todo..
         //Expression::Coalesce(_) => {} todo..
-        Expression::FunctionCall(f, _args) => {
-            match f {
-                Function::Str |
-                Function::StrBefore |
-                Function::StrAfter
-                => Some(BaseRDFNodeType::Literal(xsd::STRING.into_owned())),
-                Function::Datatype | Function::Iri => Some(BaseRDFNodeType::IRI),
-                Function::BNode => Some(BaseRDFNodeType::BlankNode),
-                Function::Contains |
-                Function::Regex |
-                Function::LangMatches |
-                Function::StrStarts |
-                Function::StrEnds |
-                Function::IsIri |
-                Function::IsBlank |
-                Function::IsLiteral |
-                Function::IsNumeric => Some(BaseRDFNodeType::Literal(xsd::BOOLEAN.into_owned())),
-                Function::Year |
-                Function::Month |
-                Function::Day |
-                Function::Hours |
-                Function::Minutes |
-                Function::Seconds => Some(BaseRDFNodeType::Literal(xsd::UNSIGNED_INT.into_owned())),
-                Function::Custom(nn) => {
-                   if matches!(
-                        nn.as_ref(),
-                        xsd::INT
-                    | xsd::LONG
-                    | xsd::INTEGER
-                    | xsd::BOOLEAN
-                    | xsd::UNSIGNED_LONG
-                    | xsd::UNSIGNED_INT
-                    | xsd::UNSIGNED_SHORT
-                    | xsd::UNSIGNED_BYTE
-                    | xsd::DECIMAL
-                    | xsd::DOUBLE
-                    | xsd::FLOAT
-                    | xsd::STRING
-                    ) {
-                       Some(BaseRDFNodeType::Literal(nn.to_owned()))
-                   } else {
-                       None
-                   }
-                }
-                _ => None
+        Expression::FunctionCall(f, _args) => match f {
+            Function::Str | Function::StrBefore | Function::StrAfter => {
+                Some(BaseRDFNodeType::Literal(xsd::STRING.into_owned()))
             }
-        }
+            Function::Datatype | Function::Iri => Some(BaseRDFNodeType::IRI),
+            Function::BNode => Some(BaseRDFNodeType::BlankNode),
+            Function::Contains
+            | Function::Regex
+            | Function::LangMatches
+            | Function::StrStarts
+            | Function::StrEnds
+            | Function::IsIri
+            | Function::IsBlank
+            | Function::IsLiteral
+            | Function::IsNumeric => Some(BaseRDFNodeType::Literal(xsd::BOOLEAN.into_owned())),
+            Function::Year
+            | Function::Month
+            | Function::Day
+            | Function::Hours
+            | Function::Minutes
+            | Function::Seconds => Some(BaseRDFNodeType::Literal(xsd::UNSIGNED_INT.into_owned())),
+            Function::Custom(nn) => {
+                if matches!(
+                    nn.as_ref(),
+                    xsd::INT
+                        | xsd::LONG
+                        | xsd::INTEGER
+                        | xsd::BOOLEAN
+                        | xsd::UNSIGNED_LONG
+                        | xsd::UNSIGNED_INT
+                        | xsd::UNSIGNED_SHORT
+                        | xsd::UNSIGNED_BYTE
+                        | xsd::DECIMAL
+                        | xsd::DOUBLE
+                        | xsd::FLOAT
+                        | xsd::STRING
+                ) {
+                    Some(BaseRDFNodeType::Literal(nn.to_owned()))
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        },
         _ => None,
     }
 }

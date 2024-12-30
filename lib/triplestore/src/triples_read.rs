@@ -18,7 +18,8 @@ use representation::rdf_to_polars::{
     rdf_owned_blank_node_to_polars_literal_value, rdf_owned_named_node_to_polars_literal_value,
 };
 use representation::{
-    BaseRDFNodeType, BaseRDFNodeTypeRef, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD,
+    get_subject_datatype_ref, get_term_datatype_ref, BaseRDFNodeType, LANG_STRING_LANG_FIELD,
+    LANG_STRING_VALUE_FIELD,
 };
 use representation::{OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use std::collections::HashMap;
@@ -211,61 +212,7 @@ impl Triplestore {
                         let mut subjects_ser = Series::from_iter(strings_iter);
                         subjects_ser.rename(SUBJECT_COL_NAME.into());
 
-                        let objects_ser = if object_dt.is_lang_string() {
-                            let langs = objects
-                                .par_iter()
-                                .map(|t| match t {
-                                    Term::Literal(l) => LiteralValue::String(
-                                        l.language().unwrap().to_string().into(),
-                                    ),
-                                    _ => panic!("Should never happen"),
-                                })
-                                .collect();
-                            let vals = objects
-                                .into_par_iter()
-                                .map(|t| match t {
-                                    Term::Literal(l) => {
-                                        let (s, _, _) = l.destruct();
-                                        LiteralValue::String(s.into())
-                                    }
-                                    _ => panic!("Should never happen"),
-                                })
-                                .collect();
-
-                            let val_ser =
-                                polars_literal_values_to_series(vals, LANG_STRING_VALUE_FIELD);
-                            let lang_ser =
-                                polars_literal_values_to_series(langs, LANG_STRING_LANG_FIELD);
-                            let mut df = DataFrame::new(vec![val_ser.into(), lang_ser.into()])
-                                .unwrap()
-                                .lazy()
-                                .with_column(
-                                    as_struct(vec![
-                                        col(LANG_STRING_VALUE_FIELD),
-                                        col(LANG_STRING_LANG_FIELD),
-                                    ])
-                                    .alias(OBJECT_COL_NAME),
-                                )
-                                .collect()
-                                .unwrap();
-                            df.drop_in_place(OBJECT_COL_NAME)
-                                .unwrap()
-                                .take_materialized_series()
-                        } else {
-                            let any_iter: Vec<_> = objects
-                                .into_par_iter()
-                                .map(|t| match t {
-                                    Term::NamedNode(nn) => {
-                                        rdf_owned_named_node_to_polars_literal_value(nn)
-                                    }
-                                    Term::BlankNode(bb) => {
-                                        rdf_owned_blank_node_to_polars_literal_value(bb)
-                                    }
-                                    Term::Literal(l) => rdf_literal_to_polars_literal_value(&l),
-                                })
-                                .collect();
-                            polars_literal_values_to_series(any_iter, OBJECT_COL_NAME)
-                        };
+                        let objects_ser = particular_term_vec_to_series(objects, object_dt.clone());
 
                         let all_series =
                             vec![subjects_ser.into_column(), objects_ser.into_column()];
@@ -324,21 +271,6 @@ fn subject_to_oxrdf_subject(s: Subject, parser_call: &str) -> Subject {
 
 fn blank_node_to_oxrdf_blank_node(bn: BlankNode, parser_call: &str) -> BlankNode {
     BlankNode::new_unchecked(format!("{}_{}", bn.as_str(), parser_call))
-}
-
-fn get_subject_datatype_ref(s: &Subject) -> BaseRDFNodeTypeRef {
-    match s {
-        Subject::NamedNode(_) => BaseRDFNodeTypeRef::IRI,
-        Subject::BlankNode(_) => BaseRDFNodeTypeRef::BlankNode,
-    }
-}
-
-fn get_term_datatype_ref(t: &Term) -> BaseRDFNodeTypeRef {
-    match t {
-        Term::NamedNode(_) => BaseRDFNodeTypeRef::IRI,
-        Term::BlankNode(_) => BaseRDFNodeTypeRef::BlankNode,
-        Term::Literal(l) => BaseRDFNodeTypeRef::Literal(l.datatype()),
-    }
 }
 
 fn create_predicate_map(
@@ -416,5 +348,56 @@ impl Iterator for MyFromSliceQuadReader<'_> {
                 Err(e) => Err(e.into()),
             },
         })
+    }
+}
+
+// These terms must be of the given dt
+fn particular_term_vec_to_series(term_vec: Vec<Term>, dt: BaseRDFNodeType) -> Series {
+    if dt.is_lang_string() {
+        let langs = term_vec
+            .par_iter()
+            .map(|t| match t {
+                Term::Literal(l) => LiteralValue::String(l.language().unwrap().to_string().into()),
+                _ => panic!("Should never happen"),
+            })
+            .collect();
+        let vals = term_vec
+            .into_par_iter()
+            .map(|t| match t {
+                Term::Literal(l) => {
+                    let (s, _, _) = l.destruct();
+                    LiteralValue::String(s.into())
+                }
+                _ => panic!("Should never happen"),
+            })
+            .collect();
+
+        let val_ser = polars_literal_values_to_series(vals, LANG_STRING_VALUE_FIELD);
+        let lang_ser = polars_literal_values_to_series(langs, LANG_STRING_LANG_FIELD);
+        let mut df = DataFrame::new(vec![val_ser.into(), lang_ser.into()])
+            .unwrap()
+            .lazy()
+            .with_column(
+                as_struct(vec![
+                    col(LANG_STRING_VALUE_FIELD),
+                    col(LANG_STRING_LANG_FIELD),
+                ])
+                .alias(OBJECT_COL_NAME),
+            )
+            .collect()
+            .unwrap();
+        df.drop_in_place(OBJECT_COL_NAME)
+            .unwrap()
+            .take_materialized_series()
+    } else {
+        let any_iter: Vec<_> = term_vec
+            .into_par_iter()
+            .map(|t| match t {
+                Term::NamedNode(nn) => rdf_owned_named_node_to_polars_literal_value(nn),
+                Term::BlankNode(bb) => rdf_owned_blank_node_to_polars_literal_value(bb),
+                Term::Literal(l) => rdf_literal_to_polars_literal_value(&l),
+            })
+            .collect();
+        polars_literal_values_to_series(any_iter, OBJECT_COL_NAME)
     }
 }

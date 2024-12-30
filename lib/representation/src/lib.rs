@@ -10,14 +10,18 @@ pub mod literals;
 pub mod python;
 pub mod subtypes;
 
-use crate::multitype::{MULTI_BLANK_DT, MULTI_IRI_DT, MULTI_NONE_DT};
+use crate::multitype::{
+    base_col_name, MULTI_BLANK_DT, MULTI_IRI_DT,
+    MULTI_NONE_DT,
+};
 use crate::subtypes::{is_literal_subtype, OWL_REAL};
 use oxrdf::vocab::{rdf, xsd};
-use oxrdf::{BlankNode, NamedNode, NamedNodeRef, NamedOrBlankNode, Term};
-use polars::prelude::{DataType, Field, TimeUnit};
+use oxrdf::{BlankNode, NamedNode, NamedNodeRef, NamedOrBlankNode, Subject, Term};
+use polars::datatypes::CategoricalOrdering;
+use polars::prelude::{DataType, Field, PlSmallStr, TimeUnit};
 use serde::de::{Error, Visitor};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use spargebra::term::TermPattern;
+use spargebra::term::{GroundTerm, TermPattern};
 use std::fmt::{Display, Formatter};
 
 pub const VERB_COL_NAME: &str = "verb";
@@ -90,6 +94,38 @@ where
     serializer.serialize_str(named_node.as_str())
 }
 
+impl RDFNodeType {
+    pub fn polars_data_type(&self) -> DataType {
+        match self {
+            RDFNodeType::IRI => BaseRDFNodeType::IRI.polars_data_type(),
+            RDFNodeType::BlankNode => BaseRDFNodeType::BlankNode.polars_data_type(),
+            RDFNodeType::Literal(_) => BaseRDFNodeType::from_rdf_node_type(self).polars_data_type(),
+            RDFNodeType::None => BaseRDFNodeType::None.polars_data_type(),
+            RDFNodeType::MultiType(types) => {
+                let mut fields = Vec::new();
+                for t in types {
+                    let n = base_col_name(t);
+                    let i = create_multi_has_this_type_column_name(&n);
+                    if t.is_lang_string() {
+                        fields.push(Field::new(
+                            PlSmallStr::from_str(LANG_STRING_VALUE_FIELD),
+                            DataType::Categorical(None, CategoricalOrdering::Physical),
+                        ));
+                        fields.push(Field::new(
+                            PlSmallStr::from_str(LANG_STRING_LANG_FIELD),
+                            DataType::Categorical(None, CategoricalOrdering::Physical),
+                        ));
+                    } else {
+                        fields.push(Field::new(PlSmallStr::from_str(&n), t.polars_data_type()));
+                    }
+                    fields.push(Field::new(PlSmallStr::from_str(&i), DataType::Boolean));
+                }
+                DataType::Struct(fields)
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone, Ord, PartialOrd, PartialEq, Eq, Hash)]
 pub enum BaseRDFNodeTypeRef<'a> {
     IRI,
@@ -123,6 +159,28 @@ impl BaseRDFNodeTypeRef<'_> {
             BaseRDFNodeTypeRef::Literal(l) => l.as_str(),
             BaseRDFNodeTypeRef::None => MULTI_NONE_DT,
         }
+    }
+}
+
+pub fn get_subject_datatype_ref(s: &Subject) -> BaseRDFNodeTypeRef {
+    match s {
+        Subject::NamedNode(_) => BaseRDFNodeTypeRef::IRI,
+        Subject::BlankNode(_) => BaseRDFNodeTypeRef::BlankNode,
+    }
+}
+
+pub fn get_term_datatype_ref(t: &Term) -> BaseRDFNodeTypeRef {
+    match t {
+        Term::NamedNode(_) => BaseRDFNodeTypeRef::IRI,
+        Term::BlankNode(_) => BaseRDFNodeTypeRef::BlankNode,
+        Term::Literal(l) => BaseRDFNodeTypeRef::Literal(l.datatype()),
+    }
+}
+
+pub fn get_ground_term_datatype_ref(t: &GroundTerm) -> BaseRDFNodeTypeRef {
+    match t {
+        GroundTerm::NamedNode(_) => BaseRDFNodeTypeRef::IRI,
+        GroundTerm::Literal(l) => BaseRDFNodeTypeRef::Literal(l.datatype()),
     }
 }
 

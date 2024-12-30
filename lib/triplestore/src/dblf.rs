@@ -4,11 +4,12 @@ use oxrdf::{NamedNode, Subject, Term};
 use polars::prelude::{as_struct, col, concat, lit, IntoLazy, LazyFrame, UnionArgs};
 use polars_core::datatypes::CategoricalOrdering;
 use polars_core::prelude::{Column, DataFrame, DataType};
+use query_processing::type_constraints::PossibleTypes;
 use rayon::iter::IntoParallelIterator;
 use rayon::iter::ParallelIterator;
 use representation::multitype::{
-    all_multi_and_is_cols, all_multi_cols, lf_columns_to_categorical, multi_has_this_type_column,
-    non_multi_type_string,
+    all_multi_and_is_cols, all_multi_cols, base_col_name, lf_columns_to_categorical,
+    multi_has_this_type_column,
 };
 use representation::rdf_to_polars::{
     rdf_named_node_to_polars_literal_value, rdf_term_to_polars_expr,
@@ -19,7 +20,6 @@ use representation::{
     SUBJECT_COL_NAME, VERB_COL_NAME,
 };
 use std::collections::{HashMap, HashSet};
-use query_processing::type_constraints::PossibleTypes;
 
 impl Triplestore {
     pub fn get_predicate_iris(&self, include_transient: bool) -> Vec<NamedNode> {
@@ -425,7 +425,7 @@ pub fn unnest_non_multi_col(mut mappings: LazyFrame, c: &str, dt: &BaseRDFNodeTy
             exprs.push(col(c).struct_().field_by_name(inner).alias(&prefixed_inner));
         }
     } else {
-        let inner = non_multi_type_string(dt);
+        let inner = base_col_name(dt);
         let prefixed_inner = create_prefixed_multi_colname(c, &inner);
         exprs.push(col(c).alias(&prefixed_inner));
     }

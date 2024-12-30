@@ -2,19 +2,25 @@ use crate::errors::RepresentationError;
 use crate::multitype::{
     all_multi_main_cols, multi_has_this_type_column, MULTI_BLANK_DT, MULTI_IRI_DT, MULTI_NONE_DT,
 };
+use crate::rdf_to_polars::{
+    polars_literal_values_to_series, rdf_literal_to_polars_literal_value,
+    rdf_owned_blank_node_to_polars_literal_value, rdf_owned_named_node_to_polars_literal_value,
+};
 use crate::{
-    literal_blanknode_to_blanknode, literal_iri_to_namednode, BaseRDFNodeType, RDFNodeType,
-    LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD, OBJECT_COL_NAME, SUBJECT_COL_NAME,
+    literal_blanknode_to_blanknode, literal_iri_to_namednode, BaseRDFNodeType, BaseRDFNodeTypeRef,
+    RDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD, OBJECT_COL_NAME,
+    SUBJECT_COL_NAME,
 };
 use chrono::TimeZone as ChronoTimeZone;
 use chrono::{Datelike, Timelike};
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{Literal, NamedNode, Subject, Triple, Variable};
-use polars::export::rayon::iter::IndexedParallelIterator;
 use polars::export::rayon::iter::ParallelIterator;
+use polars::export::rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator};
 use polars::export::rayon::prelude::IntoParallelIterator;
 use polars::prelude::{
-    as_struct, col, AnyValue, Column, DataFrame, DataType, IntoColumn, IntoLazy, Series, TimeZone,
+    as_struct, col, AnyValue, Column, DataFrame, DataType, IntoColumn, IntoLazy, LiteralValue,
+    Series, TimeZone,
 };
 use spargebra::term::Term;
 use std::collections::{HashMap, HashSet};
@@ -439,5 +445,78 @@ pub fn hack_format_timestamp_with_timezone(column: &Column, tz: &mut TimeZone) -
         .into_column()
     } else {
         panic!("Unknown timezone{}", tz);
+    }
+}
+
+// These terms must all be of the same data type
+pub fn particular_opt_term_vec_to_series(
+    term_vec: Vec<Option<Term>>,
+    dt: BaseRDFNodeTypeRef,
+    c: &str,
+) -> Series {
+    if dt.is_lang_string() {
+        let langs = term_vec
+            .par_iter()
+            .map(|t| {
+                if let Some(t) = t {
+                    match t {
+                        Term::Literal(l) => {
+                            LiteralValue::String(l.language().unwrap().to_string().into())
+                        }
+                        _ => panic!("Should never happen"),
+                    }
+                } else {
+                    LiteralValue::Null
+                }
+            })
+            .collect();
+        let vals = term_vec
+            .into_par_iter()
+            .map(|t| {
+                if let Some(t) = t {
+                    match t {
+                        Term::Literal(l) => {
+                            let (s, _, _) = l.destruct();
+                            LiteralValue::String(s.into())
+                        }
+                        _ => panic!("Should never happen"),
+                    }
+                } else {
+                    LiteralValue::Null
+                }
+            })
+            .collect();
+
+        let val_ser = polars_literal_values_to_series(vals, LANG_STRING_VALUE_FIELD);
+        let lang_ser = polars_literal_values_to_series(langs, LANG_STRING_LANG_FIELD);
+        let mut df = DataFrame::new(vec![val_ser.into(), lang_ser.into()])
+            .unwrap()
+            .lazy()
+            .with_column(
+                as_struct(vec![
+                    col(LANG_STRING_VALUE_FIELD),
+                    col(LANG_STRING_LANG_FIELD),
+                ])
+                .alias(c),
+            )
+            .collect()
+            .unwrap();
+        df.drop_in_place(c).unwrap().take_materialized_series()
+    } else {
+        let any_iter: Vec<_> = term_vec
+            .into_par_iter()
+            .map(|t| {
+                if let Some(t) = t {
+                    match t {
+                        Term::NamedNode(nn) => rdf_owned_named_node_to_polars_literal_value(nn),
+                        Term::BlankNode(bb) => rdf_owned_blank_node_to_polars_literal_value(bb),
+                        Term::Literal(l) => rdf_literal_to_polars_literal_value(&l),
+                    }
+                } else {
+                    LiteralValue::Null
+                }
+            })
+            .collect();
+        polars_literal_values_to_series(any_iter, c)
     }
 }

@@ -6,15 +6,16 @@ use crate::errors::QueryProcessingError;
 use log::{debug, warn};
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{Literal, NamedNode, NamedNodeRef, Variable};
-use polars::datatypes::{DataType, TimeUnit};
+use polars::datatypes::{CategoricalOrdering, DataType, TimeUnit};
 use polars::frame::UniqueKeepStrategy;
 use polars::prelude::{
-    coalesce, col, concat_str, lit, when, Expr, LazyFrame, LiteralValue, Operator,
+    as_struct, coalesce, col, concat_str, lit, when, Expr, LazyFrame, LiteralValue, Operator,
 };
-use representation::multitype::non_multi_type_string;
 use representation::multitype::{
-    all_multi_main_cols, multi_has_this_type_column, MULTI_BLANK_DT, MULTI_IRI_DT,
+    all_multi_main_cols, convert_lf_col_to_multitype, create_multi_has_this_type_column_name,
+    multi_has_this_type_column, MULTI_BLANK_DT, MULTI_IRI_DT,
 };
+use representation::multitype::{base_col_name, set_all_indicator_false_or_null_row_null};
 use representation::query_context::Context;
 use representation::rdf_to_polars::{
     rdf_literal_to_polars_literal_value, rdf_named_node_to_polars_literal_value,
@@ -25,7 +26,7 @@ use representation::{
     BaseRDFNodeType, RDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD,
 };
 use spargebra::algebra::{Expression, Function};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::ops::{Div, Mul};
 use std::sync::Arc;
 
@@ -304,11 +305,45 @@ pub fn coalesce_expression(
     outer_context: &Context,
 ) -> Result<SolutionMappings, QueryProcessingError> {
     let mut coal_exprs = vec![];
+    let mut basic_types = HashSet::new();
     for c in &inner_contexts {
-        if solution_mappings.rdf_node_types.get(c.as_str()).unwrap() != &RDFNodeType::None {
+        let dt = solution_mappings.rdf_node_types.get(c.as_str()).unwrap();
+        if dt != &RDFNodeType::None {
             coal_exprs.push(col(c.as_str()));
+            match dt {
+                RDFNodeType::MultiType(types) => {
+                    for t in types {
+                        basic_types.insert(t.clone());
+                    }
+                }
+                dt => {
+                    basic_types.insert(BaseRDFNodeType::from_rdf_node_type(dt));
+                }
+            }
         }
     }
+    let mut sorted_types: Vec<_> = basic_types.into_iter().collect();
+    sorted_types.sort();
+    if sorted_types.len() > 0 {
+        for c in &inner_contexts {
+            let dt = solution_mappings.rdf_node_types.get(c.as_str()).unwrap();
+            if dt != &RDFNodeType::None {
+                if !matches!(dt, RDFNodeType::MultiType(_)) {
+                    solution_mappings.mappings = solution_mappings
+                        .mappings
+                        .with_column(convert_lf_col_to_multitype(c.as_str(), dt));
+                    solution_mappings.rdf_node_types.insert(
+                        c.as_str().to_string(),
+                        RDFNodeType::MultiType(vec![BaseRDFNodeType::from_rdf_node_type(dt)]),
+                    );
+                }
+                solution_mappings =
+                    convert_multitype_col_to_wider(solution_mappings, c.as_str(), &sorted_types);
+            }
+        }
+    }
+    solution_mappings = set_all_indicator_false_or_null_row_null(solution_mappings);
+    println!("S_olutions {:?}", solution_mappings.mappings.clone().collect().unwrap());
 
     if coal_exprs.is_empty() {
         solution_mappings.mappings = solution_mappings.mappings.with_column(
@@ -323,17 +358,85 @@ pub fn coalesce_expression(
         solution_mappings.mappings = solution_mappings
             .mappings
             .with_column(coalesce(coal_exprs.as_slice()).alias(outer_context.as_str()));
-        //TODO: generalize
-        let existing_type = solution_mappings
-            .rdf_node_types
-            .get(inner_contexts.first().unwrap().as_str())
-            .unwrap();
+        let t = if sorted_types.len() > 1 {
+            RDFNodeType::MultiType(sorted_types)
+        } else {
+            sorted_types.into_iter().next().unwrap().as_rdf_node_type()
+        };
         solution_mappings
             .rdf_node_types
-            .insert(outer_context.as_str().to_string(), existing_type.clone());
+            .insert(outer_context.as_str().to_string(), t);
     }
     solution_mappings = drop_inner_contexts(solution_mappings, &inner_contexts.iter().collect());
     Ok(solution_mappings)
+}
+
+fn convert_multitype_col_to_wider(
+    sm: SolutionMappings,
+    c: &str,
+    sorted_types: &Vec<BaseRDFNodeType>,
+) -> SolutionMappings {
+    let SolutionMappings {
+        mut mappings,
+        mut rdf_node_types,
+        height_estimate,
+    } = sm;
+    let t = rdf_node_types.get(c).unwrap();
+    if let RDFNodeType::MultiType(existing_types) = t {
+        let mut struct_exprs = vec![];
+        for t in sorted_types {
+            let name = base_col_name(t);
+            let indicator = create_multi_has_this_type_column_name(&name);
+            if existing_types.contains(t) {
+                if t.is_lang_string() {
+                    struct_exprs.push(
+                        col(c)
+                            .struct_()
+                            .field_by_name(LANG_STRING_VALUE_FIELD)
+                            .alias(LANG_STRING_VALUE_FIELD),
+                    );
+                    struct_exprs.push(
+                        col(c)
+                            .struct_()
+                            .field_by_name(LANG_STRING_LANG_FIELD)
+                            .alias(LANG_STRING_LANG_FIELD),
+                    );
+                } else {
+                    struct_exprs.push(col(c).struct_().field_by_name(&name).alias(&name));
+                }
+                struct_exprs.push(col(c).struct_().field_by_name(&indicator).alias(&indicator));
+            } else {
+                if t.is_lang_string() {
+                    struct_exprs.push(
+                        lit(LiteralValue::Null)
+                            .cast(DataType::Categorical(None, CategoricalOrdering::Physical))
+                            .alias(LANG_STRING_VALUE_FIELD),
+                    );
+                    struct_exprs.push(
+                        lit(LiteralValue::Null)
+                            .cast(DataType::Categorical(None, CategoricalOrdering::Physical))
+                            .alias(LANG_STRING_LANG_FIELD),
+                    );
+                } else {
+                    struct_exprs.push(
+                        lit(LiteralValue::Null)
+                            .cast(t.polars_data_type())
+                            .alias(&name),
+                    );
+                }
+                struct_exprs.push(
+                    lit(LiteralValue::Null)
+                        .cast(DataType::Boolean)
+                        .alias(&indicator),
+                );
+            }
+        }
+        mappings = mappings.with_column(as_struct(struct_exprs).alias(c));
+        rdf_node_types.insert(c.to_string(), RDFNodeType::MultiType(sorted_types.clone()));
+    } else {
+        panic!("Should never be called with type not multi")
+    }
+    SolutionMappings::new(mappings, rdf_node_types, height_estimate)
 }
 
 pub fn exists(
@@ -597,7 +700,7 @@ pub fn func_expression(
                                 when(
                                     col(first_context.as_str())
                                         .struct_()
-                                        .field_by_name(&non_multi_type_string(t))
+                                        .field_by_name(&base_col_name(t))
                                         .is_null()
                                         .not(),
                                 )
@@ -1219,10 +1322,8 @@ fn typed_equals_expr(
                         .and(
                             col(left_col)
                                 .struct_()
-                                .field_by_name(&non_multi_type_string(lt))
-                                .eq(col(left_col)
-                                    .struct_()
-                                    .field_by_name(&non_multi_type_string(lt))),
+                                .field_by_name(&base_col_name(lt))
+                                .eq(col(left_col).struct_().field_by_name(&base_col_name(lt))),
                         ));
                 }
             }
@@ -1243,7 +1344,7 @@ fn typed_equals_expr(
                     .and(
                         col(left_col)
                             .struct_()
-                            .field_by_name(&non_multi_type_string(&right_type))
+                            .field_by_name(&base_col_name(&right_type))
                             .eq(col(right_col)),
                     )
             } else {
@@ -1266,7 +1367,7 @@ fn typed_equals_expr(
                 .and(
                     col(right_col)
                         .struct_()
-                        .field_by_name(&non_multi_type_string(&left_type))
+                        .field_by_name(&base_col_name(&left_type))
                         .eq(col(left_col)),
                 )
         } else {
@@ -1354,7 +1455,7 @@ pub fn str_function(c: &str, t: &RDFNodeType) -> Expr {
                     } else {
                         col(c)
                             .struct_()
-                            .field_by_name(&non_multi_type_string(t))
+                            .field_by_name(&base_col_name(t))
                             .cast(DataType::String)
                     }
                 }
@@ -1402,7 +1503,7 @@ pub fn xsd_cast_literal(
         for t in types {
             to_coalesce.push(match t {
                 BaseRDFNodeType::IRI => cast_iri_to_xsd_literal(
-                    col(c).struct_().field_by_name(&non_multi_type_string(t)),
+                    col(c).struct_().field_by_name(&base_col_name(t)),
                     c,
                     t,
                     trg,
@@ -1417,7 +1518,7 @@ pub fn xsd_cast_literal(
                     ))
                 }
                 BaseRDFNodeType::Literal(src_nn) => cast_literal(
-                    col(c).struct_().field_by_name(&non_multi_type_string(t)),
+                    col(c).struct_().field_by_name(&base_col_name(t)),
                     src_nn.as_ref(),
                     trg_nn,
                     trg_type.clone(),

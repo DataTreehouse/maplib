@@ -1,5 +1,7 @@
 use crate::errors::QueryProcessingError;
+use crate::type_constraints::{conjunction_variable_type, equal_variable_type, PossibleTypes};
 use log::warn;
+use oxrdf::vocab::rdfs;
 use oxrdf::Variable;
 use polars::datatypes::{CategoricalOrdering, DataType};
 use polars::frame::UniqueKeepStrategy;
@@ -8,19 +10,17 @@ use polars::prelude::{
     UnionArgs,
 };
 use representation::multitype::{
-    convert_lf_col_to_multitype, create_join_compatible_solution_mappings,
-    lf_column_to_categorical, nest_multicolumns, non_multi_type_string, unnest_multicols,
+    base_col_name, convert_lf_col_to_multitype, create_join_compatible_solution_mappings,
+    lf_column_to_categorical, nest_multicolumns, unnest_multicols,
 };
 use representation::multitype::{join_workaround, unique_workaround};
 use representation::query_context::Context;
 use representation::rdf_to_polars::string_rdf_literal;
 use representation::solution_mapping::{is_string_col, SolutionMappings};
 use representation::{BaseRDFNodeType, RDFNodeType};
-use std::collections::{HashMap, HashSet};
-use oxrdf::vocab::rdfs;
-use uuid::Uuid;
 use spargebra::algebra::{Expression, Function};
-use crate::type_constraints::{conjunction_variable_type, equal_variable_type, PossibleTypes};
+use std::collections::{HashMap, HashSet};
+use uuid::Uuid;
 
 pub fn distinct(
     mut solution_mappings: SolutionMappings,
@@ -268,35 +268,25 @@ pub fn order_by(
                     match &t {
                         BaseRDFNodeType::IRI | BaseRDFNodeType::BlankNode => {
                             order_exprs.push(
-                                col(c)
-                                    .struct_()
-                                    .field_by_name(&non_multi_type_string(&t))
-                                    .cast(DataType::Categorical(
-                                        None,
-                                        CategoricalOrdering::Lexical,
-                                    )),
+                                col(c).struct_().field_by_name(&base_col_name(&t)).cast(
+                                    DataType::Categorical(None, CategoricalOrdering::Lexical),
+                                ),
                             );
                         }
                         BaseRDFNodeType::Literal(dt) => {
                             if string_rdf_literal(dt.as_ref()) {
                                 order_exprs.push(
-                                    col(c)
-                                        .struct_()
-                                        .field_by_name(&non_multi_type_string(&t))
-                                        .cast(DataType::Categorical(
-                                            None,
-                                            CategoricalOrdering::Lexical,
-                                        )),
+                                    col(c).struct_().field_by_name(&base_col_name(&t)).cast(
+                                        DataType::Categorical(None, CategoricalOrdering::Lexical),
+                                    ),
                                 );
                             } else {
-                                order_exprs.push(
-                                    col(c).struct_().field_by_name(&non_multi_type_string(&t)),
-                                );
+                                order_exprs
+                                    .push(col(c).struct_().field_by_name(&base_col_name(&t)));
                             }
                         }
                         BaseRDFNodeType::None => {
-                            order_exprs
-                                .push(col(c).struct_().field_by_name(&non_multi_type_string(&t)));
+                            order_exprs.push(col(c).struct_().field_by_name(&base_col_name(&t)));
                         }
                     }
                 }
@@ -513,7 +503,9 @@ pub fn union(
 }
 
 #[allow(dead_code)]
-fn find_enforced_variable_type_constraints(e: &Expression) -> Option<HashMap<String, PossibleTypes>> {
+fn find_enforced_variable_type_constraints(
+    e: &Expression,
+) -> Option<HashMap<String, PossibleTypes>> {
     match e {
         Expression::If(_, left, right) | Expression::Or(left, right) => {
             let left = find_enforced_variable_type_constraints(left);

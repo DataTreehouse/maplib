@@ -1,18 +1,19 @@
-use oxrdf::vocab::{rdfs};
+use oxrdf::vocab::rdfs;
 use oxrdf::{Term, Variable};
+use query_processing::type_constraints::{
+    conjunction_variable_type, equal_variable_type, ConstraintExpr, PossibleTypes,
+};
 use representation::polars_to_rdf::column_as_terms;
 use representation::solution_mapping::SolutionMappings;
 use representation::BaseRDFNodeType;
 use spargebra::algebra::{Expression, Function, GraphPattern};
 use spargebra::term::{GroundTerm, NamedNodePattern, TermPattern, TriplePattern};
 use std::collections::{HashMap, HashSet};
-use query_processing::type_constraints::{conjunction_variable_type, equal_variable_type, ConstraintExpr, PossibleTypes};
 
 pub const SMALL_HEIGHT: usize = 100;
 pub const OWL_REAL: &str = "http://www.w3.org/2002/07/owl#real";
 
 //Todos: pushdowns from joins..
-
 
 #[derive(Clone, Debug)]
 pub struct Pushdowns {
@@ -382,7 +383,6 @@ fn find_variable_type_constraints(e: &Expression) -> Option<HashMap<String, Poss
     }
     None
 }
-
 
 fn conjunction(
     left: &mut HashMap<String, HashSet<Term>>,

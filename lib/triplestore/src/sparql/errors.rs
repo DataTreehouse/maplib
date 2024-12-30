@@ -20,4 +20,6 @@ pub enum SparqlError {
     TripleTableReadError(TriplestoreError),
     #[error("Error storing triples {}", .0)]
     StoreTriplesError(TriplestoreError),
+    #[error("Construct query with undefined variable {}", .0)]
+    ConstructWithUndefinedVariable(String),
 }

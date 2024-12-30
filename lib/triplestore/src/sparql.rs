@@ -249,11 +249,12 @@ fn triple_to_df(
 ) -> Result<Option<EagerSolutionMappings>, SparqlError> {
     let mut triple_types = HashMap::new();
     let (subj_expr, subj_dt) =
-        term_pattern_expression(rdf_node_types, &t.subject, SUBJECT_COL_NAME);
+        term_pattern_expression(rdf_node_types, &t.subject, SUBJECT_COL_NAME)?;
     triple_types.insert(SUBJECT_COL_NAME.to_string(), subj_dt);
-    let (verb_expr, verb_dt) = named_node_pattern_expr(rdf_node_types, &t.predicate, VERB_COL_NAME);
+    let (verb_expr, verb_dt) =
+        named_node_pattern_expr(rdf_node_types, &t.predicate, VERB_COL_NAME)?;
     triple_types.insert(VERB_COL_NAME.to_string(), verb_dt);
-    let (obj_expr, obj_dt) = term_pattern_expression(rdf_node_types, &t.object, OBJECT_COL_NAME);
+    let (obj_expr, obj_dt) = term_pattern_expression(rdf_node_types, &t.object, OBJECT_COL_NAME)?;
     triple_types.insert(OBJECT_COL_NAME.to_string(), obj_dt);
 
     let mut lf = df
@@ -295,17 +296,17 @@ fn term_pattern_expression(
     rdf_node_types: &HashMap<String, RDFNodeType>,
     tp: &TermPattern,
     name: &str,
-) -> (Expr, RDFNodeType) {
+) -> Result<(Expr, RDFNodeType), SparqlError> {
     match tp {
-        TermPattern::NamedNode(nn) => named_node_lit(nn, name),
+        TermPattern::NamedNode(nn) => Ok(named_node_lit(nn, name)),
         TermPattern::BlankNode(_) => {
             unimplemented!("Blank node term pattern not supported")
         }
         TermPattern::Literal(thelit) => {
             let l = lit(rdf_literal_to_polars_literal_value(thelit)).alias(name);
-            (l, RDFNodeType::Literal(thelit.datatype().into_owned()))
+            Ok((l, RDFNodeType::Literal(thelit.datatype().into_owned())))
         }
-        TermPattern::Variable(v) => variable_expression(rdf_node_types, v, name),
+        TermPattern::Variable(v) => Ok(variable_expression(rdf_node_types, v, name)?),
     }
 }
 
@@ -313,10 +314,10 @@ fn named_node_pattern_expr(
     rdf_node_types: &HashMap<String, RDFNodeType>,
     nnp: &NamedNodePattern,
     name: &str,
-) -> (Expr, RDFNodeType) {
+) -> Result<(Expr, RDFNodeType), SparqlError> {
     match nnp {
-        NamedNodePattern::NamedNode(nn) => named_node_lit(nn, name),
-        NamedNodePattern::Variable(v) => variable_expression(rdf_node_types, v, name),
+        NamedNodePattern::NamedNode(nn) => Ok(named_node_lit(nn, name)),
+        NamedNodePattern::Variable(v) => Ok(variable_expression(rdf_node_types, v, name)?),
     }
 }
 
@@ -331,9 +332,14 @@ fn variable_expression(
     rdf_node_types: &HashMap<String, RDFNodeType>,
     v: &Variable,
     name: &str,
-) -> (Expr, RDFNodeType) {
-    (
-        col(v.as_str()).alias(name),
-        rdf_node_types.get(v.as_str()).unwrap().clone(),
-    )
+) -> Result<(Expr, RDFNodeType), SparqlError> {
+    let t = if let Some(t) = rdf_node_types.get(v.as_str()) {
+        t.clone()
+    } else {
+        return Err(SparqlError::ConstructWithUndefinedVariable(
+            v.as_str().to_string(),
+        ));
+    };
+
+    Ok((col(v.as_str()).alias(name), t))
 }

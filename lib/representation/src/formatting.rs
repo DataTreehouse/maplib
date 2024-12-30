@@ -1,4 +1,4 @@
-use crate::multitype::non_multi_type_string;
+use crate::multitype::base_col_name;
 use crate::polars_to_rdf::{
     datetime_column_to_strings, XSD_DATETIME_WITH_TZ_FORMAT, XSD_DATE_WITHOUT_TZ_FORMAT,
 };
@@ -87,9 +87,7 @@ pub fn expression_to_string(expr: Expr, name: &str, rdf_node_type: RDFNodeType) 
                 exprs.push(base_expression_to_string(expr.clone(), name, t));
             } else {
                 exprs.push(base_expression_to_string(
-                    expr.clone()
-                        .struct_()
-                        .field_by_name(&non_multi_type_string(&t)),
+                    expr.clone().struct_().field_by_name(&base_col_name(&t)),
                     name,
                     t,
                 ));
