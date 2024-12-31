@@ -111,6 +111,9 @@ impl Triplestore {
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         streaming: bool,
     ) -> Result<QueryResult, SparqlError> {
+        if streaming {
+            return unimplemented!("Streaming is currently disabled due to an unresolved bug in Polarsq")
+        }
         let query = Query::parse(query, None).map_err(SparqlError::ParseError)?;
         self.query_impl(&query, parameters, streaming)
     }
