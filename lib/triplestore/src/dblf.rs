@@ -19,6 +19,7 @@ use representation::{
     SUBJECT_COL_NAME, VERB_COL_NAME,
 };
 use std::collections::{HashMap, HashSet};
+use std::path::PathBuf;
 
 impl Triplestore {
     pub fn get_predicate_iris(&self, include_transient: bool) -> Vec<NamedNode> {
@@ -466,7 +467,7 @@ fn partial_check_need_multi(
 
 fn single_tt_to_deduplicated_lf(
     tt: &mut Triples,
-    storage_folder: &Option<String>,
+    storage_folder: &Option<PathBuf>,
     subjects: &Option<Vec<&Subject>>,
     objects: &Option<Vec<&Term>>,
     _keep_subject: bool,
@@ -529,7 +530,7 @@ struct HalfBakedSolutionMappings {
 fn multiple_tt_to_deduplicated_lf(
     triples: &mut HashMap<(BaseRDFNodeType, BaseRDFNodeType), Triples>,
     types: Option<HashSet<(BaseRDFNodeType, BaseRDFNodeType)>>,
-    storage_folder: &Option<String>,
+    storage_folder: &Option<PathBuf>,
     subjects: &Option<Vec<Subject>>,
     objects: &Option<Vec<Term>>,
     keep_subject: bool,

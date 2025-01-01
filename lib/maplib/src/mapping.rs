@@ -15,6 +15,7 @@ use shacl::{validate, ValidationReport};
 use std::collections::HashMap;
 use std::io::Write;
 use std::path::Path;
+use log::warn;
 use templates::ast::{ConstantTermOrList, PType, Template};
 use templates::dataset::TemplateDataset;
 use templates::document::document_from_str;
@@ -27,7 +28,6 @@ pub struct Mapping {
     pub template_dataset: TemplateDataset,
     pub base_triplestore: Triplestore,
     pub triplestores_map: HashMap<NamedNode, Triplestore>,
-    use_caching: bool,
     pub blank_node_counter: usize,
     pub indexing: IndexingOptions,
 }
@@ -68,18 +68,33 @@ impl Mapping {
             _ => {}
         };
 
-        let use_caching = storage_folder.is_some();
+        let use_disk = storage_folder.is_some();
+        let indexing = if use_disk {
+            if let Some(indexing) = indexing {
+                if indexing.enabled {
+                    warn!("Enabling storage and indexing will slow down mapping. Use create_index to add the index after mapping is done")
+                }
+                indexing
+            } else {
+                IndexingOptions {
+                    enabled: false,
+                    object_sort_all: false,
+                    object_sort_some: None,
+                }
+            }
+        } else {
+            indexing.unwrap_or_default()
+        };
         Ok(Mapping {
             template_dataset: template_dataset.clone(),
             base_triplestore: Triplestore::new(
                 storage_folder,
-                Some(indexing.clone().unwrap_or_default()),
+                Some(indexing.clone()),
             )
             .map_err(MappingError::TriplestoreError)?,
             triplestores_map: Default::default(),
-            use_caching,
             blank_node_counter: 0,
-            indexing: indexing.unwrap_or_default(),
+            indexing,
         })
     }
 

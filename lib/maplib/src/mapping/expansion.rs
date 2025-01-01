@@ -15,7 +15,7 @@ use representation::multitype::split_df_multicols;
 use representation::rdf_to_polars::rdf_named_node_to_polars_literal_value;
 use representation::RDFNodeType;
 use representation::{OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME};
-use std::cmp::{max, min};
+use std::cmp::{max};
 use std::collections::{HashMap, HashSet};
 use std::time::Instant;
 use templates::ast::{
@@ -80,59 +80,25 @@ impl Mapping {
         }
         df = lf.map(|lf| lf.collect().unwrap());
 
-        if self.use_caching && df.is_some() {
-            let df = df.unwrap();
-            let n_50_mb = (df.estimated_size() / 50_000_000) + 1;
-            let chunk_size = df.height() / n_50_mb;
-            let mut offset = 0i64;
-            loop {
-                let to_row = min(df.height(), offset as usize + chunk_size);
-                let df_slice = df.slice_par(offset, to_row);
-                offset += chunk_size as i64;
-                let (result_vec, new_blank_node_counter) = self._expand(
-                    0,
-                    0,
-                    self.blank_node_counter,
-                    &target_template_name,
-                    Some(df_slice),
-                    &target_template.signature,
-                    columns.clone(),
-                    static_columns.clone(),
-                    unique_subsets.clone(),
-                )?;
-                self.process_results(
-                    result_vec,
-                    &call_uuid,
-                    new_blank_node_counter,
-                    &graph,
-                    deduplicate,
-                )?;
-                debug!("Finished processing {} rows", to_row);
-                if offset >= df.height() as i64 {
-                    break;
-                }
-            }
-        } else {
-            let (result_vec, new_blank_node_counter) = self._expand(
-                0,
-                0,
-                self.blank_node_counter,
-                &target_template_name,
-                df,
-                &target_template.signature,
-                columns,
-                static_columns,
-                unique_subsets,
-            )?;
-            self.process_results(
-                result_vec,
-                &call_uuid,
-                new_blank_node_counter,
-                &graph,
-                deduplicate,
-            )?;
-            debug!("Expansion took {} seconds", now.elapsed().as_secs_f32());
-        }
+        let (result_vec, new_blank_node_counter) = self._expand(
+            0,
+            0,
+            self.blank_node_counter,
+            &target_template_name,
+            df,
+            &target_template.signature,
+            columns,
+            static_columns,
+            unique_subsets,
+        )?;
+        self.process_results(
+            result_vec,
+            &call_uuid,
+            new_blank_node_counter,
+            &graph,
+            deduplicate,
+        )?;
+        debug!("Expansion took {} seconds", now.elapsed().as_secs_f32());
         Ok(MappingReport {})
     }
 

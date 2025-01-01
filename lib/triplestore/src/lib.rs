@@ -12,7 +12,7 @@ pub mod triples_read;
 pub mod triples_write;
 
 use crate::errors::TriplestoreError;
-use crate::io_funcs::{create_folder_if_not_exists, delete_tmp_parquets_in_storage_folder};
+use crate::io_funcs::{create_folder_if_not_exists};
 use crate::storage::Triples;
 use log::debug;
 use oxrdf::vocab::{rdf, rdfs};
@@ -27,12 +27,13 @@ use representation::{
     VERB_COL_NAME,
 };
 use std::collections::{HashMap, HashSet};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
+use uuid::Uuid;
 
 #[derive(Clone)]
 pub struct Triplestore {
-    pub storage_folder: Option<String>,
+    pub storage_folder: Option<PathBuf>,
     deduplicated: bool,
     triples_map: HashMap<NamedNode, HashMap<(BaseRDFNodeType, BaseRDFNodeType), Triples>>,
     transient_triples_map: HashMap<NamedNode, HashMap<(BaseRDFNodeType, BaseRDFNodeType), Triples>>,
@@ -91,16 +92,21 @@ impl Triplestore {
         storage_folder: Option<String>,
         indexing: Option<IndexingOptions>,
     ) -> Result<Triplestore, TriplestoreError> {
-        if let Some(storage_folder) = &storage_folder {
-            let path = Path::new(storage_folder);
-            create_folder_if_not_exists(path)?;
-            delete_tmp_parquets_in_storage_folder(path)?;
-        }
+        let pathbuf = if let Some(storage_folder) = &storage_folder {
+            let mut pathbuf = Path::new(storage_folder).to_path_buf();
+            create_folder_if_not_exists(pathbuf.as_path())?;
+            let ext = format!("ts_{}", Uuid::new_v4().to_string());
+            pathbuf.push(&ext);
+            create_folder_if_not_exists(pathbuf.as_path())?;
+            Some(pathbuf)
+        } else {
+            None
+        };
         Ok(Triplestore {
             triples_map: HashMap::new(),
             transient_triples_map: HashMap::new(),
             deduplicated: true,
-            storage_folder,
+            storage_folder:pathbuf,
             parser_call: 0,
             indexing: indexing.unwrap_or(IndexingOptions::default()),
         })
@@ -436,7 +442,7 @@ fn flatten<T>(nested: Vec<Vec<T>>) -> Vec<T> {
 
 fn deduplicate_and_index_map(
     df_map: &mut HashMap<NamedNode, HashMap<(BaseRDFNodeType, BaseRDFNodeType), Triples>>,
-    storage_folder: &Option<String>,
+    storage_folder: &Option<PathBuf>,
 ) -> Result<(), TriplestoreError> {
     for map in df_map.values_mut() {
         for v in map.values_mut() {

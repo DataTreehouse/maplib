@@ -1,14 +1,13 @@
-use parquet_io::ParquetIOError;
 use std::fmt::{Display, Formatter};
 use std::io;
 use thiserror::Error;
+use parquet_io::ParquetIOError;
 
 #[derive(Error, Debug)]
 pub enum TriplestoreError {
     WriteNTriplesError(String),
     PathDoesNotExist(String),
-    ParquetIOError(ParquetIOError),
-    RemoveParquetFileError(io::Error),
+    RemoveFileError(io::Error),
     FolderCreateIOError(io::Error),
     ReadCachingDirectoryError(io::Error),
     ReadCachingDirectoryEntryError(io::Error),
@@ -20,6 +19,8 @@ pub enum TriplestoreError {
     RDFSClassInheritanceError(String),
     NTriplesParsingError(String),
     IndexingError(String),
+    IPCIOError(String),
+    ParquetIOError(ParquetIOError),
 }
 
 impl Display for TriplestoreError {
@@ -31,8 +32,11 @@ impl Display for TriplestoreError {
             TriplestoreError::PathDoesNotExist(p) => {
                 write!(f, "Path {} does not exist", p)
             }
-            TriplestoreError::RemoveParquetFileError(e) => {
-                write!(f, "Error removing parquet file {}", e)
+            TriplestoreError::RemoveFileError(e) => {
+                write!(f, "Error removing file {}", e)
+            }
+            TriplestoreError::IPCIOError(e) => {
+                write!(f, "IPC IO error: {}", e)
             }
             TriplestoreError::ParquetIOError(e) => {
                 write!(f, "Parquet IO error: {}", e)
