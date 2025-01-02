@@ -53,3 +53,7 @@ ryu = "1.0.18"
 #dev-dependencies
 rstest = "0.21.0"
 serial_test = "3.1.1"
+
+[patch.crates-io]
+polars = { git = 'https://github.com/pola-rs/polars', rev="91d04b855a37aa116b6f871c8be0a1b4ab770434" }
+polars-core = { git = 'https://github.com/pola-rs/polars', rev="91d04b855a37aa116b6f871c8be0a1b4ab770434" }
