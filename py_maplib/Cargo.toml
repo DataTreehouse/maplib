@@ -32,7 +32,4 @@ crate-type = ["cdylib"]
 mimalloc = { version = "0.1", default-features = false }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-jemallocator = { version = "0.5.4", features = ["disable_initial_exec_tls", "background_threads"] }
-
-[target.'cfg(target_os = "macos")'.dependencies]
 jemallocator = { version = "0.5.4", features = ["disable_initial_exec_tls"] }

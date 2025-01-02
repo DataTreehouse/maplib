@@ -1,8 +1,2 @@
 [build]
 jobs = 4
-
-#From polars: https://github.com/pola-rs/polars/blob/main/.cargo/config.toml
-#See /licensing for Polars license.
-[env]
-# Tune jemalloc (https://github.com/pola-rs/polars/issues/18088).
-JEMALLOC_SYS_WITH_MALLOC_CONF = "dirty_decay_ms:500,muzzy_decay_ms:-1"
