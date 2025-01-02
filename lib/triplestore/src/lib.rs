@@ -21,7 +21,8 @@ use polars::prelude::{AnyValue, DataFrame, IntoLazy, UniqueKeepStrategy};
 use polars_core::datatypes::CategoricalOrdering;
 use rayon::iter::ParallelDrainRange;
 use rayon::iter::ParallelIterator;
-use representation::multitype::lf_columns_to_categorical;
+use representation::multitype::{lf_columns_to_categorical, set_structs_all_null_to_null_row};
+use representation::solution_mapping::EagerSolutionMappings;
 use representation::{
     literal_iri_to_namednode, BaseRDFNodeType, RDFNodeType, OBJECT_COL_NAME, SUBJECT_COL_NAME,
     VERB_COL_NAME,
@@ -344,6 +345,19 @@ pub fn prepare_triples(
 ) -> Vec<TripleDF> {
     let now = Instant::now();
     let mut out_df_vec = vec![];
+    let map = HashMap::from([
+        (
+            SUBJECT_COL_NAME.to_string(),
+            subject_type.as_rdf_node_type(),
+        ),
+        (OBJECT_COL_NAME.to_string(), object_type.as_rdf_node_type()),
+    ]);
+    let sm = EagerSolutionMappings::new(df, map).as_lazy();
+    let EagerSolutionMappings {
+        mappings: mut df,
+        rdf_node_types: _,
+    } = set_structs_all_null_to_null_row(sm).as_eager();
+
     if df.height() == 0 {
         return vec![];
     }

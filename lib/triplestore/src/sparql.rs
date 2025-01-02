@@ -259,7 +259,6 @@ fn triple_to_df(
     triple_types.insert(VERB_COL_NAME.to_string(), verb_dt);
     let (obj_expr, obj_dt) = term_pattern_expression(rdf_node_types, &t.object, OBJECT_COL_NAME)?;
     triple_types.insert(OBJECT_COL_NAME.to_string(), obj_dt);
-
     let mut lf = df
         .clone()
         .lazy()
