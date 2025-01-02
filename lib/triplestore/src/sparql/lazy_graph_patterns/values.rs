@@ -1,11 +1,11 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
 use crate::sparql::pushdowns::Pushdowns;
-use oxrdf::{Variable};
-use polars::prelude::{JoinType};
+use oxrdf::Variable;
+use polars::prelude::JoinType;
 use query_processing::graph_patterns::{join, values_pattern};
 use representation::query_context::Context;
-use representation::solution_mapping::{SolutionMappings};
+use representation::solution_mapping::SolutionMappings;
 use spargebra::term::GroundTerm;
 
 impl Triplestore {

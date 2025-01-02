@@ -1,7 +1,7 @@
+use parquet_io::ParquetIOError;
 use std::fmt::{Display, Formatter};
 use std::io;
 use thiserror::Error;
-use parquet_io::ParquetIOError;
 
 #[derive(Error, Debug)]
 pub enum TriplestoreError {

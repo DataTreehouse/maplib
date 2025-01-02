@@ -252,6 +252,8 @@ impl Triplestore {
             out_dt_subj = RDFNodeType::None;
         }
         let mut var_cols = vec![];
+        let mut rename_src = vec![];
+        let mut rename_trg = vec![];
         match subject {
             TermPattern::NamedNode(nn) => {
                 let l = rdf_named_node_to_polars_literal_value(nn);
@@ -263,8 +265,10 @@ impl Triplestore {
                 out_df = out_df.drop(SUBJECT_COL_NAME).unwrap();
             }
             TermPattern::BlankNode(b) => {
-                var_cols.push(b.as_str().to_string());
-                out_df.rename(SUBJECT_COL_NAME, b.as_str().into()).unwrap();
+                let bname = b.to_string();
+                var_cols.push(bname.clone());
+                rename_src.push(SUBJECT_COL_NAME);
+                rename_trg.push(bname);
             }
             TermPattern::Literal(l) => {
                 let l = rdf_literal_to_polars_literal_value(l);
@@ -277,7 +281,10 @@ impl Triplestore {
             }
             TermPattern::Variable(v) => {
                 var_cols.push(v.as_str().to_string());
-                out_df.rename(SUBJECT_COL_NAME, v.as_str().into()).unwrap();
+                if v.as_str() != SUBJECT_COL_NAME {
+                    rename_src.push(SUBJECT_COL_NAME);
+                    rename_trg.push(v.as_str().into());
+                }
             }
         }
 
@@ -292,8 +299,10 @@ impl Triplestore {
                 out_df = out_df.drop(OBJECT_COL_NAME).unwrap();
             }
             TermPattern::BlankNode(b) => {
-                var_cols.push(b.as_str().to_string());
-                out_df.rename(OBJECT_COL_NAME, b.as_str().into()).unwrap();
+                let bname = b.to_string();
+                var_cols.push(bname.clone());
+                rename_src.push(OBJECT_COL_NAME);
+                rename_trg.push(bname);
             }
             TermPattern::Literal(l) => {
                 let l = rdf_literal_to_polars_literal_value(l);
@@ -306,9 +315,10 @@ impl Triplestore {
             }
             TermPattern::Variable(v) => {
                 var_cols.push(v.as_str().to_string());
-                out_df
-                    .rename(OBJECT_COL_NAME, PlSmallStr::from_str(v.as_str()))
-                    .unwrap();
+                if v.as_str() != OBJECT_COL_NAME {
+                    rename_src.push(OBJECT_COL_NAME);
+                    rename_trg.push(v.as_str().into());
+                }
             }
         }
         let mut datatypes = HashMap::new();
@@ -319,8 +329,12 @@ impl Triplestore {
             datatypes.insert(v.as_str().to_string(), out_dt_obj);
         }
         let out_df_height = out_df.height();
+        let mut out_lf = out_df.lazy();
+        if !rename_src.is_empty() {
+            out_lf = out_lf.rename(rename_src, rename_trg, true);
+        }
         let mut path_solution_mappings = SolutionMappings {
-            mappings: out_df.lazy(),
+            mappings: out_lf,
             rdf_node_types: datatypes,
             height_estimate: out_df_height,
         };

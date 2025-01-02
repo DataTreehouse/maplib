@@ -10,10 +10,7 @@ pub mod literals;
 pub mod python;
 pub mod subtypes;
 
-use crate::multitype::{
-    base_col_name, MULTI_BLANK_DT, MULTI_IRI_DT,
-    MULTI_NONE_DT,
-};
+use crate::multitype::{base_col_name, MULTI_BLANK_DT, MULTI_IRI_DT, MULTI_NONE_DT};
 use crate::subtypes::{is_literal_subtype, OWL_REAL};
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{BlankNode, NamedNode, NamedNodeRef, NamedOrBlankNode, Subject, Term};
@@ -165,7 +162,7 @@ pub fn get_subject_datatype_ref(s: &Subject) -> BaseRDFNodeTypeRef {
         Subject::NamedNode(_) => BaseRDFNodeTypeRef::IRI,
         Subject::BlankNode(_) => BaseRDFNodeTypeRef::BlankNode,
         #[cfg(feature = "rdf-star")]
-        _ => unimplemented!()
+        _ => unimplemented!(),
     }
 }
 
@@ -175,7 +172,7 @@ pub fn get_term_datatype_ref(t: &Term) -> BaseRDFNodeTypeRef {
         Term::BlankNode(_) => BaseRDFNodeTypeRef::BlankNode,
         Term::Literal(l) => BaseRDFNodeTypeRef::Literal(l.datatype()),
         #[cfg(feature = "rdf-star")]
-        _ => unimplemented!()
+        _ => unimplemented!(),
     }
 }
 
@@ -184,7 +181,7 @@ pub fn get_ground_term_datatype_ref(t: &GroundTerm) -> BaseRDFNodeTypeRef {
         GroundTerm::NamedNode(_) => BaseRDFNodeTypeRef::IRI,
         GroundTerm::Literal(l) => BaseRDFNodeTypeRef::Literal(l.datatype()),
         #[cfg(feature = "rdf-star")]
-        _ => unimplemented!()
+        _ => unimplemented!(),
     }
 }
 

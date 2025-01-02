@@ -142,6 +142,7 @@ impl PyMapping {
     #[pyo3(signature = (documents=None, indexing_options=None))]
     fn new(
         documents: Option<&Bound<'_, PyAny>>,
+        //storage_folder: Option<String>,
         indexing_options: Option<PyIndexingOptions>,
     ) -> PyResult<PyMapping> {
         let documents = if let Some(documents) = documents {

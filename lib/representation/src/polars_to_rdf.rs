@@ -1,7 +1,5 @@
 use crate::errors::RepresentationError;
-use crate::multitype::{
-    all_multi_main_cols, MULTI_BLANK_DT, MULTI_IRI_DT, MULTI_NONE_DT,
-};
+use crate::multitype::{all_multi_main_cols, MULTI_BLANK_DT, MULTI_IRI_DT, MULTI_NONE_DT};
 use crate::rdf_to_polars::{
     polars_literal_values_to_series, rdf_literal_to_polars_literal_value,
     rdf_owned_blank_node_to_polars_literal_value, rdf_owned_named_node_to_polars_literal_value,

@@ -7,9 +7,7 @@ use polars_core::prelude::{Column, DataFrame, DataType};
 use query_processing::type_constraints::PossibleTypes;
 use rayon::iter::IntoParallelIterator;
 use rayon::iter::ParallelIterator;
-use representation::multitype::{
-    all_multi_cols, base_col_name, lf_columns_to_categorical,
-};
+use representation::multitype::{all_multi_cols, base_col_name, lf_columns_to_categorical};
 use representation::rdf_to_polars::{
     rdf_named_node_to_polars_literal_value, rdf_term_to_polars_expr,
 };
@@ -281,17 +279,22 @@ impl Triplestore {
                 all_mappings.push(mappings);
             }
 
-            let mut mappings = concat(
-                all_mappings,
-                UnionArgs {
-                    parallel: true,
-                    rechunk: false,
-                    to_supertypes: false,
-                    diagonal: true,
-                    from_partitioned_ds: false,
-                },
-            )
-            .unwrap();
+            let mut mappings = if all_mappings.len() > 1 {
+                concat(
+                    all_mappings,
+                    UnionArgs {
+                        parallel: true,
+                        rechunk: false,
+                        to_supertypes: false,
+                        diagonal: true,
+                        from_partitioned_ds: false,
+                        maintain_order: false,
+                    },
+                )
+                .unwrap()
+            } else {
+                all_mappings.pop().unwrap()
+            };
 
             let mut sorted_subject_types: Vec<_> = subject_types.into_iter().collect();
             sorted_subject_types.sort();
@@ -317,22 +320,34 @@ impl Triplestore {
                 mappings = mappings.with_column(as_struct(struct_exprs).alias(OBJECT_COL_NAME));
             }
             let mut keep = vec![];
-            let mut rename = vec![];
+            let mut rename_src = vec![];
+            let mut rename_trg = vec![];
             if let Some(s) = subject_keep_rename {
                 keep.push(SUBJECT_COL_NAME);
-                rename.push(s);
+                if s != SUBJECT_COL_NAME {
+                    rename_src.push(SUBJECT_COL_NAME);
+                    rename_trg.push(s);
+                }
             }
             if let Some(v) = verb_keep_rename {
                 keep.push(VERB_COL_NAME);
-                rename.push(v);
+                if v != VERB_COL_NAME {
+                    rename_src.push(VERB_COL_NAME);
+                    rename_trg.push(v);
+                }
             }
             if let Some(o) = object_keep_rename {
                 keep.push(OBJECT_COL_NAME);
-                rename.push(o);
+                if o != OBJECT_COL_NAME {
+                    rename_src.push(OBJECT_COL_NAME);
+                    rename_trg.push(o);
+                }
             }
-            mappings = mappings.rename(&keep, &rename, true);
-            let rename_exprs: Vec<_> = rename.into_iter().map(|x| col(x)).collect();
-            mappings = mappings.select(rename_exprs);
+            let keep_exprs: Vec<_> = keep.iter().map(|x| col(*x)).collect();
+            mappings = mappings.select(keep_exprs);
+            if !rename_src.is_empty() {
+                mappings = mappings.rename(&rename_src, &rename_trg, true);
+            }
 
             let mut types = HashMap::new();
             if let Some(subject_col_name) = subject_keep_rename {
@@ -487,17 +502,22 @@ fn single_tt_to_deduplicated_lf(
         lfs.push(lf);
         new_height = new_height.saturating_add(height);
     }
-    let mut lf = concat(
-        lfs,
-        UnionArgs {
-            parallel: true,
-            rechunk: true, //Important?
-            to_supertypes: false,
-            diagonal: false,
-            from_partitioned_ds: false,
-        },
-    )
-    .unwrap();
+    let mut lf = if lfs.len() > 1 {
+        concat(
+            lfs,
+            UnionArgs {
+                parallel: true,
+                rechunk: true, //Important?
+                to_supertypes: false,
+                diagonal: false,
+                from_partitioned_ds: false,
+                maintain_order: false,
+            },
+        )
+        .unwrap()
+    } else {
+        lfs.pop().unwrap()
+    };
     if let Some(subject_terms) = &subjects {
         // Handles case where singular subject from triple pattern.
         if subject_terms.len() == 1 {

@@ -1119,7 +1119,8 @@ pub fn func_expression(
                     if types.contains(&BaseRDFNodeType::BlankNode) {
                         col(first_context.as_str())
                             .struct_()
-                            .field_by_name(&base_col_name(&BaseRDFNodeType::BlankNode)).is_not_null()
+                            .field_by_name(&base_col_name(&BaseRDFNodeType::BlankNode))
+                            .is_not_null()
                     } else {
                         lit(false)
                     }
@@ -1179,7 +1180,8 @@ pub fn func_expression(
                             exprs.push(
                                 col(first_context.as_str())
                                     .struct_()
-                                    .field_by_name(&base_col_name(t)).is_not_null()
+                                    .field_by_name(&base_col_name(t))
+                                    .is_not_null(),
                             );
                         }
                     }
@@ -1294,7 +1296,7 @@ fn typed_equals_expr(
                             col(right_col)
                                 .struct_()
                                 .field_by_name(&base_col_name(lt))
-                                .is_not_null()
+                                .is_not_null(),
                         )
                         .and(
                             col(left_col)

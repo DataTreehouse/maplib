@@ -12,7 +12,7 @@ pub mod triples_read;
 pub mod triples_write;
 
 use crate::errors::TriplestoreError;
-use crate::io_funcs::{create_folder_if_not_exists};
+use crate::io_funcs::create_folder_if_not_exists;
 use crate::storage::Triples;
 use log::debug;
 use oxrdf::vocab::{rdf, rdfs};
@@ -106,7 +106,7 @@ impl Triplestore {
             triples_map: HashMap::new(),
             transient_triples_map: HashMap::new(),
             deduplicated: true,
-            storage_folder:pathbuf,
+            storage_folder: pathbuf,
             parser_call: 0,
             indexing: indexing.unwrap_or(IndexingOptions::default()),
         })

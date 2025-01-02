@@ -246,7 +246,7 @@ pub fn get_keep_rename_term_pattern(term_pattern: &TermPattern) -> Option<String
     if let TermPattern::Variable(v) = term_pattern {
         return Some(v.as_str().to_string());
     } else if let TermPattern::BlankNode(b) = term_pattern {
-        return Some(b.as_str().to_string());
+        return Some(b.to_string());
     }
     None
 }

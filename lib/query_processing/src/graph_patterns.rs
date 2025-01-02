@@ -5,22 +5,28 @@ use oxrdf::vocab::rdfs;
 use oxrdf::{Term, Variable};
 use polars::datatypes::{CategoricalOrdering, DataType, PlSmallStr};
 use polars::frame::{DataFrame, UniqueKeepStrategy};
-use polars::prelude::{as_struct, col, concat_lf_diagonal, lit, Expr, IntoColumn, IntoLazy, JoinArgs, JoinType, LiteralValue, SortMultipleOptions, UnionArgs};
+use polars::prelude::{
+    as_struct, col, concat_lf_diagonal, lit, Expr, IntoColumn, IntoLazy, JoinArgs, JoinType,
+    LiteralValue, SortMultipleOptions, UnionArgs,
+};
 use representation::multitype::{
     base_col_name, convert_lf_col_to_multitype, create_join_compatible_solution_mappings,
     lf_column_to_categorical, nest_multicolumns, unnest_multicols,
 };
 use representation::multitype::{join_workaround, unique_workaround};
+use representation::polars_to_rdf::particular_opt_term_vec_to_series;
 use representation::query_context::Context;
 use representation::rdf_to_polars::string_rdf_literal;
 use representation::solution_mapping::{is_string_col, EagerSolutionMappings, SolutionMappings};
-use representation::{get_ground_term_datatype_ref, BaseRDFNodeType, BaseRDFNodeTypeRef, RDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD};
+use representation::{
+    get_ground_term_datatype_ref, BaseRDFNodeType, BaseRDFNodeTypeRef, RDFNodeType,
+    LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD,
+};
 use spargebra::algebra::{Expression, Function};
+use spargebra::term::GroundTerm;
 use std::collections::{HashMap, HashSet};
 use std::iter;
 use uuid::Uuid;
-use representation::polars_to_rdf::particular_opt_term_vec_to_series;
-use spargebra::term::GroundTerm;
 
 pub fn distinct(
     mut solution_mappings: SolutionMappings,
@@ -482,7 +488,6 @@ pub fn union(
             }
         }
     }
-
     let mut output_mappings = concat_lf_diagonal(
         to_concat,
         UnionArgs {
@@ -491,6 +496,7 @@ pub fn union(
             to_supertypes: false,
             diagonal: true,
             from_partitioned_ds: false,
+            maintain_order: false,
         },
     )
     .expect("Concat problem");
@@ -589,11 +595,10 @@ fn find_enforced_variable_type_constraints(
 
 pub fn values_pattern(
     variables: &[Variable],
-    bindings: &[Vec<Option<GroundTerm>>]) -> SolutionMappings {
-    let mut variable_datatype_opt_term_vecs: HashMap<
-        usize,
-        HashMap<BaseRDFNodeTypeRef, Vec<_>>,
-    > = HashMap::new();
+    bindings: &[Vec<Option<GroundTerm>>],
+) -> SolutionMappings {
+    let mut variable_datatype_opt_term_vecs: HashMap<usize, HashMap<BaseRDFNodeTypeRef, Vec<_>>> =
+        HashMap::new();
     // Todo: this could be parallel.. but we have very small data here..
     for i in 0..variables.len() {
         variable_datatype_opt_term_vecs.insert(i, HashMap::new());

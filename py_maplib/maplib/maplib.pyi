@@ -327,14 +327,12 @@ class Mapping:
     ... m = Mapping(doc)
 
     :param documents: a stOTTR document or a list of these
-    :param storage_folder: Folder to store database triples. Use create_index to apply index after heavy mapping/loading operations.
     :param indexing_options: options for indexing
     """
 
     def __init__(
-        self, documents: Union[str, List[str]] = None, storage_folder:str=None, indexing_options: "IndexingOptions" = None
+        self, documents: Union[str, List[str]] = None, indexing_options: "IndexingOptions" = None
     ) -> "Mapping": ...
-
     def add_template(self, template: "Template"):
         """
         Add a template to the mapping. Overwrites any existing template with the same IRI.

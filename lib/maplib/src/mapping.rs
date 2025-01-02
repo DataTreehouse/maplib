@@ -5,6 +5,7 @@ pub mod expansion;
 
 use crate::errors::MaplibError;
 use crate::mapping::errors::MappingError;
+use log::warn;
 use oxrdf::NamedNode;
 use oxrdfio::RdfFormat;
 use polars::prelude::DataFrame;
@@ -15,7 +16,6 @@ use shacl::{validate, ValidationReport};
 use std::collections::HashMap;
 use std::io::Write;
 use std::path::Path;
-use log::warn;
 use templates::ast::{ConstantTermOrList, PType, Template};
 use templates::dataset::TemplateDataset;
 use templates::document::document_from_str;
@@ -87,11 +87,8 @@ impl Mapping {
         };
         Ok(Mapping {
             template_dataset: template_dataset.clone(),
-            base_triplestore: Triplestore::new(
-                storage_folder,
-                Some(indexing.clone()),
-            )
-            .map_err(MappingError::TriplestoreError)?,
+            base_triplestore: Triplestore::new(storage_folder, Some(indexing.clone()))
+                .map_err(MappingError::TriplestoreError)?,
             triplestores_map: Default::default(),
             blank_node_counter: 0,
             indexing,

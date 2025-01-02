@@ -36,6 +36,7 @@ impl Triplestore {
             parameters,
             pushdowns,
         )?;
+
         Ok(output_solution_mappings)
     }
 }

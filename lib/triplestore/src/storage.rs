@@ -63,25 +63,38 @@ impl Triples {
                         Ok(lfs)
                     })
                     .collect();
-                let lfs: Vec<_> = lfs_heights?
+                let mut lfs: Vec<_> = lfs_heights?
                     .into_iter()
                     .flatten()
                     .map(|(lf, _)| lf)
                     .collect();
-                let lf = concat(
-                    lfs,
-                    UnionArgs {
-                        parallel: true,
-                        rechunk: false,
-                        to_supertypes: false,
-                        diagonal: false,
-                        from_partitioned_ds: false,
-                    },
-                )
-                .unwrap();
-                let df = lf.unique(None, UniqueKeepStrategy::Any).collect().unwrap();
+                let lf = if lfs.len() > 1 {
+                    concat(
+                        lfs,
+                        UnionArgs {
+                            parallel: true,
+                            rechunk: true,
+                            to_supertypes: false,
+                            diagonal: false,
+                            from_partitioned_ds: false,
+                            maintain_order: false,
+                        },
+                    )
+                    .unwrap()
+                } else {
+                    lfs.pop().unwrap()
+                };
+                let df = lf
+                    .unique(None, UniqueKeepStrategy::First)
+                    .collect()
+                    .unwrap();
                 self.height = df.height();
-                unsorted.push(StoredTriples::new(df, &self.subject_type, &self.object_type, storage_folder)?);
+                unsorted.push(StoredTriples::new(
+                    df,
+                    &self.subject_type,
+                    &self.object_type,
+                    storage_folder,
+                )?);
             }
             self.unique = true;
         }
@@ -155,6 +168,7 @@ impl Triples {
                             to_supertypes: false,
                             diagonal: false,
                             from_partitioned_ds: false,
+                            maintain_order: false,
                         },
                     )
                     .unwrap()
@@ -301,7 +315,8 @@ impl Triples {
                 }
             }
         } else if let Some(unsorted) = &mut self.unsorted {
-            let new_stored = StoredTriples::new(df, &self.subject_type, &self.object_type, storage_folder)?;
+            let new_stored =
+                StoredTriples::new(df, &self.subject_type, &self.object_type, storage_folder)?;
             unsorted.push(new_stored);
             self.unique = false;
         } else {
@@ -646,7 +661,7 @@ fn cast_col_to_cat(mut lf: LazyFrame, c: &str, lexsort: bool) -> LazyFrame {
     lf
 }
 
-fn get_col(subject:bool) -> &'static str {
+fn get_col(subject: bool) -> &'static str {
     if subject {
         SUBJECT_COL_NAME
     } else {
@@ -654,7 +669,7 @@ fn get_col(subject:bool) -> &'static str {
     }
 }
 
-fn sort_indexed_lf(lf: LazyFrame, is_subject:bool, also_other: bool) -> LazyFrame {
+fn sort_indexed_lf(lf: LazyFrame, is_subject: bool, also_other: bool) -> LazyFrame {
     let c = get_col(is_subject);
     let mut lf = cast_col_to_cat(lf, c, true);
 
@@ -681,7 +696,7 @@ fn update_column_sorted_index(
     df: DataFrame,
     storage_folder: &Option<PathBuf>,
     stored_triples: &StoredTriples,
-    is_subject:bool,
+    is_subject: bool,
     subject_type: &BaseRDFNodeType,
     object_type: &BaseRDFNodeType,
 ) -> Result<(StoredTriples, usize, BTreeMap<String, usize>), TriplestoreError> {
@@ -735,7 +750,7 @@ fn repeated_from_last_row_expr(c: &str) -> Expr {
 
 fn create_unique_df_and_sparse_map(
     mut lf: LazyFrame,
-    is_subject:bool,
+    is_subject: bool,
     unique: bool,
 ) -> (DataFrame, BTreeMap<String, usize>) {
     let c = get_col(is_subject);

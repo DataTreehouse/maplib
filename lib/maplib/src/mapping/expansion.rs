@@ -15,7 +15,7 @@ use representation::multitype::split_df_multicols;
 use representation::rdf_to_polars::rdf_named_node_to_polars_literal_value;
 use representation::RDFNodeType;
 use representation::{OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME};
-use std::cmp::{max};
+use std::cmp::max;
 use std::collections::{HashMap, HashSet};
 use std::time::Instant;
 use templates::ast::{
