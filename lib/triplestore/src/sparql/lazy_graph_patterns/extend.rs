@@ -3,8 +3,9 @@ use crate::sparql::errors::SparqlError;
 use log::debug;
 use oxrdf::Variable;
 
-use crate::sparql::pushdowns::Pushdowns;
+use query_processing::expressions::contains_graph_pattern;
 use query_processing::graph_patterns::extend;
+use query_processing::pushdowns::Pushdowns;
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use spargebra::algebra::{Expression, GraphPattern};
@@ -26,6 +27,11 @@ impl Triplestore {
         let inner_context = context.extension_with(PathEntry::ExtendInner);
         let expression_context = context.extension_with(PathEntry::ExtendExpression);
         pushdowns.remove_variable(variable);
+        let expression_pushdowns = if contains_graph_pattern(expression) {
+            Some(pushdowns.clone())
+        } else {
+            None
+        };
         let mut output_solution_mappings = self.lazy_graph_pattern(
             inner,
             input_solution_mappings,
@@ -33,12 +39,12 @@ impl Triplestore {
             parameters,
             pushdowns,
         )?;
-
         output_solution_mappings = self.lazy_expression(
             expression,
             output_solution_mappings,
             &expression_context,
             parameters,
+            expression_pushdowns.as_ref(),
         )?;
         Ok(extend(
             output_solution_mappings,

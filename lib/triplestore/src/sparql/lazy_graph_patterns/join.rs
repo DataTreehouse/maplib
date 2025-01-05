@@ -2,7 +2,7 @@ use super::Triplestore;
 use crate::sparql::errors::SparqlError;
 use log::debug;
 
-use crate::sparql::pushdowns::Pushdowns;
+use query_processing::pushdowns::Pushdowns;
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use spargebra::algebra::GraphPattern;
@@ -28,7 +28,6 @@ impl Triplestore {
             parameters,
             pushdowns.clone(),
         )?;
-        output_solution_mappings = pushdowns.add_from_solution_mappings(output_solution_mappings);
         output_solution_mappings = self.lazy_graph_pattern(
             right,
             Some(output_solution_mappings),

@@ -19,11 +19,11 @@ use crate::sparql::errors::SparqlError;
 use log::{debug, info};
 
 use crate::sparql::lazy_graph_patterns::triples_ordering::order_triple_patterns;
-use crate::sparql::pushdowns::Pushdowns;
 use oxrdf::vocab::xsd;
 use polars::prelude::IntoLazy;
 use polars_core::frame::DataFrame;
 use polars_core::prelude::{NamedFrom, Series};
+use query_processing::pushdowns::Pushdowns;
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use representation::RDFNodeType;
@@ -56,7 +56,7 @@ impl Triplestore {
                         updated_solution_mappings,
                         tp,
                         &bgp_context,
-                        &pushdowns,
+                        &mut pushdowns,
                     )?);
                 }
                 if let Some(updated_solution_mappings) = updated_solution_mappings {

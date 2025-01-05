@@ -1,15 +1,15 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
-use crate::sparql::pushdowns::Pushdowns;
 use oxrdf::vocab::xsd;
 use oxrdf::{NamedNode, Variable};
 use polars::prelude::{
-    col, lit, AnyValue, DataFrame, IntoLazy, IntoSeries, JoinArgs, JoinType, PlSmallStr, Series,
+    col, lit, AnyValue, DataFrame, IntoLazy, IntoSeries, JoinArgs, JoinType, Series,
     UniqueKeepStrategy,
 };
 use polars_core::prelude::{DataType, SortMultipleOptions};
 use query_processing::errors::QueryProcessingError;
 use query_processing::graph_patterns::{join, union};
+use query_processing::pushdowns::Pushdowns;
 use representation::multitype::{
     compress_actual_multitypes, force_convert_multicol_to_single_col, group_by_workaround,
     nest_multicolumns,

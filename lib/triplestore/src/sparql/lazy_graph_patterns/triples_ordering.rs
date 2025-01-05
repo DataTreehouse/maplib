@@ -1,5 +1,5 @@
-use crate::sparql::pushdowns::Pushdowns;
 use oxrdf::{BlankNode, Term, Variable};
+use query_processing::pushdowns::Pushdowns;
 use representation::solution_mapping::SolutionMappings;
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 use std::cmp::Ordering;

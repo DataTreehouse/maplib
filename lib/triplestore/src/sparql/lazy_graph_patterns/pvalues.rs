@@ -3,8 +3,8 @@ use crate::sparql::errors::SparqlError;
 use oxrdf::Variable;
 use polars::prelude::{IntoLazy, JoinType};
 
-use crate::sparql::pushdowns::Pushdowns;
 use query_processing::graph_patterns::join;
+use query_processing::pushdowns::Pushdowns;
 use representation::query_context::Context;
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use std::collections::{HashMap, HashSet};

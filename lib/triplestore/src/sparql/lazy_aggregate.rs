@@ -42,6 +42,7 @@ impl Triplestore {
                     solution_mappings,
                     column_context.as_ref().unwrap(),
                     parameters,
+                    None,
                 )?;
                 match name {
                     AggregateFunction::Count => {

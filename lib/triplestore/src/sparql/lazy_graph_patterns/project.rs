@@ -3,8 +3,8 @@ use crate::sparql::errors::SparqlError;
 use log::debug;
 use oxrdf::Variable;
 
-use crate::sparql::pushdowns::Pushdowns;
 use query_processing::graph_patterns::project;
+use query_processing::pushdowns::Pushdowns;
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use spargebra::algebra::GraphPattern;

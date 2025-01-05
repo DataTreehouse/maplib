@@ -3,12 +3,12 @@ use crate::sparql::errors::SparqlError;
 use representation::query_context::Context;
 use representation::solution_mapping::SolutionMappings;
 
-use crate::sparql::pushdowns::Pushdowns;
 use log::debug;
 use oxrdf::{NamedNode, Subject, Term};
 use polars::prelude::IntoLazy;
 use polars::prelude::{col, lit, AnyValue, DataType, JoinType};
 use query_processing::graph_patterns::join;
+use query_processing::pushdowns::Pushdowns;
 use query_processing::type_constraints::PossibleTypes;
 use representation::{literal_iri_to_namednode, BaseRDFNodeType, RDFNodeType};
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
@@ -20,13 +20,18 @@ impl Triplestore {
         mut solution_mappings: Option<SolutionMappings>,
         triple_pattern: &TriplePattern,
         context: &Context,
-        pushdowns: &Pushdowns,
+        pushdowns: &mut Pushdowns,
     ) -> Result<SolutionMappings, SparqlError> {
         debug!(
             "Processing triple pattern {:?} at {}",
             triple_pattern,
             context.as_str()
         );
+        let mut solution_mappings = if let Some(solution_mappings) = solution_mappings {
+            Some(pushdowns.add_from_solution_mappings(solution_mappings))
+        } else {
+            None
+        };
         let subjects = create_subjects(&triple_pattern.subject, &pushdowns.variables_values);
         let subject_type_ctr = create_type_constraint(
             &triple_pattern.subject,

@@ -2,10 +2,10 @@ use super::Triplestore;
 use crate::sparql::errors::SparqlError;
 use log::debug;
 
-use crate::sparql::pushdowns::Pushdowns;
 use polars::prelude::JoinType;
-use query_processing::expressions::drop_inner_contexts;
+use query_processing::expressions::{contains_graph_pattern, drop_inner_contexts};
 use query_processing::graph_patterns::{filter, join};
+use query_processing::pushdowns::Pushdowns;
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use spargebra::algebra::{Expression, GraphPattern};
@@ -35,12 +35,19 @@ impl Triplestore {
             pushdowns.clone(),
         )?;
 
-        left_solution_mappings = pushdowns.add_from_solution_mappings(left_solution_mappings);
         pushdowns.add_graph_pattern_pushdowns(right);
 
-        if let Some(expr) = expression {
-            pushdowns.add_filter_variable_pushdowns(expr);
-        }
+        let expression_pushdowns = if let Some(expr) = expression {
+            pushdowns.add_filter_variable_pushdowns(expr, None);
+            if contains_graph_pattern(expr) {
+                Some(pushdowns.clone())
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
         let mut right_solution_mappings = self.lazy_graph_pattern(
             right,
             Some(left_solution_mappings.clone()),
@@ -48,12 +55,14 @@ impl Triplestore {
             parameters,
             pushdowns,
         )?;
+
         if let Some(expr) = expression {
             right_solution_mappings = self.lazy_expression(
                 expr,
                 right_solution_mappings,
                 &expression_context,
                 parameters,
+                expression_pushdowns.as_ref(),
             )?;
             right_solution_mappings = filter(right_solution_mappings, &expression_context)?;
             right_solution_mappings =

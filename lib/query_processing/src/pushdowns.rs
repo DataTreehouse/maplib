@@ -1,8 +1,8 @@
-use oxrdf::vocab::rdfs;
-use oxrdf::{Term, Variable};
-use query_processing::type_constraints::{
+use crate::type_constraints::{
     conjunction_variable_type, equal_variable_type, ConstraintExpr, PossibleTypes,
 };
+use oxrdf::vocab::rdfs;
+use oxrdf::{Term, Variable};
 use representation::polars_to_rdf::column_as_terms;
 use representation::solution_mapping::SolutionMappings;
 use representation::BaseRDFNodeType;
@@ -22,7 +22,7 @@ pub struct Pushdowns {
 }
 
 impl Pushdowns {
-    pub(crate) fn remove_variable(&mut self, v: &Variable) {
+    pub fn remove_variable(&mut self, v: &Variable) {
         self.variables_values.remove(v.as_str());
         self.variables_type_constraints.remove(v.as_str());
     }
@@ -44,8 +44,21 @@ impl Pushdowns {
 }
 
 impl Pushdowns {
-    pub(crate) fn add_from_solution_mappings(&mut self, sm: SolutionMappings) -> SolutionMappings {
-        if sm.height_estimate <= SMALL_HEIGHT {
+    pub fn add_from_solution_mappings(&mut self, sm: SolutionMappings) -> SolutionMappings {
+        let mut should_add_from_solution_mappings = false;
+        for v in sm.rdf_node_types.keys() {
+            if let Some(vv) = self.variables_values.get(v) {
+                if vv.len() > sm.height_estimate {
+                    should_add_from_solution_mappings = true;
+                    break;
+                }
+            } else {
+                should_add_from_solution_mappings = true;
+                break;
+            }
+        }
+
+        if should_add_from_solution_mappings && sm.height_estimate <= SMALL_HEIGHT {
             let eager_sm = sm.as_eager();
             let colnames = eager_sm.mappings.get_column_names();
             let columns = eager_sm.mappings.columns(&colnames).unwrap();
@@ -67,7 +80,7 @@ impl Pushdowns {
         }
     }
 
-    pub(crate) fn add_patterns_pushdowns(&mut self, patterns: &Vec<TriplePattern>) {
+    pub fn add_patterns_pushdowns(&mut self, patterns: &Vec<TriplePattern>) {
         for pattern in patterns {
             if let TermPattern::Variable(v) = &pattern.subject {
                 self.iri_or_blanknode_constraint(v)
@@ -78,20 +91,32 @@ impl Pushdowns {
         }
     }
 
-    pub(crate) fn add_graph_pattern_pushdowns(&mut self, gp: &GraphPattern) {
+    pub fn add_graph_pattern_pushdowns(&mut self, gp: &GraphPattern) {
+        self.add_graph_pattern_pushdowns_impl(gp, None);
+    }
+
+    fn add_graph_pattern_pushdowns_impl(
+        &mut self,
+        gp: &GraphPattern,
+        only_vars: Option<&Vec<&str>>,
+    ) {
         match gp {
             GraphPattern::Bgp { patterns } => {
                 self.add_patterns_pushdowns(patterns);
             }
             GraphPattern::Join { left, right } => {
-                self.add_graph_pattern_pushdowns(left);
-                self.add_graph_pattern_pushdowns(right);
+                self.add_graph_pattern_pushdowns_impl(left, only_vars);
+                self.add_graph_pattern_pushdowns_impl(right, only_vars);
             }
-            GraphPattern::LeftJoin { left, .. } => self.add_graph_pattern_pushdowns(left),
-            GraphPattern::Minus { left, .. } => self.add_graph_pattern_pushdowns(left),
+            GraphPattern::LeftJoin { left, .. } => {
+                self.add_graph_pattern_pushdowns_impl(left, only_vars)
+            }
+            GraphPattern::Minus { left, .. } => {
+                self.add_graph_pattern_pushdowns_impl(left, only_vars)
+            }
             GraphPattern::Filter { inner, expr } => {
-                self.add_graph_pattern_pushdowns(inner);
-                self.add_filter_variable_pushdowns(expr);
+                self.add_graph_pattern_pushdowns_impl(inner, only_vars);
+                self.add_filter_variable_pushdowns(expr, only_vars);
             }
             GraphPattern::Union { left: _, right: _ } => {
                 //Consider what to do, must make corresponding change to graph pattern behaviour.
@@ -101,7 +126,7 @@ impl Pushdowns {
                 expression,
                 variable,
             } => {
-                self.add_graph_pattern_pushdowns(inner);
+                self.add_graph_pattern_pushdowns_impl(inner, only_vars);
                 if let Expression::Variable(expr_variable) = expression {
                     if self.variables_values.contains_key(expr_variable.as_str()) {
                         self.variables_values.insert(
@@ -119,6 +144,11 @@ impl Pushdowns {
                 variables,
             } => {
                 for (i, v) in variables.iter().enumerate() {
+                    if let Some(only_vars) = &only_vars {
+                        if !only_vars.contains(&v.as_str()) {
+                            continue;
+                        }
+                    }
                     let mut terms = HashSet::new();
                     let mut types = HashSet::new();
                     for gs in bindings {
@@ -171,32 +201,68 @@ impl Pushdowns {
                     }
                 }
             }
-            GraphPattern::OrderBy { inner, .. } => self.add_graph_pattern_pushdowns(inner),
-            GraphPattern::Distinct { inner, .. } => self.add_graph_pattern_pushdowns(inner),
-            GraphPattern::Reduced { inner } => self.add_graph_pattern_pushdowns(inner),
+            GraphPattern::OrderBy { inner, .. } => {
+                self.add_graph_pattern_pushdowns_impl(inner, only_vars)
+            }
+            GraphPattern::Distinct { inner, .. } => {
+                self.add_graph_pattern_pushdowns_impl(inner, only_vars)
+            }
+            GraphPattern::Reduced { inner } => {
+                self.add_graph_pattern_pushdowns_impl(inner, only_vars)
+            }
             GraphPattern::Slice { inner, .. } => {
-                self.add_graph_pattern_pushdowns(inner);
+                self.add_graph_pattern_pushdowns_impl(inner, only_vars);
             }
             GraphPattern::Group {
-                inner: _,
-                variables: _,
+                inner: i,
+                variables: vs,
                 ..
             }
             | GraphPattern::Project {
-                inner: _,
-                variables: _,
+                inner: i,
+                variables: vs,
             } => {
-                //Todo..
+                let new_variables: Vec<_> = if let Some(only_vars) = only_vars {
+                    vs.iter()
+                        .map(|x| x.as_str())
+                        .filter(|x| only_vars.contains(x))
+                        .collect()
+                } else {
+                    vs.iter().map(|x| x.as_str()).collect()
+                };
+                if !new_variables.is_empty() {
+                    self.add_graph_pattern_pushdowns_impl(i, Some(&new_variables));
+                }
             }
             _ => {}
         }
     }
 
-    pub fn add_filter_variable_pushdowns(&mut self, e: &Expression) {
-        if let Some(pushdowns) = find_variable_pushdowns(e) {
+    pub fn add_filter_variable_pushdowns(&mut self, e: &Expression, only_vars: Option<&Vec<&str>>) {
+        if let Some(mut pushdowns) = find_variable_pushdowns(e) {
+            if let Some(only_vars) = only_vars {
+                let to_remove: Vec<_> = pushdowns
+                    .keys()
+                    .filter(|k| only_vars.contains(&k.as_str()))
+                    .cloned()
+                    .collect();
+                for k in to_remove {
+                    pushdowns.remove(k.as_str());
+                }
+            }
             self.variables_values = conjunction(&mut self.variables_values, pushdowns);
         }
-        if let Some(type_constraints) = find_variable_type_constraints(e) {
+        if let Some(mut type_constraints) = find_variable_type_constraints(e) {
+            if let Some(only_vars) = only_vars {
+                let to_remove: Vec<_> = type_constraints
+                    .keys()
+                    .filter(|k| only_vars.contains(&k.as_str()))
+                    .cloned()
+                    .collect();
+                for k in to_remove {
+                    type_constraints.remove(k.as_str());
+                }
+            }
             self.variables_type_constraints =
                 conjunction_variable_type(&mut self.variables_type_constraints, type_constraints);
         }

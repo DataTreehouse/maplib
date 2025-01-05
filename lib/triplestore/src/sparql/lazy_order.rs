@@ -18,7 +18,13 @@ impl Triplestore {
             OrderExpression::Asc(expr) => {
                 let inner_context = context.extension_with(PathEntry::OrderingOperation);
                 Ok((
-                    self.lazy_expression(expr, solution_mappings, &inner_context, parameters)?,
+                    self.lazy_expression(
+                        expr,
+                        solution_mappings,
+                        &inner_context,
+                        parameters,
+                        None,
+                    )?,
                     true,
                     inner_context,
                 ))
@@ -26,7 +32,13 @@ impl Triplestore {
             OrderExpression::Desc(expr) => {
                 let inner_context = context.extension_with(PathEntry::OrderingOperation);
                 Ok((
-                    self.lazy_expression(expr, solution_mappings, &inner_context, parameters)?,
+                    self.lazy_expression(
+                        expr,
+                        solution_mappings,
+                        &inner_context,
+                        parameters,
+                        None,
+                    )?,
                     false,
                     inner_context,
                 ))

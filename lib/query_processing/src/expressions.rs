@@ -1557,3 +1557,37 @@ fn cast_literal(c: Expr, src: NamedNodeRef, trg: NamedNodeRef, trg_type: DataTyp
 //                             .eq(lit("true"))
 //                             .alias(outer_context.as_str()),
 //                     );
+
+pub fn contains_graph_pattern(e: &Expression) -> bool {
+    match e {
+        Expression::NamedNode(_)
+        | Expression::Bound(_)
+        | Expression::Literal(_)
+        | Expression::Variable(_) => false,
+        Expression::Or(l, r)
+        | Expression::And(l, r)
+        | Expression::Equal(l, r)
+        | Expression::SameTerm(l, r)
+        | Expression::Greater(l, r)
+        | Expression::GreaterOrEqual(l, r)
+        | Expression::Less(l, r)
+        | Expression::LessOrEqual(l, r)
+        | Expression::Add(l, r)
+        | Expression::Subtract(l, r)
+        | Expression::Multiply(l, r)
+        | Expression::Divide(l, r) => contains_graph_pattern(l) | contains_graph_pattern(r),
+        Expression::UnaryPlus(u) | Expression::UnaryMinus(u) | Expression::Not(u) => {
+            contains_graph_pattern(u)
+        }
+        Expression::Exists(e) => true,
+        Expression::In(l, r) => {
+            contains_graph_pattern(l) | r.iter().map(|x| contains_graph_pattern(x)).any(|x| x)
+        }
+        Expression::If(l, m, r) => {
+            contains_graph_pattern(l) || contains_graph_pattern(m) || contains_graph_pattern(r)
+        }
+        Expression::Coalesce(e) | Expression::FunctionCall(_, e) => {
+            e.iter().map(|x| contains_graph_pattern(x)).any(|x| x)
+        }
+    }
+}

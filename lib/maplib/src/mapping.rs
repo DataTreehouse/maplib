@@ -140,6 +140,16 @@ impl Mapping {
         Ok(())
     }
 
+    pub fn add_templates_from_string(&mut self, s: &str) -> Result<(), MaplibError> {
+        let doc = document_from_str(s).map_err(|x| MaplibError::TemplateError(x))?;
+        let dataset =
+            TemplateDataset::from_documents(vec![doc]).map_err(MaplibError::TemplateError)?;
+        for t in dataset.templates {
+            self.add_template(t)?
+        }
+        Ok(())
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub fn read_triples(
         &mut self,
