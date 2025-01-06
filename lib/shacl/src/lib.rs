@@ -1,17 +1,26 @@
 pub mod errors;
+pub mod storage;
+
 use errors::ShaclError;
-use polars::prelude::DataFrame;
-use representation::solution_mapping::EagerSolutionMappings;
-use representation::RDFNodeType;
-use std::collections::HashMap;
+use representation::solution_mapping::{SolutionMappings};
 use std::path::PathBuf;
 use triplestore::Triplestore;
+use crate::storage::StoredResults;
+
 #[derive(Debug, Clone)]
 pub struct ValidationReport {
     pub conforms: bool,
-    pub df: Option<DataFrame>,
-    pub rdf_node_types: Option<HashMap<String, RDFNodeType>>,
-    pub details: Option<EagerSolutionMappings>,
+    pub results: Option<StoredResults>,
+}
+
+impl ValidationReport {
+    pub fn concatenated_results(&self) -> Result<Option<SolutionMappings>, ShaclError> {
+        unimplemented!("Contact Data Treehouse to try")
+    }
+
+    pub fn concatenated_details(&self) -> Result<Option<SolutionMappings>, ShaclError> {
+        unimplemented!("Contact Data Treehouse to try")
+    }
 }
 
 pub fn validate(
