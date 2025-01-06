@@ -4,6 +4,7 @@ use polars::prelude::DataFrame;
 use representation::solution_mapping::EagerSolutionMappings;
 use representation::RDFNodeType;
 use std::collections::HashMap;
+use std::path::PathBuf;
 use triplestore::Triplestore;
 #[derive(Debug, Clone)]
 pub struct ValidationReport {
@@ -19,6 +20,7 @@ pub fn validate(
     _include_details: bool,
     _include_conforms: bool,
     _streaming: bool,
+    _folder_path: Option<&PathBuf>,
 ) -> Result<ValidationReport, ShaclError> {
     unimplemented!("Contact Data Treehouse to try")
 }
