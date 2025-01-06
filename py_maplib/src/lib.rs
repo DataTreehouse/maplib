@@ -392,7 +392,9 @@ impl PyMapping {
         include_conforms=None,
         include_shape_graph=None,
         streaming=None,
-        result_storage=None))]
+        max_shape_results=None,
+        result_storage=None,
+    ))]
     fn validate(
         &mut self,
         shape_graph: String,
@@ -400,6 +402,7 @@ impl PyMapping {
         include_conforms: Option<bool>,
         include_shape_graph: Option<bool>,
         streaming: Option<bool>,
+        max_shape_results: Option<usize>,
         result_storage: Option<&str>,
     ) -> PyResult<PyValidationReport> {
         let shape_graph = NamedNode::new(shape_graph).map_err(PyMaplibError::from)?;
@@ -411,6 +414,7 @@ impl PyMapping {
                 include_details.unwrap_or(false),
                 include_conforms.unwrap_or(false),
                 streaming.unwrap_or(false),
+                max_shape_results,
                 path.as_ref(),
             )
             .map_err(PyMaplibError::from)?;

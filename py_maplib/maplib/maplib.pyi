@@ -477,6 +477,7 @@ class Mapping:
         include_conforms: bool = False,
         include_shape_graph: bool = True,
         streaming: bool = False,
+        max_shape_results: int = None,
         result_storage: str = None,
     ) -> ValidationReport:
         """
@@ -489,6 +490,7 @@ class Mapping:
         :param include_shape_graph: Include the shape graph in the report, useful when creating the graph from the report.
         :param include_datatypes: Return the datatypes of the validation report (and details).
         :param streaming: Use Polars streaming
+        :param max_shape_results: Maximum number of results per shape. Reduces the size of the result set.
         :param result_storage: Where to store validation results. Can reduce memory use for large result sets.
         :return: Validation report containing a report (report.df) and whether the graph conforms (report.conforms)
         """

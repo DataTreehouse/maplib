@@ -300,6 +300,7 @@ impl Mapping {
         include_details: bool,
         include_conforms: bool,
         streaming: bool,
+        max_shape_results: Option<usize>,
         folder_path: Option<&PathBuf>,
     ) -> Result<ValidationReport, ShaclError> {
         let (shape_graph, mut shape_triplestore) =
@@ -310,6 +311,7 @@ impl Mapping {
             include_details,
             include_conforms,
             streaming,
+            max_shape_results,
             folder_path,
         ) {
             Ok(vr) => {
