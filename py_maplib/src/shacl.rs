@@ -1,3 +1,4 @@
+use crate::error::PyMaplibError;
 use crate::{fix_cats_and_multicolumns, PyIndexingOptions, PyMapping};
 use pydf_io::to_python::df_to_py_df;
 use pyo3::{pyclass, pymethods, PyObject, PyResult, Python};
@@ -42,14 +43,22 @@ impl PyValidationReport {
         include_datatypes: Option<bool>,
         py: Python<'_>,
     ) -> PyResult<Option<PyObject>> {
-        let report = if let Some(df) = self.inner.df.clone() {
-            let (df, rdf_node_types) = fix_cats_and_multicolumns(
-                df,
-                self.inner.rdf_node_types.as_ref().unwrap().clone(),
+        let report = if let Some(sm) = self
+            .inner
+            .concatenated_results()
+            .map_err(PyMaplibError::ShaclError)?
+        {
+            let EagerSolutionMappings {
+                mut mappings,
+                mut rdf_node_types,
+            } = sm.as_eager();
+            (mappings, rdf_node_types) = fix_cats_and_multicolumns(
+                mappings,
+                rdf_node_types,
                 native_dataframe.unwrap_or(false),
             );
             Some(df_to_py_df(
-                df,
+                mappings,
                 rdf_node_types,
                 None,
                 include_datatypes.unwrap_or(false),
@@ -68,11 +77,15 @@ impl PyValidationReport {
         include_datatypes: Option<bool>,
         py: Python<'_>,
     ) -> PyResult<Option<PyObject>> {
-        let details = if let Some(EagerSolutionMappings {
-            mut mappings,
-            mut rdf_node_types,
-        }) = self.inner.details.clone()
+        let details = if let Some(sm) = self
+            .inner
+            .concatenated_details()
+            .map_err(PyMaplibError::ShaclError)?
         {
+            let EagerSolutionMappings {
+                mut mappings,
+                mut rdf_node_types,
+            } = sm.as_eager();
             (mappings, rdf_node_types) = fix_cats_and_multicolumns(
                 mappings,
                 rdf_node_types,
@@ -92,7 +105,7 @@ impl PyValidationReport {
     }
 
     #[pyo3(signature = (indexing=None))]
-    pub fn graph(&self, indexing: Option<PyIndexingOptions>) -> PyMapping {
+    pub fn graph(&self, indexing: Option<PyIndexingOptions>) -> PyResult<PyMapping> {
         let indexing = if let Some(indexing) = indexing {
             Some(indexing.inner)
         } else {
@@ -102,7 +115,8 @@ impl PyValidationReport {
             &self.inner,
             &self.shape_graph,
             Some(indexing.unwrap_or(self.indexing.clone())),
-        );
-        PyMapping::from_inner_mapping(m)
+        )
+        .map_err(PyMaplibError::ShaclError)?;
+        Ok(PyMapping::from_inner_mapping(m))
     }
 }

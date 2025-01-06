@@ -12,6 +12,8 @@ pl.Config.set_fmt_str_lengths(300)
 
 PATH_HERE = pathlib.Path(__file__).parent
 TESTDATA_PATH = PATH_HERE / "testdata"
+
+
 @pytest.fixture(scope="session", params=[True, False])
 def windpower_mapping(request):
     instance_mapping = """
@@ -54,8 +56,7 @@ def windpower_mapping(request):
     n = 40
 
     mapping = Mapping(
-        [instance_mapping],
-        indexing_options=IndexingOptions(enabled=False)
+        [instance_mapping], indexing_options=IndexingOptions(enabled=False)
     )
     # Used as a prefix
     wpex = "https://github.com/magbak/chrontext/windpower_example#"
@@ -264,6 +265,7 @@ def test_simple_query(windpower_mapping):
     expected_df = pl.scan_csv(filename).sort(["a", "b"]).collect()
     pl.testing.assert_frame_equal(df, expected_df)
 
+
 def test_everything_from_subject_query(windpower_mapping):
     query = """
 SELECT ?b ?c WHERE {
@@ -304,6 +306,7 @@ SELECT ?site_label ?wtur_label ?ts ?ts_label WHERE {
     # Important assert for checking indexing by object string
     assert_frame_equal(df, expected_df)
 
+
 def test_bad_pushdown(windpower_mapping):
     query = """PREFIX xsd:<http://www.w3.org/2001/XMLSchema#>
 PREFIX ct:<https://github.com/magbak/chrontext#>
@@ -329,7 +332,7 @@ SELECT ?site_label ?ts ?ts_label WHERE {
     FILTER(?site_label = "Wind Mountain") .
 }"""
     df = windpower_mapping.query(query)
-    assert df.shape == (0,3)
+    assert df.shape == (0, 3)
 
 
 def test_larger_ordered_query(windpower_mapping):
@@ -547,10 +550,10 @@ def test_str_functions(windpower_mapping):
         }
         """
     )
-    df = df.filter(
-        pl.col("strStarts") | pl.col("strEnds") | pl.col("contains")
-    ).sort(["label"])
+    df = df.filter(pl.col("strStarts") | pl.col("strEnds") | pl.col("contains")).sort(
+        ["label"]
+    )
     filename = TESTDATA_PATH / "stringfuncs.csv"
-    #df.write_csv(filename)
+    # df.write_csv(filename)
     expected_df = pl.scan_csv(filename).sort(["label"]).collect()
     assert_frame_equal(df, expected_df)

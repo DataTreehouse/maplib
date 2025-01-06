@@ -250,9 +250,12 @@ class IndexingOptions:
     Options for indexing
     """
 
-    def __init__(self, enabled:bool=True,
-                 object_sort_all:bool=None,
-                 object_sort_some:List["IRI"]=None):
+    def __init__(
+        self,
+        enabled: bool = True,
+        object_sort_all: bool = None,
+        object_sort_some: List["IRI"] = None,
+    ):
         """
         Defaults to indexing on subjects and objects for select types (e.g. rdf:type and rdfs:label)
 
@@ -298,7 +301,7 @@ class ValidationReport:
         :return: Details of the SHACL validation report, as a DataFrame
         """
 
-    def graph(self, indexing = None) -> "Mapping":
+    def graph(self, indexing=None) -> "Mapping":
         """
         Creates a new mapping object where the base graph is the validation report with results.
         Includes the details of the validation report in the new graph if they exist.
@@ -331,12 +334,14 @@ class Mapping:
     """
 
     def __init__(
-        self, documents: Union[str, List[str]] = None, indexing_options: "IndexingOptions" = None
+        self,
+        documents: Union[str, List[str]] = None,
+        indexing_options: "IndexingOptions" = None,
     ) -> "Mapping": ...
-    def add_template(self, template: "Template"):
+    def add_template(self, template: Union["Template", str]):
         """
         Add a template to the mapping. Overwrites any existing template with the same IRI.
-        :param template: The template to add.
+        :param template: The template to add, as a stOTTR string or as a programmatically constructed Template.
         :return:
         """
 
@@ -472,6 +477,7 @@ class Mapping:
         include_conforms: bool = False,
         include_shape_graph: bool = True,
         streaming: bool = False,
+        result_storage: str = None,
     ) -> ValidationReport:
         """
         Validate the contained knowledge graph using SHACL
@@ -483,6 +489,7 @@ class Mapping:
         :param include_shape_graph: Include the shape graph in the report, useful when creating the graph from the report.
         :param include_datatypes: Return the datatypes of the validation report (and details).
         :param streaming: Use Polars streaming
+        :param result_storage: Where to store validation results. Can reduce memory use for large result sets.
         :return: Validation report containing a report (report.df) and whether the graph conforms (report.conforms)
         """
 
@@ -564,11 +571,12 @@ class Mapping:
         :param graph: The IRI of the graph to write.
         """
 
-    def write_triples(self,
-            file_path: Union[str, Path],
-            format=LiteralType["ntriples", "turtle", "rdf/xml"],
-            graph: str = None,
-            ) -> None:
+    def write_triples(
+        self,
+        file_path: Union[str, Path],
+        format=LiteralType["ntriples", "turtle", "rdf/xml"],
+        graph: str = None,
+    ) -> None:
         """
         Write the non-transient triples to the file path specified in the NTriples format.
 
@@ -580,7 +588,6 @@ class Mapping:
         :param format: One of "ntriples", "turtle", "rdf/xml".
         :param graph: The IRI of the graph to write.
         """
-
 
     def write_ntriples_string(self, graph: str = None) -> str:
         """
@@ -595,7 +602,9 @@ class Mapping:
         :return Triples in mapping in the NTriples format (potentially a large string)
         """
 
-    def write_triples_string(self, format=LiteralType["ntriples", "turtle", "rdf/xml"], graph: str = None) -> str:
+    def write_triples_string(
+        self, format=LiteralType["ntriples", "turtle", "rdf/xml"], graph: str = None
+    ) -> str:
         """
         DEPRECATED: use write_triples_string with format="ntriples"
         Write the non-transient triples to a string in memory.
@@ -677,14 +686,18 @@ class Mapping:
         @return: The sprout as its own Mapping.
         """
 
-    def get_predicate_iris(self, graph: str = None, include_transient:bool=False) -> List["IRI"]:
+    def get_predicate_iris(
+        self, graph: str = None, include_transient: bool = False
+    ) -> List["IRI"]:
         """
         :param graph: The graph to get the predicate iris from.
         :param include_transient: Should we include predicates only between transient triples?
         :return: The IRIs of the predicates currently in the given graph.
         """
 
-    def get_predicate(self, iri: "IRI", graph: str=None, include_transient:bool=False) -> List["SolutionMappings"]:
+    def get_predicate(
+        self, iri: "IRI", graph: str = None, include_transient: bool = False
+    ) -> List["SolutionMappings"]:
         """
         :param iri: The predicate IRI
         :param graph: The graph to get the predicate from.
@@ -692,7 +705,9 @@ class Mapping:
         :return: A list of the underlying tables that store a given predicate.
         """
 
-    def create_index(self, options: "IndexingOptions"=None, all:bool=True, graph: str=None):
+    def create_index(
+        self, options: "IndexingOptions" = None, all: bool = True, graph: str = None
+    ):
         """
         :param options: Indexing options
         :param all: Apply to all existing and new graphs

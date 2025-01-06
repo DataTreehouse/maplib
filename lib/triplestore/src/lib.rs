@@ -2,7 +2,6 @@ extern crate core;
 
 mod dblf;
 pub mod errors;
-mod io_funcs;
 pub mod native_parquet_write;
 pub mod query_solutions;
 pub mod rdfs_inferencing;
@@ -12,8 +11,8 @@ pub mod triples_read;
 pub mod triples_write;
 
 use crate::errors::TriplestoreError;
-use crate::io_funcs::create_folder_if_not_exists;
 use crate::storage::Triples;
+use file_io::create_folder_if_not_exists;
 use log::debug;
 use oxrdf::vocab::{rdf, rdfs};
 use oxrdf::NamedNode;
@@ -95,10 +94,12 @@ impl Triplestore {
     ) -> Result<Triplestore, TriplestoreError> {
         let pathbuf = if let Some(storage_folder) = &storage_folder {
             let mut pathbuf = Path::new(storage_folder).to_path_buf();
-            create_folder_if_not_exists(pathbuf.as_path())?;
+            create_folder_if_not_exists(pathbuf.as_path())
+                .map_err(TriplestoreError::FileIOError)?;
             let ext = format!("ts_{}", Uuid::new_v4().to_string());
             pathbuf.push(&ext);
-            create_folder_if_not_exists(pathbuf.as_path())?;
+            create_folder_if_not_exists(pathbuf.as_path())
+                .map_err(TriplestoreError::FileIOError)?;
             Some(pathbuf)
         } else {
             None

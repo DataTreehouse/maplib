@@ -7,7 +7,7 @@ rust-version.workspace = true
 [dependencies]
 query_processing = { path = "../query_processing" }
 representation = { path = "../representation" }
-parquet_io = { path = "../parquet_io" }
+file_io = { path = "../file_io" }
 spargebra = { path = "../spargebra" }
 
 rayon.workspace = true

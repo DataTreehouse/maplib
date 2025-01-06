@@ -2,7 +2,9 @@ import polars as pl
 from maplib import Mapping, RDFType, XSD
 from polars.testing import assert_frame_equal
 import polars as pl
+
 pl.Config.set_fmt_str_lengths(200)
+
 
 def test_multi_filter_equals():
     m = Mapping([])
@@ -18,6 +20,7 @@ def test_multi_filter_equals():
     )
     assert_frame_equal(df, pl.DataFrame({"a": ["<http://example.net/hello2>"]}))
 
+
 def test_multi_filter_numerical_equals():
     m = Mapping([])
     df = m.query(
@@ -31,7 +34,8 @@ def test_multi_filter_numerical_equals():
     }
     """
     )
-    assert df.shape == (0,2)
+    assert df.shape == (0, 2)
+
 
 def test_multi_filter_numerical_cast_real_equals():
     m = Mapping([])
@@ -46,7 +50,8 @@ def test_multi_filter_numerical_cast_real_equals():
     }
     """
     )
-    assert df.shape == (1,2)
+    assert df.shape == (1, 2)
+
 
 def test_multi_filter_numerical_cast_integer_equals():
     m = Mapping([])
@@ -61,7 +66,8 @@ def test_multi_filter_numerical_cast_integer_equals():
     }
     """
     )
-    assert df.shape == (1,2)
+    assert df.shape == (1, 2)
+
 
 def test_multi_filter_numerical_cast_string_equals():
     m = Mapping([])
@@ -76,7 +82,8 @@ def test_multi_filter_numerical_cast_string_equals():
     }
     """
     )
-    assert df.shape == (1,2)
+    assert df.shape == (1, 2)
+
 
 def test_multi_filter_uri_cast_string_equals():
     m = Mapping([])
@@ -90,7 +97,8 @@ def test_multi_filter_uri_cast_string_equals():
     }
     """
     )
-    assert df.shape == (1,1)
+    assert df.shape == (1, 1)
+
 
 def test_filter_uri_cast_string_equals():
     m = Mapping([])
@@ -104,7 +112,8 @@ def test_filter_uri_cast_string_equals():
     }
     """
     )
-    assert df.shape == (1,1)
+    assert df.shape == (1, 1)
+
 
 def test_multi_filter_equals_with_datatypes():
     m = Mapping([])
@@ -124,6 +133,7 @@ def test_multi_filter_equals_with_datatypes():
         sm.mappings, pl.DataFrame({"a": ["<http://example.net/hello2>"]})
     )
 
+
 def test_multi_value_different_types_filter_equals_with_datatypes():
     m = Mapping([])
     sm = m.query(
@@ -138,9 +148,8 @@ def test_multi_value_different_types_filter_equals_with_datatypes():
         include_datatypes=True,
     )
     assert sm.rdf_types == {"a": RDFType.Literal(XSD().boolean)}
-    assert_frame_equal(
-        sm.mappings, pl.DataFrame({"a": [True]})
-    )
+    assert_frame_equal(sm.mappings, pl.DataFrame({"a": [True]}))
+
 
 def test_multi_value_different_types_filter_isiri_or_equals_with_datatypes():
     m = Mapping([])
@@ -155,10 +164,21 @@ def test_multi_value_different_types_filter_isiri_or_equals_with_datatypes():
     """,
         include_datatypes=True,
     )
-    assert sm.rdf_types == {"a": RDFType.Multi([RDFType.IRI(), RDFType.Literal(XSD().integer)])}
+    assert sm.rdf_types == {
+        "a": RDFType.Multi([RDFType.IRI(), RDFType.Literal(XSD().integer)])
+    }
     assert_frame_equal(
-        sm.mappings, pl.DataFrame({"a": ["<http://example.net/hello2>", '"1"^^<http://www.w3.org/2001/XMLSchema#integer>']})
+        sm.mappings,
+        pl.DataFrame(
+            {
+                "a": [
+                    "<http://example.net/hello2>",
+                    '"1"^^<http://www.w3.org/2001/XMLSchema#integer>',
+                ]
+            }
+        ),
     )
+
 
 def test_coalesce_both_multi_same_types():
     m = Mapping([])
@@ -178,6 +198,7 @@ def test_coalesce_both_multi_same_types():
     )
     assert sm.mappings.get_column("c").is_null().sum() == 0
 
+
 def test_coalesce_both_multi_different_types():
     m = Mapping([])
     sm = m.query(
@@ -195,6 +216,7 @@ def test_coalesce_both_multi_different_types():
         include_datatypes=True,
     )
     assert sm.mappings.get_column("c").is_null().sum() == 0
+
 
 def test_coalesce_both_multi_different_types_rhs_less():
     m = Mapping([])
@@ -214,6 +236,7 @@ def test_coalesce_both_multi_different_types_rhs_less():
     )
     assert sm.mappings.get_column("c").is_null().sum() == 0
 
+
 def test_coalesce_only_lhs_multi():
     m = Mapping([])
     sm = m.query(
@@ -231,6 +254,7 @@ def test_coalesce_only_lhs_multi():
         include_datatypes=True,
     )
     assert sm.mappings.get_column("c").is_null().sum() == 0
+
 
 def test_coalesce_only_rhs_multi():
     m = Mapping([])
@@ -267,8 +291,9 @@ def test_coalesce_no_multi():
     """,
         include_datatypes=True,
     )
-    assert sm.rdf_types == {'c': RDFType.IRI(), 'b': RDFType.IRI(), 'a': RDFType.IRI()}
+    assert sm.rdf_types == {"c": RDFType.IRI(), "b": RDFType.IRI(), "a": RDFType.IRI()}
     assert sm.mappings.get_column("c").is_null().sum() == 0
+
 
 def test_multi_filter_equals_mirrored():
     m = Mapping([])

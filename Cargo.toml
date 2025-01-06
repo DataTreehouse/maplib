@@ -4,7 +4,7 @@ members = [
     "lib/representation",
     "lib/maplib",
     "lib/triplestore",
-    "lib/parquet_io",
+    "lib/file_io",
     "lib/pydf_io",
     "lib/query_processing",
     "lib/spargebra",

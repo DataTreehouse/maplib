@@ -15,7 +15,7 @@ use shacl::errors::ShaclError;
 use shacl::{validate, ValidationReport};
 use std::collections::HashMap;
 use std::io::Write;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use templates::ast::{ConstantTermOrList, PType, Template};
 use templates::dataset::TemplateDataset;
 use templates::document::document_from_str;
@@ -300,6 +300,7 @@ impl Mapping {
         include_details: bool,
         include_conforms: bool,
         streaming: bool,
+        folder_path: Option<&PathBuf>,
     ) -> Result<ValidationReport, ShaclError> {
         let (shape_graph, mut shape_triplestore) =
             self.triplestores_map.remove_entry(shape_graph).unwrap();
@@ -309,6 +310,7 @@ impl Mapping {
             include_details,
             include_conforms,
             streaming,
+            folder_path,
         ) {
             Ok(vr) => {
                 self.triplestores_map.insert(shape_graph, shape_triplestore);

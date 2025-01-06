@@ -27,6 +27,20 @@ def test_create_mapping_from_empty_polars_df():
     mapping.expand("http://example.net/ns#ExampleTemplate", df)
 
 
+def test_add_template_instead_of_constructor_df():
+    doc = """
+    @prefix ex:<http://example.net/ns#>.
+    ex:ExampleTemplate [?MyValue] :: {
+    ottr:Triple(ex:myObject, ex:hasValue, ?MyValue)
+    } .
+    """
+
+    df = pl.DataFrame({"MyValue": []})
+    mapping = Mapping()
+    mapping.add_template(doc)
+    mapping.expand("http://example.net/ns#ExampleTemplate", df)
+
+
 def test_create_mapping_with_optional_value_missing_df():
     doc = """
     @prefix ex:<http://example.net/ns#>.

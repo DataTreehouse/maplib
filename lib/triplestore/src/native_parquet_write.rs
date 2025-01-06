@@ -1,7 +1,7 @@
 use super::Triplestore;
 use crate::errors::TriplestoreError;
+use file_io::{property_to_filename, write_parquet};
 use log::debug;
-use parquet_io::{property_to_filename, write_parquet};
 use polars::prelude::ParquetCompression;
 use representation::BaseRDFNodeType;
 use std::path::Path;
@@ -49,7 +49,7 @@ impl Triplestore {
                         file_path.as_path(),
                         ParquetCompression::default(),
                     )
-                    .map_err(TriplestoreError::ParquetIOError)?
+                    .map_err(TriplestoreError::FileIOError)?
                 }
             }
         }

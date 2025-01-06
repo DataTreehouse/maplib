@@ -183,10 +183,21 @@ impl PyMapping {
         })
     }
 
-    fn add_template(&mut self, template: PyTemplate) -> PyResult<()> {
-        self.inner
-            .add_template(template.into_inner())
-            .map_err(PyMaplibError::from)?;
+    fn add_template(&mut self, template: Bound<'_, PyAny>) -> PyResult<()> {
+        if let Ok(s) = template.extract::<String>() {
+            self.inner
+                .add_templates_from_string(&s)
+                .map_err(PyMaplibError::from)?;
+        } else if let Ok(s) = template.extract::<PyTemplate>() {
+            self.inner
+                .add_template(s.into_inner())
+                .map_err(PyMaplibError::from)?;
+        } else {
+            return Err(PyMaplibError::FunctionArgumentError(
+                "Expected template to be Template or stOTTR document string".to_string(),
+            )
+            .into());
+        }
         Ok(())
     }
 
@@ -230,7 +241,9 @@ impl PyMapping {
             i.into_inner().to_string()
         } else if let Ok(t) = template.extract::<PyTemplate>() {
             let t_string = t.template.signature.template_name.as_str().to_string();
-            self.add_template(t)?;
+            self.inner
+                .add_template(t.into_inner())
+                .map_err(|x| PyMaplibError::from(x))?;
             t_string
         } else if let Ok(s) = template.extract::<String>() {
             s
@@ -373,7 +386,13 @@ impl PyMapping {
         Ok(())
     }
 
-    #[pyo3(signature = (shape_graph, include_details=None, include_conforms=None, include_shape_graph=None, streaming=None))]
+    #[pyo3(signature = (
+        shape_graph,
+        include_details=None,
+        include_conforms=None,
+        include_shape_graph=None,
+        streaming=None,
+        result_storage=None))]
     fn validate(
         &mut self,
         shape_graph: String,
@@ -381,8 +400,10 @@ impl PyMapping {
         include_conforms: Option<bool>,
         include_shape_graph: Option<bool>,
         streaming: Option<bool>,
+        result_storage: Option<&str>,
     ) -> PyResult<PyValidationReport> {
         let shape_graph = NamedNode::new(shape_graph).map_err(PyMaplibError::from)?;
+        let path = result_storage.map(|v| Path::new(v).to_owned());
         let report = self
             .inner
             .validate(
@@ -390,6 +411,7 @@ impl PyMapping {
                 include_details.unwrap_or(false),
                 include_conforms.unwrap_or(false),
                 streaming.unwrap_or(false),
+                path.as_ref(),
             )
             .map_err(PyMaplibError::from)?;
         let shape_graph_triplestore = if include_shape_graph.unwrap_or(true) {

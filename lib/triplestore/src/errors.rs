@@ -1,4 +1,4 @@
-use parquet_io::ParquetIOError;
+use file_io::FileIOError;
 use std::fmt::{Display, Formatter};
 use std::io;
 use thiserror::Error;
@@ -20,7 +20,7 @@ pub enum TriplestoreError {
     NTriplesParsingError(String),
     IndexingError(String),
     IPCIOError(String),
-    ParquetIOError(ParquetIOError),
+    FileIOError(FileIOError),
 }
 
 impl Display for TriplestoreError {
@@ -38,7 +38,7 @@ impl Display for TriplestoreError {
             TriplestoreError::IPCIOError(e) => {
                 write!(f, "IPC IO error: {}", e)
             }
-            TriplestoreError::ParquetIOError(e) => {
+            TriplestoreError::FileIOError(e) => {
                 write!(f, "Parquet IO error: {}", e)
             }
             TriplestoreError::FolderCreateIOError(e) => {

@@ -1,8 +1,8 @@
 use crate::errors::QueryProcessingError;
 use crate::type_constraints::{conjunction_variable_type, equal_variable_type, PossibleTypes};
 use log::warn;
-use oxrdf::vocab::rdfs;
-use oxrdf::{Term, Variable};
+use oxrdf::vocab::{rdf, rdfs};
+use oxrdf::{NamedNode, Term, Variable};
 use polars::datatypes::{CategoricalOrdering, DataType, PlSmallStr};
 use polars::frame::{DataFrame, UniqueKeepStrategy};
 use polars::prelude::{
@@ -11,7 +11,8 @@ use polars::prelude::{
 };
 use representation::multitype::{
     base_col_name, convert_lf_col_to_multitype, create_join_compatible_solution_mappings,
-    lf_column_to_categorical, nest_multicolumns, unnest_multicols,
+    known_convert_lf_multicol_to_single, lf_column_to_categorical, nest_multicolumns,
+    unnest_multicols,
 };
 use representation::multitype::{join_workaround, unique_workaround};
 use representation::polars_to_rdf::particular_opt_term_vec_to_series;
@@ -128,16 +129,40 @@ pub fn join(
     join_type: JoinType,
 ) -> Result<SolutionMappings, QueryProcessingError> {
     let SolutionMappings {
-        mappings: right_mappings,
-        rdf_node_types: right_datatypes,
+        mappings: mut right_mappings,
+        rdf_node_types: mut right_datatypes,
         height_estimate: right_height,
     } = right_solution_mappings;
 
     let SolutionMappings {
-        mappings: left_mappings,
-        rdf_node_types: left_datatypes,
+        mappings: mut left_mappings,
+        rdf_node_types: mut left_datatypes,
         height_estimate: left_height,
     } = left_solution_mappings;
+
+    let mut lang_to_multi = vec![];
+    for (lk, lt) in &left_datatypes {
+        if lt.is_lang_string() {
+            if let Some(rt) = right_datatypes.get(lk) {
+                if rt.is_lang_string() {
+                    lang_to_multi.push(lk.clone());
+                }
+            }
+        }
+    }
+    if !lang_to_multi.is_empty() {
+        let lang_base_type = BaseRDFNodeType::Literal(NamedNode::from(rdf::LANG_STRING));
+        let lang_rdf_type = lang_base_type.as_rdf_node_type();
+        let lang_multi = RDFNodeType::MultiType(vec![lang_base_type]);
+        for k in lang_to_multi.iter() {
+            left_mappings =
+                left_mappings.with_column(convert_lf_col_to_multitype(k, &lang_rdf_type));
+            left_datatypes.insert(k.clone(), lang_multi.clone());
+            right_mappings =
+                right_mappings.with_column(convert_lf_col_to_multitype(k, &lang_rdf_type));
+            right_datatypes.insert(k.clone(), lang_multi.clone());
+        }
+    }
 
     let (left_mappings, left_datatypes, right_mappings, right_datatypes) =
         create_join_compatible_solution_mappings(
@@ -148,7 +173,7 @@ pub fn join(
             join_type.clone(),
         );
 
-    let solution_mappings = join_workaround(
+    let mut solution_mappings = join_workaround(
         left_mappings,
         left_datatypes,
         left_height,
@@ -157,6 +182,18 @@ pub fn join(
         right_height,
         join_type,
     );
+
+    if !lang_to_multi.is_empty() {
+        let lang_base_type = BaseRDFNodeType::Literal(NamedNode::from(rdf::LANG_STRING));
+        let lang_rdf_type = lang_base_type.as_rdf_node_type();
+        for k in lang_to_multi.iter() {
+            solution_mappings.mappings =
+                known_convert_lf_multicol_to_single(solution_mappings.mappings, k, &lang_base_type);
+            solution_mappings
+                .rdf_node_types
+                .insert(k.clone(), lang_rdf_type.clone());
+        }
+    }
 
     Ok(solution_mappings)
 }
