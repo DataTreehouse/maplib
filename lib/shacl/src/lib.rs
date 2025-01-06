@@ -29,6 +29,7 @@ pub fn validate(
     _include_details: bool,
     _include_conforms: bool,
     _streaming: bool,
+    _max_shape_results: Option<usize>,
     _folder_path: Option<&PathBuf>,
 ) -> Result<ValidationReport, ShaclError> {
     unimplemented!("Contact Data Treehouse to try")
