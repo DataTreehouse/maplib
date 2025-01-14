@@ -1579,7 +1579,7 @@ pub fn contains_graph_pattern(e: &Expression) -> bool {
         Expression::UnaryPlus(u) | Expression::UnaryMinus(u) | Expression::Not(u) => {
             contains_graph_pattern(u)
         }
-        Expression::Exists(e) => true,
+        Expression::Exists(_) => true,
         Expression::In(l, r) => {
             contains_graph_pattern(l) | r.iter().map(|x| contains_graph_pattern(x)).any(|x| x)
         }
