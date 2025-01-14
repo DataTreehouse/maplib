@@ -197,15 +197,15 @@ impl Display for PType {
             PType::Basic(t) => write!(f, "{}", t),
             PType::Lub(lt) => {
                 let s = lt.to_string();
-                write!(f, "LUBType({})", s)
+                write!(f, "LUB<{}>", s)
             }
             PType::List(lt) => {
                 let s = lt.to_string();
-                write!(f, "ListType({})", s)
+                write!(f, "List<{}>", s)
             }
             PType::NEList(lt) => {
                 let s = lt.to_string();
-                write!(f, "NEListType({})", s)
+                write!(f, "NEList<{}>", s)
             }
             PType::None => {
                 write!(f, "")

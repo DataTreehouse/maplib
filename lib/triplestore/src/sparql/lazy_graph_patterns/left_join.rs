@@ -27,7 +27,7 @@ impl Triplestore {
         let left_context = context.extension_with(PathEntry::LeftJoinLeftSide);
         let right_context = context.extension_with(PathEntry::LeftJoinRightSide);
         let expression_context = context.extension_with(PathEntry::LeftJoinExpression);
-        let mut left_solution_mappings = self.lazy_graph_pattern(
+        let left_solution_mappings = self.lazy_graph_pattern(
             left,
             solution_mappings,
             &left_context,
