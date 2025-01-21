@@ -10,6 +10,7 @@ use polars::datatypes::{CategoricalOrdering, DataType, TimeUnit};
 use polars::frame::UniqueKeepStrategy;
 use polars::prelude::{
     as_struct, coalesce, col, concat_str, lit, when, Expr, LazyFrame, LiteralValue, Operator,
+    StrptimeOptions,
 };
 use representation::multitype::{
     all_multi_main_cols, convert_lf_col_to_multitype, MULTI_BLANK_DT, MULTI_IRI_DT,
@@ -844,6 +845,10 @@ pub fn func_expression(
                     | xsd::DOUBLE
                     | xsd::FLOAT
                     | xsd::STRING
+                    | xsd::DATE_TIME
+                    | xsd::DATE
+                    | xsd::DURATION
+                    | xsd::TIME
             ) {
                 assert_eq!(args.len(), 1);
                 let first_context = args_contexts.get(&0).unwrap();
@@ -1018,6 +1023,22 @@ pub fn func_expression(
             solution_mappings
                 .rdf_node_types
                 .insert(outer_context.as_str().to_string(), t.clone());
+        }
+        Function::StrLen => {
+            assert_eq!(args.len(), 1);
+            let first_context = args_contexts.get(&0).unwrap();
+            let t = solution_mappings
+                .rdf_node_types
+                .get(first_context.as_str())
+                .unwrap();
+            let mut expr = str_function(first_context.as_str(), t);
+            expr = expr.str().len_chars().cast(DataType::Int64);
+            expr = expr.alias(outer_context.as_str());
+            solution_mappings.mappings = solution_mappings.mappings.with_column(expr);
+            solution_mappings.rdf_node_types.insert(
+                outer_context.as_str().to_string(),
+                RDFNodeType::Literal(xsd::INTEGER.into_owned()),
+            );
         }
         Function::StrStarts | Function::StrEnds | Function::Contains => {
             assert_eq!(args.len(), 2);
@@ -1538,7 +1559,39 @@ fn cast_iri_to_xsd_literal(
 
 fn cast_literal(c: Expr, src: NamedNodeRef, trg: NamedNodeRef, trg_type: DataType) -> Expr {
     if src == xsd::STRING && trg == xsd::BOOLEAN {
-        c.str().to_lowercase().eq(lit("true"))
+        c.cast(DataType::String)
+            .str()
+            .to_lowercase()
+            .eq(lit("true"))
+    } else if src == xsd::STRING && trg == xsd::DATE_TIME {
+        c.cast(DataType::String).str().to_datetime(
+            None,
+            None,
+            StrptimeOptions {
+                format: None,
+                strict: true,
+                exact: false,
+                cache: false,
+            },
+            lit("raise"),
+        )
+    } else if src == xsd::STRING && trg == xsd::DATE {
+        c.cast(DataType::String).str().to_date(StrptimeOptions {
+            format: None,
+            strict: true,
+            exact: false,
+            cache: false,
+        })
+    } else if src == xsd::STRING && trg == xsd::TIME {
+        c.cast(DataType::String).str().to_time(StrptimeOptions {
+            format: None,
+            strict: true,
+            exact: false,
+            cache: false,
+        })
+    } else if src == xsd::STRING && trg == xsd::DURATION {
+        //Todo handle durations
+        c
     } else {
         c.cast(trg_type)
     }
