@@ -85,6 +85,20 @@ def test_multi_filter_numerical_cast_string_equals():
     assert df.shape == (1, 2)
 
 
+def test_multi_strlen():
+    m = Mapping([])
+    df = m.query(
+        """
+    PREFIX : <http://example.net/> 
+    PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+    SELECT ?a (STRLEN(?a) AS ?len) WHERE {
+        VALUES (?a) { ("123"^^xsd:int) ("Hello") ("") ("ABC"^^xsd:string)}
+    } 
+    """
+    )
+    assert df.get_column("len").sum() == 11
+
+
 def test_multi_filter_uri_cast_string_equals():
     m = Mapping([])
     df = m.query(

@@ -4,36 +4,22 @@ from polars.testing import assert_frame_equal
 
 from maplib import BlankNode
 
-pl.Config.set_fmt_str_lengths(300)
+from maplib import (
+    Mapping,
+    Prefix,
+    Template,
+    Argument,
+    Parameter,
+    Variable,
+    RDFType,
+    Triple,
+    a,
+)
 
 
 @pytest.fixture(scope="function")
-def pizzas_mapping():
-    from maplib import (
-        Mapping,
-        Prefix,
-        Template,
-        Argument,
-        Parameter,
-        Variable,
-        RDFType,
-        Triple,
-        a,
-    )
-    import polars as pl
-
-    pl.Config.set_fmt_str_lengths(150)
-
+def template() -> Template:
     pi = "https://github.com/DataTreehouse/maplib/pizza#"
-    df = pl.DataFrame(
-        {
-            "p": [pi + "Hawaiian", pi + "Grandiosa"],
-            "c": [pi + "CAN", pi + "NOR"],
-            "ings": [[pi + "Pineapple", pi + "Ham"], [pi + "Pepper", pi + "Meat"]],
-        }
-    )
-    # print(df)
-
     pi = Prefix("pi", pi)
 
     p_var = Variable("p")
@@ -59,6 +45,22 @@ def pizzas_mapping():
             ),
         ],
     )
+    return template
+
+@pytest.fixture(scope="function")
+def pizzas_mapping(template:Template):
+
+    pi = "https://github.com/DataTreehouse/maplib/pizza#"
+    df = pl.DataFrame(
+        {
+            "p": [pi + "Hawaiian", pi + "Grandiosa"],
+            "c": [pi + "CAN", pi + "NOR"],
+            "ings": [[pi + "Pineapple", pi + "Ham"], [pi + "Pepper", pi + "Meat"]],
+        }
+    )
+    # print(df)
+
+
 
     m = Mapping()
     m.expand(template, df)
@@ -88,3 +90,14 @@ def test_simple_query_no_error(pizzas_mapping):
         {"p": ["<https://github.com/DataTreehouse/maplib/pizza#Hawaiian>"]}
     )
     assert_frame_equal(res, expected_df)
+
+
+def test_print_template(template:Template):
+    s = str(template)
+    assert s == """<https://github.com/DataTreehouse/maplib/pizza#PizzaTemplate> [ <http://ns.ottr.xyz/0.4/IRI> ?p,  <http://ns.ottr.xyz/0.4/IRI> ?c,  List<<http://ns.ottr.xyz/0.4/IRI>> ?ings ] :: {
+  <http://ns.ottr.xyz/0.4/Triple>(?p,<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>,<https://github.com/DataTreehouse/maplib/pizza#Pizza>) ,
+  <http://ns.ottr.xyz/0.4/Triple>(?p,<https://github.com/DataTreehouse/maplib/pizza#fromCountry>,?c) ,
+  <http://ns.ottr.xyz/0.4/Triple>(?p,<https://github.com/DataTreehouse/maplib/pizza#hasBlank>,_:MyBlank) ,
+  cross | <http://ns.ottr.xyz/0.4/Triple>(?p,<https://github.com/DataTreehouse/maplib/pizza#hasIngredient>,++ ?ings)
+} . 
+"""
