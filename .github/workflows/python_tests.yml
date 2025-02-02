@@ -11,6 +11,7 @@ env:
   RUST_LOG: debug
   MATURIN_VERSION: '1.7.4'
   RUST_TOOLCHAIN: nightly-2024-11-28
+  PYTHON_VERSION: '3.12'
 
 jobs:
   build_and_test:
@@ -21,7 +22,7 @@ jobs:
 
     - uses: actions/setup-python@v2
       with:
-        python-version: 3.12
+        python-version: ${{ env.PYTHON_VERSION }}
 
     - name: Install dependencies
       run: |

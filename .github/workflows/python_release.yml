@@ -16,6 +16,7 @@ env:
   RUST_TOOLCHAIN: nightly-2024-11-28
   MATURIN_VERSION: '1.7.4'
   MATURIN_PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+  PYTHON_VERSION: '3.12'
 
 jobs:
   security_audit:
@@ -30,15 +31,11 @@ jobs:
     needs: security_audit
     runs-on: ubuntu-latest
     environment: release
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: [ '3.9', '3.10', '3.11', '3.12' ]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v4
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Fix README symlink
         run: |
@@ -51,7 +48,7 @@ jobs:
           RUSTFLAGS: -C target-feature=+fxsr,+sse,+sse2,+sse3,+ssse3,+sse4.1,+sse4.2,+popcnt,+avx,+fma
         with:
           command: publish
-          args: -m py_maplib/Cargo.toml --skip-existing -o wheels -i python${{ matrix.python-version }} -u magbak
+          args: -m py_maplib/Cargo.toml --skip-existing -o wheels -u magbak
           maturin-version: ${{ env.MATURIN_VERSION }}
           rust-toolchain: ${{ env.RUST_TOOLCHAIN }}
 
@@ -81,7 +78,7 @@ jobs:
           RUSTFLAGS: -C target-feature=+fxsr,+sse,+sse2,+sse3,+sse4.1,+sse4.2
         with:
           command: publish
-          args: -m py_maplib/Cargo.toml --no-sdist --skip-existing -o wheels -i python${{ matrix.PYTHON_VERSION }} -u magbak
+          args: -m py_maplib/Cargo.toml --no-sdist --skip-existing -o wheels -u magbak
           maturin-version: ${{ env.MATURIN_VERSION }}
           rust-toolchain: ${{ env.RUST_TOOLCHAIN }}
 
