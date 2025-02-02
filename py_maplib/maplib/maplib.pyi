@@ -402,13 +402,13 @@ class Mapping:
 
     def query(
         self,
-        query: str,
-        parameters: ParametersType = None,
-        include_datatypes: bool = False,
-        native_dataframe: bool = False,
-        graph: str = None,
-        streaming: bool = False,
-        return_json: bool = False,
+            query: str,
+            parameters: ParametersType = None,
+            include_datatypes: bool = False,
+            native_dataframe: bool = False,
+            graph: str = None,
+            streaming: bool = False,
+            return_json: bool = False,
     ) -> Union[
         DataFrame, SolutionMappings, List[Union[DataFrame, SolutionMappings, str]], None
     ]:
