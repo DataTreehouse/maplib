@@ -337,7 +337,7 @@ impl Triplestore {
 }
 
 pub fn prepare_triples(
-    mut df: DataFrame,
+    df: DataFrame,
     subject_type: &BaseRDFNodeType,
     object_type: &BaseRDFNodeType,
     static_verb_column: Option<NamedNode>,

@@ -507,8 +507,7 @@ pub fn compress_actual_multitypes(
             let mut keep_types = vec![];
             let mut any_dropped = false;
 
-            let main_cols = all_multi_main_cols(&types);
-            for (t, ts) in types.into_iter().zip(main_cols.into_iter()) {
+            for t in types.into_iter() {
                 let any_values = df
                     .column(&c)
                     .unwrap()

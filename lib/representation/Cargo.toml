@@ -20,5 +20,5 @@ pyo3 = {workspace = true, features = ["chrono-tz", "chrono"]}
 serde = {workspace = true, features = ["derive"]}
 oxsdatatypes.workspace = true
 
-[features]
-rdf-star = ["oxrdf/rdf-star"]
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("gil-refs", "rdf-star"))'] }

@@ -21,9 +21,9 @@ polars = { version = "0.45.1", features = ["nightly", "performant", "cse", "fmt"
 polars-core = { version = "0.45.1", default-features = false }
 rayon = "1.10.0"
 regex = "1.11.1"
-oxrdf = "0.2.2"
-oxrdfio = "0.1.2"
-oxttl = "0.1.2"
+oxrdf = { version="0.2.2" }
+oxrdfio = { version = "0.1.2" }
+oxttl = { version="0.1.2" }
 oxiri = "0.2.8"
 sparesults = "0.2.3"
 oxsdatatypes = "0.2.0"

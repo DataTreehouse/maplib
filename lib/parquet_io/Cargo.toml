@@ -1,0 +1,10 @@
+[package]
+name = "parquet_io"
+version = "0.5.0"
+edition = "2021"
+rust-version.workspace = true
+
+[dependencies]
+polars = {workspace=true, features=["parquet"], default-features = false }
+thiserror={ workspace= true }
+uuid = {workspace=true}

@@ -1539,9 +1539,9 @@ pub fn xsd_cast_literal(
 
 fn cast_iri_to_xsd_literal(
     e: Expr,
-    c: &str,
-    src: &BaseRDFNodeType,
-    trg: &BaseRDFNodeType,
+    _c: &str,
+    _src: &BaseRDFNodeType,
+    _trg: &BaseRDFNodeType,
     trg_nn: NamedNodeRef,
     trg_type: DataType,
 ) -> Result<Expr, QueryProcessingError> {

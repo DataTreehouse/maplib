@@ -16,7 +16,7 @@ impl Triplestore {
         solution_mappings: Option<SolutionMappings>,
         context: &Context,
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
-        mut pushdowns: Pushdowns,
+        pushdowns: Pushdowns,
     ) -> Result<SolutionMappings, SparqlError> {
         debug!("Processing join graph pattern");
         let left_context = context.extension_with(PathEntry::JoinLeftSide);
