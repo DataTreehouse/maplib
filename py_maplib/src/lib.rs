@@ -149,12 +149,12 @@ impl PyMapping {
             if documents.is_instance_of::<PyList>() {
                 let mut strs = vec![];
                 for doc in documents.iter()? {
-                    let docstr = doc?.str()?.to_str()?.to_string();
+                    let docstr = doc?.str()?.to_string();
                     strs.push(docstr);
                 }
                 Some(strs)
             } else {
-                let docstr = documents.str()?.to_str()?.to_string();
+                let docstr = documents.str()?.to_string();
                 Some(vec![docstr])
             }
         } else {
