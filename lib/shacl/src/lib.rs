@@ -1,11 +1,11 @@
 pub mod errors;
 pub mod storage;
 
+use crate::storage::StoredResults;
 use errors::ShaclError;
-use representation::solution_mapping::{SolutionMappings};
+use representation::solution_mapping::SolutionMappings;
 use std::path::PathBuf;
 use triplestore::Triplestore;
-use crate::storage::StoredResults;
 
 #[derive(Debug, Clone)]
 pub struct ValidationReport {

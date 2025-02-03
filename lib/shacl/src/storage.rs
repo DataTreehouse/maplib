@@ -1,4 +1,4 @@
-use representation::solution_mapping::{EagerSolutionMappings};
+use representation::solution_mapping::EagerSolutionMappings;
 use representation::RDFNodeType;
 use std::collections::HashMap;
 use std::path::PathBuf;

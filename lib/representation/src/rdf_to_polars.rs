@@ -177,161 +177,7 @@ pub fn polars_literal_values_to_series(literal_values: Vec<LiteralValue>, name: 
         .iter()
         .find(|x| &&LiteralValue::Null != x)
         .cloned();
-    let first_null_opt = literal_values
-        .iter()
-        .find(|x| &&LiteralValue::Null == x)
-        .cloned();
-    if let (Some(first_non_null), None) = (&first_non_null_opt, &first_null_opt) {
-        match first_non_null {
-            LiteralValue::Boolean(_) => Series::new(
-                name.into(),
-                literal_values
-                    .into_iter()
-                    .map(|x| {
-                        if let LiteralValue::Boolean(b) = x {
-                            b
-                        } else {
-                            panic!("Not possible")
-                        }
-                    })
-                    .collect::<Vec<bool>>(),
-            ),
-            LiteralValue::String(_) => Series::new(
-                name.into(),
-                literal_values
-                    .into_iter()
-                    .map(|x| {
-                        if let LiteralValue::String(u) = x {
-                            u.to_string()
-                        } else {
-                            panic!("Not possible")
-                        }
-                    })
-                    .collect::<Vec<String>>(),
-            ),
-            LiteralValue::UInt32(_) => Series::new(
-                name.into(),
-                literal_values
-                    .into_iter()
-                    .map(|x| {
-                        if let LiteralValue::UInt32(i) = x {
-                            i
-                        } else {
-                            panic!("Not possible")
-                        }
-                    })
-                    .collect::<Vec<u32>>(),
-            ),
-            LiteralValue::UInt64(_) => Series::new(
-                name.into(),
-                literal_values
-                    .into_iter()
-                    .map(|x| {
-                        if let LiteralValue::UInt64(i) = x {
-                            i
-                        } else {
-                            panic!("Not possible")
-                        }
-                    })
-                    .collect::<Vec<u64>>(),
-            ),
-            LiteralValue::Int32(_) => Series::new(
-                name.into(),
-                literal_values
-                    .into_iter()
-                    .map(|x| {
-                        if let LiteralValue::Int32(i) = x {
-                            i
-                        } else {
-                            panic!("Not possible")
-                        }
-                    })
-                    .collect::<Vec<i32>>(),
-            ),
-            LiteralValue::Int64(_) => Series::new(
-                name.into(),
-                literal_values
-                    .into_iter()
-                    .map(|x| {
-                        if let LiteralValue::Int64(i) = x {
-                            i
-                        } else {
-                            panic!("Not possible")
-                        }
-                    })
-                    .collect::<Vec<i64>>(),
-            ),
-            LiteralValue::Float32(_) => Series::new(
-                name.into(),
-                literal_values
-                    .into_iter()
-                    .map(|x| {
-                        if let LiteralValue::Float32(f) = x {
-                            f
-                        } else {
-                            panic!("Not possible")
-                        }
-                    })
-                    .collect::<Vec<f32>>(),
-            ),
-            LiteralValue::Float64(_) => Series::new(
-                name.into(),
-                literal_values
-                    .into_iter()
-                    .map(|x| {
-                        if let LiteralValue::Float64(f) = x {
-                            Some(f)
-                        } else {
-                            panic!("Not possible")
-                        }
-                    })
-                    .collect::<Vec<Option<f64>>>(),
-            ),
-            LiteralValue::Range { .. } => {
-                todo!()
-            }
-            LiteralValue::DateTime(_, t, tz) => Series::new(
-                name.into(),
-                literal_values
-                    .into_iter()
-                    .map(|x| {
-                        if let LiteralValue::DateTime(n, _tz_prime, _) = x {
-                            //assert_eq!(t, &t_prime);
-                            n
-                        } else {
-                            panic!("Not possible")
-                        }
-                    })
-                    .collect::<Vec<i64>>(),
-            )
-            .cast(&DataType::Datetime(*t, tz.clone()))
-            .unwrap(),
-            LiteralValue::Date(_) => Series::new(
-                name.into(),
-                literal_values
-                    .into_iter()
-                    .map(|x| {
-                        if let LiteralValue::Date(t) = x {
-                            t
-                        } else {
-                            panic!("Not possible")
-                        }
-                    })
-                    .collect::<Vec<i32>>(),
-            )
-            .cast(&DataType::Date)
-            .unwrap(),
-            LiteralValue::Duration(_, _) => {
-                todo!()
-            }
-            LiteralValue::Series(_) => {
-                todo!()
-            }
-            p => {
-                todo!("{p:?}")
-            }
-        }
-    } else if let (Some(first_non_null), Some(_)) = (&first_non_null_opt, &first_null_opt) {
+    if let Some(first_non_null) = &first_non_null_opt {
         match first_non_null {
             LiteralValue::Boolean(_) => Series::new(
                 name.into(),
@@ -358,6 +204,58 @@ pub fn polars_literal_values_to_series(literal_values: Vec<LiteralValue>, name: 
                         }
                     })
                     .collect::<Vec<Option<String>>>(),
+            ),
+            LiteralValue::UInt8(_) => Series::new(
+                name.into(),
+                literal_values
+                    .into_iter()
+                    .map(|x| {
+                        if let LiteralValue::UInt8(u) = x {
+                            Some(u)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Vec<Option<u8>>>(),
+            ),
+            LiteralValue::Int8(_) => Series::new(
+                name.into(),
+                literal_values
+                    .into_iter()
+                    .map(|x| {
+                        if let LiteralValue::Int8(i) = x {
+                            Some(i)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Vec<Option<i8>>>(),
+            ),
+            LiteralValue::UInt16(_) => Series::new(
+                name.into(),
+                literal_values
+                    .into_iter()
+                    .map(|x| {
+                        if let LiteralValue::UInt16(u) = x {
+                            Some(u)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Vec<Option<u16>>>(),
+            ),
+            LiteralValue::Int16(_) => Series::new(
+                name.into(),
+                literal_values
+                    .into_iter()
+                    .map(|x| {
+                        if let LiteralValue::Int16(i) = x {
+                            Some(i)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Vec<Option<i16>>>(),
             ),
             LiteralValue::UInt32(_) => Series::new(
                 name.into(),
@@ -432,7 +330,7 @@ pub fn polars_literal_values_to_series(literal_values: Vec<LiteralValue>, name: 
                         if let LiteralValue::Float64(f) = x {
                             Some(f)
                         } else {
-                            None
+                            panic!("Not possible")
                         }
                     })
                     .collect::<Vec<Option<f64>>>(),
@@ -440,32 +338,45 @@ pub fn polars_literal_values_to_series(literal_values: Vec<LiteralValue>, name: 
             LiteralValue::Range { .. } => {
                 todo!()
             }
-            LiteralValue::DateTime(_, t, None) =>
-            //TODO: Assert time unit lik??
-            {
-                Series::new(
-                    name.into(),
-                    literal_values
-                        .into_iter()
-                        .map(|x| {
-                            if let LiteralValue::DateTime(n, t_prime, None) = x {
-                                assert_eq!(t, &t_prime);
-                                Some(n)
-                            } else {
-                                None
-                            }
-                        })
-                        .collect::<Vec<Option<i64>>>(),
-                )
-            }
+            LiteralValue::DateTime(_, t, tz) => Series::new(
+                name.into(),
+                literal_values
+                    .into_iter()
+                    .map(|x| {
+                        if let LiteralValue::DateTime(n, _tz_prime, _) = x {
+                            //assert_eq!(t, &t_prime);
+                            Some(n)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Vec<Option<i64>>>(),
+            )
+            .cast(&DataType::Datetime(*t, tz.clone()))
+            .unwrap(),
+            LiteralValue::Date(_) => Series::new(
+                name.into(),
+                literal_values
+                    .into_iter()
+                    .map(|x| {
+                        if let LiteralValue::Date(t) = x {
+                            Some(t)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Vec<Option<i32>>>(),
+            )
+            .cast(&DataType::Date)
+            .unwrap(),
             LiteralValue::Duration(_, _) => {
                 todo!()
             }
             LiteralValue::Series(_) => {
                 todo!()
             }
-            _ => {
-                todo!()
+            p => {
+                todo!("{p:?}")
             }
         }
     } else {
