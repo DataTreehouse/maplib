@@ -3,7 +3,7 @@ use std::collections::HashMap;
 
 use crate::sparql::errors::SparqlError;
 use oxrdf::vocab::xsd;
-use polars::prelude::{col, Expr, LiteralValue, Operator};
+use polars::prelude::{col, Expr, LiteralValue};
 
 use query_processing::exists_helper::rewrite_exists_graph_pattern;
 use query_processing::expressions::{
@@ -48,7 +48,7 @@ impl Triplestore {
                 )?;
                 binary_expression(
                     output_solution_mappings,
-                    Operator::Or,
+                    expr,
                     &left_context,
                     &right_context,
                     context,
@@ -73,7 +73,7 @@ impl Triplestore {
                 )?;
                 binary_expression(
                     output_solution_mappings,
-                    Operator::And,
+                    expr,
                     &left_context,
                     &right_context,
                     context,
@@ -98,7 +98,7 @@ impl Triplestore {
                 )?;
                 binary_expression(
                     output_solution_mappings,
-                    Operator::Eq,
+                    expr,
                     &left_context,
                     &right_context,
                     context,
@@ -126,7 +126,7 @@ impl Triplestore {
                 )?;
                 binary_expression(
                     output_solution_mappings,
-                    Operator::Gt,
+                    expr,
                     &left_context,
                     &right_context,
                     context,
@@ -152,7 +152,7 @@ impl Triplestore {
 
                 binary_expression(
                     output_solution_mappings,
-                    Operator::GtEq,
+                    expr,
                     &left_context,
                     &right_context,
                     context,
@@ -177,7 +177,7 @@ impl Triplestore {
                 )?;
                 binary_expression(
                     output_solution_mappings,
-                    Operator::Lt,
+                    expr,
                     &left_context,
                     &right_context,
                     context,
@@ -202,7 +202,7 @@ impl Triplestore {
                 )?;
                 binary_expression(
                     output_solution_mappings,
-                    Operator::LtEq,
+                    expr,
                     &left_context,
                     &right_context,
                     context,
@@ -257,7 +257,7 @@ impl Triplestore {
                 )?;
                 binary_expression(
                     output_solution_mappings,
-                    Operator::Plus,
+                    expr,
                     &left_context,
                     &right_context,
                     context,
@@ -282,7 +282,7 @@ impl Triplestore {
                 )?;
                 binary_expression(
                     output_solution_mappings,
-                    Operator::Minus,
+                    expr,
                     &left_context,
                     &right_context,
                     context,
@@ -307,7 +307,7 @@ impl Triplestore {
                 )?;
                 binary_expression(
                     output_solution_mappings,
-                    Operator::Multiply,
+                    expr,
                     &left_context,
                     &right_context,
                     context,
@@ -333,7 +333,7 @@ impl Triplestore {
 
                 binary_expression(
                     output_solution_mappings,
-                    Operator::Divide,
+                    expr,
                     &left_context,
                     &right_context,
                     context,

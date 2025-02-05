@@ -80,16 +80,24 @@ pub fn prepare_group_by(
     mut solution_mappings: SolutionMappings,
     variables: &[Variable],
 ) -> (SolutionMappings, Vec<Expr>, Option<String>) {
-    let by: Vec<Expr>;
+    let mut by = vec![];
     let dummy_varname = if variables.is_empty() {
         let dummy_varname = Uuid::new_v4().to_string();
-        by = vec![col(&dummy_varname)];
+        by.push(col(&dummy_varname));
         solution_mappings.mappings = solution_mappings
             .mappings
             .with_column(lit(true).alias(&dummy_varname));
         Some(dummy_varname)
     } else {
-        by = variables.iter().map(|v| col(v.as_str())).collect();
+        let mut grouped = HashSet::new();
+        for v in variables {
+            if !grouped.contains(&v) {
+                grouped.insert(v);
+                by.push(col(v.as_str()));
+            } else {
+                warn!("GROUP BY contains duplicate variable: {}", v)
+            }
+        }
         None
     };
     (solution_mappings, by, dummy_varname)

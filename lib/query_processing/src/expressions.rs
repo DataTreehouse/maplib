@@ -22,8 +22,9 @@ use representation::rdf_to_polars::{
 };
 use representation::solution_mapping::SolutionMappings;
 use representation::{
-    literal_is_boolean, literal_is_datetime, literal_is_numeric, literal_is_string,
-    BaseRDFNodeType, RDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD,
+    literal_is_boolean, literal_is_date, literal_is_datetime, literal_is_numeric,
+    literal_is_string, BaseRDFNodeType, RDFNodeType, LANG_STRING_LANG_FIELD,
+    LANG_STRING_VALUE_FIELD,
 };
 use spargebra::algebra::{Expression, Function};
 use std::collections::{HashMap, HashSet};
@@ -82,27 +83,51 @@ pub fn variable(
 
 pub fn binary_expression(
     mut solution_mappings: SolutionMappings,
-    op: Operator,
+    expression: &Expression,
     left_context: &Context,
     right_context: &Context,
     outer_context: &Context,
 ) -> Result<SolutionMappings, QueryProcessingError> {
-    let expr = if op == Operator::Eq {
-        let left_type = solution_mappings
-            .rdf_node_types
-            .get(left_context.as_str())
-            .unwrap();
-        let right_type = solution_mappings
-            .rdf_node_types
-            .get(right_context.as_str())
-            .unwrap();
+    let left_type = solution_mappings
+        .rdf_node_types
+        .get(left_context.as_str())
+        .unwrap();
+    let right_type = solution_mappings
+        .rdf_node_types
+        .get(right_context.as_str())
+        .unwrap();
+    let expr = if matches!(expression, Expression::Equal(..)) {
         typed_equals_expr(
             left_context.as_str(),
             right_context.as_str(),
             left_type,
             right_type,
         )
+    } else if matches!(
+        expression,
+        Expression::Less(..)
+            | Expression::Greater(..)
+            | Expression::GreaterOrEqual(..)
+            | Expression::LessOrEqual(..)
+    ) {
+        typed_comparison_expr(
+            left_context.as_str(),
+            right_context.as_str(),
+            left_type,
+            right_type,
+            expression,
+        )
     } else {
+        let op = match expression {
+            Expression::Or(_, _) => Operator::Or,
+            Expression::And(_, _) => Operator::And,
+            Expression::Add(_, _) => Operator::Plus,
+            Expression::Subtract(_, _) => Operator::Minus,
+            Expression::Multiply(_, _) => Operator::Multiply,
+            Expression::Divide(_, _) => Operator::Divide,
+            _ => panic!("Should never happen"),
+        };
+
         Expr::BinaryExpr {
             left: Arc::new(col(left_context.as_str())),
             op,
@@ -113,15 +138,18 @@ pub fn binary_expression(
         .mappings
         .with_column(expr.alias(outer_context.as_str()));
 
-    let t = match op {
-        Operator::LtEq
-        | Operator::GtEq
-        | Operator::Gt
-        | Operator::Lt
-        | Operator::And
-        | Operator::Eq
-        | Operator::Or => RDFNodeType::Literal(xsd::BOOLEAN.into_owned()),
-        Operator::Plus | Operator::Minus | Operator::Multiply | Operator::Divide => {
+    let t = match expression {
+        Expression::LessOrEqual(..)
+        | Expression::GreaterOrEqual(..)
+        | Expression::Greater(..)
+        | Expression::Less(..)
+        | Expression::And(..)
+        | Expression::Equal(..)
+        | Expression::Or(..) => RDFNodeType::Literal(xsd::BOOLEAN.into_owned()),
+        Expression::Add(..)
+        | Expression::Subtract(..)
+        | Expression::Multiply(..)
+        | Expression::Divide(..) => {
             let left_type = solution_mappings
                 .rdf_node_types
                 .get(left_context.as_str())
@@ -130,7 +158,7 @@ pub fn binary_expression(
                 .rdf_node_types
                 .get(right_context.as_str())
                 .unwrap();
-            let div_int = if op == Operator::Divide {
+            let div_int = if matches!(expression, Expression::Divide(..)) {
                 if let RDFNodeType::Literal(right_lit) = right_type {
                     matches!(
                         right_lit.as_ref(),
@@ -1368,6 +1396,103 @@ fn typed_equals_expr(
     }
 }
 
+fn typed_comparison_expr(
+    left_col: &str,
+    right_col: &str,
+    left_type: &RDFNodeType,
+    right_type: &RDFNodeType,
+    expression: &Expression,
+) -> Expr {
+    let mut comps = vec![];
+    if let RDFNodeType::MultiType(left_types) = left_type {
+        if let RDFNodeType::MultiType(right_types) = right_type {
+            for lt in left_types {
+                for rt in right_types {
+                    if let BaseRDFNodeType::Literal(lt_nn) = lt {
+                        if let BaseRDFNodeType::Literal(rt_nn) = rt {
+                            comps.push(comp(
+                                col(left_col).struct_().field_by_name(&base_col_name(lt)),
+                                col(right_col).struct_().field_by_name(&base_col_name(rt)),
+                                lt_nn.as_ref(),
+                                rt_nn.as_ref(),
+                                expression,
+                            ));
+                        }
+                    }
+                }
+            }
+        } else {
+            if let RDFNodeType::Literal(rt_nn) = right_type {
+                //Only left multi
+                for lt in left_types {
+                    if let BaseRDFNodeType::Literal(lt_nn) = lt {
+                        comps.push(comp(
+                            col(left_col).struct_().field_by_name(&base_col_name(lt)),
+                            col(right_col),
+                            lt_nn.as_ref(),
+                            rt_nn.as_ref(),
+                            expression,
+                        ));
+                    }
+                }
+            }
+        }
+    } else if let RDFNodeType::MultiType(right_types) = right_type {
+        if let RDFNodeType::Literal(lt_nn) = left_type {
+            for rt in right_types {
+                if let BaseRDFNodeType::Literal(rt_nn) = rt {
+                    comps.push(comp(
+                        col(left_col),
+                        col(right_col).struct_().field_by_name(&base_col_name(rt)),
+                        lt_nn.as_ref(),
+                        rt_nn.as_ref(),
+                        expression,
+                    ));
+                }
+            }
+        }
+    } else {
+        if let RDFNodeType::Literal(lt_nn) = left_type {
+            if let RDFNodeType::Literal(rt_nn) = right_type {
+                comps.push(comp(
+                    col(left_col),
+                    col(right_col),
+                    lt_nn.as_ref(),
+                    rt_nn.as_ref(),
+                    expression,
+                ));
+            }
+        }
+    }
+    if comps.is_empty() {
+        lit(LiteralValue::Null).cast(DataType::Boolean)
+    } else {
+        coalesce(&comps)
+    }
+}
+
+fn comp(
+    e_left: Expr,
+    e_right: Expr,
+    dt_left: NamedNodeRef,
+    dt_right: NamedNodeRef,
+    expression: &Expression,
+) -> Expr {
+    let e = match expression {
+        Expression::Greater(_, _) => e_left.clone().gt(e_right.clone()),
+        Expression::GreaterOrEqual(_, _) => e_left.clone().gt_eq(e_right.clone()),
+        Expression::Less(_, _) => e_left.clone().lt(e_right.clone()),
+        Expression::LessOrEqual(_, _) => e_left.clone().lt_eq(e_right.clone()),
+        _ => panic!("Should never happen"),
+    };
+
+    if compatible_operation(expression, dt_left, dt_right) {
+        e
+    } else {
+        lit(LiteralValue::Null).cast(DataType::Boolean)
+    }
+}
+
 pub fn drop_inner_contexts(mut sm: SolutionMappings, contexts: &Vec<&Context>) -> SolutionMappings {
     let mut inner = vec![];
     for c in contexts {
@@ -1379,7 +1504,7 @@ pub fn drop_inner_contexts(mut sm: SolutionMappings, contexts: &Vec<&Context>) -
     sm
 }
 
-pub fn compatible_operation(expression: Expression, l1: NamedNodeRef, l2: NamedNodeRef) -> bool {
+pub fn compatible_operation(expression: &Expression, l1: NamedNodeRef, l2: NamedNodeRef) -> bool {
     match expression {
         Expression::Equal(..)
         | Expression::LessOrEqual(..)
@@ -1390,6 +1515,7 @@ pub fn compatible_operation(expression: Expression, l1: NamedNodeRef, l2: NamedN
                 || (literal_is_boolean(l1) && literal_is_boolean(l2))
                 || (literal_is_string(l1) && literal_is_string(l2))
                 || (literal_is_datetime(l1) && literal_is_datetime(l2))
+                || (literal_is_date(l1) && literal_is_date(l2))
         }
         Expression::Or(..) | Expression::And(..) => {
             literal_is_boolean(l1) && literal_is_boolean(l2)

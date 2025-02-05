@@ -3,7 +3,8 @@ use crate::sparql::errors::SparqlError;
 use log::debug;
 use oxrdf::Variable;
 
-use query_processing::graph_patterns::project;
+use polars::prelude::JoinType;
+use query_processing::graph_patterns::{join, project};
 use query_processing::pushdowns::Pushdowns;
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
@@ -24,15 +25,19 @@ impl Triplestore {
         let inner_context = context.extension_with(PathEntry::ProjectInner);
         pushdowns.limit_to_variables(variables);
         pushdowns.add_graph_pattern_pushdowns(inner);
-        let mut solution_mappings = self.lazy_graph_pattern(
-            inner,
-            solution_mappings,
-            &inner_context,
-            parameters,
-            pushdowns,
-        )?;
+        let mut project_solution_mappings =
+            self.lazy_graph_pattern(inner, None, &inner_context, parameters, pushdowns)?;
+        project_solution_mappings = project(project_solution_mappings, variables)?;
 
-        solution_mappings = project(solution_mappings, variables)?;
+        let solution_mappings = if let Some(solution_mappings) = solution_mappings {
+            join(
+                solution_mappings,
+                project_solution_mappings,
+                JoinType::Inner,
+            )?
+        } else {
+            project_solution_mappings
+        };
 
         Ok(solution_mappings)
     }

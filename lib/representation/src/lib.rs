@@ -429,6 +429,10 @@ pub fn literal_is_datetime(l: NamedNodeRef) -> bool {
     matches!(l, xsd::DATE_TIME)
 }
 
+pub fn literal_is_date(l: NamedNodeRef) -> bool {
+    matches!(l, xsd::DATE)
+}
+
 pub fn literal_is_string(l: NamedNodeRef) -> bool {
     matches!(l, xsd::STRING)
 }

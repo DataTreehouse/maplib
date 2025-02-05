@@ -35,7 +35,6 @@ impl Triplestore {
             parameters,
             pushdowns,
         )?;
-
         output_solution_mappings = self.lazy_expression(
             expression,
             output_solution_mappings,

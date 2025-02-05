@@ -432,14 +432,6 @@ fn build_select(
         with_aggregate = true;
     }
 
-    // HAVING
-    if let Some(expr) = having {
-        p = GraphPattern::Filter {
-            expr,
-            inner: Box::new(p),
-        };
-    }
-
     // VALUES
     if let Some(data) = values {
         p = new_join(p, data);
@@ -510,6 +502,14 @@ fn build_select(
         }
         SelectionVariables::Everything => false,
     };
+
+    // HAVING
+    if let Some(expr) = having {
+        p = GraphPattern::Filter {
+            expr,
+            inner: Box::new(p),
+        };
+    }
 
     let mut m = p;
 

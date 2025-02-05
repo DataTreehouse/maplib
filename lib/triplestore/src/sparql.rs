@@ -114,10 +114,10 @@ impl Triplestore {
             unimplemented!("Streaming is currently disabled due to an unresolved bug in Polarsq")
         }
         let query = Query::parse(query, None).map_err(SparqlError::ParseError)?;
-        self.query_impl(&query, parameters, streaming)
+        self.query_parsed(&query, parameters, streaming)
     }
 
-    fn query_impl(
+    pub fn query_parsed(
         &mut self,
         query: &Query,
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
@@ -178,7 +178,7 @@ impl Triplestore {
     ) -> Result<(), SparqlError> {
         let query = Query::parse(query, None).map_err(SparqlError::ParseError)?;
         if let Query::Construct { .. } = &query {
-            let res = self.query_impl(&query, parameters, streaming)?;
+            let res = self.query_parsed(&query, parameters, streaming)?;
             match res {
                 QueryResult::Select(_, _) => {
                     panic!("Should never happen")
