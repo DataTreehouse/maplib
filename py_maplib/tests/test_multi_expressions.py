@@ -2,9 +2,11 @@ import polars as pl
 from maplib import Mapping, RDFType, XSD
 from polars.testing import assert_frame_equal
 import polars as pl
+import pathlib
 
 pl.Config.set_fmt_str_lengths(200)
-
+PATH_HERE = pathlib.Path(__file__).parent
+TESTDATA_PATH = PATH_HERE / "testdata"
 
 def test_multi_filter_equals():
     m = Mapping([])
@@ -353,3 +355,92 @@ def test_multi_filter_is_in():
     """
     )
     assert_frame_equal(df, pl.DataFrame({"a": ["<http://example.net/hello2>"]}))
+
+def test_multi_filter_comparison():
+    m = Mapping([])
+    df = m.query(
+        """
+    PREFIX : <http://example.net/> 
+    PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+    SELECT ?a WHERE {
+    VALUES (?a) { (1) (3.0) (89) }
+    FILTER(?a > 1.4)
+    } ORDER BY ?a
+    """
+    )
+    expected = pl.from_repr("""
+┌───────────────────────────────────────────────────┐
+│ a                                                 │
+│ ---                                               │
+│ str                                               │
+╞═══════════════════════════════════════════════════╡
+│ "3.0"^^<http://www.w3.org/2001/XMLSchema#decimal> │
+│ "89"^^<http://www.w3.org/2001/XMLSchema#integer>  │
+└───────────────────────────────────────────────────┘
+    """)
+    assert_frame_equal(df, expected)
+
+def test_multi_filter_incompatible_comparison():
+    m = Mapping([])
+    df = m.query(
+        """
+    PREFIX : <http://example.net/> 
+    PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+    SELECT ?a WHERE {
+    VALUES (?a) { (1) (3.0) (89) ("String") ("2021-01-01T08:00:00"^^xsd:dateTime) }
+    FILTER(?a > 1.4)
+    } ORDER BY ?a
+    """
+    )
+    expected = pl.from_repr("""
+┌───────────────────────────────────────────────────┐
+│ a                                                 │
+│ ---                                               │
+│ str                                               │
+╞═══════════════════════════════════════════════════╡
+│ "3.0"^^<http://www.w3.org/2001/XMLSchema#decimal> │
+│ "89"^^<http://www.w3.org/2001/XMLSchema#integer>  │
+└───────────────────────────────────────────────────┘
+    """)
+    assert_frame_equal(df, expected)
+
+def test_multi_filter_incompatible_datetime_comparison():
+    m = Mapping([])
+    df = m.query(
+        """
+    PREFIX : <http://example.net/> 
+    PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+    SELECT ?a WHERE {
+    VALUES (?a) { (1) (3.0) (89) ("String") ("2021-01-01T08:00:00"^^xsd:dateTime) }
+    FILTER(?a > "2021-01-01T07:59:59"^^xsd:dateTime)
+    } ORDER BY ?a
+    """
+    )
+    expected = pl.from_repr("""
+┌─────────────────────┐
+│ a                   │
+│ ---                 │
+│ datetime[ns]        │
+╞═════════════════════╡
+│ 2021-01-01 08:00:00 │
+└─────────────────────┘
+    """)
+    assert_frame_equal(df, expected)
+
+def test_multi_filter_incompatible_many_comparison():
+    m = Mapping([])
+    df = m.query(
+        """
+    PREFIX : <http://example.net/> 
+    PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+    SELECT ?a ?b WHERE {
+    VALUES (?a) { (1) (3.0) (89) ("String") ("2021-01-01T08:00:00"^^xsd:dateTime) }
+    VALUES (?b) { (2) (2.0) (90) ("AString") ("2021-01-01T08:00:01"^^xsd:dateTime) }
+    FILTER(?a < ?b)
+    } ORDER BY ?a ?b
+    """
+    )
+    f = TESTDATA_PATH / "multi_many_comp.csv"
+    #df.write_csv(f)
+    expected = pl.read_csv(f)
+    assert_frame_equal(df, expected)

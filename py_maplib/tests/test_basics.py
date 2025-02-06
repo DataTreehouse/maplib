@@ -18,7 +18,7 @@ def test_create_mapping_from_empty_polars_df():
     doc = """
     @prefix ex:<http://example.net/ns#>.
     ex:ExampleTemplate [?MyValue] :: {
-    ottr:Triple(ex:myObject, ex:hasValue, ?MyValue)
+        ottr:Triple(ex:myObject, ex:hasValue, ?MyValue)
     } .
     """
 

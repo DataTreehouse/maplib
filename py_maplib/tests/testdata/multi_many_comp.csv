@@ -1,0 +1,7 @@
+a,b
+"""2021-01-01T08:00:00""^^<http://www.w3.org/2001/XMLSchema#dateTime>","""2021-01-01T08:00:01""^^<http://www.w3.org/2001/XMLSchema#dateTime>"
+"""3.0""^^<http://www.w3.org/2001/XMLSchema#decimal>","""90""^^<http://www.w3.org/2001/XMLSchema#integer>"
+"""1""^^<http://www.w3.org/2001/XMLSchema#integer>","""2.0""^^<http://www.w3.org/2001/XMLSchema#decimal>"
+"""1""^^<http://www.w3.org/2001/XMLSchema#integer>","""2""^^<http://www.w3.org/2001/XMLSchema#integer>"
+"""1""^^<http://www.w3.org/2001/XMLSchema#integer>","""90""^^<http://www.w3.org/2001/XMLSchema#integer>"
+"""89""^^<http://www.w3.org/2001/XMLSchema#integer>","""90""^^<http://www.w3.org/2001/XMLSchema#integer>"

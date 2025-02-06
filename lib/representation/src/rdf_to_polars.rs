@@ -330,7 +330,7 @@ pub fn polars_literal_values_to_series(literal_values: Vec<LiteralValue>, name: 
                         if let LiteralValue::Float64(f) = x {
                             Some(f)
                         } else {
-                            panic!("Not possible")
+                            None
                         }
                     })
                     .collect::<Vec<Option<f64>>>(),
