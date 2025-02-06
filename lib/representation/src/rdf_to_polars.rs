@@ -131,25 +131,40 @@ pub fn rdf_literal_to_polars_literal_value(lit: &Literal) -> LiteralValue {
             LiteralValue::Null
         }
     } else if datatype == xsd::DATE_TIME {
-        let dt_without_tz = value.parse::<NaiveDateTime>();
-        if let Ok(dt) = dt_without_tz {
+        let dt_with_tz = value.parse::<DateTime<Utc>>();
+        if let Ok(dt) = dt_with_tz {
             LiteralValue::DateTime(
-                dt.and_utc().timestamp_nanos_opt().unwrap(),
+                dt.naive_utc().and_utc().timestamp_nanos_opt().unwrap(),
                 TimeUnit::Nanoseconds,
-                None,
+                Some(dt.timezone().to_string().into()),
             )
         } else {
-            let dt_with_tz = value.parse::<DateTime<Utc>>();
-            if let Ok(dt) = dt_with_tz {
+            let dt_without_tz = value.parse::<NaiveDateTime>();
+            if let Ok(dt) = dt_without_tz {
                 LiteralValue::DateTime(
-                    dt.naive_utc().and_utc().timestamp_nanos_opt().unwrap(),
+                    dt.and_utc().timestamp_nanos_opt().unwrap(),
                     TimeUnit::Nanoseconds,
-                    Some(dt.timezone().to_string().into()),
+                    None,
                 )
             } else {
-                warn!("Could not parse xsd:datetime {}", value);
+                warn!("Could not parse xsd:dateTime {}", value);
                 LiteralValue::Null
             }
+        }
+    } else if datatype == xsd::DATE_TIME_STAMP {
+        let dt_with_tz = value.parse::<DateTime<Utc>>();
+        if let Ok(dt) = dt_with_tz {
+            LiteralValue::DateTime(
+                dt.naive_utc().and_utc().timestamp_nanos_opt().unwrap(),
+                TimeUnit::Nanoseconds,
+                Some(dt.timezone().to_string().into()),
+            )
+        } else {
+            warn!(
+                "Could not parse xsd:dateTimeStamp {} note that timezone is required",
+                value
+            );
+            LiteralValue::Null
         }
     } else if datatype == xsd::DATE {
         if let Ok(parsed) = NaiveDate::parse_from_str(value, "%Y-%m-%d") {

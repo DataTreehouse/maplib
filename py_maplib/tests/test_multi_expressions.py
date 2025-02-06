@@ -444,3 +444,26 @@ def test_multi_filter_incompatible_many_comparison():
     #df.write_csv(f)
     expected = pl.read_csv(f)
     assert_frame_equal(df, expected)
+
+def test_multi_filter_incompatible_datetime_comparison():
+    m = Mapping([])
+    df = m.query(
+        """
+    PREFIX : <http://example.net/> 
+    PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+    SELECT ?a WHERE {
+    VALUES (?a) { (1) (3.0) (89) ("String") ("2021-01-01T08:00:00+00:00"^^xsd:dateTime) }
+    FILTER(?a > "2021-01-01T07:59:59+00:00"^^xsd:dateTimeStamp)
+    } ORDER BY ?a
+    """
+    )
+    expected = pl.from_repr("""
+┌─────────────────────┐
+│ a                   │
+│ ---                 │
+│ datetime[ns, UTC]   │
+╞═════════════════════╡
+│ 2021-01-01 08:00:00 │
+└─────────────────────┘
+    """)
+    assert_frame_equal(df, expected)

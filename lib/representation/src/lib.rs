@@ -426,7 +426,7 @@ pub fn literal_is_boolean(l: NamedNodeRef) -> bool {
 }
 
 pub fn literal_is_datetime(l: NamedNodeRef) -> bool {
-    matches!(l, xsd::DATE_TIME)
+    matches!(l, xsd::DATE_TIME) || matches!(l, xsd::DATE_TIME_STAMP)
 }
 
 pub fn literal_is_date(l: NamedNodeRef) -> bool {
