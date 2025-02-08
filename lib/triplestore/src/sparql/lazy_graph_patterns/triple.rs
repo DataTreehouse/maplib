@@ -27,6 +27,7 @@ impl Triplestore {
             triple_pattern,
             context.as_str()
         );
+
         let mut solution_mappings = if let Some(solution_mappings) = solution_mappings {
             Some(pushdowns.add_from_solution_mappings(solution_mappings))
         } else {

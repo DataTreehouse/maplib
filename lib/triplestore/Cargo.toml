@@ -9,6 +9,7 @@ query_processing = { path = "../query_processing" }
 representation = { path = "../representation" }
 file_io = { path = "../file_io" }
 spargebra = { path = "../spargebra" }
+fts = {path = "../fts"}
 
 rayon.workspace = true
 sprs = { workspace = true, features = ["multi_thread"] }

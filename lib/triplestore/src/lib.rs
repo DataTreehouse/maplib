@@ -13,6 +13,7 @@ pub mod triples_write;
 use crate::errors::TriplestoreError;
 use crate::storage::Triples;
 use file_io::create_folder_if_not_exists;
+use fts::FtsIndex;
 use log::debug;
 use oxrdf::vocab::{rdf, rdfs};
 use oxrdf::NamedNode;
@@ -39,6 +40,7 @@ pub struct Triplestore {
     transient_triples_map: HashMap<NamedNode, HashMap<(BaseRDFNodeType, BaseRDFNodeType), Triples>>,
     parser_call: usize,
     indexing: IndexingOptions,
+    fts_index: Option<FtsIndex>,
 }
 
 impl Triplestore {
@@ -55,6 +57,13 @@ pub struct IndexingOptions {
     pub enabled: bool,
     pub object_sort_all: bool,
     pub object_sort_some: Option<HashSet<NamedNode>>,
+    pub fts_path: Option<PathBuf>,
+}
+
+impl IndexingOptions {
+    pub fn set_fts_path(&mut self, fts_path: Option<PathBuf>) {
+        self.fts_path = fts_path;
+    }
 }
 
 impl Default for IndexingOptions {
@@ -66,6 +75,7 @@ impl Default for IndexingOptions {
                 rdfs::LABEL.into_owned(),
                 rdf::TYPE.into_owned(),
             ])),
+            fts_path: None,
         }
     }
 }
@@ -104,13 +114,20 @@ impl Triplestore {
         } else {
             None
         };
+        let indexing = indexing.unwrap_or(IndexingOptions::default());
+        let fts_index = if let Some(fts_path) = &indexing.fts_path {
+            Some(FtsIndex::new(fts_path).map_err(TriplestoreError::FtsError)?)
+        } else {
+            None
+        };
         Ok(Triplestore {
             triples_map: HashMap::new(),
             transient_triples_map: HashMap::new(),
             deduplicated: true,
             storage_folder: pathbuf,
             parser_call: 0,
-            indexing: indexing.unwrap_or(IndexingOptions::default()),
+            indexing,
+            fts_index,
         })
     }
 
@@ -132,6 +149,28 @@ impl Triplestore {
             for (k, m) in &mut self.triples_map {
                 for ((_, object_type), ts) in m {
                     ts.add_index(object_type, &self.storage_folder, k, &indexing)?
+                }
+            }
+            if let Some(fts_path) = &indexing.fts_path {
+                if self.fts_index.is_none() {
+                    self.fts_index =
+                        Some(FtsIndex::new(fts_path).map_err(TriplestoreError::FtsError)?);
+                }
+                for (predicate, map) in &self.triples_map {
+                    for ((subject_type, object_type), ts) in map {
+                        for (lf, _) in ts.get_lazy_frames_deduplicated(&None, &None)? {
+                            self.fts_index
+                                .as_mut()
+                                .unwrap()
+                                .add_literal_string(
+                                    &lf.collect().unwrap(),
+                                    predicate,
+                                    subject_type,
+                                    object_type,
+                                )
+                                .map_err(TriplestoreError::FtsError)?;
+                        }
+                    }
                 }
             }
         }
@@ -192,6 +231,13 @@ impl Triplestore {
             unique,
         } in triples_df
         {
+            if matches!(object_type, BaseRDFNodeType::Literal(..)) {
+                if let Some(fts_index) = &mut self.fts_index {
+                    fts_index
+                        .add_literal_string(&df, &predicate, &subject_type, &object_type)
+                        .map_err(TriplestoreError::FtsError)?;
+                }
+            }
             let mut lf = df.lazy();
             let mut map = HashMap::new();
             map.insert(

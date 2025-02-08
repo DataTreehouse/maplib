@@ -90,14 +90,22 @@ pub struct PyIndexingOptions {
 #[pymethods]
 impl PyIndexingOptions {
     #[new]
-    #[pyo3(signature = (enabled, object_sort_all=None, object_sort_some=None))]
+    #[pyo3(signature = (enabled, object_sort_all=None, object_sort_some=None, fts_path=None))]
     pub fn new(
         enabled: bool,
         object_sort_all: Option<bool>,
         object_sort_some: Option<Vec<PyIRI>>,
+        fts_path: Option<String>,
     ) -> PyIndexingOptions {
+        let fts_path = if let Some(fts_path) = fts_path {
+            Some(Path::new(&fts_path).to_owned())
+        } else {
+            None
+        };
         let inner = if enabled && object_sort_all.is_none() && object_sort_some.is_none() {
-            IndexingOptions::default()
+            let mut opts = IndexingOptions::default();
+            opts.set_fts_path(fts_path);
+            opts
         } else {
             let object_sort_all = object_sort_all.unwrap_or(false);
             let enabled = enabled || object_sort_all || object_sort_some.is_some();
@@ -120,6 +128,7 @@ impl PyIndexingOptions {
                         enabled,
                         object_sort_all,
                         object_sort_some,
+                        fts_path,
                     }
                 }
             } else {
@@ -127,6 +136,7 @@ impl PyIndexingOptions {
                     enabled,
                     object_sort_all,
                     object_sort_some: None,
+                    fts_path,
                 }
             }
         };

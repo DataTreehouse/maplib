@@ -1,4 +1,5 @@
 use crate::errors::TriplestoreError;
+use fts::FtsError;
 use query_processing::errors::QueryProcessingError;
 use representation::RDFNodeType;
 use spargebra::SparqlSyntaxError;
@@ -22,4 +23,6 @@ pub enum SparqlError {
     StoreTriplesError(TriplestoreError),
     #[error("Construct query with undefined variable {}", .0)]
     ConstructWithUndefinedVariable(String),
+    #[error("Full text search lookup error: {}", .0)]
+    FtsLookupError(#[from] FtsError),
 }

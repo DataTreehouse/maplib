@@ -9,6 +9,7 @@ members = [
     "lib/query_processing",
     "lib/spargebra",
     "lib/shacl",
+    "lib/fts",
     "py_maplib",
 ]
 

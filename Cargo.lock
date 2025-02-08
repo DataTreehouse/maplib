@@ -620,6 +620,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a0d2fde1f7b3d48b8395d5f2de76c18a528bd6a9cdde438df747bfcba3e05d6f"
 
 [[package]]
+name = "fts"
+version = "0.1.0"
+dependencies = [
+ "oxrdf",
+ "polars",
+ "query_processing",
+ "representation",
+ "spargebra",
+ "thiserror",
+]
+
+[[package]]
 name = "fundu"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1966,7 +1978,7 @@ dependencies = [
 
 [[package]]
 name = "py_maplib"
-version = "0.14.12"
+version = "0.14.13"
 dependencies = [
  "jemallocator",
  "log",
@@ -2766,6 +2778,7 @@ name = "triplestore"
 version = "0.5.0"
 dependencies = [
  "file_io",
+ "fts",
  "itoa",
  "log",
  "memmap2",

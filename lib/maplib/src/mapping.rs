@@ -80,6 +80,7 @@ impl Mapping {
                     enabled: false,
                     object_sort_all: false,
                     object_sort_some: None,
+                    fts_path: None,
                 }
             }
         } else {

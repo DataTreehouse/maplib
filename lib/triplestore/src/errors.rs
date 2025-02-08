@@ -1,4 +1,5 @@
 use file_io::FileIOError;
+use fts::FtsError;
 use std::fmt::{Display, Formatter};
 use std::io;
 use thiserror::Error;
@@ -21,6 +22,7 @@ pub enum TriplestoreError {
     IndexingError(String),
     IPCIOError(String),
     FileIOError(FileIOError),
+    FtsError(FtsError),
 }
 
 impl Display for TriplestoreError {
@@ -73,6 +75,9 @@ impl Display for TriplestoreError {
             }
             TriplestoreError::IndexingError(x) => {
                 write!(f, "Indexing error {}", x)
+            }
+            TriplestoreError::FtsError(e) => {
+                write!(f, "Full text search error {}", e)
             }
         }
     }

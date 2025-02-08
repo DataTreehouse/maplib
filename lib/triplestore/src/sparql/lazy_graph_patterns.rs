@@ -20,9 +20,10 @@ use log::{debug, info};
 
 use crate::sparql::lazy_graph_patterns::triples_ordering::order_triple_patterns;
 use oxrdf::vocab::xsd;
-use polars::prelude::IntoLazy;
+use polars::prelude::{IntoLazy, JoinType};
 use polars_core::frame::DataFrame;
 use polars_core::prelude::{NamedFrom, Series};
+use query_processing::graph_patterns::join;
 use query_processing::pushdowns::Pushdowns;
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
@@ -34,7 +35,7 @@ impl Triplestore {
     pub fn lazy_graph_pattern(
         &mut self,
         graph_pattern: &GraphPattern,
-        solution_mappings: Option<SolutionMappings>,
+        mut solution_mappings: Option<SolutionMappings>,
         context: &Context,
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         mut pushdowns: Pushdowns,
@@ -46,11 +47,30 @@ impl Triplestore {
         );
         let sm = match graph_pattern {
             GraphPattern::Bgp { patterns } => {
-                pushdowns.add_patterns_pushdowns(patterns);
+                let patterns = if let Some(fts_index) = &self.fts_index {
+                    let (patterns, fts_solution_mappings) =
+                        fts_index.lookup_from_triple_patterns(patterns)?;
+                    if let Some(fts_solution_mappings) = fts_solution_mappings {
+                        solution_mappings = if let Some(solution_mappings) = solution_mappings {
+                            Some(join(
+                                solution_mappings,
+                                fts_solution_mappings,
+                                JoinType::Inner,
+                            )?)
+                        } else {
+                            Some(fts_solution_mappings)
+                        };
+                    }
+                    patterns
+                } else {
+                    patterns.clone()
+                };
+
+                pushdowns.add_patterns_pushdowns(&patterns);
                 let mut updated_solution_mappings = solution_mappings;
                 let bgp_context = context.extension_with(PathEntry::BGP);
                 let ordered_patterns =
-                    order_triple_patterns(patterns, &updated_solution_mappings, &pushdowns);
+                    order_triple_patterns(&patterns, &updated_solution_mappings, &pushdowns);
                 for tp in &ordered_patterns {
                     updated_solution_mappings = Some(self.lazy_triple_pattern(
                         updated_solution_mappings,
