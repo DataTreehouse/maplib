@@ -1,19 +1,16 @@
-use oxrdf::{NamedNode};
+use oxrdf::NamedNode;
 use polars::frame::DataFrame;
-use representation::solution_mapping::{SolutionMappings};
+use representation::solution_mapping::SolutionMappings;
 use representation::BaseRDFNodeType;
 use spargebra::term::TriplePattern;
 use std::path::Path;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
-pub enum FtsError {
-
-}
+pub enum FtsError {}
 
 #[derive(Debug, Clone)]
-pub struct FtsIndex {
-}
+pub struct FtsIndex {}
 
 impl FtsIndex {
     pub fn new(_path: &Path) -> Result<FtsIndex, FtsError> {

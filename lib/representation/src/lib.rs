@@ -418,7 +418,8 @@ pub fn owned_term_to_named_node(t: Term) -> Option<NamedNode> {
 }
 
 pub fn literal_is_numeric(l: NamedNodeRef) -> bool {
-    is_literal_subtype(l, NamedNode::new_unchecked(OWL_REAL).as_ref())
+    matches!(l, xsd::FLOAT | xsd::DOUBLE)
+        || is_literal_subtype(l, NamedNode::new_unchecked(OWL_REAL).as_ref())
 }
 
 pub fn literal_is_boolean(l: NamedNodeRef) -> bool {

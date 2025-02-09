@@ -15,6 +15,7 @@ pub fn is_literal_subtype(s: NamedNodeRef, t: NamedNodeRef) -> bool {
     } else {
         match t {
             xsd::DECIMAL => xsd_decimal_subtype(s),
+            xsd::DOUBLE => xsd_double_subtype(s),
             xsd::INTEGER => xsd_integer_subtype(s),
             xsd::LONG => xsd_long_subtype(s),
             xsd::INT => xsd_int_subtype(s),
@@ -46,6 +47,10 @@ fn owl_rational_subtype(s: NamedNodeRef) -> bool {
 
 fn xsd_decimal_subtype(s: NamedNodeRef) -> bool {
     matches!(s, xsd::INTEGER) || xsd_integer_subtype(s)
+}
+
+fn xsd_double_subtype(s: NamedNodeRef) -> bool {
+    matches!(s, xsd::FLOAT)
 }
 
 fn xsd_integer_subtype(s: NamedNodeRef) -> bool {

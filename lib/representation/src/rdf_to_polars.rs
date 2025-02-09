@@ -1,9 +1,8 @@
 use crate::{LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD};
-use chrono::NaiveDate;
+use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
 use log::warn;
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{BlankNode, Literal, NamedNode, NamedNodeRef, Term};
-use polars::export::chrono::{DateTime, NaiveDateTime, Utc};
 use polars::prelude::{as_struct, lit, DataType, Expr, LiteralValue, NamedFrom, Series, TimeUnit};
 use std::str::FromStr;
 

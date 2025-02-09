@@ -13,13 +13,14 @@ use chrono::TimeZone as ChronoTimeZone;
 use chrono::{Datelike, Timelike};
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{Literal, NamedNode, Subject, Triple, Variable};
-use polars::export::rayon::iter::ParallelIterator;
-use polars::export::rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator};
-use polars::export::rayon::prelude::IntoParallelIterator;
 use polars::prelude::{
     as_struct, col, AnyValue, Column, DataFrame, DataType, IntoColumn, IntoLazy, LiteralValue,
     Series, TimeZone,
 };
+use rayon::iter::IndexedParallelIterator;
+use rayon::iter::IntoParallelIterator;
+use rayon::iter::ParallelIterator;
+use rayon::prelude::IntoParallelRefIterator;
 use spargebra::term::Term;
 use std::collections::{HashMap, HashSet};
 use std::vec::IntoIter;

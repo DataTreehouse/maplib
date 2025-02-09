@@ -167,7 +167,7 @@ impl Triplestore {
                     lookup_dtypes.get(VALUE_COLUMN).unwrap(),
                     RDFNodeType::MultiType(..)
                 ) {
-                    if let TermPattern::NamedNode(_)  = subject {
+                    if let TermPattern::NamedNode(_) = subject {
                         out_df = force_convert_multicol_to_single_col(
                             out_df.lazy(),
                             SUBJECT_COL_NAME,

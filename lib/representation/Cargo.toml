@@ -19,6 +19,7 @@ uuid.workspace = true
 pyo3 = {workspace = true, features = ["chrono-tz", "chrono"]}
 serde = {workspace = true, features = ["derive"]}
 oxsdatatypes.workspace = true
+rayon.workspace = true
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("gil-refs", "rdf-star"))'] }

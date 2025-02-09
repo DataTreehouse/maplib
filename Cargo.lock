@@ -2284,6 +2284,7 @@ dependencies = [
  "oxsdatatypes",
  "polars",
  "pyo3",
+ "rayon",
  "serde",
  "spargebra",
  "thiserror",

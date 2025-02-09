@@ -2,9 +2,9 @@
 // https://github.com/pola-rs/polars/blob/dc94be767d26943be11a40d6171ccc1c41a86c4f/crates/polars-io/src/csv/write/write_impl/serializer.rs
 // The Polars license can be found in the licensing folder.
 
-use polars::export::arrow::array::{Array, BooleanArray, PrimitiveArray, Utf8ViewArray};
-use polars::export::arrow::types::NativeType;
 use polars_core::prelude::*;
+use polars_core::utils::arrow::array::{Array, BooleanArray, PrimitiveArray, Utf8ViewArray};
+use polars_core::utils::arrow::types::NativeType;
 use representation::BaseRDFNodeType;
 use std::io::Write;
 
