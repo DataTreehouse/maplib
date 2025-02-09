@@ -51,7 +51,7 @@ impl Triplestore {
         let mut var_cols = vec![];
         match subject {
             TermPattern::BlankNode(b) => {
-                var_cols.push(b.as_str().to_string());
+                var_cols.push(b.to_string());
             }
             TermPattern::Variable(v) => {
                 var_cols.push(v.as_str().to_string());
@@ -61,7 +61,7 @@ impl Triplestore {
 
         match object {
             TermPattern::BlankNode(b) => {
-                var_cols.push(b.as_str().to_string());
+                var_cols.push(b.to_string());
             }
             TermPattern::Variable(v) => {
                 var_cols.push(v.as_str().to_string());
@@ -167,7 +167,7 @@ impl Triplestore {
                     lookup_dtypes.get(VALUE_COLUMN).unwrap(),
                     RDFNodeType::MultiType(..)
                 ) {
-                    if let TermPattern::NamedNode(_) = subject {
+                    if let TermPattern::NamedNode(_)  = subject {
                         out_df = force_convert_multicol_to_single_col(
                             out_df.lazy(),
                             SUBJECT_COL_NAME,
@@ -324,9 +324,13 @@ impl Triplestore {
         let mut datatypes = HashMap::new();
         if let TermPattern::Variable(v) = subject {
             datatypes.insert(v.as_str().to_string(), out_dt_subj);
+        } else if let TermPattern::BlankNode(b) = subject {
+            datatypes.insert(b.to_string(), out_dt_subj);
         }
         if let TermPattern::Variable(v) = object {
             datatypes.insert(v.as_str().to_string(), out_dt_obj);
+        } else if let TermPattern::BlankNode(b) = object {
+            datatypes.insert(b.to_string(), out_dt_obj);
         }
         let out_df_height = out_df.height();
         let mut out_lf = out_df.lazy();
