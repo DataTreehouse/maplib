@@ -152,23 +152,25 @@ impl Triplestore {
                 }
             }
             if let Some(fts_path) = &indexing.fts_path {
+                // Only doing anything if the fts index does not already exist.
+                // If it exists, then it should be updated as well.
                 if self.fts_index.is_none() {
                     self.fts_index =
                         Some(FtsIndex::new(fts_path).map_err(TriplestoreError::FtsError)?);
-                }
-                for (predicate, map) in &self.triples_map {
-                    for ((subject_type, object_type), ts) in map {
-                        for (lf, _) in ts.get_lazy_frames_deduplicated(&None, &None)? {
-                            self.fts_index
-                                .as_mut()
-                                .unwrap()
-                                .add_literal_string(
-                                    &lf.collect().unwrap(),
-                                    predicate,
-                                    subject_type,
-                                    object_type,
-                                )
-                                .map_err(TriplestoreError::FtsError)?;
+                    for (predicate, map) in &self.triples_map {
+                        for ((subject_type, object_type), ts) in map {
+                            for (lf, _) in ts.get_lazy_frames_deduplicated(&None, &None)? {
+                                self.fts_index
+                                    .as_mut()
+                                    .unwrap()
+                                    .add_literal_string(
+                                        &lf.collect().unwrap(),
+                                        predicate,
+                                        subject_type,
+                                        object_type,
+                                    )
+                                    .map_err(TriplestoreError::FtsError)?;
+                            }
                         }
                     }
                 }
@@ -232,6 +234,7 @@ impl Triplestore {
         } in triples_df
         {
             if matches!(object_type, BaseRDFNodeType::Literal(..)) {
+                //TODO: Get what is actually updated from db and then only add those things
                 if let Some(fts_index) = &mut self.fts_index {
                     fts_index
                         .add_literal_string(&df, &predicate, &subject_type, &object_type)
