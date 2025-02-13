@@ -296,6 +296,9 @@ fn triple_to_solution_mappings(
     let verb = match &t.predicate {
         NamedNodePattern::NamedNode(verb) => Some(verb.clone()),
         NamedNodePattern::Variable(_) => {
+            let (verb_expr, verb_dt) =
+                named_node_pattern_expr(rdf_node_types, &t.predicate, VERB_COL_NAME)?;
+            triple_types.insert(VERB_COL_NAME.to_string(), verb_dt);
             filter_expr = filter_expr.and(
                 expr_is_null_workaround(
                     col(VERB_COL_NAME),
@@ -303,10 +306,7 @@ fn triple_to_solution_mappings(
                 )
                 .not(),
             );
-            let (verb_expr, verb_dt) =
-                named_node_pattern_expr(rdf_node_types, &t.predicate, VERB_COL_NAME)?;
             select_expr.push(verb_expr);
-            triple_types.insert(VERB_COL_NAME.to_string(), verb_dt);
             None
         }
     };
