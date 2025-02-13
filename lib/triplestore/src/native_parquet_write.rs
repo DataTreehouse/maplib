@@ -17,8 +17,6 @@ impl Triplestore {
         }
         let path_buf = path.to_path_buf();
 
-        self.deduplicate()?;
-
         for (property, tts) in &mut self.triples_map {
             for ((_rdf_node_type_s, rdf_node_type_o), tt) in tts {
                 let filename;
@@ -36,11 +34,7 @@ impl Triplestore {
                 }
                 let file_path = path_buf.clone();
 
-                for (i, (lf, _)) in tt
-                    .get_lazy_frames_deduplicated(&None, &None)?
-                    .into_iter()
-                    .enumerate()
-                {
+                for (i, (lf, _)) in tt.get_lazy_frames(&None, &None)?.into_iter().enumerate() {
                     let filename = format!("{filename}_part_{i}.parquet");
                     let mut file_path = file_path.clone();
                     file_path.push(filename);

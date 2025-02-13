@@ -5,7 +5,6 @@ pub mod expansion;
 
 use crate::errors::MaplibError;
 use crate::mapping::errors::MappingError;
-use log::warn;
 use oxrdf::NamedNode;
 use oxrdfio::RdfFormat;
 use polars::prelude::DataFrame;
@@ -41,6 +40,26 @@ pub struct ExpandOptions {
     pub validate_unique_subsets: bool,
 }
 
+impl ExpandOptions {
+    pub fn from_args(
+        unique_subset: Option<Vec<String>>,
+        graph: Option<NamedNode>,
+        validate_iris: Option<bool>,
+        validate_unique_subset: Option<bool>,
+    ) -> Self {
+        let unique_subsets =
+            unique_subset.map(|unique_subset| vec![unique_subset.into_iter().collect()]);
+
+        ExpandOptions {
+            unique_subsets,
+            graph: graph,
+            deduplicate: false,
+            validate_iris: validate_iris.unwrap_or(true),
+            validate_unique_subsets: validate_unique_subset.unwrap_or(false),
+        }
+    }
+}
+
 struct OTTRTripleInstance {
     df: DataFrame,
     dynamic_columns: HashMap<String, MappingColumnType>,
@@ -71,13 +90,9 @@ impl Mapping {
         let use_disk = storage_folder.is_some();
         let indexing = if use_disk {
             if let Some(indexing) = indexing {
-                if indexing.enabled {
-                    warn!("Enabling storage and indexing will slow down mapping. Use create_index to add the index after mapping is done")
-                }
                 indexing
             } else {
                 IndexingOptions {
-                    enabled: false,
                     object_sort_all: false,
                     object_sort_some: None,
                     fts_path: None,
@@ -244,7 +259,8 @@ impl Mapping {
         deduplicate: bool,
     ) -> Result<(), SparqlError> {
         let use_triplestore = self.get_triplestore(&target_graph);
-        use_triplestore.insert_construct_result(dfs, transient, deduplicate)
+        let _ = use_triplestore.insert_construct_result(dfs, transient, deduplicate)?;
+        Ok(())
     }
 
     pub fn write_triples<W: Write>(
@@ -254,9 +270,6 @@ impl Mapping {
         rdf_format: RdfFormat,
     ) -> Result<(), MappingError> {
         let triplestore = self.get_triplestore(&graph);
-        triplestore
-            .deduplicate()
-            .map_err(MappingError::TriplestoreError)?;
         triplestore.write_triples(buffer, rdf_format).unwrap();
         Ok(())
     }
@@ -370,16 +383,6 @@ impl Mapping {
                 .create_index(indexing)
                 .map_err(MappingError::TriplestoreError)?;
         }
-        Ok(())
-    }
-
-    pub fn initialize(&mut self) -> Result<(), MappingError> {
-        for t in self.triplestores_map.values_mut() {
-            t.deduplicate().map_err(MappingError::TriplestoreError)?;
-        }
-        self.base_triplestore
-            .deduplicate()
-            .map_err(MappingError::TriplestoreError)?;
         Ok(())
     }
 }

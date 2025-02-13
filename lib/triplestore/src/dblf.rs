@@ -17,7 +17,6 @@ use representation::{
     SUBJECT_COL_NAME, VERB_COL_NAME,
 };
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
 
 impl Triplestore {
     pub fn get_predicate_iris(&self, include_transient: bool) -> Vec<NamedNode> {
@@ -96,10 +95,9 @@ impl Triplestore {
                 object_datatype_ctr,
             );
             if let Some(m) = self.triples_map.get_mut(verb_uri) {
-                if let Some(sms) = multiple_tt_to_deduplicated_lf(
+                if let Some(sms) = multiple_tt_to_lf(
                     m,
                     compatible_types,
-                    &self.storage_folder,
                     subjects,
                     objects,
                     keep_subject,
@@ -116,10 +114,9 @@ impl Triplestore {
                 object_datatype_ctr,
             );
             if let Some(m) = self.transient_triples_map.get_mut(verb_uri) {
-                if let Some(sms) = multiple_tt_to_deduplicated_lf(
+                if let Some(sms) = multiple_tt_to_lf(
                     m,
                     compatible_types,
-                    &self.storage_folder,
                     subjects,
                     objects,
                     keep_subject,
@@ -480,18 +477,14 @@ fn partial_check_need_multi(
     false
 }
 
-fn single_tt_to_deduplicated_lf(
-    tt: &mut Triples,
-    storage_folder: &Option<PathBuf>,
+fn single_tt_to_lf(
+    tt: &Triples,
     subjects: &Option<Vec<&Subject>>,
     objects: &Option<Vec<&Term>>,
     _keep_subject: bool,
 ) -> Result<Option<(LazyFrame, usize)>, SparqlError> {
-    tt.deduplicate_and_index(storage_folder)
-        .map_err(SparqlError::DeduplicationError)?;
-    assert!(tt.unique, "Should be deduplicated");
     let lfs_and_heights = tt
-        .get_lazy_frames_deduplicated(subjects, objects)
+        .get_lazy_frames(subjects, objects)
         .map_err(SparqlError::TripleTableReadError)?;
     if lfs_and_heights.is_empty() {
         return Ok(None);
@@ -547,16 +540,15 @@ struct HalfBakedSolutionMappings {
     pub height_upper_bound: usize,
 }
 
-fn multiple_tt_to_deduplicated_lf(
-    triples: &mut HashMap<(BaseRDFNodeType, BaseRDFNodeType), Triples>,
+fn multiple_tt_to_lf(
+    triples: &HashMap<(BaseRDFNodeType, BaseRDFNodeType), Triples>,
     types: Option<HashSet<(BaseRDFNodeType, BaseRDFNodeType)>>,
-    storage_folder: &Option<PathBuf>,
     subjects: &Option<Vec<Subject>>,
     objects: &Option<Vec<Term>>,
     keep_subject: bool,
 ) -> Result<Option<Vec<HalfBakedSolutionMappings>>, SparqlError> {
     let mut filtered = vec![];
-    for ((subj_type, obj_type), tt) in triples.iter_mut() {
+    for ((subj_type, obj_type), tt) in triples.iter() {
         if let Some(types) = &types {
             if !types.contains(&(subj_type.clone(), obj_type.clone())) {
                 continue;
@@ -582,13 +574,9 @@ fn multiple_tt_to_deduplicated_lf(
             None
         };
 
-        if let Some((lf, height)) = single_tt_to_deduplicated_lf(
-            tt,
-            storage_folder,
-            &filtered_subjects,
-            &filtered_objects,
-            keep_subject,
-        )? {
+        if let Some((lf, height)) =
+            single_tt_to_lf(tt, &filtered_subjects, &filtered_objects, keep_subject)?
+        {
             if height > 0 {
                 let half_baked = HalfBakedSolutionMappings {
                     mappings: lf,

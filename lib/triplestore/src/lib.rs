@@ -35,7 +35,6 @@ use uuid::Uuid;
 #[derive(Clone)]
 pub struct Triplestore {
     pub storage_folder: Option<PathBuf>,
-    deduplicated: bool,
     triples_map: HashMap<NamedNode, HashMap<(BaseRDFNodeType, BaseRDFNodeType), Triples>>,
     transient_triples_map: HashMap<NamedNode, HashMap<(BaseRDFNodeType, BaseRDFNodeType), Triples>>,
     parser_call: usize,
@@ -54,7 +53,6 @@ impl Triplestore {
 
 #[derive(Clone)]
 pub struct IndexingOptions {
-    pub enabled: bool,
     pub object_sort_all: bool,
     pub object_sort_some: Option<HashSet<NamedNode>>,
     pub fts_path: Option<PathBuf>,
@@ -69,7 +67,6 @@ impl IndexingOptions {
 impl Default for IndexingOptions {
     fn default() -> IndexingOptions {
         IndexingOptions {
-            enabled: true,
             object_sort_all: false,
             object_sort_some: Some(HashSet::from([
                 rdfs::LABEL.into_owned(),
@@ -95,6 +92,14 @@ pub struct TripleDF {
     subject_type: BaseRDFNodeType,
     object_type: BaseRDFNodeType,
     unique: bool,
+}
+
+#[derive(Debug)]
+pub struct NewTriples {
+    df: Option<DataFrame>,
+    predicate: NamedNode,
+    subject_type: BaseRDFNodeType,
+    object_type: BaseRDFNodeType,
 }
 
 impl Triplestore {
@@ -123,7 +128,6 @@ impl Triplestore {
         Ok(Triplestore {
             triples_map: HashMap::new(),
             transient_triples_map: HashMap::new(),
-            deduplicated: true,
             storage_folder: pathbuf,
             parser_call: 0,
             indexing,
@@ -131,46 +135,30 @@ impl Triplestore {
         })
     }
 
-    pub fn is_deduplicated(&self) -> bool {
-        self.deduplicated
-    }
-
-    pub fn deduplicate(&mut self) -> Result<(), TriplestoreError> {
-        let now = Instant::now();
-        deduplicate_and_index_map(&mut self.triples_map, &self.storage_folder)?;
-        deduplicate_and_index_map(&mut self.transient_triples_map, &self.storage_folder)?;
-        self.deduplicated = true;
-        debug!("Deduplication took {} seconds", now.elapsed().as_secs_f64());
-        Ok(())
-    }
-
     pub fn create_index(&mut self, indexing: IndexingOptions) -> Result<(), TriplestoreError> {
-        if indexing.enabled {
-            for (k, m) in &mut self.triples_map {
-                for ((_, object_type), ts) in m {
-                    ts.add_index(object_type, &self.storage_folder, k, &indexing)?
-                }
+        for (k, m) in &mut self.triples_map {
+            for ((_, object_type), ts) in m {
+                ts.add_index(object_type, &self.storage_folder, k, &indexing)?
             }
-            if let Some(fts_path) = &indexing.fts_path {
-                // Only doing anything if the fts index does not already exist.
-                // If it exists, then it should be updated as well.
-                if self.fts_index.is_none() {
-                    self.fts_index =
-                        Some(FtsIndex::new(fts_path).map_err(TriplestoreError::FtsError)?);
-                    for (predicate, map) in &self.triples_map {
-                        for ((subject_type, object_type), ts) in map {
-                            for (lf, _) in ts.get_lazy_frames_deduplicated(&None, &None)? {
-                                self.fts_index
-                                    .as_mut()
-                                    .unwrap()
-                                    .add_literal_string(
-                                        &lf.collect().unwrap(),
-                                        predicate,
-                                        subject_type,
-                                        object_type,
-                                    )
-                                    .map_err(TriplestoreError::FtsError)?;
-                            }
+        }
+        if let Some(fts_path) = &indexing.fts_path {
+            // Only doing anything if the fts index does not already exist.
+            // If it exists, then it should be updated as well.
+            if self.fts_index.is_none() {
+                self.fts_index = Some(FtsIndex::new(fts_path).map_err(TriplestoreError::FtsError)?);
+                for (predicate, map) in &self.triples_map {
+                    for ((subject_type, object_type), ts) in map {
+                        for (lf, _) in ts.get_lazy_frames(&None, &None)? {
+                            self.fts_index
+                                .as_mut()
+                                .unwrap()
+                                .add_literal_string(
+                                    &lf.collect().unwrap(),
+                                    predicate,
+                                    subject_type,
+                                    object_type,
+                                )
+                                .map_err(TriplestoreError::FtsError)?;
                         }
                     }
                 }
@@ -186,7 +174,7 @@ impl Triplestore {
         call_uuid: &str,
         transient: bool,
         deduplicate: bool,
-    ) -> Result<(), TriplestoreError> {
+    ) -> Result<Vec<NewTriples>, TriplestoreError> {
         let df_vecs_to_add: Vec<Vec<TripleDF>> = ts
             .par_drain(..)
             .map(|t| {
@@ -210,8 +198,8 @@ impl Triplestore {
             })
             .collect();
         let dfs_to_add = flatten(df_vecs_to_add);
-        self.add_triples_df(dfs_to_add, call_uuid, transient)?;
-        Ok(())
+        let new_triples = self.add_triples_df(dfs_to_add, call_uuid, transient)?;
+        Ok(new_triples)
     }
 
     fn add_triples_df(
@@ -219,7 +207,8 @@ impl Triplestore {
         triples_df: Vec<TripleDF>,
         call_uuid: &str,
         transient: bool,
-    ) -> Result<(), TriplestoreError> {
+    ) -> Result<Vec<NewTriples>, TriplestoreError> {
+        let mut out_new_triples = vec![];
         let use_map = if transient {
             &mut self.transient_triples_map
         } else {
@@ -251,44 +240,47 @@ impl Triplestore {
             lf = lf_columns_to_categorical(lf, &map, CategoricalOrdering::Physical);
             df = lf.collect().unwrap();
             let k = (subject_type.clone(), object_type.clone());
+            let mut added_triples = false;
             if let Some(m) = use_map.get_mut(&predicate) {
                 if let Some(t) = m.get_mut(&k) {
-                    t.add_triples(df, &self.storage_folder)?
-                } else {
-                    m.insert(
-                        k,
-                        Triples::new(
-                            df,
-                            unique,
-                            call_uuid,
-                            &self.storage_folder,
-                            subject_type,
-                            object_type,
-                            &predicate,
-                            &self.indexing,
-                        )?,
-                    );
+                    let new_triples_opt = t.add_triples(df.clone(), &self.storage_folder)?;
+                    let new_triples = NewTriples {
+                        df: new_triples_opt,
+                        predicate: predicate.clone(),
+                        subject_type: subject_type.clone(),
+                        object_type: object_type.clone(),
+                    };
+                    out_new_triples.push(new_triples);
+                    added_triples = true;
                 }
             } else {
                 use_map.insert(
                     predicate.clone(),
-                    HashMap::from([(
-                        k,
-                        Triples::new(
-                            df,
-                            unique,
-                            call_uuid,
-                            &self.storage_folder,
-                            subject_type,
-                            object_type,
-                            &predicate,
-                            &self.indexing,
-                        )?,
-                    )]),
+                    HashMap::new(),
                 );
+            };
+            if !added_triples {
+                let triples = Triples::new(
+                    df,
+                    unique,
+                    call_uuid,
+                    &self.storage_folder,
+                    subject_type.clone(),
+                    object_type.clone(),
+                    &predicate,
+                    &self.indexing,
+                )?;
+                let mut lfs = triples.get_lazy_frames(&None, &None)?;
+                assert_eq!(lfs.len(), 1);
+                let (lf,_) = lfs.pop().unwrap();
+                let df = lf.collect().unwrap();
+                let new_triples = NewTriples{ df:Some(df), predicate:predicate.clone(), subject_type, object_type };
+                out_new_triples.push(new_triples);
+                let m = use_map.get_mut(&predicate).unwrap();
+                m.insert(k, triples);
             }
         }
-        Ok(())
+        Ok(out_new_triples)
     }
 
     //     fn subtract_from_transient(
@@ -502,16 +494,4 @@ fn prepare_triples_df(
 //From: https://users.rust-lang.org/t/flatten-a-vec-vec-t-to-a-vec-t/24526/3
 fn flatten<T>(nested: Vec<Vec<T>>) -> Vec<T> {
     nested.into_iter().flatten().collect()
-}
-
-fn deduplicate_and_index_map(
-    df_map: &mut HashMap<NamedNode, HashMap<(BaseRDFNodeType, BaseRDFNodeType), Triples>>,
-    storage_folder: &Option<PathBuf>,
-) -> Result<(), TriplestoreError> {
-    for map in df_map.values_mut() {
-        for v in map.values_mut() {
-            v.deduplicate_and_index(storage_folder)?;
-        }
-    }
-    Ok(())
 }

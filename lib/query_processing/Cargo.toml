@@ -37,6 +37,7 @@ polars = {workspace=true, default-features = false, features=[
 log.workspace = true
 uuid.workspace = true
 thiserror.workspace = true
+rayon.workspace = true
 
 [dev-dependencies]
 rstest.workspace = true

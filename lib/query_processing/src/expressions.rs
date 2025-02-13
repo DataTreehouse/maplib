@@ -9,9 +9,11 @@ use oxrdf::{Literal, NamedNode, NamedNodeRef, Variable};
 use polars::datatypes::{CategoricalOrdering, DataType, TimeUnit};
 use polars::frame::UniqueKeepStrategy;
 use polars::prelude::{
-    as_struct, coalesce, col, concat_str, lit, when, Expr, LazyFrame, LiteralValue, Operator,
-    StrptimeOptions,
+    as_struct, coalesce, col, concat_str, lit, when, Expr, GetOutput, IntoColumn, LazyFrame,
+    LiteralValue, NamedFrom, Operator, PlSmallStr, StrptimeOptions,
 };
+use polars::series::Series;
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use representation::multitype::{
     all_multi_main_cols, convert_lf_col_to_multitype, MULTI_BLANK_DT, MULTI_IRI_DT,
 };
@@ -500,7 +502,13 @@ pub fn func_expression(
 ) -> Result<SolutionMappings, QueryProcessingError> {
     match func {
         Function::Year => {
-            assert_eq!(args.len(), 1);
+            if args.len() != 1 {
+                return Err(QueryProcessingError::BadNumberOfFunctionArguments(
+                    func.clone(),
+                    args.len(),
+                    "1".to_string(),
+                ));
+            }
             let first_context = args_contexts.get(&0).unwrap();
             solution_mappings.mappings = solution_mappings.mappings.with_column(
                 col(first_context.as_str())
@@ -514,7 +522,13 @@ pub fn func_expression(
             );
         }
         Function::Month => {
-            assert_eq!(args.len(), 1);
+            if args.len() != 1 {
+                return Err(QueryProcessingError::BadNumberOfFunctionArguments(
+                    func.clone(),
+                    args.len(),
+                    "1".to_string(),
+                ));
+            }
             let first_context = args_contexts.get(&0).unwrap();
             solution_mappings.mappings = solution_mappings.mappings.with_column(
                 col(first_context.as_str())
@@ -528,7 +542,13 @@ pub fn func_expression(
             );
         }
         Function::Day => {
-            assert_eq!(args.len(), 1);
+            if args.len() != 1 {
+                return Err(QueryProcessingError::BadNumberOfFunctionArguments(
+                    func.clone(),
+                    args.len(),
+                    "1".to_string(),
+                ));
+            }
             let first_context = args_contexts.get(&0).unwrap();
             solution_mappings.mappings = solution_mappings.mappings.with_column(
                 col(first_context.as_str())
@@ -542,7 +562,13 @@ pub fn func_expression(
             );
         }
         Function::Hours => {
-            assert_eq!(args.len(), 1);
+            if args.len() != 1 {
+                return Err(QueryProcessingError::BadNumberOfFunctionArguments(
+                    func.clone(),
+                    args.len(),
+                    "1".to_string(),
+                ));
+            }
             let first_context = args_contexts.get(&0).unwrap();
             solution_mappings.mappings = solution_mappings.mappings.with_column(
                 col(first_context.as_str())
@@ -556,7 +582,13 @@ pub fn func_expression(
             );
         }
         Function::Minutes => {
-            assert_eq!(args.len(), 1);
+            if args.len() != 1 {
+                return Err(QueryProcessingError::BadNumberOfFunctionArguments(
+                    func.clone(),
+                    args.len(),
+                    "1".to_string(),
+                ));
+            }
             let first_context = args_contexts.get(&0).unwrap();
             solution_mappings.mappings = solution_mappings.mappings.with_column(
                 col(first_context.as_str())
@@ -570,7 +602,13 @@ pub fn func_expression(
             );
         }
         Function::Seconds => {
-            assert_eq!(args.len(), 1);
+            if args.len() != 1 {
+                return Err(QueryProcessingError::BadNumberOfFunctionArguments(
+                    func.clone(),
+                    args.len(),
+                    "1".to_string(),
+                ));
+            }
             let first_context = args_contexts.get(&0).unwrap();
             solution_mappings.mappings = solution_mappings.mappings.with_column(
                 col(first_context.as_str())
@@ -584,7 +622,13 @@ pub fn func_expression(
             );
         }
         Function::Abs => {
-            assert_eq!(args.len(), 1);
+            if args.len() != 1 {
+                return Err(QueryProcessingError::BadNumberOfFunctionArguments(
+                    func.clone(),
+                    args.len(),
+                    "1".to_string(),
+                ));
+            }
             let first_context = args_contexts.get(&0).unwrap();
             solution_mappings.mappings = solution_mappings.mappings.with_column(
                 col(first_context.as_str())
@@ -600,7 +644,13 @@ pub fn func_expression(
                 .insert(outer_context.as_str().to_string(), existing_type.clone());
         }
         Function::Ceil => {
-            assert_eq!(args.len(), 1);
+            if args.len() != 1 {
+                return Err(QueryProcessingError::BadNumberOfFunctionArguments(
+                    func.clone(),
+                    args.len(),
+                    "1".to_string(),
+                ));
+            }
             let first_context = args_contexts.get(&0).unwrap();
             solution_mappings.mappings = solution_mappings.mappings.with_column(
                 col(first_context.as_str())
@@ -613,7 +663,13 @@ pub fn func_expression(
             );
         }
         Function::Floor => {
-            assert_eq!(args.len(), 1);
+            if args.len() != 1 {
+                return Err(QueryProcessingError::BadNumberOfFunctionArguments(
+                    func.clone(),
+                    args.len(),
+                    "1".to_string(),
+                ));
+            }
             let first_context = args_contexts.get(&0).unwrap();
             solution_mappings.mappings = solution_mappings.mappings.with_column(
                 col(first_context.as_str())
@@ -626,7 +682,13 @@ pub fn func_expression(
             );
         }
         Function::Concat => {
-            assert!(args.len() > 1);
+            if args.len() != 1 {
+                return Err(QueryProcessingError::BadNumberOfFunctionArguments(
+                    func.clone(),
+                    args.len(),
+                    "1".to_string(),
+                ));
+            }
             let SolutionMappings {
                 mappings,
                 rdf_node_types: datatypes,
@@ -644,7 +706,13 @@ pub fn func_expression(
             );
         }
         Function::Round => {
-            assert_eq!(args.len(), 1);
+            if args.len() != 1 {
+                return Err(QueryProcessingError::BadNumberOfFunctionArguments(
+                    func.clone(),
+                    args.len(),
+                    "1".to_string(),
+                ));
+            }
             let first_context = args_contexts.get(&0).unwrap();
             solution_mappings.mappings = solution_mappings.mappings.with_column(
                 col(first_context.as_str())
@@ -660,7 +728,13 @@ pub fn func_expression(
                 .insert(outer_context.as_str().to_string(), existing_type.clone());
         }
         Function::Str => {
-            assert_eq!(args.len(), 1);
+            if args.len() != 1 {
+                return Err(QueryProcessingError::BadNumberOfFunctionArguments(
+                    func.clone(),
+                    args.len(),
+                    "1".to_string(),
+                ));
+            }
             let first_context = args_contexts.get(&0).unwrap();
             solution_mappings.mappings = solution_mappings.mappings.with_column(
                 str_function(
@@ -678,7 +752,13 @@ pub fn func_expression(
             );
         }
         Function::Lang => {
-            assert_eq!(args.len(), 1);
+            if args.len() != 1 {
+                return Err(QueryProcessingError::BadNumberOfFunctionArguments(
+                    func.clone(),
+                    args.len(),
+                    "1".to_string(),
+                ));
+            }
             let first_context = args_contexts.get(&0).unwrap();
             let dt = solution_mappings
                 .rdf_node_types
@@ -749,7 +829,13 @@ pub fn func_expression(
             );
         }
         Function::LangMatches => {
-            assert!(args.len() == 2);
+            if args.len() != 2 {
+                return Err(QueryProcessingError::BadNumberOfFunctionArguments(
+                    func.clone(),
+                    args.len(),
+                    "2".to_string(),
+                ));
+            }
             let lang_expr = col(args_contexts.get(&0).unwrap().as_str()).cast(DataType::String);
 
             if let Expression::Literal(l) = args.get(1).unwrap() {
@@ -781,7 +867,13 @@ pub fn func_expression(
             }
         }
         Function::Regex => {
-            assert!(args.len() == 2 || args.len() == 3);
+            if args.len() != 2 && args.len() != 3 {
+                return Err(QueryProcessingError::BadNumberOfFunctionArguments(
+                    func.clone(),
+                    args.len(),
+                    "2 or 3".to_string(),
+                ));
+            }
             let text_context = args_contexts.get(&0).unwrap();
             if let Expression::Literal(regex_lit) = args.get(1).unwrap() {
                 if !regex_lit.is_plain() {
@@ -856,6 +948,71 @@ pub fn func_expression(
             } else {
                 unimplemented!("Non literal regex")
             }
+        }
+        Function::Uuid => {
+            if !args.is_empty() {
+                return Err(QueryProcessingError::BadNumberOfFunctionArguments(
+                    func.clone(),
+                    args.len(),
+                    "0".to_string(),
+                ));
+            }
+            let tmp_column = uuid::Uuid::new_v4().to_string();
+            solution_mappings.mappings = solution_mappings
+                .mappings
+                .with_row_index(PlSmallStr::from_str(&tmp_column), None);
+            solution_mappings.mappings = solution_mappings.mappings.with_column(
+                (lit("urn:uuid:")
+                    + col(&tmp_column).map(
+                        |c| {
+                            let uuids: Vec<_> = (0..c.len())
+                                .into_par_iter()
+                                .map(|_| uuid::Uuid::new_v4().to_string())
+                                .collect();
+                            let s = Series::new("uuids".into(), uuids);
+                            Ok(Some(s.into_column()))
+                        },
+                        GetOutput::from_type(DataType::String),
+                    ))
+                .alias(outer_context.as_str()),
+            );
+            solution_mappings.mappings = solution_mappings.mappings.drop([col(&tmp_column)]);
+            solution_mappings
+                .rdf_node_types
+                .insert(outer_context.as_str().to_string(), RDFNodeType::IRI);
+        }
+        Function::StrUuid => {
+            if !args.is_empty() {
+                return Err(QueryProcessingError::BadNumberOfFunctionArguments(
+                    func.clone(),
+                    args.len(),
+                    "0".to_string(),
+                ));
+            }
+            let tmp_column = uuid::Uuid::new_v4().to_string();
+            solution_mappings.mappings = solution_mappings
+                .mappings
+                .with_row_index(PlSmallStr::from_str(&tmp_column), None);
+            solution_mappings.mappings = solution_mappings.mappings.with_column(
+                col(&tmp_column)
+                    .map(
+                        |c| {
+                            let uuids: Vec<_> = (0..c.len())
+                                .into_par_iter()
+                                .map(|_| uuid::Uuid::new_v4().to_string())
+                                .collect();
+                            let s = Series::new("uuids".into(), uuids);
+                            Ok(Some(s.into_column()))
+                        },
+                        GetOutput::from_type(DataType::String),
+                    )
+                    .alias(outer_context.as_str()),
+            );
+            solution_mappings.mappings = solution_mappings.mappings.drop([col(&tmp_column)]);
+            solution_mappings.rdf_node_types.insert(
+                outer_context.as_str().to_string(),
+                RDFNodeType::Literal(xsd::STRING.into_owned()),
+            );
         }
         Function::Custom(nn) => {
             let iri = nn.as_str();

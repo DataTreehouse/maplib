@@ -4,7 +4,7 @@ mod lazy_expressions;
 pub(crate) mod lazy_graph_patterns;
 mod lazy_order;
 
-use super::Triplestore;
+use super::{NewTriples, Triplestore};
 use crate::sparql::errors::SparqlError;
 use crate::TriplesToAdd;
 use oxrdf::{NamedNode, Subject, Term, Triple, Variable};
@@ -175,7 +175,7 @@ impl Triplestore {
         transient: bool,
         streaming: bool,
         deduplicate: bool,
-    ) -> Result<(), SparqlError> {
+    ) -> Result<Vec<NewTriples>, SparqlError> {
         let query = Query::parse(query, None).map_err(SparqlError::ParseError)?;
         if let Query::Construct { .. } = &query {
             let res = self.query_parsed(&query, parameters, streaming)?;
@@ -196,7 +196,7 @@ impl Triplestore {
         dfs: Vec<(DataFrame, HashMap<String, RDFNodeType>)>,
         transient: bool,
         deduplicate: bool,
-    ) -> Result<(), SparqlError> {
+    ) -> Result<Vec<NewTriples>, SparqlError> {
         let call_uuid = Uuid::new_v4().to_string();
         let mut all_triples_to_add = vec![];
 
@@ -236,11 +236,13 @@ impl Triplestore {
                 });
             }
         }
-        if !all_triples_to_add.is_empty() {
+        let new_triples = if !all_triples_to_add.is_empty() {
             self.add_triples_vec(all_triples_to_add, &call_uuid, transient, deduplicate)
-                .map_err(SparqlError::StoreTriplesError)?;
-        }
-        Ok(())
+                .map_err(SparqlError::StoreTriplesError)?
+        } else {
+            vec![]
+        };
+        Ok(new_triples)
     }
 }
 

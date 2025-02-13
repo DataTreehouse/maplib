@@ -1,16 +1,15 @@
 use crate::errors::TriplestoreError;
 use oxrdf::{NamedNode, Subject, Term};
 use polars::prelude::{
-    as_struct, col, concat, lit, Expr, IdxSize, IntoLazy, IpcWriter, LazyFrame, PlSmallStr,
-    ScanArgsIpc, UnionArgs,
+    as_struct, col, lit, Expr, IdxSize, IntoLazy, IpcWriter, LazyFrame, PlSmallStr,
+    ScanArgsIpc,
 };
 use polars_core::datatypes::{AnyValue, CategoricalChunked, LogicalType};
-use polars_core::frame::{DataFrame, UniqueKeepStrategy};
+use polars_core::frame::{DataFrame};
 use polars_core::prelude::{
     CategoricalOrdering, CompatLevel, DataType, Series, SortMultipleOptions,
 };
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
-use rayon::iter::{IntoParallelRefIterator, ParallelDrainRange};
 use std::cmp;
 
 use crate::IndexingOptions;
@@ -30,76 +29,20 @@ use uuid::Uuid;
 const OFFSET_STEP: usize = 100;
 const MIN_SIZE_CACHING: usize = 100_000_000; //100MB
 
+const EXISTING_COL: &str = "existing";
+
 #[derive(Clone)]
 #[allow(dead_code)]
 pub(crate) struct Triples {
-    pub(crate) unique: bool,
     height: usize,
     call_uuid: String, //TODO: For uniqueness of blank nodes, an optimization
-    unsorted: Option<Vec<StoredTriples>>,
-    indexing_enabled: bool,
     object_indexing_enabled: bool,
-    subject_sort: Option<StoredTriples>,
-    subject_sparse_index: Option<BTreeMap<String, usize>>,
+    subject_sort: StoredTriples,
+    subject_sparse_index: BTreeMap<String, usize>,
     object_sort: Option<StoredTriples>,
     object_sparse_index: Option<BTreeMap<String, usize>>,
     subject_type: BaseRDFNodeType,
     object_type: BaseRDFNodeType,
-}
-
-impl Triples {
-    pub(crate) fn deduplicate_and_index(
-        &mut self,
-        storage_folder: &Option<PathBuf>,
-    ) -> Result<(), TriplestoreError> {
-        if self.indexing_enabled {
-            self.do_indexing_if_enabled(storage_folder)?;
-        } else if !self.unique {
-            if let Some(unsorted) = &mut self.unsorted {
-                let lfs_heights: Result<Vec<_>, _> = unsorted
-                    .par_drain(..)
-                    .map(|x| {
-                        let lfs = x.get_lazy_frames(None)?;
-                        Ok(lfs)
-                    })
-                    .collect();
-                let mut lfs: Vec<_> = lfs_heights?
-                    .into_iter()
-                    .flatten()
-                    .map(|(lf, _)| lf)
-                    .collect();
-                let lf = if lfs.len() > 1 {
-                    concat(
-                        lfs,
-                        UnionArgs {
-                            parallel: true,
-                            rechunk: true,
-                            to_supertypes: false,
-                            diagonal: false,
-                            from_partitioned_ds: false,
-                            maintain_order: false,
-                        },
-                    )
-                    .unwrap()
-                } else {
-                    lfs.pop().unwrap()
-                };
-                let df = lf
-                    .unique(None, UniqueKeepStrategy::First)
-                    .collect()
-                    .unwrap();
-                self.height = df.height();
-                unsorted.push(StoredTriples::new(
-                    df,
-                    &self.subject_type,
-                    &self.object_type,
-                    storage_folder,
-                )?);
-            }
-            self.unique = true;
-        }
-        Ok(())
-    }
 }
 
 impl Triples {
@@ -113,24 +56,33 @@ impl Triples {
         verb_iri: &NamedNode,
         indexing: &IndexingOptions,
     ) -> Result<Self, TriplestoreError> {
-        let height = df.height();
-        let stored = StoredTriples::new(df, &subject_type, &object_type, storage_folder)?;
         let object_indexing_enabled = can_and_should_index_object(&object_type, verb_iri, indexing);
-        let mut triples = Triples {
+        let IndexedTriples {
+            subject_sort,
+            subject_sparse_index,
+            object_sort,
+            object_sparse_index,
             height,
+        } = create_indices(
+            df.lazy(),
             unique,
-            call_uuid: call_uuid.to_string(),
-            unsorted: Some(vec![stored]),
-            indexing_enabled: indexing.enabled,
-            subject_sparse_index: None,
-            object_sort: None,
-            subject_sort: None,
-            object_sparse_index: None,
+            storage_folder,
+            object_indexing_enabled,
+            &subject_type,
+            &object_type,
+        )?;
+        let triples = Triples {
+            height,
+            call_uuid: call_uuid.to_owned(),
+            object_indexing_enabled,
+            subject_sort,
+            subject_sparse_index,
+            object_sort,
+            object_sparse_index,
             subject_type,
             object_type,
-            object_indexing_enabled,
         };
-        triples.do_indexing_if_enabled(storage_folder)?;
+
         Ok(triples)
     }
 
@@ -142,104 +94,26 @@ impl Triples {
         indexing: &IndexingOptions,
     ) -> Result<(), TriplestoreError> {
         let object_indexing_enabled = can_and_should_index_object(&object_type, verb_iri, indexing);
-        self.indexing_enabled = true;
         self.object_indexing_enabled = object_indexing_enabled;
-        self.do_indexing_if_enabled(storage_folder)?;
+        self.maybe_do_object_indexing(storage_folder)?;
         Ok(())
     }
 
-    fn do_indexing_if_enabled(
-        &mut self,
-        storage_folder: &Option<PathBuf>,
-    ) -> Result<(), TriplestoreError> {
-        if self.indexing_enabled {
-            if self.unsorted.is_some() {
-                let mut lfs: Vec<_> = self
-                    .get_lazy_frames_impl(&None, &None)?
-                    .into_iter()
-                    .map(|(lf, _)| lf)
-                    .collect();
-                let lf = if lfs.len() > 1 {
-                    concat(
-                        lfs,
-                        UnionArgs {
-                            parallel: true,
-                            rechunk: true,
-                            to_supertypes: false,
-                            diagonal: false,
-                            from_partitioned_ds: false,
-                            maintain_order: false,
-                        },
-                    )
-                    .unwrap()
-                } else {
-                    lfs.pop().unwrap()
-                };
-                let IndexedTriples {
-                    subject_sort,
-                    subject_sparse_index,
-                    object_sort,
-                    object_sparse_index,
-                    height,
-                } = create_indices(
-                    lf,
-                    self.unique,
-                    storage_folder,
-                    self.object_indexing_enabled,
-                    &self.subject_type,
-                    &self.object_type,
-                )?;
-                self.height = height;
-                self.subject_sort = Some(subject_sort);
-                self.subject_sparse_index = Some(subject_sparse_index);
-                self.object_sort = object_sort;
-                self.object_sparse_index = object_sparse_index;
-                self.unique = true;
-                self.unsorted = None;
-            }
-        }
-        Ok(())
-    }
-
-    pub(crate) fn get_lazy_frames_deduplicated(
+    pub(crate) fn get_lazy_frames(
         &self,
         subjects: &Option<Vec<&Subject>>,
         objects: &Option<Vec<&Term>>,
     ) -> Result<Vec<(LazyFrame, usize)>, TriplestoreError> {
-        if !self.unique || (self.indexing_enabled && self.subject_sort.is_none()) {
-            panic!("Must deduplicate and/or build index first");
-        }
-        self.get_lazy_frames_impl(subjects, objects)
-    }
-
-    fn get_lazy_frames_impl(
-        &self,
-        subjects: &Option<Vec<&Subject>>,
-        objects: &Option<Vec<&Term>>,
-    ) -> Result<Vec<(LazyFrame, usize)>, TriplestoreError> {
-        if let Some(unsorted) = &self.unsorted {
-            let lfs: Result<Vec<_>, _> = unsorted
-                .par_iter()
-                .map(|x| x.get_lazy_frames(None))
+        if let Some(subjects) = subjects {
+            let strings: Vec<_> = subjects
+                .iter()
+                .map(|x| match *x {
+                    Subject::NamedNode(nn) => nn.as_str(),
+                    Subject::BlankNode(bl) => bl.as_str(),
+                })
                 .collect();
-            let lfs: Vec<_> = lfs?.into_iter().flatten().collect();
-            return Ok(lfs);
-        } else if let Some(subjects) = subjects {
-            if let Some(sorted) = &self.subject_sort {
-                let strings: Vec<_> = subjects
-                    .iter()
-                    .map(|x| match *x {
-                        Subject::NamedNode(nn) => nn.as_str(),
-                        Subject::BlankNode(bl) => bl.as_str(),
-                    })
-                    .collect();
-                let offsets = get_lookup_offsets(
-                    strings,
-                    self.subject_sparse_index.as_ref().unwrap(),
-                    self.height,
-                );
-                return Ok(sorted.get_lazy_frames(Some(offsets))?);
-            }
+            let offsets = get_lookup_offsets(strings, &self.subject_sparse_index, self.height);
+            return Ok(self.subject_sort.get_lazy_frames(Some(offsets))?);
         } else if let Some(objects) = objects {
             if let Some(sorted) = &self.object_sort {
                 let allow_pushdown = if let BaseRDFNodeType::Literal(t) = &self.object_type {
@@ -271,56 +145,59 @@ impl Triples {
                 return Ok(sorted.get_lazy_frames(offsets)?);
             }
         }
-        Ok(self.subject_sort.as_ref().unwrap().get_lazy_frames(None)?)
+        Ok(self.subject_sort.get_lazy_frames(None)?)
     }
 
     pub(crate) fn add_triples(
         &mut self,
         df: DataFrame,
         storage_folder: &Option<PathBuf>,
-    ) -> Result<(), TriplestoreError> {
-        if self.indexing_enabled && self.subject_sort.is_some() {
-            if let Some(sorted) = self.subject_sort.take() {
-                let (stored, height, sparse) = update_column_sorted_index(
-                    df.clone(),
+    ) -> Result<Option<DataFrame>, TriplestoreError> {
+        let (stored, height, sparse, new_triples) = update_column_sorted_index(
+            df.clone(),
+            storage_folder,
+            &self.subject_sort,
+            true,
+            &self.subject_type,
+            &self.object_type,
+        )?;
+        self.subject_sort.wipe()?;
+        self.subject_sparse_index = sparse;
+        self.subject_sort = stored;
+        self.height = height;
+        if self.object_indexing_enabled {
+            if let Some(mut sorted) = self.object_sort.take() {
+                let (stored, height, sparse, _) = update_column_sorted_index(
+                    df,
                     storage_folder,
                     &sorted,
-                    true,
+                    false,
                     &self.subject_type,
                     &self.object_type,
                 )?;
                 sorted.wipe()?;
-                self.subject_sparse_index = Some(sparse);
-                self.subject_sort = Some(stored);
+                self.object_sparse_index = Some(sparse);
+                self.object_sort = Some(stored);
                 self.height = height;
             } else {
                 panic!("Triplestore in invalid state");
             }
-            if self.object_indexing_enabled {
-                if let Some(sorted) = self.object_sort.take() {
-                    let (stored, height, sparse) = update_column_sorted_index(
-                        df,
-                        storage_folder,
-                        &sorted,
-                        false,
-                        &self.subject_type,
-                        &self.object_type,
-                    )?;
-                    sorted.wipe()?;
-                    self.object_sparse_index = Some(sparse);
-                    self.object_sort = Some(stored);
-                    self.height = height;
-                } else {
-                    panic!("Triplestore in invalid state");
-                }
-            }
-        } else if let Some(unsorted) = &mut self.unsorted {
-            let new_stored =
-                StoredTriples::new(df, &self.subject_type, &self.object_type, storage_folder)?;
-            unsorted.push(new_stored);
-            self.unique = false;
-        } else {
-            panic!("Triplestore in invalid state");
+        }
+        Ok(new_triples)
+    }
+
+    fn maybe_do_object_indexing(
+        &mut self,
+        storage_folder: &Option<PathBuf>,
+    ) -> Result<(), TriplestoreError> {
+        if self.object_indexing_enabled && self.object_sort.is_none() {
+            let mut lfs = self.get_lazy_frames(&None, &None)?;
+            assert_eq!(lfs.len(), 1);
+            let (lf, _) = lfs.pop().unwrap();
+            let (object_sort, obj_map) =
+                create_object_index(lf, &self.subject_type, &self.object_type, storage_folder)?;
+            self.object_sort = Some(object_sort);
+            self.object_sparse_index = Some(obj_map);
         }
         Ok(())
     }
@@ -342,8 +219,8 @@ fn create_indices(
     subj_type: &BaseRDFNodeType,
     obj_type: &BaseRDFNodeType,
 ) -> Result<IndexedTriples, TriplestoreError> {
-    lf = sort_indexed_lf(lf, true, false);
-    let (df, subj_sparse_map) = create_unique_df_and_sparse_map(lf, true, unique);
+    lf = sort_indexed_lf(lf, true, false, false);
+    let (df, subj_sparse_map) = create_unique_df_and_sparse_map(lf, true, unique, false);
     let height = df.height();
     let subject_sparse_index = subj_sparse_map;
     let subject_sort = StoredTriples::new(df.clone(), subj_type, obj_type, storage_folder)?;
@@ -352,11 +229,10 @@ fn create_indices(
     let mut object_sparse_index = None;
 
     if should_index_by_objects {
-        lf = sort_indexed_lf(df.lazy(), false, false);
-        //Unique is true due to previous unique operation.
-        let (df, obj_sparse_map) = create_unique_df_and_sparse_map(lf, false, true);
-        object_sort = Some(StoredTriples::new(df, subj_type, obj_type, storage_folder)?);
-        object_sparse_index = Some(obj_sparse_map);
+        let (new_object_sort, new_object_sparse_index) =
+            create_object_index(df.lazy(), subj_type, obj_type, storage_folder)?;
+        object_sort = Some(new_object_sort);
+        object_sparse_index = Some(new_object_sparse_index);
     }
     Ok(IndexedTriples {
         subject_sort,
@@ -365,6 +241,20 @@ fn create_indices(
         object_sparse_index,
         height,
     })
+}
+
+fn create_object_index(
+    df: LazyFrame,
+    subj_type: &BaseRDFNodeType,
+    obj_type: &BaseRDFNodeType,
+    storage_folder: &Option<PathBuf>,
+) -> Result<(StoredTriples, BTreeMap<String, usize>), TriplestoreError> {
+    let lf = sort_indexed_lf(df.lazy(), false, false, false);
+    //Unique is true due to previous unique operation.
+    let (df, obj_sparse_map) = create_unique_df_and_sparse_map(lf, false, true, false);
+    let object_sort = StoredTriples::new(df, subj_type, obj_type, storage_folder)?;
+    let object_sparse_index = obj_sparse_map;
+    Ok((object_sort, object_sparse_index))
 }
 
 fn can_and_should_index_object(
@@ -444,7 +334,7 @@ impl StoredTriples {
         }
     }
 
-    pub(crate) fn wipe(self) -> Result<(), TriplestoreError> {
+    pub(crate) fn wipe(&mut self) -> Result<(), TriplestoreError> {
         if let Self::TriplesOnDisk(t) = self {
             t.wipe()?
         };
@@ -487,7 +377,7 @@ impl TriplesOnDisk {
         Ok((scan_ipc(p, &self.subj_type, &self.obj_type)?, self.height))
     }
 
-    pub(crate) fn wipe(self) -> Result<(), TriplestoreError> {
+    pub(crate) fn wipe(&mut self) -> Result<(), TriplestoreError> {
         let p = Path::new(&self.df_path);
         remove_file(p).map_err(TriplestoreError::RemoveFileError)?;
         Ok(())
@@ -669,7 +559,12 @@ fn get_col(subject: bool) -> &'static str {
     }
 }
 
-fn sort_indexed_lf(lf: LazyFrame, is_subject: bool, also_other: bool) -> LazyFrame {
+fn sort_indexed_lf(
+    lf: LazyFrame,
+    is_subject: bool,
+    also_other: bool,
+    sort_on_existing: bool,
+) -> LazyFrame {
     let c = get_col(is_subject);
     let mut lf = cast_col_to_cat(lf, c, true);
 
@@ -677,6 +572,9 @@ fn sort_indexed_lf(lf: LazyFrame, is_subject: bool, also_other: bool) -> LazyFra
     if also_other {
         let other_c = get_col(!is_subject);
         by.push(PlSmallStr::from_str(&other_c));
+    }
+    if sort_on_existing {
+        by.push(PlSmallStr::from_str(EXISTING_COL));
     }
 
     lf = lf.sort(
@@ -699,11 +597,24 @@ fn update_column_sorted_index(
     is_subject: bool,
     subject_type: &BaseRDFNodeType,
     object_type: &BaseRDFNodeType,
-) -> Result<(StoredTriples, usize, BTreeMap<String, usize>), TriplestoreError> {
+) -> Result<
+    (
+        StoredTriples,
+        usize,
+        BTreeMap<String, usize>,
+        Option<DataFrame>,
+    ),
+    TriplestoreError,
+> {
     let c = get_col(is_subject);
-    let mut lf = sort_indexed_lf(df.lazy(), is_subject, false);
+    let mut lf = sort_indexed_lf(df.lazy(), is_subject, false, false);
     let existing_lfs_heights = stored_triples.get_lazy_frames(None)?;
     let existing_lfs: Vec<_> = existing_lfs_heights.into_iter().map(|(lf, _)| lf).collect();
+    assert_eq!(existing_lfs.len(), 1);
+    let sort_on_existing = is_subject;
+    if sort_on_existing {
+        lf = lf.with_column(lit(false).alias(EXISTING_COL));
+    }
     for mut elf in existing_lfs {
         elf = cast_col_to_cat(elf, c, true);
 
@@ -718,11 +629,17 @@ fn update_column_sorted_index(
             elf = elf.unnest([other_c]);
             lf = lf.unnest([other_c]);
         }
-
+        if sort_on_existing {
+            elf = elf.with_column(lit(true).alias(EXISTING_COL));
+        }
         lf = lf.merge_sorted(elf, PlSmallStr::from_str(c)).unwrap();
 
         if other_type.is_lang_string() {
             let other_c = get_col(!is_subject);
+            let mut select_cols = vec![col(SUBJECT_COL_NAME), col(OBJECT_COL_NAME)];
+            if sort_on_existing {
+                select_cols.push(col(EXISTING_COL));
+            }
             lf = lf
                 .with_column(
                     as_struct(vec![
@@ -731,14 +648,31 @@ fn update_column_sorted_index(
                     ])
                     .alias(other_c),
                 )
-                .select([col(SUBJECT_COL_NAME), col(OBJECT_COL_NAME)]);
+                .select(select_cols);
         }
     }
-    let (df, sparse_map) = create_unique_df_and_sparse_map(lf, is_subject, false);
+    let (df, sparse_map) = create_unique_df_and_sparse_map(lf, is_subject, false, sort_on_existing);
     let height = df.height();
+    let new_triples = if sort_on_existing {
+        let new_triples = df
+            .clone()
+            .lazy()
+            .filter(col(EXISTING_COL).not())
+            .select([col(SUBJECT_COL_NAME), col(OBJECT_COL_NAME)])
+            .collect()
+            .unwrap();
+        if new_triples.height() == 0 {
+            Some(new_triples)
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
     let stored = StoredTriples::new(df, subject_type, object_type, storage_folder)?;
 
-    Ok((stored, height, sparse_map))
+    Ok((stored, height, sparse_map, new_triples))
 }
 
 fn repeated_from_last_row_expr(c: &str) -> Expr {
@@ -752,10 +686,11 @@ fn create_unique_df_and_sparse_map(
     mut lf: LazyFrame,
     is_subject: bool,
     unique: bool,
+    sort_on_existing: bool,
 ) -> (DataFrame, BTreeMap<String, usize>) {
     let c = get_col(is_subject);
     if !unique {
-        lf = sort_indexed_lf(lf, is_subject, true);
+        lf = sort_indexed_lf(lf, is_subject, true, sort_on_existing);
         let other_c = get_col(!is_subject);
         lf = lf.with_column(
             repeated_from_last_row_expr(c)
@@ -765,8 +700,13 @@ fn create_unique_df_and_sparse_map(
         lf = lf.filter(col("is_duplicated").not());
         lf = cast_col_to_cat(lf, c, false);
     }
+    let mut cols = vec![col(SUBJECT_COL_NAME), col(OBJECT_COL_NAME)];
 
-    lf = lf.select([col(SUBJECT_COL_NAME), col(OBJECT_COL_NAME)]);
+    if sort_on_existing {
+        cols.push(col(EXISTING_COL));
+    }
+
+    lf = lf.select(cols);
 
     let df = lf.collect().unwrap();
     let ser = df.column(c).unwrap().as_materialized_series();

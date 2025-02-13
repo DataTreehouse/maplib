@@ -33,6 +33,25 @@ const FIRST_COL: &str = "first";
 const REST_COL: &str = "rest";
 
 impl Mapping {
+    pub fn expand_triples(
+        &mut self,
+        mut df: DataFrame,
+        mapping_column_types: Option<HashMap<String, MappingColumnType>>,
+        verb: Option<NamedNode>,
+        expand_options: ExpandOptions,
+    ) -> Result<MappingReport, MappingError> {
+        if let Some(verb) = verb {
+            df = df
+                .lazy()
+                .with_column(
+                    lit(rdf_named_node_to_polars_literal_value(&verb)).alias(VERB_COL_NAME),
+                )
+                .collect()
+                .unwrap();
+        }
+        self.expand(OTTR_TRIPLE, Some(df), mapping_column_types, expand_options)
+    }
+
     pub fn expand(
         &mut self,
         template: &str,
