@@ -445,6 +445,25 @@ def test_multi_filter_incompatible_many_comparison():
     expected = pl.read_csv(f)
     assert_frame_equal(df, expected)
 
+
+def test_multi_concat():
+    m = Mapping([])
+    df = m.query(
+        """
+    PREFIX : <http://example.net/> 
+    PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+    SELECT ?a ?b ?c WHERE {
+    VALUES (?a) { (1) (3.0) (89) ("String") ("2021-01-01T08:00:00"^^xsd:dateTime) }
+    VALUES (?b) { (2) (2.0) (90) ("AString") ("2021-01-01T08:00:01"^^xsd:dateTime) }
+    BIND(CONCAT(STR(?a),"_", STR(?b)) AS ?c)
+    } ORDER BY ?a ?b
+    """
+    )
+    f = TESTDATA_PATH / "multi_concat.csv"
+    #df.write_csv(f)
+    expected = pl.read_csv(f)
+    assert_frame_equal(df, expected)
+
 def test_multi_filter_incompatible_datetime_comparison():
     m = Mapping([])
     df = m.query(

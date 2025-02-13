@@ -1,0 +1,26 @@
+a,b,c
+"""2021-01-01T08:00:00""^^<http://www.w3.org/2001/XMLSchema#dateTime>","""2021-01-01T08:00:01""^^<http://www.w3.org/2001/XMLSchema#dateTime>",2021-01-01 08:00:00.000000000_2021-01-01 08:00:01.000000000
+"""2021-01-01T08:00:00""^^<http://www.w3.org/2001/XMLSchema#dateTime>","""2.0""^^<http://www.w3.org/2001/XMLSchema#decimal>",2021-01-01 08:00:00.000000000_2.0
+"""2021-01-01T08:00:00""^^<http://www.w3.org/2001/XMLSchema#dateTime>","""2""^^<http://www.w3.org/2001/XMLSchema#integer>",2021-01-01 08:00:00.000000000_2
+"""2021-01-01T08:00:00""^^<http://www.w3.org/2001/XMLSchema#dateTime>","""90""^^<http://www.w3.org/2001/XMLSchema#integer>",2021-01-01 08:00:00.000000000_90
+"""2021-01-01T08:00:00""^^<http://www.w3.org/2001/XMLSchema#dateTime>","""AString""",2021-01-01 08:00:00.000000000_AString
+"""3.0""^^<http://www.w3.org/2001/XMLSchema#decimal>","""2021-01-01T08:00:01""^^<http://www.w3.org/2001/XMLSchema#dateTime>",3.0_2021-01-01 08:00:01.000000000
+"""3.0""^^<http://www.w3.org/2001/XMLSchema#decimal>","""2.0""^^<http://www.w3.org/2001/XMLSchema#decimal>",3.0_2.0
+"""3.0""^^<http://www.w3.org/2001/XMLSchema#decimal>","""2""^^<http://www.w3.org/2001/XMLSchema#integer>",3.0_2
+"""3.0""^^<http://www.w3.org/2001/XMLSchema#decimal>","""90""^^<http://www.w3.org/2001/XMLSchema#integer>",3.0_90
+"""3.0""^^<http://www.w3.org/2001/XMLSchema#decimal>","""AString""",3.0_AString
+"""1""^^<http://www.w3.org/2001/XMLSchema#integer>","""2021-01-01T08:00:01""^^<http://www.w3.org/2001/XMLSchema#dateTime>",1_2021-01-01 08:00:01.000000000
+"""1""^^<http://www.w3.org/2001/XMLSchema#integer>","""2.0""^^<http://www.w3.org/2001/XMLSchema#decimal>",1_2.0
+"""1""^^<http://www.w3.org/2001/XMLSchema#integer>","""2""^^<http://www.w3.org/2001/XMLSchema#integer>",1_2
+"""1""^^<http://www.w3.org/2001/XMLSchema#integer>","""90""^^<http://www.w3.org/2001/XMLSchema#integer>",1_90
+"""1""^^<http://www.w3.org/2001/XMLSchema#integer>","""AString""",1_AString
+"""89""^^<http://www.w3.org/2001/XMLSchema#integer>","""2021-01-01T08:00:01""^^<http://www.w3.org/2001/XMLSchema#dateTime>",89_2021-01-01 08:00:01.000000000
+"""89""^^<http://www.w3.org/2001/XMLSchema#integer>","""2.0""^^<http://www.w3.org/2001/XMLSchema#decimal>",89_2.0
+"""89""^^<http://www.w3.org/2001/XMLSchema#integer>","""2""^^<http://www.w3.org/2001/XMLSchema#integer>",89_2
+"""89""^^<http://www.w3.org/2001/XMLSchema#integer>","""90""^^<http://www.w3.org/2001/XMLSchema#integer>",89_90
+"""89""^^<http://www.w3.org/2001/XMLSchema#integer>","""AString""",89_AString
+"""String""","""2021-01-01T08:00:01""^^<http://www.w3.org/2001/XMLSchema#dateTime>",String_2021-01-01 08:00:01.000000000
+"""String""","""2.0""^^<http://www.w3.org/2001/XMLSchema#decimal>",String_2.0
+"""String""","""2""^^<http://www.w3.org/2001/XMLSchema#integer>",String_2
+"""String""","""90""^^<http://www.w3.org/2001/XMLSchema#integer>",String_90
+"""String""","""AString""",String_AString

@@ -682,11 +682,11 @@ pub fn func_expression(
             );
         }
         Function::Concat => {
-            if args.len() != 1 {
+            if args.len() < 2 {
                 return Err(QueryProcessingError::BadNumberOfFunctionArguments(
                     func.clone(),
                     args.len(),
-                    "1".to_string(),
+                    ">1".to_string(),
                 ));
             }
             let SolutionMappings {
