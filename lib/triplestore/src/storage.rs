@@ -160,7 +160,6 @@ impl Triples {
             &self.subject_type,
             &self.object_type,
         )?;
-        println!("New triples {:?}", new_triples);
         self.subject_sort.wipe()?;
         self.subject_sparse_index = sparse;
         self.subject_sort = stored;
@@ -657,7 +656,6 @@ fn update_column_sorted_index(
     let (df, sparse_map) = create_unique_df_and_sparse_map(lf, is_subject, false, sort_on_existing);
     let height = df.height();
     let new_triples = if sort_on_existing {
-        println!("Triples {}", df);
         let new_triples = df
             .clone()
             .lazy()

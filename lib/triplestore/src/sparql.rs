@@ -274,7 +274,6 @@ impl Triplestore {
         } else {
             vec![]
         };
-        println!("{:?}", new_triples);
         Ok(new_triples)
     }
 }
