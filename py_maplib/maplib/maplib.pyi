@@ -252,7 +252,6 @@ class IndexingOptions:
 
     def __init__(
         self,
-        enabled: bool = True,
         object_sort_all: bool = None,
         object_sort_some: List["IRI"] = None,
         fts_path: str = None
@@ -260,7 +259,6 @@ class IndexingOptions:
         """
         Defaults to indexing on subjects and objects for select types (e.g. rdf:type and rdfs:label)
 
-        :param enabled: Enable indexing (this will enable indexing on subjects)
         :param object_sort_all: Enable object-indexing for all suitable predicates (doubles memory requirement).
         :param object_sort_some: Enable object-indexing for a selected list of predicates.
         :param fts_path: Enable full text search, stored at the path
@@ -370,10 +368,39 @@ class Mapping:
         :param df: DataFrame where the columns have the same names as the template arguments
         :param unique_subset: DataFrame column names known to be unique e.g. ["colA", "colB"], for a performance boost (reduce costly deduplication)
         :param graph: The IRI of the graph to add triples to.
+        :param types: The types of the columns.
         :param validate_iris: Validate any IRI-columns.
         :param validate_unique_subset: Check that provided unique subset actually is unique.
-        :param types: The types of the columns.
         """
+
+    def expand_triples(
+            self,
+            df: DataFrame = None,
+            verb: str = None,
+            unique: bool = False,
+            graph: str = None,
+            types: Dict[str, RDFType] = None,
+            validate_iris: bool = True,
+            validate_unique: bool = False,
+    ) -> None:
+        """
+        Expand a template using a DataFrame with columns subject, object and verb
+        The verb column can also be supplied as a string if it is the same for all rows.
+        Usage:
+
+        >>> m.expand_triples(df)
+
+        If the template has no arguments, the df argument is not necessary.
+
+        :param df: DataFrame where the columns are named subject and object. May also contain a verb-column.
+        :param verb: The uri of the verb.
+        :param unique: Is the DataFrame garuanteed to consist of unique rows?
+        :param graph: The IRI of the graph to add triples to.
+        :param types: The types of the columns.
+        :param validate_iris: Validate any IRI-columns.
+        :param validate_unique: Check that the triples are actually unique if this is indicated.
+        """
+
 
     def expand_default(
         self,
@@ -441,6 +468,8 @@ class Mapping:
         self,
         query: str,
         parameters: ParametersType = None,
+        include_datatypes: bool = False,
+        native_dataframe: bool = False,
         transient: bool = False,
         streaming: bool = False,
         source_graph: str = None,
@@ -465,6 +494,8 @@ class Mapping:
 
         :param query: The SPARQL Insert query string
         :param parameters: PVALUES Parameters, a DataFrame containing the value bindings in the custom PVALUES construction.
+        :param native_dataframe: Return columns with maplib-native formatting. Useful for round-trips.
+        :param include_datatypes: Datatypes are not returned by default, set to true to return a dict with the solution mappings and the datatypes.
         :param transient: Should the inserted triples be included in exports?
         :param source_graph: The IRI of the source graph to execute the construct query.
         :param target_graph: The IRI of the target graph to insert into.
@@ -648,6 +679,8 @@ class Mapping:
         self,
         query: str,
         parameters: ParametersType = None,
+        include_datatypes: bool = False,
+        native_dataframe: bool = False,
         transient: bool = False,
         streaming: bool = False,
         source_graph: str = None,
@@ -676,6 +709,8 @@ class Mapping:
 
         :param query: The SPARQL Insert query string
         :param parameters: PVALUES Parameters, a DataFrame containing the value bindings in the custom PVALUES construction.
+        :param native_dataframe: Return columns with maplib-native formatting. Useful for round-trips.
+        :param include_datatypes: Datatypes are not returned by default, set to true to return a dict with the solution mappings and the datatypes.
         :param transient: Should the inserted triples be included in exports?
         :param source_graph: The IRI of the source graph to execute the construct query.
         :param target_graph: The IRI of the target graph to insert into.
@@ -716,12 +751,5 @@ class Mapping:
         :param options: Indexing options
         :param all: Apply to all existing and new graphs
         :param graph: The graph where indexes should be added
-        :return:
-        """
-
-    def initialize(self):
-        """
-        Deduplicates and builds indices of all triplestores.
-        Happens automatically on first query or validation.
         :return:
         """

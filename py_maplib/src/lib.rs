@@ -12,6 +12,7 @@ use log::warn;
 use maplib::errors::MaplibError;
 use maplib::mapping::errors::MappingError;
 use maplib::mapping::{ExpandOptions, Mapping as InnerMapping};
+
 use pydf_io::to_python::{df_to_py_df, fix_cats_and_multicolumns};
 use pyo3::prelude::*;
 use std::collections::{HashMap, HashSet};
@@ -46,6 +47,7 @@ use triplestore::sparql::{QueryResult as SparqlQueryResult, QueryResult};
 use jemallocator::Jemalloc;
 use oxrdf::NamedNode;
 use oxrdfio::RdfFormat;
+use polars::prelude::{col, lit, IntoLazy};
 use pyo3::types::{PyList, PyString};
 use representation::python::{
     PyBlankNode, PyIRI, PyLiteral, PyPrefix, PyRDFType, PySolutionMappings, PyVariable,
@@ -54,9 +56,11 @@ use representation::solution_mapping::EagerSolutionMappings;
 
 #[cfg(not(target_os = "linux"))]
 use mimalloc::MiMalloc;
+use representation::rdf_to_polars::rdf_named_node_to_polars_literal_value;
+use representation::{RDFNodeType, OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME};
 use templates::python::{a, py_triple, PyArgument, PyInstance, PyParameter, PyTemplate, PyXSD};
 use templates::MappingColumnType;
-use triplestore::IndexingOptions;
+use triplestore::{IndexingOptions, NewTriples};
 
 #[cfg(target_os = "linux")]
 #[global_allocator]
@@ -90,9 +94,8 @@ pub struct PyIndexingOptions {
 #[pymethods]
 impl PyIndexingOptions {
     #[new]
-    #[pyo3(signature = (enabled, object_sort_all=None, object_sort_some=None, fts_path=None))]
+    #[pyo3(signature = (object_sort_all=None, object_sort_some=None, fts_path=None))]
     pub fn new(
-        enabled: bool,
         object_sort_all: Option<bool>,
         object_sort_some: Option<Vec<PyIRI>>,
         fts_path: Option<String>,
@@ -102,40 +105,29 @@ impl PyIndexingOptions {
         } else {
             None
         };
-        let inner = if enabled && object_sort_all.is_none() && object_sort_some.is_none() {
+        let inner = if object_sort_all.is_none() && object_sort_some.is_none() {
             let mut opts = IndexingOptions::default();
             opts.set_fts_path(fts_path);
             opts
         } else {
             let object_sort_all = object_sort_all.unwrap_or(false);
-            let enabled = enabled || object_sort_all || object_sort_some.is_some();
-            if enabled {
-                if object_sort_all && object_sort_some.is_none() {
-                    IndexingOptions::default()
-                } else {
-                    let object_sort_some: Option<HashSet<_>> =
-                        if let Some(object_sort_some) = object_sort_some {
-                            Some(
-                                object_sort_some
-                                    .into_iter()
-                                    .map(|x| x.into_inner())
-                                    .collect(),
-                            )
-                        } else {
-                            None
-                        };
-                    IndexingOptions {
-                        enabled,
-                        object_sort_all,
-                        object_sort_some,
-                        fts_path,
-                    }
-                }
+            if object_sort_all && object_sort_some.is_none() {
+                IndexingOptions::default()
             } else {
+                let object_sort_some: Option<HashSet<_>> =
+                    if let Some(object_sort_some) = object_sort_some {
+                        Some(
+                            object_sort_some
+                                .into_iter()
+                                .map(|x| x.into_inner())
+                                .collect(),
+                        )
+                    } else {
+                        None
+                    };
                 IndexingOptions {
-                    enabled,
                     object_sort_all,
-                    object_sort_some: None,
+                    object_sort_some,
                     fts_path,
                 }
             }
@@ -263,27 +255,10 @@ impl PyMapping {
             )
             .into());
         };
-
-        let unique_subsets =
-            unique_subset.map(|unique_subset| vec![unique_subset.into_iter().collect()]);
-
-        let options = ExpandOptions {
-            unique_subsets,
-            graph: parse_optional_graph(graph)?,
-            deduplicate: false,
-            validate_iris: validate_iris.unwrap_or(true),
-            validate_unique_subsets: validate_unique_subset.unwrap_or(false),
-        };
-
-        let types = if let Some(types) = types {
-            let mut new_types = HashMap::new();
-            for (k, v) in types {
-                new_types.insert(k, MappingColumnType::Flat(v.as_rdf_node_type()));
-            }
-            Some(new_types)
-        } else {
-            None
-        };
+        let graph = parse_optional_graph(graph)?;
+        let options =
+            ExpandOptions::from_args(unique_subset, graph, validate_iris, validate_unique_subset);
+        let types = map_types(types);
 
         if let Some(df) = df {
             if df.getattr("height")?.gt(0).unwrap() {
@@ -305,6 +280,42 @@ impl PyMapping {
                 .map_err(PyMaplibError::from)?;
         }
 
+        Ok(None)
+    }
+
+    #[pyo3(signature = (df, verb=None, unique=None, graph=None, types=None, validate_iris=None, validate_unique=None))]
+    fn expand_triples(
+        &mut self,
+        df: &Bound<'_, PyAny>,
+        verb: Option<String>,
+        unique: Option<bool>,
+        graph: Option<String>,
+        types: Option<HashMap<String, PyRDFType>>,
+        validate_iris: Option<bool>,
+        validate_unique: Option<bool>,
+    ) -> PyResult<Option<PyObject>> {
+        let graph = parse_optional_graph(graph)?;
+        let df = polars_df_to_rust_df(df)?;
+        let colnames: Option<Vec<_>> = if unique.unwrap_or(false) {
+            Some(
+                df.get_column_names()
+                    .iter()
+                    .map(|x| x.to_string())
+                    .collect(),
+            )
+        } else {
+            None
+        };
+        let options = ExpandOptions::from_args(colnames, graph, validate_iris, validate_unique);
+        let types = map_types(types);
+        let verb = if let Some(verb) = verb {
+            Some(NamedNode::new(verb).map_err(PyMaplibError::IriParseError)?)
+        } else {
+            None
+        };
+        self.inner
+            .expand_triples(df, types, verb, options)
+            .map_err(PyMaplibError::from)?;
         Ok(None)
     }
 
@@ -446,16 +457,19 @@ impl PyMapping {
         ))
     }
 
-    #[pyo3(signature = (query, parameters=None, transient=None, streaming=None, source_graph=None, target_graph=None))]
+    #[pyo3(signature = (query, parameters=None, include_datatypes=None, native_dataframe=None, transient=None, streaming=None, source_graph=None, target_graph=None))]
     fn insert(
         &mut self,
         query: String,
         parameters: Option<ParametersType>,
+        include_datatypes: Option<bool>,
+        native_dataframe: Option<bool>,
         transient: Option<bool>,
         streaming: Option<bool>,
         source_graph: Option<String>,
         target_graph: Option<String>,
-    ) -> PyResult<()> {
+        py: Python<'_>,
+    ) -> PyResult<HashMap<String, PyObject>> {
         let mapped_parameters = map_parameters(parameters)?;
         let source_graph = parse_optional_graph(source_graph)?;
         let target_graph = parse_optional_graph(target_graph)?;
@@ -468,8 +482,9 @@ impl PyMapping {
                 streaming.unwrap_or(false),
             )
             .map_err(PyMaplibError::from)?;
-        if let QueryResult::Construct(dfs_and_dts) = res {
-            self.inner
+        let out_dict = if let QueryResult::Construct(dfs_and_dts) = res {
+            let new_triples = self
+                .inner
                 .insert_construct_result(
                     dfs_and_dts,
                     transient.unwrap_or(false),
@@ -477,25 +492,34 @@ impl PyMapping {
                     false,
                 )
                 .map_err(PyMaplibError::from)?;
+            new_triples_to_dict(
+                new_triples,
+                native_dataframe.unwrap_or(false),
+                include_datatypes.unwrap_or(false),
+                py,
+            )?
         } else {
             todo!("Handle this error..")
-        }
+        };
         if self.sprout.is_some() {
             self.sprout.as_mut().unwrap().blank_node_counter = self.inner.blank_node_counter;
         }
-        Ok(())
+        Ok(out_dict.into())
     }
 
-    #[pyo3(signature = (query, parameters=None, transient=None, streaming=None, source_graph=None, target_graph=None))]
+    #[pyo3(signature = (query, parameters=None, include_datatypes=None, native_dataframe=None, transient=None, streaming=None, source_graph=None, target_graph=None))]
     fn insert_sprout(
         &mut self,
         query: String,
         parameters: Option<ParametersType>,
+        include_datatypes: Option<bool>,
+        native_dataframe: Option<bool>,
         transient: Option<bool>,
         streaming: Option<bool>,
         source_graph: Option<String>,
         target_graph: Option<String>,
-    ) -> PyResult<()> {
+        py: Python<'_>,
+    ) -> PyResult<HashMap<String, PyObject>> {
         let mapped_parameters = map_parameters(parameters)?;
         let source_graph = parse_optional_graph(source_graph)?;
         let target_graph = parse_optional_graph(target_graph)?;
@@ -511,8 +535,9 @@ impl PyMapping {
                 streaming.unwrap_or(false),
             )
             .map_err(PyMaplibError::from)?;
-        if let QueryResult::Construct(dfs_and_dts) = res {
-            self.sprout
+        let out_dict = if let QueryResult::Construct(dfs_and_dts) = res {
+            let new_triples = self
+                .sprout
                 .as_mut()
                 .unwrap()
                 .insert_construct_result(
@@ -522,12 +547,18 @@ impl PyMapping {
                     false,
                 )
                 .map_err(PyMaplibError::from)?;
+            new_triples_to_dict(
+                new_triples,
+                native_dataframe.unwrap_or(false),
+                include_datatypes.unwrap_or(false),
+                py,
+            )?
         } else {
             todo!("Handle this error..")
-        }
+        };
         self.inner.blank_node_counter = self.sprout.as_ref().unwrap().blank_node_counter;
 
-        Ok(())
+        Ok(out_dict)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -704,13 +735,6 @@ impl PyMapping {
         }
         Ok(out)
     }
-
-    fn initialize(&mut self) -> PyResult<()> {
-        self.inner
-            .initialize()
-            .map_err(PyMaplibError::MappingError)?;
-        Ok(())
-    }
 }
 
 #[pymodule]
@@ -749,16 +773,43 @@ fn query_to_result(
         return Ok(PyString::new_bound(py, &json).into());
     }
     match res {
-        SparqlQueryResult::Select(mut df, mut datatypes) => {
-            (df, datatypes) = fix_cats_and_multicolumns(df, datatypes, native_dataframe);
-            let pydf = df_to_py_df(df, datatypes, None, include_details, py)?;
+        SparqlQueryResult::Select(EagerSolutionMappings {
+            mut mappings,
+            mut rdf_node_types,
+        }) => {
+            (mappings, rdf_node_types) =
+                fix_cats_and_multicolumns(mappings, rdf_node_types, native_dataframe);
+            let pydf = df_to_py_df(mappings, rdf_node_types, None, include_details, py)?;
             Ok(pydf)
         }
         SparqlQueryResult::Construct(dfs) => {
             let mut query_results = vec![];
-            for (mut df, mut datatypes) in dfs {
-                (df, datatypes) = fix_cats_and_multicolumns(df, datatypes, native_dataframe);
-                let pydf = df_to_py_df(df, datatypes, None, include_details, py)?;
+            for (
+                EagerSolutionMappings {
+                    mut mappings,
+                    mut rdf_node_types,
+                },
+                verb,
+            ) in dfs
+            {
+                if let Some(verb) = verb {
+                    mappings = mappings
+                        .lazy()
+                        .with_column(
+                            lit(rdf_named_node_to_polars_literal_value(&verb)).alias(VERB_COL_NAME),
+                        )
+                        .select([
+                            col(SUBJECT_COL_NAME),
+                            col(VERB_COL_NAME),
+                            col(OBJECT_COL_NAME),
+                        ])
+                        .collect()
+                        .unwrap();
+                    rdf_node_types.insert(VERB_COL_NAME.to_string(), RDFNodeType::IRI);
+                }
+                (mappings, rdf_node_types) =
+                    fix_cats_and_multicolumns(mappings, rdf_node_types, native_dataframe);
+                let pydf = df_to_py_df(mappings, rdf_node_types, None, include_details, py)?;
                 query_results.push(pydf);
             }
             Ok(PyList::new_bound(py, query_results).into())
@@ -809,4 +860,48 @@ fn parse_optional_graph(graph: Option<String>) -> PyResult<Option<NamedNode>> {
         None
     };
     Ok(graph)
+}
+
+fn map_types(
+    types: Option<HashMap<String, PyRDFType>>,
+) -> Option<HashMap<String, MappingColumnType>> {
+    let types = if let Some(types) = types {
+        let mut new_types = HashMap::new();
+        for (k, v) in types {
+            new_types.insert(k, MappingColumnType::Flat(v.as_rdf_node_type()));
+        }
+        Some(new_types)
+    } else {
+        None
+    };
+    types
+}
+
+fn new_triples_to_dict(
+    new_triples: Vec<NewTriples>,
+    native_dataframe: bool,
+    include_datatypes: bool,
+    py: Python<'_>,
+) -> PyResult<HashMap<String, PyObject>> {
+    let mut map = HashMap::new();
+    for NewTriples {
+        df,
+        predicate,
+        subject_type,
+        object_type,
+    } in new_triples
+    {
+        if let Some(mut df) = df {
+            let mut types = HashMap::new();
+            types.insert(
+                SUBJECT_COL_NAME.to_string(),
+                subject_type.as_rdf_node_type(),
+            );
+            types.insert(OBJECT_COL_NAME.to_string(), object_type.as_rdf_node_type());
+            (df, types) = fix_cats_and_multicolumns(df, types, native_dataframe);
+            let py_sm = df_to_py_df(df, types, None, include_datatypes, py)?;
+            map.insert(predicate.as_str().to_string(), py_sm);
+        }
+    }
+    Ok(map)
 }

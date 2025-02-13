@@ -14,8 +14,8 @@ PATH_HERE = pathlib.Path(__file__).parent
 TESTDATA_PATH = PATH_HERE / "testdata"
 
 
-@pytest.fixture(scope="session", params=[True, False])
-def windpower_mapping(request):
+@pytest.fixture(scope="session")
+def windpower_mapping():
     instance_mapping = """
     @prefix tpl:<https://github.com/magbak/chrontext/templates#>.
     @prefix rds:<https://github.com/magbak/chrontext/rds_power#>.
@@ -56,7 +56,7 @@ def windpower_mapping(request):
     n = 40
 
     mapping = Mapping(
-        [instance_mapping], indexing_options=IndexingOptions(enabled=False)
+        [instance_mapping]
     )
     # Used as a prefix
     wpex = "https://github.com/magbak/chrontext/windpower_example#"
@@ -253,8 +253,6 @@ def windpower_mapping(request):
     wind_turbine_has_wms = add_aspect_labeling_by_source(wind_turbine_has_wms, "LE")
 
     mapping.expand("tpl:FunctionalAspect", df=wind_turbine_has_wms)
-    if request.param:
-        mapping.create_index()
     return mapping
 
 

@@ -651,3 +651,30 @@ def test_bool_func():
     """
     )
     assert_frame_equal(df, pl.DataFrame({"a": ["true"]}))
+
+def test_expand_triples():
+    df = pl.DataFrame({"subject": ["http://example.net/ns#A", "http://example.net/ns#B", "http://example.net/ns#C"],
+                       "object": ["http://example.net/ns#D", "http://example.net/ns#E", "http://example.net/ns#F"]})
+    types = {
+        "subject":RDFType.IRI(),
+        "object":RDFType.IRI()
+    }
+    verb = "http://example.net/ns#hasRel"
+    m = Mapping()
+    m.expand_triples(df, types=types, verb=verb)
+    df = m.query("""
+    SELECT ?a ?b ?c WHERE {?a ?b ?c} ORDER BY ?a ?b ?c
+    """)
+    expected = pl.from_repr("""
+┌───────────────────────────┬────────────────────────────────┬───────────────────────────┐
+│ a                         ┆ b                              ┆ c                         │
+│ ---                       ┆ ---                            ┆ ---                       │
+│ str                       ┆ str                            ┆ str                       │
+╞═══════════════════════════╪════════════════════════════════╪═══════════════════════════╡
+│ <http://example.net/ns#A> ┆ <http://example.net/ns#hasRel> ┆ <http://example.net/ns#D> │
+│ <http://example.net/ns#B> ┆ <http://example.net/ns#hasRel> ┆ <http://example.net/ns#E> │
+│ <http://example.net/ns#C> ┆ <http://example.net/ns#hasRel> ┆ <http://example.net/ns#F> │
+└───────────────────────────┴────────────────────────────────┴───────────────────────────┘
+    """)
+    assert_frame_equal(df, expected)
+

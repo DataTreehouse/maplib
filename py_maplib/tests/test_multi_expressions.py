@@ -467,3 +467,41 @@ def test_multi_filter_incompatible_datetime_comparison():
 └─────────────────────┘
     """)
     assert_frame_equal(df, expected)
+
+def test_generate_uuids():
+    m = Mapping([])
+    sm = m.query(
+        """
+    PREFIX : <http://example.net/> 
+    PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+    SELECT ?a ?uuid WHERE {
+    VALUES (?a) { (1) (2) (3) }
+    BIND(uuid() as ?uuid)
+    } ORDER BY ?a
+    """, include_datatypes=True
+    )
+    assert sm.rdf_types == {'a': RDFType.Literal("http://www.w3.org/2001/XMLSchema#integer"),
+                            'uuid': RDFType.IRI()}
+    assert sm.mappings.height == 3
+    df = sm.mappings.with_columns(
+        pl.col("uuid").str.starts_with("<urn:uuid:").alias("startswithcorrect")
+    )
+    assert df.get_column("startswithcorrect").sum() == 3
+    assert df.get_column("uuid").unique().len() == 3
+
+def test_generate_str_uuids():
+    m = Mapping([])
+    sm = m.query(
+        """
+    PREFIX : <http://example.net/> 
+    PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+    SELECT ?a ?struuid WHERE {
+    VALUES (?a) { (1) (2) (3) }
+    BIND(struuid() as ?struuid)
+    } ORDER BY ?a
+    """, include_datatypes=True
+    )
+    assert sm.rdf_types == {'a': RDFType.Literal("http://www.w3.org/2001/XMLSchema#integer"),
+                            'struuid': RDFType.Literal("http://www.w3.org/2001/XMLSchema#string")}
+    assert sm.mappings.height == 3
+    assert sm.mappings.get_column("struuid").unique().len() == 3
