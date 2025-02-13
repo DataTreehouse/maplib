@@ -6,6 +6,7 @@ use representation::multitype::unique_workaround;
 use crate::sparql::QueryResult;
 use crate::Triplestore;
 use representation::polars_to_rdf::{df_as_result, QuerySolutions};
+use representation::solution_mapping::EagerSolutionMappings;
 
 pub fn query_select(
     query: &str,
@@ -15,13 +16,17 @@ pub fn query_select(
 ) -> QuerySolutions {
     let qres = triplestore.query(query, &None, streaming).unwrap();
 
-    let (df, types) = if let QueryResult::Select(mut df, types) = qres {
+    let (df, types) = if let QueryResult::Select(EagerSolutionMappings {
+        mut mappings,
+        rdf_node_types,
+    }) = qres
+    {
         if deduplicate {
-            let mut lf = df.lazy();
-            lf = unique_workaround(lf, &types, None, false, UniqueKeepStrategy::Any);
-            df = lf.collect().unwrap();
+            let mut lf = mappings.lazy();
+            lf = unique_workaround(lf, &rdf_node_types, None, false, UniqueKeepStrategy::Any);
+            mappings = lf.collect().unwrap();
         }
-        (df, types)
+        (mappings, rdf_node_types)
     } else {
         panic!("Should never happen")
     };

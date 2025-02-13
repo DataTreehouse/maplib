@@ -21,7 +21,7 @@ use templates::document::document_from_str;
 use templates::MappingColumnType;
 use triplestore::sparql::errors::SparqlError;
 use triplestore::sparql::QueryResult;
-use triplestore::{IndexingOptions, Triplestore};
+use triplestore::{IndexingOptions, NewTriples, Triplestore};
 
 pub struct Mapping {
     pub template_dataset: TemplateDataset,
@@ -253,14 +253,14 @@ impl Mapping {
 
     pub fn insert_construct_result(
         &mut self,
-        dfs: Vec<(DataFrame, HashMap<String, RDFNodeType>)>,
+        sms: Vec<(EagerSolutionMappings, Option<NamedNode>)>,
         transient: bool,
         target_graph: Option<NamedNode>,
         deduplicate: bool,
-    ) -> Result<(), SparqlError> {
+    ) -> Result<Vec<NewTriples>, SparqlError> {
         let use_triplestore = self.get_triplestore(&target_graph);
-        let _ = use_triplestore.insert_construct_result(dfs, transient, deduplicate)?;
-        Ok(())
+        let new_triples = use_triplestore.insert_construct_result(sms, transient, deduplicate)?;
+        Ok(new_triples)
     }
 
     pub fn write_triples<W: Write>(

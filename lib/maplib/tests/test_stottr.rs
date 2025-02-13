@@ -4,6 +4,7 @@ use maplib::mapping::{ExpandOptions, Mapping};
 use oxrdf::{Literal, NamedNode, Subject, Term, Triple};
 use polars::prelude::{col, AnyValue, DataFrame, IntoLazy, PlSmallStr, Series, TimeUnit};
 use representation::polars_to_rdf::df_as_result;
+use representation::solution_mapping::EagerSolutionMappings;
 use rstest::*;
 use serial_test::serial;
 use std::collections::HashSet;
@@ -21,8 +22,12 @@ fn get_triples(mapping: &mut Mapping) -> Vec<Triple> {
         )
         .unwrap();
     let mut triples = vec![];
-    if let QueryResult::Select(df, types) = res {
-        let solns = df_as_result(df, &types);
+    if let QueryResult::Select(EagerSolutionMappings {
+        mappings,
+        rdf_node_types,
+    }) = res
+    {
+        let solns = df_as_result(mappings, &rdf_node_types);
         for s in solns.solutions {
             let (subject, verb, object) = triplestore::query_solutions::get_three_query_solutions(
                 s,

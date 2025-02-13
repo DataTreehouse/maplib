@@ -95,13 +95,9 @@ impl Triplestore {
                 object_datatype_ctr,
             );
             if let Some(m) = self.triples_map.get_mut(verb_uri) {
-                if let Some(sms) = multiple_tt_to_lf(
-                    m,
-                    compatible_types,
-                    subjects,
-                    objects,
-                    keep_subject,
-                )? {
+                if let Some(sms) =
+                    multiple_tt_to_lf(m, compatible_types, subjects, objects, keep_subject)?
+                {
                     all_sms.extend(sms);
                 }
             }
@@ -114,13 +110,9 @@ impl Triplestore {
                 object_datatype_ctr,
             );
             if let Some(m) = self.transient_triples_map.get_mut(verb_uri) {
-                if let Some(sms) = multiple_tt_to_lf(
-                    m,
-                    compatible_types,
-                    subjects,
-                    objects,
-                    keep_subject,
-                )? {
+                if let Some(sms) =
+                    multiple_tt_to_lf(m, compatible_types, subjects, objects, keep_subject)?
+                {
                     all_sms.extend(sms);
                 }
             }

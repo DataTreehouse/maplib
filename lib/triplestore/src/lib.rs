@@ -96,10 +96,10 @@ pub struct TripleDF {
 
 #[derive(Debug)]
 pub struct NewTriples {
-    df: Option<DataFrame>,
-    predicate: NamedNode,
-    subject_type: BaseRDFNodeType,
-    object_type: BaseRDFNodeType,
+    pub df: Option<DataFrame>,
+    pub predicate: NamedNode,
+    pub subject_type: BaseRDFNodeType,
+    pub object_type: BaseRDFNodeType,
 }
 
 impl Triplestore {
@@ -254,10 +254,7 @@ impl Triplestore {
                     added_triples = true;
                 }
             } else {
-                use_map.insert(
-                    predicate.clone(),
-                    HashMap::new(),
-                );
+                use_map.insert(predicate.clone(), HashMap::new());
             };
             if !added_triples {
                 let triples = Triples::new(
@@ -272,9 +269,14 @@ impl Triplestore {
                 )?;
                 let mut lfs = triples.get_lazy_frames(&None, &None)?;
                 assert_eq!(lfs.len(), 1);
-                let (lf,_) = lfs.pop().unwrap();
+                let (lf, _) = lfs.pop().unwrap();
                 let df = lf.collect().unwrap();
-                let new_triples = NewTriples{ df:Some(df), predicate:predicate.clone(), subject_type, object_type };
+                let new_triples = NewTriples {
+                    df: Some(df),
+                    predicate: predicate.clone(),
+                    subject_type,
+                    object_type,
+                };
                 out_new_triples.push(new_triples);
                 let m = use_map.get_mut(&predicate).unwrap();
                 m.insert(k, triples);

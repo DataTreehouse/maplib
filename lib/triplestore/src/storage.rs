@@ -1,11 +1,10 @@
 use crate::errors::TriplestoreError;
 use oxrdf::{NamedNode, Subject, Term};
 use polars::prelude::{
-    as_struct, col, lit, Expr, IdxSize, IntoLazy, IpcWriter, LazyFrame, PlSmallStr,
-    ScanArgsIpc,
+    as_struct, col, lit, Expr, IdxSize, IntoLazy, IpcWriter, LazyFrame, PlSmallStr, ScanArgsIpc,
 };
 use polars_core::datatypes::{AnyValue, CategoricalChunked, LogicalType};
-use polars_core::frame::{DataFrame};
+use polars_core::frame::DataFrame;
 use polars_core::prelude::{
     CategoricalOrdering, CompatLevel, DataType, Series, SortMultipleOptions,
 };
@@ -161,6 +160,7 @@ impl Triples {
             &self.subject_type,
             &self.object_type,
         )?;
+        println!("New triples {:?}", new_triples);
         self.subject_sort.wipe()?;
         self.subject_sparse_index = sparse;
         self.subject_sort = stored;
@@ -569,18 +569,21 @@ fn sort_indexed_lf(
     let mut lf = cast_col_to_cat(lf, c, true);
 
     let mut by = vec![PlSmallStr::from_str(c)];
+    let mut descending = vec![false];
     if also_other {
         let other_c = get_col(!is_subject);
         by.push(PlSmallStr::from_str(&other_c));
+        descending.push(false);
     }
     if sort_on_existing {
         by.push(PlSmallStr::from_str(EXISTING_COL));
+        descending.push(true);
     }
 
     lf = lf.sort(
         by,
         SortMultipleOptions {
-            descending: vec![false],
+            descending,
             nulls_last: vec![false],
             multithreaded: true,
             maintain_order: false,
@@ -654,6 +657,7 @@ fn update_column_sorted_index(
     let (df, sparse_map) = create_unique_df_and_sparse_map(lf, is_subject, false, sort_on_existing);
     let height = df.height();
     let new_triples = if sort_on_existing {
+        println!("Triples {}", df);
         let new_triples = df
             .clone()
             .lazy()
@@ -661,7 +665,7 @@ fn update_column_sorted_index(
             .select([col(SUBJECT_COL_NAME), col(OBJECT_COL_NAME)])
             .collect()
             .unwrap();
-        if new_triples.height() == 0 {
+        if new_triples.height() > 0 {
             Some(new_triples)
         } else {
             None
