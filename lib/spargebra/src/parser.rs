@@ -442,6 +442,14 @@ fn build_select(
         p = new_join(p, data);
     }
 
+    // HAVING
+    if let Some(expr) = having {
+        p = GraphPattern::Filter {
+            expr,
+            inner: Box::new(p),
+        };
+    }
+
     // SELECT
     let mut pv = Vec::new();
     let with_project = match select.variables {
@@ -502,14 +510,6 @@ fn build_select(
         }
         SelectionVariables::Everything => false,
     };
-
-    // HAVING
-    if let Some(expr) = having {
-        p = GraphPattern::Filter {
-            expr,
-            inner: Box::new(p),
-        };
-    }
 
     let mut m = p;
 
