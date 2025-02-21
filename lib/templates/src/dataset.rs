@@ -184,10 +184,17 @@ fn infer_template_types(
 ) -> Result<bool, TemplateError> {
     let mut changed = false;
     for i in &mut template.pattern_list {
-        let other = *templates
+        let other = if let Some(t) = templates
             .iter()
             .find(|t| t.signature.template_name == i.template_name)
-            .unwrap();
+        {
+            (*t).clone()
+        } else {
+            return Err(TemplateError::TemplateNotFound(
+                template.signature.template_name.to_string().clone(),
+                i.template_name.to_string().clone(),
+            ));
+        };
         if i.argument_list.len() != other.signature.parameter_list.len() {
             return Err(TemplateError::InconsistentNumberOfArguments(
                 template.signature.template_name.as_str().to_string(),

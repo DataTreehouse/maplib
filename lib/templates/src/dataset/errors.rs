@@ -12,6 +12,7 @@ pub enum TemplateError {
     ResolveDirectoryEntryError(walkdir::Error),
     ParsingError(crate::parsing::errors::ParsingError),
     ResolutionError(ResolutionError),
+    TemplateNotFound(String, String),
 }
 
 impl Display for TemplateError {
@@ -42,6 +43,12 @@ impl Display for TemplateError {
             }
             TemplateError::ResolutionError(r) => {
                 write!(f, "Template resolution error {}", r)
+            }
+            TemplateError::TemplateNotFound(container, inner) => {
+                write!(
+                    f,
+                    "Could not find template {inner} referenced from template {container}"
+                )
             }
         }
     }

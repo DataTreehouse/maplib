@@ -167,6 +167,22 @@ def test_nested_template_more_general():
     assert r.rdf_types["c"] == RDFType.Literal(XSD().string)
 
 
+def test_nested_template_not_found():
+    df = pl.DataFrame({"MyValue": ["hello"]})
+    templates = """
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+<http://example.net/ns#ExampleNestedTemplate> [ rdfs:Literal ?MyValue ] :: {
+  <http://ns.ottr.xyz/0.4/Triple>(<http://example.net/ns#MyObject>,<http://example.net/ns#hasValue>,?MyValue)
+} . 
+<http://example.net/ns#ExampleTemplate> [ xsd:string ?MyValue ] :: {
+  <http://example.net/ns#ExampleNestedTemplateWrong>(?MyValue)
+} . 
+    """
+    with pytest.raises(Exception):
+        Mapping(templates)
+
+
 def test_nested_template_more_specific():
     df = pl.DataFrame({"MyValue": ["hello"]})
     templates = """
