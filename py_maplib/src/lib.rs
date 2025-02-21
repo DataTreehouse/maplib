@@ -227,17 +227,14 @@ impl PyMapping {
         }
     }
 
-    #[pyo3(signature = (template, df=None, unique_subset=None, graph=None, types=None,
-                        validate_iris=true, validate_unique_subset=false))]
+    #[pyo3(signature = (template, df=None, graph=None, types=None, validate_iris=true))]
     fn expand(
         &mut self,
         template: &Bound<'_, PyAny>,
         df: Option<&Bound<'_, PyAny>>,
-        unique_subset: Option<Vec<String>>,
         graph: Option<String>,
         types: Option<HashMap<String, PyRDFType>>,
         validate_iris: Option<bool>,
-        validate_unique_subset: Option<bool>,
     ) -> PyResult<Option<PyObject>> {
         let template = if let Ok(i) = template.extract::<PyIRI>() {
             i.into_inner().to_string()
@@ -256,8 +253,7 @@ impl PyMapping {
             .into());
         };
         let graph = parse_optional_graph(graph)?;
-        let options =
-            ExpandOptions::from_args(unique_subset, graph, validate_iris, validate_unique_subset);
+        let options = ExpandOptions::from_args(graph, validate_iris);
         let types = map_types(types);
 
         if let Some(df) = df {
@@ -283,30 +279,18 @@ impl PyMapping {
         Ok(None)
     }
 
-    #[pyo3(signature = (df, verb=None, unique=None, graph=None, types=None, validate_iris=None, validate_unique=None))]
+    #[pyo3(signature = (df, verb=None, graph=None, types=None, validate_iris=None))]
     fn expand_triples(
         &mut self,
         df: &Bound<'_, PyAny>,
         verb: Option<String>,
-        unique: Option<bool>,
         graph: Option<String>,
         types: Option<HashMap<String, PyRDFType>>,
         validate_iris: Option<bool>,
-        validate_unique: Option<bool>,
     ) -> PyResult<Option<PyObject>> {
         let graph = parse_optional_graph(graph)?;
         let df = polars_df_to_rust_df(df)?;
-        let colnames: Option<Vec<_>> = if unique.unwrap_or(false) {
-            Some(
-                df.get_column_names()
-                    .iter()
-                    .map(|x| x.to_string())
-                    .collect(),
-            )
-        } else {
-            None
-        };
-        let options = ExpandOptions::from_args(colnames, graph, validate_iris, validate_unique);
+        let options = ExpandOptions::from_args(graph, validate_iris);
         let types = map_types(types);
         let verb = if let Some(verb) = verb {
             Some(NamedNode::new(verb).map_err(PyMaplibError::IriParseError)?)
@@ -319,8 +303,7 @@ impl PyMapping {
         Ok(None)
     }
 
-    #[pyo3(signature = (df, primary_key_column, template_prefix=None, predicate_uri_prefix=None,
-                        graph=None, validate_iris=true, validate_unique_subset=false))]
+    #[pyo3(signature = (df, primary_key_column, template_prefix=None, predicate_uri_prefix=None, graph=None, validate_iris=true))]
     fn expand_default(
         &mut self,
         df: &Bound<'_, PyAny>,
@@ -329,15 +312,11 @@ impl PyMapping {
         predicate_uri_prefix: Option<String>,
         graph: Option<String>,
         validate_iris: Option<bool>,
-        validate_unique_subset: Option<bool>,
     ) -> PyResult<String> {
         let df = polars_df_to_rust_df(df)?;
         let options = ExpandOptions {
-            unique_subsets: Some(vec![vec![primary_key_column.clone()]]),
             graph: parse_optional_graph(graph)?,
-            deduplicate: false,
             validate_iris: validate_iris.unwrap_or(true),
-            validate_unique_subsets: validate_unique_subset.unwrap_or(false),
         };
 
         let tmpl = self
@@ -485,12 +464,7 @@ impl PyMapping {
         let out_dict = if let QueryResult::Construct(dfs_and_dts) = res {
             let new_triples = self
                 .inner
-                .insert_construct_result(
-                    dfs_and_dts,
-                    transient.unwrap_or(false),
-                    target_graph,
-                    false,
-                )
+                .insert_construct_result(dfs_and_dts, transient.unwrap_or(false), target_graph)
                 .map_err(PyMaplibError::from)?;
             new_triples_to_dict(
                 new_triples,
@@ -540,12 +514,7 @@ impl PyMapping {
                 .sprout
                 .as_mut()
                 .unwrap()
-                .insert_construct_result(
-                    dfs_and_dts,
-                    transient.unwrap_or(false),
-                    target_graph,
-                    false,
-                )
+                .insert_construct_result(dfs_and_dts, transient.unwrap_or(false), target_graph)
                 .map_err(PyMaplibError::from)?;
             new_triples_to_dict(
                 new_triples,
@@ -562,7 +531,7 @@ impl PyMapping {
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[pyo3(signature = (file_path, format=None, base_iri=None, transient=None, parallel=None, checked=None, deduplicate=None, graph=None, replace_graph=None))]
+    #[pyo3(signature = (file_path, format=None, base_iri=None, transient=None, parallel=None, checked=None, graph=None, replace_graph=None))]
     fn read_triples(
         &mut self,
         file_path: &Bound<'_, PyAny>,
@@ -571,7 +540,6 @@ impl PyMapping {
         transient: Option<bool>,
         parallel: Option<bool>,
         checked: Option<bool>,
-        deduplicate: Option<bool>,
         graph: Option<String>,
         replace_graph: Option<bool>,
     ) -> PyResult<()> {
@@ -587,7 +555,6 @@ impl PyMapping {
                 transient.unwrap_or(false),
                 parallel.unwrap_or(false),
                 checked.unwrap_or(true),
-                deduplicate.unwrap_or(true),
                 graph,
                 replace_graph.unwrap_or(false),
             )
@@ -596,7 +563,7 @@ impl PyMapping {
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[pyo3(signature = (s, format, base_iri=None, transient=None, parallel=None, checked=None, deduplicate=None, graph=None, replace_graph=None))]
+    #[pyo3(signature = (s, format, base_iri=None, transient=None, parallel=None, checked=None, graph=None, replace_graph=None))]
     fn read_triples_string(
         &mut self,
         s: &str,
@@ -605,7 +572,6 @@ impl PyMapping {
         transient: Option<bool>,
         parallel: Option<bool>,
         checked: Option<bool>,
-        deduplicate: Option<bool>,
         graph: Option<String>,
         replace_graph: Option<bool>,
     ) -> PyResult<()> {
@@ -619,7 +585,6 @@ impl PyMapping {
                 transient.unwrap_or(false),
                 parallel.unwrap_or(false),
                 checked.unwrap_or(true),
-                deduplicate.unwrap_or(true),
                 graph,
                 replace_graph.unwrap_or(false),
             )
@@ -884,6 +849,7 @@ fn new_triples_to_dict(
     py: Python<'_>,
 ) -> PyResult<HashMap<String, PyObject>> {
     let mut map = HashMap::new();
+    //TODO: Handle case where same predicate occurs multiple times
     for NewTriples {
         df,
         predicate,

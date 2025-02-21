@@ -349,39 +349,32 @@ class Mapping:
         self,
         template: Union[str, "Template", IRI],
         df: DataFrame = None,
-        unique_subset: List[str] = None,
         graph: str = None,
         types: Dict[str, RDFType] = None,
         validate_iris: bool = True,
-        validate_unique_subset: bool = False,
     ) -> None:
         """
         Expand a template using a DataFrame
         Usage:
 
         >>> m.expand("ex:ExampleTemplate", df)
-        ... m.expand("ex:ExampleTemplate", df, unique_subsets=["MyValue"])
 
         If the template has no arguments, the df argument is not necessary.
 
         :param template: Template, IRI, IRI string or prefixed template name.
         :param df: DataFrame where the columns have the same names as the template arguments
-        :param unique_subset: DataFrame column names known to be unique e.g. ["colA", "colB"], for a performance boost (reduce costly deduplication)
         :param graph: The IRI of the graph to add triples to.
         :param types: The types of the columns.
         :param validate_iris: Validate any IRI-columns.
-        :param validate_unique_subset: Check that provided unique subset actually is unique.
         """
 
     def expand_triples(
             self,
             df: DataFrame = None,
             verb: str = None,
-            unique: bool = False,
             graph: str = None,
             types: Dict[str, RDFType] = None,
             validate_iris: bool = True,
-            validate_unique: bool = False,
     ) -> None:
         """
         Expand a template using a DataFrame with columns subject, object and verb
@@ -394,11 +387,9 @@ class Mapping:
 
         :param df: DataFrame where the columns are named subject and object. May also contain a verb-column.
         :param verb: The uri of the verb.
-        :param unique: Is the DataFrame garuanteed to consist of unique rows?
         :param graph: The IRI of the graph to add triples to.
         :param types: The types of the columns.
         :param validate_iris: Validate any IRI-columns.
-        :param validate_unique: Check that the triples are actually unique if this is indicated.
         """
 
 
@@ -410,7 +401,6 @@ class Mapping:
         predicate_uri_prefix: str = None,
         graph: str = None,
         validate_iris: bool = True,
-        validate_unique_subset: bool = False,
     ) -> str:
         """
         Create a default template and expand it based on a dataframe.
@@ -425,7 +415,6 @@ class Mapping:
         :param predicate_uri_prefix: Prefix of the predicates/verbs in the generated template, names are derived from column names.
         :param graph: The IRI of the graph to add triples to.
         :param validate_iris: Validate any IRI-columns.
-        :param validate_unique_subset: Check that provided unique subset actually is unique.
         :return: The generated template
         """
 
@@ -536,7 +525,6 @@ class Mapping:
         transient: bool = False,
         parallel: bool = False,
         checked: bool = True,
-        deduplicate: bool = True,
         graph: str = None,
         replace_graph: bool = False,
     ) -> None:
@@ -556,7 +544,6 @@ class Mapping:
         :param transient: Should these triples be included when writing the graph to the file system?
         :param parallel: Parse triples in parallel, currently only NTRiples. Assumes all prefixes are in the beginning of the document.
         :param checked: Check IRIs etc.
-        :param deduplicate: Set to true by default, disable to increase throughput for large files containing only unique triples.
         :param graph: The IRI of the graph to read the triples into, if None, it will be the default graph.
         :param replace_graph: Replace the graph with these triples? Will replace the default graph if no graph is specified.
         """
@@ -569,7 +556,6 @@ class Mapping:
         transient: bool = False,
         parallel: bool = False,
         checked: bool = True,
-        deduplicate: bool = True,
         graph: str = None,
         replace_graph: bool = False,
     ) -> None:
@@ -588,7 +574,6 @@ class Mapping:
         :param transient: Should these triples be included when writing the graph to the file system?
         :param parallel: Parse triples in parallel, currently only NTRiples. Assumes all prefixes are in the beginning of the document.
         :param checked: Check IRIs etc.
-        :param deduplicate: Set to true by default, disable to increase throughput for large files containing only unique triples.
         :param graph: The IRI of the graph to read the triples into.
         :param replace_graph: Replace the graph with these triples? Will replace the default graph if no graph is specified.
         """

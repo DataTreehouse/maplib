@@ -33,29 +33,15 @@ pub struct Mapping {
 
 #[derive(Clone, Default)]
 pub struct ExpandOptions {
-    pub unique_subsets: Option<Vec<Vec<String>>>,
     pub graph: Option<NamedNode>,
-    pub deduplicate: bool,
     pub validate_iris: bool,
-    pub validate_unique_subsets: bool,
 }
 
 impl ExpandOptions {
-    pub fn from_args(
-        unique_subset: Option<Vec<String>>,
-        graph: Option<NamedNode>,
-        validate_iris: Option<bool>,
-        validate_unique_subset: Option<bool>,
-    ) -> Self {
-        let unique_subsets =
-            unique_subset.map(|unique_subset| vec![unique_subset.into_iter().collect()]);
-
+    pub fn from_args(graph: Option<NamedNode>, validate_iris: Option<bool>) -> Self {
         ExpandOptions {
-            unique_subsets,
             graph: graph,
-            deduplicate: false,
             validate_iris: validate_iris.unwrap_or(true),
-            validate_unique_subsets: validate_unique_subset.unwrap_or(false),
         }
     }
 }
@@ -64,7 +50,6 @@ struct OTTRTripleInstance {
     df: DataFrame,
     dynamic_columns: HashMap<String, MappingColumnType>,
     static_columns: HashMap<String, StaticColumn>,
-    has_unique_subset: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -175,7 +160,6 @@ impl Mapping {
         transient: bool,
         parallel: bool,
         checked: bool,
-        deduplicate: bool,
         graph: Option<NamedNode>,
         replace_graph: bool,
     ) -> Result<(), MappingError> {
@@ -184,15 +168,7 @@ impl Mapping {
         }
         let triplestore = self.get_triplestore(&graph);
         triplestore
-            .read_triples_from_path(
-                p,
-                rdf_format,
-                base_iri,
-                transient,
-                parallel,
-                checked,
-                deduplicate,
-            )
+            .read_triples_from_path(p, rdf_format, base_iri, transient, parallel, checked)
             .map_err(MappingError::TriplestoreError)
     }
 
@@ -205,7 +181,6 @@ impl Mapping {
         transient: bool,
         parallel: bool,
         checked: bool,
-        deduplicate: bool,
         graph: Option<NamedNode>,
         replace_graph: bool,
     ) -> Result<(), MappingError> {
@@ -214,15 +189,7 @@ impl Mapping {
         }
         let triplestore = self.get_triplestore(&graph);
         triplestore
-            .read_triples_from_string(
-                s,
-                rdf_format,
-                base_iri,
-                transient,
-                parallel,
-                checked,
-                deduplicate,
-            )
+            .read_triples_from_string(s, rdf_format, base_iri, transient, parallel, checked)
             .map_err(MappingError::TriplestoreError)
     }
 
@@ -256,10 +223,9 @@ impl Mapping {
         sms: Vec<(EagerSolutionMappings, Option<NamedNode>)>,
         transient: bool,
         target_graph: Option<NamedNode>,
-        deduplicate: bool,
     ) -> Result<Vec<NewTriples>, SparqlError> {
         let use_triplestore = self.get_triplestore(&target_graph);
-        let new_triples = use_triplestore.insert_construct_result(sms, transient, deduplicate)?;
+        let new_triples = use_triplestore.insert_construct_result(sms, transient)?;
         Ok(new_triples)
     }
 

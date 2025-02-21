@@ -47,7 +47,6 @@ pub(crate) struct Triples {
 impl Triples {
     pub(crate) fn new(
         df: DataFrame,
-        unique: bool,
         call_uuid: &str,
         storage_folder: &Option<PathBuf>,
         subject_type: BaseRDFNodeType,
@@ -64,7 +63,6 @@ impl Triples {
             height,
         } = create_indices(
             df.lazy(),
-            unique,
             storage_folder,
             object_indexing_enabled,
             &subject_type,
@@ -211,15 +209,13 @@ struct IndexedTriples {
 }
 
 fn create_indices(
-    mut lf: LazyFrame,
-    unique: bool,
+    lf: LazyFrame,
     storage_folder: &Option<PathBuf>,
     should_index_by_objects: bool,
     subj_type: &BaseRDFNodeType,
     obj_type: &BaseRDFNodeType,
 ) -> Result<IndexedTriples, TriplestoreError> {
-    lf = sort_indexed_lf(lf, true, false, false);
-    let (df, subj_sparse_map) = create_unique_df_and_sparse_map(lf, true, unique, false);
+    let (df, subj_sparse_map) = create_unique_df_and_sparse_map(lf, true, true, false);
     let height = df.height();
     let subject_sparse_index = subj_sparse_map;
     let subject_sort = StoredTriples::new(df.clone(), subj_type, obj_type, storage_folder)?;
@@ -249,8 +245,8 @@ fn create_object_index(
     storage_folder: &Option<PathBuf>,
 ) -> Result<(StoredTriples, BTreeMap<String, usize>), TriplestoreError> {
     let lf = sort_indexed_lf(df.lazy(), false, false, false);
-    //Unique is true due to previous unique operation.
-    let (df, obj_sparse_map) = create_unique_df_and_sparse_map(lf, false, true, false);
+    // No need to deduplicate as subject index creation has deduplicated
+    let (df, obj_sparse_map) = create_unique_df_and_sparse_map(lf, false, false, false);
     let object_sort = StoredTriples::new(df, subj_type, obj_type, storage_folder)?;
     let object_sparse_index = obj_sparse_map;
     Ok((object_sort, object_sparse_index))
@@ -653,7 +649,7 @@ fn update_column_sorted_index(
                 .select(select_cols);
         }
     }
-    let (df, sparse_map) = create_unique_df_and_sparse_map(lf, is_subject, false, sort_on_existing);
+    let (df, sparse_map) = create_unique_df_and_sparse_map(lf, is_subject, true, sort_on_existing);
     let height = df.height();
     let new_triples = if sort_on_existing {
         let new_triples = df
@@ -687,11 +683,11 @@ fn repeated_from_last_row_expr(c: &str) -> Expr {
 fn create_unique_df_and_sparse_map(
     mut lf: LazyFrame,
     is_subject: bool,
-    unique: bool,
+    deduplicate: bool,
     sort_on_existing: bool,
 ) -> (DataFrame, BTreeMap<String, usize>) {
     let c = get_col(is_subject);
-    if !unique {
+    if deduplicate {
         lf = sort_indexed_lf(lf, is_subject, true, sort_on_existing);
         let other_c = get_col(!is_subject);
         lf = lf.with_column(

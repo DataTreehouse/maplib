@@ -199,7 +199,6 @@ impl Triplestore {
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         transient: bool,
         streaming: bool,
-        deduplicate: bool,
     ) -> Result<Vec<NewTriples>, SparqlError> {
         let query = Query::parse(query, None).map_err(SparqlError::ParseError)?;
         if let Query::Construct { .. } = &query {
@@ -208,9 +207,7 @@ impl Triplestore {
                 QueryResult::Select(_) => {
                     panic!("Should never happen")
                 }
-                QueryResult::Construct(dfs) => {
-                    self.insert_construct_result(dfs, transient, deduplicate)
-                }
+                QueryResult::Construct(dfs) => self.insert_construct_result(dfs, transient),
             }
         } else {
             Err(SparqlError::QueryTypeNotSupported)
@@ -220,7 +217,6 @@ impl Triplestore {
         &mut self,
         sms: Vec<(EagerSolutionMappings, Option<NamedNode>)>,
         transient: bool,
-        deduplicate: bool,
     ) -> Result<Vec<NewTriples>, SparqlError> {
         let call_uuid = Uuid::new_v4().to_string();
         let mut all_triples_to_add = vec![];
@@ -255,7 +251,6 @@ impl Triplestore {
                         subject_type: new_subj_dt,
                         object_type: new_obj_dt,
                         static_verb_column: verb.clone(),
-                        has_unique_subset: false,
                     });
                 }
             } else {
@@ -264,12 +259,11 @@ impl Triplestore {
                     subject_type: subj_dt.clone(),
                     object_type: obj_dt.clone(),
                     static_verb_column: verb,
-                    has_unique_subset: false,
                 });
             }
         }
         let new_triples = if !all_triples_to_add.is_empty() {
-            self.add_triples_vec(all_triples_to_add, &call_uuid, transient, deduplicate)
+            self.add_triples_vec(all_triples_to_add, &call_uuid, transient)
                 .map_err(SparqlError::StoreTriplesError)?
         } else {
             vec![]

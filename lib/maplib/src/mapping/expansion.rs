@@ -64,21 +64,11 @@ impl Mapping {
         let target_template_name = target_template.signature.template_name.as_str().to_string();
 
         let ExpandOptions {
-            unique_subsets: unique_subsets_opt,
             graph,
-            deduplicate,
             validate_iris,
-            validate_unique_subsets,
         } = options;
-        let unique_subsets = unique_subsets_opt.unwrap_or_default();
-        let (mut df, mut columns) = validate(
-            df,
-            mapping_column_types,
-            &target_template,
-            validate_iris,
-            &unique_subsets,
-            validate_unique_subsets,
-        )?;
+        let (mut df, mut columns) =
+            validate(df, mapping_column_types, &target_template, validate_iris)?;
         let call_uuid = Uuid::new_v4().to_string();
 
         let mut static_columns = HashMap::new();
@@ -108,15 +98,8 @@ impl Mapping {
             &target_template.signature,
             columns,
             static_columns,
-            unique_subsets,
         )?;
-        self.process_results(
-            result_vec,
-            &call_uuid,
-            new_blank_node_counter,
-            &graph,
-            deduplicate,
-        )?;
+        self.process_results(result_vec, &call_uuid, new_blank_node_counter, &graph)?;
         debug!("Expansion took {} seconds", now.elapsed().as_secs_f32());
         Ok(MappingReport {})
     }
@@ -132,7 +115,6 @@ impl Mapping {
         calling_signature: &Signature,
         dynamic_columns: HashMap<String, MappingColumnType>,
         static_columns: HashMap<String, StaticColumn>,
-        unique_subsets: Vec<Vec<String>>,
     ) -> Result<(Vec<OTTRTripleInstance>, usize), MappingError> {
         if let Some(template) = self.template_dataset.get(name) {
             if template.signature.template_name.as_str() == OTTR_TRIPLE {
@@ -142,7 +124,6 @@ impl Mapping {
                             df,
                             dynamic_columns,
                             static_columns,
-                            has_unique_subset: !unique_subsets.is_empty(),
                         }],
                         blank_node_counter,
                     ))
@@ -191,7 +172,6 @@ impl Mapping {
                             df: instance_df,
                             dynamic_columns: instance_dynamic_columns,
                             constant_columns: instance_constant_columns,
-                            unique_subsets: new_unique_subsets,
                             blank_node_counter,
                         }) = create_remapped(
                             self.blank_node_counter,
@@ -203,7 +183,6 @@ impl Mapping {
                             series_vec,
                             &dynamic_columns,
                             &static_columns,
-                            &unique_subsets,
                             use_df_height,
                         )? {
                             Ok::<_, MappingError>(Some(self._expand(
@@ -215,7 +194,6 @@ impl Mapping {
                                 &target_template.signature,
                                 instance_dynamic_columns,
                                 instance_constant_columns,
-                                new_unique_subsets,
                             )?))
                         } else {
                             Ok(None)
@@ -243,7 +221,6 @@ impl Mapping {
         call_uuid: &str,
         mut new_blank_node_counter: usize,
         graph: &Option<NamedNode>,
-        deduplicate: bool,
     ) -> Result<(), MappingError> {
         let now = Instant::now();
         let triples: Vec<_> = result_vec
@@ -263,7 +240,6 @@ impl Mapping {
             subject_type,
             object_type,
             verb,
-            has_unique_subset,
         } in ok_triples
         {
             let mut coltypes_names = vec![
@@ -292,7 +268,6 @@ impl Mapping {
                     subject_type: types.remove(SUBJECT_COL_NAME).unwrap(),
                     object_type: types.remove(OBJECT_COL_NAME).unwrap(),
                     static_verb_column: verb.clone(),
-                    has_unique_subset,
                 });
             }
         }
@@ -309,7 +284,7 @@ impl Mapping {
         };
 
         use_triplestore
-            .add_triples_vec(all_triples_to_add, call_uuid, false, deduplicate)
+            .add_triples_vec(all_triples_to_add, call_uuid, false)
             .map_err(MappingError::TriplestoreError)?;
 
         self.blank_node_counter = new_blank_node_counter;
@@ -382,7 +357,6 @@ struct CreateTriplesResult {
     subject_type: RDFNodeType,
     object_type: RDFNodeType,
     verb: Option<NamedNode>,
-    has_unique_subset: bool,
 }
 
 fn create_triples(
@@ -397,7 +371,6 @@ fn create_triples(
         mut df,
         mut dynamic_columns,
         static_columns,
-        has_unique_subset,
     } = triple_instance;
 
     let mut results = vec![];
@@ -485,7 +458,6 @@ fn create_triples(
         subject_type: subj_rdf_node_type,
         object_type: obj_rdf_node_type,
         verb,
-        has_unique_subset,
     });
     Ok((
         results,
@@ -572,21 +544,18 @@ fn create_list_triples(
             subject_type: RDFNodeType::BlankNode,
             object_type: RDFNodeType::BlankNode,
             verb: Some(rdf::REST.into_owned()),
-            has_unique_subset: false,
         },
         CreateTriplesResult {
             df: rest_nil_df,
             subject_type: RDFNodeType::BlankNode,
             object_type: RDFNodeType::IRI,
             verb: Some(rdf::REST.into_owned()),
-            has_unique_subset: false,
         },
         CreateTriplesResult {
             df: first_df,
             subject_type: RDFNodeType::BlankNode,
             object_type: rdf_node_type.clone(),
             verb: Some(rdf::FIRST.into_owned()),
-            has_unique_subset: false,
         },
     ];
     *blank_node_counter += df.height();
@@ -634,7 +603,6 @@ fn create_remapped(
     mut columns_vec: Vec<Column>,
     dynamic_columns: &HashMap<String, MappingColumnType>,
     constant_columns: &HashMap<String, StaticColumn>,
-    unique_subsets: &Vec<Vec<String>>,
     input_df_height: usize,
 ) -> Result<Option<RemapResult>, MappingError> {
     let now = Instant::now();
@@ -744,25 +712,6 @@ fn create_remapped(
             }
         }
     }
-    let mut new_unique_subsets = vec![];
-    if instance.list_expander.is_none() {
-        for unique_subset in unique_subsets {
-            let mut new_subset = vec![];
-            let mut aborted = false;
-            for x in unique_subset.iter() {
-                if let Some(renamed) = rename_map.get(x.as_str()) {
-                    for new_name in renamed {
-                        new_subset.push(new_name.to_string());
-                    }
-                } else {
-                    aborted = true;
-                }
-            }
-            if !aborted && !new_subset.is_empty() {
-                new_unique_subsets.push(new_subset);
-            }
-        }
-    }
 
     for s in &mut columns_vec {
         let sname = s.name().to_string();
@@ -842,7 +791,6 @@ fn create_remapped(
         df: lf.collect().unwrap(),
         dynamic_columns: new_dynamic_columns,
         constant_columns: new_constant_columns,
-        unique_subsets: new_unique_subsets,
         blank_node_counter: out_blank_node_counter,
     }))
 }
@@ -870,6 +818,5 @@ struct RemapResult {
     df: DataFrame,
     dynamic_columns: HashMap<String, MappingColumnType>,
     constant_columns: HashMap<String, StaticColumn>,
-    unique_subsets: Vec<Vec<String>>,
     blank_node_counter: usize,
 }

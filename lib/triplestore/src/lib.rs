@@ -17,7 +17,7 @@ use fts::FtsIndex;
 use log::debug;
 use oxrdf::vocab::{rdf, rdfs};
 use oxrdf::NamedNode;
-use polars::prelude::{AnyValue, DataFrame, IntoLazy, UniqueKeepStrategy};
+use polars::prelude::{AnyValue, DataFrame, IntoLazy};
 use polars_core::datatypes::CategoricalOrdering;
 use rayon::iter::ParallelDrainRange;
 use rayon::iter::ParallelIterator;
@@ -82,7 +82,6 @@ pub struct TriplesToAdd {
     pub subject_type: RDFNodeType,
     pub object_type: RDFNodeType,
     pub static_verb_column: Option<NamedNode>,
-    pub has_unique_subset: bool,
 }
 
 #[derive(Debug)]
@@ -91,7 +90,6 @@ pub struct TripleDF {
     predicate: NamedNode,
     subject_type: BaseRDFNodeType,
     object_type: BaseRDFNodeType,
-    unique: bool,
 }
 
 #[derive(Debug)]
@@ -173,7 +171,6 @@ impl Triplestore {
         mut ts: Vec<TriplesToAdd>,
         call_uuid: &str,
         transient: bool,
-        deduplicate: bool,
     ) -> Result<Vec<NewTriples>, TriplestoreError> {
         let df_vecs_to_add: Vec<Vec<TripleDF>> = ts
             .par_drain(..)
@@ -183,7 +180,6 @@ impl Triplestore {
                     subject_type,
                     object_type,
                     static_verb_column,
-                    has_unique_subset,
                 } = t;
                 assert!(!matches!(subject_type, RDFNodeType::MultiType(..)));
                 assert!(!matches!(object_type, RDFNodeType::MultiType(..)));
@@ -192,8 +188,6 @@ impl Triplestore {
                     &BaseRDFNodeType::from_rdf_node_type(&subject_type),
                     &BaseRDFNodeType::from_rdf_node_type(&object_type),
                     static_verb_column,
-                    has_unique_subset,
-                    deduplicate,
                 )
             })
             .collect();
@@ -219,7 +213,6 @@ impl Triplestore {
             predicate,
             subject_type,
             object_type,
-            unique,
         } in triples_df
         {
             if matches!(object_type, BaseRDFNodeType::Literal(..)) {
@@ -259,7 +252,6 @@ impl Triplestore {
             if !added_triples {
                 let triples = Triples::new(
                     df,
-                    unique,
                     call_uuid,
                     &self.storage_folder,
                     subject_type.clone(),
@@ -384,8 +376,6 @@ pub fn prepare_triples(
     subject_type: &BaseRDFNodeType,
     object_type: &BaseRDFNodeType,
     static_verb_column: Option<NamedNode>,
-    has_unique_subset: bool,
-    deduplicate: bool,
 ) -> Vec<TripleDF> {
     let now = Instant::now();
     let mut out_df_vec = vec![];
@@ -408,14 +398,7 @@ pub fn prepare_triples(
 
     if let Some(static_verb_column) = static_verb_column {
         df = df.select([SUBJECT_COL_NAME, OBJECT_COL_NAME]).unwrap();
-        if let Some(tdf) = prepare_triples_df(
-            df,
-            static_verb_column,
-            subject_type,
-            object_type,
-            has_unique_subset,
-            deduplicate,
-        ) {
+        if let Some(tdf) = prepare_triples_df(df, static_verb_column, subject_type, object_type) {
             out_df_vec.push(tdf);
         }
     } else {
@@ -435,14 +418,7 @@ pub fn prepare_triples(
                 }
             }
             part = part.select([SUBJECT_COL_NAME, OBJECT_COL_NAME]).unwrap();
-            if let Some(tdf) = prepare_triples_df(
-                part,
-                predicate,
-                subject_type,
-                object_type,
-                has_unique_subset,
-                deduplicate,
-            ) {
+            if let Some(tdf) = prepare_triples_df(part, predicate, subject_type, object_type) {
                 out_df_vec.push(tdf);
             }
         }
@@ -459,24 +435,11 @@ fn prepare_triples_df(
     predicate: NamedNode,
     subject_type: &BaseRDFNodeType,
     object_type: &BaseRDFNodeType,
-    has_unique_subset: bool,
-    deduplicate: bool,
 ) -> Option<TripleDF> {
     let now = Instant::now();
     df = df.drop_nulls::<String>(None).unwrap();
     if df.height() == 0 {
         return None;
-    }
-    debug!(
-        "Prepare single triple df after drop null before it is added took {} seconds",
-        now.elapsed().as_secs_f32()
-    );
-    let mut unique = has_unique_subset;
-    if deduplicate && !has_unique_subset {
-        df = df
-            .unique::<(), ()>(None, UniqueKeepStrategy::First, None)
-            .unwrap();
-        unique = true;
     }
 
     //TODO: add polars datatype harmonization here.
@@ -489,7 +452,6 @@ fn prepare_triples_df(
         predicate,
         subject_type: subject_type.clone(),
         object_type: object_type.clone(),
-        unique,
     })
 }
 

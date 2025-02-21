@@ -40,7 +40,6 @@ impl Triplestore {
         transient: bool,
         parallel: bool,
         checked: bool,
-        deduplicate: bool,
     ) -> Result<(), TriplestoreError> {
         let rdf_format = if let Some(rdf_format) = rdf_format {
             rdf_format
@@ -64,7 +63,6 @@ impl Triplestore {
             transient,
             parallel,
             checked,
-            deduplicate,
         )
     }
 
@@ -77,7 +75,6 @@ impl Triplestore {
         transient: bool,
         parallel: bool,
         checked: bool,
-        deduplicate: bool,
     ) -> Result<(), TriplestoreError> {
         self.read_triples(
             s.as_bytes(),
@@ -86,7 +83,6 @@ impl Triplestore {
             transient,
             parallel,
             checked,
-            deduplicate,
         )
     }
 
@@ -99,7 +95,6 @@ impl Triplestore {
         transient: bool,
         parallel: bool,
         checked: bool,
-        deduplicate: bool,
     ) -> Result<(), TriplestoreError> {
         let start_quadproc_now = Instant::now();
         let readers =
@@ -230,7 +225,6 @@ impl Triplestore {
                             subject_type: subject_dt.as_rdf_node_type(),
                             object_type: object_dt.as_rdf_node_type(),
                             static_verb_column: Some(NamedNode::new_unchecked(k.clone())),
-                            has_unique_subset: !deduplicate,
                         });
                     }
                 }
@@ -243,12 +237,7 @@ impl Triplestore {
             start_tripleproc_now.elapsed().as_secs_f64()
         );
         self.parser_call += 1;
-        self.add_triples_vec(
-            triples_to_add,
-            &uuid::Uuid::new_v4().to_string(),
-            transient,
-            deduplicate,
-        )?;
+        self.add_triples_vec(triples_to_add, &uuid::Uuid::new_v4().to_string(), transient)?;
         Ok(())
     }
 }

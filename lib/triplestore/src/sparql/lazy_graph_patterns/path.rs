@@ -333,6 +333,7 @@ impl Triplestore {
             datatypes.insert(b.to_string(), out_dt_obj);
         }
         let out_df_height = out_df.height();
+
         let mut out_lf = out_df.lazy();
         if !rename_src.is_empty() {
             out_lf = out_lf.rename(rename_src, rename_trg, true);

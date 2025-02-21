@@ -20,25 +20,10 @@ pub fn validate(
     mut mapping_column_types: Option<HashMap<String, MappingColumnType>>,
     template: &Template,
     validate_iris: bool,
-    unique_subsets: &Vec<Vec<String>>,
-    validate_unique: bool,
 ) -> Result<(Option<DataFrame>, HashMap<String, MappingColumnType>), MappingError> {
     validate_column_existence(&df, template)?;
     let mut map = HashMap::new();
     if let Some(df) = df {
-        if validate_unique {
-            for s in unique_subsets {
-                let duplicated = df.select(s).unwrap().is_duplicated().unwrap().sum();
-                if let Some(duplicated) = duplicated {
-                    if duplicated > 0 {
-                        return Err(MappingError::UniqueSubsetHasDuplicateRows(
-                            duplicated as u32,
-                            s.clone(),
-                        ));
-                    }
-                }
-            }
-        }
         for p in &template.signature.parameter_list {
             if !p.optional && p.default_value.is_none() {
                 validate_non_optional_parameter_non_null(&df, p.variable.as_str())?;
