@@ -3,7 +3,10 @@
   craneLib,
   cargoVendorDir,
   lib,
+  callPackage,
   buildPythonPackage,
+  pythonImportsCheckHook,
+  pytestCheckHook,
   rustPlatform,
   polars,
   pyarrow,
@@ -30,6 +33,9 @@ buildPythonPackage rec {
     craneLib.configureCargoCommonVarsHook
     craneLib.configureCargoVendoredDepsHook
     rustPlatform.maturinBuildHook
+
+    pythonImportsCheckHook
+    # pytestCheckHook
   ];
 
   propagatedBuildInputs = [
@@ -38,5 +44,9 @@ buildPythonPackage rec {
   ];
 
   buildAndTestSubdir = "py_maplib";
+
+  passthru.tests = {
+    pytest = callPackage ./tests.nix { inherit src; };
+  };
 }
 

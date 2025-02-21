@@ -29,18 +29,24 @@
           (craneLib.fileset.commonCargoSources root)
           (lib.fileset.fileFilter (file: file.hasExt "md") root)
           (./py_maplib/LICENSE)
+          (./py_maplib/tests)
         ];
       };
 
       cargoVendorDir = craneLib.vendorCargoDeps { inherit src; };
+
+      python = let
+        packageOverrides = self: super: {
+          maplib = self.callPackage ./nix/py_maplib.nix {
+            inherit src
+              craneLib cargoVendorDir
+              rustPlatform;
+          };
+        };
+      in pkgs.python3.override {inherit packageOverrides; self = python;};
     in {
       packages = rec {
-        py_maplib = pkgs.python3Packages.callPackage ./nix/py_maplib.nix {
-          inherit
-            src
-            craneLib cargoVendorDir
-            rustPlatform;
-        };
+        py_maplib = python.pkgs.maplib;
       };
     }
   );
