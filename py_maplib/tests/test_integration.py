@@ -55,9 +55,7 @@ def windpower_mapping():
 
     n = 40
 
-    mapping = Mapping(
-        [instance_mapping]
-    )
+    mapping = Mapping([instance_mapping])
     # Used as a prefix
     wpex = "https://github.com/magbak/chrontext/windpower_example#"
     rds = "https://github.com/magbak/chrontext/rds_power#"

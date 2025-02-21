@@ -4,6 +4,7 @@ use representation::errors::RepresentationError;
 use std::fmt::{Display, Formatter};
 use std::io;
 use templates::ast::{ConstantTermOrList, PType};
+use templates::dataset::errors::TemplateError;
 use templates::MappingColumnType;
 use thiserror::Error;
 use triplestore::errors::TriplestoreError;
@@ -37,6 +38,7 @@ pub enum MappingError {
     TooDeeplyNestedError(String),
     DatatypeInferenceError(RepresentationError),
     InvalidIRIError(String, usize, String),
+    TemplateError(#[from] TemplateError),
 }
 
 impl Display for MappingError {
@@ -167,6 +169,9 @@ impl Display for MappingError {
             }
             MappingError::InvalidIRIError(colname, n_errors, examples) => {
                 write!(f, "Found at least {n_errors} invalid IRIs for column {colname}, examples: {examples}")
+            }
+            MappingError::TemplateError(x) => {
+                write!(f, "Template error: {}", x)
             }
         }
     }

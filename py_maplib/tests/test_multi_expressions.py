@@ -8,6 +8,7 @@ pl.Config.set_fmt_str_lengths(200)
 PATH_HERE = pathlib.Path(__file__).parent
 TESTDATA_PATH = PATH_HERE / "testdata"
 
+
 def test_multi_filter_equals():
     m = Mapping([])
     df = m.query(
@@ -356,6 +357,7 @@ def test_multi_filter_is_in():
     )
     assert_frame_equal(df, pl.DataFrame({"a": ["<http://example.net/hello2>"]}))
 
+
 def test_multi_filter_comparison():
     m = Mapping([])
     df = m.query(
@@ -368,7 +370,8 @@ def test_multi_filter_comparison():
     } ORDER BY ?a
     """
     )
-    expected = pl.from_repr("""
+    expected = pl.from_repr(
+        """
 ┌───────────────────────────────────────────────────┐
 │ a                                                 │
 │ ---                                               │
@@ -377,8 +380,10 @@ def test_multi_filter_comparison():
 │ "3.0"^^<http://www.w3.org/2001/XMLSchema#decimal> │
 │ "89"^^<http://www.w3.org/2001/XMLSchema#integer>  │
 └───────────────────────────────────────────────────┘
-    """)
+    """
+    )
     assert_frame_equal(df, expected)
+
 
 def test_multi_filter_incompatible_comparison():
     m = Mapping([])
@@ -392,7 +397,8 @@ def test_multi_filter_incompatible_comparison():
     } ORDER BY ?a
     """
     )
-    expected = pl.from_repr("""
+    expected = pl.from_repr(
+        """
 ┌───────────────────────────────────────────────────┐
 │ a                                                 │
 │ ---                                               │
@@ -401,8 +407,10 @@ def test_multi_filter_incompatible_comparison():
 │ "3.0"^^<http://www.w3.org/2001/XMLSchema#decimal> │
 │ "89"^^<http://www.w3.org/2001/XMLSchema#integer>  │
 └───────────────────────────────────────────────────┘
-    """)
+    """
+    )
     assert_frame_equal(df, expected)
+
 
 def test_multi_filter_incompatible_datetime_comparison():
     m = Mapping([])
@@ -416,7 +424,8 @@ def test_multi_filter_incompatible_datetime_comparison():
     } ORDER BY ?a
     """
     )
-    expected = pl.from_repr("""
+    expected = pl.from_repr(
+        """
 ┌─────────────────────┐
 │ a                   │
 │ ---                 │
@@ -424,8 +433,10 @@ def test_multi_filter_incompatible_datetime_comparison():
 ╞═════════════════════╡
 │ 2021-01-01 08:00:00 │
 └─────────────────────┘
-    """)
+    """
+    )
     assert_frame_equal(df, expected)
+
 
 def test_multi_filter_incompatible_many_comparison():
     m = Mapping([])
@@ -441,7 +452,7 @@ def test_multi_filter_incompatible_many_comparison():
     """
     )
     f = TESTDATA_PATH / "multi_many_comp.csv"
-    #df.write_csv(f)
+    # df.write_csv(f)
     expected = pl.read_csv(f)
     assert_frame_equal(df, expected)
 
@@ -460,9 +471,10 @@ def test_multi_concat():
     """
     )
     f = TESTDATA_PATH / "multi_concat.csv"
-    #df.write_csv(f)
+    # df.write_csv(f)
     expected = pl.read_csv(f)
     assert_frame_equal(df, expected)
+
 
 def test_multi_filter_incompatible_datetime_comparison():
     m = Mapping([])
@@ -476,7 +488,8 @@ def test_multi_filter_incompatible_datetime_comparison():
     } ORDER BY ?a
     """
     )
-    expected = pl.from_repr("""
+    expected = pl.from_repr(
+        """
 ┌─────────────────────┐
 │ a                   │
 │ ---                 │
@@ -484,8 +497,10 @@ def test_multi_filter_incompatible_datetime_comparison():
 ╞═════════════════════╡
 │ 2021-01-01 08:00:00 │
 └─────────────────────┘
-    """)
+    """
+    )
     assert_frame_equal(df, expected)
+
 
 def test_generate_uuids():
     m = Mapping([])
@@ -497,16 +512,20 @@ def test_generate_uuids():
     VALUES (?a) { (1) (2) (3) }
     BIND(uuid() as ?uuid)
     } ORDER BY ?a
-    """, include_datatypes=True
+    """,
+        include_datatypes=True,
     )
-    assert sm.rdf_types == {'a': RDFType.Literal("http://www.w3.org/2001/XMLSchema#integer"),
-                            'uuid': RDFType.IRI()}
+    assert sm.rdf_types == {
+        "a": RDFType.Literal("http://www.w3.org/2001/XMLSchema#integer"),
+        "uuid": RDFType.IRI(),
+    }
     assert sm.mappings.height == 3
     df = sm.mappings.with_columns(
         pl.col("uuid").str.starts_with("<urn:uuid:").alias("startswithcorrect")
     )
     assert df.get_column("startswithcorrect").sum() == 3
     assert df.get_column("uuid").unique().len() == 3
+
 
 def test_generate_str_uuids():
     m = Mapping([])
@@ -518,9 +537,12 @@ def test_generate_str_uuids():
     VALUES (?a) { (1) (2) (3) }
     BIND(struuid() as ?struuid)
     } ORDER BY ?a
-    """, include_datatypes=True
+    """,
+        include_datatypes=True,
     )
-    assert sm.rdf_types == {'a': RDFType.Literal("http://www.w3.org/2001/XMLSchema#integer"),
-                            'struuid': RDFType.Literal("http://www.w3.org/2001/XMLSchema#string")}
+    assert sm.rdf_types == {
+        "a": RDFType.Literal("http://www.w3.org/2001/XMLSchema#integer"),
+        "struuid": RDFType.Literal("http://www.w3.org/2001/XMLSchema#string"),
+    }
     assert sm.mappings.height == 3
     assert sm.mappings.get_column("struuid").unique().len() == 3

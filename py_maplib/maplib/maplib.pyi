@@ -254,7 +254,7 @@ class IndexingOptions:
         self,
         object_sort_all: bool = None,
         object_sort_some: List["IRI"] = None,
-        fts_path: str = None
+        fts_path: str = None,
     ):
         """
         Defaults to indexing on subjects and objects for select types (e.g. rdf:type and rdfs:label)
@@ -369,12 +369,12 @@ class Mapping:
         """
 
     def expand_triples(
-            self,
-            df: DataFrame = None,
-            verb: str = None,
-            graph: str = None,
-            types: Dict[str, RDFType] = None,
-            validate_iris: bool = True,
+        self,
+        df: DataFrame = None,
+        verb: str = None,
+        graph: str = None,
+        types: Dict[str, RDFType] = None,
+        validate_iris: bool = True,
     ) -> None:
         """
         Expand a template using a DataFrame with columns subject, object and verb
@@ -391,7 +391,6 @@ class Mapping:
         :param types: The types of the columns.
         :param validate_iris: Validate any IRI-columns.
         """
-
 
     def expand_default(
         self,
@@ -420,13 +419,13 @@ class Mapping:
 
     def query(
         self,
-            query: str,
-            parameters: ParametersType = None,
-            include_datatypes: bool = False,
-            native_dataframe: bool = False,
-            graph: str = None,
-            streaming: bool = False,
-            return_json: bool = False,
+        query: str,
+        parameters: ParametersType = None,
+        include_datatypes: bool = False,
+        native_dataframe: bool = False,
+        graph: str = None,
+        streaming: bool = False,
+        return_json: bool = False,
     ) -> Union[
         DataFrame, SolutionMappings, List[Union[DataFrame, SolutionMappings, str]], None
     ]:

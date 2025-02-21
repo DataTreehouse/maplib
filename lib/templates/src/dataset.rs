@@ -21,6 +21,7 @@ pub struct TemplateDataset {
     pub templates: Vec<Template>,
     pub ground_instances: Vec<Instance>,
     pub prefix_map: HashMap<String, NamedNode>,
+    pub inferred_types: bool,
 }
 
 impl TemplateDataset {
@@ -64,6 +65,7 @@ impl TemplateDataset {
             templates,
             ground_instances,
             prefix_map,
+            inferred_types: false,
         };
         //TODO: Put in function, check not exists and consistent...
         let ottr_triple_subject = Parameter {
@@ -140,7 +142,7 @@ impl TemplateDataset {
             .find(|&t| t.signature.template_name.as_str() == template)
     }
 
-    fn infer_types(&mut self) -> Result<(), TemplateError> {
+    pub fn infer_types(&mut self) -> Result<(), TemplateError> {
         let mut changed = true;
         while changed {
             let mut inner_changed = false;
@@ -157,6 +159,7 @@ impl TemplateDataset {
                 changed = false;
             }
         }
+        self.inferred_types = true;
         Ok(())
     }
 
@@ -173,7 +176,7 @@ impl TemplateDataset {
             self.templates.remove(pos);
         }
         self.templates.push(template);
-        self.infer_types()?;
+        self.inferred_types = false;
         Ok(())
     }
 }

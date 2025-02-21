@@ -59,6 +59,9 @@ impl Mapping {
         mapping_column_types: Option<HashMap<String, MappingColumnType>>,
         options: ExpandOptions,
     ) -> Result<MappingReport, MappingError> {
+        if !self.template_dataset.inferred_types {
+            self.template_dataset.infer_types()?;
+        }
         let now = Instant::now();
         let target_template = self.resolve_template(template)?.clone();
         let target_template_name = target_template.signature.template_name.as_str().to_string();
