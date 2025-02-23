@@ -1,9 +1,10 @@
 use crate::mapping::errors::MappingError;
+use log::warn;
 use oxiri::Iri;
-use oxrdf::vocab::rdfs;
+use oxrdf::vocab::{rdfs, xsd};
 use polars::datatypes::DataType;
 use polars::frame::DataFrame;
-use polars::prelude::{ChunkApply, Column, Series};
+use polars::prelude::{col, ChunkApply, Column, IntoLazy, Series};
 use rayon::current_num_threads;
 use rayon::iter::IntoParallelIterator;
 use rayon::iter::ParallelIterator;
@@ -23,11 +24,12 @@ pub fn validate(
 ) -> Result<(Option<DataFrame>, HashMap<String, MappingColumnType>), MappingError> {
     validate_column_existence(&df, template)?;
     let mut map = HashMap::new();
-    if let Some(df) = df {
+    if let Some(mut df) = df {
         for p in &template.signature.parameter_list {
             if !p.optional && p.default_value.is_none() {
                 validate_non_optional_parameter_non_null(&df, p.variable.as_str())?;
             }
+            df = autoconvert_datatypes(df, &mut mapping_column_types, p);
             let name = p.variable.as_str();
             let mut found_column_type = false;
             if let Some(mapping_column_types) = &mut mapping_column_types {
@@ -305,5 +307,62 @@ pub fn polars_datatype_to_mapping_column_datatype(
         let dt =
             polars_type_to_literal_type(datatype).map_err(MappingError::DatatypeInferenceError)?;
         Ok(MappingColumnType::Flat(dt))
+    }
+}
+
+fn autoconvert_datatypes(
+    mut df: DataFrame,
+    mapping_column_types: &mut Option<HashMap<String, MappingColumnType>>,
+    p: &Parameter,
+) -> DataFrame {
+    if let Some(t) = &p.ptype {
+        if let Some(dt) = cast_datetime_to_date(t, df.column(p.variable.as_str()).unwrap().dtype())
+        {
+            warn!(
+                "Automatically casting column {} to {}",
+                p.variable.as_str(),
+                dt
+            );
+            df = df
+                .lazy()
+                .with_column(col(p.variable.as_str()).cast(dt))
+                .collect()
+                .unwrap();
+            if let Some(mapping_column_types) = mapping_column_types {
+                mapping_column_types.remove(p.variable.as_str());
+            }
+        }
+    }
+    df
+}
+
+fn cast_datetime_to_date(ptype: &PType, data_type: &DataType) -> Option<DataType> {
+    match ptype {
+        PType::None => None,
+        PType::Basic(b) => {
+            if let DataType::List(data_type) = data_type {
+                //Handles case where OTTR is creating lists
+                cast_datetime_to_date(ptype, data_type)
+            } else if b.as_ref() == xsd::DATE {
+                if matches!(data_type, DataType::Datetime(..)) {
+                    Some(DataType::Date)
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        }
+        PType::Lub(l) | PType::List(l) | PType::NEList(l) => {
+            if let DataType::List(data_type) = data_type {
+                if let Some(t) = cast_datetime_to_date(l, data_type) {
+                    Some(DataType::List(Box::new(t)))
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        }
     }
 }
