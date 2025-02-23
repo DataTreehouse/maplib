@@ -49,6 +49,7 @@
         default = py_maplib;
         py_maplib = python.pkgs.maplib;
       };
+      legacyPackages.python = python;
       devShells.default = craneLib.devShell {
         inputsFrom = [ self.packages.${system}.py_maplib ];
 
