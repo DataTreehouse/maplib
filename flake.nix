@@ -46,7 +46,20 @@
       in pkgs.python3.override {inherit packageOverrides; self = python;};
     in {
       packages = rec {
+        default = py_maplib;
         py_maplib = python.pkgs.maplib;
+      };
+      devShells.default = craneLib.devShell {
+        inputsFrom = [ self.packages.${system}.py_maplib ];
+
+        # https://github.com/tikv/jemallocator/pull/116
+        env.CFLAGS = "-Wno-error=int-conversion";
+
+        packages = [
+          pkgs.cargo-audit
+          pkgs.cargo-deny
+          pkgs.cargo-vet
+        ];
       };
     }
   );
