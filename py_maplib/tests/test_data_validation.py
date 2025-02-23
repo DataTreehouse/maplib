@@ -141,6 +141,36 @@ def test_autoconverted_datetime_to_date():
     assert r.rdf_types["c"] == RDFType.Literal(XSD().date)
 
 
+def test_autoconverted_optional_datetime_to_date():
+    xsd = XSD()
+    df = pl.DataFrame({"MyValue": ["2020-02-02T00:00:00Z"]}).cast(pl.Datetime("ns"))
+    mapping = Mapping()
+    ex = Prefix("ex", "http://example.net/ns#")
+    my_value = Variable("MyValue")
+    my_other_value = Variable("MyOtherValue")
+    my_object = ex.suf("MyObject")
+    template = Template(
+        ex.suf("ExampleTemplate"),
+        [
+            Parameter(my_value, rdf_type=RDFType.Literal(xsd.date)),
+            Parameter(my_other_value, rdf_type=RDFType.Literal(xsd.date), optional=True),
+        ],
+        [
+            Triple(my_object, ex.suf("hasValue"), my_value),
+        ],
+    )
+    mapping.expand(template, df)
+    r = mapping.query(
+        """
+    SELECT ?a ?b ?c WHERE {
+        ?a ?b ?c
+    }
+    """,
+        include_datatypes=True,
+    )
+    assert r.rdf_types["c"] == RDFType.Literal(XSD().date)
+
+
 def test_autoconverted_datetime_list_to_date_list_1():
     xsd = XSD()
     df = pl.DataFrame({"MyValue": [["2020-02-02T00:00:00Z"]]}).cast(pl.List(pl.Datetime("ns")))

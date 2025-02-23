@@ -316,20 +316,21 @@ fn autoconvert_datatypes(
     p: &Parameter,
 ) -> DataFrame {
     if let Some(t) = &p.ptype {
-        if let Some(dt) = cast_datetime_to_date(t, df.column(p.variable.as_str()).unwrap().dtype())
-        {
-            warn!(
-                "Automatically casting column {} to {}",
-                p.variable.as_str(),
-                dt
-            );
-            df = df
-                .lazy()
-                .with_column(col(p.variable.as_str()).cast(dt))
-                .collect()
-                .unwrap();
-            if let Some(mapping_column_types) = mapping_column_types {
-                mapping_column_types.remove(p.variable.as_str());
+        if let Ok(c) = df.column(p.variable.as_str()) {
+            if let Some(dt) = cast_datetime_to_date(t, c.dtype()) {
+                warn!(
+                    "Automatically casting column {} to {}",
+                    p.variable.as_str(),
+                    dt
+                );
+                df = df
+                    .lazy()
+                    .with_column(col(p.variable.as_str()).cast(dt))
+                    .collect()
+                    .unwrap();
+                if let Some(mapping_column_types) = mapping_column_types {
+                    mapping_column_types.remove(p.variable.as_str());
+                }
             }
         }
     }
