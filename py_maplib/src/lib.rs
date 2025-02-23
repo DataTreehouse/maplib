@@ -706,6 +706,8 @@ impl PyMapping {
 #[pyo3(name = "maplib")]
 fn _maplib(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     enable_string_cache();
+    // Currently deadlocks, likely need to change all above with allow threads: https://docs.rs/pyo3-log/latest/pyo3_log/
+    // pyo3_log::init();
     m.add_class::<PyIndexingOptions>()?;
     m.add_class::<PyMapping>()?;
     m.add_class::<PyValidationReport>()?;

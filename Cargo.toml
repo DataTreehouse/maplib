@@ -18,6 +18,7 @@ rust-version = "1.81.0"
 
 [workspace.dependencies]
 pyo3 = {version = "0.22.6", features = ["py-clone", "abi3-py39"] }
+pyo3-log = {version = "0.11.0"}
 polars = { version = "0.45.1", features = ["nightly", "performant", "cse", "fmt"], default-features = false }
 polars-core = { version = "0.45.1", default-features = false }
 rayon = "1.10.0"
@@ -42,7 +43,6 @@ serde = { version = "1.0.203" }
 peg = "0.8"
 rand = "0.8"
 oxilangtag = "0.1.5"
-datetimeparse = "0.3.0"
 fundu = "2.0.0"
 memmap2 = "0.9.4"
 sprs = "0.11.2"

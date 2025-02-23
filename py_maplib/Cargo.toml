@@ -13,6 +13,7 @@ report_mapping = {path = "../lib/report_mapping"}
 templates = {path= "../lib/templates"}
 
 pyo3.workspace = true
+pyo3-log.workspace = true
 oxrdf.workspace = true
 oxrdfio.workspace = true
 thiserror.workspace = true
