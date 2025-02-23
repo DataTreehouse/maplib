@@ -145,12 +145,26 @@ Indeed, we have added the triple:
 The [API](https://datatreehouse.github.io/maplib/maplib/maplib.html) is simple, and contains only one class and a few methods for:
 - expanding templates
 - querying with SPARQL
-- validating SHACL
+- validating with SHACL
 - importing triples (Turtle, RDF/XML, NTriples)
-- writing triples (NTriples)
+- writing triples (Turtle, RDF/XML, NTriples)
 - creating a new Mapping object (sprout) based on queries over the current Mapping object.
 
 The API is documented [HERE](https://datatreehouse.github.io/maplib/maplib/maplib.html)
+
+## Roadmap of features and optimizations
+Spring 2025
+- Datalog reasoning support
+- Reduced memory footprint
+- Further SPARQL optimizations
+- JSON-LD support
+
+Fall 2025
+- SHACL rules support
+- Improved TTL serialization (prettier and faster)
++++
+
+Roadmap is subject to changes,particularly user and customer requests. 
 
 ## References
 There is an associated paper [1] with associated benchmarks showing superior performance and scalability that can be found [here](https://ieeexplore.ieee.org/document/10106242). OTTR is described in [2].
