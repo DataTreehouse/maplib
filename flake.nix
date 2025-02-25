@@ -48,6 +48,7 @@
       packages = rec {
         default = py_maplib;
         py_maplib = python.pkgs.maplib;
+        python-env = python.withPackages (ps: [ ps.maplib ps.polars ]);
       };
       legacyPackages.python = python;
       devShells.default = craneLib.devShell {
@@ -61,6 +62,12 @@
           pkgs.cargo-deny
           pkgs.cargo-vet
         ];
+      };
+      apps = rec {
+        python-env = {
+          type = "app";
+          program = "${self.packages.${system}.python-env}/bin/python";
+        };
       };
     }
   );
