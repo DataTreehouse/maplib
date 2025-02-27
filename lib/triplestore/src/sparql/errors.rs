@@ -15,8 +15,8 @@ pub enum SparqlError {
     InconsistentDatatypes(String, RDFNodeType, RDFNodeType, String),
     #[error(transparent)]
     QueryProcessingError(#[from] QueryProcessingError),
-    #[error("Error deduplicating triples {}", .0)]
-    DeduplicationError(TriplestoreError),
+    #[error("Error indexing triples {}", .0)]
+    IndexingError(TriplestoreError),
     #[error("Read dataframe error {}", .0)]
     TripleTableReadError(TriplestoreError),
     #[error("Error storing triples {}", .0)]

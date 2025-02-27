@@ -69,9 +69,11 @@ impl Mapping {
         let ExpandOptions {
             graph,
             validate_iris,
+            delay_index,
         } = options;
         let (mut df, mut columns) =
             validate(df, mapping_column_types, &target_template, validate_iris)?;
+
         let call_uuid = Uuid::new_v4().to_string();
 
         let mut static_columns = HashMap::new();
@@ -102,7 +104,13 @@ impl Mapping {
             columns,
             static_columns,
         )?;
-        self.process_results(result_vec, &call_uuid, new_blank_node_counter, &graph)?;
+        self.process_results(
+            result_vec,
+            &call_uuid,
+            new_blank_node_counter,
+            &graph,
+            delay_index,
+        )?;
         debug!("Expansion took {} seconds", now.elapsed().as_secs_f32());
         Ok(MappingReport {})
     }
@@ -224,6 +232,7 @@ impl Mapping {
         call_uuid: &str,
         mut new_blank_node_counter: usize,
         graph: &Option<NamedNode>,
+        delay_index: bool,
     ) -> Result<(), MappingError> {
         let now = Instant::now();
         let triples: Vec<_> = result_vec
@@ -287,7 +296,7 @@ impl Mapping {
         };
 
         use_triplestore
-            .add_triples_vec(all_triples_to_add, call_uuid, false)
+            .add_triples_vec(all_triples_to_add, call_uuid, false, delay_index)
             .map_err(MappingError::TriplestoreError)?;
 
         self.blank_node_counter = new_blank_node_counter;

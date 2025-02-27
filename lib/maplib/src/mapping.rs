@@ -19,6 +19,7 @@ use templates::ast::{ConstantTermOrList, PType, Template};
 use templates::dataset::TemplateDataset;
 use templates::document::document_from_str;
 use templates::MappingColumnType;
+use triplestore::errors::TriplestoreError;
 use triplestore::sparql::errors::SparqlError;
 use triplestore::sparql::QueryResult;
 use triplestore::{IndexingOptions, NewTriples, Triplestore};
@@ -35,13 +36,19 @@ pub struct Mapping {
 pub struct ExpandOptions {
     pub graph: Option<NamedNode>,
     pub validate_iris: bool,
+    pub delay_index: bool,
 }
 
 impl ExpandOptions {
-    pub fn from_args(graph: Option<NamedNode>, validate_iris: Option<bool>) -> Self {
+    pub fn from_args(
+        graph: Option<NamedNode>,
+        validate_iris: Option<bool>,
+        delay_index: Option<bool>,
+    ) -> Self {
         ExpandOptions {
             graph: graph,
             validate_iris: validate_iris.unwrap_or(true),
+            delay_index: delay_index.unwrap_or(false),
         }
     }
 }
@@ -94,6 +101,11 @@ impl Mapping {
             blank_node_counter: 0,
             indexing,
         })
+    }
+
+    pub fn index_unindexed(&mut self, graph: &Option<NamedNode>) -> Result<(), TriplestoreError> {
+        let t = self.get_triplestore(graph);
+        t.index_unindexed()
     }
 
     pub fn from_folder<P: AsRef<Path>>(

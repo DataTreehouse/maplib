@@ -151,6 +151,11 @@ impl Triplestore {
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         streaming: bool,
     ) -> Result<QueryResult, SparqlError> {
+        if self.has_unindexed {
+            self.index_unindexed()
+                .map_err(|x| SparqlError::IndexingError(x))?;
+        }
+
         let context = Context::new();
         match query {
             Query::Select {
@@ -263,7 +268,7 @@ impl Triplestore {
             }
         }
         let new_triples = if !all_triples_to_add.is_empty() {
-            self.add_triples_vec(all_triples_to_add, &call_uuid, transient)
+            self.add_triples_vec(all_triples_to_add, &call_uuid, transient, false)
                 .map_err(SparqlError::StoreTriplesError)?
         } else {
             vec![]

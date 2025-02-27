@@ -40,6 +40,7 @@ pub struct Triplestore {
     parser_call: usize,
     indexing: IndexingOptions,
     fts_index: Option<FtsIndex>,
+    has_unindexed: bool,
 }
 
 impl Triplestore {
@@ -130,10 +131,22 @@ impl Triplestore {
             parser_call: 0,
             indexing,
             fts_index,
+            has_unindexed: false,
         })
     }
 
+    pub fn index_unindexed(&mut self) -> Result<(), TriplestoreError> {
+        for (_, map) in self.triples_map.iter_mut() {
+            for (_, v) in map.iter_mut() {
+                v.index_unindexed(&self.storage_folder, None)?;
+            }
+        }
+        self.has_unindexed = false;
+        Ok(())
+    }
+
     pub fn create_index(&mut self, indexing: IndexingOptions) -> Result<(), TriplestoreError> {
+        self.index_unindexed()?;
         for (k, m) in &mut self.triples_map {
             for ((_, object_type), ts) in m {
                 ts.add_index(object_type, &self.storage_folder, k, &indexing)?
@@ -171,6 +184,7 @@ impl Triplestore {
         mut ts: Vec<TriplesToAdd>,
         call_uuid: &str,
         transient: bool,
+        delay_index: bool,
     ) -> Result<Vec<NewTriples>, TriplestoreError> {
         let df_vecs_to_add: Vec<Vec<TripleDF>> = ts
             .par_drain(..)
@@ -192,7 +206,10 @@ impl Triplestore {
             })
             .collect();
         let dfs_to_add = flatten(df_vecs_to_add);
-        let new_triples = self.add_triples_df(dfs_to_add, call_uuid, transient)?;
+        let new_triples = self.add_triples_df(dfs_to_add, call_uuid, transient, delay_index)?;
+        if delay_index {
+            self.has_unindexed = true;
+        }
         Ok(new_triples)
     }
 
@@ -201,6 +218,7 @@ impl Triplestore {
         triples_df: Vec<TripleDF>,
         call_uuid: &str,
         transient: bool,
+        delay_index: bool,
     ) -> Result<Vec<NewTriples>, TriplestoreError> {
         let mut out_new_triples = vec![];
         let use_map = if transient {
@@ -223,27 +241,30 @@ impl Triplestore {
                         .map_err(TriplestoreError::FtsError)?;
                 }
             }
-            let mut lf = df.lazy();
             let mut map = HashMap::new();
             map.insert(
                 SUBJECT_COL_NAME.to_string(),
                 subject_type.as_rdf_node_type(),
             );
             map.insert(OBJECT_COL_NAME.to_string(), object_type.as_rdf_node_type());
+            let mut lf = df.lazy();
             lf = lf_columns_to_categorical(lf, &map, CategoricalOrdering::Physical);
             df = lf.collect().unwrap();
             let k = (subject_type.clone(), object_type.clone());
             let mut added_triples = false;
             if let Some(m) = use_map.get_mut(&predicate) {
                 if let Some(t) = m.get_mut(&k) {
-                    let new_triples_opt = t.add_triples(df.clone(), &self.storage_folder)?;
-                    let new_triples = NewTriples {
-                        df: new_triples_opt,
-                        predicate: predicate.clone(),
-                        subject_type: subject_type.clone(),
-                        object_type: object_type.clone(),
-                    };
-                    out_new_triples.push(new_triples);
+                    let new_triples_opt =
+                        t.add_triples(df.clone(), &self.storage_folder, delay_index)?;
+                    if !delay_index {
+                        let new_triples = NewTriples {
+                            df: new_triples_opt,
+                            predicate: predicate.clone(),
+                            subject_type: subject_type.clone(),
+                            object_type: object_type.clone(),
+                        };
+                        out_new_triples.push(new_triples);
+                    }
                     added_triples = true;
                 }
             } else {
@@ -258,18 +279,21 @@ impl Triplestore {
                     object_type.clone(),
                     &predicate,
                     &self.indexing,
+                    delay_index,
                 )?;
-                let mut lfs = triples.get_lazy_frames(&None, &None)?;
-                assert_eq!(lfs.len(), 1);
-                let (lf, _) = lfs.pop().unwrap();
-                let df = lf.collect().unwrap();
-                let new_triples = NewTriples {
-                    df: Some(df),
-                    predicate: predicate.clone(),
-                    subject_type,
-                    object_type,
-                };
-                out_new_triples.push(new_triples);
+                if !delay_index {
+                    let mut lfs = triples.get_lazy_frames(&None, &None)?;
+                    assert_eq!(lfs.len(), 1);
+                    let (lf, _) = lfs.pop().unwrap();
+                    let df = lf.collect().unwrap();
+                    let new_triples = NewTriples {
+                        df: Some(df),
+                        predicate: predicate.clone(),
+                        subject_type,
+                        object_type,
+                    };
+                    out_new_triples.push(new_triples);
+                }
                 let m = use_map.get_mut(&predicate).unwrap();
                 m.insert(k, triples);
             }
