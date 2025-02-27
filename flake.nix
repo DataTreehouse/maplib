@@ -13,9 +13,11 @@
     flake-utils.lib.eachDefaultSystem (system: let
       pkgs = nixpkgs.legacyPackages.${system};
       inherit (pkgs) lib;
-      inherit (fenix.packages.${system}.minimal) toolchain;
+
+      fenixSet = fenix.packages.${system}.complete;
+      inherit (fenixSet) toolchain;
       
-      craneLib = (crane.mkLib pkgs).overrideToolchain fenix.packages.${system}.minimal.toolchain;
+      craneLib = (crane.mkLib pkgs).overrideToolchain toolchain;
 
       rustPlatform = pkgs.makeRustPlatform {
         cargo = toolchain;
@@ -48,7 +50,7 @@
       packages = rec {
         default = py_maplib;
         py_maplib = python.pkgs.maplib;
-        python-env = python.withPackages (ps: [ ps.maplib ps.polars ]);
+        python-env = python.withPackages (ps: [ ps.maplib ps.polars ps.rdflib ]);
       };
       legacyPackages.python = python;
       devShells.default = craneLib.devShell {
@@ -61,6 +63,8 @@
           pkgs.cargo-audit
           pkgs.cargo-deny
           pkgs.cargo-vet
+
+          fenixSet.rust-analyzer
         ];
       };
       apps = rec {
