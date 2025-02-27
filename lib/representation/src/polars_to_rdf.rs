@@ -189,36 +189,29 @@ pub fn basic_rdf_node_type_column_to_term_vec(
             .collect(),
         BaseRDFNodeType::Literal(l) => match l.as_ref() {
             rdf::LANG_STRING => {
-                let value_ser = column
-                    .struct_()
-                    .unwrap()
+                let col_struct = column.struct_().unwrap();
+                let value_ser = col_struct
                     .field_by_name(LANG_STRING_VALUE_FIELD)
                     .unwrap()
                     .cast(&DataType::String)
                     .unwrap();
                 let value_iter = value_ser.str().unwrap().into_iter();
-                let lang_ser = column
-                    .struct_()
-                    .unwrap()
+
+                let lang_ser = col_struct
                     .field_by_name(LANG_STRING_LANG_FIELD)
                     .unwrap()
                     .cast(&DataType::String)
                     .unwrap();
                 let lang_iter = lang_ser.str().unwrap().into_iter();
+
                 value_iter
                     .zip(lang_iter)
-                    .map(|(value, lang)| {
-                        if let Some(value) = value {
-                            if let Some(lang) = lang {
-                                Some(Term::Literal(
-                                    Literal::new_language_tagged_literal_unchecked(value, lang),
-                                ))
-                            } else {
-                                panic!()
-                            }
-                        } else {
-                            None
-                        }
+                    .map(|(value, lang)| match (value, lang) {
+                        (Some(v), Some(l)) => Some(Term::Literal(
+                            Literal::new_language_tagged_literal_unchecked(v, l),
+                        )),
+                        (None, None) => None,
+                        _ => panic!(),
                     })
                     .collect()
             }
