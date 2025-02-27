@@ -13,9 +13,10 @@ pl.Config.set_fmt_str_lengths(300)
 PATH_HERE = pathlib.Path(__file__).parent
 TESTDATA_PATH = PATH_HERE / "testdata"
 
-
-@pytest.fixture(scope="session")
-def windpower_mapping():
+@pytest.fixture(scope="session", params=[True, False])
+def windpower_mapping(request):
+    print(request)
+    delay_index = request.param
     instance_mapping = """
     @prefix tpl:<https://github.com/magbak/chrontext/templates#>.
     @prefix rds:<https://github.com/magbak/chrontext/rds_power#>.
@@ -71,7 +72,7 @@ def windpower_mapping():
             "SiteIRI": site_iris,
         }
     )
-    mapping.expand("tpl:Site", sites)
+    mapping.expand("tpl:Site", sites, delay_index=delay_index)
 
     wind_turbine_iris = [wpex + "WindTurbine" + str(i) for i in range(1, n + 1)]
     wind_turbines = pl.DataFrame(

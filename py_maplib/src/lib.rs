@@ -227,7 +227,7 @@ impl PyMapping {
         }
     }
 
-    #[pyo3(signature = (template, df=None, graph=None, types=None, validate_iris=true))]
+    #[pyo3(signature = (template, df=None, graph=None, types=None, validate_iris=true, delay_index=false))]
     fn expand(
         &mut self,
         template: &Bound<'_, PyAny>,
@@ -235,6 +235,7 @@ impl PyMapping {
         graph: Option<String>,
         types: Option<HashMap<String, PyRDFType>>,
         validate_iris: Option<bool>,
+        delay_index: Option<bool>,
     ) -> PyResult<Option<PyObject>> {
         let template = if let Ok(i) = template.extract::<PyIRI>() {
             i.into_inner().to_string()
@@ -253,7 +254,7 @@ impl PyMapping {
             .into());
         };
         let graph = parse_optional_graph(graph)?;
-        let options = ExpandOptions::from_args(graph, validate_iris);
+        let options = ExpandOptions::from_args(graph, validate_iris, delay_index);
         let types = map_types(types);
 
         if let Some(df) = df {
@@ -279,7 +280,7 @@ impl PyMapping {
         Ok(None)
     }
 
-    #[pyo3(signature = (df, verb=None, graph=None, types=None, validate_iris=None))]
+    #[pyo3(signature = (df, verb=None, graph=None, types=None, validate_iris=None, delay_index=false))]
     fn expand_triples(
         &mut self,
         df: &Bound<'_, PyAny>,
@@ -287,10 +288,11 @@ impl PyMapping {
         graph: Option<String>,
         types: Option<HashMap<String, PyRDFType>>,
         validate_iris: Option<bool>,
+        delay_index: Option<bool>,
     ) -> PyResult<Option<PyObject>> {
         let graph = parse_optional_graph(graph)?;
         let df = polars_df_to_rust_df(df)?;
-        let options = ExpandOptions::from_args(graph, validate_iris);
+        let options = ExpandOptions::from_args(graph, validate_iris, delay_index);
         let types = map_types(types);
         let verb = if let Some(verb) = verb {
             Some(NamedNode::new(verb).map_err(PyMaplibError::IriParseError)?)
@@ -303,7 +305,7 @@ impl PyMapping {
         Ok(None)
     }
 
-    #[pyo3(signature = (df, primary_key_column, template_prefix=None, predicate_uri_prefix=None, graph=None, validate_iris=true))]
+    #[pyo3(signature = (df, primary_key_column, template_prefix=None, predicate_uri_prefix=None, graph=None, validate_iris=true, delay_index=false))]
     fn expand_default(
         &mut self,
         df: &Bound<'_, PyAny>,
@@ -312,12 +314,11 @@ impl PyMapping {
         predicate_uri_prefix: Option<String>,
         graph: Option<String>,
         validate_iris: Option<bool>,
+        delay_index: Option<bool>,
     ) -> PyResult<String> {
         let df = polars_df_to_rust_df(df)?;
-        let options = ExpandOptions {
-            graph: parse_optional_graph(graph)?,
-            validate_iris: validate_iris.unwrap_or(true),
-        };
+        let graph = parse_optional_graph(graph)?;
+        let options = ExpandOptions::from_args(graph, validate_iris, delay_index);
 
         let tmpl = self
             .inner

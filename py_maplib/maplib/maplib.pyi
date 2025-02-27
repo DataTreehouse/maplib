@@ -352,6 +352,7 @@ class Mapping:
         graph: str = None,
         types: Dict[str, RDFType] = None,
         validate_iris: bool = True,
+        delay_index: bool = False
     ) -> None:
         """
         Expand a template using a DataFrame
@@ -366,6 +367,7 @@ class Mapping:
         :param graph: The IRI of the graph to add triples to.
         :param types: The types of the columns.
         :param validate_iris: Validate any IRI-columns.
+        :param delay_index: Delay index construction - reduces write amplification when doing many expansions
         """
 
     def expand_triples(
@@ -375,6 +377,7 @@ class Mapping:
         graph: str = None,
         types: Dict[str, RDFType] = None,
         validate_iris: bool = True,
+        delay_index: bool = False
     ) -> None:
         """
         Expand a template using a DataFrame with columns subject, object and verb
@@ -390,6 +393,7 @@ class Mapping:
         :param graph: The IRI of the graph to add triples to.
         :param types: The types of the columns.
         :param validate_iris: Validate any IRI-columns.
+        :param delay_index: Delay index construction - reduces write amplification when doing many expansions
         """
 
     def expand_default(
@@ -400,6 +404,7 @@ class Mapping:
         predicate_uri_prefix: str = None,
         graph: str = None,
         validate_iris: bool = True,
+        delay_index: bool = False
     ) -> str:
         """
         Create a default template and expand it based on a dataframe.
@@ -414,6 +419,7 @@ class Mapping:
         :param predicate_uri_prefix: Prefix of the predicates/verbs in the generated template, names are derived from column names.
         :param graph: The IRI of the graph to add triples to.
         :param validate_iris: Validate any IRI-columns.
+        :param delay_index: Delay index construction - reduces write amplification when doing many expansions
         :return: The generated template
         """
 
