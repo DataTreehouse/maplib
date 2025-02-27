@@ -227,7 +227,7 @@ impl PyMapping {
         }
     }
 
-    #[pyo3(signature = (template, df=None, graph=None, types=None, validate_iris=true, delay_index=true))]
+    #[pyo3(signature = (template, df=None, graph=None, types=None, validate_iris=None, delay_index=None))]
     fn expand(
         &mut self,
         template: &Bound<'_, PyAny>,
@@ -280,7 +280,7 @@ impl PyMapping {
         Ok(None)
     }
 
-    #[pyo3(signature = (df, verb=None, graph=None, types=None, validate_iris=None, delay_index=true))]
+    #[pyo3(signature = (df, verb=None, graph=None, types=None, validate_iris=None, delay_index=None))]
     fn expand_triples(
         &mut self,
         df: &Bound<'_, PyAny>,
@@ -305,7 +305,7 @@ impl PyMapping {
         Ok(None)
     }
 
-    #[pyo3(signature = (df, primary_key_column, template_prefix=None, predicate_uri_prefix=None, graph=None, validate_iris=true, delay_index=true))]
+    #[pyo3(signature = (df, primary_key_column, template_prefix=None, predicate_uri_prefix=None, graph=None, validate_iris=None, delay_index=None))]
     fn expand_default(
         &mut self,
         df: &Bound<'_, PyAny>,
@@ -437,7 +437,7 @@ impl PyMapping {
         ))
     }
 
-    #[pyo3(signature = (query, parameters=None, include_datatypes=None, native_dataframe=None, transient=None, streaming=None, source_graph=None, target_graph=None))]
+    #[pyo3(signature = (query, parameters=None, include_datatypes=None, native_dataframe=None, transient=None, streaming=None, source_graph=None, target_graph=None, delay_index=None))]
     fn insert(
         &mut self,
         query: String,
@@ -448,6 +448,7 @@ impl PyMapping {
         streaming: Option<bool>,
         source_graph: Option<String>,
         target_graph: Option<String>,
+        delay_index: Option<bool>,
         py: Python<'_>,
     ) -> PyResult<HashMap<String, PyObject>> {
         let mapped_parameters = map_parameters(parameters)?;
@@ -465,7 +466,7 @@ impl PyMapping {
         let out_dict = if let QueryResult::Construct(dfs_and_dts) = res {
             let new_triples = self
                 .inner
-                .insert_construct_result(dfs_and_dts, transient.unwrap_or(false), target_graph)
+                .insert_construct_result(dfs_and_dts, transient.unwrap_or(false), target_graph, delay_index.unwrap_or(true))
                 .map_err(PyMaplibError::from)?;
             new_triples_to_dict(
                 new_triples,
@@ -482,7 +483,7 @@ impl PyMapping {
         Ok(out_dict.into())
     }
 
-    #[pyo3(signature = (query, parameters=None, include_datatypes=None, native_dataframe=None, transient=None, streaming=None, source_graph=None, target_graph=None))]
+    #[pyo3(signature = (query, parameters=None, include_datatypes=None, native_dataframe=None, transient=None, streaming=None, source_graph=None, target_graph=None, delay_index=None))]
     fn insert_sprout(
         &mut self,
         query: String,
@@ -493,6 +494,7 @@ impl PyMapping {
         streaming: Option<bool>,
         source_graph: Option<String>,
         target_graph: Option<String>,
+        delay_index: Option<bool>,
         py: Python<'_>,
     ) -> PyResult<HashMap<String, PyObject>> {
         let mapped_parameters = map_parameters(parameters)?;
@@ -515,7 +517,7 @@ impl PyMapping {
                 .sprout
                 .as_mut()
                 .unwrap()
-                .insert_construct_result(dfs_and_dts, transient.unwrap_or(false), target_graph)
+                .insert_construct_result(dfs_and_dts, transient.unwrap_or(false), target_graph, delay_index.unwrap_or(true))
                 .map_err(PyMaplibError::from)?;
             new_triples_to_dict(
                 new_triples,

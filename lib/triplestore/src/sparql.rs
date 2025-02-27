@@ -204,6 +204,7 @@ impl Triplestore {
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         transient: bool,
         streaming: bool,
+        delay_index: bool,
     ) -> Result<Vec<NewTriples>, SparqlError> {
         let query = Query::parse(query, None).map_err(SparqlError::ParseError)?;
         if let Query::Construct { .. } = &query {
@@ -212,7 +213,9 @@ impl Triplestore {
                 QueryResult::Select(_) => {
                     panic!("Should never happen")
                 }
-                QueryResult::Construct(dfs) => self.insert_construct_result(dfs, transient),
+                QueryResult::Construct(dfs) => {
+                    self.insert_construct_result(dfs, transient, delay_index)
+                }
             }
         } else {
             Err(SparqlError::QueryTypeNotSupported)
@@ -222,6 +225,7 @@ impl Triplestore {
         &mut self,
         sms: Vec<(EagerSolutionMappings, Option<NamedNode>)>,
         transient: bool,
+        delay_index: bool,
     ) -> Result<Vec<NewTriples>, SparqlError> {
         let call_uuid = Uuid::new_v4().to_string();
         let mut all_triples_to_add = vec![];
@@ -268,7 +272,7 @@ impl Triplestore {
             }
         }
         let new_triples = if !all_triples_to_add.is_empty() {
-            self.add_triples_vec(all_triples_to_add, &call_uuid, transient, false)
+            self.add_triples_vec(all_triples_to_add, &call_uuid, transient, delay_index)
                 .map_err(SparqlError::StoreTriplesError)?
         } else {
             vec![]

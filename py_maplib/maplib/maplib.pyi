@@ -352,7 +352,7 @@ class Mapping:
         graph: str = None,
         types: Dict[str, RDFType] = None,
         validate_iris: bool = True,
-        delay_index: bool = False,
+        delay_index: bool = True,
     ) -> None:
         """
         Expand a template using a DataFrame
@@ -377,7 +377,7 @@ class Mapping:
         graph: str = None,
         types: Dict[str, RDFType] = None,
         validate_iris: bool = True,
-        delay_index: bool = False,
+        delay_index: bool = True,
     ) -> None:
         """
         Expand a template using a DataFrame with columns subject, object and verb
@@ -404,7 +404,7 @@ class Mapping:
         predicate_uri_prefix: str = None,
         graph: str = None,
         validate_iris: bool = True,
-        delay_index: bool = False,
+        delay_index: bool = True,
     ) -> str:
         """
         Create a default template and expand it based on a dataframe.
@@ -468,6 +468,7 @@ class Mapping:
         streaming: bool = False,
         source_graph: str = None,
         target_graph: str = None,
+        delay_index: bool = True,
     ):
         """
         Insert the results of a Construct query in the graph.
@@ -494,6 +495,7 @@ class Mapping:
         :param source_graph: The IRI of the source graph to execute the construct query.
         :param target_graph: The IRI of the target graph to insert into.
         :param streaming: Use Polars streaming
+        :param delay_index: Delay indexing, use when making multiple inserts of the same predicate.
         :return: None
         """
 
@@ -675,6 +677,7 @@ class Mapping:
         streaming: bool = False,
         source_graph: str = None,
         target_graph: str = None,
+        delay_index: bool = True,
     ):
         """
         Insert the results of a Construct query in a sprouted graph, which is created if no sprout is active.
@@ -705,6 +708,7 @@ class Mapping:
         :param source_graph: The IRI of the source graph to execute the construct query.
         :param target_graph: The IRI of the target graph to insert into.
         :param streaming: Use Polars streaming
+        :param delay_index: Delay indexing, use when making multiple inserts of the same predicate to improve performance.
         :return: None
         """
 

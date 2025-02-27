@@ -235,9 +235,10 @@ impl Mapping {
         sms: Vec<(EagerSolutionMappings, Option<NamedNode>)>,
         transient: bool,
         target_graph: Option<NamedNode>,
+        delay_index: bool,
     ) -> Result<Vec<NewTriples>, SparqlError> {
         let use_triplestore = self.get_triplestore(&target_graph);
-        let new_triples = use_triplestore.insert_construct_result(sms, transient)?;
+        let new_triples = use_triplestore.insert_construct_result(sms, transient, delay_index)?;
         Ok(new_triples)
     }
 
