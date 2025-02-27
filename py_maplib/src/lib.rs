@@ -227,7 +227,7 @@ impl PyMapping {
         }
     }
 
-    #[pyo3(signature = (template, df=None, graph=None, types=None, validate_iris=true, delay_index=false))]
+    #[pyo3(signature = (template, df=None, graph=None, types=None, validate_iris=true, delay_index=true))]
     fn expand(
         &mut self,
         template: &Bound<'_, PyAny>,
@@ -280,7 +280,7 @@ impl PyMapping {
         Ok(None)
     }
 
-    #[pyo3(signature = (df, verb=None, graph=None, types=None, validate_iris=None, delay_index=false))]
+    #[pyo3(signature = (df, verb=None, graph=None, types=None, validate_iris=None, delay_index=true))]
     fn expand_triples(
         &mut self,
         df: &Bound<'_, PyAny>,
@@ -305,7 +305,7 @@ impl PyMapping {
         Ok(None)
     }
 
-    #[pyo3(signature = (df, primary_key_column, template_prefix=None, predicate_uri_prefix=None, graph=None, validate_iris=true, delay_index=false))]
+    #[pyo3(signature = (df, primary_key_column, template_prefix=None, predicate_uri_prefix=None, graph=None, validate_iris=true, delay_index=true))]
     fn expand_default(
         &mut self,
         df: &Bound<'_, PyAny>,
