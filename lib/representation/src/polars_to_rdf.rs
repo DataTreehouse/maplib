@@ -8,8 +8,8 @@ use crate::rdf_to_polars::{
 };
 use crate::{
     literal_blanknode_to_blanknode, literal_iri_to_namednode, BaseRDFNodeType, BaseRDFNodeTypeRef,
-    RDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD, OBJECT_COL_NAME,
-    SUBJECT_COL_NAME,
+    RDFNodeType, IRI_PREFIX_FIELD, IRI_SUFFIX_FIELD, LANG_STRING_LANG_FIELD,
+    LANG_STRING_VALUE_FIELD, OBJECT_COL_NAME, SUBJECT_COL_NAME,
 };
 use chrono::TimeZone as ChronoTimeZone;
 use chrono::{Datelike, Timelike};
@@ -131,14 +131,37 @@ pub fn basic_rdf_node_type_column_to_term_vec(
     base_rdf_node_type: &BaseRDFNodeType,
 ) -> Vec<Option<Term>> {
     match base_rdf_node_type {
-        BaseRDFNodeType::IRI => column
-            .cast(&DataType::String)
-            .unwrap()
-            .str()
-            .unwrap()
-            .par_iter()
-            .map(|x| x.map(|x| Term::NamedNode(literal_iri_to_namednode(x))))
-            .collect(),
+        // TODO!: Could I do some polars concat here instead?
+        BaseRDFNodeType::IRI => {
+            let col_struct = column.struct_().unwrap();
+
+            let prefix_ser = col_struct
+                .field_by_name(IRI_PREFIX_FIELD)
+                .unwrap()
+                .cast(&DataType::String)
+                .unwrap();
+            let prefix_iter = prefix_ser.str().unwrap().into_iter();
+
+            let suffix_ser = col_struct
+                .field_by_name(IRI_SUFFIX_FIELD)
+                .unwrap()
+                .cast(&DataType::String)
+                .unwrap();
+            let suffix_iter = suffix_ser.str().unwrap().into_iter();
+
+            prefix_iter
+                .zip(suffix_iter)
+                .map(|(prefix, suffix)| {
+                    // This literally did nothing
+                    let iri = format!(
+                        "{}{}",
+                        prefix.expect("column_to_term: iri has no prefix!"),
+                        suffix.expect("column_to_term: iri has no suffix!")
+                    );
+                    Some(Term::NamedNode(NamedNode::new_unchecked(iri)))
+                })
+                .collect()
+        }
         BaseRDFNodeType::BlankNode => column
             .cast(&DataType::String)
             .unwrap()

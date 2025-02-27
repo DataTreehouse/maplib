@@ -1,4 +1,4 @@
-use crate::{LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD};
+use crate::{IRI_PREFIX_FIELD, IRI_SUFFIX_FIELD, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD};
 use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
 use log::warn;
 use oxrdf::vocab::{rdf, xsd};
@@ -12,7 +12,7 @@ use std::str::FromStr;
 
 pub fn rdf_term_to_polars_expr(term: &Term) -> Expr {
     match term {
-        Term::NamedNode(named_node) => lit(rdf_named_node_to_polars_literal_value(named_node)),
+        Term::NamedNode(named_node) => rdf_named_node_to_polars_expr(named_node),
         Term::Literal(l) => {
             let dt = l.datatype();
             if dt == rdf::LANG_STRING {
@@ -28,6 +28,20 @@ pub fn rdf_term_to_polars_expr(term: &Term) -> Expr {
         #[cfg(feature = "rdf-star")]
         Term::Triple(_) => todo!(),
     }
+}
+
+pub fn rdf_named_node_to_polars_expr(named_node: &NamedNode) -> Expr {
+    let iri: &str = named_node.as_str();
+    const DELIMITERS: &[char] = &['/', '#'];
+    let (prefix, suffix) = match iri.rsplit_once(DELIMITERS) {
+        Some(pair) => pair,
+        None => ("", iri),
+    };
+
+    as_struct(vec![
+        lit(prefix).alias(IRI_PREFIX_FIELD),
+        lit(suffix).alias(IRI_SUFFIX_FIELD),
+    ])
 }
 
 pub fn rdf_named_node_to_polars_literal_value(named_node: &NamedNode) -> LiteralValue {

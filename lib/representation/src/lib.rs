@@ -26,6 +26,8 @@ pub const OBJECT_COL_NAME: &str = "object";
 pub const SUBJECT_COL_NAME: &str = "subject";
 pub const LANG_STRING_VALUE_FIELD: &str = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>";
 pub const LANG_STRING_LANG_FIELD: &str = "l";
+pub const IRI_PREFIX_FIELD: &str = "IRI-prefix";
+pub const IRI_SUFFIX_FIELD: &str = "IRI-suffix";
 
 const RDF_NODE_TYPE_IRI: &str = "IRI";
 const RDF_NODE_TYPE_BLANK_NODE: &str = "Blank";
@@ -106,6 +108,15 @@ impl RDFNodeType {
                         fields.push(Field::new(
                             PlSmallStr::from_str(LANG_STRING_LANG_FIELD),
                             DataType::Categorical(None, CategoricalOrdering::Physical),
+                        ));
+                    } else if t.is_iri() {
+                        fields.push(Field::new(
+                            PlSmallStr::from_str(IRI_PREFIX_FIELD),
+                            DataType::Categorical(None, CategoricalOrdering::Physical),
+                        ));
+                        fields.push(Field::new(
+                            PlSmallStr::from_str(IRI_SUFFIX_FIELD),
+                            DataType::String,
                         ));
                     } else {
                         fields.push(Field::new(PlSmallStr::from_str(&n), t.polars_data_type()));
@@ -260,7 +271,13 @@ impl BaseRDFNodeType {
 
     pub fn polars_data_type(&self) -> DataType {
         match self {
-            BaseRDFNodeType::IRI => DataType::String,
+            BaseRDFNodeType::IRI => DataType::Struct(vec![
+                Field::new(
+                    IRI_PREFIX_FIELD.into(),
+                    DataType::Categorical(None, CategoricalOrdering::Physical),
+                ),
+                Field::new(IRI_SUFFIX_FIELD.into(), DataType::String),
+            ]),
             BaseRDFNodeType::BlankNode => DataType::String,
             BaseRDFNodeType::Literal(l) => match l.as_ref() {
                 xsd::STRING => DataType::String,

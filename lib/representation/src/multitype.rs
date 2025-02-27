@@ -1,5 +1,8 @@
 use crate::solution_mapping::SolutionMappings;
-use crate::{BaseRDFNodeType, RDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD};
+use crate::{
+    BaseRDFNodeType, RDFNodeType, IRI_PREFIX_FIELD, IRI_SUFFIX_FIELD, LANG_STRING_LANG_FIELD,
+    LANG_STRING_VALUE_FIELD,
+};
 use oxrdf::vocab::{rdf, xsd};
 use polars::datatypes::PlSmallStr;
 use polars::prelude::{
@@ -42,6 +45,11 @@ pub fn extract_column_from_multitype(
             multitype_column,
             &vec![LANG_STRING_VALUE_FIELD, LANG_STRING_LANG_FIELD],
             LANG_STRING_VALUE_FIELD,
+        ),
+        BaseRDFNodeType::IRI => filter_multitype(
+            multitype_column,
+            &vec![IRI_PREFIX_FIELD, IRI_SUFFIX_FIELD],
+            &colname,
         ),
         _ => filter_multitype(multitype_column, &vec![&colname], &colname),
     }
