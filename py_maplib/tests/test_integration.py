@@ -13,6 +13,7 @@ pl.Config.set_fmt_str_lengths(300)
 PATH_HERE = pathlib.Path(__file__).parent
 TESTDATA_PATH = PATH_HERE / "testdata"
 
+
 @pytest.fixture(scope="session", params=[True, False])
 def windpower_mapping(request):
     print(request)

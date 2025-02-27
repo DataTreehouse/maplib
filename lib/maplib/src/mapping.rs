@@ -48,7 +48,7 @@ impl ExpandOptions {
         ExpandOptions {
             graph: graph,
             validate_iris: validate_iris.unwrap_or(true),
-            delay_index: delay_index.unwrap_or(false),
+            delay_index: delay_index.unwrap_or(true),
         }
     }
 }

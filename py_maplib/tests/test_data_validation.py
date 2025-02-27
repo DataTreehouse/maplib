@@ -115,6 +115,7 @@ def test_want_xsd_int_got_xsd_boolean():
     with pytest.raises(Exception):
         mapping.expand(template, df)
 
+
 def test_autoconverted_datetime_to_date():
     xsd = XSD()
     df = pl.DataFrame({"MyValue": ["2020-02-02T00:00:00Z"]}).cast(pl.Datetime("ns"))
@@ -153,7 +154,9 @@ def test_autoconverted_optional_datetime_to_date():
         ex.suf("ExampleTemplate"),
         [
             Parameter(my_value, rdf_type=RDFType.Literal(xsd.date)),
-            Parameter(my_other_value, rdf_type=RDFType.Literal(xsd.date), optional=True),
+            Parameter(
+                my_other_value, rdf_type=RDFType.Literal(xsd.date), optional=True
+            ),
         ],
         [
             Triple(my_object, ex.suf("hasValue"), my_value),
@@ -173,7 +176,9 @@ def test_autoconverted_optional_datetime_to_date():
 
 def test_autoconverted_datetime_list_to_date_list_1():
     xsd = XSD()
-    df = pl.DataFrame({"MyValue": [["2020-02-02T00:00:00Z"]]}).cast(pl.List(pl.Datetime("ns")))
+    df = pl.DataFrame({"MyValue": [["2020-02-02T00:00:00Z"]]}).cast(
+        pl.List(pl.Datetime("ns"))
+    )
     mapping = Mapping()
     ex = Prefix("ex", "http://example.net/ns#")
     my_value = Variable("MyValue")
@@ -194,12 +199,20 @@ def test_autoconverted_datetime_list_to_date_list_1():
     """,
         include_datatypes=True,
     )
-    assert r.rdf_types["c"] == RDFType.Multi([RDFType.IRI(), RDFType.BlankNode(), RDFType.Literal("http://www.w3.org/2001/XMLSchema#date")])
+    assert r.rdf_types["c"] == RDFType.Multi(
+        [
+            RDFType.IRI(),
+            RDFType.BlankNode(),
+            RDFType.Literal("http://www.w3.org/2001/XMLSchema#date"),
+        ]
+    )
 
 
 def test_autoconverted_datetime_list_to_date_list_2():
     xsd = XSD()
-    df = pl.DataFrame({"MyValue": [["2020-02-02T00:00:00Z"]]}).cast(pl.List(pl.Datetime("ns")))
+    df = pl.DataFrame({"MyValue": [["2020-02-02T00:00:00Z"]]}).cast(
+        pl.List(pl.Datetime("ns"))
+    )
     mapping = Mapping()
     ex = Prefix("ex", "http://example.net/ns#")
     my_value = Variable("MyValue")
@@ -208,7 +221,12 @@ def test_autoconverted_datetime_list_to_date_list_2():
         ex.suf("ExampleTemplate"),
         [Parameter(my_value, rdf_type=RDFType.Nested(RDFType.Literal(xsd.date)))],
         [
-            Triple(my_object, ex.suf("hasValue"), Argument(my_value, list_expand=True), list_expander="cross"),
+            Triple(
+                my_object,
+                ex.suf("hasValue"),
+                Argument(my_value, list_expand=True),
+                list_expander="cross",
+            ),
         ],
     )
     mapping.expand(template, df)

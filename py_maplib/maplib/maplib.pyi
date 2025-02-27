@@ -352,7 +352,7 @@ class Mapping:
         graph: str = None,
         types: Dict[str, RDFType] = None,
         validate_iris: bool = True,
-        delay_index: bool = False
+        delay_index: bool = False,
     ) -> None:
         """
         Expand a template using a DataFrame
@@ -377,7 +377,7 @@ class Mapping:
         graph: str = None,
         types: Dict[str, RDFType] = None,
         validate_iris: bool = True,
-        delay_index: bool = False
+        delay_index: bool = False,
     ) -> None:
         """
         Expand a template using a DataFrame with columns subject, object and verb
@@ -404,7 +404,7 @@ class Mapping:
         predicate_uri_prefix: str = None,
         graph: str = None,
         validate_iris: bool = True,
-        delay_index: bool = False
+        delay_index: bool = False,
     ) -> str:
         """
         Create a default template and expand it based on a dataframe.
