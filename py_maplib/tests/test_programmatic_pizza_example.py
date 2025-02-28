@@ -101,11 +101,11 @@ def test_insert_new_thing(pizzas_mapping):
         ?p a pi:Pizza .
         ?p pi:hasIngredient pi:Pineapple .
     }"""
-    res1 = pizzas_mapping.insert(hpizzas)
+    res1 = pizzas_mapping.insert(hpizzas, delay_index=False)
     assert isinstance(res1, dict)
     assert len(res1) == 1
     assert res1["http://www.w3.org/1999/02/22-rdf-syntax-ns#type"].shape == (1, 2)
-    res2 = pizzas_mapping.insert(hpizzas)
+    res2 = pizzas_mapping.insert(hpizzas, delay_index=False)
     assert len(res2) == 0
 
 
@@ -119,12 +119,12 @@ def test_insert_new_things(pizzas_mapping):
     WHERE {
         ?p a pi:Pizza .
     }"""
-    res1 = pizzas_mapping.insert(hpizzas)
+    res1 = pizzas_mapping.insert(hpizzas, delay_index=False)
     assert isinstance(res1, dict)
     assert len(res1) == 2
     assert res1["http://www.w3.org/1999/02/22-rdf-syntax-ns#type"].shape == (2, 2)
     assert res1["https://github.com/DataTreehouse/maplib/pizza#abc"].shape == (2, 2)
-    res2 = pizzas_mapping.insert(hpizzas)
+    res2 = pizzas_mapping.insert(hpizzas, delay_index=False)
     assert len(res2) == 0
 
 

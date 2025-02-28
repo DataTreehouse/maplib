@@ -10,6 +10,7 @@ use std::time::Instant;
 impl Triplestore {
     pub fn write_native_parquet(&mut self, path: &Path) -> Result<(), TriplestoreError> {
         let now = Instant::now();
+        self.index_unindexed()?;
         if !path.exists() {
             return Err(TriplestoreError::PathDoesNotExist(
                 path.to_str().unwrap().to_string(),

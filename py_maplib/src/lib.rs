@@ -466,7 +466,12 @@ impl PyMapping {
         let out_dict = if let QueryResult::Construct(dfs_and_dts) = res {
             let new_triples = self
                 .inner
-                .insert_construct_result(dfs_and_dts, transient.unwrap_or(false), target_graph, delay_index.unwrap_or(true))
+                .insert_construct_result(
+                    dfs_and_dts,
+                    transient.unwrap_or(false),
+                    target_graph,
+                    delay_index.unwrap_or(true),
+                )
                 .map_err(PyMaplibError::from)?;
             new_triples_to_dict(
                 new_triples,
@@ -517,7 +522,12 @@ impl PyMapping {
                 .sprout
                 .as_mut()
                 .unwrap()
-                .insert_construct_result(dfs_and_dts, transient.unwrap_or(false), target_graph, delay_index.unwrap_or(true))
+                .insert_construct_result(
+                    dfs_and_dts,
+                    transient.unwrap_or(false),
+                    target_graph,
+                    delay_index.unwrap_or(true),
+                )
                 .map_err(PyMaplibError::from)?;
             new_triples_to_dict(
                 new_triples,

@@ -21,10 +21,11 @@ const CHUNK_SIZE: usize = 1_024;
 
 impl Triplestore {
     pub fn write_triples<W: Write>(
-        &self,
+        &mut self,
         buf: &mut W,
         format: RdfFormat,
     ) -> Result<(), TriplestoreError> {
+        self.index_unindexed()?;
         if RdfFormat::NTriples == format {
             let n_threads = POOL.current_num_threads();
             for (verb, df_map) in &self.triples_map {
