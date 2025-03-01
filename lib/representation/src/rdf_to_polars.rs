@@ -1,4 +1,7 @@
-use crate::{IRI_PREFIX_FIELD, IRI_SUFFIX_FIELD, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD};
+use crate::{
+    IRI_OBJECT_PREFIX_FIELD, IRI_OBJECT_SUFFIX_FIELD, LANG_STRING_LANG_FIELD,
+    LANG_STRING_VALUE_FIELD,
+};
 use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
 use log::warn;
 use oxrdf::vocab::{rdf, xsd};
@@ -35,8 +38,8 @@ pub fn rdf_named_node_to_polars_expr(named_node: &NamedNode) -> Expr {
     };
 
     as_struct(vec![
-        lit(prefix).alias(IRI_PREFIX_FIELD),
-        lit(suffix).alias(IRI_SUFFIX_FIELD),
+        lit(prefix).alias(IRI_OBJECT_PREFIX_FIELD),
+        lit(suffix).alias(IRI_OBJECT_SUFFIX_FIELD),
     ])
 }
 

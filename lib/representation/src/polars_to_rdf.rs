@@ -6,7 +6,7 @@ use crate::rdf_to_polars::{
 };
 use crate::{
     literal_blanknode_to_blanknode, literal_iri_to_namednode, BaseRDFNodeType, BaseRDFNodeTypeRef,
-    RDFNodeType, IRI_PREFIX_FIELD, IRI_SUFFIX_FIELD, LANG_STRING_LANG_FIELD,
+    RDFNodeType, IRI_OBJECT_PREFIX_FIELD, IRI_OBJECT_SUFFIX_FIELD, LANG_STRING_LANG_FIELD,
     LANG_STRING_VALUE_FIELD, OBJECT_COL_NAME, SUBJECT_COL_NAME,
 };
 use chrono::TimeZone as ChronoTimeZone;
@@ -171,19 +171,18 @@ pub fn basic_rdf_node_type_column_to_term_vec(
     base_rdf_node_type: &BaseRDFNodeType,
 ) -> Vec<Option<Term>> {
     match base_rdf_node_type {
-        // TODO!: Could I do some polars concat here instead?
         BaseRDFNodeType::IRI => {
             let col_struct = column.struct_().unwrap();
 
             let prefix_ser = col_struct
-                .field_by_name(IRI_PREFIX_FIELD)
+                .field_by_name(IRI_OBJECT_PREFIX_FIELD)
                 .unwrap()
                 .cast(&DataType::String)
                 .unwrap();
             let prefix_iter = prefix_ser.str().unwrap().into_iter();
 
             let suffix_ser = col_struct
-                .field_by_name(IRI_SUFFIX_FIELD)
+                .field_by_name(IRI_OBJECT_SUFFIX_FIELD)
                 .unwrap()
                 .cast(&DataType::String)
                 .unwrap();

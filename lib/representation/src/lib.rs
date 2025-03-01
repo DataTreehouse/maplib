@@ -26,12 +26,77 @@ pub const OBJECT_COL_NAME: &str = "object";
 pub const SUBJECT_COL_NAME: &str = "subject";
 pub const LANG_STRING_VALUE_FIELD: &str = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>";
 pub const LANG_STRING_LANG_FIELD: &str = "l";
-pub const IRI_PREFIX_FIELD: &str = "IRI-prefix";
-pub const IRI_SUFFIX_FIELD: &str = "IRI-suffix";
+pub const IRI_SUBJECT_PREFIX_FIELD: &str = "IRI-sp";
+pub const IRI_SUBJECT_SUFFIX_FIELD: &str = "IRI-ss";
+pub const IRI_OBJECT_PREFIX_FIELD: &str = "IRI-op";
+pub const IRI_OBJECT_SUFFIX_FIELD: &str = "IRI-os";
 
 const RDF_NODE_TYPE_IRI: &str = "IRI";
 const RDF_NODE_TYPE_BLANK_NODE: &str = "Blank";
 const RDF_NODE_TYPE_NONE: &str = "None";
+
+// TODO: Constrain these types to subsets which are actually valid
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum ConstrainedRDFNodeType {
+    Subject(RDFNodeType),
+    Object(RDFNodeType),
+}
+
+impl ConstrainedRDFNodeType {
+    pub fn unwrap(self) -> RDFNodeType {
+        match self {
+            Self::Subject(s) => s,
+            Self::Object(o) => o,
+        }
+    }
+
+    pub fn polars_data_type(&self) -> DataType {
+        let (iri_prefix, iri_suffix) = match self {
+            Self::Subject(_) => (IRI_SUBJECT_PREFIX_FIELD, IRI_SUBJECT_SUFFIX_FIELD),
+            Self::Object(_) => (IRI_OBJECT_PREFIX_FIELD, IRI_OBJECT_SUFFIX_FIELD),
+        };
+
+        let node_type = &self.clone().unwrap();
+        match &node_type {
+            RDFNodeType::IRI => DataType::Struct(vec![
+                Field::new(
+                    iri_prefix.into(),
+                    DataType::Categorical(None, CategoricalOrdering::Physical),
+                ),
+                Field::new(iri_suffix.into(), DataType::String),
+            ]),
+            RDFNodeType::MultiType(types) => {
+                let mut fields = Vec::new();
+                for t in types {
+                    let n = base_col_name(t);
+                    if t.is_lang_string() {
+                        fields.push(Field::new(
+                            PlSmallStr::from_str(LANG_STRING_VALUE_FIELD),
+                            DataType::Categorical(None, CategoricalOrdering::Physical),
+                        ));
+                        fields.push(Field::new(
+                            PlSmallStr::from_str(LANG_STRING_LANG_FIELD),
+                            DataType::Categorical(None, CategoricalOrdering::Physical),
+                        ));
+                    } else if t.is_iri() {
+                        fields.push(Field::new(
+                            PlSmallStr::from_str(iri_prefix),
+                            DataType::Categorical(None, CategoricalOrdering::Physical),
+                        ));
+                        fields.push(Field::new(
+                            PlSmallStr::from_str(iri_suffix),
+                            DataType::String,
+                        ));
+                    } else {
+                        fields.push(Field::new(PlSmallStr::from_str(&n), t.polars_data_type()));
+                    }
+                }
+                DataType::Struct(fields)
+            }
+            _ => BaseRDFNodeType::from_rdf_node_type(&node_type).polars_data_type(),
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum RDFNodeTypeRef<'a> {
@@ -95,40 +160,7 @@ where
 
 impl RDFNodeType {
     pub fn polars_data_type(&self) -> DataType {
-        match self {
-            RDFNodeType::IRI => BaseRDFNodeType::IRI.polars_data_type(),
-            RDFNodeType::BlankNode => BaseRDFNodeType::BlankNode.polars_data_type(),
-            RDFNodeType::Literal(_) => BaseRDFNodeType::from_rdf_node_type(self).polars_data_type(),
-            RDFNodeType::None => BaseRDFNodeType::None.polars_data_type(),
-            RDFNodeType::MultiType(types) => {
-                let mut fields = Vec::new();
-                for t in types {
-                    let n = base_col_name(t);
-                    if t.is_lang_string() {
-                        fields.push(Field::new(
-                            PlSmallStr::from_str(LANG_STRING_VALUE_FIELD),
-                            DataType::Categorical(None, CategoricalOrdering::Physical),
-                        ));
-                        fields.push(Field::new(
-                            PlSmallStr::from_str(LANG_STRING_LANG_FIELD),
-                            DataType::Categorical(None, CategoricalOrdering::Physical),
-                        ));
-                    } else if t.is_iri() {
-                        fields.push(Field::new(
-                            PlSmallStr::from_str(IRI_PREFIX_FIELD),
-                            DataType::Categorical(None, CategoricalOrdering::Physical),
-                        ));
-                        fields.push(Field::new(
-                            PlSmallStr::from_str(IRI_SUFFIX_FIELD),
-                            DataType::String,
-                        ));
-                    } else {
-                        fields.push(Field::new(PlSmallStr::from_str(&n), t.polars_data_type()));
-                    }
-                }
-                DataType::Struct(fields)
-            }
-        }
+        BaseRDFNodeType::from_rdf_node_type(self).polars_data_type()
     }
 }
 
@@ -272,13 +304,6 @@ impl BaseRDFNodeType {
 
     pub fn polars_data_type(&self) -> DataType {
         match self {
-            BaseRDFNodeType::IRI => DataType::Struct(vec![
-                Field::new(
-                    IRI_PREFIX_FIELD.into(),
-                    DataType::Categorical(None, CategoricalOrdering::Physical),
-                ),
-                Field::new(IRI_SUFFIX_FIELD.into(), DataType::String),
-            ]),
             BaseRDFNodeType::BlankNode => DataType::String,
             BaseRDFNodeType::Literal(l) => match l.as_ref() {
                 xsd::STRING => DataType::String,
@@ -298,6 +323,8 @@ impl BaseRDFNodeType {
                 _ => DataType::String,
             },
             BaseRDFNodeType::None => DataType::Boolean,
+            // TODO: Should this panic?
+            BaseRDFNodeType::IRI => DataType::String,
         }
     }
 
