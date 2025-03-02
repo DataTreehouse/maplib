@@ -3,9 +3,9 @@ use crate::{BaseRDFNodeType, RDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VA
 use oxrdf::vocab::{rdf, xsd};
 use polars::datatypes::PlSmallStr;
 use polars::prelude::{
-    all_horizontal, as_struct, col, lit, when, CategoricalOrdering, DataFrame, DataType, Expr,
-    IntoLazy, JoinArgs, JoinType, LazyFrame, LazyGroupBy, LiteralValue, MaintainOrderJoin,
-    UniqueKeepStrategy,
+    all_horizontal, as_struct, col, lit, when, CategoricalOrdering, Column, DataFrame, DataType,
+    Expr, IntoColumn, IntoLazy, JoinArgs, JoinType, LazyFrame, LazyGroupBy, LiteralValue,
+    MaintainOrderJoin, UniqueKeepStrategy,
 };
 
 use std::collections::{HashMap, HashSet};
@@ -29,6 +29,41 @@ pub fn convert_lf_col_to_multitype(c: &str, dt: &RDFNodeType) -> Expr {
         RDFNodeType::None => as_struct(vec![col(c).alias(MULTI_NONE_DT)]).alias(c),
         RDFNodeType::MultiType(..) => col(c),
     }
+}
+
+pub fn extract_lang_literal_from_multitype(column: &Column, colname: String) -> Column {
+    let mut lf = DataFrame::new(vec![
+        column
+            .struct_()
+            .unwrap()
+            .field_by_name(LANG_STRING_VALUE_FIELD)
+            .unwrap()
+            .cast(&DataType::String)
+            .unwrap()
+            .clone()
+            .into_column(),
+        column
+            .struct_()
+            .unwrap()
+            .field_by_name(LANG_STRING_LANG_FIELD)
+            .unwrap()
+            .cast(&DataType::String)
+            .unwrap()
+            .clone()
+            .into_column(),
+    ])
+    .unwrap()
+    .lazy();
+    lf = lf.with_column(
+        as_struct(vec![
+            col(LANG_STRING_LANG_FIELD),
+            col(LANG_STRING_VALUE_FIELD),
+        ])
+        .alias(&colname),
+    );
+    let df = lf.collect();
+    let ser = df.unwrap().drop_in_place(&colname).unwrap();
+    return ser;
 }
 
 pub fn base_col_name(dt: &BaseRDFNodeType) -> String {
