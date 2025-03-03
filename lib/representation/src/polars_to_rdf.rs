@@ -1,5 +1,7 @@
 use crate::errors::RepresentationError;
-use crate::multitype::{all_multi_main_cols, extract_lang_literal_from_multitype, MULTI_BLANK_DT, MULTI_IRI_DT, MULTI_NONE_DT};
+use crate::multitype::{
+    extract_column_from_multitype, MULTI_BLANK_DT, MULTI_IRI_DT, MULTI_NONE_DT,
+};
 use crate::rdf_to_polars::{
     polars_literal_values_to_series, rdf_literal_to_polars_literal_value,
     rdf_owned_blank_node_to_polars_literal_value, rdf_owned_named_node_to_polars_literal_value,
@@ -47,21 +49,9 @@ pub fn column_as_terms(column: &Column, t: &RDFNodeType) -> Vec<Option<Term>> {
         }
         RDFNodeType::MultiType(types) => {
             let mut iters: Vec<IntoIter<Option<Term>>> = vec![];
-            for (t, colname) in types.iter().zip(all_multi_main_cols(types)) {
-                let v = if t.is_lang_string() {
-                    let ser = extract_lang_literal_from_multitype(column, colname);
-                    basic_rdf_node_type_column_to_term_vec(&ser, t)
-                } else {
-                    basic_rdf_node_type_column_to_term_vec(
-                        &column
-                            .struct_()
-                            .unwrap()
-                            .field_by_name(&colname)
-                            .unwrap()
-                            .into_column(),
-                        t,
-                    )
-                };
+            for t in types {
+                let type_column = extract_column_from_multitype(column, t);
+                let v = basic_rdf_node_type_column_to_term_vec(&type_column, t);
                 iters.push(v.into_iter())
             }
             let mut final_terms = vec![];
