@@ -31,39 +31,46 @@ pub fn convert_lf_col_to_multitype(c: &str, dt: &RDFNodeType) -> Expr {
     }
 }
 
-pub fn extract_lang_literal_from_multitype(column: &Column, colname: String) -> Column {
-    let mut lf = DataFrame::new(vec![
-        column
-            .struct_()
+/// Takes a Column containing a multitype and extracts a column corresponding to the subtype specified
+pub fn extract_column_from_multitype(
+    multitype_column: &Column,
+    subtype: &BaseRDFNodeType,
+) -> Column {
+    let mt_struct = multitype_column.struct_().unwrap();
+    let colname = base_col_name(subtype);
+    match subtype {
+        BaseRDFNodeType::Literal(_) if subtype.is_lang_string() => {
+            let mut lf = DataFrame::new(vec![
+                mt_struct
+                    .field_by_name(LANG_STRING_VALUE_FIELD)
+                    .unwrap()
+                    .cast(&DataType::String)
+                    .unwrap()
+                    .clone()
+                    .into_column(),
+                mt_struct
+                    .field_by_name(LANG_STRING_LANG_FIELD)
+                    .unwrap()
+                    .cast(&DataType::String)
+                    .unwrap()
+                    .clone()
+                    .into_column(),
+            ])
             .unwrap()
-            .field_by_name(LANG_STRING_VALUE_FIELD)
-            .unwrap()
-            .cast(&DataType::String)
-            .unwrap()
-            .clone()
-            .into_column(),
-        column
-            .struct_()
-            .unwrap()
-            .field_by_name(LANG_STRING_LANG_FIELD)
-            .unwrap()
-            .cast(&DataType::String)
-            .unwrap()
-            .clone()
-            .into_column(),
-    ])
-    .unwrap()
-    .lazy();
-    lf = lf.with_column(
-        as_struct(vec![
-            col(LANG_STRING_LANG_FIELD),
-            col(LANG_STRING_VALUE_FIELD),
-        ])
-        .alias(&colname),
-    );
-    let df = lf.collect();
-    let ser = df.unwrap().drop_in_place(&colname).unwrap();
-    return ser;
+            .lazy();
+            lf = lf.with_column(
+                as_struct(vec![
+                    col(LANG_STRING_LANG_FIELD),
+                    col(LANG_STRING_VALUE_FIELD),
+                ])
+                .alias(&colname),
+            );
+            let df = lf.collect();
+            let ser = df.unwrap().drop_in_place(&colname).unwrap();
+            return ser;
+        }
+        _ => return mt_struct.field_by_name(&colname).unwrap().into_column(),
+    }
 }
 
 pub fn base_col_name(dt: &BaseRDFNodeType) -> String {
