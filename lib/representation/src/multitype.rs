@@ -5,7 +5,7 @@ use polars::datatypes::PlSmallStr;
 use polars::prelude::{
     all_horizontal, as_struct, col, lit, when, CategoricalOrdering, Column, DataFrame, DataType,
     Expr, IntoColumn, IntoLazy, JoinArgs, JoinType, LazyFrame, LazyGroupBy, LiteralValue,
-    MaintainOrderJoin, UniqueKeepStrategy,
+    MaintainOrderJoin, Selector, UniqueKeepStrategy,
 };
 
 use std::collections::{HashMap, HashSet};
@@ -64,6 +64,15 @@ pub fn extract_column_from_multitype(
                     col(LANG_STRING_VALUE_FIELD),
                 ])
                 .alias(&colname),
+            );
+            // The LANG_STRING_VALUE_FIELD is what is used to store
+            // the struct containing { LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD }
+            lf = lf.drop(
+                [
+                    Selector::new(col(LANG_STRING_LANG_FIELD)),
+                    // Selector::new(col(LANG_STRING_VALUE_FIELD)),
+                ]
+                .into_iter(),
             );
             let df = lf.collect();
             let ser = df.unwrap().drop_in_place(&colname).unwrap();
