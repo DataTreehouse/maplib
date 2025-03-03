@@ -94,11 +94,7 @@ where
 impl RDFNodeType {
     pub fn polars_data_type(&self) -> DataType {
         match self {
-            RDFNodeType::IRI => BaseRDFNodeType::IRI.polars_data_type(),
-            RDFNodeType::BlankNode => BaseRDFNodeType::BlankNode.polars_data_type(),
-            RDFNodeType::Literal(_) => BaseRDFNodeType::from_rdf_node_type(self).polars_data_type(),
-            RDFNodeType::None => BaseRDFNodeType::None.polars_data_type(),
-            RDFNodeType::MultiType(types) => {
+            Self::MultiType(types) => {
                 let mut fields = Vec::new();
                 for t in types {
                     let n = base_col_name(t);
@@ -117,6 +113,9 @@ impl RDFNodeType {
                 }
                 DataType::Struct(fields)
             }
+            Self::IRI | Self::BlankNode | Self::Literal(_) | Self::None => {
+                BaseRDFNodeType::from_rdf_node_type(self).polars_data_type()
+            }
         }
     }
 }
@@ -131,7 +130,7 @@ pub enum BaseRDFNodeTypeRef<'a> {
 
 impl BaseRDFNodeTypeRef<'_> {
     pub fn is_lang_string(&self) -> bool {
-        if let BaseRDFNodeTypeRef::Literal(l) = self {
+        if let Self::Literal(l) = self {
             l == &rdf::LANG_STRING
         } else {
             false
@@ -149,10 +148,10 @@ impl BaseRDFNodeTypeRef<'_> {
 
     pub fn as_str(&self) -> &str {
         match self {
-            BaseRDFNodeTypeRef::IRI => MULTI_IRI_DT,
-            BaseRDFNodeTypeRef::BlankNode => MULTI_BLANK_DT,
-            BaseRDFNodeTypeRef::Literal(l) => l.as_str(),
-            BaseRDFNodeTypeRef::None => MULTI_NONE_DT,
+            Self::IRI => MULTI_IRI_DT,
+            Self::BlankNode => MULTI_BLANK_DT,
+            Self::Literal(l) => l.as_str(),
+            Self::None => MULTI_NONE_DT,
         }
     }
 }
@@ -200,10 +199,10 @@ pub enum BaseRDFNodeType {
 impl From<BaseRDFNodeType> for RDFNodeType {
     fn from(val: BaseRDFNodeType) -> Self {
         match val {
-            BaseRDFNodeType::IRI => RDFNodeType::IRI,
-            BaseRDFNodeType::BlankNode => RDFNodeType::BlankNode,
-            BaseRDFNodeType::Literal(l) => RDFNodeType::Literal(l),
-            BaseRDFNodeType::None => RDFNodeType::None,
+            BaseRDFNodeType::IRI => Self::IRI,
+            BaseRDFNodeType::BlankNode => Self::BlankNode,
+            BaseRDFNodeType::Literal(l) => Self::Literal(l),
+            BaseRDFNodeType::None => Self::None,
         }
     }
 }
@@ -211,29 +210,29 @@ impl From<BaseRDFNodeType> for RDFNodeType {
 impl BaseRDFNodeType {
     pub fn as_ref(&self) -> BaseRDFNodeTypeRef {
         match self {
-            BaseRDFNodeType::IRI => BaseRDFNodeTypeRef::IRI,
-            BaseRDFNodeType::BlankNode => BaseRDFNodeTypeRef::BlankNode,
-            BaseRDFNodeType::Literal(l) => BaseRDFNodeTypeRef::Literal(l.as_ref()),
-            BaseRDFNodeType::None => BaseRDFNodeTypeRef::None,
+            Self::IRI => BaseRDFNodeTypeRef::IRI,
+            Self::BlankNode => BaseRDFNodeTypeRef::BlankNode,
+            Self::Literal(l) => BaseRDFNodeTypeRef::Literal(l.as_ref()),
+            Self::None => BaseRDFNodeTypeRef::None,
         }
     }
 
-    pub fn from_rdf_node_type(r: &RDFNodeType) -> BaseRDFNodeType {
+    pub fn from_rdf_node_type(r: &RDFNodeType) -> Self {
         match r {
-            RDFNodeType::IRI => BaseRDFNodeType::IRI,
-            RDFNodeType::BlankNode => BaseRDFNodeType::BlankNode,
-            RDFNodeType::Literal(l) => BaseRDFNodeType::Literal(l.clone()),
-            RDFNodeType::None => BaseRDFNodeType::None,
+            RDFNodeType::IRI => Self::IRI,
+            RDFNodeType::BlankNode => Self::BlankNode,
+            RDFNodeType::Literal(l) => Self::Literal(l.clone()),
+            RDFNodeType::None => Self::None,
             RDFNodeType::MultiType(_) => {
                 panic!()
             }
         }
     }
     pub fn is_iri(&self) -> bool {
-        self == &BaseRDFNodeType::IRI
+        self == &Self::IRI
     }
     pub fn is_blank_node(&self) -> bool {
-        self == &BaseRDFNodeType::BlankNode
+        self == &Self::BlankNode
     }
 
     pub fn is_lang_string(&self) -> bool {
@@ -249,7 +248,7 @@ impl BaseRDFNodeType {
         }
     }
 
-    pub fn from_term(term: &Term) -> BaseRDFNodeType {
+    pub fn from_term(term: &Term) -> Self {
         match term {
             Term::NamedNode(_) => BaseRDFNodeType::IRI,
             Term::BlankNode(_) => BaseRDFNodeType::BlankNode,
@@ -286,16 +285,16 @@ impl BaseRDFNodeType {
 
     pub fn from_string(s: String) -> Self {
         if s == MULTI_IRI_DT {
-            BaseRDFNodeType::IRI
+            Self::IRI
         } else if s == MULTI_BLANK_DT {
-            BaseRDFNodeType::BlankNode
+            Self::BlankNode
         } else if s == MULTI_NONE_DT {
-            BaseRDFNodeType::None
+            Self::None
         } else {
             if s.starts_with("<") {
                 todo!();
             }
-            BaseRDFNodeType::Literal(NamedNode::new_unchecked(s))
+            Self::Literal(NamedNode::new_unchecked(s))
         }
     }
 }
@@ -303,16 +302,16 @@ impl BaseRDFNodeType {
 impl Display for BaseRDFNodeType {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            BaseRDFNodeType::IRI => {
+            Self::IRI => {
                 write!(f, "{RDF_NODE_TYPE_IRI}")
             }
-            BaseRDFNodeType::BlankNode => {
+            Self::BlankNode => {
                 write!(f, "{RDF_NODE_TYPE_BLANK_NODE}")
             }
-            BaseRDFNodeType::Literal(l) => {
+            Self::Literal(l) => {
                 write!(f, "{}", l)
             }
-            BaseRDFNodeType::None => {
+            Self::None => {
                 write!(f, "{RDF_NODE_TYPE_NONE}")
             }
         }
@@ -322,28 +321,19 @@ impl Display for BaseRDFNodeType {
 impl Display for RDFNodeType {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            RDFNodeType::IRI => {
-                write!(f, "{RDF_NODE_TYPE_IRI}")
-            }
-            RDFNodeType::BlankNode => {
-                write!(f, "{RDF_NODE_TYPE_BLANK_NODE}")
-            }
-            RDFNodeType::Literal(l) => {
-                write!(f, "{}", l)
-            }
-            RDFNodeType::None => {
-                write!(f, "{RDF_NODE_TYPE_NONE}")
-            }
-            RDFNodeType::MultiType(types) => {
+            Self::MultiType(types) => {
                 let type_strings: Vec<_> = types.iter().map(|x| x.to_string()).collect();
                 write!(f, "Multiple({})", type_strings.join(", "))
+            }
+            Self::IRI | Self::BlankNode | Self::Literal(_) | Self::None => {
+                BaseRDFNodeType::from_rdf_node_type(self).fmt(f)
             }
         }
     }
 }
 
 impl RDFNodeType {
-    pub fn infer_from_term_pattern(tp: &TermPattern) -> Option<Self> {
+    pub fn infer_from_term_pattern(tp: &TermPattern) -> Option<RDFNodeType> {
         match tp {
             TermPattern::NamedNode(_) => Some(RDFNodeType::IRI),
             TermPattern::BlankNode(_) => None,
@@ -355,14 +345,14 @@ impl RDFNodeType {
     }
 
     pub fn is_iri(&self) -> bool {
-        self == &RDFNodeType::IRI
+        self == &Self::IRI
     }
     pub fn is_blank_node(&self) -> bool {
-        self == &RDFNodeType::BlankNode
+        self == &Self::BlankNode
     }
 
     pub fn is_lang_string(&self) -> bool {
-        if let RDFNodeType::Literal(l) = self {
+        if let Self::Literal(l) = self {
             l.as_ref() == rdf::LANG_STRING
         } else {
             false
@@ -370,7 +360,7 @@ impl RDFNodeType {
     }
 
     pub fn is_lit_type(&self, nnref: NamedNodeRef) -> bool {
-        if let RDFNodeType::Literal(l) = self {
+        if let Self::Literal(l) = self {
             if l.as_ref() == nnref {
                 return true;
             }
@@ -388,7 +378,7 @@ impl RDFNodeType {
 
     pub fn is_numeric(&self) -> bool {
         match self {
-            RDFNodeType::Literal(l) => literal_is_numeric(l.as_ref()),
+            Self::Literal(l) => literal_is_numeric(l.as_ref()),
             _ => false,
         }
     }

@@ -3,9 +3,9 @@ use crate::{BaseRDFNodeType, RDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VA
 use oxrdf::vocab::{rdf, xsd};
 use polars::datatypes::PlSmallStr;
 use polars::prelude::{
-    all_horizontal, as_struct, col, lit, when, CategoricalOrdering, DataFrame, DataType, Expr,
-    IntoLazy, JoinArgs, JoinType, LazyFrame, LazyGroupBy, LiteralValue, MaintainOrderJoin,
-    UniqueKeepStrategy,
+    all_horizontal, as_struct, col, lit, when, CategoricalOrdering, Column, DataFrame, DataType,
+    Expr, IntoColumn, IntoLazy, JoinArgs, JoinType, LazyFrame, LazyGroupBy, LiteralValue,
+    MaintainOrderJoin, Selector, UniqueKeepStrategy,
 };
 
 use std::collections::{HashMap, HashSet};
@@ -28,6 +28,57 @@ pub fn convert_lf_col_to_multitype(c: &str, dt: &RDFNodeType) -> Expr {
         }
         RDFNodeType::None => as_struct(vec![col(c).alias(MULTI_NONE_DT)]).alias(c),
         RDFNodeType::MultiType(..) => col(c),
+    }
+}
+
+/// Takes a Column containing a multitype and extracts a column corresponding to the subtype specified
+pub fn extract_column_from_multitype(
+    multitype_column: &Column,
+    subtype: &BaseRDFNodeType,
+) -> Column {
+    let mt_struct = multitype_column.struct_().unwrap();
+    let colname = base_col_name(subtype);
+    match subtype {
+        BaseRDFNodeType::Literal(_) if subtype.is_lang_string() => {
+            let mut lf = DataFrame::new(vec![
+                mt_struct
+                    .field_by_name(LANG_STRING_VALUE_FIELD)
+                    .unwrap()
+                    .cast(&DataType::String)
+                    .unwrap()
+                    .clone()
+                    .into_column(),
+                mt_struct
+                    .field_by_name(LANG_STRING_LANG_FIELD)
+                    .unwrap()
+                    .cast(&DataType::String)
+                    .unwrap()
+                    .clone()
+                    .into_column(),
+            ])
+            .unwrap()
+            .lazy();
+            lf = lf.with_column(
+                as_struct(vec![
+                    col(LANG_STRING_LANG_FIELD),
+                    col(LANG_STRING_VALUE_FIELD),
+                ])
+                .alias(&colname),
+            );
+            // The LANG_STRING_VALUE_FIELD is what is used to store
+            // the struct containing { LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD }
+            lf = lf.drop(
+                [
+                    Selector::new(col(LANG_STRING_LANG_FIELD)),
+                    // Selector::new(col(LANG_STRING_VALUE_FIELD)),
+                ]
+                .into_iter(),
+            );
+            let df = lf.collect();
+            let ser = df.unwrap().drop_in_place(&colname).unwrap();
+            return ser;
+        }
+        _ => return mt_struct.field_by_name(&colname).unwrap().into_column(),
     }
 }
 
