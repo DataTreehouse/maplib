@@ -357,10 +357,10 @@ fn lub_type(l: &str) -> IResult<&str, UnresolvedPType> {
 }
 
 fn basic_type(b: &str) -> IResult<&str, UnresolvedPType> {
-    let (b, t) = prefixed_name(b)?;
+    let (b, t) = iri(b)?;
     Ok((
         b,
-        UnresolvedPType::Basic(ResolvesToNamedNode::PrefixedName(t)),
+        UnresolvedPType::Basic(t),
     ))
 }
 

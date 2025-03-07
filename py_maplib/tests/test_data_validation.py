@@ -650,6 +650,34 @@ def test_constant_arg_has_valid_subtype():
     assert r.rdf_types["c"] == RDFType.IRI()
 
 
+
+def test_iri_datatype():
+    templates = """
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+<http://example.net/ns#ExampleNestedTemplate> [ ?a, ?b, <http://www.w3.org/1999/02/22-rdf-syntax-ns#Resource> ?c ] :: {
+  ottr:Triple(?a, ?b, ?c)
+} . 
+<http://example.net/ns#ExampleTemplate> [ ] :: {
+    <http://example.net/ns#ExampleNestedTemplate>(<http://example.net/ns#MyObject>,<http://example.net/ns#hasValueList>, rdf:type)
+} . 
+    """
+    mapping = Mapping(templates)
+    mapping.expand("http://example.net/ns#ExampleTemplate")
+    r = mapping.query(
+        """
+    SELECT ?a ?b ?c WHERE {
+        ?a ?b ?c
+    }
+    """,
+        include_datatypes=True,
+    )
+    assert r.mappings.height == 1
+    assert r.rdf_types["c"] == RDFType.IRI()
+
+
 @pytest.mark.skip("Missing general validation logic")
 def test_constant_arg_has_invalid_subtype():
     templates = """
