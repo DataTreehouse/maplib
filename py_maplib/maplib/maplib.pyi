@@ -400,7 +400,7 @@ class Mapping:
         self,
         df: DataFrame,
         primary_key_column: str,
-        dry_run: bool = false,
+        dry_run: bool = False,
         graph: str = None,
         types: Dict[str, RDFType] = None,
         validate_iris: bool = True,
