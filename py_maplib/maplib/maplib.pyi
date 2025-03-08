@@ -400,9 +400,9 @@ class Mapping:
         self,
         df: DataFrame,
         primary_key_column: str,
-        template_prefix: str = None,
-        predicate_uri_prefix: str = None,
+        dry_run: bool = false,
         graph: str = None,
+        types: Dict[str, RDFType] = None,
         validate_iris: bool = True,
         delay_index: bool = True,
     ) -> str:
@@ -415,9 +415,9 @@ class Mapping:
 
         :param df: DataFrame where the columns have the same names as the template arguments
         :param primary_key_column: This column will be the subject of all triples in the generated template.
-        :param template_prefix: Prefix of the template - the name is auto-generated.
-        :param predicate_uri_prefix: Prefix of the predicates/verbs in the generated template, names are derived from column names.
+        :param dry_run: Do not expand the template, only return the string.
         :param graph: The IRI of the graph to add triples to.
+        :param types: The types of the columns.
         :param validate_iris: Validate any IRI-columns.
         :param delay_index: Delay index construction - reduces write amplification when doing many expansions
         :return: The generated template

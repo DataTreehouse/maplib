@@ -2,17 +2,17 @@ use super::Mapping;
 use crate::mapping::errors::MappingError;
 use crate::mapping::ExpandOptions;
 use log::warn;
+use std::collections::HashMap;
 use templates::ast::{
     Argument, ConstantTerm, ConstantTermOrList, Instance, ListExpanderType, PType, Parameter,
     Signature, StottrTerm, Template,
 };
-use templates::constants::{
-    DEFAULT_PREDICATE_URI_PREFIX, DEFAULT_TEMPLATE_PREFIX, OTTR_IRI, OTTR_TRIPLE,
-};
+use templates::constants::{DEFAULT_PREFIX, OTTR_IRI, OTTR_TRIPLE};
 
+use crate::mapping::expansion::validation::infer_type_from_column;
 use oxrdf::{NamedNode, Variable};
 use polars::prelude::{col, DataFrame, DataType, IntoLazy};
-use uuid::Uuid;
+use templates::MappingColumnType;
 
 impl Mapping {
     pub fn expand_default(
@@ -20,13 +20,10 @@ impl Mapping {
         mut df: DataFrame,
         pk_col: String,
         fk_cols: Vec<String>,
-        template_prefix: Option<String>,
-        predicate_prefix_uri: Option<String>,
+        dry_run: bool,
+        mapping_column_types: Option<HashMap<String, MappingColumnType>>,
         options: ExpandOptions,
     ) -> Result<Template, MappingError> {
-        let use_template_prefix = template_prefix.unwrap_or(DEFAULT_TEMPLATE_PREFIX.to_string());
-        let use_predicate_uri_prefix =
-            predicate_prefix_uri.unwrap_or(DEFAULT_PREDICATE_URI_PREFIX.to_string());
         let mut params = vec![];
         let columns: Vec<String> = df
             .get_column_names()
@@ -84,10 +81,22 @@ impl Mapping {
                     default_value: None,
                 })
             } else {
+                let t = if let Some(map) = &mapping_column_types {
+                    if let Some(t) = map.get(c.as_str()) {
+                        Some(t.clone())
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+                let t = t.unwrap_or(infer_type_from_column(df.column(&c).unwrap())?);
+                let pt = t.as_ptype();
+
                 params.push(Parameter {
                     optional: has_null,
                     non_blank: false,
-                    ptype: None,
+                    ptype: Some(pt),
                     variable: Variable::new_unchecked(c),
                     default_value: None,
                 });
@@ -105,7 +114,7 @@ impl Mapping {
 
                 patterns.push(Instance {
                     list_expander: list_expander.clone(),
-                    template_name: NamedNode::new(OTTR_TRIPLE).unwrap(),
+                    template_name: NamedNode::new_unchecked(OTTR_TRIPLE),
                     prefixed_template_name: Some("ottr:Triple".to_string()),
                     argument_list: vec![
                         Argument {
@@ -115,10 +124,10 @@ impl Mapping {
                         Argument {
                             list_expand: false,
                             term: StottrTerm::ConstantTerm(ConstantTermOrList::ConstantTerm(
-                                ConstantTerm::Iri(
-                                    NamedNode::new(format!("{}{}", &use_predicate_uri_prefix, c))
-                                        .unwrap(),
-                                ),
+                                ConstantTerm::Iri(NamedNode::new(format!(
+                                    "{}{}",
+                                    DEFAULT_PREFIX, c
+                                ))?),
                             )),
                         },
                         Argument {
@@ -130,19 +139,29 @@ impl Mapping {
             }
         }
 
-        let template_uuid = Uuid::new_v4().to_string();
-        let template_name = format!("{}{}", use_template_prefix, &template_uuid);
+        let template_name = format!(
+            "{}default_template_{}",
+            DEFAULT_PREFIX, &self.default_template_counter
+        );
+        self.default_template_counter = self.default_template_counter + 1;
         let template = Template {
             signature: Signature {
                 template_name: NamedNode::new(template_name.clone()).unwrap(),
-                template_prefixed_name: Some(format!("prefix:{}", template_uuid)),
+                template_prefixed_name: None,
                 parameter_list: params,
                 annotation_list: None,
             },
             pattern_list: patterns,
         };
-        self.template_dataset.templates.push(template.clone());
-        self.expand(template_name.as_str(), Some(df), None, options)?;
+        if !dry_run {
+            self.template_dataset.templates.push(template.clone());
+            self.expand(
+                template_name.as_str(),
+                Some(df),
+                mapping_column_types,
+                options,
+            )?;
+        }
         Ok(template)
     }
 }

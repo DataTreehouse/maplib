@@ -823,7 +823,7 @@ fn test_default() {
             df,
             "subject".to_string(),
             vec![],
-            None,
+            false,
             None,
             Default::default(),
         )
@@ -835,7 +835,7 @@ fn test_default() {
         Triple {
             subject: Subject::NamedNode(NamedNode::new_unchecked("http://example.net/ns#obj1")),
             predicate: NamedNode::new_unchecked(
-                "https://github.com/magbak/maplib/Predicates#myVar1",
+                "urn:maplib_default:myVar1",
             ),
             object: Term::Literal(Literal::new_typed_literal(
                 "1",
@@ -845,7 +845,7 @@ fn test_default() {
         Triple {
             subject: Subject::NamedNode(NamedNode::new_unchecked("http://example.net/ns#obj1")),
             predicate: NamedNode::new_unchecked(
-                "https://github.com/magbak/maplib/Predicates#myVar1",
+                "urn:maplib_default:myVar1",
             ),
             object: Term::Literal(Literal::new_typed_literal(
                 "2",
@@ -855,7 +855,7 @@ fn test_default() {
         Triple {
             subject: Subject::NamedNode(NamedNode::new_unchecked("http://example.net/ns#obj1")),
             predicate: NamedNode::new_unchecked(
-                "https://github.com/magbak/maplib/Predicates#myVar2",
+                "urn:maplib_default:myVar2",
             ),
             object: Term::Literal(Literal::new_typed_literal(
                 "5",
@@ -865,7 +865,7 @@ fn test_default() {
         Triple {
             subject: Subject::NamedNode(NamedNode::new_unchecked("http://example.net/ns#obj1")),
             predicate: NamedNode::new_unchecked(
-                "https://github.com/magbak/maplib/Predicates#myVar2",
+                "urn:maplib_default:myVar2",
             ),
             object: Term::Literal(Literal::new_typed_literal(
                 "6",
@@ -875,7 +875,7 @@ fn test_default() {
         Triple {
             subject: Subject::NamedNode(NamedNode::new_unchecked("http://example.net/ns#obj2")),
             predicate: NamedNode::new_unchecked(
-                "https://github.com/magbak/maplib/Predicates#myVar2",
+                "urn:maplib_default:myVar2",
             ),
             object: Term::Literal(Literal::new_typed_literal(
                 "7",
@@ -917,7 +917,7 @@ fn test_default_list() {
             df,
             "subject".to_string(),
             vec![],
-            None,
+            false,
             None,
             Default::default(),
         )
@@ -929,7 +929,7 @@ fn test_default_list() {
         Triple {
             subject: Subject::NamedNode(NamedNode::new_unchecked("http://example.net/ns#obj1")),
             predicate: NamedNode::new_unchecked(
-                "https://github.com/magbak/maplib/Predicates#myList1",
+                "urn:maplib_default:myList1",
             ),
             object: Term::Literal(Literal::new_typed_literal(
                 "1",
@@ -939,7 +939,7 @@ fn test_default_list() {
         Triple {
             subject: Subject::NamedNode(NamedNode::new_unchecked("http://example.net/ns#obj1")),
             predicate: NamedNode::new_unchecked(
-                "https://github.com/magbak/maplib/Predicates#myList1",
+                "urn:maplib_default:myList1",
             ),
             object: Term::Literal(Literal::new_typed_literal(
                 "2",
@@ -949,7 +949,7 @@ fn test_default_list() {
         Triple {
             subject: Subject::NamedNode(NamedNode::new_unchecked("http://example.net/ns#obj1")),
             predicate: NamedNode::new_unchecked(
-                "https://github.com/magbak/maplib/Predicates#myList2",
+                "urn:maplib_default:myList2",
             ),
             object: Term::Literal(Literal::new_typed_literal(
                 "5",
@@ -959,7 +959,7 @@ fn test_default_list() {
         Triple {
             subject: Subject::NamedNode(NamedNode::new_unchecked("http://example.net/ns#obj1")),
             predicate: NamedNode::new_unchecked(
-                "https://github.com/magbak/maplib/Predicates#myList2",
+                "urn:maplib_default:myList2",
             ),
             object: Term::Literal(Literal::new_typed_literal(
                 "6",
@@ -969,7 +969,7 @@ fn test_default_list() {
         Triple {
             subject: Subject::NamedNode(NamedNode::new_unchecked("http://example.net/ns#obj2")),
             predicate: NamedNode::new_unchecked(
-                "https://github.com/magbak/maplib/Predicates#myList2",
+                "urn:maplib_default:myList2",
             ),
             object: Term::Literal(Literal::new_typed_literal(
                 "7",

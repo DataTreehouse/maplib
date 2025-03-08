@@ -246,10 +246,26 @@ impl PyMapping {
                 .map_err(|x| PyMaplibError::from(x))?;
             t_string
         } else if let Ok(s) = template.extract::<String>() {
-            s
+            if s.len() < 100 {
+                s
+            } else {
+                let s = self
+                    .inner
+                    .add_templates_from_string(&s)
+                    .map_err(PyMaplibError::from)?;
+                let s = if let Some(s) = s {
+                    s
+                } else {
+                    return Err(PyMaplibError::FunctionArgumentError(
+                        "Template stOTTR document contained no templates".to_string(),
+                    )
+                    .into());
+                };
+                s.as_str().to_string()
+            }
         } else {
             return Err(PyMaplibError::FunctionArgumentError(
-                "Template must be IRI or str".to_string(),
+                "Template must be Template, IRI or str".to_string(),
             )
             .into());
         };
@@ -305,33 +321,31 @@ impl PyMapping {
         Ok(None)
     }
 
-    #[pyo3(signature = (df, primary_key_column, template_prefix=None, predicate_uri_prefix=None, graph=None, validate_iris=None, delay_index=None))]
+    #[pyo3(signature = (df, primary_key_column, dry_run=None, graph=None, types=None,
+                            validate_iris=None, delay_index=None))]
     fn expand_default(
         &mut self,
         df: &Bound<'_, PyAny>,
         primary_key_column: String,
-        template_prefix: Option<String>,
-        predicate_uri_prefix: Option<String>,
+        dry_run: Option<bool>,
         graph: Option<String>,
+        types: Option<HashMap<String, PyRDFType>>,
         validate_iris: Option<bool>,
         delay_index: Option<bool>,
     ) -> PyResult<String> {
         let df = polars_df_to_rust_df(df)?;
         let graph = parse_optional_graph(graph)?;
         let options = ExpandOptions::from_args(graph, validate_iris, delay_index);
-
+        let dry_run = dry_run.unwrap_or(false);
+        let types = map_types(types);
         let tmpl = self
             .inner
-            .expand_default(
-                df,
-                primary_key_column,
-                vec![],
-                template_prefix,
-                predicate_uri_prefix,
-                options,
-            )
+            .expand_default(df, primary_key_column, vec![], dry_run, types, options)
             .map_err(MaplibError::from)
             .map_err(PyMaplibError::from)?;
+        if dry_run {
+            println!("Produced template:\n\n {}", tmpl);
+        }
         Ok(format!("{}", tmpl))
     }
 

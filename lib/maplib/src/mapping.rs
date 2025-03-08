@@ -29,6 +29,7 @@ pub struct Mapping {
     pub base_triplestore: Triplestore,
     pub triplestores_map: HashMap<NamedNode, Triplestore>,
     pub blank_node_counter: usize,
+    pub default_template_counter: usize,
     pub indexing: IndexingOptions,
 }
 
@@ -99,6 +100,7 @@ impl Mapping {
                 .map_err(MappingError::TriplestoreError)?,
             triplestores_map: Default::default(),
             blank_node_counter: 0,
+            default_template_counter: 0,
             indexing,
         })
     }
@@ -153,14 +155,27 @@ impl Mapping {
         Ok(())
     }
 
-    pub fn add_templates_from_string(&mut self, s: &str) -> Result<(), MaplibError> {
+    pub fn add_templates_from_string(&mut self, s: &str) -> Result<Option<NamedNode>, MaplibError> {
         let doc = document_from_str(s).map_err(|x| MaplibError::TemplateError(x))?;
         let dataset =
             TemplateDataset::from_documents(vec![doc]).map_err(MaplibError::TemplateError)?;
+        let return_template_iri = if !dataset.templates.is_empty() {
+            Some(
+                dataset
+                    .templates
+                    .get(0)
+                    .unwrap()
+                    .signature
+                    .template_name
+                    .clone(),
+            )
+        } else {
+            None
+        };
         for t in dataset.templates {
             self.add_template(t)?
         }
-        Ok(())
+        Ok(return_template_iri)
     }
 
     #[allow(clippy::too_many_arguments)]

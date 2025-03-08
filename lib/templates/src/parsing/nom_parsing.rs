@@ -358,10 +358,7 @@ fn lub_type(l: &str) -> IResult<&str, UnresolvedPType> {
 
 fn basic_type(b: &str) -> IResult<&str, UnresolvedPType> {
     let (b, t) = iri(b)?;
-    Ok((
-        b,
-        UnresolvedPType::Basic(t),
-    ))
+    Ok((b, UnresolvedPType::Basic(t)))
 }
 
 fn variable(v: &str) -> IResult<&str, Variable> {

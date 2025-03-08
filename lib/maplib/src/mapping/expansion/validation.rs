@@ -2,6 +2,7 @@ use crate::mapping::errors::MappingError;
 use log::warn;
 use oxiri::Iri;
 use oxrdf::vocab::{rdfs, xsd};
+use oxrdf::NamedNode;
 use polars::datatypes::DataType;
 use polars::frame::DataFrame;
 use polars::prelude::{col, ChunkApply, Column, IntoLazy, Series};
@@ -201,10 +202,32 @@ fn infer_mapping_column_type(
             ptype,
         )?)
     } else {
-        let series_inferred_mapping_column_type =
-            polars_datatype_to_mapping_column_datatype(column.dtype())?;
-        Ok(series_inferred_mapping_column_type)
+        infer_type_from_column(column)
     }
+}
+
+pub fn infer_type_from_column(column: &Column) -> Result<MappingColumnType, MappingError> {
+    if is_iri_col(column) {
+        return Ok(MappingColumnType::Flat(RDFNodeType::IRI));
+    }
+    let series_inferred_mapping_column_type =
+        polars_datatype_to_mapping_column_datatype(column.dtype())?;
+    Ok(series_inferred_mapping_column_type)
+}
+
+fn is_iri_col(column: &Column) -> bool {
+    let dtype = column.dtype();
+    if dtype.is_string() {
+        let strchk = column.str().unwrap();
+        let fnn = strchk.first_non_null();
+        if let Some(fnn) = fnn {
+            let s = strchk.get(fnn).unwrap();
+            if let Ok(_) = NamedNode::new(s) {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 fn infer_validate_mapping_column_type_from_ptype(

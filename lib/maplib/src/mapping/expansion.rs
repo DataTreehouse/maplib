@@ -1,4 +1,4 @@
-mod validation;
+pub mod validation;
 
 use super::{ExpandOptions, Mapping, MappingReport, OTTRTripleInstance, StaticColumn};
 use crate::mapping::constant_terms::{constant_blank_node_to_series, constant_to_expr};

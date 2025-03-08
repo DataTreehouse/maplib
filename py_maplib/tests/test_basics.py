@@ -691,3 +691,123 @@ def test_expand_triples():
     """
     )
     assert_frame_equal(df, expected)
+
+
+
+def test_expand_default_triples():
+    df = pl.DataFrame(
+        {
+            "subject": [
+                "http://example.net/ns#A",
+                "http://example.net/ns#B",
+                "http://example.net/ns#C",
+            ],
+            "object": [
+                "http://example.net/ns#D",
+                "http://example.net/ns#E",
+                "http://example.net/ns#F",
+            ],
+        }
+    )
+    m = Mapping()
+    tpl = m.expand_default(df, primary_key_column="subject")
+    #print(tpl)
+    df = m.query(
+        """
+    SELECT ?a ?b ?c WHERE {?a ?b ?c} ORDER BY ?a ?b ?c
+    """
+    )
+    expected = pl.from_repr(
+        """
+┌───────────────────────────┬────────────────────────────────┬───────────────────────────┐
+│ a                         ┆ b                              ┆ c                         │
+│ ---                       ┆ ---                            ┆ ---                       │
+│ str                       ┆ str                            ┆ str                       │
+╞═══════════════════════════╪════════════════════════════════╪═══════════════════════════╡
+│ <http://example.net/ns#A> ┆ <urn:maplib_default:object>    ┆ <http://example.net/ns#D> │
+│ <http://example.net/ns#B> ┆ <urn:maplib_default:object>    ┆ <http://example.net/ns#E> │
+│ <http://example.net/ns#C> ┆ <urn:maplib_default:object>    ┆ <http://example.net/ns#F> │
+└───────────────────────────┴────────────────────────────────┴───────────────────────────┘
+    """
+    )
+    assert_frame_equal(df, expected)
+
+def test_expand_default_triples_non_iri_object():
+    df = pl.DataFrame(
+        {
+            "subject": [
+                "http://example.net/ns#A",
+                "http://example.net/ns#B",
+                "http://example.net/ns#C",
+            ],
+            "object": [
+                "1",
+                "3",
+                "5",
+            ],
+        }
+    )
+    m = Mapping()
+    tpl = m.expand_default(df, primary_key_column="subject")
+    #print(tpl)
+    df = m.query(
+        """
+    SELECT ?a ?b ?c WHERE {?a ?b ?c} ORDER BY ?a ?b ?c
+    """
+    )
+    expected = pl.from_repr(
+        """
+┌───────────────────────────┬────────────────────────────────┬───────────────────────────┐
+│ a                         ┆ b                              ┆ c                         │
+│ ---                       ┆ ---                            ┆ ---                       │
+│ str                       ┆ str                            ┆ str                       │
+╞═══════════════════════════╪════════════════════════════════╪═══════════════════════════╡
+│ <http://example.net/ns#A> ┆ <urn:maplib_default:object>    ┆ 1                         │
+│ <http://example.net/ns#B> ┆ <urn:maplib_default:object>    ┆ 3                         │
+│ <http://example.net/ns#C> ┆ <urn:maplib_default:object>    ┆ 5                         │
+└───────────────────────────┴────────────────────────────────┴───────────────────────────┘
+    """
+    )
+    assert_frame_equal(df, expected)
+
+
+def test_expand_generated_default_triples_non_iri_object():
+    df = pl.DataFrame(
+        {
+            "subject": [
+                "http://example.net/ns#A",
+                "http://example.net/ns#B",
+                "http://example.net/ns#C",
+            ],
+            "object": [
+                "1",
+                "3",
+                "5",
+            ],
+        }
+    )
+    m = Mapping()
+    tpl = """<urn:maplib_default:default_template_0> [ <http://ns.ottr.xyz/0.4/IRI> ?subject,  <http://www.w3.org/2001/XMLSchema#string> ?object ] :: {
+                ottr:Triple(?subject,<urn:maplib_default:object>,?object)
+            } . """
+    m.expand(tpl, df)
+    df = m.query(
+        """
+    SELECT ?a ?b ?c WHERE {?a ?b ?c} ORDER BY ?a ?b ?c
+    """
+    )
+    expected = pl.from_repr(
+        """
+┌───────────────────────────┬────────────────────────────────┬───────────────────────────┐
+│ a                         ┆ b                              ┆ c                         │
+│ ---                       ┆ ---                            ┆ ---                       │
+│ str                       ┆ str                            ┆ str                       │
+╞═══════════════════════════╪════════════════════════════════╪═══════════════════════════╡
+│ <http://example.net/ns#A> ┆ <urn:maplib_default:object>    ┆ 1                         │
+│ <http://example.net/ns#B> ┆ <urn:maplib_default:object>    ┆ 3                         │
+│ <http://example.net/ns#C> ┆ <urn:maplib_default:object>    ┆ 5                         │
+└───────────────────────────┴────────────────────────────────┴───────────────────────────┘
+    """
+    )
+    assert_frame_equal(df, expected)
+
