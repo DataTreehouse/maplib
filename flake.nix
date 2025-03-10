@@ -4,9 +4,9 @@
     flake-utils.url = "github:numtide/flake-utils";
 
     crane.url = "github:ipetkov/crane";
-    
+
     fenix.url = "github:nix-community/fenix";
-    fenix.inputs.nixpkgs.follows = "nixpkgs";    
+    fenix.inputs.nixpkgs.follows = "nixpkgs";
   };
 
   outputs = { self, flake-utils, nixpkgs, crane, fenix, ... }@inputs:
@@ -16,7 +16,7 @@
 
       fenixSet = fenix.packages.${system}.complete;
       inherit (fenixSet) toolchain;
-      
+
       craneLib = (crane.mkLib pkgs).overrideToolchain toolchain;
 
       rustPlatform = pkgs.makeRustPlatform {
@@ -30,16 +30,17 @@
         fileset = lib.fileset.unions [
           (craneLib.fileset.commonCargoSources root)
           (lib.fileset.fileFilter (file: file.hasExt "md") root)
-          (./py_maplib/LICENSE)
-          (./py_maplib/tests)
+          ./py_maplib/LICENSE
+          ./py_maplib/tests
         ];
       };
 
       cargoVendorDir = craneLib.vendorCargoDeps { inherit src; };
+      cargoArtifacts = craneLib.buildDepsOnly { inherit src; };
 
       python = let
         packageOverrides = self: super: {
-          maplib = self.callPackage ./nix/py_maplib.nix {
+          maplib = self.callPackage ./nix/py_maplib {
             inherit src
               craneLib cargoVendorDir
               rustPlatform;
@@ -66,6 +67,13 @@
 
           fenixSet.rust-analyzer
         ];
+      };
+      checks = {
+        py_pytest = self.packages.${system}.py_maplib.passthru.tests.pytest;
+        cargo_test = craneLib.cargoTest {
+          inherit src cargoArtifacts;
+          inherit (craneLib.crateNameFromCargoToml { cargoToml = ./py_maplib/Cargo.toml; }) pname version;
+        };
       };
       apps = rec {
         python-env = {

@@ -29,7 +29,7 @@ buildPythonPackage rec {
     # This probably breaks cross-compilation
     rustPlatform.rust.rustc
     rustPlatform.rust.cargo
-  
+
     craneLib.configureCargoCommonVarsHook
     craneLib.configureCargoVendoredDepsHook
     rustPlatform.maturinBuildHook
@@ -46,7 +46,6 @@ buildPythonPackage rec {
   buildAndTestSubdir = "py_maplib";
 
   passthru.tests = {
-    pytest = callPackage ./tests.nix { inherit src; };
+    pytest = callPackage ./pytest.nix { inherit src; };
   };
 }
-
