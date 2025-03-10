@@ -1984,7 +1984,7 @@ dependencies = [
 
 [[package]]
 name = "py_maplib"
-version = "0.15.1"
+version = "0.15.4"
 dependencies = [
  "jemallocator",
  "log",
