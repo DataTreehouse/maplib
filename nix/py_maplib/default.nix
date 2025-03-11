@@ -44,8 +44,4 @@ buildPythonPackage rec {
   ];
 
   buildAndTestSubdir = "py_maplib";
-
-  passthru.tests = {
-    pytest = callPackage ./pytest.nix { inherit src; };
-  };
 }

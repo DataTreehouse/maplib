@@ -69,7 +69,14 @@
         ];
       };
       checks = {
-        py_pytest = self.packages.${system}.py_maplib.passthru.tests.pytest;
+        py_pytest = self.legacyPackages.${system}.python.pkgs.callPackage ./nix/py_maplib/pytest.nix {
+          src = lib.fileset.toSource {
+            root = ./.;
+            fileset = lib.fileset.unions [
+              ./py_maplib/tests
+            ];
+          };
+        };
         cargo_test = craneLib.cargoTest {
           inherit src cargoArtifacts;
           inherit (craneLib.crateNameFromCargoToml { cargoToml = ./py_maplib/Cargo.toml; }) pname version;
