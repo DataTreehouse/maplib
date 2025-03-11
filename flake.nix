@@ -31,7 +31,7 @@
           (craneLib.fileset.commonCargoSources root)
           (lib.fileset.fileFilter (file: file.hasExt "md") root)
           ./py_maplib/LICENSE
-          ./py_maplib/tests
+          ./py_maplib
         ];
       };
 
