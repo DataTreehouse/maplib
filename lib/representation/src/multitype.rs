@@ -3,9 +3,9 @@ use crate::{BaseRDFNodeType, RDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VA
 use oxrdf::vocab::{rdf, xsd};
 use polars::datatypes::PlSmallStr;
 use polars::prelude::{
-    all_horizontal, as_struct, col, lit, when, CategoricalOrdering, DataFrame, DataType, Expr,
-    IntoLazy, JoinArgs, JoinType, LazyFrame, LazyGroupBy, LiteralValue, MaintainOrderJoin,
-    UniqueKeepStrategy,
+    all_horizontal, as_struct, col, lit, when, CategoricalOrdering, Column, DataFrame, DataType,
+    Expr, IntoColumn, IntoLazy, JoinArgs, JoinType, LazyFrame, LazyGroupBy, LiteralValue,
+    MaintainOrderJoin, Selector, UniqueKeepStrategy,
 };
 
 use std::collections::{HashMap, HashSet};
@@ -28,6 +28,55 @@ pub fn convert_lf_col_to_multitype(c: &str, dt: &RDFNodeType) -> Expr {
         }
         RDFNodeType::None => as_struct(vec![col(c).alias(MULTI_NONE_DT)]).alias(c),
         RDFNodeType::MultiType(..) => col(c),
+    }
+}
+
+/// Takes a Column containing a multitype and extracts a column corresponding to the subtype specified
+pub fn extract_column_from_multitype(
+    multitype_column: &Column,
+    subtype: &BaseRDFNodeType,
+) -> Column {
+    let colname = base_col_name(subtype);
+    match subtype {
+        BaseRDFNodeType::Literal(_) if subtype.is_lang_string() => filter_multitype(
+            multitype_column,
+            &vec![LANG_STRING_VALUE_FIELD, LANG_STRING_LANG_FIELD],
+            LANG_STRING_VALUE_FIELD,
+        ),
+        _ => filter_multitype(multitype_column, &vec![&colname], &colname),
+    }
+}
+
+/// Takes a column containing a multitype and creates a new column with only the fields specified in the names argument
+fn filter_multitype(multitype_column: &Column, names: &Vec<&str>, col_name: &str) -> Column {
+    let mt_struct = multitype_column.struct_().unwrap();
+
+    match names.len() {
+        0 => panic!("There are probably better ways of constructing an empty column"),
+        1 => {
+            let mut new_column = mt_struct.field_by_name(names[0]).unwrap().into_column();
+            new_column.rename(col_name.into());
+            new_column
+        }
+        _ => {
+            let new_columns: Vec<Column> = names
+                .iter()
+                .map(|n| mt_struct.field_by_name(n).unwrap().clone().into_column())
+                .collect();
+            let mut lf = DataFrame::new(new_columns).unwrap().lazy();
+
+            let struct_exprs: Vec<Expr> = names.iter().map(|&n| col(n)).collect();
+            lf = lf.with_column(as_struct(struct_exprs).alias(col_name));
+
+            let columns_drop_iter = names
+                .iter()
+                .filter(|&n| *n != col_name) // Make sure not to drop col_name even if it overlaps with one of the provided field names
+                .map(|&n| Selector::new(col(n)));
+            lf = lf.drop(columns_drop_iter);
+            let df = lf.collect();
+            let ser = df.unwrap().drop_in_place(&col_name).unwrap();
+            return ser;
+        }
     }
 }
 

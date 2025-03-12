@@ -1,5 +1,7 @@
 use crate::errors::RepresentationError;
-use crate::multitype::{all_multi_main_cols, MULTI_BLANK_DT, MULTI_IRI_DT, MULTI_NONE_DT};
+use crate::multitype::{
+    extract_column_from_multitype, MULTI_BLANK_DT, MULTI_IRI_DT, MULTI_NONE_DT,
+};
 use crate::rdf_to_polars::{
     polars_literal_values_to_series, rdf_literal_to_polars_literal_value,
     rdf_owned_blank_node_to_polars_literal_value, rdf_owned_named_node_to_polars_literal_value,
@@ -47,51 +49,9 @@ pub fn column_as_terms(column: &Column, t: &RDFNodeType) -> Vec<Option<Term>> {
         }
         RDFNodeType::MultiType(types) => {
             let mut iters: Vec<IntoIter<Option<Term>>> = vec![];
-            for (t, colname) in types.iter().zip(all_multi_main_cols(types)) {
-                let v = if t.is_lang_string() {
-                    let mut lf = DataFrame::new(vec![
-                        column
-                            .struct_()
-                            .unwrap()
-                            .field_by_name(LANG_STRING_VALUE_FIELD)
-                            .unwrap()
-                            .cast(&DataType::String)
-                            .unwrap()
-                            .clone()
-                            .into_column(),
-                        column
-                            .struct_()
-                            .unwrap()
-                            .field_by_name(LANG_STRING_LANG_FIELD)
-                            .unwrap()
-                            .cast(&DataType::String)
-                            .unwrap()
-                            .clone()
-                            .into_column(),
-                    ])
-                    .unwrap()
-                    .lazy();
-                    lf = lf.with_column(
-                        as_struct(vec![
-                            col(LANG_STRING_LANG_FIELD),
-                            col(LANG_STRING_VALUE_FIELD),
-                        ])
-                        .alias(&colname),
-                    );
-                    let df = lf.collect();
-                    let ser = df.unwrap().drop_in_place(&colname).unwrap();
-                    basic_rdf_node_type_column_to_term_vec(&ser, t)
-                } else {
-                    basic_rdf_node_type_column_to_term_vec(
-                        &column
-                            .struct_()
-                            .unwrap()
-                            .field_by_name(&colname)
-                            .unwrap()
-                            .into_column(),
-                        t,
-                    )
-                };
+            for t in types {
+                let type_column = extract_column_from_multitype(column, t);
+                let v = basic_rdf_node_type_column_to_term_vec(&type_column, t);
                 iters.push(v.into_iter())
             }
             let mut final_terms = vec![];
@@ -189,36 +149,29 @@ pub fn basic_rdf_node_type_column_to_term_vec(
             .collect(),
         BaseRDFNodeType::Literal(l) => match l.as_ref() {
             rdf::LANG_STRING => {
-                let value_ser = column
-                    .struct_()
-                    .unwrap()
+                let col_struct = column.struct_().unwrap();
+                let value_ser = col_struct
                     .field_by_name(LANG_STRING_VALUE_FIELD)
                     .unwrap()
                     .cast(&DataType::String)
                     .unwrap();
                 let value_iter = value_ser.str().unwrap().into_iter();
-                let lang_ser = column
-                    .struct_()
-                    .unwrap()
+
+                let lang_ser = col_struct
                     .field_by_name(LANG_STRING_LANG_FIELD)
                     .unwrap()
                     .cast(&DataType::String)
                     .unwrap();
                 let lang_iter = lang_ser.str().unwrap().into_iter();
+
                 value_iter
                     .zip(lang_iter)
-                    .map(|(value, lang)| {
-                        if let Some(value) = value {
-                            if let Some(lang) = lang {
-                                Some(Term::Literal(
-                                    Literal::new_language_tagged_literal_unchecked(value, lang),
-                                ))
-                            } else {
-                                panic!()
-                            }
-                        } else {
-                            None
-                        }
+                    .map(|(value, lang)| match (value, lang) {
+                        (Some(v), Some(l)) => Some(Term::Literal(
+                            Literal::new_language_tagged_literal_unchecked(v, l),
+                        )),
+                        (None, None) => None,
+                        _ => panic!(),
                     })
                     .collect()
             }
