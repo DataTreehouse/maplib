@@ -51,6 +51,7 @@ jobs:
           args: -m py_maplib/Cargo.toml --skip-existing -o wheels -u magbak
           maturin-version: ${{ env.MATURIN_VERSION }}
           rust-toolchain: ${{ env.RUST_TOOLCHAIN }}
+          manylinux: 2_24
 
   win-macos:
     needs: security_audit
