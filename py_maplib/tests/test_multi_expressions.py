@@ -292,6 +292,27 @@ def test_coalesce_only_rhs_multi():
     assert sm.mappings.get_column("c").is_null().sum() == 0
 
 
+def test_div_by_unbound_is_unbound():
+    m = Mapping([])
+    sm = m.query(
+        """
+    PREFIX : <http://example.net/> 
+    PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+    SELECT ?a ?b (?a / ?b AS ?c) WHERE {
+    VALUES (?a) { (1) (2) }
+    OPTIONAL {
+        VALUES (?b) { (1.5) (4.5) }
+        FILTER(?a = 1)
+    }
+    }
+    """,
+        include_datatypes=True,
+    )
+    assert sm.mappings.height == 3
+    assert sm.mappings.get_column("c").is_null().sum() == 1
+
+
+
 def test_coalesce_no_multi():
     m = Mapping([])
     sm = m.query(

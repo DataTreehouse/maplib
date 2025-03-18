@@ -98,6 +98,16 @@ pub fn binary_expression(
         .rdf_node_types
         .get(right_context.as_str())
         .unwrap();
+    if &RDFNodeType::None == left_type || &RDFNodeType::None == right_type {
+        solution_mappings.mappings = solution_mappings.mappings.with_column(
+            lit(LiteralValue::Null).cast(BaseRDFNodeType::None.polars_data_type()).alias(outer_context.as_str()),
+        );
+        solution_mappings
+            .rdf_node_types
+            .insert(outer_context.as_str().to_string(), RDFNodeType::None);
+        solution_mappings = drop_inner_contexts(solution_mappings, &vec![left_context, right_context]);
+        return Ok(solution_mappings);
+    }
     let expr = if matches!(expression, Expression::Equal(..)) {
         typed_equals_expr(
             left_context.as_str(),
