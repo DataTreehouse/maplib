@@ -1,6 +1,6 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
-use log::debug;
+use log::trace;
 use oxrdf::Variable;
 
 use query_processing::expressions::contains_graph_pattern;
@@ -23,7 +23,7 @@ impl Triplestore {
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         mut pushdowns: Pushdowns,
     ) -> Result<SolutionMappings, SparqlError> {
-        debug!("Processing extend graph pattern");
+        trace!("Processing extend graph pattern");
         let inner_context = context.extension_with(PathEntry::ExtendInner);
         let expression_context = context.extension_with(PathEntry::ExtendExpression);
         pushdowns.remove_variable(variable);

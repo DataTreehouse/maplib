@@ -1,6 +1,6 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
-use log::debug;
+use log::trace;
 
 use query_processing::graph_patterns::minus;
 use query_processing::pushdowns::Pushdowns;
@@ -19,7 +19,7 @@ impl Triplestore {
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         pushdowns: Pushdowns,
     ) -> Result<SolutionMappings, SparqlError> {
-        debug!("Processing minus graph pattern");
+        trace!("Processing minus graph pattern");
         let left_context = context.extension_with(PathEntry::MinusLeftSide);
         let right_context = context.extension_with(PathEntry::MinusRightSide);
         let left_solution_mappings = self.lazy_graph_pattern(

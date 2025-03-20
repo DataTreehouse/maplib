@@ -1,6 +1,6 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
-use log::debug;
+use log::trace;
 use oxrdf::Variable;
 
 use polars::prelude::JoinType;
@@ -21,7 +21,7 @@ impl Triplestore {
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         mut pushdowns: Pushdowns,
     ) -> Result<SolutionMappings, SparqlError> {
-        debug!("Processing project graph pattern");
+        trace!("Processing project graph pattern");
         let inner_context = context.extension_with(PathEntry::ProjectInner);
         pushdowns.limit_to_variables(variables);
         pushdowns.add_graph_pattern_pushdowns(inner);

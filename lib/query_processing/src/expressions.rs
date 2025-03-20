@@ -100,12 +100,15 @@ pub fn binary_expression(
         .unwrap();
     if &RDFNodeType::None == left_type || &RDFNodeType::None == right_type {
         solution_mappings.mappings = solution_mappings.mappings.with_column(
-            lit(LiteralValue::Null).cast(BaseRDFNodeType::None.polars_data_type()).alias(outer_context.as_str()),
+            lit(LiteralValue::Null)
+                .cast(BaseRDFNodeType::None.polars_data_type())
+                .alias(outer_context.as_str()),
         );
         solution_mappings
             .rdf_node_types
             .insert(outer_context.as_str().to_string(), RDFNodeType::None);
-        solution_mappings = drop_inner_contexts(solution_mappings, &vec![left_context, right_context]);
+        solution_mappings =
+            drop_inner_contexts(solution_mappings, &vec![left_context, right_context]);
         return Ok(solution_mappings);
     }
     let expr = if matches!(expression, Expression::Equal(..)) {
@@ -903,7 +906,6 @@ pub fn func_expression(
                 };
 
                 let pattern = add_regex_feature_flags(regex_lit.value(), flags);
-                debug!("Effective pattern is {}", pattern);
                 let t = solution_mappings
                     .rdf_node_types
                     .get(text_context.as_str())

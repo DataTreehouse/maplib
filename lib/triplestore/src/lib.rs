@@ -447,10 +447,6 @@ pub fn prepare_triples(
             }
         }
     }
-    debug!(
-        "Adding triples took {} seconds",
-        now.elapsed().as_secs_f32()
-    );
     out_df_vec
 }
 
@@ -467,10 +463,6 @@ fn prepare_triples_df(
     }
 
     //TODO: add polars datatype harmonization here.
-    debug!(
-        "Prepare single triple df before it is added took {} seconds",
-        now.elapsed().as_secs_f32()
-    );
     Some(TripleDF {
         df,
         predicate,

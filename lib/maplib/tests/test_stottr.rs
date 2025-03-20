@@ -834,9 +834,7 @@ fn test_default() {
     let expected_triples_set = HashSet::from([
         Triple {
             subject: Subject::NamedNode(NamedNode::new_unchecked("http://example.net/ns#obj1")),
-            predicate: NamedNode::new_unchecked(
-                "urn:maplib_default:myVar1",
-            ),
+            predicate: NamedNode::new_unchecked("urn:maplib_default:myVar1"),
             object: Term::Literal(Literal::new_typed_literal(
                 "1",
                 NamedNode::new_unchecked("http://www.w3.org/2001/XMLSchema#int"),
@@ -844,9 +842,7 @@ fn test_default() {
         },
         Triple {
             subject: Subject::NamedNode(NamedNode::new_unchecked("http://example.net/ns#obj1")),
-            predicate: NamedNode::new_unchecked(
-                "urn:maplib_default:myVar1",
-            ),
+            predicate: NamedNode::new_unchecked("urn:maplib_default:myVar1"),
             object: Term::Literal(Literal::new_typed_literal(
                 "2",
                 NamedNode::new_unchecked("http://www.w3.org/2001/XMLSchema#int"),
@@ -854,9 +850,7 @@ fn test_default() {
         },
         Triple {
             subject: Subject::NamedNode(NamedNode::new_unchecked("http://example.net/ns#obj1")),
-            predicate: NamedNode::new_unchecked(
-                "urn:maplib_default:myVar2",
-            ),
+            predicate: NamedNode::new_unchecked("urn:maplib_default:myVar2"),
             object: Term::Literal(Literal::new_typed_literal(
                 "5",
                 NamedNode::new_unchecked("http://www.w3.org/2001/XMLSchema#int"),
@@ -864,9 +858,7 @@ fn test_default() {
         },
         Triple {
             subject: Subject::NamedNode(NamedNode::new_unchecked("http://example.net/ns#obj1")),
-            predicate: NamedNode::new_unchecked(
-                "urn:maplib_default:myVar2",
-            ),
+            predicate: NamedNode::new_unchecked("urn:maplib_default:myVar2"),
             object: Term::Literal(Literal::new_typed_literal(
                 "6",
                 NamedNode::new_unchecked("http://www.w3.org/2001/XMLSchema#int"),
@@ -874,9 +866,7 @@ fn test_default() {
         },
         Triple {
             subject: Subject::NamedNode(NamedNode::new_unchecked("http://example.net/ns#obj2")),
-            predicate: NamedNode::new_unchecked(
-                "urn:maplib_default:myVar2",
-            ),
+            predicate: NamedNode::new_unchecked("urn:maplib_default:myVar2"),
             object: Term::Literal(Literal::new_typed_literal(
                 "7",
                 NamedNode::new_unchecked("http://www.w3.org/2001/XMLSchema#int"),
@@ -928,9 +918,7 @@ fn test_default_list() {
     let expected_triples_set = HashSet::from([
         Triple {
             subject: Subject::NamedNode(NamedNode::new_unchecked("http://example.net/ns#obj1")),
-            predicate: NamedNode::new_unchecked(
-                "urn:maplib_default:myList1",
-            ),
+            predicate: NamedNode::new_unchecked("urn:maplib_default:myList1"),
             object: Term::Literal(Literal::new_typed_literal(
                 "1",
                 NamedNode::new_unchecked("http://www.w3.org/2001/XMLSchema#int"),
@@ -938,9 +926,7 @@ fn test_default_list() {
         },
         Triple {
             subject: Subject::NamedNode(NamedNode::new_unchecked("http://example.net/ns#obj1")),
-            predicate: NamedNode::new_unchecked(
-                "urn:maplib_default:myList1",
-            ),
+            predicate: NamedNode::new_unchecked("urn:maplib_default:myList1"),
             object: Term::Literal(Literal::new_typed_literal(
                 "2",
                 NamedNode::new_unchecked("http://www.w3.org/2001/XMLSchema#int"),
@@ -948,9 +934,7 @@ fn test_default_list() {
         },
         Triple {
             subject: Subject::NamedNode(NamedNode::new_unchecked("http://example.net/ns#obj1")),
-            predicate: NamedNode::new_unchecked(
-                "urn:maplib_default:myList2",
-            ),
+            predicate: NamedNode::new_unchecked("urn:maplib_default:myList2"),
             object: Term::Literal(Literal::new_typed_literal(
                 "5",
                 NamedNode::new_unchecked("http://www.w3.org/2001/XMLSchema#int"),
@@ -958,9 +942,7 @@ fn test_default_list() {
         },
         Triple {
             subject: Subject::NamedNode(NamedNode::new_unchecked("http://example.net/ns#obj1")),
-            predicate: NamedNode::new_unchecked(
-                "urn:maplib_default:myList2",
-            ),
+            predicate: NamedNode::new_unchecked("urn:maplib_default:myList2"),
             object: Term::Literal(Literal::new_typed_literal(
                 "6",
                 NamedNode::new_unchecked("http://www.w3.org/2001/XMLSchema#int"),
@@ -968,9 +950,7 @@ fn test_default_list() {
         },
         Triple {
             subject: Subject::NamedNode(NamedNode::new_unchecked("http://example.net/ns#obj2")),
-            predicate: NamedNode::new_unchecked(
-                "urn:maplib_default:myList2",
-            ),
+            predicate: NamedNode::new_unchecked("urn:maplib_default:myList2"),
             object: Term::Literal(Literal::new_typed_literal(
                 "7",
                 NamedNode::new_unchecked("http://www.w3.org/2001/XMLSchema#int"),

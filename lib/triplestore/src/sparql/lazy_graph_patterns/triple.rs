@@ -3,7 +3,7 @@ use crate::sparql::errors::SparqlError;
 use representation::query_context::Context;
 use representation::solution_mapping::SolutionMappings;
 
-use log::debug;
+use log::trace;
 use oxrdf::{NamedNode, Subject, Term};
 use polars::prelude::IntoLazy;
 use polars::prelude::{col, lit, AnyValue, DataType, JoinType};
@@ -22,7 +22,7 @@ impl Triplestore {
         context: &Context,
         pushdowns: &mut Pushdowns,
     ) -> Result<SolutionMappings, SparqlError> {
-        debug!(
+        trace!(
             "Processing triple pattern {:?} at {}",
             triple_pattern,
             context.as_str()

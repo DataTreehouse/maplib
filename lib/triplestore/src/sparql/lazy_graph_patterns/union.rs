@@ -1,6 +1,6 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
-use log::debug;
+use log::trace;
 
 use query_processing::graph_patterns::union;
 use query_processing::pushdowns::Pushdowns;
@@ -19,7 +19,7 @@ impl Triplestore {
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         mut pushdowns: Pushdowns,
     ) -> Result<SolutionMappings, SparqlError> {
-        debug!("Processing union graph pattern");
+        trace!("Processing union graph pattern");
         let left_context = context.extension_with(PathEntry::UnionLeftSide);
         let right_context = context.extension_with(PathEntry::UnionRightSide);
         let mut left_pushdowns = pushdowns.clone();

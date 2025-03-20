@@ -1,6 +1,6 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
-use log::debug;
+use log::trace;
 
 use query_processing::graph_patterns::order_by;
 use query_processing::pushdowns::Pushdowns;
@@ -19,7 +19,7 @@ impl Triplestore {
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         pushdowns: Pushdowns,
     ) -> Result<SolutionMappings, SparqlError> {
-        debug!("Processing order by graph pattern");
+        trace!("Processing order by graph pattern");
         let mut output_solution_mappings = self.lazy_graph_pattern(
             inner,
             solution_mappings,

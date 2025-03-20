@@ -1,6 +1,6 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
-use log::debug;
+use log::trace;
 
 use polars::prelude::JoinType;
 use query_processing::expressions::{contains_graph_pattern, drop_inner_contexts};
@@ -23,7 +23,7 @@ impl Triplestore {
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         mut pushdowns: Pushdowns,
     ) -> Result<SolutionMappings, SparqlError> {
-        debug!("Processing left join graph pattern");
+        trace!("Processing left join graph pattern");
         let left_context = context.extension_with(PathEntry::LeftJoinLeftSide);
         let right_context = context.extension_with(PathEntry::LeftJoinRightSide);
         let expression_context = context.extension_with(PathEntry::LeftJoinExpression);

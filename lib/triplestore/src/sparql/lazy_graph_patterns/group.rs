@@ -1,6 +1,6 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
-use log::debug;
+use log::trace;
 use oxrdf::Variable;
 
 use query_processing::aggregates::AggregateReturn;
@@ -23,7 +23,7 @@ impl Triplestore {
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         mut pushdowns: Pushdowns,
     ) -> Result<SolutionMappings, SparqlError> {
-        debug!("Processing group graph pattern");
+        trace!("Processing group graph pattern");
         let inner_context = context.extension_with(PathEntry::GroupInner);
         pushdowns.limit_to_variables(variables);
         pushdowns.add_graph_pattern_pushdowns(inner);

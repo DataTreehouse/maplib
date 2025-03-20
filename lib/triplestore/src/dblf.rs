@@ -492,7 +492,7 @@ fn single_tt_to_lf(
             lfs,
             UnionArgs {
                 parallel: true,
-                rechunk: true, //Important?
+                rechunk: true, //Todo: check if important for performance
                 to_supertypes: false,
                 diagonal: false,
                 from_partitioned_ds: false,

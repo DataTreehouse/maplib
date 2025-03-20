@@ -1,6 +1,6 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
-use log::debug;
+use log::trace;
 use query_processing::graph_patterns::distinct;
 use query_processing::pushdowns::Pushdowns;
 use representation::query_context::{Context, PathEntry};
@@ -17,7 +17,7 @@ impl Triplestore {
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         pushdowns: Pushdowns,
     ) -> Result<SolutionMappings, SparqlError> {
-        debug!("Processing distinct graph pattern");
+        trace!("Processing distinct graph pattern");
         let solution_mappings = self.lazy_graph_pattern(
             inner,
             solution_mappings,

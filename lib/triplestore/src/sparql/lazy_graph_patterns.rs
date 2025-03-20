@@ -16,7 +16,7 @@ mod values;
 
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
-use log::{debug, info};
+use log::{info, trace};
 
 use crate::sparql::lazy_graph_patterns::triples_ordering::order_triple_patterns;
 use oxrdf::vocab::xsd;
@@ -40,7 +40,7 @@ impl Triplestore {
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         mut pushdowns: Pushdowns,
     ) -> Result<SolutionMappings, SparqlError> {
-        debug!(
+        trace!(
             "Start processing graph pattern {:?} at context: {}",
             graph_pattern,
             context.as_str()
@@ -246,7 +246,7 @@ impl Triplestore {
                 pushdowns,
             ),
         };
-        debug!(
+        trace!(
             "Finish processing graph pattern {:?} at context: {}",
             graph_pattern,
             context.as_str()
