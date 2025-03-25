@@ -41,6 +41,8 @@ impl Triplestore {
         parallel: bool,
         checked: bool,
     ) -> Result<(), TriplestoreError> {
+        let now = Instant::now();
+        debug!("Started reading triples from path {}", path.to_string_lossy());
         let rdf_format = if let Some(rdf_format) = rdf_format {
             rdf_format
         } else if path.extension() == Some("ttl".as_ref()) {
@@ -56,14 +58,19 @@ impl Triplestore {
         let mut opt = MmapOptions::new();
         opt.stack();
         let map = unsafe { opt.map(&file).unwrap() };
-        self.read_triples(
+        let res = self.read_triples(
             map.deref(),
             rdf_format,
             base_iri,
             transient,
             parallel,
             checked,
-        )
+        );
+        debug!(
+            "Reading triples from path took {} seconds",
+            now.elapsed().as_secs_f32()
+        );
+        res
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -236,6 +243,7 @@ impl Triplestore {
             "Creating the triples to add as DFs took {} seconds",
             start_tripleproc_now.elapsed().as_secs_f64()
         );
+        let start_add_triples_vec = Instant::now();
         self.parser_call += 1;
         self.add_triples_vec(
             triples_to_add,
@@ -243,6 +251,10 @@ impl Triplestore {
             transient,
             false,
         )?;
+        debug!(
+            "Adding triples vec took {} seconds",
+            start_add_triples_vec.elapsed().as_secs_f64()
+        );
         Ok(())
     }
 }

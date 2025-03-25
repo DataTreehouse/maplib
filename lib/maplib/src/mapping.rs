@@ -353,6 +353,9 @@ impl Mapping {
         include_transient: bool,
     ) -> Result<Vec<EagerSolutionMappings>, SparqlError> {
         let triplestore = self.get_triplestore(&graph);
+        triplestore
+            .index_unindexed()
+            .map_err(|x| SparqlError::IndexingError(x))?;
         triplestore.get_predicate_eager_solution_mappings(predicate, include_transient)
     }
 

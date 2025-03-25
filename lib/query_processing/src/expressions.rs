@@ -3,7 +3,7 @@ use crate::constants::{
     NANOS_AS_DATETIME, SECONDS_AS_DATETIME,
 };
 use crate::errors::QueryProcessingError;
-use log::{debug, warn};
+use log::warn;
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{Literal, NamedNode, NamedNodeRef, Variable};
 use polars::datatypes::{CategoricalOrdering, DataType, TimeUnit};

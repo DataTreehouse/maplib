@@ -186,6 +186,7 @@ impl Triplestore {
         transient: bool,
         delay_index: bool,
     ) -> Result<Vec<NewTriples>, TriplestoreError> {
+        let prepare_triples_now = Instant::now();
         let df_vecs_to_add: Vec<Vec<TripleDF>> = ts
             .par_drain(..)
             .map(|t| {
@@ -205,11 +206,20 @@ impl Triplestore {
                 )
             })
             .collect();
+        debug!(
+            "Preparing triples took {} seconds",
+            prepare_triples_now.elapsed().as_secs_f32()
+        );
+        let add_triples_now = Instant::now();
         let dfs_to_add = flatten(df_vecs_to_add);
         let new_triples = self.add_triples_df(dfs_to_add, call_uuid, transient, delay_index)?;
         if delay_index {
             self.has_unindexed = true;
         }
+        debug!(
+            "Adding triples df took {} seconds",
+            add_triples_now.elapsed().as_secs_f32()
+        );
         Ok(new_triples)
     }
 
@@ -401,7 +411,6 @@ pub fn prepare_triples(
     object_type: &BaseRDFNodeType,
     static_verb_column: Option<NamedNode>,
 ) -> Vec<TripleDF> {
-    let now = Instant::now();
     let mut out_df_vec = vec![];
     let map = HashMap::from([
         (
@@ -456,7 +465,6 @@ fn prepare_triples_df(
     subject_type: &BaseRDFNodeType,
     object_type: &BaseRDFNodeType,
 ) -> Option<TripleDF> {
-    let now = Instant::now();
     df = df.drop_nulls::<String>(None).unwrap();
     if df.height() == 0 {
         return None;
