@@ -249,7 +249,7 @@ impl Triplestore {
             triples_to_add,
             &uuid::Uuid::new_v4().to_string(),
             transient,
-            false,
+            true,
         )?;
         debug!(
             "Adding triples vec took {} seconds",

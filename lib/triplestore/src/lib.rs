@@ -243,14 +243,19 @@ impl Triplestore {
             object_type,
         } in triples_df
         {
+            debug!("Adding predicate {} subject type {} object type {}",
+                predicate, subject_type, object_type);
             if matches!(object_type, BaseRDFNodeType::Literal(..)) {
                 //TODO: Get what is actually updated from db and then only add those things
                 if let Some(fts_index) = &mut self.fts_index {
+                    let fts_now = Instant::now();
                     fts_index
                         .add_literal_string(&df, &predicate, &subject_type, &object_type)
                         .map_err(TriplestoreError::FtsError)?;
+                    debug!("Adding to fts index took {} seconds", fts_now.elapsed().as_secs_f32());
                 }
             }
+            let cast_now = Instant::now();
             let mut map = HashMap::new();
             map.insert(
                 SUBJECT_COL_NAME.to_string(),
@@ -262,6 +267,8 @@ impl Triplestore {
             df = lf.collect().unwrap();
             let k = (subject_type.clone(), object_type.clone());
             let mut added_triples = false;
+            debug!("Casting to cat took {} seconds", cast_now.elapsed().as_secs_f32());
+            let add_now = Instant::now();
             if let Some(m) = use_map.get_mut(&predicate) {
                 if let Some(t) = m.get_mut(&k) {
                     let new_triples_opt =
@@ -307,6 +314,7 @@ impl Triplestore {
                 let m = use_map.get_mut(&predicate).unwrap();
                 m.insert(k, triples);
             }
+            debug!("Adding triples to map took  {} seconds", add_now.elapsed().as_secs_f32());
         }
         Ok(out_new_triples)
     }
