@@ -56,5 +56,5 @@ rstest = "0.21.0"
 serial_test = "3.1.1"
 
 [patch.crates-io]
-polars = { git = 'https://github.com/pola-rs/polars', rev="841c387d99d7024037556c4ef79d96bf2caac397" }
-polars-core = { git = 'https://github.com/pola-rs/polars', rev="841c387d99d7024037556c4ef79d96bf2caac397" }
+polars = { git = 'https://github.com/pola-rs/polars', rev="ac9d598fd07d85b26a29bd7465a7bfa945b6f963" }
+polars-core = { git = 'https://github.com/pola-rs/polars', rev="ac9d598fd07d85b26a29bd7465a7bfa945b6f963" }

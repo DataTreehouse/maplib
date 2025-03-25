@@ -277,7 +277,6 @@ impl Triplestore {
                         to_supertypes: false,
                         diagonal: true,
                         from_partitioned_ds: false,
-                        maintain_order: false,
                     },
                 )
                 .unwrap()
@@ -496,7 +495,6 @@ fn single_tt_to_lf(
                 to_supertypes: false,
                 diagonal: false,
                 from_partitioned_ds: false,
-                maintain_order: false,
             },
         )
         .unwrap()
