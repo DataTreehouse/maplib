@@ -299,6 +299,7 @@ impl Triplestore {
                     delay_index,
                 )?;
                 if !delay_index {
+                    let new_triples_now = Instant::now();
                     let mut lfs = triples.get_lazy_frames(&None, &None)?;
                     assert_eq!(lfs.len(), 1);
                     let (lf, _) = lfs.pop().unwrap();
@@ -310,6 +311,7 @@ impl Triplestore {
                         object_type,
                     };
                     out_new_triples.push(new_triples);
+                    debug!("Creating new triples out took {} seconds", new_triples_now.elapsed().as_secs_f32());
                 }
                 let m = use_map.get_mut(&predicate).unwrap();
                 m.insert(k, triples);

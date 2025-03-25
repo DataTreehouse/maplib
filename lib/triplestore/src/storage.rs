@@ -23,6 +23,8 @@ use representation::{
 use std::collections::{BTreeMap, HashMap};
 use std::fs::{remove_file, File};
 use std::path::{Path, PathBuf};
+use std::time::Instant;
+use log::debug;
 use uuid::Uuid;
 
 const OFFSET_STEP: usize = 100;
@@ -299,19 +301,24 @@ fn create_indices(
     subj_type: &BaseRDFNodeType,
     obj_type: &BaseRDFNodeType,
 ) -> Result<IndexedTriples, TriplestoreError> {
+    let now = Instant::now();
     let (df, subj_sparse_map) = create_unique_df_and_sparse_map(lf, true, true, false);
+    debug!("Creating subject sparse map took {} seconds", now.elapsed().as_secs_f32());
+    let store_now = Instant::now();
     let height = df.height();
     let subject_sparse_index = subj_sparse_map;
     let subject_sort = StoredTriples::new(df.clone(), subj_type, obj_type, storage_folder)?;
-
+    debug!("Storing triples took {}", store_now.elapsed().as_secs_f32());
     let mut object_sort = None;
     let mut object_sparse_index = None;
 
     if should_index_by_objects {
+        let object_now = Instant::now();
         let (new_object_sort, new_object_sparse_index) =
             create_object_index(df.lazy(), subj_type, obj_type, storage_folder)?;
         object_sort = Some(new_object_sort);
         object_sparse_index = Some(new_object_sparse_index);
+        debug!("Indexing by objects took {}", object_now.elapsed().as_secs_f32());
     }
     Ok(IndexedTriples {
         subject_sort,
@@ -771,6 +778,7 @@ fn create_unique_df_and_sparse_map(
     deduplicate: bool,
     sort_on_existing: bool,
 ) -> (DataFrame, BTreeMap<String, usize>) {
+    let deduplicate_now = Instant::now();
     let c = get_col(is_subject);
     if deduplicate {
         lf = sort_indexed_lf(lf, is_subject, true, sort_on_existing);
@@ -792,8 +800,11 @@ fn create_unique_df_and_sparse_map(
     lf = lf.select(cols);
 
     let df = lf.collect().unwrap();
+    debug!("Creating deduplicated df took {} seconds", deduplicate_now.elapsed().as_secs_f32());
+    let sparse_now = Instant::now();
     let ser = df.column(c).unwrap().as_materialized_series();
     let sparse_map = create_sparse_map(ser);
+    debug!("Creating sparse map took {} seconds", sparse_now.elapsed().as_secs_f32());
     (df, sparse_map)
 }
 
