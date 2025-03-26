@@ -42,7 +42,10 @@ impl Triplestore {
         checked: bool,
     ) -> Result<(), TriplestoreError> {
         let now = Instant::now();
-        debug!("Started reading triples from path {}", path.to_string_lossy());
+        debug!(
+            "Started reading triples from path {}",
+            path.to_string_lossy()
+        );
         let rdf_format = if let Some(rdf_format) = rdf_format {
             rdf_format
         } else if path.extension() == Some("ttl".as_ref()) {

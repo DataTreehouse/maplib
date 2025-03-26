@@ -12,6 +12,7 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use std::cmp;
 
 use crate::IndexingOptions;
+use log::debug;
 use oxrdf::vocab::xsd;
 use polars::io::SerWriter;
 use polars_core::utils::{concat_df, Container};
@@ -24,7 +25,6 @@ use std::collections::{BTreeMap, HashMap};
 use std::fs::{remove_file, File};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
-use log::debug;
 use uuid::Uuid;
 
 const OFFSET_STEP: usize = 100;
@@ -303,7 +303,10 @@ fn create_indices(
 ) -> Result<IndexedTriples, TriplestoreError> {
     let now = Instant::now();
     let (df, subj_sparse_map) = create_unique_df_and_sparse_map(lf, true, true, false);
-    debug!("Creating subject sparse map took {} seconds", now.elapsed().as_secs_f32());
+    debug!(
+        "Creating subject sparse map took {} seconds",
+        now.elapsed().as_secs_f32()
+    );
     let store_now = Instant::now();
     let height = df.height();
     let subject_sparse_index = subj_sparse_map;
@@ -318,7 +321,10 @@ fn create_indices(
             create_object_index(df.lazy(), subj_type, obj_type, storage_folder)?;
         object_sort = Some(new_object_sort);
         object_sparse_index = Some(new_object_sparse_index);
-        debug!("Indexing by objects took {}", object_now.elapsed().as_secs_f32());
+        debug!(
+            "Indexing by objects took {}",
+            object_now.elapsed().as_secs_f32()
+        );
     }
     Ok(IndexedTriples {
         subject_sort,
@@ -800,11 +806,17 @@ fn create_unique_df_and_sparse_map(
     lf = lf.select(cols);
 
     let df = lf.collect().unwrap();
-    debug!("Creating deduplicated df took {} seconds", deduplicate_now.elapsed().as_secs_f32());
+    debug!(
+        "Creating deduplicated df took {} seconds",
+        deduplicate_now.elapsed().as_secs_f32()
+    );
     let sparse_now = Instant::now();
     let ser = df.column(c).unwrap().as_materialized_series();
     let sparse_map = create_sparse_map(ser);
-    debug!("Creating sparse map took {} seconds", sparse_now.elapsed().as_secs_f32());
+    debug!(
+        "Creating sparse map took {} seconds",
+        sparse_now.elapsed().as_secs_f32()
+    );
     (df, sparse_map)
 }
 

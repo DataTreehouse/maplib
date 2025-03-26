@@ -311,8 +311,15 @@ impl Mapping {
         max_shape_results: Option<usize>,
         folder_path: Option<&PathBuf>,
     ) -> Result<ValidationReport, ShaclError> {
-        let (shape_graph, mut shape_triplestore) =
-            self.triplestores_map.remove_entry(shape_graph).unwrap();
+        let (shape_graph, mut shape_triplestore) = if let Some((shape_graph, shape_triplestore)) =
+            self.triplestores_map.remove_entry(shape_graph)
+        {
+            (shape_graph, shape_triplestore)
+        } else {
+            return Err(ShaclError::ShapeGraphDoesNotExist(
+                shape_graph.as_str().to_string(),
+            ));
+        };
         match validate(
             &mut self.base_triplestore,
             &mut shape_triplestore,
