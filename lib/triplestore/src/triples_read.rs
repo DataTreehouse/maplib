@@ -293,7 +293,7 @@ fn create_predicate_map(
             predicate,
             object,
             ..
-        } = q.map_err(|x| TriplestoreError::TurtleParsingError(x.to_string()))?;
+        } = q.map_err(|x| TriplestoreError::ParsingError(x.to_string()))?;
         let type_map: &mut HashMap<_, HashMap<_, (Vec<Subject>, Vec<Term>)>> =
             if let Some(type_map) = predicate_map.get_mut(predicate.as_str()) {
                 type_map

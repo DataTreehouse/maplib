@@ -34,7 +34,7 @@ pub enum MappingError {
     RemoveParquetFileError(io::Error),
     TriplestoreError(TriplestoreError),
     MissingDataFrameForNonEmptySignature,
-    TurtleParsingError(String),
+    ParsingError(String),
     TooDeeplyNestedError(String),
     DatatypeInferenceError(RepresentationError),
     InvalidIRIError(String, usize, String),
@@ -155,8 +155,8 @@ impl Display for MappingError {
             MappingError::MissingDataFrameForNonEmptySignature => {
                 write!(f, "Missing DataFrame argument, but signature is not empty")
             }
-            MappingError::TurtleParsingError(t) => {
-                write!(f, "Turtle parsing error: {}", t)
+            MappingError::ParsingError(t) => {
+                write!(f, "Parsing error: {}", t)
             }
             MappingError::TooDeeplyNestedError(s) => {
                 write!(f, "{s}")
