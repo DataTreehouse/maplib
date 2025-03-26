@@ -316,9 +316,9 @@ impl Mapping {
         {
             (shape_graph, shape_triplestore)
         } else {
-            return Err(ShaclError::ShapeGraphDoesNotExist(
-                shape_graph.as_str().to_string(),
-            ));
+            return Err(
+                TriplestoreError::GraphDoesNotExist(shape_graph.as_str().to_string()).into(),
+            );
         };
         match validate(
             &mut self.base_triplestore,

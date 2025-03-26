@@ -23,6 +23,7 @@ pub enum TriplestoreError {
     IPCIOError(String),
     FileIOError(FileIOError),
     FtsError(FtsError),
+    GraphDoesNotExist(String),
 }
 
 impl Display for TriplestoreError {
@@ -78,6 +79,9 @@ impl Display for TriplestoreError {
             }
             TriplestoreError::FtsError(e) => {
                 write!(f, "Full text search error {}", e)
+            }
+            TriplestoreError::GraphDoesNotExist(n) => {
+                write!(f, "Graph does not exist: {}", n)
             }
         }
     }
