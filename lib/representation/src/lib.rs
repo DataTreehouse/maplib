@@ -250,6 +250,14 @@ impl BaseRDFNodeType {
         self.as_ref().is_lang_string()
     }
 
+    /// Denotes that the data for this type might exist in multiple fields or columns
+    /// Extra care might be required
+    pub fn is_multifield(&self) -> bool {
+        vec![Self::is_lang_string, Self::is_iri]
+            .into_iter()
+            .any(|f| f(self))
+    }
+
     pub fn as_rdf_node_type(&self) -> RDFNodeType {
         match self {
             BaseRDFNodeType::IRI => RDFNodeType::IRI,
