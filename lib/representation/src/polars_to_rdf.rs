@@ -8,8 +8,8 @@ use crate::rdf_to_polars::{
 };
 use crate::{
     literal_blanknode_to_blanknode, literal_iri_to_namednode, BaseRDFNodeType, BaseRDFNodeTypeRef,
-    RDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD, OBJECT_COL_NAME,
-    SUBJECT_COL_NAME,
+    RDFNodeType, IRI_PREFIX_FIELD, IRI_SUFFIX_FIELD, LANG_STRING_LANG_FIELD,
+    LANG_STRING_VALUE_FIELD, OBJECT_COL_NAME, SUBJECT_COL_NAME,
 };
 use chrono::TimeZone as ChronoTimeZone;
 use chrono::{Datelike, Timelike};
@@ -131,14 +131,37 @@ pub fn basic_rdf_node_type_column_to_term_vec(
     base_rdf_node_type: &BaseRDFNodeType,
 ) -> Vec<Option<Term>> {
     match base_rdf_node_type {
-        BaseRDFNodeType::IRI => column
-            .cast(&DataType::String)
-            .unwrap()
-            .str()
-            .unwrap()
-            .par_iter()
-            .map(|x| x.map(|x| Term::NamedNode(literal_iri_to_namednode(x))))
-            .collect(),
+        // TODO!: Could I do some polars concat here instead?
+        BaseRDFNodeType::IRI => {
+            let col_struct = column.struct_().unwrap();
+
+            let prefix_ser = col_struct
+                .field_by_name(IRI_PREFIX_FIELD)
+                .unwrap()
+                .cast(&DataType::String)
+                .unwrap();
+            let prefix_iter = prefix_ser.str().unwrap().into_iter();
+
+            let suffix_ser = col_struct
+                .field_by_name(IRI_SUFFIX_FIELD)
+                .unwrap()
+                .cast(&DataType::String)
+                .unwrap();
+            let suffix_iter = suffix_ser.str().unwrap().into_iter();
+
+            prefix_iter
+                .zip(suffix_iter)
+                .map(|(prefix, suffix)| {
+                    // This literally did nothing
+                    let iri = format!(
+                        "{}{}",
+                        prefix.expect("column_to_term: iri has no prefix!"),
+                        suffix.expect("column_to_term: iri has no suffix!")
+                    );
+                    Some(Term::NamedNode(NamedNode::new_unchecked(iri)))
+                })
+                .collect()
+        }
         BaseRDFNodeType::BlankNode => column
             .cast(&DataType::String)
             .unwrap()
@@ -252,6 +275,8 @@ pub fn polars_type_to_literal_type(
             let mut dts = vec![];
             let mut found_lang_string_value = false;
             let mut found_lang_string_lang = false;
+            let mut found_iri_prefix = false;
+            let mut found_iri_suffix = false;
 
             let mut only_lang_string = true;
             let mut unknown_fields = HashSet::new();
@@ -264,9 +289,13 @@ pub fn polars_type_to_literal_type(
                     LANG_STRING_LANG_FIELD => {
                         found_lang_string_lang = true;
                     }
-                    MULTI_IRI_DT => {
+                    IRI_PREFIX_FIELD => {
                         only_lang_string = false;
+                        found_iri_prefix = true;
                         dts.push(BaseRDFNodeType::IRI);
+                    }
+                    IRI_SUFFIX_FIELD => {
+                        found_iri_suffix = true;
                     }
                     MULTI_NONE_DT => {
                         only_lang_string = false;
@@ -298,6 +327,12 @@ pub fn polars_type_to_literal_type(
             if found_lang_string_value ^ found_lang_string_lang {
                 return Err(RepresentationError::DatatypeError(
                     "Found just one of the lang string cols".into(),
+                ));
+            }
+
+            if found_iri_prefix ^ found_iri_suffix {
+                return Err(RepresentationError::DatatypeError(
+                    "Found just one of the iri cols".into(),
                 ));
             }
 
