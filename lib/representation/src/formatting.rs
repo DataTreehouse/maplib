@@ -32,47 +32,47 @@ pub fn base_expression_to_string(
     let expr = match base_rdf_node_type {
         BaseRDFNodeType::IRI => lit("<") + expr.cast(DataType::String) + lit(">"),
         BaseRDFNodeType::BlankNode => lit("_:") + expr.cast(DataType::String),
+        BaseRDFNodeType::Literal(l) if l.as_ref() == xsd::DATE_TIME => {
+            lit("\"")
+                + expr.map(
+                    |x| {
+                        let dt = x.dtype();
+                        let tz = if let DataType::Datetime(_, tz) = dt {
+                            tz
+                        } else {
+                            panic!()
+                        };
+                        Ok(Some(datetime_column_to_strings(&x, tz).into_column()))
+                    },
+                    GetOutput::from_type(DataType::String),
+                )
+                + lit(format!("\"^^{}", l))
+        }
+        BaseRDFNodeType::Literal(l) if l.as_ref() == xsd::DATE_TIME_STAMP => {
+            lit("\"") + expr.dt().strftime(XSD_DATETIME_WITH_TZ_FORMAT) + lit(format!("\"^^{}", l))
+        }
+        BaseRDFNodeType::Literal(l) if l.as_ref() == xsd::DATE => {
+            lit("\"") + expr.dt().strftime(XSD_DATE_WITHOUT_TZ_FORMAT) + lit(format!("\"^^{}", l))
+        }
+        BaseRDFNodeType::Literal(l) if l.as_ref() == rdf::LANG_STRING => {
+            lit("\"")
+                + expr
+                    .clone()
+                    .struct_()
+                    .field_by_name(LANG_STRING_VALUE_FIELD)
+                    .cast(DataType::String)
+                + lit("\"@")
+                + expr
+                    .struct_()
+                    .field_by_name(LANG_STRING_LANG_FIELD)
+                    .cast(DataType::String)
+        }
+        BaseRDFNodeType::Literal(l) if l.as_ref() == xsd::STRING => {
+            lit("\"") + expr.cast(DataType::String) + lit("\"")
+        }
+        // Fallback
         BaseRDFNodeType::Literal(l) => {
-            if l.as_ref() == xsd::DATE_TIME {
-                lit("\"")
-                    + expr.map(
-                        |x| {
-                            let dt = x.dtype();
-                            let tz = if let DataType::Datetime(_, tz) = dt {
-                                tz
-                            } else {
-                                panic!()
-                            };
-                            Ok(Some(datetime_column_to_strings(&x, tz).into_column()))
-                        },
-                        GetOutput::from_type(DataType::String),
-                    )
-                    + lit(format!("\"^^{}", l))
-            } else if l.as_ref() == xsd::DATE_TIME_STAMP {
-                lit("\"")
-                    + expr.dt().strftime(XSD_DATETIME_WITH_TZ_FORMAT)
-                    + lit(format!("\"^^{}", l))
-            } else if l.as_ref() == xsd::DATE {
-                lit("\"")
-                    + expr.dt().strftime(XSD_DATE_WITHOUT_TZ_FORMAT)
-                    + lit(format!("\"^^{}", l))
-            } else if l.as_ref() == rdf::LANG_STRING {
-                lit("\"")
-                    + expr
-                        .clone()
-                        .struct_()
-                        .field_by_name(LANG_STRING_VALUE_FIELD)
-                        .cast(DataType::String)
-                    + lit("\"@")
-                    + expr
-                        .struct_()
-                        .field_by_name(LANG_STRING_LANG_FIELD)
-                        .cast(DataType::String)
-            } else if l.as_ref() == xsd::STRING {
-                lit("\"") + expr.cast(DataType::String) + lit("\"")
-            } else {
-                lit("\"") + expr.cast(DataType::String) + lit(format!("\"^^{}", l))
-            }
+            lit("\"") + expr.cast(DataType::String) + lit(format!("\"^^{}", l))
         }
         BaseRDFNodeType::None => lit(LiteralValue::untyped_null()).cast(DataType::String),
     };
