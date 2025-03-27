@@ -12,7 +12,7 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use std::cmp;
 
 use crate::IndexingOptions;
-use log::debug;
+use log::{debug, trace};
 use oxrdf::vocab::xsd;
 use polars::io::SerWriter;
 use polars_core::utils::{concat_df, Container};
@@ -248,6 +248,7 @@ impl Triples {
             self.subject_sort = Some(stored);
             self.height = height;
             if self.object_indexing_enabled {
+                debug!("Started updating object index");
                 if let Some(mut sorted) = self.object_sort.take() {
                     let (stored, height, sparse, _) = update_column_sorted_index(
                         df,
@@ -264,6 +265,7 @@ impl Triples {
                 } else {
                     panic!("Triplestore in invalid state");
                 }
+                debug!("Finished updating object index");
             }
             Ok(new_triples)
         }
@@ -302,20 +304,20 @@ fn create_indices(
     obj_type: &BaseRDFNodeType,
 ) -> Result<IndexedTriples, TriplestoreError> {
     let now = Instant::now();
-    let (df, subj_sparse_map) = create_unique_df_and_sparse_map(lf, true, true, false);
+    let (df, subject_sparse_index) = create_unique_df_and_sparse_map(lf, true, true, false);
     debug!(
         "Creating subject sparse map took {} seconds",
         now.elapsed().as_secs_f32()
     );
     let store_now = Instant::now();
     let height = df.height();
-    let subject_sparse_index = subj_sparse_map;
     let subject_sort = StoredTriples::new(df.clone(), subj_type, obj_type, storage_folder)?;
     debug!("Storing triples took {}", store_now.elapsed().as_secs_f32());
     let mut object_sort = None;
     let mut object_sparse_index = None;
 
     if should_index_by_objects {
+        debug!("Start indexing by objects");
         let object_now = Instant::now();
         let (new_object_sort, new_object_sparse_index) =
             create_object_index(df.lazy(), subj_type, obj_type, storage_folder)?;
@@ -632,6 +634,10 @@ fn update_at_offset(
 }
 
 fn cast_col_to_cat(mut lf: LazyFrame, c: &str, lexsort: bool) -> LazyFrame {
+    let df = lf.collect().unwrap();
+    debug!("Remove lf types before cast {:?}", df.dtypes());
+    debug!("REMOVE lf before cast {}", df);
+    lf = df.lazy();
     lf = lf.with_column(col(c).cast(DataType::Categorical(
         None,
         if lexsort {
@@ -682,6 +688,9 @@ fn sort_indexed_lf(
             limit: None,
         },
     );
+    debug!("REMOVE: do sorting");
+    lf = lf.collect().unwrap().lazy();
+    debug!("REMOVE: done sorting");
     lf
 }
 
@@ -701,6 +710,8 @@ fn update_column_sorted_index(
     ),
     TriplestoreError,
 > {
+    trace!("Updating column sorted index");
+    debug!("DF to update column sorted index {}", df);
     let c = get_col(is_subject);
     let mut lf = sort_indexed_lf(df.lazy(), is_subject, false, false);
     let existing_lfs_heights = stored_triples.get_lazy_frames(None)?;
@@ -713,7 +724,6 @@ fn update_column_sorted_index(
 
     for mut elf in existing_lfs {
         elf = cast_col_to_cat(elf, c, true);
-
         let other_type = if is_subject {
             object_type
         } else {
@@ -728,8 +738,21 @@ fn update_column_sorted_index(
         if sort_on_existing {
             elf = elf.with_column(lit(true).alias(EXISTING_COL));
         }
-        lf = lf.merge_sorted(elf, PlSmallStr::from_str(c)).unwrap();
+        let edf = elf.collect().unwrap();
+        debug!("EDF {}", edf);
+        debug!("EDF dtypes {:?}", edf.dtypes());
+        elf = edf.lazy();
 
+        let df = lf.collect().unwrap();
+        debug!("LF df before merge sort {}", df);
+        debug!("LF dtypes {:?}", df.dtypes());
+        lf = df.lazy();
+
+        lf = lf.merge_sorted(elf, PlSmallStr::from_str(c)).unwrap();
+        let df = lf.collect().unwrap();
+        debug!("LF df after dtypes {:?}", df.dtypes());
+        debug!("LF df after merge sort {}", df); // HER KRÆSJER VI
+        lf = df.lazy();
         if other_type.is_lang_string() {
             let other_c = get_col(!is_subject);
             let mut select_cols = vec![col(SUBJECT_COL_NAME), col(OBJECT_COL_NAME)];
@@ -747,6 +770,8 @@ fn update_column_sorted_index(
                 .select(select_cols);
         }
     }
+    lf = lf.collect().unwrap().lazy();
+    trace!("Finish merging new and old");
     let (df, sparse_map) = create_unique_df_and_sparse_map(lf, is_subject, true, sort_on_existing);
     let height = df.height();
     let new_triples = if sort_on_existing {
@@ -765,7 +790,7 @@ fn update_column_sorted_index(
     } else {
         None
     };
-
+    debug!("Found new triples!");
     let stored = StoredTriples::new(df, subject_type, object_type, storage_folder)?;
 
     Ok((stored, height, sparse_map, new_triples))

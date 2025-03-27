@@ -8,10 +8,7 @@ use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{Literal, NamedNode, NamedNodeRef, Variable};
 use polars::datatypes::{CategoricalOrdering, DataType, TimeUnit};
 use polars::frame::UniqueKeepStrategy;
-use polars::prelude::{
-    as_struct, coalesce, col, concat_str, lit, when, Expr, GetOutput, IntoColumn, LazyFrame,
-    LiteralValue, NamedFrom, Operator, PlSmallStr, StrptimeOptions,
-};
+use polars::prelude::{as_struct, coalesce, col, concat_str, lit, when, Expr, GetOutput, IntoColumn, LazyFrame, LiteralValue, NamedFrom, Operator, PlSmallStr, Scalar, StrptimeOptions};
 use polars::series::Series;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use representation::multitype::{
@@ -100,7 +97,7 @@ pub fn binary_expression(
         .unwrap();
     if &RDFNodeType::None == left_type || &RDFNodeType::None == right_type {
         solution_mappings.mappings = solution_mappings.mappings.with_column(
-            lit(LiteralValue::Null)
+            lit(LiteralValue::untyped_null())
                 .cast(BaseRDFNodeType::None.polars_data_type())
                 .alias(outer_context.as_str()),
         );
@@ -241,7 +238,7 @@ pub fn unary_minus(
         .mappings
         .with_column(
             (Expr::BinaryExpr {
-                left: Arc::new(Expr::Literal(LiteralValue::Int32(0))),
+                left: Arc::new(Expr::Literal(LiteralValue::Scalar(Scalar::from(0i32)))),
                 op: Operator::Minus,
                 right: Arc::new(col(inner_context.as_str())),
             })
@@ -389,7 +386,7 @@ pub fn coalesce_expression(
 
     if coal_exprs.is_empty() {
         solution_mappings.mappings = solution_mappings.mappings.with_column(
-            lit(LiteralValue::Null)
+            lit(LiteralValue::untyped_null())
                 .cast(BaseRDFNodeType::None.polars_data_type())
                 .alias(outer_context.as_str()),
         );
@@ -448,18 +445,18 @@ fn convert_multitype_col_to_wider(
             } else {
                 if t.is_lang_string() {
                     struct_exprs.push(
-                        lit(LiteralValue::Null)
+                        lit(LiteralValue::untyped_null())
                             .cast(DataType::Categorical(None, CategoricalOrdering::Physical))
                             .alias(LANG_STRING_VALUE_FIELD),
                     );
                     struct_exprs.push(
-                        lit(LiteralValue::Null)
+                        lit(LiteralValue::untyped_null())
                             .cast(DataType::Categorical(None, CategoricalOrdering::Physical))
                             .alias(LANG_STRING_LANG_FIELD),
                     );
                 } else {
                     struct_exprs.push(
-                        lit(LiteralValue::Null)
+                        lit(LiteralValue::untyped_null())
                             .cast(t.polars_data_type())
                             .alias(&name),
                     );
@@ -493,7 +490,7 @@ pub fn exists(
     let inner_context_col = exists_df.drop_in_place(inner_context.as_str()).unwrap();
     mappings = mappings.with_column(
         col(inner_context.as_str())
-            .is_in(lit(inner_context_col.take_materialized_series()))
+            .is_in(lit(inner_context_col.take_materialized_series()), false)
             .alias(outer_context.as_str()),
     );
 
@@ -818,10 +815,10 @@ pub fn func_expression(
                                         .not(),
                                 )
                                 .then(lit(""))
-                                .otherwise(lit(LiteralValue::Null).cast(DataType::String)),
+                                .otherwise(lit(LiteralValue::untyped_null()).cast(DataType::String)),
                             )
                         } else {
-                            exprs.push(lit(LiteralValue::Null).cast(DataType::String))
+                            exprs.push(lit(LiteralValue::untyped_null()).cast(DataType::String))
                         }
                     }
                     solution_mappings.mappings = solution_mappings
@@ -830,7 +827,7 @@ pub fn func_expression(
                 }
                 _ => {
                     solution_mappings.mappings = solution_mappings.mappings.with_column(
-                        lit(LiteralValue::Null)
+                        lit(LiteralValue::untyped_null())
                             .cast(DataType::String)
                             .alias(outer_context.as_str()),
                     );
@@ -947,7 +944,7 @@ pub fn func_expression(
                         );
                     } else {
                         solution_mappings.mappings = solution_mappings.mappings.with_column(
-                            lit(LiteralValue::Null)
+                            lit(LiteralValue::untyped_null())
                                 .cast(DataType::Boolean)
                                 .alias(outer_context.as_str()),
                         );
@@ -1109,7 +1106,7 @@ pub fn func_expression(
                 let first_context = args_contexts.get(&0).unwrap();
                 solution_mappings.mappings = solution_mappings.mappings.with_column(
                     col(first_context.as_str())
-                        .mul(Expr::Literal(LiteralValue::UInt64(1000)))
+                        .mul(Expr::Literal(LiteralValue::Scalar(Scalar::from(1000))))
                         .cast(DataType::Datetime(TimeUnit::Milliseconds, None))
                         .alias(outer_context.as_str()),
                 );
@@ -1143,7 +1140,7 @@ pub fn func_expression(
                 solution_mappings.mappings = solution_mappings.mappings.with_column(
                     ((first_as_seconds.clone()
                         - (first_as_seconds % col(second_context.as_str())))
-                    .mul(Expr::Literal(LiteralValue::UInt64(1000)))
+                    .mul(Expr::Literal(LiteralValue::Scalar(Scalar::from(1000))))
                     .cast(DataType::Datetime(TimeUnit::Milliseconds, None)))
                     .alias(outer_context.as_str()),
                 );
@@ -1437,11 +1434,11 @@ pub fn func_expression(
                     if !exprs.is_empty() {
                         coalesce(exprs.as_slice())
                     } else {
-                        lit(LiteralValue::Null)
+                        lit(LiteralValue::untyped_null())
                     }
                 }
                 RDFNodeType::Literal(l) => lit(rdf_named_node_to_polars_literal_value(l)),
-                _ => lit(LiteralValue::Null),
+                _ => lit(LiteralValue::untyped_null()),
             };
             solution_mappings.mappings = solution_mappings
                 .mappings
@@ -1464,7 +1461,7 @@ pub fn in_expression(
     right_contexts: &Vec<Context>,
     outer_context: &Context,
 ) -> Result<SolutionMappings, QueryProcessingError> {
-    let mut expr = Expr::Literal(LiteralValue::Boolean(false));
+    let mut expr = Expr::Literal(LiteralValue::Scalar(Scalar::from(false)));
     let left_type = solution_mappings
         .rdf_node_types
         .get(left_context.as_str())
@@ -1634,7 +1631,7 @@ fn typed_comparison_expr(
         }
     }
     if comps.is_empty() {
-        lit(LiteralValue::Null).cast(DataType::Boolean)
+        lit(LiteralValue::untyped_null()).cast(DataType::Boolean)
     } else {
         coalesce(&comps)
     }
@@ -1658,7 +1655,7 @@ fn comp(
     if compatible_operation(expression, dt_left, dt_right) {
         e
     } else {
-        lit(LiteralValue::Null).cast(DataType::Boolean)
+        lit(LiteralValue::untyped_null()).cast(DataType::Boolean)
     }
 }
 
@@ -1742,7 +1739,7 @@ pub fn str_function(c: &str, t: &RDFNodeType) -> Expr {
                             .cast(DataType::String)
                     }
                 }
-                BaseRDFNodeType::None => lit(LiteralValue::Null).cast(DataType::String),
+                BaseRDFNodeType::None => lit(LiteralValue::untyped_null()).cast(DataType::String),
             })
         }
         coalesce(to_coalesce.as_slice()).alias(c)
@@ -1758,7 +1755,7 @@ pub fn str_function(c: &str, t: &RDFNodeType) -> Expr {
                     col(c).cast(DataType::String)
                 }
             }
-            BaseRDFNodeType::None => lit(LiteralValue::Null).cast(DataType::String),
+            BaseRDFNodeType::None => lit(LiteralValue::untyped_null()).cast(DataType::String),
         }
     }
 }
@@ -1806,7 +1803,7 @@ pub fn xsd_cast_literal(
                     trg_nn,
                     trg_type.clone(),
                 ),
-                BaseRDFNodeType::None => lit(LiteralValue::Null).cast(trg_type.clone()),
+                BaseRDFNodeType::None => lit(LiteralValue::untyped_null()).cast(trg_type.clone()),
             })
         }
         Ok(coalesce(to_coalesce.as_slice()).alias(c))
@@ -1827,7 +1824,7 @@ pub fn xsd_cast_literal(
                 trg_nn,
                 trg_type.clone(),
             )),
-            BaseRDFNodeType::None => Ok(lit(LiteralValue::Null).cast(trg_type)),
+            BaseRDFNodeType::None => Ok(lit(LiteralValue::untyped_null()).cast(trg_type)),
         }
     }
 }
@@ -1843,7 +1840,7 @@ fn cast_iri_to_xsd_literal(
     if trg_nn == xsd::STRING {
         Ok(cast_literal(e, xsd::STRING, trg_nn, trg_type.clone()))
     } else {
-        Ok(lit(LiteralValue::Null).cast(trg_type.clone()))
+        Ok(lit(LiteralValue::untyped_null()).cast(trg_type.clone()))
         // Err(QueryProcessingError::BadCastDatatype(
         //     c.to_string(),
         //     src.clone(),

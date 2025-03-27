@@ -15,10 +15,7 @@ use chrono::TimeZone as ChronoTimeZone;
 use chrono::{Datelike, Timelike};
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{Literal, NamedNode, Subject, Triple, Variable};
-use polars::prelude::{
-    as_struct, col, AnyValue, Column, DataFrame, DataType, IntoColumn, IntoLazy, LiteralValue,
-    Series, TimeZone,
-};
+use polars::prelude::{as_struct, col, AnyValue, Column, DataFrame, DataType, IntoColumn, IntoLazy, LiteralValue, PlSmallStr, Scalar, Series, TimeZone};
 use rayon::iter::IndexedParallelIterator;
 use rayon::iter::IntoParallelIterator;
 use rayon::iter::ParallelIterator;
@@ -403,12 +400,12 @@ pub fn particular_opt_term_vec_to_series(
                 if let Some(t) = t {
                     match t {
                         Term::Literal(l) => {
-                            LiteralValue::String(l.language().unwrap().to_string().into())
+                            LiteralValue::Scalar(Scalar::from(PlSmallStr::from_string(l.language().unwrap().to_string())))
                         }
                         _ => panic!("Should never happen"),
                     }
                 } else {
-                    LiteralValue::Null
+                    LiteralValue::untyped_null()
                 }
             })
             .collect();
@@ -419,12 +416,12 @@ pub fn particular_opt_term_vec_to_series(
                     match t {
                         Term::Literal(l) => {
                             let (s, _, _) = l.destruct();
-                            LiteralValue::String(s.into())
+                            LiteralValue::Scalar(Scalar::from(PlSmallStr::from_string(s)))
                         }
                         _ => panic!("Should never happen"),
                     }
                 } else {
-                    LiteralValue::Null
+                    LiteralValue::untyped_null()
                 }
             })
             .collect();
@@ -457,7 +454,7 @@ pub fn particular_opt_term_vec_to_series(
                         _ => unimplemented!(),
                     }
                 } else {
-                    LiteralValue::Null
+                    LiteralValue::untyped_null()
                 }
             })
             .collect();

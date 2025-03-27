@@ -3,8 +3,8 @@ use std::collections::HashMap;
 
 use crate::sparql::errors::SparqlError;
 use oxrdf::vocab::xsd;
-use polars::prelude::{col, Expr, LiteralValue};
-
+use polars::prelude::{col, lit, LiteralValue};
+use polars_core::prelude::Scalar;
 use query_processing::exists_helper::rewrite_exists_graph_pattern;
 use query_processing::expressions::{
     binary_expression, bound, coalesce_expression, exists, func_expression, if_expression,
@@ -379,7 +379,7 @@ impl Triplestore {
                 output_solution_mappings.mappings = output_solution_mappings
                     .mappings
                     .with_column(
-                        Expr::Literal(LiteralValue::Int64(1)).alias(exists_context.as_str()),
+                        lit(LiteralValue::Scalar(Scalar::from(1i64))).alias(exists_context.as_str()),
                     )
                     .with_column(col(exists_context.as_str()).cum_sum(false));
                 output_solution_mappings.rdf_node_types.insert(

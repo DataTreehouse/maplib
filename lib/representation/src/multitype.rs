@@ -362,7 +362,7 @@ pub fn create_join_compatible_solution_mappings(
                                 right_keep.sort();
                                 if right_keep.is_empty() {
                                     right_mappings = right_mappings.filter(lit(false)).with_column(
-                                        lit(LiteralValue::Null)
+                                        lit(LiteralValue::untyped_null())
                                             .cast(BaseRDFNodeType::None.polars_data_type())
                                             .alias(v),
                                     );
@@ -416,13 +416,13 @@ pub fn create_join_compatible_solution_mappings(
                                     new_left_datatypes.insert(v.clone(), right_dt.clone());
                                 } else {
                                     left_mappings = left_mappings.filter(lit(false)).with_column(
-                                        lit(LiteralValue::Null)
+                                        lit(LiteralValue::untyped_null())
                                             .cast(BaseRDFNodeType::None.polars_data_type())
                                             .alias(v),
                                     );
                                     new_left_datatypes.insert(v.clone(), RDFNodeType::None);
                                     right_mappings = right_mappings.filter(lit(false)).with_column(
-                                        lit(LiteralValue::Null)
+                                        lit(LiteralValue::untyped_null())
                                             .cast(BaseRDFNodeType::None.polars_data_type())
                                             .alias(v),
                                     );
@@ -439,7 +439,7 @@ pub fn create_join_compatible_solution_mappings(
                                     );
                                 } else {
                                     right_mappings = right_mappings.filter(lit(false)).with_column(
-                                        lit(LiteralValue::Null)
+                                        lit(LiteralValue::untyped_null())
                                             .cast(BaseRDFNodeType::None.polars_data_type())
                                             .alias(v),
                                     );
@@ -466,13 +466,13 @@ pub fn create_join_compatible_solution_mappings(
                                     new_right_datatypes.insert(v.clone(), left_dt.clone());
                                 } else {
                                     left_mappings = left_mappings.filter(lit(false)).with_column(
-                                        lit(LiteralValue::Null)
+                                        lit(LiteralValue::untyped_null())
                                             .cast(BaseRDFNodeType::None.polars_data_type())
                                             .alias(v),
                                     );
                                     new_left_datatypes.insert(v.clone(), RDFNodeType::None);
                                     right_mappings = right_mappings.filter(lit(false)).with_column(
-                                        lit(LiteralValue::Null)
+                                        lit(LiteralValue::untyped_null())
                                             .cast(BaseRDFNodeType::None.polars_data_type())
                                             .alias(v),
                                     );
@@ -489,7 +489,7 @@ pub fn create_join_compatible_solution_mappings(
                                     new_right_datatypes.insert(v.clone(), left_dt.clone());
                                 } else {
                                     right_mappings = right_mappings.filter(lit(false)).with_column(
-                                        lit(LiteralValue::Null)
+                                        lit(LiteralValue::untyped_null())
                                             .cast(BaseRDFNodeType::None.polars_data_type())
                                             .alias(v),
                                     );
@@ -505,13 +505,13 @@ pub fn create_join_compatible_solution_mappings(
                         match join_type {
                             JoinType::Inner => {
                                 left_mappings = left_mappings.filter(lit(false)).with_column(
-                                    lit(LiteralValue::Null)
+                                    lit(LiteralValue::untyped_null())
                                         .cast(BaseRDFNodeType::None.polars_data_type())
                                         .alias(v),
                                 );
                                 new_left_datatypes.insert(v.clone(), RDFNodeType::None);
                                 right_mappings = right_mappings.filter(lit(false)).with_column(
-                                    lit(LiteralValue::Null)
+                                    lit(LiteralValue::untyped_null())
                                         .cast(BaseRDFNodeType::None.polars_data_type())
                                         .alias(v),
                                 );
@@ -519,7 +519,7 @@ pub fn create_join_compatible_solution_mappings(
                             }
                             JoinType::Left => {
                                 right_mappings = right_mappings.filter(lit(false)).with_column(
-                                    lit(LiteralValue::Null)
+                                    lit(LiteralValue::untyped_null())
                                         .cast(BaseRDFNodeType::None.polars_data_type())
                                         .alias(v),
                                 );
@@ -575,7 +575,7 @@ pub fn compress_actual_multitypes(
             if any_dropped {
                 if keep_types.is_empty() {
                     col_exprs.push(
-                        lit(LiteralValue::Null)
+                        lit(LiteralValue::untyped_null())
                             .cast(BaseRDFNodeType::None.polars_data_type())
                             .alias(&c),
                     );
@@ -761,7 +761,7 @@ pub fn set_structs_all_null_to_null_row(sm: SolutionMappings) -> SolutionMapping
         if !is_null_exprs.is_empty() {
             mappings = mappings.with_column(
                 when(all_horizontal(is_null_exprs).unwrap())
-                    .then(lit(LiteralValue::Null).cast(r.polars_data_type()))
+                    .then(lit(LiteralValue::untyped_null()).cast(r.polars_data_type()))
                     .otherwise(col(k))
                     .alias(k),
             );
@@ -868,7 +868,7 @@ pub fn join_workaround(
             validation: Default::default(),
             suffix: None,
             slice: None,
-            join_nulls: true,
+            nulls_equal: true,
             coalesce: Default::default(),
             maintain_order: MaintainOrderJoin::None,
         };

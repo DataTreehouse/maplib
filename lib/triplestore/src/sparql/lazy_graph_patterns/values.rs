@@ -18,6 +18,7 @@ impl Triplestore {
         _pushdowns: Pushdowns,
     ) -> Result<SolutionMappings, SparqlError> {
         let sm = values_pattern(variables, bindings);
+        println!("VALUES {}", sm.mappings.clone().collect().unwrap());
         if let Some(mut mappings) = solution_mappings {
             mappings = join(mappings, sm, JoinType::Inner)?;
             Ok(mappings)
