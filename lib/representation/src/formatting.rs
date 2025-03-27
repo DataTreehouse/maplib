@@ -97,7 +97,7 @@ pub fn expression_to_string(expr: Expr, name: &str, rdf_node_type: RDFNodeType) 
     if let RDFNodeType::MultiType(ts) = rdf_node_type {
         let mut exprs = vec![];
         for t in ts {
-            if t.is_lang_string() {
+            if t.is_multifield() {
                 exprs.push(base_expression_to_string(expr.clone(), name, t));
             } else {
                 exprs.push(base_expression_to_string(
