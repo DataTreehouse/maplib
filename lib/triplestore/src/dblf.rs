@@ -68,7 +68,7 @@ impl Triplestore {
                 &Some(s),
                 &Some(o),
             )?;
-            let eager_sm = sm.as_eager();
+            let eager_sm = sm.as_eager(false);
             eager_sms.push(eager_sm);
         }
         Ok(eager_sms)

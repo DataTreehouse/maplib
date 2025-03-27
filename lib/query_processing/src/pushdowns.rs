@@ -59,7 +59,7 @@ impl Pushdowns {
         }
 
         if should_add_from_solution_mappings && sm.height_estimate <= SMALL_HEIGHT {
-            let eager_sm = sm.as_eager();
+            let eager_sm = sm.as_eager(false);
             let colnames = eager_sm.mappings.get_column_names();
             let columns = eager_sm.mappings.columns(&colnames).unwrap();
             //Todo: why not par?
