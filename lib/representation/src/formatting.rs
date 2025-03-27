@@ -2,7 +2,10 @@ use crate::multitype::base_col_name;
 use crate::polars_to_rdf::{
     datetime_column_to_strings, XSD_DATETIME_WITH_TZ_FORMAT, XSD_DATE_WITHOUT_TZ_FORMAT,
 };
-use crate::{BaseRDFNodeType, RDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD};
+use crate::{
+    BaseRDFNodeType, RDFNodeType, IRI_PREFIX_FIELD, IRI_SUFFIX_FIELD, LANG_STRING_LANG_FIELD,
+    LANG_STRING_VALUE_FIELD,
+};
 use oxrdf::vocab::{rdf, xsd};
 use polars::datatypes::DataType;
 use polars::prelude::{coalesce, col, lit, Expr, GetOutput, IntoColumn, LazyFrame, LiteralValue};
@@ -30,7 +33,18 @@ pub fn base_expression_to_string(
     base_rdf_node_type: BaseRDFNodeType,
 ) -> Expr {
     let expr = match base_rdf_node_type {
-        BaseRDFNodeType::IRI => lit("<") + expr.cast(DataType::String) + lit(">"),
+        BaseRDFNodeType::IRI => {
+            let prefix = expr
+                .clone()
+                .struct_()
+                .field_by_name(IRI_PREFIX_FIELD)
+                .cast(DataType::String);
+            let suffix = expr
+                .struct_()
+                .field_by_name(IRI_SUFFIX_FIELD)
+                .cast(DataType::String);
+            lit("<") + prefix + suffix + lit(">")
+        }
         BaseRDFNodeType::BlankNode => lit("_:") + expr.cast(DataType::String),
         BaseRDFNodeType::Literal(l) if l.as_ref() == xsd::DATE_TIME => {
             lit("\"")
