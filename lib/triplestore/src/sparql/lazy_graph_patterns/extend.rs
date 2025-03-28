@@ -22,6 +22,7 @@ impl Triplestore {
         context: &Context,
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         mut pushdowns: Pushdowns,
+        include_transient: bool,
     ) -> Result<SolutionMappings, SparqlError> {
         trace!("Processing extend graph pattern");
         let inner_context = context.extension_with(PathEntry::ExtendInner);
@@ -38,6 +39,7 @@ impl Triplestore {
             &inner_context,
             parameters,
             pushdowns,
+            include_transient,
         )?;
         output_solution_mappings = self.lazy_expression(
             expression,
@@ -45,6 +47,7 @@ impl Triplestore {
             &expression_context,
             parameters,
             expression_pushdowns.as_ref(),
+            include_transient,
         )?;
         Ok(extend(
             output_solution_mappings,

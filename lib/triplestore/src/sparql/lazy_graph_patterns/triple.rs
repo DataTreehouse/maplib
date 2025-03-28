@@ -21,6 +21,7 @@ impl Triplestore {
         triple_pattern: &TriplePattern,
         context: &Context,
         pushdowns: &mut Pushdowns,
+        include_transient: bool,
     ) -> Result<SolutionMappings, SparqlError> {
         trace!(
             "Processing triple pattern {:?} at {}",
@@ -60,6 +61,7 @@ impl Triplestore {
                 &objects,
                 &subject_type_ctr,
                 &object_type_ctr,
+                include_transient,
             )?,
             NamedNodePattern::Variable(v) => {
                 let mut predicates: Option<HashSet<NamedNode>> = None;
@@ -139,6 +141,7 @@ impl Triplestore {
                     &objects,
                     &subject_type_ctr,
                     &object_type_ctr,
+                    include_transient,
                 )?;
                 sm
             }

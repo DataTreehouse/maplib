@@ -20,13 +20,20 @@ impl Triplestore {
         context: &Context,
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         mut pushdowns: Pushdowns,
+        include_transient: bool,
     ) -> Result<SolutionMappings, SparqlError> {
         trace!("Processing project graph pattern");
         let inner_context = context.extension_with(PathEntry::ProjectInner);
         pushdowns.limit_to_variables(variables);
         pushdowns.add_graph_pattern_pushdowns(inner);
-        let mut project_solution_mappings =
-            self.lazy_graph_pattern(inner, None, &inner_context, parameters, pushdowns)?;
+        let mut project_solution_mappings = self.lazy_graph_pattern(
+            inner,
+            None,
+            &inner_context,
+            parameters,
+            pushdowns,
+            include_transient,
+        )?;
         project_solution_mappings = project(project_solution_mappings, variables)?;
 
         let solution_mappings = if let Some(solution_mappings) = solution_mappings {

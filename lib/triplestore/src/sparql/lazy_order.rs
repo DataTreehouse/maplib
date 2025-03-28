@@ -13,6 +13,7 @@ impl Triplestore {
         solution_mappings: SolutionMappings,
         context: &Context,
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
+        include_transient: bool,
     ) -> Result<(SolutionMappings, bool, Context), SparqlError> {
         match oexpr {
             OrderExpression::Asc(expr) => {
@@ -24,6 +25,7 @@ impl Triplestore {
                         &inner_context,
                         parameters,
                         None,
+                        include_transient,
                     )?,
                     true,
                     inner_context,
@@ -38,6 +40,7 @@ impl Triplestore {
                         &inner_context,
                         parameters,
                         None,
+                        include_transient,
                     )?,
                     false,
                     inner_context,

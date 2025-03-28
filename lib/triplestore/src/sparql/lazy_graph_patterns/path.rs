@@ -45,6 +45,7 @@ impl Triplestore {
         solution_mappings: Option<SolutionMappings>,
         context: &Context,
         pushdowns: Pushdowns,
+        include_transient: bool,
     ) -> Result<SolutionMappings, SparqlError> {
         let create_sparse = need_sparse_matrix(ppe);
 
@@ -81,6 +82,7 @@ impl Triplestore {
                 &context.extension_with(PathEntry::PathRewrite),
                 &None,
                 pushdowns,
+                include_transient,
             )?;
             for i in &intermediaries {
                 sms.rdf_node_types.remove(i).unwrap();
@@ -96,7 +98,7 @@ impl Triplestore {
         let out_dt_subj;
         let out_dt_obj;
 
-        let mut df_creator = U32DataFrameCreator::new();
+        let mut df_creator = U32DataFrameCreator::new(include_transient);
         df_creator.gather_namednode_dfs(ppe, self)?;
         let (lookup_df, lookup_dtypes, namednode_dfs) = df_creator.create_u32_dfs()?;
         let max_index: Option<u32> = lookup_df
@@ -636,12 +638,14 @@ fn sparse_path(
 
 struct U32DataFrameCreator {
     pub named_nodes: HashMap<NamedNode, (DataFrame, RDFNodeType, RDFNodeType)>,
+    include_transient: bool,
 }
 
 impl U32DataFrameCreator {
-    pub fn new() -> Self {
+    pub fn new(include_transient: bool) -> Self {
         U32DataFrameCreator {
             named_nodes: Default::default(),
+            include_transient,
         }
     }
 
@@ -816,6 +820,7 @@ impl U32DataFrameCreator {
                     &None,
                     &None,
                     &None,
+                    self.include_transient,
                 )?;
                 self.named_nodes.insert(
                     nn.clone(),

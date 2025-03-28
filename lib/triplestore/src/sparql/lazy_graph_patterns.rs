@@ -39,6 +39,7 @@ impl Triplestore {
         context: &Context,
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         mut pushdowns: Pushdowns,
+        include_transient: bool,
     ) -> Result<SolutionMappings, SparqlError> {
         trace!(
             "Start processing graph pattern {:?} at context: {}",
@@ -77,6 +78,7 @@ impl Triplestore {
                         tp,
                         &bgp_context,
                         &mut pushdowns,
+                        include_transient,
                     )?);
                 }
                 if let Some(updated_solution_mappings) = updated_solution_mappings {
@@ -101,7 +103,15 @@ impl Triplestore {
                 subject,
                 path,
                 object,
-            } => self.lazy_path(subject, path, object, solution_mappings, context, pushdowns),
+            } => self.lazy_path(
+                subject,
+                path,
+                object,
+                solution_mappings,
+                context,
+                pushdowns,
+                include_transient,
+            ),
             GraphPattern::Join { left, right } => self.lazy_join(
                 left,
                 right,
@@ -109,6 +119,7 @@ impl Triplestore {
                 context,
                 parameters,
                 pushdowns,
+                include_transient,
             ),
             GraphPattern::LeftJoin {
                 left,
@@ -122,6 +133,7 @@ impl Triplestore {
                 context,
                 parameters,
                 pushdowns,
+                include_transient,
             ),
             GraphPattern::Filter { expr, inner } => self.lazy_filter(
                 inner,
@@ -130,6 +142,7 @@ impl Triplestore {
                 context,
                 parameters,
                 pushdowns,
+                include_transient,
             ),
             GraphPattern::Union { left, right } => self.lazy_union(
                 left,
@@ -138,6 +151,7 @@ impl Triplestore {
                 context,
                 parameters,
                 pushdowns,
+                include_transient,
             ),
             GraphPattern::Graph { name: _, inner: _ } => {
                 todo!("Graphs not supported yet")
@@ -154,6 +168,7 @@ impl Triplestore {
                 context,
                 parameters,
                 pushdowns,
+                include_transient,
             ),
             GraphPattern::Minus { left, right } => self.lazy_minus(
                 left,
@@ -162,6 +177,7 @@ impl Triplestore {
                 context,
                 parameters,
                 pushdowns,
+                include_transient,
             ),
             GraphPattern::Values {
                 variables,
@@ -174,6 +190,7 @@ impl Triplestore {
                 context,
                 parameters,
                 pushdowns,
+                include_transient,
             ),
             GraphPattern::Project { inner, variables } => self.lazy_project(
                 inner,
@@ -182,10 +199,16 @@ impl Triplestore {
                 context,
                 parameters,
                 pushdowns,
+                include_transient,
             ),
-            GraphPattern::Distinct { inner } => {
-                self.lazy_distinct(inner, solution_mappings, context, parameters, pushdowns)
-            }
+            GraphPattern::Distinct { inner } => self.lazy_distinct(
+                inner,
+                solution_mappings,
+                context,
+                parameters,
+                pushdowns,
+                include_transient,
+            ),
             GraphPattern::Reduced { inner } => {
                 info!("Reduced has no practical effect in this implementation");
                 self.lazy_graph_pattern(
@@ -194,6 +217,7 @@ impl Triplestore {
                     &context.extension_with(PathEntry::ReducedInner),
                     parameters,
                     pushdowns,
+                    include_transient,
                 )
             }
             GraphPattern::Slice {
@@ -207,6 +231,7 @@ impl Triplestore {
                     &context.extension_with(PathEntry::ReducedInner),
                     parameters,
                     pushdowns,
+                    include_transient,
                 )?;
                 if let Some(length) = length {
                     newsols.mappings = newsols.mappings.slice(*start as i64, *length as u32);
@@ -227,6 +252,7 @@ impl Triplestore {
                 context,
                 parameters,
                 pushdowns,
+                include_transient,
             ),
             GraphPattern::Service { .. } => {
                 unimplemented!("Services are not implemented")

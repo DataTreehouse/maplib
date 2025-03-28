@@ -18,6 +18,7 @@ impl Triplestore {
         context: &Context,
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         pushdowns: Pushdowns,
+        include_transient: bool,
     ) -> Result<SolutionMappings, SparqlError> {
         trace!("Processing minus graph pattern");
         let left_context = context.extension_with(PathEntry::MinusLeftSide);
@@ -28,6 +29,7 @@ impl Triplestore {
             &left_context,
             parameters,
             pushdowns,
+            include_transient,
         )?;
 
         let right_solution_mappings = self.lazy_graph_pattern(
@@ -36,6 +38,7 @@ impl Triplestore {
             &right_context,
             parameters,
             Pushdowns::new(),
+            include_transient,
         )?;
 
         Ok(minus(left_solution_mappings, right_solution_mappings)?)

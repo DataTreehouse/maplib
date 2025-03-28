@@ -67,6 +67,7 @@ impl Triplestore {
                 &None,
                 &Some(s),
                 &Some(o),
+                include_transient,
             )?;
             let eager_sm = sm.as_eager(false);
             eager_sms.push(eager_sm);
@@ -85,6 +86,7 @@ impl Triplestore {
         objects: &Option<Vec<Term>>,
         subject_datatype_ctr: &Option<PossibleTypes>,
         object_datatype_ctr: &Option<PossibleTypes>,
+        include_transient: bool,
     ) -> Result<Option<Vec<HalfBakedSolutionMappings>>, SparqlError> {
         let mut all_sms = vec![];
         if self.triples_map.contains_key(verb_uri) {
@@ -102,7 +104,7 @@ impl Triplestore {
                 }
             }
         }
-        if self.transient_triples_map.contains_key(verb_uri) {
+        if include_transient && self.transient_triples_map.contains_key(verb_uri) {
             let compatible_types = self.all_compatible_types(
                 verb_uri,
                 true,
@@ -140,6 +142,7 @@ impl Triplestore {
         objects: &Option<Vec<Term>>,
         subject_datatype_ctr: &Option<PossibleTypes>,
         object_datatype_ctr: &Option<PossibleTypes>,
+        include_transient: bool,
     ) -> Result<SolutionMappings, SparqlError> {
         let predicate_uris = predicate_uris.unwrap_or(self.all_predicates());
         let predicate_uris_len = predicate_uris.len();
@@ -157,6 +160,7 @@ impl Triplestore {
                     objects,
                     subject_datatype_ctr,
                     object_datatype_ctr,
+                    include_transient,
                 )? {
                     sms.extend(sm);
                 }

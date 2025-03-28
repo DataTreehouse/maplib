@@ -18,6 +18,7 @@ impl Triplestore {
         context: &Context,
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         pushdowns: Pushdowns,
+        include_transient: bool,
     ) -> Result<SolutionMappings, SparqlError> {
         trace!("Processing order by graph pattern");
         let mut output_solution_mappings = self.lazy_graph_pattern(
@@ -26,6 +27,7 @@ impl Triplestore {
             &context.extension_with(PathEntry::OrderByInner),
             parameters,
             pushdowns,
+            include_transient,
         )?;
 
         let order_expression_contexts: Vec<Context> = (0..expression.len())
@@ -39,6 +41,7 @@ impl Triplestore {
                 output_solution_mappings,
                 order_expression_contexts.get(i).unwrap(),
                 parameters,
+                include_transient,
             )?;
             output_solution_mappings = ordering_solution_mappings;
             inner_contexts.push(inner_context);
