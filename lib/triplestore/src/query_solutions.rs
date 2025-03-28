@@ -13,8 +13,11 @@ pub fn query_select(
     triplestore: &mut Triplestore,
     deduplicate: bool,
     streaming: bool,
+    include_transient: bool,
 ) -> QuerySolutions {
-    let qres = triplestore.query(query, &None, streaming).unwrap();
+    let qres = triplestore
+        .query(query, &None, streaming, include_transient)
+        .unwrap();
 
     let (df, types) = if let QueryResult::Select(EagerSolutionMappings {
         mut mappings,

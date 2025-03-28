@@ -18,6 +18,7 @@ impl Triplestore {
         context: &Context,
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         mut pushdowns: Pushdowns,
+        include_transient: bool,
     ) -> Result<SolutionMappings, SparqlError> {
         trace!("Processing union graph pattern");
         let left_context = context.extension_with(PathEntry::UnionLeftSide);
@@ -30,6 +31,7 @@ impl Triplestore {
             &left_context,
             parameters,
             left_pushdowns,
+            include_transient,
         )?;
         pushdowns.add_graph_pattern_pushdowns(right);
         let right_solution_mappings = self.lazy_graph_pattern(
@@ -38,6 +40,7 @@ impl Triplestore {
             &right_context,
             parameters,
             pushdowns,
+            include_transient,
         )?;
 
         Ok(union(

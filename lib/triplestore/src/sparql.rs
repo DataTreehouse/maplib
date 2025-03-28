@@ -137,12 +137,13 @@ impl Triplestore {
         query: &str,
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         streaming: bool,
+        include_transient: bool,
     ) -> Result<QueryResult, SparqlError> {
         if streaming {
             unimplemented!("Streaming is currently disabled due to an unresolved bug in Polarsq")
         }
         let query = Query::parse(query, None).map_err(SparqlError::ParseError)?;
-        self.query_parsed(&query, parameters, streaming)
+        self.query_parsed(&query, parameters, streaming, include_transient)
     }
 
     pub fn query_parsed(
@@ -150,6 +151,7 @@ impl Triplestore {
         query: &Query,
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         streaming: bool,
+        include_transient: bool,
     ) -> Result<QueryResult, SparqlError> {
         if self.has_unindexed {
             self.index_unindexed()
@@ -167,8 +169,14 @@ impl Triplestore {
                     mappings,
                     rdf_node_types: types,
                     ..
-                } =
-                    self.lazy_graph_pattern(pattern, None, &context, parameters, Pushdowns::new())?;
+                } = self.lazy_graph_pattern(
+                    pattern,
+                    None,
+                    &context,
+                    parameters,
+                    Pushdowns::new(),
+                    include_transient,
+                )?;
                 let df = mappings.with_streaming(streaming).collect().unwrap();
                 Ok(QueryResult::Select(EagerSolutionMappings::new(df, types)))
             }
@@ -182,8 +190,14 @@ impl Triplestore {
                     mappings,
                     rdf_node_types,
                     ..
-                } =
-                    self.lazy_graph_pattern(pattern, None, &context, parameters, Pushdowns::new())?;
+                } = self.lazy_graph_pattern(
+                    pattern,
+                    None,
+                    &context,
+                    parameters,
+                    Pushdowns::new(),
+                    include_transient,
+                )?;
                 let df = mappings.collect().unwrap();
                 let mut solutions = vec![];
                 for t in template {
@@ -205,10 +219,11 @@ impl Triplestore {
         transient: bool,
         streaming: bool,
         delay_index: bool,
+        include_transient: bool,
     ) -> Result<Vec<NewTriples>, SparqlError> {
         let query = Query::parse(query, None).map_err(SparqlError::ParseError)?;
         if let Query::Construct { .. } = &query {
-            let res = self.query_parsed(&query, parameters, streaming)?;
+            let res = self.query_parsed(&query, parameters, streaming, include_transient)?;
             match res {
                 QueryResult::Select(_) => {
                     panic!("Should never happen")
