@@ -17,7 +17,6 @@ def add_triples(
             target.expand(
                 template,
                 sm.mappings,
-                unique_subset=["subject", "object"],
                 types=sm.rdf_types,
                 graph=target_graph,
             )

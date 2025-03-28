@@ -1,8 +1,6 @@
 use crate::errors::TriplestoreError;
 use oxrdf::{NamedNode, Subject, Term};
-use polars::prelude::{
-    as_struct, col, lit, Expr, IdxSize, IntoLazy, IpcWriter, LazyFrame, PlSmallStr, ScanArgsIpc,
-};
+use polars::prelude::{as_struct, col, concat, lit, Expr, IdxSize, IntoLazy, IpcWriter, LazyFrame, PlSmallStr, ScanArgsIpc, UnionArgs};
 use polars_core::datatypes::{AnyValue, CategoricalChunked, LogicalType};
 use polars_core::frame::DataFrame;
 use polars_core::prelude::{
@@ -700,6 +698,7 @@ fn update_column_sorted_index(
     ),
     TriplestoreError,
 > {
+    debug!("start update column");
     let c = get_col(is_subject);
     let mut lf = sort_indexed_lf(df.lazy(), is_subject, false, false);
     let existing_lfs_heights = stored_triples.get_lazy_frames(None)?;
@@ -709,8 +708,6 @@ fn update_column_sorted_index(
     if sort_on_existing {
         lf = lf.with_column(lit(false).alias(EXISTING_COL));
     }
-    //Workaround:
-    lf = lf.with_column(col(c).cast(DataType::String));
 
     for mut elf in existing_lfs {
         elf = cast_col_to_cat(elf, c, true);
@@ -729,10 +726,17 @@ fn update_column_sorted_index(
         if sort_on_existing {
             elf = elf.with_column(lit(true).alias(EXISTING_COL));
         }
-        //Workaround:
-        elf = elf.with_column(col(c).cast(DataType::String));
-        lf = lf.merge_sorted(elf, PlSmallStr::from_str(c)).unwrap();
 
+        //TODO: go back to merge sorted
+        //lf = lf.merge_sorted(elf, PlSmallStr::from_str(c)).unwrap().collect().unwrap().lazy();
+        lf = concat([lf, elf], UnionArgs{
+            parallel: true,
+            rechunk: false,
+            to_supertypes: false,
+            diagonal: true,
+            from_partitioned_ds: false,
+            maintain_order: false,
+        }).unwrap();
         if other_type.is_lang_string() {
             let other_c = get_col(!is_subject);
             let mut select_cols = vec![col(SUBJECT_COL_NAME), col(OBJECT_COL_NAME)];
@@ -750,8 +754,7 @@ fn update_column_sorted_index(
                 .select(select_cols);
         }
     }
-    //Workaround:
-    lf = lf.with_column(col(c).cast(DataType::Categorical(None, CategoricalOrdering::Lexical)));
+
     let (df, sparse_map) = create_unique_df_and_sparse_map(lf, is_subject, true, sort_on_existing);
     let height = df.height();
     let new_triples = if sort_on_existing {

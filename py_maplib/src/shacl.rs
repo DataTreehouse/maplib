@@ -36,13 +36,15 @@ impl PyValidationReport {
         self.inner.conforms
     }
 
-    #[pyo3(signature = (native_dataframe=None, include_datatypes=None))]
+    #[pyo3(signature = (native_dataframe=None, include_datatypes=None, streaming=None))]
     pub fn results(
         &self,
         native_dataframe: Option<bool>,
         include_datatypes: Option<bool>,
+        streaming: Option<bool>,
         py: Python<'_>,
     ) -> PyResult<Option<PyObject>> {
+        let streaming = streaming.unwrap_or(false);
         let report = if let Some(sm) = self
             .inner
             .concatenated_results()
@@ -51,7 +53,7 @@ impl PyValidationReport {
             let EagerSolutionMappings {
                 mut mappings,
                 mut rdf_node_types,
-            } = sm.as_eager();
+            } = sm.as_eager(streaming);
             (mappings, rdf_node_types) = fix_cats_and_multicolumns(
                 mappings,
                 rdf_node_types,
@@ -70,13 +72,15 @@ impl PyValidationReport {
         Ok(report)
     }
 
-    #[pyo3(signature = (native_dataframe=None, include_datatypes=None))]
+    #[pyo3(signature = (native_dataframe=None, include_datatypes=None, streaming=None))]
     pub fn details(
         &self,
         native_dataframe: Option<bool>,
         include_datatypes: Option<bool>,
+        streaming: Option<bool>,
         py: Python<'_>,
     ) -> PyResult<Option<PyObject>> {
+        let streaming = streaming.unwrap_or(false);
         let details = if let Some(sm) = self
             .inner
             .concatenated_details()
@@ -85,7 +89,7 @@ impl PyValidationReport {
             let EagerSolutionMappings {
                 mut mappings,
                 mut rdf_node_types,
-            } = sm.as_eager();
+            } = sm.as_eager(streaming);
             (mappings, rdf_node_types) = fix_cats_and_multicolumns(
                 mappings,
                 rdf_node_types,
