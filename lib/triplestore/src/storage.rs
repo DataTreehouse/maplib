@@ -1,7 +1,7 @@
 use crate::errors::TriplestoreError;
 use oxrdf::{NamedNode, Subject, Term};
 use polars::prelude::{
-    as_struct, col, concat, lit, Expr, IdxSize, IntoLazy, IpcWriter, LazyFrame, PlSmallStr,
+    col, concat, lit, Expr, IdxSize, IntoLazy, IpcWriter, LazyFrame, PlSmallStr,
     ScanArgsIpc, UnionArgs,
 };
 use polars_core::datatypes::{AnyValue, CategoricalChunked, LogicalType};
@@ -19,8 +19,7 @@ use polars::io::SerWriter;
 use polars_core::utils::{concat_df, Container};
 use representation::multitype::{lf_column_from_categorical, lf_column_to_categorical};
 use representation::{
-    BaseRDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD, OBJECT_COL_NAME,
-    SUBJECT_COL_NAME,
+    BaseRDFNodeType, OBJECT_COL_NAME, SUBJECT_COL_NAME,
 };
 use std::collections::{BTreeMap, HashMap};
 use std::fs::{remove_file, File};
@@ -713,12 +712,6 @@ fn update_column_sorted_index(
 
     for mut elf in existing_lfs {
         elf = cast_col_to_cat(elf, c, true);
-
-        let other_type = if is_subject {
-            object_type
-        } else {
-            subject_type
-        };
 
         if sort_on_existing {
             elf = elf.with_column(lit(true).alias(EXISTING_COL));
