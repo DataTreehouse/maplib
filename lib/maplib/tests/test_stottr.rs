@@ -19,6 +19,7 @@ fn get_triples(mapping: &mut Mapping) -> Vec<Triple> {
             &None,
             None,
             false,
+            true,
         )
         .unwrap();
     let mut triples = vec![];
