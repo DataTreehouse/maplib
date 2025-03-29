@@ -3,6 +3,7 @@ from typing import Union, List, Dict, Optional, Callable, Tuple, Literal as Lite
 from polars import DataFrame
 from datetime import datetime, date
 
+
 class RDFType:
     """
     The type of a column containing a RDF variable.
@@ -670,7 +671,7 @@ class Mapping:
     def create_sprout(self):
         """
         A sprout is a simplified way of dealing with multiple graphs.
-        See also `maplib.maplib.Mapping.insert_sprout` and `maplib.maplib.Mapping.detach_sprout`
+        See also `Mapping.insert_sprout` and `Mapping.detach_sprout`
 
         :return:
         """
@@ -692,7 +693,7 @@ class Mapping:
         Insert the results of a Construct query in a sprouted graph, which is created if no sprout is active.
         Sprouts are simplified way of dealing with multiple graphs.
         Useful for being able to use the same query for inspecting what will be inserted and actually inserting.
-        See also `maplib.maplib.Mapping.detach_sprout`
+        See also `Mapping.detach_sprout`
 
         Usage:
 
@@ -726,7 +727,7 @@ class Mapping:
         """
         Detaches and returns the sprout from the mapping.
 
-        @return: The sprout as its own Mapping.
+        :return: The sprout as its own Mapping.
         """
 
     def get_predicate_iris(
@@ -757,39 +758,3 @@ class Mapping:
         :param graph: The graph where indexes should be added
         :return:
         """
-
-async def explore(
-        m: Mapping,
-        host: str = "localhost",
-        port: int = 8000,
-        bind: str = "localhost",
-        popup=True,
-        fts=True,):
-    """
-    Starts a graph explorer session.
-    To run from Jupyter Notebook use:
-    >>> from maplib import explore
-    >>>
-    >>> await explore(m)
-
-    This will block further execution of the notebook until you stop the cell.
-
-    :param m: The Mapping to explore
-    :param host: The hostname that we will point the browser to.
-    :param port: The port where the graph explorer webserver listens on.
-    :param bind: Bind to the following host / ip.
-    :param popup: Pop up the browser window.
-    :param fts: Enable full text search indexing
-    """
-
-def add_triples(
-        source: Mapping, target: Mapping, source_graph: str = None, target_graph: str = None
-):
-    """
-    (Zeroy) copy the triples from one Mapping into another.
-
-    :param source: The source mapping
-    :param target: The target mapping
-    :param source_graph: The named graph in the source mapping to copy from. None means default graph.
-    :param target_graph: The named graph in the target mapping to copy into. None means default graph.
-    """
