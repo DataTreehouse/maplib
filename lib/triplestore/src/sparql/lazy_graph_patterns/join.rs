@@ -17,6 +17,7 @@ impl Triplestore {
         context: &Context,
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         pushdowns: Pushdowns,
+        include_transient: bool,
     ) -> Result<SolutionMappings, SparqlError> {
         trace!("Processing join graph pattern");
         let left_context = context.extension_with(PathEntry::JoinLeftSide);
@@ -27,6 +28,7 @@ impl Triplestore {
             &left_context,
             parameters,
             pushdowns.clone(),
+            include_transient,
         )?;
         output_solution_mappings = self.lazy_graph_pattern(
             right,
@@ -34,6 +36,7 @@ impl Triplestore {
             &right_context,
             parameters,
             pushdowns,
+            include_transient,
         )?;
 
         Ok(output_solution_mappings)

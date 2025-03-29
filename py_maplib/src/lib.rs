@@ -350,7 +350,8 @@ impl PyMapping {
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[pyo3(signature = (query, parameters=None, include_datatypes=None, native_dataframe=None, graph=None, streaming=None, return_json=None))]
+    #[pyo3(signature = (query, parameters=None, include_datatypes=None, native_dataframe=None,
+    graph=None, streaming=None, return_json=None, include_transient=None))]
     fn query(
         &mut self,
         py: Python<'_>,
@@ -361,6 +362,7 @@ impl PyMapping {
         graph: Option<String>,
         streaming: Option<bool>,
         return_json: Option<bool>,
+        include_transient: Option<bool>,
     ) -> PyResult<PyObject> {
         let graph = parse_optional_graph(graph)?;
         let mapped_parameters = map_parameters(parameters)?;
@@ -371,6 +373,7 @@ impl PyMapping {
                 &mapped_parameters,
                 graph,
                 streaming.unwrap_or(false),
+                include_transient.unwrap_or(true),
             )
             .map_err(PyMaplibError::from)?;
         query_to_result(
@@ -431,6 +434,7 @@ impl PyMapping {
                 streaming.unwrap_or(false),
                 max_shape_results,
                 path.as_ref(),
+                false, //TODO: Needs more work before can be exposed
             )
             .map_err(PyMaplibError::from)?;
         let shape_graph_triplestore = if include_shape_graph.unwrap_or(true) {
@@ -451,7 +455,9 @@ impl PyMapping {
         ))
     }
 
-    #[pyo3(signature = (query, parameters=None, include_datatypes=None, native_dataframe=None, transient=None, streaming=None, source_graph=None, target_graph=None, delay_index=None))]
+    #[pyo3(signature = (query, parameters=None, include_datatypes=None, native_dataframe=None,
+                               transient=None, streaming=None, source_graph=None, target_graph=None,
+                               delay_index=None, include_transient=None))]
     fn insert(
         &mut self,
         query: String,
@@ -463,6 +469,7 @@ impl PyMapping {
         source_graph: Option<String>,
         target_graph: Option<String>,
         delay_index: Option<bool>,
+        include_transient: Option<bool>,
         py: Python<'_>,
     ) -> PyResult<HashMap<String, PyObject>> {
         let mapped_parameters = map_parameters(parameters)?;
@@ -475,6 +482,7 @@ impl PyMapping {
                 &mapped_parameters,
                 source_graph,
                 streaming.unwrap_or(false),
+                include_transient.unwrap_or(true),
             )
             .map_err(PyMaplibError::from)?;
         let out_dict = if let QueryResult::Construct(dfs_and_dts) = res {
@@ -502,7 +510,9 @@ impl PyMapping {
         Ok(out_dict.into())
     }
 
-    #[pyo3(signature = (query, parameters=None, include_datatypes=None, native_dataframe=None, transient=None, streaming=None, source_graph=None, target_graph=None, delay_index=None))]
+    #[pyo3(signature = (query, parameters=None, include_datatypes=None, native_dataframe=None,
+                        transient=None, streaming=None, source_graph=None, target_graph=None,
+                        delay_index=None, include_transient=None))]
     fn insert_sprout(
         &mut self,
         query: String,
@@ -514,6 +524,7 @@ impl PyMapping {
         source_graph: Option<String>,
         target_graph: Option<String>,
         delay_index: Option<bool>,
+        include_transient: Option<bool>,
         py: Python<'_>,
     ) -> PyResult<HashMap<String, PyObject>> {
         let mapped_parameters = map_parameters(parameters)?;
@@ -529,6 +540,7 @@ impl PyMapping {
                 &mapped_parameters,
                 source_graph,
                 streaming.unwrap_or(false),
+                include_transient.unwrap_or(true),
             )
             .map_err(PyMaplibError::from)?;
         let out_dict = if let QueryResult::Construct(dfs_and_dts) = res {

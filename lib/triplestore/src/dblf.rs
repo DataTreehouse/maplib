@@ -67,8 +67,9 @@ impl Triplestore {
                 &None,
                 &Some(s),
                 &Some(o),
+                include_transient,
             )?;
-            let eager_sm = sm.as_eager();
+            let eager_sm = sm.as_eager(false);
             eager_sms.push(eager_sm);
         }
         Ok(eager_sms)
@@ -85,6 +86,7 @@ impl Triplestore {
         objects: &Option<Vec<Term>>,
         subject_datatype_ctr: &Option<PossibleTypes>,
         object_datatype_ctr: &Option<PossibleTypes>,
+        include_transient: bool,
     ) -> Result<Option<Vec<HalfBakedSolutionMappings>>, SparqlError> {
         let mut all_sms = vec![];
         if self.triples_map.contains_key(verb_uri) {
@@ -102,7 +104,7 @@ impl Triplestore {
                 }
             }
         }
-        if self.transient_triples_map.contains_key(verb_uri) {
+        if include_transient && self.transient_triples_map.contains_key(verb_uri) {
             let compatible_types = self.all_compatible_types(
                 verb_uri,
                 true,
@@ -140,6 +142,7 @@ impl Triplestore {
         objects: &Option<Vec<Term>>,
         subject_datatype_ctr: &Option<PossibleTypes>,
         object_datatype_ctr: &Option<PossibleTypes>,
+        include_transient: bool,
     ) -> Result<SolutionMappings, SparqlError> {
         let predicate_uris = predicate_uris.unwrap_or(self.all_predicates());
         let predicate_uris_len = predicate_uris.len();
@@ -157,6 +160,7 @@ impl Triplestore {
                     objects,
                     subject_datatype_ctr,
                     object_datatype_ctr,
+                    include_transient,
                 )? {
                     sms.extend(sm);
                 }
@@ -174,6 +178,7 @@ impl Triplestore {
             let mut accumulated_heights = 0usize;
 
             // This part is to work around a performance bug in Polars.
+            // Still present..
             if predicate_uris_len > 1 && (subjects.is_some() || objects.is_some()) {
                 sms = sms
                     .into_par_iter()
@@ -277,6 +282,7 @@ impl Triplestore {
                         to_supertypes: false,
                         diagonal: true,
                         from_partitioned_ds: false,
+                        maintain_order: false,
                     },
                 )
                 .unwrap()
@@ -495,6 +501,7 @@ fn single_tt_to_lf(
                 to_supertypes: false,
                 diagonal: false,
                 from_partitioned_ds: false,
+                maintain_order: false,
             },
         )
         .unwrap()

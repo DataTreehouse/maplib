@@ -44,7 +44,7 @@ pub fn constant_to_expr(
                 )
             }
             ConstantTerm::None => (
-                Expr::Literal(LiteralValue::Null),
+                Expr::Literal(LiteralValue::untyped_null()),
                 PType::None,
                 MappingColumnType::Flat(RDFNodeType::None),
             ),

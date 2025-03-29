@@ -74,7 +74,7 @@ pub fn base_expression_to_string(
                 lit("\"") + expr.cast(DataType::String) + lit(format!("\"^^{}", l))
             }
         }
-        BaseRDFNodeType::None => lit(LiteralValue::Null).cast(DataType::String),
+        BaseRDFNodeType::None => lit(LiteralValue::untyped_null()).cast(DataType::String),
     };
     expr.alias(name)
 }

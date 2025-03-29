@@ -9,8 +9,8 @@ use oxrdfio::{RdfFormat, RdfParser, RdfSyntaxError, SliceQuadParser};
 use oxttl::ntriples::SliceNTriplesParser;
 use oxttl::turtle::SliceTurtleParser;
 use oxttl::{NTriplesParser, TurtleParser};
-use polars::prelude::{as_struct, col, DataFrame, IntoLazy, LiteralValue, Series};
-use polars_core::prelude::IntoColumn;
+use polars::prelude::{as_struct, col, DataFrame, IntoLazy, LiteralValue, PlSmallStr, Series};
+use polars_core::prelude::{IntoColumn, Scalar};
 use rayon::iter::ParallelIterator;
 use rayon::prelude::{IntoParallelIterator, IntoParallelRefIterator};
 use representation::rdf_to_polars::{
@@ -366,7 +366,9 @@ fn particular_term_vec_to_series(term_vec: Vec<Term>, dt: BaseRDFNodeType) -> Se
         let langs = term_vec
             .par_iter()
             .map(|t| match t {
-                Term::Literal(l) => LiteralValue::String(l.language().unwrap().to_string().into()),
+                Term::Literal(l) => LiteralValue::Scalar(Scalar::from(PlSmallStr::from_string(
+                    l.language().unwrap().to_string(),
+                ))),
                 _ => panic!("Should never happen"),
             })
             .collect();
@@ -375,7 +377,7 @@ fn particular_term_vec_to_series(term_vec: Vec<Term>, dt: BaseRDFNodeType) -> Se
             .map(|t| match t {
                 Term::Literal(l) => {
                     let (s, _, _) = l.destruct();
-                    LiteralValue::String(s.into())
+                    LiteralValue::Scalar(Scalar::from(PlSmallStr::from_string(s)))
                 }
                 _ => panic!("Should never happen"),
             })

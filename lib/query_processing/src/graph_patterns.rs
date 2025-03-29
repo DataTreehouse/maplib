@@ -375,7 +375,7 @@ pub fn project(
         if !datatypes.contains_key(v.as_str()) {
             warn!("The variable {} does not exist in the solution mappings, adding as an unbound variable", v);
             mappings = mappings.with_column(
-                lit(LiteralValue::Null)
+                lit(LiteralValue::untyped_null())
                     .cast(BaseRDFNodeType::None.polars_data_type())
                     .alias(v.as_str()),
             );
@@ -541,6 +541,7 @@ pub fn union(
             to_supertypes: false,
             diagonal: true,
             from_partitioned_ds: false,
+            maintain_order: false,
         },
     )
     .expect("Concat problem");

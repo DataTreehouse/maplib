@@ -49,9 +49,9 @@ impl SolutionMappings {
         }
     }
 
-    pub fn as_eager(self) -> EagerSolutionMappings {
+    pub fn as_eager(self, streaming: bool) -> EagerSolutionMappings {
         EagerSolutionMappings {
-            mappings: self.mappings.collect().unwrap(),
+            mappings: self.mappings.with_streaming(streaming).collect().unwrap(),
             rdf_node_types: self.rdf_node_types,
         }
     }

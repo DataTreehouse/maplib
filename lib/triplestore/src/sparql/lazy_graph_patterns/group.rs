@@ -22,6 +22,7 @@ impl Triplestore {
         context: &Context,
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         mut pushdowns: Pushdowns,
+        include_transient: bool,
     ) -> Result<SolutionMappings, SparqlError> {
         trace!("Processing group graph pattern");
         let inner_context = context.extension_with(PathEntry::GroupInner);
@@ -33,6 +34,7 @@ impl Triplestore {
             &inner_context,
             parameters,
             pushdowns,
+            include_transient,
         )?;
         let (mut output_solution_mappings, by, dummy_varname) =
             prepare_group_by(output_solution_mappings, variables);
@@ -54,6 +56,7 @@ impl Triplestore {
                 output_solution_mappings,
                 &aggregate_context,
                 parameters,
+                include_transient,
             )?;
             output_solution_mappings = aggregate_solution_mappings;
             new_rdf_node_types.insert(v.as_str().to_string(), rdf_node_type);

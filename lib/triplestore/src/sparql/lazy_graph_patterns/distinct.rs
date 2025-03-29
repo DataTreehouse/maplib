@@ -16,6 +16,7 @@ impl Triplestore {
         context: &Context,
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         pushdowns: Pushdowns,
+        include_transient: bool,
     ) -> Result<SolutionMappings, SparqlError> {
         trace!("Processing distinct graph pattern");
         let solution_mappings = self.lazy_graph_pattern(
@@ -24,6 +25,7 @@ impl Triplestore {
             &context.extension_with(PathEntry::DistinctInner),
             parameters,
             pushdowns,
+            include_transient,
         )?;
         let sm = distinct(solution_mappings)?;
         Ok(sm)

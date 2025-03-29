@@ -9,7 +9,7 @@ use oxrdf::{
     VariableNameParseError,
 };
 use oxsdatatypes::Duration;
-use polars::datatypes::TimeUnit;
+use polars::datatypes::{AnyValue, TimeUnit};
 use polars::prelude::LiteralValue;
 use pyo3::basic::CompareOp;
 use pyo3::exceptions::PyException;
@@ -359,35 +359,40 @@ impl PyLiteral {
         }
 
         Ok(match rdf_literal_to_polars_literal_value(&self.literal) {
-            LiteralValue::Boolean(b) => b.into_py(py),
-            LiteralValue::String(s) => s.into_py(py),
-            LiteralValue::UInt8(u) => u.into_py(py),
-            LiteralValue::UInt16(u) => u.into_py(py),
-            LiteralValue::UInt32(u) => u.into_py(py),
-            LiteralValue::UInt64(u) => u.into_py(py),
-            LiteralValue::Int8(i) => i.into_py(py),
-            LiteralValue::Int16(i) => i.into_py(py),
-            LiteralValue::Int32(i) => i.into_py(py),
-            LiteralValue::Int64(i) => i.into_py(py),
-            LiteralValue::Float32(f) => f.into_py(py),
-            LiteralValue::Float64(f) => f.into_py(py),
-            LiteralValue::Date(_d) => {
-                todo!()
-            }
-            LiteralValue::DateTime(i, tu, tz) => {
-                //From temporal conversion in polars
-                let delta = match tu {
-                    TimeUnit::Nanoseconds => TimeDelta::nanoseconds(i),
-                    TimeUnit::Microseconds => TimeDelta::microseconds(i),
-                    TimeUnit::Milliseconds => TimeDelta::milliseconds(i),
-                };
-                let dt = NaiveDateTime::UNIX_EPOCH.checked_add_signed(delta).unwrap();
-                if let Some(tz) = tz {
-                    let tz = tz.parse::<Tz>().unwrap();
-                    let dt = tz.from_utc_datetime(&dt);
-                    dt.into_py(py)
-                } else {
-                    dt.into_py(py)
+            LiteralValue::Scalar(s) => {
+                match s.into_value() {
+                    AnyValue::Boolean(b) => b.into_py(py),
+                    AnyValue::String(s) => s.into_py(py),
+                    AnyValue::UInt8(u) => u.into_py(py),
+                    AnyValue::UInt16(u) => u.into_py(py),
+                    AnyValue::UInt32(u) => u.into_py(py),
+                    AnyValue::UInt64(u) => u.into_py(py),
+                    AnyValue::Int8(i) => i.into_py(py),
+                    AnyValue::Int16(i) => i.into_py(py),
+                    AnyValue::Int32(i) => i.into_py(py),
+                    AnyValue::Int64(i) => i.into_py(py),
+                    AnyValue::Float32(f) => f.into_py(py),
+                    AnyValue::Float64(f) => f.into_py(py),
+                    AnyValue::Date(_d) => {
+                        todo!()
+                    }
+                    AnyValue::Datetime(i, tu, tz) => {
+                        //From temporal conversion in polars
+                        let delta = match tu {
+                            TimeUnit::Nanoseconds => TimeDelta::nanoseconds(i),
+                            TimeUnit::Microseconds => TimeDelta::microseconds(i),
+                            TimeUnit::Milliseconds => TimeDelta::milliseconds(i),
+                        };
+                        let dt = NaiveDateTime::UNIX_EPOCH.checked_add_signed(delta).unwrap();
+                        if let Some(tz) = tz {
+                            let tz = tz.parse::<Tz>().unwrap();
+                            let dt = tz.from_utc_datetime(&dt);
+                            dt.into_py(py)
+                        } else {
+                            dt.into_py(py)
+                        }
+                    }
+                    _ => todo!(),
                 }
             }
             _ => todo!(),

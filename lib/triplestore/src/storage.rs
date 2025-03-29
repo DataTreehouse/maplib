@@ -1,7 +1,8 @@
 use crate::errors::TriplestoreError;
 use oxrdf::{NamedNode, Subject, Term};
 use polars::prelude::{
-    as_struct, col, lit, Expr, IdxSize, IntoLazy, IpcWriter, LazyFrame, PlSmallStr, ScanArgsIpc,
+    as_struct, col, concat, lit, Expr, IdxSize, IntoLazy, IpcWriter, LazyFrame, PlSmallStr,
+    ScanArgsIpc, UnionArgs,
 };
 use polars_core::datatypes::{AnyValue, CategoricalChunked, LogicalType};
 use polars_core::frame::DataFrame;
@@ -302,14 +303,13 @@ fn create_indices(
     obj_type: &BaseRDFNodeType,
 ) -> Result<IndexedTriples, TriplestoreError> {
     let now = Instant::now();
-    let (df, subj_sparse_map) = create_unique_df_and_sparse_map(lf, true, true, false);
+    let (df, subject_sparse_index) = create_unique_df_and_sparse_map(lf, true, true, false);
     debug!(
         "Creating subject sparse map took {} seconds",
         now.elapsed().as_secs_f32()
     );
     let store_now = Instant::now();
     let height = df.height();
-    let subject_sparse_index = subj_sparse_map;
     let subject_sort = StoredTriples::new(df.clone(), subj_type, obj_type, storage_folder)?;
     debug!("Storing triples took {}", store_now.elapsed().as_secs_f32());
     let mut object_sort = None;
@@ -719,34 +719,27 @@ fn update_column_sorted_index(
         } else {
             subject_type
         };
-        //This exercise is a workaround for a bug in polars with struct and merge_sorted
-        if other_type.is_lang_string() {
-            let other_c = get_col(!is_subject);
-            elf = elf.unnest([other_c]);
-            lf = lf.unnest([other_c]);
-        }
+
         if sort_on_existing {
             elf = elf.with_column(lit(true).alias(EXISTING_COL));
         }
-        lf = lf.merge_sorted(elf, PlSmallStr::from_str(c)).unwrap();
 
-        if other_type.is_lang_string() {
-            let other_c = get_col(!is_subject);
-            let mut select_cols = vec![col(SUBJECT_COL_NAME), col(OBJECT_COL_NAME)];
-            if sort_on_existing {
-                select_cols.push(col(EXISTING_COL));
-            }
-            lf = lf
-                .with_column(
-                    as_struct(vec![
-                        col(LANG_STRING_VALUE_FIELD),
-                        col(LANG_STRING_LANG_FIELD),
-                    ])
-                    .alias(other_c),
-                )
-                .select(select_cols);
-        }
+        //TODO: go back to merge sorted
+        //lf = lf.merge_sorted(elf, PlSmallStr::from_str(c)).unwrap().collect().unwrap().lazy();
+        lf = concat(
+            [lf, elf],
+            UnionArgs {
+                parallel: true,
+                rechunk: false,
+                to_supertypes: false,
+                diagonal: true,
+                from_partitioned_ds: false,
+                maintain_order: false,
+            },
+        )
+        .unwrap();
     }
+
     let (df, sparse_map) = create_unique_df_and_sparse_map(lf, is_subject, true, sort_on_existing);
     let height = df.height();
     let new_triples = if sort_on_existing {

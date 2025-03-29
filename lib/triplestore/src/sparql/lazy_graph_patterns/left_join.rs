@@ -22,6 +22,7 @@ impl Triplestore {
         context: &Context,
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         mut pushdowns: Pushdowns,
+        include_transient: bool,
     ) -> Result<SolutionMappings, SparqlError> {
         trace!("Processing left join graph pattern");
         let left_context = context.extension_with(PathEntry::LeftJoinLeftSide);
@@ -33,6 +34,7 @@ impl Triplestore {
             &left_context,
             parameters,
             pushdowns.clone(),
+            include_transient,
         )?;
 
         pushdowns.add_graph_pattern_pushdowns(right);
@@ -54,6 +56,7 @@ impl Triplestore {
             &right_context,
             parameters,
             pushdowns,
+            include_transient,
         )?;
 
         if let Some(expr) = expression {
@@ -63,6 +66,7 @@ impl Triplestore {
                 &expression_context,
                 parameters,
                 expression_pushdowns.as_ref(),
+                include_transient,
             )?;
             right_solution_mappings = filter(right_solution_mappings, &expression_context)?;
             right_solution_mappings =

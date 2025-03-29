@@ -447,7 +447,7 @@ pub fn prepare_triples(
     let EagerSolutionMappings {
         mappings: mut df,
         rdf_node_types: _,
-    } = set_structs_all_null_to_null_row(sm).as_eager();
+    } = set_structs_all_null_to_null_row(sm).as_eager(false);
 
     if df.height() == 0 {
         return vec![];

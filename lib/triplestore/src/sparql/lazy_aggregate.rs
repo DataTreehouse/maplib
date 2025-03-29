@@ -19,6 +19,7 @@ impl Triplestore {
         solution_mappings: SolutionMappings,
         context: &Context,
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
+        include_transient: bool,
     ) -> Result<AggregateReturn, SparqlError> {
         let output_solution_mappings;
         let mut out_expr;
@@ -43,6 +44,7 @@ impl Triplestore {
                     column_context.as_ref().unwrap(),
                     parameters,
                     None,
+                    include_transient,
                 )?;
                 match name {
                     AggregateFunction::Count => {

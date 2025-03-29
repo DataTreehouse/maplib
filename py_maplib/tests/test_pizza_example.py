@@ -124,9 +124,30 @@ def test_construct_pvalues2(pizzas_mapping):
         parameters={"h": (h_df, {"h1": RDFType.IRI()})},
     )
     res0 = res[0]
-    expected_dtypes = {"object": "IRI", "subject": "IRI"}
-    # assert res0.rdf_datatypes == expected_dtypes
     res1 = res[1]
-    # assert res1.rdf_datatypes == expected_dtypes
     assert res0.height == 1
     assert res1.height == 2
+
+@pytest.mark.skip()
+def test_having_not_so_nice(pizzas_mapping):
+    h_df = pl.DataFrame(
+        {
+            "h1": [
+                "https://github.com/magbak/maplib/pizza#Hawaiian",
+                "https://github.com/magbak/maplib/pizza#Hawaiian2",
+            ]
+        }
+    )
+    res = pizzas_mapping.query(
+        """
+    PREFIX pizza:<https://github.com/magbak/maplib/pizza#>
+
+    SELECT ?i (COUNT(?p) AS ?c)
+    WHERE {
+        ?p pizza:hasIngredient ?i .
+    } 
+    GROUP BY ?i
+    HAVING (?c > 1)
+    """
+    )
+    assert res.height > 0

@@ -49,7 +49,7 @@ impl Triplestore {
         };
         if let Some(mut mappings) = solution_mappings {
             //TODO: Remove this workaround
-            mappings = mappings.as_eager().as_lazy();
+            mappings = mappings.as_eager(false).as_lazy();
             mappings = join(mappings, sm, JoinType::Inner)?;
             Ok(mappings)
         } else {
