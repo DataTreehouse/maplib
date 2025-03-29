@@ -128,7 +128,6 @@ def test_construct_pvalues2(pizzas_mapping):
     assert res0.height == 1
     assert res1.height == 2
 
-@pytest.mark.skip()
 def test_having_not_so_nice(pizzas_mapping):
     h_df = pl.DataFrame(
         {
@@ -142,12 +141,12 @@ def test_having_not_so_nice(pizzas_mapping):
         """
     PREFIX pizza:<https://github.com/magbak/maplib/pizza#>
 
-    SELECT ?i (COUNT(?p) AS ?c)
+    SELECT ?p (COUNT(?i) AS ?c)
     WHERE {
         ?p pizza:hasIngredient ?i .
     } 
-    GROUP BY ?i
+    GROUP BY ?p
     HAVING (?c > 1)
     """
     )
-    assert res.height > 0
+    assert res.height == 2

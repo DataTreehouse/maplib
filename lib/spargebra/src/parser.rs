@@ -410,6 +410,11 @@ fn build_select(
     let mut p = r#where;
     let mut with_aggregate = false;
 
+    let mut where_visible: HashSet<Variable> = HashSet::default();
+    p.on_in_scope_variable(|v| {
+        where_visible.insert(v.clone());
+    });
+
     // GROUP BY
     let aggregates = state.aggregates.pop().unwrap_or_default();
     if group.is_none() && !aggregates.is_empty() {
@@ -442,6 +447,21 @@ fn build_select(
         p = new_join(p, data);
     }
 
+    // SELECT THOSE VARIABLES THAT NEED TO BE VISIBLE FOR THE HAVING
+    if let SelectionVariables::Explicit(sel_items) = &select.variables {
+        for sel_item in sel_items {
+            if let SelectionMember::Expression(expression, variable) = sel_item {
+                if !where_visible.contains(&variable) {
+                    p = GraphPattern::Extend {
+                        inner: Box::new(p),
+                        variable: variable.clone(),
+                        expression: expression.clone(),
+                    };
+                }
+            }
+        }
+    }
+
     // HAVING
     if let Some(expr) = having {
         p = GraphPattern::Filter {
@@ -468,23 +488,25 @@ fn build_select(
                         v
                     }
                     SelectionMember::Expression(expression, variable) => {
-                        if visible.contains(&variable) {
-                            // We disallow to override an existing variable with an expression
-                            return Err(
-                                "The SELECT overrides an existing variable using an expression",
-                            );
+                        if where_visible.contains(&variable) {
+                            if visible.contains(&variable) {
+                                // We disallow to override an existing variable with an expression
+                                return Err(
+                                    "The SELECT overrides an existing variable using an expression",
+                                );
+                            }
+                            if with_aggregate && !are_variables_bound(&expression, &visible) {
+                                // We validate projection variables if there is an aggregate
+                                return Err(
+                                    "The SELECT contains an expression with a variable that is unbound",
+                                );
+                            }
+                            p = GraphPattern::Extend {
+                                inner: Box::new(p),
+                                variable: variable.clone(),
+                                expression,
+                            };
                         }
-                        if with_aggregate && !are_variables_bound(&expression, &visible) {
-                            // We validate projection variables if there is an aggregate
-                            return Err(
-                                "The SELECT contains an expression with a variable that is unbound",
-                            );
-                        }
-                        p = GraphPattern::Extend {
-                            inner: Box::new(p),
-                            variable: variable.clone(),
-                            expression,
-                        };
                         variable
                     }
                 };
