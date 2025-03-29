@@ -541,7 +541,7 @@ pub fn union(
             to_supertypes: false,
             diagonal: true,
             from_partitioned_ds: false,
-            maintain_order:false,
+            maintain_order: false,
         },
     )
     .expect("Concat problem");

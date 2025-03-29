@@ -366,7 +366,9 @@ fn particular_term_vec_to_series(term_vec: Vec<Term>, dt: BaseRDFNodeType) -> Se
         let langs = term_vec
             .par_iter()
             .map(|t| match t {
-                Term::Literal(l) => LiteralValue::Scalar(Scalar::from(PlSmallStr::from_string(l.language().unwrap().to_string()))),
+                Term::Literal(l) => LiteralValue::Scalar(Scalar::from(PlSmallStr::from_string(
+                    l.language().unwrap().to_string(),
+                ))),
                 _ => panic!("Should never happen"),
             })
             .collect();

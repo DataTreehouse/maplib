@@ -1,10 +1,13 @@
-use std::ops::Deref;
 use crate::{LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD};
 use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
 use log::warn;
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{BlankNode, Literal, NamedNode, NamedNodeRef, Term};
-use polars::prelude::{as_struct, lit, AnyValue, DataType, Expr, LiteralValue, NamedFrom, PlSmallStr, Scalar, Series, TimeUnit};
+use polars::prelude::{
+    as_struct, lit, AnyValue, DataType, Expr, LiteralValue, NamedFrom, PlSmallStr, Scalar, Series,
+    TimeUnit,
+};
+use std::ops::Deref;
 use std::str::FromStr;
 
 pub fn rdf_term_to_polars_expr(term: &Term) -> Expr {
@@ -32,7 +35,9 @@ pub fn rdf_named_node_to_polars_literal_value(named_node: &NamedNode) -> Literal
 }
 
 pub fn rdf_owned_named_node_to_polars_literal_value(named_node: NamedNode) -> LiteralValue {
-    LiteralValue::Scalar(Scalar::from(PlSmallStr::from_string(named_node.into_string())))
+    LiteralValue::Scalar(Scalar::from(PlSmallStr::from_string(
+        named_node.into_string(),
+    )))
 }
 
 pub fn rdf_blank_node_to_polars_literal_value(blank_node: &BlankNode) -> LiteralValue {
@@ -40,7 +45,9 @@ pub fn rdf_blank_node_to_polars_literal_value(blank_node: &BlankNode) -> Literal
 }
 
 pub fn rdf_owned_blank_node_to_polars_literal_value(blank_node: BlankNode) -> LiteralValue {
-    LiteralValue::Scalar(Scalar::from(PlSmallStr::from_string(blank_node.into_string())))
+    LiteralValue::Scalar(Scalar::from(PlSmallStr::from_string(
+        blank_node.into_string(),
+    )))
 }
 
 //TODO: Sort and check..
@@ -148,8 +155,10 @@ pub fn rdf_literal_to_polars_literal_value(lit: &Literal) -> LiteralValue {
                 ))
             } else {
                 warn!("Could not parse xsd:dateTime {}", value);
-                LiteralValue::Scalar(Scalar::null(DataType::Datetime(TimeUnit::Nanoseconds, None)))
-
+                LiteralValue::Scalar(Scalar::null(DataType::Datetime(
+                    TimeUnit::Nanoseconds,
+                    None,
+                )))
             }
         }
     } else if datatype == xsd::DATE_TIME_STAMP {
@@ -165,14 +174,16 @@ pub fn rdf_literal_to_polars_literal_value(lit: &Literal) -> LiteralValue {
                 "Could not parse xsd:dateTimeStamp {} note that timezone is required",
                 value
             );
-            LiteralValue::Scalar(Scalar::null(DataType::Datetime(TimeUnit::Nanoseconds, None)))
+            LiteralValue::Scalar(Scalar::null(DataType::Datetime(
+                TimeUnit::Nanoseconds,
+                None,
+            )))
         }
     } else if datatype == xsd::DATE {
         if let Ok(parsed) = NaiveDate::parse_from_str(value, "%Y-%m-%d") {
             let dur = parsed.signed_duration_since(NaiveDate::from_ymd_opt(1970, 1, 1).unwrap());
 
-            LiteralValue::Scalar(Scalar::new_date(
-                dur.num_days() as i32))
+            LiteralValue::Scalar(Scalar::new_date(dur.num_days() as i32))
         } else {
             warn!("Could not parse xsd:date {}", value);
             LiteralValue::Scalar(Scalar::null(DataType::Date))
@@ -190,18 +201,16 @@ pub fn rdf_literal_to_polars_literal_value(lit: &Literal) -> LiteralValue {
 }
 
 pub fn polars_literal_values_to_series(literal_values: Vec<LiteralValue>, name: &str) -> Series {
-    let first_non_null_opt = literal_values
-        .iter()
-        .find(|x| !x.is_null())
-        .cloned();
+    let first_non_null_opt = literal_values.iter().find(|x| !x.is_null()).cloned();
     if let Some(first_non_null) = &first_non_null_opt {
         if let LiteralValue::Scalar(s) = first_non_null {
-            let values = literal_values.into_iter().map(|x| if let LiteralValue::Scalar(s) = x {
-                s.into_value()
-            } else {
-                panic!("Should never happen")
-            }
-            );
+            let values = literal_values.into_iter().map(|x| {
+                if let LiteralValue::Scalar(s) = x {
+                    s.into_value()
+                } else {
+                    panic!("Should never happen")
+                }
+            });
             match s.value() {
                 AnyValue::Boolean(_) => Series::new(
                     name.into(),
@@ -386,10 +395,10 @@ pub fn polars_literal_values_to_series(literal_values: Vec<LiteralValue>, name: 
                         })
                         .collect::<Vec<Option<i64>>>(),
                 )
-                    .cast(&DataType::Datetime(*t, tz.cloned()))
-                    .unwrap(),
+                .cast(&DataType::Datetime(*t, tz.cloned()))
+                .unwrap(),
                 AnyValue::DatetimeOwned(_, t, tz) => {
-                    let tz = tz.as_ref().map(|x|x.deref().clone());
+                    let tz = tz.as_ref().map(|x| x.deref().clone());
                     Series::new(
                         name.into(),
                         values
@@ -404,9 +413,9 @@ pub fn polars_literal_values_to_series(literal_values: Vec<LiteralValue>, name: 
                             })
                             .collect::<Vec<Option<i64>>>(),
                     )
-                        .cast(&DataType::Datetime(*t, tz))
-                        .unwrap()
-                },
+                    .cast(&DataType::Datetime(*t, tz))
+                    .unwrap()
+                }
                 AnyValue::Date(_) => Series::new(
                     name.into(),
                     values
@@ -420,8 +429,8 @@ pub fn polars_literal_values_to_series(literal_values: Vec<LiteralValue>, name: 
                         })
                         .collect::<Vec<Option<i32>>>(),
                 )
-                    .cast(&DataType::Date)
-                    .unwrap(),
+                .cast(&DataType::Date)
+                .unwrap(),
                 AnyValue::Duration(_, _) => {
                     todo!()
                 }

@@ -1,6 +1,9 @@
 use crate::errors::TriplestoreError;
 use oxrdf::{NamedNode, Subject, Term};
-use polars::prelude::{as_struct, col, concat, lit, Expr, IdxSize, IntoLazy, IpcWriter, LazyFrame, PlSmallStr, ScanArgsIpc, UnionArgs};
+use polars::prelude::{
+    as_struct, col, concat, lit, Expr, IdxSize, IntoLazy, IpcWriter, LazyFrame, PlSmallStr,
+    ScanArgsIpc, UnionArgs,
+};
 use polars_core::datatypes::{AnyValue, CategoricalChunked, LogicalType};
 use polars_core::frame::DataFrame;
 use polars_core::prelude::{
@@ -10,7 +13,7 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use std::cmp;
 
 use crate::IndexingOptions;
-use log::{debug};
+use log::debug;
 use oxrdf::vocab::xsd;
 use polars::io::SerWriter;
 use polars_core::utils::{concat_df, Container};
@@ -723,14 +726,18 @@ fn update_column_sorted_index(
 
         //TODO: go back to merge sorted
         //lf = lf.merge_sorted(elf, PlSmallStr::from_str(c)).unwrap().collect().unwrap().lazy();
-        lf = concat([lf, elf], UnionArgs{
-            parallel: true,
-            rechunk: false,
-            to_supertypes: false,
-            diagonal: true,
-            from_partitioned_ds: false,
-            maintain_order: false,
-        }).unwrap();
+        lf = concat(
+            [lf, elf],
+            UnionArgs {
+                parallel: true,
+                rechunk: false,
+                to_supertypes: false,
+                diagonal: true,
+                from_partitioned_ds: false,
+                maintain_order: false,
+            },
+        )
+        .unwrap();
     }
 
     let (df, sparse_map) = create_unique_df_and_sparse_map(lf, is_subject, true, sort_on_existing);

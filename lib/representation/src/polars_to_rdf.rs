@@ -15,7 +15,10 @@ use chrono::TimeZone as ChronoTimeZone;
 use chrono::{Datelike, Timelike};
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{Literal, NamedNode, Subject, Triple, Variable};
-use polars::prelude::{as_struct, col, AnyValue, Column, DataFrame, DataType, IntoColumn, IntoLazy, LiteralValue, PlSmallStr, Scalar, Series, TimeZone};
+use polars::prelude::{
+    as_struct, col, AnyValue, Column, DataFrame, DataType, IntoColumn, IntoLazy, LiteralValue,
+    PlSmallStr, Scalar, Series, TimeZone,
+};
 use rayon::iter::IndexedParallelIterator;
 use rayon::iter::IntoParallelIterator;
 use rayon::iter::ParallelIterator;
@@ -399,9 +402,9 @@ pub fn particular_opt_term_vec_to_series(
             .map(|t| {
                 if let Some(t) = t {
                     match t {
-                        Term::Literal(l) => {
-                            LiteralValue::Scalar(Scalar::from(PlSmallStr::from_string(l.language().unwrap().to_string())))
-                        }
+                        Term::Literal(l) => LiteralValue::Scalar(Scalar::from(
+                            PlSmallStr::from_string(l.language().unwrap().to_string()),
+                        )),
                         _ => panic!("Should never happen"),
                     }
                 } else {

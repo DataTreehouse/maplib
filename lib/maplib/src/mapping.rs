@@ -240,7 +240,7 @@ impl Mapping {
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         graph: Option<NamedNode>,
         streaming: bool,
-        include_transient:bool,
+        include_transient: bool,
     ) -> Result<QueryResult, SparqlError> {
         let use_triplestore = self.get_triplestore(&graph);
         use_triplestore.query(query, parameters, streaming, include_transient)
@@ -311,7 +311,7 @@ impl Mapping {
         streaming: bool,
         max_shape_results: Option<usize>,
         folder_path: Option<&PathBuf>,
-        include_transient:bool,
+        include_transient: bool,
     ) -> Result<ValidationReport, ShaclError> {
         let (shape_graph, mut shape_triplestore) = if let Some((shape_graph, shape_triplestore)) =
             self.triplestores_map.remove_entry(shape_graph)

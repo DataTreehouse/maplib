@@ -8,7 +8,10 @@ use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{Literal, NamedNode, NamedNodeRef, Variable};
 use polars::datatypes::{CategoricalOrdering, DataType, TimeUnit};
 use polars::frame::UniqueKeepStrategy;
-use polars::prelude::{as_struct, coalesce, col, concat_str, lit, when, Expr, GetOutput, IntoColumn, LazyFrame, LiteralValue, NamedFrom, Operator, PlSmallStr, Scalar, StrptimeOptions};
+use polars::prelude::{
+    as_struct, coalesce, col, concat_str, lit, when, Expr, GetOutput, IntoColumn, LazyFrame,
+    LiteralValue, NamedFrom, Operator, PlSmallStr, Scalar, StrptimeOptions,
+};
 use polars::series::Series;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use representation::multitype::{
@@ -815,7 +818,9 @@ pub fn func_expression(
                                         .not(),
                                 )
                                 .then(lit(""))
-                                .otherwise(lit(LiteralValue::untyped_null()).cast(DataType::String)),
+                                .otherwise(
+                                    lit(LiteralValue::untyped_null()).cast(DataType::String),
+                                ),
                             )
                         } else {
                             exprs.push(lit(LiteralValue::untyped_null()).cast(DataType::String))
