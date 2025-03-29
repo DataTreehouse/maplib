@@ -178,6 +178,7 @@ impl Triplestore {
             let mut accumulated_heights = 0usize;
 
             // This part is to work around a performance bug in Polars.
+            // Still present..
             if predicate_uris_len > 1 && (subjects.is_some() || objects.is_some()) {
                 sms = sms
                     .into_par_iter()

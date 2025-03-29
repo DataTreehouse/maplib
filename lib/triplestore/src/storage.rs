@@ -10,7 +10,7 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use std::cmp;
 
 use crate::IndexingOptions;
-use log::{debug, trace};
+use log::{debug};
 use oxrdf::vocab::xsd;
 use polars::io::SerWriter;
 use polars_core::utils::{concat_df, Container};
@@ -698,7 +698,6 @@ fn update_column_sorted_index(
     ),
     TriplestoreError,
 > {
-    debug!("start update column");
     let c = get_col(is_subject);
     let mut lf = sort_indexed_lf(df.lazy(), is_subject, false, false);
     let existing_lfs_heights = stored_triples.get_lazy_frames(None)?;
@@ -717,12 +716,7 @@ fn update_column_sorted_index(
         } else {
             subject_type
         };
-        //This exercise is a workaround for a bug in polars with struct and merge_sorted
-        if other_type.is_lang_string() {
-            let other_c = get_col(!is_subject);
-            elf = elf.unnest([other_c]);
-            lf = lf.unnest([other_c]);
-        }
+
         if sort_on_existing {
             elf = elf.with_column(lit(true).alias(EXISTING_COL));
         }
@@ -737,22 +731,6 @@ fn update_column_sorted_index(
             from_partitioned_ds: false,
             maintain_order: false,
         }).unwrap();
-        if other_type.is_lang_string() {
-            let other_c = get_col(!is_subject);
-            let mut select_cols = vec![col(SUBJECT_COL_NAME), col(OBJECT_COL_NAME)];
-            if sort_on_existing {
-                select_cols.push(col(EXISTING_COL));
-            }
-            lf = lf
-                .with_column(
-                    as_struct(vec![
-                        col(LANG_STRING_VALUE_FIELD),
-                        col(LANG_STRING_LANG_FIELD),
-                    ])
-                    .alias(other_c),
-                )
-                .select(select_cols);
-        }
     }
 
     let (df, sparse_map) = create_unique_df_and_sparse_map(lf, is_subject, true, sort_on_existing);
