@@ -6,4 +6,5 @@ edition = "2021"
 [dependencies]
 representation = { path = "../representation" }
 triplestore = {path="../triplestore"}
-thiserror = { workspace= true }
+thiserror.workspace = true
+oxrdf.workspace = true

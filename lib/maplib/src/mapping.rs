@@ -312,6 +312,9 @@ impl Mapping {
         max_shape_results: Option<usize>,
         folder_path: Option<&PathBuf>,
         include_transient: bool,
+        only_shapes: Option<Vec<NamedNode>>,
+        deactivate_shapes: Vec<NamedNode>,
+        dry_run: bool,
     ) -> Result<ValidationReport, ShaclError> {
         let (shape_graph, mut shape_triplestore) = if let Some((shape_graph, shape_triplestore)) =
             self.triplestores_map.remove_entry(shape_graph)
@@ -331,6 +334,9 @@ impl Mapping {
             max_shape_results,
             folder_path,
             include_transient,
+            only_shapes,
+            deactivate_shapes,
+            dry_run,
         ) {
             Ok(vr) => {
                 self.triplestores_map.insert(shape_graph, shape_triplestore);

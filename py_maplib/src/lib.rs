@@ -412,6 +412,9 @@ impl PyMapping {
         streaming=None,
         max_shape_results=None,
         result_storage=None,
+        only_shapes=None,
+        deactivate_shapes=None,
+        dry_run=None,
     ))]
     fn validate(
         &mut self,
@@ -422,8 +425,37 @@ impl PyMapping {
         streaming: Option<bool>,
         max_shape_results: Option<usize>,
         result_storage: Option<&str>,
+        only_shapes: Option<Vec<String>>,
+        deactivate_shapes: Option<Vec<String>>,
+        dry_run: Option<bool>,
     ) -> PyResult<PyValidationReport> {
         let shape_graph = NamedNode::new(shape_graph).map_err(PyMaplibError::from)?;
+        if only_shapes.is_some() && deactivate_shapes.is_some() {
+            return Err(PyMaplibError::FunctionArgumentError(
+                "only_shapes and deactivate_shapes cannot both be set".to_string(),
+            )
+            .into());
+        }
+        let only_shapes = if let Some(only_shapes) = only_shapes {
+            let only_shapes: Result<Vec<_>, _> = only_shapes
+                .into_iter()
+                .map(|x| NamedNode::new(x).map_err(PyMaplibError::from))
+                .collect();
+            Some(only_shapes?)
+        } else {
+            None
+        };
+
+        let deactivate_shapes = if let Some(deactivate_shapes) = deactivate_shapes {
+            let deactivate_shapes: Result<Vec<_>, _> = deactivate_shapes
+                .into_iter()
+                .map(|x| NamedNode::new(x).map_err(PyMaplibError::from))
+                .collect();
+            deactivate_shapes?
+        } else {
+            vec![]
+        };
+
         let path = result_storage.map(|v| Path::new(v).to_owned());
         let report = self
             .inner
@@ -435,6 +467,9 @@ impl PyMapping {
                 max_shape_results,
                 path.as_ref(),
                 false, //TODO: Needs more work before can be exposed
+                only_shapes,
+                deactivate_shapes,
+                dry_run.unwrap_or(false),
             )
             .map_err(PyMaplibError::from)?;
         let shape_graph_triplestore = if include_shape_graph.unwrap_or(true) {

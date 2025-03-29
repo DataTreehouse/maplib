@@ -2508,6 +2508,7 @@ dependencies = [
 name = "shacl"
 version = "0.1.0"
 dependencies = [
+ "oxrdf",
  "representation",
  "thiserror",
  "triplestore",

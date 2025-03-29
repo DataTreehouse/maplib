@@ -5,6 +5,7 @@ use pyo3::{pyclass, pymethods, PyObject, PyResult, Python};
 use report_mapping::report_to_mapping;
 use representation::solution_mapping::EagerSolutionMappings;
 use shacl::ValidationReport as RustValidationReport;
+use std::collections::HashMap;
 use triplestore::{IndexingOptions, Triplestore};
 
 #[derive(Clone)]
@@ -32,8 +33,20 @@ impl PyValidationReport {
 #[pymethods]
 impl PyValidationReport {
     #[getter]
-    pub fn conforms(&self) -> bool {
+    pub fn conforms(&self) -> Option<bool> {
         self.inner.conforms
+    }
+
+    #[getter]
+    pub fn shape_targets(&self, py: Python<'_>) -> PyResult<PyObject> {
+        let df = self.inner.shape_targets_df();
+        df_to_py_df(df, HashMap::new(), None, false, py)
+    }
+
+    #[getter]
+    pub fn performance(&self, py: Python<'_>) -> PyResult<PyObject> {
+        let df = self.inner.performance_df();
+        df_to_py_df(df, HashMap::new(), None, false, py)
     }
 
     #[pyo3(signature = (native_dataframe=None, include_datatypes=None, streaming=None))]

@@ -5,12 +5,29 @@ use crate::storage::StoredResults;
 use errors::ShaclError;
 use representation::solution_mapping::SolutionMappings;
 use std::path::PathBuf;
+use std::time::Duration;
+use oxrdf::NamedOrBlankNode;
 use triplestore::Triplestore;
+
+#[derive(Debug, Clone)]
+pub struct ShapeTargets {
+    pub shape_node: NamedOrBlankNode,
+    pub context: String,
+    pub count: usize,
+}
+
+#[derive(Debug, Clone)]
+pub struct ValidationPerformance {
+    pub shape_node: NamedOrBlankNode,
+    pub duration: Duration,
+}
 
 #[derive(Debug, Clone)]
 pub struct ValidationReport {
     pub conforms: bool,
     pub results: Option<StoredResults>,
+    pub performance: Vec<ValidationPerformance>,
+    pub shape_targets: Vec<ShapeTargets>,
 }
 
 impl ValidationReport {

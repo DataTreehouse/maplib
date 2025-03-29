@@ -1,8 +1,8 @@
 use crate::errors::TriplestoreError;
 use oxrdf::{NamedNode, Subject, Term};
 use polars::prelude::{
-    col, concat, lit, Expr, IdxSize, IntoLazy, IpcWriter, LazyFrame, PlSmallStr,
-    ScanArgsIpc, UnionArgs,
+    col, concat, lit, Expr, IdxSize, IntoLazy, IpcWriter, LazyFrame, PlSmallStr, ScanArgsIpc,
+    UnionArgs,
 };
 use polars_core::datatypes::{AnyValue, CategoricalChunked, LogicalType};
 use polars_core::frame::DataFrame;
@@ -18,9 +18,7 @@ use oxrdf::vocab::xsd;
 use polars::io::SerWriter;
 use polars_core::utils::{concat_df, Container};
 use representation::multitype::{lf_column_from_categorical, lf_column_to_categorical};
-use representation::{
-    BaseRDFNodeType, OBJECT_COL_NAME, SUBJECT_COL_NAME,
-};
+use representation::{BaseRDFNodeType, OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use std::collections::{BTreeMap, HashMap};
 use std::fs::{remove_file, File};
 use std::path::{Path, PathBuf};
