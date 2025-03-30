@@ -25,7 +25,7 @@ pub struct ValidationPerformance {
 
 #[derive(Debug, Clone)]
 pub struct ValidationReport {
-    pub conforms: bool,
+    pub conforms: Option<bool>,
     pub results: Option<StoredResults>,
     pub performance: Vec<ValidationPerformance>,
     pub shape_targets: Vec<ShapeTargets>,
