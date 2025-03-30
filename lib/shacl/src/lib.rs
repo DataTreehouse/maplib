@@ -18,8 +18,9 @@ pub struct ShapeTargets {
 }
 
 #[derive(Debug, Clone)]
-pub struct ValidationPerformance {
+pub struct Performance {
     pub shape_node: NamedOrBlankNode,
+    pub context: String,
     pub duration: Duration,
 }
 
@@ -27,7 +28,8 @@ pub struct ValidationPerformance {
 pub struct ValidationReport {
     pub conforms: Option<bool>,
     pub results: Option<StoredResults>,
-    pub performance: Vec<ValidationPerformance>,
+    pub validation_performance: Vec<Performance>,
+    pub targets_performance: Vec<Performance>,
     pub shape_targets: Vec<ShapeTargets>,
 }
 
