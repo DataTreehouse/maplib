@@ -2509,6 +2509,7 @@ name = "shacl"
 version = "0.1.0"
 dependencies = [
  "oxrdf",
+ "polars",
  "representation",
  "thiserror",
  "triplestore",

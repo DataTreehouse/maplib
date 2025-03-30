@@ -8,3 +8,4 @@ representation = { path = "../representation" }
 triplestore = {path="../triplestore"}
 thiserror.workspace = true
 oxrdf.workspace = true
+polars.workspace = true

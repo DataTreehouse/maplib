@@ -7,6 +7,7 @@ use representation::solution_mapping::SolutionMappings;
 use std::path::PathBuf;
 use std::time::Duration;
 use oxrdf::{NamedNode, NamedOrBlankNode};
+use polars::prelude::DataFrame;
 use triplestore::Triplestore;
 
 #[derive(Debug, Clone)]
@@ -36,6 +37,13 @@ impl ValidationReport {
     }
 
     pub fn concatenated_details(&self) -> Result<Option<SolutionMappings>, ShaclError> {
+        unimplemented!("Contact Data Treehouse to try")
+    }
+    pub fn performance_df(&self) -> DataFrame {
+        unimplemented!("Contact Data Treehouse to try")
+    }
+
+    pub fn shape_targets_df(&self) -> DataFrame {
         unimplemented!("Contact Data Treehouse to try")
     }
 }
