@@ -6,7 +6,7 @@ use errors::ShaclError;
 use representation::solution_mapping::SolutionMappings;
 use std::path::PathBuf;
 use std::time::Duration;
-use oxrdf::NamedOrBlankNode;
+use oxrdf::{NamedNode, NamedOrBlankNode};
 use triplestore::Triplestore;
 
 #[derive(Debug, Clone)]
@@ -49,6 +49,9 @@ pub fn validate(
     _max_shape_results: Option<usize>,
     _folder_path: Option<&PathBuf>,
     _include_transient: bool,
+    _only_shapes: Option<Vec<NamedNode>>,
+    _deactivate_shapes: Vec<NamedNode>,
+    _dry_run: bool,
 ) -> Result<ValidationReport, ShaclError> {
     unimplemented!("Contact Data Treehouse to try")
 }
