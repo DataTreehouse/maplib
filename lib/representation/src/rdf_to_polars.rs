@@ -30,13 +30,18 @@ pub fn rdf_term_to_polars_expr(term: &Term) -> Expr {
     }
 }
 
-pub fn rdf_named_node_to_polars_expr(named_node: &NamedNode) -> Expr {
+pub fn rdf_split_named_node(named_node: &NamedNode) -> (&str, &str) {
     let iri: &str = named_node.as_str();
     const DELIMITERS: &[char] = &['/', '#'];
     let (prefix, suffix) = match iri.rsplit_once(DELIMITERS) {
         Some(pair) => pair,
         None => ("", iri),
     };
+    return (prefix, suffix);
+}
+
+pub fn rdf_named_node_to_polars_expr(named_node: &NamedNode) -> Expr {
+    let (prefix, suffix) = rdf_split_named_node(named_node);
 
     as_struct(vec![
         lit(prefix).alias(IRI_PREFIX_FIELD),

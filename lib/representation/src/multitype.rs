@@ -19,7 +19,7 @@ pub const MULTI_NONE_DT: &str = "N";
 
 pub fn convert_lf_col_to_multitype(c: &str, dt: &RDFNodeType) -> Expr {
     match dt {
-        RDFNodeType::IRI => as_struct(vec![col(c).alias(MULTI_IRI_DT)]).alias(c),
+        RDFNodeType::IRI => col(c),
         RDFNodeType::BlankNode => as_struct(vec![col(c).alias(MULTI_BLANK_DT)]).alias(c),
         RDFNodeType::Literal(l) => {
             if rdf::LANG_STRING == l.as_ref() {
@@ -88,9 +88,10 @@ fn filter_multitype(multitype_column: &Column, names: &Vec<&str>, col_name: &str
     }
 }
 
+// TODO: I wonder what would happen if we started assuming things were multifield rather than working around the opposite
 pub fn base_col_name(dt: &BaseRDFNodeType) -> String {
     match dt {
-        BaseRDFNodeType::IRI => MULTI_IRI_DT.to_string(),
+        BaseRDFNodeType::IRI => IRI_SUFFIX_FIELD.to_string(),
         BaseRDFNodeType::BlankNode => MULTI_BLANK_DT.to_string(),
         BaseRDFNodeType::Literal(l) => l.to_string(),
         BaseRDFNodeType::None => MULTI_NONE_DT.to_string(),
@@ -698,6 +699,9 @@ pub fn all_multi_cols(dts: &Vec<BaseRDFNodeType>) -> Vec<String> {
         let colname = base_col_name(d);
         if d.is_lang_string() {
             all_cols.push(LANG_STRING_LANG_FIELD.to_string());
+        }
+        if d.is_iri() {
+            all_cols.push(IRI_PREFIX_FIELD.to_string());
         }
         all_cols.push(colname);
     }
