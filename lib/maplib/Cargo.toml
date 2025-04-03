@@ -9,6 +9,7 @@ templates = {path = "../templates"}
 triplestore = { path = "../triplestore" }
 shacl = { path = "../shacl" }
 representation = { path = "../representation" }
+datalog = {path = "../datalog"}
 
 rayon = { workspace = true }
 oxrdf = { workspace = true }

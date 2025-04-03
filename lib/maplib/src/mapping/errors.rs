@@ -7,6 +7,7 @@ use templates::ast::{ConstantTermOrList, PType};
 use templates::dataset::errors::TemplateError;
 use templates::MappingColumnType;
 use thiserror::Error;
+use datalog::inference::DatalogError;
 use triplestore::errors::TriplestoreError;
 
 #[derive(Error, Debug)]
@@ -39,6 +40,8 @@ pub enum MappingError {
     DatatypeInferenceError(RepresentationError),
     InvalidIRIError(String, usize, String),
     TemplateError(#[from] TemplateError),
+    DatalogSyntaxError(String),
+    DatalogError(DatalogError),
 }
 
 impl Display for MappingError {
@@ -172,6 +175,12 @@ impl Display for MappingError {
             }
             MappingError::TemplateError(x) => {
                 write!(f, "Template error: {}", x)
+            }
+            MappingError::DatalogSyntaxError(e) => {
+                write!(f, "Datalog syntax error: {}", e)
+            }
+            MappingError::DatalogError(e) => {
+                write!(f, "Datalog error: {}", e)
             }
         }
     }

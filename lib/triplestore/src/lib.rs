@@ -101,6 +101,19 @@ pub struct NewTriples {
     pub object_type: BaseRDFNodeType,
 }
 
+impl NewTriples {
+    pub fn to_eager_solution_mappings(self) -> Option<EagerSolutionMappings> {
+        if let Some(df) = self.df {
+            let mut map = HashMap::new();
+            map.insert(SUBJECT_COL_NAME.to_string(), self.subject_type.as_rdf_node_type());
+            map.insert(OBJECT_COL_NAME.to_string(), self.object_type.as_rdf_node_type());
+            Some(EagerSolutionMappings::new(df, map))
+        } else {
+            None
+        }
+    }
+}
+
 impl Triplestore {
     pub fn new(
         storage_folder: Option<String>,

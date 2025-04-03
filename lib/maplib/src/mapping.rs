@@ -15,6 +15,9 @@ use shacl::{validate, ValidationReport};
 use std::collections::HashMap;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use datalog::ast::DatalogRuleset;
+use datalog::inference::infer;
+use datalog::parser::parse_datalog_ruleset;
 use templates::ast::{ConstantTermOrList, PType, Template};
 use templates::dataset::TemplateDataset;
 use templates::document::document_from_str;
@@ -31,6 +34,7 @@ pub struct Mapping {
     pub blank_node_counter: usize,
     pub default_template_counter: usize,
     pub indexing: IndexingOptions,
+    pub ruleset: Option<DatalogRuleset>,
 }
 
 #[derive(Clone, Default)]
@@ -102,6 +106,7 @@ impl Mapping {
             blank_node_counter: 0,
             default_template_counter: 0,
             indexing,
+            ruleset: None,
         })
     }
 
@@ -397,5 +402,41 @@ impl Mapping {
                 .map_err(MappingError::TriplestoreError)?;
         }
         Ok(())
+    }
+
+    pub fn add_ruleset(&mut self, datalog_ruleset: &str) -> Result<(), MappingError> {
+        let ruleset = parse_datalog_ruleset(datalog_ruleset, None)
+            .map_err(|x| MappingError::DatalogSyntaxError(x.to_string()))?;
+        println!("Display debug {:?}", ruleset);
+
+        if let Some(existing_ruleset) = &mut self.ruleset {
+            existing_ruleset.extend(ruleset)
+        } else {
+            self.ruleset = Some(ruleset);
+        }
+        Ok(())
+    }
+
+    pub fn drop_ruleset(&mut self) {
+        self.ruleset = None;
+    }
+
+    pub fn infer(
+        &mut self,
+        insert: bool,
+    ) -> Result<Option<HashMap<NamedNode, EagerSolutionMappings>>, MappingError> {
+        if let Some(ruleset) = self.ruleset.take() {
+            let res = infer(&mut self.base_triplestore, &ruleset, insert);
+            match res {
+                Ok(o) => Ok(o),
+                Err(e) => {
+                    // Put it back.. this is done to be able to make a mutable borrow of the base triplestore
+                    self.ruleset = Some(ruleset);
+                    Err(MappingError::DatalogError(e))
+                }
+            }
+        } else {
+            todo!("Make an error!!")
+        }
     }
 }

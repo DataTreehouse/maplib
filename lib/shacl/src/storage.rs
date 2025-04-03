@@ -3,6 +3,7 @@ use representation::RDFNodeType;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct StoredResults {
     folder_path: Option<PathBuf>,
@@ -16,6 +17,7 @@ pub enum StoredSolutionMappings {
     SolutionMappingsOnDisk(SolutionMappingsOnDisk),
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct SolutionMappingsOnDisk {
     height: usize,

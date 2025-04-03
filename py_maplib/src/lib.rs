@@ -774,6 +774,52 @@ impl PyMapping {
         }
         Ok(out)
     }
+
+    #[pyo3(signature = (ruleset,))]
+    fn add_ruleset(&mut self, ruleset: &str) -> PyResult<()> {
+        self.inner
+            .add_ruleset(ruleset)
+            .map_err(PyMaplibError::MappingError)?;
+        Ok(())
+    }
+
+    fn drop_ruleset(&mut self) {
+        self.inner.drop_ruleset();
+    }
+
+    #[pyo3(signature = (insert=None, include_datatypes=None, native_dataframe=None))]
+    fn infer(
+        &mut self,
+        insert: Option<bool>,
+        include_datatypes: Option<bool>,
+        native_dataframe: Option<bool>,
+        py: Python<'_>,
+    ) -> PyResult<Option<HashMap<String, PyObject>>> {
+        let res = self
+            .inner
+            .infer(insert.unwrap_or(true))
+            .map_err(PyMaplibError::MappingError)?;
+        if let Some(res) = res {
+            let mut py_res = HashMap::new();
+            for (
+                nn,
+                EagerSolutionMappings {
+                    mut mappings,
+                    mut rdf_node_types,
+                },
+            ) in res
+            {
+                let include_datatypes = include_datatypes.unwrap_or(false);
+                let native_dataframe = native_dataframe.unwrap_or(false);
+                (mappings, rdf_node_types) = fix_cats_and_multicolumns(mappings, rdf_node_types, native_dataframe);
+                let pydf = df_to_py_df(mappings, rdf_node_types, None, include_datatypes, py)?;
+                py_res.insert(nn.as_str().to_string(), pydf);
+            }
+            Ok(Some(py_res))
+        } else {
+            Ok(None)
+        }
+    }
 }
 
 #[pymodule]

@@ -766,3 +766,30 @@ class Mapping:
         :param graph: The graph where indexes should be added
         :return:
         """
+
+    def add_ruleset(self, ruleset: str):
+        """
+        Add a Datalog ruleset to the mapping, concatenating it with any existing ruleset.
+        :param ruleset: The ruleset to add
+        :return:
+        """
+
+    def drop_ruleset(self):
+        """
+        Drops the ruleset
+        :return:
+        """
+
+    def infer(
+            self,
+            insert: bool=True,
+            include_datatypes: bool = False,
+            native_dataframe: bool = False,
+    ) -> Optional[Dict[str, DataFrame]]:
+        """
+        Run the inference rules
+        :param insert: Will the resulting triples be inserted into the triplestore, or returned?
+        :param native_dataframe: Return columns with maplib-native formatting. Useful for round-trips.
+        :param include_datatypes: Datatypes are not returned by default, set to true to return a dict with the solution mappings and the datatypes.
+        :return: The inferred N-Tuples if the triples are not inserted.
+        """

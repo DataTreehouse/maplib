@@ -496,6 +496,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "datalog"
+version = "0.1.0"
+dependencies = [
+ "oxrdf",
+ "representation",
+ "thiserror",
+ "triplestore",
+]
+
+[[package]]
 name = "dyn-clone"
 version = "1.0.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1035,6 +1045,7 @@ version = "0.6.0"
 dependencies = [
  "chrono",
  "chrono-tz 0.10.3",
+ "datalog",
  "env_logger",
  "log",
  "oxiri",
@@ -1979,7 +1990,7 @@ dependencies = [
 
 [[package]]
 name = "py_maplib"
-version = "0.15.11"
+version = "0.15.12"
 dependencies = [
  "jemallocator",
  "log",
