@@ -13,8 +13,8 @@ use representation::rdf_to_polars::{
 };
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use representation::{
-    BaseRDFNodeType, RDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD, OBJECT_COL_NAME,
-    SUBJECT_COL_NAME, VERB_COL_NAME,
+    BaseRDFNodeType, RDFNodeType, IRI_PREFIX_FIELD, IRI_SUFFIX_FIELD, LANG_STRING_LANG_FIELD,
+    LANG_STRING_VALUE_FIELD, OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME,
 };
 use std::collections::{HashMap, HashSet};
 
@@ -205,6 +205,20 @@ impl Triplestore {
                                         .field_by_name(LANG_STRING_LANG_FIELD)
                                         .cast(DataType::String)
                                         .alias(LANG_STRING_LANG_FIELD),
+                                ])
+                                .alias(OBJECT_COL_NAME),
+                            )
+                        } else if object_type.is_iri() {
+                            mappings = mappings.with_column(
+                                as_struct(vec![
+                                    col(OBJECT_COL_NAME)
+                                        .struct_()
+                                        .field_by_name(IRI_PREFIX_FIELD)
+                                        .alias(IRI_PREFIX_FIELD),
+                                    col(OBJECT_COL_NAME)
+                                        .struct_()
+                                        .field_by_name(IRI_SUFFIX_FIELD)
+                                        .alias(IRI_SUFFIX_FIELD),
                                 ])
                                 .alias(OBJECT_COL_NAME),
                             )
@@ -427,7 +441,7 @@ pub fn unnest_non_multi_col(mut mappings: LazyFrame, c: &str, dt: &BaseRDFNodeTy
     let mut exprs = vec![];
     let mut drop_cols = vec![];
 
-    if dt.is_lang_string() {
+    if dt.is_multifield() {
         let inner_cols = all_multi_cols(&vec![dt.clone()]);
         for inner in &inner_cols {
             let prefixed_inner = create_prefixed_multi_colname(c, inner);

@@ -1,10 +1,13 @@
 use crate::solution_mapping::SolutionMappings;
-use crate::{BaseRDFNodeType, RDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD};
+use crate::{
+    BaseRDFNodeType, RDFNodeType, IRI_PREFIX_FIELD, IRI_SUFFIX_FIELD, LANG_STRING_LANG_FIELD,
+    LANG_STRING_VALUE_FIELD,
+};
 use oxrdf::vocab::{rdf, xsd};
 use polars::datatypes::PlSmallStr;
 use polars::prelude::{
-    all_horizontal, as_struct, col, lit, when, CategoricalOrdering, Column, DataFrame, DataType,
-    Expr, IntoColumn, IntoLazy, JoinArgs, JoinType, LazyFrame, LazyGroupBy, LiteralValue,
+    all_horizontal, as_struct, col, is_null, lit, when, CategoricalOrdering, Column, DataFrame,
+    DataType, Expr, IntoColumn, IntoLazy, JoinArgs, JoinType, LazyFrame, LazyGroupBy, LiteralValue,
     MaintainOrderJoin, Selector, UniqueKeepStrategy,
 };
 
@@ -16,7 +19,7 @@ pub const MULTI_NONE_DT: &str = "N";
 
 pub fn convert_lf_col_to_multitype(c: &str, dt: &RDFNodeType) -> Expr {
     match dt {
-        RDFNodeType::IRI => as_struct(vec![col(c).alias(MULTI_IRI_DT)]).alias(c),
+        RDFNodeType::IRI => col(c),
         RDFNodeType::BlankNode => as_struct(vec![col(c).alias(MULTI_BLANK_DT)]).alias(c),
         RDFNodeType::Literal(l) => {
             if rdf::LANG_STRING == l.as_ref() {
@@ -42,6 +45,11 @@ pub fn extract_column_from_multitype(
             multitype_column,
             &vec![LANG_STRING_VALUE_FIELD, LANG_STRING_LANG_FIELD],
             LANG_STRING_VALUE_FIELD,
+        ),
+        BaseRDFNodeType::IRI => filter_multitype(
+            multitype_column,
+            &vec![IRI_PREFIX_FIELD, IRI_SUFFIX_FIELD],
+            &colname,
         ),
         _ => filter_multitype(multitype_column, &vec![&colname], &colname),
     }
@@ -80,14 +88,17 @@ fn filter_multitype(multitype_column: &Column, names: &Vec<&str>, col_name: &str
     }
 }
 
+// TODO: I wonder what would happen if we started assuming things were multifield rather than working around the opposite
 pub fn base_col_name(dt: &BaseRDFNodeType) -> String {
     match dt {
-        BaseRDFNodeType::IRI => MULTI_IRI_DT.to_string(),
+        BaseRDFNodeType::IRI => IRI_SUFFIX_FIELD.to_string(),
         BaseRDFNodeType::BlankNode => MULTI_BLANK_DT.to_string(),
         BaseRDFNodeType::Literal(l) => l.to_string(),
         BaseRDFNodeType::None => MULTI_NONE_DT.to_string(),
     }
 }
+
+// HELP: What are the reasons for these functions?
 
 pub fn lf_column_from_categorical(
     mut lf: LazyFrame,
@@ -96,7 +107,19 @@ pub fn lf_column_from_categorical(
 ) -> LazyFrame {
     match rdf_node_types.get(c).unwrap() {
         RDFNodeType::IRI | RDFNodeType::BlankNode => {
-            lf = lf.with_column(col(c).cast(DataType::String))
+            lf = lf.with_column(
+                as_struct(vec![
+                    col(c)
+                        .struct_()
+                        .field_by_name(IRI_PREFIX_FIELD)
+                        .cast(DataType::String),
+                    col(c)
+                        .struct_()
+                        .field_by_name(IRI_SUFFIX_FIELD)
+                        .cast(DataType::String),
+                ])
+                .alias(c),
+            )
         }
         RDFNodeType::Literal(l) => {
             if l.as_ref() == xsd::STRING {
@@ -122,12 +145,20 @@ pub fn lf_column_from_categorical(
             let mut fields = vec![];
             for t in types {
                 match t {
-                    BaseRDFNodeType::IRI => fields.push(
-                        col(c)
-                            .struct_()
-                            .field_by_name(MULTI_IRI_DT)
-                            .cast(DataType::String),
-                    ),
+                    BaseRDFNodeType::IRI => {
+                        fields.push(
+                            col(c)
+                                .struct_()
+                                .field_by_name(IRI_PREFIX_FIELD)
+                                .cast(DataType::String),
+                        );
+                        fields.push(
+                            col(c)
+                                .struct_()
+                                .field_by_name(IRI_SUFFIX_FIELD)
+                                .cast(DataType::String),
+                        );
+                    }
                     BaseRDFNodeType::BlankNode => fields.push(
                         col(c)
                             .struct_()
@@ -189,7 +220,20 @@ pub fn lf_column_to_categorical(
 ) -> LazyFrame {
     match rdf_node_type {
         RDFNodeType::IRI | RDFNodeType::BlankNode => {
-            lf = lf.with_column(col(c).cast(DataType::Categorical(None, cat_order)))
+            lf = lf.with_column(col(c).cast(DataType::Categorical(None, cat_order)));
+            lf = lf.with_column(
+                as_struct(vec![
+                    col(c)
+                        .struct_()
+                        .field_by_name(IRI_PREFIX_FIELD)
+                        .cast(DataType::Categorical(None, cat_order)),
+                    col(c)
+                        .struct_()
+                        .field_by_name(IRI_SUFFIX_FIELD)
+                        .cast(DataType::Categorical(None, cat_order)),
+                ])
+                .alias(c),
+            )
         }
         RDFNodeType::Literal(l) => {
             if l.as_ref() == xsd::STRING {
@@ -221,9 +265,15 @@ pub fn lf_column_to_categorical(
                         fields.push(
                             col(c)
                                 .struct_()
-                                .field_by_name(MULTI_IRI_DT)
+                                .field_by_name(IRI_PREFIX_FIELD)
                                 .cast(DataType::Categorical(None, cat_order)),
-                        )
+                        );
+                        fields.push(
+                            col(c)
+                                .struct_()
+                                .field_by_name(IRI_SUFFIX_FIELD)
+                                .cast(DataType::Categorical(None, cat_order)),
+                        );
                     }
                     BaseRDFNodeType::BlankNode => {
                         found_cat_expr = true;
@@ -650,6 +700,9 @@ pub fn all_multi_cols(dts: &Vec<BaseRDFNodeType>) -> Vec<String> {
         if d.is_lang_string() {
             all_cols.push(LANG_STRING_LANG_FIELD.to_string());
         }
+        if d.is_iri() {
+            all_cols.push(IRI_PREFIX_FIELD.to_string());
+        }
         all_cols.push(colname);
     }
     all_cols
@@ -683,6 +736,14 @@ pub fn known_convert_lf_multicol_to_single(
             as_struct(vec![
                 col(c).struct_().field_by_name(LANG_STRING_VALUE_FIELD),
                 col(c).struct_().field_by_name(LANG_STRING_LANG_FIELD),
+            ])
+            .alias(c),
+        );
+    } else if dt.is_iri() {
+        lf = lf.with_column(
+            as_struct(vec![
+                col(c).struct_().field_by_name(IRI_PREFIX_FIELD),
+                col(c).struct_().field_by_name(IRI_SUFFIX_FIELD),
             ])
             .alias(c),
         );
@@ -757,6 +818,9 @@ pub fn set_structs_all_null_to_null_row(sm: SolutionMappings) -> SolutionMapping
                     .field_by_name(LANG_STRING_VALUE_FIELD)
                     .is_null(),
             );
+        }
+        if r.is_iri() {
+            is_null_exprs.push(col(k).struct_().field_by_name(IRI_PREFIX_FIELD).is_null());
         }
         if !is_null_exprs.is_empty() {
             mappings = mappings.with_column(

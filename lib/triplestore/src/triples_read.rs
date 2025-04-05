@@ -11,18 +11,20 @@ use oxttl::turtle::SliceTurtleParser;
 use oxttl::{NTriplesParser, TurtleParser};
 use polars::prelude::{as_struct, col, DataFrame, IntoLazy, LiteralValue, PlSmallStr, Series};
 use polars_core::prelude::{IntoColumn, Scalar};
-use rayon::iter::ParallelIterator;
+use rayon::iter::{IndexedParallelIterator, ParallelIterator};
 use rayon::prelude::{IntoParallelIterator, IntoParallelRefIterator};
 use representation::rdf_to_polars::{
     polars_literal_values_to_series, rdf_literal_to_polars_literal_value,
     rdf_owned_blank_node_to_polars_literal_value, rdf_owned_named_node_to_polars_literal_value,
+    rdf_split_named_node,
 };
 use representation::{
-    get_subject_datatype_ref, get_term_datatype_ref, BaseRDFNodeType, LANG_STRING_LANG_FIELD,
-    LANG_STRING_VALUE_FIELD,
+    get_subject_datatype_ref, get_term_datatype_ref, BaseRDFNodeType, IRI_PREFIX_FIELD,
+    IRI_SUFFIX_FIELD, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD,
 };
 use representation::{OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use std::collections::HashMap;
+use std::f32::NAN;
 use std::fs::File;
 use std::ops::Deref;
 use std::path::Path;
@@ -394,6 +396,40 @@ fn particular_term_vec_to_series(term_vec: Vec<Term>, dt: BaseRDFNodeType) -> Se
                     col(LANG_STRING_LANG_FIELD),
                 ])
                 .alias(OBJECT_COL_NAME),
+            )
+            .collect()
+            .unwrap();
+        df.drop_in_place(OBJECT_COL_NAME)
+            .unwrap()
+            .take_materialized_series()
+    } else if dt.is_iri() {
+        let mut prefixes: Vec<_> = Vec::new();
+        let mut suffixes: Vec<_> = Vec::new();
+        term_vec
+            .par_iter()
+            .map(|t| match t {
+                Term::NamedNode(named_node) => named_node,
+                _ => unreachable!(
+                    "Datatype is an iri, but I couldn't convert the term to a NamedNode"
+                ),
+            })
+            .map(rdf_split_named_node)
+            .map(|(prefix, suffix)| {
+                (
+                    LiteralValue::Scalar(Scalar::from(PlSmallStr::from_str(prefix))),
+                    LiteralValue::Scalar(Scalar::from(PlSmallStr::from_str(suffix))),
+                )
+            })
+            .unzip_into_vecs(&mut prefixes, &mut suffixes);
+
+        let prefix_ser = polars_literal_values_to_series(prefixes, IRI_PREFIX_FIELD);
+        let suffix_ser = polars_literal_values_to_series(suffixes, IRI_SUFFIX_FIELD);
+        let mut df = DataFrame::new(vec![prefix_ser.into(), suffix_ser.into()])
+            .unwrap()
+            .lazy()
+            .with_column(
+                as_struct(vec![col(IRI_PREFIX_FIELD), col(IRI_SUFFIX_FIELD)])
+                    .alias(OBJECT_COL_NAME),
             )
             .collect()
             .unwrap();

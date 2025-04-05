@@ -14,9 +14,7 @@ use polars::prelude::{
 };
 use polars::series::Series;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
-use representation::multitype::{
-    all_multi_main_cols, convert_lf_col_to_multitype, MULTI_BLANK_DT, MULTI_IRI_DT,
-};
+use representation::multitype::{all_multi_main_cols, convert_lf_col_to_multitype, MULTI_BLANK_DT};
 use representation::multitype::{base_col_name, set_structs_all_null_to_null_row};
 use representation::query_context::Context;
 use representation::rdf_to_polars::{
@@ -25,8 +23,8 @@ use representation::rdf_to_polars::{
 use representation::solution_mapping::SolutionMappings;
 use representation::{
     literal_is_boolean, literal_is_date, literal_is_datetime, literal_is_numeric,
-    literal_is_string, BaseRDFNodeType, RDFNodeType, LANG_STRING_LANG_FIELD,
-    LANG_STRING_VALUE_FIELD,
+    literal_is_string, BaseRDFNodeType, RDFNodeType, IRI_PREFIX_FIELD, IRI_SUFFIX_FIELD,
+    LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD,
 };
 use spargebra::algebra::{Expression, Function};
 use std::collections::{HashMap, HashSet};
@@ -1726,10 +1724,7 @@ pub fn str_function(c: &str, t: &RDFNodeType) -> Expr {
         let mut to_coalesce = vec![];
         for t in types {
             to_coalesce.push(match t {
-                BaseRDFNodeType::IRI => col(c)
-                    .struct_()
-                    .field_by_name(MULTI_IRI_DT)
-                    .cast(DataType::String),
+                BaseRDFNodeType::IRI => cast_iri_to_string(c),
                 BaseRDFNodeType::BlankNode => col(c)
                     .struct_()
                     .field_by_name(MULTI_BLANK_DT)
@@ -1751,7 +1746,7 @@ pub fn str_function(c: &str, t: &RDFNodeType) -> Expr {
     } else {
         let t = BaseRDFNodeType::from_rdf_node_type(t);
         match &t {
-            BaseRDFNodeType::IRI => col(c).cast(DataType::String),
+            BaseRDFNodeType::IRI => cast_iri_to_string(c),
             BaseRDFNodeType::BlankNode => col(c).cast(DataType::String),
             BaseRDFNodeType::Literal(_) => {
                 if t.is_lang_string() {
@@ -1770,6 +1765,12 @@ fn cast_lang_string_to_string(c: &str) -> Expr {
         .struct_()
         .field_by_name(LANG_STRING_VALUE_FIELD)
         .cast(DataType::String)
+}
+
+fn cast_iri_to_string(c: &str) -> Expr {
+    let prefix = col(c).struct_().field_by_name(IRI_PREFIX_FIELD);
+    let suffix = col(c).struct_().field_by_name(IRI_SUFFIX_FIELD);
+    concat_str(&[prefix, suffix], "", true)
 }
 
 pub fn xsd_cast_literal(
