@@ -282,13 +282,19 @@ impl Mapping {
         buffer: &mut W,
         cim_prefix: NamedNode,
         profile_graph: NamedNode,
-        fullmodel_details: HashMap<String,String>,
+        fullmodel_details: HashMap<String, String>,
         graph: Option<NamedNode>,
     ) -> Result<(), MappingError> {
         let mut profile_triplestore = self.triplestores_map.remove(&profile_graph).unwrap();
         let triplestore = self.get_triplestore(&graph);
-        let res = cim_xml_write(buffer, triplestore, &mut profile_triplestore, &cim_prefix, fullmodel_details)
-            .map_err(MappingError::CIMXMLError);
+        let res = cim_xml_write(
+            buffer,
+            triplestore,
+            &mut profile_triplestore,
+            &cim_prefix,
+            fullmodel_details,
+        )
+        .map_err(MappingError::CIMXMLError);
         self.triplestores_map
             .insert(profile_graph, profile_triplestore);
         res
