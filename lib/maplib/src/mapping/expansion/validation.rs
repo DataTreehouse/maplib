@@ -54,7 +54,8 @@ pub fn validate(
                             MappingColumnType::Flat(t) => {
                                 let mut offsets = vec![];
                                 let threads = current_num_threads();
-                                let stride = ser.len() / threads;
+                                //TODO: Is this correct?
+                                let stride = ser.len().div_ceil(threads);
                                 let mut last_end = 0;
                                 for i in 0..threads {
                                     let stride = if i == threads - 1 { ser.len() } else { stride };

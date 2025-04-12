@@ -384,6 +384,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "cimxml"
+version = "0.1.0"
+dependencies = [
+ "oxrdf",
+ "thiserror",
+ "triplestore",
+]
+
+[[package]]
 name = "colorchoice"
 version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1045,6 +1054,7 @@ version = "0.6.0"
 dependencies = [
  "chrono",
  "chrono-tz 0.10.3",
+ "cimxml",
  "datalog",
  "env_logger",
  "log",

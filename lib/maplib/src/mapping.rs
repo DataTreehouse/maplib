@@ -5,6 +5,10 @@ pub mod expansion;
 
 use crate::errors::MaplibError;
 use crate::mapping::errors::MappingError;
+use cimxml::cim_xml_write;
+use datalog::ast::DatalogRuleset;
+use datalog::inference::infer;
+use datalog::parser::parse_datalog_ruleset;
 use oxrdf::NamedNode;
 use oxrdfio::RdfFormat;
 use polars::prelude::DataFrame;
@@ -15,9 +19,6 @@ use shacl::{validate, ValidationReport};
 use std::collections::HashMap;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use datalog::ast::DatalogRuleset;
-use datalog::inference::infer;
-use datalog::parser::parse_datalog_ruleset;
 use templates::ast::{ConstantTermOrList, PType, Template};
 use templates::dataset::TemplateDataset;
 use templates::document::document_from_str;
@@ -270,8 +271,27 @@ impl Mapping {
         rdf_format: RdfFormat,
     ) -> Result<(), MappingError> {
         let triplestore = self.get_triplestore(&graph);
-        triplestore.write_triples(buffer, rdf_format).unwrap();
+        triplestore
+            .write_triples(buffer, rdf_format)
+            .map_err(MappingError::TriplestoreError)?;
         Ok(())
+    }
+
+    pub fn write_cim_xml<W: Write>(
+        &mut self,
+        buffer: &mut W,
+        cim_prefix: NamedNode,
+        profile_graph: NamedNode,
+        fullmodel_details: HashMap<String,String>,
+        graph: Option<NamedNode>,
+    ) -> Result<(), MappingError> {
+        let mut profile_triplestore = self.triplestores_map.remove(&profile_graph).unwrap();
+        let triplestore = self.get_triplestore(&graph);
+        let res = cim_xml_write(buffer, triplestore, &mut profile_triplestore, &cim_prefix, fullmodel_details)
+            .map_err(MappingError::CIMXMLError);
+        self.triplestores_map
+            .insert(profile_graph, profile_triplestore);
+        res
     }
 
     pub fn write_native_parquet(

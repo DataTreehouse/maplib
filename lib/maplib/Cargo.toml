@@ -10,6 +10,7 @@ triplestore = { path = "../triplestore" }
 shacl = { path = "../shacl" }
 representation = { path = "../representation" }
 datalog = {path = "../datalog"}
+cimxml = {path = "../cimxml"}
 
 rayon = { workspace = true }
 oxrdf = { workspace = true }

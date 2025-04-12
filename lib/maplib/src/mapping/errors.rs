@@ -1,3 +1,5 @@
+use cimxml::CIMXMLError;
+use datalog::inference::DatalogError;
 use oxrdf::IriParseError;
 use polars::prelude::{DataFrame, DataType, PolarsError};
 use representation::errors::RepresentationError;
@@ -7,7 +9,6 @@ use templates::ast::{ConstantTermOrList, PType};
 use templates::dataset::errors::TemplateError;
 use templates::MappingColumnType;
 use thiserror::Error;
-use datalog::inference::DatalogError;
 use triplestore::errors::TriplestoreError;
 
 #[derive(Error, Debug)]
@@ -42,6 +43,7 @@ pub enum MappingError {
     TemplateError(#[from] TemplateError),
     DatalogSyntaxError(String),
     DatalogError(DatalogError),
+    CIMXMLError(CIMXMLError),
 }
 
 impl Display for MappingError {
@@ -181,6 +183,9 @@ impl Display for MappingError {
             }
             MappingError::DatalogError(e) => {
                 write!(f, "Datalog error: {}", e)
+            }
+            MappingError::CIMXMLError(c) => {
+                write!(f, "CIMXML error: {}", c)
             }
         }
     }

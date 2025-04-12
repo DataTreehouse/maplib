@@ -11,6 +11,7 @@ members = [
     "lib/shacl",
     "lib/fts",
     "lib/datalog",
+    "lib/cimxml",
     "py_maplib",
 ]
 

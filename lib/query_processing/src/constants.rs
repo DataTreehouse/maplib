@@ -10,3 +10,5 @@ pub const FLOOR_DATETIME_TO_SECONDS_INTERVAL: &str =
 pub const MODULUS: &str = "https://github.com/DataTreehouse/chrontext#modulus";
 
 pub const TIME_BUCKET: &str = "https://github.com/DataTreehouse/chrontext#time_bucket";
+
+pub const LIST_AGGREGATION: &str = "https://github.com/DataTreehouse/maplib#ListAggregation";
