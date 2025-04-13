@@ -9,6 +9,7 @@ use templates::ast::{
 };
 use templates::constants::{DEFAULT_PREFIX, OTTR_IRI, OTTR_TRIPLE};
 
+use crate::errors::MaplibError;
 use crate::mapping::expansion::validation::infer_type_from_column;
 use oxrdf::{NamedNode, Variable};
 use polars::prelude::{col, DataFrame, DataType, IntoLazy};
@@ -23,7 +24,7 @@ impl Mapping {
         dry_run: bool,
         mapping_column_types: Option<HashMap<String, MappingColumnType>>,
         options: ExpandOptions,
-    ) -> Result<Template, MappingError> {
+    ) -> Result<Template, MaplibError> {
         let mut params = vec![];
         let columns: Vec<String> = df
             .get_column_names()
@@ -124,10 +125,10 @@ impl Mapping {
                         Argument {
                             list_expand: false,
                             term: StottrTerm::ConstantTerm(ConstantTermOrList::ConstantTerm(
-                                ConstantTerm::Iri(NamedNode::new(format!(
-                                    "{}{}",
-                                    DEFAULT_PREFIX, c
-                                ))?),
+                                ConstantTerm::Iri(
+                                    NamedNode::new(format!("{}{}", DEFAULT_PREFIX, c))
+                                        .map_err(|x| MappingError::IriParseError(x))?,
+                                ),
                             )),
                         },
                         Argument {

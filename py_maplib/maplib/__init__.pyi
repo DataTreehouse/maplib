@@ -793,3 +793,5 @@ class Mapping:
         :param include_datatypes: Datatypes are not returned by default, set to true to return a dict with the solution mappings and the datatypes.
         :return: The inferred N-Tuples if the triples are not inserted.
         """
+
+class MaplibException(Exception): ...

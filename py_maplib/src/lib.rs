@@ -4,13 +4,12 @@ extern crate core;
 mod error;
 mod shacl;
 
-use crate::error::PyMaplibError;
+use crate::error::*;
 use pydf_io::to_rust::polars_df_to_rust_df;
 
 use crate::shacl::PyValidationReport;
 use log::warn;
 use maplib::errors::MaplibError;
-use maplib::mapping::errors::MappingError;
 use maplib::mapping::{ExpandOptions, Mapping as InnerMapping};
 
 use pydf_io::to_python::{df_to_py_df, fix_cats_and_multicolumns};
@@ -165,7 +164,8 @@ impl PyMapping {
         let mut parsed_documents = vec![];
         if let Some(documents) = documents {
             for ds in documents {
-                let parsed_doc = document_from_str(&ds).map_err(PyMaplibError::from)?;
+                let parsed_doc = document_from_str(&ds)
+                    .map_err(|x| PyMaplibError::from(MaplibError::from(x)))?;
                 parsed_documents.push(parsed_doc);
             }
         }
@@ -311,7 +311,7 @@ impl PyMapping {
         let options = ExpandOptions::from_args(graph, validate_iris, delay_index);
         let types = map_types(types);
         let verb = if let Some(verb) = verb {
-            Some(NamedNode::new(verb).map_err(PyMaplibError::IriParseError)?)
+            Some(NamedNode::new(verb).map_err(|x| PyMaplibError::from(MaplibError::from(x)))?)
         } else {
             None
         };
@@ -429,7 +429,8 @@ impl PyMapping {
         deactivate_shapes: Option<Vec<String>>,
         dry_run: Option<bool>,
     ) -> PyResult<PyValidationReport> {
-        let shape_graph = NamedNode::new(shape_graph).map_err(PyMaplibError::from)?;
+        let shape_graph =
+            NamedNode::new(shape_graph).map_err(|x| PyMaplibError::from(MaplibError::from(x)))?;
         if only_shapes.is_some() && deactivate_shapes.is_some() {
             return Err(PyMaplibError::FunctionArgumentError(
                 "only_shapes and deactivate_shapes cannot both be set".to_string(),
@@ -439,7 +440,7 @@ impl PyMapping {
         let only_shapes = if let Some(only_shapes) = only_shapes {
             let only_shapes: Result<Vec<_>, _> = only_shapes
                 .into_iter()
-                .map(|x| NamedNode::new(x).map_err(PyMaplibError::from))
+                .map(|x| NamedNode::new(x).map_err(|x| PyMaplibError::from(MaplibError::from(x))))
                 .collect();
             Some(only_shapes?)
         } else {
@@ -449,7 +450,7 @@ impl PyMapping {
         let deactivate_shapes = if let Some(deactivate_shapes) = deactivate_shapes {
             let deactivate_shapes: Result<Vec<_>, _> = deactivate_shapes
                 .into_iter()
-                .map(|x| NamedNode::new(x).map_err(PyMaplibError::from))
+                .map(|x| NamedNode::new(x).map_err(|x| PyMaplibError::from(MaplibError::from(x))))
                 .collect();
             deactivate_shapes?
         } else {
@@ -529,7 +530,7 @@ impl PyMapping {
                     target_graph,
                     delay_index.unwrap_or(true),
                 )
-                .map_err(PyMaplibError::from)?;
+                .map_err(|x| PyMaplibError::from(MaplibError::from(x)))?;
             new_triples_to_dict(
                 new_triples,
                 native_dataframe.unwrap_or(false),
@@ -589,7 +590,7 @@ impl PyMapping {
                     target_graph,
                     delay_index.unwrap_or(true),
                 )
-                .map_err(PyMaplibError::from)?;
+                .map_err(|x| PyMaplibError::from(MaplibError::from(x)))?;
             new_triples_to_dict(
                 new_triples,
                 native_dataframe.unwrap_or(false),
@@ -691,7 +692,7 @@ impl PyMapping {
         let file_path = file_path.str()?.to_string();
         let path_buf = PathBuf::from(file_path);
         let mut actual_file = File::create(path_buf.as_path())
-            .map_err(|x| PyMaplibError::from(MappingError::FileCreateIOError(x)))?;
+            .map_err(|x| PyMaplibError::from(MaplibError::FileCreateIOError(x)))?;
         let graph = parse_optional_graph(graph)?;
         self.inner
             .write_triples(&mut actual_file, graph, format)
@@ -732,7 +733,7 @@ impl PyMapping {
         let graph = parse_optional_graph(graph)?;
         self.inner
             .write_native_parquet(&folder_path, graph)
-            .map_err(PyMaplibError::MappingError)?;
+            .map_err(PyMaplibError::from)?;
         Ok(())
     }
 
@@ -746,7 +747,7 @@ impl PyMapping {
         let nns = self
             .inner
             .get_predicate_iris(&graph, include_transient.unwrap_or(false))
-            .map_err(PyMaplibError::SparqlError)?;
+            .map_err(|x| PyMaplibError::from(MaplibError::from(x)))?;
         Ok(nns.into_iter().map(PyIRI::from).collect())
     }
 
@@ -762,7 +763,7 @@ impl PyMapping {
         let eager_sms = self
             .inner
             .get_predicate(&iri.into_inner(), graph, include_transient.unwrap_or(false))
-            .map_err(PyMaplibError::SparqlError)?;
+            .map_err(|x| PyMaplibError::from(MaplibError::from(x)))?;
         let mut out = vec![];
         for EagerSolutionMappings {
             mappings,
@@ -779,7 +780,7 @@ impl PyMapping {
     fn add_ruleset(&mut self, ruleset: &str) -> PyResult<()> {
         self.inner
             .add_ruleset(ruleset)
-            .map_err(PyMaplibError::MappingError)?;
+            .map_err(PyMaplibError::from)?;
         Ok(())
     }
 
@@ -798,7 +799,7 @@ impl PyMapping {
         let res = self
             .inner
             .infer(insert.unwrap_or(true))
-            .map_err(PyMaplibError::MappingError)?;
+            .map_err(PyMaplibError::MaplibError)?;
         if let Some(res) = res {
             let mut py_res = HashMap::new();
             for (
@@ -811,7 +812,8 @@ impl PyMapping {
             {
                 let include_datatypes = include_datatypes.unwrap_or(false);
                 let native_dataframe = native_dataframe.unwrap_or(false);
-                (mappings, rdf_node_types) = fix_cats_and_multicolumns(mappings, rdf_node_types, native_dataframe);
+                (mappings, rdf_node_types) =
+                    fix_cats_and_multicolumns(mappings, rdf_node_types, native_dataframe);
                 let pydf = df_to_py_df(mappings, rdf_node_types, None, include_datatypes, py)?;
                 py_res.insert(nn.as_str().to_string(), pydf);
             }
@@ -824,7 +826,7 @@ impl PyMapping {
 
 #[pymodule]
 #[pyo3(name = "maplib")]
-fn _maplib(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn _maplib(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     enable_string_cache();
     // Currently deadlocks, likely need to change all above with allow threads: https://docs.rs/pyo3-log/latest/pyo3_log/
     // pyo3_log::init();
@@ -845,6 +847,11 @@ fn _maplib(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyInstance>()?;
     m.add_function(wrap_pyfunction!(py_triple, m)?)?;
     m.add_function(wrap_pyfunction!(a, m)?)?;
+    m.add("MaplibException", py.get_type_bound::<MaplibException>())?;
+    m.add(
+        "FunctionArgumentException",
+        py.get_type_bound::<FunctionArgumentException>(),
+    )?;
     Ok(())
 }
 
@@ -942,7 +949,7 @@ fn resolve_format(format: &str) -> RdfFormat {
 
 fn parse_optional_graph(graph: Option<String>) -> PyResult<Option<NamedNode>> {
     let graph = if let Some(graph) = graph {
-        Some(NamedNode::new(graph).map_err(PyMaplibError::from)?)
+        Some(NamedNode::new(graph).map_err(|x| PyMaplibError::from(MaplibError::from(x)))?)
     } else {
         None
     };

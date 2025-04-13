@@ -1,6 +1,7 @@
 pub mod validation;
 
 use super::{ExpandOptions, Mapping, MappingReport, OTTRTripleInstance, StaticColumn};
+use crate::errors::MaplibError;
 use crate::mapping::constant_terms::{constant_blank_node_to_series, constant_to_expr};
 use crate::mapping::errors::MappingError;
 use crate::mapping::expansion::validation::validate;
@@ -39,7 +40,7 @@ impl Mapping {
         mapping_column_types: Option<HashMap<String, MappingColumnType>>,
         verb: Option<NamedNode>,
         expand_options: ExpandOptions,
-    ) -> Result<MappingReport, MappingError> {
+    ) -> Result<MappingReport, MaplibError> {
         if let Some(verb) = verb {
             df = df
                 .lazy()
@@ -58,7 +59,7 @@ impl Mapping {
         df: Option<DataFrame>,
         mapping_column_types: Option<HashMap<String, MappingColumnType>>,
         options: ExpandOptions,
-    ) -> Result<MappingReport, MappingError> {
+    ) -> Result<MappingReport, MaplibError> {
         if !self.template_dataset.inferred_types {
             self.template_dataset.infer_types()?;
         }
