@@ -1,6 +1,5 @@
 #[derive(Debug)]
-pub struct DatalogRuleset {
-}
+pub struct DatalogRuleset {}
 
 impl DatalogRuleset {
     pub fn extend(&mut self, _other: DatalogRuleset) {

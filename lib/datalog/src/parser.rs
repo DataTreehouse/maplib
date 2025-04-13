@@ -1,6 +1,4 @@
-use crate::ast::{
-    DatalogRuleset,
-};
+use crate::ast::DatalogRuleset;
 use thiserror::*;
 
 pub fn parse_datalog_ruleset(
@@ -15,5 +13,4 @@ pub fn parse_datalog_ruleset(
 pub struct DatalogSyntaxError(#[from] DatalogParseErrorKind);
 
 #[derive(Debug, Error)]
-pub(crate) enum DatalogParseErrorKind {
-}
+pub(crate) enum DatalogParseErrorKind {}

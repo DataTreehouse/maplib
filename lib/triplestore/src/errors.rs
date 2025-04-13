@@ -1,8 +1,8 @@
 use file_io::FileIOError;
 use fts::FtsError;
+use oxrdfio::RdfSyntaxError;
 use std::fmt::{Display, Formatter};
 use std::io;
-use oxrdfio::RdfSyntaxError;
 use thiserror::Error;
 
 #[derive(Error, Debug)]

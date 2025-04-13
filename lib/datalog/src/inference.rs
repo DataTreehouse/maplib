@@ -1,11 +1,10 @@
-use crate::ast::{DatalogRuleset};
-use oxrdf::{NamedNode};
+use crate::ast::DatalogRuleset;
+use oxrdf::NamedNode;
 use representation::solution_mapping::EagerSolutionMappings;
-use std::collections::{HashMap};
+use std::collections::HashMap;
 use thiserror::*;
 use triplestore::sparql::errors::SparqlError;
-use triplestore::{Triplestore};
-
+use triplestore::Triplestore;
 
 #[derive(Debug, Error)]
 pub enum DatalogError {
