@@ -14,9 +14,9 @@ use polars::prelude::LiteralValue;
 use pyo3::basic::CompareOp;
 use pyo3::exceptions::PyException;
 use pyo3::prelude::PyAnyMethods;
+use pyo3::IntoPyObjectExt;
 use pyo3::{
-    create_exception, pyclass, pymethods, Bound, IntoPy, Py, PyAny, PyErr, PyObject, PyResult,
-    Python,
+    create_exception, pyclass, pymethods, Bound, Py, PyAny, PyErr, PyObject, PyResult, Python,
 };
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
@@ -140,7 +140,7 @@ impl PyRDFType {
 
     #[staticmethod]
     #[pyo3(name = "Literal")]
-    fn literal(iri: Bound<'_, PyAny>) -> PyResult<PyRDFType>{
+    fn literal(iri: Bound<'_, PyAny>) -> PyResult<PyRDFType> {
         if let Ok(pyiri) = iri.extract::<PyIRI>() {
             Ok(PyRDFType {
                 flat: Some(RDFNodeType::Literal(pyiri.iri)),
@@ -279,7 +279,7 @@ impl PyPrefix {
         Ok(PyPrefix { prefix, iri })
     }
 
-    pub fn suf(&self, suffix: String) -> PyResult<PyIRI>{
+    pub fn suf(&self, suffix: String) -> PyResult<PyIRI> {
         PyIRI::new(format!("{}{}", self.iri.as_str(), suffix))
     }
 }
@@ -352,27 +352,27 @@ impl PyLiteral {
         self.literal.language()
     }
 
-    pub fn to_native(&self, py: Python<'_>) -> PyResult<PyObject>{
+    pub fn to_native(&self, py: Python<'_>) -> PyResult<PyObject> {
         if self.literal.datatype() == xsd::DURATION {
             let duration = Duration::from_str(self.literal.value()).unwrap();
-            return Ok(PyXSDDuration { duration }.into_py(py));
+            return PyXSDDuration { duration }.into_py_any(py);
         }
 
-        Ok(match rdf_literal_to_polars_literal_value(&self.literal) {
+        match rdf_literal_to_polars_literal_value(&self.literal) {
             LiteralValue::Scalar(s) => {
                 match s.into_value() {
-                    AnyValue::Boolean(b) => b.into_py(py),
-                    AnyValue::String(s) => s.into_py(py),
-                    AnyValue::UInt8(u) => u.into_py(py),
-                    AnyValue::UInt16(u) => u.into_py(py),
-                    AnyValue::UInt32(u) => u.into_py(py),
-                    AnyValue::UInt64(u) => u.into_py(py),
-                    AnyValue::Int8(i) => i.into_py(py),
-                    AnyValue::Int16(i) => i.into_py(py),
-                    AnyValue::Int32(i) => i.into_py(py),
-                    AnyValue::Int64(i) => i.into_py(py),
-                    AnyValue::Float32(f) => f.into_py(py),
-                    AnyValue::Float64(f) => f.into_py(py),
+                    AnyValue::Boolean(b) => b.into_py_any(py),
+                    AnyValue::String(s) => s.into_py_any(py),
+                    AnyValue::UInt8(u) => u.into_py_any(py),
+                    AnyValue::UInt16(u) => u.into_py_any(py),
+                    AnyValue::UInt32(u) => u.into_py_any(py),
+                    AnyValue::UInt64(u) => u.into_py_any(py),
+                    AnyValue::Int8(i) => i.into_py_any(py),
+                    AnyValue::Int16(i) => i.into_py_any(py),
+                    AnyValue::Int32(i) => i.into_py_any(py),
+                    AnyValue::Int64(i) => i.into_py_any(py),
+                    AnyValue::Float32(f) => f.into_py_any(py),
+                    AnyValue::Float64(f) => f.into_py_any(py),
                     AnyValue::Date(_d) => {
                         todo!()
                     }
@@ -387,16 +387,16 @@ impl PyLiteral {
                         if let Some(tz) = tz {
                             let tz = tz.parse::<Tz>().unwrap();
                             let dt = tz.from_utc_datetime(&dt);
-                            dt.into_py(py)
+                            dt.into_py_any(py)
                         } else {
-                            dt.into_py(py)
+                            dt.into_py_any(py)
                         }
                     }
                     _ => todo!(),
                 }
             }
             _ => todo!(),
-        })
+        }
     }
 }
 

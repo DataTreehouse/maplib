@@ -751,6 +751,6 @@ pub fn values_pattern(
         .select(varexpr)
         .collect()
         .unwrap();
-    
+
     EagerSolutionMappings::new(df, all_datatypes).as_lazy()
 }

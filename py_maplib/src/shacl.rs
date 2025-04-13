@@ -57,7 +57,7 @@ impl PyValidationReport {
         include_datatypes: Option<bool>,
         streaming: Option<bool>,
         py: Python<'_>,
-    ) -> PyResult<Option<PyObject>>{
+    ) -> PyResult<Option<PyObject>> {
         let streaming = streaming.unwrap_or(false);
         let report = if let Some(sm) = self
             .inner
@@ -93,7 +93,7 @@ impl PyValidationReport {
         include_datatypes: Option<bool>,
         streaming: Option<bool>,
         py: Python<'_>,
-    ) -> PyResult<Option<PyObject>>{
+    ) -> PyResult<Option<PyObject>> {
         let streaming = streaming.unwrap_or(false);
         let details = if let Some(sm) = self
             .inner
@@ -123,7 +123,7 @@ impl PyValidationReport {
     }
 
     #[pyo3(signature = (indexing=None))]
-    pub fn graph(&self, indexing: Option<PyIndexingOptions>) -> PyResult<PyMapping>{
+    pub fn graph(&self, indexing: Option<PyIndexingOptions>) -> PyResult<PyMapping> {
         let indexing = if let Some(indexing) = indexing {
             Some(indexing.inner)
         } else {

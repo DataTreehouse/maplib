@@ -354,35 +354,13 @@ dependencies = [
 
 [[package]]
 name = "chrono-tz"
-version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "93698b29de5e97ad0ae26447b344c482a7284c737d9ddc5f9e52b74a336671bb"
-dependencies = [
- "chrono",
- "chrono-tz-build 0.3.0",
- "phf",
-]
-
-[[package]]
-name = "chrono-tz"
 version = "0.10.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "efdce149c370f133a071ca8ef6ea340b7b88748ab0810097a9e2976eaa34b4f3"
 dependencies = [
  "chrono",
- "chrono-tz-build 0.4.1",
+ "chrono-tz-build",
  "phf",
-]
-
-[[package]]
-name = "chrono-tz-build"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0c088aee841df9c3041febbb73934cfc39708749bf96dc827e3359cd39ef11b1"
-dependencies = [
- "parse-zoneinfo",
- "phf",
- "phf_codegen",
 ]
 
 [[package]]
@@ -1096,7 +1074,7 @@ name = "maplib"
 version = "0.6.0"
 dependencies = [
  "chrono",
- "chrono-tz 0.10.3",
+ "chrono-tz",
  "cimxml",
  "datalog",
  "env_logger",
@@ -1530,7 +1508,7 @@ dependencies = [
  "atoi_simd",
  "bytemuck",
  "chrono",
- "chrono-tz 0.10.3",
+ "chrono-tz",
  "dyn-clone",
  "either",
  "ethnum",
@@ -1593,7 +1571,7 @@ dependencies = [
  "bitflags",
  "bytemuck",
  "chrono",
- "chrono-tz 0.10.3",
+ "chrono-tz",
  "comfy-table",
  "either",
  "hashbrown 0.14.5",
@@ -1659,7 +1637,7 @@ dependencies = [
  "atoi_simd",
  "bytes",
  "chrono",
- "chrono-tz 0.10.3",
+ "chrono-tz",
  "fast-float2",
  "futures",
  "glob",
@@ -1692,7 +1670,7 @@ version = "0.46.0"
 source = "git+https://github.com/pola-rs/polars?rev=319a9a84ab573886b2a13548a8e462fee353acef#319a9a84ab573886b2a13548a8e462fee353acef"
 dependencies = [
  "chrono",
- "chrono-tz 0.10.3",
+ "chrono-tz",
  "fallible-streaming-iterator",
  "hashbrown 0.15.2",
  "indexmap",
@@ -1760,7 +1738,7 @@ dependencies = [
  "base64",
  "bytemuck",
  "chrono",
- "chrono-tz 0.10.3",
+ "chrono-tz",
  "either",
  "hashbrown 0.15.2",
  "hex",
@@ -1853,7 +1831,7 @@ dependencies = [
  "bytemuck",
  "bytes",
  "chrono",
- "chrono-tz 0.10.3",
+ "chrono-tz",
  "either",
  "hashbrown 0.15.2",
  "memmap2",
@@ -1962,7 +1940,7 @@ dependencies = [
  "atoi_simd",
  "bytemuck",
  "chrono",
- "chrono-tz 0.10.3",
+ "chrono-tz",
  "now",
  "num-traits",
  "polars-arrow",
@@ -2087,13 +2065,13 @@ dependencies = [
 
 [[package]]
 name = "pyo3"
-version = "0.22.6"
+version = "0.24.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f402062616ab18202ae8319da13fa4279883a2b8a9d9f83f20dbade813ce1884"
+checksum = "17da310086b068fbdcefbba30aeb3721d5bb9af8db4987d6735b2183ca567229"
 dependencies = [
  "cfg-if",
  "chrono",
- "chrono-tz 0.9.0",
+ "chrono-tz",
  "indoc",
  "libc",
  "memoffset",
@@ -2107,9 +2085,9 @@ dependencies = [
 
 [[package]]
 name = "pyo3-build-config"
-version = "0.22.6"
+version = "0.24.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b14b5775b5ff446dd1056212d778012cbe8a0fbffd368029fd9e25b514479c38"
+checksum = "e27165889bd793000a098bb966adc4300c312497ea25cf7a690a9f0ac5aa5fc1"
 dependencies = [
  "once_cell",
  "target-lexicon",
@@ -2117,9 +2095,9 @@ dependencies = [
 
 [[package]]
 name = "pyo3-ffi"
-version = "0.22.6"
+version = "0.24.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9ab5bcf04a2cdcbb50c7d6105de943f543f9ed92af55818fd17b660390fc8636"
+checksum = "05280526e1dbf6b420062f3ef228b78c0c54ba94e157f5cb724a609d0f2faabc"
 dependencies = [
  "libc",
  "pyo3-build-config",
@@ -2127,9 +2105,9 @@ dependencies = [
 
 [[package]]
 name = "pyo3-log"
-version = "0.11.0"
+version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3ac84e6eec1159bc2a575c9ae6723baa6ee9d45873e9bebad1e3ad7e8d28a443"
+checksum = "7079e412e909af5d6be7c04a7f29f6a2837a080410e1c529c9dee2c367383db4"
 dependencies = [
  "arc-swap",
  "log",
@@ -2138,9 +2116,9 @@ dependencies = [
 
 [[package]]
 name = "pyo3-macros"
-version = "0.22.6"
+version = "0.24.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0fd24d897903a9e6d80b968368a34e1525aeb719d568dba8b3d4bfa5dc67d453"
+checksum = "5c3ce5686aa4d3f63359a5100c62a127c9f15e8398e5fdeb5deef1fed5cd5f44"
 dependencies = [
  "proc-macro2",
  "pyo3-macros-backend",
@@ -2150,9 +2128,9 @@ dependencies = [
 
 [[package]]
 name = "pyo3-macros-backend"
-version = "0.22.6"
+version = "0.24.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "36c011a03ba1e50152b4b394b479826cad97e7a21eb52df179cd91ac411cbfbe"
+checksum = "f4cf6faa0cbfb0ed08e89beb8103ae9724eb4750e3a78084ba4017cbe94f3855"
 dependencies = [
  "heck",
  "proc-macro2",
@@ -2403,7 +2381,7 @@ name = "representation"
 version = "0.6.10"
 dependencies = [
  "chrono",
- "chrono-tz 0.10.3",
+ "chrono-tz",
  "log",
  "oxrdf",
  "oxsdatatypes",
@@ -2814,9 +2792,9 @@ dependencies = [
 
 [[package]]
 name = "target-lexicon"
-version = "0.12.16"
+version = "0.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "61c41af27dd6d1e27b1b16b489db798443478cef1f06a660c96db617ba5de3b1"
+checksum = "e502f78cdbb8ba4718f566c418c52bc729126ffd16baee5baa718cf25dd5a69a"
 
 [[package]]
 name = "templates"

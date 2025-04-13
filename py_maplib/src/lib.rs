@@ -48,6 +48,7 @@ use oxrdf::NamedNode;
 use oxrdfio::RdfFormat;
 use polars::prelude::{col, lit, IntoLazy};
 use pyo3::types::{PyList, PyString};
+use pyo3::IntoPyObjectExt;
 use representation::python::{
     PyBlankNode, PyIRI, PyLiteral, PyPrefix, PyRDFType, PySolutionMappings, PyVariable,
 };
@@ -110,10 +111,12 @@ impl PyIndexingOptions {
                 IndexingOptions::default()
             } else {
                 let object_sort_some: Option<HashSet<_>> =
-                    object_sort_some.map(|object_sort_some| object_sort_some
-                                .into_iter()
-                                .map(|x| x.into_inner())
-                                .collect());
+                    object_sort_some.map(|object_sort_some| {
+                        object_sort_some
+                            .into_iter()
+                            .map(|x| x.into_inner())
+                            .collect()
+                    });
                 IndexingOptions {
                     object_sort_all,
                     object_sort_some,
@@ -139,7 +142,7 @@ impl PyMapping {
         let documents = if let Some(documents) = documents {
             if documents.is_instance_of::<PyList>() {
                 let mut strs = vec![];
-                for doc in documents.iter()? {
+                for doc in documents.try_iter()? {
                     let docstr = doc?.str()?.to_string();
                     strs.push(docstr);
                 }
@@ -175,7 +178,7 @@ impl PyMapping {
         })
     }
 
-    fn add_template(&mut self, template: Bound<'_, PyAny>) -> PyResult<()>{
+    fn add_template(&mut self, template: Bound<'_, PyAny>) -> PyResult<()> {
         if let Ok(s) = template.extract::<String>() {
             self.inner
                 .add_templates_from_string(&s)
@@ -193,7 +196,7 @@ impl PyMapping {
         Ok(())
     }
 
-    fn create_sprout(&mut self) -> PyResult<()>{
+    fn create_sprout(&mut self) -> PyResult<()> {
         let mut sprout = InnerMapping::new(
             &self.inner.template_dataset,
             None,
@@ -205,7 +208,7 @@ impl PyMapping {
         Ok(())
     }
 
-    fn detach_sprout(&mut self) -> PyResult<Option<PyMapping>>{
+    fn detach_sprout(&mut self) -> PyResult<Option<PyMapping>> {
         if let Some(sprout) = self.sprout.take() {
             let m = PyMapping {
                 inner: sprout,
@@ -226,7 +229,7 @@ impl PyMapping {
         types: Option<HashMap<String, PyRDFType>>,
         validate_iris: Option<bool>,
         delay_index: Option<bool>,
-    ) -> PyResult<Option<PyObject>>{
+    ) -> PyResult<Option<PyObject>> {
         let template = if let Ok(i) = template.extract::<PyIRI>() {
             i.into_inner().to_string()
         } else if let Ok(t) = template.extract::<PyTemplate>() {
@@ -269,14 +272,16 @@ impl PyMapping {
 
                 let _report = self
                     .inner
-                    .expand(&template, Some(df), types, options).map_err(PyMaplibError::from)?;
+                    .expand(&template, Some(df), types, options)
+                    .map_err(PyMaplibError::from)?;
             } else {
                 warn!("Template expansion of {} with empty DataFrame", template);
             }
         } else {
             let _report = self
                 .inner
-                .expand(&template, None, None, options).map_err(PyMaplibError::from)?;
+                .expand(&template, None, None, options)
+                .map_err(PyMaplibError::from)?;
         }
 
         Ok(None)
@@ -291,7 +296,7 @@ impl PyMapping {
         types: Option<HashMap<String, PyRDFType>>,
         validate_iris: Option<bool>,
         delay_index: Option<bool>,
-    ) -> PyResult<Option<PyObject>>{
+    ) -> PyResult<Option<PyObject>> {
         let graph = parse_optional_graph(graph)?;
         let df = polars_df_to_rust_df(df)?;
         let options = ExpandOptions::from_args(graph, validate_iris, delay_index);
@@ -318,7 +323,7 @@ impl PyMapping {
         types: Option<HashMap<String, PyRDFType>>,
         validate_iris: Option<bool>,
         delay_index: Option<bool>,
-    ) -> PyResult<String>{
+    ) -> PyResult<String> {
         let df = polars_df_to_rust_df(df)?;
         let graph = parse_optional_graph(graph)?;
         let options = ExpandOptions::from_args(graph, validate_iris, delay_index);
@@ -326,7 +331,8 @@ impl PyMapping {
         let types = map_types(types);
         let tmpl = self
             .inner
-            .expand_default(df, primary_key_column, vec![], dry_run, types, options).map_err(PyMaplibError::from)?;
+            .expand_default(df, primary_key_column, vec![], dry_run, types, options)
+            .map_err(PyMaplibError::from)?;
         if dry_run {
             println!("Produced template:\n\n {}", tmpl);
         }
@@ -347,7 +353,7 @@ impl PyMapping {
         streaming: Option<bool>,
         return_json: Option<bool>,
         include_transient: Option<bool>,
-    ) -> PyResult<PyObject>{
+    ) -> PyResult<PyObject> {
         let graph = parse_optional_graph(graph)?;
         let mapped_parameters = map_parameters(parameters)?;
         let res = self
@@ -375,7 +381,7 @@ impl PyMapping {
         options: Option<PyIndexingOptions>,
         all: Option<bool>,
         graph: Option<String>,
-    ) -> PyResult<()>{
+    ) -> PyResult<()> {
         let graph = parse_optional_graph(graph)?;
         let options = if let Some(options) = options {
             options.inner
@@ -412,7 +418,7 @@ impl PyMapping {
         only_shapes: Option<Vec<String>>,
         deactivate_shapes: Option<Vec<String>>,
         dry_run: Option<bool>,
-    ) -> PyResult<PyValidationReport>{
+    ) -> PyResult<PyValidationReport> {
         let shape_graph =
             NamedNode::new(shape_graph).map_err(|x| PyMaplibError::from(MaplibError::from(x)))?;
         if only_shapes.is_some() && deactivate_shapes.is_some() {
@@ -491,7 +497,7 @@ impl PyMapping {
         delay_index: Option<bool>,
         include_transient: Option<bool>,
         py: Python<'_>,
-    ) -> PyResult<HashMap<String, PyObject>>{
+    ) -> PyResult<HashMap<String, PyObject>> {
         let mapped_parameters = map_parameters(parameters)?;
         let source_graph = parse_optional_graph(source_graph)?;
         let target_graph = parse_optional_graph(target_graph)?;
@@ -546,7 +552,7 @@ impl PyMapping {
         delay_index: Option<bool>,
         include_transient: Option<bool>,
         py: Python<'_>,
-    ) -> PyResult<HashMap<String, PyObject>>{
+    ) -> PyResult<HashMap<String, PyObject>> {
         let mapped_parameters = map_parameters(parameters)?;
         let source_graph = parse_optional_graph(source_graph)?;
         let target_graph = parse_optional_graph(target_graph)?;
@@ -601,7 +607,7 @@ impl PyMapping {
         checked: Option<bool>,
         graph: Option<String>,
         replace_graph: Option<bool>,
-    ) -> PyResult<()>{
+    ) -> PyResult<()> {
         let graph = parse_optional_graph(graph)?;
         let file_path = file_path.str()?.to_string();
         let path = Path::new(&file_path);
@@ -633,7 +639,7 @@ impl PyMapping {
         checked: Option<bool>,
         graph: Option<String>,
         replace_graph: Option<bool>,
-    ) -> PyResult<()>{
+    ) -> PyResult<()> {
         let graph = parse_optional_graph(graph)?;
         let format = resolve_format(format);
         self.inner
@@ -656,7 +662,7 @@ impl PyMapping {
         &mut self,
         file_path: &Bound<'_, PyAny>,
         graph: Option<String>,
-    ) -> PyResult<()>{
+    ) -> PyResult<()> {
         warn!("use write_triples with format=\"ntriples\" instead");
         self.write_triples(file_path, Some("ntriples".to_string()), graph)
     }
@@ -667,7 +673,7 @@ impl PyMapping {
         file_path: &Bound<'_, PyAny>,
         format: Option<String>,
         graph: Option<String>,
-    ) -> PyResult<()>{
+    ) -> PyResult<()> {
         let format = if let Some(format) = format {
             resolve_format(&format)
         } else {
@@ -685,7 +691,7 @@ impl PyMapping {
     }
 
     #[pyo3(signature = (graph=None))]
-    fn write_ntriples_string(&mut self, graph: Option<String>) -> PyResult<String>{
+    fn write_ntriples_string(&mut self, graph: Option<String>) -> PyResult<String> {
         warn!("use write_triples_string with format=\"ntriples\" instead");
         self.write_triples_string(Some("ntriples".to_string()), graph)
     }
@@ -695,7 +701,7 @@ impl PyMapping {
         &mut self,
         format: Option<String>,
         graph: Option<String>,
-    ) -> PyResult<String>{
+    ) -> PyResult<String> {
         let format = if let Some(format) = format {
             resolve_format(&format)
         } else {
@@ -712,7 +718,7 @@ impl PyMapping {
         &mut self,
         folder_path: &Bound<'_, PyAny>,
         graph: Option<String>,
-    ) -> PyResult<()>{
+    ) -> PyResult<()> {
         let folder_path = folder_path.str()?.to_string();
         let graph = parse_optional_graph(graph)?;
         self.inner
@@ -726,7 +732,7 @@ impl PyMapping {
         &mut self,
         graph: Option<String>,
         include_transient: Option<bool>,
-    ) -> PyResult<Vec<PyIRI>>{
+    ) -> PyResult<Vec<PyIRI>> {
         let graph = parse_optional_graph(graph)?;
         let nns = self
             .inner
@@ -742,7 +748,7 @@ impl PyMapping {
         iri: PyIRI,
         graph: Option<String>,
         include_transient: Option<bool>,
-    ) -> PyResult<Vec<PyObject>>{
+    ) -> PyResult<Vec<PyObject>> {
         let graph = parse_optional_graph(graph)?;
         let eager_sms = self
             .inner
@@ -761,7 +767,7 @@ impl PyMapping {
     }
 
     #[pyo3(signature = (ruleset,))]
-    fn add_ruleset(&mut self, ruleset: &str) -> PyResult<()>{
+    fn add_ruleset(&mut self, ruleset: &str) -> PyResult<()> {
         self.inner
             .add_ruleset(ruleset)
             .map_err(PyMaplibError::from)?;
@@ -779,7 +785,7 @@ impl PyMapping {
         include_datatypes: Option<bool>,
         native_dataframe: Option<bool>,
         py: Python<'_>,
-    ) -> PyResult<Option<HashMap<String, PyObject>>>{
+    ) -> PyResult<Option<HashMap<String, PyObject>>> {
         let res = self
             .inner
             .infer(insert.unwrap_or(true))
@@ -831,10 +837,10 @@ fn _maplib(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyInstance>()?;
     m.add_function(wrap_pyfunction!(py_triple, m)?)?;
     m.add_function(wrap_pyfunction!(a, m)?)?;
-    m.add("MaplibException", py.get_type_bound::<MaplibException>())?;
+    m.add("MaplibException", py.get_type::<MaplibException>())?;
     m.add(
         "FunctionArgumentException",
-        py.get_type_bound::<FunctionArgumentException>(),
+        py.get_type::<FunctionArgumentException>(),
     )?;
     Ok(())
 }
@@ -848,7 +854,7 @@ fn query_to_result(
 ) -> PyResult<PyObject> {
     if return_json {
         let json = res.json();
-        return Ok(PyString::new_bound(py, &json).into());
+        return Ok(PyString::new(py, &json).into());
     }
     match res {
         SparqlQueryResult::Select(EagerSolutionMappings {
@@ -890,7 +896,7 @@ fn query_to_result(
                 let pydf = df_to_py_df(mappings, rdf_node_types, None, include_details, py)?;
                 query_results.push(pydf);
             }
-            Ok(PyList::new_bound(py, query_results).into())
+            PyList::new(py, query_results)?.into_py_any(py)
         }
     }
 }
@@ -943,7 +949,6 @@ fn parse_optional_graph(graph: Option<String>) -> PyResult<Option<NamedNode>> {
 fn map_types(
     types: Option<HashMap<String, PyRDFType>>,
 ) -> Option<HashMap<String, MappingColumnType>> {
-    
     if let Some(types) = types {
         let mut new_types = HashMap::new();
         for (k, v) in types {

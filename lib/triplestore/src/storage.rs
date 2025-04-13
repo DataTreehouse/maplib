@@ -358,7 +358,6 @@ fn can_and_should_index_object(
         false
     };
 
-    
     if can_index_object {
         if indexing.object_sort_all {
             true

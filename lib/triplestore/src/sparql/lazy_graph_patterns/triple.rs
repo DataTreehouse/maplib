@@ -29,7 +29,8 @@ impl Triplestore {
             context.as_str()
         );
 
-        let mut solution_mappings = solution_mappings.map(|solution_mappings| pushdowns.add_from_solution_mappings(solution_mappings));
+        let mut solution_mappings = solution_mappings
+            .map(|solution_mappings| pushdowns.add_from_solution_mappings(solution_mappings));
         let subjects = create_subjects(&triple_pattern.subject, &pushdowns.variables_values);
         let subject_type_ctr = create_type_constraint(
             &triple_pattern.subject,
@@ -128,7 +129,7 @@ impl Triplestore {
                 }
                 let predicates: Option<Vec<_>> =
                     predicates.map(|predicates| predicates.into_iter().collect());
-                
+
                 self.get_multi_predicates_solution_mappings(
                     predicates,
                     &subject_rename,

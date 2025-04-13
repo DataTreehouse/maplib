@@ -338,7 +338,7 @@ impl PyTemplate {
         &self,
         arguments: Vec<Bound<'_, PyAny>>,
         list_expander: Option<String>,
-    ) -> PyResult<PyInstance>{
+    ) -> PyResult<PyInstance> {
         PyInstance::new(
             PyIRI::new(self.template.signature.template_name.as_str().to_string())?,
             arguments,
@@ -409,7 +409,7 @@ pub fn py_triple<'py>(
     predicate: Bound<'py, PyAny>,
     object: Bound<'py, PyAny>,
     list_expander: Option<String>,
-) -> PyResult<PyInstance>{
+) -> PyResult<PyInstance> {
     PyInstance::new(
         PyIRI::new(OTTR_TRIPLE.to_string())?,
         vec![subject, predicate, object],

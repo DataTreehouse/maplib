@@ -74,7 +74,7 @@ fn filter_multitype(multitype_column: &Column, names: &Vec<&str>, col_name: &str
                 .map(|&n| Selector::new(col(n)));
             lf = lf.drop(columns_drop_iter);
             let df = lf.collect();
-            
+
             df.unwrap().drop_in_place(col_name).unwrap()
         }
     }

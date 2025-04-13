@@ -1924,9 +1924,7 @@ pub fn contains_graph_pattern(e: &Expression) -> bool {
             contains_graph_pattern(u)
         }
         Expression::Exists(_) => true,
-        Expression::In(l, r) => {
-            contains_graph_pattern(l) | r.iter().any(contains_graph_pattern)
-        }
+        Expression::In(l, r) => contains_graph_pattern(l) | r.iter().any(contains_graph_pattern),
         Expression::If(l, m, r) => {
             contains_graph_pattern(l) || contains_graph_pattern(m) || contains_graph_pattern(r)
         }

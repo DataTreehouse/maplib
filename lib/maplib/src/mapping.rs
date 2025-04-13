@@ -167,7 +167,8 @@ impl Mapping {
         let return_template_iri = if !dataset.templates.is_empty() {
             Some(
                 dataset
-                    .templates.first()
+                    .templates
+                    .first()
                     .unwrap()
                     .signature
                     .template_name
