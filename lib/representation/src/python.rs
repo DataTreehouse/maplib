@@ -363,6 +363,7 @@ impl PyLiteral {
                 match s.into_value() {
                     AnyValue::Boolean(b) => b.into_py_any(py),
                     AnyValue::String(s) => s.into_py_any(py),
+                    AnyValue::StringOwned(s) => s.as_str().into_py_any(py),
                     AnyValue::UInt8(u) => u.into_py_any(py),
                     AnyValue::UInt16(u) => u.into_py_any(py),
                     AnyValue::UInt32(u) => u.into_py_any(py),
@@ -385,6 +386,22 @@ impl PyLiteral {
                         };
                         let dt = NaiveDateTime::UNIX_EPOCH.checked_add_signed(delta).unwrap();
                         if let Some(tz) = tz {
+                            let tz = tz.parse::<Tz>().unwrap();
+                            let dt = tz.from_utc_datetime(&dt);
+                            dt.into_py_any(py)
+                        } else {
+                            dt.into_py_any(py)
+                        }
+                    }
+                    AnyValue::DatetimeOwned(i, tu, tz) => {
+                        //From temporal conversion in polars
+                        let delta = match tu {
+                            TimeUnit::Nanoseconds => TimeDelta::nanoseconds(i),
+                            TimeUnit::Microseconds => TimeDelta::microseconds(i),
+                            TimeUnit::Milliseconds => TimeDelta::milliseconds(i),
+                        };
+                        let dt = NaiveDateTime::UNIX_EPOCH.checked_add_signed(delta).unwrap();
+                        if let Some(tz) = &tz {
                             let tz = tz.parse::<Tz>().unwrap();
                             let dt = tz.from_utc_datetime(&dt);
                             dt.into_py_any(py)
