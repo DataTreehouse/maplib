@@ -652,7 +652,7 @@ pub fn values_pattern(
         for (j, col) in row.iter().enumerate() {
             let map = variable_datatype_opt_term_vecs.get_mut(&j).unwrap();
             if let Some(gt) = col {
-                let dt = get_ground_term_datatype_ref(&gt);
+                let dt = get_ground_term_datatype_ref(gt);
                 {
                     let vector = if let Some(vector) = map.get_mut(&dt) {
                         vector
@@ -675,7 +675,7 @@ pub fn values_pattern(
                     }
                 }
             } else {
-                for (_, v) in &mut *map {
+                for v in (*map).values_mut() {
                     v.push(None);
                 }
             }
@@ -751,6 +751,6 @@ pub fn values_pattern(
         .select(varexpr)
         .collect()
         .unwrap();
-    let sm = EagerSolutionMappings::new(df, all_datatypes).as_lazy();
-    sm
+    
+    EagerSolutionMappings::new(df, all_datatypes).as_lazy()
 }

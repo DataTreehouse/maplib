@@ -155,7 +155,7 @@ impl Triplestore {
     ) -> Result<QueryResult, SparqlError> {
         if self.has_unindexed {
             self.index_unindexed()
-                .map_err(|x| SparqlError::IndexingError(x))?;
+                .map_err(SparqlError::IndexingError)?;
         }
 
         let context = Context::new();

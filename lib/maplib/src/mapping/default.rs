@@ -83,15 +83,11 @@ impl Mapping {
                 })
             } else {
                 let t = if let Some(map) = &mapping_column_types {
-                    if let Some(t) = map.get(c.as_str()) {
-                        Some(t.clone())
-                    } else {
-                        None
-                    }
+                    map.get(c.as_str()).cloned()
                 } else {
                     None
                 };
-                let t = t.unwrap_or(infer_type_from_column(df.column(&c).unwrap())?);
+                let t = t.unwrap_or(infer_type_from_column(df.column(c).unwrap())?);
                 let pt = t.as_ptype();
 
                 params.push(Parameter {
@@ -127,7 +123,7 @@ impl Mapping {
                             term: StottrTerm::ConstantTerm(ConstantTermOrList::ConstantTerm(
                                 ConstantTerm::Iri(
                                     NamedNode::new(format!("{}{}", DEFAULT_PREFIX, c))
-                                        .map_err(|x| MappingError::IriParseError(x))?,
+                                        .map_err(MappingError::IriParseError)?,
                                 ),
                             )),
                         },
@@ -144,7 +140,7 @@ impl Mapping {
             "{}default_template_{}",
             DEFAULT_PREFIX, &self.default_template_counter
         );
-        self.default_template_counter = self.default_template_counter + 1;
+        self.default_template_counter += 1;
         let template = Template {
             signature: Signature {
                 template_name: NamedNode::new(template_name.clone()).unwrap(),

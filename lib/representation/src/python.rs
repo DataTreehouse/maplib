@@ -140,7 +140,7 @@ impl PyRDFType {
 
     #[staticmethod]
     #[pyo3(name = "Literal")]
-    fn literal(iri: Bound<'_, PyAny>) -> PyResult<PyRDFType> {
+    fn literal(iri: Bound<'_, PyAny>) -> PyResult<PyRDFType>{
         if let Ok(pyiri) = iri.extract::<PyIRI>() {
             Ok(PyRDFType {
                 flat: Some(RDFNodeType::Literal(pyiri.iri)),
@@ -279,7 +279,7 @@ impl PyPrefix {
         Ok(PyPrefix { prefix, iri })
     }
 
-    pub fn suf(&self, suffix: String) -> PyResult<PyIRI> {
+    pub fn suf(&self, suffix: String) -> PyResult<PyIRI>{
         PyIRI::new(format!("{}{}", self.iri.as_str(), suffix))
     }
 }
@@ -352,7 +352,7 @@ impl PyLiteral {
         self.literal.language()
     }
 
-    pub fn to_native(&self, py: Python<'_>) -> PyResult<PyObject> {
+    pub fn to_native(&self, py: Python<'_>) -> PyResult<PyObject>{
         if self.literal.datatype() == xsd::DURATION {
             let duration = Duration::from_str(self.literal.value()).unwrap();
             return Ok(PyXSDDuration { duration }.into_py(py));

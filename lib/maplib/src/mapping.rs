@@ -51,7 +51,7 @@ impl ExpandOptions {
         delay_index: Option<bool>,
     ) -> Self {
         ExpandOptions {
-            graph: graph,
+            graph,
             validate_iris: validate_iris.unwrap_or(true),
             delay_index: delay_index.unwrap_or(true),
         }
@@ -161,14 +161,13 @@ impl Mapping {
     }
 
     pub fn add_templates_from_string(&mut self, s: &str) -> Result<Option<NamedNode>, MaplibError> {
-        let doc = document_from_str(s).map_err(|x| MaplibError::TemplateError(x))?;
+        let doc = document_from_str(s).map_err(MaplibError::TemplateError)?;
         let dataset =
             TemplateDataset::from_documents(vec![doc]).map_err(MaplibError::TemplateError)?;
         let return_template_iri = if !dataset.templates.is_empty() {
             Some(
                 dataset
-                    .templates
-                    .get(0)
+                    .templates.first()
                     .unwrap()
                     .signature
                     .template_name
@@ -397,7 +396,7 @@ impl Mapping {
         let triplestore = self.get_triplestore(&graph);
         triplestore
             .index_unindexed()
-            .map_err(|x| SparqlError::IndexingError(x))?;
+            .map_err(SparqlError::IndexingError)?;
         triplestore
             .get_predicate_eager_solution_mappings(predicate, include_transient)
             .map_err(|x| x.into())

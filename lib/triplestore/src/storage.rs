@@ -155,7 +155,7 @@ impl Triples {
         verb_iri: &NamedNode,
         indexing: &IndexingOptions,
     ) -> Result<(), TriplestoreError> {
-        let object_indexing_enabled = can_and_should_index_object(&object_type, verb_iri, indexing);
+        let object_indexing_enabled = can_and_should_index_object(object_type, verb_iri, indexing);
         self.object_indexing_enabled = object_indexing_enabled;
         self.maybe_do_object_indexing(storage_folder)?;
         Ok(())
@@ -180,11 +180,11 @@ impl Triples {
                 self.subject_sparse_index.as_ref().unwrap(),
                 self.height,
             );
-            return Ok(self
+            return self
                 .subject_sort
                 .as_ref()
                 .unwrap()
-                .get_lazy_frames(Some(offsets))?);
+                .get_lazy_frames(Some(offsets));
         } else if let Some(objects) = objects {
             if let Some(sorted) = &self.object_sort {
                 let allow_pushdown = if let BaseRDFNodeType::Literal(t) = &self.object_type {
@@ -213,10 +213,10 @@ impl Triples {
                 } else {
                     None
                 };
-                return Ok(sorted.get_lazy_frames(offsets)?);
+                return sorted.get_lazy_frames(offsets);
             }
         }
-        Ok(self.subject_sort.as_ref().unwrap().get_lazy_frames(None)?)
+        self.subject_sort.as_ref().unwrap().get_lazy_frames(None)
     }
 
     pub(crate) fn add_triples(
@@ -358,7 +358,8 @@ fn can_and_should_index_object(
         false
     };
 
-    let should_index_by_objects = if can_index_object {
+    
+    if can_index_object {
         if indexing.object_sort_all {
             true
         } else if let Some(object_sort_some) = &indexing.object_sort_some {
@@ -368,8 +369,7 @@ fn can_and_should_index_object(
         }
     } else {
         false
-    };
-    should_index_by_objects
+    }
 }
 
 #[derive(Clone)]
@@ -559,7 +559,7 @@ fn get_lookup_interval(
     let mut range_backwards = sparse_map.range(..trg.to_string());
     while let Some((s, prev)) = range_backwards.next_back() {
         if s != trg {
-            from = cmp::min(prev.clone(), height);
+            from = cmp::min(*prev, height);
             break;
         }
     }
@@ -568,7 +568,7 @@ fn get_lookup_interval(
     let mut to = height - 1;
     for (s, next) in range_forwards {
         if s != trg {
-            to = next.clone();
+            to = *next;
             break;
         }
     }
@@ -660,7 +660,7 @@ fn sort_indexed_lf(
     let mut descending = vec![false];
     if also_other {
         let other_c = get_col(!is_subject);
-        by.push(PlSmallStr::from_str(&other_c));
+        by.push(PlSmallStr::from_str(other_c));
         descending.push(false);
     }
     if sort_on_existing {

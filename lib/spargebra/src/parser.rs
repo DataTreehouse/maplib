@@ -451,7 +451,7 @@ fn build_select(
     if let SelectionVariables::Explicit(sel_items) = &select.variables {
         for sel_item in sel_items {
             if let SelectionMember::Expression(expression, variable) = sel_item {
-                if !where_visible.contains(&variable) {
+                if !where_visible.contains(variable) {
                     p = GraphPattern::Extend {
                         inner: Box::new(p),
                         variable: variable.clone(),
@@ -1621,7 +1621,7 @@ parser! {
         }
         rule PropertyListPathNotEmpty_item_content() -> FocusedTripleOrPathPattern<(VariableOrPropertyPath,Vec<AnnotatedTermPath>)> = p:(VerbPath() / VerbSimple()) _ o:ObjectListPath() _ {
             FocusedTripleOrPathPattern {
-                focus: (p, o.focus.into_iter().map(AnnotatedTermPath::from).collect()),
+                focus: (p, o.focus.into_iter().collect()),
                 patterns: o.patterns
             }
         }

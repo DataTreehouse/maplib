@@ -129,7 +129,7 @@ impl Triplestore {
             let mut pathbuf = Path::new(storage_folder).to_path_buf();
             create_folder_if_not_exists(pathbuf.as_path())
                 .map_err(TriplestoreError::FileIOError)?;
-            let ext = format!("ts_{}", Uuid::new_v4().to_string());
+            let ext = format!("ts_{}", Uuid::new_v4());
             pathbuf.push(&ext);
             create_folder_if_not_exists(pathbuf.as_path())
                 .map_err(TriplestoreError::FileIOError)?;
@@ -137,7 +137,7 @@ impl Triplestore {
         } else {
             None
         };
-        let indexing = indexing.unwrap_or(IndexingOptions::default());
+        let indexing = indexing.unwrap_or_default();
         let fts_index = if let Some(fts_path) = &indexing.fts_path {
             Some(FtsIndex::new(fts_path).map_err(TriplestoreError::FtsError)?)
         } else {
