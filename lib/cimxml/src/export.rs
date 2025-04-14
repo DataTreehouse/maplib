@@ -1,8 +1,20 @@
+use std::collections::HashMap;
+use std::io::Write;
 use oxrdf::{Literal, NamedNode};
 use thiserror::Error;
+use triplestore::Triplestore;
 
 #[derive(Error, Debug)]
-pub enum CIMXMLError {
+pub enum CIMXMLError {}
+
+pub fn cim_xml_write<W: Write>(
+    _buf: &mut W,
+    _triplestore: &mut Triplestore,
+    _profile_triplestore: &mut Triplestore,
+    _cim_prefix: &NamedNode,
+    _fullmodel_details: HashMap<String, String>,
+) -> Result<(), CIMXMLError> {
+    unimplemented!("Contact Data Treehouse to try")
 }
 
 pub struct FullModelDetails {
@@ -26,4 +38,5 @@ impl FullModelDetails {
         _profiles: Vec<NamedNode>,
     ) -> Result<Self, CIMXMLError> {
         unimplemented!("Contact Data Treehouse to try")
+    }
 }
