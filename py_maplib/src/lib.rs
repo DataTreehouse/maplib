@@ -12,6 +12,8 @@ use log::warn;
 use maplib::errors::MaplibError;
 use maplib::mapping::{ExpandOptions, Mapping as InnerMapping};
 
+use chrono::Utc;
+use cimxml::export::FullModelDetails;
 use pydf_io::to_python::{df_to_py_df, fix_cats_and_multicolumns};
 use pyo3::prelude::*;
 use std::collections::{HashMap, HashSet};
@@ -44,6 +46,7 @@ use triplestore::sparql::{QueryResult as SparqlQueryResult, QueryResult};
 // SOFTWARE.
 #[cfg(target_os = "linux")]
 use jemallocator::Jemalloc;
+use oxrdf::vocab::xsd;
 use oxrdf::NamedNode;
 use oxrdfio::RdfFormat;
 use polars::prelude::{col, lit, IntoLazy};
@@ -56,6 +59,7 @@ use representation::solution_mapping::EagerSolutionMappings;
 
 #[cfg(not(target_os = "linux"))]
 use mimalloc::MiMalloc;
+use representation::polars_to_rdf::XSD_DATETIME_WITH_TZ_FORMAT;
 use representation::rdf_to_polars::rdf_named_node_to_polars_literal_value;
 use representation::{RDFNodeType, OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME};
 use templates::python::{a, py_triple, PyArgument, PyInstance, PyParameter, PyTemplate, PyXSD};
@@ -262,7 +266,7 @@ impl PyMapping {
             )
             .into());
         };
-        let graph = parse_optional_graph(graph)?;
+        let graph = parse_optional_named_node(graph)?;
         let options = ExpandOptions::from_args(graph, validate_iris, delay_index);
         let types = map_types(types);
 
@@ -297,7 +301,7 @@ impl PyMapping {
         validate_iris: Option<bool>,
         delay_index: Option<bool>,
     ) -> PyResult<Option<PyObject>> {
-        let graph = parse_optional_graph(graph)?;
+        let graph = parse_optional_named_node(graph)?;
         let df = polars_df_to_rust_df(df)?;
         let options = ExpandOptions::from_args(graph, validate_iris, delay_index);
         let types = map_types(types);
@@ -325,7 +329,7 @@ impl PyMapping {
         delay_index: Option<bool>,
     ) -> PyResult<String> {
         let df = polars_df_to_rust_df(df)?;
-        let graph = parse_optional_graph(graph)?;
+        let graph = parse_optional_named_node(graph)?;
         let options = ExpandOptions::from_args(graph, validate_iris, delay_index);
         let dry_run = dry_run.unwrap_or(false);
         let types = map_types(types);
@@ -354,7 +358,7 @@ impl PyMapping {
         return_json: Option<bool>,
         include_transient: Option<bool>,
     ) -> PyResult<PyObject> {
-        let graph = parse_optional_graph(graph)?;
+        let graph = parse_optional_named_node(graph)?;
         let mapped_parameters = map_parameters(parameters)?;
         let res = self
             .inner
@@ -382,7 +386,7 @@ impl PyMapping {
         all: Option<bool>,
         graph: Option<String>,
     ) -> PyResult<()> {
-        let graph = parse_optional_graph(graph)?;
+        let graph = parse_optional_named_node(graph)?;
         let options = if let Some(options) = options {
             options.inner
         } else {
@@ -499,8 +503,8 @@ impl PyMapping {
         py: Python<'_>,
     ) -> PyResult<HashMap<String, PyObject>> {
         let mapped_parameters = map_parameters(parameters)?;
-        let source_graph = parse_optional_graph(source_graph)?;
-        let target_graph = parse_optional_graph(target_graph)?;
+        let source_graph = parse_optional_named_node(source_graph)?;
+        let target_graph = parse_optional_named_node(target_graph)?;
         let res = self
             .inner
             .query(
@@ -554,8 +558,8 @@ impl PyMapping {
         py: Python<'_>,
     ) -> PyResult<HashMap<String, PyObject>> {
         let mapped_parameters = map_parameters(parameters)?;
-        let source_graph = parse_optional_graph(source_graph)?;
-        let target_graph = parse_optional_graph(target_graph)?;
+        let source_graph = parse_optional_named_node(source_graph)?;
+        let target_graph = parse_optional_named_node(target_graph)?;
         if self.sprout.is_none() {
             self.create_sprout()?;
         }
@@ -608,7 +612,7 @@ impl PyMapping {
         graph: Option<String>,
         replace_graph: Option<bool>,
     ) -> PyResult<()> {
-        let graph = parse_optional_graph(graph)?;
+        let graph = parse_optional_named_node(graph)?;
         let file_path = file_path.str()?.to_string();
         let path = Path::new(&file_path);
         let format = format.map(|format| resolve_format(&format));
@@ -640,7 +644,7 @@ impl PyMapping {
         graph: Option<String>,
         replace_graph: Option<bool>,
     ) -> PyResult<()> {
-        let graph = parse_optional_graph(graph)?;
+        let graph = parse_optional_named_node(graph)?;
         let format = resolve_format(format);
         self.inner
             .read_triples_string(
@@ -683,9 +687,76 @@ impl PyMapping {
         let path_buf = PathBuf::from(file_path);
         let mut actual_file = File::create(path_buf.as_path())
             .map_err(|x| PyMaplibError::from(MaplibError::FileCreateIOError(x)))?;
-        let graph = parse_optional_graph(graph)?;
+        let graph = parse_optional_named_node(graph)?;
         self.inner
             .write_triples(&mut actual_file, graph, format)
+            .unwrap();
+        Ok(())
+    }
+
+    #[pyo3(signature = (
+        file_path, profiles, model_iri=None, version=None, description=None, created=None,
+        scenario_time=None, modeling_authority_set=None, cim_prefix=None, graph=None,
+        profile_graph=None))]
+    fn write_cim_xml(
+        &mut self,
+        file_path: &Bound<'_, PyAny>,
+        profiles: Vec<String>,
+        model_iri: Option<String>,
+        version: Option<String>,
+        description: Option<String>,
+        created: Option<String>,
+        scenario_time: Option<String>,
+        modeling_authority_set: Option<String>,
+        cim_prefix: Option<String>,
+        graph: Option<String>,
+        profile_graph: Option<String>,
+    ) -> PyResult<()> {
+        let cim_prefix = parse_optional_named_node(cim_prefix)?
+            .unwrap_or(NamedNode::new_unchecked("http://iec.ch/TC57/CIM100#"));
+        let model_iri = parse_optional_named_node(model_iri)?.unwrap_or(NamedNode::new_unchecked(
+            format!("urn:uuid:{}", uuid::Uuid::new_v4().to_string()),
+        ));
+        let version = version.map(|x| oxrdf::Literal::new_simple_literal(x));
+        let description = description.map(|x| oxrdf::Literal::new_simple_literal(x));
+        let profile_graph = parse_optional_named_node(profile_graph)?;
+        let created = oxrdf::Literal::new_typed_literal(
+            created.unwrap_or(Utc::now().format(XSD_DATETIME_WITH_TZ_FORMAT).to_string()),
+            xsd::DATE_TIME,
+        );
+        let scenario_time = oxrdf::Literal::new_typed_literal(
+            scenario_time.unwrap_or(Utc::now().format(XSD_DATETIME_WITH_TZ_FORMAT).to_string()),
+            xsd::DATE_TIME,
+        );
+        let modeling_authority_set =
+            modeling_authority_set.map(|x| oxrdf::Literal::new_simple_literal(x));
+        let graph = parse_optional_named_node(graph)?;
+        let file_path = file_path.str()?.to_string();
+        let path_buf = PathBuf::from(file_path);
+        let mut nn_profiles = vec![];
+        for p in profiles {
+            nn_profiles.push(parse_named_node(p)?);
+        }
+        let mut actual_file = File::create(path_buf.as_path())
+            .map_err(|x| PyMaplibError::from(MaplibError::FileCreateIOError(x)))?;
+        let fullmodel_details = FullModelDetails::new(
+            model_iri,
+            description,
+            version,
+            created,
+            scenario_time,
+            modeling_authority_set,
+            nn_profiles,
+        )
+        .map_err(|x| PyMaplibError::from(MaplibError::CIMXMLError(x)))?;
+        self.inner
+            .write_cim_xml(
+                &mut actual_file,
+                fullmodel_details,
+                cim_prefix,
+                profile_graph,
+                graph,
+            )
             .unwrap();
         Ok(())
     }
@@ -708,7 +779,7 @@ impl PyMapping {
             RdfFormat::NTriples
         };
         let mut out = vec![];
-        let graph = parse_optional_graph(graph)?;
+        let graph = parse_optional_named_node(graph)?;
         self.inner.write_triples(&mut out, graph, format).unwrap();
         Ok(String::from_utf8(out).unwrap())
     }
@@ -720,7 +791,7 @@ impl PyMapping {
         graph: Option<String>,
     ) -> PyResult<()> {
         let folder_path = folder_path.str()?.to_string();
-        let graph = parse_optional_graph(graph)?;
+        let graph = parse_optional_named_node(graph)?;
         self.inner
             .write_native_parquet(&folder_path, graph)
             .map_err(PyMaplibError::from)?;
@@ -733,7 +804,7 @@ impl PyMapping {
         graph: Option<String>,
         include_transient: Option<bool>,
     ) -> PyResult<Vec<PyIRI>> {
-        let graph = parse_optional_graph(graph)?;
+        let graph = parse_optional_named_node(graph)?;
         let nns = self
             .inner
             .get_predicate_iris(&graph, include_transient.unwrap_or(false))
@@ -749,7 +820,7 @@ impl PyMapping {
         graph: Option<String>,
         include_transient: Option<bool>,
     ) -> PyResult<Vec<PyObject>> {
-        let graph = parse_optional_graph(graph)?;
+        let graph = parse_optional_named_node(graph)?;
         let eager_sms = self
             .inner
             .get_predicate(&iri.into_inner(), graph, include_transient.unwrap_or(false))
@@ -937,13 +1008,17 @@ fn resolve_format(format: &str) -> RdfFormat {
     }
 }
 
-fn parse_optional_graph(graph: Option<String>) -> PyResult<Option<NamedNode>> {
-    let graph = if let Some(graph) = graph {
-        Some(NamedNode::new(graph).map_err(|x| PyMaplibError::from(MaplibError::from(x)))?)
+fn parse_named_node(s: String) -> PyResult<NamedNode> {
+    Ok(NamedNode::new(s).map_err(|x| PyMaplibError::from(MaplibError::from(x)))?)
+}
+
+fn parse_optional_named_node(s: Option<String>) -> PyResult<Option<NamedNode>> {
+    let nn = if let Some(s) = s {
+        Some(parse_named_node(s)?)
     } else {
         None
     };
-    Ok(graph)
+    Ok(nn)
 }
 
 fn map_types(

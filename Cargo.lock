@@ -2034,6 +2034,8 @@ dependencies = [
 name = "py_maplib"
 version = "0.15.13"
 dependencies = [
+ "chrono",
+ "cimxml",
  "jemallocator",
  "log",
  "maplib",
@@ -2050,6 +2052,7 @@ dependencies = [
  "templates",
  "thiserror",
  "triplestore",
+ "uuid",
 ]
 
 [[package]]

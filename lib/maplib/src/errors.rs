@@ -1,5 +1,5 @@
 use crate::mapping::errors::MappingError;
-use cimxml::CIMXMLError;
+use cimxml::export::CIMXMLError;
 use datalog::inference::DatalogError;
 use oxiri::IriParseError;
 use polars::error::PolarsError;

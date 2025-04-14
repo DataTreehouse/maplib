@@ -5,7 +5,7 @@ pub mod expansion;
 
 use crate::errors::MaplibError;
 use crate::mapping::errors::MappingError;
-use cimxml::cim_xml_write;
+use cimxml::export::{cim_xml_write, FullModelDetails};
 use datalog::ast::DatalogRuleset;
 use datalog::inference::infer;
 use datalog::parser::parse_datalog_ruleset;
@@ -281,12 +281,16 @@ impl Mapping {
     pub fn write_cim_xml<W: Write>(
         &mut self,
         buffer: &mut W,
+        fullmodel_details: FullModelDetails,
         cim_prefix: NamedNode,
-        profile_graph: NamedNode,
-        fullmodel_details: HashMap<String, String>,
         graph: Option<NamedNode>,
+        profile_graph: Option<NamedNode>,
     ) -> Result<(), MaplibError> {
-        let mut profile_triplestore = self.triplestores_map.remove(&profile_graph).unwrap();
+        let mut profile_triplestore = if let Some(profile_graph) = &profile_graph {
+            Some(self.triplestores_map.remove(&profile_graph).unwrap())
+        } else {
+            None
+        };
         let triplestore = self.get_triplestore(&graph);
         let res = cim_xml_write(
             buffer,
@@ -296,8 +300,10 @@ impl Mapping {
             fullmodel_details,
         )
         .map_err(MaplibError::CIMXMLError);
-        self.triplestores_map
-            .insert(profile_graph, profile_triplestore);
+        if let Some(profile_triplestore) = profile_triplestore {
+            self.triplestores_map
+                .insert(profile_graph.unwrap(), profile_triplestore);
+        }
         res
     }
 
