@@ -1,3 +1,5 @@
+mod export;
+
 use oxrdf::NamedNode;
 use std::collections::HashMap;
 use std::io::Write;
