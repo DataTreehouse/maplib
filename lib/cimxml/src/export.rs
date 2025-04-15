@@ -9,7 +9,7 @@ pub enum CIMXMLError {}
 pub fn cim_xml_write<W: Write>(
     _buf: &mut W,
     _triplestore: &mut Triplestore,
-    _profile_triplestore: &mut Option<Triplestore>,
+    _profile_triplestore: &mut Triplestore,
     _cim_prefix: &NamedNode,
     _fullmodel_details: FullModelDetails,
 ) -> Result<(), CIMXMLError> {
@@ -24,7 +24,6 @@ pub struct FullModelDetails {
     created: Literal,
     scenario_time: Literal,
     modeling_authority_set: Option<Literal>,
-    profiles: Vec<NamedNode>,
 }
 
 impl FullModelDetails {
@@ -35,7 +34,6 @@ impl FullModelDetails {
         _created: Literal,
         _scenario_time: Literal,
         _modeling_authority_set: Option<Literal>,
-        _profiles: Vec<NamedNode>,
     ) -> Result<Self, CIMXMLError> {
         unimplemented!("Contact Data Treehouse to try")
     }

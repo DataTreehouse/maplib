@@ -617,7 +617,7 @@ class Mapping:
 
     def write_cim_xml(self,
         file_path: Union[str, Path],
-        profiles: List[str],
+        profile_graph: str,
         model_iri: str = None,
         version:str = None,
         description:str = None,
@@ -625,32 +625,36 @@ class Mapping:
         scenario_time: str = None,
         modeling_authority_set: str = None,
         cim_prefix: str = "http://iec.ch/TC57/CIM100#",
-        profile_graph: str = None,
         graph: str = None) -> None:
         """
         Write the legacy CIM XML format.
 
+        >>> PROFILE_GRAPH = "urn:graph:profiles"
+        >>> m = Mapping()
+        >>> m.read_triples(model_path, base_iri=publicID, format="rdf/xml")
+        >>> m.read_triples("61970-600-2_Equipment-AP-Voc-RDFS2020_v3-0-0.rdf", graph=PROFILE_GRAPH, format="rdf/xml")
+        >>> m.read_triples("61970-600-2_Operation-AP-Voc-RDFS2020_v3-0-0.rdf", graph=PROFILE_GRAPH, format="rdf/xml")
         >>> model.write_cim_xml(
-        >>>     "model.xml",
-        >>>     profiles=["http://entsoe.eu/CIM/EquipmentCore/3/1", "http://entsoe.eu/CIM/EquipmentOperation/3/1"],
-        >>>     description = "MyModel",
-        >>>     created = "2023-09-14T20:27:41",
-        >>>     scenario_time = "2023-09-14T02:44:43",
-        >>>     modeling_authority_set="MyAuthSet",
-        >>>     version="22",
-        >>>     cim_prefix="http://iec.ch/TC57/2013/CIM-schema-cim16#")
+        >>> "model.xml",
+        >>> profile_graph=PROFILE_GRAPH,
+        >>> cim_prefix="http://iec.ch/TC57/CIM100#",
+        >>> description = "MyModel",
+        >>> created = "2023-09-14T20:27:41",
+        >>> scenario_time = "2023-09-14T02:44:43",
+        >>> modeling_authority_set="www.westernpower.co.uk",
+        >>> version="22",
+        >>> )
 
         :param file_path: The path of the file containing triples
-        :param profiles: We have model_iri md:Model.profile profile . where profile is in profiles.
-        :param model_iri: model_iri a md:FullModel.
+        :param profile_graph: The IRI of the graph containing the ontology of the CIM profile to write.
+        :param model_iri: model_iri a md:FullModel. Is generated if not provided.
         :param version: model_iri md:Model.version version .
         :param description: model_iri md:Model.description description .
         :param created: model_iri md:Model.created created .
         :param scenario_time: model_iri md:Model.scenarioTime scenario_time .
         :param modeling_authority_set: model_iri md:Model.modelingAuthoritySet modeling_authority_set .
-        :param cim_prefix: The prefix of the cim namespace.
+        :param cim_prefix: The prefix of the cim namespace, defaults to CIM 100.
         :param graph: The graph to write, defaults to the default graph.
-        :param profile_graph: The IRI of the graph containing the ontology of the CIM profile to write. Defaults to graph.
         """
 
     def write_triples(

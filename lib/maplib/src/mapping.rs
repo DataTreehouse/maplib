@@ -284,13 +284,9 @@ impl Mapping {
         fullmodel_details: FullModelDetails,
         cim_prefix: NamedNode,
         graph: Option<NamedNode>,
-        profile_graph: Option<NamedNode>,
+        profile_graph: NamedNode,
     ) -> Result<(), MaplibError> {
-        let mut profile_triplestore = if let Some(profile_graph) = &profile_graph {
-            Some(self.triplestores_map.remove(&profile_graph).unwrap())
-        } else {
-            None
-        };
+        let mut profile_triplestore = self.triplestores_map.remove(&profile_graph).unwrap();
         let triplestore = self.get_triplestore(&graph);
         let res = cim_xml_write(
             buffer,
@@ -300,10 +296,7 @@ impl Mapping {
             fullmodel_details,
         )
         .map_err(MaplibError::CIMXMLError);
-        if let Some(profile_triplestore) = profile_triplestore {
-            self.triplestores_map
-                .insert(profile_graph.unwrap(), profile_triplestore);
-        }
+        self.triplestores_map.insert(profile_graph, profile_triplestore);
         res
     }
 

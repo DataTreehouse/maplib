@@ -695,13 +695,12 @@ impl PyMapping {
     }
 
     #[pyo3(signature = (
-        file_path, profiles, model_iri=None, version=None, description=None, created=None,
-        scenario_time=None, modeling_authority_set=None, cim_prefix=None, graph=None,
-        profile_graph=None))]
+        file_path, profile_graph, model_iri=None, version=None, description=None, created=None,
+        scenario_time=None, modeling_authority_set=None, cim_prefix=None, graph=None))]
     fn write_cim_xml(
         &mut self,
         file_path: &Bound<'_, PyAny>,
-        profiles: Vec<String>,
+        profile_graph: String,
         model_iri: Option<String>,
         version: Option<String>,
         description: Option<String>,
@@ -710,7 +709,6 @@ impl PyMapping {
         modeling_authority_set: Option<String>,
         cim_prefix: Option<String>,
         graph: Option<String>,
-        profile_graph: Option<String>,
     ) -> PyResult<()> {
         let cim_prefix = parse_optional_named_node(cim_prefix)?
             .unwrap_or(NamedNode::new_unchecked("http://iec.ch/TC57/CIM100#"));
@@ -719,7 +717,7 @@ impl PyMapping {
         ));
         let version = version.map(|x| oxrdf::Literal::new_simple_literal(x));
         let description = description.map(|x| oxrdf::Literal::new_simple_literal(x));
-        let profile_graph = parse_optional_named_node(profile_graph)?;
+        let profile_graph = parse_named_node(profile_graph)?;
         let created = oxrdf::Literal::new_typed_literal(
             created.unwrap_or(Utc::now().format(XSD_DATETIME_WITH_TZ_FORMAT).to_string()),
             xsd::DATE_TIME,
@@ -733,10 +731,6 @@ impl PyMapping {
         let graph = parse_optional_named_node(graph)?;
         let file_path = file_path.str()?.to_string();
         let path_buf = PathBuf::from(file_path);
-        let mut nn_profiles = vec![];
-        for p in profiles {
-            nn_profiles.push(parse_named_node(p)?);
-        }
         let mut actual_file = File::create(path_buf.as_path())
             .map_err(|x| PyMaplibError::from(MaplibError::FileCreateIOError(x)))?;
         let fullmodel_details = FullModelDetails::new(
@@ -746,7 +740,6 @@ impl PyMapping {
             created,
             scenario_time,
             modeling_authority_set,
-            nn_profiles,
         )
         .map_err(|x| PyMaplibError::from(MaplibError::CIMXMLError(x)))?;
         self.inner
@@ -754,8 +747,8 @@ impl PyMapping {
                 &mut actual_file,
                 fullmodel_details,
                 cim_prefix,
-                profile_graph,
                 graph,
+                profile_graph,
             )
             .unwrap();
         Ok(())
