@@ -634,7 +634,7 @@ class Mapping:
         >>> m.read_triples(model_path, base_iri=publicID, format="rdf/xml")
         >>> m.read_triples("61970-600-2_Equipment-AP-Voc-RDFS2020_v3-0-0.rdf", graph=PROFILE_GRAPH, format="rdf/xml")
         >>> m.read_triples("61970-600-2_Operation-AP-Voc-RDFS2020_v3-0-0.rdf", graph=PROFILE_GRAPH, format="rdf/xml")
-        >>> model.write_cim_xml(
+        >>> m.write_cim_xml(
         >>> "model.xml",
         >>> profile_graph=PROFILE_GRAPH,
         >>> cim_prefix="http://iec.ch/TC57/CIM100#",
