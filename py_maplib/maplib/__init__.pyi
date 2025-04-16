@@ -635,14 +635,14 @@ class Mapping:
         >>> m.read_triples("61970-600-2_Equipment-AP-Voc-RDFS2020_v3-0-0.rdf", graph=PROFILE_GRAPH, format="rdf/xml")
         >>> m.read_triples("61970-600-2_Operation-AP-Voc-RDFS2020_v3-0-0.rdf", graph=PROFILE_GRAPH, format="rdf/xml")
         >>> m.write_cim_xml(
-        >>> "model.xml",
-        >>> profile_graph=PROFILE_GRAPH,
-        >>> cim_prefix="http://iec.ch/TC57/CIM100#",
-        >>> description = "MyModel",
-        >>> created = "2023-09-14T20:27:41",
-        >>> scenario_time = "2023-09-14T02:44:43",
-        >>> modeling_authority_set="www.westernpower.co.uk",
-        >>> version="22",
+        >>>     "model.xml",
+        >>>     profile_graph=PROFILE_GRAPH,
+        >>>     cim_prefix="http://iec.ch/TC57/CIM100#",
+        >>>     description = "MyModel",
+        >>>     created = "2023-09-14T20:27:41",
+        >>>     scenario_time = "2023-09-14T02:44:43",
+        >>>     modeling_authority_set="www.westernpower.co.uk",
+        >>>     version="22",
         >>> )
 
         :param file_path: The path of the file containing triples
