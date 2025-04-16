@@ -18,7 +18,7 @@ use oxrdf::vocab::xsd;
 use polars::io::SerWriter;
 use polars_core::utils::{concat_df, Container};
 use representation::multitype::{lf_column_from_categorical, lf_column_to_categorical};
-use representation::{BaseRDFNodeType, OBJECT_COL_NAME, SUBJECT_COL_NAME};
+use representation::{BaseRDFNodeType, IRI_PREFIX_FIELD, IRI_SUFFIX_FIELD, OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use std::collections::{BTreeMap, HashMap};
 use std::fs::{remove_file, File};
 use std::path::{Path, PathBuf};
@@ -610,12 +610,12 @@ fn get_lookup_offsets(
         .collect()
 }
 
-fn update_at_offset(
-    st_chunked: &StructChunked,
+fn update_cat_at_offset(
+    cat_chunked: &CategoricalChunked,
     offset: usize,
     sparse_map: &mut BTreeMap<String, usize>,
 ) {
-    let any = st_chunked.get_any_value(offset).unwrap();
+    let any = cat_chunked.get_any_value(offset).unwrap();
     let s = match any {
         AnyValue::Null => None,
         AnyValue::Categorical(c, rev, _) => Some(rev.get(c).to_string()),
@@ -624,6 +624,34 @@ fn update_at_offset(
     };
     if let Some(s) = s {
         let e = sparse_map.entry(s);
+        e.or_insert(offset);
+    }
+}
+
+fn update_iri_at_offset(
+    prefix: &CategoricalChunked,
+    suffix: &CategoricalChunked,
+    offset: usize,
+    sparse_map: &mut BTreeMap<String, usize>,
+) {
+    let any_prefix = prefix.get_any_value(offset).unwrap();
+    let any_suffix = suffix.get_any_value(offset).unwrap();
+
+    let p = match any_prefix {
+        AnyValue::Null => None,
+        AnyValue::Categorical(c, rev, _) => Some(rev.get(c).to_string()),
+        AnyValue::CategoricalOwned(c, rev, _) => Some(rev.get(c).to_string()),
+        _ => panic!(),
+    };
+    let s = match any_suffix {
+        AnyValue::Null => None,
+        AnyValue::Categorical(c, rev, _) => Some(rev.get(c).to_string()),
+        AnyValue::CategoricalOwned(c, rev, _) => Some(rev.get(c).to_string()),
+        _ => panic!(),
+    };
+    if let (Some(p), Some(s)) = (p,s) {
+        let iri = format!("{}{}", p,s);
+        let e = sparse_map.entry(iri);
         e.or_insert(offset);
     }
 }
@@ -653,6 +681,8 @@ fn sort_indexed_lf(
     is_subject: bool,
     also_other: bool,
     sort_on_existing: bool,
+    subject_type: &BaseRDFNodeType,
+    object_type: &BaseRDFNodeType,
 ) -> LazyFrame {
     let c = get_col(is_subject);
     let mut lf = cast_col_to_cat(lf, c, true);
@@ -804,18 +834,46 @@ fn create_unique_df_and_sparse_map(
     (df, sparse_map)
 }
 
-fn create_sparse_map(ser: &Series) -> BTreeMap<String, usize> {
-    let st = ser.struct_().unwrap();
+fn create_sparse_map(ser: &Series, t: &BaseRDFNodeType) -> BTreeMap<String, usize> {
+    let mut iri_prefix_series = None;
+    let mut iri_suffix_series = None;
+    let mut cat_series = None;
+    if t.is_iri() {
+        let st = ser.struct_().unwrap();
+        iri_prefix_series = Some(st.field_by_name(IRI_PREFIX_FIELD).unwrap());
+        iri_suffix_series = Some(st.field_by_name(IRI_SUFFIX_FIELD).unwrap());
+    } else {
+        cat_series = Some(ser.categorical().unwrap());
+    }
     let mut sparse_map = BTreeMap::new();
     let mut current_offset = 0;
     while current_offset < ser.len() {
-        update_at_offset(st, current_offset, &mut sparse_map);
+        if let Some(cat_series) = &cat_series {
+            update_cat_at_offset(*cat_series, current_offset, &mut sparse_map);
+        } else {
+            update_iri_at_offset(
+                iri_prefix_series.as_ref().unwrap().categorical().unwrap(),
+                iri_suffix_series.as_ref().unwrap().categorical().unwrap(),
+                current_offset,
+                &mut sparse_map,
+            );
+        }
         current_offset += OFFSET_STEP;
     }
     //Ensure that we have both ends
     let final_offset = ser.len() - 1;
     if current_offset != final_offset {
-        update_at_offset(st, final_offset, &mut sparse_map);
+        if let Some(cat_series) = &cat_series {
+            update_cat_at_offset(*cat_series, final_offset, &mut sparse_map);
+        } else {
+            update_iri_at_offset(
+                iri_prefix_series.as_ref().unwrap().categorical().unwrap(),
+                iri_suffix_series.as_ref().unwrap().categorical().unwrap(),
+                final_offset,
+                &mut sparse_map,
+            );
+        }
     }
     sparse_map
 }
+
