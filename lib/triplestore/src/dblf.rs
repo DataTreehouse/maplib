@@ -8,9 +8,7 @@ use query_processing::type_constraints::PossibleTypes;
 use rayon::iter::IntoParallelIterator;
 use rayon::iter::ParallelIterator;
 use representation::multitype::{all_multi_cols, base_col_name, lf_columns_to_categorical};
-use representation::rdf_to_polars::{
-    rdf_named_node_to_polars_literal_value, rdf_term_to_polars_expr,
-};
+use representation::rdf_to_polars::{rdf_named_node_to_polars_expr, rdf_term_to_polars_expr};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use representation::{
     BaseRDFNodeType, RDFNodeType, IRI_PREFIX_FIELD, IRI_SUFFIX_FIELD, LANG_STRING_LANG_FIELD,
@@ -270,9 +268,7 @@ impl Triplestore {
 
                 if verb_keep_rename.is_some() {
                     mappings = mappings.with_column(
-                        lit(rdf_named_node_to_polars_literal_value(&verb.unwrap()))
-                            .cast(DataType::Categorical(None, CategoricalOrdering::Physical))
-                            .alias(VERB_COL_NAME),
+                        rdf_named_node_to_polars_expr(&verb.unwrap()).alias(VERB_COL_NAME),
                     );
                 }
 

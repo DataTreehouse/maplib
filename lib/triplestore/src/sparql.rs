@@ -18,7 +18,7 @@ use representation::multitype::{split_df_multicols, unique_workaround};
 use representation::polars_to_rdf::{df_as_result, QuerySolutions};
 use representation::query_context::Context;
 use representation::rdf_to_polars::{
-    rdf_literal_to_polars_literal_value, rdf_named_node_to_polars_literal_value,
+    rdf_literal_to_polars_literal_value, rdf_named_node_to_polars_expr,
 };
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use representation::RDFNodeType;
@@ -79,10 +79,7 @@ impl QueryResult {
                     if let Some(verb) = verb {
                         mappings = mappings
                             .lazy()
-                            .with_column(
-                                lit(rdf_named_node_to_polars_literal_value(verb))
-                                    .alias(VERB_COL_NAME),
-                            )
+                            .with_column(rdf_named_node_to_polars_expr(verb).alias(VERB_COL_NAME))
                             .select([
                                 col(SUBJECT_COL_NAME),
                                 col(VERB_COL_NAME),
@@ -381,7 +378,7 @@ fn named_node_pattern_expr(
 
 fn named_node_lit(nn: &NamedNode, name: &str) -> (Expr, RDFNodeType) {
     (
-        lit(rdf_named_node_to_polars_literal_value(nn)).alias(name),
+        rdf_named_node_to_polars_expr(nn).alias(name),
         RDFNodeType::IRI,
     )
 }

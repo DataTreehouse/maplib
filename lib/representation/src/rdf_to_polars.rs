@@ -31,9 +31,26 @@ pub fn rdf_term_to_polars_expr(term: &Term) -> Expr {
 }
 
 pub fn rdf_split_named_node(named_node: &NamedNode) -> (&str, &str) {
+    // Apache 2 / MIT The Rust Project Contributors
+    #[inline]
+    fn rsplit_once_inclusive_l<P: std::str::pattern::Pattern>(
+        this: &str,
+        delimiter: P,
+    ) -> Option<(&'_ str, &'_ str)>
+    where
+        for<'a> P::Searcher<'a>: std::str::pattern::ReverseSearcher<'a>,
+    {
+        let (_, end) = std::str::pattern::ReverseSearcher::next_match_back(
+            &mut delimiter.into_searcher(this),
+        )?;
+        // SAFETY: `Searcher` is known to return valid indices.
+        unsafe { Some((this.get_unchecked(..end), this.get_unchecked(end..))) }
+    }
+
     let iri: &str = named_node.as_str();
     const DELIMITERS: &[char] = &['/', '#'];
-    let (prefix, suffix) = match iri.rsplit_once(DELIMITERS) {
+
+    let (prefix, suffix) = match rsplit_once_inclusive_l(iri, DELIMITERS) {
         Some(pair) => pair,
         None => ("", iri),
     };
@@ -47,16 +64,6 @@ pub fn rdf_named_node_to_polars_expr(named_node: &NamedNode) -> Expr {
         lit(prefix).alias(IRI_PREFIX_FIELD),
         lit(suffix).alias(IRI_SUFFIX_FIELD),
     ])
-}
-
-pub fn rdf_named_node_to_polars_literal_value(named_node: &NamedNode) -> LiteralValue {
-    LiteralValue::Scalar(Scalar::from(PlSmallStr::from_str(named_node.as_str())))
-}
-
-pub fn rdf_owned_named_node_to_polars_literal_value(named_node: NamedNode) -> LiteralValue {
-    LiteralValue::Scalar(Scalar::from(PlSmallStr::from_string(
-        named_node.into_string(),
-    )))
 }
 
 pub fn rdf_blank_node_to_polars_literal_value(blank_node: &BlankNode) -> LiteralValue {

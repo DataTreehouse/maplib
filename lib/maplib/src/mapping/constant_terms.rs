@@ -9,8 +9,7 @@ use polars::prelude::{
 use rayon::iter::ParallelIterator;
 use rayon::prelude::IntoParallelIterator;
 use representation::rdf_to_polars::{
-    polars_literal_values_to_series, rdf_named_node_to_polars_literal_value,
-    rdf_term_to_polars_expr,
+    polars_literal_values_to_series, rdf_named_node_to_polars_expr, rdf_term_to_polars_expr,
 };
 use std::ops::Deref;
 use templates::constants::{OTTR_BLANK_NODE, OTTR_IRI};
@@ -24,9 +23,9 @@ pub fn constant_to_expr(
     let (expr, ptype, rdf_node_type) = match constant_term {
         ConstantTermOrList::ConstantTerm(c) => match c {
             ConstantTerm::Iri(iri) => {
-                let polars_literal = rdf_named_node_to_polars_literal_value(iri);
+                let polars_literal = rdf_named_node_to_polars_expr(iri);
                 (
-                    Expr::Literal(polars_literal),
+                    polars_literal,
                     PType::Basic(NamedNode::new_unchecked(OTTR_IRI)),
                     MappingColumnType::Flat(RDFNodeType::IRI),
                 )

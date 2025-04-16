@@ -1,8 +1,8 @@
 use crate::errors::TriplestoreError;
 use oxrdf::{NamedNode, Subject, Term};
 use polars::prelude::{
-    col, concat, lit, Expr, IdxSize, IntoLazy, IpcWriter, LazyFrame, PlSmallStr, ScanArgsIpc,
-    UnionArgs,
+    col, concat, lit, ChunkAnyValue, Expr, IdxSize, IntoLazy, IpcWriter, LazyFrame, PlSmallStr,
+    ScanArgsIpc, StructChunked, UnionArgs,
 };
 use polars_core::datatypes::{AnyValue, CategoricalChunked, LogicalType};
 use polars_core::frame::DataFrame;
@@ -611,11 +611,11 @@ fn get_lookup_offsets(
 }
 
 fn update_at_offset(
-    cat_chunked: &CategoricalChunked,
+    st_chunked: &StructChunked,
     offset: usize,
     sparse_map: &mut BTreeMap<String, usize>,
 ) {
-    let any = cat_chunked.get_any_value(offset).unwrap();
+    let any = st_chunked.get_any_value(offset).unwrap();
     let s = match any {
         AnyValue::Null => None,
         AnyValue::Categorical(c, rev, _) => Some(rev.get(c).to_string()),
@@ -629,14 +629,14 @@ fn update_at_offset(
 }
 
 fn cast_col_to_cat(mut lf: LazyFrame, c: &str, lexsort: bool) -> LazyFrame {
-    lf = lf.with_column(col(c).cast(DataType::Categorical(
-        None,
-        if lexsort {
-            CategoricalOrdering::Lexical
-        } else {
-            CategoricalOrdering::Physical
-        },
-    )));
+    // lf = lf.with_column(col(c).cast(DataType::Categorical(
+    //     None,
+    //     if lexsort {
+    //         CategoricalOrdering::Lexical
+    //     } else {
+    //         CategoricalOrdering::Physical
+    //     },
+    // )));
     lf
 }
 
@@ -805,17 +805,17 @@ fn create_unique_df_and_sparse_map(
 }
 
 fn create_sparse_map(ser: &Series) -> BTreeMap<String, usize> {
-    let cat = ser.categorical().unwrap();
+    let st = ser.struct_().unwrap();
     let mut sparse_map = BTreeMap::new();
     let mut current_offset = 0;
     while current_offset < ser.len() {
-        update_at_offset(cat, current_offset, &mut sparse_map);
+        update_at_offset(st, current_offset, &mut sparse_map);
         current_offset += OFFSET_STEP;
     }
     //Ensure that we have both ends
     let final_offset = ser.len() - 1;
     if current_offset != final_offset {
-        update_at_offset(cat, final_offset, &mut sparse_map);
+        update_at_offset(st, final_offset, &mut sparse_map);
     }
     sparse_map
 }

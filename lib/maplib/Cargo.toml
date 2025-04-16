@@ -5,7 +5,7 @@ edition = "2021"
 rust-version.workspace = true
 
 [dependencies]
-templates = {path = "../templates"}
+templates = { path = "../templates" }
 triplestore = { path = "../triplestore" }
 shacl = { path = "../shacl" }
 representation = { path = "../representation" }
@@ -14,8 +14,25 @@ rayon = { workspace = true }
 oxrdf = { workspace = true }
 oxiri = { workspace = true }
 polars = { workspace = true, default-features = false, features = [
-    "semi_anti_join", "abs", "round_series", "lazy", "concat_str", "is_in", "dtype-full", "strings", "rows",
-    "timezones", "polars-time", "temporal", "list_eval", "partition_by", "parquet", "cse", "nightly", "performant",
+    "semi_anti_join",
+    "abs",
+    "round_series",
+    "lazy",
+    "concat_str",
+    "is_in",
+    "dtype-full",
+    "strings",
+    "rows",
+    "timezones",
+    "polars-time",
+    "temporal",
+    "list_eval",
+    "partition_by",
+    "parquet",
+    "cse",
+    "nightly",
+    "performant",
+    "extract_groups",
 ] }
 log = { workspace = true }
 chrono = { workspace = true }
@@ -26,5 +43,5 @@ env_logger = { workspace = true }
 oxrdfio = { workspace = true }
 
 [dev-dependencies]
-rstest.workspace=true
+rstest.workspace = true
 serial_test.workspace = true

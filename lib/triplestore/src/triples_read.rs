@@ -15,8 +15,7 @@ use rayon::iter::{IndexedParallelIterator, ParallelIterator};
 use rayon::prelude::{IntoParallelIterator, IntoParallelRefIterator};
 use representation::rdf_to_polars::{
     polars_literal_values_to_series, rdf_literal_to_polars_literal_value,
-    rdf_owned_blank_node_to_polars_literal_value, rdf_owned_named_node_to_polars_literal_value,
-    rdf_split_named_node,
+    rdf_owned_blank_node_to_polars_literal_value, rdf_split_named_node,
 };
 use representation::{
     get_subject_datatype_ref, get_term_datatype_ref, BaseRDFNodeType, IRI_PREFIX_FIELD,
@@ -24,7 +23,6 @@ use representation::{
 };
 use representation::{OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use std::collections::HashMap;
-use std::f32::NAN;
 use std::fs::File;
 use std::ops::Deref;
 use std::path::Path;
@@ -440,7 +438,7 @@ fn particular_term_vec_to_series(term_vec: Vec<Term>, dt: BaseRDFNodeType) -> Se
         let any_iter: Vec<_> = term_vec
             .into_par_iter()
             .map(|t| match t {
-                Term::NamedNode(nn) => rdf_owned_named_node_to_polars_literal_value(nn),
+                Term::NamedNode(_) => unreachable!(),
                 Term::BlankNode(bb) => rdf_owned_blank_node_to_polars_literal_value(bb),
                 Term::Literal(l) => rdf_literal_to_polars_literal_value(&l),
             })

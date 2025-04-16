@@ -16,7 +16,7 @@ use representation::multitype::{
 };
 use representation::query_context::{Context, PathEntry};
 use representation::rdf_to_polars::{
-    rdf_literal_to_polars_literal_value, rdf_named_node_to_polars_literal_value,
+    rdf_literal_to_polars_literal_value, rdf_named_node_to_polars_expr,
 };
 use representation::solution_mapping::SolutionMappings;
 use representation::{BaseRDFNodeType, RDFNodeType};
@@ -258,10 +258,10 @@ impl Triplestore {
         let mut rename_trg = vec![];
         match subject {
             TermPattern::NamedNode(nn) => {
-                let l = rdf_named_node_to_polars_literal_value(nn);
+                let l = rdf_named_node_to_polars_expr(nn);
                 out_df = out_df
                     .lazy()
-                    .filter(col(SUBJECT_COL_NAME).eq(lit(l)))
+                    .filter(col(SUBJECT_COL_NAME).eq(l))
                     .collect()
                     .unwrap();
                 out_df = out_df.drop(SUBJECT_COL_NAME).unwrap();
@@ -292,10 +292,10 @@ impl Triplestore {
 
         match object {
             TermPattern::NamedNode(nn) => {
-                let l = rdf_named_node_to_polars_literal_value(nn);
+                let l = rdf_named_node_to_polars_expr(nn);
                 out_df = out_df
                     .lazy()
-                    .filter(col(OBJECT_COL_NAME).eq(lit(l)))
+                    .filter(col(OBJECT_COL_NAME).eq(l))
                     .collect()
                     .unwrap();
                 out_df = out_df.drop(OBJECT_COL_NAME).unwrap();

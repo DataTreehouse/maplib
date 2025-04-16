@@ -2,7 +2,7 @@ use crate::errors::RepresentationError;
 use crate::multitype::{extract_column_from_multitype, MULTI_BLANK_DT, MULTI_NONE_DT};
 use crate::rdf_to_polars::{
     polars_literal_values_to_series, rdf_literal_to_polars_literal_value,
-    rdf_owned_blank_node_to_polars_literal_value, rdf_owned_named_node_to_polars_literal_value,
+    rdf_owned_blank_node_to_polars_literal_value,
 };
 use crate::{
     literal_blanknode_to_blanknode, literal_iri_to_namednode, BaseRDFNodeType, BaseRDFNodeTypeRef,
@@ -483,7 +483,7 @@ pub fn particular_opt_term_vec_to_series(
             .map(|t| {
                 if let Some(t) = t {
                     match t {
-                        Term::NamedNode(nn) => rdf_owned_named_node_to_polars_literal_value(nn),
+                        Term::NamedNode(nn) => unreachable!(),
                         Term::BlankNode(bb) => rdf_owned_blank_node_to_polars_literal_value(bb),
                         Term::Literal(l) => rdf_literal_to_polars_literal_value(&l),
                         #[cfg(feature = "rdf-star")]

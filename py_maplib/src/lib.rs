@@ -56,7 +56,7 @@ use representation::solution_mapping::EagerSolutionMappings;
 
 #[cfg(not(target_os = "linux"))]
 use mimalloc::MiMalloc;
-use representation::rdf_to_polars::rdf_named_node_to_polars_literal_value;
+use representation::rdf_to_polars::rdf_named_node_to_polars_expr;
 use representation::{RDFNodeType, OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME};
 use templates::python::{a, py_triple, PyArgument, PyInstance, PyParameter, PyTemplate, PyXSD};
 use templates::MappingColumnType;
@@ -836,9 +836,7 @@ fn query_to_result(
                 if let Some(verb) = verb {
                     mappings = mappings
                         .lazy()
-                        .with_column(
-                            lit(rdf_named_node_to_polars_literal_value(&verb)).alias(VERB_COL_NAME),
-                        )
+                        .with_column(rdf_named_node_to_polars_expr(&verb).alias(VERB_COL_NAME))
                         .select([
                             col(SUBJECT_COL_NAME),
                             col(VERB_COL_NAME),

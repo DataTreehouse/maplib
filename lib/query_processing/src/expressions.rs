@@ -18,7 +18,7 @@ use representation::multitype::{all_multi_main_cols, convert_lf_col_to_multitype
 use representation::multitype::{base_col_name, set_structs_all_null_to_null_row};
 use representation::query_context::Context;
 use representation::rdf_to_polars::{
-    rdf_literal_to_polars_literal_value, rdf_named_node_to_polars_literal_value,
+    rdf_literal_to_polars_literal_value, rdf_named_node_to_polars_expr,
 };
 use representation::solution_mapping::SolutionMappings;
 use representation::{
@@ -36,9 +36,9 @@ pub fn named_node(
     nn: &NamedNode,
     context: &Context,
 ) -> Result<SolutionMappings, QueryProcessingError> {
-    solution_mappings.mappings = solution_mappings.mappings.with_column(
-        Expr::Literal(rdf_named_node_to_polars_literal_value(nn)).alias(context.as_str()),
-    );
+    solution_mappings.mappings = solution_mappings
+        .mappings
+        .with_column(rdf_named_node_to_polars_expr(nn).alias(context.as_str()));
     solution_mappings
         .rdf_node_types
         .insert(context.as_str().to_string(), RDFNodeType::IRI);
@@ -1431,7 +1431,7 @@ pub fn func_expression(
                     let mut exprs = vec![];
                     for t in types {
                         if let BaseRDFNodeType::Literal(l) = t {
-                            exprs.push(lit(rdf_named_node_to_polars_literal_value(l)));
+                            exprs.push(rdf_named_node_to_polars_expr(l));
                         }
                     }
                     if !exprs.is_empty() {
@@ -1440,7 +1440,7 @@ pub fn func_expression(
                         lit(LiteralValue::untyped_null())
                     }
                 }
-                RDFNodeType::Literal(l) => lit(rdf_named_node_to_polars_literal_value(l)),
+                RDFNodeType::Literal(l) => rdf_named_node_to_polars_expr(l),
                 _ => lit(LiteralValue::untyped_null()),
             };
             solution_mappings.mappings = solution_mappings

@@ -1,3 +1,5 @@
+#![feature(pattern)]
+
 pub mod multitype;
 pub mod polars_to_rdf;
 pub mod query_context;

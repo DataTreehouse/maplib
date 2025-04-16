@@ -261,15 +261,15 @@ impl Triplestore {
                 }
             }
             let cast_now = Instant::now();
-            let mut map = HashMap::new();
-            map.insert(
-                SUBJECT_COL_NAME.to_string(),
-                subject_type.as_rdf_node_type(),
-            );
-            map.insert(OBJECT_COL_NAME.to_string(), object_type.as_rdf_node_type());
-            let mut lf = df.lazy();
-            lf = lf_columns_to_categorical(lf, &map, CategoricalOrdering::Physical);
-            df = lf.collect().unwrap();
+            // let mut map = HashMap::new();
+            // map.insert(
+            //     SUBJECT_COL_NAME.to_string(),
+            //     subject_type.as_rdf_node_type(),
+            // );
+            // map.insert(OBJECT_COL_NAME.to_string(), object_type.as_rdf_node_type());
+            // let mut lf = df.lazy();
+            // lf = lf_columns_to_categorical(lf, &map, CategoricalOrdering::Physical);
+            // df = lf.collect().unwrap();
             let k = (subject_type.clone(), object_type.clone());
             let mut added_triples = false;
             debug!(

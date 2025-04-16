@@ -8,12 +8,15 @@ use log::debug;
 use oxrdf::vocab::rdf;
 use oxrdf::{NamedNode, Variable};
 use polars::prelude::{
-    col, lit, Column, DataFrame, DataType, Expr, IntoColumn, IntoLazy, LazyFrame, NamedFrom, Series,
+    as_struct, col, cols, lit, Column, DataFrame, DataType, Expr, IntoColumn, IntoLazy, LazyFrame,
+    NamedFrom, Series,
 };
-use rayon::iter::{IndexedParallelIterator, ParallelDrainRange, ParallelIterator};
+use rayon::iter::{
+    IndexedParallelIterator, IntoParallelIterator, ParallelDrainRange, ParallelIterator,
+};
 use representation::multitype::split_df_multicols;
-use representation::rdf_to_polars::rdf_named_node_to_polars_literal_value;
-use representation::RDFNodeType;
+use representation::rdf_to_polars::rdf_named_node_to_polars_expr;
+use representation::{RDFNodeType, IRI_PREFIX_FIELD, IRI_SUFFIX_FIELD};
 use representation::{OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME};
 use std::cmp::max;
 use std::collections::{HashMap, HashSet};
@@ -43,9 +46,7 @@ impl Mapping {
         if let Some(verb) = verb {
             df = df
                 .lazy()
-                .with_column(
-                    lit(rdf_named_node_to_polars_literal_value(&verb)).alias(VERB_COL_NAME),
-                )
+                .with_column(rdf_named_node_to_polars_expr(&verb).alias(VERB_COL_NAME))
                 .collect()
                 .unwrap();
         }
@@ -471,6 +472,32 @@ fn create_triples(
         object_type: obj_rdf_node_type,
         verb,
     });
+
+    results = results
+        .into_par_iter()
+        .map(
+            |CreateTriplesResult {
+                 mut df,
+                 subject_type,
+                 object_type,
+                 verb,
+             }| {
+                if subject_type.is_iri() {
+                    df = df_split_iri(df, SUBJECT_COL_NAME);
+                }
+                if object_type.is_iri() {
+                    df = df_split_iri(df, OBJECT_COL_NAME);
+                }
+                CreateTriplesResult {
+                    df,
+                    subject_type,
+                    object_type,
+                    verb,
+                }
+            },
+        )
+        .collect();
+
     Ok((
         results,
         max(
@@ -478,6 +505,40 @@ fn create_triples(
             new_object_blank_node_counter,
         ),
     ))
+}
+
+fn df_split_iri(df: DataFrame, column_name: &str) -> DataFrame {
+    // Check if the frame already has a struct for its iri
+    let index = df
+        .get_column_index(column_name)
+        .expect("Column name is not in dataframe");
+    if df.dtypes()[index].is_struct() {
+        return df;
+    }
+
+    let mut lf = df.lazy();
+    lf = lf.with_column(
+        col(column_name)
+            .str()
+            .extract_groups("(.+[#/])?(.+)$") // Regex is probably slow
+            .unwrap(),
+    );
+    lf = lf.with_column(
+        as_struct(vec![
+            col(column_name)
+                .struct_()
+                .field_by_name("1")
+                .alias(IRI_PREFIX_FIELD),
+            col(column_name)
+                .struct_()
+                .field_by_name("2")
+                .alias(IRI_SUFFIX_FIELD),
+        ])
+        .alias(column_name),
+    );
+
+    let df = lf.collect().unwrap();
+    df
 }
 
 fn create_list_triples(
@@ -539,12 +600,7 @@ fn create_list_triples(
         .clone()
         .lazy()
         .filter(col(OBJECT_COL_NAME).is_null())
-        .with_column(
-            lit(rdf_named_node_to_polars_literal_value(
-                &rdf::NIL.into_owned(),
-            ))
-            .alias(OBJECT_COL_NAME),
-        )
+        .with_column(rdf_named_node_to_polars_expr(&rdf::NIL.into_owned()).alias(OBJECT_COL_NAME))
         .collect()
         .unwrap();
 
