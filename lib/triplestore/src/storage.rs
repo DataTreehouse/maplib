@@ -1,14 +1,11 @@
 use crate::errors::TriplestoreError;
 use oxrdf::{NamedNode, Subject, Term};
 use polars::prelude::{
-    col, lit, ChunkAnyValue, Expr, IdxSize, IntoLazy, IpcWriter, LazyFrame, PlSmallStr,
-    ScanArgsIpc,
+    as_struct, col, lit, Expr, IdxSize, IntoLazy, IpcWriter, LazyFrame, PlSmallStr, ScanArgsIpc,
 };
-use polars_core::datatypes::{AnyValue, CategoricalChunked, LogicalType};
+use polars_core::datatypes::{AnyValue, CategoricalChunked, DataType, LogicalType};
 use polars_core::frame::DataFrame;
-use polars_core::prelude::{
-    CategoricalOrdering, CompatLevel, Series, SortMultipleOptions,
-};
+use polars_core::prelude::{CategoricalOrdering, CompatLevel, Series, SortMultipleOptions};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use std::cmp;
 
@@ -18,7 +15,10 @@ use oxrdf::vocab::xsd;
 use polars::io::SerWriter;
 use polars_core::utils::{concat_df, Container};
 use representation::multitype::{lf_column_from_categorical, lf_column_to_categorical};
-use representation::{BaseRDFNodeType, IRI_PREFIX_FIELD, IRI_SUFFIX_FIELD, OBJECT_COL_NAME, SUBJECT_COL_NAME};
+use representation::{
+    BaseRDFNodeType, IRI_PREFIX_FIELD, IRI_SUFFIX_FIELD, LANG_STRING_LANG_FIELD,
+    LANG_STRING_VALUE_FIELD, OBJECT_COL_NAME, SUBJECT_COL_NAME,
+};
 use std::collections::{BTreeMap, HashMap};
 use std::fs::{remove_file, File};
 use std::path::{Path, PathBuf};
@@ -300,7 +300,8 @@ fn create_indices(
     obj_type: &BaseRDFNodeType,
 ) -> Result<IndexedTriples, TriplestoreError> {
     let now = Instant::now();
-    let (df, subject_sparse_index) = create_unique_df_and_sparse_map(lf, true, true, false);
+    let (df, subject_sparse_index) =
+        create_unique_df_and_sparse_map(lf, true, true, false, subj_type, obj_type);
     debug!(
         "Creating subject sparse map took {} seconds",
         now.elapsed().as_secs_f32()
@@ -338,9 +339,10 @@ fn create_object_index(
     obj_type: &BaseRDFNodeType,
     storage_folder: &Option<PathBuf>,
 ) -> Result<(StoredTriples, BTreeMap<String, usize>), TriplestoreError> {
-    let lf = sort_indexed_lf(df.lazy(), false, false, false);
+    let lf = sort_indexed_lf(df.lazy(), false, false, false, subj_type, obj_type);
     // No need to deduplicate as subject index creation has deduplicated
-    let (df, obj_sparse_map) = create_unique_df_and_sparse_map(lf, false, false, false);
+    let (df, obj_sparse_map) =
+        create_unique_df_and_sparse_map(lf, false, false, false, subj_type, obj_type);
     let object_sort = StoredTriples::new(df, subj_type, obj_type, storage_folder)?;
     let object_sparse_index = obj_sparse_map;
     Ok((object_sort, object_sparse_index))
@@ -648,22 +650,51 @@ fn update_iri_at_offset(
         AnyValue::CategoricalOwned(c, rev, _) => Some(rev.get(c).to_string()),
         _ => panic!(),
     };
-    if let (Some(p), Some(s)) = (p,s) {
-        let iri = format!("{}{}", p,s);
+    if let (Some(p), Some(s)) = (p, s) {
+        let iri = format!("{}{}", p, s);
         let e = sparse_map.entry(iri);
         e.or_insert(offset);
     }
 }
 
-fn cast_col_to_cat(mut lf: LazyFrame, c: &str, lexsort: bool) -> LazyFrame {
-    // lf = lf.with_column(col(c).cast(DataType::Categorical(
-    //     None,
-    //     if lexsort {
-    //         CategoricalOrdering::Lexical
-    //     } else {
-    //         CategoricalOrdering::Physical
-    //     },
-    // )));
+fn cast_col_to_cat(mut lf: LazyFrame, c: &str, lexsort: bool, t: &BaseRDFNodeType) -> LazyFrame {
+    let cat_order = if lexsort {
+        CategoricalOrdering::Lexical
+    } else {
+        CategoricalOrdering::Physical
+    };
+    if t.is_iri() {
+        lf = lf.with_column(
+            as_struct(vec![
+                col(c)
+                    .struct_()
+                    .field_by_name(IRI_PREFIX_FIELD)
+                    .cast(DataType::Categorical(None, cat_order)),
+                col(c)
+                    .struct_()
+                    .field_by_name(IRI_SUFFIX_FIELD)
+                    .cast(DataType::Categorical(None, cat_order)),
+            ])
+            .alias(c),
+        );
+    } else if t.is_lang_string() {
+        lf = lf.with_column(
+            as_struct(vec![
+                col(c)
+                    .struct_()
+                    .field_by_name(LANG_STRING_VALUE_FIELD)
+                    .cast(DataType::Categorical(None, cat_order)),
+                col(c)
+                    .struct_()
+                    .field_by_name(LANG_STRING_LANG_FIELD)
+                    .cast(DataType::Categorical(None, cat_order)),
+            ])
+            .alias(c),
+        );
+    } else {
+        lf = lf.with_column(col(c).cast(DataType::Categorical(None, cat_order)));
+    }
+
     lf
 }
 
@@ -672,6 +703,18 @@ fn get_col(subject: bool) -> &'static str {
         SUBJECT_COL_NAME
     } else {
         OBJECT_COL_NAME
+    }
+}
+
+fn get_type<'a>(
+    subject: bool,
+    subject_type: &'a BaseRDFNodeType,
+    object_type: &'a BaseRDFNodeType,
+) -> &'a BaseRDFNodeType {
+    if subject {
+        subject_type
+    } else {
+        object_type
     }
 }
 
@@ -684,21 +727,27 @@ fn sort_indexed_lf(
     object_type: &BaseRDFNodeType,
 ) -> LazyFrame {
     let c = get_col(is_subject);
-    let mut lf = cast_col_to_cat(lf, c, true);
+    let t = get_type(is_subject, subject_type, object_type);
+    let mut lf = cast_col_to_cat(lf, c, true, t);
 
-    let mut by = vec![PlSmallStr::from_str(c)];
-    let mut descending = vec![false];
-    if also_other {
-        let other_c = get_col(!is_subject);
-        by.push(PlSmallStr::from_str(other_c));
+    let mut by = get_sort_exprs(!is_subject, subject_type, object_type);
+    let mut descending = vec![];
+    for _ in 0..by.len() {
         descending.push(false);
     }
+    if also_other {
+        let sort_exprs = get_sort_exprs(!is_subject, subject_type, object_type);
+        for _ in 0..sort_exprs.len() {
+            descending.push(false);
+        }
+        by.extend(sort_exprs);
+    }
     if sort_on_existing {
-        by.push(PlSmallStr::from_str(EXISTING_COL));
+        by.push(col(EXISTING_COL));
         descending.push(true);
     }
 
-    lf = lf.sort(
+    lf = lf.sort_by_exprs(
         by,
         SortMultipleOptions {
             descending,
@@ -709,6 +758,26 @@ fn sort_indexed_lf(
         },
     );
     lf
+}
+
+fn get_sort_exprs(
+    is_subject: bool,
+    subject_type: &BaseRDFNodeType,
+    object_type: &BaseRDFNodeType,
+) -> Vec<Expr> {
+    let mut exprs = vec![];
+    let c = get_col(is_subject);
+    let t = get_type(is_subject, subject_type, object_type);
+    if t.is_iri() {
+        exprs.push(col(c).struct_().field_by_name(IRI_PREFIX_FIELD));
+        exprs.push(col(c).struct_().field_by_name(IRI_SUFFIX_FIELD));
+    } else if t.is_lang_string() {
+        exprs.push(col(c).struct_().field_by_name(LANG_STRING_VALUE_FIELD));
+        exprs.push(col(c).struct_().field_by_name(LANG_STRING_LANG_FIELD));
+    } else {
+        exprs.push(col(c));
+    }
+    exprs
 }
 
 fn update_column_sorted_index(
@@ -728,7 +797,15 @@ fn update_column_sorted_index(
     TriplestoreError,
 > {
     let c = get_col(is_subject);
-    let mut lf = sort_indexed_lf(df.lazy(), is_subject, false, false);
+    let t = get_type(is_subject, subject_type, object_type);
+    let mut lf = sort_indexed_lf(
+        df.lazy(),
+        is_subject,
+        false,
+        false,
+        subject_type,
+        object_type,
+    );
     let existing_lfs_heights = stored_triples.get_lazy_frames(None)?;
     let existing_lfs: Vec<_> = existing_lfs_heights.into_iter().map(|(lf, _)| lf).collect();
     assert_eq!(existing_lfs.len(), 1);
@@ -738,7 +815,7 @@ fn update_column_sorted_index(
     }
 
     for mut elf in existing_lfs {
-        elf = cast_col_to_cat(elf, c, true);
+        elf = cast_col_to_cat(elf, c, true, t);
 
         if sort_on_existing {
             elf = elf.with_column(lit(true).alias(EXISTING_COL));
@@ -747,7 +824,14 @@ fn update_column_sorted_index(
         lf = lf.merge_sorted(elf, PlSmallStr::from_str(c)).unwrap();
     }
 
-    let (df, sparse_map) = create_unique_df_and_sparse_map(lf, is_subject, true, sort_on_existing);
+    let (df, sparse_map) = create_unique_df_and_sparse_map(
+        lf,
+        is_subject,
+        true,
+        sort_on_existing,
+        subject_type,
+        object_type,
+    );
     let height = df.height();
     let new_triples = if sort_on_existing {
         let new_triples = df
@@ -783,11 +867,20 @@ fn create_unique_df_and_sparse_map(
     is_subject: bool,
     deduplicate: bool,
     sort_on_existing: bool,
+    subject_type: &BaseRDFNodeType,
+    object_type: &BaseRDFNodeType,
 ) -> (DataFrame, BTreeMap<String, usize>) {
     let deduplicate_now = Instant::now();
     let c = get_col(is_subject);
     if deduplicate {
-        lf = sort_indexed_lf(lf, is_subject, true, sort_on_existing);
+        lf = sort_indexed_lf(
+            lf,
+            is_subject,
+            true,
+            sort_on_existing,
+            subject_type,
+            object_type,
+        );
         let other_c = get_col(!is_subject);
         lf = lf.with_column(
             repeated_from_last_row_expr(c)
@@ -795,7 +888,8 @@ fn create_unique_df_and_sparse_map(
                 .alias("is_duplicated"),
         );
         lf = lf.filter(col("is_duplicated").not());
-        lf = cast_col_to_cat(lf, c, false);
+        let t = get_type(is_subject, subject_type, object_type);
+        lf = cast_col_to_cat(lf, c, false, t);
     }
     let mut cols = vec![col(SUBJECT_COL_NAME), col(OBJECT_COL_NAME)];
 
@@ -812,7 +906,8 @@ fn create_unique_df_and_sparse_map(
     );
     let sparse_now = Instant::now();
     let ser = df.column(c).unwrap().as_materialized_series();
-    let sparse_map = create_sparse_map(ser);
+    let t = get_type(is_subject, subject_type, object_type);
+    let sparse_map = create_sparse_map(ser, t);
     debug!(
         "Creating sparse map took {} seconds",
         sparse_now.elapsed().as_secs_f32()
@@ -862,4 +957,3 @@ fn create_sparse_map(ser: &Series, t: &BaseRDFNodeType) -> BTreeMap<String, usiz
     }
     sparse_map
 }
-

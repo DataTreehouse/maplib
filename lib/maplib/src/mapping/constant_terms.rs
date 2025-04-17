@@ -23,9 +23,9 @@ pub fn constant_to_expr(
     let (expr, ptype, rdf_node_type) = match constant_term {
         ConstantTermOrList::ConstantTerm(c) => match c {
             ConstantTerm::Iri(iri) => {
-                let polars_literal = rdf_named_node_to_polars_expr(iri);
+                let polars_expr = rdf_named_node_to_polars_expr(iri);
                 (
-                    polars_literal,
+                    polars_expr,
                     PType::Basic(NamedNode::new_unchecked(OTTR_IRI)),
                     MappingColumnType::Flat(RDFNodeType::IRI),
                 )

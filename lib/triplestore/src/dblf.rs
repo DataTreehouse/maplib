@@ -299,7 +299,6 @@ impl Triplestore {
             } else {
                 all_mappings.pop().unwrap()
             };
-
             let mut sorted_subject_types: Vec<_> = subject_types.into_iter().collect();
             sorted_subject_types.sort();
             let mut sorted_object_types: Vec<_> = object_types.into_iter().collect();

@@ -9,7 +9,8 @@ use representation::polars_to_rdf::{
     date_column_to_strings, datetime_column_to_strings, df_as_triples,
 };
 use representation::{
-    LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD, OBJECT_COL_NAME, SUBJECT_COL_NAME,
+    BaseRDFNodeType, IRI_PREFIX_FIELD, IRI_SUFFIX_FIELD, LANG_STRING_LANG_FIELD,
+    LANG_STRING_VALUE_FIELD, OBJECT_COL_NAME, SUBJECT_COL_NAME,
 };
 use std::collections::HashMap;
 use std::io::Write;
@@ -18,6 +19,10 @@ mod fast_ntriples;
 mod serializers;
 
 const CHUNK_SIZE: usize = 1_024;
+const SUBJECT_COL_IRI_PREFIX: &str = "subject-IRI-prefix";
+const SUBJECT_COL_IRI_SUFFIX: &str = "subject-IRI-suffix";
+const OBJECT_COL_IRI_PREFIX: &str = "object-IRI-prefix";
+const OBJECT_COL_IRI_SUFFIX: &str = "object-IRI-suffix";
 
 impl Triplestore {
     pub fn write_triples<W: Write>(
@@ -32,44 +37,70 @@ impl Triplestore {
                 let verb_string = verb.to_string();
                 let verb_bytes = verb_string.as_bytes();
                 for ((subject_type, object_type), tt) in df_map {
-                    if object_type.is_lang_string() {
-                        let types = HashMap::from([
-                            (SUBJECT_COL_NAME.to_string(), subject_type.clone()),
-                            (LANG_STRING_VALUE_FIELD.to_string(), object_type.clone()),
-                            (LANG_STRING_LANG_FIELD.to_string(), object_type.clone()),
-                        ]);
-                        let lfs = tt.get_lazy_frames(&None, &None)?;
-                        for (lf, _) in lfs {
-                            let df = lf
-                                .unnest([OBJECT_COL_NAME])
-                                .select([
-                                    col(SUBJECT_COL_NAME),
-                                    col(LANG_STRING_VALUE_FIELD),
-                                    col(LANG_STRING_LANG_FIELD),
-                                ])
-                                .collect()
-                                .unwrap();
-                            fast_ntriples::write_triples_in_df(
-                                buf, &df, verb_bytes, &types, CHUNK_SIZE, n_threads,
-                            )
-                            .unwrap();
-                        }
+                    let mut types = HashMap::new();
+                    let mut select = vec![];
+                    if subject_type.is_iri() {
+                        types.insert(SUBJECT_COL_IRI_PREFIX.to_string(), BaseRDFNodeType::IRI);
+                        types.insert(SUBJECT_COL_IRI_SUFFIX.to_string(), BaseRDFNodeType::IRI);
+                        select.push(
+                            col(SUBJECT_COL_NAME)
+                                .struct_()
+                                .field_by_name(IRI_PREFIX_FIELD)
+                                .alias(SUBJECT_COL_IRI_PREFIX),
+                        );
+                        select.push(
+                            col(SUBJECT_COL_NAME)
+                                .struct_()
+                                .field_by_name(IRI_SUFFIX_FIELD)
+                                .alias(SUBJECT_COL_IRI_SUFFIX),
+                        );
                     } else {
-                        let types = HashMap::from([
-                            (SUBJECT_COL_NAME.to_string(), subject_type.clone()),
-                            (OBJECT_COL_NAME.to_string(), object_type.clone()),
-                        ]);
-                        for (lf, _) in tt.get_lazy_frames(&None, &None)? {
-                            let mut df = lf
-                                .select([col(SUBJECT_COL_NAME), col(OBJECT_COL_NAME)])
-                                .collect()
-                                .unwrap();
-                            convert_datelike_to_string(&mut df, OBJECT_COL_NAME);
-                            fast_ntriples::write_triples_in_df(
-                                buf, &df, verb_bytes, &types, CHUNK_SIZE, n_threads,
-                            )
-                            .unwrap();
-                        }
+                        types.insert(SUBJECT_COL_NAME.to_string(), subject_type.clone());
+                        select.push(col(SUBJECT_COL_NAME));
+                    }
+
+                    if object_type.is_lang_string() {
+                        types.insert(LANG_STRING_VALUE_FIELD.to_string(), object_type.clone());
+                        types.insert(LANG_STRING_LANG_FIELD.to_string(), object_type.clone());
+                        select.push(
+                            col(OBJECT_COL_NAME)
+                                .struct_()
+                                .field_by_name(LANG_STRING_VALUE_FIELD)
+                                .alias(LANG_STRING_VALUE_FIELD),
+                        );
+                        select.push(
+                            col(OBJECT_COL_NAME)
+                                .struct_()
+                                .field_by_name(LANG_STRING_LANG_FIELD)
+                                .alias(LANG_STRING_LANG_FIELD),
+                        );
+                    } else if object_type.is_iri() {
+                        types.insert(OBJECT_COL_IRI_PREFIX.to_string(), BaseRDFNodeType::IRI);
+                        types.insert(OBJECT_COL_IRI_SUFFIX.to_string(), BaseRDFNodeType::IRI);
+                        select.push(
+                            col(OBJECT_COL_NAME)
+                                .struct_()
+                                .field_by_name(IRI_PREFIX_FIELD)
+                                .alias(OBJECT_COL_IRI_PREFIX),
+                        );
+                        select.push(
+                            col(OBJECT_COL_NAME)
+                                .struct_()
+                                .field_by_name(IRI_SUFFIX_FIELD)
+                                .alias(OBJECT_COL_IRI_SUFFIX),
+                        );
+                    } else {
+                        types.insert(OBJECT_COL_NAME.to_string(), object_type.clone());
+                        select.push(col(OBJECT_COL_NAME));
+                    }
+
+                    let lfs = tt.get_lazy_frames(&None, &None)?;
+                    for (lf, _) in lfs {
+                        let df = lf.select(select.clone()).collect().unwrap();
+                        fast_ntriples::write_triples_in_df(
+                            buf, &df, verb_bytes, &types, CHUNK_SIZE, n_threads,
+                        )
+                        .unwrap();
                     }
                 }
             }

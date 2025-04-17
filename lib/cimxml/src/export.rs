@@ -1,5 +1,5 @@
-use std::io::Write;
 use oxrdf::{Literal, NamedNode};
+use std::io::Write;
 use thiserror::Error;
 use triplestore::Triplestore;
 

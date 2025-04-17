@@ -296,7 +296,8 @@ impl Mapping {
             fullmodel_details,
         )
         .map_err(MaplibError::CIMXMLError);
-        self.triplestores_map.insert(profile_graph, profile_triplestore);
+        self.triplestores_map
+            .insert(profile_graph, profile_triplestore);
         res
     }
 
@@ -429,7 +430,6 @@ impl Mapping {
     pub fn add_ruleset(&mut self, datalog_ruleset: &str) -> Result<(), MaplibError> {
         let ruleset = parse_datalog_ruleset(datalog_ruleset, None)
             .map_err(|x| MaplibError::DatalogSyntaxError(x.to_string()))?;
-        println!("Display debug {:?}", ruleset);
 
         if let Some(existing_ruleset) = &mut self.ruleset {
             existing_ruleset.extend(ruleset)

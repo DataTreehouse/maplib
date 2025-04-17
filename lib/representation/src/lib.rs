@@ -12,7 +12,7 @@ pub mod literals;
 pub mod python;
 pub mod subtypes;
 
-use crate::multitype::{base_col_name, MULTI_BLANK_DT, MULTI_IRI_DT, MULTI_NONE_DT};
+use crate::multitype::{base_col_name, MULTI_BLANK_DT, MULTI_NONE_DT};
 use crate::subtypes::{is_literal_subtype, OWL_REAL};
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{BlankNode, NamedNode, NamedNodeRef, NamedOrBlankNode, Subject, Term};
@@ -161,7 +161,7 @@ impl BaseRDFNodeTypeRef<'_> {
 
     pub fn as_str(&self) -> &str {
         match self {
-            Self::IRI => MULTI_IRI_DT,
+            Self::IRI => IRI_PREFIX_FIELD,
             Self::BlankNode => MULTI_BLANK_DT,
             Self::Literal(l) => l.as_str(),
             Self::None => MULTI_NONE_DT,
@@ -311,7 +311,7 @@ impl BaseRDFNodeType {
     }
 
     pub fn from_string(s: String) -> Self {
-        if s == MULTI_IRI_DT {
+        if s == IRI_PREFIX_FIELD {
             Self::IRI
         } else if s == MULTI_BLANK_DT {
             Self::BlankNode

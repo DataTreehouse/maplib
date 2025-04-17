@@ -5,9 +5,9 @@ use crate::rdf_to_polars::{
     rdf_owned_blank_node_to_polars_literal_value,
 };
 use crate::{
-    literal_blanknode_to_blanknode, BaseRDFNodeType, BaseRDFNodeTypeRef,
-    RDFNodeType, IRI_PREFIX_FIELD, IRI_SUFFIX_FIELD, LANG_STRING_LANG_FIELD,
-    LANG_STRING_VALUE_FIELD, OBJECT_COL_NAME, SUBJECT_COL_NAME,
+    literal_blanknode_to_blanknode, BaseRDFNodeType, BaseRDFNodeTypeRef, RDFNodeType,
+    IRI_PREFIX_FIELD, IRI_SUFFIX_FIELD, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD,
+    OBJECT_COL_NAME, SUBJECT_COL_NAME,
 };
 use chrono::TimeZone as ChronoTimeZone;
 use chrono::{Datelike, Timelike};

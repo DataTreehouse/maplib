@@ -22,6 +22,8 @@ pub fn format_columns(
             || t == &RDFNodeType::BlankNode
         {
             lf = lf.with_column(expression_to_string(col(c), c, t.clone()));
+        } else if let RDFNodeType::IRI = t {
+            lf = lf.with_column(base_expression_to_string(col(c), c, BaseRDFNodeType::IRI))
         }
     }
     lf

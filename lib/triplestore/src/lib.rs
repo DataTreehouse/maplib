@@ -20,7 +20,7 @@ use oxrdf::NamedNode;
 use polars::prelude::{AnyValue, DataFrame};
 use rayon::iter::ParallelDrainRange;
 use rayon::iter::ParallelIterator;
-use representation::multitype::{set_structs_all_null_to_null_row};
+use representation::multitype::set_structs_all_null_to_null_row;
 use representation::solution_mapping::EagerSolutionMappings;
 use representation::{
     literal_iri_to_namednode, BaseRDFNodeType, RDFNodeType, OBJECT_COL_NAME, SUBJECT_COL_NAME,

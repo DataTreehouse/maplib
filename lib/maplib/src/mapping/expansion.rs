@@ -9,7 +9,7 @@ use log::debug;
 use oxrdf::vocab::rdf;
 use oxrdf::{NamedNode, Variable};
 use polars::prelude::{
-    as_struct, col, cols, lit, Column, DataFrame, DataType, Expr, IntoColumn, IntoLazy, LazyFrame,
+    as_struct, col, lit, Column, DataFrame, DataType, Expr, IntoColumn, IntoLazy, LazyFrame,
     NamedFrom, Series,
 };
 use rayon::iter::{

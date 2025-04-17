@@ -19,10 +19,7 @@ use representation::polars_to_rdf::particular_opt_term_vec_to_series;
 use representation::query_context::Context;
 use representation::rdf_to_polars::string_rdf_literal;
 use representation::solution_mapping::{is_string_col, EagerSolutionMappings, SolutionMappings};
-use representation::{
-    get_ground_term_datatype_ref, BaseRDFNodeType, BaseRDFNodeTypeRef, RDFNodeType,
-    LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD,
-};
+use representation::{get_ground_term_datatype_ref, BaseRDFNodeType, BaseRDFNodeTypeRef, RDFNodeType, IRI_PREFIX_FIELD, IRI_SUFFIX_FIELD, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD};
 use spargebra::algebra::{Expression, Function};
 use spargebra::term::GroundTerm;
 use std::collections::{HashMap, HashSet};
@@ -172,6 +169,30 @@ pub fn join(
         }
     }
 
+    let mut iri_to_multi = vec![];
+    for (lk, lt) in &left_datatypes {
+        if lt.is_iri() {
+            if let Some(rt) = right_datatypes.get(lk) {
+                if rt.is_iri() {
+                    iri_to_multi.push(lk.clone());
+                }
+            }
+        }
+    }
+    if !iri_to_multi.is_empty() {
+        let iri_base_type = BaseRDFNodeType::IRI;
+        let iri_rdf_type = iri_base_type.as_rdf_node_type();
+        let iri_multi = RDFNodeType::MultiType(vec![iri_base_type]);
+        for k in iri_to_multi.iter() {
+            left_mappings =
+                left_mappings.with_column(convert_lf_col_to_multitype(k, &iri_rdf_type));
+            left_datatypes.insert(k.clone(), iri_multi.clone());
+            right_mappings =
+                right_mappings.with_column(convert_lf_col_to_multitype(k, &iri_rdf_type));
+            right_datatypes.insert(k.clone(), iri_multi.clone());
+        }
+    }
+
     let (left_mappings, left_datatypes, right_mappings, right_datatypes) =
         create_join_compatible_solution_mappings(
             left_mappings,
@@ -197,6 +218,18 @@ pub fn join(
         for k in lang_to_multi.iter() {
             solution_mappings.mappings =
                 known_convert_lf_multicol_to_single(solution_mappings.mappings, k, &lang_base_type);
+            solution_mappings
+                .rdf_node_types
+                .insert(k.clone(), lang_rdf_type.clone());
+        }
+    }
+
+    if !iri_to_multi.is_empty() {
+        let iri_base_type = BaseRDFNodeType::IRI;
+        let lang_rdf_type = iri_base_type.as_rdf_node_type();
+        for k in iri_to_multi.iter() {
+            solution_mappings.mappings =
+                known_convert_lf_multicol_to_single(solution_mappings.mappings, k, &iri_base_type);
             solution_mappings
                 .rdf_node_types
                 .insert(k.clone(), lang_rdf_type.clone());
@@ -283,7 +316,21 @@ pub fn order_by(
     for (c, a) in columns.iter().zip(asc_ordering) {
         let t = rdf_node_types.get(c).unwrap();
         match t {
-            RDFNodeType::IRI | RDFNodeType::BlankNode => {
+            RDFNodeType::IRI => {
+                order_exprs.push(
+                    col(c).struct_().field_by_name(IRI_PREFIX_FIELD).cast(
+                        DataType::Categorical(None, CategoricalOrdering::Lexical),
+                    ),
+                );
+                order_exprs.push(
+                    col(c).struct_().field_by_name(IRI_SUFFIX_FIELD).cast(
+                        DataType::Categorical(None, CategoricalOrdering::Lexical),
+                    ),
+                );
+                asc_bools.push(a);
+                asc_bools.push(a);
+            }
+            RDFNodeType::BlankNode => {
                 order_exprs
                     .push(col(c).cast(DataType::Categorical(None, CategoricalOrdering::Lexical)));
                 asc_bools.push(a);
@@ -317,7 +364,20 @@ pub fn order_by(
                 for t in ts {
                     asc_bools.push(a);
                     match &t {
-                        BaseRDFNodeType::IRI | BaseRDFNodeType::BlankNode => {
+                        BaseRDFNodeType::IRI => {
+                            order_exprs.push(
+                                col(c).struct_().field_by_name(IRI_PREFIX_FIELD).cast(
+                                    DataType::Categorical(None, CategoricalOrdering::Lexical),
+                                ),
+                            );
+                            order_exprs.push(
+                                col(c).struct_().field_by_name(IRI_SUFFIX_FIELD).cast(
+                                    DataType::Categorical(None, CategoricalOrdering::Lexical),
+                                ),
+                            );
+                            asc_bools.push(a);
+                        }
+                        BaseRDFNodeType::BlankNode => {
                             order_exprs.push(
                                 col(c).struct_().field_by_name(&base_col_name(&t)).cast(
                                     DataType::Categorical(None, CategoricalOrdering::Lexical),

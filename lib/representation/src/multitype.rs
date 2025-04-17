@@ -6,14 +6,13 @@ use crate::{
 use oxrdf::vocab::{rdf, xsd};
 use polars::datatypes::PlSmallStr;
 use polars::prelude::{
-    all_horizontal, as_struct, col, lit, when, CategoricalOrdering, Column, DataFrame,
-    DataType, Expr, IntoColumn, IntoLazy, JoinArgs, JoinType, LazyFrame, LazyGroupBy, LiteralValue,
+    all_horizontal, as_struct, col, lit, when, CategoricalOrdering, Column, DataFrame, DataType,
+    Expr, IntoColumn, IntoLazy, JoinArgs, JoinType, LazyFrame, LazyGroupBy, LiteralValue,
     MaintainOrderJoin, Selector, UniqueKeepStrategy,
 };
 
 use std::collections::{HashMap, HashSet};
 
-pub const MULTI_IRI_DT: &str = "I";
 pub const MULTI_BLANK_DT: &str = "B";
 pub const MULTI_NONE_DT: &str = "N";
 
@@ -91,7 +90,7 @@ fn filter_multitype(multitype_column: &Column, names: &Vec<&str>, col_name: &str
 // TODO: I wonder what would happen if we started assuming things were multifield rather than working around the opposite
 pub fn base_col_name(dt: &BaseRDFNodeType) -> String {
     match dt {
-        BaseRDFNodeType::IRI => MULTI_IRI_DT.to_string(),
+        BaseRDFNodeType::IRI => IRI_PREFIX_FIELD.to_string(),
         BaseRDFNodeType::BlankNode => MULTI_BLANK_DT.to_string(),
         BaseRDFNodeType::Literal(l) => l.to_string(),
         BaseRDFNodeType::None => MULTI_NONE_DT.to_string(),
