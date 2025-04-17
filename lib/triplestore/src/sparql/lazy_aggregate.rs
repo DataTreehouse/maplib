@@ -3,9 +3,10 @@ use crate::sparql::errors::SparqlError;
 use oxrdf::Variable;
 
 use query_processing::aggregates::{
-    avg, count_with_expression, count_without_expression, group_concat, max, min, sample, sum,
-    AggregateReturn,
+    avg, count_with_expression, count_without_expression, group_concat, list_aggregation, max, min,
+    sample, sum, AggregateReturn,
 };
+use query_processing::constants::LIST_AGGREGATION;
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use spargebra::algebra::{AggregateExpression, AggregateFunction};
@@ -82,7 +83,14 @@ impl Triplestore {
                             sample(&output_solution_mappings, column_context.as_ref().unwrap());
                     }
                     AggregateFunction::Custom(name) => {
-                        panic!("Custom aggregation {} not supported", name);
+                        if name.as_str() == LIST_AGGREGATION {
+                            (out_expr, out_rdf_node_type) = list_aggregation(
+                                &output_solution_mappings,
+                                column_context.as_ref().unwrap(),
+                            );
+                        } else {
+                            unimplemented!("Custom aggregation {}", name);
+                        }
                     }
                 }
             }

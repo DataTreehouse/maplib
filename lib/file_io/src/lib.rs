@@ -11,7 +11,7 @@ use thiserror::Error;
 
 pub fn create_folder_if_not_exists(path: &Path) -> Result<(), FileIOError> {
     if !path.exists() {
-        create_dir(path).map_err(|x| FileIOError::FileCreateIOError(x))?;
+        create_dir(path).map_err(FileIOError::FileCreateIOError)?;
     }
     Ok(())
 }

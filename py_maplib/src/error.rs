@@ -22,36 +22,15 @@
 // SOFTWARE.
 
 use maplib::errors::MaplibError;
-use maplib::mapping::errors::MappingError;
-use oxrdf::IriParseError;
-use polars::prelude::PolarsError;
 use pyo3::{create_exception, exceptions::PyException, prelude::*};
-use shacl::errors::ShaclError;
 use std::fmt::Debug;
-use templates::dataset::errors::TemplateError;
 use thiserror::Error;
-use triplestore::errors::TriplestoreError;
-use triplestore::sparql::errors::SparqlError;
 
 #[derive(Error, Debug)]
 #[allow(clippy::enum_variant_names)]
 pub enum PyMaplibError {
     #[error(transparent)]
     MaplibError(#[from] MaplibError),
-    #[error(transparent)]
-    PolarsError(#[from] PolarsError),
-    #[error(transparent)]
-    SparqlError(#[from] SparqlError),
-    #[error(transparent)]
-    TemplateError(#[from] TemplateError),
-    #[error(transparent)]
-    MappingError(#[from] MappingError),
-    #[error(transparent)]
-    TriplestoreError(#[from] TriplestoreError),
-    #[error(transparent)]
-    ShaclError(#[from] ShaclError),
-    #[error(transparent)]
-    IriParseError(#[from] IriParseError),
     #[error("Function argument error: `{0}`")]
     FunctionArgumentError(String),
 }
@@ -59,33 +38,13 @@ pub enum PyMaplibError {
 impl std::convert::From<PyMaplibError> for PyErr {
     fn from(err: PyMaplibError) -> PyErr {
         match &err {
-            PyMaplibError::MaplibError(err) => MaplibErrorException::new_err(format!("{}", err)),
-            PyMaplibError::PolarsError(err) => PolarsErrorException::new_err(format!("{}", err)),
-            PyMaplibError::SparqlError(err) => SparqlErrorException::new_err(format!("{}", err)),
-            PyMaplibError::TemplateError(err) => {
-                TemplateErrorException::new_err(format!("{}", err))
-            }
-            PyMaplibError::MappingError(err) => MappingErrorException::new_err(format!("{}", err)),
-            PyMaplibError::TriplestoreError(err) => {
-                TriplestoreErrorException::new_err(format!("{}", err))
-            }
-            PyMaplibError::ShaclError(err) => ShaclErrorException::new_err(format!("{}", err)),
-            PyMaplibError::IriParseError(err) => {
-                IriParseErrorException::new_err(format!("{}", err))
-            }
+            PyMaplibError::MaplibError(err) => MaplibException::new_err(format!("{}", err)),
             PyMaplibError::FunctionArgumentError(s) => {
-                FunctionArgumentErrorException::new_err(s.clone())
+                FunctionArgumentException::new_err(s.clone())
             }
         }
     }
 }
 
-create_exception!(exceptions, MaplibErrorException, PyException);
-create_exception!(exceptions, PolarsErrorException, PyException);
-create_exception!(exceptions, MappingErrorException, PyException);
-create_exception!(exceptions, SparqlErrorException, PyException);
-create_exception!(exceptions, TemplateErrorException, PyException);
-create_exception!(exceptions, TriplestoreErrorException, PyException);
-create_exception!(exceptions, ShaclErrorException, PyException);
-create_exception!(exceptions, IriParseErrorException, PyException);
-create_exception!(exceptions, FunctionArgumentErrorException, PyException);
+create_exception!(exceptions, MaplibException, PyException);
+create_exception!(exceptions, FunctionArgumentException, PyException);

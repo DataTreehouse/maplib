@@ -10,6 +10,7 @@ use polars_core::utils::arrow::record_batch::RecordBatch;
 use pyo3::ffi::Py_uintptr_t;
 use pyo3::prelude::*;
 use pyo3::types::PyList;
+use pyo3::IntoPyObjectExt;
 use representation::formatting::format_columns;
 use representation::multitype::{compress_actual_multitypes, lf_column_from_categorical};
 use representation::python::PySolutionMappings;
@@ -38,7 +39,7 @@ pub(crate) fn to_py_array(
         (array_ptr as Py_uintptr_t, schema_ptr as Py_uintptr_t),
     )?;
 
-    Ok(array.to_object(py))
+    array.into_py_any(py)
 }
 
 /// RecordBatch to Python.
@@ -59,7 +60,7 @@ pub(crate) fn to_py_rb(
         .getattr("RecordBatch")?
         .call_method1("from_arrays", (arrays, names.to_vec()))?;
 
-    Ok(record.to_object(py))
+    record.into_py_any(py)
 }
 pub fn to_py_df(
     rb: &RecordBatch,
@@ -69,14 +70,14 @@ pub fn to_py_df(
     polars: &Bound<'_, PyModule>,
 ) -> PyResult<PyObject> {
     let py_rb = to_py_rb(rb, names, py, pyarrow)?;
-    let py_rb_list = PyList::empty_bound(py);
+    let py_rb_list = PyList::empty(py);
     py_rb_list.append(py_rb)?;
     let py_table = pyarrow
         .getattr("Table")?
         .call_method1("from_batches", (py_rb_list,))?;
-    let py_table = py_table.to_object(py);
+    let py_table = py_table.into_py_any(py)?;
     let df = polars.call_method1("from_arrow", (py_table,))?;
-    Ok(df.to_object(py))
+    df.into_py_any(py)
 }
 
 pub fn df_to_py_df(
@@ -97,11 +98,11 @@ pub fn df_to_py_df(
         .iter_chunks(CompatLevel::oldest(), true)
         .next()
         .unwrap();
-    let pyarrow = PyModule::import_bound(py, "pyarrow")?;
-    let polars = PyModule::import_bound(py, "polars")?;
+    let pyarrow = PyModule::import(py, "pyarrow")?;
+    let polars = PyModule::import(py, "polars")?;
     let py_df = to_py_df(&chunk, names.as_slice(), py, &pyarrow, &polars)?;
     if include_datatypes {
-        Ok(Py::new(
+        Py::new(
             py,
             PySolutionMappings {
                 mappings: py_df.into_any(),
@@ -109,7 +110,7 @@ pub fn df_to_py_df(
                 pushdown_paths,
             },
         )?
-        .to_object(py))
+        .into_py_any(py)
     } else {
         Ok(py_df)
     }

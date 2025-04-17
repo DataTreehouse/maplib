@@ -22,7 +22,9 @@ __all__ = [
     "Prefix",
     "BlankNode",
     "explore",
-    "add_triples"]
+    "add_triples",
+    "MaplibException"
+]
 
 import pathlib
 from .maplib import *

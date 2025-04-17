@@ -155,3 +155,13 @@ fn rdf_node_type_from_context<'a>(
         .unwrap();
     datatype
 }
+
+pub fn list_aggregation(
+    solution_mappings: &SolutionMappings,
+    column_context: &Context,
+) -> (Expr, RDFNodeType) {
+    //Todo: add list types..
+    let out_rdf_node_type = rdf_node_type_from_context(column_context, solution_mappings).clone();
+    let out_expr = col(column_context.as_str());
+    (out_expr, out_rdf_node_type)
+}

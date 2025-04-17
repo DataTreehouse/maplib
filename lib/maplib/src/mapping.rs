@@ -5,12 +5,15 @@ pub mod expansion;
 
 use crate::errors::MaplibError;
 use crate::mapping::errors::MappingError;
+use cimxml::export::{cim_xml_write, FullModelDetails};
+use datalog::ast::DatalogRuleset;
+use datalog::inference::infer;
+use datalog::parser::parse_datalog_ruleset;
 use oxrdf::NamedNode;
 use oxrdfio::RdfFormat;
 use polars::prelude::DataFrame;
 use representation::solution_mapping::EagerSolutionMappings;
 use representation::RDFNodeType;
-use shacl::errors::ShaclError;
 use shacl::{validate, ValidationReport};
 use std::collections::HashMap;
 use std::io::Write;
@@ -31,6 +34,7 @@ pub struct Mapping {
     pub blank_node_counter: usize,
     pub default_template_counter: usize,
     pub indexing: IndexingOptions,
+    pub ruleset: Option<DatalogRuleset>,
 }
 
 #[derive(Clone, Default)]
@@ -47,7 +51,7 @@ impl ExpandOptions {
         delay_index: Option<bool>,
     ) -> Self {
         ExpandOptions {
-            graph: graph,
+            graph,
             validate_iris: validate_iris.unwrap_or(true),
             delay_index: delay_index.unwrap_or(true),
         }
@@ -97,11 +101,12 @@ impl Mapping {
         Ok(Mapping {
             template_dataset: template_dataset.clone(),
             base_triplestore: Triplestore::new(storage_folder, Some(indexing.clone()))
-                .map_err(MappingError::TriplestoreError)?,
+                .map_err(MaplibError::TriplestoreError)?,
             triplestores_map: Default::default(),
             blank_node_counter: 0,
             default_template_counter: 0,
             indexing,
+            ruleset: None,
         })
     }
 
@@ -156,14 +161,14 @@ impl Mapping {
     }
 
     pub fn add_templates_from_string(&mut self, s: &str) -> Result<Option<NamedNode>, MaplibError> {
-        let doc = document_from_str(s).map_err(|x| MaplibError::TemplateError(x))?;
+        let doc = document_from_str(s).map_err(MaplibError::TemplateError)?;
         let dataset =
             TemplateDataset::from_documents(vec![doc]).map_err(MaplibError::TemplateError)?;
         let return_template_iri = if !dataset.templates.is_empty() {
             Some(
                 dataset
                     .templates
-                    .get(0)
+                    .first()
                     .unwrap()
                     .signature
                     .template_name
@@ -189,14 +194,14 @@ impl Mapping {
         checked: bool,
         graph: Option<NamedNode>,
         replace_graph: bool,
-    ) -> Result<(), MappingError> {
+    ) -> Result<(), MaplibError> {
         if replace_graph {
             self.truncate_graph(&graph)
         }
         let triplestore = self.get_triplestore(&graph);
         triplestore
             .read_triples_from_path(p, rdf_format, base_iri, transient, parallel, checked)
-            .map_err(MappingError::TriplestoreError)
+            .map_err(MaplibError::TriplestoreError)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -210,14 +215,14 @@ impl Mapping {
         checked: bool,
         graph: Option<NamedNode>,
         replace_graph: bool,
-    ) -> Result<(), MappingError> {
+    ) -> Result<(), MaplibError> {
         if replace_graph {
             self.truncate_graph(&graph)
         }
         let triplestore = self.get_triplestore(&graph);
         triplestore
             .read_triples_from_string(s, rdf_format, base_iri, transient, parallel, checked)
-            .map_err(MappingError::TriplestoreError)
+            .map_err(MaplibError::TriplestoreError)
     }
 
     pub fn get_triplestore(&mut self, graph: &Option<NamedNode>) -> &mut Triplestore {
@@ -241,9 +246,11 @@ impl Mapping {
         graph: Option<NamedNode>,
         streaming: bool,
         include_transient: bool,
-    ) -> Result<QueryResult, SparqlError> {
+    ) -> Result<QueryResult, MaplibError> {
         let use_triplestore = self.get_triplestore(&graph);
-        use_triplestore.query(query, parameters, streaming, include_transient)
+        use_triplestore
+            .query(query, parameters, streaming, include_transient)
+            .map_err(|x| x.into())
     }
 
     pub fn insert_construct_result(
@@ -263,24 +270,48 @@ impl Mapping {
         buffer: &mut W,
         graph: Option<NamedNode>,
         rdf_format: RdfFormat,
-    ) -> Result<(), MappingError> {
+    ) -> Result<(), MaplibError> {
         let triplestore = self.get_triplestore(&graph);
-        triplestore.write_triples(buffer, rdf_format).unwrap();
+        triplestore
+            .write_triples(buffer, rdf_format)
+            .map_err(MaplibError::TriplestoreError)?;
         Ok(())
+    }
+
+    pub fn write_cim_xml<W: Write>(
+        &mut self,
+        buffer: &mut W,
+        fullmodel_details: FullModelDetails,
+        cim_prefix: NamedNode,
+        graph: Option<NamedNode>,
+        profile_graph: NamedNode,
+    ) -> Result<(), MaplibError> {
+        let mut profile_triplestore = self.triplestores_map.remove(&profile_graph).unwrap();
+        let triplestore = self.get_triplestore(&graph);
+        let res = cim_xml_write(
+            buffer,
+            triplestore,
+            &mut profile_triplestore,
+            &cim_prefix,
+            fullmodel_details,
+        )
+        .map_err(MaplibError::CIMXMLError);
+        self.triplestores_map.insert(profile_graph, profile_triplestore);
+        res
     }
 
     pub fn write_native_parquet(
         &mut self,
         path: &str,
         graph: Option<NamedNode>,
-    ) -> Result<(), MappingError> {
+    ) -> Result<(), MaplibError> {
         let triplestore = self.get_triplestore(&graph);
         triplestore
             .write_native_parquet(Path::new(path))
-            .map_err(MappingError::TriplestoreError)
+            .map_err(MaplibError::TriplestoreError)
     }
 
-    fn resolve_template(&self, s: &str) -> Result<&Template, MappingError> {
+    fn resolve_template(&self, s: &str) -> Result<&Template, MaplibError> {
         if let Some(t) = self.template_dataset.get(s) {
             return Ok(t);
         } else {
@@ -295,12 +326,13 @@ impl Mapping {
                     } else {
                         return Err(MappingError::NoTemplateForTemplateNameFromPrefix(
                             possible_template_name,
-                        ));
+                        )
+                        .into());
                     }
                 }
             }
         }
-        Err(MappingError::TemplateNotFound(s.to_string()))
+        Err(MappingError::TemplateNotFound(s.to_string()).into())
     }
 
     pub fn validate(
@@ -315,7 +347,7 @@ impl Mapping {
         only_shapes: Option<Vec<NamedNode>>,
         deactivate_shapes: Vec<NamedNode>,
         dry_run: bool,
-    ) -> Result<ValidationReport, ShaclError> {
+    ) -> Result<ValidationReport, MaplibError> {
         let (shape_graph, mut shape_triplestore) = if let Some((shape_graph, shape_triplestore)) =
             self.triplestores_map.remove_entry(shape_graph)
         {
@@ -325,7 +357,7 @@ impl Mapping {
                 TriplestoreError::GraphDoesNotExist(shape_graph.as_str().to_string()).into(),
             );
         };
-        match validate(
+        let res = validate(
             &mut self.base_triplestore,
             &mut shape_triplestore,
             include_details,
@@ -337,16 +369,9 @@ impl Mapping {
             only_shapes,
             deactivate_shapes,
             dry_run,
-        ) {
-            Ok(vr) => {
-                self.triplestores_map.insert(shape_graph, shape_triplestore);
-                Ok(vr)
-            }
-            Err(e) => {
-                self.triplestores_map.insert(shape_graph, shape_triplestore);
-                Err(e)
-            }
-        }
+        );
+        self.triplestores_map.insert(shape_graph, shape_triplestore);
+        res.map_err(|x| x.into())
     }
 
     fn truncate_graph(&mut self, graph: &Option<NamedNode>) {
@@ -357,7 +382,7 @@ impl Mapping {
         &mut self,
         graph: &Option<NamedNode>,
         include_transient: bool,
-    ) -> Result<Vec<NamedNode>, SparqlError> {
+    ) -> Result<Vec<NamedNode>, MaplibError> {
         let triplestore = self.get_triplestore(graph);
         Ok(triplestore.get_predicate_iris(include_transient))
     }
@@ -367,12 +392,14 @@ impl Mapping {
         predicate: &NamedNode,
         graph: Option<NamedNode>,
         include_transient: bool,
-    ) -> Result<Vec<EagerSolutionMappings>, SparqlError> {
+    ) -> Result<Vec<EagerSolutionMappings>, MaplibError> {
         let triplestore = self.get_triplestore(&graph);
         triplestore
             .index_unindexed()
-            .map_err(|x| SparqlError::IndexingError(x))?;
-        triplestore.get_predicate_eager_solution_mappings(predicate, include_transient)
+            .map_err(SparqlError::IndexingError)?;
+        triplestore
+            .get_predicate_eager_solution_mappings(predicate, include_transient)
+            .map_err(|x| x.into())
     }
 
     pub fn create_index(
@@ -380,22 +407,58 @@ impl Mapping {
         indexing: IndexingOptions,
         all: bool,
         graph: Option<NamedNode>,
-    ) -> Result<(), MappingError> {
+    ) -> Result<(), MaplibError> {
         if all {
             for t in self.triplestores_map.values_mut() {
                 t.create_index(indexing.clone())
-                    .map_err(MappingError::TriplestoreError)?;
+                    .map_err(MaplibError::TriplestoreError)?;
             }
             self.base_triplestore
                 .create_index(indexing.clone())
-                .map_err(MappingError::TriplestoreError)?;
+                .map_err(MaplibError::TriplestoreError)?;
             self.indexing = indexing;
         } else {
             let triplestore = self.get_triplestore(&graph);
             triplestore
                 .create_index(indexing)
-                .map_err(MappingError::TriplestoreError)?;
+                .map_err(MaplibError::TriplestoreError)?;
         }
         Ok(())
+    }
+
+    pub fn add_ruleset(&mut self, datalog_ruleset: &str) -> Result<(), MaplibError> {
+        let ruleset = parse_datalog_ruleset(datalog_ruleset, None)
+            .map_err(|x| MaplibError::DatalogSyntaxError(x.to_string()))?;
+        println!("Display debug {:?}", ruleset);
+
+        if let Some(existing_ruleset) = &mut self.ruleset {
+            existing_ruleset.extend(ruleset)
+        } else {
+            self.ruleset = Some(ruleset);
+        }
+        Ok(())
+    }
+
+    pub fn drop_ruleset(&mut self) {
+        self.ruleset = None;
+    }
+
+    pub fn infer(
+        &mut self,
+        insert: bool,
+    ) -> Result<Option<HashMap<NamedNode, EagerSolutionMappings>>, MaplibError> {
+        if let Some(ruleset) = self.ruleset.take() {
+            let res = infer(&mut self.base_triplestore, &ruleset, insert);
+            match res {
+                Ok(o) => Ok(o),
+                Err(e) => {
+                    // Put it back.. this is done to be able to make a mutable borrow of the base triplestore
+                    self.ruleset = Some(ruleset);
+                    Err(MaplibError::DatalogError(e))
+                }
+            }
+        } else {
+            todo!("Make an error!!")
+        }
     }
 }

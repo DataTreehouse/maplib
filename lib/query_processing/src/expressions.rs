@@ -443,25 +443,23 @@ fn convert_multitype_col_to_wider(
                 } else {
                     struct_exprs.push(col(c).struct_().field_by_name(&name).alias(&name));
                 }
+            } else if t.is_lang_string() {
+                struct_exprs.push(
+                    lit(LiteralValue::untyped_null())
+                        .cast(DataType::Categorical(None, CategoricalOrdering::Physical))
+                        .alias(LANG_STRING_VALUE_FIELD),
+                );
+                struct_exprs.push(
+                    lit(LiteralValue::untyped_null())
+                        .cast(DataType::Categorical(None, CategoricalOrdering::Physical))
+                        .alias(LANG_STRING_LANG_FIELD),
+                );
             } else {
-                if t.is_lang_string() {
-                    struct_exprs.push(
-                        lit(LiteralValue::untyped_null())
-                            .cast(DataType::Categorical(None, CategoricalOrdering::Physical))
-                            .alias(LANG_STRING_VALUE_FIELD),
-                    );
-                    struct_exprs.push(
-                        lit(LiteralValue::untyped_null())
-                            .cast(DataType::Categorical(None, CategoricalOrdering::Physical))
-                            .alias(LANG_STRING_LANG_FIELD),
-                    );
-                } else {
-                    struct_exprs.push(
-                        lit(LiteralValue::untyped_null())
-                            .cast(t.polars_data_type())
-                            .alias(&name),
-                    );
-                }
+                struct_exprs.push(
+                    lit(LiteralValue::untyped_null())
+                        .cast(t.polars_data_type())
+                        .alias(&name),
+                );
             }
         }
         mappings = mappings.with_column(as_struct(struct_exprs).alias(c));
@@ -1590,19 +1588,17 @@ fn typed_comparison_expr(
                     }
                 }
             }
-        } else {
-            if let RDFNodeType::Literal(rt_nn) = right_type {
-                //Only left multi
-                for lt in left_types {
-                    if let BaseRDFNodeType::Literal(lt_nn) = lt {
-                        comps.push(comp(
-                            col(left_col).struct_().field_by_name(&base_col_name(lt)),
-                            col(right_col),
-                            lt_nn.as_ref(),
-                            rt_nn.as_ref(),
-                            expression,
-                        ));
-                    }
+        } else if let RDFNodeType::Literal(rt_nn) = right_type {
+            //Only left multi
+            for lt in left_types {
+                if let BaseRDFNodeType::Literal(lt_nn) = lt {
+                    comps.push(comp(
+                        col(left_col).struct_().field_by_name(&base_col_name(lt)),
+                        col(right_col),
+                        lt_nn.as_ref(),
+                        rt_nn.as_ref(),
+                        expression,
+                    ));
                 }
             }
         }
@@ -1620,17 +1616,15 @@ fn typed_comparison_expr(
                 }
             }
         }
-    } else {
-        if let RDFNodeType::Literal(lt_nn) = left_type {
-            if let RDFNodeType::Literal(rt_nn) = right_type {
-                comps.push(comp(
-                    col(left_col),
-                    col(right_col),
-                    lt_nn.as_ref(),
-                    rt_nn.as_ref(),
-                    expression,
-                ));
-            }
+    } else if let RDFNodeType::Literal(lt_nn) = left_type {
+        if let RDFNodeType::Literal(rt_nn) = right_type {
+            comps.push(comp(
+                col(left_col),
+                col(right_col),
+                lt_nn.as_ref(),
+                rt_nn.as_ref(),
+                expression,
+            ));
         }
     }
     if comps.is_empty() {
@@ -1931,14 +1925,12 @@ pub fn contains_graph_pattern(e: &Expression) -> bool {
             contains_graph_pattern(u)
         }
         Expression::Exists(_) => true,
-        Expression::In(l, r) => {
-            contains_graph_pattern(l) | r.iter().map(|x| contains_graph_pattern(x)).any(|x| x)
-        }
+        Expression::In(l, r) => contains_graph_pattern(l) | r.iter().any(contains_graph_pattern),
         Expression::If(l, m, r) => {
             contains_graph_pattern(l) || contains_graph_pattern(m) || contains_graph_pattern(r)
         }
         Expression::Coalesce(e) | Expression::FunctionCall(_, e) => {
-            e.iter().map(|x| contains_graph_pattern(x)).any(|x| x)
+            e.iter().any(contains_graph_pattern)
         }
     }
 }

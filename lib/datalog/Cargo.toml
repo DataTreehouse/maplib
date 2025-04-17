@@ -1,0 +1,12 @@
+[package]
+name = "datalog"
+version = "0.1.0"
+edition = "2021"
+rust-version.workspace = true
+
+[dependencies]
+triplestore = {path = "../triplestore"}
+representation = {path = "../representation"}
+
+thiserror.workspace= true
+oxrdf.workspace = true

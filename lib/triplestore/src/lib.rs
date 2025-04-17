@@ -17,11 +17,10 @@ use fts::FtsIndex;
 use log::debug;
 use oxrdf::vocab::{rdf, rdfs};
 use oxrdf::NamedNode;
-use polars::prelude::{AnyValue, DataFrame, IntoLazy};
-use polars_core::datatypes::CategoricalOrdering;
+use polars::prelude::{AnyValue, DataFrame};
 use rayon::iter::ParallelDrainRange;
 use rayon::iter::ParallelIterator;
-use representation::multitype::{lf_columns_to_categorical, set_structs_all_null_to_null_row};
+use representation::multitype::{set_structs_all_null_to_null_row};
 use representation::solution_mapping::EagerSolutionMappings;
 use representation::{
     literal_iri_to_namednode, BaseRDFNodeType, RDFNodeType, OBJECT_COL_NAME, SUBJECT_COL_NAME,
@@ -101,6 +100,25 @@ pub struct NewTriples {
     pub object_type: BaseRDFNodeType,
 }
 
+impl NewTriples {
+    pub fn to_eager_solution_mappings(self) -> Option<EagerSolutionMappings> {
+        if let Some(df) = self.df {
+            let mut map = HashMap::new();
+            map.insert(
+                SUBJECT_COL_NAME.to_string(),
+                self.subject_type.as_rdf_node_type(),
+            );
+            map.insert(
+                OBJECT_COL_NAME.to_string(),
+                self.object_type.as_rdf_node_type(),
+            );
+            Some(EagerSolutionMappings::new(df, map))
+        } else {
+            None
+        }
+    }
+}
+
 impl Triplestore {
     pub fn new(
         storage_folder: Option<String>,
@@ -110,7 +128,7 @@ impl Triplestore {
             let mut pathbuf = Path::new(storage_folder).to_path_buf();
             create_folder_if_not_exists(pathbuf.as_path())
                 .map_err(TriplestoreError::FileIOError)?;
-            let ext = format!("ts_{}", Uuid::new_v4().to_string());
+            let ext = format!("ts_{}", Uuid::new_v4());
             pathbuf.push(&ext);
             create_folder_if_not_exists(pathbuf.as_path())
                 .map_err(TriplestoreError::FileIOError)?;
@@ -118,7 +136,7 @@ impl Triplestore {
         } else {
             None
         };
-        let indexing = indexing.unwrap_or(IndexingOptions::default());
+        let indexing = indexing.unwrap_or_default();
         let fts_index = if let Some(fts_path) = &indexing.fts_path {
             Some(FtsIndex::new(fts_path).map_err(TriplestoreError::FtsError)?)
         } else {
@@ -237,7 +255,7 @@ impl Triplestore {
             &mut self.triples_map
         };
         for TripleDF {
-            mut df,
+            df,
             predicate,
             subject_type,
             object_type,

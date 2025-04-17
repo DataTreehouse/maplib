@@ -1,8 +1,7 @@
 use oxrdf::IriParseError;
-use polars::prelude::{DataFrame, DataType, PolarsError};
+use polars::prelude::{DataFrame, DataType};
 use representation::errors::RepresentationError;
 use std::fmt::{Display, Formatter};
-use std::io;
 use templates::ast::{ConstantTermOrList, PType};
 use templates::dataset::errors::TemplateError;
 use templates::MappingColumnType;
@@ -11,7 +10,7 @@ use triplestore::errors::TriplestoreError;
 
 #[derive(Error, Debug)]
 pub enum MappingError {
-    InvalidTemplateNameError(#[from] IriParseError),
+    InvalidTemplateNameError(IriParseError),
     TemplateNotFound(String),
     NonOptionalColumnHasNull(String, DataFrame),
     MissingParameterColumn(String),
@@ -26,19 +25,13 @@ pub enum MappingError {
     ConstantDoesNotMatchDataType(ConstantTermOrList, PType, PType),
     ConstantListHasInconsistentPType(ConstantTermOrList, PType, PType),
     NoTemplateForTemplateNameFromPrefix(String),
-    FileCreateIOError(io::Error),
-    WriteParquetError(PolarsError),
-    ReadParquetError(PolarsError),
-    PathDoesNotExist(String),
-    WriteNTriplesError(io::Error),
-    RemoveParquetFileError(io::Error),
-    TriplestoreError(TriplestoreError),
     MissingDataFrameForNonEmptySignature,
-    ParsingError(String),
     TooDeeplyNestedError(String),
     DatatypeInferenceError(RepresentationError),
     InvalidIRIError(String, usize, String),
     TemplateError(#[from] TemplateError),
+    TriplestoreError(#[from] TriplestoreError),
+    IriParseError(IriParseError),
 }
 
 impl Display for MappingError {
@@ -130,33 +123,8 @@ impl Display for MappingError {
                     constant_term,
                 )
             }
-
-            MappingError::FileCreateIOError(e) => {
-                write!(f, "Creating file for writing resulted in an error: {}", e)
-            }
-            MappingError::WriteParquetError(e) => {
-                write!(f, "Writing to parquet file produced an error {:?}", e)
-            }
-            MappingError::PathDoesNotExist(p) => {
-                write!(f, "Path {} does not exist", p)
-            }
-            MappingError::ReadParquetError(p) => {
-                write!(f, "Reading parquet file resulted in an error: {:?}", p)
-            }
-            MappingError::WriteNTriplesError(e) => {
-                write!(f, "Error writing NTriples {}", e)
-            }
-            MappingError::RemoveParquetFileError(e) => {
-                write!(f, "Error removing parquet file {}", e)
-            }
-            MappingError::TriplestoreError(e) => {
-                write!(f, "Triplestore error {}", e)
-            }
             MappingError::MissingDataFrameForNonEmptySignature => {
                 write!(f, "Missing DataFrame argument, but signature is not empty")
-            }
-            MappingError::ParsingError(t) => {
-                write!(f, "Parsing error: {}", t)
             }
             MappingError::TooDeeplyNestedError(s) => {
                 write!(f, "{s}")
@@ -172,6 +140,12 @@ impl Display for MappingError {
             }
             MappingError::TemplateError(x) => {
                 write!(f, "Template error: {}", x)
+            }
+            MappingError::TriplestoreError(x) => {
+                write!(f, "Error storing mapping results in triplestore: {}", x)
+            }
+            MappingError::IriParseError(x) => {
+                write!(f, "IRI parse error: {}", x)
             }
         }
     }

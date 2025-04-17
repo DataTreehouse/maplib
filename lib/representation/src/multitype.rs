@@ -6,7 +6,7 @@ use crate::{
 use oxrdf::vocab::{rdf, xsd};
 use polars::datatypes::PlSmallStr;
 use polars::prelude::{
-    all_horizontal, as_struct, col, is_null, lit, when, CategoricalOrdering, Column, DataFrame,
+    all_horizontal, as_struct, col, lit, when, CategoricalOrdering, Column, DataFrame,
     DataType, Expr, IntoColumn, IntoLazy, JoinArgs, JoinType, LazyFrame, LazyGroupBy, LiteralValue,
     MaintainOrderJoin, Selector, UniqueKeepStrategy,
 };
@@ -82,8 +82,8 @@ fn filter_multitype(multitype_column: &Column, names: &Vec<&str>, col_name: &str
                 .map(|&n| Selector::new(col(n)));
             lf = lf.drop(columns_drop_iter);
             let df = lf.collect();
-            let ser = df.unwrap().drop_in_place(&col_name).unwrap();
-            return ser;
+
+            df.unwrap().drop_in_place(col_name).unwrap()
         }
     }
 }
@@ -701,7 +701,7 @@ pub fn all_multi_cols(dts: &Vec<BaseRDFNodeType>) -> Vec<String> {
                 all_cols.push(IRI_PREFIX_FIELD.to_owned());
                 all_cols.push(IRI_SUFFIX_FIELD.to_owned());
             }
-            BaseRDFNodeType::Literal(l) if d.is_lang_string() => {
+            BaseRDFNodeType::Literal(..) if d.is_lang_string() => {
                 all_cols.push(LANG_STRING_VALUE_FIELD.to_owned());
                 all_cols.push(LANG_STRING_LANG_FIELD.to_owned());
             }

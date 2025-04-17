@@ -1,6 +1,6 @@
 [package]
 name = "py_maplib"
-version = "0.15.11"
+version = "0.15.15"
 edition = "2021"
 
 [dependencies]
@@ -11,6 +11,7 @@ shacl = { path = "../lib/shacl" }
 pydf_io = { path = "../lib/pydf_io" }
 report_mapping = {path = "../lib/report_mapping"}
 templates = {path= "../lib/templates"}
+cimxml = {path = "../lib/cimxml"}
 
 pyo3.workspace = true
 pyo3-log.workspace = true
@@ -24,6 +25,8 @@ polars = { workspace = true, features = [
     "dtype-i8", "dtype-i16", "dtype-struct",
     "dtype-time", "dtype-u8", "dtype-u16"], default-features = false }
 log.workspace = true
+uuid.workspace = true
+chrono.workspace = true
 
 [lib]
 name = "maplib"

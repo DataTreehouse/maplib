@@ -54,12 +54,13 @@ pub fn validate(
                             MappingColumnType::Flat(t) => {
                                 let mut offsets = vec![];
                                 let threads = current_num_threads();
-                                let stride = ser.len() / threads;
+                                //TODO: Is this correct?
+                                let stride = ser.len().div_ceil(threads);
                                 let mut last_end = 0;
                                 for i in 0..threads {
                                     let stride = if i == threads - 1 { ser.len() } else { stride };
-                                    offsets.push((last_end, stride.clone()));
-                                    last_end = last_end + stride;
+                                    offsets.push((last_end, stride));
+                                    last_end += stride;
                                 }
                                 let res: Result<Vec<_>, MappingError> = offsets
                                     .into_par_iter()
@@ -222,7 +223,7 @@ fn is_iri_col(column: &Column) -> bool {
         let fnn = strchk.first_non_null();
         if let Some(fnn) = fnn {
             let s = strchk.get(fnn).unwrap();
-            if let Ok(_) = NamedNode::new(s) {
+            if NamedNode::new(s).is_ok() {
                 return true;
             }
         }
@@ -379,11 +380,7 @@ fn cast_datetime_to_date(ptype: &PType, data_type: &DataType) -> Option<DataType
         }
         PType::Lub(l) | PType::List(l) | PType::NEList(l) => {
             if let DataType::List(data_type) = data_type {
-                if let Some(t) = cast_datetime_to_date(l, data_type) {
-                    Some(DataType::List(Box::new(t)))
-                } else {
-                    None
-                }
+                cast_datetime_to_date(l, data_type).map(|t| DataType::List(Box::new(t)))
             } else {
                 None
             }

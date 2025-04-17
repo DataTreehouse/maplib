@@ -5,7 +5,7 @@ use crate::rdf_to_polars::{
     rdf_owned_blank_node_to_polars_literal_value,
 };
 use crate::{
-    literal_blanknode_to_blanknode, literal_iri_to_namednode, BaseRDFNodeType, BaseRDFNodeTypeRef,
+    literal_blanknode_to_blanknode, BaseRDFNodeType, BaseRDFNodeTypeRef,
     RDFNodeType, IRI_PREFIX_FIELD, IRI_SUFFIX_FIELD, LANG_STRING_LANG_FIELD,
     LANG_STRING_VALUE_FIELD, OBJECT_COL_NAME, SUBJECT_COL_NAME,
 };
@@ -483,7 +483,7 @@ pub fn particular_opt_term_vec_to_series(
             .map(|t| {
                 if let Some(t) = t {
                     match t {
-                        Term::NamedNode(nn) => unreachable!(),
+                        Term::NamedNode(..) => unreachable!(),
                         Term::BlankNode(bb) => rdf_owned_blank_node_to_polars_literal_value(bb),
                         Term::Literal(l) => rdf_literal_to_polars_literal_value(&l),
                         #[cfg(feature = "rdf-star")]

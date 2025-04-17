@@ -3,11 +3,11 @@ pub mod storage;
 
 use crate::storage::StoredResults;
 use errors::ShaclError;
+use oxrdf::{NamedNode, NamedOrBlankNode};
+use polars::prelude::DataFrame;
 use representation::solution_mapping::SolutionMappings;
 use std::path::PathBuf;
 use std::time::Duration;
-use oxrdf::{NamedNode, NamedOrBlankNode};
-use polars::prelude::DataFrame;
 use triplestore::Triplestore;
 
 #[derive(Debug, Clone)]

@@ -1,7 +1,7 @@
 use super::{Triples, Triplestore};
 use crate::sparql::errors::SparqlError;
 use oxrdf::{NamedNode, Subject, Term};
-use polars::prelude::{as_struct, col, concat, lit, IntoLazy, LazyFrame, UnionArgs};
+use polars::prelude::{as_struct, col, concat, IntoLazy, LazyFrame, UnionArgs};
 use polars_core::datatypes::CategoricalOrdering;
 use polars_core::prelude::{Column, DataFrame, DataType};
 use query_processing::type_constraints::PossibleTypes;

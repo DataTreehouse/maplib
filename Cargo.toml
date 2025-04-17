@@ -10,6 +10,8 @@ members = [
     "lib/spargebra",
     "lib/shacl",
     "lib/fts",
+    "lib/datalog",
+    "lib/cimxml",
     "py_maplib",
 ]
 
@@ -17,8 +19,8 @@ members = [
 rust-version = "1.81.0"
 
 [workspace.dependencies]
-pyo3 = {version = "0.22.6", features = ["py-clone", "abi3-py39"] }
-pyo3-log = {version = "0.11.0"}
+pyo3 = {version = "0.24.1", features = ["py-clone", "abi3-py39"] }
+pyo3-log = {version = "0.12.3" }
 polars = { version = "0.46.0", features = ["nightly", "performant", "cse", "fmt"], default-features = false }
 polars-core = { version = "0.46.0", default-features = false }
 rayon = "1.10.0"
@@ -56,5 +58,5 @@ rstest = "0.21.0"
 serial_test = "3.1.1"
 
 [patch.crates-io]
-polars = { git = 'https://github.com/pola-rs/polars', rev="ac9d598fd07d85b26a29bd7465a7bfa945b6f963" }
-polars-core = { git = 'https://github.com/pola-rs/polars', rev="ac9d598fd07d85b26a29bd7465a7bfa945b6f963" }
+polars = { git = 'https://github.com/pola-rs/polars', rev="319a9a84ab573886b2a13548a8e462fee353acef" }
+polars-core = { git = 'https://github.com/pola-rs/polars', rev="319a9a84ab573886b2a13548a8e462fee353acef" }

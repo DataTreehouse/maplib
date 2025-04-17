@@ -1,5 +1,6 @@
 use file_io::FileIOError;
 use fts::FtsError;
+use oxrdfio::RdfSyntaxError;
 use std::fmt::{Display, Formatter};
 use std::io;
 use thiserror::Error;
@@ -12,13 +13,11 @@ pub enum TriplestoreError {
     FolderCreateIOError(io::Error),
     ReadCachingDirectoryError(io::Error),
     ReadCachingDirectoryEntryError(io::Error),
-    ParsingError(String),
-    XMLParsingError(String),
+    RDFSyntaxError(RdfSyntaxError),
     ReadTriplesFileError(io::Error),
     InvalidBaseIri(String),
     SubtractTransientTriplesError(String),
     RDFSClassInheritanceError(String),
-    NTriplesParsingError(String),
     IndexingError(String),
     IPCIOError(String),
     FileIOError(FileIOError),
@@ -53,8 +52,8 @@ impl Display for TriplestoreError {
             TriplestoreError::ReadCachingDirectoryEntryError(e) => {
                 write!(f, "Read caching directory entry error {}", e)
             }
-            TriplestoreError::ParsingError(p) => {
-                write!(f, "Parsing error {}", p)
+            TriplestoreError::RDFSyntaxError(p) => {
+                write!(f, "{}", p)
             }
             TriplestoreError::ReadTriplesFileError(rt) => {
                 write!(f, "Read triples file error {}", rt)
@@ -67,12 +66,6 @@ impl Display for TriplestoreError {
             }
             TriplestoreError::RDFSClassInheritanceError(x) => {
                 write!(f, "RDFS Class inheritance error {x}")
-            }
-            TriplestoreError::XMLParsingError(xp) => {
-                write!(f, "RDF XML parsing error {}", xp)
-            }
-            TriplestoreError::NTriplesParsingError(xp) => {
-                write!(f, "NTriples parsing error {}", xp)
             }
             TriplestoreError::IndexingError(x) => {
                 write!(f, "Indexing error {}", x)
