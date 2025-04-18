@@ -188,8 +188,25 @@ impl Triplestore {
                             object_type,
                             height_upper_bound: _,
                         } = sm;
-                        mappings =
-                            mappings.with_column(col(SUBJECT_COL_NAME).cast(DataType::String));
+                        if subject_type.is_iri() {
+                            mappings = mappings.with_column(
+                                as_struct(vec![
+                                    col(SUBJECT_COL_NAME)
+                                        .struct_()
+                                        .field_by_name(IRI_PREFIX_FIELD)
+                                        .alias(IRI_PREFIX_FIELD),
+                                    col(SUBJECT_COL_NAME)
+                                        .struct_()
+                                        .field_by_name(IRI_SUFFIX_FIELD)
+                                        .alias(IRI_SUFFIX_FIELD),
+                                ])
+                                .alias(SUBJECT_COL_NAME),
+                            );
+                        } else {
+                            //blank node
+                            mappings =
+                                mappings.with_column(col(SUBJECT_COL_NAME).cast(DataType::String));
+                        }
                         if object_type.is_lang_string() {
                             mappings = mappings.with_column(
                                 as_struct(vec![

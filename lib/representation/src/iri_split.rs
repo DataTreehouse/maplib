@@ -14,7 +14,7 @@ pub fn lf_split_iri(mut lf: LazyFrame, column_name: &str) -> LazyFrame {
     lf = lf.with_column(
         col(column_name)
             .str()
-            .extract_groups("(.+[#/])?(.+)$") // Regex is probably slow
+            .extract_groups("(.+[#/:])?(.+)$") // Regex is probably slow
             .unwrap(),
     );
     lf = lf.with_column(

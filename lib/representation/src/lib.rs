@@ -318,6 +318,8 @@ impl BaseRDFNodeType {
                 xsd::STRING => DataType::String,
                 xsd::UNSIGNED_INT => DataType::UInt32,
                 xsd::UNSIGNED_LONG => DataType::UInt64,
+                xsd::SHORT => DataType::Int16,
+                xsd::UNSIGNED_SHORT => DataType::UInt16,
                 xsd::INTEGER | xsd::LONG => DataType::Int64,
                 xsd::INT => DataType::Int32,
                 xsd::DOUBLE | xsd::DECIMAL => DataType::Float64,

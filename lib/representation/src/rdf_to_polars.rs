@@ -48,7 +48,7 @@ pub fn rdf_split_named_node(named_node: &NamedNode) -> (&str, &str) {
     }
 
     let iri: &str = named_node.as_str();
-    const DELIMITERS: &[char] = &['/', '#'];
+    const DELIMITERS: &[char] = &['/', '#', ':'];
 
     let (prefix, suffix) = match rsplit_once_inclusive_l(iri, DELIMITERS) {
         Some(pair) => pair,

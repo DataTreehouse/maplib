@@ -57,9 +57,13 @@ impl Triples {
         delay_index: bool,
     ) -> Result<Self, TriplestoreError> {
         let object_indexing_enabled = can_and_should_index_object(&object_type, verb_iri, indexing);
+        let height = df.height();
+        let mut lf = df.lazy();
+        lf = cast_col_to_cat(lf, SUBJECT_COL_NAME, false, &subject_type);
+        lf = cast_col_to_cat(lf, OBJECT_COL_NAME, false, &object_type);
         if delay_index {
             let triples = Triples {
-                height: df.height(),
+                height,
                 call_uuid: call_uuid.to_owned(),
                 object_indexing_enabled,
                 subject_sort: None,
@@ -68,7 +72,7 @@ impl Triples {
                 object_sparse_index: None,
                 subject_type,
                 object_type,
-                unindexed: vec![df],
+                unindexed: vec![lf.collect().unwrap()],
             };
             Ok(triples)
         } else {
@@ -79,7 +83,7 @@ impl Triples {
                 object_sparse_index,
                 height,
             } = create_indices(
-                df.lazy(),
+                lf,
                 storage_folder,
                 object_indexing_enabled,
                 &subject_type,
@@ -222,10 +226,14 @@ impl Triples {
 
     pub(crate) fn add_triples(
         &mut self,
-        df: DataFrame,
+        mut df: DataFrame,
         storage_folder: &Option<PathBuf>,
         delay_index: bool,
     ) -> Result<Option<DataFrame>, TriplestoreError> {
+        let mut lf = df.lazy();
+        lf = cast_col_to_cat(lf, SUBJECT_COL_NAME, false, &self.subject_type);
+        lf = cast_col_to_cat(lf, OBJECT_COL_NAME, false, &self.object_type);
+        df = lf.collect().unwrap();
         if delay_index {
             self.unindexed.push(df);
             Ok(None)
@@ -691,7 +699,7 @@ fn cast_col_to_cat(mut lf: LazyFrame, c: &str, lexsort: bool, t: &BaseRDFNodeTyp
             ])
             .alias(c),
         );
-    } else {
+    } else if t.polars_data_type() == DataType::String {
         lf = lf.with_column(col(c).cast(DataType::Categorical(None, cat_order)));
     }
 
