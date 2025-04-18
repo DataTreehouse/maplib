@@ -8,6 +8,7 @@ pub mod solution_mapping;
 
 pub mod errors;
 pub mod formatting;
+pub mod iri_split;
 pub mod literals;
 pub mod python;
 pub mod subtypes;
@@ -258,6 +259,30 @@ impl BaseRDFNodeType {
         vec![Self::is_lang_string, Self::is_iri]
             .into_iter()
             .any(|f| f(self))
+    }
+
+    pub fn multi_cols(&self) -> Vec<String> {
+        match self {
+            BaseRDFNodeType::IRI => {
+                vec![IRI_PREFIX_FIELD.to_string(), IRI_PREFIX_FIELD.to_string()]
+            }
+            BaseRDFNodeType::BlankNode => {
+                vec![MULTI_BLANK_DT.to_string()]
+            }
+            BaseRDFNodeType::Literal(l) => {
+                if self.is_lang_string() {
+                    vec![
+                        LANG_STRING_VALUE_FIELD.to_string(),
+                        LANG_STRING_VALUE_FIELD.to_string(),
+                    ]
+                } else {
+                    vec![l.to_string()]
+                }
+            }
+            BaseRDFNodeType::None => {
+                vec![MULTI_NONE_DT.to_string()]
+            }
+        }
     }
 
     pub fn as_rdf_node_type(&self) -> RDFNodeType {

@@ -105,7 +105,8 @@ pub fn lf_column_from_categorical(
     rdf_node_types: &HashMap<String, RDFNodeType>,
 ) -> LazyFrame {
     match rdf_node_types.get(c).unwrap() {
-        RDFNodeType::IRI | RDFNodeType::BlankNode => {
+        RDFNodeType::BlankNode => lf = lf.with_column(col(c).cast(DataType::String)),
+        RDFNodeType::IRI => {
             lf = lf.with_column(
                 as_struct(vec![
                     col(c)
@@ -218,8 +219,10 @@ pub fn lf_column_to_categorical(
     cat_order: CategoricalOrdering,
 ) -> LazyFrame {
     match rdf_node_type {
-        RDFNodeType::IRI | RDFNodeType::BlankNode => {
+        RDFNodeType::BlankNode => {
             lf = lf.with_column(col(c).cast(DataType::Categorical(None, cat_order)));
+        }
+        RDFNodeType::IRI => {
             lf = lf.with_column(
                 as_struct(vec![
                     col(c)

@@ -14,12 +14,12 @@ use polars_core::prelude::{IntoColumn, Scalar};
 use rayon::iter::{IndexedParallelIterator, ParallelIterator};
 use rayon::prelude::{IntoParallelIterator, IntoParallelRefIterator};
 use representation::rdf_to_polars::{
-    polars_literal_values_to_series, rdf_literal_to_polars_literal_value,
-    rdf_owned_blank_node_to_polars_literal_value, rdf_split_named_node,
+    polars_literal_values_to_series, rdf_blank_node_to_polars_literal_value,
+    rdf_literal_to_polars_literal_value, rdf_split_named_node,
 };
 use representation::{
-    get_subject_datatype_ref, get_term_datatype_ref, BaseRDFNodeType, IRI_PREFIX_FIELD,
-    IRI_SUFFIX_FIELD, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD,
+    get_term_datatype_ref, BaseRDFNodeType, IRI_PREFIX_FIELD, IRI_SUFFIX_FIELD,
+    LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD,
 };
 use representation::{OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use std::collections::HashMap;
@@ -28,7 +28,7 @@ use std::ops::Deref;
 use std::path::Path;
 use std::time::Instant;
 
-type MapType = HashMap<String, HashMap<String, (Vec<Subject>, Vec<Term>)>>;
+type MapType = HashMap<String, HashMap<String, (Vec<Term>, Vec<Term>)>>;
 
 impl Triplestore {
     #[allow(clippy::too_many_arguments)]
@@ -210,14 +210,11 @@ impl Triplestore {
                     let subject_dt = BaseRDFNodeType::from_string(subject_dt);
                     for (object_dt, (subjects, objects)) in obj_map {
                         let object_dt = BaseRDFNodeType::from_string(object_dt);
-                        let strings_iter = subjects.into_iter().map(|s| match s {
-                            Subject::NamedNode(nn) => nn.into_string(),
-                            Subject::BlankNode(bl) => bl.into_string(),
-                        });
-                        let mut subjects_ser = Series::from_iter(strings_iter);
+                        let mut subjects_ser =
+                            particular_term_vec_to_series(&subjects, subject_dt.clone());
                         subjects_ser.rename(SUBJECT_COL_NAME.into());
-
-                        let objects_ser = particular_term_vec_to_series(objects, object_dt.clone());
+                        let objects_ser =
+                            particular_term_vec_to_series(&objects, object_dt.clone());
 
                         let all_series =
                             vec![subjects_ser.into_column(), objects_ser.into_column()];
@@ -270,11 +267,11 @@ fn term_to_oxrdf_term(t: Term, parser_call: &str) -> Term {
     }
 }
 
-fn subject_to_oxrdf_subject(s: Subject, parser_call: &str) -> Subject {
+fn subject_to_oxrdf_term(s: Subject, parser_call: &str) -> Term {
     if let Subject::BlankNode(bn) = s {
-        Subject::BlankNode(blank_node_to_oxrdf_blank_node(bn, parser_call))
+        Term::BlankNode(blank_node_to_oxrdf_blank_node(bn, parser_call))
     } else {
-        s
+        s.into()
     }
 }
 
@@ -294,7 +291,7 @@ fn create_predicate_map(
             object,
             ..
         } = q.map_err(TriplestoreError::RDFSyntaxError)?;
-        let type_map: &mut HashMap<_, HashMap<_, (Vec<Subject>, Vec<Term>)>> =
+        let type_map: &mut HashMap<_, HashMap<_, (Vec<Term>, Vec<Term>)>> =
             if let Some(type_map) = predicate_map.get_mut(predicate.as_str()) {
                 type_map
             } else {
@@ -303,9 +300,9 @@ fn create_predicate_map(
                 predicate_map.get_mut(&verb_key).unwrap()
             };
 
-        let subject_to_insert = subject_to_oxrdf_subject(subject, parser_call);
+        let subject_to_insert = subject_to_oxrdf_term(subject, parser_call);
         let object_to_insert = term_to_oxrdf_term(object, parser_call);
-        let subject_datatype = get_subject_datatype_ref(&subject_to_insert);
+        let subject_datatype = get_term_datatype_ref(&subject_to_insert);
         let object_datatype = get_term_datatype_ref(&object_to_insert);
         if let Some(obj_type_map) = type_map.get_mut(subject_datatype.as_str()) {
             if let Some((subjects, objects)) = obj_type_map.get_mut(object_datatype.as_str()) {
@@ -361,7 +358,7 @@ impl Iterator for MyFromSliceQuadReader<'_> {
 }
 
 // These terms must be of the given dt
-fn particular_term_vec_to_series(term_vec: Vec<Term>, dt: BaseRDFNodeType) -> Series {
+fn particular_term_vec_to_series(term_vec: &Vec<Term>, dt: BaseRDFNodeType) -> Series {
     if dt.is_lang_string() {
         let langs = term_vec
             .par_iter()
@@ -376,8 +373,7 @@ fn particular_term_vec_to_series(term_vec: Vec<Term>, dt: BaseRDFNodeType) -> Se
             .into_par_iter()
             .map(|t| match t {
                 Term::Literal(l) => {
-                    let (s, _, _) = l.destruct();
-                    LiteralValue::Scalar(Scalar::from(PlSmallStr::from_string(s)))
+                    LiteralValue::Scalar(Scalar::from(PlSmallStr::from_str(l.value())))
                 }
                 _ => panic!("Should never happen"),
             })
@@ -439,8 +435,8 @@ fn particular_term_vec_to_series(term_vec: Vec<Term>, dt: BaseRDFNodeType) -> Se
             .into_par_iter()
             .map(|t| match t {
                 Term::NamedNode(_) => unreachable!(),
-                Term::BlankNode(bb) => rdf_owned_blank_node_to_polars_literal_value(bb),
-                Term::Literal(l) => rdf_literal_to_polars_literal_value(&l),
+                Term::BlankNode(bb) => rdf_blank_node_to_polars_literal_value(bb),
+                Term::Literal(l) => rdf_literal_to_polars_literal_value(l),
             })
             .collect();
         polars_literal_values_to_series(any_iter, OBJECT_COL_NAME)

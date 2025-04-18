@@ -19,7 +19,10 @@ use representation::polars_to_rdf::particular_opt_term_vec_to_series;
 use representation::query_context::Context;
 use representation::rdf_to_polars::string_rdf_literal;
 use representation::solution_mapping::{is_string_col, EagerSolutionMappings, SolutionMappings};
-use representation::{get_ground_term_datatype_ref, BaseRDFNodeType, BaseRDFNodeTypeRef, RDFNodeType, IRI_PREFIX_FIELD, IRI_SUFFIX_FIELD, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD};
+use representation::{
+    get_ground_term_datatype_ref, BaseRDFNodeType, BaseRDFNodeTypeRef, RDFNodeType,
+    IRI_PREFIX_FIELD, IRI_SUFFIX_FIELD, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD,
+};
 use spargebra::algebra::{Expression, Function};
 use spargebra::term::GroundTerm;
 use std::collections::{HashMap, HashSet};
@@ -318,14 +321,16 @@ pub fn order_by(
         match t {
             RDFNodeType::IRI => {
                 order_exprs.push(
-                    col(c).struct_().field_by_name(IRI_PREFIX_FIELD).cast(
-                        DataType::Categorical(None, CategoricalOrdering::Lexical),
-                    ),
+                    col(c)
+                        .struct_()
+                        .field_by_name(IRI_PREFIX_FIELD)
+                        .cast(DataType::Categorical(None, CategoricalOrdering::Lexical)),
                 );
                 order_exprs.push(
-                    col(c).struct_().field_by_name(IRI_SUFFIX_FIELD).cast(
-                        DataType::Categorical(None, CategoricalOrdering::Lexical),
-                    ),
+                    col(c)
+                        .struct_()
+                        .field_by_name(IRI_SUFFIX_FIELD)
+                        .cast(DataType::Categorical(None, CategoricalOrdering::Lexical)),
                 );
                 asc_bools.push(a);
                 asc_bools.push(a);
@@ -775,10 +780,22 @@ pub fn values_pattern(
                             .field_by_name(LANG_STRING_LANG_FIELD)
                             .alias(LANG_STRING_LANG_FIELD),
                     );
+                } else if t.is_iri() {
+                    struct_exprs.push(
+                        col(&name)
+                            .struct_()
+                            .field_by_name(IRI_PREFIX_FIELD)
+                            .alias(IRI_PREFIX_FIELD),
+                    );
+                    struct_exprs.push(
+                        col(&name)
+                            .struct_()
+                            .field_by_name(IRI_SUFFIX_FIELD)
+                            .alias(IRI_SUFFIX_FIELD),
+                    );
                 } else {
                     struct_exprs.push(col(&name).alias(tname));
                 }
-
                 columns.push(c);
                 types.push(t);
             }

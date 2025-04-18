@@ -2,7 +2,7 @@ use crate::errors::RepresentationError;
 use crate::multitype::{extract_column_from_multitype, MULTI_BLANK_DT, MULTI_NONE_DT};
 use crate::rdf_to_polars::{
     polars_literal_values_to_series, rdf_literal_to_polars_literal_value,
-    rdf_owned_blank_node_to_polars_literal_value,
+    rdf_owned_blank_node_to_polars_literal_value, rdf_split_named_node,
 };
 use crate::{
     literal_blanknode_to_blanknode, BaseRDFNodeType, BaseRDFNodeTypeRef, RDFNodeType,
@@ -477,6 +477,36 @@ pub fn particular_opt_term_vec_to_series(
             .collect()
             .unwrap();
         df.drop_in_place(c).unwrap().take_materialized_series()
+    } else if BaseRDFNodeTypeRef::IRI == dt {
+        let (prefixes, suffixes) = term_vec
+            .par_iter()
+            .map(|t| {
+                if let Some(t) = t {
+                    match t {
+                        Term::NamedNode(nn) => {
+                            let (pre, suf) = rdf_split_named_node(nn);
+                            (
+                                LiteralValue::Scalar(Scalar::from(PlSmallStr::from_str(pre))),
+                                LiteralValue::Scalar(Scalar::from(PlSmallStr::from_str(suf))),
+                            )
+                        }
+                        _ => panic!("Should never happen"),
+                    }
+                } else {
+                    (LiteralValue::untyped_null(), LiteralValue::untyped_null())
+                }
+            })
+            .unzip();
+
+        let prefixes_ser = polars_literal_values_to_series(prefixes, IRI_PREFIX_FIELD);
+        let suffixes_ser = polars_literal_values_to_series(suffixes, IRI_SUFFIX_FIELD);
+        let mut df = DataFrame::new(vec![prefixes_ser.into(), suffixes_ser.into()])
+            .unwrap()
+            .lazy()
+            .with_column(as_struct(vec![col(IRI_PREFIX_FIELD), col(IRI_SUFFIX_FIELD)]).alias(c))
+            .collect()
+            .unwrap();
+        df.drop_in_place(c).unwrap().take_materialized_series()
     } else {
         let any_iter: Vec<_> = term_vec
             .into_par_iter()
@@ -486,8 +516,6 @@ pub fn particular_opt_term_vec_to_series(
                         Term::NamedNode(..) => unreachable!(),
                         Term::BlankNode(bb) => rdf_owned_blank_node_to_polars_literal_value(bb),
                         Term::Literal(l) => rdf_literal_to_polars_literal_value(&l),
-                        #[cfg(feature = "rdf-star")]
-                        _ => unimplemented!(),
                     }
                 } else {
                     LiteralValue::untyped_null()

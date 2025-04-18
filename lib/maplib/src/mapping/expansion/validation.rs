@@ -110,23 +110,25 @@ pub fn validate_flat_iri_column(
     t: &RDFNodeType,
 ) -> Result<(), MappingError> {
     if t.is_iri() {
-        let c = ser
-            .cast(&DataType::String)
-            .unwrap()
-            .str()
-            .unwrap()
-            .apply(parse_iri);
-        let is_err = c.is_not_null();
-        if let Some(n_errs) = is_err.sum() {
-            if n_errs > 0 {
-                let errs_3 = ser.filter(&is_err).unwrap();
-                let errs = errs_3.head(Some(3));
-                let examples = errs.cast(&DataType::String).unwrap().fmt_list();
-                return Err(MappingError::InvalidIRIError(
-                    colname.to_string(),
-                    n_errs as usize,
-                    examples,
-                ));
+        if !matches!(ser.dtype(), DataType::Struct(..)) {
+            let c = ser
+                .cast(&DataType::String)
+                .unwrap()
+                .str()
+                .unwrap()
+                .apply(parse_iri);
+            let is_err = c.is_not_null();
+            if let Some(n_errs) = is_err.sum() {
+                if n_errs > 0 {
+                    let errs_3 = ser.filter(&is_err).unwrap();
+                    let errs = errs_3.head(Some(3));
+                    let examples = errs.cast(&DataType::String).unwrap().fmt_list();
+                    return Err(MappingError::InvalidIRIError(
+                        colname.to_string(),
+                        n_errs as usize,
+                        examples,
+                    ));
+                }
             }
         }
     }
@@ -270,8 +272,7 @@ fn infer_validate_mapping_column_type_from_ptype(
                     } else {
                         Ok(MappingColumnType::Flat(RDFNodeType::IRI))
                     }
-                } else
-                {
+                } else {
                     Err(MappingError::ColumnDataTypeMismatch(
                         column_name.to_string(),
                         datatype.clone(),

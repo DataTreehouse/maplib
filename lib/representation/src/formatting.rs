@@ -18,7 +18,6 @@ pub fn format_columns(
     for (c, t) in rdf_node_types {
         if matches!(t, RDFNodeType::MultiType(_))
             || t.is_lang_string()
-            || t == &RDFNodeType::IRI
             || t == &RDFNodeType::BlankNode
         {
             lf = lf.with_column(expression_to_string(col(c), c, t.clone()));

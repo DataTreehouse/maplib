@@ -296,6 +296,7 @@ pub fn bound(
 
 pub fn expr_is_null_workaround(expr: Expr, rdf_node_type: &RDFNodeType) -> Expr {
     match rdf_node_type {
+        RDFNodeType::IRI => expr.struct_().field_by_name(IRI_PREFIX_FIELD).is_null(),
         RDFNodeType::Literal(l) => {
             if l.as_ref() == rdf::LANG_STRING {
                 expr.struct_()
@@ -427,7 +428,20 @@ fn convert_multitype_col_to_wider(
         for t in sorted_types {
             let name = base_col_name(t);
             if existing_types.contains(t) {
-                if t.is_lang_string() {
+                if t.is_iri() {
+                    struct_exprs.push(
+                        col(c)
+                            .struct_()
+                            .field_by_name(IRI_PREFIX_FIELD)
+                            .alias(IRI_PREFIX_FIELD),
+                    );
+                    struct_exprs.push(
+                        col(c)
+                            .struct_()
+                            .field_by_name(IRI_SUFFIX_FIELD)
+                            .alias(IRI_SUFFIX_FIELD),
+                    );
+                } else if t.is_lang_string() {
                     struct_exprs.push(
                         col(c)
                             .struct_()
@@ -443,6 +457,17 @@ fn convert_multitype_col_to_wider(
                 } else {
                     struct_exprs.push(col(c).struct_().field_by_name(&name).alias(&name));
                 }
+            } else if t.is_iri() {
+                struct_exprs.push(
+                    lit(LiteralValue::untyped_null())
+                        .cast(DataType::Categorical(None, CategoricalOrdering::Physical))
+                        .alias(IRI_PREFIX_FIELD),
+                );
+                struct_exprs.push(
+                    lit(LiteralValue::untyped_null())
+                        .cast(DataType::Categorical(None, CategoricalOrdering::Physical))
+                        .alias(IRI_SUFFIX_FIELD),
+                );
             } else if t.is_lang_string() {
                 struct_exprs.push(
                     lit(LiteralValue::untyped_null())
@@ -972,18 +997,22 @@ pub fn func_expression(
                 .mappings
                 .with_row_index(PlSmallStr::from_str(&tmp_column), None);
             solution_mappings.mappings = solution_mappings.mappings.with_column(
-                (lit("urn:uuid:")
-                    + col(&tmp_column).map(
-                        |c| {
-                            let uuids: Vec<_> = (0..c.len())
-                                .into_par_iter()
-                                .map(|_| uuid::Uuid::new_v4().to_string())
-                                .collect();
-                            let s = Series::new("uuids".into(), uuids);
-                            Ok(Some(s.into_column()))
-                        },
-                        GetOutput::from_type(DataType::String),
-                    ))
+                as_struct(vec![
+                    lit("urn:uuid:").alias(IRI_PREFIX_FIELD),
+                    col(&tmp_column)
+                        .map(
+                            |c| {
+                                let uuids: Vec<_> = (0..c.len())
+                                    .into_par_iter()
+                                    .map(|_| uuid::Uuid::new_v4().to_string())
+                                    .collect();
+                                let s = Series::new("uuids".into(), uuids);
+                                Ok(Some(s.into_column()))
+                            },
+                            GetOutput::from_type(DataType::String),
+                        )
+                        .alias(IRI_SUFFIX_FIELD),
+                ])
                 .alias(outer_context.as_str()),
             );
             solution_mappings.mappings = solution_mappings.mappings.drop([col(&tmp_column)]);
@@ -1504,38 +1533,65 @@ fn typed_equals_expr(
             let mut eq = lit(false);
             for lt in left_types {
                 if right_types.contains(lt) {
-                    eq = eq.or(col(left_col)
-                        .struct_()
-                        .field_by_name(&base_col_name(lt))
-                        .is_not_null()
-                        .and(
-                            col(right_col)
-                                .struct_()
-                                .field_by_name(&base_col_name(lt))
-                                .is_not_null(),
-                        )
-                        .and(
-                            col(left_col)
-                                .struct_()
-                                .field_by_name(&base_col_name(lt))
-                                .eq(col(left_col).struct_().field_by_name(&base_col_name(lt))),
-                        ));
+                    for colname in lt.multi_cols() {
+                        eq = eq.or(col(left_col)
+                            .struct_()
+                            .field_by_name(&colname)
+                            .is_not_null()
+                            .and(
+                                col(right_col)
+                                    .struct_()
+                                    .field_by_name(&colname)
+                                    .is_not_null(),
+                            )
+                            .and(
+                                col(right_col)
+                                    .struct_()
+                                    .field_by_name(&colname)
+                                    .eq(col(left_col).struct_().field_by_name(&colname)),
+                            ));
+                    }
                 }
             }
             eq
         } else {
             let right_type = BaseRDFNodeType::from_rdf_node_type(right_type);
             if left_types.contains(&right_type) {
-                col(left_col)
-                    .struct_()
-                    .field_by_name(&base_col_name(&right_type))
-                    .is_not_null()
-                    .and(
-                        col(left_col)
+                let right_fields = right_type.multi_cols();
+                if right_fields.len() > 1 {
+                    let mut eq = lit(false);
+                    for field_name in right_fields {
+                        eq = eq.or(col(left_col)
                             .struct_()
-                            .field_by_name(&base_col_name(&right_type))
-                            .eq(col(right_col)),
-                    )
+                            .field_by_name(&field_name)
+                            .is_not_null()
+                            .and(
+                                col(right_col)
+                                    .struct_()
+                                    .field_by_name(&field_name)
+                                    .is_not_null(),
+                            )
+                            .and(
+                                col(right_col).struct_().field_by_name(&field_name).eq(col(
+                                    left_col,
+                                )
+                                .struct_()
+                                .field_by_name(&field_name)),
+                            ));
+                    }
+                    eq
+                } else {
+                    col(left_col)
+                        .struct_()
+                        .field_by_name(&base_col_name(&right_type))
+                        .is_not_null()
+                        .and(
+                            col(left_col)
+                                .struct_()
+                                .field_by_name(&base_col_name(&right_type))
+                                .eq(col(right_col)),
+                        )
+                }
             } else {
                 lit(false)
             }
@@ -1543,16 +1599,40 @@ fn typed_equals_expr(
     } else if let RDFNodeType::MultiType(right_types) = right_type {
         let left_type = BaseRDFNodeType::from_rdf_node_type(left_type);
         if right_types.contains(&left_type) {
-            col(right_col)
-                .struct_()
-                .field_by_name(&base_col_name(&left_type))
-                .is_not_null()
-                .and(
-                    col(right_col)
+            let left_fields = left_type.multi_cols();
+            if left_fields.len() > 1 {
+                let mut eq = lit(false);
+                for field_name in left_fields {
+                    eq = eq.or(col(left_col)
                         .struct_()
-                        .field_by_name(&base_col_name(&left_type))
-                        .eq(col(left_col)),
-                )
+                        .field_by_name(&field_name)
+                        .is_not_null()
+                        .and(
+                            col(right_col)
+                                .struct_()
+                                .field_by_name(&field_name)
+                                .is_not_null(),
+                        )
+                        .and(
+                            col(left_col)
+                                .struct_()
+                                .field_by_name(&field_name)
+                                .eq(col(right_col).struct_().field_by_name(&field_name)),
+                        ));
+                }
+                eq
+            } else {
+                col(right_col)
+                    .struct_()
+                    .field_by_name(&base_col_name(&left_type))
+                    .is_not_null()
+                    .and(
+                        col(right_col)
+                            .struct_()
+                            .field_by_name(&base_col_name(&left_type))
+                            .eq(col(left_col)),
+                    )
+            }
         } else {
             lit(false)
         }
@@ -1782,14 +1862,9 @@ pub fn xsd_cast_literal(
         let mut to_coalesce = vec![];
         for t in types {
             to_coalesce.push(match t {
-                BaseRDFNodeType::IRI => cast_iri_to_xsd_literal(
-                    col(c).struct_().field_by_name(&base_col_name(t)),
-                    c,
-                    t,
-                    trg,
-                    trg_nn,
-                    trg_type.clone(),
-                )?,
+                BaseRDFNodeType::IRI => {
+                    cast_iri_to_xsd_literal(cast_iri_to_string(c), trg_nn, trg_type.clone())?
+                }
                 BaseRDFNodeType::BlankNode => {
                     return Err(QueryProcessingError::BadCastDatatype(
                         c.to_string(),
@@ -1811,7 +1886,7 @@ pub fn xsd_cast_literal(
         let t = BaseRDFNodeType::from_rdf_node_type(src);
         match &t {
             BaseRDFNodeType::IRI => {
-                cast_iri_to_xsd_literal(col(c), c, &t, trg, trg_nn, trg_type.clone())
+                cast_iri_to_xsd_literal(cast_iri_to_string(c), trg_nn, trg_type.clone())
             }
             BaseRDFNodeType::BlankNode => Err(QueryProcessingError::BadCastDatatype(
                 c.to_string(),
@@ -1831,9 +1906,6 @@ pub fn xsd_cast_literal(
 
 fn cast_iri_to_xsd_literal(
     e: Expr,
-    _c: &str,
-    _src: &BaseRDFNodeType,
-    _trg: &BaseRDFNodeType,
     trg_nn: NamedNodeRef,
     trg_type: DataType,
 ) -> Result<Expr, QueryProcessingError> {
@@ -1841,11 +1913,6 @@ fn cast_iri_to_xsd_literal(
         Ok(cast_literal(e, xsd::STRING, trg_nn, trg_type.clone()))
     } else {
         Ok(lit(LiteralValue::untyped_null()).cast(trg_type.clone()))
-        // Err(QueryProcessingError::BadCastDatatype(
-        //     c.to_string(),
-        //     src.clone(),
-        //     trg.clone(),
-        // ))
     }
 }
 
