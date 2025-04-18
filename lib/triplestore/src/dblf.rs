@@ -8,7 +8,9 @@ use query_processing::type_constraints::PossibleTypes;
 use rayon::iter::IntoParallelIterator;
 use rayon::iter::ParallelIterator;
 use representation::multitype::{all_multi_cols, base_col_name, lf_columns_to_categorical};
-use representation::rdf_to_polars::{rdf_named_node_to_polars_expr, rdf_term_to_polars_expr};
+use representation::rdf_to_polars::{
+    rdf_named_node_to_polars_expr, rdf_term_to_polars_expr,
+};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use representation::{
     BaseRDFNodeType, RDFNodeType, IRI_PREFIX_FIELD, IRI_SUFFIX_FIELD, LANG_STRING_LANG_FIELD,
@@ -77,9 +79,7 @@ impl Triplestore {
     fn get_deduplicated_predicate_lf(
         &mut self,
         verb_uri: &NamedNode,
-        keep_subject: bool,
         keep_verb: bool,
-        _keep_object: bool,
         subjects: &Option<Vec<Subject>>,
         objects: &Option<Vec<Term>>,
         subject_datatype_ctr: &Option<PossibleTypes>,
@@ -95,9 +95,7 @@ impl Triplestore {
                 object_datatype_ctr,
             );
             if let Some(m) = self.triples_map.get_mut(verb_uri) {
-                if let Some(sms) =
-                    multiple_tt_to_lf(m, compatible_types, subjects, objects, keep_subject)?
-                {
+                if let Some(sms) = multiple_tt_to_lf(m, compatible_types, subjects, objects)? {
                     all_sms.extend(sms);
                 }
             }
@@ -110,9 +108,7 @@ impl Triplestore {
                 object_datatype_ctr,
             );
             if let Some(m) = self.transient_triples_map.get_mut(verb_uri) {
-                if let Some(sms) =
-                    multiple_tt_to_lf(m, compatible_types, subjects, objects, keep_subject)?
-                {
+                if let Some(sms) = multiple_tt_to_lf(m, compatible_types, subjects, objects)? {
                     all_sms.extend(sms);
                 }
             }
@@ -151,9 +147,7 @@ impl Triplestore {
             for nn in predicate_uris {
                 if let Some(sm) = self.get_deduplicated_predicate_lf(
                     &nn,
-                    subject_keep_rename.is_some(),
                     verb_keep_rename.is_some(),
-                    object_keep_rename.is_some(),
                     subjects,
                     objects,
                     subject_datatype_ctr,
@@ -504,7 +498,6 @@ fn single_tt_to_lf(
     tt: &Triples,
     subjects: &Option<Vec<&Subject>>,
     objects: &Option<Vec<&Term>>,
-    _keep_subject: bool,
 ) -> Result<Option<(LazyFrame, usize)>, SparqlError> {
     let lfs_and_heights = tt
         .get_lazy_frames(subjects, objects)
@@ -568,7 +561,6 @@ fn multiple_tt_to_lf(
     types: Option<HashSet<(BaseRDFNodeType, BaseRDFNodeType)>>,
     subjects: &Option<Vec<Subject>>,
     objects: &Option<Vec<Term>>,
-    keep_subject: bool,
 ) -> Result<Option<Vec<HalfBakedSolutionMappings>>, SparqlError> {
     let mut filtered = vec![];
     for ((subj_type, obj_type), tt) in triples.iter() {
@@ -597,9 +589,7 @@ fn multiple_tt_to_lf(
             None
         };
 
-        if let Some((lf, height)) =
-            single_tt_to_lf(tt, &filtered_subjects, &filtered_objects, keep_subject)?
-        {
+        if let Some((lf, height)) = single_tt_to_lf(tt, &filtered_subjects, &filtered_objects)? {
             if height > 0 {
                 let half_baked = HalfBakedSolutionMappings {
                     mappings: lf,

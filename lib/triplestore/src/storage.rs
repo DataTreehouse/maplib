@@ -40,8 +40,8 @@ pub(crate) struct Triples {
     subject_sparse_index: Option<BTreeMap<String, usize>>,
     object_sort: Option<StoredTriples>,
     object_sparse_index: Option<BTreeMap<String, usize>>,
-    subject_type: BaseRDFNodeType,
-    object_type: BaseRDFNodeType,
+    pub subject_type: BaseRDFNodeType,
+    pub object_type: BaseRDFNodeType,
     unindexed: Vec<DataFrame>,
 }
 
@@ -738,7 +738,7 @@ fn sort_indexed_lf(
     let t = get_type(is_subject, subject_type, object_type);
     let mut lf = cast_col_to_cat(lf, c, true, t);
 
-    let mut by = get_sort_exprs(!is_subject, subject_type, object_type);
+    let mut by = get_sort_exprs(is_subject, subject_type, object_type);
     let mut descending = vec![];
     for _ in 0..by.len() {
         descending.push(false);
@@ -880,6 +880,7 @@ fn create_unique_df_and_sparse_map(
 ) -> (DataFrame, BTreeMap<String, usize>) {
     let deduplicate_now = Instant::now();
     let c = get_col(is_subject);
+
     if deduplicate {
         lf = sort_indexed_lf(
             lf,
