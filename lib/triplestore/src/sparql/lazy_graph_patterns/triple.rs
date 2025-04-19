@@ -143,6 +143,7 @@ impl Triplestore {
                 )?
             }
         };
+
         let colnames: Vec<_> = dts.keys().cloned().collect();
         if let Some(SolutionMappings {
             mut mappings,

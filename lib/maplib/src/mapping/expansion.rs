@@ -11,9 +11,12 @@ use oxrdf::{NamedNode, Variable};
 use polars::prelude::{
     col, lit, Column, DataFrame, DataType, Expr, IntoColumn, IntoLazy, LazyFrame, NamedFrom, Series,
 };
-use rayon::iter::{IndexedParallelIterator, ParallelDrainRange, ParallelIterator};
+use rayon::iter::{
+    IndexedParallelIterator, IntoParallelIterator, ParallelDrainRange, ParallelIterator,
+};
+use representation::iri_split::{col_not_struct, lf_split_iri};
 use representation::multitype::split_df_multicols;
-use representation::rdf_to_polars::rdf_named_node_to_polars_literal_value;
+use representation::rdf_to_polars::rdf_named_node_to_polars_expr;
 use representation::RDFNodeType;
 use representation::{OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME};
 use std::cmp::max;
@@ -44,9 +47,7 @@ impl Mapping {
         if let Some(verb) = verb {
             df = df
                 .lazy()
-                .with_column(
-                    lit(rdf_named_node_to_polars_literal_value(&verb)).alias(VERB_COL_NAME),
-                )
+                .with_column(rdf_named_node_to_polars_expr(&verb).alias(VERB_COL_NAME))
                 .collect()
                 .unwrap();
         }
@@ -472,6 +473,37 @@ fn create_triples(
         object_type: obj_rdf_node_type,
         verb,
     });
+
+    results = results
+        .into_par_iter()
+        .map(
+            |CreateTriplesResult {
+                 df,
+                 subject_type,
+                 object_type,
+                 verb,
+             }| {
+                let subject_not_struct = col_not_struct(&df, SUBJECT_COL_NAME);
+                let object_not_struct = col_not_struct(&df, OBJECT_COL_NAME);
+
+                let mut lf = df.lazy();
+                if subject_type.is_iri() && subject_not_struct {
+                    lf = lf_split_iri(lf, SUBJECT_COL_NAME);
+                }
+                if object_type.is_iri() && object_not_struct {
+                    lf = lf_split_iri(lf, OBJECT_COL_NAME);
+                }
+                let df = lf.collect().unwrap();
+                CreateTriplesResult {
+                    df,
+                    subject_type,
+                    object_type,
+                    verb,
+                }
+            },
+        )
+        .collect();
+
     Ok((
         results,
         max(
@@ -540,12 +572,7 @@ fn create_list_triples(
         .clone()
         .lazy()
         .filter(col(OBJECT_COL_NAME).is_null())
-        .with_column(
-            lit(rdf_named_node_to_polars_literal_value(
-                &rdf::NIL.into_owned(),
-            ))
-            .alias(OBJECT_COL_NAME),
-        )
+        .with_column(rdf_named_node_to_polars_expr(&rdf::NIL.into_owned()).alias(OBJECT_COL_NAME))
         .collect()
         .unwrap();
 

@@ -2,6 +2,9 @@
 // https://github.com/pola-rs/polars/blob/dc94be767d26943be11a40d6171ccc1c41a86c4f/crates/polars-io/src/csv/write/write_impl.rs
 // The Polars license can be found in the licensing folder.
 use crate::triples_write::serializers::serializer_for;
+use crate::triples_write::{
+    OBJECT_COL_IRI_PREFIX, OBJECT_COL_IRI_SUFFIX, SUBJECT_COL_IRI_PREFIX, SUBJECT_COL_IRI_SUFFIX,
+};
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::NamedNode;
 use polars_core::prelude::*;
@@ -27,13 +30,17 @@ pub(crate) fn write_triples_in_df<W: Write>(
 ) -> PolarsResult<()> {
     let len = df.height();
     let total_rows_per_pool_iter = n_threads * chunk_size;
+    let subject_iri = rdf_node_types.contains_key(SUBJECT_COL_IRI_PREFIX);
 
     let mut n_rows_finished = 0;
     let use_suffix = df
         .get_columns()
         .iter()
         .map(|x| {
-            if x.name() == LANG_STRING_VALUE_FIELD {
+            if x.name() == LANG_STRING_VALUE_FIELD
+                || x.name() == SUBJECT_COL_IRI_PREFIX
+                || x.name() == OBJECT_COL_IRI_PREFIX
+            {
                 vec![]
             } else if x.name() == OBJECT_COL_NAME {
                 if let BaseRDFNodeType::Literal(nn) = rdf_node_types.get(OBJECT_COL_NAME).unwrap() {
@@ -83,11 +90,14 @@ pub(crate) fn write_triples_in_df<W: Write>(
                     .iter()
                     .map(|col| {
                         let lang_tag = col.name() == LANG_STRING_LANG_FIELD;
+                        let iri_suffix = col.name() == SUBJECT_COL_IRI_SUFFIX
+                            || col.name() == OBJECT_COL_IRI_SUFFIX;
                         serializer_for(
                             &*col.as_materialized_series().chunks()[0],
                             col.dtype(),
                             rdf_node_types.get(col.name().as_str()).unwrap(),
                             lang_tag,
+                            iri_suffix,
                         )
                     })
                     .collect::<Result<_, _>>()?;
@@ -103,10 +113,18 @@ pub(crate) fn write_triples_in_df<W: Write>(
 
             for _ in 0..len {
                 serializers[0].serialize(write_buffer);
+                let next_i = if subject_iri {
+                    serializers[1].serialize(write_buffer);
+                    2
+                } else {
+                    1
+                };
                 write_buffer.push(SEPARATOR);
                 write_buffer.extend_from_slice(verb);
                 write_buffer.push(SEPARATOR);
-                for (serializer, suffix_use) in serializers[1..].iter_mut().zip(&use_suffix[1..]) {
+                for (serializer, suffix_use) in
+                    serializers[next_i..].iter_mut().zip(&use_suffix[next_i..])
+                {
                     serializer.serialize(write_buffer);
                     write_buffer.extend_from_slice(suffix_use);
                 }

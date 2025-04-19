@@ -1,7 +1,7 @@
 use super::{Triples, Triplestore};
 use crate::sparql::errors::SparqlError;
 use oxrdf::{NamedNode, Subject, Term};
-use polars::prelude::{as_struct, col, concat, lit, IntoLazy, LazyFrame, UnionArgs};
+use polars::prelude::{as_struct, col, concat, IntoLazy, LazyFrame, UnionArgs};
 use polars_core::datatypes::CategoricalOrdering;
 use polars_core::prelude::{Column, DataFrame, DataType};
 use query_processing::type_constraints::PossibleTypes;
@@ -9,12 +9,12 @@ use rayon::iter::IntoParallelIterator;
 use rayon::iter::ParallelIterator;
 use representation::multitype::{all_multi_cols, base_col_name, lf_columns_to_categorical};
 use representation::rdf_to_polars::{
-    rdf_named_node_to_polars_literal_value, rdf_term_to_polars_expr,
+    rdf_named_node_to_polars_expr, rdf_term_to_polars_expr,
 };
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use representation::{
-    BaseRDFNodeType, RDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD, OBJECT_COL_NAME,
-    SUBJECT_COL_NAME, VERB_COL_NAME,
+    BaseRDFNodeType, RDFNodeType, IRI_PREFIX_FIELD, IRI_SUFFIX_FIELD, LANG_STRING_LANG_FIELD,
+    LANG_STRING_VALUE_FIELD, OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME,
 };
 use std::collections::{HashMap, HashSet};
 
@@ -79,9 +79,7 @@ impl Triplestore {
     fn get_deduplicated_predicate_lf(
         &mut self,
         verb_uri: &NamedNode,
-        keep_subject: bool,
         keep_verb: bool,
-        _keep_object: bool,
         subjects: &Option<Vec<Subject>>,
         objects: &Option<Vec<Term>>,
         subject_datatype_ctr: &Option<PossibleTypes>,
@@ -97,9 +95,7 @@ impl Triplestore {
                 object_datatype_ctr,
             );
             if let Some(m) = self.triples_map.get_mut(verb_uri) {
-                if let Some(sms) =
-                    multiple_tt_to_lf(m, compatible_types, subjects, objects, keep_subject)?
-                {
+                if let Some(sms) = multiple_tt_to_lf(m, compatible_types, subjects, objects)? {
                     all_sms.extend(sms);
                 }
             }
@@ -112,9 +108,7 @@ impl Triplestore {
                 object_datatype_ctr,
             );
             if let Some(m) = self.transient_triples_map.get_mut(verb_uri) {
-                if let Some(sms) =
-                    multiple_tt_to_lf(m, compatible_types, subjects, objects, keep_subject)?
-                {
+                if let Some(sms) = multiple_tt_to_lf(m, compatible_types, subjects, objects)? {
                     all_sms.extend(sms);
                 }
             }
@@ -147,15 +141,14 @@ impl Triplestore {
         let predicate_uris = predicate_uris.unwrap_or(self.all_predicates());
         let predicate_uris_len = predicate_uris.len();
         let mut sms = vec![];
+
         if !(objects.is_some() && objects.as_ref().unwrap().is_empty())
             || !(subjects.is_some() && subjects.as_ref().unwrap().is_empty())
         {
             for nn in predicate_uris {
                 if let Some(sm) = self.get_deduplicated_predicate_lf(
                     &nn,
-                    subject_keep_rename.is_some(),
                     verb_keep_rename.is_some(),
-                    object_keep_rename.is_some(),
                     subjects,
                     objects,
                     subject_datatype_ctr,
@@ -190,8 +183,25 @@ impl Triplestore {
                             object_type,
                             height_upper_bound: _,
                         } = sm;
-                        mappings =
-                            mappings.with_column(col(SUBJECT_COL_NAME).cast(DataType::String));
+                        if subject_type.is_iri() {
+                            mappings = mappings.with_column(
+                                as_struct(vec![
+                                    col(SUBJECT_COL_NAME)
+                                        .struct_()
+                                        .field_by_name(IRI_PREFIX_FIELD)
+                                        .alias(IRI_PREFIX_FIELD),
+                                    col(SUBJECT_COL_NAME)
+                                        .struct_()
+                                        .field_by_name(IRI_SUFFIX_FIELD)
+                                        .alias(IRI_SUFFIX_FIELD),
+                                ])
+                                .alias(SUBJECT_COL_NAME),
+                            );
+                        } else {
+                            //blank node
+                            mappings =
+                                mappings.with_column(col(SUBJECT_COL_NAME).cast(DataType::String));
+                        }
                         if object_type.is_lang_string() {
                             mappings = mappings.with_column(
                                 as_struct(vec![
@@ -205,6 +215,20 @@ impl Triplestore {
                                         .field_by_name(LANG_STRING_LANG_FIELD)
                                         .cast(DataType::String)
                                         .alias(LANG_STRING_LANG_FIELD),
+                                ])
+                                .alias(OBJECT_COL_NAME),
+                            )
+                        } else if object_type.is_iri() {
+                            mappings = mappings.with_column(
+                                as_struct(vec![
+                                    col(OBJECT_COL_NAME)
+                                        .struct_()
+                                        .field_by_name(IRI_PREFIX_FIELD)
+                                        .alias(IRI_PREFIX_FIELD),
+                                    col(OBJECT_COL_NAME)
+                                        .struct_()
+                                        .field_by_name(IRI_SUFFIX_FIELD)
+                                        .alias(IRI_SUFFIX_FIELD),
                                 ])
                                 .alias(OBJECT_COL_NAME),
                             )
@@ -256,9 +280,7 @@ impl Triplestore {
 
                 if verb_keep_rename.is_some() {
                     mappings = mappings.with_column(
-                        lit(rdf_named_node_to_polars_literal_value(&verb.unwrap()))
-                            .cast(DataType::Categorical(None, CategoricalOrdering::Physical))
-                            .alias(VERB_COL_NAME),
+                        rdf_named_node_to_polars_expr(&verb.unwrap()).alias(VERB_COL_NAME),
                     );
                 }
 
@@ -289,7 +311,6 @@ impl Triplestore {
             } else {
                 all_mappings.pop().unwrap()
             };
-
             let mut sorted_subject_types: Vec<_> = subject_types.into_iter().collect();
             sorted_subject_types.sort();
             let mut sorted_object_types: Vec<_> = object_types.into_iter().collect();
@@ -427,7 +448,7 @@ pub fn unnest_non_multi_col(mut mappings: LazyFrame, c: &str, dt: &BaseRDFNodeTy
     let mut exprs = vec![];
     let mut drop_cols = vec![];
 
-    if dt.is_lang_string() {
+    if dt.is_multifield() {
         let inner_cols = all_multi_cols(&vec![dt.clone()]);
         for inner in &inner_cols {
             let prefixed_inner = create_prefixed_multi_colname(c, inner);
@@ -478,7 +499,6 @@ fn single_tt_to_lf(
     tt: &Triples,
     subjects: &Option<Vec<&Subject>>,
     objects: &Option<Vec<&Term>>,
-    _keep_subject: bool,
 ) -> Result<Option<(LazyFrame, usize)>, SparqlError> {
     let lfs_and_heights = tt
         .get_lazy_frames(subjects, objects)
@@ -508,6 +528,7 @@ fn single_tt_to_lf(
     } else {
         lfs.pop().unwrap()
     };
+
     if let Some(subject_terms) = &subjects {
         // Handles case where singular subject from triple pattern.
         if subject_terms.len() == 1 {
@@ -542,7 +563,6 @@ fn multiple_tt_to_lf(
     types: Option<HashSet<(BaseRDFNodeType, BaseRDFNodeType)>>,
     subjects: &Option<Vec<Subject>>,
     objects: &Option<Vec<Term>>,
-    keep_subject: bool,
 ) -> Result<Option<Vec<HalfBakedSolutionMappings>>, SparqlError> {
     let mut filtered = vec![];
     for ((subj_type, obj_type), tt) in triples.iter() {
@@ -570,10 +590,7 @@ fn multiple_tt_to_lf(
         } else {
             None
         };
-
-        if let Some((lf, height)) =
-            single_tt_to_lf(tt, &filtered_subjects, &filtered_objects, keep_subject)?
-        {
+        if let Some((lf, height)) = single_tt_to_lf(tt, &filtered_subjects, &filtered_objects)? {
             if height > 0 {
                 let half_baked = HalfBakedSolutionMappings {
                     mappings: lf,

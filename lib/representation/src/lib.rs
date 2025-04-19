@@ -1,3 +1,5 @@
+#![feature(pattern)]
+
 pub mod multitype;
 pub mod polars_to_rdf;
 pub mod query_context;
@@ -6,11 +8,12 @@ pub mod solution_mapping;
 
 pub mod errors;
 pub mod formatting;
+pub mod iri_split;
 pub mod literals;
 pub mod python;
 pub mod subtypes;
 
-use crate::multitype::{base_col_name, MULTI_BLANK_DT, MULTI_IRI_DT, MULTI_NONE_DT};
+use crate::multitype::{base_col_name, MULTI_BLANK_DT, MULTI_NONE_DT};
 use crate::subtypes::{is_literal_subtype, OWL_REAL};
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{BlankNode, NamedNode, NamedNodeRef, NamedOrBlankNode, Subject, Term};
@@ -26,6 +29,8 @@ pub const OBJECT_COL_NAME: &str = "object";
 pub const SUBJECT_COL_NAME: &str = "subject";
 pub const LANG_STRING_VALUE_FIELD: &str = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>";
 pub const LANG_STRING_LANG_FIELD: &str = "l";
+pub const IRI_PREFIX_FIELD: &str = "IRI-prefix";
+pub const IRI_SUFFIX_FIELD: &str = "IRI-suffix";
 
 const RDF_NODE_TYPE_IRI: &str = "IRI";
 const RDF_NODE_TYPE_BLANK_NODE: &str = "Blank";
@@ -107,6 +112,15 @@ impl RDFNodeType {
                             PlSmallStr::from_str(LANG_STRING_LANG_FIELD),
                             DataType::Categorical(None, CategoricalOrdering::Physical),
                         ));
+                    } else if t.is_iri() {
+                        fields.push(Field::new(
+                            PlSmallStr::from_str(IRI_PREFIX_FIELD),
+                            DataType::Categorical(None, CategoricalOrdering::Physical),
+                        ));
+                        fields.push(Field::new(
+                            PlSmallStr::from_str(IRI_SUFFIX_FIELD),
+                            DataType::String,
+                        ));
                     } else {
                         fields.push(Field::new(PlSmallStr::from_str(&n), t.polars_data_type()));
                     }
@@ -148,7 +162,7 @@ impl BaseRDFNodeTypeRef<'_> {
 
     pub fn as_str(&self) -> &str {
         match self {
-            Self::IRI => MULTI_IRI_DT,
+            Self::IRI => IRI_PREFIX_FIELD,
             Self::BlankNode => MULTI_BLANK_DT,
             Self::Literal(l) => l.as_str(),
             Self::None => MULTI_NONE_DT,
@@ -239,6 +253,38 @@ impl BaseRDFNodeType {
         self.as_ref().is_lang_string()
     }
 
+    /// Denotes that the data for this type might exist in multiple fields or columns
+    /// Extra care might be required
+    pub fn is_multifield(&self) -> bool {
+        vec![Self::is_lang_string, Self::is_iri]
+            .into_iter()
+            .any(|f| f(self))
+    }
+
+    pub fn multi_cols(&self) -> Vec<String> {
+        match self {
+            BaseRDFNodeType::IRI => {
+                vec![IRI_PREFIX_FIELD.to_string(), IRI_PREFIX_FIELD.to_string()]
+            }
+            BaseRDFNodeType::BlankNode => {
+                vec![MULTI_BLANK_DT.to_string()]
+            }
+            BaseRDFNodeType::Literal(l) => {
+                if self.is_lang_string() {
+                    vec![
+                        LANG_STRING_VALUE_FIELD.to_string(),
+                        LANG_STRING_VALUE_FIELD.to_string(),
+                    ]
+                } else {
+                    vec![l.to_string()]
+                }
+            }
+            BaseRDFNodeType::None => {
+                vec![MULTI_NONE_DT.to_string()]
+            }
+        }
+    }
+
     pub fn as_rdf_node_type(&self) -> RDFNodeType {
         match self {
             BaseRDFNodeType::IRI => RDFNodeType::IRI,
@@ -260,12 +306,20 @@ impl BaseRDFNodeType {
 
     pub fn polars_data_type(&self) -> DataType {
         match self {
-            BaseRDFNodeType::IRI => DataType::String,
+            BaseRDFNodeType::IRI => DataType::Struct(vec![
+                Field::new(
+                    IRI_PREFIX_FIELD.into(),
+                    DataType::Categorical(None, CategoricalOrdering::Physical),
+                ),
+                Field::new(IRI_SUFFIX_FIELD.into(), DataType::String),
+            ]),
             BaseRDFNodeType::BlankNode => DataType::String,
             BaseRDFNodeType::Literal(l) => match l.as_ref() {
                 xsd::STRING => DataType::String,
                 xsd::UNSIGNED_INT => DataType::UInt32,
                 xsd::UNSIGNED_LONG => DataType::UInt64,
+                xsd::SHORT => DataType::Int16,
+                xsd::UNSIGNED_SHORT => DataType::UInt16,
                 xsd::INTEGER | xsd::LONG => DataType::Int64,
                 xsd::INT => DataType::Int32,
                 xsd::DOUBLE | xsd::DECIMAL => DataType::Float64,
@@ -284,7 +338,7 @@ impl BaseRDFNodeType {
     }
 
     pub fn from_string(s: String) -> Self {
-        if s == MULTI_IRI_DT {
+        if s == IRI_PREFIX_FIELD {
             Self::IRI
         } else if s == MULTI_BLANK_DT {
             Self::BlankNode

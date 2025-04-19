@@ -5,12 +5,12 @@ use oxrdf::vocab::{rdfs, xsd};
 use oxrdf::NamedNode;
 use polars::datatypes::DataType;
 use polars::frame::DataFrame;
-use polars::prelude::{col, ChunkApply, Column, IntoLazy, Series};
+use polars::prelude::{col, ChunkApply, Column, Field, IntoLazy, PlSmallStr, Series};
 use rayon::current_num_threads;
 use rayon::iter::IntoParallelIterator;
 use rayon::iter::ParallelIterator;
 use representation::polars_to_rdf::polars_type_to_literal_type;
-use representation::{BaseRDFNodeType, RDFNodeType};
+use representation::{BaseRDFNodeType, RDFNodeType, IRI_PREFIX_FIELD, IRI_SUFFIX_FIELD};
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use templates::ast::{ptype_is_blank, ptype_is_iri, PType, Parameter, Template};
@@ -110,23 +110,25 @@ pub fn validate_flat_iri_column(
     t: &RDFNodeType,
 ) -> Result<(), MappingError> {
     if t.is_iri() {
-        let c = ser
-            .cast(&DataType::String)
-            .unwrap()
-            .str()
-            .unwrap()
-            .apply(parse_iri);
-        let is_err = c.is_not_null();
-        if let Some(n_errs) = is_err.sum() {
-            if n_errs > 0 {
-                let errs_3 = ser.filter(&is_err).unwrap();
-                let errs = errs_3.head(Some(3));
-                let examples = errs.cast(&DataType::String).unwrap().fmt_list();
-                return Err(MappingError::InvalidIRIError(
-                    colname.to_string(),
-                    n_errs as usize,
-                    examples,
-                ));
+        if !matches!(ser.dtype(), DataType::Struct(..)) {
+            let c = ser
+                .cast(&DataType::String)
+                .unwrap()
+                .str()
+                .unwrap()
+                .apply(parse_iri);
+            let is_err = c.is_not_null();
+            if let Some(n_errs) = is_err.sum() {
+                if n_errs > 0 {
+                    let errs_3 = ser.filter(&is_err).unwrap();
+                    let errs = errs_3.head(Some(3));
+                    let examples = errs.cast(&DataType::String).unwrap().fmt_list();
+                    return Err(MappingError::InvalidIRIError(
+                        colname.to_string(),
+                        n_errs as usize,
+                        examples,
+                    ));
+                }
             }
         }
     }
@@ -248,6 +250,28 @@ fn infer_validate_mapping_column_type_from_ptype(
             } else if ptype_is_iri(nn.as_ref()) {
                 if datatype.is_string() || datatype.is_categorical() {
                     Ok(MappingColumnType::Flat(RDFNodeType::IRI))
+                } else if let DataType::Struct(fields) = datatype {
+                    let mut found_ok_pre = false;
+                    let mut found_ok_suf = false;
+                    for f in fields {
+                        let dtype_ok = f.dtype.is_string() || f.dtype.is_categorical();
+                        found_ok_pre = found_ok_pre | (f.name == IRI_PREFIX_FIELD && dtype_ok);
+                        found_ok_suf = found_ok_suf | (f.name == IRI_SUFFIX_FIELD && dtype_ok);
+                    }
+                    if !found_ok_pre && !found_ok_suf {
+                        let expected_fields = vec![
+                            Field::new(PlSmallStr::from_str(IRI_PREFIX_FIELD), DataType::String),
+                            Field::new(PlSmallStr::from_str(IRI_SUFFIX_FIELD), DataType::String),
+                        ];
+                        Err(MappingError::ColumnDataTypeMismatch(
+                            column_name.to_string(),
+                            datatype.clone(),
+                            ptype.clone(),
+                            Some(DataType::Struct(expected_fields)),
+                        ))
+                    } else {
+                        Ok(MappingColumnType::Flat(RDFNodeType::IRI))
+                    }
                 } else {
                     Err(MappingError::ColumnDataTypeMismatch(
                         column_name.to_string(),

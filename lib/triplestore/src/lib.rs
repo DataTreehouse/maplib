@@ -17,15 +17,14 @@ use fts::FtsIndex;
 use log::debug;
 use oxrdf::vocab::{rdf, rdfs};
 use oxrdf::NamedNode;
-use polars::prelude::{AnyValue, DataFrame, IntoLazy};
-use polars_core::datatypes::CategoricalOrdering;
+use polars::prelude::{AnyValue, DataFrame};
 use rayon::iter::ParallelDrainRange;
 use rayon::iter::ParallelIterator;
-use representation::multitype::{lf_columns_to_categorical, set_structs_all_null_to_null_row};
+use representation::multitype::set_structs_all_null_to_null_row;
 use representation::solution_mapping::EagerSolutionMappings;
 use representation::{
-    literal_iri_to_namednode, BaseRDFNodeType, RDFNodeType, OBJECT_COL_NAME, SUBJECT_COL_NAME,
-    VERB_COL_NAME,
+    literal_iri_to_namednode, BaseRDFNodeType, RDFNodeType, IRI_PREFIX_FIELD, IRI_SUFFIX_FIELD,
+    OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME,
 };
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -256,7 +255,7 @@ impl Triplestore {
             &mut self.triples_map
         };
         for TripleDF {
-            mut df,
+            df,
             predicate,
             subject_type,
             object_type,
@@ -280,15 +279,15 @@ impl Triplestore {
                 }
             }
             let cast_now = Instant::now();
-            let mut map = HashMap::new();
-            map.insert(
-                SUBJECT_COL_NAME.to_string(),
-                subject_type.as_rdf_node_type(),
-            );
-            map.insert(OBJECT_COL_NAME.to_string(), object_type.as_rdf_node_type());
-            let mut lf = df.lazy();
-            lf = lf_columns_to_categorical(lf, &map, CategoricalOrdering::Physical);
-            df = lf.collect().unwrap();
+            // let mut map = HashMap::new();
+            // map.insert(
+            //     SUBJECT_COL_NAME.to_string(),
+            //     subject_type.as_rdf_node_type(),
+            // );
+            // map.insert(OBJECT_COL_NAME.to_string(), object_type.as_rdf_node_type());
+            // let mut lf = df.lazy();
+            // lf = lf_columns_to_categorical(lf, &map, CategoricalOrdering::Physical);
+            // df = lf.collect().unwrap();
             let k = (subject_type.clone(), object_type.clone());
             let mut added_triples = false;
             debug!(
@@ -298,8 +297,10 @@ impl Triplestore {
             let add_now = Instant::now();
             if let Some(m) = use_map.get_mut(&predicate) {
                 if let Some(t) = m.get_mut(&k) {
+                    //We cannot become unindexed
+                    let use_delay_index = !t.is_indexed() && delay_index ;
                     let new_triples_opt =
-                        t.add_triples(df.clone(), &self.storage_folder, delay_index)?;
+                        t.add_triples(df.clone(), &self.storage_folder, use_delay_index)?;
                     if !delay_index {
                         let new_triples = NewTriples {
                             df: new_triples_opt,
@@ -489,6 +490,26 @@ pub fn prepare_triples(
                     predicate = literal_iri_to_namednode(b.get(a));
                 } else if let Ok(AnyValue::StringOwned(s)) = any_predicate {
                     predicate = literal_iri_to_namednode(s.as_str());
+                } else if let Ok(AnyValue::StructOwned(fields)) = any_predicate {
+                    let mut prefix = None;
+                    let mut suffix = None;
+                    let (values, fields) = *fields;
+                    for (i, f) in fields.iter().enumerate() {
+                        if f.name == IRI_PREFIX_FIELD {
+                            prefix = Some(values.get(i).unwrap());
+                        } else if f.name == IRI_SUFFIX_FIELD {
+                            suffix = Some(values.get(i).unwrap());
+                        } else {
+                            unreachable!("Should never happen")
+                        }
+                    }
+                    let prefix = prefix.unwrap();
+                    let suffix = suffix.unwrap();
+                    let prefix_str = get_any_value_string(prefix);
+                    let suffix_str = get_any_value_string(suffix);
+                    predicate = NamedNode::new_unchecked(format!("{}{}", prefix_str, suffix_str));
+                } else if let Ok(AnyValue::Struct(..)) = any_predicate {
+                    todo!("Fix borrowed struct support")
                 } else {
                     panic!("Predicate: {:?}", any_predicate);
                 }
@@ -500,6 +521,16 @@ pub fn prepare_triples(
         }
     }
     out_df_vec
+}
+
+fn get_any_value_string<'a>(a: &'a AnyValue) -> &'a str {
+    match a {
+        AnyValue::String(s) => *s,
+        AnyValue::StringOwned(s) => s.as_str(),
+        AnyValue::Categorical(u, rev, _) => rev.get(*u),
+        AnyValue::CategoricalOwned(u, rev, _) => rev.get(*u),
+        _ => unreachable!("Should never happen"),
+    }
 }
 
 fn prepare_triples_df(

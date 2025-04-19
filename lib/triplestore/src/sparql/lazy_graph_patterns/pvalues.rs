@@ -5,6 +5,7 @@ use polars::prelude::{IntoLazy, JoinType};
 
 use query_processing::graph_patterns::join;
 use query_processing::pushdowns::Pushdowns;
+use representation::iri_split::{col_not_struct, lf_split_iri};
 use representation::query_context::Context;
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use std::collections::{HashMap, HashSet};
@@ -35,9 +36,23 @@ impl Triplestore {
                 if mapping_vars != expected_vars {
                     todo!("Handle mismatching variables in PValues")
                 }
+                let mut iri_not_struct = HashSet::new();
                 let height = mappings.height();
+
+                for (c, t) in rdf_node_types {
+                    if t.is_iri() && col_not_struct(mappings, c) {
+                        iri_not_struct.insert(c);
+                    }
+                }
+                let mut mappings = mappings.clone().lazy();
+                for c in rdf_node_types.keys() {
+                    if iri_not_struct.contains(&c) {
+                        mappings = lf_split_iri(mappings, c);
+                    }
+                }
+
                 SolutionMappings {
-                    mappings: mappings.clone().lazy(),
+                    mappings,
                     rdf_node_types: rdf_node_types.clone(),
                     height_estimate: height,
                 }

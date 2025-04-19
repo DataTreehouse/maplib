@@ -264,13 +264,12 @@ pub(super) fn blank_node_serializer<'a, Iter: Send + 'a>(
     })
 }
 
-pub(super) fn iri_serializer<'a, Iter: Send + 'a>(
+pub(super) fn iri_prefix_serializer<'a, Iter: Send + 'a>(
     mut f: impl FnMut(&mut Iter) -> Option<&str> + Send + 'a,
     mut update: impl FnMut(&'a dyn Array) -> Iter + Send + 'a,
     array: &'a dyn Array,
 ) -> Box<dyn Serializer<'a> + 'a + Send> {
     const LEFT: u8 = b'<';
-    const RIGHT: u8 = b'>';
 
     struct StringSerializer<F, Iter, Update> {
         serialize: F,
@@ -298,6 +297,47 @@ pub(super) fn iri_serializer<'a, Iter: Send + 'a>(
             return;
         };
         buf.push(LEFT);
+        buf.extend_from_slice(s.as_bytes());
+    };
+    Box::new(StringSerializer {
+        serialize,
+        update,
+        iter,
+    })
+}
+
+pub(super) fn iri_suffix_serializer<'a, Iter: Send + 'a>(
+    mut f: impl FnMut(&mut Iter) -> Option<&str> + Send + 'a,
+    mut update: impl FnMut(&'a dyn Array) -> Iter + Send + 'a,
+    array: &'a dyn Array,
+) -> Box<dyn Serializer<'a> + 'a + Send> {
+    const RIGHT: u8 = b'>';
+
+    struct StringSerializer<F, Iter, Update> {
+        serialize: F,
+        update: Update,
+        iter: Iter,
+    }
+
+    impl<'a, F, Iter, Update> Serializer<'a> for StringSerializer<F, Iter, Update>
+    where
+        F: FnMut(&mut Iter, &mut Vec<u8>),
+        Update: FnMut(&'a dyn Array) -> Iter,
+    {
+        fn serialize(&mut self, buf: &mut Vec<u8>) {
+            (self.serialize)(&mut self.iter, buf);
+        }
+
+        fn update_array(&mut self, array: &'a dyn Array) {
+            self.iter = (self.update)(array);
+        }
+    }
+
+    let iter = update(array);
+    let serialize = move |iter: &mut Iter, buf: &mut Vec<u8>| {
+        let Some(s) = f(iter) else {
+            return;
+        };
         buf.extend_from_slice(s.as_bytes());
         buf.push(RIGHT);
     };
@@ -329,6 +369,7 @@ pub(super) fn serializer_for<'a>(
     dtype: &'a DataType,
     rdf_node_type: &'a BaseRDFNodeType,
     is_lang_tag: bool,
+    is_iri_suffix: bool,
 ) -> PolarsResult<Box<dyn Serializer<'a> + Send + 'a>> {
     macro_rules! with_quoted_serializer {
         ($make_serializer:path, $($arg:tt)*) => {{
@@ -365,16 +406,31 @@ pub(super) fn serializer_for<'a>(
             },
             array,
         ),
-        (DataType::String, BaseRDFNodeType::IRI) => iri_serializer(
-            |iter| Iterator::next(iter).expect(TOO_MANY_MSG),
-            |arr| {
-                arr.as_any()
-                    .downcast_ref::<Utf8ViewArray>()
-                    .expect(ARRAY_MISMATCH_MSG)
-                    .iter()
-            },
-            array,
-        ),
+        (DataType::String, BaseRDFNodeType::IRI) => {
+            if !is_iri_suffix {
+                iri_prefix_serializer(
+                    |iter| Iterator::next(iter).expect(TOO_MANY_MSG),
+                    |arr| {
+                        arr.as_any()
+                            .downcast_ref::<Utf8ViewArray>()
+                            .expect(ARRAY_MISMATCH_MSG)
+                            .iter()
+                    },
+                    array,
+                )
+            } else {
+                iri_suffix_serializer(
+                    |iter| Iterator::next(iter).expect(TOO_MANY_MSG),
+                    |arr| {
+                        arr.as_any()
+                            .downcast_ref::<Utf8ViewArray>()
+                            .expect(ARRAY_MISMATCH_MSG)
+                            .iter()
+                    },
+                    array,
+                )
+            }
+        }
         (DataType::String, BaseRDFNodeType::Literal(_)) if is_lang_tag => lang_serializer(
             |iter| Iterator::next(iter).expect(TOO_MANY_MSG),
             |arr| {
@@ -416,19 +472,35 @@ pub(super) fn serializer_for<'a>(
         }
         (DataType::Categorical(rev_map, _) | DataType::Enum(rev_map, _), BaseRDFNodeType::IRI) => {
             let rev_map = rev_map.as_deref().unwrap();
-            iri_serializer(
-                |iter| {
-                    let &idx: &u32 = Iterator::next(iter).expect(TOO_MANY_MSG)?;
-                    Some(rev_map.get(idx))
-                },
-                |arr| {
-                    arr.as_any()
-                        .downcast_ref::<PrimitiveArray<u32>>()
-                        .expect(ARRAY_MISMATCH_MSG)
-                        .iter()
-                },
-                array,
-            )
+            if !is_iri_suffix {
+                iri_prefix_serializer(
+                    |iter| {
+                        let &idx: &u32 = Iterator::next(iter).expect(TOO_MANY_MSG)?;
+                        Some(rev_map.get(idx))
+                    },
+                    |arr| {
+                        arr.as_any()
+                            .downcast_ref::<PrimitiveArray<u32>>()
+                            .expect(ARRAY_MISMATCH_MSG)
+                            .iter()
+                    },
+                    array,
+                )
+            } else {
+                iri_suffix_serializer(
+                    |iter| {
+                        let &idx: &u32 = Iterator::next(iter).expect(TOO_MANY_MSG)?;
+                        Some(rev_map.get(idx))
+                    },
+                    |arr| {
+                        arr.as_any()
+                            .downcast_ref::<PrimitiveArray<u32>>()
+                            .expect(ARRAY_MISMATCH_MSG)
+                            .iter()
+                    },
+                    array,
+                )
+            }
         }
         (
             DataType::Categorical(rev_map, _) | DataType::Enum(rev_map, _),
