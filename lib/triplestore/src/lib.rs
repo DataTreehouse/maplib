@@ -297,8 +297,10 @@ impl Triplestore {
             let add_now = Instant::now();
             if let Some(m) = use_map.get_mut(&predicate) {
                 if let Some(t) = m.get_mut(&k) {
+                    //We cannot become unindexed
+                    let use_delay_index = !t.is_indexed() && delay_index ;
                     let new_triples_opt =
-                        t.add_triples(df.clone(), &self.storage_folder, delay_index)?;
+                        t.add_triples(df.clone(), &self.storage_folder, use_delay_index)?;
                     if !delay_index {
                         let new_triples = NewTriples {
                             df: new_triples_opt,

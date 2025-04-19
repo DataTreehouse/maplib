@@ -1,8 +1,6 @@
 use crate::errors::TriplestoreError;
 use oxrdf::{NamedNode, Subject, Term};
-use polars::prelude::{
-    as_struct, col, lit, Expr, IdxSize, IntoLazy, IpcWriter, LazyFrame, PlSmallStr, ScanArgsIpc,
-};
+use polars::prelude::{as_struct, col, concat, lit, Expr, IdxSize, IntoLazy, IpcWriter, LazyFrame, PlSmallStr, ScanArgsIpc, UnionArgs};
 use polars_core::datatypes::{AnyValue, CategoricalChunked, DataType, LogicalType};
 use polars_core::frame::DataFrame;
 use polars_core::prelude::{CategoricalOrdering, CompatLevel, Series, SortMultipleOptions};
@@ -104,6 +102,10 @@ impl Triples {
 
             Ok(triples)
         }
+    }
+
+    pub(crate) fn is_indexed(&self) -> bool {
+        self.subject_sort.is_some() || self.object_sort.is_some()
     }
 
     pub fn index_unindexed(
@@ -235,12 +237,14 @@ impl Triples {
         lf = cast_col_to_cat(lf, OBJECT_COL_NAME, false, &self.object_type);
         df = lf.collect().unwrap();
         if delay_index {
+            assert!(self.subject_sort.is_none());
             self.unindexed.push(df);
             Ok(None)
         } else if !self.unindexed.is_empty() {
             let df = self.index_unindexed(storage_folder, Some(df))?;
             Ok(df)
         } else {
+            let height_before = self.height;
             let (stored, height, sparse, new_triples) = update_column_sorted_index(
                 df.clone(),
                 storage_folder,
@@ -249,13 +253,14 @@ impl Triples {
                 &self.subject_type,
                 &self.object_type,
             )?;
+            assert!(height >= height_before);
             self.subject_sort.as_mut().unwrap().wipe()?;
             self.subject_sparse_index = Some(sparse);
             self.subject_sort = Some(stored);
             self.height = height;
             if self.object_indexing_enabled {
                 if let Some(mut sorted) = self.object_sort.take() {
-                    let (stored, height, sparse, _) = update_column_sorted_index(
+                    let (stored, obj_height, sparse, _) = update_column_sorted_index(
                         df,
                         storage_folder,
                         &sorted,
@@ -266,6 +271,7 @@ impl Triples {
                     sorted.wipe()?;
                     self.object_sparse_index = Some(sparse);
                     self.object_sort = Some(stored);
+                    assert_eq!(height, obj_height);
                     self.height = height;
                 } else {
                     panic!("Triplestore in invalid state");
@@ -438,6 +444,13 @@ impl StoredTriples {
         };
         Ok(())
     }
+
+    pub(crate) fn get_height(&self) -> usize {
+        match self {
+            StoredTriples::TriplesOnDisk(t) => {t.get_height()}
+            StoredTriples::TriplesInMemory(t) => {t.get_height()}
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -479,6 +492,10 @@ impl TriplesOnDisk {
         let p = Path::new(&self.df_path);
         remove_file(p).map_err(TriplestoreError::RemoveFileError)?;
         Ok(())
+    }
+
+    pub(crate) fn get_height(&self) -> usize {
+        self.height
     }
 }
 
@@ -556,6 +573,10 @@ impl TriplesInMemory {
     pub(crate) fn get_lazy_frame(&self) -> Result<(LazyFrame, usize), TriplestoreError> {
         let height = self.df.as_ref().unwrap().height();
         Ok((self.df.as_ref().unwrap().clone().lazy(), height))
+    }
+
+    pub(crate) fn get_height(&self) -> usize {
+        self.df.as_ref().unwrap().height()
     }
 }
 
@@ -804,6 +825,7 @@ fn update_column_sorted_index(
     ),
     TriplestoreError,
 > {
+    let height_before = stored_triples.get_height();
     let c = get_col(is_subject);
     let t = get_type(is_subject, subject_type, object_type);
     let mut lf = sort_indexed_lf(
@@ -829,7 +851,18 @@ fn update_column_sorted_index(
             elf = elf.with_column(lit(true).alias(EXISTING_COL));
         }
 
-        lf = lf.merge_sorted(elf, PlSmallStr::from_str(c)).unwrap();
+        //lf = lf.merge_sorted(elf, PlSmallStr::from_str(c)).unwrap();
+        lf = concat(
+            [lf, elf],
+            UnionArgs {
+                parallel: true,
+                rechunk: false,
+                to_supertypes: false,
+                diagonal: true,
+                from_partitioned_ds: false,
+                maintain_order: false,
+            },
+        ).unwrap();
     }
 
     let (df, sparse_map) = create_unique_df_and_sparse_map(
@@ -841,6 +874,7 @@ fn update_column_sorted_index(
         object_type,
     );
     let height = df.height();
+    assert!(height_before <= height);
     let new_triples = if sort_on_existing {
         let new_triples = df
             .clone()
@@ -880,7 +914,6 @@ fn create_unique_df_and_sparse_map(
 ) -> (DataFrame, BTreeMap<String, usize>) {
     let deduplicate_now = Instant::now();
     let c = get_col(is_subject);
-
     if deduplicate {
         lf = sort_indexed_lf(
             lf,
@@ -909,6 +942,7 @@ fn create_unique_df_and_sparse_map(
     lf = lf.select(cols);
 
     let df = lf.collect().unwrap();
+
     debug!(
         "Creating deduplicated df took {} seconds",
         deduplicate_now.elapsed().as_secs_f32()

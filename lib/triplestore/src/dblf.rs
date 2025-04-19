@@ -141,6 +141,7 @@ impl Triplestore {
         let predicate_uris = predicate_uris.unwrap_or(self.all_predicates());
         let predicate_uris_len = predicate_uris.len();
         let mut sms = vec![];
+
         if !(objects.is_some() && objects.as_ref().unwrap().is_empty())
             || !(subjects.is_some() && subjects.as_ref().unwrap().is_empty())
         {
@@ -527,6 +528,7 @@ fn single_tt_to_lf(
     } else {
         lfs.pop().unwrap()
     };
+
     if let Some(subject_terms) = &subjects {
         // Handles case where singular subject from triple pattern.
         if subject_terms.len() == 1 {
@@ -588,7 +590,6 @@ fn multiple_tt_to_lf(
         } else {
             None
         };
-
         if let Some((lf, height)) = single_tt_to_lf(tt, &filtered_subjects, &filtered_objects)? {
             if height > 0 {
                 let half_baked = HalfBakedSolutionMappings {
