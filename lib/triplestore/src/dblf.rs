@@ -95,7 +95,14 @@ impl Triplestore {
                 object_datatype_ctr,
             );
             if let Some(m) = self.triples_map.get_mut(verb_uri) {
-                if let Some(sms) = multiple_tt_to_lf(m, compatible_types, subjects, objects, keep_subject, keep_object)? {
+                if let Some(sms) = multiple_tt_to_lf(
+                    m,
+                    compatible_types,
+                    subjects,
+                    objects,
+                    keep_subject,
+                    keep_object,
+                )? {
                     all_sms.extend(sms);
                 }
             }
@@ -108,7 +115,14 @@ impl Triplestore {
                 object_datatype_ctr,
             );
             if let Some(m) = self.transient_triples_map.get_mut(verb_uri) {
-                if let Some(sms) = multiple_tt_to_lf(m, compatible_types, subjects, objects, keep_subject, keep_object)? {
+                if let Some(sms) = multiple_tt_to_lf(
+                    m,
+                    compatible_types,
+                    subjects,
+                    objects,
+                    keep_subject,
+                    keep_object,
+                )? {
                     all_sms.extend(sms);
                 }
             }
@@ -198,12 +212,12 @@ impl Triplestore {
                                             .field_by_name(IRI_SUFFIX_FIELD)
                                             .alias(IRI_SUFFIX_FIELD),
                                     ])
-                                        .alias(SUBJECT_COL_NAME),
+                                    .alias(SUBJECT_COL_NAME),
                                 );
                             } else {
                                 //blank node
-                                mappings =
-                                    mappings.with_column(col(SUBJECT_COL_NAME).cast(DataType::String));
+                                mappings = mappings
+                                    .with_column(col(SUBJECT_COL_NAME).cast(DataType::String));
                             }
                         }
                         if let Some(object_type) = &object_type {
@@ -221,7 +235,7 @@ impl Triplestore {
                                             .cast(DataType::String)
                                             .alias(LANG_STRING_LANG_FIELD),
                                     ])
-                                        .alias(OBJECT_COL_NAME),
+                                    .alias(OBJECT_COL_NAME),
                                 )
                             } else if object_type.is_iri() {
                                 mappings = mappings.with_column(
@@ -235,11 +249,11 @@ impl Triplestore {
                                             .field_by_name(IRI_SUFFIX_FIELD)
                                             .alias(IRI_SUFFIX_FIELD),
                                     ])
-                                        .alias(OBJECT_COL_NAME),
+                                    .alias(OBJECT_COL_NAME),
                                 )
                             } else if object_type.polars_data_type() == DataType::String {
-                                mappings =
-                                    mappings.with_column(col(OBJECT_COL_NAME).cast(DataType::String));
+                                mappings = mappings
+                                    .with_column(col(OBJECT_COL_NAME).cast(DataType::String));
                             }
                         }
                         let df = mappings.collect().unwrap();
@@ -253,7 +267,10 @@ impl Triplestore {
                             );
                         }
                         if let Some(object_type) = &object_type {
-                            rdf_node_types.insert(OBJECT_COL_NAME.to_string(), object_type.as_rdf_node_type());
+                            rdf_node_types.insert(
+                                OBJECT_COL_NAME.to_string(),
+                                object_type.as_rdf_node_type(),
+                            );
                         }
                         mappings = lf_columns_to_categorical(
                             mappings,
@@ -612,8 +629,16 @@ fn multiple_tt_to_lf(
                 let half_baked = HalfBakedSolutionMappings {
                     mappings: lf.select(select),
                     verb: None,
-                    subject_type: if keep_subject {Some(subj_type.clone()) } else { None },
-                    object_type: if keep_object {Some(obj_type.clone()) } else { None },
+                    subject_type: if keep_subject {
+                        Some(subj_type.clone())
+                    } else {
+                        None
+                    },
+                    object_type: if keep_object {
+                        Some(obj_type.clone())
+                    } else {
+                        None
+                    },
                     height_upper_bound: height,
                 };
                 filtered.push(half_baked);

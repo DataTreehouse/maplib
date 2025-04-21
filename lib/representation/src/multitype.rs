@@ -291,9 +291,10 @@ pub fn lf_column_to_categorical(
                         if l.as_ref() == xsd::STRING {
                             found_cat_expr = true;
                             fields.push(
-                                col(c).struct_().field_by_name(&base_col_name(t)).cast(
-                                    DataType::Categorical(None, cat_order),
-                                ),
+                                col(c)
+                                    .struct_()
+                                    .field_by_name(&base_col_name(t))
+                                    .cast(DataType::Categorical(None, cat_order)),
                             );
                         } else if l.as_ref() == rdf::LANG_STRING {
                             found_cat_expr = true;
@@ -301,10 +302,7 @@ pub fn lf_column_to_categorical(
                                 col(c)
                                     .struct_()
                                     .field_by_name(LANG_STRING_VALUE_FIELD)
-                                    .cast(DataType::Categorical(
-                                        None,
-                                        cat_order,
-                                    )),
+                                    .cast(DataType::Categorical(None, cat_order)),
                             );
                             fields.push(
                                 col(c)

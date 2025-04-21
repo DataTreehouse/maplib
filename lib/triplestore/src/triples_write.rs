@@ -1,5 +1,6 @@
 use super::Triplestore;
 use crate::errors::TriplestoreError;
+use oxrdf::vocab::xsd;
 use oxrdfio::{RdfFormat, RdfSerializer};
 use polars::prelude::col;
 use polars_core::datatypes::DataType;
@@ -14,7 +15,6 @@ use representation::{
 };
 use std::collections::HashMap;
 use std::io::Write;
-use oxrdf::vocab::xsd;
 
 mod fast_ntriples;
 mod serializers;
