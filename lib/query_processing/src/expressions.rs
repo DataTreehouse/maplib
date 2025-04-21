@@ -299,7 +299,7 @@ pub fn expr_is_null_workaround(expr: Expr, rdf_node_type: &RDFNodeType) -> Expr 
         RDFNodeType::IRI => expr.struct_().field_by_name(IRI_PREFIX_FIELD).is_null(),
         RDFNodeType::Literal(l) => {
             if l.as_ref() == rdf::LANG_STRING {
-                expr.struct_()
+               expr.struct_()
                     .field_by_name(LANG_STRING_VALUE_FIELD)
                     .is_null()
             } else {
@@ -1533,8 +1533,9 @@ fn typed_equals_expr(
             let mut eq = lit(false);
             for lt in left_types {
                 if right_types.contains(lt) {
+                    let mut type_eq = lit(true);
                     for colname in lt.multi_cols() {
-                        eq = eq.or(col(left_col)
+                        type_eq = type_eq.and(col(left_col)
                             .struct_()
                             .field_by_name(&colname)
                             .is_not_null()
@@ -1551,6 +1552,7 @@ fn typed_equals_expr(
                                     .eq(col(left_col).struct_().field_by_name(&colname)),
                             ));
                     }
+                    eq = eq.or(type_eq);
                 }
             }
             eq
@@ -1559,9 +1561,9 @@ fn typed_equals_expr(
             if left_types.contains(&right_type) {
                 let right_fields = right_type.multi_cols();
                 if right_fields.len() > 1 {
-                    let mut eq = lit(false);
+                    let mut eq = lit(true);
                     for field_name in right_fields {
-                        eq = eq.or(col(left_col)
+                        eq = eq.and(col(left_col)
                             .struct_()
                             .field_by_name(&field_name)
                             .is_not_null()
@@ -1601,9 +1603,9 @@ fn typed_equals_expr(
         if right_types.contains(&left_type) {
             let left_fields = left_type.multi_cols();
             if left_fields.len() > 1 {
-                let mut eq = lit(false);
+                let mut eq = lit(true);
                 for field_name in left_fields {
-                    eq = eq.or(col(left_col)
+                    eq = eq.and(col(left_col)
                         .struct_()
                         .field_by_name(&field_name)
                         .is_not_null()
@@ -1844,7 +1846,7 @@ fn cast_lang_string_to_string(c: &str) -> Expr {
 fn cast_iri_to_string(c: &str) -> Expr {
     let prefix = col(c).struct_().field_by_name(IRI_PREFIX_FIELD);
     let suffix = col(c).struct_().field_by_name(IRI_SUFFIX_FIELD);
-    concat_str(&[prefix, suffix], "", true)
+    concat_str(&[prefix, suffix], "", false)
 }
 
 pub fn xsd_cast_literal(

@@ -1,6 +1,9 @@
 use crate::errors::TriplestoreError;
 use oxrdf::{NamedNode, Subject, Term};
-use polars::prelude::{as_struct, col, concat, lit, Expr, IdxSize, IntoLazy, IpcWriter, LazyFrame, PlSmallStr, ScanArgsIpc, UnionArgs};
+use polars::prelude::{
+    as_struct, col, concat, lit, Expr, IdxSize, IntoLazy, IpcWriter, LazyFrame, ScanArgsIpc,
+    UnionArgs,
+};
 use polars_core::datatypes::{AnyValue, CategoricalChunked, DataType, LogicalType};
 use polars_core::frame::DataFrame;
 use polars_core::prelude::{CategoricalOrdering, CompatLevel, Series, SortMultipleOptions};
@@ -447,8 +450,8 @@ impl StoredTriples {
 
     pub(crate) fn get_height(&self) -> usize {
         match self {
-            StoredTriples::TriplesOnDisk(t) => {t.get_height()}
-            StoredTriples::TriplesInMemory(t) => {t.get_height()}
+            StoredTriples::TriplesOnDisk(t) => t.get_height(),
+            StoredTriples::TriplesInMemory(t) => t.get_height(),
         }
     }
 }
@@ -862,7 +865,8 @@ fn update_column_sorted_index(
                 from_partitioned_ds: false,
                 maintain_order: false,
             },
-        ).unwrap();
+        )
+        .unwrap();
     }
 
     let (df, sparse_map) = create_unique_df_and_sparse_map(

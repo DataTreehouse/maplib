@@ -238,7 +238,8 @@ pub fn lf_column_to_categorical(
             )
         }
         RDFNodeType::Literal(l) => {
-            if l.as_ref() == xsd::STRING {
+            let dtype = rdf_node_type.polars_data_type();
+            if dtype == DataType::String {
                 lf = lf.with_column(col(c).cast(DataType::Categorical(None, cat_order)))
             } else if l.as_ref() == rdf::LANG_STRING {
                 lf = lf.with_column(
@@ -291,7 +292,7 @@ pub fn lf_column_to_categorical(
                             found_cat_expr = true;
                             fields.push(
                                 col(c).struct_().field_by_name(&base_col_name(t)).cast(
-                                    DataType::Categorical(None, CategoricalOrdering::Lexical),
+                                    DataType::Categorical(None, cat_order),
                                 ),
                             );
                         } else if l.as_ref() == rdf::LANG_STRING {
@@ -302,7 +303,7 @@ pub fn lf_column_to_categorical(
                                     .field_by_name(LANG_STRING_VALUE_FIELD)
                                     .cast(DataType::Categorical(
                                         None,
-                                        CategoricalOrdering::Lexical,
+                                        cat_order,
                                     )),
                             );
                             fields.push(

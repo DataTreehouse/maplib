@@ -132,7 +132,6 @@ pub fn basic_rdf_node_type_column_to_term_vec(
         // TODO!: Could I do some polars concat here instead?
         BaseRDFNodeType::IRI => {
             let col_struct = column.struct_().unwrap();
-
             let prefix_ser = col_struct
                 .field_by_name(IRI_PREFIX_FIELD)
                 .unwrap()
@@ -151,12 +150,16 @@ pub fn basic_rdf_node_type_column_to_term_vec(
                 .zip(suffix_iter)
                 .map(|(prefix, suffix)| {
                     // This literally did nothing
-                    let iri = format!(
-                        "{}{}",
-                        prefix.expect("column_to_term: iri has no prefix!"),
-                        suffix.expect("column_to_term: iri has no suffix!")
-                    );
-                    Some(Term::NamedNode(NamedNode::new_unchecked(iri)))
+                    if prefix.is_none() && suffix.is_none() {
+                        None
+                    } else {
+                        let iri = format!(
+                            "{}{}",
+                            prefix.expect("column_to_term: iri has no prefix!"),
+                            suffix.expect("column_to_term: iri has no suffix!")
+                        );
+                        Some(Term::NamedNode(NamedNode::new_unchecked(iri)))
+                    }
                 })
                 .collect()
         }

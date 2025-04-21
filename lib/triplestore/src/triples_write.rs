@@ -14,6 +14,7 @@ use representation::{
 };
 use std::collections::HashMap;
 use std::io::Write;
+use oxrdf::vocab::xsd;
 
 mod fast_ntriples;
 mod serializers;
@@ -96,7 +97,13 @@ impl Triplestore {
 
                     let lfs = tt.get_lazy_frames(&None, &None)?;
                     for (lf, _) in lfs {
-                        let df = lf.select(select.clone()).collect().unwrap();
+                        let mut df = lf.select(select.clone()).collect().unwrap();
+                        if let BaseRDFNodeType::Literal(l) = object_type {
+                            let l_ref = l.as_ref();
+                            if matches!(l_ref, xsd::DATE | xsd::DATE_TIME | xsd::DATE_TIME_STAMP) {
+                                convert_datelike_to_string(&mut df, OBJECT_COL_NAME);
+                            }
+                        }
                         fast_ntriples::write_triples_in_df(
                             buf, &df, verb_bytes, &types, CHUNK_SIZE, n_threads,
                         )
@@ -110,8 +117,9 @@ impl Triplestore {
             for (verb, df_map) in &self.triples_map {
                 for ((subject_type, object_type), tt) in df_map {
                     for (lf, _) in tt.get_lazy_frames(&None, &None)? {
+                        let df = lf.collect().unwrap();
                         let triples = df_as_triples(
-                            lf.collect().unwrap(),
+                            df,
                             &subject_type.as_rdf_node_type(),
                             &object_type.as_rdf_node_type(),
                             verb,

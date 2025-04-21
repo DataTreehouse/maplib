@@ -46,14 +46,6 @@ pub struct PossibleTypes {
 }
 
 impl PossibleTypes {
-    pub fn get_witness(&self) -> BaseRDFNodeType {
-        match self.e.as_ref().unwrap() {
-            ConstraintExpr::Bottom | ConstraintExpr::Top => BaseRDFNodeType::None,
-            ConstraintExpr::Constraint(c) => c.as_ref().clone(),
-            _ => BaseRDFNodeType::None, //Todo improve this..
-        }
-    }
-
     pub fn compatible_with(&self, t: &BaseRDFNodeType) -> bool {
         self.e.as_ref().unwrap().compatible_with(t)
     }

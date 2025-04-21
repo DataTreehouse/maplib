@@ -264,7 +264,7 @@ impl BaseRDFNodeType {
     pub fn multi_cols(&self) -> Vec<String> {
         match self {
             BaseRDFNodeType::IRI => {
-                vec![IRI_PREFIX_FIELD.to_string(), IRI_PREFIX_FIELD.to_string()]
+                vec![IRI_PREFIX_FIELD.to_string(), IRI_SUFFIX_FIELD.to_string()]
             }
             BaseRDFNodeType::BlankNode => {
                 vec![MULTI_BLANK_DT.to_string()]
@@ -331,6 +331,8 @@ impl BaseRDFNodeType {
                 ]),
                 xsd::DATE_TIME => DataType::Datetime(TimeUnit::Nanoseconds, None),
                 xsd::DATE => DataType::Date,
+                //TODO: Fix when adding proper list support
+                rdf::LIST => DataType::List(Box::new(DataType::Boolean)),
                 _ => DataType::String,
             },
             BaseRDFNodeType::None => DataType::Boolean,
