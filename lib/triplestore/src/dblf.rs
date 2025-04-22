@@ -81,7 +81,7 @@ impl Triplestore {
         verb_uri: &NamedNode,
         keep_subject: bool,
         keep_verb: bool,
-        _keep_object: bool,
+        keep_object: bool,
         subjects: &Option<Vec<Subject>>,
         objects: &Option<Vec<Term>>,
         subject_datatype_ctr: &Option<PossibleTypes>,
@@ -97,9 +97,14 @@ impl Triplestore {
                 object_datatype_ctr,
             );
             if let Some(m) = self.triples_map.get_mut(verb_uri) {
-                if let Some(sms) =
-                    multiple_tt_to_lf(m, compatible_types, subjects, objects, keep_subject)?
-                {
+                if let Some(sms) = multiple_tt_to_lf(
+                    m,
+                    compatible_types,
+                    subjects,
+                    objects,
+                    keep_subject,
+                    keep_object,
+                )? {
                     all_sms.extend(sms);
                 }
             }
@@ -112,9 +117,14 @@ impl Triplestore {
                 object_datatype_ctr,
             );
             if let Some(m) = self.transient_triples_map.get_mut(verb_uri) {
-                if let Some(sms) =
-                    multiple_tt_to_lf(m, compatible_types, subjects, objects, keep_subject)?
-                {
+                if let Some(sms) = multiple_tt_to_lf(
+                    m,
+                    compatible_types,
+                    subjects,
+                    objects,
+                    keep_subject,
+                    keep_object,
+                )? {
                     all_sms.extend(sms);
                 }
             }
@@ -190,38 +200,49 @@ impl Triplestore {
                             object_type,
                             height_upper_bound: _,
                         } = sm;
-                        mappings =
-                            mappings.with_column(col(SUBJECT_COL_NAME).cast(DataType::String));
-                        if object_type.is_lang_string() {
-                            mappings = mappings.with_column(
-                                as_struct(vec![
-                                    col(OBJECT_COL_NAME)
-                                        .struct_()
-                                        .field_by_name(LANG_STRING_VALUE_FIELD)
-                                        .cast(DataType::String)
-                                        .alias(LANG_STRING_VALUE_FIELD),
-                                    col(OBJECT_COL_NAME)
-                                        .struct_()
-                                        .field_by_name(LANG_STRING_LANG_FIELD)
-                                        .cast(DataType::String)
-                                        .alias(LANG_STRING_LANG_FIELD),
-                                ])
-                                .alias(OBJECT_COL_NAME),
-                            )
-                        } else if object_type.polars_data_type() == DataType::String {
+                        if subject_type.is_some() {
                             mappings =
-                                mappings.with_column(col(OBJECT_COL_NAME).cast(DataType::String));
+                                mappings.with_column(col(SUBJECT_COL_NAME).cast(DataType::String));
                         }
+                        if let Some(object_type) = &object_type {
+                            if object_type.is_lang_string() {
+                                mappings = mappings.with_column(
+                                    as_struct(vec![
+                                        col(OBJECT_COL_NAME)
+                                            .struct_()
+                                            .field_by_name(LANG_STRING_VALUE_FIELD)
+                                            .cast(DataType::String)
+                                            .alias(LANG_STRING_VALUE_FIELD),
+                                        col(OBJECT_COL_NAME)
+                                            .struct_()
+                                            .field_by_name(LANG_STRING_LANG_FIELD)
+                                            .cast(DataType::String)
+                                            .alias(LANG_STRING_LANG_FIELD),
+                                    ])
+                                    .alias(OBJECT_COL_NAME),
+                                )
+                            } else if object_type.polars_data_type() == DataType::String {
+                                mappings = mappings
+                                    .with_column(col(OBJECT_COL_NAME).cast(DataType::String));
+                            }
+                        }
+
                         let df = mappings.collect().unwrap();
                         let height_upper_bound = df.height();
                         mappings = df.lazy();
-                        let rdf_node_types = HashMap::from([
-                            (
+                        let mut rdf_node_types = HashMap::new();
+                        if let Some(subject_type) = &subject_type {
+                            rdf_node_types.insert(
                                 SUBJECT_COL_NAME.to_string(),
                                 subject_type.as_rdf_node_type(),
-                            ),
-                            (OBJECT_COL_NAME.to_string(), object_type.as_rdf_node_type()),
-                        ]);
+                            );
+                        }
+                        if let Some(object_type) = &object_type {
+                            rdf_node_types.insert(
+                                OBJECT_COL_NAME.to_string(),
+                                object_type.as_rdf_node_type(),
+                            );
+                        }
                         mappings = lf_columns_to_categorical(
                             mappings,
                             &rdf_node_types,
@@ -247,11 +268,11 @@ impl Triplestore {
                 height_upper_bound,
             } in sms
             {
-                if subject_need_multi {
-                    mappings = unnest_non_multi_col(mappings, SUBJECT_COL_NAME, &subject_type);
-                }
-                if subject_keep_rename.is_some() {
-                    subject_types.insert(subject_type);
+                if let Some(subject_type) = &subject_type {
+                    if subject_need_multi {
+                        mappings = unnest_non_multi_col(mappings, SUBJECT_COL_NAME, subject_type);
+                    }
+                    subject_types.insert(subject_type.clone());
                 }
 
                 if verb_keep_rename.is_some() {
@@ -262,11 +283,11 @@ impl Triplestore {
                     );
                 }
 
-                if object_need_multi {
-                    mappings = unnest_non_multi_col(mappings, OBJECT_COL_NAME, &object_type);
-                }
-                if object_keep_rename.is_some() {
-                    object_types.insert(object_type);
+                if let Some(object_type) = &object_type {
+                    if object_need_multi {
+                        mappings = unnest_non_multi_col(mappings, OBJECT_COL_NAME, object_type);
+                    }
+                    object_types.insert(object_type.clone());
                 }
 
                 accumulated_heights = accumulated_heights.saturating_add(height_upper_bound);
@@ -370,7 +391,6 @@ impl Triplestore {
                 subject_keep_rename,
                 verb_keep_rename,
                 object_keep_rename,
-                object_datatype_ctr,
             ))
         }
     }
@@ -478,7 +498,6 @@ fn single_tt_to_lf(
     tt: &Triples,
     subjects: &Option<Vec<&Subject>>,
     objects: &Option<Vec<&Term>>,
-    _keep_subject: bool,
 ) -> Result<Option<(LazyFrame, usize)>, SparqlError> {
     let lfs_and_heights = tt
         .get_lazy_frames(subjects, objects)
@@ -532,8 +551,8 @@ fn single_tt_to_lf(
 struct HalfBakedSolutionMappings {
     pub mappings: LazyFrame,
     pub verb: Option<NamedNode>,
-    pub subject_type: BaseRDFNodeType,
-    pub object_type: BaseRDFNodeType,
+    pub subject_type: Option<BaseRDFNodeType>,
+    pub object_type: Option<BaseRDFNodeType>,
     pub height_upper_bound: usize,
 }
 
@@ -543,6 +562,7 @@ fn multiple_tt_to_lf(
     subjects: &Option<Vec<Subject>>,
     objects: &Option<Vec<Term>>,
     keep_subject: bool,
+    keep_object: bool,
 ) -> Result<Option<Vec<HalfBakedSolutionMappings>>, SparqlError> {
     let mut filtered = vec![];
     for ((subj_type, obj_type), tt) in triples.iter() {
@@ -571,15 +591,29 @@ fn multiple_tt_to_lf(
             None
         };
 
-        if let Some((lf, height)) =
-            single_tt_to_lf(tt, &filtered_subjects, &filtered_objects, keep_subject)?
-        {
+        if let Some((lf, height)) = single_tt_to_lf(tt, &filtered_subjects, &filtered_objects)? {
             if height > 0 {
+                let mut select = vec![];
+                if keep_subject {
+                    select.push(col(SUBJECT_COL_NAME));
+                }
+                if keep_object {
+                    select.push(col(OBJECT_COL_NAME));
+                }
+
                 let half_baked = HalfBakedSolutionMappings {
-                    mappings: lf,
+                    mappings: lf.select(select),
                     verb: None,
-                    subject_type: subj_type.clone(),
-                    object_type: obj_type.clone(),
+                    subject_type: if keep_subject {
+                        Some(subj_type.clone())
+                    } else {
+                        None
+                    },
+                    object_type: if keep_object {
+                        Some(obj_type.clone())
+                    } else {
+                        None
+                    },
                     height_upper_bound: height,
                 };
                 filtered.push(half_baked);
@@ -644,7 +678,6 @@ pub fn create_empty_lf_datatypes(
     subject_keep_rename: &Option<String>,
     verb_keep_rename: &Option<String>,
     object_keep_rename: &Option<String>,
-    object_datatype: &Option<PossibleTypes>,
 ) -> SolutionMappings {
     let mut columns_vec = vec![];
     let mut out_datatypes = HashMap::new();
@@ -664,11 +697,7 @@ pub fn create_empty_lf_datatypes(
         ))
     }
     if let Some(object_rename) = object_keep_rename {
-        let dt = if let Some(object_datatype) = object_datatype {
-            object_datatype.get_witness()
-        } else {
-            BaseRDFNodeType::None
-        };
+        let dt = BaseRDFNodeType::None;
         let polars_dt = dt.polars_data_type();
         let use_datatype = dt.as_rdf_node_type();
 

@@ -282,7 +282,7 @@ impl Mapping {
         &mut self,
         buffer: &mut W,
         fullmodel_details: FullModelDetails,
-        cim_prefix: NamedNode,
+        prefixes: HashMap<String, NamedNode>,
         graph: Option<NamedNode>,
         profile_graph: NamedNode,
     ) -> Result<(), MaplibError> {
@@ -292,11 +292,12 @@ impl Mapping {
             buffer,
             triplestore,
             &mut profile_triplestore,
-            &cim_prefix,
+            prefixes,
             fullmodel_details,
         )
         .map_err(MaplibError::CIMXMLError);
-        self.triplestores_map.insert(profile_graph, profile_triplestore);
+        self.triplestores_map
+            .insert(profile_graph, profile_triplestore);
         res
     }
 

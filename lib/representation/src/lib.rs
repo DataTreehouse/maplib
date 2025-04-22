@@ -208,6 +208,26 @@ impl From<BaseRDFNodeType> for RDFNodeType {
 }
 
 impl BaseRDFNodeType {
+    pub fn multi_columns(&self) -> Vec<String> {
+        match self {
+            BaseRDFNodeType::IRI => vec![MULTI_IRI_DT.to_string()],
+            BaseRDFNodeType::BlankNode => vec![MULTI_BLANK_DT.to_string()],
+            BaseRDFNodeType::Literal(_) => {
+                if self.is_lang_string() {
+                    vec![
+                        LANG_STRING_VALUE_FIELD.to_string(),
+                        LANG_STRING_LANG_FIELD.to_string(),
+                    ]
+                } else {
+                    vec![base_col_name(self).to_string()]
+                }
+            }
+            BaseRDFNodeType::None => {
+                vec![MULTI_NONE_DT.to_string()]
+            }
+        }
+    }
+
     pub fn as_ref(&self) -> BaseRDFNodeTypeRef {
         match self {
             Self::IRI => BaseRDFNodeTypeRef::IRI,
@@ -266,8 +286,10 @@ impl BaseRDFNodeType {
                 xsd::STRING => DataType::String,
                 xsd::UNSIGNED_INT => DataType::UInt32,
                 xsd::UNSIGNED_LONG => DataType::UInt64,
+                xsd::UNSIGNED_SHORT => DataType::UInt16,
                 xsd::INTEGER | xsd::LONG => DataType::Int64,
                 xsd::INT => DataType::Int32,
+                xsd::SHORT => DataType::Int16,
                 xsd::DOUBLE | xsd::DECIMAL => DataType::Float64,
                 xsd::FLOAT => DataType::Float32,
                 xsd::BOOLEAN => DataType::Boolean,
@@ -277,6 +299,8 @@ impl BaseRDFNodeType {
                 ]),
                 xsd::DATE_TIME => DataType::Datetime(TimeUnit::Nanoseconds, None),
                 xsd::DATE => DataType::Date,
+                //TODO: Fix when adding proper list support
+                rdf::LIST => DataType::List(Box::new(DataType::Boolean)),
                 _ => DataType::String,
             },
             BaseRDFNodeType::None => DataType::Boolean,

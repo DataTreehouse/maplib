@@ -497,7 +497,7 @@ def test_multi_concat():
     assert_frame_equal(df, expected)
 
 
-def test_multi_filter_incompatible_datetime_comparison():
+def test_multi_filter_incompatible_datetimestamp_comparison():
     m = Mapping([])
     df = m.query(
         """
@@ -567,3 +567,86 @@ def test_generate_str_uuids():
     }
     assert sm.mappings.height == 3
     assert sm.mappings.get_column("struuid").unique().len() == 3
+
+def test_replace_single():
+    m = Mapping([])
+    sm = m.query(
+        """
+    PREFIX : <http://example.net/> 
+    PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+    SELECT ?a ?replace WHERE {
+    VALUES (?a) { ("abcabc") ("ab") ("bb") }
+    BIND(REPLACE(?a, "ab", "ba") as ?replace)
+    } ORDER BY ?a
+    """,
+        include_datatypes=True,
+    )
+    assert sm.rdf_types == {
+        "a": RDFType.Literal("http://www.w3.org/2001/XMLSchema#string"),
+        "replace": RDFType.Literal("http://www.w3.org/2001/XMLSchema#string"),
+    }
+    assert sm.mappings.height == 3
+    assert sm.mappings.get_column("replace").to_list() == ["ba", "bacbac", "bb"]
+
+
+def test_replace_multi():
+    m = Mapping([])
+    sm = m.query(
+        """
+    PREFIX : <http://example.net/> 
+    PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+    SELECT ?a ?replace WHERE {
+    VALUES (?a) { ("abcabc") ("ab") (3) }
+    BIND(REPLACE(?a, "ab", "ba") as ?replace)
+    } ORDER BY ?a
+    """,
+        include_datatypes=True,
+    )
+    assert sm.rdf_types == {
+        "a": RDFType.Multi([RDFType.Literal("http://www.w3.org/2001/XMLSchema#integer"), RDFType.Literal("http://www.w3.org/2001/XMLSchema#string")]),
+        "replace": RDFType.Literal("http://www.w3.org/2001/XMLSchema#string"),
+    }
+    assert sm.mappings.height == 3
+    assert sm.mappings.get_column("replace").to_list() == [None, "ba", "bacbac"]
+
+
+def test_regex_multi():
+    m = Mapping([])
+    sm = m.query(
+        """
+    PREFIX : <http://example.net/> 
+    PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+    SELECT ?a ?replace WHERE {
+    VALUES (?a) { ("abcabc") ("ab") (3) }
+    BIND(REGEX(?a, "ab") as ?replace)
+    } ORDER BY ?a
+    """,
+        include_datatypes=True,
+    )
+    assert sm.rdf_types == {
+        "a": RDFType.Multi([RDFType.Literal("http://www.w3.org/2001/XMLSchema#integer"), RDFType.Literal("http://www.w3.org/2001/XMLSchema#string")]),
+        "replace": RDFType.Literal("http://www.w3.org/2001/XMLSchema#boolean"),
+    }
+    assert sm.mappings.height == 3
+    assert sm.mappings.get_column("replace").to_list() == [None, True, True]
+
+
+def test_regex():
+    m = Mapping([])
+    sm = m.query(
+        """
+    PREFIX : <http://example.net/> 
+    PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+    SELECT ?a ?replace WHERE {
+    VALUES (?a) { ("abcabc") ("ab") ("bb") }
+    BIND(REGEX(?a, "ab") as ?replace)
+    } ORDER BY ?a
+    """,
+        include_datatypes=True,
+    )
+    assert sm.rdf_types == {
+        "a": RDFType.Literal("http://www.w3.org/2001/XMLSchema#string"),
+        "replace": RDFType.Literal("http://www.w3.org/2001/XMLSchema#boolean"),
+    }
+    assert sm.mappings.height == 3
+    assert sm.mappings.get_column("replace").to_list() == [True, True, False]

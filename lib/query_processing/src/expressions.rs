@@ -3,7 +3,6 @@ use crate::constants::{
     NANOS_AS_DATETIME, SECONDS_AS_DATETIME,
 };
 use crate::errors::QueryProcessingError;
-use log::warn;
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{Literal, NamedNode, NamedNodeRef, Variable};
 use polars::datatypes::{CategoricalOrdering, DataType, TimeUnit};
@@ -887,76 +886,46 @@ pub fn func_expression(
                     "2 or 3".to_string(),
                 ));
             }
-            let text_context = args_contexts.get(&0).unwrap();
-            if let Expression::Literal(regex_lit) = args.get(1).unwrap() {
-                if !regex_lit.is_plain() {
-                    todo!("Non plain literal regex lit")
-                }
-                let flags = if let Some(third_expr) = args.get(2) {
-                    if let Expression::Literal(l) = third_expr {
-                        if !l.is_plain() {
-                            todo!("Non plain literal flags for regex")
-                        }
-                        Some(l.value())
-                    } else {
-                        todo!("Non literal flag for regex")
-                    }
-                } else {
-                    None
-                };
 
-                let pattern = add_regex_feature_flags(regex_lit.value(), flags);
-                let t = solution_mappings
-                    .rdf_node_types
-                    .get(text_context.as_str())
-                    .unwrap();
-                if let RDFNodeType::MultiType(_ts) = t {
-                    todo!("Multitypes and regex")
-                    // let mut exprs = vec![];
-                    // for t in ts {
-                    //     exprs.push(mul)
-                    // }
+            let text_context = args_contexts.get(&0).unwrap();
+            let t = solution_mappings
+                .rdf_node_types
+                .get(text_context.as_str())
+                .unwrap();
+            if let Expression::Literal(regex_lit) = args.get(1).unwrap() {
+                let pattern = create_regex_literal(regex_lit, args.get(2));
+                let expr = if let RDFNodeType::MultiType(ts) = t {
+                    let mut exprs = vec![];
+                    for t in ts {
+                        let replace_expr = create_regex_expr(
+                            col(text_context.as_str())
+                                .struct_()
+                                .field_by_name(&base_col_name(t)),
+                            t,
+                            &pattern,
+                        );
+                        exprs.push(replace_expr);
+                    }
+                    coalesce(&exprs)
                 } else {
                     let t = BaseRDFNodeType::from_rdf_node_type(t);
-                    let use_col = match t {
-                        BaseRDFNodeType::BlankNode
-                        | BaseRDFNodeType::None
-                        | BaseRDFNodeType::IRI => None,
-                        BaseRDFNodeType::Literal(l) => {
-                            if l.as_ref() == xsd::STRING {
-                                Some(col(text_context.as_str()))
-                            } else if l.as_ref() == rdf::LANG_STRING {
-                                Some(
-                                    col(text_context.as_str())
-                                        .struct_()
-                                        .field_by_name(LANG_STRING_VALUE_FIELD),
-                                )
-                            } else {
-                                warn!("Tried to apply REGEX to non-string.");
-                                None
-                            }
-                        }
-                    };
-                    if let Some(use_col) = use_col {
-                        solution_mappings.mappings = solution_mappings.mappings.with_column(
-                            use_col
-                                .cast(DataType::String)
-                                .str()
-                                .contains(lit(pattern), true)
-                                .alias(outer_context.as_str()),
-                        );
+                    let use_col = if t.is_lang_string() {
+                        col(text_context.as_str())
+                            .struct_()
+                            .field_by_name(LANG_STRING_VALUE_FIELD)
                     } else {
-                        solution_mappings.mappings = solution_mappings.mappings.with_column(
-                            lit(LiteralValue::untyped_null())
-                                .cast(DataType::Boolean)
-                                .alias(outer_context.as_str()),
-                        );
-                    }
-                    solution_mappings.rdf_node_types.insert(
-                        outer_context.as_str().to_string(),
-                        RDFNodeType::Literal(xsd::BOOLEAN.into_owned()),
-                    );
-                }
+                        col(text_context.as_str())
+                    };
+                    let replace_expr = create_regex_expr(use_col, &t, &pattern);
+                    replace_expr
+                };
+                solution_mappings.mappings = solution_mappings
+                    .mappings
+                    .with_column(expr.alias(outer_context.as_str()));
+                solution_mappings.rdf_node_types.insert(
+                    outer_context.as_str().to_string(),
+                    RDFNodeType::Literal(xsd::BOOLEAN.into_owned()),
+                );
             } else {
                 unimplemented!("Non literal regex")
             }
@@ -1025,6 +994,67 @@ pub fn func_expression(
                 outer_context.as_str().to_string(),
                 RDFNodeType::Literal(xsd::STRING.into_owned()),
             );
+        }
+        Function::Replace => {
+            if args.len() != 3 && args.len() != 4 {
+                return Err(QueryProcessingError::BadNumberOfFunctionArguments(
+                    func.clone(),
+                    args.len(),
+                    "3 or 4".to_string(),
+                ));
+            }
+            let arg_context = args_contexts.get(&0).unwrap();
+            let arg_type = solution_mappings
+                .rdf_node_types
+                .get(arg_context.as_str())
+                .unwrap();
+
+            let replacement_context = args_contexts.get(&2).unwrap();
+            let _replacement_type = solution_mappings
+                .rdf_node_types
+                .get(replacement_context.as_str())
+                .unwrap();
+
+            if let Expression::Literal(regex_lit) = args.get(1).unwrap() {
+                let pattern = create_regex_literal(regex_lit, args.get(3));
+                let replacement_expr = col(replacement_context.as_str());
+                let expr = if let RDFNodeType::MultiType(ts) = arg_type {
+                    let mut exprs = vec![];
+                    for t in ts {
+                        let replace_expr = create_regex_replace_expr(
+                            col(arg_context.as_str())
+                                .struct_()
+                                .field_by_name(&base_col_name(t)),
+                            t,
+                            &pattern,
+                            &replacement_expr,
+                        );
+                        exprs.push(replace_expr);
+                    }
+                    coalesce(&exprs)
+                } else {
+                    let t = BaseRDFNodeType::from_rdf_node_type(arg_type);
+                    let use_col = if t.is_lang_string() {
+                        col(arg_context.as_str())
+                            .struct_()
+                            .field_by_name(LANG_STRING_VALUE_FIELD)
+                    } else {
+                        col(arg_context.as_str())
+                    };
+                    let replace_expr =
+                        create_regex_replace_expr(use_col, &t, &pattern, &replacement_expr);
+                    replace_expr
+                };
+                solution_mappings.mappings = solution_mappings
+                    .mappings
+                    .with_column(expr.alias(outer_context.as_str()));
+                solution_mappings.rdf_node_types.insert(
+                    outer_context.as_str().to_string(),
+                    RDFNodeType::Literal(xsd::STRING.into_owned()),
+                );
+            } else {
+                todo!("Non literal pattern")
+            }
         }
         Function::Custom(nn) => {
             let iri = nn.as_str();
@@ -1456,6 +1486,64 @@ pub fn func_expression(
     }
     solution_mappings = drop_inner_contexts(solution_mappings, &args_contexts.values().collect());
     Ok(solution_mappings)
+}
+
+fn create_regex_expr(expr: Expr, t: &BaseRDFNodeType, pattern: &str) -> Expr {
+    let do_regex = match t {
+        BaseRDFNodeType::BlankNode | BaseRDFNodeType::None | BaseRDFNodeType::IRI => false,
+        BaseRDFNodeType::Literal(l) => {
+            matches!(l.as_ref(), xsd::STRING | rdf::LANG_STRING)
+        }
+    };
+    if do_regex {
+        expr.cast(DataType::String)
+            .str()
+            .contains(lit(pattern), true)
+    } else {
+        lit(LiteralValue::untyped_null()).cast(DataType::Boolean)
+    }
+}
+
+fn create_regex_replace_expr(
+    expr: Expr,
+    t: &BaseRDFNodeType,
+    pattern: &str,
+    replacement: &Expr,
+) -> Expr {
+    let do_regex_replace = match t {
+        BaseRDFNodeType::BlankNode | BaseRDFNodeType::None | BaseRDFNodeType::IRI => false,
+        BaseRDFNodeType::Literal(l) => {
+            matches!(l.as_ref(), xsd::STRING | rdf::LANG_STRING)
+        }
+    };
+    if do_regex_replace {
+        expr.cast(DataType::String)
+            .str()
+            .replace_all(lit(pattern), replacement.clone(), false)
+    } else {
+        lit(LiteralValue::untyped_null()).cast(DataType::String)
+    }
+}
+
+fn create_regex_literal(regex_literal: &Literal, flags_expr: Option<&Expression>) -> String {
+    if !regex_literal.is_plain() {
+        todo!("Non plain literal regex lit")
+    }
+    let flags = if let Some(third_expr) = flags_expr {
+        if let Expression::Literal(l) = third_expr {
+            if !l.is_plain() {
+                todo!("Non plain literal flags for regex")
+            }
+            Some(l.value())
+        } else {
+            todo!("Non literal flag for regex")
+        }
+    } else {
+        None
+    };
+
+    let pattern = add_regex_feature_flags(regex_literal.value(), flags);
+    pattern
 }
 
 pub fn in_expression(

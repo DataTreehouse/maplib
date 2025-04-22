@@ -624,7 +624,7 @@ class Mapping:
         created: str = None,
         scenario_time: str = None,
         modeling_authority_set: str = None,
-        cim_prefix: str = "http://iec.ch/TC57/CIM100#",
+        prefixes: Dict[str,str] = None,
         graph: str = None) -> None:
         """
         Write the legacy CIM XML format.
@@ -637,7 +637,6 @@ class Mapping:
         >>> m.write_cim_xml(
         >>>     "model.xml",
         >>>     profile_graph=PROFILE_GRAPH,
-        >>>     cim_prefix="http://iec.ch/TC57/CIM100#",
         >>>     description = "MyModel",
         >>>     created = "2023-09-14T20:27:41",
         >>>     scenario_time = "2023-09-14T02:44:43",
@@ -653,7 +652,7 @@ class Mapping:
         :param created: model_iri md:Model.created created .
         :param scenario_time: model_iri md:Model.scenarioTime scenario_time .
         :param modeling_authority_set: model_iri md:Model.modelingAuthoritySet modeling_authority_set .
-        :param cim_prefix: The prefix of the cim namespace, defaults to CIM 100.
+        :param prefixes: Prefixes to be used in XML export.
         :param graph: The graph to write, defaults to the default graph.
         """
 

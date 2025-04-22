@@ -696,7 +696,7 @@ impl PyMapping {
 
     #[pyo3(signature = (
         file_path, profile_graph, model_iri=None, version=None, description=None, created=None,
-        scenario_time=None, modeling_authority_set=None, cim_prefix=None, graph=None))]
+        scenario_time=None, modeling_authority_set=None, prefixes=None, graph=None))]
     fn write_cim_xml(
         &mut self,
         file_path: &Bound<'_, PyAny>,
@@ -707,11 +707,22 @@ impl PyMapping {
         created: Option<String>,
         scenario_time: Option<String>,
         modeling_authority_set: Option<String>,
-        cim_prefix: Option<String>,
+        prefixes: Option<HashMap<String, String>>,
         graph: Option<String>,
     ) -> PyResult<()> {
-        let cim_prefix = parse_optional_named_node(cim_prefix)?
-            .unwrap_or(NamedNode::new_unchecked("http://iec.ch/TC57/CIM100#"));
+        let mut named_node_prefixes = HashMap::new();
+        if let Some(prefixes) = prefixes {
+            for (k, v) in prefixes {
+                let v_nn = parse_named_node(v)?;
+                named_node_prefixes.insert(k, v_nn);
+            }
+        }
+        if !named_node_prefixes.contains_key("cim") {
+            named_node_prefixes.insert(
+                "cim".to_string(),
+                NamedNode::new_unchecked("http://iec.ch/TC57/CIM100#"),
+            );
+        }
         let model_iri = parse_optional_named_node(model_iri)?.unwrap_or(NamedNode::new_unchecked(
             format!("urn:uuid:{}", uuid::Uuid::new_v4().to_string()),
         ));
@@ -746,7 +757,7 @@ impl PyMapping {
             .write_cim_xml(
                 &mut actual_file,
                 fullmodel_details,
-                cim_prefix,
+                named_node_prefixes,
                 graph,
                 profile_graph,
             )
