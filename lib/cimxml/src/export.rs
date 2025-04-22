@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use oxrdf::{Literal, NamedNode};
 use std::io::Write;
 use thiserror::Error;
@@ -10,7 +11,7 @@ pub fn cim_xml_write<W: Write>(
     _buf: &mut W,
     _triplestore: &mut Triplestore,
     _profile_triplestore: &mut Triplestore,
-    _cim_prefix: &NamedNode,
+    _prefixes: HashMap<String, NamedNode>,
     _fullmodel_details: FullModelDetails,
 ) -> Result<(), CIMXMLError> {
     unimplemented!("Contact Data Treehouse to try")
