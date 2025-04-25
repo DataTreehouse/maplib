@@ -38,7 +38,6 @@ impl Triplestore {
         )?;
         let (mut output_solution_mappings, by, dummy_varname) =
             prepare_group_by(output_solution_mappings, variables);
-
         let mut aggregate_expressions = vec![];
         let mut new_rdf_node_types = HashMap::new();
         for i in 0..aggregates.len() {
@@ -62,12 +61,13 @@ impl Triplestore {
             new_rdf_node_types.insert(v.as_str().to_string(), rdf_node_type);
             aggregate_expressions.push(expr);
         }
-        Ok(group_by(
+        let grouped = group_by(
             output_solution_mappings,
             aggregate_expressions,
             by,
             dummy_varname,
             new_rdf_node_types,
-        )?)
+        )?;
+        Ok(grouped)
     }
 }
