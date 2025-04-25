@@ -650,3 +650,26 @@ def test_regex():
     }
     assert sm.mappings.height == 3
     assert sm.mappings.get_column("replace").to_list() == [True, True, False]
+
+
+def test_issue_22():
+    m = Mapping([])
+    sm = m.query(
+        """
+    PREFIX : <http://example.net/> 
+    PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+    SELECT ?a (COUNT(*) as ?c) WHERE {
+    VALUES (?a) { ("abbb") ("abbb") ("ab") ("a") ("a") }
+    BIND(REPLACE(?a, "b", "") as ?replace)
+    } GROUP BY ?a 
+    ORDER BY ?a 
+    """,
+        include_datatypes=True,
+    )
+    print(sm.mappings)
+    assert sm.rdf_types == {
+        "a": RDFType.Literal("http://www.w3.org/2001/XMLSchema#string"),
+        "c": RDFType.Literal("http://www.w3.org/2001/XMLSchema#unsignedInt"),
+    }
+    assert sm.mappings.height == 3
+    assert sm.mappings.get_column("c").to_list() == [2, 1, 2]
