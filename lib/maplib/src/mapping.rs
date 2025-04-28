@@ -27,6 +27,9 @@ use triplestore::sparql::errors::SparqlError;
 use triplestore::sparql::QueryResult;
 use triplestore::{IndexingOptions, NewTriples, Triplestore};
 
+#[cfg(feature = "pyo3")]
+use pyo3::Python;
+
 pub struct Mapping {
     pub template_dataset: TemplateDataset,
     pub base_triplestore: Triplestore,
@@ -246,10 +249,18 @@ impl Mapping {
         graph: Option<NamedNode>,
         streaming: bool,
         include_transient: bool,
+        #[cfg(feature = "pyo3")] py: pyo3::Python<'_>,
     ) -> Result<QueryResult, MaplibError> {
         let use_triplestore = self.get_triplestore(&graph);
         use_triplestore
-            .query(query, parameters, streaming, include_transient)
+            .query(
+                query,
+                parameters,
+                streaming,
+                include_transient,
+                #[cfg(feature = "pyo3")]
+                py,
+            )
             .map_err(|x| x.into())
     }
 
@@ -285,6 +296,7 @@ impl Mapping {
         prefixes: HashMap<String, NamedNode>,
         graph: Option<NamedNode>,
         profile_graph: NamedNode,
+        #[cfg(feature = "pyo3")] py: Python<'_>,
     ) -> Result<(), MaplibError> {
         let mut profile_triplestore = self.triplestores_map.remove(&profile_graph).unwrap();
         let triplestore = self.get_triplestore(&graph);
@@ -294,6 +306,8 @@ impl Mapping {
             &mut profile_triplestore,
             prefixes,
             fullmodel_details,
+            #[cfg(feature = "pyo3")]
+            py,
         )
         .map_err(MaplibError::CIMXMLError);
         self.triplestores_map
@@ -348,6 +362,7 @@ impl Mapping {
         only_shapes: Option<Vec<NamedNode>>,
         deactivate_shapes: Vec<NamedNode>,
         dry_run: bool,
+        #[cfg(feature = "pyo3")] py: Python<'_>,
     ) -> Result<ValidationReport, MaplibError> {
         let (shape_graph, mut shape_triplestore) = if let Some((shape_graph, shape_triplestore)) =
             self.triplestores_map.remove_entry(shape_graph)
@@ -370,6 +385,8 @@ impl Mapping {
             only_shapes,
             deactivate_shapes,
             dry_run,
+            #[cfg(feature = "pyo3")]
+            py,
         );
         self.triplestores_map.insert(shape_graph, shape_triplestore);
         res.map_err(|x| x.into())
@@ -445,9 +462,16 @@ impl Mapping {
     pub fn infer(
         &mut self,
         insert: bool,
+        #[cfg(feature = "pyo3")] py: Python<'_>,
     ) -> Result<Option<HashMap<NamedNode, EagerSolutionMappings>>, MaplibError> {
         if let Some(ruleset) = self.ruleset.take() {
-            let res = infer(&mut self.base_triplestore, &ruleset, insert);
+            let res = infer(
+                &mut self.base_triplestore,
+                &ruleset,
+                insert,
+                #[cfg(feature = "pyo3")]
+                py,
+            );
             match res {
                 Ok(o) => Ok(o),
                 Err(e) => {

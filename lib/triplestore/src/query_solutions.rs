@@ -14,9 +14,17 @@ pub fn query_select(
     deduplicate: bool,
     streaming: bool,
     include_transient: bool,
+    #[cfg(feature = "pyo3")] py: pyo3::Python<'_>,
 ) -> QuerySolutions {
     let qres = triplestore
-        .query(query, &None, streaming, include_transient)
+        .query(
+            query,
+            &None,
+            streaming,
+            include_transient,
+            #[cfg(feature = "pyo3")]
+            py,
+        )
         .unwrap();
 
     let (df, types) = if let QueryResult::Select(EagerSolutionMappings {

@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
+    "lib/utils",
     "lib/representation",
     "lib/maplib",
     "lib/triplestore",

@@ -25,4 +25,6 @@ pub enum SparqlError {
     ConstructWithUndefinedVariable(String),
     #[error("Full text search lookup error: {}", .0)]
     FtsLookupError(#[from] FtsError),
+    #[error("Query interrupted via signal")]
+    InterruptSignal,
 }

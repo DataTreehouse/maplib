@@ -4,14 +4,14 @@ version = "0.15.17"
 edition = "2021"
 
 [dependencies]
-maplib = { path = "../lib/maplib" }
-triplestore = { path = "../lib/triplestore" }
+maplib = { path = "../lib/maplib", features = [ "pyo3" ] }
+triplestore = { path = "../lib/triplestore", features = [ "pyo3" ] }
 representation = { path = "../lib/representation" }
-shacl = { path = "../lib/shacl" }
+shacl = { path = "../lib/shacl", features = [ "pyo3" ] }
 pydf_io = { path = "../lib/pydf_io" }
 report_mapping = {path = "../lib/report_mapping"}
 templates = {path= "../lib/templates"}
-cimxml = {path = "../lib/cimxml"}
+cimxml = {path = "../lib/cimxml", features = [ "pyo3" ]}
 
 pyo3.workspace = true
 pyo3-log.workspace = true

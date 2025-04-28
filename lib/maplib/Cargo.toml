@@ -4,6 +4,9 @@ version = "0.6.0"
 edition = "2021"
 rust-version.workspace = true
 
+[features]
+pyo3 = [ "dep:pyo3", "triplestore/pyo3", "shacl/pyo3", "datalog/pyo3", "cimxml/pyo3" ]
+
 [dependencies]
 templates = {path = "../templates"}
 triplestore = { path = "../triplestore" }
@@ -26,6 +29,9 @@ uuid = { workspace = true }
 thiserror = { workspace = true }
 env_logger = { workspace = true }
 oxrdfio = { workspace = true }
+
+pyo3 = { workspace = true, optional = true }
+
 
 [dev-dependencies]
 rstest.workspace=true

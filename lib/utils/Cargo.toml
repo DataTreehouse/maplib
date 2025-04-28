@@ -1,15 +1,16 @@
 [package]
-name = "cimxml"
+name = "utils"
 version = "0.1.0"
 edition = "2021"
 rust-version.workspace = true
 
 [features]
-pyo3 = [ "dep:pyo3", "triplestore/pyo3" ]
+pyo3 = [ "dep:pyo3" ]
 
 [dependencies]
-triplestore = {path="../triplestore"}
+
+polars = { workspace = true, features = ["lazy"], default-features = false }
+polars-core = {workspace = true, default-features = false}
 thiserror.workspace = true
-oxrdf.workspace = true
 
 pyo3 = { workspace = true, optional = true }
