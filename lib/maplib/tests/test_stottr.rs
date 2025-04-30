@@ -12,6 +12,7 @@ use std::path::PathBuf;
 use triplestore::sparql::QueryResult;
 
 // TODO: Legacy functionality, these tests should move to Python.
+#[cfg(not(feature = "pyo3"))]
 fn get_triples(mapping: &mut Mapping) -> Vec<Triple> {
     let res = mapping
         .query(
@@ -62,6 +63,7 @@ fn testdata_path() -> PathBuf {
     testdata_path
 }
 
+#[cfg(not(feature = "pyo3"))]
 #[rstest]
 #[serial]
 fn test_all_iri_case() {
@@ -111,6 +113,7 @@ fn test_all_iri_case() {
     assert_eq!(expected_triples_set, actual_triples_set);
 }
 
+#[cfg(not(feature = "pyo3"))]
 #[rstest]
 #[serial]
 fn test_string_language_tag_cases() {
@@ -165,6 +168,7 @@ fn test_string_language_tag_cases() {
     assert_eq!(expected_triples_set, actual_triples_set);
 }
 
+#[cfg(not(feature = "pyo3"))]
 #[rstest]
 #[serial]
 fn test_const_list_case() {
@@ -238,13 +242,14 @@ fn test_const_list_case() {
     assert_eq!(expected_triples_set, actual_triples_set);
 }
 
+#[cfg(not(feature = "pyo3"))]
 #[rstest]
 #[serial]
 fn test_nested_templates() {
     let stottr = r#"
 @prefix ex:<http://example.net/ns#>.
 ex:ExampleTemplate [?myVar1 , ?myVar2] :: {
-    ex:Nested(?myVar1),  
+    ex:Nested(?myVar1),
     ottr:Triple(ex:anObject, ex:hasOtherNumber, ?myVar2)
   } .
 ex:Nested [?myVar] :: {
@@ -311,6 +316,7 @@ ex:Nested [?myVar] :: {
 // ?Duration_sec
 // ?List_String
 
+#[cfg(not(feature = "pyo3"))]
 #[rstest]
 #[serial]
 fn test_derived_datatypes() {
@@ -594,6 +600,7 @@ ex:ExampleTemplate [
     assert_eq!(expected_triples, actual_triples);
 }
 
+#[cfg(not(feature = "pyo3"))]
 #[rstest]
 #[serial]
 fn test_list_arguments() {
@@ -677,6 +684,7 @@ ex:AnotherExampleTemplate [?object, ?predicate, ?myList] :: {
     assert_eq!(expected_triples_set, actual_triples_set);
 }
 
+#[cfg(not(feature = "pyo3"))]
 #[rstest]
 #[serial]
 fn test_two_list_arguments() {
@@ -801,6 +809,7 @@ ex:AnotherExampleTemplate [?subject, ?myList1, ?myList2] :: {
     assert_eq!(expected_triples_set, actual_triples_set);
 }
 
+#[cfg(not(feature = "pyo3"))]
 #[rstest]
 #[serial]
 fn test_default() {
@@ -877,6 +886,7 @@ fn test_default() {
     assert_eq!(expected_triples_set, actual_triples_set);
 }
 
+#[cfg(not(feature = "pyo3"))]
 #[rstest]
 #[serial]
 fn test_default_list() {
