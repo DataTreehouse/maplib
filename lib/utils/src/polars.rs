@@ -25,6 +25,7 @@ pub fn pl_interruptable_collect(
 
     #[cfg(feature = "pyo3")]
     {
+        // TODO: https://github.com/pola-rs/polars/issues/22513
         //                     min  med  avg  95%   99%   99.9%
         // check_signals takes 20 - 30 - 85 - 261 - 691 - 908
         // It's better to give it some time rather than waste it on checking signals
@@ -34,7 +35,11 @@ pub fn pl_interruptable_collect(
             match future.fetch() {
                 None => {
                     if py.check_signals().is_err() {
+                        // Polars has some kind of race condition and panics as it tries to tx on our dropped rx
+                        // We've already decided to bail out, so waiting a few ms for rayon to clean up or whatever should be fine
+                        // TODO: https://github.com/pola-rs/polars/issues/22515
                         future.cancel();
+                        sleep(Duration::from_millis(50));
                         return Err(InterruptableCollectError::Interrupted);
                     }
                     // Max delay is twice the time the query actually took
