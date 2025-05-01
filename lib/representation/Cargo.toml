@@ -4,9 +4,11 @@ version = "0.6.10"
 edition = "2021"
 rust-version.workspace = true
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[features]
+pyo3 = [ ]
 
 [dependencies]
+utils = { path = "../utils" }
 spargebra = {path = "../spargebra"}
 
 log.workspace = true

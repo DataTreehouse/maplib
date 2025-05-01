@@ -2397,6 +2397,7 @@ dependencies = [
  "serde",
  "spargebra",
  "thiserror",
+ "utils",
  "uuid",
 ]
 

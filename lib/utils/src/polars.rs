@@ -21,7 +21,7 @@ pub fn pl_interruptable_collect(
 ) -> Result<DataFrame, InterruptableCollectError> {
     // println!("Entering an interruptable collect");
 
-    let future = lf.collect_concurrently().unwrap();
+    let future = lf.collect_concurrently()?;
 
     #[cfg(feature = "pyo3")]
     {

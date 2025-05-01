@@ -2,6 +2,10 @@ use crate::RDFNodeType;
 use oxrdf::vocab::xsd;
 use polars::prelude::{DataFrame, IntoLazy, LazyFrame};
 use std::collections::HashMap;
+use utils::polars::{pl_interruptable_collect, InterruptableCollectError};
+
+#[cfg(feature = "pyo3")]
+use pyo3::Python;
 
 #[derive(Clone)]
 pub struct SolutionMappings {
@@ -54,6 +58,24 @@ impl SolutionMappings {
             mappings: self.mappings.with_streaming(streaming).collect().unwrap(),
             rdf_node_types: self.rdf_node_types,
         }
+    }
+
+    pub fn as_eager_interruptable(
+        self,
+        streaming: bool,
+        #[cfg(feature = "pyo3")] py: Python,
+    ) -> Result<EagerSolutionMappings, InterruptableCollectError> {
+        #[cfg(feature = "pyo3")]
+        {
+            let df = pl_interruptable_collect(self.mappings.with_streaming(streaming), py)?;
+            Ok(EagerSolutionMappings {
+                mappings: df,
+                rdf_node_types: self.rdf_node_types,
+            })
+        }
+
+        #[cfg(not(feature = "pyo3"))]
+        Ok(as_eager(self))
     }
 }
 
