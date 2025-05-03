@@ -75,7 +75,7 @@ impl SolutionMappings {
         }
 
         #[cfg(not(feature = "pyo3"))]
-        Ok(as_eager(self))
+        Ok(self.as_eager(streaming))
     }
 }
 
