@@ -24,9 +24,7 @@ pub fn count_with_expression(column_context: &Context, distinct: bool) -> (Expr,
     )
 }
 
-pub fn count_without_expression(
-    distinct: bool,
-) -> (Expr, RDFNodeType) {
+pub fn count_without_expression(distinct: bool) -> (Expr, RDFNodeType) {
     let columns_expr = all();
     let out_expr = if distinct {
         columns_expr.n_unique()

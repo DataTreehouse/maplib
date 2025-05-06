@@ -30,8 +30,7 @@ impl Triplestore {
             AggregateExpression::CountSolutions { distinct } => {
                 output_solution_mappings = solution_mappings;
                 column_context = None;
-                (out_expr, out_rdf_node_type) =
-                    count_without_expression(*distinct);
+                (out_expr, out_rdf_node_type) = count_without_expression(*distinct);
             }
             AggregateExpression::FunctionCall {
                 name,
