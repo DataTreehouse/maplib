@@ -1,7 +1,7 @@
 use crate::query_context::Context;
 use crate::rdf_to_polars::rdf_literal_to_polars_literal_value;
 use crate::{BaseRDFNodeType, RDFNodeType};
-use chrono::{DateTime, NaiveDateTime, TimeDelta, TimeZone};
+use chrono::{DateTime, TimeDelta, TimeZone};
 use chrono_tz::Tz;
 use oxrdf::vocab::xsd;
 use oxrdf::{
