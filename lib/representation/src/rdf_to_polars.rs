@@ -1,12 +1,11 @@
 use crate::{LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD};
 use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
-use chrono_tz::Tz;
 use log::warn;
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{BlankNode, Literal, NamedNode, NamedNodeRef, Term};
 use polars::prelude::{
     as_struct, lit, AnyValue, DataType, Expr, LiteralValue, NamedFrom, PlSmallStr, Scalar, Series,
-    TimeUnit, TimeZone,
+    TimeUnit,
 };
 use std::ops::Deref;
 use std::str::FromStr;
@@ -144,9 +143,7 @@ pub fn rdf_literal_to_polars_literal_value(lit: &Literal) -> LiteralValue {
             LiteralValue::Scalar(Scalar::new_datetime(
                 dt.naive_utc().and_utc().timestamp_nanos_opt().unwrap(),
                 TimeUnit::Nanoseconds,
-                Some(TimeZone::from_chrono(
-                    &Tz::from_str(&dt.timezone().to_string()).unwrap(),
-                )),
+                Some(dt.timezone().to_string().into()),
             ))
         } else {
             let dt_without_tz = value.parse::<NaiveDateTime>();
@@ -170,9 +167,7 @@ pub fn rdf_literal_to_polars_literal_value(lit: &Literal) -> LiteralValue {
             LiteralValue::Scalar(Scalar::new_datetime(
                 dt.naive_utc().and_utc().timestamp_nanos_opt().unwrap(),
                 TimeUnit::Nanoseconds,
-                Some(TimeZone::from_chrono(
-                    &Tz::from_str(&dt.timezone().to_string()).unwrap(),
-                )),
+                Some(dt.timezone().to_string().into()),
             ))
         } else {
             warn!(
