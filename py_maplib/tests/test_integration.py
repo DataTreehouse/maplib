@@ -506,10 +506,8 @@ def test_simple_construct_query(windpower_mapping, streaming):
     )
     assert_frame_equal(nothing, expected_nothing_df)
 
-
-# TODO!!: Debug!
-@pytest.mark.parametrize("streaming", [True])  # ,False])
-def test_simple_insert_construct_query(windpower_mapping, streaming):
+#No idempotency means no streaming parameter.
+def test_simple_insert_construct_query(windpower_mapping):
     windpower_mapping.insert(
         """
     PREFIX ct:<https://github.com/magbak/chrontext#>
@@ -517,8 +515,8 @@ def test_simple_insert_construct_query(windpower_mapping, streaming):
     ?a a ct:somethingTestit.
     ?b a ct:nothingTestit. 
     } WHERE {?a a ?b}""",
-        streaming=streaming,
     )
+
 
     something = windpower_mapping.query(
         """
@@ -528,7 +526,6 @@ def test_simple_insert_construct_query(windpower_mapping, streaming):
         ?a a ct:somethingTestit .
         }
     """,
-        streaming=streaming,
     ).sort(["a"])
     nothing = windpower_mapping.query(
         """
@@ -538,7 +535,6 @@ def test_simple_insert_construct_query(windpower_mapping, streaming):
             ?a a ct:nothingTestit .
             }
         """,
-        streaming=streaming,
     ).sort(["a"])
     filename_something = TESTDATA_PATH / "simple_insert_query_something.csv"
     # something.write_csv(filename_something)

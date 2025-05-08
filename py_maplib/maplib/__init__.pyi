@@ -68,16 +68,16 @@ class Prefix:
     A prefix that can be used to ergonomically build iris.
     """
 
-    def __init__(self, prefix, iri):
+    def __init__(self, iri,  prefix_name=None):
         """
         Create a new prefix.
-        :param prefix: The name of the prefix
         :param iri: The prefix IRI.
+        :param prefix_name: The name of the prefix
         """
 
     def suf(self, suffix: str) -> IRI:
         """
-        Create a IRI by appending the suffix.
+        Create an IRI by appending the suffix.
         :param suffix: The suffix to append.
         :return:
         """

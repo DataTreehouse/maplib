@@ -90,7 +90,7 @@ def test_create_mapping_with_optional_value_missing_df(streaming):
 def test_create_programmatic_mapping_with_optional_value_missing_df(streaming):
     df = pl.DataFrame({"MyValue": ["A"]})
     mapping = Mapping()
-    ex = Prefix("ex", "http://example.net/ns#")
+    ex = Prefix("http://example.net/ns#")
     my_value = Variable("MyValue")
     my_other_value = Variable("MyOtherValue")
     my_object = ex.suf("MyObject")
@@ -138,7 +138,7 @@ def test_create_programmatic_mapping_with_default(streaming):
     xsd = XSD()
     df = pl.DataFrame({"MyValue": ["A"]})
     mapping = Mapping()
-    ex = Prefix("ex", "http://example.net/ns#")
+    ex = Prefix("http://example.net/ns#")
     my_value = Variable("MyValue")
     my_other_value = Variable("MyOtherValue")
     yet_another_value = Variable("YetAnotherValue")
@@ -179,7 +179,7 @@ def test_create_programmatic_mapping_with_nested_default(streaming):
     xsd = XSD()
     df = pl.DataFrame({"MyValue": ["A"]})
     mapping = Mapping()
-    ex = Prefix("ex", "http://example.net/ns#")
+    ex = Prefix("http://example.net/ns#")
     my_value = Variable("MyValue")
     my_other_value = Variable("MyOtherValue")
     yet_another_value = Variable("YetAnotherValue")
@@ -226,7 +226,7 @@ def test_create_programmatic_mapping_with_nested_default_and_missing_column(stre
     xsd = XSD()
     df = pl.DataFrame({"MyValue": ["A"]})
     mapping = Mapping()
-    ex = Prefix("ex", "http://example.net/ns#")
+    ex = Prefix("http://example.net/ns#")
     my_value = Variable("MyValue")
     my_other_value = Variable("MyOtherValue")
     yet_another_value = Variable("YetAnotherValue")
@@ -283,7 +283,7 @@ def test_create_programmatic_mapping_with_nested_partial_default(streaming):
         }
     )
     mapping = Mapping()
-    ex = Prefix("ex", "http://example.net/ns#")
+    ex = Prefix("http://example.net/ns#")
     my_value = Variable("MyValue")
     my_other_value = Variable("MyOtherValue")
     yet_another_value = Variable("YetAnotherValue")
@@ -340,7 +340,7 @@ def test_create_programmatic_mapping_with_nested_none_optional(streaming):
     xsd = XSD()
     df = pl.DataFrame({"MyValue": ["A", "B"]})
     mapping = Mapping()
-    ex = Prefix("ex", "http://example.net/ns#")
+    ex = Prefix("http://example.net/ns#")
     my_value = Variable("MyValue")
     my_other_value = Variable("MyOtherValue")
     my_object = ex.suf("MyObject")
@@ -393,7 +393,7 @@ def test_create_programmatic_mapping_with_partial_default(streaming):
         }
     )
     mapping = Mapping()
-    ex = Prefix("ex", "http://example.net/ns#")
+    ex = Prefix("http://example.net/ns#")
     my_value = Variable("MyValue")
     my_other_value = Variable("MyOtherValue")
     yet_another_value = Variable("YetAnotherValue")
@@ -523,7 +523,7 @@ def test_programmatic_mapping():
 
 
 def test_programmatic_mapping_to_string():
-    ex = Prefix("ex", "http://example.net/ns#")
+    ex = Prefix("http://example.net/ns#", prefix_name="ex")
     example_template = Template(
         iri=ex.suf("ExampleTemplate"),
         parameters=[],
@@ -538,14 +538,14 @@ def test_programmatic_mapping_to_string():
     assert (
         str(example_template)
         == """<http://example.net/ns#ExampleTemplate> [ ] :: {
-  <http://ns.ottr.xyz/0.4/Triple>(<http://example.net/ns#myObject>,<http://example.net/ns#hasObj>,<http://example.net/ns#myOtherObject>)
+  <http://ns.ottr.xyz/0.4/Triple>(<http://example.net/ns#myObject>, <http://example.net/ns#hasObj>, <http://example.net/ns#myOtherObject>)
 } . 
 """
     )
 
 
 def test_programmatic_mapping_with_prefix():
-    ex = Prefix("ex", "http://example.net/ns#")
+    ex = Prefix("http://example.net/ns#", "ex")
     example_template = Template(
         iri=ex.suf("ExampleTemplate"),
         parameters=[],

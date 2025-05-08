@@ -20,7 +20,7 @@ def test_want_float_got_int64():
     xsd = XSD()
     df = pl.DataFrame({"MyValue": [1]})
     mapping = Mapping()
-    ex = Prefix("ex", "http://example.net/ns#")
+    ex = Prefix("http://example.net/ns#")
     my_value = Variable("MyValue")
     my_object = ex.suf("MyObject")
     template = Template(
@@ -37,7 +37,7 @@ def test_want_float_got_int64():
 def test_want_rdfs_literal_got_int64():
     df = pl.DataFrame({"MyValue": [1]})
     mapping = Mapping()
-    ex = Prefix("ex", "http://example.net/ns#")
+    ex = Prefix( "http://example.net/ns#")
     my_value = Variable("MyValue")
     my_object = ex.suf("MyObject")
     template = Template(
@@ -69,7 +69,7 @@ def test_want_rdfs_literal_got_int64():
 def test_want_rdfs_resource_got_int64():
     df = pl.DataFrame({"MyValue": [1]})
     mapping = Mapping()
-    ex = Prefix("ex", "http://example.net/ns#")
+    ex = Prefix( "http://example.net/ns#")
     my_value = Variable("MyValue")
     my_object = ex.suf("MyObject")
     template = Template(
@@ -102,7 +102,7 @@ def test_want_xsd_int_got_xsd_boolean():
     xsd = XSD()
     df = pl.DataFrame({"MyValue": [True]})
     mapping = Mapping()
-    ex = Prefix("ex", "http://example.net/ns#")
+    ex = Prefix( "http://example.net/ns#")
     my_value = Variable("MyValue")
     my_object = ex.suf("MyObject")
     template = Template(
@@ -120,7 +120,7 @@ def test_autoconverted_datetime_to_date():
     xsd = XSD()
     df = pl.DataFrame({"MyValue": ["2020-02-02T00:00:00Z"]}).cast(pl.Datetime("ns"))
     mapping = Mapping()
-    ex = Prefix("ex", "http://example.net/ns#")
+    ex = Prefix( "http://example.net/ns#")
     my_value = Variable("MyValue")
     my_object = ex.suf("MyObject")
     template = Template(
@@ -146,7 +146,7 @@ def test_autoconverted_optional_datetime_to_date():
     xsd = XSD()
     df = pl.DataFrame({"MyValue": ["2020-02-02T00:00:00Z"]}).cast(pl.Datetime("ns"))
     mapping = Mapping()
-    ex = Prefix("ex", "http://example.net/ns#")
+    ex = Prefix( "http://example.net/ns#")
     my_value = Variable("MyValue")
     my_other_value = Variable("MyOtherValue")
     my_object = ex.suf("MyObject")
@@ -180,7 +180,7 @@ def test_autoconverted_datetime_list_to_date_list_1():
         pl.List(pl.Datetime("ns"))
     )
     mapping = Mapping()
-    ex = Prefix("ex", "http://example.net/ns#")
+    ex = Prefix( "http://example.net/ns#")
     my_value = Variable("MyValue")
     my_object = ex.suf("MyObject")
     template = Template(
@@ -214,7 +214,7 @@ def test_autoconverted_datetime_list_to_date_list_2():
         pl.List(pl.Datetime("ns"))
     )
     mapping = Mapping()
-    ex = Prefix("ex", "http://example.net/ns#")
+    ex = Prefix( "http://example.net/ns#")
     my_value = Variable("MyValue")
     my_object = ex.suf("MyObject")
     template = Template(
@@ -246,7 +246,7 @@ def test_want_xsd_long_got_xsd_short():
     df = pl.DataFrame({"MyValue": [1]})
     df = df.with_columns(pl.col("MyValue").cast(pl.Int16))
     mapping = Mapping()
-    ex = Prefix("ex", "http://example.net/ns#")
+    ex = Prefix( "http://example.net/ns#")
     my_value = Variable("MyValue")
     my_object = ex.suf("MyObject")
     template = Template(

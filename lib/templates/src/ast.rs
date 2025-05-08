@@ -71,6 +71,7 @@ impl Display for Signature {
         }
         write!(f, " [")?;
         for (idx, p) in self.parameter_list.iter().enumerate() {
+            write!(f, "\n    ")?;
             std::fmt::Display::fmt(p, f)?;
             if idx + 1 != self.parameter_list.len() {
                 write!(f, ", ")?;
@@ -341,7 +342,7 @@ impl Display for Instance {
         for (idx, a) in self.argument_list.iter().enumerate() {
             std::fmt::Display::fmt(a, f)?;
             if idx + 1 != self.argument_list.len() {
-                write!(f, ",")?;
+                write!(f, ", ")?;
             }
         }
         write!(f, ")")

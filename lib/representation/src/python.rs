@@ -267,16 +267,17 @@ impl From<NamedNode> for PyIRI {
 #[derive(Clone, Debug)]
 #[pyclass(name = "Prefix")]
 pub struct PyPrefix {
-    pub prefix: String,
+    pub prefix_name: Option<String>,
     pub iri: NamedNode,
 }
 
 #[pymethods]
 impl PyPrefix {
     #[new]
-    pub fn new(prefix: String, iri: String) -> PyResult<Self> {
+    #[pyo3(signature = (iri, prefix_name=None))]
+    pub fn new(iri: String, prefix_name: Option<String>) -> PyResult<Self> {
         let iri = NamedNode::new(iri).map_err(PyRepresentationError::IriParseError)?;
-        Ok(PyPrefix { prefix, iri })
+        Ok(PyPrefix { prefix_name, iri })
     }
 
     pub fn suf(&self, suffix: String) -> PyResult<PyIRI> {
