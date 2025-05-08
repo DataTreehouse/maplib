@@ -650,7 +650,6 @@ def test_constant_arg_has_valid_subtype():
     assert r.rdf_types["c"] == RDFType.IRI()
 
 
-
 def test_iri_datatype():
     templates = """
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .

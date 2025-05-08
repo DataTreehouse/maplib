@@ -145,9 +145,6 @@ impl Triplestore {
         include_transient: bool,
         #[cfg(feature = "pyo3")] py: Python<'_>,
     ) -> Result<QueryResult, SparqlError> {
-        if streaming {
-            unimplemented!("Streaming is currently disabled due to an unresolved bug in Polarsq")
-        }
         let query = Query::parse(query, None).map_err(SparqlError::ParseError)?;
         self.query_parsed(
             &query,
@@ -192,7 +189,7 @@ impl Triplestore {
                 )?;
 
                 match pl_interruptable_collect(
-                    mappings.with_streaming(streaming),
+                    mappings.with_new_streaming(streaming),
                     #[cfg(feature = "pyo3")]
                     py,
                 ) {

@@ -55,7 +55,11 @@ impl SolutionMappings {
 
     pub fn as_eager(self, streaming: bool) -> EagerSolutionMappings {
         EagerSolutionMappings {
-            mappings: self.mappings.with_streaming(streaming).collect().unwrap(),
+            mappings: self
+                .mappings
+                .with_new_streaming(streaming)
+                .collect()
+                .unwrap(),
             rdf_node_types: self.rdf_node_types,
         }
     }
@@ -67,7 +71,7 @@ impl SolutionMappings {
     ) -> Result<EagerSolutionMappings, InterruptableCollectError> {
         #[cfg(feature = "pyo3")]
         {
-            let df = pl_interruptable_collect(self.mappings.with_streaming(streaming), py)?;
+            let df = pl_interruptable_collect(self.mappings.with_new_streaming(streaming), py)?;
             Ok(EagerSolutionMappings {
                 mappings: df,
                 rdf_node_types: self.rdf_node_types,

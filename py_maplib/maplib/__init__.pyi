@@ -3,7 +3,6 @@ from typing import Union, List, Dict, Optional, Callable, Tuple, Literal as Lite
 from polars import DataFrame
 from datetime import datetime, date
 
-
 class RDFType:
     """
     The type of a column containing a RDF variable.
@@ -620,17 +619,19 @@ class Mapping:
         :param graph: The IRI of the graph to write.
         """
 
-    def write_cim_xml(self,
+    def write_cim_xml(
+        self,
         file_path: Union[str, Path],
         profile_graph: str,
         model_iri: str = None,
-        version:str = None,
-        description:str = None,
+        version: str = None,
+        description: str = None,
         created: str = None,
         scenario_time: str = None,
         modeling_authority_set: str = None,
-        prefixes: Dict[str,str] = None,
-        graph: str = None) -> None:
+        prefixes: Dict[str, str] = None,
+        graph: str = None,
+    ) -> None:
         """
         Write the legacy CIM XML format.
 
@@ -827,10 +828,10 @@ class Mapping:
         """
 
     def infer(
-            self,
-            insert: bool=True,
-            include_datatypes: bool = False,
-            native_dataframe: bool = False,
+        self,
+        insert: bool = True,
+        include_datatypes: bool = False,
+        native_dataframe: bool = False,
     ) -> Optional[Dict[str, DataFrame]]:
         """
         Run the inference rules

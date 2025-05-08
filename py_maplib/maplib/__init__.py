@@ -23,7 +23,7 @@ __all__ = [
     "BlankNode",
     "explore",
     "add_triples",
-    "MaplibException"
+    "MaplibException",
 ]
 
 import pathlib
@@ -33,13 +33,14 @@ from .add_triples import add_triples
 if (pathlib.Path(__file__).parent.resolve() / "graph_explorer").exists():
     from .graph_explorer import explore
 else:
+
     async def explore(
-            m: "Mapping",
-            host: str = "localhost",
-            port: int = 8000,
-            bind: str = "localhost",
-            popup=True,
-            fts=True,
+        m: "Mapping",
+        host: str = "localhost",
+        port: int = 8000,
+        bind: str = "localhost",
+        popup=True,
+        fts=True,
     ):
         """Starts a graph explorer session.
         To run from Jupyter Notebook use:
@@ -57,4 +58,3 @@ else:
         :param fts: Enable full text search indexing
         """
         print("Contact Data Treehouse to try!")
-

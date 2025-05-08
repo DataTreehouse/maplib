@@ -9,7 +9,7 @@ use polars::datatypes::{CategoricalOrdering, DataType, TimeUnit};
 use polars::frame::UniqueKeepStrategy;
 use polars::prelude::{
     as_struct, coalesce, col, concat_str, lit, when, Expr, GetOutput, IntoColumn, LazyFrame,
-    LiteralValue, NamedFrom, Operator, PlSmallStr, Scalar, StrptimeOptions,
+    LiteralValue, NamedFrom, Operator, PlSmallStr, RoundMode, Scalar, StrptimeOptions,
 };
 use polars::series::Series;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
@@ -726,7 +726,7 @@ pub fn func_expression(
             let first_context = args_contexts.get(&0).unwrap();
             solution_mappings.mappings = solution_mappings.mappings.with_column(
                 col(first_context.as_str())
-                    .round(0)
+                    .round(0, RoundMode::HalfAwayFromZero)
                     .alias(outer_context.as_str()),
             );
             let existing_type = solution_mappings
