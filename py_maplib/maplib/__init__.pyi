@@ -274,15 +274,20 @@ class ValidationReport:
     """
 
     conforms: bool
+    "Whether or not the validation report conforms to the shapes"
+
     shape_targets: DataFrame
+    "A DataFrame containing the counts of the targets of each shape and constraint"
+
     performance: DataFrame
+    "Performance statistics for the validation process"
 
     def results(
         self,
         native_dataframe: bool = False,
         include_datatypes: bool = False,
         streaming: bool = False,
-    ) -> Optional[Union[DataFrame, SolutionMappings]]:
+    ) -> Optional[Union[DataFrame, "SolutionMappings"]]:
         """
         Return the results of the validation report, if they exist.
 
