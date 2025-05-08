@@ -552,7 +552,7 @@ class Mapping:
         format: LiteralType["ntriples", "turtle", "rdf/xml", "xml", "rdfxml"] = None,
         base_iri: str = None,
         transient: bool = False,
-        parallel: bool = False,
+        parallel: bool = None,
         checked: bool = True,
         graph: str = None,
         replace_graph: bool = False,
@@ -571,7 +571,7 @@ class Mapping:
         :param format: One of "ntriples", "turtle", "rdf/xml", otherwise it is inferred from the file extension.
         :param base_iri: Base iri
         :param transient: Should these triples be included when writing the graph to the file system?
-        :param parallel: Parse triples in parallel, currently only NTRiples. Assumes all prefixes are in the beginning of the document.
+        :param parallel: Parse triples in parallel, currently only NTRiples and Turtle. Assumes all prefixes are in the beginning of the document. Defaults to true only for NTriples.
         :param checked: Check IRIs etc.
         :param graph: The IRI of the graph to read the triples into, if None, it will be the default graph.
         :param replace_graph: Replace the graph with these triples? Will replace the default graph if no graph is specified.
@@ -583,7 +583,7 @@ class Mapping:
         format: LiteralType["ntriples", "turtle", "rdf/xml", "xml", "rdfxml"],
         base_iri: str = None,
         transient: bool = False,
-        parallel: bool = False,
+        parallel: bool = None,
         checked: bool = True,
         graph: str = None,
         replace_graph: bool = False,
@@ -601,7 +601,7 @@ class Mapping:
         :param format: One of "ntriples", "turtle", "rdf/xml".
         :param base_iri: Base iri
         :param transient: Should these triples be included when writing the graph to the file system?
-        :param parallel: Parse triples in parallel, currently only NTRiples. Assumes all prefixes are in the beginning of the document.
+        :param parallel: Parse triples in parallel, currently only NTRiples and Turtle. Assumes all prefixes are in the beginning of the document. Defaults to true for NTriples.
         :param checked: Check IRIs etc.
         :param graph: The IRI of the graph to read the triples into.
         :param replace_graph: Replace the graph with these triples? Will replace the default graph if no graph is specified.
