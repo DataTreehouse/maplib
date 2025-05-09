@@ -1,14 +1,21 @@
 extern crate core;
-
-use maplib::mapping::{ExpandOptions, Mapping};
+#[cfg(not(feature = "pyo3"))]
+use maplib::mapping::Mapping;
+#[cfg(not(feature = "pyo3"))]
 use oxrdf::{Literal, NamedNode, Subject, Term, Triple};
+#[cfg(not(feature = "pyo3"))]
 use polars::prelude::{col, AnyValue, DataFrame, IntoLazy, PlSmallStr, Series, TimeUnit};
+#[cfg(not(feature = "pyo3"))]
 use representation::polars_to_rdf::df_as_result;
+#[cfg(not(feature = "pyo3"))]
 use representation::solution_mapping::EagerSolutionMappings;
 use rstest::*;
+#[cfg(not(feature = "pyo3"))]
 use serial_test::serial;
+#[cfg(not(feature = "pyo3"))]
 use std::collections::HashSet;
 use std::path::PathBuf;
+#[cfg(not(feature = "pyo3"))]
 use triplestore::sparql::QueryResult;
 
 // TODO: Legacy functionality, these tests should move to Python.

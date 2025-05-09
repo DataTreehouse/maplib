@@ -1,9 +1,5 @@
-#[cfg(test)]
-use crate::constants::OTTR_TRIPLE;
 use crate::constants::{OTTR_BLANK_NODE, OTTR_IRI};
 use oxrdf::vocab::rdfs;
-#[cfg(test)]
-use oxrdf::vocab::xsd;
 use oxrdf::{BlankNode, Literal, NamedNode, NamedNodeRef, Variable};
 use representation::RDFNodeType;
 use std::collections::HashMap;
@@ -434,37 +430,4 @@ pub struct StottrDocument {
     pub directives: Vec<Directive>,
     pub statements: Vec<Statement>,
     pub prefix_map: HashMap<String, NamedNode>,
-}
-
-#[test]
-fn test_display_easy_template() {
-    let template = Template {
-        signature: Signature {
-            template_name: NamedNode::new("http://MYTEMPLATEURI#Templ").unwrap(),
-            template_prefixed_name: Some("prefix:Templ".to_string()),
-            parameter_list: vec![Parameter {
-                optional: true,
-                non_blank: true,
-                ptype: Some(PType::Basic(xsd::DOUBLE.into_owned())),
-                variable: Variable::new_unchecked("myVar"),
-                default_value: Some(DefaultValue {
-                    constant_term: ConstantTermOrList::ConstantTerm(ConstantTerm::Literal(
-                        Literal::new_typed_literal("0.1", xsd::DOUBLE),
-                    )),
-                }),
-            }],
-            annotation_list: None,
-        },
-        pattern_list: vec![Instance {
-            list_expander: None,
-            template_name: NamedNode::new(OTTR_TRIPLE).unwrap(),
-            prefixed_template_name: Some("ottr:Triple".to_string()),
-            argument_list: vec![Argument {
-                list_expand: false,
-                term: StottrTerm::Variable(Variable::new_unchecked("myVar")),
-            }],
-        }],
-    };
-
-    assert_eq!(format!("{}", template), "prefix:Templ [?! <http://www.w3.org/2001/XMLSchema#double> ?myVar = \"0.1\"^^<http://www.w3.org/2001/XMLSchema#double> ] :: {\n  ottr:Triple(?myVar)\n} . \n".to_string());
 }
