@@ -444,7 +444,7 @@ impl PyXSD {
     #[allow(clippy::new_without_default)]
     pub fn new() -> PyXSD {
         PyXSD {
-            prefix: PyPrefix::new("xsd".to_string(), XSD_PREFIX_IRI.to_string()).unwrap(),
+            prefix: PyPrefix::new(XSD_PREFIX_IRI.to_string(), Some("xsd".to_string())).unwrap(),
         }
     }
 

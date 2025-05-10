@@ -368,6 +368,7 @@ impl PyMapping {
                 graph,
                 streaming.unwrap_or(false),
                 include_transient.unwrap_or(true),
+                py,
             )
             .map_err(PyMaplibError::from)?;
         query_to_result(
@@ -412,6 +413,7 @@ impl PyMapping {
     ))]
     fn validate(
         &mut self,
+        py: Python<'_>,
         shape_graph: String,
         include_details: Option<bool>,
         include_conforms: Option<bool>,
@@ -465,6 +467,7 @@ impl PyMapping {
                 only_shapes,
                 deactivate_shapes,
                 dry_run.unwrap_or(false),
+                py,
             )
             .map_err(PyMaplibError::from)?;
         let shape_graph_triplestore = if include_shape_graph.unwrap_or(true) {
@@ -513,6 +516,7 @@ impl PyMapping {
                 source_graph,
                 streaming.unwrap_or(false),
                 include_transient.unwrap_or(true),
+                py,
             )
             .map_err(PyMaplibError::from)?;
         let out_dict = if let QueryResult::Construct(dfs_and_dts) = res {
@@ -571,6 +575,7 @@ impl PyMapping {
                 source_graph,
                 streaming.unwrap_or(false),
                 include_transient.unwrap_or(true),
+                py,
             )
             .map_err(PyMaplibError::from)?;
         let out_dict = if let QueryResult::Construct(dfs_and_dts) = res {
@@ -622,7 +627,7 @@ impl PyMapping {
                 format,
                 base_iri,
                 transient.unwrap_or(false),
-                parallel.unwrap_or(false),
+                parallel,
                 checked.unwrap_or(true),
                 graph,
                 replace_graph.unwrap_or(false),
@@ -652,7 +657,7 @@ impl PyMapping {
                 format,
                 base_iri,
                 transient.unwrap_or(false),
-                parallel.unwrap_or(false),
+                parallel,
                 checked.unwrap_or(true),
                 graph,
                 replace_graph.unwrap_or(false),
@@ -696,9 +701,10 @@ impl PyMapping {
 
     #[pyo3(signature = (
         file_path, profile_graph, model_iri=None, version=None, description=None, created=None,
-        scenario_time=None, modeling_authority_set=None, cim_prefix=None, graph=None))]
+        scenario_time=None, modeling_authority_set=None, prefixes=None, graph=None))]
     fn write_cim_xml(
         &mut self,
+        py: Python<'_>,
         file_path: &Bound<'_, PyAny>,
         profile_graph: String,
         model_iri: Option<String>,
@@ -707,11 +713,22 @@ impl PyMapping {
         created: Option<String>,
         scenario_time: Option<String>,
         modeling_authority_set: Option<String>,
-        cim_prefix: Option<String>,
+        prefixes: Option<HashMap<String, String>>,
         graph: Option<String>,
     ) -> PyResult<()> {
-        let cim_prefix = parse_optional_named_node(cim_prefix)?
-            .unwrap_or(NamedNode::new_unchecked("http://iec.ch/TC57/CIM100#"));
+        let mut named_node_prefixes = HashMap::new();
+        if let Some(prefixes) = prefixes {
+            for (k, v) in prefixes {
+                let v_nn = parse_named_node(v)?;
+                named_node_prefixes.insert(k, v_nn);
+            }
+        }
+        if !named_node_prefixes.contains_key("cim") {
+            named_node_prefixes.insert(
+                "cim".to_string(),
+                NamedNode::new_unchecked("http://iec.ch/TC57/CIM100#"),
+            );
+        }
         let model_iri = parse_optional_named_node(model_iri)?.unwrap_or(NamedNode::new_unchecked(
             format!("urn:uuid:{}", uuid::Uuid::new_v4().to_string()),
         ));
@@ -746,9 +763,10 @@ impl PyMapping {
             .write_cim_xml(
                 &mut actual_file,
                 fullmodel_details,
-                cim_prefix,
+                named_node_prefixes,
                 graph,
                 profile_graph,
+                py,
             )
             .unwrap();
         Ok(())
@@ -845,14 +863,14 @@ impl PyMapping {
     #[pyo3(signature = (insert=None, include_datatypes=None, native_dataframe=None))]
     fn infer(
         &mut self,
+        py: Python<'_>,
         insert: Option<bool>,
         include_datatypes: Option<bool>,
         native_dataframe: Option<bool>,
-        py: Python<'_>,
     ) -> PyResult<Option<HashMap<String, PyObject>>> {
         let res = self
             .inner
-            .infer(insert.unwrap_or(true))
+            .infer(insert.unwrap_or(true), py)
             .map_err(PyMaplibError::MaplibError)?;
         if let Some(res) = res {
             let mut py_res = HashMap::new();

@@ -3,6 +3,7 @@ use polars::frame::UniqueKeepStrategy;
 use polars::prelude::IntoLazy;
 use representation::multitype::unique_workaround;
 
+use crate::sparql::errors::SparqlError;
 use crate::sparql::QueryResult;
 use crate::Triplestore;
 use representation::polars_to_rdf::{df_as_result, QuerySolutions};
@@ -14,10 +15,16 @@ pub fn query_select(
     deduplicate: bool,
     streaming: bool,
     include_transient: bool,
-) -> QuerySolutions {
-    let qres = triplestore
-        .query(query, &None, streaming, include_transient)
-        .unwrap();
+    #[cfg(feature = "pyo3")] py: pyo3::Python<'_>,
+) -> Result<QuerySolutions, SparqlError> {
+    let qres = triplestore.query(
+        query,
+        &None,
+        streaming,
+        include_transient,
+        #[cfg(feature = "pyo3")]
+        py,
+    )?;
 
     let (df, types) = if let QueryResult::Select(EagerSolutionMappings {
         mut mappings,
@@ -33,7 +40,7 @@ pub fn query_select(
     } else {
         panic!("Should never happen")
     };
-    df_as_result(df, &types)
+    Ok(df_as_result(df, &types))
 }
 
 #[allow(clippy::too_many_arguments)]

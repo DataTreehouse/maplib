@@ -128,6 +128,7 @@ def test_construct_pvalues2(pizzas_mapping):
     assert res0.height == 1
     assert res1.height == 2
 
+
 def test_having_not_so_nice(pizzas_mapping):
     h_df = pl.DataFrame(
         {

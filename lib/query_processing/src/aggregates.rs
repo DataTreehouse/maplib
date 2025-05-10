@@ -1,6 +1,6 @@
 use oxrdf::vocab::xsd;
 use polars::datatypes::DataType;
-use polars::prelude::{col, cols, Expr};
+use polars::prelude::{all, col, Expr};
 use representation::query_context::Context;
 use representation::solution_mapping::SolutionMappings;
 use representation::RDFNodeType;
@@ -24,17 +24,12 @@ pub fn count_with_expression(column_context: &Context, distinct: bool) -> (Expr,
     )
 }
 
-pub fn count_without_expression(
-    solution_mappings: &SolutionMappings,
-    distinct: bool,
-) -> (Expr, RDFNodeType) {
-    let all_proper_column_names: Vec<String> =
-        solution_mappings.rdf_node_types.keys().cloned().collect();
-    let columns_expr = cols(all_proper_column_names);
+pub fn count_without_expression(distinct: bool) -> (Expr, RDFNodeType) {
+    let columns_expr = all();
     let out_expr = if distinct {
         columns_expr.n_unique()
     } else {
-        columns_expr.unique()
+        columns_expr.len()
     };
     (
         out_expr,

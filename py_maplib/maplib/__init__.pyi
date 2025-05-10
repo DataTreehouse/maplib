@@ -3,7 +3,6 @@ from typing import Union, List, Dict, Optional, Callable, Tuple, Literal as Lite
 from polars import DataFrame
 from datetime import datetime, date
 
-
 class RDFType:
     """
     The type of a column containing a RDF variable.
@@ -69,16 +68,16 @@ class Prefix:
     A prefix that can be used to ergonomically build iris.
     """
 
-    def __init__(self, prefix, iri):
+    def __init__(self, iri,  prefix_name=None):
         """
         Create a new prefix.
-        :param prefix: The name of the prefix
         :param iri: The prefix IRI.
+        :param prefix_name: The name of the prefix
         """
 
     def suf(self, suffix: str) -> IRI:
         """
-        Create a IRI by appending the suffix.
+        Create an IRI by appending the suffix.
         :param suffix: The suffix to append.
         :return:
         """
@@ -274,15 +273,20 @@ class ValidationReport:
     """
 
     conforms: bool
+    "Whether or not the validation report conforms to the shapes"
+
     shape_targets: DataFrame
+    "A DataFrame containing the counts of the targets of each shape and constraint"
+
     performance: DataFrame
+    "Performance statistics for the validation process"
 
     def results(
         self,
         native_dataframe: bool = False,
         include_datatypes: bool = False,
         streaming: bool = False,
-    ) -> Optional[Union[DataFrame, SolutionMappings]]:
+    ) -> Optional[Union[DataFrame, "SolutionMappings"]]:
         """
         Return the results of the validation report, if they exist.
 
@@ -547,7 +551,7 @@ class Mapping:
         format: LiteralType["ntriples", "turtle", "rdf/xml", "xml", "rdfxml"] = None,
         base_iri: str = None,
         transient: bool = False,
-        parallel: bool = False,
+        parallel: bool = None,
         checked: bool = True,
         graph: str = None,
         replace_graph: bool = False,
@@ -566,7 +570,7 @@ class Mapping:
         :param format: One of "ntriples", "turtle", "rdf/xml", otherwise it is inferred from the file extension.
         :param base_iri: Base iri
         :param transient: Should these triples be included when writing the graph to the file system?
-        :param parallel: Parse triples in parallel, currently only NTRiples. Assumes all prefixes are in the beginning of the document.
+        :param parallel: Parse triples in parallel, currently only NTRiples and Turtle. Assumes all prefixes are in the beginning of the document. Defaults to true only for NTriples.
         :param checked: Check IRIs etc.
         :param graph: The IRI of the graph to read the triples into, if None, it will be the default graph.
         :param replace_graph: Replace the graph with these triples? Will replace the default graph if no graph is specified.
@@ -578,7 +582,7 @@ class Mapping:
         format: LiteralType["ntriples", "turtle", "rdf/xml", "xml", "rdfxml"],
         base_iri: str = None,
         transient: bool = False,
-        parallel: bool = False,
+        parallel: bool = None,
         checked: bool = True,
         graph: str = None,
         replace_graph: bool = False,
@@ -596,7 +600,7 @@ class Mapping:
         :param format: One of "ntriples", "turtle", "rdf/xml".
         :param base_iri: Base iri
         :param transient: Should these triples be included when writing the graph to the file system?
-        :param parallel: Parse triples in parallel, currently only NTRiples. Assumes all prefixes are in the beginning of the document.
+        :param parallel: Parse triples in parallel, currently only NTRiples and Turtle. Assumes all prefixes are in the beginning of the document. Defaults to true for NTriples.
         :param checked: Check IRIs etc.
         :param graph: The IRI of the graph to read the triples into.
         :param replace_graph: Replace the graph with these triples? Will replace the default graph if no graph is specified.
@@ -615,17 +619,19 @@ class Mapping:
         :param graph: The IRI of the graph to write.
         """
 
-    def write_cim_xml(self,
+    def write_cim_xml(
+        self,
         file_path: Union[str, Path],
         profile_graph: str,
         model_iri: str = None,
-        version:str = None,
-        description:str = None,
+        version: str = None,
+        description: str = None,
         created: str = None,
         scenario_time: str = None,
         modeling_authority_set: str = None,
-        cim_prefix: str = "http://iec.ch/TC57/CIM100#",
-        graph: str = None) -> None:
+        prefixes: Dict[str, str] = None,
+        graph: str = None,
+    ) -> None:
         """
         Write the legacy CIM XML format.
 
@@ -637,7 +643,6 @@ class Mapping:
         >>> m.write_cim_xml(
         >>>     "model.xml",
         >>>     profile_graph=PROFILE_GRAPH,
-        >>>     cim_prefix="http://iec.ch/TC57/CIM100#",
         >>>     description = "MyModel",
         >>>     created = "2023-09-14T20:27:41",
         >>>     scenario_time = "2023-09-14T02:44:43",
@@ -653,7 +658,7 @@ class Mapping:
         :param created: model_iri md:Model.created created .
         :param scenario_time: model_iri md:Model.scenarioTime scenario_time .
         :param modeling_authority_set: model_iri md:Model.modelingAuthoritySet modeling_authority_set .
-        :param cim_prefix: The prefix of the cim namespace, defaults to CIM 100.
+        :param prefixes: Prefixes to be used in XML export.
         :param graph: The graph to write, defaults to the default graph.
         """
 
@@ -823,10 +828,10 @@ class Mapping:
         """
 
     def infer(
-            self,
-            insert: bool=True,
-            include_datatypes: bool = False,
-            native_dataframe: bool = False,
+        self,
+        insert: bool = True,
+        include_datatypes: bool = False,
+        native_dataframe: bool = False,
     ) -> Optional[Dict[str, DataFrame]]:
         """
         Run the inference rules

@@ -4,6 +4,8 @@ mod lazy_expressions;
 pub(crate) mod lazy_graph_patterns;
 mod lazy_order;
 
+use utils::polars::{pl_interruptable_collect, InterruptableCollectError};
+
 use super::{NewTriples, Triplestore};
 use crate::sparql::errors::SparqlError;
 use crate::TriplesToAdd;
@@ -29,6 +31,9 @@ use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 use spargebra::Query;
 use std::collections::HashMap;
 use uuid::Uuid;
+
+#[cfg(feature = "pyo3")]
+use pyo3::Python;
 
 #[derive(Debug)]
 pub enum QueryResult {
@@ -135,12 +140,17 @@ impl Triplestore {
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         streaming: bool,
         include_transient: bool,
+        #[cfg(feature = "pyo3")] py: Python<'_>,
     ) -> Result<QueryResult, SparqlError> {
-        if streaming {
-            unimplemented!("Streaming is currently disabled due to an unresolved bug in Polarsq")
-        }
         let query = Query::parse(query, None).map_err(SparqlError::ParseError)?;
-        self.query_parsed(&query, parameters, streaming, include_transient)
+        self.query_parsed(
+            &query,
+            parameters,
+            streaming,
+            include_transient,
+            #[cfg(feature = "pyo3")]
+            py,
+        )
     }
 
     pub fn query_parsed(
@@ -149,6 +159,7 @@ impl Triplestore {
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         streaming: bool,
         include_transient: bool,
+        #[cfg(feature = "pyo3")] py: Python<'_>,
     ) -> Result<QueryResult, SparqlError> {
         if self.has_unindexed {
             self.index_unindexed().map_err(SparqlError::IndexingError)?;
@@ -173,8 +184,18 @@ impl Triplestore {
                     Pushdowns::new(),
                     include_transient,
                 )?;
-                let df = mappings.with_streaming(streaming).collect().unwrap();
-                Ok(QueryResult::Select(EagerSolutionMappings::new(df, types)))
+
+                match pl_interruptable_collect(
+                    mappings.with_new_streaming(streaming),
+                    #[cfg(feature = "pyo3")]
+                    py,
+                ) {
+                    Ok(df) => Ok(QueryResult::Select(EagerSolutionMappings::new(df, types))),
+                    Err(InterruptableCollectError::Interrupted) => {
+                        Err(SparqlError::InterruptSignal)
+                    }
+                    _ => panic!(),
+                }
             }
             Query::Construct {
                 template,
@@ -194,15 +215,27 @@ impl Triplestore {
                     Pushdowns::new(),
                     include_transient,
                 )?;
-                let df = mappings.collect().unwrap();
-                let mut solutions = vec![];
-                for t in template {
-                    if let Some((sm, verb)) = triple_to_solution_mappings(&df, &rdf_node_types, t)?
-                    {
-                        solutions.push((sm, verb));
+                match pl_interruptable_collect(
+                    mappings,
+                    #[cfg(feature = "pyo3")]
+                    py,
+                ) {
+                    Ok(df) => {
+                        let mut solutions = vec![];
+                        for t in template {
+                            if let Some((sm, verb)) =
+                                triple_to_solution_mappings(&df, &rdf_node_types, t)?
+                            {
+                                solutions.push((sm, verb));
+                            }
+                        }
+                        Ok(QueryResult::Construct(solutions))
                     }
+                    Err(InterruptableCollectError::Interrupted) => {
+                        Err(SparqlError::InterruptSignal)
+                    }
+                    _ => panic!(),
                 }
-                Ok(QueryResult::Construct(solutions))
             }
             _ => Err(SparqlError::QueryTypeNotSupported),
         }
@@ -216,10 +249,18 @@ impl Triplestore {
         streaming: bool,
         delay_index: bool,
         include_transient: bool,
+        #[cfg(feature = "pyo3")] py: Python<'_>,
     ) -> Result<Vec<NewTriples>, SparqlError> {
         let query = Query::parse(query, None).map_err(SparqlError::ParseError)?;
         if let Query::Construct { .. } = &query {
-            let res = self.query_parsed(&query, parameters, streaming, include_transient)?;
+            let res = self.query_parsed(
+                &query,
+                parameters,
+                streaming,
+                include_transient,
+                #[cfg(feature = "pyo3")]
+                py,
+            )?;
             match res {
                 QueryResult::Select(_) => {
                     panic!("Should never happen")

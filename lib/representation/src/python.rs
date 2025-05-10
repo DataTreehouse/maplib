@@ -1,7 +1,7 @@
 use crate::query_context::Context;
 use crate::rdf_to_polars::rdf_literal_to_polars_literal_value;
 use crate::{BaseRDFNodeType, RDFNodeType};
-use chrono::{NaiveDateTime, TimeDelta, TimeZone};
+use chrono::{DateTime, TimeDelta, TimeZone};
 use chrono_tz::Tz;
 use oxrdf::vocab::xsd;
 use oxrdf::{
@@ -267,16 +267,17 @@ impl From<NamedNode> for PyIRI {
 #[derive(Clone, Debug)]
 #[pyclass(name = "Prefix")]
 pub struct PyPrefix {
-    pub prefix: String,
+    pub prefix_name: Option<String>,
     pub iri: NamedNode,
 }
 
 #[pymethods]
 impl PyPrefix {
     #[new]
-    pub fn new(prefix: String, iri: String) -> PyResult<Self> {
+    #[pyo3(signature = (iri, prefix_name=None))]
+    pub fn new(iri: String, prefix_name: Option<String>) -> PyResult<Self> {
         let iri = NamedNode::new(iri).map_err(PyRepresentationError::IriParseError)?;
-        Ok(PyPrefix { prefix, iri })
+        Ok(PyPrefix { prefix_name, iri })
     }
 
     pub fn suf(&self, suffix: String) -> PyResult<PyIRI> {
@@ -384,10 +385,10 @@ impl PyLiteral {
                             TimeUnit::Microseconds => TimeDelta::microseconds(i),
                             TimeUnit::Milliseconds => TimeDelta::milliseconds(i),
                         };
-                        let dt = NaiveDateTime::UNIX_EPOCH.checked_add_signed(delta).unwrap();
+                        let dt = DateTime::UNIX_EPOCH.checked_add_signed(delta).unwrap();
                         if let Some(tz) = tz {
                             let tz = tz.parse::<Tz>().unwrap();
-                            let dt = tz.from_utc_datetime(&dt);
+                            let dt = tz.from_utc_datetime(&dt.naive_utc());
                             dt.into_py_any(py)
                         } else {
                             dt.into_py_any(py)
@@ -400,10 +401,10 @@ impl PyLiteral {
                             TimeUnit::Microseconds => TimeDelta::microseconds(i),
                             TimeUnit::Milliseconds => TimeDelta::milliseconds(i),
                         };
-                        let dt = NaiveDateTime::UNIX_EPOCH.checked_add_signed(delta).unwrap();
+                        let dt = DateTime::UNIX_EPOCH.checked_add_signed(delta).unwrap();
                         if let Some(tz) = &tz {
                             let tz = tz.parse::<Tz>().unwrap();
-                            let dt = tz.from_utc_datetime(&dt);
+                            let dt = tz.from_utc_datetime(&dt.naive_utc());
                             dt.into_py_any(py)
                         } else {
                             dt.into_py_any(py)

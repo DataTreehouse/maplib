@@ -22,7 +22,7 @@ pl.Config.set_fmt_str_lengths(200)
 @pytest.fixture(scope="function")
 def template() -> Template:
     pi = "https://github.com/DataTreehouse/maplib/pizza#"
-    pi = Prefix("pi", pi)
+    pi = Prefix(pi)
 
     p_var = Variable("p")
     c_var = Variable("c")
@@ -132,11 +132,14 @@ def test_print_template(template: Template):
     s = str(template)
     assert (
         s
-        == """<https://github.com/DataTreehouse/maplib/pizza#PizzaTemplate> [ <http://ns.ottr.xyz/0.4/IRI> ?p,  <http://ns.ottr.xyz/0.4/IRI> ?c,  List<<http://ns.ottr.xyz/0.4/IRI>> ?ings ] :: {
-  <http://ns.ottr.xyz/0.4/Triple>(?p,<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>,<https://github.com/DataTreehouse/maplib/pizza#Pizza>) ,
-  <http://ns.ottr.xyz/0.4/Triple>(?p,<https://github.com/DataTreehouse/maplib/pizza#fromCountry>,?c) ,
-  <http://ns.ottr.xyz/0.4/Triple>(?p,<https://github.com/DataTreehouse/maplib/pizza#hasBlank>,_:MyBlank) ,
-  cross | <http://ns.ottr.xyz/0.4/Triple>(?p,<https://github.com/DataTreehouse/maplib/pizza#hasIngredient>,++ ?ings)
+        == """<https://github.com/DataTreehouse/maplib/pizza#PizzaTemplate> [
+     <http://ns.ottr.xyz/0.4/IRI> ?p, 
+     <http://ns.ottr.xyz/0.4/IRI> ?c, 
+     List<<http://ns.ottr.xyz/0.4/IRI>> ?ings ] :: {
+  <http://ns.ottr.xyz/0.4/Triple>(?p, <http://www.w3.org/1999/02/22-rdf-syntax-ns#type>, <https://github.com/DataTreehouse/maplib/pizza#Pizza>) ,
+  <http://ns.ottr.xyz/0.4/Triple>(?p, <https://github.com/DataTreehouse/maplib/pizza#fromCountry>, ?c) ,
+  <http://ns.ottr.xyz/0.4/Triple>(?p, <https://github.com/DataTreehouse/maplib/pizza#hasBlank>, _:MyBlank) ,
+  cross | <http://ns.ottr.xyz/0.4/Triple>(?p, <https://github.com/DataTreehouse/maplib/pizza#hasIngredient>, ++ ?ings)
 } . 
 """
     )

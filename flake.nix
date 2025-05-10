@@ -5,7 +5,7 @@
 
     crane.url = "github:ipetkov/crane";
 
-    fenix.url = "github:nix-community/fenix";
+    fenix.url = "github:nix-community/fenix/monthly";
     fenix.inputs.nixpkgs.follows = "nixpkgs";
   };
 
@@ -51,7 +51,7 @@
       packages = rec {
         default = py_maplib;
         py_maplib = python.pkgs.maplib;
-        python-env = python.withPackages (ps: [ ps.maplib ps.polars ps.rdflib ]);
+        python-env = python.withPackages (ps: [ ps.maplib ps.polars ps.rdflib ps.jupyter ]);
       };
       legacyPackages.python = python;
       devShells.default = craneLib.devShell {
@@ -82,10 +82,14 @@
           inherit (craneLib.crateNameFromCargoToml { cargoToml = ./py_maplib/Cargo.toml; }) pname version;
         };
       };
-      apps = rec {
+      apps = {
         python-env = {
           type = "app";
           program = "${self.packages.${system}.python-env}/bin/python";
+        };
+        jupyter = {
+          type = "app";
+          program = "${self.packages.${system}.python-env}/bin/jupyter";
         };
       };
     }

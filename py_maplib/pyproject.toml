@@ -25,6 +25,9 @@ Documentation = "https://datatreehouse.github.io/maplib/maplib/maplib.html"
 Repository = "https://github.com/DataTreehouse/maplib"
 Changelog = "https://github.com/DataTreehouse/maplib/releases"
 
+[project.optional-dependencies]
+explorer = ["fastapi[standard]>=0.115"]
+
 [build-system]
 requires = ["maturin==1.7.4"]
 build-backend = "maturin"

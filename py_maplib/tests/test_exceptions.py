@@ -2,6 +2,7 @@ import pytest
 from maplib import Mapping
 from maplib import MaplibException
 
+
 def test_mapping_exception():
     m = Mapping()
 

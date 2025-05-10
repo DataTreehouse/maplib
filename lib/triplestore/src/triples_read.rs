@@ -38,7 +38,7 @@ impl Triplestore {
         rdf_format: Option<RdfFormat>,
         base_iri: Option<String>,
         transient: bool,
-        parallel: bool,
+        parallel: Option<bool>,
         checked: bool,
     ) -> Result<(), TriplestoreError> {
         let now = Instant::now();
@@ -83,7 +83,7 @@ impl Triplestore {
         rdf_format: RdfFormat,
         base_iri: Option<String>,
         transient: bool,
-        parallel: bool,
+        parallel: Option<bool>,
         checked: bool,
     ) -> Result<(), TriplestoreError> {
         self.read_triples(
@@ -103,10 +103,15 @@ impl Triplestore {
         rdf_format: RdfFormat,
         base_iri: Option<String>,
         transient: bool,
-        parallel: bool,
+        parallel: Option<bool>,
         checked: bool,
     ) -> Result<(), TriplestoreError> {
         let start_quadproc_now = Instant::now();
+        let parallel = if let Some(parallel) = parallel {
+            parallel
+        } else {
+            RdfFormat::NTriples == rdf_format
+        };
         let readers =
             if (rdf_format == RdfFormat::Turtle || rdf_format == RdfFormat::NTriples) && parallel {
                 let threads = if let Ok(threads) = std::thread::available_parallelism() {

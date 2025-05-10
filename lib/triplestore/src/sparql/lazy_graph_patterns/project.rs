@@ -35,7 +35,6 @@ impl Triplestore {
             include_transient,
         )?;
         project_solution_mappings = project(project_solution_mappings, variables)?;
-
         let solution_mappings = if let Some(solution_mappings) = solution_mappings {
             join(
                 solution_mappings,

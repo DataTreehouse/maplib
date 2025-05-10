@@ -4,9 +4,14 @@ version = "0.1.0"
 edition = "2021"
 rust-version.workspace = true
 
+[features]
+pyo3 = [ "dep:pyo3", "triplestore/pyo3" ]
+
 [dependencies]
 triplestore = {path = "../triplestore"}
 representation = {path = "../representation"}
 
 thiserror.workspace= true
 oxrdf.workspace = true
+
+pyo3 = { workspace = true, optional = true }

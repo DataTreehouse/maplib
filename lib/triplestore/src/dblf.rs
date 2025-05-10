@@ -256,6 +256,7 @@ impl Triplestore {
                                     .with_column(col(OBJECT_COL_NAME).cast(DataType::String));
                             }
                         }
+
                         let df = mappings.collect().unwrap();
                         let height_upper_bound = df.height();
                         mappings = df.lazy();
