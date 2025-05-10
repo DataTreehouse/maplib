@@ -224,7 +224,7 @@ impl From<BaseRDFNodeType> for RDFNodeType {
 impl BaseRDFNodeType {
     pub fn multi_columns(&self) -> Vec<String> {
         match self {
-            BaseRDFNodeType::IRI => vec![MULTI_IRI_DT.to_string()],
+            BaseRDFNodeType::IRI => vec![IRI_PREFIX_FIELD.to_string(), IRI_SUFFIX_FIELD.to_string()],
             BaseRDFNodeType::BlankNode => vec![MULTI_BLANK_DT.to_string()],
             BaseRDFNodeType::Literal(_) => {
                 if self.is_lang_string() {
@@ -338,7 +338,6 @@ impl BaseRDFNodeType {
                 xsd::STRING => DataType::String,
                 xsd::UNSIGNED_INT => DataType::UInt32,
                 xsd::UNSIGNED_LONG => DataType::UInt64,
-                xsd::SHORT => DataType::Int16,
                 xsd::UNSIGNED_SHORT => DataType::UInt16,
                 xsd::INTEGER | xsd::LONG => DataType::Int64,
                 xsd::INT => DataType::Int32,
