@@ -521,7 +521,7 @@ class Mapping:
         include_conforms: bool = False,
         include_shape_graph: bool = True,
         streaming: bool = False,
-        max_shape_results: int = None,
+        max_shape_constraint_results: int = None,
         result_storage: str = None,
         only_shapes: List[str] = None,
         deactivate_shapes: List[str] = None,
@@ -537,7 +537,7 @@ class Mapping:
         :param include_shape_graph: Include the shape graph in the report, useful when creating the graph from the report.
         :param include_datatypes: Return the datatypes of the validation report (and details).
         :param streaming: Use Polars streaming
-        :param max_shape_results: Maximum number of results per shape. Reduces the size of the result set.
+        :param max_shape_constraint_results: Maximum number of results per shape and constraint. Reduces the size of the result set.
         :param result_storage: Where to store validation results. Can reduce memory use for large result sets.
         :param only_shapes: Validate only these shapes, None means all shapes are validated (must be IRI, cannot be used with deactivate_shapes).
         :param deactivate_shapes: Disable validation of these shapes (must be IRI, cannot be used with deactivate_shapes).

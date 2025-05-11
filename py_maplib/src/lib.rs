@@ -60,8 +60,8 @@ use representation::solution_mapping::EagerSolutionMappings;
 #[cfg(not(target_os = "linux"))]
 use mimalloc::MiMalloc;
 use representation::polars_to_rdf::XSD_DATETIME_WITH_TZ_FORMAT;
-use representation::rdf_to_polars::rdf_named_node_to_polars_literal_value;
 use representation::{RDFNodeType, OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME};
+use representation::rdf_to_polars::rdf_named_node_to_polars_literal_value;
 use templates::python::{a, py_triple, PyArgument, PyInstance, PyParameter, PyTemplate, PyXSD};
 use templates::MappingColumnType;
 use triplestore::{IndexingOptions, NewTriples};
@@ -405,7 +405,7 @@ impl PyMapping {
         include_conforms=None,
         include_shape_graph=None,
         streaming=None,
-        max_shape_results=None,
+        max_shape_constraint_results=None,
         result_storage=None,
         only_shapes=None,
         deactivate_shapes=None,
@@ -419,7 +419,7 @@ impl PyMapping {
         include_conforms: Option<bool>,
         include_shape_graph: Option<bool>,
         streaming: Option<bool>,
-        max_shape_results: Option<usize>,
+        max_shape_constraint_results: Option<usize>,
         result_storage: Option<&str>,
         only_shapes: Option<Vec<String>>,
         deactivate_shapes: Option<Vec<String>>,
@@ -461,7 +461,7 @@ impl PyMapping {
                 include_details.unwrap_or(false),
                 include_conforms.unwrap_or(false),
                 streaming.unwrap_or(false),
-                max_shape_results,
+                max_shape_constraint_results,
                 path.as_ref(),
                 false, //TODO: Needs more work before can be exposed
                 only_shapes,

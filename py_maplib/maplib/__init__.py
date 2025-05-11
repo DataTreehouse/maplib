@@ -28,7 +28,7 @@ __all__ = [
 
 import pathlib
 from .maplib import *
-from .add_triples import add_triples
+from .adding_triples import add_triples
 
 if (pathlib.Path(__file__).parent.resolve() / "graph_explorer").exists():
     from .graph_explorer import explore

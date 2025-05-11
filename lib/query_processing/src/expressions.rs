@@ -8,8 +8,9 @@ use oxrdf::{Literal, NamedNode, NamedNodeRef, Variable};
 use polars::datatypes::{CategoricalOrdering, DataType, TimeUnit};
 use polars::frame::UniqueKeepStrategy;
 use polars::prelude::{
-    as_struct, coalesce, col, concat_str, lit, when, Expr, GetOutput, IntoColumn, LazyFrame,
-    LiteralValue, NamedFrom, Operator, PlSmallStr, RoundMode, Scalar, StrptimeOptions,
+    as_struct, coalesce, col, concat_str, lit, when, Expr, GetOutput, IntoColumn, JoinArgs,
+    JoinType, LazyFrame, LiteralValue, NamedFrom, Operator, PlSmallStr, RoundMode, Scalar,
+    StrptimeOptions,
 };
 use polars::series::Series;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
@@ -482,17 +483,26 @@ pub fn exists(
         mut rdf_node_types,
         height_estimate: height_upper_bound,
     } = solution_mappings;
-    let mut exists_df = exists_lf
+    let exists_lf = exists_lf
         .select([col(inner_context.as_str())])
-        .unique(None, UniqueKeepStrategy::First)
-        .collect()
-        .expect("Collect lazy exists error");
-    let inner_context_col = exists_df.drop_in_place(inner_context.as_str()).unwrap();
-    mappings = mappings.with_column(
-        col(inner_context.as_str())
-            .is_in(lit(inner_context_col.take_materialized_series()), false)
-            .alias(outer_context.as_str()),
-    );
+        .unique(None, UniqueKeepStrategy::Any)
+        .with_column(lit(true).alias(outer_context.as_str()));
+    mappings = mappings
+        .join(
+            exists_lf,
+            [col(inner_context.as_str())],
+            [col(inner_context.as_str())],
+            JoinArgs {
+                how: JoinType::Left,
+                validation: Default::default(),
+                suffix: None,
+                slice: None,
+                nulls_equal: false,
+                coalesce: Default::default(),
+                maintain_order: Default::default(),
+            },
+        )
+        .with_column(col(outer_context.as_str()).fill_null(lit(false)));
 
     rdf_node_types.insert(
         outer_context.as_str().to_string(),
