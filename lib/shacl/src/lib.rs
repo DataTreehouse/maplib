@@ -59,7 +59,7 @@ pub fn validate(
     _include_details: bool,
     _include_conforms: bool,
     _streaming: bool,
-    _max_shape_results: Option<usize>,
+    _max_shape_constraint_results: Option<usize>,
     _folder_path: Option<&PathBuf>,
     _include_transient: bool,
     _only_shapes: Option<Vec<NamedNode>>,
