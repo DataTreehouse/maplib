@@ -1,4 +1,3 @@
-use crate::multitype::base_col_name;
 use crate::polars_to_rdf::{
     datetime_column_to_strings, XSD_DATETIME_WITH_TZ_FORMAT, XSD_DATE_WITHOUT_TZ_FORMAT,
 };
@@ -10,22 +9,79 @@ use oxrdf::vocab::{rdf, xsd};
 use polars::datatypes::DataType;
 use polars::prelude::{coalesce, col, lit, Expr, GetOutput, IntoColumn, LazyFrame, LiteralValue};
 use std::collections::HashMap;
+use oxrdf::NamedNode;
 
 pub fn format_columns(
     mut lf: LazyFrame,
-    rdf_node_types: &HashMap<String, RDFNodeType>,
+    rdf_node_types: &mut HashMap<String, RDFNodeType>,
 ) -> LazyFrame {
-    for (c, t) in rdf_node_types {
-        if matches!(t, RDFNodeType::MultiType(_))
-            || t.is_lang_string()
+    let mut iri_cols = vec![];
+    let mut iri_multi_cols = vec![];
+    for (c, t) in rdf_node_types.iter() {
+        if let RDFNodeType::MultiType(types) = t {
+            for t in types.iter() {
+                if t.is_iri() { 
+                    iri_multi_cols.push(c.to_string());
+                    break;
+                }
+            }
+            lf = lf.with_column(expression_to_string(col(c), c, t.clone()));
+        } else if  t.is_lang_string()
             || t == &RDFNodeType::BlankNode
         {
             lf = lf.with_column(expression_to_string(col(c), c, t.clone()));
-        } else if let RDFNodeType::IRI = t {
-            lf = lf.with_column(base_expression_to_string(col(c), c, BaseRDFNodeType::IRI))
+        } else if t.is_iri() {
+            lf = lf.with_column(base_expression_to_string(
+                col(c),
+                c,
+                BaseRDFNodeType::from_rdf_node_type(t),
+            ));
+            iri_cols.push(c.to_string());
         }
     }
+    for c in iri_cols {
+        rdf_node_types.insert(c, RDFNodeType::IRI(None));
+    }
+    for c in  iri_multi_cols {
+        let mut types = vec![];
+        let existing = rdf_node_types.remove(&c).unwrap();
+        if let RDFNodeType::MultiType(existing) = existing {
+            for t in existing {
+                if t.is_iri() {
+                    types.push(BaseRDFNodeType::IRI(None));
+                } else {
+                    types.push(t);
+                }
+            }
+        } else {
+            unreachable!("Should never happen");
+        }
+        rdf_node_types.insert(c, RDFNodeType::MultiType(types));
+    }
     lf
+}
+
+pub fn iri_col_to_string_no_brackets(expr:Expr, nn:Option<&NamedNode>) -> Expr {
+    if let Some(nn) = nn {
+        let prefix = lit(nn.as_str());
+        let suffix = expr
+            .struct_()
+            .field_by_name(IRI_SUFFIX_FIELD)
+            .cast(DataType::String);
+        prefix + suffix
+        
+    } else {
+        let prefix = expr
+            .clone()
+            .struct_()
+            .field_by_name(IRI_PREFIX_FIELD)
+            .cast(DataType::String);
+        let suffix = expr
+            .struct_()
+            .field_by_name(IRI_SUFFIX_FIELD)
+            .cast(DataType::String);
+        prefix + suffix
+    }
 }
 
 pub fn base_expression_to_string(
@@ -34,17 +90,9 @@ pub fn base_expression_to_string(
     base_rdf_node_type: BaseRDFNodeType,
 ) -> Expr {
     let expr = match base_rdf_node_type {
-        BaseRDFNodeType::IRI => {
-            let prefix = expr
-                .clone()
-                .struct_()
-                .field_by_name(IRI_PREFIX_FIELD)
-                .cast(DataType::String);
-            let suffix = expr
-                .struct_()
-                .field_by_name(IRI_SUFFIX_FIELD)
-                .cast(DataType::String);
-            lit("<") + prefix + suffix + lit(">")
+        BaseRDFNodeType::IRI(nn) => {
+            let iri = iri_col_to_string_no_brackets(expr, nn.as_ref());
+            lit("<") + iri + lit(">")
         }
         BaseRDFNodeType::BlankNode => lit("_:") + expr.cast(DataType::String),
         BaseRDFNodeType::Literal(l) if l.as_ref() == xsd::DATE_TIME => {
@@ -102,7 +150,7 @@ pub fn expression_to_string(expr: Expr, name: &str, rdf_node_type: RDFNodeType) 
                 exprs.push(base_expression_to_string(expr.clone(), name, t));
             } else {
                 exprs.push(base_expression_to_string(
-                    expr.clone().struct_().field_by_name(&base_col_name(&t)),
+                    expr.clone().struct_().field_by_name(&t.base_col()),
                     name,
                     t,
                 ));

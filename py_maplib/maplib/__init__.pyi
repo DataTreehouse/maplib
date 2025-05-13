@@ -9,7 +9,7 @@ class RDFType:
     For instance, xsd:string is RDFType.Literal("http://www.w3.org/2001/XMLSchema#string")
     """
 
-    IRI: Callable[[], "RDFType"]
+    IRI: Union[Callable[[], "RDFType"], Callable[[str], "RDFType"]]
     BlankNode: Callable[[], "RDFType"]
     Literal: Callable[[Union[str, "IRI"]], "RDFType"]
     Multi: Callable[[List["RDFType"]], "RDFType"]

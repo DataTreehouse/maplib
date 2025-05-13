@@ -132,9 +132,8 @@ pub fn fix_cats_and_multicolumns(
     for c in dts.keys() {
         lf = lf_column_from_categorical(lf.lazy(), c, &dts);
     }
-
     if !native_dataframe {
-        lf = format_columns(lf, &dts)
+        lf = format_columns(lf, &mut dts);
     }
     df = lf.select(column_ordering).collect().unwrap();
     (df, dts)

@@ -2,7 +2,7 @@ use super::Triplestore;
 use crate::errors::TriplestoreError;
 use oxrdf::vocab::xsd;
 use oxrdfio::{RdfFormat, RdfSerializer};
-use polars::prelude::col;
+use polars::prelude::{col, lit};
 use polars_core::datatypes::DataType;
 use polars_core::frame::DataFrame;
 use polars_core::POOL;
@@ -40,15 +40,22 @@ impl Triplestore {
                 for ((subject_type, object_type), tt) in df_map {
                     let mut types = HashMap::new();
                     let mut select = vec![];
-                    if subject_type.is_iri() {
-                        types.insert(SUBJECT_COL_IRI_PREFIX.to_string(), BaseRDFNodeType::IRI);
-                        types.insert(SUBJECT_COL_IRI_SUFFIX.to_string(), BaseRDFNodeType::IRI);
-                        select.push(
-                            col(SUBJECT_COL_NAME)
-                                .struct_()
-                                .field_by_name(IRI_PREFIX_FIELD)
-                                .alias(SUBJECT_COL_IRI_PREFIX),
-                        );
+                    if let BaseRDFNodeType::IRI(nn) = subject_type {
+                        types.insert(SUBJECT_COL_IRI_PREFIX.to_string(), BaseRDFNodeType::IRI(None));
+                        types.insert(SUBJECT_COL_IRI_SUFFIX.to_string(), BaseRDFNodeType::IRI(None));
+                        if let Some(nn) = nn {
+                            select.push(
+                                lit(nn.as_str())
+                                    .alias(SUBJECT_COL_IRI_PREFIX),
+                            );
+                        } else {
+                            select.push(
+                                col(SUBJECT_COL_NAME)
+                                    .struct_()
+                                    .field_by_name(IRI_PREFIX_FIELD)
+                                    .alias(SUBJECT_COL_IRI_PREFIX),
+                            );
+                        }
                         select.push(
                             col(SUBJECT_COL_NAME)
                                 .struct_()
@@ -75,15 +82,22 @@ impl Triplestore {
                                 .field_by_name(LANG_STRING_LANG_FIELD)
                                 .alias(LANG_STRING_LANG_FIELD),
                         );
-                    } else if object_type.is_iri() {
-                        types.insert(OBJECT_COL_IRI_PREFIX.to_string(), BaseRDFNodeType::IRI);
-                        types.insert(OBJECT_COL_IRI_SUFFIX.to_string(), BaseRDFNodeType::IRI);
-                        select.push(
-                            col(OBJECT_COL_NAME)
-                                .struct_()
-                                .field_by_name(IRI_PREFIX_FIELD)
-                                .alias(OBJECT_COL_IRI_PREFIX),
-                        );
+                    } else if let BaseRDFNodeType::IRI(nn) = object_type {
+                        types.insert(OBJECT_COL_IRI_PREFIX.to_string(), BaseRDFNodeType::IRI(None));
+                        types.insert(OBJECT_COL_IRI_SUFFIX.to_string(), BaseRDFNodeType::IRI(None));
+                        if let Some(nn) = nn{
+                            select.push(
+                                lit(nn.as_str())
+                                    .alias(OBJECT_COL_IRI_PREFIX),
+                            );
+                        } else {
+                            select.push(
+                                col(OBJECT_COL_NAME)
+                                    .struct_()
+                                    .field_by_name(IRI_PREFIX_FIELD)
+                                    .alias(OBJECT_COL_IRI_PREFIX),
+                            );
+                        }
                         select.push(
                             col(OBJECT_COL_NAME)
                                 .struct_()

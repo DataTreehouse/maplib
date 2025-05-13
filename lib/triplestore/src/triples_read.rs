@@ -235,6 +235,7 @@ impl Triplestore {
                         triples_to_add.push(TriplesToAdd {
                             df,
                             subject_type: subject_dt.as_rdf_node_type(),
+                            predicate_type: None,
                             object_type: object_dt.as_rdf_node_type(),
                             static_verb_column: Some(NamedNode::new_unchecked(k.clone())),
                         });

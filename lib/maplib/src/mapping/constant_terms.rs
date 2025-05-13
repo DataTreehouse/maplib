@@ -3,15 +3,12 @@ use crate::mapping::{MappingColumnType, RDFNodeType};
 use templates::ast::{ConstantTerm, ConstantTermOrList, PType};
 
 use oxrdf::{NamedNode, Term};
-use polars::prelude::{
-    concat_list, lit, AnyValue, DataType, Expr, IntoSeries, ListChunked, LiteralValue, Series,
-};
+use polars::prelude::{as_struct, concat_list, lit, AnyValue, DataType, Expr, IntoSeries, ListChunked, LiteralValue, Series};
 use rayon::iter::ParallelIterator;
 use rayon::prelude::IntoParallelIterator;
-use representation::rdf_to_polars::{
-    polars_literal_values_to_series, rdf_named_node_to_polars_expr, rdf_term_to_polars_expr,
-};
+use representation::rdf_to_polars::{polars_literal_values_to_series, rdf_split_named_node, rdf_term_to_polars_expr};
 use std::ops::Deref;
+use representation::{IRI_SUFFIX_FIELD};
 use templates::constants::{OTTR_BLANK_NODE, OTTR_IRI};
 
 const BLANK_NODE_SERIES_NAME: &str = "blank_node_series";
@@ -23,11 +20,11 @@ pub fn constant_to_expr(
     let (expr, ptype, rdf_node_type) = match constant_term {
         ConstantTermOrList::ConstantTerm(c) => match c {
             ConstantTerm::Iri(iri) => {
-                let polars_expr = rdf_named_node_to_polars_expr(iri);
+                let (pre,suf) = rdf_split_named_node(iri);
                 (
-                    polars_expr,
+                    as_struct(vec![lit(suf).alias(IRI_SUFFIX_FIELD)]),
                     PType::Basic(NamedNode::new_unchecked(OTTR_IRI)),
-                    MappingColumnType::Flat(RDFNodeType::IRI),
+                    MappingColumnType::Flat(RDFNodeType::IRI(Some(NamedNode::new_unchecked(pre)))),
                 )
             }
             ConstantTerm::BlankNode(_) => {
@@ -35,7 +32,7 @@ pub fn constant_to_expr(
             }
             ConstantTerm::Literal(lit) => {
                 let the_dt = lit.datatype().into_owned();
-                let expr = rdf_term_to_polars_expr(&Term::Literal(lit.clone()));
+                let expr = rdf_term_to_polars_expr(&Term::Literal(lit.clone()), false);
                 (
                     expr,
                     PType::Basic(the_dt.clone()),

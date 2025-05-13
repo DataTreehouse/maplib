@@ -144,7 +144,7 @@ impl PType {
 impl From<&RDFNodeType> for PType {
     fn from(value: &RDFNodeType) -> Self {
         match value {
-            RDFNodeType::IRI => PType::Basic(NamedNode::new_unchecked(OTTR_IRI)),
+            RDFNodeType::IRI(..) => PType::Basic(NamedNode::new_unchecked(OTTR_IRI)),
             RDFNodeType::BlankNode => PType::Basic(NamedNode::new_unchecked(OTTR_BLANK_NODE)),
             RDFNodeType::Literal(l) => PType::Basic(l.to_owned()),
             RDFNodeType::None => PType::None,
@@ -182,7 +182,7 @@ pub fn ptype_nn_to_rdf_node_type(nn: NamedNodeRef) -> RDFNodeType {
     if ptype_is_blank(nn) {
         RDFNodeType::BlankNode
     } else if ptype_is_iri(nn) {
-        RDFNodeType::IRI
+        RDFNodeType::IRI(None)
     } else {
         RDFNodeType::Literal(nn.into_owned())
     }

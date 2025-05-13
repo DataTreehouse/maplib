@@ -169,25 +169,25 @@ impl Triplestore {
                     lookup_dtypes.get(VALUE_COLUMN).unwrap(),
                     RDFNodeType::MultiType(..)
                 ) {
-                    if let TermPattern::NamedNode(_) = subject {
+                    if let TermPattern::NamedNode(nn) = subject {
                         out_df = force_convert_multicol_to_single_col(
                             out_df.lazy(),
                             SUBJECT_COL_NAME,
-                            &BaseRDFNodeType::IRI,
+                            &BaseRDFNodeType::IRI(Some(nn.clone())),
                         )
                         .collect()
                         .unwrap();
-                        dtypes.insert(SUBJECT_COL_NAME.to_string(), RDFNodeType::IRI);
+                        dtypes.insert(SUBJECT_COL_NAME.to_string(), RDFNodeType::IRI(Some(nn.clone())));
                     }
-                    if let TermPattern::NamedNode(_) = object {
+                    if let TermPattern::NamedNode(nn) = object {
                         out_df = force_convert_multicol_to_single_col(
                             out_df.lazy(),
                             OBJECT_COL_NAME,
-                            &BaseRDFNodeType::IRI,
+                            &BaseRDFNodeType::IRI(Some(nn.clone())),
                         )
                         .collect()
                         .unwrap();
-                        dtypes.insert(OBJECT_COL_NAME.to_string(), RDFNodeType::IRI);
+                        dtypes.insert(OBJECT_COL_NAME.to_string(), RDFNodeType::IRI(Some(nn.clone())));
                     }
                     if let TermPattern::Literal(l) = subject {
                         out_df = force_convert_multicol_to_single_col(
@@ -258,7 +258,7 @@ impl Triplestore {
         let mut rename_trg = vec![];
         match subject {
             TermPattern::NamedNode(nn) => {
-                let l = rdf_named_node_to_polars_expr(nn);
+                let l = rdf_named_node_to_polars_expr(nn, false);
                 out_df = out_df
                     .lazy()
                     .filter(col(SUBJECT_COL_NAME).eq(l))
@@ -292,7 +292,7 @@ impl Triplestore {
 
         match object {
             TermPattern::NamedNode(nn) => {
-                let l = rdf_named_node_to_polars_expr(nn);
+                let l = rdf_named_node_to_polars_expr(nn, false);
                 out_df = out_df
                     .lazy()
                     .filter(col(OBJECT_COL_NAME).eq(l))

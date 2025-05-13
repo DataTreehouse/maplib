@@ -40,7 +40,7 @@ pub fn column_as_terms(column: &Column, t: &RDFNodeType) -> Vec<Option<Term>> {
     let height = column.len();
     let terms: Vec<_> = match t {
         RDFNodeType::None
-        | RDFNodeType::IRI
+        | RDFNodeType::IRI(..)
         | RDFNodeType::BlankNode
         | RDFNodeType::Literal(..) => {
             basic_rdf_node_type_column_to_term_vec(column, &BaseRDFNodeType::from_rdf_node_type(t))
@@ -130,7 +130,7 @@ pub fn basic_rdf_node_type_column_to_term_vec(
 ) -> Vec<Option<Term>> {
     match base_rdf_node_type {
         // TODO!: Could I do some polars concat here instead?
-        BaseRDFNodeType::IRI => {
+        BaseRDFNodeType::IRI(None) => {
             let col_struct = column.struct_().unwrap();
             let prefix_ser = col_struct
                 .field_by_name(IRI_PREFIX_FIELD)
@@ -156,6 +156,33 @@ pub fn basic_rdf_node_type_column_to_term_vec(
                         let iri = format!(
                             "{}{}",
                             prefix.expect("column_to_term: iri has no prefix!"),
+                            suffix.expect("column_to_term: iri has no suffix!")
+                        );
+                        Some(Term::NamedNode(NamedNode::new_unchecked(iri)))
+                    }
+                })
+                .collect()
+        }
+        BaseRDFNodeType::IRI(Some(nn)) => {
+            let col_struct = column.struct_().unwrap();
+
+            let suffix_ser = col_struct
+                .field_by_name(IRI_SUFFIX_FIELD)
+                .unwrap()
+                .cast(&DataType::String)
+                .unwrap();
+            let suffix_iter = suffix_ser.str().unwrap().into_iter();
+            
+            let prefix = nn.as_str();
+            suffix_iter
+                .map(|suffix| {
+                    // This literally did nothing
+                    if suffix.is_none() {
+                        None
+                    } else {
+                        let iri = format!(
+                            "{}{}",
+                            prefix,
                             suffix.expect("column_to_term: iri has no suffix!")
                         );
                         Some(Term::NamedNode(NamedNode::new_unchecked(iri)))
@@ -293,7 +320,7 @@ pub fn polars_type_to_literal_type(
                     IRI_PREFIX_FIELD => {
                         only_lang_string = false;
                         found_iri_prefix = true;
-                        dts.push(BaseRDFNodeType::IRI);
+                        dts.push(BaseRDFNodeType::IRI(None));
                     }
                     IRI_SUFFIX_FIELD => {
                         found_iri_suffix = true;
@@ -480,7 +507,7 @@ pub fn particular_opt_term_vec_to_series(
             .collect()
             .unwrap();
         df.drop_in_place(c).unwrap().take_materialized_series()
-    } else if BaseRDFNodeTypeRef::IRI == dt {
+    } else if dt.is_iri() {
         let (prefixes, suffixes) = term_vec
             .par_iter()
             .map(|t| {

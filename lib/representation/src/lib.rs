@@ -8,19 +8,17 @@ pub mod solution_mapping;
 
 pub mod errors;
 pub mod formatting;
-pub mod iri_split;
+pub mod iri;
 pub mod literals;
 pub mod python;
 pub mod subtypes;
 
-use crate::multitype::{base_col_name, MULTI_BLANK_DT, MULTI_NONE_DT};
+use crate::multitype::{MULTI_BLANK_DT, MULTI_NONE_DT};
 use crate::subtypes::{is_literal_subtype, OWL_REAL};
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{BlankNode, NamedNode, NamedNodeRef, NamedOrBlankNode, Subject, Term};
 use polars::datatypes::CategoricalOrdering;
 use polars::prelude::{DataType, Field, PlSmallStr, TimeUnit};
-use serde::de::{Error, Visitor};
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use spargebra::term::{GroundTerm, TermPattern};
 use std::fmt::{Display, Formatter};
 
@@ -38,62 +36,20 @@ const RDF_NODE_TYPE_NONE: &str = "None";
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum RDFNodeTypeRef<'a> {
-    IRI,
+    IRI(Option<NamedNodeRef<'a>>),
     BlankNode,
     Literal(NamedNodeRef<'a>),
     None,
     MultiType(Vec<BaseRDFNodeTypeRef<'a>>),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum RDFNodeType {
-    IRI,
+    IRI(Option<NamedNode>),
     BlankNode,
-    #[serde(
-        deserialize_with = "deserialize_named_node",
-        serialize_with = "serialize_named_node"
-    )]
     Literal(NamedNode),
     None,
     MultiType(Vec<BaseRDFNodeType>),
-}
-
-struct StringVisitor;
-
-impl Visitor<'_> for StringVisitor {
-    type Value = NamedNode;
-
-    fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
-        formatter.write_str("A valid IRI (without < and >)")
-    }
-
-    fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
-    where
-        E: Error,
-    {
-        NamedNode::new(v).map_err(|x| E::custom(x.to_string()))
-    }
-
-    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
-    where
-        E: Error,
-    {
-        NamedNode::new(v).map_err(|x| E::custom(x.to_string()))
-    }
-}
-
-fn deserialize_named_node<'de, D>(deserializer: D) -> Result<NamedNode, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    deserializer.deserialize_string(StringVisitor)
-}
-
-fn serialize_named_node<S>(named_node: &NamedNode, serializer: S) -> Result<S::Ok, S::Error>
-where
-    S: Serializer,
-{
-    serializer.serialize_str(named_node.as_str())
 }
 
 impl RDFNodeType {
@@ -102,7 +58,6 @@ impl RDFNodeType {
             Self::MultiType(types) => {
                 let mut fields = Vec::new();
                 for t in types {
-                    let n = base_col_name(t);
                     if t.is_lang_string() {
                         fields.push(Field::new(
                             PlSmallStr::from_str(LANG_STRING_VALUE_FIELD),
@@ -122,12 +77,13 @@ impl RDFNodeType {
                             DataType::String,
                         ));
                     } else {
-                        fields.push(Field::new(PlSmallStr::from_str(&n), t.polars_data_type()));
+                        let n = t.base_col();
+                        fields.push(Field::new(PlSmallStr::from_string(n), t.polars_data_type()));
                     }
                 }
                 DataType::Struct(fields)
             }
-            Self::IRI | Self::BlankNode | Self::Literal(_) | Self::None => {
+            Self::IRI(..) | Self::BlankNode | Self::Literal(..) | Self::None => {
                 BaseRDFNodeType::from_rdf_node_type(self).polars_data_type()
             }
         }
@@ -136,7 +92,7 @@ impl RDFNodeType {
 
 #[derive(Debug, Clone, Ord, PartialOrd, PartialEq, Eq, Hash)]
 pub enum BaseRDFNodeTypeRef<'a> {
-    IRI,
+    IRI(Option<NamedNodeRef<'a>>),
     BlankNode,
     Literal(NamedNodeRef<'a>),
     None,
@@ -151,9 +107,13 @@ impl BaseRDFNodeTypeRef<'_> {
         }
     }
 
+    pub(crate) fn is_iri(&self) -> bool {
+        matches!(self, Self::IRI(_))
+    }
+
     pub fn into_owned(self) -> BaseRDFNodeType {
         match self {
-            BaseRDFNodeTypeRef::IRI => BaseRDFNodeType::IRI,
+            BaseRDFNodeTypeRef::IRI(nn) => BaseRDFNodeType::IRI(nn.map(|nn| nn.into_owned())),
             BaseRDFNodeTypeRef::BlankNode => BaseRDFNodeType::BlankNode,
             BaseRDFNodeTypeRef::Literal(l) => BaseRDFNodeType::Literal(l.into_owned()),
             BaseRDFNodeTypeRef::None => BaseRDFNodeType::None,
@@ -162,7 +122,7 @@ impl BaseRDFNodeTypeRef<'_> {
 
     pub fn as_str(&self) -> &str {
         match self {
-            Self::IRI => IRI_PREFIX_FIELD,
+            Self::IRI(..) => IRI_SUFFIX_FIELD,
             Self::BlankNode => MULTI_BLANK_DT,
             Self::Literal(l) => l.as_str(),
             Self::None => MULTI_NONE_DT,
@@ -172,7 +132,7 @@ impl BaseRDFNodeTypeRef<'_> {
 
 pub fn get_subject_datatype_ref(s: &Subject) -> BaseRDFNodeTypeRef {
     match s {
-        Subject::NamedNode(_) => BaseRDFNodeTypeRef::IRI,
+        Subject::NamedNode(_) => BaseRDFNodeTypeRef::IRI(None),
         Subject::BlankNode(_) => BaseRDFNodeTypeRef::BlankNode,
         #[cfg(feature = "rdf-star")]
         _ => unimplemented!(),
@@ -181,7 +141,7 @@ pub fn get_subject_datatype_ref(s: &Subject) -> BaseRDFNodeTypeRef {
 
 pub fn get_term_datatype_ref(t: &Term) -> BaseRDFNodeTypeRef {
     match t {
-        Term::NamedNode(_) => BaseRDFNodeTypeRef::IRI,
+        Term::NamedNode(_) => BaseRDFNodeTypeRef::IRI(None),
         Term::BlankNode(_) => BaseRDFNodeTypeRef::BlankNode,
         Term::Literal(l) => BaseRDFNodeTypeRef::Literal(l.datatype()),
         #[cfg(feature = "rdf-star")]
@@ -191,21 +151,18 @@ pub fn get_term_datatype_ref(t: &Term) -> BaseRDFNodeTypeRef {
 
 pub fn get_ground_term_datatype_ref(t: &GroundTerm) -> BaseRDFNodeTypeRef {
     match t {
-        GroundTerm::NamedNode(_) => BaseRDFNodeTypeRef::IRI,
+        GroundTerm::NamedNode(_) => BaseRDFNodeTypeRef::IRI(None),
         GroundTerm::Literal(l) => BaseRDFNodeTypeRef::Literal(l.datatype()),
         #[cfg(feature = "rdf-star")]
         _ => unimplemented!(),
     }
 }
 
-#[derive(Debug, Clone, Ord, PartialOrd, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Ord, PartialOrd, PartialEq, Eq, Hash)]
 pub enum BaseRDFNodeType {
-    IRI,
+    
+    IRI(Option<NamedNode>),
     BlankNode,
-    #[serde(
-        deserialize_with = "deserialize_named_node",
-        serialize_with = "serialize_named_node"
-    )]
     Literal(NamedNode),
     None,
 }
@@ -213,7 +170,7 @@ pub enum BaseRDFNodeType {
 impl From<BaseRDFNodeType> for RDFNodeType {
     fn from(val: BaseRDFNodeType) -> Self {
         match val {
-            BaseRDFNodeType::IRI => Self::IRI,
+            BaseRDFNodeType::IRI(nn) => Self::IRI(nn),
             BaseRDFNodeType::BlankNode => Self::BlankNode,
             BaseRDFNodeType::Literal(l) => Self::Literal(l),
             BaseRDFNodeType::None => Self::None,
@@ -222,29 +179,9 @@ impl From<BaseRDFNodeType> for RDFNodeType {
 }
 
 impl BaseRDFNodeType {
-    pub fn multi_columns(&self) -> Vec<String> {
-        match self {
-            BaseRDFNodeType::IRI => vec![IRI_PREFIX_FIELD.to_string(), IRI_SUFFIX_FIELD.to_string()],
-            BaseRDFNodeType::BlankNode => vec![MULTI_BLANK_DT.to_string()],
-            BaseRDFNodeType::Literal(_) => {
-                if self.is_lang_string() {
-                    vec![
-                        LANG_STRING_VALUE_FIELD.to_string(),
-                        LANG_STRING_LANG_FIELD.to_string(),
-                    ]
-                } else {
-                    vec![base_col_name(self).to_string()]
-                }
-            }
-            BaseRDFNodeType::None => {
-                vec![MULTI_NONE_DT.to_string()]
-            }
-        }
-    }
-
     pub fn as_ref(&self) -> BaseRDFNodeTypeRef {
         match self {
-            Self::IRI => BaseRDFNodeTypeRef::IRI,
+            Self::IRI(nn) => BaseRDFNodeTypeRef::IRI(nn.as_ref().map(|nn| nn.as_ref())),
             Self::BlankNode => BaseRDFNodeTypeRef::BlankNode,
             Self::Literal(l) => BaseRDFNodeTypeRef::Literal(l.as_ref()),
             Self::None => BaseRDFNodeTypeRef::None,
@@ -253,7 +190,7 @@ impl BaseRDFNodeType {
 
     pub fn from_rdf_node_type(r: &RDFNodeType) -> Self {
         match r {
-            RDFNodeType::IRI => Self::IRI,
+            RDFNodeType::IRI(nn) => Self::IRI(nn.clone()),
             RDFNodeType::BlankNode => Self::BlankNode,
             RDFNodeType::Literal(l) => Self::Literal(l.clone()),
             RDFNodeType::None => Self::None,
@@ -263,7 +200,7 @@ impl BaseRDFNodeType {
         }
     }
     pub fn is_iri(&self) -> bool {
-        self == &Self::IRI
+        matches!(self, Self::IRI(..))
     }
     pub fn is_blank_node(&self) -> bool {
         self == &Self::BlankNode
@@ -283,8 +220,11 @@ impl BaseRDFNodeType {
 
     pub fn multi_cols(&self) -> Vec<String> {
         match self {
-            BaseRDFNodeType::IRI => {
+            BaseRDFNodeType::IRI(None) => {
                 vec![IRI_PREFIX_FIELD.to_string(), IRI_SUFFIX_FIELD.to_string()]
+            }
+            BaseRDFNodeType::IRI(Some(..)) => {
+                vec![IRI_SUFFIX_FIELD.to_string()]
             }
             BaseRDFNodeType::BlankNode => {
                 vec![MULTI_BLANK_DT.to_string()]
@@ -293,7 +233,7 @@ impl BaseRDFNodeType {
                 if self.is_lang_string() {
                     vec![
                         LANG_STRING_VALUE_FIELD.to_string(),
-                        LANG_STRING_VALUE_FIELD.to_string(),
+                        LANG_STRING_LANG_FIELD.to_string(),
                     ]
                 } else {
                     vec![l.to_string()]
@@ -305,9 +245,30 @@ impl BaseRDFNodeType {
         }
     }
 
+    pub fn base_col(&self) -> String {
+        match self {
+            BaseRDFNodeType::IRI(..) => {
+                IRI_SUFFIX_FIELD.to_string()
+            }
+            BaseRDFNodeType::BlankNode => {
+                MULTI_BLANK_DT.to_string()
+            }
+            BaseRDFNodeType::Literal(l) => {
+                if self.is_lang_string() {
+                    LANG_STRING_VALUE_FIELD.to_string()
+                } else {
+                    l.to_string()
+                }
+            }
+            BaseRDFNodeType::None => {
+                MULTI_NONE_DT.to_string()
+            }
+        }
+    }
+
     pub fn as_rdf_node_type(&self) -> RDFNodeType {
         match self {
-            BaseRDFNodeType::IRI => RDFNodeType::IRI,
+            BaseRDFNodeType::IRI(nn) => RDFNodeType::IRI(nn.clone()),
             BaseRDFNodeType::BlankNode => RDFNodeType::BlankNode,
             BaseRDFNodeType::Literal(l) => RDFNodeType::Literal(l.clone()),
             BaseRDFNodeType::None => RDFNodeType::None,
@@ -316,7 +277,7 @@ impl BaseRDFNodeType {
 
     pub fn from_term(term: &Term) -> Self {
         match term {
-            Term::NamedNode(_) => BaseRDFNodeType::IRI,
+            Term::NamedNode(_) => BaseRDFNodeType::IRI(None),
             Term::BlankNode(_) => BaseRDFNodeType::BlankNode,
             Term::Literal(l) => BaseRDFNodeType::Literal(l.datatype().into_owned()),
             #[cfg(feature = "rdf-star")]
@@ -326,13 +287,16 @@ impl BaseRDFNodeType {
 
     pub fn polars_data_type(&self) -> DataType {
         match self {
-            BaseRDFNodeType::IRI => DataType::Struct(vec![
+            BaseRDFNodeType::IRI(None) => DataType::Struct(vec![
                 Field::new(
                     IRI_PREFIX_FIELD.into(),
                     DataType::Categorical(None, CategoricalOrdering::Physical),
                 ),
                 Field::new(IRI_SUFFIX_FIELD.into(), DataType::String),
             ]),
+            BaseRDFNodeType::IRI(Some(..)) => {
+                DataType::Struct(vec![Field::new(IRI_SUFFIX_FIELD.into(), DataType::String)])
+            }
             BaseRDFNodeType::BlankNode => DataType::String,
             BaseRDFNodeType::Literal(l) => match l.as_ref() {
                 xsd::STRING => DataType::String,
@@ -360,8 +324,8 @@ impl BaseRDFNodeType {
     }
 
     pub fn from_string(s: String) -> Self {
-        if s == IRI_PREFIX_FIELD {
-            Self::IRI
+        if s == IRI_SUFFIX_FIELD {
+            Self::IRI(None)
         } else if s == MULTI_BLANK_DT {
             Self::BlankNode
         } else if s == MULTI_NONE_DT {
@@ -378,7 +342,7 @@ impl BaseRDFNodeType {
 impl Display for BaseRDFNodeType {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::IRI => {
+            Self::IRI(..) => {
                 write!(f, "{RDF_NODE_TYPE_IRI}")
             }
             Self::BlankNode => {
@@ -401,7 +365,7 @@ impl Display for RDFNodeType {
                 let type_strings: Vec<_> = types.iter().map(|x| x.to_string()).collect();
                 write!(f, "Multiple({})", type_strings.join(", "))
             }
-            Self::IRI | Self::BlankNode | Self::Literal(_) | Self::None => {
+            Self::IRI(..) | Self::BlankNode | Self::Literal(_) | Self::None => {
                 BaseRDFNodeType::from_rdf_node_type(self).fmt(f)
             }
         }
@@ -411,7 +375,7 @@ impl Display for RDFNodeType {
 impl RDFNodeType {
     pub fn infer_from_term_pattern(tp: &TermPattern) -> Option<RDFNodeType> {
         match tp {
-            TermPattern::NamedNode(_) => Some(RDFNodeType::IRI),
+            TermPattern::NamedNode(_) => Some(RDFNodeType::IRI(None)),
             TermPattern::BlankNode(_) => None,
             TermPattern::Literal(l) => Some(RDFNodeType::Literal(l.datatype().into_owned())),
             TermPattern::Variable(_v) => None,
@@ -421,7 +385,7 @@ impl RDFNodeType {
     }
 
     pub fn is_iri(&self) -> bool {
-        self == &Self::IRI
+        matches!(self, Self::IRI(_))
     }
     pub fn is_blank_node(&self) -> bool {
         self == &Self::BlankNode

@@ -60,7 +60,7 @@ use representation::solution_mapping::EagerSolutionMappings;
 #[cfg(not(target_os = "linux"))]
 use mimalloc::MiMalloc;
 use representation::polars_to_rdf::XSD_DATETIME_WITH_TZ_FORMAT;
-use representation::rdf_to_polars::rdf_named_node_to_polars_expr;
+use representation::rdf_to_polars::{rdf_named_node_to_polars_expr, rdf_split_named_node};
 use representation::{RDFNodeType, OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME};
 use templates::python::{a, py_triple, PyArgument, PyInstance, PyParameter, PyTemplate, PyXSD};
 use templates::MappingColumnType;
@@ -959,9 +959,10 @@ fn query_to_result(
             ) in dfs
             {
                 if let Some(verb) = verb {
+                    let (pre, _) = rdf_split_named_node(&verb);
                     mappings = mappings
                         .lazy()
-                        .with_column(rdf_named_node_to_polars_expr(&verb).alias(VERB_COL_NAME))
+                        .with_column(rdf_named_node_to_polars_expr(&verb, true).alias(VERB_COL_NAME))
                         .select([
                             col(SUBJECT_COL_NAME),
                             col(VERB_COL_NAME),
@@ -969,7 +970,7 @@ fn query_to_result(
                         ])
                         .collect()
                         .unwrap();
-                    rdf_node_types.insert(VERB_COL_NAME.to_string(), RDFNodeType::IRI);
+                    rdf_node_types.insert(VERB_COL_NAME.to_string(), RDFNodeType::IRI(Some(NamedNode::new_unchecked(pre))));
                 }
                 (mappings, rdf_node_types) =
                     fix_cats_and_multicolumns(mappings, rdf_node_types, native_dataframe);

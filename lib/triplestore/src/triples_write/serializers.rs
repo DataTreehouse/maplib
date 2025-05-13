@@ -406,7 +406,7 @@ pub(super) fn serializer_for<'a>(
             },
             array,
         ),
-        (DataType::String, BaseRDFNodeType::IRI) => {
+        (DataType::String, BaseRDFNodeType::IRI(..)) => {
             if !is_iri_suffix {
                 iri_prefix_serializer(
                     |iter| Iterator::next(iter).expect(TOO_MANY_MSG),
@@ -470,7 +470,7 @@ pub(super) fn serializer_for<'a>(
                 array,
             )
         }
-        (DataType::Categorical(rev_map, _) | DataType::Enum(rev_map, _), BaseRDFNodeType::IRI) => {
+        (DataType::Categorical(rev_map, _) | DataType::Enum(rev_map, _), BaseRDFNodeType::IRI(..)) => {
             let rev_map = rev_map.as_deref().unwrap();
             if !is_iri_suffix {
                 iri_prefix_serializer(

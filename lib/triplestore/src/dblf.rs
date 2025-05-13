@@ -7,14 +7,17 @@ use polars_core::prelude::{Column, DataFrame, DataType};
 use query_processing::type_constraints::PossibleTypes;
 use rayon::iter::IntoParallelIterator;
 use rayon::iter::ParallelIterator;
-use representation::multitype::{all_multi_cols, base_col_name, lf_columns_to_categorical};
-use representation::rdf_to_polars::{rdf_named_node_to_polars_expr, rdf_term_to_polars_expr};
+use representation::multitype::{lf_columns_to_categorical};
+use representation::rdf_to_polars::{
+    rdf_named_node_to_polars_expr, rdf_split_named_node, rdf_term_to_polars_expr,
+};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use representation::{
     BaseRDFNodeType, RDFNodeType, IRI_PREFIX_FIELD, IRI_SUFFIX_FIELD, LANG_STRING_LANG_FIELD,
     LANG_STRING_VALUE_FIELD, OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME,
 };
 use std::collections::{HashMap, HashSet};
+use query_processing::graph_patterns::union;
 
 impl Triplestore {
     pub fn get_predicate_iris(&self, include_transient: bool) -> Vec<NamedNode> {
@@ -177,15 +180,6 @@ impl Triplestore {
         }
 
         if !sms.is_empty() {
-            let subject_need_multi =
-                partial_check_need_multi(&sms, true, subject_keep_rename.is_some());
-            let object_need_multi =
-                partial_check_need_multi(&sms, false, object_keep_rename.is_some());
-            let mut all_mappings = vec![];
-            let mut subject_types = HashSet::new();
-            let mut object_types = HashSet::new();
-            let mut accumulated_heights = 0usize;
-
             // This part is to work around a performance bug in Polars.
             // Still present..
             if predicate_uris_len > 1 && (subjects.is_some() || objects.is_some()) {
@@ -200,18 +194,20 @@ impl Triplestore {
                             height_upper_bound: _,
                         } = sm;
                         if let Some(subject_type) = &subject_type {
-                            if subject_type.is_iri() {
+                            if let BaseRDFNodeType::IRI(subject_nn) = subject_type {
+                                let mut subject_structs = vec![];
+                                if subject_nn.is_none() {
+                                    subject_structs.push(col(SUBJECT_COL_NAME)
+                                        .struct_()
+                                        .field_by_name(IRI_PREFIX_FIELD).cast(DataType::String)
+                                        .alias(IRI_PREFIX_FIELD));
+                                }
+                                subject_structs.push(col(SUBJECT_COL_NAME)
+                                                 .struct_()
+                                                 .field_by_name(IRI_SUFFIX_FIELD).cast(DataType::String)
+                                                 .alias(IRI_SUFFIX_FIELD));
                                 mappings = mappings.with_column(
-                                    as_struct(vec![
-                                        col(SUBJECT_COL_NAME)
-                                            .struct_()
-                                            .field_by_name(IRI_PREFIX_FIELD)
-                                            .alias(IRI_PREFIX_FIELD),
-                                        col(SUBJECT_COL_NAME)
-                                            .struct_()
-                                            .field_by_name(IRI_SUFFIX_FIELD)
-                                            .alias(IRI_SUFFIX_FIELD),
-                                    ])
+                                    as_struct(subject_structs)
                                     .alias(SUBJECT_COL_NAME),
                                 );
                             } else {
@@ -237,21 +233,23 @@ impl Triplestore {
                                     ])
                                     .alias(OBJECT_COL_NAME),
                                 )
-                            } else if object_type.is_iri() {
+                            } else if let BaseRDFNodeType::IRI(object_nn) = object_type {
+                                let mut object_structs = vec![];
+                                if object_nn.is_none() {
+                                    object_structs.push(col(OBJECT_COL_NAME)
+                                        .struct_()
+                                        .field_by_name(IRI_PREFIX_FIELD).cast(DataType::String)
+                                        .alias(IRI_PREFIX_FIELD));
+                                }
+                                object_structs.push(col(OBJECT_COL_NAME)
+                                    .struct_()
+                                    .field_by_name(IRI_SUFFIX_FIELD).cast(DataType::String)
+                                    .alias(IRI_SUFFIX_FIELD));
                                 mappings = mappings.with_column(
-                                    as_struct(vec![
-                                        col(OBJECT_COL_NAME)
-                                            .struct_()
-                                            .field_by_name(IRI_PREFIX_FIELD)
-                                            .alias(IRI_PREFIX_FIELD),
-                                        col(OBJECT_COL_NAME)
-                                            .struct_()
-                                            .field_by_name(IRI_SUFFIX_FIELD)
-                                            .alias(IRI_SUFFIX_FIELD),
-                                    ])
-                                    .alias(OBJECT_COL_NAME),
-                                )
-                            } else if object_type.polars_data_type() == DataType::String {
+                                    as_struct(object_structs)
+                                        .alias(OBJECT_COL_NAME),
+                                );
+                            }  else if object_type.polars_data_type() == DataType::String {
                                 mappings = mappings
                                     .with_column(col(OBJECT_COL_NAME).cast(DataType::String));
                             }
@@ -289,6 +287,16 @@ impl Triplestore {
                     })
                     .collect();
             }
+            
+            let verbs: HashSet<_> = sms.iter().map(|x| &x.verb).collect();
+            let mut unique_verb = None;
+            if verbs.len() == 1 {
+                if let Some(verb) = verbs.into_iter().next().unwrap() {
+                    unique_verb = Some(verb.clone());
+                }
+            }
+
+            let mut all_sms = vec![];
 
             for HalfBakedSolutionMappings {
                 mut mappings,
@@ -298,78 +306,48 @@ impl Triplestore {
                 height_upper_bound,
             } in sms
             {
-                if let Some(subject_type) = subject_type {
-                    if subject_need_multi {
-                        mappings = unnest_non_multi_col(mappings, SUBJECT_COL_NAME, &subject_type);
-                    }
-                    subject_types.insert(subject_type);
+                let mut rdf_node_types = HashMap::new();
+                if let Some(subject_type) = &subject_type {
+                    rdf_node_types.insert(SUBJECT_COL_NAME.to_string(), subject_type.as_rdf_node_type());
                 }
-
+                if let Some(object_type) = &object_type {
+                    rdf_node_types.insert(OBJECT_COL_NAME.to_string(), object_type.as_rdf_node_type());
+                }
                 if verb_keep_rename.is_some() {
                     mappings = mappings.with_column(
-                        rdf_named_node_to_polars_expr(&verb.unwrap()).alias(VERB_COL_NAME),
+                        rdf_named_node_to_polars_expr(&verb.unwrap(), unique_verb.is_some())
+                            .alias(VERB_COL_NAME),
                     );
-                }
-
-                if let Some(object_type) = object_type {
-                    if object_need_multi {
-                        mappings = unnest_non_multi_col(mappings, OBJECT_COL_NAME, &object_type);
+                    if let Some(unique_verb) = &unique_verb {
+                        let (pre, _) = rdf_split_named_node(&unique_verb);
+                        rdf_node_types.insert(
+                            VERB_COL_NAME.to_string(),
+                            RDFNodeType::IRI(Some(NamedNode::new_unchecked(pre))),
+                        );
+                    } else {
+                        rdf_node_types.insert(VERB_COL_NAME.to_string(), RDFNodeType::IRI(None));
                     }
-                    object_types.insert(object_type);
                 }
-
-                accumulated_heights = accumulated_heights.saturating_add(height_upper_bound);
-                all_mappings.push(mappings);
+                let sm = SolutionMappings::new(mappings, rdf_node_types, height_upper_bound);
+                all_sms.push(sm);
             }
-
-            let mut mappings = if all_mappings.len() > 1 {
-                concat(
-                    all_mappings,
-                    UnionArgs {
-                        parallel: true,
-                        rechunk: false,
-                        to_supertypes: false,
-                        diagonal: true,
-                        from_partitioned_ds: false,
-                        maintain_order: false,
-                    },
-                )
-                .unwrap()
-            } else {
-                all_mappings.pop().unwrap()
-            };
-            let mut sorted_subject_types: Vec<_> = subject_types.into_iter().collect();
-            sorted_subject_types.sort();
-            let mut sorted_object_types: Vec<_> = object_types.into_iter().collect();
-            sorted_object_types.sort();
-
-            if subject_need_multi {
-                let multi_colnames = all_multi_cols(&sorted_subject_types);
-                let mut struct_exprs = vec![];
-                for inner_col in &multi_colnames {
-                    let prefixed_col = create_prefixed_multi_colname(SUBJECT_COL_NAME, inner_col);
-                    struct_exprs.push(col(prefixed_col).alias(inner_col));
-                }
-                mappings = mappings.with_column(as_struct(struct_exprs).alias(SUBJECT_COL_NAME));
-            }
-            if object_need_multi {
-                let multi_colnames = all_multi_cols(&sorted_object_types);
-                let mut struct_exprs = vec![];
-                for inner_col in &multi_colnames {
-                    let prefixed_col = create_prefixed_multi_colname(OBJECT_COL_NAME, inner_col);
-                    struct_exprs.push(col(prefixed_col).alias(inner_col));
-                }
-                mappings = mappings.with_column(as_struct(struct_exprs).alias(OBJECT_COL_NAME));
-            }
+            
+            let mut sm = 
+                union(
+                    all_sms,
+                    false,
+                )?;
             let mut keep = vec![];
             let mut rename_src = vec![];
             let mut rename_trg = vec![];
+            let mut types = HashMap::new();
             if let Some(s) = subject_keep_rename {
                 keep.push(SUBJECT_COL_NAME);
                 if s != SUBJECT_COL_NAME {
                     rename_src.push(SUBJECT_COL_NAME);
                     rename_trg.push(s);
                 }
+                types.insert(s.clone(), sm.rdf_node_types.remove(SUBJECT_COL_NAME).unwrap());
             }
             if let Some(v) = verb_keep_rename {
                 keep.push(VERB_COL_NAME);
@@ -377,6 +355,7 @@ impl Triplestore {
                     rename_src.push(VERB_COL_NAME);
                     rename_trg.push(v);
                 }
+                types.insert(v.clone(), sm.rdf_node_types.remove(VERB_COL_NAME).unwrap());
             }
             if let Some(o) = object_keep_rename {
                 keep.push(OBJECT_COL_NAME);
@@ -384,34 +363,14 @@ impl Triplestore {
                     rename_src.push(OBJECT_COL_NAME);
                     rename_trg.push(o);
                 }
+                types.insert(o.clone(), sm.rdf_node_types.remove(OBJECT_COL_NAME).unwrap());
             }
+            sm.rdf_node_types = types;
             let keep_exprs: Vec<_> = keep.iter().map(|x| col(*x)).collect();
-            mappings = mappings.select(keep_exprs);
+            sm.mappings = sm.mappings.select(keep_exprs);
             if !rename_src.is_empty() {
-                mappings = mappings.rename(&rename_src, &rename_trg, true);
+                sm.mappings = sm.mappings.rename(&rename_src, &rename_trg, true);
             }
-
-            let mut types = HashMap::new();
-            if let Some(subject_col_name) = subject_keep_rename {
-                let subject_type = if subject_need_multi {
-                    RDFNodeType::MultiType(sorted_subject_types)
-                } else {
-                    sorted_subject_types.pop().unwrap().as_rdf_node_type()
-                };
-                types.insert(subject_col_name.clone(), subject_type);
-            }
-            if let Some(verb_col_name) = verb_keep_rename {
-                types.insert(verb_col_name.clone(), RDFNodeType::IRI);
-            }
-            if let Some(object_col_name) = object_keep_rename {
-                let object_type = if object_need_multi {
-                    RDFNodeType::MultiType(sorted_object_types)
-                } else {
-                    sorted_object_types.pop().unwrap().as_rdf_node_type()
-                };
-                types.insert(object_col_name.clone(), object_type);
-            };
-            let sm = SolutionMappings::new(mappings, types, accumulated_heights);
             Ok(sm)
         } else {
             Ok(create_empty_lf_datatypes(
@@ -469,58 +428,6 @@ impl Triplestore {
     }
 }
 
-#[allow(clippy::type_complexity)]
-pub fn unnest_non_multi_col(mut mappings: LazyFrame, c: &str, dt: &BaseRDFNodeType) -> LazyFrame {
-    let mut exprs = vec![];
-    let mut drop_cols = vec![];
-
-    if dt.is_multifield() {
-        let inner_cols = all_multi_cols(&vec![dt.clone()]);
-        for inner in &inner_cols {
-            let prefixed_inner = create_prefixed_multi_colname(c, inner);
-            exprs.push(col(c).struct_().field_by_name(inner).alias(&prefixed_inner));
-        }
-    } else {
-        let inner = base_col_name(dt);
-        let prefixed_inner = create_prefixed_multi_colname(c, &inner);
-        exprs.push(col(c).alias(&prefixed_inner));
-    }
-    drop_cols.push(col(c));
-
-    mappings = mappings.with_columns(exprs);
-    mappings = mappings.drop(drop_cols);
-    mappings
-}
-
-fn create_prefixed_multi_colname(c: &str, inner: &str) -> String {
-    format!("{c}{inner}")
-}
-
-fn partial_check_need_multi(
-    sms: &Vec<HalfBakedSolutionMappings>,
-    subject: bool,
-    keep: bool,
-) -> bool {
-    if keep {
-        let mut first_datatype = None;
-        for sm in sms {
-            let use_dt = if subject {
-                &sm.subject_type
-            } else {
-                &sm.object_type
-            };
-            if let Some(first) = &first_datatype {
-                if first != &use_dt {
-                    return true;
-                }
-            } else {
-                first_datatype = Some(use_dt);
-            }
-        }
-    }
-    false
-}
-
 fn single_tt_to_lf(
     tt: &Triples,
     subjects: &Option<Vec<&Subject>>,
@@ -558,18 +465,18 @@ fn single_tt_to_lf(
     if let Some(subject_terms) = &subjects {
         // Handles case where singular subject from triple pattern.
         if subject_terms.len() == 1 {
-            lf = lf.filter(
-                col(SUBJECT_COL_NAME).eq(rdf_term_to_polars_expr(&Term::from(
-                    subject_terms.first().unwrap().as_ref(),
-                ))),
-            );
+            lf = lf.filter(col(SUBJECT_COL_NAME).eq(rdf_term_to_polars_expr(
+                &Term::from(subject_terms.first().unwrap().as_ref()),
+                true,
+            )));
         }
     }
     if let Some(object_terms) = &objects {
         // Handles case where singular object from triple pattern.
         if object_terms.len() == 1 {
             lf = lf.filter(
-                col(OBJECT_COL_NAME).eq(rdf_term_to_polars_expr(object_terms.first().unwrap())),
+                col(OBJECT_COL_NAME)
+                    .eq(rdf_term_to_polars_expr(object_terms.first().unwrap(), true)),
             );
         }
     }
@@ -657,7 +564,7 @@ fn filter_objects<'a>(object_type: &BaseRDFNodeType, objects: &'a Vec<Term>) -> 
     let mut filtered = vec![];
     for o in objects {
         let ok = match object_type {
-            BaseRDFNodeType::IRI => {
+            BaseRDFNodeType::IRI(..) => {
                 matches!(o, Term::NamedNode(_))
             }
             BaseRDFNodeType::BlankNode => {
@@ -689,8 +596,8 @@ fn filter_subjects<'a>(
     for s in subjects {
         #[allow(unreachable_patterns)]
         let ok = match s {
-            Subject::NamedNode(_) => subject_type == &BaseRDFNodeType::IRI,
-            Subject::BlankNode(_) => subject_type == &BaseRDFNodeType::BlankNode,
+            Subject::NamedNode(_) => subject_type.is_iri(),
+            Subject::BlankNode(_) => subject_type.is_blank_node(),
             _ => unimplemented!("Only blank node and iri subjects"),
         };
         if ok {

@@ -1,6 +1,8 @@
 use crate::{IRI_PREFIX_FIELD, IRI_SUFFIX_FIELD};
+use oxrdf::NamedNode;
+use polars::datatypes::CategoricalOrdering;
 use polars::frame::DataFrame;
-use polars::prelude::{as_struct, col, LazyFrame};
+use polars::prelude::{as_struct, col, lit, DataType, Expr, LazyFrame};
 
 pub fn col_not_struct(df: &DataFrame, column_name: &str) -> bool {
     // Check if the frame already has a struct for its iri
@@ -32,3 +34,16 @@ pub fn lf_split_iri(mut lf: LazyFrame, column_name: &str) -> LazyFrame {
     );
     lf
 }
+
+pub fn no_prefix_iri_col_with_static_prefix(c: &str, prefix: &NamedNode, cat_ordering:Option<CategoricalOrdering>) -> Expr {
+    let mut field = lit(prefix.as_str()).alias(IRI_PREFIX_FIELD);
+    if let Some(ordering) = cat_ordering {
+        field = field.cast(DataType::Categorical(None, ordering));
+    }
+    col(c)
+        .struct_()
+        .with_fields(vec![field])
+        .unwrap()
+        .alias(c)
+}
+

@@ -196,6 +196,7 @@ def test_multi_datatype_union_query_native_df(blank_person_mapping, streaming):
     )
     by = ["s", "o"]
     df = res.sort(by=by)
+    #print(df)
     filename = TESTDATA_PATH / "multi_datatype_union_query_native_df.parquet"
     #df.write_parquet(filename)
     expected_df = pl.scan_parquet(filename).sort(by).collect()

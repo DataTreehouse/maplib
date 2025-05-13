@@ -12,18 +12,16 @@ use crate::TriplesToAdd;
 use oxrdf::{NamedNode, Subject, Term, Triple, Variable};
 use oxttl::TurtleSerializer;
 use polars::frame::DataFrame;
-use polars::prelude::{col, lit, Expr, IntoLazy};
+use polars::prelude::{as_struct, col, lit, Expr, IntoLazy};
 use polars_core::frame::UniqueKeepStrategy;
 use query_processing::expressions::expr_is_null_workaround;
 use query_processing::pushdowns::Pushdowns;
 use representation::multitype::{split_df_multicols, unique_workaround};
 use representation::polars_to_rdf::{df_as_result, QuerySolutions};
 use representation::query_context::Context;
-use representation::rdf_to_polars::{
-    rdf_literal_to_polars_literal_value, rdf_named_node_to_polars_expr,
-};
+use representation::rdf_to_polars::{rdf_literal_to_polars_literal_value, rdf_split_named_node};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
-use representation::RDFNodeType;
+use representation::{RDFNodeType, IRI_SUFFIX_FIELD};
 use representation::{OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME};
 use sparesults::QueryResultsFormat;
 use sparesults::QueryResultsSerializer;
@@ -82,9 +80,10 @@ impl QueryResult {
                     let mut mappings = mappings.clone();
                     let mut rdf_node_types = rdf_node_types.clone();
                     if let Some(verb) = verb {
+                        let (verb_expr, verb_type) = named_node_lit(verb, VERB_COL_NAME);
                         mappings = mappings
                             .lazy()
-                            .with_column(rdf_named_node_to_polars_expr(verb).alias(VERB_COL_NAME))
+                            .with_column(verb_expr)
                             .select([
                                 col(SUBJECT_COL_NAME),
                                 col(VERB_COL_NAME),
@@ -92,7 +91,7 @@ impl QueryResult {
                             ])
                             .collect()
                             .unwrap();
-                        rdf_node_types.insert(VERB_COL_NAME.to_string(), RDFNodeType::IRI);
+                        rdf_node_types.insert(VERB_COL_NAME.to_string(), verb_type);
                     }
                     let QuerySolutions {
                         variables,
@@ -184,7 +183,6 @@ impl Triplestore {
                     Pushdowns::new(),
                     include_transient,
                 )?;
-
                 match pl_interruptable_collect(
                     mappings.with_new_streaming(streaming),
                     #[cfg(feature = "pyo3")]
@@ -302,6 +300,7 @@ impl Triplestore {
             if matches!(obj_dt, RDFNodeType::MultiType(..)) {
                 multicols.insert(OBJECT_COL_NAME.to_string(), obj_dt.clone());
             }
+            let predicate_dt = rdf_node_types.get(VERB_COL_NAME);
             if !multicols.is_empty() {
                 let dfs_dts = split_df_multicols(mappings, &multicols);
                 for (df, mut map) in dfs_dts {
@@ -310,6 +309,7 @@ impl Triplestore {
                     all_triples_to_add.push(TriplesToAdd {
                         df,
                         subject_type: new_subj_dt,
+                        predicate_type: predicate_dt.cloned(), 
                         object_type: new_obj_dt,
                         static_verb_column: verb.clone(),
                     });
@@ -318,6 +318,7 @@ impl Triplestore {
                 all_triples_to_add.push(TriplesToAdd {
                     df: mappings,
                     subject_type: subj_dt.clone(),
+                    predicate_type: predicate_dt.cloned(),
                     object_type: obj_dt.clone(),
                     static_verb_column: verb,
                 });
@@ -417,9 +418,10 @@ fn named_node_pattern_expr(
 }
 
 fn named_node_lit(nn: &NamedNode, name: &str) -> (Expr, RDFNodeType) {
+    let (pre,suf) = rdf_split_named_node(nn);
     (
-        rdf_named_node_to_polars_expr(nn).alias(name),
-        RDFNodeType::IRI,
+        as_struct(vec![lit(suf).alias(IRI_SUFFIX_FIELD)]).alias(name),
+        RDFNodeType::IRI(Some(NamedNode::new_unchecked(pre))),
     )
 }
 

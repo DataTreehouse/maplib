@@ -39,8 +39,10 @@ pub(crate) struct Triples {
     object_indexing_enabled: bool,
     subject_sort: Option<StoredTriples>,
     subject_sparse_index: Option<BTreeMap<String, usize>>,
+    subject_prefix_index: Option<HashMap<String, usize>>,
     object_sort: Option<StoredTriples>,
     object_sparse_index: Option<BTreeMap<String, usize>>,
+    object_prefix_index: Option<HashMap<String, usize>>,
     pub subject_type: BaseRDFNodeType,
     pub object_type: BaseRDFNodeType,
     unindexed: Vec<DataFrame>,
@@ -69,8 +71,10 @@ impl Triples {
                 object_indexing_enabled,
                 subject_sort: None,
                 subject_sparse_index: None,
+                subject_prefix_index: None,
                 object_sort: None,
                 object_sparse_index: None,
+                object_prefix_index: None,
                 subject_type,
                 object_type,
                 unindexed: vec![lf.collect().unwrap()],
@@ -80,8 +84,10 @@ impl Triples {
             let IndexedTriples {
                 subject_sort,
                 subject_sparse_index,
+                subject_prefix_index,
                 object_sort,
                 object_sparse_index,
+                object_prefix_index,
                 height,
             } = create_indices(
                 lf,
@@ -96,8 +102,10 @@ impl Triples {
                 object_indexing_enabled,
                 subject_sort: Some(subject_sort),
                 subject_sparse_index: Some(subject_sparse_index),
+                subject_prefix_index,
                 object_sort,
                 object_sparse_index,
+                object_prefix_index,
                 subject_type,
                 object_type,
                 unindexed: vec![],
@@ -132,8 +140,10 @@ impl Triples {
             let IndexedTriples {
                 subject_sort,
                 subject_sparse_index,
+                subject_prefix_index,
                 object_sort,
                 object_sparse_index,
+                object_prefix_index,
                 height,
             } = create_indices(
                 df.lazy(),
@@ -149,8 +159,10 @@ impl Triples {
 
             self.subject_sort = Some(subject_sort);
             self.subject_sparse_index = Some(subject_sparse_index);
+            self.subject_prefix_index = subject_prefix_index;
             self.object_sort = object_sort;
             self.object_sparse_index = object_sparse_index;
+            self.object_prefix_index = object_prefix_index;
             self.height = height;
             Ok(Some(df))
         } else {
@@ -177,6 +189,7 @@ impl Triples {
         objects: &Option<Vec<&Term>>,
     ) -> Result<Vec<(LazyFrame, usize)>, TriplestoreError> {
         assert!(self.unindexed.is_empty());
+        assert!(self.subject_sort.is_some());
         if let Some(subjects) = subjects {
             let strings: Vec<_> = subjects
                 .iter()
@@ -248,7 +261,7 @@ impl Triples {
             Ok(df)
         } else {
             let height_before = self.height;
-            let (stored, height, sparse, new_triples) = update_column_sorted_index(
+            let (stored, height, sparse, prefix_map, new_triples) = update_column_sorted_index(
                 df.clone(),
                 storage_folder,
                 self.subject_sort.as_ref().unwrap(),
@@ -260,10 +273,11 @@ impl Triples {
             self.subject_sort.as_mut().unwrap().wipe()?;
             self.subject_sparse_index = Some(sparse);
             self.subject_sort = Some(stored);
+            self.subject_prefix_index = prefix_map;
             self.height = height;
             if self.object_indexing_enabled {
                 if let Some(mut sorted) = self.object_sort.take() {
-                    let (stored, obj_height, sparse, _) = update_column_sorted_index(
+                    let (stored, obj_height, sparse, prefix_map, _) = update_column_sorted_index(
                         df,
                         storage_folder,
                         &sorted,
@@ -273,6 +287,7 @@ impl Triples {
                     )?;
                     sorted.wipe()?;
                     self.object_sparse_index = Some(sparse);
+                    self.object_prefix_index = prefix_map;
                     self.object_sort = Some(stored);
                     assert_eq!(height, obj_height);
                     self.height = height;
@@ -292,10 +307,11 @@ impl Triples {
             let mut lfs = self.get_lazy_frames(&None, &None)?;
             assert_eq!(lfs.len(), 1);
             let (lf, _) = lfs.pop().unwrap();
-            let (object_sort, obj_map) =
+            let (object_sort, obj_map, obj_prefix_map) =
                 create_object_index(lf, &self.subject_type, &self.object_type, storage_folder)?;
             self.object_sort = Some(object_sort);
             self.object_sparse_index = Some(obj_map);
+            self.object_prefix_index = obj_prefix_map;
         }
         Ok(())
     }
@@ -304,8 +320,10 @@ impl Triples {
 struct IndexedTriples {
     subject_sort: StoredTriples,
     subject_sparse_index: BTreeMap<String, usize>,
+    subject_prefix_index: Option<HashMap<String, usize>>,
     object_sort: Option<StoredTriples>,
     object_sparse_index: Option<BTreeMap<String, usize>>,
+    object_prefix_index: Option<HashMap<String, usize>>,
     height: usize,
 }
 
@@ -317,7 +335,7 @@ fn create_indices(
     obj_type: &BaseRDFNodeType,
 ) -> Result<IndexedTriples, TriplestoreError> {
     let now = Instant::now();
-    let (df, subject_sparse_index) =
+    let (df, subject_sparse_index, subject_prefix_index) =
         create_unique_df_and_sparse_map(lf, true, true, false, subj_type, obj_type);
     debug!(
         "Creating subject sparse map took {} seconds",
@@ -329,13 +347,15 @@ fn create_indices(
     debug!("Storing triples took {}", store_now.elapsed().as_secs_f32());
     let mut object_sort = None;
     let mut object_sparse_index = None;
+    let mut object_prefix_index = None;
 
     if should_index_by_objects {
         let object_now = Instant::now();
-        let (new_object_sort, new_object_sparse_index) =
+        let (new_object_sort, new_object_sparse_index, new_object_prefix_index) =
             create_object_index(df.lazy(), subj_type, obj_type, storage_folder)?;
         object_sort = Some(new_object_sort);
         object_sparse_index = Some(new_object_sparse_index);
+        object_prefix_index = new_object_prefix_index;
         debug!(
             "Indexing by objects took {}",
             object_now.elapsed().as_secs_f32()
@@ -344,8 +364,10 @@ fn create_indices(
     Ok(IndexedTriples {
         subject_sort,
         subject_sparse_index,
+        subject_prefix_index,
         object_sort,
         object_sparse_index,
+        object_prefix_index,
         height,
     })
 }
@@ -355,14 +377,21 @@ fn create_object_index(
     subj_type: &BaseRDFNodeType,
     obj_type: &BaseRDFNodeType,
     storage_folder: &Option<PathBuf>,
-) -> Result<(StoredTriples, BTreeMap<String, usize>), TriplestoreError> {
+) -> Result<
+    (
+        StoredTriples,
+        BTreeMap<String, usize>,
+        Option<HashMap<String, usize>>,
+    ),
+    TriplestoreError,
+> {
     let lf = sort_indexed_lf(df.lazy(), false, false, false, subj_type, obj_type);
     // No need to deduplicate as subject index creation has deduplicated
-    let (df, obj_sparse_map) =
+    let (df, obj_sparse_map, obj_prefix_map) =
         create_unique_df_and_sparse_map(lf, false, false, false, subj_type, obj_type);
     let object_sort = StoredTriples::new(df, subj_type, obj_type, storage_folder)?;
     let object_sparse_index = obj_sparse_map;
-    Ok((object_sort, object_sparse_index))
+    Ok((object_sort, object_sparse_index, obj_prefix_map))
 }
 
 fn can_and_should_index_object(
@@ -662,19 +691,24 @@ fn update_cat_at_offset(
 }
 
 fn update_iri_at_offset(
-    prefix: &CategoricalChunked,
+    prefix: Option<&CategoricalChunked>,
+    prefix_nn: Option<&NamedNode>,
     suffix: &CategoricalChunked,
     offset: usize,
     sparse_map: &mut BTreeMap<String, usize>,
 ) {
-    let any_prefix = prefix.get_any_value(offset).unwrap();
     let any_suffix = suffix.get_any_value(offset).unwrap();
 
-    let p = match any_prefix {
-        AnyValue::Null => None,
-        AnyValue::Categorical(c, rev, _) => Some(rev.get(c).to_string()),
-        AnyValue::CategoricalOwned(c, rev, _) => Some(rev.get(c).to_string()),
-        _ => panic!(),
+    let p = if let Some(prefix) = prefix {
+        let any_prefix = prefix.get_any_value(offset).unwrap();
+        match any_prefix {
+            AnyValue::Null => None,
+            AnyValue::Categorical(c, rev, _) => Some(rev.get(c).to_string()),
+            AnyValue::CategoricalOwned(c, rev, _) => Some(rev.get(c).to_string()),
+            _ => panic!(),
+        }
+    } else {
+        Some(prefix_nn.unwrap().as_str().to_string())
     };
     let s = match any_suffix {
         AnyValue::Null => None,
@@ -695,18 +729,20 @@ fn cast_col_to_cat(mut lf: LazyFrame, c: &str, lexsort: bool, t: &BaseRDFNodeTyp
     } else {
         CategoricalOrdering::Physical
     };
-    if t.is_iri() {
+    if let BaseRDFNodeType::IRI(nn) = t {
+        let mut structs = vec![];
+        if nn.is_none() {
+            structs.push(col(c)
+                .struct_()
+                .field_by_name(IRI_PREFIX_FIELD)
+                .cast(DataType::Categorical(None, cat_order)));
+        }
+        structs.push(col(c)
+                         .struct_()
+                         .field_by_name(IRI_SUFFIX_FIELD)
+                         .cast(DataType::Categorical(None, cat_order)));
         lf = lf.with_column(
-            as_struct(vec![
-                col(c)
-                    .struct_()
-                    .field_by_name(IRI_PREFIX_FIELD)
-                    .cast(DataType::Categorical(None, cat_order)),
-                col(c)
-                    .struct_()
-                    .field_by_name(IRI_SUFFIX_FIELD)
-                    .cast(DataType::Categorical(None, cat_order)),
-            ])
+            as_struct(structs)
             .alias(c),
         );
     } else if t.is_lang_string() {
@@ -800,8 +836,10 @@ fn get_sort_exprs(
     let mut exprs = vec![];
     let c = get_col(is_subject);
     let t = get_type(is_subject, subject_type, object_type);
-    if t.is_iri() {
-        exprs.push(col(c).struct_().field_by_name(IRI_PREFIX_FIELD));
+    if let BaseRDFNodeType::IRI(nn) = t {
+        if nn.is_none() {
+            exprs.push(col(c).struct_().field_by_name(IRI_PREFIX_FIELD));
+        }
         exprs.push(col(c).struct_().field_by_name(IRI_SUFFIX_FIELD));
     } else if t.is_lang_string() {
         exprs.push(col(c).struct_().field_by_name(LANG_STRING_VALUE_FIELD));
@@ -824,6 +862,7 @@ fn update_column_sorted_index(
         StoredTriples,
         usize,
         BTreeMap<String, usize>,
+        Option<HashMap<String, usize>>,
         Option<DataFrame>,
     ),
     TriplestoreError,
@@ -869,7 +908,7 @@ fn update_column_sorted_index(
         .unwrap();
     }
 
-    let (df, sparse_map) = create_unique_df_and_sparse_map(
+    let (df, sparse_map, prefix_map) = create_unique_df_and_sparse_map(
         lf,
         is_subject,
         true,
@@ -898,7 +937,7 @@ fn update_column_sorted_index(
 
     let stored = StoredTriples::new(df, subject_type, object_type, storage_folder)?;
 
-    Ok((stored, height, sparse_map, new_triples))
+    Ok((stored, height, sparse_map, prefix_map, new_triples))
 }
 
 fn repeated_from_last_row_expr(c: &str) -> Expr {
@@ -915,7 +954,11 @@ fn create_unique_df_and_sparse_map(
     sort_on_existing: bool,
     subject_type: &BaseRDFNodeType,
     object_type: &BaseRDFNodeType,
-) -> (DataFrame, BTreeMap<String, usize>) {
+) -> (
+    DataFrame,
+    BTreeMap<String, usize>,
+    Option<HashMap<String, usize>>,
+) {
     let deduplicate_now = Instant::now();
     let c = get_col(is_subject);
     if deduplicate {
@@ -944,7 +987,6 @@ fn create_unique_df_and_sparse_map(
     }
 
     lf = lf.select(cols);
-
     let df = lf.collect().unwrap();
 
     debug!(
@@ -955,20 +997,66 @@ fn create_unique_df_and_sparse_map(
     let ser = df.column(c).unwrap().as_materialized_series();
     let t = get_type(is_subject, subject_type, object_type);
     let sparse_map = create_sparse_map(ser, t);
+    let prefix_map = create_prefix_map(ser, t);
     debug!(
         "Creating sparse map took {} seconds",
         sparse_now.elapsed().as_secs_f32()
     );
-    (df, sparse_map)
+    (df, sparse_map, prefix_map)
+}
+
+fn create_prefix_map(ser: &Series, t: &BaseRDFNodeType) -> Option<HashMap<String, usize>> {
+    if let BaseRDFNodeType::IRI(None) = t {
+        let st = ser.struct_().unwrap();
+        let iri_prefix_series = st.field_by_name(IRI_PREFIX_FIELD).unwrap();
+        let mut last = None;
+        let mut map = HashMap::new();
+        for (i, any_prefix) in iri_prefix_series.iter().enumerate() {
+            match any_prefix {
+                AnyValue::Categorical(c, rev, _) => {
+                    if let Some(last_val) = last {
+                        if last_val != c {
+                            map.insert(rev.get(c).to_string(), i);
+                            last = Some(c);
+                        }
+                    } else {
+                        map.insert(rev.get(c).to_string(), i);
+                        last = Some(c);
+                    }
+                }
+                AnyValue::CategoricalOwned(c, rev, _) => {
+                    if let Some(last_val) = last {
+                        if last_val != c {
+                            map.insert(rev.get(c).to_string(), i);
+                            last = Some(c);
+                        }
+                    } else {
+                        map.insert(rev.get(c).to_string(), i);
+                        last = Some(c);
+                    }
+                }
+                _ => panic!(),
+            };
+        }
+        Some(map)
+    } else {
+        None
+    }
 }
 
 fn create_sparse_map(ser: &Series, t: &BaseRDFNodeType) -> BTreeMap<String, usize> {
     let mut iri_prefix_series = None;
     let mut iri_suffix_series = None;
+    let mut prefix = None;
     let mut cat_series = None;
-    if t.is_iri() {
+    if let BaseRDFNodeType::IRI(nn) = t {
         let st = ser.struct_().unwrap();
-        iri_prefix_series = Some(st.field_by_name(IRI_PREFIX_FIELD).unwrap());
+        if let Some(nn) = nn {
+            prefix = Some(nn);
+        }
+        else {
+            iri_prefix_series = Some(st.field_by_name(IRI_PREFIX_FIELD).unwrap());
+        } 
         iri_suffix_series = Some(st.field_by_name(IRI_SUFFIX_FIELD).unwrap());
     } else {
         cat_series = Some(ser.categorical().unwrap());
@@ -978,9 +1066,18 @@ fn create_sparse_map(ser: &Series, t: &BaseRDFNodeType) -> BTreeMap<String, usiz
     while current_offset < ser.len() {
         if let Some(cat_series) = &cat_series {
             update_cat_at_offset(*cat_series, current_offset, &mut sparse_map);
+        } else if let Some(iri_prefix_series) = &iri_prefix_series {
+            update_iri_at_offset(
+                Some(iri_prefix_series.categorical().unwrap()),
+                None,
+                iri_suffix_series.as_ref().unwrap().categorical().unwrap(),
+                current_offset,
+                &mut sparse_map,
+            );
         } else {
             update_iri_at_offset(
-                iri_prefix_series.as_ref().unwrap().categorical().unwrap(),
+                None,
+                prefix,
                 iri_suffix_series.as_ref().unwrap().categorical().unwrap(),
                 current_offset,
                 &mut sparse_map,
@@ -993,9 +1090,18 @@ fn create_sparse_map(ser: &Series, t: &BaseRDFNodeType) -> BTreeMap<String, usiz
     if current_offset != final_offset {
         if let Some(cat_series) = &cat_series {
             update_cat_at_offset(*cat_series, final_offset, &mut sparse_map);
+        } else if let Some(iri_prefix_series) = iri_prefix_series {
+            update_iri_at_offset(
+                Some(iri_prefix_series.categorical().unwrap()),
+                None,
+                iri_suffix_series.as_ref().unwrap().categorical().unwrap(),
+                final_offset,
+                &mut sparse_map,
+            );
         } else {
             update_iri_at_offset(
-                iri_prefix_series.as_ref().unwrap().categorical().unwrap(),
+                None,
+                prefix,
                 iri_suffix_series.as_ref().unwrap().categorical().unwrap(),
                 final_offset,
                 &mut sparse_map,

@@ -1,5 +1,6 @@
 use oxrdf::vocab::xsd;
 use oxrdf::{NamedNode, Variable};
+use representation::rdf_to_polars::rdf_split_named_node;
 use representation::subtypes::{is_literal_subtype, OWL_REAL};
 use representation::BaseRDFNodeType;
 use spargebra::algebra::{Expression, Function};
@@ -21,7 +22,14 @@ impl ConstraintExpr {
             ConstraintExpr::Bottom => false,
             ConstraintExpr::Top => true,
             ConstraintExpr::Constraint(c) => match c.as_ref() {
-                BaseRDFNodeType::IRI => t == &BaseRDFNodeType::IRI,
+                BaseRDFNodeType::IRI(None) => matches!(t, BaseRDFNodeType::IRI(..)),
+                BaseRDFNodeType::IRI(Some(nn)) => {
+                    if let BaseRDFNodeType::IRI(Some(nn_other)) = t {
+                        nn_other == nn
+                    } else {
+                        matches!(t, BaseRDFNodeType::IRI(None))
+                    }
+                }
                 BaseRDFNodeType::BlankNode => t == &BaseRDFNodeType::BlankNode,
                 BaseRDFNodeType::Literal(l_ctr) => {
                     if let BaseRDFNodeType::Literal(l) = t {
@@ -119,7 +127,10 @@ pub fn equal_variable_type(a: &Expression, b: &Expression) -> Option<(Variable, 
 
 pub fn get_expression_rdf_type(e: &Expression) -> Option<BaseRDFNodeType> {
     match e {
-        Expression::NamedNode(_) => Some(BaseRDFNodeType::IRI),
+        Expression::NamedNode(nn) => {
+            let (pre, _) = rdf_split_named_node(nn);
+            Some(BaseRDFNodeType::IRI(Some(NamedNode::new_unchecked(pre))))
+        }
         Expression::Literal(l) => Some(BaseRDFNodeType::Literal(l.datatype().into_owned())),
         Expression::Or(_, _)
         | Expression::And(_, _)
@@ -147,7 +158,7 @@ pub fn get_expression_rdf_type(e: &Expression) -> Option<BaseRDFNodeType> {
             Function::Str | Function::StrBefore | Function::StrAfter => {
                 Some(BaseRDFNodeType::Literal(xsd::STRING.into_owned()))
             }
-            Function::Datatype | Function::Iri => Some(BaseRDFNodeType::IRI),
+            Function::Datatype | Function::Iri => Some(BaseRDFNodeType::IRI(None)),
             Function::BNode => Some(BaseRDFNodeType::BlankNode),
             Function::Contains
             | Function::Regex

@@ -6,13 +6,15 @@ use representation::solution_mapping::SolutionMappings;
 use log::trace;
 use oxrdf::{NamedNode, Subject, Term};
 use polars::prelude::IntoLazy;
-use polars::prelude::{col, lit, AnyValue, DataType, JoinType};
+use polars::prelude::{col, lit, AnyValue, JoinType};
 use query_processing::graph_patterns::join;
 use query_processing::pushdowns::Pushdowns;
 use query_processing::type_constraints::PossibleTypes;
 use representation::{literal_iri_to_namednode, BaseRDFNodeType, RDFNodeType};
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 use std::collections::{HashMap, HashSet};
+use representation::formatting::iri_col_to_string_no_brackets;
+use representation::rdf_to_polars::rdf_split_named_node;
 
 impl Triplestore {
     pub fn lazy_triple_pattern(
@@ -77,25 +79,21 @@ impl Triplestore {
                             .collect(),
                     )
                 } else if let Some(SolutionMappings {
-                    mappings,
+                    mut mappings,
                     rdf_node_types,
                     height_estimate: height_upper_bound,
                 }) = solution_mappings
                 {
                     if let Some(dt) = rdf_node_types.get(v.as_str()) {
-                        if let RDFNodeType::IRI = dt {
-                            let mappings_df = mappings.collect().unwrap();
-                            let predicates_series = mappings_df
-                                .column(v.as_str())
-                                .unwrap()
-                                .unique()
-                                .unwrap()
-                                .cast(&DataType::String)
-                                .unwrap()
-                                .take_materialized_series();
-                            let predicates_iter = predicates_series.iter();
+                        if let RDFNodeType::IRI(prefix) = dt {
+                            let tmp = uuid::Uuid::new_v4().to_string();
+                            mappings = mappings.with_column(iri_col_to_string_no_brackets(col(v.as_str()), prefix.as_ref()).alias(&tmp));
+                            let mut mappings_df = mappings.collect().unwrap();
+                            
+                            let predicates_col = mappings_df.column(&tmp).unwrap().unique().unwrap();
+                            let predicates_ser = predicates_col.as_materialized_series();
                             predicates = Some(
-                                predicates_iter
+                                predicates_ser.iter()
                                     .filter_map(|x| match x {
                                         AnyValue::Null => None,
                                         AnyValue::String(s) => Some(literal_iri_to_namednode(s)),
@@ -106,6 +104,7 @@ impl Triplestore {
                                     })
                                     .collect(),
                             );
+                            mappings_df = mappings_df.drop(&tmp).unwrap();
                             solution_mappings = Some(SolutionMappings {
                                 mappings: mappings_df.lazy(),
                                 rdf_node_types,
@@ -204,7 +203,10 @@ fn create_type_constraint(
     variable_type_constraint: &HashMap<String, PossibleTypes>,
 ) -> Option<PossibleTypes> {
     match term_pattern {
-        TermPattern::NamedNode(_) => Some(PossibleTypes::singular(BaseRDFNodeType::IRI)),
+        TermPattern::NamedNode(nn) => {
+            let (pre,_) = rdf_split_named_node(nn);
+            Some(PossibleTypes::singular(BaseRDFNodeType::IRI(Some(NamedNode::new_unchecked(pre)))))
+        },
         TermPattern::Literal(l) => Some(PossibleTypes::singular(BaseRDFNodeType::Literal(
             l.datatype().into_owned(),
         ))),

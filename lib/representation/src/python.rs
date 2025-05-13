@@ -70,8 +70,12 @@ impl Display for PyRDFType {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         if let Some(flat) = &self.flat {
             match flat {
-                RDFNodeType::IRI => {
-                    write!(f, "RDFType.IRI()")
+                RDFNodeType::IRI(nn) => {
+                    if let Some(nn) = nn {
+                        write!(f, "RDFType.IRI({})", nn.as_str())
+                    } else {
+                        write!(f, "RDFType.IRI()")
+                    }
                 }
                 RDFNodeType::BlankNode => {
                     write!(f, "RDFType.BlankNode()")
@@ -86,14 +90,18 @@ impl Display for PyRDFType {
                     write!(f, "RDFType.Multi([").unwrap();
                     for (i, t) in ts.iter().enumerate() {
                         match t {
-                            BaseRDFNodeType::IRI => {
-                                write!(f, "RDFType.IRI()").unwrap();
+                            BaseRDFNodeType::IRI(nn) => {
+                                if let Some(nn) = nn {
+                                    write!(f, "RDFType.IRI({})", nn.as_str()).unwrap();
+                                } else {
+                                    write!(f, "RDFType.IRI()").unwrap();
+                                }
                             }
                             BaseRDFNodeType::BlankNode => {
                                 write!(f, "RDFType.BlankNode()").unwrap();
                             }
                             BaseRDFNodeType::Literal(l) => {
-                                write!(f, "RDFType.Literal({})", l).unwrap();
+                                write!(f, "RDFType.Literal({})", l.as_str()).unwrap();
                             }
                             BaseRDFNodeType::None => {
                                 write!(f, "RDFType.None()").unwrap();
@@ -161,12 +169,18 @@ impl PyRDFType {
         }
     }
     #[staticmethod]
-    #[pyo3(name = "IRI")]
-    fn iri() -> PyRDFType {
-        PyRDFType {
-            flat: Some(RDFNodeType::IRI),
+    #[pyo3(name = "IRI", signature = (prefix=None))]
+    fn iri(prefix:Option<String>) -> PyResult<PyRDFType> {
+        let rt = if let Some(prefix) = prefix {
+            let nn = NamedNode::new(prefix).map_err(PyRepresentationError::IriParseError)?;
+            RDFNodeType::IRI(Some(nn))
+        } else {
+            RDFNodeType::IRI(None)
+        };
+        Ok(PyRDFType {
+            flat: Some(rt),
             nested: None,
-        }
+        })
     }
 
     #[staticmethod]

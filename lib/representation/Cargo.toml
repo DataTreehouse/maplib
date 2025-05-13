@@ -19,7 +19,6 @@ chrono-tz.workspace = true
 thiserror.workspace = true
 uuid.workspace = true
 pyo3 = {workspace = true, features = ["chrono-tz", "chrono"]}
-serde = {workspace = true, features = ["derive"]}
 oxsdatatypes.workspace = true
 rayon.workspace = true
 

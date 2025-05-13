@@ -18,6 +18,7 @@ pub const OWL_REAL: &str = "http://www.w3.org/2002/07/owl#real";
 #[derive(Clone, Debug)]
 pub struct Pushdowns {
     pub variables_values: HashMap<String, HashSet<Term>>,
+    pub variables_prefixes: HashMap<String, HashSet<String>>,
     pub variables_type_constraints: HashMap<String, PossibleTypes>,
 }
 
@@ -38,6 +39,7 @@ impl Pushdowns {
     pub fn new() -> Pushdowns {
         Pushdowns {
             variables_values: Default::default(),
+            variables_prefixes: Default::default(),
             variables_type_constraints: Default::default(),
         }
     }

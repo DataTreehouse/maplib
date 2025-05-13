@@ -80,6 +80,7 @@ impl Default for IndexingOptions {
 pub struct TriplesToAdd {
     pub df: DataFrame,
     pub subject_type: RDFNodeType,
+    pub predicate_type: Option<RDFNodeType>,
     pub object_type: RDFNodeType,
     pub static_verb_column: Option<NamedNode>,
 }
@@ -211,14 +212,17 @@ impl Triplestore {
                 let TriplesToAdd {
                     df,
                     subject_type,
+                    predicate_type,
                     object_type,
                     static_verb_column,
                 } = t;
                 assert!(!matches!(subject_type, RDFNodeType::MultiType(..)));
+                assert!(!matches!(predicate_type, Some(RDFNodeType::MultiType(..))));
                 assert!(!matches!(object_type, RDFNodeType::MultiType(..)));
                 prepare_triples(
                     df,
                     &BaseRDFNodeType::from_rdf_node_type(&subject_type),
+                    &predicate_type.map(|x|BaseRDFNodeType::from_rdf_node_type(&x)),
                     &BaseRDFNodeType::from_rdf_node_type(&object_type),
                     static_verb_column,
                 )
@@ -452,6 +456,7 @@ impl Triplestore {
 pub fn prepare_triples(
     df: DataFrame,
     subject_type: &BaseRDFNodeType,
+    predicate_type: &Option<BaseRDFNodeType>,
     object_type: &BaseRDFNodeType,
     static_verb_column: Option<NamedNode>,
 ) -> Vec<TripleDF> {
@@ -480,6 +485,11 @@ pub fn prepare_triples(
         }
     } else {
         let partitions = df.partition_by([VERB_COL_NAME], true).unwrap();
+        let static_prefix = if let BaseRDFNodeType::IRI(nn) = predicate_type.as_ref().unwrap() {
+            nn  
+        } else {
+            unreachable!()
+        };
         for mut part in partitions {
             let predicate;
             {
@@ -503,9 +513,12 @@ pub fn prepare_triples(
                             unreachable!("Should never happen")
                         }
                     }
-                    let prefix = prefix.unwrap();
                     let suffix = suffix.unwrap();
-                    let prefix_str = get_any_value_string(prefix);
+                    let prefix_str = if let Some(prefix) = prefix {
+                        get_any_value_string(prefix)
+                    } else {
+                        static_prefix.as_ref().unwrap().as_str()
+                    };
                     let suffix_str = get_any_value_string(suffix);
                     predicate = NamedNode::new_unchecked(format!("{}{}", prefix_str, suffix_str));
                 } else if let Ok(AnyValue::Struct(..)) = any_predicate {

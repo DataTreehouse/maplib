@@ -10,7 +10,7 @@ use polars::prelude::{
     LiteralValue, SortMultipleOptions, UnionArgs,
 };
 use representation::multitype::{
-    base_col_name, convert_lf_col_to_multitype, create_join_compatible_solution_mappings,
+    convert_lf_col_to_multitype, create_join_compatible_solution_mappings,
     known_convert_lf_multicol_to_single, lf_column_to_categorical, nest_multicolumns,
     unnest_multicols,
 };
@@ -28,6 +28,7 @@ use spargebra::term::GroundTerm;
 use std::collections::{HashMap, HashSet};
 use std::iter;
 use uuid::Uuid;
+use representation::iri::no_prefix_iri_col_with_static_prefix;
 
 pub fn distinct(
     mut solution_mappings: SolutionMappings,
@@ -177,22 +178,21 @@ pub fn join(
         if lt.is_iri() {
             if let Some(rt) = right_datatypes.get(lk) {
                 if rt.is_iri() {
-                    iri_to_multi.push(lk.clone());
+                    iri_to_multi.push((lk.clone(), lt.clone(), rt.clone()));
                 }
             }
         }
     }
     if !iri_to_multi.is_empty() {
-        let iri_base_type = BaseRDFNodeType::IRI;
-        let iri_rdf_type = iri_base_type.as_rdf_node_type();
-        let iri_multi = RDFNodeType::MultiType(vec![iri_base_type]);
-        for k in iri_to_multi.iter() {
-            left_mappings =
-                left_mappings.with_column(convert_lf_col_to_multitype(k, &iri_rdf_type));
-            left_datatypes.insert(k.clone(), iri_multi.clone());
-            right_mappings =
-                right_mappings.with_column(convert_lf_col_to_multitype(k, &iri_rdf_type));
-            right_datatypes.insert(k.clone(), iri_multi.clone());
+        for (k, lt, rt) in iri_to_multi.iter() {
+            left_mappings = left_mappings.with_column(convert_lf_col_to_multitype(k, lt));
+            let iri_multi_left =
+                RDFNodeType::MultiType(vec![BaseRDFNodeType::from_rdf_node_type(lt)]);
+            left_datatypes.insert(k.clone(), iri_multi_left.clone());
+            right_mappings = right_mappings.with_column(convert_lf_col_to_multitype(k, rt));
+            let iri_multi_right =
+                RDFNodeType::MultiType(vec![BaseRDFNodeType::from_rdf_node_type(rt)]);
+            right_datatypes.insert(k.clone(), iri_multi_right.clone());
         }
     }
 
@@ -228,14 +228,14 @@ pub fn join(
     }
 
     if !iri_to_multi.is_empty() {
-        let iri_base_type = BaseRDFNodeType::IRI;
-        let lang_rdf_type = iri_base_type.as_rdf_node_type();
-        for k in iri_to_multi.iter() {
-            solution_mappings.mappings =
-                known_convert_lf_multicol_to_single(solution_mappings.mappings, k, &iri_base_type);
-            solution_mappings
-                .rdf_node_types
-                .insert(k.clone(), lang_rdf_type.clone());
+        for (k, ..) in iri_to_multi.iter() {
+            let t = solution_mappings.rdf_node_types.get(k).unwrap();
+            if let RDFNodeType::MultiType(ts) = t {
+                assert_eq!(ts.len(), 1);
+                solution_mappings
+                    .rdf_node_types
+                    .insert(k.clone(), ts.get(0).unwrap().as_rdf_node_type());
+            }
         }
     }
 
@@ -319,20 +319,22 @@ pub fn order_by(
     for (c, a) in columns.iter().zip(asc_ordering) {
         let t = rdf_node_types.get(c).unwrap();
         match t {
-            RDFNodeType::IRI => {
-                order_exprs.push(
-                    col(c)
-                        .struct_()
-                        .field_by_name(IRI_PREFIX_FIELD)
-                        .cast(DataType::Categorical(None, CategoricalOrdering::Lexical)),
-                );
+            RDFNodeType::IRI(nn) => {
+                if nn.is_none() {
+                    order_exprs.push(
+                        col(c)
+                            .struct_()
+                            .field_by_name(IRI_PREFIX_FIELD)
+                            .cast(DataType::Categorical(None, CategoricalOrdering::Lexical)),
+                    );
+                    asc_bools.push(a);
+                }
                 order_exprs.push(
                     col(c)
                         .struct_()
                         .field_by_name(IRI_SUFFIX_FIELD)
                         .cast(DataType::Categorical(None, CategoricalOrdering::Lexical)),
                 );
-                asc_bools.push(a);
                 asc_bools.push(a);
             }
             RDFNodeType::BlankNode => {
@@ -357,7 +359,7 @@ pub fn order_by(
             RDFNodeType::MultiType(ts) => {
                 let mut ts = ts.clone();
                 ts.sort_by_key(|x| match x {
-                    BaseRDFNodeType::IRI => 2,
+                    BaseRDFNodeType::IRI(..) => 2,
                     BaseRDFNodeType::BlankNode => 1,
                     BaseRDFNodeType::Literal(_) => 3,
                     BaseRDFNodeType::None => 0,
@@ -369,22 +371,24 @@ pub fn order_by(
                 for t in ts {
                     asc_bools.push(a);
                     match &t {
-                        BaseRDFNodeType::IRI => {
-                            order_exprs.push(
-                                col(c).struct_().field_by_name(IRI_PREFIX_FIELD).cast(
-                                    DataType::Categorical(None, CategoricalOrdering::Lexical),
-                                ),
-                            );
+                        BaseRDFNodeType::IRI(nn) => {
+                            if nn.is_none() {
+                                order_exprs.push(
+                                    col(c).struct_().field_by_name(IRI_PREFIX_FIELD).cast(
+                                        DataType::Categorical(None, CategoricalOrdering::Lexical),
+                                    ),
+                                );
+                                asc_bools.push(a);
+                            }
                             order_exprs.push(
                                 col(c).struct_().field_by_name(IRI_SUFFIX_FIELD).cast(
                                     DataType::Categorical(None, CategoricalOrdering::Lexical),
                                 ),
                             );
-                            asc_bools.push(a);
                         }
                         BaseRDFNodeType::BlankNode => {
                             order_exprs.push(
-                                col(c).struct_().field_by_name(&base_col_name(&t)).cast(
+                                col(c).struct_().field_by_name(&t.base_col()).cast(
                                     DataType::Categorical(None, CategoricalOrdering::Lexical),
                                 ),
                             );
@@ -392,17 +396,16 @@ pub fn order_by(
                         BaseRDFNodeType::Literal(dt) => {
                             if string_rdf_literal(dt.as_ref()) {
                                 order_exprs.push(
-                                    col(c).struct_().field_by_name(&base_col_name(&t)).cast(
+                                    col(c).struct_().field_by_name(&t.base_col()).cast(
                                         DataType::Categorical(None, CategoricalOrdering::Lexical),
                                     ),
                                 );
                             } else {
-                                order_exprs
-                                    .push(col(c).struct_().field_by_name(&base_col_name(&t)));
+                                order_exprs.push(col(c).struct_().field_by_name(&t.base_col()));
                             }
                         }
                         BaseRDFNodeType::None => {
-                            order_exprs.push(col(c).struct_().field_by_name(&base_col_name(&t)));
+                            order_exprs.push(col(c).struct_().field_by_name(&t.base_col()));
                         }
                     }
                 }
@@ -498,7 +501,6 @@ pub fn union(
     for m in &mappings[1..mappings.len()] {
         let mut updated_target_types = HashMap::new();
         let SolutionMappings {
-            mappings: _,
             rdf_node_types: right_datatypes,
             ..
         } = m;
@@ -506,19 +508,17 @@ pub fn union(
             if let Some(left_type) = target_types.get(right_col) {
                 if left_type != right_type {
                     if let RDFNodeType::MultiType(left_types) = left_type {
-                        let mut left_set: HashSet<_> = left_types.iter().collect();
                         if let RDFNodeType::MultiType(right_types) = right_type {
-                            let right_set: HashSet<_> = right_types.iter().collect();
-                            let mut union: Vec<_> =
-                                left_set.union(&right_set).map(|x| (*x).clone()).collect();
+                            let union = combine_multi_types(left_types, right_types);
+                            let mut union: Vec<_> = union.into_iter().collect();
                             union.sort();
                             updated_target_types
                                 .insert(right_col.clone(), RDFNodeType::MultiType(union));
                         } else {
                             //Right not multi
                             let base_right = BaseRDFNodeType::from_rdf_node_type(right_type);
-                            left_set.insert(&base_right);
-                            let mut new_types: Vec<_> = left_set.into_iter().cloned().collect();
+                            let union = combine_multi_types(left_types, &vec![base_right]);
+                            let mut new_types: Vec<_> = union.into_iter().collect();
                             new_types.sort();
                             let new_type = RDFNodeType::MultiType(new_types);
                             updated_target_types.insert(right_col.clone(), new_type);
@@ -526,10 +526,9 @@ pub fn union(
                     } else {
                         //Left not multi
                         if let RDFNodeType::MultiType(right_types) = right_type {
-                            let mut right_set: HashSet<_> = right_types.iter().collect();
                             let base_left = BaseRDFNodeType::from_rdf_node_type(left_type);
-                            right_set.insert(&base_left);
-                            let mut new_types: Vec<_> = right_set.into_iter().cloned().collect();
+                            let union = combine_multi_types( &vec![base_left], right_types);
+                            let mut new_types: Vec<_> = union.into_iter().collect();
                             new_types.sort();
                             let new_type = RDFNodeType::MultiType(new_types);
                             updated_target_types.insert(right_col.clone(), new_type);
@@ -537,10 +536,16 @@ pub fn union(
                             //Both not multi
                             let base_left = BaseRDFNodeType::from_rdf_node_type(left_type);
                             let base_right = BaseRDFNodeType::from_rdf_node_type(right_type);
-                            let mut new_types = vec![base_left.clone(), base_right.clone()];
-                            new_types.sort();
-                            let new_type = RDFNodeType::MultiType(new_types);
-                            updated_target_types.insert(right_col.to_string(), new_type);
+                            let union = combine_multi_types( &vec![base_left], &vec![base_right]);
+                            let mut new_types:Vec<_> = union.into_iter().collect();
+                            if new_types.len() == 1 {
+                                //Case when IRI with different static prefix properties are merged.
+                                updated_target_types.insert(right_col.to_string(), new_types.remove(0).as_rdf_node_type());
+                            } else {
+                                new_types.sort();
+                                let new_type = RDFNodeType::MultiType(new_types);
+                                updated_target_types.insert(right_col.to_string(), new_type);
+                            }
                         }
                     }
                 }
@@ -550,7 +555,6 @@ pub fn union(
         }
         target_types.extend(updated_target_types);
     }
-
     let mut to_concat = vec![];
     let mut exploded_map: HashMap<String, (Vec<String>, Vec<String>)> = HashMap::new();
     let mut new_height = 0usize;
@@ -562,18 +566,47 @@ pub fn union(
     } in mappings
     {
         new_height = new_height.saturating_add(height_upper_bound);
-        let mut new_multi = HashMap::new();
+        let mut new_types = HashMap::new();
         for (c, t) in &rdf_node_types {
             let target_type = target_types.get(c).unwrap();
-            if t != target_type && !matches!(t, RDFNodeType::MultiType(..)) {
-                mappings = mappings.with_column(convert_lf_col_to_multitype(c, t));
-                new_multi.insert(
-                    c.clone(),
-                    RDFNodeType::MultiType(vec![BaseRDFNodeType::from_rdf_node_type(t)]),
-                );
+            if t != target_type {
+                let mut use_t = t.clone();
+                if let RDFNodeType::MultiType(target_multi_types) = target_type {
+                    if target_multi_types.contains(&BaseRDFNodeType::IRI(None)) {
+                        let static_prefix = if let RDFNodeType::IRI(prefix) = t {
+                            prefix.as_ref()
+                        } else if let RDFNodeType::MultiType(types) = t {
+                            let mut out_prefix = None;
+                            for t in types {
+                                if let BaseRDFNodeType::IRI(prefix) = t {
+                                    out_prefix = prefix.as_ref();
+                                }
+                            }
+                            out_prefix
+                        } else {
+                            None
+                        };
+                        if let Some(prefix) = static_prefix {
+                            mappings = mappings.with_column(no_prefix_iri_col_with_static_prefix(c, prefix, Some(CategoricalOrdering::Physical)));
+                            use_t = RDFNodeType::IRI(None);
+                        }
+                    }
+                    mappings = mappings.with_column(convert_lf_col_to_multitype(c, t));
+                    new_types.insert(
+                        c.clone(),
+                        RDFNodeType::MultiType(vec![BaseRDFNodeType::from_rdf_node_type(&use_t)]),
+                    );
+                } else if let RDFNodeType::IRI(None) = target_type {
+                    if let RDFNodeType::IRI(Some(prefix)) = t {
+                        mappings = mappings.with_column(no_prefix_iri_col_with_static_prefix(c, prefix, Some(CategoricalOrdering::Physical)));
+                        new_types.insert(c.clone(), RDFNodeType::IRI(None));
+                    } else {
+                        unreachable!("Should never happen");
+                    }
+                }
             }
         }
-        rdf_node_types.extend(new_multi);
+        rdf_node_types.extend(new_types);
         let (new_mappings, new_exploded_map) = unnest_multicols(mappings, &rdf_node_types);
 
         to_concat.push(new_mappings);
@@ -616,6 +649,39 @@ pub fn union(
         target_types,
         new_height,
     ))
+}
+
+fn combine_multi_types(left_types: &Vec<BaseRDFNodeType>, right_types: &Vec<BaseRDFNodeType>) -> HashSet<BaseRDFNodeType> {
+    let mut union: HashSet<_> = left_types.iter().filter(|x|!x.is_iri()).cloned().collect();
+    union.extend(right_types.iter().filter(|x|!x.is_iri()).cloned());
+    let mut found_left_iri = false;
+    for lt in left_types {
+        if let BaseRDFNodeType::IRI(left_nn) = lt {
+            found_left_iri = true;
+            let mut found_right_iri = false;
+            for rt in right_types {
+                if let BaseRDFNodeType::IRI(right_nn) = rt {
+                    found_right_iri = true;
+                    if left_nn != right_nn {
+                        union.insert(BaseRDFNodeType::IRI(None));
+                    } else {
+                        union.insert(BaseRDFNodeType::IRI(left_nn.clone()));
+                    }
+                } 
+            }
+            if !found_right_iri {
+                union.insert(lt.clone());
+            }
+        } else {
+           union.insert(lt.clone()); 
+        }
+    }
+    for rt in right_types {
+        if !rt.is_iri() || !found_left_iri {
+            union.insert(rt.clone());
+        }
+    }
+    union
 }
 
 #[allow(dead_code)]
@@ -669,7 +735,7 @@ fn find_enforced_variable_type_constraints(
                     if let Expression::Variable(v) = args.first().unwrap() {
                         return Some(HashMap::from([(
                             v.as_str().to_string(),
-                            PossibleTypes::singular(BaseRDFNodeType::IRI),
+                            PossibleTypes::singular(BaseRDFNodeType::IRI(None)),
                         )]));
                     }
                 }
@@ -766,7 +832,7 @@ pub fn values_pattern(
             for (i, (t, mut c)) in types_columns.into_iter().enumerate() {
                 let name = format!("c{i}");
                 c.rename(PlSmallStr::from_str(&name));
-                let tname = base_col_name(&t);
+                let tname = t.base_col();
                 if t.is_lang_string() {
                     struct_exprs.push(
                         col(&name)

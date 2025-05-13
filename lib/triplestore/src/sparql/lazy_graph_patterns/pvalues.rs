@@ -5,7 +5,7 @@ use polars::prelude::{IntoLazy, JoinType};
 
 use query_processing::graph_patterns::join;
 use query_processing::pushdowns::Pushdowns;
-use representation::iri_split::{col_not_struct, lf_split_iri};
+use representation::iri::{col_not_struct, lf_split_iri};
 use representation::query_context::Context;
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use std::collections::{HashMap, HashSet};

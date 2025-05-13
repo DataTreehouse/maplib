@@ -746,7 +746,6 @@ def test_issue_22(streaming):
         include_datatypes=True,
         streaming=streaming,
     )
-    print(sm.mappings)
     assert sm.rdf_types == {
         "a": RDFType.Literal("http://www.w3.org/2001/XMLSchema#string"),
         "c": RDFType.Literal("http://www.w3.org/2001/XMLSchema#unsignedInt"),

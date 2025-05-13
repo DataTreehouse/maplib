@@ -211,7 +211,7 @@ fn infer_mapping_column_type(
 
 pub fn infer_type_from_column(column: &Column) -> Result<MappingColumnType, MappingError> {
     if is_iri_col(column) {
-        return Ok(MappingColumnType::Flat(RDFNodeType::IRI));
+        return Ok(MappingColumnType::Flat(RDFNodeType::IRI(None)));
     }
     let series_inferred_mapping_column_type =
         polars_datatype_to_mapping_column_datatype(column.dtype())?;
@@ -249,7 +249,7 @@ fn infer_validate_mapping_column_type_from_ptype(
                 Ok(MappingColumnType::Flat(RDFNodeType::None))
             } else if ptype_is_iri(nn.as_ref()) {
                 if datatype.is_string() || datatype.is_categorical() {
-                    Ok(MappingColumnType::Flat(RDFNodeType::IRI))
+                    Ok(MappingColumnType::Flat(RDFNodeType::IRI(None)))
                 } else if let DataType::Struct(fields) = datatype {
                     let mut found_ok_pre = false;
                     let mut found_ok_suf = false;
@@ -270,7 +270,7 @@ fn infer_validate_mapping_column_type_from_ptype(
                             Some(DataType::Struct(expected_fields)),
                         ))
                     } else {
-                        Ok(MappingColumnType::Flat(RDFNodeType::IRI))
+                        Ok(MappingColumnType::Flat(RDFNodeType::IRI(None)))
                     }
                 } else {
                     Err(MappingError::ColumnDataTypeMismatch(

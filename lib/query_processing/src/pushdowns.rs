@@ -157,7 +157,7 @@ impl Pushdowns {
                             terms.insert(g.clone());
                             match g {
                                 GroundTerm::NamedNode(_) => {
-                                    types.insert(BaseRDFNodeType::IRI);
+                                    types.insert(BaseRDFNodeType::IRI(None));
                                 }
                                 GroundTerm::Literal(l) => {
                                     types.insert(BaseRDFNodeType::Literal(
@@ -287,7 +287,7 @@ impl Pushdowns {
 
     fn iri_or_blanknode_constraint(&mut self, v: &Variable) {
         let ctr = ConstraintExpr::Or(
-            Box::new(ConstraintExpr::Constraint(Box::new(BaseRDFNodeType::IRI))),
+            Box::new(ConstraintExpr::Constraint(Box::new(BaseRDFNodeType::IRI(None)))),
             Box::new(ConstraintExpr::Constraint(Box::new(
                 BaseRDFNodeType::BlankNode,
             ))),
@@ -416,7 +416,7 @@ fn find_variable_type_constraints(e: &Expression) -> Option<HashMap<String, Poss
                     if let Expression::Variable(v) = args.first().unwrap() {
                         return Some(HashMap::from([(
                             v.as_str().to_string(),
-                            PossibleTypes::singular(BaseRDFNodeType::IRI),
+                            PossibleTypes::singular(BaseRDFNodeType::IRI(None)),
                         )]));
                     }
                 }

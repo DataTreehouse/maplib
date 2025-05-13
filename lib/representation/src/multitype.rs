@@ -12,20 +12,21 @@ use polars::prelude::{
 };
 
 use std::collections::{HashMap, HashSet};
+use crate::iri::no_prefix_iri_col_with_static_prefix;
 
 pub const MULTI_BLANK_DT: &str = "B";
 pub const MULTI_NONE_DT: &str = "N";
 
 pub fn convert_lf_col_to_multitype(c: &str, dt: &RDFNodeType) -> Expr {
     match dt {
-        RDFNodeType::IRI => col(c),
+        RDFNodeType::IRI(..) => col(c),
         RDFNodeType::BlankNode => as_struct(vec![col(c).alias(MULTI_BLANK_DT)]).alias(c),
         RDFNodeType::Literal(l) => {
             if rdf::LANG_STRING == l.as_ref() {
                 col(c)
             } else {
-                let colname = base_col_name(&BaseRDFNodeType::from_rdf_node_type(dt));
-                as_struct(vec![col(c).alias(&colname)]).alias(c)
+                let colname = BaseRDFNodeType::from_rdf_node_type(dt).base_col();
+                as_struct(vec![col(c).alias(colname)]).alias(c)
             }
         }
         RDFNodeType::None => as_struct(vec![col(c).alias(MULTI_NONE_DT)]).alias(c),
@@ -38,18 +39,22 @@ pub fn extract_column_from_multitype(
     multitype_column: &Column,
     subtype: &BaseRDFNodeType,
 ) -> Column {
-    let colname = base_col_name(subtype);
+    let colname = subtype.base_col();
     match subtype {
         BaseRDFNodeType::Literal(_) if subtype.is_lang_string() => filter_multitype(
             multitype_column,
             &vec![LANG_STRING_VALUE_FIELD, LANG_STRING_LANG_FIELD],
             LANG_STRING_VALUE_FIELD,
         ),
-        BaseRDFNodeType::IRI => filter_multitype(
+        BaseRDFNodeType::IRI(..) => {
+            let cols = subtype.multi_cols();
+            let borrowed_cols = cols.iter().map(|x|x.as_str()).collect();
+            filter_multitype(
             multitype_column,
-            &vec![IRI_PREFIX_FIELD, IRI_SUFFIX_FIELD],
+            &borrowed_cols,
             &colname,
-        ),
+        )
+        },
         _ => filter_multitype(multitype_column, &vec![&colname], &colname),
     }
 }
@@ -87,16 +92,6 @@ fn filter_multitype(multitype_column: &Column, names: &Vec<&str>, col_name: &str
     }
 }
 
-// TODO: I wonder what would happen if we started assuming things were multifield rather than working around the opposite
-pub fn base_col_name(dt: &BaseRDFNodeType) -> String {
-    match dt {
-        BaseRDFNodeType::IRI => IRI_PREFIX_FIELD.to_string(),
-        BaseRDFNodeType::BlankNode => MULTI_BLANK_DT.to_string(),
-        BaseRDFNodeType::Literal(l) => l.to_string(),
-        BaseRDFNodeType::None => MULTI_NONE_DT.to_string(),
-    }
-}
-
 // HELP: What are the reasons for these functions?
 
 pub fn lf_column_from_categorical(
@@ -106,7 +101,7 @@ pub fn lf_column_from_categorical(
 ) -> LazyFrame {
     match rdf_node_types.get(c).unwrap() {
         RDFNodeType::BlankNode => lf = lf.with_column(col(c).cast(DataType::String)),
-        RDFNodeType::IRI => {
+        RDFNodeType::IRI(None) => {
             lf = lf.with_column(
                 as_struct(vec![
                     col(c)
@@ -119,6 +114,17 @@ pub fn lf_column_from_categorical(
                         .cast(DataType::String),
                 ])
                 .alias(c),
+            )
+        }
+        RDFNodeType::IRI(Some(..)) => {
+            lf = lf.with_column(
+                as_struct(vec![
+                    col(c)
+                        .struct_()
+                        .field_by_name(IRI_SUFFIX_FIELD)
+                        .cast(DataType::String),
+                ])
+                    .alias(c),
             )
         }
         RDFNodeType::Literal(l) => {
@@ -145,13 +151,21 @@ pub fn lf_column_from_categorical(
             let mut fields = vec![];
             for t in types {
                 match t {
-                    BaseRDFNodeType::IRI => {
+                    BaseRDFNodeType::IRI(None) => {
                         fields.push(
                             col(c)
                                 .struct_()
                                 .field_by_name(IRI_PREFIX_FIELD)
                                 .cast(DataType::String),
                         );
+                        fields.push(
+                            col(c)
+                                .struct_()
+                                .field_by_name(IRI_SUFFIX_FIELD)
+                                .cast(DataType::String),
+                        );
+                    }
+                    BaseRDFNodeType::IRI(Some(..)) => {
                         fields.push(
                             col(c)
                                 .struct_()
@@ -170,7 +184,7 @@ pub fn lf_column_from_categorical(
                             fields.push(
                                 col(c)
                                     .struct_()
-                                    .field_by_name(&base_col_name(t))
+                                    .field_by_name(&t.base_col())
                                     .cast(DataType::String),
                             );
                         } else if l.as_ref() == rdf::LANG_STRING {
@@ -187,7 +201,7 @@ pub fn lf_column_from_categorical(
                                     .cast(DataType::String),
                             );
                         } else {
-                            fields.push(col(c).struct_().field_by_name(&base_col_name(t)));
+                            fields.push(col(c).struct_().field_by_name(&t.base_col()));
                         }
                     }
                     BaseRDFNodeType::None => {
@@ -222,7 +236,7 @@ pub fn lf_column_to_categorical(
         RDFNodeType::BlankNode => {
             lf = lf.with_column(col(c).cast(DataType::Categorical(None, cat_order)));
         }
-        RDFNodeType::IRI => {
+        RDFNodeType::IRI(None) => {
             lf = lf.with_column(
                 as_struct(vec![
                     col(c)
@@ -235,6 +249,17 @@ pub fn lf_column_to_categorical(
                         .cast(DataType::Categorical(None, cat_order)),
                 ])
                 .alias(c),
+            )
+        }
+        RDFNodeType::IRI(Some(..)) => {
+            lf = lf.with_column(
+                as_struct(vec![
+                    col(c)
+                        .struct_()
+                        .field_by_name(IRI_SUFFIX_FIELD)
+                        .cast(DataType::Categorical(None, cat_order)),
+                ])
+                    .alias(c),
             )
         }
         RDFNodeType::Literal(l) => {
@@ -263,7 +288,7 @@ pub fn lf_column_to_categorical(
             let mut fields = vec![];
             for t in types {
                 match t {
-                    BaseRDFNodeType::IRI => {
+                    BaseRDFNodeType::IRI(None) => {
                         found_cat_expr = true;
                         fields.push(
                             col(c)
@@ -271,6 +296,15 @@ pub fn lf_column_to_categorical(
                                 .field_by_name(IRI_PREFIX_FIELD)
                                 .cast(DataType::Categorical(None, cat_order)),
                         );
+                        fields.push(
+                            col(c)
+                                .struct_()
+                                .field_by_name(IRI_SUFFIX_FIELD)
+                                .cast(DataType::Categorical(None, cat_order)),
+                        );
+                    }
+                    BaseRDFNodeType::IRI(Some(..)) => {
+                        found_cat_expr = true;
                         fields.push(
                             col(c)
                                 .struct_()
@@ -293,7 +327,7 @@ pub fn lf_column_to_categorical(
                             fields.push(
                                 col(c)
                                     .struct_()
-                                    .field_by_name(&base_col_name(t))
+                                    .field_by_name(&t.base_col())
                                     .cast(DataType::Categorical(None, cat_order)),
                             );
                         } else if l.as_ref() == rdf::LANG_STRING {
@@ -311,7 +345,7 @@ pub fn lf_column_to_categorical(
                                     .cast(DataType::Categorical(None, cat_order)),
                             );
                         } else {
-                            fields.push(col(c).struct_().field_by_name(&base_col_name(t)));
+                            fields.push(col(c).struct_().field_by_name(&t.base_col()));
                         }
                     }
                     BaseRDFNodeType::None => {
@@ -354,6 +388,24 @@ pub fn create_join_compatible_solution_mappings(
                             JoinType::Inner => {
                                 let mut keep: Vec<_> =
                                     left_set.intersection(&right_set).cloned().collect();
+                                for t in left_types {
+                                    if let BaseRDFNodeType::IRI(Some(nn)) = t {
+                                        if right_set.contains(&BaseRDFNodeType::IRI(None)) {
+                                            right_mappings = right_mappings.filter(col(IRI_PREFIX_FIELD).eq(nn.as_str())).drop([IRI_PREFIX_FIELD]);
+                                            keep.push(t.clone());
+                                        }
+                                    }
+                                }
+                                
+                                for t in right_types {
+                                    if let BaseRDFNodeType::IRI(Some(nn)) = t {
+                                        if left_set.contains(&BaseRDFNodeType::IRI(None)) {
+                                            left_mappings = left_mappings.filter(col(IRI_PREFIX_FIELD).eq(nn.as_str())).drop([IRI_PREFIX_FIELD]);
+                                            keep.push(t.clone());
+                                        }
+                                    }
+                                }
+                                
                                 keep.sort();
                                 if keep.is_empty() {
                                     left_mappings = left_mappings
@@ -410,6 +462,26 @@ pub fn create_join_compatible_solution_mappings(
                             JoinType::Left => {
                                 let mut right_keep: Vec<_> =
                                     left_set.intersection(&right_set).cloned().collect();
+                                
+                                for t in left_types {
+                                    if let BaseRDFNodeType::IRI(Some(nn)) = t {
+                                        if right_set.contains(&BaseRDFNodeType::IRI(None)) {
+                                            right_mappings = right_mappings.filter(col(IRI_PREFIX_FIELD).eq(nn.as_str())).drop([IRI_PREFIX_FIELD]);
+                                            right_keep.push(t.clone());
+                                        }
+                                    }
+                                }
+
+                                for t in right_types {
+                                    if let BaseRDFNodeType::IRI(Some(nn)) = t {
+                                        if left_set.contains(&BaseRDFNodeType::IRI(None)) {
+                                            right_mappings = right_mappings.with_column(no_prefix_iri_col_with_static_prefix(v, nn, None));
+                                            right_keep.push(t.clone());
+                                        }
+                                    }
+                                }
+
+                                
                                 right_keep.sort();
                                 if right_keep.is_empty() {
                                     right_mappings = right_mappings.filter(lit(false)).with_column(
@@ -458,7 +530,24 @@ pub fn create_join_compatible_solution_mappings(
                         let base_right = BaseRDFNodeType::from_rdf_node_type(right_dt);
                         match join_type {
                             JoinType::Inner => {
-                                if left_types.contains(&base_right) {
+                                let mut iri_match = false;
+                                if base_right == BaseRDFNodeType::IRI(None) {
+                                    for t in left_types {
+                                        if let BaseRDFNodeType::IRI(Some(nn)) = t {
+                                            right_mappings = right_mappings.filter(col(IRI_PREFIX_FIELD).eq(nn.as_str())).drop([IRI_PREFIX_FIELD]);
+                                            iri_match = true;
+                                        }
+                                    }
+                                }
+
+                                if let BaseRDFNodeType::IRI(Some(nn)) = &base_right {
+                                    if left_types.contains(&BaseRDFNodeType::IRI(None)) {
+                                        left_mappings = left_mappings.filter(col(IRI_PREFIX_FIELD).eq(nn.as_str())).drop([IRI_PREFIX_FIELD]);
+                                        iri_match = true;
+                                    }
+                                }
+                                
+                                if iri_match || left_types.contains(&base_right) {
                                     left_mappings = force_convert_multicol_to_single_col(
                                         left_mappings,
                                         v,
@@ -481,7 +570,26 @@ pub fn create_join_compatible_solution_mappings(
                                 }
                             }
                             JoinType::Left => {
-                                if left_types.contains(&base_right) {
+                                let mut iri_match = false;
+                                if base_right == BaseRDFNodeType::IRI(None) {
+                                    for t in left_types {
+                                        if let BaseRDFNodeType::IRI(Some(nn)) = t {
+                                            right_mappings = right_mappings.filter(col(IRI_PREFIX_FIELD).eq(nn.as_str())).drop([IRI_PREFIX_FIELD]);
+                                            iri_match = true;
+                                        }
+                                    }
+                                }
+                                
+                                if let BaseRDFNodeType::IRI(Some(nn)) = &base_right {
+                                    if left_types.contains(&BaseRDFNodeType::IRI(None)) {
+                                        right_mappings = right_mappings.with_column(
+                                            no_prefix_iri_col_with_static_prefix(v, nn, None)
+                                        );
+                                        iri_match = true;
+                                    }
+                                }
+                                
+                                if iri_match || left_types.contains(&base_right) {
                                     right_mappings = right_mappings
                                         .with_column(convert_lf_col_to_multitype(v, right_dt));
                                     new_right_datatypes.insert(
@@ -504,15 +612,32 @@ pub fn create_join_compatible_solution_mappings(
                     }
                 } else {
                     //left not multi
-                    let left_basic_dt = BaseRDFNodeType::from_rdf_node_type(left_dt);
+                    let base_left = BaseRDFNodeType::from_rdf_node_type(left_dt);
                     if let RDFNodeType::MultiType(right_types) = right_dt {
                         match join_type {
                             JoinType::Inner => {
-                                if right_types.contains(&left_basic_dt) {
+                                let mut iri_match = false;
+                                if base_left == BaseRDFNodeType::IRI(None) {
+                                    for t in right_types {
+                                        if let BaseRDFNodeType::IRI(Some(nn)) = t {
+                                            left_mappings = left_mappings.filter(col(IRI_PREFIX_FIELD).eq(nn.as_str())).drop([IRI_PREFIX_FIELD]);
+                                            iri_match = true;
+                                        }
+                                    }
+                                }
+
+                                if let BaseRDFNodeType::IRI(Some(nn)) = &base_left {
+                                    if right_types.contains(&BaseRDFNodeType::IRI(None)) {
+                                        right_mappings = right_mappings.filter(col(IRI_PREFIX_FIELD).eq(nn.as_str())).drop([IRI_PREFIX_FIELD]);
+                                        iri_match = true;
+                                    }
+                                }
+                                
+                                if iri_match || right_types.contains(&base_left) {
                                     right_mappings = force_convert_multicol_to_single_col(
                                         right_mappings,
                                         v,
-                                        &left_basic_dt,
+                                        &base_left,
                                     );
                                     new_right_datatypes.insert(v.clone(), left_dt.clone());
                                 } else {
@@ -531,11 +656,30 @@ pub fn create_join_compatible_solution_mappings(
                                 }
                             }
                             JoinType::Left => {
-                                if right_types.contains(&left_basic_dt) {
+                                let mut iri_match = false;
+                                if base_left == BaseRDFNodeType::IRI(None) {
+                                    for t in right_types {
+                                        if let BaseRDFNodeType::IRI(Some(nn)) = t {
+                                            right_mappings = right_mappings.with_column(
+                                                no_prefix_iri_col_with_static_prefix(v, nn, None)
+                                            );
+                                            iri_match = true;
+                                        }
+                                    }
+                                }
+
+                                if let BaseRDFNodeType::IRI(Some(nn)) = &base_left {
+                                    if right_types.contains(&BaseRDFNodeType::IRI(None)) {
+                                        right_mappings = right_mappings.filter(col(IRI_PREFIX_FIELD).eq(nn.as_str())).drop([IRI_PREFIX_FIELD]);
+                                        iri_match = true;
+                                    }
+                                }
+                                
+                                if iri_match || right_types.contains(&base_left) {
                                     right_mappings = force_convert_multicol_to_single_col(
                                         right_mappings,
                                         v,
-                                        &left_basic_dt,
+                                        &base_left,
                                     );
                                     new_right_datatypes.insert(v.clone(), left_dt.clone());
                                 } else {
@@ -613,7 +757,7 @@ pub fn compress_actual_multitypes(
                     .unwrap()
                     .struct_()
                     .unwrap()
-                    .field_by_name(&base_col_name(&t))
+                    .field_by_name(&t.base_col())
                     .unwrap()
                     .is_not_null()
                     .any();
@@ -697,26 +841,18 @@ pub fn all_multi_cols(dts: &Vec<BaseRDFNodeType>) -> Vec<String> {
     let mut all_cols = vec![];
 
     for d in dts {
-        match d {
-            BaseRDFNodeType::IRI => {
-                all_cols.push(IRI_PREFIX_FIELD.to_owned());
-                all_cols.push(IRI_SUFFIX_FIELD.to_owned());
-            }
-            BaseRDFNodeType::Literal(..) if d.is_lang_string() => {
-                all_cols.push(LANG_STRING_VALUE_FIELD.to_owned());
-                all_cols.push(LANG_STRING_LANG_FIELD.to_owned());
-            }
-            _ => all_cols.push(base_col_name(d)),
-        }
+        let colname = d.multi_cols();
+        all_cols.extend(colname);
     }
     all_cols
 }
+
 
 pub fn all_multi_main_cols(dts: &Vec<BaseRDFNodeType>) -> Vec<String> {
     let mut all_cols = vec![];
 
     for d in dts {
-        let colname = base_col_name(d);
+        let colname = d.base_col();
         all_cols.push(colname);
     }
     all_cols
@@ -744,15 +880,17 @@ pub fn known_convert_lf_multicol_to_single(
             .alias(c),
         );
     } else if dt.is_iri() {
+        let fields = dt.multi_cols();
+        let mut struct_fields = vec![];
+        for f in fields {
+            struct_fields.push(col(c).struct_().field_by_name(&f));
+        }
         lf = lf.with_column(
-            as_struct(vec![
-                col(c).struct_().field_by_name(IRI_PREFIX_FIELD),
-                col(c).struct_().field_by_name(IRI_SUFFIX_FIELD),
-            ])
+            as_struct(struct_fields)
             .alias(c),
         );
     } else {
-        lf = lf.with_column(col(c).struct_().field_by_name(&base_col_name(dt)).alias(c))
+        lf = lf.with_column(col(c).struct_().field_by_name(&dt.base_col()).alias(c))
     }
     lf
 }
@@ -812,7 +950,7 @@ pub fn set_structs_all_null_to_null_row(sm: SolutionMappings) -> SolutionMapping
         let mut is_null_exprs = vec![];
         if let RDFNodeType::MultiType(ts) = r {
             for t in ts {
-                is_null_exprs.push(col(k).struct_().field_by_name(&base_col_name(t)).is_null());
+                is_null_exprs.push(col(k).struct_().field_by_name(&t.base_col()).is_null());
             }
         }
         if r.is_lang_string() {
@@ -824,7 +962,7 @@ pub fn set_structs_all_null_to_null_row(sm: SolutionMappings) -> SolutionMapping
             );
         }
         if r.is_iri() {
-            is_null_exprs.push(col(k).struct_().field_by_name(IRI_PREFIX_FIELD).is_null());
+            is_null_exprs.push(col(k).struct_().field_by_name(IRI_SUFFIX_FIELD).is_null());
         }
         if !is_null_exprs.is_empty() {
             mappings = mappings.with_column(

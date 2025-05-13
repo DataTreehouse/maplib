@@ -14,9 +14,9 @@ use polars::prelude::{
 use rayon::iter::{
     IndexedParallelIterator, IntoParallelIterator, ParallelDrainRange, ParallelIterator,
 };
-use representation::iri_split::{col_not_struct, lf_split_iri};
+use representation::iri::{col_not_struct, lf_split_iri};
 use representation::multitype::split_df_multicols;
-use representation::rdf_to_polars::rdf_named_node_to_polars_expr;
+use representation::rdf_to_polars::{rdf_named_node_to_polars_expr, rdf_split_named_node};
 use representation::RDFNodeType;
 use representation::{OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME};
 use std::cmp::max;
@@ -44,10 +44,11 @@ impl Mapping {
         verb: Option<NamedNode>,
         expand_options: ExpandOptions,
     ) -> Result<MappingReport, MaplibError> {
+        //TODO: drop prefix col.. 
         if let Some(verb) = verb {
             df = df
                 .lazy()
-                .with_column(rdf_named_node_to_polars_expr(&verb).alias(VERB_COL_NAME))
+                .with_column(rdf_named_node_to_polars_expr(&verb, false).alias(VERB_COL_NAME))
                 .collect()
                 .unwrap();
         }
@@ -252,6 +253,7 @@ impl Mapping {
         for CreateTriplesResult {
             df,
             subject_type,
+            predicate_type,
             object_type,
             verb,
         } in ok_triples
@@ -261,7 +263,7 @@ impl Mapping {
                 (&object_type, OBJECT_COL_NAME),
             ];
             if verb.is_none() {
-                coltypes_names.push((&RDFNodeType::IRI, VERB_COL_NAME));
+                coltypes_names.push((&RDFNodeType::IRI(None), VERB_COL_NAME));
             }
 
             let has_multi = matches!(subject_type, RDFNodeType::MultiType(_))
@@ -280,6 +282,7 @@ impl Mapping {
                 all_triples_to_add.push(TriplesToAdd {
                     df,
                     subject_type: types.remove(SUBJECT_COL_NAME).unwrap(),
+                    predicate_type: predicate_type.clone(),
                     object_type: types.remove(OBJECT_COL_NAME).unwrap(),
                     static_verb_column: verb.clone(),
                 });
@@ -369,6 +372,7 @@ fn get_term_names<'a>(out_vars: &mut Vec<&'a str>, term: &'a StottrTerm) {
 struct CreateTriplesResult {
     df: DataFrame,
     subject_type: RDFNodeType,
+    predicate_type: Option<RDFNodeType>,
     object_type: RDFNodeType,
     verb: Option<NamedNode>,
 }
@@ -467,9 +471,19 @@ fn create_triples(
         }
     };
 
+    let predicate_type = if let Some(predicate_type) = dynamic_columns.remove(VERB_COL_NAME) {
+         match predicate_type {
+             MappingColumnType::Flat(f) => Some(f),
+             _ => unreachable!("Should never happen"),
+         }
+    } else {
+        None
+    };
+
     results.push(CreateTriplesResult {
         df,
         subject_type: subj_rdf_node_type,
+        predicate_type,
         object_type: obj_rdf_node_type,
         verb,
     });
@@ -480,15 +494,27 @@ fn create_triples(
             |CreateTriplesResult {
                  df,
                  subject_type,
+                 predicate_type,
                  object_type,
                  verb,
              }| {
                 let subject_not_struct = col_not_struct(&df, SUBJECT_COL_NAME);
                 let object_not_struct = col_not_struct(&df, OBJECT_COL_NAME);
-
+                let predicate_not_struct = if predicate_type.is_some() {
+                     Some(col_not_struct(&df, VERB_COL_NAME))
+                } else {
+                    None
+                };
+                
                 let mut lf = df.lazy();
                 if subject_type.is_iri() && subject_not_struct {
                     lf = lf_split_iri(lf, SUBJECT_COL_NAME);
+                }
+                if let Some(predicate_type) = &predicate_type {
+                    
+                    if predicate_type.is_iri() && predicate_not_struct.unwrap() {
+                        lf = lf_split_iri(lf, VERB_COL_NAME);
+                    }
                 }
                 if object_type.is_iri() && object_not_struct {
                     lf = lf_split_iri(lf, OBJECT_COL_NAME);
@@ -497,6 +523,7 @@ fn create_triples(
                 CreateTriplesResult {
                     df,
                     subject_type,
+                    predicate_type,
                     object_type,
                     verb,
                 }
@@ -572,28 +599,34 @@ fn create_list_triples(
         .clone()
         .lazy()
         .filter(col(OBJECT_COL_NAME).is_null())
-        .with_column(rdf_named_node_to_polars_expr(&rdf::NIL.into_owned()).alias(OBJECT_COL_NAME))
+        .with_column(
+            rdf_named_node_to_polars_expr(&rdf::NIL.into_owned(), true).alias(OBJECT_COL_NAME),
+        )
         .collect()
         .unwrap();
 
     let rest_df = rest_df.lazy().drop_nulls(None).collect().unwrap();
-
+    let nil = rdf::NIL.into_owned();
+    let (nil_prefix, _) = rdf_split_named_node(&nil);
     let results = vec![
         CreateTriplesResult {
             df: rest_df,
             subject_type: RDFNodeType::BlankNode,
+            predicate_type: None,
             object_type: RDFNodeType::BlankNode,
             verb: Some(rdf::REST.into_owned()),
         },
         CreateTriplesResult {
             df: rest_nil_df,
             subject_type: RDFNodeType::BlankNode,
-            object_type: RDFNodeType::IRI,
+            predicate_type: None,
+            object_type: RDFNodeType::IRI(Some(NamedNode::new_unchecked(nil_prefix))),
             verb: Some(rdf::REST.into_owned()),
         },
         CreateTriplesResult {
             df: first_df,
             subject_type: RDFNodeType::BlankNode,
+            predicate_type: None,
             object_type: rdf_node_type.clone(),
             verb: Some(rdf::FIRST.into_owned()),
         },

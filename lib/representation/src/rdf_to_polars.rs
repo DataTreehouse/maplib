@@ -10,9 +10,9 @@ use polars::prelude::{
 use std::ops::Deref;
 use std::str::FromStr;
 
-pub fn rdf_term_to_polars_expr(term: &Term) -> Expr {
+pub fn rdf_term_to_polars_expr(term: &Term, static_iri_prefix:bool) -> Expr {
     match term {
-        Term::NamedNode(named_node) => rdf_named_node_to_polars_expr(named_node),
+        Term::NamedNode(named_node) => rdf_named_node_to_polars_expr(named_node, static_iri_prefix),
         Term::Literal(l) => {
             let dt = l.datatype();
             if dt == rdf::LANG_STRING {
@@ -55,13 +55,16 @@ pub fn rdf_split_named_node(named_node: &NamedNode) -> (&str, &str) {
     return (prefix, suffix);
 }
 
-pub fn rdf_named_node_to_polars_expr(named_node: &NamedNode) -> Expr {
+pub fn rdf_named_node_to_polars_expr(named_node: &NamedNode, static_iri_prefix:bool) -> Expr {
     let (prefix, suffix) = rdf_split_named_node(named_node);
-
-    as_struct(vec![
-        lit(prefix).alias(IRI_PREFIX_FIELD),
+    let mut structs = vec![];
+    if !static_iri_prefix {
+        structs.push(lit(prefix).alias(IRI_PREFIX_FIELD));
+    }
+    structs.push(    
         lit(suffix).alias(IRI_SUFFIX_FIELD),
-    ])
+    );
+    as_struct(structs)
 }
 
 pub fn rdf_blank_node_to_polars_literal_value(blank_node: &BlankNode) -> LiteralValue {
