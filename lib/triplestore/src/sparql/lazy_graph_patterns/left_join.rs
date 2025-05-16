@@ -14,7 +14,7 @@ use std::collections::HashMap;
 impl Triplestore {
     #[allow(clippy::too_many_arguments)]
     pub fn lazy_left_join(
-        &mut self,
+        &self,
         left: &GraphPattern,
         right: &GraphPattern,
         expression: &Option<Expression>,

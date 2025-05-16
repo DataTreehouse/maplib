@@ -156,6 +156,25 @@ impl Triplestore {
         )
     }
 
+    pub fn query_indexed(
+        &self,
+        query: &str,
+        parameters: &Option<HashMap<String, EagerSolutionMappings>>,
+        streaming: bool,
+        include_transient: bool,
+        #[cfg(feature = "pyo3")] py: Python<'_>,
+    ) -> Result<QueryResult, SparqlError> {
+        let query = Query::parse(query, None).map_err(SparqlError::ParseError)?;
+        self.query_parsed_indexed(
+            &query,
+            parameters,
+            streaming,
+            include_transient,
+            #[cfg(feature = "pyo3")]
+            py,
+        )
+    }
+
     pub fn query_parsed(
         &mut self,
         query: &Query,
@@ -167,6 +186,18 @@ impl Triplestore {
         if self.has_unindexed {
             self.index_unindexed().map_err(SparqlError::IndexingError)?;
         }
+        self.query_parsed_indexed(query, parameters, streaming, include_transient,
+                                  #[cfg(feature = "pyo3")] py
+        )
+    }
+    
+    pub fn query_parsed_indexed(&self,
+                                query: &Query,
+                                parameters: &Option<HashMap<String, EagerSolutionMappings>>,
+                                streaming: bool,
+                                include_transient: bool,
+                                #[cfg(feature = "pyo3")] py: Python<'_>,
+    ) -> Result<QueryResult, SparqlError> {
 
         let context = Context::new();
         match query {

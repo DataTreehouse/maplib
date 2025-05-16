@@ -10,7 +10,7 @@ use std::collections::HashMap;
 
 impl Triplestore {
     pub(crate) fn lazy_distinct(
-        &mut self,
+        &self,
         inner: &GraphPattern,
         solution_mappings: Option<SolutionMappings>,
         context: &Context,

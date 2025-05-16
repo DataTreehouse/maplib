@@ -13,7 +13,7 @@ use std::collections::HashMap;
 
 impl Triplestore {
     pub(crate) fn lazy_project(
-        &mut self,
+        &self,
         inner: &GraphPattern,
         variables: &Vec<Variable>,
         solution_mappings: Option<SolutionMappings>,

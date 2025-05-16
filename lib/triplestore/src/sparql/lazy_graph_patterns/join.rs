@@ -10,7 +10,7 @@ use std::collections::HashMap;
 
 impl Triplestore {
     pub fn lazy_join(
-        &mut self,
+        &self,
         left: &GraphPattern,
         right: &GraphPattern,
         solution_mappings: Option<SolutionMappings>,

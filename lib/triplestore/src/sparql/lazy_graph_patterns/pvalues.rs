@@ -11,7 +11,7 @@ use std::collections::{HashMap, HashSet};
 
 impl Triplestore {
     pub(crate) fn lazy_pvalues(
-        &mut self,
+        &self,
         solution_mappings: Option<SolutionMappings>,
         variables: &[Variable],
         bindings_name: &String,

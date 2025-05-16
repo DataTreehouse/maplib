@@ -14,7 +14,7 @@ use std::collections::HashMap;
 impl Triplestore {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn lazy_extend(
-        &mut self,
+        &self,
         inner: &GraphPattern,
         variable: &Variable,
         expression: &Expression,

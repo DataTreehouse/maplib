@@ -12,7 +12,7 @@ use std::collections::HashMap;
 
 impl Triplestore {
     pub(crate) fn lazy_filter(
-        &mut self,
+        &self,
         inner: &GraphPattern,
         expression: &Expression,
         input_solution_mappings: Option<SolutionMappings>,

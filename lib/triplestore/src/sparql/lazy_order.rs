@@ -8,7 +8,7 @@ use std::collections::HashMap;
 
 impl Triplestore {
     pub fn lazy_order_expression(
-        &mut self,
+        &self,
         oexpr: &OrderExpression,
         solution_mappings: SolutionMappings,
         context: &Context,

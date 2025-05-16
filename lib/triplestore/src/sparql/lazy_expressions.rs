@@ -18,7 +18,7 @@ use spargebra::algebra::Expression;
 
 impl Triplestore {
     pub fn lazy_expression(
-        &mut self,
+        &self,
         expr: &Expression,
         solution_mappings: SolutionMappings,
         context: &Context,

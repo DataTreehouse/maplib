@@ -10,7 +10,7 @@ use spargebra::term::GroundTerm;
 
 impl Triplestore {
     pub(crate) fn lazy_values(
-        &mut self,
+        &self,
         solution_mappings: Option<SolutionMappings>,
         variables: &[Variable],
         bindings: &[Vec<Option<GroundTerm>>],

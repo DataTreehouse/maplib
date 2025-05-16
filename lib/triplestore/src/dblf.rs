@@ -77,7 +77,7 @@ impl Triplestore {
 
     #[allow(clippy::too_many_arguments)]
     fn get_deduplicated_predicate_lf(
-        &mut self,
+        &self,
         verb_uri: &NamedNode,
         keep_subject: bool,
         keep_verb: bool,
@@ -96,7 +96,7 @@ impl Triplestore {
                 subject_datatype_ctr,
                 object_datatype_ctr,
             );
-            if let Some(m) = self.triples_map.get_mut(verb_uri) {
+            if let Some(m) = self.triples_map.get(verb_uri) {
                 if let Some(sms) = multiple_tt_to_lf(
                     m,
                     compatible_types,
@@ -116,7 +116,7 @@ impl Triplestore {
                 subject_datatype_ctr,
                 object_datatype_ctr,
             );
-            if let Some(m) = self.transient_triples_map.get_mut(verb_uri) {
+            if let Some(m) = self.transient_triples_map.get(verb_uri) {
                 if let Some(sms) = multiple_tt_to_lf(
                     m,
                     compatible_types,
@@ -143,7 +143,7 @@ impl Triplestore {
 
     #[allow(clippy::too_many_arguments)]
     pub fn get_multi_predicates_solution_mappings(
-        &mut self,
+        &self,
         predicate_uris: Option<Vec<NamedNode>>,
         subject_keep_rename: &Option<String>,
         verb_keep_rename: &Option<String>,

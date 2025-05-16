@@ -11,7 +11,7 @@ use std::collections::HashMap;
 
 impl Triplestore {
     pub(crate) fn lazy_union(
-        &mut self,
+        &self,
         left: &GraphPattern,
         right: &GraphPattern,
         solution_mappings: Option<SolutionMappings>,

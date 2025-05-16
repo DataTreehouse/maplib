@@ -16,7 +16,7 @@ use std::collections::{HashMap, HashSet};
 
 impl Triplestore {
     pub fn lazy_triple_pattern(
-        &mut self,
+        &self,
         solution_mappings: Option<SolutionMappings>,
         triple_pattern: &TriplePattern,
         context: &Context,
