@@ -17,7 +17,7 @@ members = [
 ]
 
 [workspace.package]
-rust-version = "1.81.0"
+rust-version = "1.88.0"
 
 [workspace.dependencies]
 pyo3 = {version = "0.24.1", features = ["py-clone", "abi3-py39"] }
