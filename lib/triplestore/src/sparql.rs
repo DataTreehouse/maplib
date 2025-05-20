@@ -186,19 +186,24 @@ impl Triplestore {
         if self.has_unindexed {
             self.index_unindexed().map_err(SparqlError::IndexingError)?;
         }
-        self.query_parsed_indexed(query, parameters, streaming, include_transient,
-                                  #[cfg(feature = "pyo3")] py
+        self.query_parsed_indexed(
+            query,
+            parameters,
+            streaming,
+            include_transient,
+            #[cfg(feature = "pyo3")]
+            py,
         )
     }
-    
-    pub fn query_parsed_indexed(&self,
-                                query: &Query,
-                                parameters: &Option<HashMap<String, EagerSolutionMappings>>,
-                                streaming: bool,
-                                include_transient: bool,
-                                #[cfg(feature = "pyo3")] py: Python<'_>,
-    ) -> Result<QueryResult, SparqlError> {
 
+    pub fn query_parsed_indexed(
+        &self,
+        query: &Query,
+        parameters: &Option<HashMap<String, EagerSolutionMappings>>,
+        streaming: bool,
+        include_transient: bool,
+        #[cfg(feature = "pyo3")] py: Python<'_>,
+    ) -> Result<QueryResult, SparqlError> {
         let context = Context::new();
         match query {
             Query::Select {
@@ -258,7 +263,7 @@ impl Triplestore {
                         let mut solutions = vec![];
                         for t in template {
                             if let Some((sm, verb)) =
-                                triple_to_solution_mappings(&df, &rdf_node_types, t)?
+                                triple_to_solution_mappings(&df, &rdf_node_types, t, None)?
                             {
                                 solutions.push((sm, verb));
                             }
@@ -367,12 +372,21 @@ impl Triplestore {
     }
 }
 
-fn triple_to_solution_mappings(
+pub fn triple_to_solution_mappings(
     df: &DataFrame,
     rdf_node_types: &HashMap<String, RDFNodeType>,
     t: &TriplePattern,
+    preserve_column: Option<&str>,
 ) -> Result<Option<(EagerSolutionMappings, Option<NamedNode>)>, SparqlError> {
+    let mut select_expr = vec![];
     let mut triple_types = HashMap::new();
+    if let Some(preserve_column) = preserve_column {
+        select_expr.push(col(preserve_column));
+        triple_types.insert(
+            preserve_column.to_string(),
+            rdf_node_types.get(preserve_column).unwrap().clone(),
+        );
+    }
     let (subj_expr, subj_dt) =
         term_pattern_expression(rdf_node_types, &t.subject, SUBJECT_COL_NAME)?;
     triple_types.insert(SUBJECT_COL_NAME.to_string(), subj_dt);
@@ -381,7 +395,7 @@ fn triple_to_solution_mappings(
         triple_types.get(SUBJECT_COL_NAME).unwrap(),
     )
     .not();
-    let mut select_expr = vec![subj_expr];
+    select_expr.push(subj_expr);
     let verb = match &t.predicate {
         NamedNodePattern::NamedNode(verb) => Some(verb.clone()),
         NamedNodePattern::Variable(_) => {

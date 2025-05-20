@@ -60,8 +60,8 @@ use representation::solution_mapping::EagerSolutionMappings;
 #[cfg(not(target_os = "linux"))]
 use mimalloc::MiMalloc;
 use representation::polars_to_rdf::XSD_DATETIME_WITH_TZ_FORMAT;
-use representation::{RDFNodeType, OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME};
 use representation::rdf_to_polars::rdf_named_node_to_polars_literal_value;
+use representation::{RDFNodeType, OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME};
 use templates::python::{a, py_triple, PyArgument, PyInstance, PyParameter, PyTemplate, PyXSD};
 use templates::MappingColumnType;
 use triplestore::{IndexingOptions, NewTriples};

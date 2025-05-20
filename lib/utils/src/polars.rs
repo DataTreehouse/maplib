@@ -1,8 +1,8 @@
-use std::{thread::sleep, time::Duration};
-use std::collections::HashMap;
 use polars::{error::PolarsError, frame::DataFrame, prelude::LazyFrame};
 #[cfg(not(feature = "pyo3"))]
 use rayon::iter::IntoParallelIterator;
+use std::collections::HashMap;
+use std::{thread::sleep, time::Duration};
 use thiserror::Error;
 
 #[cfg(feature = "pyo3")]
@@ -63,9 +63,9 @@ pub fn pl_vec_interruptable_collect(
     // println!("Entering an interruptable collect");
 
     let mut futures = HashMap::new();
-    for (i,lf) in lfs.into_iter().enumerate() {
+    for (i, lf) in lfs.into_iter().enumerate() {
         let future = lf.collect_concurrently()?;
-        futures.insert(i,future);
+        futures.insert(i, future);
     }
 
     #[cfg(feature = "pyo3")]
@@ -105,13 +105,16 @@ pub fn pl_vec_interruptable_collect(
             }
             sleeptime = std::cmp::min(sleeptime * 2, Duration::from_millis(50));
         }
-        let results:Vec<_> = (0..dfs.len()).map(|i| {dfs.remove(&i).unwrap()}).collect();
+        let results: Vec<_> = (0..dfs.len()).map(|i| dfs.remove(&i).unwrap()).collect();
         Ok(results)
     }
-    
+
     #[cfg(not(feature = "pyo3"))]
     {
-        let dfs: Result<Vec<_>, _> = futures.into_par_iter().map(|(i, x)| { x.fetch_blocking()? }).collect();
+        let dfs: Result<Vec<_>, _> = futures
+            .into_par_iter()
+            .map(|(i, x)| x.fetch_blocking()?)
+            .collect();
         Ok(dfs?)
     }
 }
