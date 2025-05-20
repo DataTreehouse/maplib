@@ -263,7 +263,7 @@ impl Triplestore {
                         let mut solutions = vec![];
                         for t in template {
                             if let Some((sm, verb)) =
-                                triple_to_solution_mappings(&df, &rdf_node_types, t, None)?
+                                triple_to_solution_mappings(&df, &rdf_node_types, t, None, true)?
                             {
                                 solutions.push((sm, verb));
                             }
@@ -377,6 +377,7 @@ pub fn triple_to_solution_mappings(
     rdf_node_types: &HashMap<String, RDFNodeType>,
     t: &TriplePattern,
     preserve_column: Option<&str>,
+    unique:bool
 ) -> Result<Option<(EagerSolutionMappings, Option<NamedNode>)>, SparqlError> {
     let mut select_expr = vec![];
     let mut triple_types = HashMap::new();
@@ -425,8 +426,9 @@ pub fn triple_to_solution_mappings(
         .not(),
     );
     let mut lf = df.clone().lazy().select(select_expr).filter(filter_expr);
-    lf = unique_workaround(lf, &triple_types, None, false, UniqueKeepStrategy::Any);
-
+    if unique {
+        lf = unique_workaround(lf, &triple_types, None, false, UniqueKeepStrategy::Any);
+    }
     let df = lf.collect().unwrap();
     if df.height() > 0 {
         Ok(Some((EagerSolutionMappings::new(df, triple_types), verb)))
