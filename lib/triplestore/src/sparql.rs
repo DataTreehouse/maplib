@@ -28,7 +28,7 @@ use representation::{OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME};
 use sparesults::QueryResultsFormat;
 use sparesults::QueryResultsSerializer;
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
-use spargebra::Query;
+use spargebra::{GraphUpdateOperation, Query, Update};
 use std::collections::HashMap;
 use uuid::Uuid;
 
@@ -312,6 +312,7 @@ impl Triplestore {
             Err(SparqlError::QueryTypeNotSupported)
         }
     }
+
     pub fn insert_construct_result(
         &mut self,
         sms: Vec<(EagerSolutionMappings, Option<NamedNode>)>,
@@ -370,6 +371,20 @@ impl Triplestore {
         };
         Ok(new_triples)
     }
+
+    pub fn update_parsed(&mut self, update: &Update, streaming: bool, delay_index: bool) {
+        for u in &update.operations {
+            match u {
+                GraphUpdateOperation::InsertData { .. } => {}
+                GraphUpdateOperation::DeleteData { .. } => {}
+                GraphUpdateOperation::DeleteInsert { .. } => {}
+                GraphUpdateOperation::Load { .. } => {}
+                GraphUpdateOperation::Clear { .. } => {}
+                GraphUpdateOperation::Create { .. } => {}
+                GraphUpdateOperation::Drop { .. } => {}
+            }
+        }
+    }
 }
 
 pub fn triple_to_solution_mappings(
@@ -377,7 +392,7 @@ pub fn triple_to_solution_mappings(
     rdf_node_types: &HashMap<String, RDFNodeType>,
     t: &TriplePattern,
     preserve_column: Option<&str>,
-    unique:bool
+    unique: bool,
 ) -> Result<Option<(EagerSolutionMappings, Option<NamedNode>)>, SparqlError> {
     let mut select_expr = vec![];
     let mut triple_types = HashMap::new();

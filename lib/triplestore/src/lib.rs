@@ -487,7 +487,9 @@ pub fn prepare_triples(
                     predicate = literal_iri_to_namednode(p);
                 } else if let Ok(AnyValue::Categorical(a, b, _0)) = any_predicate {
                     predicate = literal_iri_to_namednode(b.get(a));
-                } else if let Ok(AnyValue::StringOwned(s)) = any_predicate {
+                } else if let Ok(AnyValue::CategoricalOwned(a, b, _0)) = any_predicate {
+                    predicate = literal_iri_to_namednode(b.get(a)); 
+                }else if let Ok(AnyValue::StringOwned(s)) = any_predicate {
                     predicate = literal_iri_to_namednode(s.as_str());
                 } else {
                     panic!("Predicate: {:?}", any_predicate);

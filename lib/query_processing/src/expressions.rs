@@ -972,6 +972,68 @@ pub fn func_expression(
                 .rdf_node_types
                 .insert(outer_context.as_str().to_string(), RDFNodeType::IRI);
         }
+        Function::Iri => {
+            if args.len() != 1 {
+                return Err(QueryProcessingError::BadNumberOfFunctionArguments(
+                    func.clone(),
+                    args.len(),
+                    "1".to_string(),
+                ));
+            }
+            let first_context = args_contexts.get(&0).unwrap();
+            let dt = solution_mappings
+                .rdf_node_types
+                .get(first_context.as_str())
+                .unwrap();
+            let c = match dt {
+                RDFNodeType::IRI => {
+                    col(first_context.as_str())
+                }
+                RDFNodeType::Literal(l) => {
+                    if l.as_ref() == xsd::STRING {
+                        col(first_context.as_str())
+                    } else {
+                        lit(LiteralValue::untyped_null()).cast(DataType::String)
+                    }
+                }
+                RDFNodeType::BlankNode | RDFNodeType::None => {
+                    lit(LiteralValue::untyped_null()).cast(DataType::String)
+                }
+                RDFNodeType::MultiType(ts) => {
+                    let mut iri_col = None;
+                    let mut string_col = None;
+                    
+                    for t in ts {
+                        match t {
+                            BaseRDFNodeType::IRI => {
+                                iri_col = Some(col(first_context.as_str()).struct_().field_by_name(MULTI_IRI_DT));
+                            }
+                            BaseRDFNodeType::Literal(l) => {
+                                if l.as_ref() == xsd::STRING {
+                                    string_col = Some(col(first_context.as_str()).struct_().field_by_name(base_col_name(t).as_str()));
+                                } 
+                            }
+                            _ => {}
+                        }
+                    }
+                    if iri_col.is_some() && string_col.is_none() {
+                        iri_col.unwrap()
+                    } else if iri_col.is_none() && string_col.is_some() {
+                        string_col.unwrap()
+                    } else if iri_col.is_some() && string_col.is_some() {
+                        coalesce(&[iri_col.unwrap().cast(DataType::String), string_col.unwrap().cast(DataType::String)])
+                    } else {
+                        lit(LiteralValue::untyped_null()).cast(DataType::String)
+                    }
+                }
+            };
+            solution_mappings.mappings = solution_mappings.mappings.with_column(
+                c.alias(outer_context.as_str()),
+            );
+            solution_mappings
+                .rdf_node_types
+                .insert(outer_context.as_str().to_string(), RDFNodeType::IRI);
+        }
         Function::StrUuid => {
             if !args.is_empty() {
                 return Err(QueryProcessingError::BadNumberOfFunctionArguments(

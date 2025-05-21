@@ -606,6 +606,72 @@ def test_generate_uuids(streaming):
 
 
 @pytest.mark.parametrize("streaming", [True, False])
+def test_generate_iri_all_strings(streaming):
+    m = Mapping([])
+    sm = m.query(
+        """
+    PREFIX : <http://example.net/> 
+    PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+    SELECT ?a ?iri WHERE {
+    VALUES (?a) { ("urn:abc:123") ("http://www.w3.org/2001/XMLSchema#integer") }
+    BIND(IRI(?a) as ?iri)
+    } ORDER BY ?a
+    """,
+        include_datatypes=True,
+        streaming=streaming,
+    )
+    assert sm.rdf_types == {
+        "a": RDFType.Literal("http://www.w3.org/2001/XMLSchema#string"),
+        "iri": RDFType.IRI(),
+    }
+    expected = pl.from_repr("""
+┌─────────────────────────────────────────────────┬────────────────────────────────────────────┐
+│ a                                               ┆ iri                                        │
+│ ---                                             ┆ ---                                        │
+│ str                                             ┆ str                                        │
+╞═════════════════════════════════════════════════╪════════════════════════════════════════════╡
+│ http://www.w3.org/2001/XMLSchema#integer        ┆ <http://www.w3.org/2001/XMLSchema#integer> │
+│ urn:abc:123                                     ┆ <urn:abc:123>                              │
+└─────────────────────────────────────────────────┴────────────────────────────────────────────┘
+    """)
+    assert_frame_equal(expected, sm.mappings)
+
+
+@pytest.mark.parametrize("streaming", [True, False])
+def test_generate_iri(streaming):
+    m = Mapping([])
+    sm = m.query(
+        """
+    PREFIX : <http://example.net/> 
+    PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+    SELECT ?a ?iri WHERE {
+    VALUES (?a) { ("urn:abc:123") ("http://www.w3.org/2001/XMLSchema#integer") (3) (<http://www.w3.org/2001/XMLSchema#abc>) }
+    BIND(IRI(?a) as ?iri)
+    } ORDER BY ?a
+    """,
+        include_datatypes=True,
+        streaming=streaming,
+    )
+    assert sm.rdf_types == {
+        "a": RDFType.Multi([RDFType.IRI(), RDFType.Literal("http://www.w3.org/2001/XMLSchema#integer"), RDFType.Literal("http://www.w3.org/2001/XMLSchema#string")]),
+        "iri": RDFType.IRI(),
+    }
+    expected = pl.from_repr("""
+┌─────────────────────────────────────────────────┬────────────────────────────────────────────┐
+│ a                                               ┆ iri                                        │
+│ ---                                             ┆ ---                                        │
+│ str                                             ┆ str                                        │
+╞═════════════════════════════════════════════════╪════════════════════════════════════════════╡
+│ <http://www.w3.org/2001/XMLSchema#abc>          ┆ <http://www.w3.org/2001/XMLSchema#abc>     │
+│ "3"^^<http://www.w3.org/2001/XMLSchema#integer> ┆ null                                       │
+│ "http://www.w3.org/2001/XMLSchema#integer"      ┆ <http://www.w3.org/2001/XMLSchema#integer> │
+│ "urn:abc:123"                                   ┆ <urn:abc:123>                              │
+└─────────────────────────────────────────────────┴────────────────────────────────────────────┘
+    """)
+    assert_frame_equal(expected, sm.mappings)
+
+
+@pytest.mark.parametrize("streaming", [True, False])
 def test_generate_str_uuids(streaming):
     m = Mapping([])
     sm = m.query(
