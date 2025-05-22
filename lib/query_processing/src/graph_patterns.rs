@@ -403,7 +403,6 @@ pub fn union(
     if mappings.len() == 1 {
         return Ok(mappings.remove(0));
     }
-
     let mut cat_mappings = vec![];
     for SolutionMappings {
         mut mappings,
@@ -440,7 +439,11 @@ pub fn union(
         for (right_col, right_type) in right_datatypes {
             if let Some(left_type) = target_types.get(right_col) {
                 if left_type != right_type {
-                    if let RDFNodeType::MultiType(left_types) = left_type {
+                    if left_type == &RDFNodeType::None {
+                        target_types.insert(right_col.clone(), right_type.clone());
+                    } else if  right_type == &RDFNodeType::None {
+                        // do nothing, the None-col will be dropped later
+                    } else if let RDFNodeType::MultiType(left_types) = left_type {
                         let mut left_set: HashSet<_> = left_types.iter().collect();
                         if let RDFNodeType::MultiType(right_types) = right_type {
                             let right_set: HashSet<_> = right_types.iter().collect();
@@ -498,15 +501,24 @@ pub fn union(
     {
         new_height = new_height.saturating_add(height_upper_bound);
         let mut new_multi = HashMap::new();
+        let mut cols_to_drop = vec![];
         for (c, t) in &rdf_node_types {
             let target_type = target_types.get(c).unwrap();
-            if t != target_type && !matches!(t, RDFNodeType::MultiType(..)) {
-                mappings = mappings.with_column(convert_lf_col_to_multitype(c, t));
-                new_multi.insert(
-                    c.clone(),
-                    RDFNodeType::MultiType(vec![BaseRDFNodeType::from_rdf_node_type(t)]),
-                );
+            if t != target_type {
+                if t == &RDFNodeType::None {
+                    mappings = mappings.drop([col(c)]);
+                    cols_to_drop.push(c.clone());
+                } else if !matches!(t, RDFNodeType::MultiType(..)) {
+                    mappings = mappings.with_column(convert_lf_col_to_multitype(c, t));
+                    new_multi.insert(
+                        c.clone(),
+                        RDFNodeType::MultiType(vec![BaseRDFNodeType::from_rdf_node_type(t)]),
+                    );
+                }
             }
+        }
+        for c in cols_to_drop {
+            rdf_node_types.remove(&c);
         }
         rdf_node_types.extend(new_multi);
         let (new_mappings, new_exploded_map) = unnest_multicols(mappings, &rdf_node_types);
