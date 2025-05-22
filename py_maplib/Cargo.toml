@@ -1,6 +1,6 @@
 [package]
 name = "py_maplib"
-version = "0.15.27"
+version = "0.15.28"
 edition = "2021"
 
 [dependencies]
