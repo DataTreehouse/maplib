@@ -471,6 +471,33 @@ class Mapping:
 
         """
 
+    def update(
+            self,
+            update: str,
+            parameters: ParametersType = None,
+            streaming: bool = False,
+            delay_index: bool = True,
+            include_transient: bool = True,
+    ):
+        """
+        Insert the results of a Construct query in the graph.
+        Useful for being able to use the same query for inspecting what will be inserted and actually inserting.
+        Usage:
+
+        >>> m = Mapping(doc)
+        ... # Omitted
+        ... update_pizzas = '''
+        ... ...'''
+        ... m.update(update_pizzas)
+
+        :param update: The SPARQL Update string
+        :param parameters: PVALUES Parameters, a DataFrame containing the value bindings in the custom PVALUES construction.
+        :param streaming: Use Polars streaming
+        :param delay_index: Delay indexing, use when making multiple inserts of the same predicate.
+        :param include_transient: Include transient triples when querying (but see "transient" above).
+        :return: None
+        """
+
     def insert(
         self,
         query: str,

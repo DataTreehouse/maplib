@@ -27,13 +27,17 @@ use representation::RDFNodeType;
 use representation::{OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME};
 use sparesults::QueryResultsFormat;
 use sparesults::QueryResultsSerializer;
-use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
+use spargebra::term::{
+    GraphNamePattern, GroundQuadPattern, GroundTermPattern, NamedNodePattern, QuadPattern,
+    TermPattern, TriplePattern,
+};
 use spargebra::{GraphUpdateOperation, Query, Update};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 
 #[cfg(feature = "pyo3")]
 use pyo3::Python;
+use spargebra::algebra::GraphPattern;
 
 #[derive(Debug)]
 pub enum QueryResult {
@@ -320,49 +324,7 @@ impl Triplestore {
         delay_index: bool,
     ) -> Result<Vec<NewTriples>, SparqlError> {
         let call_uuid = Uuid::new_v4().to_string();
-        let mut all_triples_to_add = vec![];
-
-        for (
-            EagerSolutionMappings {
-                mappings,
-                rdf_node_types,
-            },
-            verb,
-        ) in sms
-        {
-            if mappings.height() == 0 {
-                continue;
-            }
-            let mut multicols = HashMap::new();
-            let subj_dt = rdf_node_types.get(SUBJECT_COL_NAME).unwrap();
-            if matches!(subj_dt, RDFNodeType::MultiType(..)) {
-                multicols.insert(SUBJECT_COL_NAME.to_string(), subj_dt.clone());
-            }
-            let obj_dt = rdf_node_types.get(OBJECT_COL_NAME).unwrap();
-            if matches!(obj_dt, RDFNodeType::MultiType(..)) {
-                multicols.insert(OBJECT_COL_NAME.to_string(), obj_dt.clone());
-            }
-            if !multicols.is_empty() {
-                let dfs_dts = split_df_multicols(mappings, &multicols);
-                for (df, mut map) in dfs_dts {
-                    let new_subj_dt = map.remove(SUBJECT_COL_NAME).unwrap_or(subj_dt.clone());
-                    let new_obj_dt = map.remove(OBJECT_COL_NAME).unwrap_or(obj_dt.clone());
-                    all_triples_to_add.push(TriplesToAdd {
-                        df,
-                        subject_type: new_subj_dt,
-                        object_type: new_obj_dt,
-                        static_verb_column: verb.clone(),
-                    });
-                }
-            } else {
-                all_triples_to_add.push(TriplesToAdd {
-                    df: mappings,
-                    subject_type: subj_dt.clone(),
-                    object_type: obj_dt.clone(),
-                    static_verb_column: verb,
-                });
-            }
-        }
+        let all_triples_to_add = construct_result_as_triples_to_add(sms);
         let new_triples = if !all_triples_to_add.is_empty() {
             self.add_triples_vec(all_triples_to_add, &call_uuid, transient, delay_index)
                 .map_err(SparqlError::StoreTriplesError)?
@@ -372,19 +334,269 @@ impl Triplestore {
         Ok(new_triples)
     }
 
-    pub fn update_parsed(&mut self, update: &Update, streaming: bool, delay_index: bool) {
+    pub fn update(
+        &mut self,
+        update: &str,
+        parameters: &Option<HashMap<String, EagerSolutionMappings>>,
+        streaming: bool,
+        include_transient: bool,
+        delay_index: bool,
+        #[cfg(feature = "pyo3")] py: Python<'_>,
+    ) -> Result<(), SparqlError> {
+        let update = Update::parse(update, None).map_err(SparqlError::ParseError)?;
+        self.update_parsed(
+            &update,
+            parameters,
+            streaming,
+            include_transient,
+            delay_index,
+            #[cfg(feature = "pyo3")]
+            py,
+        )?;
+        Ok(())
+    }
+
+    pub fn update_parsed(
+        &mut self,
+        update: &Update,
+        parameters: &Option<HashMap<String, EagerSolutionMappings>>,
+        streaming: bool,
+        include_transient: bool,
+        delay_index: bool,
+        #[cfg(feature = "pyo3")] py: Python<'_>,
+    ) -> Result<(), SparqlError> {
+        if self.has_unindexed {
+            self.index_unindexed().map_err(SparqlError::IndexingError)?;
+        }
+        self.update_parsed_indexed(
+            update,
+            parameters,
+            streaming,
+            include_transient,
+            delay_index,
+            #[cfg(feature = "pyo3")]
+            py,
+        )?;
+        Ok(())
+    }
+
+    pub fn update_parsed_indexed(
+        &mut self,
+        update: &Update,
+        parameters: &Option<HashMap<String, EagerSolutionMappings>>,
+        streaming: bool,
+        include_transient: bool,
+        delay_index: bool,
+        #[cfg(feature = "pyo3")] py: Python<'_>,
+    ) -> Result<(), SparqlError> {
         for u in &update.operations {
             match u {
-                GraphUpdateOperation::InsertData { .. } => {}
-                GraphUpdateOperation::DeleteData { .. } => {}
-                GraphUpdateOperation::DeleteInsert { .. } => {}
+                GraphUpdateOperation::InsertData { .. } => {
+                    todo!()
+                }
+                GraphUpdateOperation::DeleteData { .. } => {
+                    todo!()
+                }
+                GraphUpdateOperation::DeleteInsert {
+                    delete,
+                    insert,
+                    using,
+                    pattern,
+                } => {
+                    if let Some(..) = using {
+                        todo!()
+                    }
+                    let mut variables = HashSet::new();
+                    for d in delete {
+                        if let GroundTermPattern::Variable(v) = &d.subject {
+                            variables.insert(v.clone());
+                        }
+                        if let GroundTermPattern::Variable(v) = &d.object {
+                            variables.insert(v.clone());
+                        }
+                        if let NamedNodePattern::Variable(v) = &d.predicate {
+                            variables.insert(v.clone());
+                        }
+                    }
+                    for i in insert {
+                        if let TermPattern::Variable(v) = &i.subject {
+                            variables.insert(v.clone());
+                        }
+                        if let TermPattern::Variable(v) = &i.object {
+                            variables.insert(v.clone());
+                        }
+                        if let NamedNodePattern::Variable(v) = &i.predicate {
+                            variables.insert(v.clone());
+                        }
+                    }
+                    let mut variables: Vec<_> = variables.into_iter().collect();
+                    variables.sort();
+                    let p = GraphPattern::Project {
+                        variables,
+                        inner: pattern.clone(),
+                    };
+                    let q = Query::Select {
+                        dataset: None,
+                        pattern: p,
+                        base_iri: None,
+                    };
+                    let r = self.query_parsed_indexed(
+                        &q,
+                        parameters,
+                        streaming,
+                        include_transient,
+                        #[cfg(feature = "pyo3")]
+                        py,
+                    )?;
+                    let EagerSolutionMappings {
+                        mappings,
+                        rdf_node_types,
+                    } = if let QueryResult::Select(sm) = r {
+                        sm
+                    } else {
+                        unreachable!("Should never happen")
+                    };
+                    let mut delete_solutions = vec![];
+                    for d in delete {
+                        let del = triple_to_solution_mappings(
+                            &mappings,
+                            &rdf_node_types,
+                            &ground_quad_pattern_to_triple_pattern(d),
+                            None,
+                            false,
+                        )?;
+                        if let Some(sol) = del {
+                            delete_solutions.push(sol);
+                        }
+                    }
+                    if !delete_solutions.is_empty() {
+                        self.delete_construct_result(delete_solutions, delay_index)?;
+                    }
+                    let mut insert_solutions = vec![];
+                    for i in insert {
+                        let insert = triple_to_solution_mappings(
+                            &mappings,
+                            &rdf_node_types,
+                            &quad_pattern_to_triple_pattern(i),
+                            None,
+                            true,
+                        )?;
+                        if let Some(insert) = insert {
+                            insert_solutions.push(insert);
+                        }
+                    }
+                    if !insert_solutions.is_empty() {
+                        self.insert_construct_result(insert_solutions, false, delay_index)?;
+                    }
+                }
                 GraphUpdateOperation::Load { .. } => {}
                 GraphUpdateOperation::Clear { .. } => {}
                 GraphUpdateOperation::Create { .. } => {}
                 GraphUpdateOperation::Drop { .. } => {}
             }
         }
+        Ok(())
     }
+
+    pub fn delete_construct_result(
+        &mut self,
+        sms: Vec<(EagerSolutionMappings, Option<NamedNode>)>,
+        delay_index: bool,
+    ) -> Result<(), SparqlError> {
+        let call_uuid = Uuid::new_v4().to_string();
+        let all_triples_to_add = construct_result_as_triples_to_add(sms);
+        if !all_triples_to_add.is_empty() {
+            self.delete_triples_vec(all_triples_to_add, &call_uuid, delay_index)
+                .map_err(SparqlError::StoreTriplesError)?;
+        };
+        Ok(())
+    }
+}
+
+fn quad_pattern_to_triple_pattern(qp: &QuadPattern) -> TriplePattern {
+    match &qp.graph_name {
+        GraphNamePattern::NamedNode(_) => {
+            todo!()
+        }
+        GraphNamePattern::DefaultGraph => {}
+        GraphNamePattern::Variable(_) => {
+            todo!()
+        }
+    }
+    TriplePattern {
+        subject: qp.subject.clone(),
+        predicate: qp.predicate.clone(),
+        object: qp.object.clone(),
+    }
+}
+
+fn ground_quad_pattern_to_triple_pattern(qp: &GroundQuadPattern) -> TriplePattern {
+    match qp.graph_name {
+        GraphNamePattern::NamedNode(_) => {
+            todo!()
+        }
+        GraphNamePattern::DefaultGraph => {}
+        GraphNamePattern::Variable(_) => {
+            todo!()
+        }
+    }
+    let subject = TermPattern::from(qp.subject.clone());
+    let predicate = qp.predicate.clone();
+    let object = TermPattern::from(qp.object.clone());
+    TriplePattern {
+        subject,
+        predicate,
+        object,
+    }
+}
+
+fn construct_result_as_triples_to_add(
+    sms: Vec<(EagerSolutionMappings, Option<NamedNode>)>,
+) -> Vec<TriplesToAdd> {
+    let mut all_triples_to_add = vec![];
+
+    for (
+        EagerSolutionMappings {
+            mappings,
+            rdf_node_types,
+        },
+        verb,
+    ) in sms
+    {
+        if mappings.height() == 0 {
+            continue;
+        }
+        let mut multicols = HashMap::new();
+        let subj_dt = rdf_node_types.get(SUBJECT_COL_NAME).unwrap();
+        if matches!(subj_dt, RDFNodeType::MultiType(..)) {
+            multicols.insert(SUBJECT_COL_NAME.to_string(), subj_dt.clone());
+        }
+        let obj_dt = rdf_node_types.get(OBJECT_COL_NAME).unwrap();
+        if matches!(obj_dt, RDFNodeType::MultiType(..)) {
+            multicols.insert(OBJECT_COL_NAME.to_string(), obj_dt.clone());
+        }
+        if !multicols.is_empty() {
+            let dfs_dts = split_df_multicols(mappings, &multicols);
+            for (df, mut map) in dfs_dts {
+                let new_subj_dt = map.remove(SUBJECT_COL_NAME).unwrap_or(subj_dt.clone());
+                let new_obj_dt = map.remove(OBJECT_COL_NAME).unwrap_or(obj_dt.clone());
+                all_triples_to_add.push(TriplesToAdd {
+                    df,
+                    subject_type: new_subj_dt,
+                    object_type: new_obj_dt,
+                    static_verb_column: verb.clone(),
+                });
+            }
+        } else {
+            all_triples_to_add.push(TriplesToAdd {
+                df: mappings,
+                subject_type: subj_dt.clone(),
+                object_type: obj_dt.clone(),
+                static_verb_column: verb,
+            });
+        }
+    }
+    all_triples_to_add
 }
 
 pub fn triple_to_solution_mappings(

@@ -17,11 +17,15 @@ use fts::FtsIndex;
 use log::debug;
 use oxrdf::vocab::{rdf, rdfs};
 use oxrdf::NamedNode;
-use polars::prelude::{AnyValue, DataFrame, IntoLazy};
+use polars::prelude::{
+    col, concat, AnyValue, DataFrame, IntoLazy, JoinArgs, JoinType, MaintainOrderJoin, UnionArgs,
+};
 use polars_core::datatypes::CategoricalOrdering;
 use rayon::iter::ParallelDrainRange;
 use rayon::iter::ParallelIterator;
-use representation::multitype::{lf_columns_to_categorical, set_structs_all_null_to_null_row};
+use representation::multitype::{
+    lf_column_to_categorical, lf_columns_to_categorical, set_structs_all_null_to_null_row,
+};
 use representation::solution_mapping::EagerSolutionMappings;
 use representation::{
     literal_iri_to_namednode, BaseRDFNodeType, RDFNodeType, OBJECT_COL_NAME, SUBJECT_COL_NAME,
@@ -200,37 +204,19 @@ impl Triplestore {
 
     pub fn add_triples_vec(
         &mut self,
-        mut ts: Vec<TriplesToAdd>,
+        ts: Vec<TriplesToAdd>,
         call_uuid: &str,
         transient: bool,
         delay_index: bool,
     ) -> Result<Vec<NewTriples>, TriplestoreError> {
         let prepare_triples_now = Instant::now();
-        let df_vecs_to_add: Vec<Vec<TripleDF>> = ts
-            .par_drain(..)
-            .map(|t| {
-                let TriplesToAdd {
-                    df,
-                    subject_type,
-                    object_type,
-                    static_verb_column,
-                } = t;
-                assert!(!matches!(subject_type, RDFNodeType::MultiType(..)));
-                assert!(!matches!(object_type, RDFNodeType::MultiType(..)));
-                prepare_triples(
-                    df,
-                    &BaseRDFNodeType::from_rdf_node_type(&subject_type),
-                    &BaseRDFNodeType::from_rdf_node_type(&object_type),
-                    static_verb_column,
-                )
-            })
-            .collect();
+        let dfs_to_add = prepare_triples_par(ts);
         debug!(
             "Preparing triples took {} seconds",
             prepare_triples_now.elapsed().as_secs_f32()
         );
         let add_triples_now = Instant::now();
-        let dfs_to_add = flatten(df_vecs_to_add);
+
         let new_triples = self.add_triples_df(dfs_to_add, call_uuid, transient, delay_index)?;
         if delay_index {
             self.has_unindexed = true;
@@ -240,6 +226,30 @@ impl Triplestore {
             add_triples_now.elapsed().as_secs_f32()
         );
         Ok(new_triples)
+    }
+
+    pub fn delete_triples_vec(
+        &mut self,
+        ts: Vec<TriplesToAdd>,
+        call_uuid: &str,
+        delay_index: bool,
+    ) -> Result<(), TriplestoreError> {
+        let prepare_triples_now = Instant::now();
+        let dfs_to_add = prepare_triples_par(ts);
+        debug!(
+            "Deleting triples took {} seconds",
+            prepare_triples_now.elapsed().as_secs_f32()
+        );
+        let add_triples_now = Instant::now();
+        self.delete_triples_df(dfs_to_add, call_uuid, delay_index)?;
+        if delay_index {
+            self.has_unindexed = true;
+        }
+        debug!(
+            "Deleting triples df took {} seconds",
+            add_triples_now.elapsed().as_secs_f32()
+        );
+        Ok(())
     }
 
     fn add_triples_df(
@@ -354,98 +364,146 @@ impl Triplestore {
         Ok(out_new_triples)
     }
 
-    //     fn subtract_from_transient(
-    //         &mut self,
-    //         triples_df: Vec<TripleDF>,
-    //         call_uuid: &String,
-    //         transient: bool,
-    //     ) -> Result<Vec<TripleDF>, TriplestoreError> {
-    //         let mut new_triples_df = vec![];
-    //         if transient {
-    //             for tdf in triples_df {
-    //                 if let Some(m) = self.triples_map.get(&tdf.predicate) {
-    //                     if let Some(SolutionMappings {
-    //                         mappings: lf,
-    //                         rdf_node_types: _,
-    //                     }) = multiple_tt_to_lf(
-    //                         m,
-    //                         None,
-    //                         Some(&tdf.subject_type),
-    //                         Some(&tdf.object_type),
-    //                         None,
-    //                         None,
-    //                     )
-    //                     .map_err(|x| TriplestoreError::SubtractTransientTriplesError(x.to_string()))?
-    //                     {
-    //                         let TripleDF {
-    //                             df,
-    //                             predicate,
-    //                             subject_type,
-    //                             object_type,
-    //                         } = tdf;
-    //                         let join_on = vec![col(SUBJECT_COL_NAME), col(OBJECT_COL_NAME)];
-    //                         let df = df
-    //                             .lazy()
-    //                             .join(lf, &join_on, &join_on, JoinArgs::new(JoinType::Anti))
-    //                             .collect()
-    //                             .unwrap();
-    //                         if df.height() > 0 {
-    //                             new_triples_df.push(TripleDF {
-    //                                 df,
-    //                                 predicate,
-    //                                 subject_type,
-    //                                 object_type,
-    //                             })
-    //                         }
-    //                     } else {
-    //                         new_triples_df.push(tdf);
-    //                     }
-    //                 } else {
-    //                     new_triples_df.push(tdf);
-    //                 }
-    //             }
-    //         } else {
-    //             let mut updated_transient_triples_df = vec![];
-    //             for tdf in &triples_df {
-    //                 if let Some(m) = self.transient_df_map.get(&tdf.predicate) {
-    //                     if let Some(SolutionMappings {
-    //                         mappings: lf,
-    //                         rdf_node_types: _,
-    //                     }) = multiple_tt_to_lf(
-    //                         m,
-    //                         None,
-    //                         Some(&tdf.subject_type),
-    //                         Some(&tdf.object_type),
-    //                         None,
-    //                         None,
-    //                     )
-    //                     .map_err(|x| TriplestoreError::SubtractTransientTriplesError(x.to_string()))?
-    //                     {
-    //                         let join_on = vec![col(SUBJECT_COL_NAME), col(OBJECT_COL_NAME)];
-    //                         let df = lf
-    //                             .join(
-    //                                 tdf.df.clone().lazy(),
-    //                                 &join_on,
-    //                                 &join_on,
-    //                                 JoinArgs::new(JoinType::Anti),
-    //                             )
-    //                             .collect()
-    //                             .unwrap();
-    //                         updated_transient_triples_df.push(TripleDF {
-    //                             df,
-    //                             predicate: tdf.predicate.clone(),
-    //                             subject_type: tdf.subject_type.clone(),
-    //                             object_type: tdf.object_type.clone(),
-    //                         });
-    //                     }
-    //                 }
-    //             }
-    //             if !updated_transient_triples_df.is_empty() {
-    //                 self.add_triples_df(updated_transient_triples_df, call_uuid, true, true)?;
-    //             }
-    //         }
-    //         Ok(new_triples_df)
-    //     }
+    fn delete_triples_df(
+        &mut self,
+        triples_df: Vec<TripleDF>,
+        call_uuid: &str,
+        delay_index: bool,
+    ) -> Result<(), TriplestoreError> {
+        for tdf in triples_df {
+            let df = get_df_after_deletion(&tdf, &self.triples_map)?;
+            self.delete_if_exists(&tdf.predicate, &tdf.subject_type, &tdf.object_type, false);
+            if let Some(df) = df {
+                let new_tdf = TripleDF {
+                    df,
+                    predicate: tdf.predicate.clone(),
+                    subject_type: tdf.subject_type.clone(),
+                    object_type: tdf.object_type.clone(),
+                };
+                self.add_triples_df(vec![new_tdf], call_uuid, false, delay_index)?;
+            }
+
+            let df = get_df_after_deletion(&tdf, &self.transient_triples_map)?;
+            self.delete_if_exists(&tdf.predicate, &tdf.subject_type, &tdf.object_type, true);
+            if let Some(df) = df {
+                let new_tdf = TripleDF {
+                    df,
+                    predicate: tdf.predicate.clone(),
+                    subject_type: tdf.subject_type.clone(),
+                    object_type: tdf.object_type.clone(),
+                };
+                self.add_triples_df(vec![new_tdf], call_uuid, true, delay_index)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn delete_if_exists(
+        &mut self,
+        predicate: &NamedNode,
+        subject_type: &BaseRDFNodeType,
+        object_type: &BaseRDFNodeType,
+        transient: bool,
+    ) {
+        let use_map = if transient {
+            &mut self.transient_triples_map
+        } else {
+            &mut self.triples_map
+        };
+        let map_empty = if let Some(m1) = use_map.get_mut(predicate) {
+            let type_ = (subject_type.clone(), object_type.clone());
+            m1.remove(&type_);
+            m1.is_empty()
+        } else {
+            false
+        };
+        if map_empty {
+            use_map.remove(predicate);
+        }
+    }
+}
+
+fn get_df_after_deletion(
+    tdf: &TripleDF,
+    map: &HashMap<NamedNode, HashMap<(BaseRDFNodeType, BaseRDFNodeType), Triples>>,
+) -> Result<Option<DataFrame>, TriplestoreError> {
+    if let Some(m) = map.get(&tdf.predicate) {
+        let type_ = (tdf.subject_type.clone(), tdf.object_type.clone());
+        if let Some(triples) = m.get(&type_) {
+            let lfs = triples.get_lazy_frames(&None, &None)?;
+            let lfs_only: Vec<_> = lfs.into_iter().map(|(lf, _)| lf).collect();
+            let mut lf = concat(
+                lfs_only,
+                UnionArgs {
+                    parallel: true,
+                    rechunk: false,
+                    to_supertypes: false,
+                    diagonal: false,
+                    from_partitioned_ds: false,
+                    maintain_order: false,
+                },
+            )
+            .unwrap();
+            let (s, o) = type_;
+            let mut to_delete = tdf.df.clone().lazy();
+            to_delete = lf_column_to_categorical(
+                to_delete,
+                SUBJECT_COL_NAME,
+                &s.as_rdf_node_type(),
+                CategoricalOrdering::Physical,
+            );
+            to_delete = lf_column_to_categorical(
+                to_delete,
+                OBJECT_COL_NAME,
+                &o.as_rdf_node_type(),
+                CategoricalOrdering::Physical,
+            );
+
+            lf = lf.join(
+                to_delete,
+                [col(SUBJECT_COL_NAME), col(OBJECT_COL_NAME)],
+                [col(SUBJECT_COL_NAME), col(OBJECT_COL_NAME)],
+                JoinArgs {
+                    how: JoinType::Anti,
+                    validation: Default::default(),
+                    suffix: None,
+                    slice: None,
+                    nulls_equal: false,
+                    coalesce: Default::default(),
+                    maintain_order: MaintainOrderJoin::None,
+                },
+            );
+            let df = lf.collect().unwrap();
+            if df.height() > 0 {
+                return Ok(Some(df));
+            }
+        }
+    }
+    Ok(None)
+}
+
+pub fn prepare_triples_par(mut ts: Vec<TriplesToAdd>) -> Vec<TripleDF> {
+    let df_vecs_to_add: Vec<Vec<TripleDF>> = ts
+        .par_drain(..)
+        .map(|t| {
+            let TriplesToAdd {
+                df,
+                subject_type,
+                object_type,
+                static_verb_column,
+            } = t;
+            assert!(!matches!(subject_type, RDFNodeType::MultiType(..)));
+            assert!(!matches!(object_type, RDFNodeType::MultiType(..)));
+            prepare_triples(
+                df,
+                &BaseRDFNodeType::from_rdf_node_type(&subject_type),
+                &BaseRDFNodeType::from_rdf_node_type(&object_type),
+                static_verb_column,
+            )
+        })
+        .collect();
+    let dfs_to_add = flatten(df_vecs_to_add);
+    dfs_to_add
 }
 
 pub fn prepare_triples(
@@ -488,8 +546,8 @@ pub fn prepare_triples(
                 } else if let Ok(AnyValue::Categorical(a, b, _0)) = any_predicate {
                     predicate = literal_iri_to_namednode(b.get(a));
                 } else if let Ok(AnyValue::CategoricalOwned(a, b, _0)) = any_predicate {
-                    predicate = literal_iri_to_namednode(b.get(a)); 
-                }else if let Ok(AnyValue::StringOwned(s)) = any_predicate {
+                    predicate = literal_iri_to_namednode(b.get(a));
+                } else if let Ok(AnyValue::StringOwned(s)) = any_predicate {
                     predicate = literal_iri_to_namednode(s.as_str());
                 } else {
                     panic!("Predicate: {:?}", any_predicate);

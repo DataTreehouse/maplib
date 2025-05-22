@@ -380,6 +380,35 @@ impl PyMapping {
         )
     }
 
+    #[allow(clippy::too_many_arguments)]
+    #[pyo3(signature = (update, parameters=None, graph=None, streaming=None, 
+        delay_index = None, include_transient=None))]
+    fn update(
+        &mut self,
+        py: Python<'_>,
+        update: String,
+        parameters: Option<ParametersType>,
+        graph: Option<String>,
+        streaming: Option<bool>,
+        delay_index: Option<bool>,
+        include_transient: Option<bool>,
+    ) -> PyResult<()> {
+        let graph = parse_optional_named_node(graph)?;
+        let mapped_parameters = map_parameters(parameters)?;
+        self.inner
+            .update(
+                &update,
+                &mapped_parameters,
+                graph,
+                streaming.unwrap_or(false),
+                include_transient.unwrap_or(true),
+                delay_index.unwrap_or(true),
+                py,
+            )
+            .map_err(PyMaplibError::from)?;
+        Ok(())
+    }
+
     #[pyo3(signature = (options=None, all=None, graph=None))]
     fn create_index(
         &mut self,

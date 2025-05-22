@@ -735,7 +735,12 @@ fn update_column_sorted_index(
         None
     };
 
-    let stored = StoredTriples::new(df, subject_type, object_type, storage_folder)?;
+    let stored = StoredTriples::new(
+        df.select([SUBJECT_COL_NAME, OBJECT_COL_NAME]).unwrap(),
+        subject_type,
+        object_type,
+        storage_folder,
+    )?;
 
     Ok((stored, height, sparse_map, new_triples))
 }
@@ -790,6 +795,7 @@ fn create_unique_df_and_sparse_map(
 }
 
 fn create_sparse_map(ser: &Series) -> BTreeMap<String, usize> {
+    assert!(ser.len() > 0);
     let cat = ser.categorical().unwrap();
     let mut sparse_map = BTreeMap::new();
     let mut current_offset = 0;

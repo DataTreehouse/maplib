@@ -264,6 +264,30 @@ impl Mapping {
             .map_err(|x| x.into())
     }
 
+    pub fn update(
+        &mut self,
+        update: &str,
+        parameters: &Option<HashMap<String, EagerSolutionMappings>>,
+        graph: Option<NamedNode>,
+        streaming: bool,
+        include_transient: bool,
+        delay_index: bool,
+        #[cfg(feature = "pyo3")] py: pyo3::Python<'_>,
+    ) -> Result<(), MaplibError> {
+        let use_triplestore = self.get_triplestore(&graph);
+        use_triplestore
+            .update(
+                update,
+                parameters,
+                streaming,
+                include_transient,
+                delay_index,
+                #[cfg(feature = "pyo3")]
+                py,
+            )
+            .map_err(|x| x.into())
+    }
+
     pub fn insert_construct_result(
         &mut self,
         sms: Vec<(EagerSolutionMappings, Option<NamedNode>)>,
