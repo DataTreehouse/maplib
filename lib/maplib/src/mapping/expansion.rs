@@ -365,6 +365,7 @@ fn get_term_names<'a>(out_vars: &mut Vec<&'a str>, term: &'a StottrTerm) {
     }
 }
 
+#[derive(Debug)]
 struct CreateTriplesResult {
     df: DataFrame,
     subject_type: RDFNodeType,
