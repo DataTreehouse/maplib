@@ -3,8 +3,9 @@ use crate::sparql::errors::SparqlError;
 use log::trace;
 use oxrdf::Variable;
 
+use polars::prelude::JoinType;
 use query_processing::aggregates::AggregateReturn;
-use query_processing::graph_patterns::{group_by, prepare_group_by};
+use query_processing::graph_patterns::{group_by, join, prepare_group_by};
 use query_processing::pushdowns::Pushdowns;
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
@@ -18,7 +19,7 @@ impl Triplestore {
         inner: &GraphPattern,
         variables: &[Variable],
         aggregates: &[(Variable, AggregateExpression)],
-        solution_mapping: Option<SolutionMappings>,
+        solution_mappings: Option<SolutionMappings>,
         context: &Context,
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         mut pushdowns: Pushdowns,
@@ -30,7 +31,7 @@ impl Triplestore {
         pushdowns.add_graph_pattern_pushdowns(inner);
         let output_solution_mappings = self.lazy_graph_pattern(
             inner,
-            solution_mapping,
+            None,
             &inner_context,
             parameters,
             pushdowns,
@@ -68,6 +69,11 @@ impl Triplestore {
             dummy_varname,
             new_rdf_node_types,
         )?;
-        Ok(grouped)
+        let solution_mappings = if let Some(solution_mappings) = solution_mappings {
+            join(solution_mappings, grouped, JoinType::Inner)?
+        } else {
+            grouped
+        };
+        Ok(solution_mappings)
     }
 }

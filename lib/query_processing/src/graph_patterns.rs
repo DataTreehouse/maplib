@@ -163,11 +163,11 @@ pub fn join(
         let lang_rdf_type = lang_base_type.as_rdf_node_type();
         let lang_multi = RDFNodeType::MultiType(vec![lang_base_type]);
         for k in lang_to_multi.iter() {
-            left_mappings =
-                left_mappings.with_column(convert_lf_col_to_multitype(k, &lang_rdf_type));
+            left_mappings = left_mappings
+                .with_column(convert_lf_col_to_multitype(col(k), &lang_rdf_type).alias(k));
             left_datatypes.insert(k.clone(), lang_multi.clone());
-            right_mappings =
-                right_mappings.with_column(convert_lf_col_to_multitype(k, &lang_rdf_type));
+            right_mappings = right_mappings
+                .with_column(convert_lf_col_to_multitype(col(k), &lang_rdf_type).alias(k));
             right_datatypes.insert(k.clone(), lang_multi.clone());
         }
     }
@@ -441,7 +441,7 @@ pub fn union(
                 if left_type != right_type {
                     if left_type == &RDFNodeType::None {
                         target_types.insert(right_col.clone(), right_type.clone());
-                    } else if  right_type == &RDFNodeType::None {
+                    } else if right_type == &RDFNodeType::None {
                         // do nothing, the None-col will be dropped later
                     } else if let RDFNodeType::MultiType(left_types) = left_type {
                         let mut left_set: HashSet<_> = left_types.iter().collect();
@@ -509,7 +509,8 @@ pub fn union(
                     mappings = mappings.drop([col(c)]);
                     cols_to_drop.push(c.clone());
                 } else if !matches!(t, RDFNodeType::MultiType(..)) {
-                    mappings = mappings.with_column(convert_lf_col_to_multitype(c, t));
+                    mappings =
+                        mappings.with_column(convert_lf_col_to_multitype(col(c), t).alias(c));
                     new_multi.insert(
                         c.clone(),
                         RDFNodeType::MultiType(vec![BaseRDFNodeType::from_rdf_node_type(t)]),

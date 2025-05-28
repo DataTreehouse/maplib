@@ -237,7 +237,9 @@ impl Triplestore {
                     Err(InterruptableCollectError::Interrupted) => {
                         Err(SparqlError::InterruptSignal)
                     }
-                    _ => panic!(),
+                    Err(e) => {
+                        panic!("Error {}", e);
+                    }
                 }
             }
             Query::Construct {
@@ -277,7 +279,9 @@ impl Triplestore {
                     Err(InterruptableCollectError::Interrupted) => {
                         Err(SparqlError::InterruptSignal)
                     }
-                    _ => panic!(),
+                    Err(e) => {
+                        panic!("Error {}", e);
+                    }
                 }
             }
             _ => Err(SparqlError::QueryTypeNotSupported),

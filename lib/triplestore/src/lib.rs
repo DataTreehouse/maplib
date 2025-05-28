@@ -24,9 +24,9 @@ use polars_core::datatypes::CategoricalOrdering;
 use rayon::iter::ParallelDrainRange;
 use rayon::iter::ParallelIterator;
 use representation::multitype::{
-    lf_column_to_categorical, lf_columns_to_categorical, set_structs_all_null_to_null_row,
+    lf_column_to_categorical, lf_columns_to_categorical, set_struct_all_null_to_null_row,
 };
-use representation::solution_mapping::EagerSolutionMappings;
+use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use representation::{
     literal_iri_to_namednode, BaseRDFNodeType, RDFNodeType, OBJECT_COL_NAME, SUBJECT_COL_NAME,
     VERB_COL_NAME,
@@ -512,6 +512,9 @@ pub fn prepare_triples(
     object_type: &BaseRDFNodeType,
     static_verb_column: Option<NamedNode>,
 ) -> Vec<TripleDF> {
+    if df.height() == 0 {
+        return vec![];
+    }
     let mut out_df_vec = vec![];
     let map = HashMap::from([
         (
@@ -520,15 +523,17 @@ pub fn prepare_triples(
         ),
         (OBJECT_COL_NAME.to_string(), object_type.as_rdf_node_type()),
     ]);
-    let sm = EagerSolutionMappings::new(df, map).as_lazy();
+
+    let height = df.height();
+    let mut lf = df.lazy();
+    for (c, t) in &map {
+        lf = lf.with_column(set_struct_all_null_to_null_row(col(c), t).alias(c));
+    }
+    let sm = SolutionMappings::new(lf, map, height);
     let EagerSolutionMappings {
         mappings: mut df,
         rdf_node_types: _,
-    } = set_structs_all_null_to_null_row(sm).as_eager(false);
-
-    if df.height() == 0 {
-        return vec![];
-    }
+    } = sm.as_eager(false);
 
     if let Some(static_verb_column) = static_verb_column {
         df = df.select([SUBJECT_COL_NAME, OBJECT_COL_NAME]).unwrap();

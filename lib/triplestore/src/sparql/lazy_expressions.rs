@@ -7,7 +7,7 @@ use polars::prelude::{col, lit, LiteralValue};
 use polars_core::prelude::Scalar;
 use query_processing::exists_helper::rewrite_exists_graph_pattern;
 use query_processing::expressions::{
-    binary_expression, bound, coalesce_expression, exists, func_expression, if_expression,
+    binary_expression, bound, coalesce_contexts, exists, func_expression, if_expression,
     in_expression, literal, named_node, not_expression, unary_minus, unary_plus, variable,
 };
 use query_processing::pushdowns::Pushdowns;
@@ -487,7 +487,7 @@ impl Triplestore {
                         include_transient,
                     )?;
                 }
-                coalesce_expression(output_solution_mappings, inner_contexts, context)?
+                coalesce_contexts(output_solution_mappings, inner_contexts, context)?
             }
             Expression::FunctionCall(func, args) => {
                 let mut args_contexts: HashMap<usize, Context> = HashMap::new();

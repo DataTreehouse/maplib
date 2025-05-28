@@ -298,6 +298,7 @@ impl BaseRDFNodeType {
                     Field::new(LANG_STRING_LANG_FIELD.into(), DataType::String),
                 ]),
                 xsd::DATE_TIME => DataType::Datetime(TimeUnit::Nanoseconds, None),
+                xsd::DATE_TIME_STAMP => DataType::Datetime(TimeUnit::Nanoseconds, None),
                 xsd::DATE => DataType::Date,
                 //TODO: Fix when adding proper list support
                 rdf::LIST => DataType::List(Box::new(DataType::Boolean)),

@@ -100,9 +100,6 @@ impl TemplateDataset {
             pattern_list: vec![],
         };
         td.templates.push(ottr_template);
-        //Todo: variable safe, no cycles, referential integrity, no duplicates, well founded
-        //Check ground instances also!!
-        td.infer_types()?;
         Ok(td)
     }
 

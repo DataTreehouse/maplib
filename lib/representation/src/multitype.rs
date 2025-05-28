@@ -14,20 +14,20 @@ pub const MULTI_IRI_DT: &str = "I";
 pub const MULTI_BLANK_DT: &str = "B";
 pub const MULTI_NONE_DT: &str = "N";
 
-pub fn convert_lf_col_to_multitype(c: &str, dt: &RDFNodeType) -> Expr {
+pub fn convert_lf_col_to_multitype(expr: Expr, dt: &RDFNodeType) -> Expr {
     match dt {
-        RDFNodeType::IRI => as_struct(vec![col(c).alias(MULTI_IRI_DT)]).alias(c),
-        RDFNodeType::BlankNode => as_struct(vec![col(c).alias(MULTI_BLANK_DT)]).alias(c),
+        RDFNodeType::IRI => as_struct(vec![expr.alias(MULTI_IRI_DT)]),
+        RDFNodeType::BlankNode => as_struct(vec![expr.alias(MULTI_BLANK_DT)]),
         RDFNodeType::Literal(l) => {
             if rdf::LANG_STRING == l.as_ref() {
-                col(c)
+                expr
             } else {
                 let colname = base_col_name(&BaseRDFNodeType::from_rdf_node_type(dt));
-                as_struct(vec![col(c).alias(&colname)]).alias(c)
+                as_struct(vec![expr.alias(&colname)])
             }
         }
-        RDFNodeType::None => as_struct(vec![col(c).alias(MULTI_NONE_DT)]).alias(c),
-        RDFNodeType::MultiType(..) => col(c),
+        RDFNodeType::None => as_struct(vec![expr.alias(MULTI_NONE_DT)]),
+        RDFNodeType::MultiType(..) => expr,
     }
 }
 
@@ -431,8 +431,9 @@ pub fn create_join_compatible_solution_mappings(
                             }
                             JoinType::Left => {
                                 if left_types.contains(&base_right) {
-                                    right_mappings = right_mappings
-                                        .with_column(convert_lf_col_to_multitype(v, right_dt));
+                                    right_mappings = right_mappings.with_column(
+                                        convert_lf_col_to_multitype(col(v), right_dt).alias(v),
+                                    );
                                     new_right_datatypes.insert(
                                         v.clone(),
                                         RDFNodeType::MultiType(vec![base_right]),
@@ -737,37 +738,32 @@ pub fn nest_multicolumns(
     mapping.with_columns(structs).drop_no_validate(drop_cols)
 }
 
-pub fn set_structs_all_null_to_null_row(sm: SolutionMappings) -> SolutionMappings {
-    let SolutionMappings {
-        mut mappings,
-        rdf_node_types,
-        height_estimate,
-    } = sm;
-    for (k, r) in &rdf_node_types {
-        let mut is_null_exprs = vec![];
-        if let RDFNodeType::MultiType(ts) = r {
-            for t in ts {
-                is_null_exprs.push(col(k).struct_().field_by_name(&base_col_name(t)).is_null());
-            }
-        }
-        if r.is_lang_string() {
+pub fn set_struct_all_null_to_null_row(expr: Expr, t: &RDFNodeType) -> Expr {
+    let mut is_null_exprs = vec![];
+    if let RDFNodeType::MultiType(ts) = t {
+        for t in ts {
             is_null_exprs.push(
-                col(k)
+                expr.clone()
                     .struct_()
-                    .field_by_name(LANG_STRING_VALUE_FIELD)
+                    .field_by_name(&base_col_name(t))
                     .is_null(),
             );
         }
-        if !is_null_exprs.is_empty() {
-            mappings = mappings.with_column(
-                when(all_horizontal(is_null_exprs).unwrap())
-                    .then(lit(LiteralValue::untyped_null()).cast(r.polars_data_type()))
-                    .otherwise(col(k))
-                    .alias(k),
-            );
-        }
+    } else if t.is_lang_string() {
+        is_null_exprs.push(
+            expr.clone()
+                .struct_()
+                .field_by_name(LANG_STRING_VALUE_FIELD)
+                .is_null(),
+        );
     }
-    SolutionMappings::new(mappings, rdf_node_types, height_estimate)
+    if !is_null_exprs.is_empty() {
+        when(all_horizontal(is_null_exprs).unwrap())
+            .then(lit(LiteralValue::untyped_null()).cast(t.polars_data_type()))
+            .otherwise(expr)
+    } else {
+        expr
+    }
 }
 
 pub fn join_workaround(
