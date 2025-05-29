@@ -71,31 +71,31 @@ impl Display for DataTreehousePattern {
         if let Some(values) = &self.values {
             write!(f, "values=(").unwrap();
             for (ts, val) in values {
-                write!(f, "({}={}), ", ts, val).unwrap();
+                write!(f, "({ts}={val}), ").unwrap();
             }
             writeln!(f, "),").unwrap();
         }
         if let Some(timestamp) = &self.timestamp {
-            writeln!(f, "timestamp={},", timestamp,).unwrap();
+            writeln!(f, "timestamp={timestamp},",).unwrap();
         }
         if let Some(from) = &self.from {
-            writeln!(f, "from={},", from).unwrap();
+            writeln!(f, "from={from},").unwrap();
         }
         if let Some(to) = &self.from {
-            writeln!(f, "from={},", to).unwrap();
+            writeln!(f, "from={to},").unwrap();
         }
         if let Some(aggregations) = &self.aggregations {
             writeln!(f, "aggregation=[,").unwrap();
             for aggregation in aggregations {
-                writeln!(f, "{},", aggregation).unwrap();
+                writeln!(f, "{aggregation},").unwrap();
             }
             writeln!(f, "]").unwrap();
         }
         if let Some(filter) = &self.filter {
-            writeln!(f, "filter={},", filter).unwrap();
+            writeln!(f, "filter={filter},").unwrap();
         }
         if let Some(window) = &self.interval {
-            writeln!(f, "window={}", window).unwrap();
+            writeln!(f, "window={window}").unwrap();
         }
         write!(f, ")")
     }
@@ -114,7 +114,7 @@ impl Display for TimestampExpression {
                 write!(f, "{t}")
             }
             TimestampExpression::Binary(t, op, d) => {
-                write!(f, "{} {} {}", t, op, d)
+                write!(f, "{t} {op} {d}")
             }
         }
     }
