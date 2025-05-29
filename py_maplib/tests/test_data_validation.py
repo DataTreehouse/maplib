@@ -306,7 +306,8 @@ def test_nested_template_not_found():
 } . 
     """
     with pytest.raises(Exception):
-        Mapping(templates)
+        m = Mapping(templates)
+        m.expand("http://example.net/ns#ExampleTemplate", df)
 
 
 def test_nested_template_more_specific():
@@ -347,7 +348,8 @@ def test_nested_template_more_specific_but_is_iri():
 } . 
     """
     with pytest.raises(Exception):
-        Mapping(templates)
+        m = Mapping(templates)
+        m.expand("http://example.net/ns#ExampleTemplate", df)
 
 
 def test_nested_template_more_general_but_is_iri():
@@ -364,7 +366,8 @@ def test_nested_template_more_general_but_is_iri():
 } . 
     """
     with pytest.raises(Exception):
-        Mapping(templates)
+        m = Mapping(templates)
+        m.expand("http://example.net/ns#ExampleTemplate", df)
 
 
 def test_nested_template_both_general_but_always_incompatible():
@@ -381,7 +384,8 @@ def test_nested_template_both_general_but_always_incompatible():
 } . 
     """
     with pytest.raises(Exception):
-        Mapping(templates)
+        m = Mapping(templates)
+        m.expand("http://example.net/ns#ExampleTemplate", df)
 
 
 def test_nested_template_both_are_general_literal_and_compatible():
