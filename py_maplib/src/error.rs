@@ -38,7 +38,7 @@ pub enum PyMaplibError {
 impl std::convert::From<PyMaplibError> for PyErr {
     fn from(err: PyMaplibError) -> PyErr {
         match &err {
-            PyMaplibError::MaplibError(err) => MaplibException::new_err(format!("{}", err)),
+            PyMaplibError::MaplibError(err) => MaplibException::new_err(format!("{err}")),
             PyMaplibError::FunctionArgumentError(s) => {
                 FunctionArgumentException::new_err(s.clone())
             }

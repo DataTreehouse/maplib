@@ -279,7 +279,7 @@ impl PyMapping {
                     .expand(&template, Some(df), types, options)
                     .map_err(PyMaplibError::from)?;
             } else {
-                warn!("Template expansion of {} with empty DataFrame", template);
+                warn!("Template expansion of {template} with empty DataFrame");
             }
         } else {
             let _report = self
@@ -338,9 +338,9 @@ impl PyMapping {
             .expand_default(df, primary_key_column, vec![], dry_run, types, options)
             .map_err(PyMaplibError::from)?;
         if dry_run {
-            println!("Produced template:\n\n {}", tmpl);
+            println!("Produced template:\n\n {tmpl}");
         }
-        Ok(format!("{}", tmpl))
+        Ok(format!("{tmpl}"))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -759,10 +759,10 @@ impl PyMapping {
             );
         }
         let model_iri = parse_optional_named_node(model_iri)?.unwrap_or(NamedNode::new_unchecked(
-            format!("urn:uuid:{}", uuid::Uuid::new_v4().to_string()),
+            format!("urn:uuid:{}", uuid::Uuid::new_v4()),
         ));
-        let version = version.map(|x| oxrdf::Literal::new_simple_literal(x));
-        let description = description.map(|x| oxrdf::Literal::new_simple_literal(x));
+        let version = version.map(oxrdf::Literal::new_simple_literal);
+        let description = description.map(oxrdf::Literal::new_simple_literal);
         let profile_graph = parse_named_node(profile_graph)?;
         let created = oxrdf::Literal::new_typed_literal(
             created.unwrap_or(Utc::now().format(XSD_DATETIME_WITH_TZ_FORMAT).to_string()),
@@ -773,7 +773,7 @@ impl PyMapping {
             xsd::DATE_TIME,
         );
         let modeling_authority_set =
-            modeling_authority_set.map(|x| oxrdf::Literal::new_simple_literal(x));
+            modeling_authority_set.map(oxrdf::Literal::new_simple_literal);
         let graph = parse_optional_named_node(graph)?;
         let file_path = file_path.str()?.to_string();
         let path_buf = PathBuf::from(file_path);
