@@ -31,15 +31,14 @@ impl Display for ResolutionError {
             ResolutionError::DuplicatedPrefixDefinition(prefix, def1, def2) => {
                 write!(
                     f,
-                    "Prefix {} has two defintions: {} and {}",
-                    prefix, def1, def2
+                    "Prefix {prefix} has two defintions: {def1} and {def2}"
                 )
             }
             ResolutionError::BadCompositeIRIError(iri_err) => {
-                write!(f, "Bad composite IRI {}", iri_err)
+                write!(f, "Bad composite IRI {iri_err}")
             }
             ResolutionError::MissingPrefixError(prefix) => {
-                write!(f, "Prefix {} is not defined", prefix)
+                write!(f, "Prefix {prefix} is not defined")
             }
         }
     }

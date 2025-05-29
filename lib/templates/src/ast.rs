@@ -61,7 +61,7 @@ pub struct Signature {
 impl Display for Signature {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         if let Some(template_prefixed_name) = &self.template_prefixed_name {
-            write!(f, "{}", template_prefixed_name)?;
+            write!(f, "{template_prefixed_name}")?;
         } else {
             write!(f, "{}", &self.template_name)?;
         }
@@ -191,18 +191,18 @@ pub fn ptype_nn_to_rdf_node_type(nn: NamedNodeRef) -> RDFNodeType {
 impl Display for PType {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            PType::Basic(t) => write!(f, "{}", t),
+            PType::Basic(t) => write!(f, "{t}"),
             PType::Lub(lt) => {
                 let s = lt.to_string();
-                write!(f, "LUB<{}>", s)
+                write!(f, "LUB<{s}>")
             }
             PType::List(lt) => {
                 let s = lt.to_string();
-                write!(f, "List<{}>", s)
+                write!(f, "List<{s}>")
             }
             PType::NEList(lt) => {
                 let s = lt.to_string();
-                write!(f, "NEList<{}>", s)
+                write!(f, "NEList<{s}>")
             }
             PType::None => {
                 write!(f, "")
@@ -330,7 +330,7 @@ impl Display for Instance {
             write!(f, " | ")?;
         }
         if let Some(prefixed_template_name) = &self.prefixed_template_name {
-            write!(f, "{}", prefixed_template_name)?;
+            write!(f, "{prefixed_template_name}")?;
         } else {
             write!(f, "{}", &self.template_name)?;
         }

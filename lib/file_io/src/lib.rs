@@ -27,13 +27,13 @@ impl Display for FileIOError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             FileIOError::FileCreateIOError(e) => {
-                write!(f, "Creating file for writing resulted in an error: {}", e)
+                write!(f, "Creating file for writing resulted in an error: {e}")
             }
             FileIOError::WriteParquetError(e) => {
-                write!(f, "Writing to parquet file produced an error {:?}", e)
+                write!(f, "Writing to parquet file produced an error {e:?}")
             }
             FileIOError::ReadParquetError(p) => {
-                write!(f, "Reading parquet file resulted in an error: {:?}", p)
+                write!(f, "Reading parquet file resulted in an error: {p:?}")
             }
         }
     }

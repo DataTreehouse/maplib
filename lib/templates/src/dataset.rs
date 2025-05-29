@@ -43,7 +43,7 @@ impl TemplateDataset {
                     }
                     if remove {
                         prefix_map.remove(&k);
-                        warn!("Prefix {} has conflicting definitions across documents, consider harmonizing", k);
+                        warn!("Prefix {k} has conflicting definitions across documents, consider harmonizing");
                     }
                 } else {
                     defined_prefixes.insert(k.clone());

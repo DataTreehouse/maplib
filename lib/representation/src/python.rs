@@ -39,16 +39,16 @@ impl From<PyRepresentationError> for PyErr {
     fn from(err: PyRepresentationError) -> PyErr {
         match &err {
             PyRepresentationError::IriParseError(err) => {
-                IriParseErrorException::new_err(format!("{}", err))
+                IriParseErrorException::new_err(format!("{err}"))
             }
             PyRepresentationError::BlankNodeIdParseError(err) => {
-                BlankNodeIdParseErrorException::new_err(format!("{}", err))
+                BlankNodeIdParseErrorException::new_err(format!("{err}"))
             }
             PyRepresentationError::BadArgumentError(err) => {
                 BadArgumentErrorException::new_err(err.to_string())
             }
             PyRepresentationError::VariableNameParseError(err) => {
-                VariableNameParseErrorException::new_err(format!("{}", err))
+                VariableNameParseErrorException::new_err(format!("{err}"))
             }
         }
     }
@@ -77,7 +77,7 @@ impl Display for PyRDFType {
                     write!(f, "RDFType.BlankNode()")
                 }
                 RDFNodeType::Literal(l) => {
-                    write!(f, "RDFType.Literal({})", l)
+                    write!(f, "RDFType.Literal({l})")
                 }
                 RDFNodeType::None => {
                     write!(f, "RDFType.None()")
@@ -93,7 +93,7 @@ impl Display for PyRDFType {
                                 write!(f, "RDFType.BlankNode()").unwrap();
                             }
                             BaseRDFNodeType::Literal(l) => {
-                                write!(f, "RDFType.Literal({})", l).unwrap();
+                                write!(f, "RDFType.Literal({l})").unwrap();
                             }
                             BaseRDFNodeType::None => {
                                 write!(f, "RDFType.None()").unwrap();
@@ -107,7 +107,7 @@ impl Display for PyRDFType {
                 }
             }
         } else if let Some(nested) = &self.nested {
-            write!(f, "RDFType.Nested({})", nested)
+            write!(f, "RDFType.Nested({nested})")
         } else {
             panic!()
         }
@@ -117,7 +117,7 @@ impl Display for PyRDFType {
 #[pymethods]
 impl PyRDFType {
     fn __repr__(&self) -> String {
-        format!("{}", self)
+        format!("{self}")
     }
 
     fn __richcmp__(&self, other: PyRDFType, op: CompareOp, py: Python) -> PyResult<bool> {

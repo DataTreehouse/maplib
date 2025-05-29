@@ -122,7 +122,7 @@ impl Mapping {
                             list_expand: false,
                             term: StottrTerm::ConstantTerm(ConstantTermOrList::ConstantTerm(
                                 ConstantTerm::Iri(
-                                    NamedNode::new(format!("{}{}", DEFAULT_PREFIX, c))
+                                    NamedNode::new(format!("{DEFAULT_PREFIX}{c}"))
                                         .map_err(MappingError::IriParseError)?,
                                 ),
                             )),

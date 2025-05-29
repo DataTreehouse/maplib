@@ -87,7 +87,7 @@ pub fn get_seven_query_solutions(
         } else if var.as_str() == seven {
             s7 = val;
         } else {
-            panic!("var {:?}, val {:?}", var, val);
+            panic!("var {var:?}, val {val:?}");
         }
     }
     (s1, s2, s3, s4, s5, s6, s7)
@@ -126,7 +126,7 @@ pub fn get_five_query_solutions(
         } else if var.as_str() == fifth {
             s5 = val;
         } else {
-            panic!("var {:?}, val {:?}", var, val);
+            panic!("var {var:?}, val {val:?}");
         }
     }
     (s1, s2, s3, s4, s5)
@@ -153,7 +153,7 @@ pub fn get_four_query_solutions(
         } else if var.as_str() == fourth {
             s4 = val;
         } else {
-            panic!("var {:?}, val {:?}", var, val);
+            panic!("var {var:?}, val {val:?}");
         }
     }
     (s1, s2, s3, s4)
@@ -177,7 +177,7 @@ pub fn get_three_query_solutions(
         } else if var.as_str() == third {
             s3 = val;
         } else {
-            panic!("var {:?}, val {:?}", var, val);
+            panic!("var {var:?}, val {val:?}");
         }
     }
     (s1, s2, s3)
@@ -197,7 +197,7 @@ pub fn get_two_query_solutions(
         } else if var.as_str() == second {
             s2 = val;
         } else {
-            panic!("var {:?}, val {:?}", var, val);
+            panic!("var {var:?}, val {val:?}");
         }
     }
     (s1, s2)

@@ -1089,7 +1089,7 @@ fn test_static_create_pn_chars_base() {
         .chain(range_l)
         .chain(range_m)
         .collect();
-    println!("{}", all_chars);
+    println!("{all_chars}");
 }
 
 #[test]
@@ -1099,7 +1099,7 @@ fn test_create_pn_chars() {
     let range_b = chars!('\u{203F}'..='\u{2040}').iter();
     let mut chars_string: String = range_a.chain(range_b).collect();
     chars_string.push('\u{00B7}');
-    println!("{}", chars_string);
+    println!("{chars_string}");
 }
 
 #[test]
@@ -1108,5 +1108,5 @@ fn test_create_iri_ref() {
     let mut notin: String = chars!('\u{0000}'..='\u{0020}').iter().collect();
     let rest = "<>\"{}|^`\\";
     notin += rest;
-    println!("{}", notin);
+    println!("{notin}");
 }

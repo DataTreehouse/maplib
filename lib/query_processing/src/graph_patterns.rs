@@ -26,7 +26,6 @@ use representation::{
 use spargebra::algebra::{Expression, Function};
 use spargebra::term::GroundTerm;
 use std::collections::{HashMap, HashSet};
-use std::iter;
 use uuid::Uuid;
 
 pub fn distinct(
@@ -95,7 +94,7 @@ pub fn prepare_group_by(
                 grouped.insert(v);
                 by.push(col(v.as_str()));
             } else {
-                warn!("GROUP BY contains duplicate variable: {}", v)
+                warn!("GROUP BY contains duplicate variable: {v}")
             }
         }
         None
@@ -373,7 +372,7 @@ pub fn project(
     let mut new_datatypes = HashMap::new();
     for v in variables {
         if !datatypes.contains_key(v.as_str()) {
-            warn!("The variable {} does not exist in the solution mappings, adding as an unbound variable", v);
+            warn!("The variable {v} does not exist in the solution mappings, adding as an unbound variable");
             mappings = mappings.with_column(
                 lit(LiteralValue::untyped_null())
                     .cast(BaseRDFNodeType::None.polars_data_type())
@@ -670,7 +669,7 @@ pub fn values_pattern(
                     let vector = if let Some(vector) = map.get_mut(&dt) {
                         vector
                     } else {
-                        map.insert(dt.clone(), iter::repeat(None).take(i).collect());
+                        map.insert(dt.clone(), std::iter::repeat_n(None, i).collect());
                         map.get_mut(&dt).unwrap()
                     };
                     //TODO: Stop copying data here!!

@@ -316,8 +316,7 @@ pub fn polars_type_to_literal_type(
             }
         }
         dt => Err(RepresentationError::DatatypeError(format!(
-            "Unknown datatype {:?}",
-            dt
+            "Unknown datatype {dt:?}"
         ))),
     }
 }
@@ -386,7 +385,7 @@ pub fn hack_format_timestamp_with_timezone(column: &Column, tz: &mut TimeZone) -
         .unwrap()
         .into_column()
     } else {
-        panic!("Unknown timezone{}", tz);
+        panic!("Unknown timezone{tz}");
     }
 }
 

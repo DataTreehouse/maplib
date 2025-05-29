@@ -122,7 +122,7 @@ impl fmt::Display for PathEntry {
                 write!(f, "OrderByInner")
             }
             PathEntry::OrderByExpression(i) => {
-                write!(f, "OrderByExpression({})", i)
+                write!(f, "OrderByExpression({i})")
             }
             PathEntry::ProjectInner => {
                 write!(f, "ProjectInner")
@@ -143,7 +143,7 @@ impl fmt::Display for PathEntry {
                 write!(f, "GroupInner")
             }
             PathEntry::GroupAggregation(i) => {
-                write!(f, "GroupAggregation({})", i)
+                write!(f, "GroupAggregation({i})")
             }
             PathEntry::IfLeft => {
                 write!(f, "IfLeft")
@@ -206,7 +206,7 @@ impl fmt::Display for PathEntry {
                 write!(f, "InLeft")
             }
             PathEntry::InRight(i) => {
-                write!(f, "InRight({})", i)
+                write!(f, "InRight({i})")
             }
             PathEntry::MultiplyLeft => {
                 write!(f, "MultiplyLeft")
@@ -245,10 +245,10 @@ impl fmt::Display for PathEntry {
                 write!(f, "Exists")
             }
             PathEntry::Coalesce(i) => {
-                write!(f, "Coalesce({})", i)
+                write!(f, "Coalesce({i})")
             }
             PathEntry::FunctionCall(i) => {
-                write!(f, "FunctionCall({})", i)
+                write!(f, "FunctionCall({i})")
             }
             PathEntry::AggregationOperation => {
                 write!(f, "AggregationOperation")

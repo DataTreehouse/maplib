@@ -102,7 +102,7 @@ impl Triplestore {
                                         AnyValue::StringOwned(s) => {
                                             Some(literal_iri_to_namednode(&s))
                                         }
-                                        x => panic!("Should never happen: {}", x),
+                                        x => panic!("Should never happen: {x}"),
                                     })
                                     .collect(),
                             );

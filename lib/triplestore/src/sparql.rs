@@ -238,7 +238,7 @@ impl Triplestore {
                         Err(SparqlError::InterruptSignal)
                     }
                     Err(e) => {
-                        panic!("Error {}", e);
+                        panic!("Error {e}");
                     }
                 }
             }
@@ -280,7 +280,7 @@ impl Triplestore {
                         Err(SparqlError::InterruptSignal)
                     }
                     Err(e) => {
-                        panic!("Error {}", e);
+                        panic!("Error {e}");
                     }
                 }
             }
@@ -407,7 +407,7 @@ impl Triplestore {
                     using,
                     pattern,
                 } => {
-                    if let Some(..) = using {
+                    if using.is_some() {
                         todo!()
                     }
                     let mut variables = HashSet::new();

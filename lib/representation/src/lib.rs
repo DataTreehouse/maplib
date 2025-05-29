@@ -334,7 +334,7 @@ impl Display for BaseRDFNodeType {
                 write!(f, "{RDF_NODE_TYPE_BLANK_NODE}")
             }
             Self::Literal(l) => {
-                write!(f, "{}", l)
+                write!(f, "{l}")
             }
             Self::None => {
                 write!(f, "{RDF_NODE_TYPE_NONE}")

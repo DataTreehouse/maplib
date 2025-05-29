@@ -21,28 +21,26 @@ impl Display for TemplateError {
             TemplateError::InconsistentNumberOfArguments(calling, template, given, expected) => {
                 write!(
                     f,
-                    "Template {} called {} with {} arguments, but expected {}",
-                    calling, template, given, expected
+                    "Template {calling} called {template} with {given} arguments, but expected {expected}"
                 )
             }
             TemplateError::IncompatibleTypes(nn, var, given, expected) => {
                 write!(
                     f,
-                    "Template {} variable {} was given argument of type {:?} but expected {:?}",
-                    nn, var, given, expected
+                    "Template {nn} variable {var} was given argument of type {given:?} but expected {expected:?}"
                 )
             }
             TemplateError::ReadTemplateFileError(e) => {
-                write!(f, "Error reading template file {}", e)
+                write!(f, "Error reading template file {e}")
             }
             TemplateError::ResolveDirectoryEntryError(e) => {
-                write!(f, "Resolve template directory entry error {}", e)
+                write!(f, "Resolve template directory entry error {e}")
             }
             TemplateError::ParsingError(p) => {
-                write!(f, "Template parsing error: {}", p)
+                write!(f, "Template parsing error: {p}")
             }
             TemplateError::ResolutionError(r) => {
-                write!(f, "Template resolution error {}", r)
+                write!(f, "Template resolution error {r}")
             }
             TemplateError::TemplateNotFound(container, inner) => {
                 write!(

@@ -442,11 +442,11 @@ impl TriplesOnDisk {
         mut df: DataFrame,
         subj_type: &BaseRDFNodeType,
         obj_type: &BaseRDFNodeType,
-        storage_folder: &PathBuf,
+        storage_folder: &Path,
     ) -> Result<Self, TriplestoreError> {
         let height = df.height();
         let file_name = format!("tmp_{}.ipc", Uuid::new_v4());
-        let mut file_path_buf = storage_folder.clone();
+        let mut file_path_buf = storage_folder.to_owned();
         file_path_buf.push(file_name);
         let file_path = file_path_buf.as_path();
 
@@ -795,7 +795,7 @@ fn create_unique_df_and_sparse_map(
 }
 
 fn create_sparse_map(ser: &Series) -> BTreeMap<String, usize> {
-    assert!(ser.len() > 0);
+    assert!(!ser.is_empty());
     let cat = ser.categorical().unwrap();
     let mut sparse_map = BTreeMap::new();
     let mut current_offset = 0;

@@ -18,12 +18,11 @@ impl Display for ParsingError {
             ParsingErrorKind::CouldNotParseEverything(s) => {
                 write!(
                     f,
-                    "Could not parse entire string as sttotr document, rest: {}",
-                    s
+                    "Could not parse entire string as sttotr document, rest: {s}"
                 )
             }
             ParsingErrorKind::NomParserError(s) => {
-                write!(f, "Nom parser error with code {}", s)
+                write!(f, "Nom parser error with code {s}")
             }
         }
     }

@@ -420,8 +420,8 @@ pub fn coalesce_expressions(
 
 fn convert_multitype_col_to_wider(
     expr: Expr,
-    existing_types: &Vec<BaseRDFNodeType>,
-    sorted_types: &Vec<BaseRDFNodeType>,
+    existing_types: &[BaseRDFNodeType],
+    sorted_types: &[BaseRDFNodeType],
 ) -> (Expr, RDFNodeType) {
     let mut struct_exprs = vec![];
     for t in sorted_types {
@@ -464,7 +464,7 @@ fn convert_multitype_col_to_wider(
     }
     (
         as_struct(struct_exprs),
-        RDFNodeType::MultiType(sorted_types.clone()),
+        RDFNodeType::MultiType(sorted_types.to_vec()),
     )
 }
 
@@ -922,8 +922,8 @@ pub fn func_expression(
                     } else {
                         col(text_context.as_str())
                     };
-                    let replace_expr = create_regex_expr(use_col, &t, &pattern);
-                    replace_expr
+                    
+                    create_regex_expr(use_col, &t, &pattern)
                 };
                 solution_mappings.mappings = solution_mappings
                     .mappings
@@ -1118,9 +1118,8 @@ pub fn func_expression(
                     } else {
                         col(arg_context.as_str())
                     };
-                    let replace_expr =
-                        create_regex_replace_expr(use_col, &t, &pattern, &replacement_expr);
-                    replace_expr
+                    
+                    create_regex_replace_expr(use_col, &t, &pattern, &replacement_expr)
                 };
                 solution_mappings.mappings = solution_mappings
                     .mappings
@@ -1950,7 +1949,7 @@ fn greatest_common_dt(dt_left: NamedNodeRef, dt_right: NamedNodeRef) -> BaseRDFN
         gcdt
     } else {
         greatest_common_dt_lhs(dt_left, dt_right)
-            .expect(&format!("Has greatest common {} {}", dt_left, dt_right))
+            .unwrap_or_else(|| panic!("Has greatest common {dt_left} {dt_right}"))
     }
 }
 
@@ -1990,11 +1989,7 @@ fn greatest_common_dt_lhs(
         (xsd::DOUBLE, xsd::FLOAT) => Some(xsd::DOUBLE),
         _ => None,
     };
-    if let Some(t) = t {
-        Some(BaseRDFNodeType::Literal(t.into_owned()))
-    } else {
-        None
-    }
+    t.map(|t| BaseRDFNodeType::Literal(t.into_owned()))
 }
 
 pub fn drop_inner_contexts(mut sm: SolutionMappings, contexts: &Vec<&Context>) -> SolutionMappings {
@@ -2048,7 +2043,7 @@ pub fn create_all_types_null_expression(expr: Expr, types: &Vec<BaseRDFNodeType>
 pub fn add_regex_feature_flags(pattern: &str, flags: Option<&str>) -> String {
     if let Some(flags) = flags {
         //TODO: Validate flags..
-        format!("(?{}){}", flags, pattern)
+        format!("(?{flags}){pattern}")
     } else {
         pattern.to_string()
     }

@@ -80,7 +80,7 @@ pub fn pl_vec_interruptable_collect(
         loop {
             sleep(sleeptime);
             for (i, future) in &futures {
-                if !dfs.contains_key(&i) {
+                if let std::collections::hash_map::Entry::Vacant(e) = dfs.entry(i) {
                     match future.fetch() {
                         None => {
                             if py.check_signals().is_err() {
@@ -94,7 +94,7 @@ pub fn pl_vec_interruptable_collect(
                             // Max delay is twice the time the query actually took
                         }
                         Some(dfr) => {
-                            dfs.insert(i, dfr?);
+                            e.insert(dfr?);
                             ok_count += 1;
                         }
                     }

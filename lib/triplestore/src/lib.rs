@@ -273,8 +273,7 @@ impl Triplestore {
         } in triples_df
         {
             debug!(
-                "Adding predicate {} subject type {} object type {}",
-                predicate, subject_type, object_type
+                "Adding predicate {predicate} subject type {subject_type} object type {object_type}"
             );
             if matches!(object_type, BaseRDFNodeType::Literal(..)) {
                 //TODO: Get what is actually updated from db and then only add those things
@@ -502,8 +501,8 @@ pub fn prepare_triples_par(mut ts: Vec<TriplesToAdd>) -> Vec<TripleDF> {
             )
         })
         .collect();
-    let dfs_to_add = flatten(df_vecs_to_add);
-    dfs_to_add
+    
+    flatten(df_vecs_to_add)
 }
 
 pub fn prepare_triples(
@@ -555,7 +554,7 @@ pub fn prepare_triples(
                 } else if let Ok(AnyValue::StringOwned(s)) = any_predicate {
                     predicate = literal_iri_to_namednode(s.as_str());
                 } else {
-                    panic!("Predicate: {:?}", any_predicate);
+                    panic!("Predicate: {any_predicate:?}");
                 }
             }
             part = part.select([SUBJECT_COL_NAME, OBJECT_COL_NAME]).unwrap();

@@ -38,17 +38,16 @@ impl Display for MappingError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             MappingError::TemplateNotFound(t) => {
-                write!(f, "Could not find template: {}", t)
+                write!(f, "Could not find template: {t}")
             }
             MappingError::NonOptionalColumnHasNull(col, nullkey) => {
                 write!(
                     f,
-                    "Column {} which is non-optional has null values for keys: {}",
-                    col, nullkey
+                    "Column {col} which is non-optional has null values for keys: {nullkey}"
                 )
             }
             MappingError::MissingParameterColumn(c) => {
-                write!(f, "Expected column {} is missing", c)
+                write!(f, "Expected column {c} is missing")
             }
             MappingError::ContainsIrrelevantColumns(irr) => {
                 write!(f, "Unexpected columns: {}", irr.join(","))
@@ -56,71 +55,62 @@ impl Display for MappingError {
             MappingError::CouldNotInferOTTRDatatypeForColumn(col, dt) => {
                 write!(
                     f,
-                    "Could not infer OTTR type for column {} with polars datatype {}",
-                    col, dt
+                    "Could not infer OTTR type for column {col} with polars datatype {dt}"
                 )
             }
             MappingError::ColumnDataTypeMismatch(col, dt, ptype, expected) => {
                 if let Some(expected) = expected {
                     write!(
                         f,
-                        "Column {} had datatype {} which was incompatible with the OTTR datatype {}, which expects {}",
-                        col, dt, ptype, expected
+                        "Column {col} had datatype {dt} which was incompatible with the OTTR datatype {ptype}, which expects {expected}"
                     )
                 } else {
                     write!(
                         f,
-                        "Column {} had datatype {} which was incompatible with the OTTR datatype {}",
-                        col, dt, ptype
+                        "Column {col} had datatype {dt} which was incompatible with the OTTR datatype {ptype}"
                     )
                 }
             }
             MappingError::PTypeNotSupported(name, ptype) => {
                 write!(
                     f,
-                    "Found value {} with unsupported OTTR datatype {}",
-                    name, ptype
+                    "Found value {name} with unsupported OTTR datatype {ptype}"
                 )
             }
             MappingError::UnknownTimeZoneError(tz) => {
-                write!(f, "Unknown time zone {}", tz)
+                write!(f, "Unknown time zone {tz}")
             }
             MappingError::UnknownVariableError(v) => {
                 write!(
                     f,
-                    "Could not find variable {}, is the OTTR template invalid?",
-                    v
+                    "Could not find variable {v}, is the OTTR template invalid?"
                 )
             }
             MappingError::ConstantDoesNotMatchDataType(constant_term, expected, actual) => {
                 write!(
                     f,
-                    "Expected constant term {:?} to have data type {} but was {}",
-                    constant_term, expected, actual
+                    "Expected constant term {constant_term:?} to have data type {expected} but was {actual}"
                 )
             }
             MappingError::ConstantListHasInconsistentPType(constant_term, prev, next) => {
                 write!(
                     f,
-                    "Constant term {:?} has inconsistent data types {} and {}",
-                    constant_term, prev, next
+                    "Constant term {constant_term:?} has inconsistent data types {prev} and {next}"
                 )
             }
             MappingError::InvalidTemplateNameError(t) => {
-                write!(f, "Invalid template name {}", t)
+                write!(f, "Invalid template name {t}")
             }
             MappingError::NoTemplateForTemplateNameFromPrefix(prefix) => {
                 write!(
                     f,
-                    "Template name {} inferred from prefix could not be found",
-                    prefix
+                    "Template name {prefix} inferred from prefix could not be found"
                 )
             }
             MappingError::InvalidPredicateConstant(constant_term) => {
                 write!(
                     f,
-                    "Predicate constant {} is not valid, must be an IRI, e.g. prefix:predicate",
-                    constant_term,
+                    "Predicate constant {constant_term} is not valid, must be an IRI, e.g. prefix:predicate",
                 )
             }
             MappingError::MissingDataFrameForNonEmptySignature => {
@@ -139,13 +129,13 @@ impl Display for MappingError {
                 write!(f, "Found at least {n_errors} invalid IRIs for column {colname}, examples: {examples}")
             }
             MappingError::TemplateError(x) => {
-                write!(f, "Template error: {}", x)
+                write!(f, "Template error: {x}")
             }
             MappingError::TriplestoreError(x) => {
-                write!(f, "Error storing mapping results in triplestore: {}", x)
+                write!(f, "Error storing mapping results in triplestore: {x}")
             }
             MappingError::IriParseError(x) => {
-                write!(f, "IRI parse error: {}", x)
+                write!(f, "IRI parse error: {x}")
             }
         }
     }

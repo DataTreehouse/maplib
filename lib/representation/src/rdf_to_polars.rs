@@ -82,62 +82,62 @@ pub fn rdf_literal_to_polars_literal_value(lit: &Literal) -> LiteralValue {
         if let Ok(u) = u32::from_str(value) {
             LiteralValue::Scalar(Scalar::from(u))
         } else {
-            warn!("Could not parse xsd:unsignedInt {}", value);
+            warn!("Could not parse xsd:unsignedInt {value}");
             LiteralValue::Scalar(Scalar::null(DataType::UInt32))
         }
     } else if datatype == xsd::UNSIGNED_LONG {
         if let Ok(u) = u64::from_str(value) {
             LiteralValue::Scalar(Scalar::from(u))
         } else {
-            warn!("Could not parse xsd:unsignedLong {}", value);
+            warn!("Could not parse xsd:unsignedLong {value}");
             LiteralValue::Scalar(Scalar::null(DataType::UInt64))
         }
     } else if datatype == xsd::INTEGER {
         if let Ok(i) = i64::from_str(value) {
             LiteralValue::Scalar(Scalar::from(i))
         } else {
-            warn!("Could not parse xsd:integer {}", value);
+            warn!("Could not parse xsd:integer {value}");
             LiteralValue::Scalar(Scalar::null(DataType::Int64))
         }
     } else if datatype == xsd::LONG {
         if let Ok(i) = i64::from_str(value) {
             LiteralValue::Scalar(Scalar::from(i))
         } else {
-            warn!("Could not parse xsd:long {}", value);
+            warn!("Could not parse xsd:long {value}");
             LiteralValue::Scalar(Scalar::null(DataType::Int64))
         }
     } else if datatype == xsd::INT {
         if let Ok(i) = i32::from_str(value) {
             LiteralValue::Scalar(Scalar::from(i))
         } else {
-            warn!("Could not parse xsd:int {}", value);
+            warn!("Could not parse xsd:int {value}");
             LiteralValue::Scalar(Scalar::null(DataType::Int32))
         }
     } else if datatype == xsd::DOUBLE {
         if let Ok(d) = f64::from_str(value) {
             LiteralValue::Scalar(Scalar::from(d))
         } else {
-            warn!("Could not parse xsd:double {}", value);
+            warn!("Could not parse xsd:double {value}");
             LiteralValue::Scalar(Scalar::null(DataType::Float64))
         }
     } else if datatype == xsd::FLOAT {
         if let Ok(f) = f32::from_str(value) {
             LiteralValue::Scalar(Scalar::from(f))
         } else {
-            warn!("Could not parse xsd:float {}", value);
+            warn!("Could not parse xsd:float {value}");
             LiteralValue::Scalar(Scalar::null(DataType::Float32))
         }
     } else if datatype == xsd::BOOLEAN {
         if let Ok(b) = bool::from_str(value) {
             LiteralValue::Scalar(Scalar::from(b))
         } else {
-            warn!("Could not parse xsd:boolean {}", value);
+            warn!("Could not parse xsd:boolean {value}");
             LiteralValue::Scalar(Scalar::null(DataType::Boolean))
         }
     } else if datatype == xsd::DATE_TIME {
         let dt_with_tz = value.parse::<DateTime<Utc>>();
         if let Ok(dt) = dt_with_tz {
-            let tz = chrono_tz::Tz::from_str(dt.timezone().to_string().as_str()).expect(&format!("Can parse timezone {}", dt));
+            let tz = chrono_tz::Tz::from_str(dt.timezone().to_string().as_str()).unwrap_or_else(|_| panic!("Can parse timezone {dt}"));
             LiteralValue::Scalar(Scalar::new_datetime(
                 dt.naive_utc().and_utc().timestamp_nanos_opt().unwrap(),
                 TimeUnit::Nanoseconds,
@@ -152,7 +152,7 @@ pub fn rdf_literal_to_polars_literal_value(lit: &Literal) -> LiteralValue {
                     None,
                 ))
             } else {
-                warn!("Could not parse xsd:dateTime {}", value);
+                warn!("Could not parse xsd:dateTime {value}");
                 LiteralValue::Scalar(Scalar::null(DataType::Datetime(
                     TimeUnit::Nanoseconds,
                     None,
@@ -162,7 +162,7 @@ pub fn rdf_literal_to_polars_literal_value(lit: &Literal) -> LiteralValue {
     } else if datatype == xsd::DATE_TIME_STAMP {
         let dt_with_tz = value.parse::<DateTime<Utc>>();
         if let Ok(dt) = dt_with_tz {
-            let tz = chrono_tz::Tz::from_str(dt.timezone().to_string().as_str()).expect(&format!("Can parse timezone {}", dt));
+            let tz = chrono_tz::Tz::from_str(dt.timezone().to_string().as_str()).unwrap_or_else(|_| panic!("Can parse timezone {dt}"));
             LiteralValue::Scalar(Scalar::new_datetime(
                 dt.naive_utc().and_utc().timestamp_nanos_opt().unwrap(),
                 TimeUnit::Nanoseconds,
@@ -170,8 +170,7 @@ pub fn rdf_literal_to_polars_literal_value(lit: &Literal) -> LiteralValue {
             ))
         } else {
             warn!(
-                "Could not parse xsd:dateTimeStamp {} note that timezone is required",
-                value
+                "Could not parse xsd:dateTimeStamp {value} note that timezone is required"
             );
             LiteralValue::Scalar(Scalar::null(DataType::Datetime(
                 TimeUnit::Nanoseconds,
@@ -184,14 +183,14 @@ pub fn rdf_literal_to_polars_literal_value(lit: &Literal) -> LiteralValue {
 
             LiteralValue::Scalar(Scalar::new_date(dur.num_days() as i32))
         } else {
-            warn!("Could not parse xsd:date {}", value);
+            warn!("Could not parse xsd:date {value}");
             LiteralValue::Scalar(Scalar::null(DataType::Date))
         }
     } else if datatype == xsd::DECIMAL {
         if let Ok(d) = f64::from_str(value) {
             LiteralValue::Scalar(Scalar::from(d))
         } else {
-            warn!("Could not parse xsd:decimal {}", value);
+            warn!("Could not parse xsd:decimal {value}");
             LiteralValue::Scalar(Scalar::null(DataType::Float64))
         }
     } else {
