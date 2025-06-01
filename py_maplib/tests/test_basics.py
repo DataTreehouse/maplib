@@ -834,3 +834,43 @@ def test_expand_generated_default_triples_non_iri_object():
     """
     )
     assert_frame_equal(df, expected)
+
+
+
+def test_list_expansion_correct():
+    pl.Config.set_fmt_str_lengths(100)
+    df = pl.DataFrame({"MySubject":["http://example.net/ns#subject1", "http://example.net/ns#subject2"],
+                       "MyValue": [[1, 2], [3,4]]})
+    templates = """
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+<http://example.net/ns#ExampleTemplate> [ ottr:IRI ?MySubject, List<rdfs:Resource> ?MyValue ] :: {
+  ottr:Triple(?MySubject,<http://example.net/ns#hasValueList>,?MyValue)
+} . 
+    """
+    mapping = Mapping(templates)
+    mapping.expand("http://example.net/ns#ExampleTemplate", df)
+    df = mapping.query(
+        """
+    PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> 
+    SELECT ?a ?e1 ?e2 ?e3 WHERE {
+        ?a <http://example.net/ns#hasValueList> ?b .
+        ?b rdf:first ?e1 .
+        ?b rdf:rest ?c .
+        ?c rdf:first ?e2 .
+        ?c rdf:rest ?e3 .
+    } ORDER BY ?a
+    """
+    )
+    expected = pl.from_repr("""
+┌──────────────────────────────────┬─────┬─────┬──────────────────────────────────────────────────┐
+│ a                                ┆ e1  ┆ e2  ┆ e3                                               │
+│ ---                              ┆ --- ┆ --- ┆ ---                                              │
+│ str                              ┆ i64 ┆ i64 ┆ str                                              │
+╞══════════════════════════════════╪═════╪═════╪══════════════════════════════════════════════════╡
+│ <http://example.net/ns#subject1> ┆ 1   ┆ 2   ┆ <http://www.w3.org/1999/02/22-rdf-syntax-ns#nil> │
+│ <http://example.net/ns#subject2> ┆ 3   ┆ 4   ┆ <http://www.w3.org/1999/02/22-rdf-syntax-ns#nil> │
+└──────────────────────────────────┴─────┴─────┴──────────────────────────────────────────────────┘
+    """)
+    assert_frame_equal(df, expected)

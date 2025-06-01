@@ -395,8 +395,7 @@ impl PyMapping {
     ) -> PyResult<()> {
         let graph = parse_optional_named_node(graph)?;
         let mapped_parameters = map_parameters(parameters)?;
-        self
-            .inner
+        self.inner
             .update(
                 &update,
                 &mapped_parameters,
@@ -773,8 +772,7 @@ impl PyMapping {
             scenario_time.unwrap_or(Utc::now().format(XSD_DATETIME_WITH_TZ_FORMAT).to_string()),
             xsd::DATE_TIME,
         );
-        let modeling_authority_set =
-            modeling_authority_set.map(oxrdf::Literal::new_simple_literal);
+        let modeling_authority_set = modeling_authority_set.map(oxrdf::Literal::new_simple_literal);
         let graph = parse_optional_named_node(graph)?;
         let file_path = file_path.str()?.to_string();
         let path_buf = PathBuf::from(file_path);

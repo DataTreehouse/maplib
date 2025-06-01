@@ -18,6 +18,7 @@ use representation::RDFNodeType;
 use representation::{OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME};
 use std::cmp::max;
 use std::collections::{HashMap, HashSet};
+use std::ops::Sub;
 use std::time::Instant;
 use templates::ast::{
     ConstantTerm, ConstantTermOrList, DefaultValue, Instance, ListExpanderType, PType, Signature,
@@ -492,12 +493,15 @@ fn create_list_triples(
     let my_df = df.with_row_index(LIST_COL.into(), None).unwrap();
     let mut list_df = my_df.select([c, LIST_COL]).unwrap();
     list_df = list_df
-        .explode([c])
-        .unwrap()
-        .with_row_index(FIRST_COL.into(), None)
-        .unwrap();
-    list_df = list_df
         .lazy()
+        .explode([c])
+        .with_column(
+            col(c)
+                .cum_count(false)
+                .sub(lit(1))
+                .over([col(LIST_COL)])
+                .alias(FIRST_COL),
+        )
         .with_column(
             (lit(format!("l_{i}_"))
                 + (col(LIST_COL) + lit(*blank_node_counter as u32)).cast(DataType::String))
@@ -506,7 +510,12 @@ fn create_list_triples(
         .with_column(
             (col(LIST_COL) + lit("_") + col(FIRST_COL).cast(DataType::String)).alias(FIRST_COL),
         )
-        .with_column(col(FIRST_COL).shift(lit(-1)).alias(REST_COL))
+        .with_column(
+            col(FIRST_COL)
+                .shift(lit(-1))
+                .over([col(LIST_COL)])
+                .alias(REST_COL),
+        )
         .collect()
         .unwrap();
     *df = my_df
