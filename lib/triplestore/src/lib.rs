@@ -501,7 +501,7 @@ pub fn prepare_triples_par(mut ts: Vec<TriplesToAdd>) -> Vec<TripleDF> {
             )
         })
         .collect();
-    
+
     flatten(df_vecs_to_add)
 }
 

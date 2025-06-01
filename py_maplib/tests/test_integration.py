@@ -506,7 +506,8 @@ def test_simple_construct_query(windpower_mapping, streaming):
     )
     assert_frame_equal(nothing, expected_nothing_df)
 
-#No idempotency means no streaming parameter.
+
+# No idempotency means no streaming parameter.
 def test_simple_insert_construct_query(windpower_mapping):
     windpower_mapping.insert(
         """
@@ -516,7 +517,6 @@ def test_simple_insert_construct_query(windpower_mapping):
     ?b a ct:nothingTestit. 
     } WHERE {?a a ?b}""",
     )
-
 
     something = windpower_mapping.query(
         """

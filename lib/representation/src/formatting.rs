@@ -53,9 +53,7 @@ pub fn base_expression_to_string(
                     + expr.dt().strftime(XSD_DATETIME_WITH_TZ_FORMAT)
                     + lit(format!("\"^^{l}"))
             } else if l.as_ref() == xsd::DATE {
-                lit("\"")
-                    + expr.dt().strftime(XSD_DATE_WITHOUT_TZ_FORMAT)
-                    + lit(format!("\"^^{l}"))
+                lit("\"") + expr.dt().strftime(XSD_DATE_WITHOUT_TZ_FORMAT) + lit(format!("\"^^{l}"))
             } else if l.as_ref() == rdf::LANG_STRING {
                 lit("\"")
                     + expr

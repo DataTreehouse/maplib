@@ -395,7 +395,8 @@ impl PyMapping {
     ) -> PyResult<()> {
         let graph = parse_optional_named_node(graph)?;
         let mapped_parameters = map_parameters(parameters)?;
-        self.inner
+        self
+            .inner
             .update(
                 &update,
                 &mapped_parameters,

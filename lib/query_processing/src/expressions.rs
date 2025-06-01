@@ -922,7 +922,7 @@ pub fn func_expression(
                     } else {
                         col(text_context.as_str())
                     };
-                    
+
                     create_regex_expr(use_col, &t, &pattern)
                 };
                 solution_mappings.mappings = solution_mappings
@@ -1118,7 +1118,7 @@ pub fn func_expression(
                     } else {
                         col(arg_context.as_str())
                     };
-                    
+
                     create_regex_replace_expr(use_col, &t, &pattern, &replacement_expr)
                 };
                 solution_mappings.mappings = solution_mappings
@@ -1343,6 +1343,211 @@ pub fn func_expression(
                 RDFNodeType::Literal(xsd::INTEGER.into_owned()),
             );
         }
+        Function::LCase | Function::UCase => {
+            assert_eq!(args.len(), 1);
+            let first_context = args_contexts.get(&0).unwrap();
+
+            let t = solution_mappings
+                .rdf_node_types
+                .get(first_context.as_str())
+                .unwrap();
+            match t {
+                RDFNodeType::IRI | RDFNodeType::BlankNode | RDFNodeType::None => {
+                    solution_mappings.mappings = solution_mappings.mappings.with_column(
+                        lit(LiteralValue::untyped_null())
+                            .cast(BaseRDFNodeType::None.polars_data_type())
+                            .alias(outer_context.as_str()),
+                    );
+                    solution_mappings
+                        .rdf_node_types
+                        .insert(outer_context.as_str().to_string(), RDFNodeType::None);
+                }
+                RDFNodeType::Literal(_) => {
+                    if t.is_lit_type(xsd::STRING) {
+                        match func {
+                            Function::LCase => {
+                                solution_mappings.mappings =
+                                    solution_mappings.mappings.with_column(
+                                        col(first_context.as_str())
+                                            .cast(DataType::String)
+                                            .str()
+                                            .to_lowercase()
+                                            .alias(outer_context.as_str()),
+                                    );
+                            }
+                            Function::UCase => {
+                                solution_mappings.mappings =
+                                    solution_mappings.mappings.with_column(
+                                        col(first_context.as_str())
+                                            .cast(DataType::String)
+                                            .str()
+                                            .to_uppercase()
+                                            .alias(outer_context.as_str()),
+                                    );
+                            }
+                            _ => unreachable!("Should never happen"),
+                        }
+                        solution_mappings.rdf_node_types.insert(
+                            outer_context.as_str().to_string(),
+                            RDFNodeType::Literal(xsd::STRING.into_owned()),
+                        );
+                    } else if t.is_lang_string() {
+                        match func {
+                            Function::LCase => {
+                                solution_mappings.mappings =
+                                    solution_mappings.mappings.with_column(
+                                        col(first_context.as_str())
+                                            .struct_()
+                                            .with_fields(vec![col(first_context.as_str())
+                                                .struct_()
+                                                .field_by_name(LANG_STRING_VALUE_FIELD)
+                                                .cast(DataType::String)
+                                                .str()
+                                                .to_lowercase()
+                                                .alias(LANG_STRING_VALUE_FIELD)])
+                                            .unwrap()
+                                            .alias(outer_context.as_str()),
+                                    );
+                            }
+                            Function::UCase => {
+                                solution_mappings.mappings =
+                                    solution_mappings.mappings.with_column(
+                                        col(first_context.as_str())
+                                            .struct_()
+                                            .with_fields(vec![col(first_context.as_str())
+                                                .struct_()
+                                                .field_by_name(LANG_STRING_VALUE_FIELD)
+                                                .cast(DataType::String)
+                                                .str()
+                                                .to_uppercase()
+                                                .alias(LANG_STRING_VALUE_FIELD)])
+                                            .unwrap()
+                                            .alias(outer_context.as_str()),
+                                    );
+                            }
+                            _ => unreachable!("Should never happen"),
+                        }
+                        solution_mappings.rdf_node_types.insert(
+                            outer_context.as_str().to_string(),
+                            RDFNodeType::Literal(rdf::LANG_STRING.into_owned()),
+                        );
+                    } else {
+                        solution_mappings.mappings = solution_mappings.mappings.with_column(
+                            lit(LiteralValue::untyped_null())
+                                .cast(BaseRDFNodeType::None.polars_data_type())
+                                .alias(outer_context.as_str()),
+                        );
+                        solution_mappings
+                            .rdf_node_types
+                            .insert(outer_context.as_str().to_string(), RDFNodeType::None);
+                    }
+                }
+                RDFNodeType::MultiType(ts) => {
+                    let mut exprs = vec![];
+                    let mut keep_types = vec![];
+                    for t in ts {
+                        if let BaseRDFNodeType::Literal(l) = t {
+                            if l.as_ref() == xsd::STRING {
+                                let field_name = base_col_name(t);
+                                match func {
+                                    Function::LCase => {
+                                        exprs.push(
+                                            col(first_context.as_str())
+                                                .struct_()
+                                                .field_by_name(&field_name)
+                                                .cast(DataType::String)
+                                                .str()
+                                                .to_lowercase()
+                                                .alias(&field_name),
+                                        );
+                                    }
+                                    Function::UCase => {
+                                        exprs.push(
+                                            col(first_context.as_str())
+                                                .struct_()
+                                                .field_by_name(&field_name)
+                                                .cast(DataType::String)
+                                                .str()
+                                                .to_uppercase()
+                                                .alias(&field_name),
+                                        );
+                                    }
+                                    _ => unreachable!("Should never happen"),
+                                }
+                                keep_types.push(t.clone());
+                            } else if t.is_lang_string() {
+                                match func {
+                                    Function::LCase => {
+                                        exprs.push(
+                                            col(first_context.as_str())
+                                                .struct_()
+                                                .field_by_name(LANG_STRING_VALUE_FIELD)
+                                                .cast(DataType::String)
+                                                .str()
+                                                .to_lowercase()
+                                                .alias(LANG_STRING_VALUE_FIELD),
+                                        );
+                                    }
+                                    Function::UCase => {
+                                        exprs.push(
+                                            col(first_context.as_str())
+                                                .struct_()
+                                                .field_by_name(LANG_STRING_VALUE_FIELD)
+                                                .cast(DataType::String)
+                                                .str()
+                                                .to_uppercase()
+                                                .alias(LANG_STRING_VALUE_FIELD),
+                                        );
+                                    }
+                                    _ => unreachable!("Should never happen"),
+                                }
+                                exprs.push(
+                                    col(first_context.as_str())
+                                        .struct_()
+                                        .field_by_name(LANG_STRING_LANG_FIELD)
+                                        .alias(LANG_STRING_LANG_FIELD),
+                                );
+                                keep_types.push(t.clone());
+                            }
+                        }
+                    }
+                    if keep_types.is_empty() {
+                        solution_mappings.mappings = solution_mappings.mappings.with_column(
+                            lit(LiteralValue::untyped_null())
+                                .cast(BaseRDFNodeType::None.polars_data_type())
+                                .alias(outer_context.as_str()),
+                        );
+                        solution_mappings
+                            .rdf_node_types
+                            .insert(outer_context.as_str().to_string(), RDFNodeType::None);
+                    } else if keep_types.len() == 1 {
+                        let t = keep_types.pop().unwrap();
+                        if t.is_lang_string() {
+                            solution_mappings.mappings = solution_mappings
+                                .mappings
+                                .with_column(as_struct(exprs).alias(outer_context.as_str()));
+                        } else {
+                            assert_eq!(exprs.len(), 1);
+                            solution_mappings.mappings = solution_mappings
+                                .mappings
+                                .with_column(exprs.pop().unwrap().alias(outer_context.as_str()));
+                        }
+                        solution_mappings
+                            .rdf_node_types
+                            .insert(outer_context.as_str().to_string(), t.as_rdf_node_type());
+                    } else {
+                        let t = RDFNodeType::MultiType(keep_types);
+                        solution_mappings.mappings = solution_mappings
+                            .mappings
+                            .with_column(as_struct(exprs).alias(outer_context.as_str()));
+                        solution_mappings
+                            .rdf_node_types
+                            .insert(outer_context.as_str().to_string(), t);
+                    }
+                }
+            }
+        }
+
         Function::StrStarts | Function::StrEnds | Function::Contains => {
             assert_eq!(args.len(), 2);
             let first_context = args_contexts.get(&0).unwrap();

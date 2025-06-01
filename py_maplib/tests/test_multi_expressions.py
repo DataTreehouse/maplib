@@ -239,6 +239,8 @@ def test_coalesce_both_multi_same_types(streaming):
         include_datatypes=True,
         streaming=streaming,
     )
+    print(sm.mappings)
+    print(sm.rdf_types)
     assert sm.mappings.get_column("c").is_null().sum() == 0
 
 
@@ -624,7 +626,8 @@ def test_generate_iri_all_strings(streaming):
         "a": RDFType.Literal("http://www.w3.org/2001/XMLSchema#string"),
         "iri": RDFType.IRI(),
     }
-    expected = pl.from_repr("""
+    expected = pl.from_repr(
+        """
 ┌─────────────────────────────────────────────────┬────────────────────────────────────────────┐
 │ a                                               ┆ iri                                        │
 │ ---                                             ┆ ---                                        │
@@ -633,7 +636,8 @@ def test_generate_iri_all_strings(streaming):
 │ http://www.w3.org/2001/XMLSchema#integer        ┆ <http://www.w3.org/2001/XMLSchema#integer> │
 │ urn:abc:123                                     ┆ <urn:abc:123>                              │
 └─────────────────────────────────────────────────┴────────────────────────────────────────────┘
-    """)
+    """
+    )
     assert_frame_equal(expected, sm.mappings)
 
 
@@ -653,10 +657,17 @@ def test_generate_iri(streaming):
         streaming=streaming,
     )
     assert sm.rdf_types == {
-        "a": RDFType.Multi([RDFType.IRI(), RDFType.Literal("http://www.w3.org/2001/XMLSchema#integer"), RDFType.Literal("http://www.w3.org/2001/XMLSchema#string")]),
+        "a": RDFType.Multi(
+            [
+                RDFType.IRI(),
+                RDFType.Literal("http://www.w3.org/2001/XMLSchema#integer"),
+                RDFType.Literal("http://www.w3.org/2001/XMLSchema#string"),
+            ]
+        ),
         "iri": RDFType.IRI(),
     }
-    expected = pl.from_repr("""
+    expected = pl.from_repr(
+        """
 ┌─────────────────────────────────────────────────┬────────────────────────────────────────────┐
 │ a                                               ┆ iri                                        │
 │ ---                                             ┆ ---                                        │
@@ -667,7 +678,8 @@ def test_generate_iri(streaming):
 │ "http://www.w3.org/2001/XMLSchema#integer"      ┆ <http://www.w3.org/2001/XMLSchema#integer> │
 │ "urn:abc:123"                                   ┆ <urn:abc:123>                              │
 └─────────────────────────────────────────────────┴────────────────────────────────────────────┘
-    """)
+    """
+    )
     assert_frame_equal(expected, sm.mappings)
 
 
@@ -715,6 +727,178 @@ def test_replace_single(streaming):
     }
     assert sm.mappings.height == 3
     assert sm.mappings.get_column("replace").to_list() == ["ba", "bacbac", "bb"]
+
+
+@pytest.mark.parametrize("streaming", [True, False])
+def test_case_single(streaming):
+    m = Mapping([])
+    sm = m.query(
+        """
+    PREFIX : <http://example.net/> 
+    PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+    SELECT ?a ?ucase ?lcase WHERE {
+    VALUES (?a) { ("abcaAc") ("ab") ("bb") }
+    BIND(UCASE(?a) as ?ucase)
+    BIND(LCASE(?a) as ?lcase)
+    } ORDER BY ?a
+    """,
+        include_datatypes=True,
+        streaming=streaming,
+    )
+    assert sm.rdf_types == {
+        "a": RDFType.Literal("http://www.w3.org/2001/XMLSchema#string"),
+        "ucase": RDFType.Literal("http://www.w3.org/2001/XMLSchema#string"),
+        "lcase": RDFType.Literal("http://www.w3.org/2001/XMLSchema#string"),
+    }
+    assert sm.mappings.height == 3
+    assert sm.mappings.get_column("ucase").to_list() == ["AB", "ABCAAC", "BB"]
+    assert sm.mappings.get_column("lcase").to_list() == ["ab", "abcaac", "bb"]
+
+
+@pytest.mark.parametrize("streaming", [True, False])
+def test_case_single_lang(streaming):
+    m = Mapping([])
+    sm = m.query(
+        """
+    PREFIX : <http://example.net/> 
+    PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+    SELECT ?a ?ucase ?lcase WHERE {
+    VALUES (?a) { ("abcaAc"@en) ("ab"@no) ("bb"@se) }
+    BIND(UCASE(?a) as ?ucase)
+    BIND(LCASE(?a) as ?lcase)
+    } ORDER BY ?a
+    """,
+        include_datatypes=True,
+        streaming=streaming,
+    )
+    assert sm.rdf_types == {
+        "a": RDFType.Literal("http://www.w3.org/1999/02/22-rdf-syntax-ns#langString"),
+        "ucase": RDFType.Literal(
+            "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString"
+        ),
+        "lcase": RDFType.Literal(
+            "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString"
+        ),
+    }
+    assert sm.mappings.height == 3
+    assert sm.mappings.get_column("ucase").to_list() == [
+        '"AB"@no',
+        '"ABCAAC"@en',
+        '"BB"@se',
+    ]
+    assert sm.mappings.get_column("lcase").to_list() == [
+        '"ab"@no',
+        '"abcaac"@en',
+        '"bb"@se',
+    ]
+
+
+@pytest.mark.parametrize("streaming", [True, False])
+def test_case_multi_type_with_only_lang(streaming):
+    m = Mapping([])
+    sm = m.query(
+        """
+    PREFIX : <http://example.net/> 
+    PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+    SELECT ?a ?ucase ?lcase WHERE {
+    VALUES (?a) { ("abcaAc"@en) ("ab"@no) ("bb"@se) (1) }
+    BIND(UCASE(?a) as ?ucase)
+    BIND(LCASE(?a) as ?lcase)
+    } ORDER BY ?a
+    """,
+        include_datatypes=True,
+        streaming=streaming,
+    )
+    assert sm.rdf_types == {
+        "a": RDFType.Multi(
+            [
+                RDFType.Literal(
+                    "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString"
+                ),
+                RDFType.Literal("http://www.w3.org/2001/XMLSchema#integer"),
+            ]
+        ),
+        "ucase": RDFType.Literal(
+            "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString"
+        ),
+        "lcase": RDFType.Literal(
+            "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString"
+        ),
+    }
+    assert sm.mappings.height == 4
+    assert sm.mappings.get_column("ucase").to_list() == [
+        '"AB"@no',
+        '"ABCAAC"@en',
+        '"BB"@se',
+        None,
+    ]
+    assert sm.mappings.get_column("lcase").to_list() == [
+        '"ab"@no',
+        '"abcaac"@en',
+        '"bb"@se',
+        None,
+    ]
+
+
+@pytest.mark.parametrize("streaming", [True, False])
+def test_case_multi_type_with_string_and_lang_string_and_other(streaming):
+    m = Mapping([])
+    sm = m.query(
+        """
+    PREFIX : <http://example.net/> 
+    PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+    SELECT ?a ?ucase ?lcase WHERE {
+    VALUES (?a) { ("abcaAc"@en) ("ab") ("bb"@se) (1) (xsd:abc) }
+    BIND(UCASE(?a) as ?ucase)
+    BIND(LCASE(?a) as ?lcase)
+    } ORDER BY ?a
+    """,
+        include_datatypes=True,
+        streaming=streaming,
+    )
+    assert sm.rdf_types == {
+        "a": RDFType.Multi(
+            [
+                RDFType.IRI(),
+                RDFType.Literal(
+                    "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString"
+                ),
+                RDFType.Literal("http://www.w3.org/2001/XMLSchema#integer"),
+                RDFType.Literal("http://www.w3.org/2001/XMLSchema#string"),
+            ]
+        ),
+        "ucase": RDFType.Multi(
+            [
+                RDFType.Literal(
+                    "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString"
+                ),
+                RDFType.Literal("http://www.w3.org/2001/XMLSchema#string"),
+            ]
+        ),
+        "lcase": RDFType.Multi(
+            [
+                RDFType.Literal(
+                    "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString"
+                ),
+                RDFType.Literal("http://www.w3.org/2001/XMLSchema#string"),
+            ]
+        ),
+    }
+    assert sm.mappings.height == 5
+    assert sm.mappings.get_column("ucase").to_list() == [
+        None,
+        '"ABCAAC"@en',
+        '"BB"@se',
+        None,
+        '"AB"',
+    ]
+    assert sm.mappings.get_column("lcase").to_list() == [
+        None,
+        '"abcaac"@en',
+        '"bb"@se',
+        None,
+        '"ab"',
+    ]
 
 
 @pytest.mark.parametrize("streaming", [True, False])

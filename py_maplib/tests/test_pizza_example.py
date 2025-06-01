@@ -165,16 +165,20 @@ def test_update_insert_delete(pizzas_mapping):
     }WHERE {
         ?p a pizza:Pizza .
     }
-    """)
-    df = pizzas_mapping.query("""
+    """
+    )
+    df = pizzas_mapping.query(
+        """
         PREFIX pizza:<https://github.com/magbak/maplib/pizza#>
         SELECT ?a ?b ?c WHERE {
             ?a ?b ?c
         }
-    """)
+    """
+    )
     assert df.height == 9
     df_filtered = df.filter(pl.col("c").str.contains(pl.lit("#NewPizza")))
     assert df_filtered.height == 2
+
 
 def test_update_insert(pizzas_mapping):
     res = pizzas_mapping.update(
@@ -186,18 +190,22 @@ def test_update_insert(pizzas_mapping):
     }WHERE {
         ?p a pizza:Pizza .
     }
-    """)
-    df = pizzas_mapping.query("""
+    """
+    )
+    df = pizzas_mapping.query(
+        """
         PREFIX pizza:<https://github.com/magbak/maplib/pizza#>
         SELECT ?a ?b ?c WHERE {
             ?a ?b ?c
         }
-    """)
+    """
+    )
     assert df.height == 11
     df_filtered_orig = df.filter(pl.col("c").str.contains(pl.lit("#Pizza")))
     assert df_filtered_orig.height == 2
     df_filtered_new = df.filter(pl.col("c").str.contains(pl.lit("#NewPizza")))
     assert df_filtered_new.height == 2
+
 
 def test_update_delete(pizzas_mapping):
     res = pizzas_mapping.update(
@@ -209,13 +217,16 @@ def test_update_delete(pizzas_mapping):
     } WHERE {
         ?p a pizza:Pizza .
     }
-    """)
-    df = pizzas_mapping.query("""
+    """
+    )
+    df = pizzas_mapping.query(
+        """
         PREFIX pizza:<https://github.com/magbak/maplib/pizza#>
         SELECT ?a ?b ?c WHERE {
             ?a ?b ?c
         }
-    """)
+    """
+    )
     assert df.height == 7
     df_filtered_orig = df.filter(pl.col("c").str.contains(pl.lit("#Pizza")))
     assert df_filtered_orig.height == 0
@@ -237,13 +248,16 @@ def test_update_insert_delete_multiple(pizzas_mapping):
         ?p a pizza:Pizza .
         ?p pizza:fromCountry ?c .
     }
-    """)
-    df = pizzas_mapping.query("""
+    """
+    )
+    df = pizzas_mapping.query(
+        """
         PREFIX pizza:<https://github.com/magbak/maplib/pizza#>
         SELECT ?a ?b ?c WHERE {
             ?a ?b ?c
         }
-    """)
+    """
+    )
     assert df.height == 7
     df_filtered = df.filter(pl.col("c").str.contains(pl.lit("#NewPizza")))
     assert df_filtered.height == 2

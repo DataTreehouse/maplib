@@ -3,7 +3,10 @@ use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
 use log::warn;
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{BlankNode, Literal, NamedNode, NamedNodeRef, Term};
-use polars::prelude::{as_struct, lit, AnyValue, DataType, Expr, LiteralValue, NamedFrom, PlSmallStr, Scalar, Series, TimeUnit, TimeZone};
+use polars::prelude::{
+    as_struct, lit, AnyValue, DataType, Expr, LiteralValue, NamedFrom, PlSmallStr, Scalar, Series,
+    TimeUnit, TimeZone,
+};
 use std::ops::Deref;
 use std::str::FromStr;
 
@@ -137,7 +140,8 @@ pub fn rdf_literal_to_polars_literal_value(lit: &Literal) -> LiteralValue {
     } else if datatype == xsd::DATE_TIME {
         let dt_with_tz = value.parse::<DateTime<Utc>>();
         if let Ok(dt) = dt_with_tz {
-            let tz = chrono_tz::Tz::from_str(dt.timezone().to_string().as_str()).unwrap_or_else(|_| panic!("Can parse timezone {dt}"));
+            let tz = chrono_tz::Tz::from_str(dt.timezone().to_string().as_str())
+                .unwrap_or_else(|_| panic!("Can parse timezone {dt}"));
             LiteralValue::Scalar(Scalar::new_datetime(
                 dt.naive_utc().and_utc().timestamp_nanos_opt().unwrap(),
                 TimeUnit::Nanoseconds,
@@ -162,16 +166,15 @@ pub fn rdf_literal_to_polars_literal_value(lit: &Literal) -> LiteralValue {
     } else if datatype == xsd::DATE_TIME_STAMP {
         let dt_with_tz = value.parse::<DateTime<Utc>>();
         if let Ok(dt) = dt_with_tz {
-            let tz = chrono_tz::Tz::from_str(dt.timezone().to_string().as_str()).unwrap_or_else(|_| panic!("Can parse timezone {dt}"));
+            let tz = chrono_tz::Tz::from_str(dt.timezone().to_string().as_str())
+                .unwrap_or_else(|_| panic!("Can parse timezone {dt}"));
             LiteralValue::Scalar(Scalar::new_datetime(
                 dt.naive_utc().and_utc().timestamp_nanos_opt().unwrap(),
                 TimeUnit::Nanoseconds,
                 Some(TimeZone::from_chrono(&tz)),
             ))
         } else {
-            warn!(
-                "Could not parse xsd:dateTimeStamp {value} note that timezone is required"
-            );
+            warn!("Could not parse xsd:dateTimeStamp {value} note that timezone is required");
             LiteralValue::Scalar(Scalar::null(DataType::Datetime(
                 TimeUnit::Nanoseconds,
                 None,
