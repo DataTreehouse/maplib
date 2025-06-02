@@ -2,7 +2,10 @@ use crate::RDFNodeType;
 use oxrdf::vocab::xsd;
 use polars::prelude::{DataFrame, IntoLazy, LazyFrame};
 use std::collections::HashMap;
-use utils::polars::{pl_interruptable_collect, InterruptableCollectError};
+use utils::polars::InterruptableCollectError;
+
+#[cfg(feature = "pyo3")]
+use utils::polars::{pl_interruptable_collect};
 
 #[cfg(feature = "pyo3")]
 use pyo3::Python;

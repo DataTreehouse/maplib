@@ -115,7 +115,7 @@ pub fn pl_vec_interruptable_collect(
     {
         let dfs: Result<Vec<_>, _> = futures
             .into_par_iter()
-            .map(|(i, x)| x.fetch_blocking())
+            .map(|(_, x)| x.fetch_blocking())
             .collect();
         Ok(dfs?)
     }
