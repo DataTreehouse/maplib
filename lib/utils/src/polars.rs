@@ -1,12 +1,14 @@
 use polars::{error::PolarsError, frame::DataFrame, prelude::LazyFrame};
 #[cfg(not(feature = "pyo3"))]
-use rayon::iter::IntoParallelIterator;
+use rayon::iter::{IntoParallelIterator,ParallelIterator};
 use std::collections::HashMap;
-use std::{thread::sleep, time::Duration};
 use thiserror::Error;
 
 #[cfg(feature = "pyo3")]
 use pyo3::Python;
+#[cfg(feature = "pyo3")]
+use std::{thread::sleep, time::Duration};
+
 
 #[derive(Error, Debug)]
 pub enum InterruptableCollectError {
@@ -113,7 +115,7 @@ pub fn pl_vec_interruptable_collect(
     {
         let dfs: Result<Vec<_>, _> = futures
             .into_par_iter()
-            .map(|(i, x)| x.fetch_blocking()?)
+            .map(|(i, x)| x.fetch_blocking())
             .collect();
         Ok(dfs?)
     }
