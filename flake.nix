@@ -64,8 +64,12 @@
           pkgs.cargo-audit
           pkgs.cargo-deny
           pkgs.cargo-vet
+          pkgs.cargo-all-features
 
           fenixSet.rust-analyzer
+
+          pkgs.just
+          pkgs.gum
         ];
       };
       checks = {
