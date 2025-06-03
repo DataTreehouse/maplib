@@ -754,6 +754,69 @@ def test_case_single(streaming):
     assert sm.mappings.get_column("ucase").to_list() == ["AB", "ABCAAC", "BB"]
     assert sm.mappings.get_column("lcase").to_list() == ["ab", "abcaac", "bb"]
 
+@pytest.mark.parametrize("streaming", [True, False])
+def test_mul_types_single(streaming):
+    m = Mapping([])
+    sm = m.query(
+        """
+    PREFIX : <http://example.net/> 
+    PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+    SELECT * WHERE {
+    VALUES (?a) { ("dummy") }
+    BIND("0.1"^^xsd:float * "0.1"^^xsd:decimal AS ?n1)
+    BIND("0.1"^^xsd:double * "0.1"^^xsd:decimal AS ?n2)
+    BIND("0.1"^^xsd:decimal * "0.1"^^xsd:decimal AS ?n3)
+    BIND("0.1"^^xsd:float * "0.1"^^xsd:float AS ?n4)
+    BIND("0.1"^^xsd:double * "0.1"^^xsd:double AS ?n5)
+    BIND("21"^^xsd:integer * "0.1"^^xsd:decimal AS ?n6)
+    #BIND("true"^^xsd:boolean * "0.1"^^xsd:decimal AS ?n7)
+    BIND("1"^^xsd:integer * "2"^^xsd:long AS ?n8)
+    BIND("2"^^xsd:long * "2"^^xsd:long AS ?n9)
+    BIND("2"^^xsd:int * "2"^^xsd:int AS ?n10)
+    } ORDER BY ?a
+    """,
+        include_datatypes=True,
+        streaming=streaming,
+    )
+    assert sm.rdf_types == {
+        'a': RDFType.Literal("http://www.w3.org/2001/XMLSchema#string"),
+        'n1': RDFType.Literal("http://www.w3.org/2001/XMLSchema#decimal"),
+        'n2': RDFType.Literal("http://www.w3.org/2001/XMLSchema#decimal"),
+        'n3': RDFType.Literal("http://www.w3.org/2001/XMLSchema#decimal"),
+        'n4': RDFType.Literal("http://www.w3.org/2001/XMLSchema#float"),
+        'n5': RDFType.Literal("http://www.w3.org/2001/XMLSchema#double"),
+        'n6': RDFType.Literal("http://www.w3.org/2001/XMLSchema#decimal"),
+        'n8': RDFType.Literal("http://www.w3.org/2001/XMLSchema#integer"),
+        'n9': RDFType.Literal("http://www.w3.org/2001/XMLSchema#integer"),
+        'n10': RDFType.Literal("http://www.w3.org/2001/XMLSchema#int"),
+    }
+
+@pytest.mark.parametrize("streaming", [True, False])
+def test_substr_single(streaming):
+    m = Mapping([])
+    sm = m.query(
+        """
+    PREFIX : <http://example.net/> 
+    PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+    SELECT ?a ?sub1 ?sub2 WHERE {
+    VALUES (?a) { ("abcaAc") ("ab") ("bb") }
+    BIND(SUBSTR(?a,3) as ?sub1)
+    BIND(SUBSTR(?a,0,3) as ?sub2)
+    } ORDER BY ?a
+    """,
+        include_datatypes=True,
+        streaming=streaming,
+    )
+    assert sm.rdf_types == {
+        "a": RDFType.Literal("http://www.w3.org/2001/XMLSchema#string"),
+        "sub1": RDFType.Literal("http://www.w3.org/2001/XMLSchema#string"),
+        "sub2": RDFType.Literal("http://www.w3.org/2001/XMLSchema#string"),
+    }
+    assert sm.mappings.height == 3
+    assert sm.mappings.get_column("sub1").to_list() == ["", "aAc", ""]
+    assert sm.mappings.get_column("sub2").to_list() == ["ab", "abc", "bb"]
+
+
 
 @pytest.mark.parametrize("streaming", [True, False])
 def test_case_single_lang(streaming):
@@ -792,6 +855,52 @@ def test_case_single_lang(streaming):
         '"bb"@se',
     ]
 
+
+@pytest.mark.parametrize("streaming", [True, False])
+def test_substr_multi_type_with_only_lang(streaming):
+    m = Mapping([])
+    sm = m.query(
+        """
+    PREFIX : <http://example.net/> 
+    PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+    SELECT ?a ?sub1 ?sub2 WHERE {
+    VALUES (?a) { ("abcaAc"@en) ("ab"@no) ("bb"@se) (1) }
+    BIND(SUBSTR(?a, 2) as ?sub1)
+    BIND(SUBSTR(?a, 2, 1) as ?sub2)
+    } ORDER BY ?a
+    """,
+        include_datatypes=True,
+        streaming=streaming,
+    )
+    assert sm.rdf_types == {
+        "a": RDFType.Multi(
+            [
+                RDFType.Literal(
+                    "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString"
+                ),
+                RDFType.Literal("http://www.w3.org/2001/XMLSchema#integer"),
+            ]
+        ),
+        "sub1": RDFType.Literal(
+            "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString"
+        ),
+        "sub2": RDFType.Literal(
+            "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString"
+        ),
+    }
+    assert sm.mappings.height == 4
+    assert sm.mappings.get_column("sub1").to_list() == [
+        '""@no',
+        '"caAc"@en',
+        '""@se',
+        None,
+    ]
+    assert sm.mappings.get_column("sub2").to_list() == [
+        '""@no',
+        '"c"@en',
+        '""@se',
+        None,
+    ]
 
 @pytest.mark.parametrize("streaming", [True, False])
 def test_case_multi_type_with_only_lang(streaming):
@@ -898,6 +1007,67 @@ def test_case_multi_type_with_string_and_lang_string_and_other(streaming):
         '"bb"@se',
         None,
         '"ab"',
+    ]
+
+
+@pytest.mark.parametrize("streaming", [True, False])
+def test_substr_multi_type_with_string_and_lang_string_and_other(streaming):
+    m = Mapping([])
+    sm = m.query(
+        """
+    PREFIX : <http://example.net/> 
+    PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+    SELECT ?a ?sub1 ?sub2 WHERE {
+    VALUES (?a) { ("abcaAc"@en) ("ab") ("bb"@se) (1) (xsd:abc) }
+    BIND(SUBSTR(?a, 3,1) as ?sub1)
+    BIND(SUBSTR(?a, 1) as ?sub2)
+    } ORDER BY ?a
+    """,
+        include_datatypes=True,
+        streaming=streaming,
+    )
+    assert sm.rdf_types == {
+        "a": RDFType.Multi(
+            [
+                RDFType.IRI(),
+                RDFType.Literal(
+                    "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString"
+                ),
+                RDFType.Literal("http://www.w3.org/2001/XMLSchema#integer"),
+                RDFType.Literal("http://www.w3.org/2001/XMLSchema#string"),
+            ]
+        ),
+        "sub1": RDFType.Multi(
+            [
+                RDFType.Literal(
+                    "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString"
+                ),
+                RDFType.Literal("http://www.w3.org/2001/XMLSchema#string"),
+            ]
+        ),
+        "sub2": RDFType.Multi(
+            [
+                RDFType.Literal(
+                    "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString"
+                ),
+                RDFType.Literal("http://www.w3.org/2001/XMLSchema#string"),
+            ]
+        ),
+    }
+    assert sm.mappings.height == 5
+    assert sm.mappings.get_column("sub1").to_list() == [
+        None,
+        '"a"@en',
+        '""@se',
+        None,
+        '""',
+    ]
+    assert sm.mappings.get_column("sub2").to_list() == [
+        None,
+        '"bcaAc"@en',
+        '"b"@se',
+        None,
+        '"b"',
     ]
 
 

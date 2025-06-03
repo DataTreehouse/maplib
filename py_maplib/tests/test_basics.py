@@ -838,7 +838,6 @@ def test_expand_generated_default_triples_non_iri_object():
 
 
 def test_list_expansion_correct():
-    pl.Config.set_fmt_str_lengths(100)
     df = pl.DataFrame({"MySubject":["http://example.net/ns#subject1", "http://example.net/ns#subject2"],
                        "MyValue": [[1, 2], [3,4]]})
     templates = """

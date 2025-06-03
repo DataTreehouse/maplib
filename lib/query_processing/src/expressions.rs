@@ -29,6 +29,7 @@ use representation::{
     LANG_STRING_VALUE_FIELD,
 };
 use spargebra::algebra::{Expression, Function};
+use std::cmp;
 use std::collections::{HashMap, HashSet};
 use std::ops::{Add, Div, Mul, Sub};
 use std::sync::Arc;
@@ -1343,10 +1344,25 @@ pub fn func_expression(
                 RDFNodeType::Literal(xsd::INTEGER.into_owned()),
             );
         }
-        Function::LCase | Function::UCase => {
-            assert_eq!(args.len(), 1);
+        Function::LCase | Function::UCase | Function::SubStr => {
+            if matches!(func, Function::LCase | Function::UCase) {
+                assert_eq!(args.len(), 1);
+            } else {
+                assert!(args.len() == 2 || args.len() == 3)
+            }
             let first_context = args_contexts.get(&0).unwrap();
-
+            let starting_loc = if let Some(Expression::Literal(starting_loc_lit)) = args.get(1) {
+                let starting_loc: i64 = starting_loc_lit.value().parse().unwrap();
+                Some(lit(starting_loc))
+            } else {
+                None
+            };
+            let length = if let Some(Expression::Literal(length)) = args.get(2) {
+                let length: i64 = length.value().parse().unwrap();
+                lit(length)
+            } else {
+                lit(LiteralValue::untyped_null()).cast(DataType::Int64)
+            };
             let t = solution_mappings
                 .rdf_node_types
                 .get(first_context.as_str())
@@ -1385,6 +1401,16 @@ pub fn func_expression(
                                             .alias(outer_context.as_str()),
                                     );
                             }
+                            Function::SubStr => {
+                                solution_mappings.mappings =
+                                    solution_mappings.mappings.with_column(
+                                        col(first_context.as_str())
+                                            .cast(DataType::String)
+                                            .str()
+                                            .slice(starting_loc.unwrap(), length)
+                                            .alias(outer_context.as_str()),
+                                    );
+                            }
                             _ => unreachable!("Should never happen"),
                         }
                         solution_mappings.rdf_node_types.insert(
@@ -1420,6 +1446,22 @@ pub fn func_expression(
                                                 .cast(DataType::String)
                                                 .str()
                                                 .to_uppercase()
+                                                .alias(LANG_STRING_VALUE_FIELD)])
+                                            .unwrap()
+                                            .alias(outer_context.as_str()),
+                                    );
+                            }
+                            Function::SubStr => {
+                                solution_mappings.mappings =
+                                    solution_mappings.mappings.with_column(
+                                        col(first_context.as_str())
+                                            .struct_()
+                                            .with_fields(vec![col(first_context.as_str())
+                                                .struct_()
+                                                .field_by_name(LANG_STRING_VALUE_FIELD)
+                                                .cast(DataType::String)
+                                                .str()
+                                                .slice(starting_loc.unwrap(), length)
                                                 .alias(LANG_STRING_VALUE_FIELD)])
                                             .unwrap()
                                             .alias(outer_context.as_str()),
@@ -1472,6 +1514,20 @@ pub fn func_expression(
                                                 .alias(&field_name),
                                         );
                                     }
+                                    Function::SubStr => {
+                                        exprs.push(
+                                            col(first_context.as_str())
+                                                .struct_()
+                                                .field_by_name(&field_name)
+                                                .cast(DataType::String)
+                                                .str()
+                                                .slice(
+                                                    starting_loc.as_ref().unwrap().clone(),
+                                                    length.clone(),
+                                                )
+                                                .alias(&field_name),
+                                        );
+                                    }
                                     _ => unreachable!("Should never happen"),
                                 }
                                 keep_types.push(t.clone());
@@ -1496,6 +1552,20 @@ pub fn func_expression(
                                                 .cast(DataType::String)
                                                 .str()
                                                 .to_uppercase()
+                                                .alias(LANG_STRING_VALUE_FIELD),
+                                        );
+                                    }
+                                    Function::SubStr => {
+                                        exprs.push(
+                                            col(first_context.as_str())
+                                                .struct_()
+                                                .field_by_name(LANG_STRING_VALUE_FIELD)
+                                                .cast(DataType::String)
+                                                .str()
+                                                .slice(
+                                                    starting_loc.as_ref().unwrap().clone(),
+                                                    length.clone(),
+                                                )
                                                 .alias(LANG_STRING_VALUE_FIELD),
                                         );
                                     }
@@ -2115,13 +2185,13 @@ fn op(
         Expression::Subtract(_, _) => e_left.clone().sub(e_right.clone()),
         _ => panic!("Should never happen"),
     };
-
-    if compatible_operation(expression, dt_left, dt_right) {
+    let compat = compatible_operation(expression, dt_left, dt_right);
+    if compat {
         let t = match expression {
-            Expression::Multiply(_, _) => biggest_numeric(dt_left, dt_right),
-            Expression::Add(_, _) => biggest_numeric(dt_left, dt_right),
+            Expression::Multiply(_, _) => greatest_common_dt(dt_left, dt_right),
+            Expression::Add(_, _) => greatest_common_dt(dt_left, dt_right),
             Expression::Divide(_, _) => BaseRDFNodeType::Literal(xsd::DOUBLE.into_owned()),
-            Expression::Subtract(_, _) => biggest_numeric(dt_left, dt_right),
+            Expression::Subtract(_, _) => greatest_common_dt(dt_left, dt_right),
             _ => unreachable!("Should never happen"),
         };
         e = e.cast(t.polars_data_type());
@@ -2135,66 +2205,75 @@ fn op(
     }
 }
 
-fn biggest_numeric(dt_left: NamedNodeRef, dt_right: NamedNodeRef) -> BaseRDFNodeType {
-    if is_floating_point(dt_left) && !is_floating_point(dt_right) {
-        BaseRDFNodeType::Literal(dt_left.into_owned())
-    } else if !is_floating_point(dt_left) && is_floating_point(dt_right) {
-        BaseRDFNodeType::Literal(dt_right.into_owned())
-    } else {
-        greatest_common_dt(dt_left, dt_right)
-    }
-}
-
-fn is_floating_point(dt: NamedNodeRef) -> bool {
-    matches!(dt, xsd::FLOAT | xsd::DOUBLE | xsd::DECIMAL)
-}
-
-fn greatest_common_dt(dt_left: NamedNodeRef, dt_right: NamedNodeRef) -> BaseRDFNodeType {
-    if let Some(gcdt) = greatest_common_dt_lhs(dt_left, dt_right) {
-        gcdt
-    } else {
-        greatest_common_dt_lhs(dt_left, dt_right)
-            .unwrap_or_else(|| panic!("Has greatest common {dt_left} {dt_right}"))
-    }
-}
-
-fn greatest_common_dt_lhs(
+fn greatest_common_dt(
     dt_left: NamedNodeRef,
     dt_right: NamedNodeRef,
-) -> Option<BaseRDFNodeType> {
-    let t = match (dt_left, dt_right) {
-        (
-            xsd::INTEGER,
-            xsd::NEGATIVE_INTEGER
-            | xsd::NON_NEGATIVE_INTEGER
-            | xsd::POSITIVE_INTEGER
-            | xsd::LONG
-            | xsd::UNSIGNED_LONG
-            | xsd::INT
-            | xsd::UNSIGNED_INT
-            | xsd::UNSIGNED_SHORT
-            | xsd::SHORT
-            | xsd::BYTE
-            | xsd::UNSIGNED_BYTE,
-        ) => Some(xsd::INTEGER),
-        (
-            xsd::LONG,
-            xsd::UNSIGNED_LONG
-            | xsd::INT
-            | xsd::UNSIGNED_SHORT
-            | xsd::SHORT
-            | xsd::BYTE
-            | xsd::UNSIGNED_BYTE,
-        ) => Some(xsd::LONG),
-        (
-            xsd::INT,
-            xsd::UNSIGNED_INT | xsd::UNSIGNED_SHORT | xsd::SHORT | xsd::BYTE | xsd::UNSIGNED_BYTE,
-        ) => Some(xsd::INT),
-        (xsd::UNSIGNED_INT, xsd::UNSIGNED_SHORT | xsd::UNSIGNED_BYTE) => Some(xsd::INT),
-        (xsd::DOUBLE, xsd::FLOAT) => Some(xsd::DOUBLE),
-        _ => None,
-    };
-    t.map(|t| BaseRDFNodeType::Literal(t.into_owned()))
+) -> BaseRDFNodeType {
+    let bits_left = n_bits(dt_left);
+    let bits_right = n_bits(dt_right);
+    let decimal_left = is_decimal(dt_left);
+    let decimal_right = is_decimal(dt_right);
+
+    let use_bits = cmp::max(bits_left, bits_right);
+    let decimal = decimal_left || decimal_right;
+    let use_type = gen_type(use_bits, decimal, dt_left, dt_right);
+    BaseRDFNodeType::Literal(use_type.into_owned())
+}
+
+fn gen_type(bits: u8, decimal: bool, left: NamedNodeRef, right: NamedNodeRef) -> NamedNodeRef<'static> {
+    if decimal {
+        if bits == 32 {
+            xsd::FLOAT
+        } else if bits == 64 {
+            if left == xsd::DECIMAL || right == xsd::DECIMAL {
+                xsd::DECIMAL
+            } else {
+                xsd::DOUBLE
+            }
+        } else {
+            todo!()
+        }
+    } else {
+        if bits == 1 {
+            xsd::BOOLEAN
+        } else if bits == 8 {
+            xsd::BYTE
+        } else if bits == 16 {
+            xsd::SHORT
+        } else if bits == 32 {
+            xsd::INT
+        } else if bits == 64 {
+            xsd::INTEGER
+        } else {
+            todo!()
+        }
+    }
+}
+
+fn n_bits(t: NamedNodeRef) -> u8 {
+    match t {
+        xsd::DOUBLE
+        | xsd::DECIMAL
+        | xsd::LONG
+        | xsd::UNSIGNED_LONG
+        | xsd::POSITIVE_INTEGER
+        | xsd::NON_NEGATIVE_INTEGER
+        | xsd::NEGATIVE_INTEGER
+        | xsd::INTEGER => 64,
+        xsd::FLOAT | xsd::INT | xsd::UNSIGNED_INT => 32,
+        xsd::SHORT | xsd::UNSIGNED_SHORT => 16,
+        xsd::BYTE | xsd::UNSIGNED_BYTE => 8,
+        xsd::BOOLEAN => 1,
+        _ => todo!("nbytes {}", t),
+    }
+}
+
+// fn is_signed(t:NamedNodeRef) -> bool {
+//     !matches!(t, xsd::UNSIGNED_INT | xsd::UNSIGNED_LONG | xsd::UNSIGNED_BYTE | xsd::UNSIGNED_SHORT | xsd::POSITIVE_INTEGER | xsd::NON_NEGATIVE_INTEGER)
+// }
+
+fn is_decimal(t: NamedNodeRef) -> bool {
+    matches!(t, xsd::FLOAT | xsd::DOUBLE | xsd::DECIMAL)
 }
 
 pub fn drop_inner_contexts(mut sm: SolutionMappings, contexts: &Vec<&Context>) -> SolutionMappings {
