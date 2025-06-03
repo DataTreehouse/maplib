@@ -34,7 +34,7 @@ if (pathlib.Path(__file__).parent.resolve() / "graph_explorer").exists():
     from .graph_explorer import explore
 else:
 
-    async def explore(
+    def explore(
         m: "Mapping",
         host: str = "localhost",
         port: int = 8000,
@@ -46,9 +46,9 @@ else:
         To run from Jupyter Notebook use:
         >>> from maplib import explore
         >>>
-        >>> await explore(m)
-
-        This will block further execution of the notebook until you stop the cell.
+        >>> server = explore(m)
+        You can later stop the server with
+        >>> server.stop()
 
         :param m: The Mapping to explore
         :param host: The hostname that we will point the browser to.
