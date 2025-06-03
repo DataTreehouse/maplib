@@ -5,7 +5,7 @@ edition = "2021"
 rust-version.workspace = true
 
 [features]
-pyo3 = [ ]
+pyo3 = [ "utils/pyo3" ]
 
 [dependencies]
 utils = { path = "../utils" }
@@ -13,7 +13,7 @@ spargebra = {path = "../spargebra"}
 
 log.workspace = true
 oxrdf = {workspace = true, features = ["oxsdatatypes"]}
-polars = {workspace = true, features=["performant", "lazy", "dtype-full", "timezones", "polars-time", "partition_by", "cross_join", "strings"], default-features = false }
+polars = {workspace = true, features=["performant", "new_streaming", "lazy", "dtype-full", "timezones", "polars-time", "partition_by", "cross_join", "strings"], default-features = false }
 chrono.workspace = true
 chrono-tz.workspace = true
 thiserror.workspace = true

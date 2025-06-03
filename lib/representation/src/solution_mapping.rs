@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use utils::polars::InterruptableCollectError;
 
 #[cfg(feature = "pyo3")]
-use utils::polars::{pl_interruptable_collect};
+use utils::polars::pl_interruptable_collect;
 
 #[cfg(feature = "pyo3")]
 use pyo3::Python;
