@@ -17,9 +17,7 @@ use fts::FtsIndex;
 use log::debug;
 use oxrdf::vocab::{rdf, rdfs};
 use oxrdf::NamedNode;
-use polars::prelude::{
-    col, concat, AnyValue, DataFrame, IntoLazy, JoinArgs, JoinType, MaintainOrderJoin, UnionArgs,
-};
+use polars::prelude::{col, concat, AnyValue, DataFrame, IntoLazy, JoinArgs, JoinType, MaintainOrderJoin, UnionArgs};
 use polars_core::datatypes::CategoricalOrdering;
 use rayon::iter::ParallelDrainRange;
 use rayon::iter::ParallelIterator;
