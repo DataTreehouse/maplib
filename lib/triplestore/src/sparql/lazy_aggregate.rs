@@ -1,4 +1,4 @@
-use super::Triplestore;
+use super::{QuerySettings, Triplestore};
 use crate::sparql::errors::SparqlError;
 use oxrdf::Variable;
 
@@ -20,7 +20,7 @@ impl Triplestore {
         solution_mappings: SolutionMappings,
         context: &Context,
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
-        include_transient: bool,
+        query_settings: &QuerySettings,
     ) -> Result<AggregateReturn, SparqlError> {
         let output_solution_mappings;
         let mut out_expr;
@@ -44,7 +44,7 @@ impl Triplestore {
                     column_context.as_ref().unwrap(),
                     parameters,
                     None,
-                    include_transient,
+                    query_settings,
                 )?;
                 match name {
                     AggregateFunction::Count => {

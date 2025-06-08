@@ -2205,10 +2205,7 @@ fn op(
     }
 }
 
-fn greatest_common_dt(
-    dt_left: NamedNodeRef,
-    dt_right: NamedNodeRef,
-) -> BaseRDFNodeType {
+fn greatest_common_dt(dt_left: NamedNodeRef, dt_right: NamedNodeRef) -> BaseRDFNodeType {
     let bits_left = n_bits(dt_left);
     let bits_right = n_bits(dt_right);
     let decimal_left = is_decimal(dt_left);
@@ -2220,7 +2217,12 @@ fn greatest_common_dt(
     BaseRDFNodeType::Literal(use_type.into_owned())
 }
 
-fn gen_type(bits: u8, decimal: bool, left: NamedNodeRef, right: NamedNodeRef) -> NamedNodeRef<'static> {
+fn gen_type(
+    bits: u8,
+    decimal: bool,
+    left: NamedNodeRef,
+    right: NamedNodeRef,
+) -> NamedNodeRef<'static> {
     if decimal {
         if bits == 32 {
             xsd::FLOAT

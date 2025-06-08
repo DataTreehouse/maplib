@@ -1,6 +1,6 @@
 use polars::{error::PolarsError, frame::DataFrame, prelude::LazyFrame};
 #[cfg(not(feature = "pyo3"))]
-use rayon::iter::{IntoParallelIterator,ParallelIterator};
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use std::collections::HashMap;
 use thiserror::Error;
 
@@ -8,7 +8,6 @@ use thiserror::Error;
 use pyo3::Python;
 #[cfg(feature = "pyo3")]
 use std::{thread::sleep, time::Duration};
-
 
 #[derive(Error, Debug)]
 pub enum InterruptableCollectError {

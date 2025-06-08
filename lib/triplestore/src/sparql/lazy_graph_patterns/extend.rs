@@ -3,6 +3,7 @@ use crate::sparql::errors::SparqlError;
 use log::trace;
 use oxrdf::Variable;
 
+use crate::sparql::QuerySettings;
 use query_processing::expressions::contains_graph_pattern;
 use query_processing::graph_patterns::extend;
 use query_processing::pushdowns::Pushdowns;
@@ -22,7 +23,7 @@ impl Triplestore {
         context: &Context,
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         mut pushdowns: Pushdowns,
-        include_transient: bool,
+        query_settings: &QuerySettings,
     ) -> Result<SolutionMappings, SparqlError> {
         trace!("Processing extend graph pattern");
         let inner_context = context.extension_with(PathEntry::ExtendInner);
@@ -39,7 +40,7 @@ impl Triplestore {
             &inner_context,
             parameters,
             pushdowns,
-            include_transient,
+            query_settings,
         )?;
         output_solution_mappings = self.lazy_expression(
             expression,
@@ -47,7 +48,7 @@ impl Triplestore {
             &expression_context,
             parameters,
             expression_pushdowns.as_ref(),
-            include_transient,
+            query_settings,
         )?;
         Ok(extend(
             output_solution_mappings,

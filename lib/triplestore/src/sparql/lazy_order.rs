@@ -1,4 +1,4 @@
-use super::Triplestore;
+use super::{QuerySettings, Triplestore};
 use crate::sparql::errors::SparqlError;
 
 use representation::query_context::{Context, PathEntry};
@@ -13,7 +13,7 @@ impl Triplestore {
         solution_mappings: SolutionMappings,
         context: &Context,
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
-        include_transient: bool,
+        query_settings: &QuerySettings,
     ) -> Result<(SolutionMappings, bool, Context), SparqlError> {
         match oexpr {
             OrderExpression::Asc(expr) => {
@@ -25,7 +25,7 @@ impl Triplestore {
                         &inner_context,
                         parameters,
                         None,
-                        include_transient,
+                        query_settings,
                     )?,
                     true,
                     inner_context,
@@ -40,7 +40,7 @@ impl Triplestore {
                         &inner_context,
                         parameters,
                         None,
-                        include_transient,
+                        query_settings,
                     )?,
                     false,
                     inner_context,

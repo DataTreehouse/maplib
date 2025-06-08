@@ -2,6 +2,7 @@ use super::Triplestore;
 use crate::sparql::errors::SparqlError;
 use log::trace;
 
+use crate::sparql::QuerySettings;
 use query_processing::expressions::contains_graph_pattern;
 use query_processing::graph_patterns::filter;
 use query_processing::pushdowns::Pushdowns;
@@ -19,7 +20,7 @@ impl Triplestore {
         context: &Context,
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         pushdowns: Pushdowns,
-        include_transient: bool,
+        query_settings: &QuerySettings,
     ) -> Result<SolutionMappings, SparqlError> {
         trace!("Processing filter graph pattern");
         let inner_context = context.extension_with(PathEntry::FilterInner);
@@ -35,7 +36,7 @@ impl Triplestore {
             &inner_context,
             parameters,
             pushdowns,
-            include_transient,
+            query_settings,
         )?;
         output_solution_mappings = self.lazy_expression(
             expression,
@@ -43,7 +44,7 @@ impl Triplestore {
             &expression_context,
             parameters,
             expression_pushdowns.as_ref(),
-            include_transient,
+            query_settings,
         )?;
         output_solution_mappings = filter(output_solution_mappings, &expression_context)?;
         Ok(output_solution_mappings)

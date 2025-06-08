@@ -45,6 +45,11 @@ pub enum QueryResult {
     Construct(Vec<(EagerSolutionMappings, Option<NamedNode>)>),
 }
 
+pub struct QuerySettings {
+    pub include_transient: bool,
+    pub allow_duplicates: bool,
+}
+
 impl QueryResult {
     pub fn json(&self) -> String {
         match self {
@@ -166,6 +171,7 @@ impl Triplestore {
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         streaming: bool,
         include_transient: bool,
+        allow_duplicates: bool,
         #[cfg(feature = "pyo3")] py: Python<'_>,
     ) -> Result<QueryResult, SparqlError> {
         let query = Query::parse(query, None).map_err(SparqlError::ParseError)?;
@@ -174,6 +180,8 @@ impl Triplestore {
             parameters,
             streaming,
             include_transient,
+            allow_duplicates,
+            true,
             #[cfg(feature = "pyo3")]
             py,
         )
@@ -195,6 +203,8 @@ impl Triplestore {
             parameters,
             streaming,
             include_transient,
+            false,
+            true,
             #[cfg(feature = "pyo3")]
             py,
         )
@@ -206,8 +216,14 @@ impl Triplestore {
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         streaming: bool,
         include_transient: bool,
+        allow_duplicates: bool,
+        deduplicate_triples: bool,
         #[cfg(feature = "pyo3")] py: Python<'_>,
     ) -> Result<QueryResult, SparqlError> {
+        let qs = QuerySettings {
+            include_transient,
+            allow_duplicates,
+        };
         let context = Context::new();
         match query {
             Query::Select {
@@ -225,7 +241,7 @@ impl Triplestore {
                     &context,
                     parameters,
                     Pushdowns::new(),
-                    include_transient,
+                    &qs,
                 )?;
 
                 match pl_interruptable_collect(
@@ -258,7 +274,7 @@ impl Triplestore {
                     &context,
                     parameters,
                     Pushdowns::new(),
-                    include_transient,
+                    &qs,
                 )?;
                 match pl_interruptable_collect(
                     mappings,
@@ -268,9 +284,13 @@ impl Triplestore {
                     Ok(df) => {
                         let mut solutions = vec![];
                         for t in template {
-                            if let Some((sm, verb)) =
-                                triple_to_solution_mappings(&df, &rdf_node_types, t, None, true)?
-                            {
+                            if let Some((sm, verb)) = triple_to_solution_mappings(
+                                &df,
+                                &rdf_node_types,
+                                t,
+                                None,
+                                deduplicate_triples,
+                            )? {
                                 solutions.push((sm, verb));
                             }
                         }
@@ -343,8 +363,9 @@ impl Triplestore {
         update: &str,
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         streaming: bool,
-        include_transient: bool,
         delay_index: bool,
+        include_transient: bool,
+        allow_duplicates: bool,
         #[cfg(feature = "pyo3")] py: Python<'_>,
     ) -> Result<(), SparqlError> {
         let update = Update::parse(update, None).map_err(SparqlError::ParseError)?;
@@ -352,8 +373,9 @@ impl Triplestore {
             &update,
             parameters,
             streaming,
-            include_transient,
             delay_index,
+            include_transient,
+            allow_duplicates,
             #[cfg(feature = "pyo3")]
             py,
         )?;
@@ -365,8 +387,9 @@ impl Triplestore {
         update: &Update,
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         streaming: bool,
-        include_transient: bool,
         delay_index: bool,
+        include_transient: bool,
+        allow_duplicates: bool,
         #[cfg(feature = "pyo3")] py: Python<'_>,
     ) -> Result<(), SparqlError> {
         if self.has_unindexed {
@@ -376,8 +399,9 @@ impl Triplestore {
             update,
             parameters,
             streaming,
-            include_transient,
             delay_index,
+            include_transient,
+            allow_duplicates,
             #[cfg(feature = "pyo3")]
             py,
         )?;
@@ -389,8 +413,9 @@ impl Triplestore {
         update: &Update,
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         streaming: bool,
-        include_transient: bool,
         delay_index: bool,
+        include_transient: bool,
+        allow_duplicates: bool,
         #[cfg(feature = "pyo3")] py: Python<'_>,
     ) -> Result<(), SparqlError> {
         for u in &update.operations {
@@ -449,6 +474,8 @@ impl Triplestore {
                         parameters,
                         streaming,
                         include_transient,
+                        allow_duplicates,
+                        delay_index, //TODO! Check
                         #[cfg(feature = "pyo3")]
                         py,
                     )?;

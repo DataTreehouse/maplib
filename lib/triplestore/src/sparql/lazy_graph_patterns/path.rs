@@ -1,5 +1,6 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
+use crate::sparql::QuerySettings;
 use oxrdf::vocab::xsd;
 use oxrdf::{NamedNode, Variable};
 use polars::prelude::{
@@ -45,7 +46,7 @@ impl Triplestore {
         solution_mappings: Option<SolutionMappings>,
         context: &Context,
         pushdowns: Pushdowns,
-        include_transient: bool,
+        query_settings: &QuerySettings,
     ) -> Result<SolutionMappings, SparqlError> {
         let create_sparse = need_sparse_matrix(ppe);
 
@@ -82,7 +83,7 @@ impl Triplestore {
                 &context.extension_with(PathEntry::PathRewrite),
                 &None,
                 pushdowns,
-                include_transient,
+                query_settings,
             )?;
             for i in &intermediaries {
                 sms.rdf_node_types.remove(i).unwrap();
@@ -98,7 +99,7 @@ impl Triplestore {
         let out_dt_subj;
         let out_dt_obj;
 
-        let mut df_creator = U32DataFrameCreator::new(include_transient);
+        let mut df_creator = U32DataFrameCreator::new(query_settings);
         df_creator.gather_namednode_dfs(ppe, self)?;
         let (lookup_df, lookup_dtypes, namednode_dfs) = df_creator.create_u32_dfs()?;
         let max_index: Option<u32> = lookup_df
@@ -642,10 +643,10 @@ struct U32DataFrameCreator {
 }
 
 impl U32DataFrameCreator {
-    pub fn new(include_transient: bool) -> Self {
+    pub fn new(query_settings: &QuerySettings) -> Self {
         U32DataFrameCreator {
             named_nodes: Default::default(),
-            include_transient,
+            include_transient: query_settings.include_transient,
         }
     }
 
@@ -821,6 +822,7 @@ impl U32DataFrameCreator {
                     &None,
                     &None,
                     self.include_transient,
+                    false,
                 )?;
                 self.named_nodes.insert(
                     nn.clone(),

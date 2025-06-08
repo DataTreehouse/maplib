@@ -1,4 +1,4 @@
-use super::Triplestore;
+use super::{QuerySettings, Triplestore};
 use std::collections::HashMap;
 
 use crate::sparql::errors::SparqlError;
@@ -24,7 +24,7 @@ impl Triplestore {
         context: &Context,
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         pushdowns: Option<&Pushdowns>,
-        include_transient: bool,
+        query_settings: &QuerySettings,
     ) -> Result<SolutionMappings, SparqlError> {
         let output_solution_mappings = match expr {
             Expression::NamedNode(nn) => named_node(solution_mappings, nn, context)?,
@@ -38,7 +38,7 @@ impl Triplestore {
                     &left_context,
                     parameters,
                     pushdowns,
-                    include_transient,
+                    query_settings,
                 )?;
                 let right_context = context.extension_with(PathEntry::OrRight);
                 output_solution_mappings = self.lazy_expression(
@@ -47,7 +47,7 @@ impl Triplestore {
                     &right_context,
                     parameters,
                     pushdowns,
-                    include_transient,
+                    query_settings,
                 )?;
                 binary_expression(
                     output_solution_mappings,
@@ -65,7 +65,7 @@ impl Triplestore {
                     &left_context,
                     parameters,
                     pushdowns,
-                    include_transient,
+                    query_settings,
                 )?;
                 let right_context = context.extension_with(PathEntry::AndRight);
                 output_solution_mappings = self.lazy_expression(
@@ -74,7 +74,7 @@ impl Triplestore {
                     &right_context,
                     parameters,
                     pushdowns,
-                    include_transient,
+                    query_settings,
                 )?;
                 binary_expression(
                     output_solution_mappings,
@@ -92,7 +92,7 @@ impl Triplestore {
                     &left_context,
                     parameters,
                     pushdowns,
-                    include_transient,
+                    query_settings,
                 )?;
                 let right_context = context.extension_with(PathEntry::EqualRight);
                 output_solution_mappings = self.lazy_expression(
@@ -101,7 +101,7 @@ impl Triplestore {
                     &right_context,
                     parameters,
                     pushdowns,
-                    include_transient,
+                    query_settings,
                 )?;
                 binary_expression(
                     output_solution_mappings,
@@ -122,7 +122,7 @@ impl Triplestore {
                     &left_context,
                     parameters,
                     pushdowns,
-                    include_transient,
+                    query_settings,
                 )?;
                 let right_context = context.extension_with(PathEntry::GreaterRight);
                 output_solution_mappings = self.lazy_expression(
@@ -131,7 +131,7 @@ impl Triplestore {
                     &right_context,
                     parameters,
                     pushdowns,
-                    include_transient,
+                    query_settings,
                 )?;
                 binary_expression(
                     output_solution_mappings,
@@ -149,7 +149,7 @@ impl Triplestore {
                     &left_context,
                     parameters,
                     pushdowns,
-                    include_transient,
+                    query_settings,
                 )?;
                 let right_context = context.extension_with(PathEntry::GreaterOrEqualRight);
                 output_solution_mappings = self.lazy_expression(
@@ -158,7 +158,7 @@ impl Triplestore {
                     &right_context,
                     parameters,
                     pushdowns,
-                    include_transient,
+                    query_settings,
                 )?;
 
                 binary_expression(
@@ -177,7 +177,7 @@ impl Triplestore {
                     &left_context,
                     parameters,
                     pushdowns,
-                    include_transient,
+                    query_settings,
                 )?;
                 let right_context = context.extension_with(PathEntry::LessRight);
                 output_solution_mappings = self.lazy_expression(
@@ -186,7 +186,7 @@ impl Triplestore {
                     &right_context,
                     parameters,
                     pushdowns,
-                    include_transient,
+                    query_settings,
                 )?;
                 binary_expression(
                     output_solution_mappings,
@@ -204,7 +204,7 @@ impl Triplestore {
                     &left_context,
                     parameters,
                     pushdowns,
-                    include_transient,
+                    query_settings,
                 )?;
                 let right_context = context.extension_with(PathEntry::LessOrEqualRight);
                 output_solution_mappings = self.lazy_expression(
@@ -213,7 +213,7 @@ impl Triplestore {
                     &right_context,
                     parameters,
                     pushdowns,
-                    include_transient,
+                    query_settings,
                 )?;
                 binary_expression(
                     output_solution_mappings,
@@ -234,7 +234,7 @@ impl Triplestore {
                     &left_context,
                     parameters,
                     pushdowns,
-                    include_transient,
+                    query_settings,
                 )?;
                 for i in 0..right.len() {
                     let expr = right.get(i).unwrap();
@@ -245,7 +245,7 @@ impl Triplestore {
                         expr_context,
                         parameters,
                         pushdowns,
-                        include_transient,
+                        query_settings,
                     )?;
                 }
                 in_expression(
@@ -263,7 +263,7 @@ impl Triplestore {
                     &left_context,
                     parameters,
                     pushdowns,
-                    include_transient,
+                    query_settings,
                 )?;
                 let right_context = context.extension_with(PathEntry::AddRight);
                 output_solution_mappings = self.lazy_expression(
@@ -272,7 +272,7 @@ impl Triplestore {
                     &right_context,
                     parameters,
                     pushdowns,
-                    include_transient,
+                    query_settings,
                 )?;
                 binary_expression(
                     output_solution_mappings,
@@ -290,7 +290,7 @@ impl Triplestore {
                     &left_context,
                     parameters,
                     pushdowns,
-                    include_transient,
+                    query_settings,
                 )?;
                 let right_context = context.extension_with(PathEntry::SubtractRight);
                 output_solution_mappings = self.lazy_expression(
@@ -299,7 +299,7 @@ impl Triplestore {
                     &right_context,
                     parameters,
                     pushdowns,
-                    include_transient,
+                    query_settings,
                 )?;
                 binary_expression(
                     output_solution_mappings,
@@ -317,7 +317,7 @@ impl Triplestore {
                     &left_context,
                     parameters,
                     pushdowns,
-                    include_transient,
+                    query_settings,
                 )?;
                 let right_context = context.extension_with(PathEntry::MultiplyRight);
                 output_solution_mappings = self.lazy_expression(
@@ -326,7 +326,7 @@ impl Triplestore {
                     &right_context,
                     parameters,
                     pushdowns,
-                    include_transient,
+                    query_settings,
                 )?;
                 binary_expression(
                     output_solution_mappings,
@@ -344,7 +344,7 @@ impl Triplestore {
                     &left_context,
                     parameters,
                     pushdowns,
-                    include_transient,
+                    query_settings,
                 )?;
                 let right_context = context.extension_with(PathEntry::DivideRight);
                 output_solution_mappings = self.lazy_expression(
@@ -353,7 +353,7 @@ impl Triplestore {
                     &right_context,
                     parameters,
                     pushdowns,
-                    include_transient,
+                    query_settings,
                 )?;
 
                 binary_expression(
@@ -373,7 +373,7 @@ impl Triplestore {
                     &plus_context,
                     parameters,
                     pushdowns,
-                    include_transient,
+                    query_settings,
                 )?;
                 unary_plus(output_solution_mappings, &plus_context, context)?
             }
@@ -385,7 +385,7 @@ impl Triplestore {
                     &minus_context,
                     parameters,
                     pushdowns,
-                    include_transient,
+                    query_settings,
                 )?;
                 unary_minus(output_solution_mappings, &minus_context, context)?
             }
@@ -397,7 +397,7 @@ impl Triplestore {
                     &not_context,
                     parameters,
                     pushdowns,
-                    include_transient,
+                    query_settings,
                 )?;
                 not_expression(output_solution_mappings, &not_context, context)?
             }
@@ -425,7 +425,7 @@ impl Triplestore {
                     &exists_context,
                     parameters,
                     pushdowns.cloned().unwrap_or(Pushdowns::new()),
-                    include_transient,
+                    query_settings,
                 )?;
                 exists(
                     output_solution_mappings,
@@ -443,7 +443,7 @@ impl Triplestore {
                     &left_context,
                     parameters,
                     pushdowns,
-                    include_transient,
+                    query_settings,
                 )?;
                 let middle_context = context.extension_with(PathEntry::IfMiddle);
                 output_solution_mappings = self.lazy_expression(
@@ -452,7 +452,7 @@ impl Triplestore {
                     &middle_context,
                     parameters,
                     pushdowns,
-                    include_transient,
+                    query_settings,
                 )?;
                 let right_context = context.extension_with(PathEntry::IfRight);
                 output_solution_mappings = self.lazy_expression(
@@ -461,7 +461,7 @@ impl Triplestore {
                     &right_context,
                     parameters,
                     pushdowns,
-                    include_transient,
+                    query_settings,
                 )?;
                 if_expression(
                     output_solution_mappings,
@@ -484,7 +484,7 @@ impl Triplestore {
                         inner_context,
                         parameters,
                         pushdowns,
-                        include_transient,
+                        query_settings,
                     )?;
                 }
                 coalesce_contexts(output_solution_mappings, inner_contexts, context)?
@@ -500,7 +500,7 @@ impl Triplestore {
                         &arg_context,
                         parameters,
                         pushdowns,
-                        include_transient,
+                        query_settings,
                     )?;
                     args_contexts.insert(i, arg_context);
                 }

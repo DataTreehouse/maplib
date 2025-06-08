@@ -3,6 +3,7 @@ use crate::sparql::errors::SparqlError;
 use representation::query_context::Context;
 use representation::solution_mapping::SolutionMappings;
 
+use crate::sparql::QuerySettings;
 use log::trace;
 use oxrdf::{NamedNode, Subject, Term};
 use polars::prelude::IntoLazy;
@@ -21,7 +22,7 @@ impl Triplestore {
         triple_pattern: &TriplePattern,
         context: &Context,
         pushdowns: &mut Pushdowns,
-        include_transient: bool,
+        query_settings: &QuerySettings,
     ) -> Result<SolutionMappings, SparqlError> {
         trace!(
             "Processing triple pattern {:?} at {}",
@@ -58,7 +59,8 @@ impl Triplestore {
                 &objects,
                 &subject_type_ctr,
                 &object_type_ctr,
-                include_transient,
+                query_settings.include_transient,
+                query_settings.allow_duplicates,
             )?,
             NamedNodePattern::Variable(v) => {
                 let mut predicates: Option<HashSet<NamedNode>> = None;
@@ -139,7 +141,8 @@ impl Triplestore {
                     &objects,
                     &subject_type_ctr,
                     &object_type_ctr,
-                    include_transient,
+                    query_settings.include_transient,
+                    query_settings.allow_duplicates,
                 )?
             }
         };

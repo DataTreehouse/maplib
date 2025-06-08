@@ -1,5 +1,6 @@
-use super::{Triples, Triplestore};
+use super::Triplestore;
 use crate::sparql::errors::SparqlError;
+use crate::storage::Triples;
 use oxrdf::{NamedNode, Subject, Term};
 use polars::prelude::{as_struct, col, concat, lit, IntoLazy, LazyFrame, UnionArgs};
 use polars_core::datatypes::CategoricalOrdering;
@@ -36,6 +37,7 @@ impl Triplestore {
         &mut self,
         predicate: &NamedNode,
         include_transient: bool,
+        allow_duplicates: bool,
     ) -> Result<Vec<EagerSolutionMappings>, SparqlError> {
         let mut types = vec![];
         if let Some(map) = self.triples_map.get(predicate) {
@@ -68,6 +70,7 @@ impl Triplestore {
                 &Some(s),
                 &Some(o),
                 include_transient,
+                allow_duplicates,
             )?;
             let eager_sm = sm.as_eager(false);
             eager_sms.push(eager_sm);
@@ -76,7 +79,7 @@ impl Triplestore {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn get_deduplicated_predicate_lf(
+    fn get_predicate_lf(
         &self,
         verb_uri: &NamedNode,
         keep_subject: bool,
@@ -87,6 +90,7 @@ impl Triplestore {
         subject_datatype_ctr: &Option<PossibleTypes>,
         object_datatype_ctr: &Option<PossibleTypes>,
         include_transient: bool,
+        allow_duplicates: bool,
     ) -> Result<Option<Vec<HalfBakedSolutionMappings>>, SparqlError> {
         let mut all_sms = vec![];
         if self.triples_map.contains_key(verb_uri) {
@@ -104,6 +108,7 @@ impl Triplestore {
                     objects,
                     keep_subject,
                     keep_object,
+                    allow_duplicates,
                 )? {
                     all_sms.extend(sms);
                 }
@@ -124,6 +129,7 @@ impl Triplestore {
                     objects,
                     keep_subject,
                     keep_object,
+                    allow_duplicates,
                 )? {
                     all_sms.extend(sms);
                 }
@@ -153,6 +159,7 @@ impl Triplestore {
         subject_datatype_ctr: &Option<PossibleTypes>,
         object_datatype_ctr: &Option<PossibleTypes>,
         include_transient: bool,
+        allow_duplicates: bool,
     ) -> Result<SolutionMappings, SparqlError> {
         let predicate_uris = predicate_uris.unwrap_or(self.all_predicates());
         let predicate_uris_len = predicate_uris.len();
@@ -161,7 +168,7 @@ impl Triplestore {
             || !(subjects.is_some() && subjects.as_ref().unwrap().is_empty())
         {
             for nn in predicate_uris {
-                if let Some(sm) = self.get_deduplicated_predicate_lf(
+                if let Some(sm) = self.get_predicate_lf(
                     &nn,
                     subject_keep_rename.is_some(),
                     verb_keep_rename.is_some(),
@@ -171,6 +178,7 @@ impl Triplestore {
                     subject_datatype_ctr,
                     object_datatype_ctr,
                     include_transient,
+                    allow_duplicates,
                 )? {
                     sms.extend(sm);
                 }
@@ -494,13 +502,14 @@ fn partial_check_need_multi(
     false
 }
 
-fn single_tt_to_lf(
-    tt: &Triples,
+fn single_triples_to_lf(
+    triples: &Triples,
     subjects: &Option<Vec<&Subject>>,
     objects: &Option<Vec<&Term>>,
+    allow_duplicates: bool,
 ) -> Result<Option<(LazyFrame, usize)>, SparqlError> {
-    let lfs_and_heights = tt
-        .get_lazy_frames(subjects, objects)
+    let lfs_and_heights = triples
+        .get_lazy_frames(subjects, objects, allow_duplicates)
         .map_err(SparqlError::TripleTableReadError)?;
     if lfs_and_heights.is_empty() {
         return Ok(None);
@@ -563,6 +572,7 @@ fn multiple_tt_to_lf(
     objects: &Option<Vec<Term>>,
     keep_subject: bool,
     keep_object: bool,
+    allow_duplicates: bool,
 ) -> Result<Option<Vec<HalfBakedSolutionMappings>>, SparqlError> {
     let mut filtered = vec![];
     for ((subj_type, obj_type), tt) in triples.iter() {
@@ -591,7 +601,9 @@ fn multiple_tt_to_lf(
             None
         };
 
-        if let Some((lf, height)) = single_tt_to_lf(tt, &filtered_subjects, &filtered_objects)? {
+        if let Some((lf, height)) =
+            single_triples_to_lf(tt, &filtered_subjects, &filtered_objects, allow_duplicates)?
+        {
             if height > 0 {
                 let mut select = vec![];
                 if keep_subject {

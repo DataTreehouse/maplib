@@ -2,6 +2,7 @@ use super::Triplestore;
 use crate::sparql::errors::SparqlError;
 use log::trace;
 
+use crate::sparql::QuerySettings;
 use query_processing::graph_patterns::union;
 use query_processing::pushdowns::Pushdowns;
 use representation::query_context::{Context, PathEntry};
@@ -18,7 +19,7 @@ impl Triplestore {
         context: &Context,
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         mut pushdowns: Pushdowns,
-        include_transient: bool,
+        query_settings: &QuerySettings,
     ) -> Result<SolutionMappings, SparqlError> {
         trace!("Processing union graph pattern");
         let left_context = context.extension_with(PathEntry::UnionLeftSide);
@@ -31,7 +32,7 @@ impl Triplestore {
             &left_context,
             parameters,
             left_pushdowns,
-            include_transient,
+            query_settings,
         )?;
         pushdowns.add_graph_pattern_pushdowns(right);
         let right_solution_mappings = self.lazy_graph_pattern(
@@ -40,7 +41,7 @@ impl Triplestore {
             &right_context,
             parameters,
             pushdowns,
-            include_transient,
+            query_settings,
         )?;
 
         Ok(union(

@@ -2,6 +2,7 @@ use super::Triplestore;
 use crate::sparql::errors::SparqlError;
 use log::trace;
 
+use crate::sparql::QuerySettings;
 use query_processing::graph_patterns::order_by;
 use query_processing::pushdowns::Pushdowns;
 use representation::query_context::{Context, PathEntry};
@@ -18,7 +19,7 @@ impl Triplestore {
         context: &Context,
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         pushdowns: Pushdowns,
-        include_transient: bool,
+        query_settings: &QuerySettings,
     ) -> Result<SolutionMappings, SparqlError> {
         trace!("Processing order by graph pattern");
         let mut output_solution_mappings = self.lazy_graph_pattern(
@@ -27,7 +28,7 @@ impl Triplestore {
             &context.extension_with(PathEntry::OrderByInner),
             parameters,
             pushdowns,
-            include_transient,
+            query_settings,
         )?;
 
         let order_expression_contexts: Vec<Context> = (0..expression.len())
@@ -41,7 +42,7 @@ impl Triplestore {
                 output_solution_mappings,
                 order_expression_contexts.get(i).unwrap(),
                 parameters,
-                include_transient,
+                query_settings,
             )?;
             output_solution_mappings = ordering_solution_mappings;
             inner_contexts.push(inner_context);

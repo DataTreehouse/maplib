@@ -401,8 +401,9 @@ impl PyMapping {
                 &mapped_parameters,
                 graph,
                 streaming.unwrap_or(false),
-                include_transient.unwrap_or(true),
                 delay_index.unwrap_or(true),
+                include_transient.unwrap_or(true),
+                false, //Todo!
                 py,
             )
             .map_err(PyMaplibError::from)?;

@@ -3,6 +3,7 @@ use crate::sparql::errors::SparqlError;
 use log::trace;
 use oxrdf::Variable;
 
+use crate::sparql::QuerySettings;
 use polars::prelude::JoinType;
 use query_processing::aggregates::AggregateReturn;
 use query_processing::graph_patterns::{group_by, join, prepare_group_by};
@@ -23,7 +24,7 @@ impl Triplestore {
         context: &Context,
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         mut pushdowns: Pushdowns,
-        include_transient: bool,
+        query_settings: &QuerySettings,
     ) -> Result<SolutionMappings, SparqlError> {
         trace!("Processing group graph pattern");
         let inner_context = context.extension_with(PathEntry::GroupInner);
@@ -35,7 +36,7 @@ impl Triplestore {
             &inner_context,
             parameters,
             pushdowns,
-            include_transient,
+            query_settings,
         )?;
         let (mut output_solution_mappings, by, dummy_varname) =
             prepare_group_by(output_solution_mappings, variables);
@@ -56,7 +57,7 @@ impl Triplestore {
                 output_solution_mappings,
                 &aggregate_context,
                 parameters,
-                include_transient,
+                query_settings,
             )?;
             output_solution_mappings = aggregate_solution_mappings;
             new_rdf_node_types.insert(v.as_str().to_string(), rdf_node_type);

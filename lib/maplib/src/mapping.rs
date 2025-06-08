@@ -270,8 +270,9 @@ impl Mapping {
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         graph: Option<NamedNode>,
         streaming: bool,
-        include_transient: bool,
         delay_index: bool,
+        include_transient: bool,
+        allow_duplicates: bool,
         #[cfg(feature = "pyo3")] py: pyo3::Python<'_>,
     ) -> Result<(), MaplibError> {
         let use_triplestore = self.get_triplestore(&graph);
@@ -280,8 +281,9 @@ impl Mapping {
                 update,
                 parameters,
                 streaming,
-                include_transient,
                 delay_index,
+                include_transient,
+                allow_duplicates,
                 #[cfg(feature = "pyo3")]
                 py,
             )
@@ -440,7 +442,7 @@ impl Mapping {
             .index_unindexed()
             .map_err(SparqlError::IndexingError)?;
         triplestore
-            .get_predicate_eager_solution_mappings(predicate, include_transient)
+            .get_predicate_eager_solution_mappings(predicate, include_transient, false)
             .map_err(|x| x.into())
     }
 
