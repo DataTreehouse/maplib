@@ -25,7 +25,7 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 use uuid::Uuid;
 
-const OFFSET_STEP: usize = 300;
+const OFFSET_STEP: usize = 100;
 const MIN_SIZE_CACHING: usize = 100_000_000; //100MB
 
 const EXISTING_COL: &str = "existing";
@@ -389,32 +389,6 @@ impl Triples {
         }
         let df = self.index_unindexed_no_segments(storage_folder, df, return_new)?;
         Ok(df)
-    }
-
-    fn compact_unindexed(
-        &mut self,
-        storage_folder: Option<&PathBuf>,
-    ) -> Result<(), TriplestoreError> {
-        let mut all_lfs = vec![];
-        for u in &self.unindexed {
-            all_lfs.extend(u.get_lazy_frames(None)?.into_iter().map(|(lf, ..)| lf));
-        }
-        let df = concat(
-            all_lfs,
-            UnionArgs {
-                parallel: true,
-                rechunk: false,
-                to_supertypes: false,
-                diagonal: false,
-                from_partitioned_ds: false,
-                maintain_order: false,
-            },
-        )
-        .unwrap()
-        .collect()
-        .unwrap();
-        self.add_triples(df, storage_folder, false)?;
-        Ok(())
     }
 }
 
