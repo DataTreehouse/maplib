@@ -705,6 +705,7 @@ fn create_object_index(
     storage_folder: Option<&PathBuf>,
 ) -> Result<(StoredTriples, BTreeMap<String, usize>), TriplestoreError> {
     let lf = sort_indexed_lf(df.lazy(), false, false, false);
+
     // No need to deduplicate as subject index creation has deduplicated
     let (df, obj_sparse_map) = create_unique_df_and_sparse_map(lf, false, false, false);
     let object_sort = StoredTriples::new(df, subj_type, obj_type, storage_folder)?;
