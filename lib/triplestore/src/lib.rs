@@ -21,8 +21,8 @@ use polars::prelude::{
     col, concat, AnyValue, DataFrame, IntoLazy, JoinArgs, JoinType, MaintainOrderJoin, UnionArgs,
 };
 use polars_core::datatypes::CategoricalOrdering;
-use rayon::iter::ParallelDrainRange;
 use rayon::iter::ParallelIterator;
+use rayon::iter::{IntoParallelRefMutIterator, ParallelDrainRange};
 use representation::multitype::{
     lf_column_to_categorical, lf_columns_to_categorical, set_struct_all_null_to_null_row,
 };
@@ -159,11 +159,17 @@ impl Triplestore {
     }
 
     pub fn index_unindexed(&mut self) -> Result<(), TriplestoreError> {
-        for (_, map) in self.triples_map.iter_mut() {
-            for (_, v) in map.iter_mut() {
-                v.index_unindexed_maybe_segments(None, self.storage_folder.as_ref())?;
-            }
-        }
+        let r: Result<Vec<_>, TriplestoreError> = self
+            .triples_map
+            .par_iter_mut()
+            .map(|(_, map)| {
+                for (_, v) in map.iter_mut() {
+                    v.index_unindexed_maybe_segments(None, self.storage_folder.as_ref())?;
+                }
+                Ok(())
+            })
+            .collect();
+        r?;
         self.has_unindexed = false;
         Ok(())
     }
