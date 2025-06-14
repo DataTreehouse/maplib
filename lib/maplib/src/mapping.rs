@@ -488,16 +488,10 @@ impl Mapping {
     pub fn infer(
         &mut self,
         insert: bool,
-        #[cfg(feature = "pyo3")] py: Python<'_>,
+        max_iterations: Option<usize>,
     ) -> Result<Option<HashMap<NamedNode, EagerSolutionMappings>>, MaplibError> {
         if let Some(ruleset) = self.ruleset.take() {
-            let res = infer(
-                &mut self.base_triplestore,
-                &ruleset,
-                insert,
-                #[cfg(feature = "pyo3")]
-                py,
-            );
+            let res = infer(&mut self.base_triplestore, &ruleset, insert, max_iterations);
             match res {
                 Ok(o) => Ok(o),
                 Err(e) => {

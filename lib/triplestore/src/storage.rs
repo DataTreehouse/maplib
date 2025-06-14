@@ -13,7 +13,7 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use std::cmp;
 
 use crate::IndexingOptions;
-use log::debug;
+use log::trace;
 use oxrdf::vocab::xsd;
 use polars::io::SerWriter;
 use polars_core::utils::Container;
@@ -161,7 +161,7 @@ impl Triples {
             false
         };
         let out = if !should_compact {
-            debug!(
+            trace!(
                 "Deduping incoming {} triples, existing {}",
                 df.height(),
                 self.height
@@ -198,7 +198,7 @@ impl Triples {
             subjects_time += now_subjects.elapsed().as_secs_f32();
 
             while i < self.segments.len() {
-                debug!(
+                trace!(
                     "Iter {} remaining height {} df height {}",
                     i,
                     remaining_height,
@@ -224,7 +224,7 @@ impl Triples {
                 i += 1;
             }
             if i < self.segments.len() && incoming_df.height() > 0 {
-                debug!("Stopped dedupe early with something to add");
+                trace!("Stopped dedupe early with something to add");
                 // We stopped early, compact the latest segments and the incoming.
                 let compact_now = Instant::now();
                 let ts: Vec<_> = self.segments.drain(i..).collect();
@@ -243,7 +243,7 @@ impl Triples {
                 compacting_indexing_time += compact_now.elapsed().as_secs_f32();
                 Ok(new_triples)
             } else if incoming_df.height() > 0 {
-                debug!("Dedupe finished, adding remaining");
+                trace!("Dedupe finished, adding remaining");
                 let compacting_now = Instant::now();
                 let (new_segment, new_triples) = TriplesSegment::new(
                     incoming_df
@@ -261,11 +261,11 @@ impl Triples {
                 compacting_indexing_time += compacting_now.elapsed().as_secs_f32();
                 Ok(new_triples)
             } else {
-                debug!("Nothing to add");
+                trace!("Nothing to add");
                 Ok(None)
             }
         } else {
-            debug!("Creating compacted segment");
+            trace!("Creating compacted segment");
             let compacting_now = Instant::now();
             let new_triples = self.compact_all(Some(df), storage_folder, return_new)?;
             compacting_indexing_time += compacting_now.elapsed().as_secs_f32();
@@ -273,7 +273,7 @@ impl Triples {
         };
 
         let total_time = total_now.elapsed().as_secs_f32();
-        debug!(
+        trace!(
             "Took {} compacting:  {}, subjects {}, nonoverlaps {}",
             total_time,
             compacting_indexing_time / total_time,
@@ -362,7 +362,7 @@ impl Triples {
         storage_folder: Option<&PathBuf>,
         delay_index: bool,
     ) -> Result<Option<DataFrame>, TriplestoreError> {
-        debug!(
+        trace!(
             "Adding incoming {} triples, existing {} delay index {}",
             df.height(),
             self.height,
@@ -550,7 +550,7 @@ impl TriplesSegment {
         } else {
             None
         };
-        debug!("offsets {:?}", offsets);
+        trace!("offsets {:?}", offsets);
         let lfs: Vec<_> = self
             .subject_sort
             .as_ref()
@@ -647,7 +647,7 @@ fn create_indices(
     let now = Instant::now();
     let (mut df, subject_sparse_index) =
         create_unique_df_and_sparse_map(lf, true, true, return_new);
-    debug!(
+    trace!(
         "Creating subject sparse map took {} seconds",
         now.elapsed().as_secs_f32()
     );
@@ -671,7 +671,7 @@ fn create_indices(
     let store_now = Instant::now();
     let height = df.height();
     let subject_sort = StoredTriples::new(df.clone(), subj_type, obj_type, storage_folder)?;
-    debug!("Storing triples took {}", store_now.elapsed().as_secs_f32());
+    trace!("Storing triples took {}", store_now.elapsed().as_secs_f32());
     let mut object_sort = None;
     let mut object_sparse_index = None;
 
@@ -681,7 +681,7 @@ fn create_indices(
             create_object_index(df.lazy(), subj_type, obj_type, storage_folder)?;
         object_sort = Some(new_object_sort);
         object_sparse_index = Some(new_object_sparse_index);
-        debug!(
+        trace!(
             "Indexing by objects took {}",
             object_now.elapsed().as_secs_f32()
         );
@@ -1083,14 +1083,14 @@ fn create_unique_df_and_sparse_map(
     lf = lf.select(cols);
 
     let df = lf.collect().unwrap();
-    debug!(
+    trace!(
         "Creating deduplicated df took {} seconds",
         deduplicate_now.elapsed().as_secs_f32()
     );
     let sparse_now = Instant::now();
     let ser = df.column(c).unwrap().as_materialized_series();
     let sparse_map = create_sparse_map(ser);
-    debug!(
+    trace!(
         "Creating sparse map took {} seconds",
         sparse_now.elapsed().as_secs_f32()
     );

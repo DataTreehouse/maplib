@@ -646,23 +646,28 @@ impl PyMapping {
         checked: Option<bool>,
         graph: Option<String>,
         replace_graph: Option<bool>,
+        py: Python<'_>,
     ) -> PyResult<()> {
         let graph = parse_optional_named_node(graph)?;
         let file_path = file_path.str()?.to_string();
         let path = Path::new(&file_path);
         let format = format.map(|format| resolve_format(&format));
-        self.inner
-            .read_triples(
-                path,
-                format,
-                base_iri,
-                transient.unwrap_or(false),
-                parallel,
-                checked.unwrap_or(true),
-                graph,
-                replace_graph.unwrap_or(false),
-            )
-            .map_err(PyMaplibError::from)?;
+        let r: Result<_, PyMaplibError> = py.allow_threads(|| {
+            self.inner
+                .read_triples(
+                    path,
+                    format,
+                    base_iri,
+                    transient.unwrap_or(false),
+                    parallel,
+                    checked.unwrap_or(true),
+                    graph,
+                    replace_graph.unwrap_or(false),
+                )
+                .map_err(PyMaplibError::from)?;
+            Ok(())
+        });
+        r?;
         Ok(())
     }
 
@@ -678,21 +683,26 @@ impl PyMapping {
         checked: Option<bool>,
         graph: Option<String>,
         replace_graph: Option<bool>,
+        py: Python<'_>,
     ) -> PyResult<()> {
         let graph = parse_optional_named_node(graph)?;
         let format = resolve_format(format);
-        self.inner
-            .read_triples_string(
-                s,
-                format,
-                base_iri,
-                transient.unwrap_or(false),
-                parallel,
-                checked.unwrap_or(true),
-                graph,
-                replace_graph.unwrap_or(false),
-            )
-            .map_err(PyMaplibError::from)?;
+        let r: Result<_, PyMaplibError> = py.allow_threads(|| {
+            self.inner
+                .read_triples_string(
+                    s,
+                    format,
+                    base_iri,
+                    transient.unwrap_or(false),
+                    parallel,
+                    checked.unwrap_or(true),
+                    graph,
+                    replace_graph.unwrap_or(false),
+                )
+                .map_err(PyMaplibError::from)?;
+            Ok(())
+        });
+        r?;
         Ok(())
     }
 
@@ -889,18 +899,20 @@ impl PyMapping {
         self.inner.drop_ruleset();
     }
 
-    #[pyo3(signature = (insert=None, include_datatypes=None, native_dataframe=None))]
+    #[pyo3(signature = (insert=None, include_datatypes=None, native_dataframe=None, max_iterations=None))]
     fn infer(
         &mut self,
         py: Python<'_>,
         insert: Option<bool>,
         include_datatypes: Option<bool>,
         native_dataframe: Option<bool>,
+        max_iterations: Option<usize>,
     ) -> PyResult<Option<HashMap<String, PyObject>>> {
-        let res = self
-            .inner
-            .infer(insert.unwrap_or(true), py)
-            .map_err(PyMaplibError::MaplibError)?;
+        let res = py.allow_threads(|| {
+            self.inner
+                .infer(insert.unwrap_or(true), max_iterations)
+                .map_err(PyMaplibError::MaplibError)
+        })?;
         if let Some(res) = res {
             let mut py_res = HashMap::new();
             for (

@@ -858,7 +858,16 @@ pub fn join_workaround(
             join_type.into(),
         );
         left_mappings = left_mappings.drop_no_validate([dummycol]);
-    } else if !on.is_empty() {
+    } else {
+        let dummy = if on.is_empty() {
+            let dummy = uuid::Uuid::new_v4().to_string();
+            left_mappings = left_mappings.with_column(lit(true).alias(&dummy));
+            right_mappings = right_mappings.with_column(lit(true).alias(&dummy));
+            on.push(col(&dummy));
+            Some(dummy)
+        } else {
+            None
+        };
         let join_args = JoinArgs {
             how: join_type,
             validation: Default::default(),
@@ -869,8 +878,9 @@ pub fn join_workaround(
             maintain_order: MaintainOrderJoin::None,
         };
         left_mappings = left_mappings.join(right_mappings, &on, &on, join_args);
-    } else {
-        left_mappings = left_mappings.cross_join(right_mappings, None);
+        if let Some(dummy) = dummy {
+            left_mappings = left_mappings.drop([col(dummy)]);
+        }
     }
 
     let mut unified_exploded = HashMap::new();

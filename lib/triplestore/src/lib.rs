@@ -14,7 +14,7 @@ use crate::errors::TriplestoreError;
 use crate::storage::Triples;
 use file_io::create_folder_if_not_exists;
 use fts::FtsIndex;
-use log::debug;
+use log::trace;
 use oxrdf::vocab::{rdf, rdfs};
 use oxrdf::NamedNode;
 use polars::prelude::{
@@ -217,7 +217,7 @@ impl Triplestore {
     ) -> Result<Vec<NewTriples>, TriplestoreError> {
         let prepare_triples_now = Instant::now();
         let dfs_to_add = prepare_triples_par(ts);
-        debug!(
+        trace!(
             "Preparing triples took {} seconds",
             prepare_triples_now.elapsed().as_secs_f32()
         );
@@ -227,7 +227,7 @@ impl Triplestore {
         if delay_index {
             self.has_unindexed = true;
         }
-        debug!(
+        trace!(
             "Adding triples df took {} seconds",
             add_triples_now.elapsed().as_secs_f32()
         );
@@ -242,7 +242,7 @@ impl Triplestore {
     ) -> Result<(), TriplestoreError> {
         let prepare_triples_now = Instant::now();
         let dfs_to_add = prepare_triples_par(ts);
-        debug!(
+        trace!(
             "Deleting triples took {} seconds",
             prepare_triples_now.elapsed().as_secs_f32()
         );
@@ -251,7 +251,7 @@ impl Triplestore {
         if delay_index {
             self.has_unindexed = true;
         }
-        debug!(
+        trace!(
             "Deleting triples df took {} seconds",
             add_triples_now.elapsed().as_secs_f32()
         );
@@ -278,7 +278,7 @@ impl Triplestore {
             object_type,
         } in triples_df
         {
-            debug!(
+            trace!(
                 "Adding predicate {predicate} subject type {subject_type} object type {object_type}"
             );
             if matches!(object_type, BaseRDFNodeType::Literal(..)) {
@@ -288,7 +288,7 @@ impl Triplestore {
                     fts_index
                         .add_literal_string(&df, &predicate, &subject_type, &object_type)
                         .map_err(TriplestoreError::FtsError)?;
-                    debug!(
+                    trace!(
                         "Adding to fts index took {} seconds",
                         fts_now.elapsed().as_secs_f32()
                     );
@@ -306,7 +306,7 @@ impl Triplestore {
             df = lf.collect().unwrap();
             let k = (subject_type.clone(), object_type.clone());
             let mut added_triples = false;
-            debug!(
+            trace!(
                 "Casting to cat took {} seconds",
                 cast_now.elapsed().as_secs_f32()
             );
@@ -361,7 +361,7 @@ impl Triplestore {
                         object_type,
                     };
                     out_new_triples.push(new_triples);
-                    debug!(
+                    trace!(
                         "Creating new triples out took {} seconds",
                         new_triples_now.elapsed().as_secs_f32()
                     );
@@ -377,7 +377,7 @@ impl Triplestore {
                 let m = use_map.get_mut(&predicate).unwrap();
                 m.insert(k, triples);
             }
-            debug!(
+            trace!(
                 "Adding triples to map took  {} seconds",
                 add_now.elapsed().as_secs_f32()
             );

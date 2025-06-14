@@ -19,7 +19,7 @@ pub fn infer(
     _triplestore: &mut Triplestore,
     _ruleset: &DatalogRuleset,
     _insert: bool,
-    #[cfg(feature = "pyo3")] _py: Python<'_>,
+    _max_iterations: Option<usize>,
 ) -> Result<Option<HashMap<NamedNode, EagerSolutionMappings>>, DatalogError> {
     unimplemented!("Contact data treehouse to try")
 }
