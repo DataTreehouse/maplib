@@ -20,7 +20,7 @@ members = [
 rust-version = "1.88.0"
 
 [workspace.dependencies]
-pyo3 = {version = "0.24.1", features = ["py-clone", "abi3-py39"] }
+pyo3 = {version = "0.24.1", features = ["py-clone"] }
 pyo3-log = {version = "0.12.3" }
 polars = { version = "0.48.1", features = ["nightly", "streaming", "performant", "cse", "fmt"], default-features = false }
 polars-core = { version = "0.48.1", default-features = false }

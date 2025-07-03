@@ -3,6 +3,9 @@ name = "py_maplib"
 version = "0.15.33"
 edition = "2021"
 
+[features]
+abi3 = [ "pyo3/abi3-py39" ]
+
 [dependencies]
 maplib = { path = "../lib/maplib", features = [ "pyo3" ] }
 triplestore = { path = "../lib/triplestore", features = [ "pyo3" ] }
