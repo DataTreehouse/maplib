@@ -208,6 +208,15 @@ impl From<BaseRDFNodeType> for RDFNodeType {
 }
 
 impl BaseRDFNodeType {
+    pub fn is_lit_type(&self, nnref: NamedNodeRef) -> bool {
+        if let Self::Literal(l) = self {
+            if l.as_ref() == nnref {
+                return true;
+            }
+        }
+        false
+    }
+    
     pub fn multi_columns(&self) -> Vec<String> {
         match self {
             BaseRDFNodeType::IRI => vec![MULTI_IRI_DT.to_string()],
