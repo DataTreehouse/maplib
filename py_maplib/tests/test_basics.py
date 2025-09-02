@@ -838,8 +838,15 @@ def test_expand_generated_default_triples_non_iri_object():
 
 
 def test_list_expansion_correct():
-    df = pl.DataFrame({"MySubject":["http://example.net/ns#subject1", "http://example.net/ns#subject2"],
-                       "MyValue": [[1, 2], [3,4]]})
+    df = pl.DataFrame(
+        {
+            "MySubject": [
+                "http://example.net/ns#subject1",
+                "http://example.net/ns#subject2",
+            ],
+            "MyValue": [[1, 2], [3, 4]],
+        }
+    )
     templates = """
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
@@ -862,8 +869,8 @@ def test_list_expansion_correct():
     } ORDER BY ?a
     """
     )
-    print("df", df)
-    expected = pl.from_repr("""
+    expected = pl.from_repr(
+        """
 ┌──────────────────────────────────┬─────┬─────┬──────────────────────────────────────────────────┐
 │ a                                ┆ e1  ┆ e2  ┆ e3                                               │
 │ ---                              ┆ --- ┆ --- ┆ ---                                              │
@@ -872,5 +879,6 @@ def test_list_expansion_correct():
 │ <http://example.net/ns#subject1> ┆ 1   ┆ 2   ┆ <http://www.w3.org/1999/02/22-rdf-syntax-ns#nil> │
 │ <http://example.net/ns#subject2> ┆ 3   ┆ 4   ┆ <http://www.w3.org/1999/02/22-rdf-syntax-ns#nil> │
 └──────────────────────────────────┴─────┴─────┴──────────────────────────────────────────────────┘
-    """)
+    """
+    )
     assert_frame_equal(df, expected)

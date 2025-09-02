@@ -6,9 +6,6 @@ use thiserror::*;
 use triplestore::sparql::errors::SparqlError;
 use triplestore::Triplestore;
 
-#[cfg(feature = "pyo3")]
-use pyo3::Python;
-
 #[derive(Debug, Error)]
 pub enum DatalogError {
     #[error(transparent)]

@@ -41,7 +41,7 @@ That is, our DataFrame is:
 Then we can define a OTTR template, and create our knowledge graph by expanding this template with our DataFrame as input:
 ```python
 from maplib import Mapping, Prefix, Template, Argument, Parameter, Variable, RDFType, Triple, a
-pi = Prefix("pi", pi)
+pi = Prefix(pi)
 
 p_var = Variable("p")
 c_var = Variable("c")
