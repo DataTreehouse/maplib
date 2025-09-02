@@ -11,6 +11,11 @@ pub const DEFAULT_PREFIX: &str = "urn:maplib_default:";
 pub const OTTR_IRI: &str = "http://ns.ottr.xyz/0.4/IRI";
 pub const OTTR_BLANK_NODE: &str = "http://ns.ottr.xyz/0.4/BlankNode";
 
+pub const OWL_PREFIX: &str = "owl";
 pub const OWL_PREFIX_IRI: &str = "http://www.w3.org/2002/07/owl#";
+
+pub const SHACL_PREFIX: &str = "sh";
+
+pub const SHACL_PREFIX_IRI: &str = "http://www.w3.org/ns/shacl#";
 
 pub const XSD_ANY_URI: &str = "http://www.w3.org/2001/XMLSchema#anyURI";

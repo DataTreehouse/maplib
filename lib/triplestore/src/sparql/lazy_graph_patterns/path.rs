@@ -4,28 +4,27 @@ use crate::sparql::QuerySettings;
 use oxrdf::vocab::xsd;
 use oxrdf::{NamedNode, Variable};
 use polars::prelude::{
-    col, lit, AnyValue, DataFrame, IntoLazy, IntoSeries, JoinArgs, JoinType, Series,
+    by_name, col, lit, AnyValue, DataFrame, IntoLazy, IntoSeries, JoinArgs, JoinType, Series,
     UniqueKeepStrategy,
 };
 use polars_core::prelude::{DataType, SortMultipleOptions};
 use query_processing::errors::QueryProcessingError;
-use query_processing::graph_patterns::{join, union};
+use query_processing::graph_patterns::{group_by_workaround, join, union};
 use query_processing::pushdowns::Pushdowns;
+use representation::cats::Cats;
 use representation::multitype::{
-    compress_actual_multitypes, force_convert_multicol_to_single_col, group_by_workaround,
-    nest_multicolumns,
+    compress_actual_multitypes, force_convert_multicol_to_single_col, nest_multicolumns,
 };
 use representation::query_context::{Context, PathEntry};
-use representation::rdf_to_polars::{
-    rdf_literal_to_polars_literal_value, rdf_named_node_to_polars_literal_value,
-};
 use representation::solution_mapping::SolutionMappings;
-use representation::{BaseRDFNodeType, RDFNodeType};
+use representation::{BaseRDFNodeType, RDFNodeState};
 use representation::{OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use spargebra::algebra::{GraphPattern, PropertyPathExpression};
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 use sprs::{CsMatBase, TriMatBase};
 use std::collections::HashMap;
+use std::sync::Arc;
+use query_processing::expressions::{maybe_literal_enc, named_node_enc};
 
 const NAMED_NODE_INDEX_COL: &str = "named_node_index_column";
 const VALUE_COLUMN: &str = "value";
@@ -88,9 +87,9 @@ impl Triplestore {
             for i in &intermediaries {
                 sms.rdf_node_types.remove(i).unwrap();
             }
-            sms.mappings = sms.mappings.drop(intermediaries);
+            sms.mappings = sms.mappings.drop(by_name(intermediaries, true));
             if let Some(solution_mappings) = solution_mappings {
-                sms = join(sms, solution_mappings, JoinType::Inner)?;
+                sms = join(sms, solution_mappings, JoinType::Inner, self.cats.clone())?;
             }
             return Ok(sms);
         }
@@ -101,7 +100,8 @@ impl Triplestore {
 
         let mut df_creator = U32DataFrameCreator::new(query_settings);
         df_creator.gather_namednode_dfs(ppe, self)?;
-        let (lookup_df, lookup_dtypes, namednode_dfs) = df_creator.create_u32_dfs()?;
+        let (lookup_df, lookup_dtypes, namednode_dfs) =
+            df_creator.create_u32_dfs(self.cats.clone())?;
         let max_index: Option<u32> = lookup_df
             .column(LOOKUP_COLUMN)
             .unwrap()
@@ -142,7 +142,7 @@ impl Triplestore {
                         &[col(LOOKUP_COLUMN)],
                         JoinArgs::new(JoinType::Inner),
                     )
-                    .drop(["subject_key"]);
+                    .drop(by_name(["subject_key"], true));
                 let lookup_object_lf =
                     lookup_df
                         .lazy()
@@ -154,7 +154,7 @@ impl Triplestore {
                         &[col(LOOKUP_COLUMN)],
                         JoinArgs::new(JoinType::Inner),
                     )
-                    .drop(["object_key"]);
+                    .drop(by_name(["object_key"], true));
                 out_df = out_lf.collect().unwrap();
                 let mut dtypes = HashMap::new();
                 dtypes.insert(
@@ -166,10 +166,7 @@ impl Triplestore {
                     lookup_dtypes.get(VALUE_COLUMN).unwrap().clone(),
                 );
 
-                if matches!(
-                    lookup_dtypes.get(VALUE_COLUMN).unwrap(),
-                    RDFNodeType::MultiType(..)
-                ) {
+                if lookup_dtypes.get(VALUE_COLUMN).unwrap().is_multi() {
                     if let TermPattern::NamedNode(_) = subject {
                         out_df = force_convert_multicol_to_single_col(
                             out_df.lazy(),
@@ -178,7 +175,10 @@ impl Triplestore {
                         )
                         .collect()
                         .unwrap();
-                        dtypes.insert(SUBJECT_COL_NAME.to_string(), RDFNodeType::IRI);
+                        dtypes.insert(
+                            SUBJECT_COL_NAME.to_string(),
+                            BaseRDFNodeType::IRI.into_default_stored_rdf_node_state(),
+                        );
                     }
                     if let TermPattern::NamedNode(_) = object {
                         out_df = force_convert_multicol_to_single_col(
@@ -188,7 +188,10 @@ impl Triplestore {
                         )
                         .collect()
                         .unwrap();
-                        dtypes.insert(OBJECT_COL_NAME.to_string(), RDFNodeType::IRI);
+                        dtypes.insert(
+                            OBJECT_COL_NAME.to_string(),
+                            BaseRDFNodeType::IRI.into_default_stored_rdf_node_state(),
+                        );
                     }
                     if let TermPattern::Literal(l) = subject {
                         out_df = force_convert_multicol_to_single_col(
@@ -200,7 +203,8 @@ impl Triplestore {
                         .unwrap();
                         dtypes.insert(
                             SUBJECT_COL_NAME.to_string(),
-                            RDFNodeType::Literal(l.datatype().into_owned()),
+                            BaseRDFNodeType::Literal(l.datatype().into_owned())
+                                .into_default_stored_rdf_node_state(),
                         );
                     }
                     if let TermPattern::Literal(l) = object {
@@ -213,7 +217,8 @@ impl Triplestore {
                         .unwrap();
                         dtypes.insert(
                             OBJECT_COL_NAME.to_string(),
-                            RDFNodeType::Literal(l.datatype().into_owned()),
+                            BaseRDFNodeType::Literal(l.datatype().into_owned())
+                                .into_default_stored_rdf_node_state(),
                         );
                     }
                 }
@@ -224,45 +229,47 @@ impl Triplestore {
                 out_df = DataFrame::new(vec![
                     Series::new_empty(
                         SUBJECT_COL_NAME.into(),
-                        &BaseRDFNodeType::None.polars_data_type(),
+                        &BaseRDFNodeType::None.default_stored_polars_data_type(),
                     )
                     .into(),
                     Series::new_empty(
                         OBJECT_COL_NAME.into(),
-                        &BaseRDFNodeType::None.polars_data_type(),
+                        &BaseRDFNodeType::None.default_stored_polars_data_type(),
                     )
                     .into(),
                 ])
                 .unwrap();
-                out_dt_obj = RDFNodeType::None;
-                out_dt_subj = RDFNodeType::None;
+                out_dt_obj = BaseRDFNodeType::None.into_default_stored_rdf_node_state();
+                out_dt_subj = BaseRDFNodeType::None.into_default_stored_rdf_node_state();
             }
         } else {
             out_df = DataFrame::new(vec![
                 Series::new_empty(
                     SUBJECT_COL_NAME.into(),
-                    &BaseRDFNodeType::None.polars_data_type(),
+                    &BaseRDFNodeType::None.default_stored_polars_data_type(),
                 )
                 .into(),
                 Series::new_empty(
                     OBJECT_COL_NAME.into(),
-                    &BaseRDFNodeType::None.polars_data_type(),
+                    &BaseRDFNodeType::None.default_stored_polars_data_type(),
                 )
                 .into(),
             ])
             .unwrap();
-            out_dt_obj = RDFNodeType::None;
-            out_dt_subj = RDFNodeType::None;
+            out_dt_obj = BaseRDFNodeType::None.into_default_stored_rdf_node_state();
+            out_dt_subj = BaseRDFNodeType::None.into_default_stored_rdf_node_state();
         }
         let mut var_cols = vec![];
         let mut rename_src = vec![];
         let mut rename_trg = vec![];
+        
         match subject {
             TermPattern::NamedNode(nn) => {
-                let l = rdf_named_node_to_polars_literal_value(nn);
+                let e = named_node_enc(nn, self.cats.as_ref());
+                let e = e.unwrap_or(lit(false));
                 out_df = out_df
                     .lazy()
-                    .filter(col(SUBJECT_COL_NAME).eq(lit(l)))
+                    .filter(col(SUBJECT_COL_NAME).eq(e))
                     .collect()
                     .unwrap();
                 out_df = out_df.drop(SUBJECT_COL_NAME).unwrap();
@@ -274,10 +281,10 @@ impl Triplestore {
                 rename_trg.push(bname);
             }
             TermPattern::Literal(l) => {
-                let l = rdf_literal_to_polars_literal_value(l);
+                let (l,..) = maybe_literal_enc(l, self.cats.as_ref());
                 out_df = out_df
                     .lazy()
-                    .filter(col(SUBJECT_COL_NAME).eq(lit(l)))
+                    .filter(col(SUBJECT_COL_NAME).eq(l))
                     .collect()
                     .unwrap();
                 out_df = out_df.drop(SUBJECT_COL_NAME).unwrap();
@@ -293,10 +300,11 @@ impl Triplestore {
 
         match object {
             TermPattern::NamedNode(nn) => {
-                let l = rdf_named_node_to_polars_literal_value(nn);
+                let e = named_node_enc(nn, self.cats.as_ref());
+                let e = e.unwrap_or(lit(false));
                 out_df = out_df
                     .lazy()
-                    .filter(col(OBJECT_COL_NAME).eq(lit(l)))
+                    .filter(col(OBJECT_COL_NAME).eq(e))
                     .collect()
                     .unwrap();
                 out_df = out_df.drop(OBJECT_COL_NAME).unwrap();
@@ -308,10 +316,10 @@ impl Triplestore {
                 rename_trg.push(bname);
             }
             TermPattern::Literal(l) => {
-                let l = rdf_literal_to_polars_literal_value(l);
+                let (l,..) = maybe_literal_enc(l, self.cats.as_ref());
                 out_df = out_df
                     .lazy()
-                    .filter(col(OBJECT_COL_NAME).eq(lit(l)))
+                    .filter(col(OBJECT_COL_NAME).eq(l))
                     .collect()
                     .unwrap();
                 out_df = out_df.drop(OBJECT_COL_NAME).unwrap();
@@ -324,6 +332,7 @@ impl Triplestore {
                 }
             }
         }
+
         let mut datatypes = HashMap::new();
         if let TermPattern::Variable(v) = subject {
             datatypes.insert(v.as_str().to_string(), out_dt_subj);
@@ -348,7 +357,12 @@ impl Triplestore {
         };
 
         if let Some(mappings) = solution_mappings {
-            path_solution_mappings = join(path_solution_mappings, mappings, JoinType::Inner)?;
+            path_solution_mappings = join(
+                path_solution_mappings,
+                mappings,
+                JoinType::Inner,
+                self.cats.clone(),
+            )?;
         }
         Ok(path_solution_mappings)
     }
@@ -638,7 +652,7 @@ fn sparse_path(
 }
 
 struct U32DataFrameCreator {
-    pub named_nodes: HashMap<NamedNode, (DataFrame, RDFNodeType, RDFNodeType)>,
+    pub named_nodes: HashMap<NamedNode, (DataFrame, RDFNodeState, RDFNodeState)>,
     include_transient: bool,
 }
 
@@ -653,10 +667,11 @@ impl U32DataFrameCreator {
     #[allow(clippy::type_complexity)]
     pub fn create_u32_dfs(
         self,
+        global_cats: Arc<Cats>,
     ) -> Result<
         (
             DataFrame,
-            HashMap<String, RDFNodeType>,
+            HashMap<String, RDFNodeState>,
             HashMap<NamedNode, DataFrame>,
         ),
         QueryProcessingError,
@@ -675,7 +690,8 @@ impl U32DataFrameCreator {
             let mut types = HashMap::new();
             types.insert(
                 NAMED_NODE_INDEX_COL.to_string(),
-                RDFNodeType::Literal(xsd::UNSIGNED_INT.into_owned()),
+                BaseRDFNodeType::Literal(xsd::UNSIGNED_INT.into_owned())
+                    .into_default_stored_rdf_node_state(),
             );
             types.insert(SUBJECT_COL_NAME.to_string(), subject_dt);
             types.insert(OBJECT_COL_NAME.to_string(), object_dt);
@@ -686,7 +702,7 @@ impl U32DataFrameCreator {
             mut mappings,
             rdf_node_types,
             ..
-        } = union(soln_mappings, false)?;
+        } = union(soln_mappings, false, global_cats.clone())?;
 
         let subject_row_index = uuid::Uuid::new_v4().to_string();
         let object_row_index = uuid::Uuid::new_v4().to_string();
@@ -716,7 +732,8 @@ impl U32DataFrameCreator {
         );
         subj_types.insert(
             subject_row_index.clone(),
-            RDFNodeType::Literal(xsd::UNSIGNED_INT.into_owned()),
+            BaseRDFNodeType::Literal(xsd::UNSIGNED_INT.into_owned())
+                .into_default_stored_rdf_node_state(),
         );
 
         let mut obj_types = HashMap::new();
@@ -726,7 +743,8 @@ impl U32DataFrameCreator {
         );
         obj_types.insert(
             object_row_index.clone(),
-            RDFNodeType::Literal(xsd::UNSIGNED_INT.into_owned()),
+            BaseRDFNodeType::Literal(xsd::UNSIGNED_INT.into_owned())
+                .into_default_stored_rdf_node_state(),
         );
 
         let subj_soln_mappings = SolutionMappings::new(lf_subj, subj_types, df_height);
@@ -735,7 +753,11 @@ impl U32DataFrameCreator {
             mut mappings,
             rdf_node_types: lookup_df_types,
             ..
-        } = union(vec![subj_soln_mappings, obj_soln_mappings], false)?;
+        } = union(
+            vec![subj_soln_mappings, obj_soln_mappings],
+            false,
+            global_cats.clone(),
+        )?;
         let (mappings_grby, maps) =
             group_by_workaround(mappings, &lookup_df_types, vec![VALUE_COLUMN.to_string()]);
         mappings = mappings_grby.agg([
@@ -745,7 +767,7 @@ impl U32DataFrameCreator {
         mappings = nest_multicolumns(mappings, maps);
 
         mappings = mappings.with_row_index(LOOKUP_COLUMN, None);
-        mappings = mappings.explode([col(&subject_row_index), col(&object_row_index)]);
+        mappings = mappings.explode(by_name([&subject_row_index, &object_row_index], true));
         let mut lookup_df = mappings.collect().unwrap();
 
         let out_dfs = df.partition_by([NAMED_NODE_INDEX_COL], true).unwrap();
@@ -822,7 +844,6 @@ impl U32DataFrameCreator {
                     &None,
                     &None,
                     self.include_transient,
-                    false,
                 )?;
                 self.named_nodes.insert(
                     nn.clone(),

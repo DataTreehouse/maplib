@@ -378,7 +378,7 @@ def test_create_programmatic_mapping_with_nested_none_optional(streaming):
     expected_df = pl.DataFrame(
         {"S": [f"<{my_object.iri}>"] * 2, "A": ["A", "B"], "B": [None, None]}
     )
-    expected_df = expected_df.with_columns(pl.col("B").cast(pl.Boolean))
+    expected_df = expected_df.with_columns(pl.col("B").cast(pl.String))
     assert_frame_equal(qres, expected_df)
 
 
@@ -862,6 +862,7 @@ def test_list_expansion_correct():
     } ORDER BY ?a
     """
     )
+    print("df", df)
     expected = pl.from_repr("""
 ┌──────────────────────────────────┬─────┬─────┬──────────────────────────────────────────────────┐
 │ a                                ┆ e1  ┆ e2  ┆ e3                                               │

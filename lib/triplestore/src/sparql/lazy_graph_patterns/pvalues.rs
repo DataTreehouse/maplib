@@ -1,7 +1,7 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
 use oxrdf::Variable;
-use polars::prelude::{IntoLazy, JoinType};
+use polars::prelude::JoinType;
 
 use query_processing::graph_patterns::join;
 use query_processing::pushdowns::Pushdowns;
@@ -36,24 +36,21 @@ impl Triplestore {
                     todo!("Handle mismatching variables in PValues")
                 }
                 let height = mappings.height();
-                SolutionMappings {
-                    mappings: mappings.clone().lazy(),
-                    rdf_node_types: rdf_node_types.clone(),
-                    height_estimate: height,
-                }
+                EagerSolutionMappings::new(mappings.clone(), rdf_node_types.clone())
             } else {
                 todo!("Handle this error.. ")
             }
         } else {
             todo!("Handle this error")
         };
+        let (sm, _) = self.cats.encode_solution_mappings(sm, None);
         if let Some(mut mappings) = solution_mappings {
             //TODO: Remove this workaround
             mappings = mappings.as_eager(false).as_lazy();
-            mappings = join(mappings, sm, JoinType::Inner)?;
+            mappings = join(mappings, sm.as_lazy(), JoinType::Inner, self.cats.clone())?;
             Ok(mappings)
         } else {
-            Ok(sm)
+            Ok(sm.as_lazy())
         }
     }
 }

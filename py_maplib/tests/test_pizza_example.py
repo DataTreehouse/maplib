@@ -43,6 +43,28 @@ def pizzas_mapping():
         ?p a pizza:Pizza .
         ?p pizza:hasIngredient ing:Pineapple .
     }"""
+    print("q1", m.query("""
+    PREFIX pizza:<https://github.com/magbak/maplib/pizza#>
+    PREFIX ing:<https://github.com/magbak/maplib/pizza/ingredients#>
+    SELECT ?p 
+    WHERE {
+        ?p pizza:hasIngredient ing:Pineapple .
+    }"""))
+    print("q2", m.query("""
+    PREFIX pizza:<https://github.com/magbak/maplib/pizza#>
+    PREFIX ing:<https://github.com/magbak/maplib/pizza/ingredients#>
+    SELECT ?p ?i
+    WHERE {
+        ?p pizza:hasIngredient ?i
+    }"""))
+    print("q3", m.query("""
+    PREFIX pizza:<https://github.com/magbak/maplib/pizza#>
+    PREFIX ing:<https://github.com/magbak/maplib/pizza/ingredients#>
+    SELECT ?p
+    WHERE {
+        ?p a pizza:Pizza
+    }"""))
+    print("heterodox", m.query(hpizzas))
     m.insert(hpizzas)
     return m
 

@@ -1,9 +1,6 @@
-use polars::enable_string_cache;
 extern crate core;
-
 mod error;
 mod shacl;
-
 use crate::error::*;
 use pydf_io::to_rust::polars_df_to_rust_df;
 
@@ -17,9 +14,10 @@ use cimxml::export::FullModelDetails;
 use pydf_io::to_python::{df_to_py_df, fix_cats_and_multicolumns};
 use pyo3::prelude::*;
 use std::collections::{HashMap, HashSet};
+use std::error::Error;
 use std::fs::File;
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, MutexGuard};
+use std::sync::{Arc, LockResult, Mutex, MutexGuard};
 use templates::dataset::TemplateDataset;
 use templates::document::document_from_str;
 use triplestore::sparql::{QueryResult as SparqlQueryResult, QueryResult};
@@ -60,9 +58,10 @@ use representation::solution_mapping::EagerSolutionMappings;
 
 #[cfg(not(target_os = "linux"))]
 use mimalloc::MiMalloc;
+use representation::cats::Cats;
 use representation::polars_to_rdf::XSD_DATETIME_WITH_TZ_FORMAT;
 use representation::rdf_to_polars::rdf_named_node_to_polars_literal_value;
-use representation::{RDFNodeType, OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME};
+use representation::{BaseRDFNodeType, OBJECT_COL_NAME, PREDICATE_COL_NAME, SUBJECT_COL_NAME};
 use templates::python::{a, py_triple, PyArgument, PyInstance, PyParameter, PyTemplate, PyXSD};
 use templates::MappingColumnType;
 use triplestore::{IndexingOptions, NewTriples};
@@ -201,7 +200,7 @@ impl PyMapping {
         detach_sprout_mutex(sprout)
     }
 
-    #[pyo3(signature = (template, df=None, graph=None, types=None, validate_iris=None, delay_index=None))]
+    #[pyo3(signature = (template, df=None, graph=None, types=None, validate_iris=None))]
     fn expand(
         &self,
         template: &Bound<'_, PyAny>,
@@ -209,7 +208,6 @@ impl PyMapping {
         graph: Option<String>,
         types: Option<HashMap<String, PyRDFType>>,
         validate_iris: Option<bool>,
-        delay_index: Option<bool>,
     ) -> PyResult<Option<PyObject>> {
         let mut inner = self.inner.lock().unwrap();
         expand_mutex(
@@ -219,11 +217,10 @@ impl PyMapping {
             graph,
             types,
             validate_iris,
-            delay_index,
         )
     }
 
-    #[pyo3(signature = (df, verb=None, graph=None, types=None, validate_iris=None, delay_index=None))]
+    #[pyo3(signature = (df, verb=None, graph=None, types=None, validate_iris=None))]
     fn expand_triples(
         &self,
         df: &Bound<'_, PyAny>,
@@ -231,7 +228,6 @@ impl PyMapping {
         graph: Option<String>,
         types: Option<HashMap<String, PyRDFType>>,
         validate_iris: Option<bool>,
-        delay_index: Option<bool>,
     ) -> PyResult<Option<PyObject>> {
         let mut inner = self.inner.lock().unwrap();
         expand_triples_mutex(
@@ -241,12 +237,11 @@ impl PyMapping {
             graph,
             types,
             validate_iris,
-            delay_index,
         )
     }
 
     #[pyo3(signature = (df, primary_key_column, dry_run=None, graph=None, types=None,
-                            validate_iris=None, delay_index=None))]
+                            validate_iris=None))]
     fn expand_default(
         &self,
         df: &Bound<'_, PyAny>,
@@ -255,7 +250,6 @@ impl PyMapping {
         graph: Option<String>,
         types: Option<HashMap<String, PyRDFType>>,
         validate_iris: Option<bool>,
-        delay_index: Option<bool>,
     ) -> PyResult<String> {
         let mut inner = self.inner.lock().unwrap();
         expand_default_mutex(
@@ -266,7 +260,6 @@ impl PyMapping {
             graph,
             types,
             validate_iris,
-            delay_index,
         )
     }
 
@@ -285,24 +278,34 @@ impl PyMapping {
         return_json: Option<bool>,
         include_transient: Option<bool>,
     ) -> PyResult<PyObject> {
-        let mut inner = self.inner.lock().unwrap();
-        query_mutex(
-            &mut inner,
-            py,
-            query,
-            parameters,
-            include_datatypes,
-            native_dataframe,
-            graph,
-            streaming,
-            return_json,
-            include_transient,
-        )
+        println!("is pois {}", self.inner.is_poisoned());
+        match self.inner.lock() {
+            Ok(mut inner) => Ok(query_mutex(
+                &mut inner,
+                py,
+                query,
+                parameters,
+                include_datatypes,
+                native_dataframe,
+                graph,
+                streaming,
+                return_json,
+                include_transient,
+            )?),
+            Err(err) => {
+                let s = if let Some(err) = err.source() {
+                    format!("{}", err)
+                } else {
+                    format!("{}", err)
+                };
+                Err(PyMaplibError::RuntimeError(s).into())
+            }
+        }
     }
 
     #[allow(clippy::too_many_arguments)]
     #[pyo3(signature = (update, parameters=None, graph=None, streaming=None,
-        delay_index = None, include_transient=None))]
+        include_transient=None))]
     fn update(
         &self,
         py: Python<'_>,
@@ -310,7 +313,6 @@ impl PyMapping {
         parameters: Option<ParametersType>,
         graph: Option<String>,
         streaming: Option<bool>,
-        delay_index: Option<bool>,
         include_transient: Option<bool>,
     ) -> PyResult<()> {
         let mut inner = self.inner.lock().unwrap();
@@ -321,9 +323,7 @@ impl PyMapping {
             parameters,
             graph,
             streaming,
-            delay_index,
             include_transient,
-            Option::Some(false), //Todo!
         )
     }
 
@@ -383,7 +383,7 @@ impl PyMapping {
 
     #[pyo3(signature = (query, parameters=None, include_datatypes=None, native_dataframe=None,
                                transient=None, streaming=None, source_graph=None, target_graph=None,
-                               delay_index=None, include_transient=None))]
+                               include_transient=None))]
     fn insert(
         &self,
         py: Python<'_>,
@@ -395,7 +395,6 @@ impl PyMapping {
         streaming: Option<bool>,
         source_graph: Option<String>,
         target_graph: Option<String>,
-        delay_index: Option<bool>,
         include_transient: Option<bool>,
     ) -> PyResult<HashMap<String, PyObject>> {
         let mut inner = self.inner.lock().unwrap();
@@ -412,14 +411,13 @@ impl PyMapping {
             streaming,
             source_graph,
             target_graph,
-            delay_index,
             include_transient,
         )
     }
 
     #[pyo3(signature = (query, parameters=None, include_datatypes=None, native_dataframe=None,
                         transient=None, streaming=None, source_graph=None, target_graph=None,
-                        delay_index=None, include_transient=None))]
+                        include_transient=None))]
     fn insert_sprout(
         &self,
         py: Python<'_>,
@@ -431,7 +429,6 @@ impl PyMapping {
         streaming: Option<bool>,
         source_graph: Option<String>,
         target_graph: Option<String>,
-        delay_index: Option<bool>,
         include_transient: Option<bool>,
     ) -> PyResult<HashMap<String, PyObject>> {
         let mut inner = self.inner.lock().unwrap();
@@ -448,7 +445,6 @@ impl PyMapping {
             streaming,
             source_graph,
             target_graph,
-            delay_index,
             include_transient,
         )
     }
@@ -697,7 +693,6 @@ fn expand_mutex(
     graph: Option<String>,
     types: Option<HashMap<String, PyRDFType>>,
     validate_iris: Option<bool>,
-    delay_index: Option<bool>,
 ) -> PyResult<Option<PyObject>> {
     let template = if let Ok(i) = template.extract::<PyIRI>() {
         i.into_inner().to_string()
@@ -731,7 +726,7 @@ fn expand_mutex(
         .into());
     };
     let graph = parse_optional_named_node(graph)?;
-    let options = ExpandOptions::from_args(graph, validate_iris, delay_index);
+    let options = ExpandOptions::from_args(graph, validate_iris);
     let types = map_types(types);
 
     if let Some(df) = df {
@@ -760,11 +755,10 @@ fn expand_triples_mutex(
     graph: Option<String>,
     types: Option<HashMap<String, PyRDFType>>,
     validate_iris: Option<bool>,
-    delay_index: Option<bool>,
 ) -> PyResult<Option<PyObject>> {
     let graph = parse_optional_named_node(graph)?;
     let df = polars_df_to_rust_df(df)?;
-    let options = ExpandOptions::from_args(graph, validate_iris, delay_index);
+    let options = ExpandOptions::from_args(graph, validate_iris);
     let types = map_types(types);
     let verb = if let Some(verb) = verb {
         Some(NamedNode::new(verb).map_err(|x| PyMaplibError::from(MaplibError::from(x)))?)
@@ -785,11 +779,10 @@ fn expand_default_mutex(
     graph: Option<String>,
     types: Option<HashMap<String, PyRDFType>>,
     validate_iris: Option<bool>,
-    delay_index: Option<bool>,
 ) -> PyResult<String> {
     let df = polars_df_to_rust_df(df)?;
     let graph = parse_optional_named_node(graph)?;
-    let options = ExpandOptions::from_args(graph, validate_iris, delay_index);
+    let options = ExpandOptions::from_args(graph, validate_iris);
     let dry_run = dry_run.unwrap_or(false);
     let types = map_types(types);
     let tmpl = inner
@@ -819,7 +812,7 @@ fn query_mutex(
         .query(
             &query,
             &mapped_parameters,
-            graph,
+            graph.clone(),
             streaming.unwrap_or(false),
             include_transient.unwrap_or(true),
             py,
@@ -830,6 +823,7 @@ fn query_mutex(
         native_dataframe.unwrap_or(false),
         include_datatypes.unwrap_or(false),
         return_json.unwrap_or(false),
+        inner.get_triplestore(&graph).cats.clone(),
         py,
     )
 }
@@ -841,9 +835,7 @@ fn update_mutex(
     parameters: Option<ParametersType>,
     graph: Option<String>,
     streaming: Option<bool>,
-    delay_index: Option<bool>,
     include_transient: Option<bool>,
-    allow_duplicates: Option<bool>,
 ) -> PyResult<()> {
     let graph = parse_optional_named_node(graph)?;
     let mapped_parameters = map_parameters(parameters)?;
@@ -854,8 +846,6 @@ fn update_mutex(
             graph,
             streaming.unwrap_or(false),
             include_transient.unwrap_or(true),
-            allow_duplicates.unwrap_or(false),
-            delay_index.unwrap_or(true),
             py,
         )
         .map_err(PyMaplibError::from)?;
@@ -962,7 +952,6 @@ fn insert_mutex(
     streaming: Option<bool>,
     source_graph: Option<String>,
     target_graph: Option<String>,
-    delay_index: Option<bool>,
     include_transient: Option<bool>,
 ) -> PyResult<HashMap<String, PyObject>> {
     let mapped_parameters = map_parameters(parameters)?;
@@ -972,7 +961,7 @@ fn insert_mutex(
         .query(
             &query,
             &mapped_parameters,
-            source_graph,
+            source_graph.clone(),
             streaming.unwrap_or(false),
             include_transient.unwrap_or(true),
             py,
@@ -984,13 +973,13 @@ fn insert_mutex(
                 dfs_and_dts,
                 transient.unwrap_or(false),
                 target_graph,
-                delay_index.unwrap_or(true),
             )
             .map_err(|x| PyMaplibError::from(MaplibError::from(x)))?;
         new_triples_to_dict(
             new_triples,
             native_dataframe.unwrap_or(false),
             include_datatypes.unwrap_or(false),
+            inner.get_triplestore(&source_graph).cats.clone(),
             py,
         )?
     } else {
@@ -1014,7 +1003,6 @@ fn insert_sprout_mutex(
     streaming: Option<bool>,
     source_graph: Option<String>,
     target_graph: Option<String>,
-    delay_index: Option<bool>,
     include_transient: Option<bool>,
 ) -> PyResult<HashMap<String, PyObject>> {
     let mapped_parameters = map_parameters(parameters)?;
@@ -1027,7 +1015,7 @@ fn insert_sprout_mutex(
         .query(
             &query,
             &mapped_parameters,
-            source_graph,
+            source_graph.clone(),
             streaming.unwrap_or(false),
             include_transient.unwrap_or(true),
             py,
@@ -1041,13 +1029,13 @@ fn insert_sprout_mutex(
                 dfs_and_dts,
                 transient.unwrap_or(false),
                 target_graph,
-                delay_index.unwrap_or(true),
             )
             .map_err(|x| PyMaplibError::from(MaplibError::from(x)))?;
         new_triples_to_dict(
             new_triples,
             native_dataframe.unwrap_or(false),
             include_datatypes.unwrap_or(false),
+            inner.get_triplestore(&source_graph).cats.clone(),
             py,
         )?
     } else {
@@ -1294,8 +1282,12 @@ fn infer_mutex(
         {
             let include_datatypes = include_datatypes.unwrap_or(false);
             let native_dataframe = native_dataframe.unwrap_or(false);
-            (mappings, rdf_node_types) =
-                fix_cats_and_multicolumns(mappings, rdf_node_types, native_dataframe);
+            (mappings, rdf_node_types) = fix_cats_and_multicolumns(
+                mappings,
+                rdf_node_types,
+                native_dataframe,
+                inner.base_triplestore.cats.clone(),
+            );
             let pydf = df_to_py_df(mappings, rdf_node_types, None, include_datatypes, py)?;
             py_res.insert(nn.as_str().to_string(), pydf);
         }
@@ -1308,7 +1300,6 @@ fn infer_mutex(
 #[pymodule]
 #[pyo3(name = "maplib")]
 fn _maplib(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
-    enable_string_cache();
     // Currently deadlocks, likely need to change all above with allow threads: https://docs.rs/pyo3-log/latest/pyo3_log/
     // pyo3_log::init();
     m.add_class::<PyIndexingOptions>()?;
@@ -1341,10 +1332,11 @@ fn query_to_result(
     native_dataframe: bool,
     include_details: bool,
     return_json: bool,
+    global_cats: Arc<Cats>,
     py: Python<'_>,
 ) -> PyResult<PyObject> {
     if return_json {
-        let json = res.json();
+        let json = res.json(global_cats.clone());
         return Ok(PyString::new(py, &json).into());
     }
     match res {
@@ -1353,7 +1345,7 @@ fn query_to_result(
             mut rdf_node_types,
         }) => {
             (mappings, rdf_node_types) =
-                fix_cats_and_multicolumns(mappings, rdf_node_types, native_dataframe);
+                fix_cats_and_multicolumns(mappings, rdf_node_types, native_dataframe, global_cats);
             let pydf = df_to_py_df(mappings, rdf_node_types, None, include_details, py)?;
             Ok(pydf)
         }
@@ -1371,19 +1363,27 @@ fn query_to_result(
                     mappings = mappings
                         .lazy()
                         .with_column(
-                            lit(rdf_named_node_to_polars_literal_value(&verb)).alias(VERB_COL_NAME),
+                            lit(rdf_named_node_to_polars_literal_value(&verb))
+                                .alias(PREDICATE_COL_NAME),
                         )
                         .select([
                             col(SUBJECT_COL_NAME),
-                            col(VERB_COL_NAME),
+                            col(PREDICATE_COL_NAME),
                             col(OBJECT_COL_NAME),
                         ])
                         .collect()
                         .unwrap();
-                    rdf_node_types.insert(VERB_COL_NAME.to_string(), RDFNodeType::IRI);
+                    rdf_node_types.insert(
+                        PREDICATE_COL_NAME.to_string(),
+                        BaseRDFNodeType::IRI.into_default_input_rdf_node_state(),
+                    );
                 }
-                (mappings, rdf_node_types) =
-                    fix_cats_and_multicolumns(mappings, rdf_node_types, native_dataframe);
+                (mappings, rdf_node_types) = fix_cats_and_multicolumns(
+                    mappings,
+                    rdf_node_types,
+                    native_dataframe,
+                    global_cats.clone(),
+                );
                 let pydf = df_to_py_df(mappings, rdf_node_types, None, include_details, py)?;
                 query_results.push(pydf);
             }
@@ -1403,7 +1403,7 @@ fn map_parameters(
             let df = polars_df_to_rust_df(&pydf)?;
             let mut rdf_node_types = HashMap::new();
             for (k, v) in map {
-                let t = v.as_rdf_node_type();
+                let t = v.as_rdf_node_state();
                 rdf_node_types.insert(k, t);
             }
             let m = EagerSolutionMappings {
@@ -1447,7 +1447,7 @@ fn map_types(
     if let Some(types) = types {
         let mut new_types = HashMap::new();
         for (k, v) in types {
-            new_types.insert(k, MappingColumnType::Flat(v.as_rdf_node_type()));
+            new_types.insert(k, MappingColumnType::Flat(v.as_rdf_node_state()));
         }
         Some(new_types)
     } else {
@@ -1459,6 +1459,7 @@ fn new_triples_to_dict(
     new_triples: Vec<NewTriples>,
     native_dataframe: bool,
     include_datatypes: bool,
+    global_cats: Arc<Cats>,
     py: Python<'_>,
 ) -> PyResult<HashMap<String, PyObject>> {
     let mut map = HashMap::new();
@@ -1474,10 +1475,14 @@ fn new_triples_to_dict(
             let mut types = HashMap::new();
             types.insert(
                 SUBJECT_COL_NAME.to_string(),
-                subject_type.as_rdf_node_type(),
+                subject_type.into_default_stored_rdf_node_state(),
             );
-            types.insert(OBJECT_COL_NAME.to_string(), object_type.as_rdf_node_type());
-            (df, types) = fix_cats_and_multicolumns(df, types, native_dataframe);
+            types.insert(
+                OBJECT_COL_NAME.to_string(),
+                object_type.into_default_stored_rdf_node_state(),
+            );
+            (df, types) =
+                fix_cats_and_multicolumns(df, types, native_dataframe, global_cats.clone());
             let py_sm = df_to_py_df(df, types, None, include_datatypes, py)?;
             map.insert(predicate.as_str().to_string(), py_sm);
         }

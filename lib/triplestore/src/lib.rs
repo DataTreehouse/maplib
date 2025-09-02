@@ -1,5 +1,6 @@
 extern crate core;
 
+pub mod cats;
 mod dblf;
 pub mod errors;
 pub mod native_parquet_write;
@@ -11,40 +12,130 @@ pub mod triples_read;
 pub mod triples_write;
 
 use crate::errors::TriplestoreError;
-use crate::storage::Triples;
+use crate::storage::{can_and_should_index_object, repeated_from_last_row_expr, Triples};
 use file_io::create_folder_if_not_exists;
 use fts::FtsIndex;
-use log::trace;
-use oxrdf::vocab::{rdf, rdfs};
+use log::{trace};
+use oxrdf::vocab::{rdf, rdfs, xsd};
 use oxrdf::NamedNode;
-use polars::prelude::{
-    col, concat, AnyValue, DataFrame, IntoLazy, JoinArgs, JoinType, MaintainOrderJoin, UnionArgs,
+use polars::prelude::{arg_sort_by, col, AnyValue, DataFrame, IntoLazy};
+use polars_core::prelude::SortMultipleOptions;
+use query_processing::type_constraints::ConstraintBaseRDFNodeType;
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use rayon::iter::{ParallelDrainRange};
+use representation::cats::{
+    cat_encode_triples, decode_expr, CatTriples, CatType, Cats, OBJECT_ARG_SORT_COL_NAME,
 };
-use polars_core::datatypes::CategoricalOrdering;
-use rayon::iter::ParallelIterator;
-use rayon::iter::{IntoParallelRefMutIterator, ParallelDrainRange};
-use representation::multitype::{
-    lf_column_to_categorical, lf_columns_to_categorical, set_struct_all_null_to_null_row,
-};
-use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
+use representation::multitype::set_struct_all_null_to_null_row;
+use representation::solution_mapping::{BaseCatState, EagerSolutionMappings};
 use representation::{
-    literal_iri_to_namednode, BaseRDFNodeType, RDFNodeType, OBJECT_COL_NAME, SUBJECT_COL_NAME,
-    VERB_COL_NAME,
+    literal_iri_to_namednode, BaseRDFNodeType, OBJECT_COL_NAME, PREDICATE_COL_NAME,
+    SUBJECT_COL_NAME,
 };
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::Instant;
 use uuid::Uuid;
+
+#[derive(Clone, Hash, Eq, PartialEq, Debug)]
+pub enum StoredBaseRDFNodeType {
+    IRI(NamedNode),
+    Blank,
+    Literal(NamedNode),
+}
+
+impl StoredBaseRDFNodeType {
+    fn from_base_and_prefix(
+        base: &BaseRDFNodeType,
+        prefix: &Option<CatType>,
+    ) -> StoredBaseRDFNodeType {
+        match base {
+            BaseRDFNodeType::IRI => {
+                if let Some(prefix) = prefix {
+                    if let CatType::Prefix(p) = prefix {
+                        StoredBaseRDFNodeType::IRI(p.clone())
+                    } else {
+                        unreachable!("Should never happen")
+                    }
+                } else {
+                    unreachable!("Should never happen")
+                }
+            }
+            BaseRDFNodeType::BlankNode => StoredBaseRDFNodeType::Blank,
+            BaseRDFNodeType::Literal(l) => StoredBaseRDFNodeType::Literal(l.clone()),
+            BaseRDFNodeType::None => {
+                unreachable!("Should never happen")
+            }
+        }
+    }
+}
+
+impl StoredBaseRDFNodeType {
+    pub(crate) fn as_constrained(&self) -> ConstraintBaseRDFNodeType {
+        match self {
+            StoredBaseRDFNodeType::IRI(i) => {
+                ConstraintBaseRDFNodeType::IRI(Some(HashSet::from([i.clone()])))
+            }
+            StoredBaseRDFNodeType::Blank => ConstraintBaseRDFNodeType::BlankNode,
+            StoredBaseRDFNodeType::Literal(l) => ConstraintBaseRDFNodeType::Literal(l.clone()),
+        }
+    }
+
+    pub fn as_cat_type(&self) -> Option<CatType> {
+        match self {
+            StoredBaseRDFNodeType::IRI(nn) => Some(CatType::Prefix(nn.clone())),
+            StoredBaseRDFNodeType::Blank => Some(CatType::Blank),
+            StoredBaseRDFNodeType::Literal(l) => {
+                if l.as_ref() == xsd::STRING {
+                    Some(CatType::Literal(xsd::STRING.into_owned()))
+                } else {
+                    None
+                }
+            }
+        }
+    }
+}
+
+impl StoredBaseRDFNodeType {
+    pub fn matches(&self, other: &BaseRDFNodeType) -> bool {
+        match self {
+            StoredBaseRDFNodeType::IRI(_) => {
+                matches!(other, BaseRDFNodeType::IRI)
+            }
+            StoredBaseRDFNodeType::Blank => {
+                matches!(other, BaseRDFNodeType::BlankNode)
+            }
+            StoredBaseRDFNodeType::Literal(l) => {
+                if let BaseRDFNodeType::Literal(l_other) = other {
+                    l == l_other
+                } else {
+                    false
+                }
+            }
+        }
+    }
+
+    pub fn as_base_rdf_node_type(&self) -> BaseRDFNodeType {
+        match self {
+            StoredBaseRDFNodeType::IRI(_) => BaseRDFNodeType::IRI,
+            StoredBaseRDFNodeType::Blank => BaseRDFNodeType::BlankNode,
+            StoredBaseRDFNodeType::Literal(nn) => BaseRDFNodeType::Literal(nn.clone()),
+        }
+    }
+}
 
 #[derive(Clone)]
 pub struct Triplestore {
     pub storage_folder: Option<PathBuf>,
-    triples_map: HashMap<NamedNode, HashMap<(BaseRDFNodeType, BaseRDFNodeType), Triples>>,
-    transient_triples_map: HashMap<NamedNode, HashMap<(BaseRDFNodeType, BaseRDFNodeType), Triples>>,
+    triples_map:
+        HashMap<NamedNode, HashMap<(StoredBaseRDFNodeType, StoredBaseRDFNodeType), Triples>>,
+    transient_triples_map:
+        HashMap<NamedNode, HashMap<(StoredBaseRDFNodeType, StoredBaseRDFNodeType), Triples>>,
     parser_call: usize,
     indexing: IndexingOptions,
     fts_index: Option<FtsIndex>,
-    has_unindexed: bool,
+    pub cats: Arc<Cats>,
 }
 
 impl Triplestore {
@@ -84,17 +175,12 @@ impl Default for IndexingOptions {
 
 pub struct TriplesToAdd {
     pub df: DataFrame,
-    pub subject_type: RDFNodeType,
-    pub object_type: RDFNodeType,
-    pub static_verb_column: Option<NamedNode>,
-}
-
-#[derive(Debug)]
-pub struct TripleDF {
-    df: DataFrame,
-    predicate: NamedNode,
-    subject_type: BaseRDFNodeType,
-    object_type: BaseRDFNodeType,
+    pub subject_type: BaseRDFNodeType,
+    pub object_type: BaseRDFNodeType,
+    pub predicate: Option<NamedNode>,
+    pub subject_cat_state: BaseCatState,
+    pub object_cat_state: BaseCatState,
+    pub predicate_cat_state: Option<BaseCatState>,
 }
 
 #[derive(Debug)]
@@ -111,11 +197,13 @@ impl NewTriples {
             let mut map = HashMap::new();
             map.insert(
                 SUBJECT_COL_NAME.to_string(),
-                self.subject_type.as_rdf_node_type(),
+                self.subject_type
+                    .clone()
+                    .into_default_input_rdf_node_state(),
             );
             map.insert(
                 OBJECT_COL_NAME.to_string(),
-                self.object_type.as_rdf_node_type(),
+                self.object_type.clone().into_default_input_rdf_node_state(),
             );
             Some(EagerSolutionMappings::new(df, map))
         } else {
@@ -154,33 +242,11 @@ impl Triplestore {
             parser_call: 0,
             indexing,
             fts_index,
-            has_unindexed: false,
+            cats: Arc::new(Cats::new_empty()),
         })
     }
 
-    pub fn index_unindexed(&mut self) -> Result<(), TriplestoreError> {
-        let r: Result<Vec<_>, TriplestoreError> = self
-            .triples_map
-            .par_iter_mut()
-            .map(|(_, map)| {
-                for (_, v) in map.iter_mut() {
-                    v.index_unindexed_maybe_segments(None, self.storage_folder.as_ref())?;
-                }
-                Ok(())
-            })
-            .collect();
-        r?;
-        self.has_unindexed = false;
-        Ok(())
-    }
-
     pub fn create_index(&mut self, indexing: IndexingOptions) -> Result<(), TriplestoreError> {
-        self.index_unindexed()?;
-        for (k, m) in &mut self.triples_map {
-            for (_, ts) in m {
-                ts.add_index(k, &indexing, self.storage_folder.as_ref())?
-            }
-        }
         if let Some(fts_path) = &indexing.fts_path {
             // Only doing anything if the fts index does not already exist.
             // If it exists, then it should be updated as well.
@@ -188,15 +254,15 @@ impl Triplestore {
                 self.fts_index = Some(FtsIndex::new(fts_path).map_err(TriplestoreError::FtsError)?);
                 for (predicate, map) in &self.triples_map {
                     for ((subject_type, object_type), ts) in map {
-                        for (lf, _) in ts.get_lazy_frames(&None, &None, false)? {
+                        for (lf, _) in ts.get_lazy_frames(&None, &None, &self.cats)? {
                             self.fts_index
                                 .as_mut()
                                 .unwrap()
                                 .add_literal_string(
                                     &lf.collect().unwrap(),
                                     predicate,
-                                    subject_type,
-                                    object_type,
+                                    &subject_type.as_base_rdf_node_type(),
+                                    &object_type.as_base_rdf_node_type(),
                                 )
                                 .map_err(TriplestoreError::FtsError)?;
                         }
@@ -211,22 +277,16 @@ impl Triplestore {
     pub fn add_triples_vec(
         &mut self,
         ts: Vec<TriplesToAdd>,
-        call_uuid: &str,
         transient: bool,
-        delay_index: bool,
     ) -> Result<Vec<NewTriples>, TriplestoreError> {
         let prepare_triples_now = Instant::now();
-        let dfs_to_add = prepare_triples_par(ts);
+        let dfs_to_add = prepare_add_triples_par(ts, self.cats.clone(), &self.indexing);
         trace!(
             "Preparing triples took {} seconds",
             prepare_triples_now.elapsed().as_secs_f32()
         );
         let add_triples_now = Instant::now();
-
-        let new_triples = self.add_triples_df(dfs_to_add, call_uuid, transient, delay_index)?;
-        if delay_index {
-            self.has_unindexed = true;
-        }
+        let new_triples = self.add_local_cat_triples(dfs_to_add, transient)?;
         trace!(
             "Adding triples df took {} seconds",
             add_triples_now.elapsed().as_secs_f32()
@@ -234,36 +294,19 @@ impl Triplestore {
         Ok(new_triples)
     }
 
-    pub fn delete_triples_vec(
+    fn add_local_cat_triples(
         &mut self,
-        ts: Vec<TriplesToAdd>,
-        call_uuid: &str,
-        delay_index: bool,
-    ) -> Result<(), TriplestoreError> {
-        let prepare_triples_now = Instant::now();
-        let dfs_to_add = prepare_triples_par(ts);
-        trace!(
-            "Deleting triples took {} seconds",
-            prepare_triples_now.elapsed().as_secs_f32()
-        );
-        let add_triples_now = Instant::now();
-        self.delete_triples_df(dfs_to_add, call_uuid, delay_index)?;
-        if delay_index {
-            self.has_unindexed = true;
-        }
-        trace!(
-            "Deleting triples df took {} seconds",
-            add_triples_now.elapsed().as_secs_f32()
-        );
-        Ok(())
+        local_cats: Vec<CatTriples>,
+        transient: bool,
+    ) -> Result<Vec<NewTriples>, TriplestoreError> {
+        let global_cats = self.globalize(local_cats);
+        self.add_global_cat_triples(global_cats, transient)
     }
 
-    fn add_triples_df(
+    fn add_global_cat_triples(
         &mut self,
-        triples_df: Vec<TripleDF>,
-        call_uuid: &str,
+        global_cat_triples: Vec<CatTriples>,
         transient: bool,
-        delay_index: bool,
     ) -> Result<Vec<NewTriples>, TriplestoreError> {
         let mut out_new_triples = vec![];
         let use_map = if transient {
@@ -271,268 +314,267 @@ impl Triplestore {
         } else {
             &mut self.triples_map
         };
-        for TripleDF {
-            mut df,
+        // Todo partition by predicate to improve parallelism
+        for CatTriples {
+            encoded_triples,
             predicate,
             subject_type,
             object_type,
-        } in triples_df
+            local_cats: _,
+        } in global_cat_triples
         {
             trace!(
                 "Adding predicate {predicate} subject type {subject_type} object type {object_type}"
             );
-            if matches!(object_type, BaseRDFNodeType::Literal(..)) {
-                //TODO: Get what is actually updated from db and then only add those things
-                if let Some(fts_index) = &mut self.fts_index {
-                    let fts_now = Instant::now();
-                    fts_index
-                        .add_literal_string(&df, &predicate, &subject_type, &object_type)
-                        .map_err(TriplestoreError::FtsError)?;
-                    trace!(
-                        "Adding to fts index took {} seconds",
-                        fts_now.elapsed().as_secs_f32()
-                    );
-                }
-            }
-            let cast_now = Instant::now();
-            let mut map = HashMap::new();
-            map.insert(
-                SUBJECT_COL_NAME.to_string(),
-                subject_type.as_rdf_node_type(),
-            );
-            map.insert(OBJECT_COL_NAME.to_string(), object_type.as_rdf_node_type());
-            let mut lf = df.lazy();
-            lf = lf_columns_to_categorical(lf, &map, CategoricalOrdering::Physical);
-            df = lf.collect().unwrap();
-            let k = (subject_type.clone(), object_type.clone());
-            let mut added_triples = false;
-            trace!(
-                "Casting to cat took {} seconds",
-                cast_now.elapsed().as_secs_f32()
-            );
-            let add_now = Instant::now();
-            if let Some(m) = use_map.get_mut(&predicate) {
-                if let Some(t) = m.get_mut(&k) {
-                    let new_triples_opt =
-                        t.add_triples(df.clone(), self.storage_folder.as_ref(), delay_index)?;
-                    if !delay_index {
-                        let new_triples = NewTriples {
-                            df: new_triples_opt,
-                            predicate: predicate.clone(),
-                            subject_type: subject_type.clone(),
-                            object_type: object_type.clone(),
-                        };
-                        out_new_triples.push(new_triples);
-                    } else {
-                        let new_triples = NewTriples {
-                            df: Some(df.clone()),
-                            predicate: predicate.clone(),
-                            subject_type: subject_type.clone(),
-                            object_type: object_type.clone(),
-                        };
-                        out_new_triples.push(new_triples);
+            for encoded_triple in encoded_triples {
+                if matches!(object_type, BaseRDFNodeType::Literal(..)) {
+                    //TODO: Get what is actually updated from db and then only add those things
+                    if let Some(fts_index) = &mut self.fts_index {
+                        let fts_now = Instant::now();
+                        fts_index
+                            .add_literal_string(
+                                &encoded_triple.df,
+                                &predicate,
+                                &subject_type,
+                                &object_type,
+                            )
+                            .map_err(TriplestoreError::FtsError)?;
+                        trace!(
+                            "Adding to fts index took {} seconds",
+                            fts_now.elapsed().as_secs_f32()
+                        );
                     }
-                    added_triples = true;
                 }
-            } else {
-                use_map.insert(predicate.clone(), HashMap::new());
-            };
-            if !added_triples {
-                let triples = Triples::new(
-                    df.clone(),
-                    call_uuid,
-                    self.storage_folder.as_ref(),
-                    subject_type.clone(),
-                    object_type.clone(),
-                    &predicate,
-                    &self.indexing,
-                    delay_index,
-                )?;
-                if !delay_index {
+
+                let cast_now = Instant::now();
+                let mut map = HashMap::new();
+                map.insert(
+                    SUBJECT_COL_NAME.to_string(),
+                    subject_type.clone().into_default_stored_rdf_node_state(),
+                );
+                map.insert(
+                    OBJECT_COL_NAME.to_string(),
+                    object_type.clone().into_default_stored_rdf_node_state(),
+                );
+                let subject_type_stored = StoredBaseRDFNodeType::from_base_and_prefix(
+                    &subject_type,
+                    &encoded_triple.subject,
+                );
+                let object_type_stored = StoredBaseRDFNodeType::from_base_and_prefix(
+                    &object_type,
+                    &encoded_triple.object,
+                );
+
+                let k = (subject_type_stored.clone(), object_type_stored.clone());
+                let mut added_triples = false;
+                trace!(
+                    "Casting to cat took {} seconds",
+                    cast_now.elapsed().as_secs_f32()
+                );
+                let add_now = Instant::now();
+                if let Some(m) = use_map.get_mut(&predicate) {
+                    if let Some(t) = m.get_mut(&k) {
+                        let new_triples_opt = t.add_triples(
+                            encoded_triple.df.clone(),
+                            self.storage_folder.as_ref(),
+                            &self.cats,
+                        )?;
+
+                        let new_triples = NewTriples {
+                            df: new_triples_opt
+                                .map(|x| x.select([SUBJECT_COL_NAME, OBJECT_COL_NAME]).unwrap()),
+                            predicate: predicate.clone(),
+                            subject_type: subject_type.clone(),
+                            object_type: object_type.clone(),
+                        };
+                        out_new_triples.push(new_triples);
+
+                        added_triples = true;
+                    }
+                } else {
+                    use_map.insert(predicate.clone(), HashMap::new());
+                };
+                if !added_triples {
+                    let triples = Triples::new(
+                        encoded_triple.df.clone(),
+                        self.storage_folder.as_ref(),
+                        subject_type_stored,
+                        object_type_stored,
+                        &predicate,
+                        &self.indexing,
+                        &self.cats,
+                    )?;
+
                     let new_triples_now = Instant::now();
-                    let mut lfs = triples.get_lazy_frames(&None, &None, false)?;
+                    let mut lfs = triples.get_lazy_frames(&None, &None, &self.cats)?;
                     assert_eq!(lfs.len(), 1);
                     let (lf, _) = lfs.pop().unwrap();
                     let df = lf.collect().unwrap();
                     let new_triples = NewTriples {
-                        df: Some(df),
+                        df: Some(df.select([SUBJECT_COL_NAME, OBJECT_COL_NAME]).unwrap()),
                         predicate: predicate.clone(),
-                        subject_type,
-                        object_type,
+                        subject_type: subject_type.clone(),
+                        object_type: object_type.clone(),
                     };
                     out_new_triples.push(new_triples);
                     trace!(
                         "Creating new triples out took {} seconds",
                         new_triples_now.elapsed().as_secs_f32()
                     );
-                } else {
-                    let new_triples = NewTriples {
-                        df: Some(df),
-                        predicate: predicate.clone(),
-                        subject_type,
-                        object_type,
-                    };
-                    out_new_triples.push(new_triples);
+
+                    let m = use_map.get_mut(&predicate).unwrap();
+                    m.insert(k, triples);
                 }
-                let m = use_map.get_mut(&predicate).unwrap();
-                m.insert(k, triples);
+                trace!(
+                    "Adding triples to map took  {} seconds",
+                    add_now.elapsed().as_secs_f32()
+                );
             }
-            trace!(
-                "Adding triples to map took  {} seconds",
-                add_now.elapsed().as_secs_f32()
-            );
         }
         Ok(out_new_triples)
     }
-
-    fn delete_triples_df(
-        &mut self,
-        triples_df: Vec<TripleDF>,
-        call_uuid: &str,
-        delay_index: bool,
-    ) -> Result<(), TriplestoreError> {
-        for tdf in triples_df {
-            let df = get_df_after_deletion(&tdf, &self.triples_map)?;
-            self.delete_if_exists(&tdf.predicate, &tdf.subject_type, &tdf.object_type, false);
-            if let Some(df) = df {
-                let new_tdf = TripleDF {
-                    df,
-                    predicate: tdf.predicate.clone(),
-                    subject_type: tdf.subject_type.clone(),
-                    object_type: tdf.object_type.clone(),
-                };
-                self.add_triples_df(vec![new_tdf], call_uuid, false, delay_index)?;
-            }
-
-            let df = get_df_after_deletion(&tdf, &self.transient_triples_map)?;
-            self.delete_if_exists(&tdf.predicate, &tdf.subject_type, &tdf.object_type, true);
-            if let Some(df) = df {
-                let new_tdf = TripleDF {
-                    df,
-                    predicate: tdf.predicate.clone(),
-                    subject_type: tdf.subject_type.clone(),
-                    object_type: tdf.object_type.clone(),
-                };
-                self.add_triples_df(vec![new_tdf], call_uuid, true, delay_index)?;
-            }
-        }
-        Ok(())
-    }
-
-    fn delete_if_exists(
-        &mut self,
-        predicate: &NamedNode,
-        subject_type: &BaseRDFNodeType,
-        object_type: &BaseRDFNodeType,
-        transient: bool,
-    ) {
-        let use_map = if transient {
-            &mut self.transient_triples_map
-        } else {
-            &mut self.triples_map
-        };
-        let map_empty = if let Some(m1) = use_map.get_mut(predicate) {
-            let type_ = (subject_type.clone(), object_type.clone());
-            m1.remove(&type_);
-            m1.is_empty()
-        } else {
-            false
-        };
-        if map_empty {
-            use_map.remove(predicate);
-        }
-    }
 }
 
-fn get_df_after_deletion(
-    tdf: &TripleDF,
-    map: &HashMap<NamedNode, HashMap<(BaseRDFNodeType, BaseRDFNodeType), Triples>>,
-) -> Result<Option<DataFrame>, TriplestoreError> {
-    if let Some(m) = map.get(&tdf.predicate) {
-        let type_ = (tdf.subject_type.clone(), tdf.object_type.clone());
-        if let Some(triples) = m.get(&type_) {
-            let lfs = triples.get_lazy_frames(&None, &None, true)?;
-            let lfs_only: Vec<_> = lfs.into_iter().map(|(lf, _)| lf).collect();
-            let mut lf = concat(
-                lfs_only,
-                UnionArgs {
-                    parallel: true,
-                    rechunk: false,
-                    to_supertypes: false,
-                    diagonal: false,
-                    from_partitioned_ds: false,
-                    maintain_order: false,
-                },
-            )
-            .unwrap();
-            let (s, o) = type_;
-            let mut to_delete = tdf.df.clone().lazy();
-            to_delete = lf_column_to_categorical(
-                to_delete,
-                SUBJECT_COL_NAME,
-                &s.as_rdf_node_type(),
-                CategoricalOrdering::Physical,
-            );
-            to_delete = lf_column_to_categorical(
-                to_delete,
-                OBJECT_COL_NAME,
-                &o.as_rdf_node_type(),
-                CategoricalOrdering::Physical,
-            );
-
-            lf = lf.join(
-                to_delete,
-                [col(SUBJECT_COL_NAME), col(OBJECT_COL_NAME)],
-                [col(SUBJECT_COL_NAME), col(OBJECT_COL_NAME)],
-                JoinArgs {
-                    how: JoinType::Anti,
-                    validation: Default::default(),
-                    suffix: None,
-                    slice: None,
-                    nulls_equal: false,
-                    coalesce: Default::default(),
-                    maintain_order: MaintainOrderJoin::None,
-                },
-            );
-            let df = lf.collect().unwrap();
-            if df.height() > 0 {
-                return Ok(Some(df));
-            }
-        }
-    }
-    Ok(None)
+struct TriplesToAddPartitionedPredicate {
+    pub df: DataFrame,
+    pub subject_type: BaseRDFNodeType,
+    pub object_type: BaseRDFNodeType,
+    pub predicate: NamedNode,
+    pub subject_cat_state: BaseCatState,
+    pub object_cat_state: BaseCatState,
 }
 
-pub fn prepare_triples_par(mut ts: Vec<TriplesToAdd>) -> Vec<TripleDF> {
-    let df_vecs_to_add: Vec<Vec<TripleDF>> = ts
+pub fn prepare_add_triples_par(
+    mut ts: Vec<TriplesToAdd>,
+    global_cats: Arc<Cats>,
+    indexing: &IndexingOptions,
+) -> Vec<CatTriples> {
+    let df_vecs_to_add: Vec<Vec<TriplesToAddPartitionedPredicate>> = ts
         .par_drain(..)
         .map(|t| {
             let TriplesToAdd {
                 df,
                 subject_type,
                 object_type,
-                static_verb_column,
+                predicate,
+                subject_cat_state,
+                predicate_cat_state,
+                object_cat_state,
             } = t;
-            assert!(!matches!(subject_type, RDFNodeType::MultiType(..)));
-            assert!(!matches!(object_type, RDFNodeType::MultiType(..)));
-            prepare_triples(
+            let df_preds = partition_unpartitioned_predicate(
                 df,
-                &BaseRDFNodeType::from_rdf_node_type(&subject_type),
-                &BaseRDFNodeType::from_rdf_node_type(&object_type),
-                static_verb_column,
-            )
+                &subject_type,
+                &object_type,
+                predicate,
+                predicate_cat_state.as_ref(),
+                global_cats.as_ref(),
+            );
+            let all_partitioned: Vec<_> = df_preds
+                .into_iter()
+                .map(|(df, predicate)| TriplesToAddPartitionedPredicate {
+                    df,
+                    subject_type: subject_type.clone(),
+                    object_type: object_type.clone(),
+                    predicate,
+                    subject_cat_state: subject_cat_state.clone(),
+                    object_cat_state: object_cat_state.clone(),
+                })
+                .collect();
+            all_partitioned
         })
         .collect();
+    let mut all_partitioned: Vec<_> = flatten(df_vecs_to_add);
+    all_partitioned = all_partitioned.into_par_iter().map(|mut t| {
+        // Always sort S,O and deduplicate
+        let mut lf = t.df.clone().lazy();
+        let mut subj_col_expr = col(SUBJECT_COL_NAME);
+        if matches!(t.subject_cat_state, BaseCatState::CategoricalNative(..)) {
+            subj_col_expr = decode_expr(
+                subj_col_expr,
+                t.subject_type.clone(),
+                t.subject_cat_state.get_local_cats(),
+                global_cats.clone(),
+            );
+        }
+        let mut obj_col_expr = col(OBJECT_COL_NAME);
+        if matches!(t.object_cat_state, BaseCatState::CategoricalNative(..)) {
+            obj_col_expr = decode_expr(
+                obj_col_expr,
+                t.object_type.clone(),
+                t.object_cat_state.get_local_cats(),
+                global_cats.clone(),
+            );
+        }
+        lf = lf.sort_by_exprs(
+            vec![subj_col_expr.clone(), obj_col_expr.clone()],
+            SortMultipleOptions {
+                descending: vec![false, false],
+                nulls_last: vec![false, false],
+                multithreaded: true,
+                maintain_order: false,
+                limit: None,
+            },
+        );
+        lf = lf.filter(
+            repeated_from_last_row_expr(SUBJECT_COL_NAME)
+                .and(repeated_from_last_row_expr(OBJECT_COL_NAME))
+                .not(),
+        );
 
-    flatten(df_vecs_to_add)
+        let object_index = can_and_should_index_object(&t.object_type, &t.predicate, indexing);
+        if object_index {
+            // Only create O,S - but no need to deduplicate
+            lf = lf.with_column(
+                arg_sort_by(
+                    vec![obj_col_expr, subj_col_expr],
+                    SortMultipleOptions {
+                        descending: vec![false, false],
+                        nulls_last: vec![false, false],
+                        multithreaded: true,
+                        maintain_order: false,
+                        limit: None,
+                    },
+                )
+                .alias(OBJECT_ARG_SORT_COL_NAME),
+            );
+        }
+        t.df = lf.collect().unwrap();
+        t
+    }).collect();
+    all_partitioned
+        .into_par_iter()
+        .map(
+            |TriplesToAddPartitionedPredicate {
+                 df,
+                 subject_type,
+                 object_type,
+                 predicate,
+                 subject_cat_state,
+                 object_cat_state,
+             }| {
+                //sort_triples(df, subject_type, object_type);
+                cat_encode_triples(
+                    df,
+                    subject_type,
+                    object_type,
+                    predicate,
+                    subject_cat_state,
+                    object_cat_state,
+                    global_cats.as_ref(),
+                )
+            },
+        )
+        .collect()
 }
 
-pub fn prepare_triples(
+pub fn partition_unpartitioned_predicate(
     df: DataFrame,
     subject_type: &BaseRDFNodeType,
     object_type: &BaseRDFNodeType,
-    static_verb_column: Option<NamedNode>,
-) -> Vec<TripleDF> {
+    predicate: Option<NamedNode>,
+    predicate_cat_state: Option<&BaseCatState>,
+    global_cats: &Cats,
+) -> Vec<(DataFrame, NamedNode)> {
     if df.height() == 0 {
         return vec![];
     }
@@ -540,72 +582,58 @@ pub fn prepare_triples(
     let map = HashMap::from([
         (
             SUBJECT_COL_NAME.to_string(),
-            subject_type.as_rdf_node_type(),
+            subject_type.clone().into_default_input_rdf_node_state(),
         ),
-        (OBJECT_COL_NAME.to_string(), object_type.as_rdf_node_type()),
+        (
+            OBJECT_COL_NAME.to_string(),
+            object_type.clone().into_default_input_rdf_node_state(),
+        ),
     ]);
 
-    let height = df.height();
     let mut lf = df.lazy();
     for (c, t) in &map {
         lf = lf.with_column(set_struct_all_null_to_null_row(col(c), t).alias(c));
     }
-    let sm = SolutionMappings::new(lf, map, height);
-    let EagerSolutionMappings {
-        mappings: mut df,
-        rdf_node_types: _,
-    } = sm.as_eager(false);
+    let mut df = lf.collect().unwrap();
 
-    if let Some(static_verb_column) = static_verb_column {
+    if let Some(predicate) = predicate {
         df = df.select([SUBJECT_COL_NAME, OBJECT_COL_NAME]).unwrap();
-        if let Some(tdf) = prepare_triples_df(df, static_verb_column, subject_type, object_type) {
-            out_df_vec.push(tdf);
+        if let Some(df) = drop_nulls(df) {
+            out_df_vec.push((df, predicate));
         }
     } else {
-        let partitions = df.partition_by([VERB_COL_NAME], true).unwrap();
+        let partitions = df.partition_by([PREDICATE_COL_NAME], true).unwrap();
         for mut part in partitions {
             let predicate;
             {
-                let any_predicate = part.column(VERB_COL_NAME).unwrap().get(0);
-                if let Ok(AnyValue::String(p)) = any_predicate {
+                let any_predicate = part.column(PREDICATE_COL_NAME).unwrap().get(0).unwrap();
+                if let AnyValue::String(p) = any_predicate {
                     predicate = literal_iri_to_namednode(p);
-                } else if let Ok(AnyValue::Categorical(a, b, _0)) = any_predicate {
-                    predicate = literal_iri_to_namednode(b.get(a));
-                } else if let Ok(AnyValue::CategoricalOwned(a, b, _0)) = any_predicate {
-                    predicate = literal_iri_to_namednode(b.get(a));
-                } else if let Ok(AnyValue::StringOwned(s)) = any_predicate {
+                } else if let AnyValue::StringOwned(s) = any_predicate {
                     predicate = literal_iri_to_namednode(s.as_str());
+                } else if let AnyValue::UInt32(u) = any_predicate {
+                    let cat_state = predicate_cat_state.unwrap();
+                    predicate = global_cats.decode_iri_u32(u, cat_state.get_local_cats())
                 } else {
                     panic!("Predicate: {any_predicate:?}");
                 }
             }
             part = part.select([SUBJECT_COL_NAME, OBJECT_COL_NAME]).unwrap();
-            if let Some(tdf) = prepare_triples_df(part, predicate, subject_type, object_type) {
-                out_df_vec.push(tdf);
+            if let Some(part) = drop_nulls(part) {
+                out_df_vec.push((part, predicate));
             }
         }
     }
     out_df_vec
 }
 
-fn prepare_triples_df(
-    mut df: DataFrame,
-    predicate: NamedNode,
-    subject_type: &BaseRDFNodeType,
-    object_type: &BaseRDFNodeType,
-) -> Option<TripleDF> {
+fn drop_nulls(mut df: DataFrame) -> Option<DataFrame> {
     df = df.drop_nulls::<String>(None).unwrap();
     if df.height() == 0 {
-        return None;
+        None
+    } else {
+        Some(df)
     }
-
-    //TODO: add polars datatype harmonization here.
-    Some(TripleDF {
-        df,
-        predicate,
-        subject_type: subject_type.clone(),
-        object_type: object_type.clone(),
-    })
 }
 
 //From: https://users.rust-lang.org/t/flatten-a-vec-vec-t-to-a-vec-t/24526/3

@@ -1,4 +1,4 @@
-subject,verb,object
+subject,predicate,object
 <https://github.com/magbak/chrontext/windpower_example#Generator10>,<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>,<https://github.com/magbak/chrontext#something>
 <https://github.com/magbak/chrontext/windpower_example#Generator11>,<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>,<https://github.com/magbak/chrontext#something>
 <https://github.com/magbak/chrontext/windpower_example#Generator12>,<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>,<https://github.com/magbak/chrontext#something>

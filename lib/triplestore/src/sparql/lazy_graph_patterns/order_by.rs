@@ -3,6 +3,7 @@ use crate::sparql::errors::SparqlError;
 use log::trace;
 
 use crate::sparql::QuerySettings;
+use polars::prelude::by_name;
 use query_processing::graph_patterns::order_by;
 use query_processing::pushdowns::Pushdowns;
 use representation::query_context::{Context, PathEntry};
@@ -52,8 +53,15 @@ impl Triplestore {
             .iter()
             .map(|x| x.as_str().to_string())
             .collect();
-        output_solution_mappings = order_by(output_solution_mappings, &sort_columns, asc_ordering)?;
-        output_solution_mappings.mappings = output_solution_mappings.mappings.drop(sort_columns);
+        output_solution_mappings = order_by(
+            output_solution_mappings,
+            &sort_columns,
+            asc_ordering,
+            self.cats.clone(),
+        )?;
+        output_solution_mappings.mappings = output_solution_mappings
+            .mappings
+            .drop(by_name(sort_columns, true));
         Ok(output_solution_mappings)
     }
 }

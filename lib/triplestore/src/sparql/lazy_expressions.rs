@@ -6,14 +6,15 @@ use oxrdf::vocab::xsd;
 use polars::prelude::{col, lit, LiteralValue};
 use polars_core::prelude::Scalar;
 use query_processing::exists_helper::rewrite_exists_graph_pattern;
+use query_processing::expressions::functions::func_expression;
 use query_processing::expressions::{
-    binary_expression, bound, coalesce_contexts, exists, func_expression, if_expression,
-    in_expression, literal, named_node, not_expression, unary_minus, unary_plus, variable,
+    binary_expression, bound, coalesce_contexts, exists, if_expression, in_expression, literal,
+    named_node, not_expression, unary_minus, unary_plus, variable,
 };
 use query_processing::pushdowns::Pushdowns;
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
-use representation::RDFNodeType;
+use representation::BaseRDFNodeType;
 use spargebra::algebra::Expression;
 
 impl Triplestore {
@@ -27,8 +28,8 @@ impl Triplestore {
         query_settings: &QuerySettings,
     ) -> Result<SolutionMappings, SparqlError> {
         let output_solution_mappings = match expr {
-            Expression::NamedNode(nn) => named_node(solution_mappings, nn, context)?,
-            Expression::Literal(lit) => literal(solution_mappings, lit, context)?,
+            Expression::NamedNode(nn) => named_node(solution_mappings, nn, context, &self.cats)?,
+            Expression::Literal(lit) => literal(solution_mappings, lit, context, &self.cats)?,
             Expression::Variable(v) => variable(solution_mappings, v, context)?,
             Expression::Or(left, right) => {
                 let left_context = context.extension_with(PathEntry::OrLeft);
@@ -55,6 +56,7 @@ impl Triplestore {
                     &left_context,
                     &right_context,
                     context,
+                    self.cats.clone(),
                 )?
             }
             Expression::And(left, right) => {
@@ -82,6 +84,7 @@ impl Triplestore {
                     &left_context,
                     &right_context,
                     context,
+                    self.cats.clone(),
                 )?
             }
             Expression::Equal(left, right) => {
@@ -109,6 +112,7 @@ impl Triplestore {
                     &left_context,
                     &right_context,
                     context,
+                    self.cats.clone(),
                 )?
             }
             Expression::SameTerm(_, _) => {
@@ -139,6 +143,7 @@ impl Triplestore {
                     &left_context,
                     &right_context,
                     context,
+                    self.cats.clone(),
                 )?
             }
             Expression::GreaterOrEqual(left, right) => {
@@ -167,6 +172,7 @@ impl Triplestore {
                     &left_context,
                     &right_context,
                     context,
+                    self.cats.clone(),
                 )?
             }
             Expression::Less(left, right) => {
@@ -194,6 +200,7 @@ impl Triplestore {
                     &left_context,
                     &right_context,
                     context,
+                    self.cats.clone(),
                 )?
             }
             Expression::LessOrEqual(left, right) => {
@@ -221,6 +228,7 @@ impl Triplestore {
                     &left_context,
                     &right_context,
                     context,
+                    self.cats.clone(),
                 )?
             }
             Expression::In(left, right) => {
@@ -253,6 +261,7 @@ impl Triplestore {
                     &left_context,
                     &right_contexts,
                     context,
+                    self.cats.clone(),
                 )?
             }
             Expression::Add(left, right) => {
@@ -280,6 +289,7 @@ impl Triplestore {
                     &left_context,
                     &right_context,
                     context,
+                    self.cats.clone(),
                 )?
             }
             Expression::Subtract(left, right) => {
@@ -307,6 +317,7 @@ impl Triplestore {
                     &left_context,
                     &right_context,
                     context,
+                    self.cats.clone(),
                 )?
             }
             Expression::Multiply(left, right) => {
@@ -334,6 +345,7 @@ impl Triplestore {
                     &left_context,
                     &right_context,
                     context,
+                    self.cats.clone(),
                 )?
             }
             Expression::Divide(left, right) => {
@@ -362,6 +374,7 @@ impl Triplestore {
                     &left_context,
                     &right_context,
                     context,
+                    self.cats.clone(),
                 )?
             }
             Expression::UnaryPlus(inner) => {
@@ -413,7 +426,8 @@ impl Triplestore {
                     .with_column(col(exists_context.as_str()).cum_sum(false));
                 output_solution_mappings.rdf_node_types.insert(
                     exists_context.as_str().to_string(),
-                    RDFNodeType::Literal(xsd::BOOLEAN.into_owned()),
+                    BaseRDFNodeType::Literal(xsd::BOOLEAN.into_owned())
+                        .into_default_input_rdf_node_state(),
                 );
                 let new_inner = rewrite_exists_graph_pattern(inner, exists_context.as_str());
                 let SolutionMappings {
@@ -487,7 +501,12 @@ impl Triplestore {
                         query_settings,
                     )?;
                 }
-                coalesce_contexts(output_solution_mappings, inner_contexts, context)?
+                coalesce_contexts(
+                    output_solution_mappings,
+                    inner_contexts,
+                    context,
+                    self.cats.clone(),
+                )?
             }
             Expression::FunctionCall(func, args) => {
                 let mut args_contexts: HashMap<usize, Context> = HashMap::new();
@@ -504,7 +523,14 @@ impl Triplestore {
                     )?;
                     args_contexts.insert(i, arg_context);
                 }
-                func_expression(output_solution_mappings, func, args, args_contexts, context)?
+                func_expression(
+                    output_solution_mappings,
+                    func,
+                    args,
+                    args_contexts,
+                    context,
+                    self.cats.clone(),
+                )?
             }
         };
         Ok(output_solution_mappings)

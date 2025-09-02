@@ -1,3 +1,4 @@
+use crate::cats::{decode_column, Cats};
 use crate::errors::RepresentationError;
 use crate::multitype::{
     extract_column_from_multitype, MULTI_BLANK_DT, MULTI_IRI_DT, MULTI_NONE_DT,
@@ -6,9 +7,10 @@ use crate::rdf_to_polars::{
     polars_literal_values_to_series, rdf_literal_to_polars_literal_value,
     rdf_owned_blank_node_to_polars_literal_value, rdf_owned_named_node_to_polars_literal_value,
 };
+use crate::solution_mapping::{BaseCatState, EagerSolutionMappings};
 use crate::{
     literal_blanknode_to_blanknode, literal_iri_to_namednode, BaseRDFNodeType, BaseRDFNodeTypeRef,
-    RDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD, OBJECT_COL_NAME,
+    RDFNodeState, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD, OBJECT_COL_NAME,
     SUBJECT_COL_NAME,
 };
 use chrono::TimeZone as ChronoTimeZone;
@@ -24,7 +26,8 @@ use rayon::iter::IntoParallelIterator;
 use rayon::iter::ParallelIterator;
 use rayon::prelude::IntoParallelRefIterator;
 use spargebra::term::Term;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
+use std::sync::Arc;
 use std::vec::IntoIter;
 
 pub const XSD_DATETIME_WITHOUT_TZ_FORMAT: &str = "%Y-%m-%dT%H:%M:%S%.f";
@@ -38,41 +41,48 @@ pub struct QuerySolutions {
     pub solutions: Vec<Vec<Option<Term>>>,
 }
 
-pub fn column_as_terms(column: &Column, t: &RDFNodeType) -> Vec<Option<Term>> {
+pub fn column_as_terms(
+    column: &Column,
+    t: &RDFNodeState,
+    global_cats: Arc<Cats>,
+) -> Vec<Option<Term>> {
     let height = column.len();
-    let terms: Vec<_> = match t {
-        RDFNodeType::None
-        | RDFNodeType::IRI
-        | RDFNodeType::BlankNode
-        | RDFNodeType::Literal(..) => {
-            basic_rdf_node_type_column_to_term_vec(column, &BaseRDFNodeType::from_rdf_node_type(t))
+    let terms: Vec<_> = if !t.is_multi() {
+        basic_rdf_node_type_column_to_term_vec(
+            column,
+            t.get_base_type().unwrap(),
+            t.get_base_state().unwrap(),
+            global_cats,
+        )
+    } else {
+        let mut iters: Vec<IntoIter<Option<Term>>> = vec![];
+        for (t, s) in &t.map {
+            let type_column = extract_column_from_multitype(column, &t);
+            let v = basic_rdf_node_type_column_to_term_vec(&type_column, t, s, global_cats.clone());
+            iters.push(v.into_iter())
         }
-        RDFNodeType::MultiType(types) => {
-            let mut iters: Vec<IntoIter<Option<Term>>> = vec![];
-            for t in types {
-                let type_column = extract_column_from_multitype(column, t);
-                let v = basic_rdf_node_type_column_to_term_vec(&type_column, t);
-                iters.push(v.into_iter())
-            }
-            let mut final_terms = vec![];
-            for _ in 0..height {
-                let mut use_term = None;
-                for iter in iters.iter_mut() {
-                    if let Some(Some(term)) = iter.next() {
-                        use_term = Some(term);
-                    }
+        let mut final_terms = vec![];
+        for _ in 0..height {
+            let mut use_term = None;
+            for iter in iters.iter_mut() {
+                if let Some(Some(term)) = iter.next() {
+                    use_term = Some(term);
                 }
-                final_terms.push(use_term);
             }
-            final_terms
+            final_terms.push(use_term);
         }
+        final_terms
     };
     terms
 }
 
-pub fn df_as_result(df: DataFrame, dtypes: &HashMap<String, RDFNodeType>) -> QuerySolutions {
-    if df.height() == 0 {
-        let variables = dtypes.keys().map(|x| Variable::new(x).unwrap()).collect();
+pub fn df_as_result(sm: &EagerSolutionMappings, global_cats: Arc<Cats>) -> QuerySolutions {
+    if sm.mappings.height() == 0 {
+        let variables = sm
+            .rdf_node_types
+            .keys()
+            .map(|x| Variable::new(x).unwrap())
+            .collect();
         return QuerySolutions {
             variables,
             solutions: vec![],
@@ -80,12 +90,12 @@ pub fn df_as_result(df: DataFrame, dtypes: &HashMap<String, RDFNodeType>) -> Que
     }
     let mut all_terms = vec![];
     let mut variables = vec![];
-    let height = df.height();
-    for (k, t) in dtypes {
-        if let Ok(ser) = df.column(k) {
+    let height = sm.mappings.height();
+    for (k, t) in &sm.rdf_node_types {
+        if let Ok(ser) = sm.mappings.column(k) {
             //TODO: Perhaps correct this upstream?
             variables.push(Variable::new_unchecked(k));
-            let terms = column_as_terms(ser, t);
+            let terms = column_as_terms(ser, t, global_cats.clone());
             all_terms.push(terms);
         }
     }
@@ -104,14 +114,24 @@ pub fn df_as_result(df: DataFrame, dtypes: &HashMap<String, RDFNodeType>) -> Que
     }
 }
 
-pub fn df_as_triples(
+pub fn global_df_as_triples(
     df: DataFrame,
-    subject_type: &RDFNodeType,
-    object_type: &RDFNodeType,
+    subject_type: BaseRDFNodeType,
+    object_type: BaseRDFNodeType,
     verb: &NamedNode,
+    global_cats: Arc<Cats>,
 ) -> Vec<Triple> {
-    let subjects = column_as_terms(df.column(SUBJECT_COL_NAME).unwrap(), subject_type);
-    let objects = column_as_terms(df.column(OBJECT_COL_NAME).unwrap(), object_type);
+    let subjects = column_as_terms(
+        df.column(SUBJECT_COL_NAME).unwrap(),
+        &subject_type.into_default_stored_rdf_node_state(),
+        global_cats.clone(),
+    );
+    let objects = column_as_terms(
+        df.column(OBJECT_COL_NAME).unwrap(),
+        &object_type.into_default_stored_rdf_node_state(),
+        global_cats,
+    );
+
     subjects
         .into_par_iter()
         .zip(objects.into_par_iter())
@@ -128,20 +148,18 @@ pub fn df_as_triples(
 
 pub fn basic_rdf_node_type_column_to_term_vec(
     column: &Column,
-    base_rdf_node_type: &BaseRDFNodeType,
+    base_type: &BaseRDFNodeType,
+    base_state: &BaseCatState,
+    global_cats: Arc<Cats>,
 ) -> Vec<Option<Term>> {
-    match base_rdf_node_type {
-        BaseRDFNodeType::IRI => column
-            .cast(&DataType::String)
-            .unwrap()
+    match &base_type {
+        BaseRDFNodeType::IRI => decode_column(column, base_type, base_state, global_cats)
             .str()
             .unwrap()
             .par_iter()
             .map(|x| x.map(|x| Term::NamedNode(literal_iri_to_namednode(x))))
             .collect(),
-        BaseRDFNodeType::BlankNode => column
-            .cast(&DataType::String)
-            .unwrap()
+        BaseRDFNodeType::BlankNode => decode_column(column, base_type, base_state, global_cats)
             .str()
             .unwrap()
             .par_iter()
@@ -175,9 +193,7 @@ pub fn basic_rdf_node_type_column_to_term_vec(
                     })
                     .collect()
             }
-            xsd::STRING => column
-                .cast(&DataType::String)
-                .unwrap()
+            xsd::STRING => decode_column(column, base_type, base_state, global_cats)
                 .str()
                 .unwrap()
                 .par_iter()
@@ -225,28 +241,64 @@ pub fn basic_rdf_node_type_column_to_term_vec(
 //TODO: add exceptions with messages..
 pub fn polars_type_to_literal_type(
     data_type: &DataType,
-) -> Result<RDFNodeType, RepresentationError> {
+) -> Result<RDFNodeState, RepresentationError> {
     match data_type {
-        DataType::Boolean => Ok(RDFNodeType::Literal(xsd::BOOLEAN.into_owned())),
-        DataType::Int8 => Ok(RDFNodeType::Literal(xsd::BYTE.into_owned())),
-        DataType::Int16 => Ok(RDFNodeType::Literal(xsd::SHORT.into_owned())),
-        DataType::UInt8 => Ok(RDFNodeType::Literal(xsd::UNSIGNED_BYTE.into_owned())),
-        DataType::UInt16 => Ok(RDFNodeType::Literal(xsd::UNSIGNED_SHORT.into_owned())),
-        DataType::UInt32 => Ok(RDFNodeType::Literal(xsd::UNSIGNED_INT.into_owned())),
-        DataType::UInt64 => Ok(RDFNodeType::Literal(xsd::UNSIGNED_LONG.into_owned())),
-        DataType::Int32 => Ok(RDFNodeType::Literal(xsd::INT.into_owned())),
-        DataType::Int64 => Ok(RDFNodeType::Literal(xsd::LONG.into_owned())),
-        DataType::Float32 => Ok(RDFNodeType::Literal(xsd::FLOAT.into_owned())),
-        DataType::Float64 => Ok(RDFNodeType::Literal(xsd::DOUBLE.into_owned())),
-        DataType::String => Ok(RDFNodeType::Literal(xsd::STRING.into_owned())),
-        DataType::Date => Ok(RDFNodeType::Literal(xsd::DATE.into_owned())),
-        DataType::Decimal(_, Some(0)) => Ok(RDFNodeType::Literal(xsd::INTEGER.into_owned())),
-        DataType::Datetime(_, Some(_)) => {
-            Ok(RDFNodeType::Literal(xsd::DATE_TIME_STAMP.into_owned()))
+        DataType::Boolean => {
+            Ok(BaseRDFNodeType::Literal(xsd::BOOLEAN.into_owned())
+                .into_default_input_rdf_node_state())
         }
-        DataType::Datetime(_, None) => Ok(RDFNodeType::Literal(xsd::DATE_TIME.into_owned())),
-        DataType::Duration(_) => Ok(RDFNodeType::Literal(xsd::DURATION.into_owned())),
-        DataType::Categorical(_, _) => Ok(RDFNodeType::Literal(xsd::STRING.into_owned())),
+        DataType::Int8 => Ok(
+            BaseRDFNodeType::Literal(xsd::BYTE.into_owned()).into_default_input_rdf_node_state()
+        ),
+        DataType::Int16 => {
+            Ok(BaseRDFNodeType::Literal(xsd::SHORT.into_owned())
+                .into_default_input_rdf_node_state())
+        }
+        DataType::UInt8 => Ok(BaseRDFNodeType::Literal(xsd::UNSIGNED_BYTE.into_owned())
+            .into_default_input_rdf_node_state()),
+        DataType::UInt16 => Ok(BaseRDFNodeType::Literal(xsd::UNSIGNED_SHORT.into_owned())
+            .into_default_input_rdf_node_state()),
+        DataType::UInt32 => Ok(BaseRDFNodeType::Literal(xsd::UNSIGNED_INT.into_owned())
+            .into_default_input_rdf_node_state()),
+        DataType::UInt64 => Ok(BaseRDFNodeType::Literal(xsd::UNSIGNED_LONG.into_owned())
+            .into_default_input_rdf_node_state()),
+        DataType::Int32 => {
+            Ok(BaseRDFNodeType::Literal(xsd::INT.into_owned()).into_default_input_rdf_node_state())
+        }
+        DataType::Int64 => Ok(
+            BaseRDFNodeType::Literal(xsd::LONG.into_owned()).into_default_input_rdf_node_state()
+        ),
+        DataType::Float32 => {
+            Ok(BaseRDFNodeType::Literal(xsd::FLOAT.into_owned())
+                .into_default_input_rdf_node_state())
+        }
+        DataType::Float64 => {
+            Ok(BaseRDFNodeType::Literal(xsd::DOUBLE.into_owned())
+                .into_default_input_rdf_node_state())
+        }
+        DataType::String => {
+            Ok(BaseRDFNodeType::Literal(xsd::STRING.into_owned())
+                .into_default_input_rdf_node_state())
+        }
+        DataType::Date => Ok(
+            BaseRDFNodeType::Literal(xsd::DATE.into_owned()).into_default_input_rdf_node_state()
+        ),
+        DataType::Decimal(_, Some(0)) => {
+            Ok(BaseRDFNodeType::Literal(xsd::INTEGER.into_owned())
+                .into_default_input_rdf_node_state())
+        }
+        DataType::Datetime(_, Some(_)) => {
+            Ok(BaseRDFNodeType::Literal(xsd::DATE_TIME_STAMP.into_owned())
+                .into_default_input_rdf_node_state())
+        }
+        DataType::Datetime(_, None) => Ok(BaseRDFNodeType::Literal(xsd::DATE_TIME.into_owned())
+            .into_default_input_rdf_node_state()),
+        DataType::Duration(_) => Ok(BaseRDFNodeType::Literal(xsd::DURATION.into_owned())
+            .into_default_input_rdf_node_state()),
+        DataType::Categorical(_, _) => {
+            Ok(BaseRDFNodeType::Literal(xsd::STRING.into_owned())
+                .into_default_input_rdf_node_state())
+        }
         DataType::Struct(fields) => {
             let names: Vec<_> = fields.iter().map(|x| x.name.as_str()).collect();
             let mut dts = vec![];
@@ -310,9 +362,10 @@ pub fn polars_type_to_literal_type(
             }
 
             if only_lang_string {
-                Ok(RDFNodeType::Literal(rdf::LANG_STRING.into_owned()))
+                Ok(BaseRDFNodeType::Literal(rdf::LANG_STRING.into_owned())
+                    .into_default_input_rdf_node_state())
             } else {
-                Ok(RDFNodeType::MultiType(dts))
+                Ok(RDFNodeState::default_from_types(dts))
             }
         }
         dt => Err(RepresentationError::DatatypeError(format!(

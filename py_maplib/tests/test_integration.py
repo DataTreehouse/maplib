@@ -14,10 +14,9 @@ PATH_HERE = pathlib.Path(__file__).parent
 TESTDATA_PATH = PATH_HERE / "testdata"
 
 
-@pytest.fixture(scope="session", params=[True, False])
+@pytest.fixture(scope="function", params=[True, False])
 def windpower_mapping(request):
     print(request)
-    delay_index = request.param
     instance_mapping = """
     @prefix tpl:<https://github.com/magbak/chrontext/templates#>.
     @prefix rds:<https://github.com/magbak/chrontext/rds_power#>.
@@ -73,7 +72,7 @@ def windpower_mapping(request):
             "SiteIRI": site_iris,
         }
     )
-    mapping.expand("tpl:Site", sites, delay_index=delay_index)
+    mapping.expand("tpl:Site", sites)
 
     wind_turbine_iris = [wpex + "WindTurbine" + str(i) for i in range(1, n + 1)]
     wind_turbines = pl.DataFrame(
@@ -275,6 +274,76 @@ SELECT ?b ?c WHERE {
 } ORDER BY ?b ?c"""
     windpower_mapping.query(query, streaming=streaming)
 
+@pytest.mark.parametrize("streaming", [True, False])
+def test_types(windpower_mapping, streaming):
+    query = """PREFIX xsd:<http://www.w3.org/2001/XMLSchema#>
+PREFIX ct:<https://github.com/magbak/chrontext#>
+PREFIX wp:<https://github.com/magbak/chrontext/windpower_example#>
+PREFIX rdfs:<http://www.w3.org/2000/01/rdf-schema#>
+PREFIX rdf:<http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rds:<https://github.com/magbak/chrontext/rds_power#>
+SELECT ?n ?t WHERE {
+    ?n a ?t .
+}"""
+    df = windpower_mapping.query(query, streaming=streaming)
+    print(df)
+    assert df.height == 164
+
+
+
+@pytest.mark.parametrize("streaming", [True, False])
+def test_missing_predicate(windpower_mapping, streaming):
+    query = """PREFIX xsd:<http://www.w3.org/2001/XMLSchema#>
+PREFIX ct:<https://github.com/magbak/chrontext#>
+PREFIX wp:<https://github.com/magbak/chrontext/windpower_example#>
+PREFIX rdfs:<http://www.w3.org/2000/01/rdf-schema#>
+PREFIX rdf:<http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rds:<https://github.com/magbak/chrontext/rds_power#>
+SELECT ?n ?asp WHERE {
+    ?n rds:hasFunctionalAspect ?asp .
+}"""
+    df = windpower_mapping.query(query, streaming=streaming)
+    print(df)
+    assert df.height == 160
+
+
+@pytest.mark.parametrize("streaming", [True, False])
+def test_missing_predicate2(windpower_mapping, streaming):
+    query = """PREFIX xsd:<http://www.w3.org/2001/XMLSchema#>
+PREFIX ct:<https://github.com/magbak/chrontext#>
+PREFIX wp:<https://github.com/magbak/chrontext/windpower_example#>
+PREFIX rdfs:<http://www.w3.org/2000/01/rdf-schema#>
+PREFIX rdf:<http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rds:<https://github.com/magbak/chrontext/rds_power#>
+SELECT ?wtur ?wtur_asp WHERE {
+        ?wtur rds:hasFunctionalAspectNode ?wtur_asp .
+
+}"""
+    df = windpower_mapping.query(query, streaming=streaming)
+    print(df)
+    assert df.height == 160
+
+
+
+@pytest.mark.parametrize("streaming", [True, False])
+def test_larger_query_simplified(windpower_mapping, streaming):
+    query = """PREFIX xsd:<http://www.w3.org/2001/XMLSchema#>
+PREFIX ct:<https://github.com/magbak/chrontext#>
+PREFIX wp:<https://github.com/magbak/chrontext/windpower_example#>
+PREFIX rdfs:<http://www.w3.org/2000/01/rdf-schema#>
+PREFIX rdf:<http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rds:<https://github.com/magbak/chrontext/rds_power#>
+SELECT ?site_label ?wtur_label WHERE {
+    ?site a rds:Site .
+    ?site rdfs:label ?site_label .
+    ?site rds:hasFunctionalAspect ?wtur_asp .
+    ?wtur_asp rdfs:label ?wtur_label .
+    ?wtur rds:hasFunctionalAspectNode ?wtur_asp .
+    FILTER(?wtur_label = "A1" && ?site_label = "Wind Mountain") .
+}"""
+    df = windpower_mapping.query(query, streaming=streaming)
+    print(df)
+
 
 @pytest.mark.parametrize("streaming", [True, False])
 def test_larger_query(windpower_mapping, streaming):
@@ -410,7 +479,6 @@ SELECT ?site_label ?node WHERE {
     # df.write_csv(filename)
     expected_df = pl.scan_csv(filename).sort(by).collect()
     pl.testing.assert_frame_equal(df, expected_df)
-
 
 @pytest.mark.parametrize("streaming", [True, False])
 def test_iterated_property_path_constant_object_query(windpower_mapping, streaming):

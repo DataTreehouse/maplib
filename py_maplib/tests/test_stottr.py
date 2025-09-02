@@ -1,3 +1,4 @@
+"""
 extern crate core;
 #[cfg(not(feature = "pyo3"))]
 use maplib::mapping::Mapping;
@@ -977,3 +978,4 @@ fn test_default_list() {
     ]);
     assert_eq!(expected_triples_set, actual_triples_set);
 }
+"""

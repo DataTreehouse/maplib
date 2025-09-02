@@ -1,5 +1,5 @@
 use crate::mapping::errors::MappingError;
-use crate::mapping::{MappingColumnType, RDFNodeType};
+use crate::mapping::{MappingColumnType, RDFNodeState};
 use templates::ast::{ConstantTerm, ConstantTermOrList, PType};
 
 use oxrdf::{NamedNode, Term};
@@ -12,6 +12,7 @@ use representation::rdf_to_polars::{
     polars_literal_values_to_series, rdf_named_node_to_polars_literal_value,
     rdf_term_to_polars_expr,
 };
+use representation::BaseRDFNodeType;
 use std::ops::Deref;
 use templates::constants::{OTTR_BLANK_NODE, OTTR_IRI};
 
@@ -28,7 +29,9 @@ pub fn constant_to_expr(
                 (
                     Expr::Literal(polars_literal),
                     PType::Basic(NamedNode::new_unchecked(OTTR_IRI)),
-                    MappingColumnType::Flat(RDFNodeType::IRI),
+                    MappingColumnType::Flat(
+                        BaseRDFNodeType::IRI.into_default_input_rdf_node_state(),
+                    ),
                 )
             }
             ConstantTerm::BlankNode(_) => {
@@ -40,13 +43,15 @@ pub fn constant_to_expr(
                 (
                     expr,
                     PType::Basic(the_dt.clone()),
-                    MappingColumnType::Flat(RDFNodeType::Literal(the_dt)),
+                    MappingColumnType::Flat(
+                        BaseRDFNodeType::Literal(the_dt).into_default_input_rdf_node_state(),
+                    ),
                 )
             }
             ConstantTerm::None => (
                 Expr::Literal(LiteralValue::untyped_null()),
                 PType::None,
-                MappingColumnType::Flat(RDFNodeType::None),
+                MappingColumnType::Flat(BaseRDFNodeType::None.into_default_input_rdf_node_state()),
             ),
         },
         ConstantTermOrList::ConstantList(inner) => {
@@ -74,9 +79,14 @@ pub fn constant_to_expr(
                 last_mapping_col_type.as_ref().unwrap().clone(),
             ));
 
-            if let MappingColumnType::Flat(RDFNodeType::Literal(_lit)) =
-                last_mapping_col_type.as_ref().unwrap()
-            {
+            let is_literal_flat =
+                if let MappingColumnType::Flat(f) = last_mapping_col_type.as_ref().unwrap() {
+                    f.is_literal()
+                } else {
+                    false
+                };
+
+            if is_literal_flat {
                 let mut all_series = vec![];
                 for ex in &expressions {
                     if let Expr::Literal(inner) = ex {
@@ -127,7 +137,7 @@ pub fn constant_blank_node_to_series(
     blank_node_counter: usize,
     constant_term: &ConstantTermOrList,
     n_rows: usize,
-) -> Result<(Series, PType, RDFNodeType), MappingError> {
+) -> Result<(Series, PType, RDFNodeState), MappingError> {
     Ok(match constant_term {
         ConstantTermOrList::ConstantTerm(ConstantTerm::BlankNode(bl)) => {
             let any_value_vec: Vec<_> = (blank_node_counter..(blank_node_counter + n_rows))
@@ -148,7 +158,7 @@ pub fn constant_blank_node_to_series(
                 )
                 .unwrap(),
                 PType::Basic(NamedNode::new_unchecked(OTTR_BLANK_NODE)),
-                RDFNodeType::BlankNode,
+                BaseRDFNodeType::BlankNode.into_default_input_rdf_node_state(),
             )
         }
         ConstantTermOrList::ConstantList(_) => {

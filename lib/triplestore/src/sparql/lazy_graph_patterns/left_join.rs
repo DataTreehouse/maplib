@@ -3,8 +3,8 @@ use crate::sparql::errors::SparqlError;
 use log::trace;
 
 use crate::sparql::QuerySettings;
-use polars::prelude::JoinType;
-use query_processing::expressions::{contains_graph_pattern, drop_inner_contexts};
+use polars::prelude::{col, JoinType};
+use query_processing::expressions::contains_graph_pattern;
 use query_processing::graph_patterns::{filter, join};
 use query_processing::pushdowns::Pushdowns;
 use representation::query_context::{Context, PathEntry};
@@ -70,13 +70,25 @@ impl Triplestore {
                 query_settings,
             )?;
             right_solution_mappings = filter(right_solution_mappings, &expression_context)?;
-            right_solution_mappings =
-                drop_inner_contexts(right_solution_mappings, &vec![&expression_context]);
+            //The following is a workaround:
+            let keep_cols: Vec<_> = right_solution_mappings
+                .rdf_node_types
+                .keys()
+                .filter(|x| x.as_str() != expression_context.as_str())
+                .map(|x| col(x))
+                .collect();
+            right_solution_mappings.mappings = right_solution_mappings.mappings.select(keep_cols);
+            right_solution_mappings
+                .rdf_node_types
+                .remove(expression_context.as_str());
+            //right_solution_mappings =
+            //    drop_inner_contexts(right_solution_mappings, &vec![&expression_context]);
         }
         let left_solution_mappings = join(
             left_solution_mappings,
             right_solution_mappings,
             JoinType::Left,
+            self.cats.clone(),
         )?;
         Ok(left_solution_mappings)
     }

@@ -9,13 +9,14 @@ use log::debug;
 use oxrdf::vocab::rdf;
 use oxrdf::{NamedNode, Variable};
 use polars::prelude::{
-    col, lit, Column, DataFrame, DataType, Expr, IntoColumn, IntoLazy, LazyFrame, NamedFrom, Series,
+    by_name, col, lit, Column, DataFrame, DataType, Expr, IntoColumn, IntoLazy, LazyFrame,
+    NamedFrom, Series,
 };
 use rayon::iter::{IndexedParallelIterator, ParallelDrainRange, ParallelIterator};
 use representation::multitype::split_df_multicols;
 use representation::rdf_to_polars::rdf_named_node_to_polars_literal_value;
-use representation::RDFNodeType;
-use representation::{OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME};
+use representation::{BaseRDFNodeType, RDFNodeState};
+use representation::{OBJECT_COL_NAME, PREDICATE_COL_NAME, SUBJECT_COL_NAME};
 use std::cmp::max;
 use std::collections::{HashMap, HashSet};
 use std::ops::Sub;
@@ -27,7 +28,6 @@ use templates::ast::{
 use templates::constants::OTTR_TRIPLE;
 use templates::MappingColumnType;
 use triplestore::{TriplesToAdd, Triplestore};
-use uuid::Uuid;
 
 const LIST_COL: &str = "list";
 const FIRST_COL: &str = "first";
@@ -46,7 +46,7 @@ impl Mapping {
             df = df
                 .lazy()
                 .with_column(
-                    lit(rdf_named_node_to_polars_literal_value(&verb)).alias(VERB_COL_NAME),
+                    lit(rdf_named_node_to_polars_literal_value(&verb)).alias(PREDICATE_COL_NAME),
                 )
                 .collect()
                 .unwrap();
@@ -71,12 +71,9 @@ impl Mapping {
         let ExpandOptions {
             graph,
             validate_iris,
-            delay_index,
         } = options;
         let (mut df, mut columns) =
             validate(df, mapping_column_types, &target_template, validate_iris)?;
-
-        let call_uuid = Uuid::new_v4().to_string();
 
         let mut static_columns = HashMap::new();
         let mut lf = df.map(|df| df.lazy());
@@ -106,13 +103,7 @@ impl Mapping {
             columns,
             static_columns,
         )?;
-        self.process_results(
-            result_vec,
-            &call_uuid,
-            new_blank_node_counter,
-            &graph,
-            delay_index,
-        )?;
+        self.process_results(result_vec, new_blank_node_counter, &graph)?;
         debug!("Expansion took {} seconds", now.elapsed().as_secs_f32());
         Ok(MappingReport {})
     }
@@ -231,10 +222,8 @@ impl Mapping {
     fn process_results(
         &mut self,
         mut result_vec: Vec<OTTRTripleInstance>,
-        call_uuid: &str,
         mut new_blank_node_counter: usize,
         graph: &Option<NamedNode>,
-        delay_index: bool,
     ) -> Result<(), MappingError> {
         let now = Instant::now();
         let triples: Vec<_> = result_vec
@@ -253,35 +242,61 @@ impl Mapping {
             df,
             subject_type,
             object_type,
-            verb,
+            verb: predicate,
         } in ok_triples
         {
-            let mut coltypes_names = vec![
-                (&subject_type, SUBJECT_COL_NAME),
-                (&object_type, OBJECT_COL_NAME),
-            ];
-            if verb.is_none() {
-                coltypes_names.push((&RDFNodeType::IRI, VERB_COL_NAME));
-            }
+            let has_multi = subject_type.is_multi() || object_type.is_multi();
 
-            let has_multi = matches!(subject_type, RDFNodeType::MultiType(_))
-                || matches!(object_type, RDFNodeType::MultiType(_));
-
-            let types = HashMap::from([
+            let mut types = HashMap::from([
                 (SUBJECT_COL_NAME.to_string(), subject_type),
                 (OBJECT_COL_NAME.to_string(), object_type),
             ]);
+            if predicate.is_none() {
+                types.insert(
+                    PREDICATE_COL_NAME.to_string(),
+                    BaseRDFNodeType::IRI.into_default_input_rdf_node_state(),
+                );
+            }
             let dfs = if has_multi {
                 split_df_multicols(df, &types)
             } else {
                 vec![(df, types)]
             };
             for (df, mut types) in dfs {
+                let (subject_type, subject_state) = types
+                    .remove(SUBJECT_COL_NAME)
+                    .unwrap()
+                    .map
+                    .into_iter()
+                    .next()
+                    .unwrap();
+                let (object_type, object_state) = types
+                    .remove(OBJECT_COL_NAME)
+                    .unwrap()
+                    .map
+                    .into_iter()
+                    .next()
+                    .unwrap();
+                let predicate_state = if predicate.is_none() {
+                    let (_, s) = types
+                        .remove(PREDICATE_COL_NAME)
+                        .unwrap()
+                        .map
+                        .into_iter()
+                        .next()
+                        .unwrap();
+                    Some(s)
+                } else {
+                    None
+                };
                 all_triples_to_add.push(TriplesToAdd {
                     df,
-                    subject_type: types.remove(SUBJECT_COL_NAME).unwrap(),
-                    object_type: types.remove(OBJECT_COL_NAME).unwrap(),
-                    static_verb_column: verb.clone(),
+                    subject_type: subject_type,
+                    object_type: object_type,
+                    predicate: predicate.clone(),
+                    subject_cat_state: subject_state,
+                    object_cat_state: object_state,
+                    predicate_cat_state: predicate_state,
                 });
             }
         }
@@ -298,7 +313,7 @@ impl Mapping {
         };
 
         use_triplestore
-            .add_triples_vec(all_triples_to_add, call_uuid, false, delay_index)
+            .add_triples_vec(all_triples_to_add, false)
             .map_err(MappingError::TriplestoreError)?;
 
         self.blank_node_counter = new_blank_node_counter;
@@ -325,10 +340,12 @@ fn fill_nulls_with_defaults(
         }
     }
     let (expr, _, mct) = constant_to_expr(&default.constant_term, &None)?;
-    if matches!(
-        current_types.get(c).unwrap(),
-        MappingColumnType::Flat(RDFNodeType::None)
-    ) {
+    let is_none = if let MappingColumnType::Flat(inner) = current_types.get(c).unwrap() {
+        inner.is_none()
+    } else {
+        false
+    };
+    if is_none {
         current_types.insert(c.to_string(), mct);
         lf = lf.with_column(expr.alias(c));
     } else {
@@ -369,8 +386,8 @@ fn get_term_names<'a>(out_vars: &mut Vec<&'a str>, term: &'a StottrTerm) {
 #[derive(Debug)]
 struct CreateTriplesResult {
     df: DataFrame,
-    subject_type: RDFNodeType,
-    object_type: RDFNodeType,
+    subject_type: RDFNodeState,
+    object_type: RDFNodeState,
     verb: Option<NamedNode>,
 }
 
@@ -399,7 +416,7 @@ fn create_triples(
     }
 
     for (k, sc) in static_columns {
-        if k == VERB_COL_NAME {
+        if k == PREDICATE_COL_NAME {
             if let ConstantTermOrList::ConstantTerm(ConstantTerm::Iri(nn)) = &sc.constant_term {
                 verb = Some(nn.clone());
             } else {
@@ -423,7 +440,7 @@ fn create_triples(
 
     let mut keep_cols = vec![col(SUBJECT_COL_NAME), col(OBJECT_COL_NAME)];
     if verb.is_none() {
-        keep_cols.push(col(VERB_COL_NAME));
+        keep_cols.push(col(PREDICATE_COL_NAME));
     }
     lf = lf.select(keep_cols.as_slice());
     let mut df = lf.collect().expect("Collect problem");
@@ -439,7 +456,7 @@ fn create_triples(
                     i,
                     &mut new_subject_blank_node_counter,
                 )?);
-                RDFNodeType::BlankNode
+                BaseRDFNodeType::BlankNode.into_default_input_rdf_node_state()
             } else {
                 return Err(MappingError::TooDeeplyNestedError(format!(
                     "Expected subject of ottr:Triple to be flat or nested in one layer, but was list containing {n:?}"
@@ -459,7 +476,7 @@ fn create_triples(
                     i + 1,
                     &mut new_object_blank_node_counter,
                 )?);
-                RDFNodeType::BlankNode
+                BaseRDFNodeType::BlankNode.into_default_input_rdf_node_state()
             } else {
                 return Err(MappingError::TooDeeplyNestedError(format!(
                     "Expected object of ottr:Triple to be flat or nested in one layer, but was list containing {n:?}"
@@ -486,7 +503,7 @@ fn create_triples(
 fn create_list_triples(
     df: &mut DataFrame,
     c: &str,
-    rdf_node_type: &RDFNodeType,
+    rdf_node_type: &RDFNodeState,
     i: usize,
     blank_node_counter: &mut usize,
 ) -> Result<Vec<CreateTriplesResult>, MappingError> {
@@ -494,7 +511,7 @@ fn create_list_triples(
     let mut list_df = my_df.select([c, LIST_COL]).unwrap();
     list_df = list_df
         .lazy()
-        .explode([c])
+        .explode(by_name([c], true))
         .with_column(
             col(c)
                 .cum_count(false)
@@ -520,7 +537,7 @@ fn create_list_triples(
         .unwrap();
     *df = my_df
         .lazy()
-        .drop([c])
+        .drop(by_name([c], true))
         .with_column(
             (lit(format!("l_{i}_"))
                 + (col(LIST_COL) + lit(*blank_node_counter as u32)).cast(DataType::String)
@@ -564,19 +581,19 @@ fn create_list_triples(
     let results = vec![
         CreateTriplesResult {
             df: rest_df,
-            subject_type: RDFNodeType::BlankNode,
-            object_type: RDFNodeType::BlankNode,
+            subject_type: BaseRDFNodeType::BlankNode.into_default_input_rdf_node_state(),
+            object_type: BaseRDFNodeType::BlankNode.into_default_input_rdf_node_state(),
             verb: Some(rdf::REST.into_owned()),
         },
         CreateTriplesResult {
             df: rest_nil_df,
-            subject_type: RDFNodeType::BlankNode,
-            object_type: RDFNodeType::IRI,
+            subject_type: BaseRDFNodeType::BlankNode.into_default_input_rdf_node_state(),
+            object_type: BaseRDFNodeType::IRI.into_default_input_rdf_node_state(),
             verb: Some(rdf::REST.into_owned()),
         },
         CreateTriplesResult {
             df: first_df,
-            subject_type: RDFNodeType::BlankNode,
+            subject_type: BaseRDFNodeType::BlankNode.into_default_input_rdf_node_state(),
             object_type: rdf_node_type.clone(),
             verb: Some(rdf::FIRST.into_owned()),
         },
@@ -775,19 +792,18 @@ fn create_remapped(
                 panic!("This situation should never arise")
             }
         }
-        let to_expand_cols: Vec<Expr> = to_expand.iter().map(|x| col(*x)).collect();
         match le {
             ListExpanderType::Cross => {
-                for c in to_expand_cols {
-                    lf = lf.explode(vec![c]);
+                for c in to_expand {
+                    lf = lf.explode(by_name([c], true));
                 }
             }
             ListExpanderType::ZipMin => {
-                lf = lf.explode(to_expand_cols.clone());
-                lf = lf.drop_nulls(Some(to_expand_cols));
+                lf = lf.explode(by_name(to_expand.iter().map(|x| *x), true));
+                lf = lf.drop_nulls(Some(by_name(to_expand, true)));
             }
             ListExpanderType::ZipMax => {
-                lf = lf.explode(to_expand_cols);
+                lf = lf.explode(by_name(to_expand, true));
             }
         }
         //Todo: List expanders for constant terms..

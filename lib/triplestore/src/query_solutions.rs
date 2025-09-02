@@ -1,7 +1,7 @@
 use oxrdf::{Term, Variable};
 use polars::frame::UniqueKeepStrategy;
 use polars::prelude::IntoLazy;
-use representation::multitype::unique_workaround;
+use query_processing::graph_patterns::unique_workaround;
 
 use crate::sparql::errors::SparqlError;
 use crate::sparql::QueryResult;
@@ -26,7 +26,7 @@ pub fn query_select(
         py,
     )?;
 
-    let (df, types) = if let QueryResult::Select(EagerSolutionMappings {
+    let sm = if let QueryResult::Select(EagerSolutionMappings {
         mut mappings,
         rdf_node_types,
     }) = qres
@@ -36,11 +36,11 @@ pub fn query_select(
             lf = unique_workaround(lf, &rdf_node_types, None, false, UniqueKeepStrategy::Any);
             mappings = lf.collect().unwrap();
         }
-        (mappings, rdf_node_types)
+        EagerSolutionMappings::new(mappings, rdf_node_types)
     } else {
         panic!("Should never happen")
     };
-    Ok(df_as_result(df, &types))
+    Ok(df_as_result(&sm, triplestore.cats.clone()))
 }
 
 #[allow(clippy::too_many_arguments)]

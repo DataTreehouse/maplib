@@ -3,8 +3,8 @@ use crate::ast::{
     PType, Parameter, Signature, Statement, StottrDocument, StottrTerm, Template,
 };
 use crate::constants::{
-    OTTR_PREFIX, OTTR_PREFIX_IRI, RDFS_PREFIX, RDFS_PREFIX_IRI, RDF_PREFIX, RDF_PREFIX_IRI,
-    XSD_PREFIX, XSD_PREFIX_IRI,
+    OTTR_PREFIX, OTTR_PREFIX_IRI, OWL_PREFIX, OWL_PREFIX_IRI, RDFS_PREFIX, RDFS_PREFIX_IRI,
+    RDF_PREFIX, RDF_PREFIX_IRI, SHACL_PREFIX, SHACL_PREFIX_IRI, XSD_PREFIX, XSD_PREFIX_IRI,
 };
 use crate::parsing::parsing_ast::{
     ResolvesToNamedNode, UnresolvedAnnotation, UnresolvedArgument, UnresolvedBaseTemplate,
@@ -334,6 +334,8 @@ fn build_prefix_map(
         (RDF_PREFIX, RDF_PREFIX_IRI),
         (XSD_PREFIX, XSD_PREFIX_IRI),
         (OTTR_PREFIX, OTTR_PREFIX_IRI),
+        (OWL_PREFIX, OWL_PREFIX_IRI),
+        (SHACL_PREFIX, SHACL_PREFIX_IRI),
     ];
     for (pre, iri) in predefined {
         if !map.contains_key(pre) {

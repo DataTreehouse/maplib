@@ -22,7 +22,6 @@ impl Triplestore {
             true,
             false,
             false,
-            false,
             #[cfg(feature = "pyo3")]
             py,
         )

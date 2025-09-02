@@ -1,4 +1,6 @@
+pub mod delete;
 pub mod errors;
+mod insert;
 pub(crate) mod lazy_aggregate;
 mod lazy_expressions;
 pub(crate) mod lazy_graph_patterns;
@@ -8,36 +10,36 @@ use utils::polars::{pl_interruptable_collect, InterruptableCollectError};
 
 use super::{NewTriples, Triplestore};
 use crate::sparql::errors::SparqlError;
-use crate::TriplesToAdd;
 use oxrdf::{NamedNode, Subject, Term, Triple, Variable};
 use oxttl::TurtleSerializer;
 use polars::frame::DataFrame;
-use polars::prelude::{col, lit, Expr, IntoLazy};
+use polars::prelude::{as_struct, col, lit, Expr, IntoLazy, LiteralValue};
 use polars_core::frame::UniqueKeepStrategy;
+use polars_core::prelude::DataType;
+#[cfg(feature = "pyo3")]
+use pyo3::Python;
 use query_processing::expressions::expr_is_null_workaround;
+use query_processing::graph_patterns::unique_workaround;
 use query_processing::pushdowns::Pushdowns;
-use representation::multitype::{split_df_multicols, unique_workaround};
+use representation::cats::Cats;
 use representation::polars_to_rdf::{df_as_result, QuerySolutions};
 use representation::query_context::Context;
 use representation::rdf_to_polars::{
     rdf_literal_to_polars_literal_value, rdf_named_node_to_polars_literal_value,
 };
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
-use representation::RDFNodeType;
-use representation::{OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME};
+use representation::{BaseRDFNodeType, RDFNodeState};
+use representation::{OBJECT_COL_NAME, PREDICATE_COL_NAME, SUBJECT_COL_NAME};
 use sparesults::QueryResultsFormat;
 use sparesults::QueryResultsSerializer;
+use spargebra::algebra::GraphPattern;
 use spargebra::term::{
     GraphNamePattern, GroundQuadPattern, GroundTermPattern, NamedNodePattern, QuadPattern,
     TermPattern, TriplePattern,
 };
 use spargebra::{GraphUpdateOperation, Query, Update};
 use std::collections::{HashMap, HashSet};
-use uuid::Uuid;
-
-#[cfg(feature = "pyo3")]
-use pyo3::Python;
-use spargebra::algebra::GraphPattern;
+use std::sync::Arc;
 
 #[derive(Debug)]
 pub enum QueryResult {
@@ -47,20 +49,16 @@ pub enum QueryResult {
 
 pub struct QuerySettings {
     pub include_transient: bool,
-    pub allow_duplicates: bool,
 }
 
 impl QueryResult {
-    pub fn json(&self) -> String {
+    pub fn json(&self, global_cats: Arc<Cats>) -> String {
         match self {
-            QueryResult::Select(EagerSolutionMappings {
-                mappings,
-                rdf_node_types,
-            }) => {
+            QueryResult::Select(sm) => {
                 let QuerySolutions {
                     variables,
                     solutions,
-                } = df_as_result(mappings.clone(), rdf_node_types);
+                } = df_as_result(sm, global_cats);
                 let json_serializer = QueryResultsSerializer::from_format(QueryResultsFormat::Json);
                 let mut buffer = vec![];
                 let mut serializer = json_serializer
@@ -80,39 +78,35 @@ impl QueryResult {
             }
             QueryResult::Construct(c) => {
                 let mut ser = TurtleSerializer::new().for_writer(vec![]);
-                for (
-                    EagerSolutionMappings {
-                        mappings,
-                        rdf_node_types,
-                    },
-                    verb,
-                ) in c
-                {
-                    let mut mappings = mappings.clone();
-                    let mut rdf_node_types = rdf_node_types.clone();
-                    if let Some(verb) = verb {
-                        mappings = mappings
+                for (sm, predicate) in c {
+                    let mut sm = sm.clone();
+                    if let Some(predicate) = predicate {
+                        sm.mappings = sm
+                            .mappings
                             .lazy()
                             .with_column(
-                                lit(rdf_named_node_to_polars_literal_value(verb))
-                                    .alias(VERB_COL_NAME),
+                                lit(rdf_named_node_to_polars_literal_value(predicate))
+                                    .alias(PREDICATE_COL_NAME),
                             )
                             .select([
                                 col(SUBJECT_COL_NAME),
-                                col(VERB_COL_NAME),
+                                col(PREDICATE_COL_NAME),
                                 col(OBJECT_COL_NAME),
                             ])
                             .collect()
                             .unwrap();
-                        rdf_node_types.insert(VERB_COL_NAME.to_string(), RDFNodeType::IRI);
+                        sm.rdf_node_types.insert(
+                            PREDICATE_COL_NAME.to_string(),
+                            BaseRDFNodeType::IRI.into_default_input_rdf_node_state(),
+                        );
                     }
                     let QuerySolutions {
                         variables,
                         solutions,
-                    } = df_as_result(mappings, &rdf_node_types);
+                    } = df_as_result(&sm, global_cats.clone());
                     for s in solutions {
                         let mut subject = None;
-                        let mut verb = None;
+                        let mut predicate = None;
                         let mut object = None;
                         for (i, t) in s.into_iter().enumerate() {
                             let t = t.unwrap();
@@ -123,8 +117,8 @@ impl QueryResult {
                                     Term::BlankNode(bl) => Subject::BlankNode(bl),
                                     _ => todo!(),
                                 });
-                            } else if v.as_str() == VERB_COL_NAME {
-                                verb = Some(match t {
+                            } else if v.as_str() == PREDICATE_COL_NAME {
+                                predicate = Some(match t {
                                     Term::NamedNode(nn) => nn,
                                     _ => panic!("Should never happen"),
                                 });
@@ -134,7 +128,7 @@ impl QueryResult {
                                 panic!("Should never happen");
                             }
                         }
-                        let t = Triple::new(subject.unwrap(), verb.unwrap(), object.unwrap());
+                        let t = Triple::new(subject.unwrap(), predicate.unwrap(), object.unwrap());
                         ser.serialize_triple(t.as_ref()).unwrap();
                     }
                 }
@@ -171,7 +165,6 @@ impl Triplestore {
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         streaming: bool,
         include_transient: bool,
-        allow_duplicates: bool,
         #[cfg(feature = "pyo3")] py: Python<'_>,
     ) -> Result<QueryResult, SparqlError> {
         let query = Query::parse(query, None).map_err(SparqlError::ParseError)?;
@@ -180,8 +173,6 @@ impl Triplestore {
             parameters,
             streaming,
             include_transient,
-            allow_duplicates,
-            true,
             #[cfg(feature = "pyo3")]
             py,
         )
@@ -193,7 +184,6 @@ impl Triplestore {
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         streaming: bool,
         include_transient: bool,
-        allow_duplicates: bool,
     ) -> Result<QueryResult, SparqlError> {
         let query = Query::parse(query, None).map_err(SparqlError::ParseError)?;
         self.query_parsed_indexed_uninterruptable(
@@ -201,8 +191,6 @@ impl Triplestore {
             parameters,
             streaming,
             include_transient,
-            allow_duplicates,
-            true,
         )
     }
 
@@ -214,16 +202,11 @@ impl Triplestore {
         include_transient: bool,
         #[cfg(feature = "pyo3")] py: Python<'_>,
     ) -> Result<QueryResult, SparqlError> {
-        if self.has_unindexed {
-            self.index_unindexed().map_err(SparqlError::IndexingError)?;
-        }
         self.query_parsed_indexed(
             query,
             parameters,
             streaming,
             include_transient,
-            false,
-            true,
             #[cfg(feature = "pyo3")]
             py,
         )
@@ -235,13 +218,10 @@ impl Triplestore {
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         streaming: bool,
         include_transient: bool,
-        allow_duplicates: bool,
-        deduplicate_triples: bool,
         #[cfg(feature = "pyo3")] py: Python<'_>,
     ) -> Result<QueryResult, SparqlError> {
         let qs = QuerySettings {
             include_transient,
-            allow_duplicates,
         };
         let context = Context::new();
         match query {
@@ -303,14 +283,15 @@ impl Triplestore {
                     Ok(df) => {
                         let mut solutions = vec![];
                         for t in template {
-                            if let Some((sm, verb)) = triple_to_solution_mappings(
+                            if let Some((sm, predicate)) = triple_to_solution_mappings(
                                 &df,
                                 &rdf_node_types,
                                 t,
                                 None,
-                                deduplicate_triples,
+                                true,
+                                &self.cats,
                             )? {
-                                solutions.push((sm, verb));
+                                solutions.push((sm, predicate));
                             }
                         }
                         Ok(QueryResult::Construct(solutions))
@@ -333,12 +314,9 @@ impl Triplestore {
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         streaming: bool,
         include_transient: bool,
-        allow_duplicates: bool,
-        deduplicate_triples: bool,
     ) -> Result<QueryResult, SparqlError> {
         let qs = QuerySettings {
             include_transient,
-            allow_duplicates,
         };
         let context = Context::new();
         match query {
@@ -385,14 +363,15 @@ impl Triplestore {
 
                 let mut solutions = vec![];
                 for t in template {
-                    if let Some((sm, verb)) = triple_to_solution_mappings(
+                    if let Some((sm, predicate)) = triple_to_solution_mappings(
                         &df,
                         &rdf_node_types,
                         t,
                         None,
-                        deduplicate_triples,
+                        true,
+                        &self.cats,
                     )? {
-                        solutions.push((sm, verb));
+                        solutions.push((sm, predicate));
                     }
                 }
                 Ok(QueryResult::Construct(solutions))
@@ -407,7 +386,6 @@ impl Triplestore {
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         transient: bool,
         streaming: bool,
-        delay_index: bool,
         include_transient: bool,
         #[cfg(feature = "pyo3")] py: Python<'_>,
     ) -> Result<Vec<NewTriples>, SparqlError> {
@@ -426,7 +404,7 @@ impl Triplestore {
                     panic!("Should never happen")
                 }
                 QueryResult::Construct(dfs) => {
-                    self.insert_construct_result(dfs, transient, delay_index)
+                    self.insert_construct_result(dfs, transient)
                 }
             }
         } else {
@@ -434,31 +412,12 @@ impl Triplestore {
         }
     }
 
-    pub fn insert_construct_result(
-        &mut self,
-        sms: Vec<(EagerSolutionMappings, Option<NamedNode>)>,
-        transient: bool,
-        delay_index: bool,
-    ) -> Result<Vec<NewTriples>, SparqlError> {
-        let call_uuid = Uuid::new_v4().to_string();
-        let all_triples_to_add = construct_result_as_triples_to_add(sms);
-        let new_triples = if !all_triples_to_add.is_empty() {
-            self.add_triples_vec(all_triples_to_add, &call_uuid, transient, delay_index)
-                .map_err(SparqlError::StoreTriplesError)?
-        } else {
-            vec![]
-        };
-        Ok(new_triples)
-    }
-
     pub fn update(
         &mut self,
         update: &str,
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         streaming: bool,
-        delay_index: bool,
         include_transient: bool,
-        allow_duplicates: bool,
         #[cfg(feature = "pyo3")] py: Python<'_>,
     ) -> Result<(), SparqlError> {
         let update = Update::parse(update, None).map_err(SparqlError::ParseError)?;
@@ -466,9 +425,7 @@ impl Triplestore {
             &update,
             parameters,
             streaming,
-            delay_index,
             include_transient,
-            allow_duplicates,
             #[cfg(feature = "pyo3")]
             py,
         )?;
@@ -480,21 +437,14 @@ impl Triplestore {
         update: &Update,
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         streaming: bool,
-        delay_index: bool,
         include_transient: bool,
-        allow_duplicates: bool,
         #[cfg(feature = "pyo3")] py: Python<'_>,
     ) -> Result<(), SparqlError> {
-        if self.has_unindexed {
-            self.index_unindexed().map_err(SparqlError::IndexingError)?;
-        }
         self.update_parsed_indexed(
             update,
             parameters,
             streaming,
-            delay_index,
             include_transient,
-            allow_duplicates,
             #[cfg(feature = "pyo3")]
             py,
         )?;
@@ -506,9 +456,7 @@ impl Triplestore {
         update: &Update,
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         streaming: bool,
-        delay_index: bool,
         include_transient: bool,
-        allow_duplicates: bool,
         #[cfg(feature = "pyo3")] py: Python<'_>,
     ) -> Result<(), SparqlError> {
         for u in &update.operations {
@@ -567,8 +515,6 @@ impl Triplestore {
                         parameters,
                         streaming,
                         include_transient,
-                        allow_duplicates,
-                        delay_index, //TODO! Check
                         #[cfg(feature = "pyo3")]
                         py,
                     )?;
@@ -588,13 +534,14 @@ impl Triplestore {
                             &ground_quad_pattern_to_triple_pattern(d),
                             None,
                             false,
+                            &self.cats,
                         )?;
                         if let Some(sol) = del {
                             delete_solutions.push(sol);
                         }
                     }
                     if !delete_solutions.is_empty() {
-                        self.delete_construct_result(delete_solutions, delay_index)?;
+                        self.delete_construct_result(delete_solutions)?;
                     }
                     let mut insert_solutions = vec![];
                     for i in insert {
@@ -604,13 +551,14 @@ impl Triplestore {
                             &quad_pattern_to_triple_pattern(i),
                             None,
                             true,
+                            &self.cats,
                         )?;
                         if let Some(insert) = insert {
                             insert_solutions.push(insert);
                         }
                     }
                     if !insert_solutions.is_empty() {
-                        self.insert_construct_result(insert_solutions, false, delay_index)?;
+                        self.insert_construct_result(insert_solutions, false)?;
                     }
                 }
                 GraphUpdateOperation::Load { .. } => {}
@@ -619,20 +567,6 @@ impl Triplestore {
                 GraphUpdateOperation::Drop { .. } => {}
             }
         }
-        Ok(())
-    }
-
-    pub fn delete_construct_result(
-        &mut self,
-        sms: Vec<(EagerSolutionMappings, Option<NamedNode>)>,
-        delay_index: bool,
-    ) -> Result<(), SparqlError> {
-        let call_uuid = Uuid::new_v4().to_string();
-        let all_triples_to_add = construct_result_as_triples_to_add(sms);
-        if !all_triples_to_add.is_empty() {
-            self.delete_triples_vec(all_triples_to_add, &call_uuid, delay_index)
-                .map_err(SparqlError::StoreTriplesError)?;
-        };
         Ok(())
     }
 }
@@ -674,61 +608,13 @@ fn ground_quad_pattern_to_triple_pattern(qp: &GroundQuadPattern) -> TriplePatter
     }
 }
 
-fn construct_result_as_triples_to_add(
-    sms: Vec<(EagerSolutionMappings, Option<NamedNode>)>,
-) -> Vec<TriplesToAdd> {
-    let mut all_triples_to_add = vec![];
-
-    for (
-        EagerSolutionMappings {
-            mappings,
-            rdf_node_types,
-        },
-        verb,
-    ) in sms
-    {
-        if mappings.height() == 0 {
-            continue;
-        }
-        let mut multicols = HashMap::new();
-        let subj_dt = rdf_node_types.get(SUBJECT_COL_NAME).unwrap();
-        if matches!(subj_dt, RDFNodeType::MultiType(..)) {
-            multicols.insert(SUBJECT_COL_NAME.to_string(), subj_dt.clone());
-        }
-        let obj_dt = rdf_node_types.get(OBJECT_COL_NAME).unwrap();
-        if matches!(obj_dt, RDFNodeType::MultiType(..)) {
-            multicols.insert(OBJECT_COL_NAME.to_string(), obj_dt.clone());
-        }
-        if !multicols.is_empty() {
-            let dfs_dts = split_df_multicols(mappings, &multicols);
-            for (df, mut map) in dfs_dts {
-                let new_subj_dt = map.remove(SUBJECT_COL_NAME).unwrap_or(subj_dt.clone());
-                let new_obj_dt = map.remove(OBJECT_COL_NAME).unwrap_or(obj_dt.clone());
-                all_triples_to_add.push(TriplesToAdd {
-                    df,
-                    subject_type: new_subj_dt,
-                    object_type: new_obj_dt,
-                    static_verb_column: verb.clone(),
-                });
-            }
-        } else {
-            all_triples_to_add.push(TriplesToAdd {
-                df: mappings,
-                subject_type: subj_dt.clone(),
-                object_type: obj_dt.clone(),
-                static_verb_column: verb,
-            });
-        }
-    }
-    all_triples_to_add
-}
-
 pub fn triple_to_solution_mappings(
     df: &DataFrame,
-    rdf_node_types: &HashMap<String, RDFNodeType>,
+    rdf_node_types: &HashMap<String, RDFNodeState>,
     t: &TriplePattern,
     preserve_column: Option<&str>,
     unique: bool,
+    global_cats: &Cats,
 ) -> Result<Option<(EagerSolutionMappings, Option<NamedNode>)>, SparqlError> {
     let mut select_expr = vec![];
     let mut triple_types = HashMap::new();
@@ -739,8 +625,13 @@ pub fn triple_to_solution_mappings(
             rdf_node_types.get(preserve_column).unwrap().clone(),
         );
     }
-    let (subj_expr, subj_dt) =
-        term_pattern_expression(rdf_node_types, &t.subject, SUBJECT_COL_NAME)?;
+    let (subj_expr, subj_dt) = term_pattern_expression(
+        rdf_node_types,
+        &t.subject,
+        SUBJECT_COL_NAME,
+        global_cats,
+        true,
+    )?;
     triple_types.insert(SUBJECT_COL_NAME.to_string(), subj_dt);
     let mut filter_expr = expr_is_null_workaround(
         col(SUBJECT_COL_NAME),
@@ -748,25 +639,35 @@ pub fn triple_to_solution_mappings(
     )
     .not();
     select_expr.push(subj_expr);
-    let verb = match &t.predicate {
-        NamedNodePattern::NamedNode(verb) => Some(verb.clone()),
+    let predicate = match &t.predicate {
+        NamedNodePattern::NamedNode(predicate) => Some(predicate.clone()),
         NamedNodePattern::Variable(_) => {
-            let (verb_expr, verb_dt) =
-                named_node_pattern_expr(rdf_node_types, &t.predicate, VERB_COL_NAME)?;
-            triple_types.insert(VERB_COL_NAME.to_string(), verb_dt);
+            let (predicate_expr, predicate_dt) = named_node_pattern_expr(
+                rdf_node_types,
+                &t.predicate,
+                PREDICATE_COL_NAME,
+                global_cats,
+            )?;
+            triple_types.insert(PREDICATE_COL_NAME.to_string(), predicate_dt);
             filter_expr = filter_expr.and(
                 expr_is_null_workaround(
-                    col(VERB_COL_NAME),
-                    triple_types.get(VERB_COL_NAME).unwrap(),
+                    col(PREDICATE_COL_NAME),
+                    triple_types.get(PREDICATE_COL_NAME).unwrap(),
                 )
                 .not(),
             );
-            select_expr.push(verb_expr);
+            select_expr.push(predicate_expr);
             None
         }
     };
 
-    let (obj_expr, obj_dt) = term_pattern_expression(rdf_node_types, &t.object, OBJECT_COL_NAME)?;
+    let (obj_expr, obj_dt) = term_pattern_expression(
+        rdf_node_types,
+        &t.object,
+        OBJECT_COL_NAME,
+        global_cats,
+        false,
+    )?;
     select_expr.push(obj_expr);
     triple_types.insert(OBJECT_COL_NAME.to_string(), obj_dt);
     filter_expr = filter_expr.and(
@@ -782,60 +683,105 @@ pub fn triple_to_solution_mappings(
     }
     let df = lf.collect().unwrap();
     if df.height() > 0 {
-        Ok(Some((EagerSolutionMappings::new(df, triple_types), verb)))
+        Ok(Some((
+            EagerSolutionMappings::new(df, triple_types),
+            predicate,
+        )))
     } else {
         Ok(None)
     }
 }
 
 fn term_pattern_expression(
-    rdf_node_types: &HashMap<String, RDFNodeType>,
+    rdf_node_types: &HashMap<String, RDFNodeState>,
     tp: &TermPattern,
     name: &str,
-) -> Result<(Expr, RDFNodeType), SparqlError> {
+    global_cats: &Cats,
+    subject: bool,
+) -> Result<(Expr, RDFNodeState), SparqlError> {
     match tp {
-        TermPattern::NamedNode(nn) => Ok(named_node_lit(nn, name)),
+        TermPattern::NamedNode(nn) => Ok(named_node_u32_lit(nn, name, global_cats)),
         TermPattern::BlankNode(_) => {
             unimplemented!("Blank node term pattern not supported")
         }
         TermPattern::Literal(thelit) => {
             let l = lit(rdf_literal_to_polars_literal_value(thelit)).alias(name);
-            Ok((l, RDFNodeType::Literal(thelit.datatype().into_owned())))
+            Ok((
+                l,
+                BaseRDFNodeType::Literal(thelit.datatype().into_owned())
+                    .into_default_input_rdf_node_state(),
+            ))
         }
-        TermPattern::Variable(v) => Ok(variable_expression(rdf_node_types, v, name)?),
+        TermPattern::Variable(v) => Ok(variable_expression(rdf_node_types, v, name, subject)?),
     }
 }
 
 fn named_node_pattern_expr(
-    rdf_node_types: &HashMap<String, RDFNodeType>,
+    rdf_node_types: &HashMap<String, RDFNodeState>,
     nnp: &NamedNodePattern,
     name: &str,
-) -> Result<(Expr, RDFNodeType), SparqlError> {
+    global_cats: &Cats,
+) -> Result<(Expr, RDFNodeState), SparqlError> {
     match nnp {
-        NamedNodePattern::NamedNode(nn) => Ok(named_node_lit(nn, name)),
-        NamedNodePattern::Variable(v) => Ok(variable_expression(rdf_node_types, v, name)?),
+        NamedNodePattern::NamedNode(nn) => Ok(named_node_u32_lit(nn, name, global_cats)),
+        NamedNodePattern::Variable(v) => Ok(variable_expression(rdf_node_types, v, name, false)?),
     }
 }
 
-fn named_node_lit(nn: &NamedNode, name: &str) -> (Expr, RDFNodeType) {
-    (
-        lit(rdf_named_node_to_polars_literal_value(nn)).alias(name),
-        RDFNodeType::IRI,
-    )
+fn named_node_u32_lit(nn: &NamedNode, name: &str, global_cats: &Cats) -> (Expr, RDFNodeState) {
+    let (u, state) = global_cats.encode_iri_or_local_cat(nn.as_str());
+    (lit(u).cast(DataType::UInt32).alias(name), state)
 }
 
 fn variable_expression(
-    rdf_node_types: &HashMap<String, RDFNodeType>,
+    rdf_node_types: &HashMap<String, RDFNodeState>,
     v: &Variable,
     name: &str,
-) -> Result<(Expr, RDFNodeType), SparqlError> {
-    let t = if let Some(t) = rdf_node_types.get(v.as_str()) {
-        t.clone()
+    subject: bool,
+) -> Result<(Expr, RDFNodeState), SparqlError> {
+    if let Some(t) = rdf_node_types.get(v.as_str()) {
+        if subject {
+            let mut new_map = HashMap::new();
+            let mut exprs = vec![];
+            for (bt, bs) in &t.map {
+                if matches!(bt, BaseRDFNodeType::BlankNode | BaseRDFNodeType::IRI) {
+                    new_map.insert(bt.clone(), bs.clone());
+                    if t.is_multi() {
+                        exprs.push(
+                            col(v.as_str())
+                                .struct_()
+                                .field_by_name(&bt.field_col_name()),
+                        );
+                    } else {
+                        exprs.push(col(v.as_str()))
+                    }
+                }
+            }
+            if exprs.is_empty() {
+                let bt = BaseRDFNodeType::None;
+                let bs = bt.default_input_cat_state();
+                let e = lit(LiteralValue::untyped_null())
+                    .cast(bt.polars_data_type(&bs, true))
+                    .alias(name);
+                let s = RDFNodeState::from_bases(bt, bs);
+                Ok((e, s))
+            } else if exprs.len() == 1 {
+                Ok((
+                    exprs.pop().unwrap().alias(name),
+                    RDFNodeState::from_map(new_map),
+                ))
+            } else {
+                Ok((
+                    as_struct(exprs).alias(name),
+                    RDFNodeState::from_map(new_map),
+                ))
+            }
+        } else {
+            Ok((col(v.as_str()).alias(name), t.clone()))
+        }
     } else {
-        return Err(SparqlError::ConstructWithUndefinedVariable(
+        Err(SparqlError::ConstructWithUndefinedVariable(
             v.as_str().to_string(),
-        ));
-    };
-
-    Ok((col(v.as_str()).alias(name), t))
+        ))
+    }
 }

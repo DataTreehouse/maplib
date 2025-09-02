@@ -13,15 +13,16 @@ spargebra = {path = "../spargebra"}
 
 log.workspace = true
 oxrdf = {workspace = true, features = ["oxsdatatypes"]}
-polars = {workspace = true, features=["performant", "new_streaming", "lazy", "dtype-full", "timezones", "polars-time", "partition_by", "cross_join", "strings"], default-features = false }
+polars = {workspace = true, features=["cum_agg","diagonal_concat", "merge_sorted", "performant", "new_streaming", "lazy", "dtype-full", "timezones", "polars-time", "partition_by", "strings"], default-features = false }
 chrono.workspace = true
 chrono-tz.workspace = true
 thiserror.workspace = true
-uuid.workspace = true
 pyo3 = {workspace = true, features = ["chrono-tz", "chrono"]}
-serde = {workspace = true, features = ["derive"]}
 oxsdatatypes.workspace = true
 rayon.workspace = true
+uuid.workspace = true
+dashmap.workspace = true
+fastbloom.workspace = true
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("gil-refs", "rdf-star"))'] }

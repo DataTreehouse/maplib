@@ -17,6 +17,8 @@ rust-version.workspace = true
 [features]
 default = []
 rdf-star = ["oxrdf/rdf-star"]
+sep-0006 = []
+sep-0002 = []
 
 [dependencies]
 rand.workspace = true

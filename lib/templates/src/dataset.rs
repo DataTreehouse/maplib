@@ -11,7 +11,7 @@ use log::warn;
 use crate::subtypes_ext::is_literal_subtype_ext;
 use oxrdf::vocab::rdfs;
 use oxrdf::{NamedNode, Variable};
-use representation::{OBJECT_COL_NAME, SUBJECT_COL_NAME, VERB_COL_NAME};
+use representation::{OBJECT_COL_NAME, PREDICATE_COL_NAME, SUBJECT_COL_NAME};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use walkdir::WalkDir;
@@ -79,7 +79,7 @@ impl TemplateDataset {
             optional: false,
             non_blank: false,
             ptype: Some(PType::Basic(NamedNode::new_unchecked(OTTR_IRI))),
-            variable: Variable::new_unchecked(VERB_COL_NAME),
+            variable: Variable::new_unchecked(PREDICATE_COL_NAME),
             default_value: None,
         };
         let ottr_triple_object = Parameter {

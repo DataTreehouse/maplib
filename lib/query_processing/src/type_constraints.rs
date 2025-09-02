@@ -1,36 +1,66 @@
 use oxrdf::vocab::xsd;
 use oxrdf::{NamedNode, Variable};
+use representation::cats::named_node_split_prefix;
 use representation::subtypes::{is_literal_subtype, OWL_REAL};
 use representation::BaseRDFNodeType;
 use spargebra::algebra::{Expression, Function};
-use std::collections::HashMap;
+use std::cmp::PartialEq;
+use std::collections::{HashMap, HashSet};
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ConstraintBaseRDFNodeType {
+    IRI(Option<HashSet<NamedNode>>),
+    BlankNode,
+    Literal(NamedNode),
+    None,
+}
+
+impl ConstraintBaseRDFNodeType {
+    pub fn from_base(base: &BaseRDFNodeType) -> Self {
+        match base {
+            BaseRDFNodeType::IRI => ConstraintBaseRDFNodeType::IRI(None),
+            BaseRDFNodeType::BlankNode => ConstraintBaseRDFNodeType::BlankNode,
+            BaseRDFNodeType::Literal(l) => ConstraintBaseRDFNodeType::Literal(l.clone()),
+            BaseRDFNodeType::None => ConstraintBaseRDFNodeType::None,
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
 pub enum ConstraintExpr {
     Bottom,
     Top,
-    Constraint(Box<BaseRDFNodeType>),
+    Constraint(Box<ConstraintBaseRDFNodeType>),
     And(Box<ConstraintExpr>, Box<ConstraintExpr>),
     Or(Box<ConstraintExpr>, Box<ConstraintExpr>),
 }
 
 impl ConstraintExpr {
-    pub(crate) fn compatible_with(&self, t: &BaseRDFNodeType) -> bool {
+    pub(crate) fn compatible_with(&self, t: &ConstraintBaseRDFNodeType) -> bool {
         match self {
             ConstraintExpr::Bottom => false,
             ConstraintExpr::Top => true,
             ConstraintExpr::Constraint(c) => match c.as_ref() {
-                BaseRDFNodeType::IRI => t == &BaseRDFNodeType::IRI,
-                BaseRDFNodeType::BlankNode => t == &BaseRDFNodeType::BlankNode,
-                BaseRDFNodeType::Literal(l_ctr) => {
-                    if let BaseRDFNodeType::Literal(l) = t {
+                ConstraintBaseRDFNodeType::IRI(None) => {
+                    matches!(t, ConstraintBaseRDFNodeType::IRI(_))
+                }
+                ConstraintBaseRDFNodeType::IRI(Some(nn)) => {
+                    if let ConstraintBaseRDFNodeType::IRI(Some(nn_c)) = c.as_ref() {
+                        !nn.is_disjoint(nn_c)
+                    } else {
+                        true
+                    }
+                }
+                ConstraintBaseRDFNodeType::BlankNode => t == &ConstraintBaseRDFNodeType::BlankNode,
+                ConstraintBaseRDFNodeType::Literal(l_ctr) => {
+                    if let ConstraintBaseRDFNodeType::Literal(l) = t {
                         is_literal_subtype(l.as_ref(), l_ctr.as_ref())
                     } else {
                         false
                     }
                 }
-                BaseRDFNodeType::None => {
+                ConstraintBaseRDFNodeType::None => {
                     panic!("Invalid state")
                 }
             },
@@ -46,11 +76,11 @@ pub struct PossibleTypes {
 }
 
 impl PossibleTypes {
-    pub fn compatible_with(&self, t: &BaseRDFNodeType) -> bool {
+    pub fn compatible_with(&self, t: &ConstraintBaseRDFNodeType) -> bool {
         self.e.as_ref().unwrap().compatible_with(t)
     }
 
-    pub fn singular(t: BaseRDFNodeType) -> Self {
+    pub fn singular(t: ConstraintBaseRDFNodeType) -> Self {
         PossibleTypes::singular_ctr(ConstraintExpr::Constraint(Box::new(t)))
     }
 
@@ -58,7 +88,7 @@ impl PossibleTypes {
         PossibleTypes { e: Some(ctr) }
     }
 
-    pub fn and(&mut self, t: BaseRDFNodeType) {
+    pub fn and(&mut self, t: ConstraintBaseRDFNodeType) {
         self.and_ctr(ConstraintExpr::Constraint(Box::new(t)));
     }
 
@@ -67,7 +97,7 @@ impl PossibleTypes {
         self.e = Some(ConstraintExpr::And(Box::new(old_e), Box::new(ctr)));
     }
 
-    pub fn or(&mut self, t: BaseRDFNodeType) {
+    pub fn or(&mut self, t: ConstraintBaseRDFNodeType) {
         let old_e = self.e.replace(ConstraintExpr::Bottom).unwrap();
         self.e = Some(ConstraintExpr::Or(
             Box::new(old_e),
@@ -108,7 +138,10 @@ pub fn conjunction_variable_type(
     new_map
 }
 
-pub fn equal_variable_type(a: &Expression, b: &Expression) -> Option<(Variable, BaseRDFNodeType)> {
+pub fn equal_variable_type(
+    a: &Expression,
+    b: &Expression,
+) -> Option<(Variable, ConstraintBaseRDFNodeType)> {
     if let Expression::Variable(v) = a {
         if let Some(t) = get_expression_rdf_type(b) {
             return Some((v.clone(), t));
@@ -117,10 +150,14 @@ pub fn equal_variable_type(a: &Expression, b: &Expression) -> Option<(Variable, 
     None
 }
 
-pub fn get_expression_rdf_type(e: &Expression) -> Option<BaseRDFNodeType> {
+pub fn get_expression_rdf_type(e: &Expression) -> Option<ConstraintBaseRDFNodeType> {
     match e {
-        Expression::NamedNode(_) => Some(BaseRDFNodeType::IRI),
-        Expression::Literal(l) => Some(BaseRDFNodeType::Literal(l.datatype().into_owned())),
+        Expression::NamedNode(nn) => Some(ConstraintBaseRDFNodeType::IRI(Some(HashSet::from([
+            named_node_split_prefix(nn),
+        ])))),
+        Expression::Literal(l) => Some(ConstraintBaseRDFNodeType::Literal(
+            l.datatype().into_owned(),
+        )),
         Expression::Or(_, _)
         | Expression::And(_, _)
         | Expression::Equal(_, _)
@@ -132,23 +169,25 @@ pub fn get_expression_rdf_type(e: &Expression) -> Option<BaseRDFNodeType> {
         | Expression::In(_, _)
         | Expression::Not(_)
         | Expression::Exists(_)
-        | Expression::Bound(_) => Some(BaseRDFNodeType::Literal(xsd::BOOLEAN.into_owned())),
+        | Expression::Bound(_) => Some(ConstraintBaseRDFNodeType::Literal(
+            xsd::BOOLEAN.into_owned(),
+        )),
         Expression::Add(_, _)
         | Expression::Subtract(_, _)
         | Expression::Multiply(_, _)
         | Expression::Divide(_, _)
         | Expression::UnaryPlus(_)
-        | Expression::UnaryMinus(_) => {
-            Some(BaseRDFNodeType::Literal(NamedNode::new_unchecked(OWL_REAL)))
-        }
+        | Expression::UnaryMinus(_) => Some(ConstraintBaseRDFNodeType::Literal(
+            NamedNode::new_unchecked(OWL_REAL),
+        )),
         //Expression::If(_, _, _) => {} todo..
         //Expression::Coalesce(_) => {} todo..
         Expression::FunctionCall(f, _args) => match f {
             Function::Str | Function::StrBefore | Function::StrAfter => {
-                Some(BaseRDFNodeType::Literal(xsd::STRING.into_owned()))
+                Some(ConstraintBaseRDFNodeType::Literal(xsd::STRING.into_owned()))
             }
-            Function::Datatype | Function::Iri => Some(BaseRDFNodeType::IRI),
-            Function::BNode => Some(BaseRDFNodeType::BlankNode),
+            Function::Datatype | Function::Iri => Some(ConstraintBaseRDFNodeType::IRI(None)),
+            Function::BNode => Some(ConstraintBaseRDFNodeType::BlankNode),
             Function::Contains
             | Function::Regex
             | Function::LangMatches
@@ -157,13 +196,17 @@ pub fn get_expression_rdf_type(e: &Expression) -> Option<BaseRDFNodeType> {
             | Function::IsIri
             | Function::IsBlank
             | Function::IsLiteral
-            | Function::IsNumeric => Some(BaseRDFNodeType::Literal(xsd::BOOLEAN.into_owned())),
+            | Function::IsNumeric => Some(ConstraintBaseRDFNodeType::Literal(
+                xsd::BOOLEAN.into_owned(),
+            )),
             Function::Year
             | Function::Month
             | Function::Day
             | Function::Hours
             | Function::Minutes
-            | Function::Seconds => Some(BaseRDFNodeType::Literal(xsd::UNSIGNED_INT.into_owned())),
+            | Function::Seconds => Some(ConstraintBaseRDFNodeType::Literal(
+                xsd::UNSIGNED_INT.into_owned(),
+            )),
             Function::Custom(nn) => {
                 if matches!(
                     nn.as_ref(),
@@ -180,7 +223,7 @@ pub fn get_expression_rdf_type(e: &Expression) -> Option<BaseRDFNodeType> {
                         | xsd::FLOAT
                         | xsd::STRING
                 ) {
-                    Some(BaseRDFNodeType::Literal(nn.to_owned()))
+                    Some(ConstraintBaseRDFNodeType::Literal(nn.to_owned()))
                 } else {
                     None
                 }

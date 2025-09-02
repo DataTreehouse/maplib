@@ -10,7 +10,7 @@ use pyo3::prelude::*;
 use representation::python::{
     PyBlankNode, PyIRI, PyLiteral, PyPrefix, PyRDFType, PyRepresentationError, PyVariable,
 };
-use representation::RDFNodeType;
+use representation::BaseRDFNodeType;
 
 #[derive(Clone)]
 #[pyclass(name = "Parameter")]
@@ -33,7 +33,7 @@ impl PyParameter {
         let data_type = if let Some(data_type) = rdf_type {
             if let Ok(r) = data_type.extract::<Py<PyRDFType>>() {
                 Some(
-                    py_rdf_type_to_mapping_column_type(&r, py)
+                    py_rdf_type_to_rdf_node_state(&r, py)
                         .map_err(PyRepresentationError::from)?
                         .as_ptype(),
                 )
@@ -75,7 +75,7 @@ impl PyParameter {
     fn set_rdf_type(&mut self, py: Python, rdf_type: Option<Py<PyRDFType>>) -> PyResult<()> {
         if let Some(rdf_type) = rdf_type {
             self.parameter.ptype = Some(
-                py_rdf_type_to_mapping_column_type(&rdf_type, py)
+                py_rdf_type_to_rdf_node_state(&rdf_type, py)
                     .map_err(PyRepresentationError::from)?
                     .as_ptype(),
             );
@@ -171,7 +171,7 @@ fn ptype_to_py_rdf_type(ptype: &PType) -> PyRDFType {
             nested: None,
         },
         PType::None => PyRDFType {
-            flat: Some(RDFNodeType::None),
+            flat: Some(BaseRDFNodeType::None.into_default_input_rdf_node_state()),
             nested: None,
         },
         PType::Lub(_) => {
@@ -417,17 +417,17 @@ pub fn py_triple<'py>(
     )
 }
 
-pub fn py_rdf_type_to_mapping_column_type(
+pub fn py_rdf_type_to_rdf_node_state(
     py_rdf_type: &Py<PyRDFType>,
     py: Python,
 ) -> Result<MappingColumnType, IriParseError> {
     if let Some(nested) = &py_rdf_type.borrow(py).nested {
         Ok(MappingColumnType::Nested(Box::new(
-            py_rdf_type_to_mapping_column_type(nested, py)?,
+            py_rdf_type_to_rdf_node_state(nested, py)?,
         )))
     } else {
         Ok(MappingColumnType::Flat(
-            py_rdf_type.borrow(py).as_rdf_node_type(),
+            py_rdf_type.borrow(py).as_rdf_node_state(),
         ))
     }
 }

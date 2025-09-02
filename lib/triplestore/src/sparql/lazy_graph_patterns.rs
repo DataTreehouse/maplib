@@ -19,15 +19,12 @@ use crate::sparql::errors::SparqlError;
 use log::{info, trace};
 
 use crate::sparql::lazy_graph_patterns::triples_ordering::order_triple_patterns;
-use oxrdf::vocab::xsd;
 use polars::prelude::{IntoLazy, JoinType};
 use polars_core::frame::DataFrame;
-use polars_core::prelude::{NamedFrom, Series};
 use query_processing::graph_patterns::join;
 use query_processing::pushdowns::Pushdowns;
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
-use representation::RDFNodeType;
 use spargebra::algebra::GraphPattern;
 use std::collections::HashMap;
 
@@ -50,13 +47,14 @@ impl Triplestore {
             GraphPattern::Bgp { patterns } => {
                 let patterns = if let Some(fts_index) = &self.fts_index {
                     let (patterns, fts_solution_mappings) =
-                        fts_index.lookup_from_triple_patterns(patterns)?;
+                        fts_index.lookup_from_triple_patterns(patterns, self.cats.clone())?;
                     if let Some(fts_solution_mappings) = fts_solution_mappings {
                         solution_mappings = if let Some(solution_mappings) = solution_mappings {
                             Some(join(
                                 solution_mappings,
                                 fts_solution_mappings,
                                 JoinType::Inner,
+                                self.cats.clone(),
                             )?)
                         } else {
                             Some(fts_solution_mappings)
@@ -81,21 +79,15 @@ impl Triplestore {
                         query_settings,
                     )?);
                 }
+
                 if let Some(updated_solution_mappings) = updated_solution_mappings {
                     Ok(updated_solution_mappings)
                 } else {
-                    //TODO: FIX THIS PROPERLY
-                    let ser = Series::new("DUMMYDUMMY".into(), vec![true]);
-                    let height = ser.len();
-                    let mut map = HashMap::new();
-                    map.insert(
-                        "DUMMYDUMMY".to_string(),
-                        RDFNodeType::Literal(xsd::BOOLEAN.into_owned()),
-                    );
+                    let map = HashMap::new();
                     Ok(SolutionMappings {
-                        mappings: DataFrame::new(vec![ser.into()]).unwrap().lazy(),
+                        mappings: DataFrame::empty_with_height(1).lazy(),
                         rdf_node_types: map,
-                        height_estimate: height,
+                        height_estimate: 1,
                     })
                 }
             }

@@ -1,7 +1,7 @@
 use crate::constants::{OTTR_BLANK_NODE, OTTR_IRI};
 use oxrdf::vocab::rdfs;
 use oxrdf::{BlankNode, Literal, NamedNode, NamedNodeRef, Variable};
-use representation::RDFNodeType;
+use representation::{BaseRDFNodeType, RDFNodeState};
 use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter};
 
@@ -141,14 +141,20 @@ impl PType {
     }
 }
 
-impl From<&RDFNodeType> for PType {
-    fn from(value: &RDFNodeType) -> Self {
-        match value {
-            RDFNodeType::IRI => PType::Basic(NamedNode::new_unchecked(OTTR_IRI)),
-            RDFNodeType::BlankNode => PType::Basic(NamedNode::new_unchecked(OTTR_BLANK_NODE)),
-            RDFNodeType::Literal(l) => PType::Basic(l.to_owned()),
-            RDFNodeType::None => PType::None,
-            RDFNodeType::MultiType(_) => PType::Basic(rdfs::RESOURCE.into_owned()),
+impl From<&RDFNodeState> for PType {
+    fn from(value: &RDFNodeState) -> Self {
+        if !value.is_multi() {
+            let b = value.get_base_type().unwrap();
+            match b {
+                BaseRDFNodeType::IRI => PType::Basic(NamedNode::new_unchecked(OTTR_IRI)),
+                BaseRDFNodeType::BlankNode => {
+                    PType::Basic(NamedNode::new_unchecked(OTTR_BLANK_NODE))
+                }
+                BaseRDFNodeType::Literal(l) => PType::Basic(l.to_owned()),
+                BaseRDFNodeType::None => PType::None,
+            }
+        } else {
+            PType::Basic(rdfs::RESOURCE.into_owned())
         }
     }
 }
@@ -178,13 +184,13 @@ pub fn ptype_is_blank(nn: NamedNodeRef) -> bool {
     nn.as_str() == OTTR_BLANK_NODE
 }
 
-pub fn ptype_nn_to_rdf_node_type(nn: NamedNodeRef) -> RDFNodeType {
+pub fn ptype_nn_to_rdf_node_type(nn: NamedNodeRef) -> RDFNodeState {
     if ptype_is_blank(nn) {
-        RDFNodeType::BlankNode
+        BaseRDFNodeType::BlankNode.into_default_input_rdf_node_state()
     } else if ptype_is_iri(nn) {
-        RDFNodeType::IRI
+        BaseRDFNodeType::IRI.into_default_input_rdf_node_state()
     } else {
-        RDFNodeType::Literal(nn.into_owned())
+        BaseRDFNodeType::Literal(nn.into_owned()).into_default_input_rdf_node_state()
     }
 }
 

@@ -33,6 +33,8 @@ pub enum PyMaplibError {
     MaplibError(#[from] MaplibError),
     #[error("Function argument error: `{0}`")]
     FunctionArgumentError(String),
+    #[error("Runtime error `{0}`")]
+    RuntimeError(String),
 }
 
 impl std::convert::From<PyMaplibError> for PyErr {
@@ -42,9 +44,11 @@ impl std::convert::From<PyMaplibError> for PyErr {
             PyMaplibError::FunctionArgumentError(s) => {
                 FunctionArgumentException::new_err(s.clone())
             }
+            PyMaplibError::RuntimeError(s) => MaplibRuntimeError::new_err(s.clone()),
         }
     }
 }
 
 create_exception!(exceptions, MaplibException, PyException);
+create_exception!(exceptions, MaplibRuntimeError, PyException);
 create_exception!(exceptions, FunctionArgumentException, PyException);

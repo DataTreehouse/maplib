@@ -13,7 +13,7 @@ use oxrdf::NamedNode;
 use oxrdfio::RdfFormat;
 use polars::prelude::DataFrame;
 use representation::solution_mapping::EagerSolutionMappings;
-use representation::RDFNodeType;
+use representation::RDFNodeState;
 use shacl::{validate, ValidationReport};
 use std::collections::HashMap;
 use std::io::Write;
@@ -44,19 +44,16 @@ pub struct Mapping {
 pub struct ExpandOptions {
     pub graph: Option<NamedNode>,
     pub validate_iris: bool,
-    pub delay_index: bool,
 }
 
 impl ExpandOptions {
     pub fn from_args(
         graph: Option<NamedNode>,
         validate_iris: Option<bool>,
-        delay_index: Option<bool>,
     ) -> Self {
         ExpandOptions {
             graph,
             validate_iris: validate_iris.unwrap_or(true),
-            delay_index: delay_index.unwrap_or(true),
         }
     }
 }
@@ -111,11 +108,6 @@ impl Mapping {
             indexing,
             ruleset: None,
         })
-    }
-
-    pub fn index_unindexed(&mut self, graph: &Option<NamedNode>) -> Result<(), TriplestoreError> {
-        let t = self.get_triplestore(graph);
-        t.index_unindexed()
     }
 
     pub fn from_folder<P: AsRef<Path>>(
@@ -270,9 +262,7 @@ impl Mapping {
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         graph: Option<NamedNode>,
         streaming: bool,
-        delay_index: bool,
         include_transient: bool,
-        allow_duplicates: bool,
         #[cfg(feature = "pyo3")] py: pyo3::Python<'_>,
     ) -> Result<(), MaplibError> {
         let use_triplestore = self.get_triplestore(&graph);
@@ -281,9 +271,7 @@ impl Mapping {
                 update,
                 parameters,
                 streaming,
-                delay_index,
                 include_transient,
-                allow_duplicates,
                 #[cfg(feature = "pyo3")]
                 py,
             )
@@ -295,10 +283,9 @@ impl Mapping {
         sms: Vec<(EagerSolutionMappings, Option<NamedNode>)>,
         transient: bool,
         target_graph: Option<NamedNode>,
-        delay_index: bool,
     ) -> Result<Vec<NewTriples>, SparqlError> {
         let use_triplestore = self.get_triplestore(&target_graph);
-        let new_triples = use_triplestore.insert_construct_result(sms, transient, delay_index)?;
+        let new_triples = use_triplestore.insert_construct_result(sms, transient)?;
         Ok(new_triples)
     }
 
@@ -439,10 +426,7 @@ impl Mapping {
     ) -> Result<Vec<EagerSolutionMappings>, MaplibError> {
         let triplestore = self.get_triplestore(&graph);
         triplestore
-            .index_unindexed()
-            .map_err(SparqlError::IndexingError)?;
-        triplestore
-            .get_predicate_eager_solution_mappings(predicate, include_transient, false)
+            .get_predicate_eager_solution_mappings(predicate, include_transient)
             .map_err(|x| x.into())
     }
 

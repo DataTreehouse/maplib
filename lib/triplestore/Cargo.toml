@@ -13,16 +13,16 @@ query_processing = { path = "../query_processing" }
 representation = { path = "../representation" }
 file_io = { path = "../file_io" }
 spargebra = { path = "../spargebra" }
-fts = {path = "../fts"}
+fts = {path ="../fts"}
 
 rayon.workspace = true
 sprs = { workspace = true, features = ["multi_thread"] }
 oxrdf.workspace = true
 polars = { workspace = true, features = [
-    "ipc",
-    "is_unique","merge_sorted", "streaming", "zip_with", "nightly", "performant", "cse", "semi_anti_join", "abs", "round_series", "lazy", "concat_str", "is_in",
+    "ipc", "range",
+    "is_unique","merge_sorted", "new_streaming", "zip_with", "nightly", "performant", "cse", "semi_anti_join", "abs", "round_series", "lazy", "concat_str", "is_in",
     "dtype-full", "strings", "rows", "timezones", "polars-time", "temporal", "list_eval", "partition_by", "parquet",
-    "diagonal_concat", "cross_join", "cum_agg"], default-features = false }
+    "diagonal_concat", "cum_agg"], default-features = false }
 polars-core = {workspace = true, default-features = false}
 log.workspace = true
 uuid.workspace = true
@@ -31,6 +31,7 @@ oxrdfio.workspace = true
 oxttl.workspace = true
 memmap2.workspace = true
 sparesults.workspace = true
+priority-queue.workspace = true
 
 pyo3 = { workspace = true, optional = true }
 

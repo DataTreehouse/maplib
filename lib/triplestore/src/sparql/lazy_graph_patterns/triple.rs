@@ -6,12 +6,12 @@ use representation::solution_mapping::SolutionMappings;
 use crate::sparql::QuerySettings;
 use log::trace;
 use oxrdf::{NamedNode, Subject, Term};
-use polars::prelude::IntoLazy;
-use polars::prelude::{col, lit, AnyValue, DataType, JoinType};
+use polars::prelude::{by_name, IntoLazy};
+use polars::prelude::{lit, AnyValue, DataType, JoinType};
 use query_processing::graph_patterns::join;
 use query_processing::pushdowns::Pushdowns;
-use query_processing::type_constraints::PossibleTypes;
-use representation::{literal_iri_to_namednode, BaseRDFNodeType, RDFNodeType};
+use query_processing::type_constraints::{ConstraintBaseRDFNodeType, PossibleTypes};
+use representation::literal_iri_to_namednode;
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 use std::collections::{HashMap, HashSet};
 
@@ -30,8 +30,9 @@ impl Triplestore {
             context.as_str()
         );
 
-        let mut solution_mappings = solution_mappings
-            .map(|solution_mappings| pushdowns.add_from_solution_mappings(solution_mappings));
+        let mut solution_mappings = solution_mappings.map(|solution_mappings| {
+            pushdowns.add_from_solution_mappings(solution_mappings, self.cats.clone())
+        });
         let subjects = create_subjects(&triple_pattern.subject, &pushdowns.variables_values);
         let subject_type_ctr = create_type_constraint(
             &triple_pattern.subject,
@@ -45,6 +46,7 @@ impl Triplestore {
         let subject_rename = get_keep_rename_term_pattern(&triple_pattern.subject);
         let verb_rename = get_keep_rename_named_node_pattern(&triple_pattern.predicate);
         let object_rename = get_keep_rename_term_pattern(&triple_pattern.object);
+
         let SolutionMappings {
             mappings: lf,
             rdf_node_types: dts,
@@ -60,7 +62,6 @@ impl Triplestore {
                 &subject_type_ctr,
                 &object_type_ctr,
                 query_settings.include_transient,
-                query_settings.allow_duplicates,
             )?,
             NamedNodePattern::Variable(v) => {
                 let mut predicates: Option<HashSet<NamedNode>> = None;
@@ -85,8 +86,9 @@ impl Triplestore {
                 }) = solution_mappings
                 {
                     if let Some(dt) = rdf_node_types.get(v.as_str()) {
-                        if let RDFNodeType::IRI = dt {
+                        if dt.is_iri() {
                             let mappings_df = mappings.collect().unwrap();
+                            //TODO! Fix
                             let predicates_series = mappings_df
                                 .column(v.as_str())
                                 .unwrap()
@@ -142,7 +144,6 @@ impl Triplestore {
                     &subject_type_ctr,
                     &object_type_ctr,
                     query_settings.include_transient,
-                    query_settings.allow_duplicates,
                 )?
             }
         };
@@ -161,7 +162,7 @@ impl Triplestore {
             if height_upper_bound == 0 {
                 // Important that overlapping cols are dropped from mappings and not from lf,
                 // since we also overwrite rdf_node_types with dts correspondingly below.
-                mappings = mappings.drop(overlap.iter().map(col));
+                mappings = mappings.drop(by_name(overlap.iter(), true));
                 if colnames.is_empty() {
                     mappings = mappings.filter(lit(false));
                 } else {
@@ -188,6 +189,7 @@ impl Triplestore {
                     solution_mappings.unwrap(),
                     new_solution_mappings,
                     JoinType::Inner,
+                    self.cats.clone(),
                 )?);
             }
         } else {
@@ -206,10 +208,12 @@ fn create_type_constraint(
     variable_type_constraint: &HashMap<String, PossibleTypes>,
 ) -> Option<PossibleTypes> {
     match term_pattern {
-        TermPattern::NamedNode(_) => Some(PossibleTypes::singular(BaseRDFNodeType::IRI)),
-        TermPattern::Literal(l) => Some(PossibleTypes::singular(BaseRDFNodeType::Literal(
-            l.datatype().into_owned(),
-        ))),
+        TermPattern::NamedNode(nn) => Some(PossibleTypes::singular(
+            ConstraintBaseRDFNodeType::IRI(Some(HashSet::from([nn.clone()]))),
+        )),
+        TermPattern::Literal(l) => Some(PossibleTypes::singular(
+            ConstraintBaseRDFNodeType::Literal(l.datatype().into_owned()),
+        )),
         TermPattern::Variable(v) => variable_type_constraint.get(v.as_str()).cloned(),
         _ => None,
     }

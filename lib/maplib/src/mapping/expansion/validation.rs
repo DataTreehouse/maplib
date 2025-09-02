@@ -10,7 +10,7 @@ use rayon::current_num_threads;
 use rayon::iter::IntoParallelIterator;
 use rayon::iter::ParallelIterator;
 use representation::polars_to_rdf::polars_type_to_literal_type;
-use representation::{BaseRDFNodeType, RDFNodeType};
+use representation::{BaseRDFNodeType, RDFNodeState};
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use templates::ast::{ptype_is_blank, ptype_is_iri, PType, Parameter, Template};
@@ -107,7 +107,7 @@ pub fn validate(
 pub fn validate_flat_iri_column(
     ser: &Series,
     colname: &str,
-    t: &RDFNodeType,
+    t: &RDFNodeState,
 ) -> Result<(), MappingError> {
     if t.is_iri() {
         let c = ser
@@ -209,7 +209,9 @@ fn infer_mapping_column_type(
 
 pub fn infer_type_from_column(column: &Column) -> Result<MappingColumnType, MappingError> {
     if is_iri_col(column) {
-        return Ok(MappingColumnType::Flat(RDFNodeType::IRI));
+        return Ok(MappingColumnType::Flat(
+            BaseRDFNodeType::IRI.into_default_input_rdf_node_state(),
+        ));
     }
     let series_inferred_mapping_column_type =
         polars_datatype_to_mapping_column_datatype(column.dtype())?;
@@ -244,10 +246,14 @@ fn infer_validate_mapping_column_type_from_ptype(
         }
         PType::Basic(nn) => {
             if datatype.is_null() {
-                Ok(MappingColumnType::Flat(RDFNodeType::None))
+                Ok(MappingColumnType::Flat(
+                    BaseRDFNodeType::None.into_default_input_rdf_node_state(),
+                ))
             } else if ptype_is_iri(nn.as_ref()) {
                 if datatype.is_string() || datatype.is_categorical() {
-                    Ok(MappingColumnType::Flat(RDFNodeType::IRI))
+                    Ok(MappingColumnType::Flat(
+                        BaseRDFNodeType::IRI.into_default_input_rdf_node_state(),
+                    ))
                 } else {
                     Err(MappingError::ColumnDataTypeMismatch(
                         column_name.to_string(),
@@ -258,7 +264,9 @@ fn infer_validate_mapping_column_type_from_ptype(
                 }
             } else if ptype_is_blank(nn.as_ref()) {
                 if datatype.is_string() || datatype.is_categorical() {
-                    Ok(MappingColumnType::Flat(RDFNodeType::BlankNode))
+                    Ok(MappingColumnType::Flat(
+                        BaseRDFNodeType::BlankNode.into_default_input_rdf_node_state(),
+                    ))
                 } else {
                     Err(MappingError::ColumnDataTypeMismatch(
                         column_name.to_string(),
@@ -275,18 +283,26 @@ fn infer_validate_mapping_column_type_from_ptype(
                     Ok(MappingColumnType::Flat(series_inferred_rdf_node_type))
                 } else {
                     let ptype_rdf_node_type = BaseRDFNodeType::Literal(nn.clone());
-                    let ptype_dt = ptype_rdf_node_type.polars_data_type();
+                    let ptype_dt = ptype_rdf_node_type.default_input_polars_data_type();
                     if ptype_dt.is_string() && (datatype.is_string() || datatype.is_categorical())
                         || &ptype_dt == datatype
                     {
                         Ok(MappingColumnType::Flat(
-                            ptype_rdf_node_type.as_rdf_node_type(),
+                            ptype_rdf_node_type.into_default_input_rdf_node_state(),
                         ))
                     } else {
                         let series_inferred_rdf_node_type =
                             polars_type_to_literal_type(datatype)
                                 .map_err(MappingError::DatatypeInferenceError)?;
-                        if let RDFNodeType::Literal(inferred_nn) = &series_inferred_rdf_node_type {
+                        if series_inferred_rdf_node_type.is_literal() {
+                            let base_inferred =
+                                series_inferred_rdf_node_type.get_base_type().unwrap();
+                            let inferred_nn =
+                                if let BaseRDFNodeType::Literal(inferred_nn) = base_inferred {
+                                    inferred_nn
+                                } else {
+                                    unreachable!("Should never happen")
+                                };
                             if is_literal_subtype_ext(inferred_nn.as_ref(), nn.as_ref()) {
                                 Ok(MappingColumnType::Flat(series_inferred_rdf_node_type))
                             } else {

@@ -1,6 +1,6 @@
 use crate::query_context::Context;
 use crate::rdf_to_polars::rdf_literal_to_polars_literal_value;
-use crate::{BaseRDFNodeType, RDFNodeType};
+use crate::{BaseRDFNodeType, RDFNodeState};
 use chrono::{DateTime, TimeDelta, TimeZone};
 use chrono_tz::Tz;
 use oxrdf::vocab::xsd;
@@ -62,54 +62,48 @@ create_exception!(exceptions, VariableNameParseErrorException, PyException);
 #[derive(Debug, Clone)]
 #[pyclass(name = "RDFType")]
 pub struct PyRDFType {
-    pub flat: Option<RDFNodeType>,
+    pub flat: Option<RDFNodeState>,
     pub nested: Option<Py<PyRDFType>>,
 }
 
 impl Display for PyRDFType {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         if let Some(flat) = &self.flat {
-            match flat {
-                RDFNodeType::IRI => {
-                    write!(f, "RDFType.IRI()")
-                }
-                RDFNodeType::BlankNode => {
-                    write!(f, "RDFType.BlankNode()")
-                }
-                RDFNodeType::Literal(l) => {
-                    write!(f, "RDFType.Literal({l})")
-                }
-                RDFNodeType::None => {
-                    write!(f, "RDFType.None()")
-                }
-                RDFNodeType::MultiType(ts) => {
-                    write!(f, "RDFType.Multi([").unwrap();
-                    for (i, t) in ts.iter().enumerate() {
-                        match t {
-                            BaseRDFNodeType::IRI => {
-                                write!(f, "RDFType.IRI()").unwrap();
-                            }
-                            BaseRDFNodeType::BlankNode => {
-                                write!(f, "RDFType.BlankNode()").unwrap();
-                            }
-                            BaseRDFNodeType::Literal(l) => {
-                                write!(f, "RDFType.Literal({l})").unwrap();
-                            }
-                            BaseRDFNodeType::None => {
-                                write!(f, "RDFType.None()").unwrap();
-                            }
-                        }
-                        if i != ts.len() - 1 {
-                            write!(f, ", ").unwrap();
-                        }
+            if flat.is_multi() {
+                write!(f, "RDFType.Multi([").unwrap();
+                let sorted_types = flat.get_sorted_types();
+                let n_types = sorted_types.len();
+                for (i, t) in sorted_types.iter().enumerate() {
+                    write_base(f, *t)?;
+                    if i != n_types - 1 {
+                        write!(f, ", ").unwrap();
                     }
-                    write!(f, "])")
                 }
+                write!(f, "])")
+            } else {
+                write_base(f, flat.get_base_type().unwrap())
             }
         } else if let Some(nested) = &self.nested {
             write!(f, "RDFType.Nested({nested})")
         } else {
             panic!()
+        }
+    }
+}
+
+fn write_base(f: &mut Formatter<'_>, t: &BaseRDFNodeType) -> std::fmt::Result {
+    match t {
+        BaseRDFNodeType::IRI => {
+            write!(f, "RDFType.IRI()")
+        }
+        BaseRDFNodeType::BlankNode => {
+            write!(f, "RDFType.BlankNode()")
+        }
+        BaseRDFNodeType::Literal(l) => {
+            write!(f, "RDFType.Literal(\"{}\")", l.as_str())
+        }
+        BaseRDFNodeType::None => {
+            write!(f, "RDFType.None()")
         }
     }
 }
@@ -123,7 +117,7 @@ impl PyRDFType {
     fn __richcmp__(&self, other: PyRDFType, op: CompareOp, py: Python) -> PyResult<bool> {
         if matches!(op, CompareOp::Eq) {
             if let (Some(self_flat), Some(other_flat)) = (&self.flat, &other.flat) {
-                Ok(self_flat == other_flat)
+                Ok(self_flat.types_equal(other_flat))
             } else if let (Some(self_nested), Some(other_nested)) = (&self.nested, &other.nested) {
                 let other_nested = other_nested.extract(py)?;
                 self_nested.borrow(py).__richcmp__(other_nested, op, py)
@@ -143,14 +137,17 @@ impl PyRDFType {
     fn literal(iri: Bound<'_, PyAny>) -> PyResult<PyRDFType> {
         if let Ok(pyiri) = iri.extract::<PyIRI>() {
             Ok(PyRDFType {
-                flat: Some(RDFNodeType::Literal(pyiri.iri)),
+                flat: Some(BaseRDFNodeType::Literal(pyiri.iri).into_default_input_rdf_node_state()),
                 nested: None,
             })
         } else if let Ok(s) = iri.extract::<String>() {
             Ok(PyRDFType {
-                flat: Some(RDFNodeType::Literal(
-                    NamedNode::new(s).map_err(PyRepresentationError::IriParseError)?,
-                )),
+                flat: Some(
+                    BaseRDFNodeType::Literal(
+                        NamedNode::new(s).map_err(PyRepresentationError::IriParseError)?,
+                    )
+                    .into_default_input_rdf_node_state(),
+                ),
                 nested: None,
             })
         } else {
@@ -164,7 +161,7 @@ impl PyRDFType {
     #[pyo3(name = "IRI")]
     fn iri() -> PyRDFType {
         PyRDFType {
-            flat: Some(RDFNodeType::IRI),
+            flat: Some(BaseRDFNodeType::IRI.into_default_input_rdf_node_state()),
             nested: None,
         }
     }
@@ -173,7 +170,7 @@ impl PyRDFType {
     #[pyo3(name = "BlankNode")]
     fn blank_node() -> PyRDFType {
         PyRDFType {
-            flat: Some(RDFNodeType::BlankNode),
+            flat: Some(BaseRDFNodeType::BlankNode.into_default_input_rdf_node_state()),
             nested: None,
         }
     }
@@ -182,7 +179,7 @@ impl PyRDFType {
     #[pyo3(name = "Unknown")]
     fn unknown() -> PyRDFType {
         PyRDFType {
-            flat: Some(RDFNodeType::None),
+            flat: Some(BaseRDFNodeType::None.into_default_input_rdf_node_state()),
             nested: None,
         }
     }
@@ -199,34 +196,33 @@ impl PyRDFType {
     #[staticmethod]
     #[pyo3(name = "Multi")]
     fn multi(rdf_types: Vec<Py<PyRDFType>>, py: Python) -> PyRDFType {
-        let mut mapped = vec![];
+        let mut mapped = HashMap::new();
         for r in rdf_types {
-            mapped.push(BaseRDFNodeType::from_rdf_node_type(
-                &r.borrow(py).as_rdf_node_type(),
-            ));
+            let state = r.borrow(py).as_rdf_node_state();
+            mapped.extend(state.map);
         }
-        let rdf_node_type = RDFNodeType::MultiType(mapped);
+        let rdf_node_state = RDFNodeState::from_map(mapped);
         PyRDFType {
-            flat: Some(rdf_node_type),
+            flat: Some(rdf_node_state),
             nested: None,
         }
     }
 }
 
 impl PyRDFType {
-    pub fn as_rdf_node_type(&self) -> RDFNodeType {
-        if let Some(rdf_node_type) = &self.flat {
-            rdf_node_type.clone()
+    pub fn as_rdf_node_state(&self) -> RDFNodeState {
+        if let Some(rdf_node_state) = &self.flat {
+            rdf_node_state.clone()
         } else {
             todo!()
         }
     }
 }
 
-impl From<RDFNodeType> for PyRDFType {
-    fn from(rdf_node_type: RDFNodeType) -> Self {
+impl From<RDFNodeState> for PyRDFType {
+    fn from(rdf_node_state: RDFNodeState) -> Self {
         PyRDFType {
-            flat: Some(rdf_node_type),
+            flat: Some(rdf_node_state),
             nested: None,
         }
     }
@@ -497,7 +493,7 @@ impl PyBlankNode {
 #[pyo3(name = "SolutionMappings")]
 pub struct PySolutionMappings {
     pub mappings: Py<PyAny>,
-    pub rdf_node_types: HashMap<String, RDFNodeType>,
+    pub rdf_node_states: HashMap<String, RDFNodeState>,
     pub pushdown_paths: Option<Vec<Context>>,
 }
 
@@ -511,7 +507,7 @@ impl PySolutionMappings {
     #[getter]
     fn rdf_types(&self) -> HashMap<String, PyRDFType> {
         let mut map = HashMap::new();
-        for (k, v) in &self.rdf_node_types {
+        for (k, v) in &self.rdf_node_states {
             map.insert(
                 k.clone(),
                 PyRDFType {

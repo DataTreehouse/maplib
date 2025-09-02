@@ -2915,7 +2915,6 @@ dependencies = [
  "polars",
  "pyo3",
  "rayon",
- "serde",
  "spargebra",
  "thiserror",
  "utils",
@@ -3881,7 +3880,6 @@ name = "utils"
 version = "0.1.0"
 dependencies = [
  "polars",
- "polars-core",
  "pyo3",
  "rayon",
  "thiserror",

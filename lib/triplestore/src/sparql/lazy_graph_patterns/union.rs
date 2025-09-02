@@ -44,9 +44,11 @@ impl Triplestore {
             query_settings,
         )?;
 
-        Ok(union(
+        let u = union(
             vec![left_solution_mappings, right_solution_mappings],
             true,
-        )?)
+            self.cats.clone(),
+        )?;
+        Ok(u)
     }
 }

@@ -1,7 +1,7 @@
 use crate::errors::TriplestoreError;
 use fts::FtsError;
 use query_processing::errors::QueryProcessingError;
-use representation::RDFNodeType;
+use representation::RDFNodeState;
 use spargebra::SparqlSyntaxError;
 use thiserror::Error;
 
@@ -12,7 +12,7 @@ pub enum SparqlError {
     #[error("Query type not supported")]
     QueryTypeNotSupported,
     #[error("Inconsistent datatypes for {}, {:?}, {:?} in context {}", .0, .1, .2, .3)]
-    InconsistentDatatypes(String, RDFNodeType, RDFNodeType, String),
+    InconsistentDatatypes(String, RDFNodeState, RDFNodeState, String),
     #[error(transparent)]
     QueryProcessingError(#[from] QueryProcessingError),
     #[error("Error indexing triples {}", .0)]

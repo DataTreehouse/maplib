@@ -18,11 +18,12 @@ impl Triplestore {
         _pushdowns: Pushdowns,
     ) -> Result<SolutionMappings, SparqlError> {
         let sm = values_pattern(variables, bindings);
+        let (sm, _) = self.cats.encode_solution_mappings(sm, None);
         if let Some(mut mappings) = solution_mappings {
-            mappings = join(mappings, sm, JoinType::Inner)?;
+            mappings = join(mappings, sm.as_lazy(), JoinType::Inner, self.cats.clone())?;
             Ok(mappings)
         } else {
-            Ok(sm)
+            Ok(sm.as_lazy())
         }
     }
 }

@@ -71,7 +71,12 @@ impl Triplestore {
             new_rdf_node_types,
         )?;
         let solution_mappings = if let Some(solution_mappings) = solution_mappings {
-            join(solution_mappings, grouped, JoinType::Inner)?
+            join(
+                solution_mappings,
+                grouped,
+                JoinType::Inner,
+                self.cats.clone(),
+            )?
         } else {
             grouped
         };

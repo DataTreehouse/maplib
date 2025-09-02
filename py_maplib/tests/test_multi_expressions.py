@@ -416,11 +416,12 @@ def test_multi_filter_is_in(streaming):
     PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
     SELECT ?a WHERE {
     {VALUES (?a) { (:hello2) }} UNION {VALUES (?a) { ("string") }}
-    FILTER(?a in (:hello2, "a"))
+        FILTER(?a in (:hello2, "abc"))
     }
     """,
         streaming=streaming,
     )
+    print(df)
     assert_frame_equal(df, pl.DataFrame({"a": ["<http://example.net/hello2>"]}))
 
 

@@ -11,12 +11,14 @@ use pyo3::ffi::Py_uintptr_t;
 use pyo3::prelude::*;
 use pyo3::types::PyList;
 use pyo3::IntoPyObjectExt;
-use representation::formatting::format_columns;
-use representation::multitype::{compress_actual_multitypes, lf_column_from_categorical};
+use representation::cats::Cats;
+use representation::formatting::{format_columns, format_native_columns};
+use representation::multitype::compress_actual_multitypes;
 use representation::python::PySolutionMappings;
 use representation::query_context::Context;
-use representation::RDFNodeType;
+use representation::RDFNodeState;
 use std::collections::HashMap;
+use std::sync::Arc;
 
 /// Arrow array to Python.
 pub(crate) fn to_py_array(
@@ -82,7 +84,7 @@ pub fn to_py_df(
 
 pub fn df_to_py_df(
     mut df: DataFrame,
-    rdf_node_types: HashMap<String, RDFNodeType>,
+    rdf_node_states: HashMap<String, RDFNodeState>,
     pushdown_paths: Option<Vec<Context>>,
     include_datatypes: bool,
     py: Python,
@@ -106,7 +108,7 @@ pub fn df_to_py_df(
             py,
             PySolutionMappings {
                 mappings: py_df.into_any(),
-                rdf_node_types,
+                rdf_node_states,
                 pushdown_paths,
             },
         )?
@@ -118,9 +120,10 @@ pub fn df_to_py_df(
 
 pub fn fix_cats_and_multicolumns(
     mut df: DataFrame,
-    mut dts: HashMap<String, RDFNodeType>,
+    mut dts: HashMap<String, RDFNodeState>,
     native_dataframe: bool,
-) -> (DataFrame, HashMap<String, RDFNodeType>) {
+    global_cats: Arc<Cats>,
+) -> (DataFrame, HashMap<String, RDFNodeState>) {
     let column_ordering: Vec<_> = df
         .get_column_names()
         .iter()
@@ -129,11 +132,10 @@ pub fn fix_cats_and_multicolumns(
     //Important that column compression happen before decisions are made based on column type.
     (df, dts) = compress_actual_multitypes(df, dts);
     let mut lf = df.lazy();
-    for c in dts.keys() {
-        lf = lf_column_from_categorical(lf.lazy(), c, &dts);
-    }
     if !native_dataframe {
-        lf = format_columns(lf, &dts)
+        lf = format_columns(lf, &dts, global_cats)
+    } else {
+        lf = format_native_columns(lf, &dts, global_cats)
     }
     df = lf.select(column_ordering).collect().unwrap();
     (df, dts)

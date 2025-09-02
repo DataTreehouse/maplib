@@ -237,9 +237,12 @@ impl Triplestore {
 
                         triples_to_add.push(TriplesToAdd {
                             df,
-                            subject_type: subject_dt.as_rdf_node_type(),
-                            object_type: object_dt.as_rdf_node_type(),
-                            static_verb_column: Some(NamedNode::new_unchecked(k.clone())),
+                            subject_type: subject_dt.clone(),
+                            object_type: object_dt.clone(),
+                            predicate: Some(NamedNode::new_unchecked(k.clone())),
+                            subject_cat_state: subject_dt.default_input_cat_state(),
+                            predicate_cat_state: None,
+                            object_cat_state: object_dt.default_input_cat_state(),
                         });
                     }
                 }
@@ -253,12 +256,7 @@ impl Triplestore {
         );
         let start_add_triples_vec = Instant::now();
         self.parser_call += 1;
-        self.add_triples_vec(
-            triples_to_add,
-            &uuid::Uuid::new_v4().to_string(),
-            transient,
-            true,
-        )?;
+        self.add_triples_vec(triples_to_add, transient)?;
         debug!(
             "Adding triples vec took {} seconds",
             start_add_triples_vec.elapsed().as_secs_f64()

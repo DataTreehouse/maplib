@@ -61,7 +61,7 @@ impl PyValidationReport {
         let streaming = streaming.unwrap_or(false);
         let report = if let Some(sm) = self
             .inner
-            .concatenated_results()
+            .concatenated_results(self.inner.cats.clone())
             .map_err(|x| PyMaplibError::from(MaplibError::from(x)))?
         {
             let EagerSolutionMappings {
@@ -72,6 +72,7 @@ impl PyValidationReport {
                 mappings,
                 rdf_node_types,
                 native_dataframe.unwrap_or(false),
+                todo!(),
             );
             Some(df_to_py_df(
                 mappings,
@@ -97,7 +98,7 @@ impl PyValidationReport {
         let streaming = streaming.unwrap_or(false);
         let details = if let Some(sm) = self
             .inner
-            .concatenated_details()
+            .concatenated_details(self.inner.cats.clone())
             .map_err(|x| PyMaplibError::from(MaplibError::from(x)))?
         {
             let EagerSolutionMappings {
@@ -108,6 +109,7 @@ impl PyValidationReport {
                 mappings,
                 rdf_node_types,
                 native_dataframe.unwrap_or(false),
+                self.inner.cats.clone(),
             );
             Some(df_to_py_df(
                 mappings,

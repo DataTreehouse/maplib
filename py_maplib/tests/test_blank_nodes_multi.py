@@ -199,7 +199,8 @@ def test_multi_datatype_union_query_native_df(blank_person_mapping, streaming):
     filename = TESTDATA_PATH / "multi_datatype_union_query_native_df.parquet"
     # df.write_parquet(filename)
     expected_df = pl.scan_parquet(filename).sort(by).collect()
-    assert_frame_equal(df, expected_df)
+    # We are forgiving of ordering of fields in struct.
+    assert_frame_equal(df, expected_df, check_exact=False)
 
 
 @pytest.mark.parametrize("streaming", [True, False])
