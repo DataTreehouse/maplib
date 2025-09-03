@@ -7,11 +7,13 @@ use oxrdf::{NamedNode, NamedOrBlankNode};
 use polars::prelude::DataFrame;
 use representation::solution_mapping::SolutionMappings;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::Duration;
 use triplestore::Triplestore;
 
 #[cfg(feature = "pyo3")]
 use pyo3::Python;
+use representation::cats::Cats;
 
 #[derive(Debug, Clone)]
 pub struct ShapeTargets {
@@ -34,14 +36,15 @@ pub struct ValidationReport {
     pub validation_performance: Vec<Performance>,
     pub targets_performance: Vec<Performance>,
     pub shape_targets: Vec<ShapeTargets>,
+    pub cats: Arc<Cats>,
 }
 
 impl ValidationReport {
-    pub fn concatenated_results(&self) -> Result<Option<SolutionMappings>, ShaclError> {
+    pub fn concatenated_results(&self, _global_cats: Arc<Cats>) -> Result<Option<SolutionMappings>, ShaclError> {
         unimplemented!("Contact Data Treehouse to try")
     }
 
-    pub fn concatenated_details(&self) -> Result<Option<SolutionMappings>, ShaclError> {
+    pub fn concatenated_details(&self, _global_cats: Arc<Cats>, ) -> Result<Option<SolutionMappings>, ShaclError> {
         unimplemented!("Contact Data Treehouse to try")
     }
     pub fn performance_df(&self) -> DataFrame {
