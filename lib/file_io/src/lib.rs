@@ -1,13 +1,9 @@
-use polars::prelude::{
-    DataFrame, LazyFrame, ParallelStrategy, ParquetCompression, ParquetWriter, PlPath, PolarsError,
-    ScanArgsParquet,
-};
+use polars::prelude::{DataFrame, LazyFrame, ParallelStrategy, ParquetCompression, ParquetWriter, PlPathRef, PolarsError, ScanArgsParquet};
 use std::fs::{create_dir, File};
 use std::path::Path;
 
 use std::fmt::{Display, Formatter};
 use std::io;
-use std::sync::Arc;
 use thiserror::Error;
 
 pub fn create_folder_if_not_exists(path: &Path) -> Result<(), FileIOError> {
@@ -62,7 +58,7 @@ pub fn write_parquet(
 
 pub fn scan_parquet(file_path: &Path) -> Result<LazyFrame, FileIOError> {
     LazyFrame::scan_parquet(
-        PlPath::Local(Arc::from(file_path)),
+        PlPathRef::Local(file_path).into_owned(),
         ScanArgsParquet {
             n_rows: None,
             cache: false,
