@@ -4,7 +4,9 @@ use representation::solution_mapping::SolutionMappings;
 use representation::BaseRDFNodeType;
 use spargebra::term::TriplePattern;
 use std::path::Path;
+use std::sync::Arc;
 use thiserror::Error;
+use representation::cats::Cats;
 
 #[derive(Debug, Error)]
 pub enum FtsError {}
