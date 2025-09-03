@@ -1,7 +1,7 @@
 use representation::solution_mapping::EagerSolutionMappings;
-use representation::RDFNodeType;
 use std::collections::HashMap;
 use std::path::PathBuf;
+use representation::RDFNodeState;
 
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
@@ -21,6 +21,6 @@ pub enum StoredSolutionMappings {
 #[derive(Debug, Clone)]
 pub struct SolutionMappingsOnDisk {
     height: usize,
-    rdf_node_types: HashMap<String, RDFNodeType>,
+    rdf_node_types: HashMap<String, RDFNodeState>,
     file: PathBuf,
 }
