@@ -29,6 +29,7 @@ impl FtsIndex {
     pub fn lookup_from_triple_patterns(
         &self,
         _patterns: &Vec<TriplePattern>,
+        _global_cats: Arc<Cats>,
     ) -> Result<(Vec<TriplePattern>, Option<SolutionMappings>), FtsError> {
         unimplemented!("Contact Data Treehouse to enable full text search")
     }
