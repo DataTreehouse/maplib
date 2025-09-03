@@ -186,12 +186,7 @@ impl Triplestore {
         include_transient: bool,
     ) -> Result<QueryResult, SparqlError> {
         let query = Query::parse(query, None).map_err(SparqlError::ParseError)?;
-        self.query_parsed_indexed_uninterruptable(
-            &query,
-            parameters,
-            streaming,
-            include_transient,
-        )
+        self.query_parsed_indexed_uninterruptable(&query, parameters, streaming, include_transient)
     }
 
     pub fn query_parsed(
@@ -220,9 +215,7 @@ impl Triplestore {
         include_transient: bool,
         #[cfg(feature = "pyo3")] py: Python<'_>,
     ) -> Result<QueryResult, SparqlError> {
-        let qs = QuerySettings {
-            include_transient,
-        };
+        let qs = QuerySettings { include_transient };
         let context = Context::new();
         match query {
             Query::Select {
@@ -315,9 +308,7 @@ impl Triplestore {
         streaming: bool,
         include_transient: bool,
     ) -> Result<QueryResult, SparqlError> {
-        let qs = QuerySettings {
-            include_transient,
-        };
+        let qs = QuerySettings { include_transient };
         let context = Context::new();
         match query {
             Query::Select {
@@ -403,9 +394,7 @@ impl Triplestore {
                 QueryResult::Select(_) => {
                     panic!("Should never happen")
                 }
-                QueryResult::Construct(dfs) => {
-                    self.insert_construct_result(dfs, transient)
-                }
+                QueryResult::Construct(dfs) => self.insert_construct_result(dfs, transient),
             }
         } else {
             Err(SparqlError::QueryTypeNotSupported)

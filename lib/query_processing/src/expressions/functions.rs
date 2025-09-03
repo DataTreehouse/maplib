@@ -945,45 +945,146 @@ pub fn func_expression(
                     RDFNodeState::from_bases(bt.clone(), BaseCatState::String),
                 );
             } else if t.is_lang_string() {
+                let mut exprs = vec![];
                 match func {
                     Function::StrBefore => {
-                        solution_mappings.mappings = solution_mappings.mappings.with_column(
+                        exprs.push(
                             col(first_context.as_str())
                                 .struct_()
-                                .with_fields(vec![col(first_context.as_str())
-                                    .struct_()
-                                    .field_by_name(LANG_STRING_VALUE_FIELD)
-                                    .str()
-                                    .strip_suffix(second_decoded)])
-                                .alias(outer_context.as_str()),
+                                .field_by_name(LANG_STRING_VALUE_FIELD)
+                                .str()
+                                .strip_suffix(second_decoded)
+                                .alias(LANG_STRING_VALUE_FIELD),
                         );
                     }
                     Function::StrAfter => {
-                        solution_mappings.mappings = solution_mappings.mappings.with_column(
+                        exprs.push(
                             col(first_context.as_str())
                                 .struct_()
-                                .with_fields(vec![col(first_context.as_str())
-                                    .struct_()
-                                    .field_by_name(LANG_STRING_VALUE_FIELD)
-                                    .str()
-                                    .strip_prefix(second_decoded)])
-                                .alias(outer_context.as_str()),
+                                .field_by_name(LANG_STRING_VALUE_FIELD)
+                                .str()
+                                .strip_prefix(second_decoded)
+                                .alias(LANG_STRING_VALUE_FIELD),
                         );
                     }
                     _ => panic!("Should never happen"),
                 }
-                solution_mappings
-                    .rdf_node_types
-                    .insert(outer_context.as_str().to_string(), t.clone());
-            } else if t.is_none() {
+                exprs.push(
+                    col(first_context.as_str())
+                        .struct_()
+                        .field_by_name(LANG_STRING_LANG_FIELD)
+                        .alias(LANG_STRING_LANG_FIELD),
+                );
                 solution_mappings.mappings = solution_mappings
                     .mappings
-                    .with_column(col(first_context.as_str()).alias(outer_context.as_str()));
-                solution_mappings
-                    .rdf_node_types
-                    .insert(outer_context.as_str().to_string(), t.clone());
+                    .with_column(as_struct(exprs).alias(outer_context.as_str()));
+                solution_mappings.rdf_node_types.insert(
+                    outer_context.as_str().to_string(),
+                    BaseRDFNodeType::Literal(rdf::LANG_STRING.into_owned())
+                        .into_default_input_rdf_node_state(),
+                );
+            } else if t.is_multi() {
+                let mut exprs = vec![];
+                let mut keep_types = vec![];
+                for (bt, bs) in &t.map {
+                    let decoded = maybe_decode_expr(
+                        col(first_context.as_str())
+                            .struct_()
+                            .field_by_name(&bt.field_col_name()),
+                        bt,
+                        bs,
+                        global_cats.clone(),
+                    );
+                    if bt.is_lit_type(xsd::STRING) || bt.is_lang_string() {
+                        match func {
+                            Function::StrBefore => {
+                                exprs.push(
+                                    decoded
+                                        .str()
+                                        .strip_suffix(second_decoded.clone())
+                                        .alias(&bt.field_col_name()),
+                                );
+                            }
+                            Function::StrAfter => {
+                                exprs.push(
+                                    decoded
+                                        .str()
+                                        .strip_prefix(second_decoded.clone())
+                                        .alias(&bt.field_col_name()),
+                                );
+                            }
+                            _ => panic!("Should never happen"),
+                        }
+                        keep_types.push(bt);
+                    }
+                    if bt.is_lang_string() {
+                        exprs.push(
+                            col(first_context.as_str())
+                                .struct_()
+                                .field_by_name(LANG_STRING_LANG_FIELD)
+                                .alias(LANG_STRING_LANG_FIELD),
+                        );
+                    }
+                }
+                if keep_types.is_empty() {
+                    solution_mappings.mappings = solution_mappings.mappings.with_column(
+                        lit(LiteralValue::untyped_null())
+                            .cast(
+                                BaseRDFNodeType::None
+                                    .into_default_input_rdf_node_state()
+                                    .polars_data_type(),
+                            )
+                            .alias(outer_context.as_str()),
+                    );
+                    solution_mappings.rdf_node_types.insert(
+                        outer_context.as_str().to_string(),
+                        BaseRDFNodeType::None.into_default_input_rdf_node_state(),
+                    );
+                } else if keep_types.len() == 1 {
+                    if exprs.len() > 1 {
+                        solution_mappings.mappings = solution_mappings
+                            .mappings
+                            .with_column(as_struct(exprs).alias(outer_context.as_str()));
+                    } else {
+                        solution_mappings.mappings = solution_mappings
+                            .mappings
+                            .with_column(exprs.pop().unwrap().alias(outer_context.as_str()));
+                    }
+                    solution_mappings.rdf_node_types.insert(
+                        outer_context.as_str().to_string(),
+                        keep_types
+                            .pop()
+                            .unwrap()
+                            .clone()
+                            .into_default_input_rdf_node_state(),
+                    );
+                } else {
+                    let type_map: HashMap<_, _> = keep_types
+                        .into_iter()
+                        .map(|bt| (bt.clone(), bt.default_input_cat_state()))
+                        .collect();
+                    solution_mappings.mappings = solution_mappings
+                        .mappings
+                        .with_column(as_struct(exprs).alias(outer_context.as_str()));
+                    solution_mappings.rdf_node_types.insert(
+                        outer_context.as_str().to_string(),
+                        RDFNodeState::from_map(type_map),
+                    );
+                }
             } else {
-                todo!()
+                solution_mappings.mappings = solution_mappings.mappings.with_column(
+                    lit(LiteralValue::untyped_null())
+                        .cast(
+                            BaseRDFNodeType::None
+                                .into_default_input_rdf_node_state()
+                                .polars_data_type(),
+                        )
+                        .alias(outer_context.as_str()),
+                );
+                solution_mappings.rdf_node_types.insert(
+                    outer_context.as_str().to_string(),
+                    BaseRDFNodeType::None.into_default_input_rdf_node_state(),
+                );
             }
         }
         Function::StrLen => {

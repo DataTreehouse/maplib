@@ -71,13 +71,10 @@ impl Cats {
                                 .field_by_name(&t.field_col_name())
                                 .unwrap()
                         } else {
-                            mappings
-                                .column(c)
-                                .unwrap()
-                                .as_materialized_series().clone()
+                            mappings.column(c).unwrap().as_materialized_series().clone()
                         };
                         to_encode.push((c.clone(), t.clone(), ser));
-                    } else if let BaseCatState::CategoricalNative(_,local) = bs {
+                    } else if let BaseCatState::CategoricalNative(_, local) = bs {
                         if let Some(map) = &include_cat_type_col {
                             if map.contains_key(c) {
                                 let ser = if s.is_multi() {
@@ -90,10 +87,7 @@ impl Cats {
                                         .field_by_name(&t.field_col_name())
                                         .unwrap()
                                 } else {
-                                    mappings
-                                        .column(c)
-                                        .unwrap()
-                                        .as_materialized_series().clone()
+                                    mappings.column(c).unwrap().as_materialized_series().clone()
                                 };
                                 to_add_prefix_col.push((c.clone(), local.clone(), ser));
                             }
@@ -116,18 +110,26 @@ impl Cats {
             .collect();
         let mut prefix_maps = HashMap::new();
         let mut mappings = mappings.lazy();
-        let prefix_cols:Vec<_> = to_add_prefix_col.into_par_iter().map(|(c,local,ser)| {
-            let (prefix_ser, maps) = self.get_prefix_column(ser, local);
-            let maps: HashMap<_, _> = maps.into_iter().map(|(u, ct)| {
-                if let CatType::Prefix(p) = ct {
-                    Some((u, p.as_str().to_string()))
-                } else {
-                    None
-                }
-            }).filter(|x|x.is_some()).map(|x|x.unwrap()).collect();
-            let name = include_cat_type_col.as_ref().unwrap().get(&c).unwrap();
-            (c, prefix_ser, maps, name)
-        }).collect();
+        let prefix_cols: Vec<_> = to_add_prefix_col
+            .into_par_iter()
+            .map(|(c, local, ser)| {
+                let (prefix_ser, maps) = self.get_prefix_column(ser, local);
+                let maps: HashMap<_, _> = maps
+                    .into_iter()
+                    .map(|(u, ct)| {
+                        if let CatType::Prefix(p) = ct {
+                            Some((u, p.as_str().to_string()))
+                        } else {
+                            None
+                        }
+                    })
+                    .filter(|x| x.is_some())
+                    .map(|x| x.unwrap())
+                    .collect();
+                let name = include_cat_type_col.as_ref().unwrap().get(&c).unwrap();
+                (c, prefix_ser, maps, name)
+            })
+            .collect();
 
         for (c, prefix_ser, maps, name) in prefix_cols {
             prefix_maps.insert(c, maps);
@@ -203,7 +205,7 @@ impl Cats {
                             if let Some(u) = enc.maybe_encode_str(s).map(|x| *x) {
                                 (None, Some(u))
                             } else {
-                                (Some((u,s)),None)
+                                (Some((u, s)), None)
                             }
                         } else {
                             (Some((u, s)), None)
@@ -369,8 +371,7 @@ impl Cats {
         }
         let local_cats = local_cats.as_ref().map(|x| x.as_ref());
         if let Some(local_cats) = local_cats {
-            let local_filtered_cat_types =
-                local_cats.filter_cat_types(&BaseRDFNodeType::IRI);
+            let local_filtered_cat_types = local_cats.filter_cat_types(&BaseRDFNodeType::IRI);
             for c in &local_filtered_cat_types {
                 let enc = local_cats.cat_map.get(*c).unwrap();
                 encs.push(enc);
@@ -450,7 +451,6 @@ impl Cats {
         }
     }
 
-
     fn filter_cat_types<'a>(&'a self, bt: &BaseRDFNodeType) -> Vec<&'a CatType> {
         let mut keep_types = vec![];
         for t in self.cat_map.keys() {
@@ -476,7 +476,6 @@ impl Cats {
         keep_types
     }
 }
-
 
 pub fn encode_triples(
     df: DataFrame,

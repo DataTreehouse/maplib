@@ -50,14 +50,10 @@ impl CatOperation {
                 } else {
                     let tmp = uuid::Uuid::new_v4().to_string();
                     let n = base_t.field_col_name();
-                    mappings = mappings.with_column(
-                        col(c)
-                            .struct_()
-                            .field_by_name(&n)
-                            .alias(&tmp),
-                    );
+                    mappings = mappings.with_column(col(c).struct_().field_by_name(&n).alias(&tmp));
                     mappings = cat_re_enc.re_encode(mappings, &tmp, forget_others);
-                    mappings = mappings.with_column(col(c).struct_().with_fields(vec![col(&tmp).alias(&n)]));
+                    mappings = mappings
+                        .with_column(col(c).struct_().with_fields(vec![col(&tmp).alias(&n)]));
                     mappings = mappings.drop(by_name([tmp], true));
                 }
             }

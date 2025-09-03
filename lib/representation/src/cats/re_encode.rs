@@ -13,7 +13,7 @@ pub struct CatReEnc {
 }
 
 impl CatReEnc {
-    pub fn re_encode(self, mut lf: LazyFrame, c: &str, forget_others:bool) -> LazyFrame {
+    pub fn re_encode(self, mut lf: LazyFrame, c: &str, forget_others: bool) -> LazyFrame {
         lf = lf.with_column(
             col(c)
                 .map(
@@ -25,7 +25,7 @@ impl CatReEnc {
         lf
     }
 
-    pub fn re_encode_column(self, c: Column, forget_others:bool) -> PolarsResult<Column> {
+    pub fn re_encode_column(self, c: Column, forget_others: bool) -> PolarsResult<Column> {
         let uch = c.u32().unwrap();
         let mut v = Vec::with_capacity(uch.len());
         for u in uch {
@@ -48,17 +48,24 @@ impl CatReEnc {
 }
 
 impl CatEncs {
-
     pub fn inner_join_re_enc(&self, other: &CatEncs) -> Vec<(u32, u32)> {
-        let renc: Vec<_> = self.map.par_iter().map(|(x,l)|{
-            if let Some(r) = other.maybe_encode_str(x) {
-                if l != r {
-                    Some((*l,*r))
+        let renc: Vec<_> = self
+            .map
+            .par_iter()
+            .map(|(x, l)| {
+                if let Some(r) = other.maybe_encode_str(x) {
+                    if l != r {
+                        Some((*l, *r))
+                    } else {
+                        None
+                    }
                 } else {
                     None
                 }
-            } else {None}
-        }).filter(|x|x.is_some()).map(|x|x.unwrap()).collect();
+            })
+            .filter(|x| x.is_some())
+            .map(|x| x.unwrap())
+            .collect();
         renc
     }
 }
@@ -66,16 +73,24 @@ impl CatEncs {
 impl Cats {
     //Re enc is for right hand side
     pub fn join(left: Arc<Cats>, right: Arc<Cats>) -> CatReEnc {
-        let rencs: Vec<_> = left.cat_map.par_iter().map(|(t,left_enc)| {
-            if let Some(right_enc) = right.cat_map.get(t) {
-                let renc = left_enc.inner_join_re_enc(right_enc);
-                Some(renc)
-            } else {
-                None
-            }
-        }).filter(|x|x.is_some()).map(|x|x.unwrap()).collect();
-        let renc_map:HashMap<_,_> = rencs.into_iter().flatten().map(|x|x).collect();
-        let cat_re_enc = CatReEnc{ cat_map: Arc::new(renc_map) };
+        let rencs: Vec<_> = left
+            .cat_map
+            .par_iter()
+            .map(|(t, left_enc)| {
+                if let Some(right_enc) = right.cat_map.get(t) {
+                    let renc = left_enc.inner_join_re_enc(right_enc);
+                    Some(renc)
+                } else {
+                    None
+                }
+            })
+            .filter(|x| x.is_some())
+            .map(|x| x.unwrap())
+            .collect();
+        let renc_map: HashMap<_, _> = rencs.into_iter().flatten().map(|x| x).collect();
+        let cat_re_enc = CatReEnc {
+            cat_map: Arc::new(renc_map),
+        };
         cat_re_enc
     }
 
@@ -109,8 +124,8 @@ impl Cats {
                             c += 1;
                         }
                     }
-                    for (s,u) in numbered_insert {
-                        enc.encode_new_string(s,u);
+                    for (s, u) in numbered_insert {
+                        enc.encode_new_string(s, u);
                     }
                     let remap: HashMap<_, _> = remap
                         .into_iter()
@@ -123,7 +138,6 @@ impl Cats {
                     };
                     self.set_height(c, t);
                     other_map.insert(t.clone(), reenc);
-
                 } else {
                     let mut remap = Vec::with_capacity(other_enc.map.len());
                     let mut new_enc = CatEncs::new_empty();

@@ -115,9 +115,7 @@ pub fn create_compatible_cats(
                                 let e_clone = e.clone();
                                 *e = e_clone.map(
                                     move |x| renc.clone().re_encode_column(x, false),
-                                    |x, f| {
-                                        Ok(f.clone())
-                                    },
+                                    |x, f| Ok(f.clone()),
                                 );
                             }
                         }

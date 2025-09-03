@@ -22,7 +22,6 @@ const OBJECT_PREFIX_COL_NAME: &str = "object_prefix";
 pub const OBJECT_ARG_SORT_COL_NAME: &str = "object_arg_sort";
 pub const SUBJECT_ARG_SORT_COL_NAME: &str = "subject_arg_sort";
 
-
 pub struct CatTriples {
     pub encoded_triples: Vec<EncodedTriples>,
     pub predicate: NamedNode,
@@ -53,7 +52,6 @@ pub struct CatEncs {
     pub map: BTreeMap<String, u32>,
     pub rev_map: HashMap<u32, String>,
 }
-
 
 #[derive(Debug)]
 pub struct Cats {

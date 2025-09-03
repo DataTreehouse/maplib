@@ -1,21 +1,26 @@
 use crate::errors::TriplestoreError;
-use oxrdf::{NamedNode, Subject, Term};
-use polars::prelude::{col, concat, lit, Expr, IdxSize, IntoLazy, JoinArgs, JoinType, LazyFrame, PlSmallStr, StaticArray, UnionArgs};
-use polars_core::datatypes::{AnyValue};
-use polars_core::frame::DataFrame;
-use polars_core::prelude::{IntoColumn, PolarsIterator, Series, SortMultipleOptions, UInt32Chunked};
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
-use std::cmp;
-use std::cmp::{Ordering, Reverse};
 use crate::{IndexingOptions, StoredBaseRDFNodeType};
 use log::trace;
 use oxrdf::vocab::xsd;
+use oxrdf::{NamedNode, Subject, Term};
+use polars::prelude::{
+    col, concat, lit, Expr, IdxSize, IntoLazy, JoinArgs, JoinType, LazyFrame, PlSmallStr,
+    StaticArray, UnionArgs,
+};
+use polars_core::datatypes::AnyValue;
+use polars_core::frame::DataFrame;
+use polars_core::prelude::{
+    IntoColumn, PolarsIterator, Series, SortMultipleOptions, UInt32Chunked,
+};
+use polars_core::series::SeriesIter;
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use representation::cats::{rdf_split_iri_str, CatEncs, Cats, OBJECT_ARG_SORT_COL_NAME};
 use representation::{BaseRDFNodeType, OBJECT_COL_NAME, SUBJECT_COL_NAME};
+use std::cmp;
+use std::cmp::{Ordering, Reverse};
 use std::collections::{BTreeMap, BinaryHeap};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
-use polars_core::series::SeriesIter;
 
 const OFFSET_STEP: usize = 100;
 const MIN_SIZE_CACHING: usize = 100_000_000; //100MB
@@ -24,7 +29,7 @@ const EXISTING_COL: &str = "existing";
 
 #[derive(Clone)]
 struct SparseIndex {
-    map:BTreeMap<String, usize>
+    map: BTreeMap<String, usize>,
 }
 
 #[derive(Clone)]
@@ -46,11 +51,12 @@ impl Triples {
         indexing: &IndexingOptions,
         cats: &Cats,
     ) -> Result<Self, TriplestoreError> {
-        let object_indexing_enabled = can_and_should_index_object(&object_type.as_base_rdf_node_type(), verb_iri, indexing);
+        let object_indexing_enabled =
+            can_and_should_index_object(&object_type.as_base_rdf_node_type(), verb_iri, indexing);
         let height = df.height();
         let mut segments = vec![];
 
-        let segment= TriplesSegment::new(
+        let segment = TriplesSegment::new(
             df,
             storage_folder,
             &subject_type,
@@ -123,9 +129,7 @@ impl Triples {
 
             let now_subjects = Instant::now();
             let subjects_str = if OFFSET_STEP / 10 * incoming_df.height() < remaining_height {
-                let new_subjects_col = incoming_df
-                    .column(SUBJECT_COL_NAME)
-                    .unwrap();
+                let new_subjects_col = incoming_df.column(SUBJECT_COL_NAME).unwrap();
                 let ct = self.subject_type.as_cat_type().unwrap();
                 let encs = global_cats.cat_map.get(&ct).unwrap();
                 let subjects =
@@ -153,10 +157,7 @@ impl Triples {
                     break;
                 }
                 let non_overlap_now = Instant::now();
-                incoming_df = segment.non_overlapping(
-                    subjects_str.as_ref(),
-                    incoming_df,
-                )?;
+                incoming_df = segment.non_overlapping(subjects_str.as_ref(), incoming_df)?;
                 nonoverlapping_time += non_overlap_now.elapsed().as_secs_f32();
 
                 if incoming_df.height() == 0 {
@@ -169,11 +170,25 @@ impl Triples {
                 trace!("Stopped dedupe early with something to add");
                 // We stopped early, compact the latest segments and the incoming.
                 let compact_now = Instant::now();
-                let mut ts: Vec<_> = self.segments.drain(i..).map(|x|(x,false)).collect();
-                let incoming_segment = TriplesSegment::new(incoming_df, storage_folder, &self.subject_type, &self.object_type, self.object_indexing_enabled, global_cats)?;
+                let mut ts: Vec<_> = self.segments.drain(i..).map(|x| (x, false)).collect();
+                let incoming_segment = TriplesSegment::new(
+                    incoming_df,
+                    storage_folder,
+                    &self.subject_type,
+                    &self.object_type,
+                    self.object_indexing_enabled,
+                    global_cats,
+                )?;
                 ts.push((incoming_segment, true));
-                let (segment, new_triples) = compact_segments(ts, global_cats, &self.subject_type, &self.object_type, storage_folder)?;
-                self.height = self.height - remaining_height + new_triples.as_ref().unwrap().height();
+                let (segment, new_triples) = compact_segments(
+                    ts,
+                    global_cats,
+                    &self.subject_type,
+                    &self.object_type,
+                    storage_folder,
+                )?;
+                self.height =
+                    self.height - remaining_height + new_triples.as_ref().unwrap().height();
                 self.segments.push(segment);
                 compacting_indexing_time += compact_now.elapsed().as_secs_f32();
                 Ok(new_triples)
@@ -199,10 +214,23 @@ impl Triples {
         } else {
             trace!("Creating compacted segment");
             let compacting_now = Instant::now();
-            let mut ts: Vec<_> = self.segments.drain(..).map(|x|(x,false)).collect();
-            let incoming_segment = TriplesSegment::new(df, storage_folder, &self.subject_type, &self.object_type, self.object_indexing_enabled, global_cats)?;
+            let mut ts: Vec<_> = self.segments.drain(..).map(|x| (x, false)).collect();
+            let incoming_segment = TriplesSegment::new(
+                df,
+                storage_folder,
+                &self.subject_type,
+                &self.object_type,
+                self.object_indexing_enabled,
+                global_cats,
+            )?;
             ts.push((incoming_segment, true));
-            let (segment, new_triples) = compact_segments(ts, global_cats, &self.subject_type, &self.object_type, storage_folder)?;
+            let (segment, new_triples) = compact_segments(
+                ts,
+                global_cats,
+                &self.subject_type,
+                &self.object_type,
+                storage_folder,
+            )?;
             self.segments.push(segment);
             compacting_indexing_time += compacting_now.elapsed().as_secs_f32();
             Ok(new_triples)
@@ -252,15 +280,13 @@ impl TriplesSegment {
         object_indexing_enabled: bool,
         cats: &Cats,
     ) -> Result<Self, TriplestoreError> {
-        let
-            IndexedTriples {
-                subject_sort,
-                subject_sparse_index,
-                object_sort,
-                object_sparse_index,
-                height,
-            }
-        = create_indices(
+        let IndexedTriples {
+            subject_sort,
+            subject_sparse_index,
+            object_sort,
+            object_sparse_index,
+            height,
+        } = create_indices(
             df,
             storage_folder,
             object_indexing_enabled,
@@ -397,7 +423,12 @@ fn create_indices(
     assert!(df.height() > 0);
     let now = Instant::now();
     let subject_encs = get_encs(cats, subj_type);
-    let subject_sparse_index = create_sparse_index(df.column(SUBJECT_COL_NAME).unwrap().as_materialized_series(), subject_encs.unwrap());
+    let subject_sparse_index = create_sparse_index(
+        df.column(SUBJECT_COL_NAME)
+            .unwrap()
+            .as_materialized_series(),
+        subject_encs.unwrap(),
+    );
     trace!(
         "Creating subject sparse map took {} seconds",
         now.elapsed().as_secs_f32()
@@ -411,31 +442,42 @@ fn create_indices(
 
     if should_index_by_objects {
         let object_now = Instant::now();
-        df = df.sort(vec![PlSmallStr::from_str(OBJECT_ARG_SORT_COL_NAME)], SortMultipleOptions {
-            descending: vec![false, false],
-            nulls_last: vec![false, false],
-            multithreaded: false,
-            maintain_order: false,
-            limit: None,
-        }).unwrap();
+        df = df
+            .sort(
+                vec![PlSmallStr::from_str(OBJECT_ARG_SORT_COL_NAME)],
+                SortMultipleOptions {
+                    descending: vec![false, false],
+                    nulls_last: vec![false, false],
+                    multithreaded: false,
+                    maintain_order: false,
+                    limit: None,
+                },
+            )
+            .unwrap();
         let object_encs = get_encs(cats, obj_type);
-        let sparse = create_sparse_index(df.column(OBJECT_COL_NAME).unwrap().as_materialized_series(), object_encs.unwrap());
-        object_sort = Some(StoredTriples::new(df.clone(), subj_type, obj_type, storage_folder)?);
+        let sparse = create_sparse_index(
+            df.column(OBJECT_COL_NAME).unwrap().as_materialized_series(),
+            object_encs.unwrap(),
+        );
+        object_sort = Some(StoredTriples::new(
+            df.clone(),
+            subj_type,
+            obj_type,
+            storage_folder,
+        )?);
         object_sparse_index = Some(sparse);
         trace!(
             "Indexing by objects took {}",
             object_now.elapsed().as_secs_f32()
         );
     }
-    Ok(
-        IndexedTriples {
-            subject_sort,
-            subject_sparse_index,
-            object_sort,
-            object_sparse_index,
-            height,
-        }
-    )
+    Ok(IndexedTriples {
+        subject_sort,
+        subject_sparse_index,
+        object_sort,
+        object_sparse_index,
+        height,
+    })
 }
 
 fn get_encs<'a>(c: &'a Cats, t: &StoredBaseRDFNodeType) -> Option<&'a CatEncs> {
@@ -736,7 +778,7 @@ fn create_sparse_index(ser: &Series, encs: &CatEncs) -> SparseIndex {
     if current_offset != final_offset {
         update_index_at_offset(strch, final_offset, &mut sparse_map, encs);
     }
-    SparseIndex { map: sparse_map}
+    SparseIndex { map: sparse_map }
 }
 
 //Assumes sorted.
@@ -761,101 +803,150 @@ fn create_deduplicated_string_vec<'a>(ser: &Series, cat_encs: &'a CatEncs) -> Ve
     v
 }
 
-fn compact_segments(segments:Vec<(TriplesSegment, bool)>, cats: &Cats, subj_type: &StoredBaseRDFNodeType,
-                    obj_type: &StoredBaseRDFNodeType,
-                    storage_folder: Option<&PathBuf>) -> Result<(TriplesSegment, Option<DataFrame>), TriplestoreError> {
+fn compact_segments(
+    segments: Vec<(TriplesSegment, bool)>,
+    cats: &Cats,
+    subj_type: &StoredBaseRDFNodeType,
+    obj_type: &StoredBaseRDFNodeType,
+    storage_folder: Option<&PathBuf>,
+) -> Result<(TriplesSegment, Option<DataFrame>), TriplestoreError> {
     let mut subject_segments = Vec::with_capacity(segments.len());
     let mut objects_segments = Vec::with_capacity(segments.len());
-    for (TriplesSegment {  subject_sort, object_sort, .. }, new) in segments {
+    for (
+        TriplesSegment {
+            subject_sort,
+            object_sort,
+            ..
+        },
+        new,
+    ) in segments
+    {
         for (lf, _) in subject_sort.unwrap().get_lazy_frames(None)? {
             subject_segments.push((lf.collect().unwrap(), new));
         }
-        if let Some(object_sort)  =object_sort {
+        if let Some(object_sort) = object_sort {
             for (lf, _) in object_sort.get_lazy_frames(None)? {
-                objects_segments.push((lf.collect().unwrap(),false));
+                objects_segments.push((lf.collect().unwrap(), false));
             }
         }
     }
     let subject_encs = get_encs(cats, subj_type);
     let object_encs = get_encs(cats, obj_type);
 
-    let (compact_subjects, new_df) = compact_dataframe_segments(subject_segments, SUBJECT_COL_NAME, OBJECT_COL_NAME, subject_encs, object_encs)?;
+    let (compact_subjects, new_df) = compact_dataframe_segments(
+        subject_segments,
+        SUBJECT_COL_NAME,
+        OBJECT_COL_NAME,
+        subject_encs,
+        object_encs,
+    )?;
     let height = compact_subjects.height();
-    let subject_index = create_sparse_index(compact_subjects.column(SUBJECT_COL_NAME).unwrap().as_materialized_series(), subject_encs.unwrap());
-    let stored_subjects = StoredTriples::new(compact_subjects, subj_type, obj_type, storage_folder)?;
+    let subject_index = create_sparse_index(
+        compact_subjects
+            .column(SUBJECT_COL_NAME)
+            .unwrap()
+            .as_materialized_series(),
+        subject_encs.unwrap(),
+    );
+    let stored_subjects =
+        StoredTriples::new(compact_subjects, subj_type, obj_type, storage_folder)?;
 
     let (stored_objects, object_index) = if !objects_segments.is_empty() {
-        let (compact_objects,_) = compact_dataframe_segments(objects_segments, OBJECT_COL_NAME, SUBJECT_COL_NAME, object_encs, subject_encs)?;
-        let object_index = create_sparse_index(compact_objects.column(OBJECT_COL_NAME).unwrap().as_materialized_series(), object_encs.unwrap());
-        let stored_objects = StoredTriples::new(compact_objects, subj_type, obj_type, storage_folder)?;
+        let (compact_objects, _) = compact_dataframe_segments(
+            objects_segments,
+            OBJECT_COL_NAME,
+            SUBJECT_COL_NAME,
+            object_encs,
+            subject_encs,
+        )?;
+        let object_index = create_sparse_index(
+            compact_objects
+                .column(OBJECT_COL_NAME)
+                .unwrap()
+                .as_materialized_series(),
+            object_encs.unwrap(),
+        );
+        let stored_objects =
+            StoredTriples::new(compact_objects, subj_type, obj_type, storage_folder)?;
         (Some(stored_objects), Some(object_index))
     } else {
-        (None,None)
+        (None, None)
     };
-    Ok((TriplesSegment {
-        height ,
-        subject_sort: Some(stored_subjects),
-        subject_sparse_index: Some(subject_index),
-        object_sort: stored_objects,
-        object_sparse_index: object_index,
-    }, new_df))
+    Ok((
+        TriplesSegment {
+            height,
+            subject_sort: Some(stored_subjects),
+            subject_sparse_index: Some(subject_index),
+            object_sort: stored_objects,
+            object_sparse_index: object_index,
+        },
+        new_df,
+    ))
 }
 
-fn compact_dataframe_segments(mut segments:Vec<(DataFrame, bool)>, col_a:&str, col_b:&str, a_cat_encs: Option<&CatEncs>, b_cat_encs:Option<&CatEncs>) -> Result<(DataFrame,Option<DataFrame>), TriplestoreError> {
-    for (df,_) in &mut segments {
+fn compact_dataframe_segments(
+    mut segments: Vec<(DataFrame, bool)>,
+    col_a: &str,
+    col_b: &str,
+    a_cat_encs: Option<&CatEncs>,
+    b_cat_encs: Option<&CatEncs>,
+) -> Result<(DataFrame, Option<DataFrame>), TriplestoreError> {
+    for (df, _) in &mut segments {
         df.as_single_chunk();
     }
     let existing_segments_borrow = &segments;
 
-        let mut queue = BinaryHeap::new();
+    let mut queue = BinaryHeap::new();
 
-        for (df,new) in existing_segments_borrow {
-            let col_a_iter = df.column(col_a).unwrap().as_materialized_series().iter();
-            let col_b_iter = df.column(col_b).unwrap().as_materialized_series().iter();
-            if let Some(it) = TripleIterator::new(col_a_iter, col_b_iter, a_cat_encs, b_cat_encs, *new) {
-                queue.push(Reverse(it));
+    for (df, new) in existing_segments_borrow {
+        let col_a_iter = df.column(col_a).unwrap().as_materialized_series().iter();
+        let col_b_iter = df.column(col_b).unwrap().as_materialized_series().iter();
+        if let Some(it) = TripleIterator::new(col_a_iter, col_b_iter, a_cat_encs, b_cat_encs, *new)
+        {
+            queue.push(Reverse(it));
+        }
+    }
+
+    let mut last_a: Option<AnyValue> = None;
+    let mut last_b: Option<AnyValue> = None;
+    let mut last_new = false;
+    let mut a_vec = vec![];
+    let mut b_vec = vec![];
+
+    let mut a_new_vec = vec![];
+    let mut b_new_vec = vec![];
+    while !queue.is_empty() {
+        let mut it = queue.pop().unwrap().0;
+        let dupe = if let (Some(last_a), Some(last_b)) = (&last_a, &last_b) {
+            last_a == &it.a_original && last_b == &it.b_original
+        } else {
+            false
+        };
+
+        if !dupe {
+            if last_new {
+                a_new_vec.push(last_a.unwrap().clone());
+                b_new_vec.push(last_b.unwrap().clone());
+            }
+            last_a = Some(it.a_original.clone());
+            last_b = Some(it.b_original.clone());
+            last_new = it.new;
+            a_vec.push(it.a_original.clone());
+            b_vec.push(it.b_original.clone());
+        } else {
+            if !it.new {
+                last_new = false;
             }
         }
 
-        let mut last_a:Option<AnyValue> = None;
-        let mut last_b:Option<AnyValue> = None;
-        let mut last_new = false;
-        let mut a_vec = vec![];
-        let mut b_vec = vec![];
-
-        let mut a_new_vec = vec![];
-        let mut b_new_vec = vec![];
-        while !queue.is_empty() {
-            let mut it = queue.pop().unwrap().0;
-            let dupe = if let (Some(last_a), Some(last_b)) = (&last_a, &last_b){
-                last_a == &it.a_original && last_b == &it.b_original
-            } else {
-                false
-            };
-
-            if !dupe {
-                if last_new {
-                        a_new_vec.push(last_a.unwrap().clone());
-                        b_new_vec.push(last_b.unwrap().clone());
-                    }
-                last_a = Some(it.a_original.clone());
-                last_b = Some(it.b_original.clone());
-                last_new = it.new;
-                a_vec.push(it.a_original.clone());
-                b_vec.push(it.b_original.clone());
-
-            } else {
-                if !it.new {
-                    last_new = false;
-                }
-            }
-
-            if let Some(it) = it.next(a_cat_encs, b_cat_encs) {
-                queue.push(Reverse(it));
-            }
+        if let Some(it) = it.next(a_cat_encs, b_cat_encs) {
+            queue.push(Reverse(it));
         }
-    let a_ser = Series::from_any_values(PlSmallStr::from_str(col_a),a_vec.as_slice(), false).unwrap();
-    let b_ser = Series::from_any_values(PlSmallStr::from_str(col_b),b_vec.as_slice(), false).unwrap();
+    }
+    let a_ser =
+        Series::from_any_values(PlSmallStr::from_str(col_a), a_vec.as_slice(), false).unwrap();
+    let b_ser =
+        Series::from_any_values(PlSmallStr::from_str(col_b), b_vec.as_slice(), false).unwrap();
     let df = DataFrame::new(vec![a_ser.into_column(), b_ser.into_column()]).unwrap();
 
     if last_new {
@@ -864,9 +955,14 @@ fn compact_dataframe_segments(mut segments:Vec<(DataFrame, bool)>, col_a:&str, c
     }
 
     let new_df = if !a_new_vec.is_empty() {
-        let a_new_ser = Series::from_any_values(PlSmallStr::from_str(col_a),a_new_vec.as_slice(), false).unwrap();
-        let b_new_ser = Series::from_any_values(PlSmallStr::from_str(col_b),b_new_vec.as_slice(), false).unwrap();
-        let new_df = DataFrame::new(vec![a_new_ser.into_column(), b_new_ser.into_column()]).unwrap();
+        let a_new_ser =
+            Series::from_any_values(PlSmallStr::from_str(col_a), a_new_vec.as_slice(), false)
+                .unwrap();
+        let b_new_ser =
+            Series::from_any_values(PlSmallStr::from_str(col_b), b_new_vec.as_slice(), false)
+                .unwrap();
+        let new_df =
+            DataFrame::new(vec![a_new_ser.into_column(), b_new_ser.into_column()]).unwrap();
         Some(new_df)
     } else {
         None
@@ -876,22 +972,23 @@ fn compact_dataframe_segments(mut segments:Vec<(DataFrame, bool)>, col_a:&str, c
 }
 
 struct TripleIterator<'a> {
-    a_original:AnyValue<'a>,
-    a_decode:Option<AnyValue<'a>>,
+    a_original: AnyValue<'a>,
+    a_decode: Option<AnyValue<'a>>,
     a_iterator: SeriesIter<'a>,
-    b_original:AnyValue<'a>,
-    b_decode:Option<AnyValue<'a>>,
+    b_original: AnyValue<'a>,
+    b_decode: Option<AnyValue<'a>>,
     b_iterator: SeriesIter<'a>,
     new: bool,
 }
 
 impl<'a> TripleIterator<'a> {
-    pub fn new(mut a_iterator: SeriesIter<'a>,
-               mut b_iterator: SeriesIter<'a>,
-               a_cat_encs: Option<&'a CatEncs>,
-               b_cat_encs: Option<&'a CatEncs>,
-               new:bool,
-    ) -> Option<Self>{
+    pub fn new(
+        mut a_iterator: SeriesIter<'a>,
+        mut b_iterator: SeriesIter<'a>,
+        a_cat_encs: Option<&'a CatEncs>,
+        b_cat_encs: Option<&'a CatEncs>,
+        new: bool,
+    ) -> Option<Self> {
         if let Some(a) = a_iterator.next() {
             let a_original = a;
             let b_original = b_iterator.next().unwrap();
@@ -904,16 +1001,24 @@ impl<'a> TripleIterator<'a> {
                 b_original,
                 b_decode,
                 b_iterator,
-                new
+                new,
             })
         } else {
             None
         }
     }
 
-    pub fn next(self, a_cat_encs: Option<&'a CatEncs>,
-                b_cat_encs: Option<&'a CatEncs>,) -> Option<Self> {
-        let Self { mut a_iterator,mut b_iterator, new, .. } = self;
+    pub fn next(
+        self,
+        a_cat_encs: Option<&'a CatEncs>,
+        b_cat_encs: Option<&'a CatEncs>,
+    ) -> Option<Self> {
+        let Self {
+            mut a_iterator,
+            mut b_iterator,
+            new,
+            ..
+        } = self;
 
         if let Some(a) = a_iterator.next() {
             let a_original = a;
@@ -927,7 +1032,7 @@ impl<'a> TripleIterator<'a> {
                 b_original,
                 b_decode,
                 b_iterator,
-                new
+                new,
             })
         } else {
             None
@@ -935,7 +1040,10 @@ impl<'a> TripleIterator<'a> {
     }
 }
 
-fn decode_elem<'a>(any_value: &AnyValue<'a>, cat_encs:Option<&'a CatEncs>) -> Option<AnyValue<'a>> {
+fn decode_elem<'a>(
+    any_value: &AnyValue<'a>,
+    cat_encs: Option<&'a CatEncs>,
+) -> Option<AnyValue<'a>> {
     if let Some(cat_encs) = cat_encs {
         if let AnyValue::UInt32(u) = any_value {
             Some(AnyValue::String(cat_encs.rev_map.get(u).unwrap()))
@@ -993,20 +1101,22 @@ impl Ord for TripleIterator<'_> {
     }
 }
 
-fn cmp_any(lhs:&AnyValue, rhs:&AnyValue) -> Ordering {
+fn cmp_any(lhs: &AnyValue, rhs: &AnyValue) -> Ordering {
     match (lhs, rhs) {
-        (AnyValue::Boolean(l), AnyValue::Boolean(r)) => {l.cmp(r)}
-        (AnyValue::Null, _) => {unreachable!()}
-        (AnyValue::String(l), AnyValue::String(r)) => {l.cmp(r)}
-        (AnyValue::UInt8(l), AnyValue::UInt8(r)) => {l.cmp(r)}
-        (AnyValue::UInt16(l), AnyValue::UInt16(r)) => {l.cmp(r)}
-        (AnyValue::UInt32(l), AnyValue::UInt32(r)) => {l.cmp(r)}
-        (AnyValue::UInt64(l), AnyValue::UInt64(r)) => {l.cmp(r)}
-        (AnyValue::Int8(l), AnyValue::Int8(r)) => {l.cmp(r)}
-        (AnyValue::Int16(l), AnyValue::Int16(r)) => {l.cmp(r)}
-        (AnyValue::Int32(l), AnyValue::Int32(r)) => {l.cmp(r)}
-        (AnyValue::Int64(l), AnyValue::Int64(r)) => {l.cmp(r)}
-        (AnyValue::Int128(l), AnyValue::Int128(r)) => {l.cmp(r)}
+        (AnyValue::Boolean(l), AnyValue::Boolean(r)) => l.cmp(r),
+        (AnyValue::Null, _) => {
+            unreachable!()
+        }
+        (AnyValue::String(l), AnyValue::String(r)) => l.cmp(r),
+        (AnyValue::UInt8(l), AnyValue::UInt8(r)) => l.cmp(r),
+        (AnyValue::UInt16(l), AnyValue::UInt16(r)) => l.cmp(r),
+        (AnyValue::UInt32(l), AnyValue::UInt32(r)) => l.cmp(r),
+        (AnyValue::UInt64(l), AnyValue::UInt64(r)) => l.cmp(r),
+        (AnyValue::Int8(l), AnyValue::Int8(r)) => l.cmp(r),
+        (AnyValue::Int16(l), AnyValue::Int16(r)) => l.cmp(r),
+        (AnyValue::Int32(l), AnyValue::Int32(r)) => l.cmp(r),
+        (AnyValue::Int64(l), AnyValue::Int64(r)) => l.cmp(r),
+        (AnyValue::Int128(l), AnyValue::Int128(r)) => l.cmp(r),
         (AnyValue::Float32(l), AnyValue::Float32(r)) => {
             if l == r {
                 Ordering::Equal
@@ -1016,42 +1126,62 @@ fn cmp_any(lhs:&AnyValue, rhs:&AnyValue) -> Ordering {
                 Ordering::Greater
             }
         }
-        (AnyValue::Float64(l), AnyValue::Float64(r)) => {if l == r {
-            Ordering::Equal
-        } else if l < r {
-            Ordering::Less
-        } else {
-            Ordering::Greater
-        }}
-        (AnyValue::Date(l), AnyValue::Date(r)) => {l.cmp(r)}
-        (AnyValue::Datetime(l,..), AnyValue::Datetime(r, ..)) => {l.cmp(r)}
-        (AnyValue::DatetimeOwned(l, ..), AnyValue::DatetimeOwned(r,..)) => {l.cmp(r)}
-        (AnyValue::Duration(l, ..), AnyValue::Duration(r,..)) => {l.cmp(r)}
-        (AnyValue::Time(l), AnyValue::Time(r)) => {l.cmp(r)}
-        (AnyValue::Categorical(_, _), _) => {unreachable!()}
-        (AnyValue::CategoricalOwned(_, _), _) => {unreachable!()}
-        (AnyValue::Enum(_, _), _) => {unreachable!()}
-        (AnyValue::EnumOwned(_, _), _) => {unreachable!()}
-        (AnyValue::List(_), _) => {todo!()}
-        (AnyValue::Array(_, _), _) => {unreachable!()}
+        (AnyValue::Float64(l), AnyValue::Float64(r)) => {
+            if l == r {
+                Ordering::Equal
+            } else if l < r {
+                Ordering::Less
+            } else {
+                Ordering::Greater
+            }
+        }
+        (AnyValue::Date(l), AnyValue::Date(r)) => l.cmp(r),
+        (AnyValue::Datetime(l, ..), AnyValue::Datetime(r, ..)) => l.cmp(r),
+        (AnyValue::DatetimeOwned(l, ..), AnyValue::DatetimeOwned(r, ..)) => l.cmp(r),
+        (AnyValue::Duration(l, ..), AnyValue::Duration(r, ..)) => l.cmp(r),
+        (AnyValue::Time(l), AnyValue::Time(r)) => l.cmp(r),
+        (AnyValue::Categorical(_, _), _) => {
+            unreachable!()
+        }
+        (AnyValue::CategoricalOwned(_, _), _) => {
+            unreachable!()
+        }
+        (AnyValue::Enum(_, _), _) => {
+            unreachable!()
+        }
+        (AnyValue::EnumOwned(_, _), _) => {
+            unreachable!()
+        }
+        (AnyValue::List(_), _) => {
+            todo!()
+        }
+        (AnyValue::Array(_, _), _) => {
+            unreachable!()
+        }
         (AnyValue::Struct(..), AnyValue::Struct(..)) => {
             todo!()
         }
         (AnyValue::StructOwned(l), AnyValue::StructOwned(r)) => {
-            let (lvs,_) = l.as_ref();
+            let (lvs, _) = l.as_ref();
             let (rvs, _) = r.as_ref();
-            for (lv,rv) in lvs.into_iter().zip(rvs) {
+            for (lv, rv) in lvs.into_iter().zip(rvs) {
                 let c = cmp_any(lv, rv);
                 if !c.is_eq() {
-                    return c
+                    return c;
                 }
             }
             Ordering::Equal
         }
-        (AnyValue::StringOwned(l), AnyValue::StringOwned(r)) => {l.cmp(r)}
-        (AnyValue::Binary(_), _) => {todo!()}
-        (AnyValue::BinaryOwned(_), _) => {todo!()}
-        (AnyValue::Decimal(..), AnyValue::Decimal(..)) => {todo!()}
-        (_,_) => unreachable!()
+        (AnyValue::StringOwned(l), AnyValue::StringOwned(r)) => l.cmp(r),
+        (AnyValue::Binary(_), _) => {
+            todo!()
+        }
+        (AnyValue::BinaryOwned(_), _) => {
+            todo!()
+        }
+        (AnyValue::Decimal(..), AnyValue::Decimal(..)) => {
+            todo!()
+        }
+        (_, _) => unreachable!(),
     }
 }

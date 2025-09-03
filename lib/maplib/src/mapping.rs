@@ -47,10 +47,7 @@ pub struct ExpandOptions {
 }
 
 impl ExpandOptions {
-    pub fn from_args(
-        graph: Option<NamedNode>,
-        validate_iris: Option<bool>,
-    ) -> Self {
+    pub fn from_args(graph: Option<NamedNode>, validate_iris: Option<bool>) -> Self {
         ExpandOptions {
             graph,
             validate_iris: validate_iris.unwrap_or(true),

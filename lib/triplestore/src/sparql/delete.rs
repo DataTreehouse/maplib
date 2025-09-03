@@ -33,10 +33,7 @@ impl Triplestore {
         Ok(())
     }
 
-    pub fn delete_triples_vec(
-        &mut self,
-        ts: Vec<CatTriples>,
-    ) -> Result<(), TriplestoreError> {
+    pub fn delete_triples_vec(&mut self, ts: Vec<CatTriples>) -> Result<(), TriplestoreError> {
         let add_triples_now = Instant::now();
         self.delete_global_cat_triples(ts)?;
         trace!(
@@ -46,10 +43,7 @@ impl Triplestore {
         Ok(())
     }
 
-    fn delete_global_cat_triples(
-        &mut self,
-        gcts: Vec<CatTriples>,
-    ) -> Result<(), TriplestoreError> {
+    fn delete_global_cat_triples(&mut self, gcts: Vec<CatTriples>) -> Result<(), TriplestoreError> {
         for gct in gcts {
             let remaining_gct = get_triples_after_deletion(&gct, &self.triples_map, &self.cats)?;
 
@@ -195,7 +189,7 @@ fn get_triples_after_deletion(
 
                 let type_ = (subj_type, obj_type);
                 if let Some(triples) = m.get(&type_) {
-                    let lfs = triples.get_lazy_frames(&None, &None,  global_cats)?;
+                    let lfs = triples.get_lazy_frames(&None, &None, global_cats)?;
                     let lfs_only: Vec<_> = lfs.into_iter().map(|(lf, _)| lf).collect();
                     let mut lf = concat(
                         lfs_only,

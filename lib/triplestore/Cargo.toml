@@ -31,7 +31,6 @@ oxrdfio.workspace = true
 oxttl.workspace = true
 memmap2.workspace = true
 sparesults.workspace = true
-priority-queue.workspace = true
 
 pyo3 = { workspace = true, optional = true }
 

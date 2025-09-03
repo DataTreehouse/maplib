@@ -210,14 +210,7 @@ impl PyMapping {
         validate_iris: Option<bool>,
     ) -> PyResult<Option<PyObject>> {
         let mut inner = self.inner.lock().unwrap();
-        expand_mutex(
-            &mut inner,
-            template,
-            df,
-            graph,
-            types,
-            validate_iris,
-        )
+        expand_mutex(&mut inner, template, df, graph, types, validate_iris)
     }
 
     #[pyo3(signature = (df, verb=None, graph=None, types=None, validate_iris=None))]
@@ -230,14 +223,7 @@ impl PyMapping {
         validate_iris: Option<bool>,
     ) -> PyResult<Option<PyObject>> {
         let mut inner = self.inner.lock().unwrap();
-        expand_triples_mutex(
-            &mut inner,
-            df,
-            verb,
-            graph,
-            types,
-            validate_iris,
-        )
+        expand_triples_mutex(&mut inner, df, verb, graph, types, validate_iris)
     }
 
     #[pyo3(signature = (df, primary_key_column, dry_run=None, graph=None, types=None,
@@ -278,7 +264,6 @@ impl PyMapping {
         return_json: Option<bool>,
         include_transient: Option<bool>,
     ) -> PyResult<PyObject> {
-        println!("is pois {}", self.inner.is_poisoned());
         match self.inner.lock() {
             Ok(mut inner) => Ok(query_mutex(
                 &mut inner,
@@ -969,11 +954,7 @@ fn insert_mutex(
         .map_err(PyMaplibError::from)?;
     let out_dict = if let QueryResult::Construct(dfs_and_dts) = res {
         let new_triples = inner
-            .insert_construct_result(
-                dfs_and_dts,
-                transient.unwrap_or(false),
-                target_graph,
-            )
+            .insert_construct_result(dfs_and_dts, transient.unwrap_or(false), target_graph)
             .map_err(|x| PyMaplibError::from(MaplibError::from(x)))?;
         new_triples_to_dict(
             new_triples,
@@ -1025,11 +1006,7 @@ fn insert_sprout_mutex(
         let new_triples = sprout
             .as_mut()
             .unwrap()
-            .insert_construct_result(
-                dfs_and_dts,
-                transient.unwrap_or(false),
-                target_graph,
-            )
+            .insert_construct_result(dfs_and_dts, transient.unwrap_or(false), target_graph)
             .map_err(|x| PyMaplibError::from(MaplibError::from(x)))?;
         new_triples_to_dict(
             new_triples,

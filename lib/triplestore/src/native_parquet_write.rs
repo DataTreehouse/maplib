@@ -34,7 +34,7 @@ impl Triplestore {
                 let file_path = path_buf.clone();
 
                 for (i, (lf, _)) in tt
-                    .get_lazy_frames(&None, &None,  &self.cats)?
+                    .get_lazy_frames(&None, &None, &self.cats)?
                     .into_iter()
                     .enumerate()
                 {

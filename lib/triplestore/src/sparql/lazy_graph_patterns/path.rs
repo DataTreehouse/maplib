@@ -9,6 +9,7 @@ use polars::prelude::{
 };
 use polars_core::prelude::{DataType, SortMultipleOptions};
 use query_processing::errors::QueryProcessingError;
+use query_processing::expressions::{maybe_literal_enc, named_node_enc};
 use query_processing::graph_patterns::{group_by_workaround, join, union};
 use query_processing::pushdowns::Pushdowns;
 use representation::cats::Cats;
@@ -24,7 +25,6 @@ use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 use sprs::{CsMatBase, TriMatBase};
 use std::collections::HashMap;
 use std::sync::Arc;
-use query_processing::expressions::{maybe_literal_enc, named_node_enc};
 
 const NAMED_NODE_INDEX_COL: &str = "named_node_index_column";
 const VALUE_COLUMN: &str = "value";
@@ -262,7 +262,7 @@ impl Triplestore {
         let mut var_cols = vec![];
         let mut rename_src = vec![];
         let mut rename_trg = vec![];
-        
+
         match subject {
             TermPattern::NamedNode(nn) => {
                 let e = named_node_enc(nn, self.cats.as_ref());
@@ -281,7 +281,7 @@ impl Triplestore {
                 rename_trg.push(bname);
             }
             TermPattern::Literal(l) => {
-                let (l,..) = maybe_literal_enc(l, self.cats.as_ref());
+                let (l, ..) = maybe_literal_enc(l, self.cats.as_ref());
                 out_df = out_df
                     .lazy()
                     .filter(col(SUBJECT_COL_NAME).eq(l))
@@ -316,7 +316,7 @@ impl Triplestore {
                 rename_trg.push(bname);
             }
             TermPattern::Literal(l) => {
-                let (l,..) = maybe_literal_enc(l, self.cats.as_ref());
+                let (l, ..) = maybe_literal_enc(l, self.cats.as_ref());
                 out_df = out_df
                     .lazy()
                     .filter(col(OBJECT_COL_NAME).eq(l))

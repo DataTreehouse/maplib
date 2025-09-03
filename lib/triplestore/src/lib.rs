@@ -15,14 +15,14 @@ use crate::errors::TriplestoreError;
 use crate::storage::{can_and_should_index_object, repeated_from_last_row_expr, Triples};
 use file_io::create_folder_if_not_exists;
 use fts::FtsIndex;
-use log::{trace};
+use log::trace;
 use oxrdf::vocab::{rdf, rdfs, xsd};
 use oxrdf::NamedNode;
 use polars::prelude::{arg_sort_by, col, AnyValue, DataFrame, IntoLazy};
 use polars_core::prelude::SortMultipleOptions;
 use query_processing::type_constraints::ConstraintBaseRDFNodeType;
+use rayon::iter::ParallelDrainRange;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
-use rayon::iter::{ParallelDrainRange};
 use representation::cats::{
     cat_encode_triples, decode_expr, CatTriples, CatType, Cats, OBJECT_ARG_SORT_COL_NAME,
 };
@@ -484,63 +484,66 @@ pub fn prepare_add_triples_par(
         })
         .collect();
     let mut all_partitioned: Vec<_> = flatten(df_vecs_to_add);
-    all_partitioned = all_partitioned.into_par_iter().map(|mut t| {
-        // Always sort S,O and deduplicate
-        let mut lf = t.df.clone().lazy();
-        let mut subj_col_expr = col(SUBJECT_COL_NAME);
-        if matches!(t.subject_cat_state, BaseCatState::CategoricalNative(..)) {
-            subj_col_expr = decode_expr(
-                subj_col_expr,
-                t.subject_type.clone(),
-                t.subject_cat_state.get_local_cats(),
-                global_cats.clone(),
+    all_partitioned = all_partitioned
+        .into_par_iter()
+        .map(|mut t| {
+            // Always sort S,O and deduplicate
+            let mut lf = t.df.clone().lazy();
+            let mut subj_col_expr = col(SUBJECT_COL_NAME);
+            if matches!(t.subject_cat_state, BaseCatState::CategoricalNative(..)) {
+                subj_col_expr = decode_expr(
+                    subj_col_expr,
+                    t.subject_type.clone(),
+                    t.subject_cat_state.get_local_cats(),
+                    global_cats.clone(),
+                );
+            }
+            let mut obj_col_expr = col(OBJECT_COL_NAME);
+            if matches!(t.object_cat_state, BaseCatState::CategoricalNative(..)) {
+                obj_col_expr = decode_expr(
+                    obj_col_expr,
+                    t.object_type.clone(),
+                    t.object_cat_state.get_local_cats(),
+                    global_cats.clone(),
+                );
+            }
+            lf = lf.sort_by_exprs(
+                vec![subj_col_expr.clone(), obj_col_expr.clone()],
+                SortMultipleOptions {
+                    descending: vec![false, false],
+                    nulls_last: vec![false, false],
+                    multithreaded: true,
+                    maintain_order: false,
+                    limit: None,
+                },
             );
-        }
-        let mut obj_col_expr = col(OBJECT_COL_NAME);
-        if matches!(t.object_cat_state, BaseCatState::CategoricalNative(..)) {
-            obj_col_expr = decode_expr(
-                obj_col_expr,
-                t.object_type.clone(),
-                t.object_cat_state.get_local_cats(),
-                global_cats.clone(),
+            lf = lf.filter(
+                repeated_from_last_row_expr(SUBJECT_COL_NAME)
+                    .and(repeated_from_last_row_expr(OBJECT_COL_NAME))
+                    .not(),
             );
-        }
-        lf = lf.sort_by_exprs(
-            vec![subj_col_expr.clone(), obj_col_expr.clone()],
-            SortMultipleOptions {
-                descending: vec![false, false],
-                nulls_last: vec![false, false],
-                multithreaded: true,
-                maintain_order: false,
-                limit: None,
-            },
-        );
-        lf = lf.filter(
-            repeated_from_last_row_expr(SUBJECT_COL_NAME)
-                .and(repeated_from_last_row_expr(OBJECT_COL_NAME))
-                .not(),
-        );
 
-        let object_index = can_and_should_index_object(&t.object_type, &t.predicate, indexing);
-        if object_index {
-            // Only create O,S - but no need to deduplicate
-            lf = lf.with_column(
-                arg_sort_by(
-                    vec![obj_col_expr, subj_col_expr],
-                    SortMultipleOptions {
-                        descending: vec![false, false],
-                        nulls_last: vec![false, false],
-                        multithreaded: true,
-                        maintain_order: false,
-                        limit: None,
-                    },
-                )
-                .alias(OBJECT_ARG_SORT_COL_NAME),
-            );
-        }
-        t.df = lf.collect().unwrap();
-        t
-    }).collect();
+            let object_index = can_and_should_index_object(&t.object_type, &t.predicate, indexing);
+            if object_index {
+                // Only create O,S - but no need to deduplicate
+                lf = lf.with_column(
+                    arg_sort_by(
+                        vec![obj_col_expr, subj_col_expr],
+                        SortMultipleOptions {
+                            descending: vec![false, false],
+                            nulls_last: vec![false, false],
+                            multithreaded: true,
+                            maintain_order: false,
+                            limit: None,
+                        },
+                    )
+                    .alias(OBJECT_ARG_SORT_COL_NAME),
+                );
+            }
+            t.df = lf.collect().unwrap();
+            t
+        })
+        .collect();
     all_partitioned
         .into_par_iter()
         .map(

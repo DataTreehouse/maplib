@@ -1134,6 +1134,7 @@ def test_before_after_only_lang_string_and_other(streaming):
         include_datatypes=True,
         streaming=streaming,
     )
+    print(sm.mappings)
     assert sm.rdf_types == {
         "a": RDFType.Literal("http://www.w3.org/1999/02/22-rdf-syntax-ns#langString"),
         "bef": RDFType.Literal("http://www.w3.org/1999/02/22-rdf-syntax-ns#langString"),

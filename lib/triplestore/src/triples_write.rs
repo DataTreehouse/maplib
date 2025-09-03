@@ -43,7 +43,7 @@ impl Triplestore {
                             ),
                             (LANG_STRING_LANG_FIELD.to_string(), base_object_type.clone()),
                         ]);
-                        let lfs = tt.get_lazy_frames(&None, &None,  &self.cats)?;
+                        let lfs = tt.get_lazy_frames(&None, &None, &self.cats)?;
                         for (lf, _) in lfs {
                             let mut df = lf
                                 .unnest(by_name([OBJECT_COL_NAME], true))

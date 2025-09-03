@@ -21,8 +21,6 @@ pyo3 = {workspace = true, features = ["chrono-tz", "chrono"]}
 oxsdatatypes.workspace = true
 rayon.workspace = true
 uuid.workspace = true
-dashmap.workspace = true
-fastbloom.workspace = true
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("gil-refs", "rdf-star"))'] }

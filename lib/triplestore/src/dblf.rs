@@ -8,9 +8,7 @@ use query_processing::expressions::{blank_node_enc, maybe_literal_enc, named_nod
 use query_processing::type_constraints::PossibleTypes;
 use representation::cats::{named_node_split_prefix, Cats};
 use representation::multitype::all_multi_cols;
-use representation::rdf_to_polars::{
-    rdf_named_node_to_polars_literal_value,
-};
+use representation::rdf_to_polars::rdf_named_node_to_polars_literal_value;
 use representation::solution_mapping::{BaseCatState, EagerSolutionMappings, SolutionMappings};
 use representation::{
     BaseRDFNodeType, RDFNodeState, OBJECT_COL_NAME, PREDICATE_COL_NAME, SUBJECT_COL_NAME,
@@ -628,12 +626,9 @@ fn multiple_tt_to_lf(
             None
         };
 
-        if let Some((lf, height)) = single_triples_to_lf(
-            tt,
-            &filtered_subjects,
-            &filtered_objects,
-            global_cats,
-        )? {
+        if let Some((lf, height)) =
+            single_triples_to_lf(tt, &filtered_subjects, &filtered_objects, global_cats)?
+        {
             if height > 0 {
                 let mut select = vec![];
                 if keep_subject {
