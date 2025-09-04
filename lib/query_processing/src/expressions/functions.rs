@@ -1758,7 +1758,7 @@ pub fn str_function(c: &str, t: &RDFNodeState, global_cats: Arc<Cats>) -> Expr {
                 if t.is_lang_string() {
                     cast_lang_string_to_string(c, b, s, global_cats)
                 } else {
-                    maybe_decode_expr(col(c), b, s, global_cats)
+                    maybe_decode_expr(col(c), b, s, global_cats).cast(DataType::String)
                 }
             }
             BaseRDFNodeType::None => lit(LiteralValue::untyped_null()).cast(DataType::String),

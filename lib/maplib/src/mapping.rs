@@ -17,7 +17,7 @@ use representation::RDFNodeState;
 use shacl::{validate, ValidationReport};
 use std::collections::HashMap;
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::{Path};
 use templates::ast::{ConstantTermOrList, PType, Template};
 use templates::dataset::TemplateDataset;
 use templates::document::document_from_str;
@@ -367,7 +367,6 @@ impl Mapping {
         include_conforms: bool,
         streaming: bool,
         max_shape_constraint_results: Option<usize>,
-        folder_path: Option<&PathBuf>,
         include_transient: bool,
         only_shapes: Option<Vec<NamedNode>>,
         deactivate_shapes: Vec<NamedNode>,
@@ -390,7 +389,6 @@ impl Mapping {
             include_conforms,
             streaming,
             max_shape_constraint_results,
-            folder_path,
             include_transient,
             only_shapes,
             deactivate_shapes,

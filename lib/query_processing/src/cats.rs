@@ -147,6 +147,7 @@ pub fn create_compatible_cats(
                             new_e_vec.push(e);
                         }
                         *e_vec = new_e_vec;
+                        *bs = BaseCatState::String;
                     }
                 }
             }

@@ -57,14 +57,14 @@ pub struct EncodedTriples {
     pub object_local_cat_uuid: Option<String>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CatEncs {
     // We use a BTree map to keep strings sorted
     pub map: BTreeMap<String, u32>,
     pub rev_map: HashMap<u32, String>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Cats {
     pub cat_map: HashMap<CatType, CatEncs>,
     iri_height: u32,
