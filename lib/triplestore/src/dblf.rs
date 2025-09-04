@@ -4,7 +4,9 @@ use crate::storage::Triples;
 use oxrdf::{NamedNode, Subject, Term};
 use polars::prelude::{as_struct, by_name, col, concat, lit, IntoLazy, LazyFrame, UnionArgs};
 use polars_core::prelude::{Column, DataFrame};
-use query_processing::expressions::{blank_node_enc, maybe_literal_enc, named_node_enc};
+use query_processing::expressions::{
+    blank_node_enc, maybe_literal_enc, named_node_enc, named_node_local_enc,
+};
 use query_processing::type_constraints::PossibleTypes;
 use representation::cats::{named_node_split_prefix, Cats};
 use representation::multitype::all_multi_cols;
@@ -278,19 +280,9 @@ impl Triplestore {
                     }
                     subject_types.insert(subject_type.clone(), subject_state.unwrap().clone());
                 }
-
                 if verb_keep_rename.is_some() {
-                    let enc = named_node_enc(verb.as_ref().unwrap(), &self.cats);
-                    if let Some(enc) = enc {
-                        mappings = mappings.with_column(enc.alias(PREDICATE_COL_NAME));
-                    } else {
-                        mappings = mappings.with_column(
-                            lit(rdf_named_node_to_polars_literal_value(
-                                verb.as_ref().unwrap(),
-                            ))
-                            .alias(PREDICATE_COL_NAME),
-                        );
-                    }
+                    let enc = named_node_enc(verb.as_ref().unwrap(), &self.cats).unwrap();
+                    mappings = mappings.with_column(enc.alias(PREDICATE_COL_NAME));
                 }
 
                 if let Some(object_type) = &object_type {
@@ -385,10 +377,12 @@ impl Triplestore {
                 );
             }
             if let Some(verb_col_name) = verb_keep_rename {
-                //TODO: predicates should be cats..
                 types.insert(
                     verb_col_name.clone(),
-                    BaseRDFNodeType::IRI.into_default_input_rdf_node_state(),
+                    RDFNodeState::from_bases(
+                        BaseRDFNodeType::IRI,
+                        BaseCatState::CategoricalNative(false, None),
+                    ),
                 );
             }
             if let Some(object_col_name) = object_keep_rename {

@@ -1,6 +1,7 @@
 mod decode;
 mod encode;
 mod globalize;
+mod image;
 mod re_encode;
 mod split;
 
@@ -35,6 +36,16 @@ pub enum CatType {
     Prefix(NamedNode),
     Blank,
     Literal(NamedNode),
+}
+
+impl CatType {
+    pub fn as_base_rdf_node_type(&self) -> BaseRDFNodeType {
+        match self {
+            CatType::Prefix(_) => BaseRDFNodeType::IRI,
+            CatType::Blank => BaseRDFNodeType::BlankNode,
+            CatType::Literal(nn) => BaseRDFNodeType::Literal(nn.clone()),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]

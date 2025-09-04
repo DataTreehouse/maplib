@@ -1,7 +1,7 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
 use representation::query_context::Context;
-use representation::solution_mapping::SolutionMappings;
+use representation::solution_mapping::{BaseCatState, SolutionMappings};
 
 use crate::sparql::QuerySettings;
 use log::trace;
@@ -89,14 +89,21 @@ impl Triplestore {
                         if dt.is_iri() {
                             let mappings_df = mappings.collect().unwrap();
                             //TODO! Fix
-                            let predicates_series = mappings_df
+                            let mut predicates_series = mappings_df
                                 .column(v.as_str())
                                 .unwrap()
                                 .unique()
                                 .unwrap()
-                                .cast(&DataType::String)
-                                .unwrap()
-                                .take_materialized_series();
+                                .as_materialized_series()
+                                .clone();
+                            let bt = dt.get_base_type().unwrap();
+                            let bs = dt.get_base_state().unwrap();
+                            if matches!(bs, BaseCatState::CategoricalNative(..)) {
+                                predicates_series =
+                                    self.cats
+                                        .decode(&predicates_series, bt, bs.get_local_cats());
+                            }
+
                             let predicates_iter = predicates_series.iter();
                             predicates = Some(
                                 predicates_iter

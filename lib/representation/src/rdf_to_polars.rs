@@ -13,17 +13,7 @@ use std::str::FromStr;
 pub fn rdf_term_to_polars_expr(term: &Term) -> Expr {
     match term {
         Term::NamedNode(named_node) => lit(rdf_named_node_to_polars_literal_value(named_node)),
-        Term::Literal(l) => {
-            let dt = l.datatype();
-            if dt == rdf::LANG_STRING {
-                as_struct(vec![
-                    lit(l.value()).alias(LANG_STRING_VALUE_FIELD),
-                    lit(l.language().unwrap()).alias(LANG_STRING_LANG_FIELD),
-                ])
-            } else {
-                lit(rdf_literal_to_polars_literal_value(l))
-            }
-        }
+        Term::Literal(l) => rdf_literal_to_polars_expr(l),
         Term::BlankNode(bl) => lit(rdf_blank_node_to_polars_literal_value(bl)),
         #[cfg(feature = "rdf-star")]
         Term::Triple(_) => todo!(),
@@ -71,6 +61,18 @@ pub fn string_rdf_literal(dt: NamedNodeRef) -> bool {
             | xsd::DURATION
             | xsd::DATE
     )
+}
+
+pub fn rdf_literal_to_polars_expr(l: &Literal) -> Expr {
+    let dt = l.datatype();
+    if dt == rdf::LANG_STRING {
+        as_struct(vec![
+            lit(l.value()).alias(LANG_STRING_VALUE_FIELD),
+            lit(l.language().unwrap()).alias(LANG_STRING_LANG_FIELD),
+        ])
+    } else {
+        lit(rdf_literal_to_polars_literal_value(l))
+    }
 }
 
 pub fn rdf_literal_to_polars_literal_value(lit: &Literal) -> LiteralValue {

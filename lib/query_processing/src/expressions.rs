@@ -16,7 +16,9 @@ use polars::prelude::{
 use representation::cats::{maybe_decode_expr, Cats};
 use representation::multitype::all_multi_main_cols;
 use representation::query_context::Context;
-use representation::rdf_to_polars::rdf_literal_to_polars_literal_value;
+use representation::rdf_to_polars::{
+    rdf_literal_to_polars_expr, rdf_literal_to_polars_literal_value, rdf_term_to_polars_expr,
+};
 use representation::solution_mapping::{BaseCatState, SolutionMappings};
 use representation::{BaseRDFNodeType, RDFNodeState, LANG_STRING_VALUE_FIELD};
 use spargebra::algebra::Expression;
@@ -25,7 +27,7 @@ use std::sync::Arc;
 
 pub fn named_node_enc(nn: &NamedNode, global_cats: &Cats) -> Option<Expr> {
     let enc = global_cats.encode_iri_slice(&[nn.as_str()]).pop().unwrap();
-    enc.map(|enc| lit(enc))
+    enc.map(|enc| lit(enc).cast(DataType::UInt32))
 }
 
 pub fn named_node_local_enc(nn: &NamedNode, global_cats: &Cats) -> (Expr, Option<Cats>) {
@@ -67,7 +69,7 @@ pub fn maybe_literal_enc(l: &Literal, global_cats: &Cats) -> (Expr, BaseRDFNodeT
         }
     } else {
         let bs = bt.default_input_cat_state().clone();
-        (lit(rdf_literal_to_polars_literal_value(l)), bt, bs)
+        (rdf_literal_to_polars_expr(l), bt, bs)
     }
 }
 
@@ -420,8 +422,8 @@ pub fn coalesce_expressions(
                     basic_types.insert(t.clone());
                 }
             }
-            keep_states.push(t);
-            keep_exprs.push(e);
+            keep_states.push(Some(t));
+            keep_exprs.push(Some(e));
         }
     }
     if keep_exprs.is_empty() {
@@ -430,7 +432,11 @@ pub fn coalesce_expressions(
         let t = BaseRDFNodeType::None.into_default_input_rdf_node_state();
         (e, t)
     } else {
-        let mut exploded = create_compatible_cats(keep_exprs, keep_states, global_cats.clone());
+        let mut exploded: Vec<_> =
+            create_compatible_cats(keep_exprs, keep_states, global_cats.clone())
+                .into_iter()
+                .map(|x| x.unwrap())
+                .collect();
         let mut coalesce_map = HashMap::new();
         let mut state_map = HashMap::new();
         for t in &basic_types {

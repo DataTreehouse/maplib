@@ -4,7 +4,9 @@ use polars::prelude::{as_struct, col, concat_lf_diagonal, lit, LiteralValue, Uni
 use representation::cats::Cats;
 use representation::multitype::convert_lf_col_to_multitype;
 use representation::solution_mapping::SolutionMappings;
-use representation::{BaseRDFNodeType, RDFNodeState};
+use representation::{
+    BaseRDFNodeType, RDFNodeState, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD,
+};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
@@ -21,23 +23,34 @@ pub fn union(
     let to_union = create_to_union(&sms);
     for s in &to_union {
         let mut new_sms = Vec::with_capacity(sms.len());
-        let to_union_exprs: Vec<_> = sms.iter().map(|_| col(s)).collect();
-        let to_union_states: Vec<_> = sms
-            .iter()
-            .map(|x| x.rdf_node_types.get(s).unwrap().clone())
-            .collect();
+
+        let mut to_union_exprs = vec![];
+        let mut to_union_states = vec![];
+        for sm in &sms {
+            if let Some(rs) = sm.rdf_node_types.get(s) {
+                to_union_exprs.push(Some(col(s)));
+                to_union_states.push(Some(rs.clone()))
+            } else {
+                to_union_exprs.push(None);
+                to_union_states.push(None);
+            }
+        }
+
         let exploded = create_compatible_cats(to_union_exprs, to_union_states, global_cats.clone());
         let mut target_states = HashMap::new();
         for m in &exploded {
-            for (bt, (_, bs)) in m {
-                if !target_states.contains_key(bt) {
-                    target_states.insert(bt.clone(), bs.clone());
+            if let Some(m) = m {
+                for (bt, (_, bs)) in m {
+                    if !target_states.contains_key(bt) {
+                        target_states.insert(bt.clone(), bs.clone());
+                    }
                 }
             }
         }
         let mut targets_vec: Vec<_> = target_states.keys().collect();
         targets_vec.sort();
-        for (mut sms, mut m) in sms.into_iter().zip(exploded) {
+        for (mut sms, m) in sms.into_iter().zip(exploded) {
+            let mut m = m.unwrap_or(HashMap::new());
             let mut exprs = Vec::with_capacity(m.len());
             let mut states = HashMap::with_capacity(m.len());
             for bt in &targets_vec {
@@ -47,12 +60,25 @@ pub fn union(
                 }
 
                 if let Some(bs) = target_states.get(*bt) {
-                    if !sms.rdf_node_types.get(s).unwrap().map.contains_key(*bt) {
-                        for c in bt.multi_columns() {
+                    if !sms.rdf_node_types.contains_key(s)
+                        || !sms.rdf_node_types.get(s).unwrap().map.contains_key(*bt)
+                    {
+                        if bt.is_lang_string() {
                             exprs.push(
                                 lit(LiteralValue::untyped_null())
                                     .cast(bt.polars_data_type(bs, true))
-                                    .alias(c),
+                                    .alias(LANG_STRING_VALUE_FIELD),
+                            );
+                            exprs.push(
+                                lit(LiteralValue::untyped_null())
+                                    .cast(bt.polars_data_type(bs, true))
+                                    .alias(LANG_STRING_LANG_FIELD),
+                            );
+                        } else {
+                            exprs.push(
+                                lit(LiteralValue::untyped_null())
+                                    .cast(bt.polars_data_type(bs, true))
+                                    .alias(bt.field_col_name()),
                             );
                         }
                         states.insert((*bt).clone(), bs.clone());
@@ -62,8 +88,11 @@ pub fn union(
             if exprs.len() > 1 {
                 sms.mappings = sms.mappings.with_column(as_struct(exprs).alias(s));
             } else {
-                sms.mappings = sms.mappings.with_column(exprs.pop().unwrap().alias(s));
+                sms.mappings = sms
+                    .mappings
+                    .with_column(exprs.pop().unwrap().alias(s).alias(s));
             }
+
             sms.rdf_node_types
                 .insert(s.to_string(), RDFNodeState::from_map(states));
             new_sms.push(sms);

@@ -216,10 +216,7 @@ fn literal_type(
             } else {
                 match base_cat_state {
                     BaseCatState::CategoricalNative(_, _) => DataType::UInt32,
-                    BaseCatState::String => DataType::String,
-                    BaseCatState::NonString => {
-                        unreachable!()
-                    }
+                    BaseCatState::String | BaseCatState::NonString => DataType::String,
                 }
             }
         }

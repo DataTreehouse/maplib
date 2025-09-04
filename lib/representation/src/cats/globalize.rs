@@ -1,4 +1,4 @@
-use super::{encode_triples, re_encode, CatTriples, Cats};
+use super::{encode_triples, rdf_split_iri_str, re_encode, CatEncs, CatTriples, CatType, Cats};
 use crate::solution_mapping::BaseCatState;
 use crate::BaseRDFNodeType;
 use oxrdf::NamedNode;
@@ -14,6 +14,22 @@ impl Cats {
         let re_enc_map = self.merge(local_cats);
         let global_cats = re_encode(cat_triples, re_enc_map);
         global_cats
+    }
+
+    pub fn encode_predicates(&mut self, cat_triples: &Vec<CatTriples>) {
+        for ct in cat_triples {
+            let (pre, suf) = rdf_split_iri_str(ct.predicate.as_str());
+            let ct = CatType::Prefix(NamedNode::new_unchecked(pre));
+            if !self.cat_map.contains_key(&ct) {
+                self.cat_map.insert(ct.clone(), CatEncs::new_empty());
+            }
+
+            let enc = self.cat_map.get_mut(&ct).unwrap();
+            if !enc.map.contains_key(suf) {
+                enc.encode_new_str(suf, self.iri_height);
+                self.iri_height += 1;
+            }
+        }
     }
 }
 

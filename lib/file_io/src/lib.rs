@@ -1,4 +1,7 @@
-use polars::prelude::{DataFrame, LazyFrame, ParallelStrategy, ParquetCompression, ParquetWriter, PlPathRef, PolarsError, ScanArgsParquet};
+use polars::prelude::{
+    DataFrame, LazyFrame, ParallelStrategy, ParquetCompression, ParquetWriter, PlPathRef,
+    PolarsError, ScanArgsParquet,
+};
 use std::fs::{create_dir, File};
 use std::path::Path;
 

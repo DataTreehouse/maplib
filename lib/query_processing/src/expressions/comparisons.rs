@@ -15,11 +15,14 @@ pub fn typed_equals_expr(
     right_type: &RDFNodeState,
     global_cats: Arc<Cats>,
 ) -> Expr {
-    let mut exploded = create_compatible_cats(
-        vec![col(left_col), col(right_col)],
-        vec![left_type.clone(), right_type.clone()],
+    let mut exploded: Vec<_> = create_compatible_cats(
+        vec![Some(col(left_col)), Some(col(right_col))],
+        vec![Some(left_type.clone()), Some(right_type.clone())],
         global_cats,
-    );
+    )
+    .into_iter()
+    .map(|x| x.unwrap())
+    .collect();
     let left_map = exploded.remove(0);
     let mut right_map = exploded.remove(0);
     let mut eq: Option<Expr> = None;

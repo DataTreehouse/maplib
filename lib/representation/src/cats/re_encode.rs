@@ -1,8 +1,10 @@
 use super::{CatEncs, CatTriples, CatType, Cats};
-use crate::{OBJECT_COL_NAME, SUBJECT_COL_NAME};
+use crate::solution_mapping::{BaseCatState, EagerSolutionMappings};
+use crate::{BaseRDFNodeType, OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use polars::datatypes::PlSmallStr;
 use polars::error::PolarsResult;
-use polars::prelude::{col, Column, IntoColumn, LazyFrame, Series};
+use polars::polars_utils::total_ord::ToTotalOrd;
+use polars::prelude::{col, Column, IntoColumn, IntoLazy, LazyFrame, Series};
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -223,4 +225,51 @@ pub fn re_encode(
         })
         .collect();
     re_encoded
+}
+
+pub fn reencode_solution_mappings(
+    sm: EagerSolutionMappings,
+    reencs: &HashMap<String, HashMap<BaseRDFNodeType, CatReEnc>>,
+) -> EagerSolutionMappings {
+    let EagerSolutionMappings {
+        mappings,
+        mut rdf_node_types,
+    } = sm;
+    let mut mappings = mappings.lazy();
+    for (c, t) in &rdf_node_types {
+        let mut reenc_exprs = vec![];
+        for (bt, bs) in &t.map {
+            if let BaseCatState::CategoricalNative(_, Some(local)) = bs {
+                let rmap = reencs.get(&local.uuid).unwrap();
+                let r = rmap.get(bt).unwrap();
+
+                let e = if t.is_multi() {
+                    col(c).struct_().field_by_name(&bt.field_col_name())
+                } else {
+                    col(c)
+                };
+                let mut r_cloned = r.clone();
+                reenc_exprs.push(e.map(
+                    move |c| r_cloned.clone().re_encode_column(c, false),
+                    |_, y| Ok(y.clone()),
+                ));
+            }
+        }
+        if !reenc_exprs.is_empty() {
+            if t.is_multi() {
+                mappings = mappings.with_column(col(c).struct_().with_fields(reenc_exprs).alias(c));
+            } else {
+                mappings = mappings.with_column(reenc_exprs.pop().unwrap().alias(c))
+            }
+        }
+    }
+    for v in rdf_node_types.values_mut() {
+        for v2 in v.map.values_mut() {
+            if matches!(v2, BaseCatState::CategoricalNative(..)) {
+                *v2 = BaseCatState::CategoricalNative(false, None);
+            }
+        }
+    }
+    let sm = EagerSolutionMappings::new(mappings.collect().unwrap(), rdf_node_types);
+    sm
 }

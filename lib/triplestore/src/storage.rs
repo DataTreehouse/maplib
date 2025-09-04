@@ -187,8 +187,12 @@ impl Triples {
                     &self.object_type,
                     storage_folder,
                 )?;
-                self.height =
-                    self.height - remaining_height + new_triples.as_ref().unwrap().height();
+                let new_triples_height = if let Some(new_triples) = &new_triples {
+                    new_triples.height()
+                } else {
+                    0
+                };
+                self.height = self.height - remaining_height + new_triples_height;
                 self.segments.push(segment);
                 compacting_indexing_time += compact_now.elapsed().as_secs_f32();
                 Ok(new_triples)
