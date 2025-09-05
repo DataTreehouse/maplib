@@ -17,7 +17,7 @@ use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::fs::File;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, LockResult, Mutex, MutexGuard};
+use std::sync::{Arc, Mutex, MutexGuard};
 use templates::dataset::TemplateDataset;
 use templates::document::document_from_str;
 use triplestore::sparql::{QueryResult as SparqlQueryResult, QueryResult};
@@ -330,7 +330,6 @@ impl PyMapping {
         include_shape_graph=None,
         streaming=None,
         max_shape_constraint_results=None,
-        result_storage=None,
         only_shapes=None,
         deactivate_shapes=None,
         dry_run=None,
@@ -344,7 +343,6 @@ impl PyMapping {
         include_shape_graph: Option<bool>,
         streaming: Option<bool>,
         max_shape_constraint_results: Option<usize>,
-        result_storage: Option<&str>,
         only_shapes: Option<Vec<String>>,
         deactivate_shapes: Option<Vec<String>>,
         dry_run: Option<bool>,
@@ -359,7 +357,6 @@ impl PyMapping {
             include_shape_graph,
             streaming,
             max_shape_constraint_results,
-            result_storage,
             only_shapes,
             deactivate_shapes,
             dry_run,
@@ -864,7 +861,6 @@ fn validate_mutex(
     include_shape_graph: Option<bool>,
     streaming: Option<bool>,
     max_shape_constraint_results: Option<usize>,
-    result_storage: Option<&str>,
     only_shapes: Option<Vec<String>>,
     deactivate_shapes: Option<Vec<String>>,
     dry_run: Option<bool>,
@@ -897,7 +893,6 @@ fn validate_mutex(
         vec![]
     };
 
-    let path = result_storage.map(|v| Path::new(v).to_owned());
     let report = inner
         .validate(
             &shape_graph,
@@ -905,7 +900,6 @@ fn validate_mutex(
             include_conforms.unwrap_or(false),
             streaming.unwrap_or(false),
             max_shape_constraint_results,
-            path.as_ref(),
             false, //TODO: Needs more work before can be exposed
             only_shapes,
             deactivate_shapes,

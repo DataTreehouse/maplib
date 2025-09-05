@@ -363,7 +363,6 @@ class Mapping:
         graph: str = None,
         types: Dict[str, RDFType] = None,
         validate_iris: bool = True,
-        delay_index: bool = True,
     ) -> None:
         """
         Expand a template using a DataFrame
@@ -378,7 +377,6 @@ class Mapping:
         :param graph: The IRI of the graph to add triples to.
         :param types: The types of the columns.
         :param validate_iris: Validate any IRI-columns.
-        :param delay_index: Delay index construction - reduces write amplification when doing many expansions
         """
 
     def expand_triples(
@@ -388,7 +386,6 @@ class Mapping:
         graph: str = None,
         types: Dict[str, RDFType] = None,
         validate_iris: bool = True,
-        delay_index: bool = True,
     ) -> None:
         """
         Expand a template using a DataFrame with columns subject, object and verb
@@ -404,7 +401,6 @@ class Mapping:
         :param graph: The IRI of the graph to add triples to.
         :param types: The types of the columns.
         :param validate_iris: Validate any IRI-columns.
-        :param delay_index: Delay index construction - reduces write amplification when doing many expansions
         """
 
     def expand_default(
@@ -415,7 +411,6 @@ class Mapping:
         graph: str = None,
         types: Dict[str, RDFType] = None,
         validate_iris: bool = True,
-        delay_index: bool = True,
     ) -> str:
         """
         Create a default template and expand it based on a dataframe.
@@ -430,7 +425,6 @@ class Mapping:
         :param graph: The IRI of the graph to add triples to.
         :param types: The types of the columns.
         :param validate_iris: Validate any IRI-columns.
-        :param delay_index: Delay index construction - reduces write amplification when doing many expansions
         :return: The generated template
         """
 
@@ -476,7 +470,6 @@ class Mapping:
             update: str,
             parameters: ParametersType = None,
             streaming: bool = False,
-            delay_index: bool = True,
             include_transient: bool = True,
     ):
         """
@@ -493,7 +486,6 @@ class Mapping:
         :param update: The SPARQL Update string
         :param parameters: PVALUES Parameters, a DataFrame containing the value bindings in the custom PVALUES construction.
         :param streaming: Use Polars streaming
-        :param delay_index: Delay indexing, use when making multiple inserts of the same predicate.
         :param include_transient: Include transient triples when querying (but see "transient" above).
         :return: None
         """
@@ -508,7 +500,6 @@ class Mapping:
         streaming: bool = False,
         source_graph: str = None,
         target_graph: str = None,
-        delay_index: bool = True,
         include_transient: bool = True,
     ):
         """
@@ -536,7 +527,6 @@ class Mapping:
         :param source_graph: The IRI of the source graph to execute the construct query.
         :param target_graph: The IRI of the target graph to insert into.
         :param streaming: Use Polars streaming
-        :param delay_index: Delay indexing, use when making multiple inserts of the same predicate.
         :param include_transient: Include transient triples when querying (but see "transient" above).
         :return: None
         """
@@ -549,7 +539,6 @@ class Mapping:
         include_shape_graph: bool = True,
         streaming: bool = False,
         max_shape_constraint_results: int = None,
-        result_storage: str = None,
         only_shapes: List[str] = None,
         deactivate_shapes: List[str] = None,
         dry_run: bool = False,
@@ -565,7 +554,6 @@ class Mapping:
         :param include_datatypes: Return the datatypes of the validation report (and details).
         :param streaming: Use Polars streaming
         :param max_shape_constraint_results: Maximum number of results per shape and constraint. Reduces the size of the result set.
-        :param result_storage: Where to store validation results. Can reduce memory use for large result sets.
         :param only_shapes: Validate only these shapes, None means all shapes are validated (must be IRI, cannot be used with deactivate_shapes).
         :param deactivate_shapes: Disable validation of these shapes (must be IRI, cannot be used with deactivate_shapes).
         :param dry_run: Only find targets of shapes, but do not validate them.
@@ -768,7 +756,6 @@ class Mapping:
         streaming: bool = False,
         source_graph: str = None,
         target_graph: str = None,
-        delay_index: bool = True,
         include_transient: bool = True,
     ):
         """
@@ -800,7 +787,6 @@ class Mapping:
         :param source_graph: The IRI of the source graph to execute the construct query.
         :param target_graph: The IRI of the target graph to insert into.
         :param streaming: Use Polars streaming
-        :param delay_index: Delay indexing, use when making multiple inserts of the same predicate to improve performance.
         :param include_transient: Include transient triples when querying (see also "transient" above).
         :return: None
         """
