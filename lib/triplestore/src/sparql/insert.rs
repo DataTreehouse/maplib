@@ -55,18 +55,22 @@ fn construct_result_as_triples_to_add(
                     if !multicols.is_empty() {
                         let dfs_dts = split_df_multicols(mappings, &multicols);
                         for (df, mut map) in dfs_dts {
-                            let mut subject_type = map.remove(SUBJECT_COL_NAME).unwrap();
+                            let mut subject_type =
+                                map.remove(SUBJECT_COL_NAME).unwrap_or(subj_dt.clone());
                             let (new_subj_dt, new_subj_state) =
                                 subject_type.map.drain().next().unwrap();
-                            let new_pred_state = if let Some(mut s) = map.remove(PREDICATE_COL_NAME)
-                            {
-                                let (new_pred_dt, new_pred_state) = s.map.drain().next().unwrap();
-                                assert!(new_pred_dt.is_iri());
-                                Some(new_pred_state)
-                            } else {
-                                None
-                            };
-                            let mut object_type = map.remove(OBJECT_COL_NAME).unwrap();
+                            //Predicate never multi col
+                            let new_pred_state =
+                                if let Some(mut s) = rdf_node_types.get(PREDICATE_COL_NAME) {
+                                    let (new_pred_dt, new_pred_state) =
+                                        s.clone().map.drain().next().unwrap();
+                                    assert!(new_pred_dt.is_iri());
+                                    Some(new_pred_state)
+                                } else {
+                                    None
+                                };
+                            let mut object_type =
+                                map.remove(OBJECT_COL_NAME).unwrap_or(obj_dt.clone());
                             let (new_obj_dt, new_obj_state) =
                                 object_type.map.drain().next().unwrap();
 

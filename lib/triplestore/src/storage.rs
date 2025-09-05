@@ -1,11 +1,11 @@
 use crate::errors::TriplestoreError;
 use crate::{IndexingOptions, StoredBaseRDFNodeType};
 use log::trace;
-use oxrdf::vocab::xsd;
+use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{NamedNode, Subject, Term};
 use polars::prelude::{
-    col, concat, lit, Expr, IdxSize, IntoLazy, JoinArgs, JoinType, LazyFrame, PlSmallStr,
-    StaticArray, UnionArgs,
+    as_struct, col, concat, lit, Expr, IdxSize, IntoLazy, JoinArgs, JoinType, LazyFrame,
+    PlSmallStr, StaticArray, UnionArgs,
 };
 use polars_core::datatypes::AnyValue;
 use polars_core::frame::DataFrame;
@@ -15,11 +15,16 @@ use polars_core::prelude::{
 use polars_core::series::SeriesIter;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use representation::cats::{rdf_split_iri_str, CatEncs, Cats, OBJECT_ARG_SORT_COL_NAME};
-use representation::{BaseRDFNodeType, OBJECT_COL_NAME, SUBJECT_COL_NAME};
+use representation::{
+    BaseRDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD, OBJECT_COL_NAME,
+    SUBJECT_COL_NAME,
+};
 use std::cmp;
 use std::cmp::{Ordering, Reverse};
 use std::collections::{BTreeMap, BinaryHeap};
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
+use std::sync::Arc;
 use std::time::Instant;
 
 const OFFSET_STEP: usize = 100;
@@ -836,11 +841,20 @@ fn compact_segments(
     }
     let subject_encs = get_encs(cats, subj_type);
     let object_encs = get_encs(cats, obj_type);
-
+    let fields = if let StoredBaseRDFNodeType::Literal(nn) = obj_type {
+        if nn.as_ref() == rdf::LANG_STRING {
+            Some((LANG_STRING_VALUE_FIELD, LANG_STRING_LANG_FIELD))
+        } else {
+            None
+        }
+    } else {
+        None
+    };
     let (compact_subjects, new_df) = compact_dataframe_segments(
         subject_segments,
         SUBJECT_COL_NAME,
         OBJECT_COL_NAME,
+        fields,
         subject_encs,
         object_encs,
     )?;
@@ -860,6 +874,7 @@ fn compact_segments(
             objects_segments,
             OBJECT_COL_NAME,
             SUBJECT_COL_NAME,
+            None,
             object_encs,
             subject_encs,
         )?;
@@ -892,37 +907,80 @@ fn compact_dataframe_segments(
     mut segments: Vec<(DataFrame, bool)>,
     col_a: &str,
     col_b: &str,
+    b_fields: Option<(&str, &str)>,
     a_cat_encs: Option<&CatEncs>,
     b_cat_encs: Option<&CatEncs>,
 ) -> Result<(DataFrame, Option<DataFrame>), TriplestoreError> {
-    for (df, _) in &mut segments {
+    let mut new_segments = vec![];
+    for (mut df, new) in segments {
         df.as_single_chunk();
+        if let Some((f1, f2)) = b_fields {
+            df = df
+                .lazy()
+                .with_column(col(col_b).struct_().field_by_name(f1).alias(f1))
+                .with_column(col(col_b).struct_().field_by_name(f2).alias(f2))
+                .select(vec![col(col_a), col(f1), col(f2)])
+                .collect()
+                .unwrap();
+        }
+        new_segments.push((df, new));
     }
+    segments = new_segments;
     let existing_segments_borrow = &segments;
+    let mut field_dfs = vec![];
 
     let mut queue = BinaryHeap::new();
 
     for (df, new) in existing_segments_borrow {
         let col_a_iter = df.column(col_a).unwrap().as_materialized_series().iter();
-        let col_b_iter = df.column(col_b).unwrap().as_materialized_series().iter();
-        if let Some(it) = TripleIterator::new(col_a_iter, col_b_iter, a_cat_encs, b_cat_encs, *new)
-        {
+        let it = if let Some((f1, f2)) = &b_fields {
+            let col_b_1_iter = df.column(f1).unwrap().as_materialized_series().iter();
+            let col_b_2_iter = df.column(f1).unwrap().as_materialized_series().iter();
+            field_dfs.push(df);
+
+            TripleIterator::new(
+                col_a_iter,
+                col_b_1_iter,
+                Some(col_b_2_iter),
+                a_cat_encs,
+                b_cat_encs,
+                *new,
+            )
+        } else {
+            let col_b = df.column(col_b).unwrap().as_materialized_series();
+            let col_b_iter = col_b.iter();
+            TripleIterator::new(col_a_iter, col_b_iter, None, a_cat_encs, b_cat_encs, *new)
+        };
+        if let Some(it) = it {
             queue.push(Reverse(it));
         }
     }
 
     let mut last_a: Option<AnyValue> = None;
-    let mut last_b: Option<AnyValue> = None;
+    let mut last_b_1: Option<AnyValue> = None;
+    let mut last_b_2: Option<AnyValue> = None;
     let mut last_new = false;
     let mut a_vec = vec![];
-    let mut b_vec = vec![];
+    let mut b_1_vec = vec![];
+    let mut b_2_vec = vec![];
 
     let mut a_new_vec = vec![];
-    let mut b_new_vec = vec![];
+    let mut b_1_new_vec = vec![];
+    let mut b_2_new_vec = vec![];
+
     while !queue.is_empty() {
         let mut it = queue.pop().unwrap().0;
-        let dupe = if let (Some(last_a), Some(last_b)) = (&last_a, &last_b) {
-            last_a == &it.a_original && last_b == &it.b_original
+        let dupe = if let (Some(last_a), Some(last_b_1)) = (&last_a, &last_b_1) {
+            let dupe = last_a == &it.a_original && last_b_1 == &it.b_1_original;
+            if dupe {
+                if let Some(last_b_2) = &last_b_2 {
+                    last_b_2 == it.b_2_original.as_ref().unwrap()
+                } else {
+                    true
+                }
+            } else {
+                false
+            }
         } else {
             false
         };
@@ -930,13 +988,22 @@ fn compact_dataframe_segments(
         if !dupe {
             if last_new {
                 a_new_vec.push(last_a.unwrap().clone());
-                b_new_vec.push(last_b.unwrap().clone());
+                b_1_new_vec.push(last_b_1.unwrap().clone());
+                if let Some(last_b_2) = &last_b_2 {
+                    b_2_new_vec.push(last_b_2.clone());
+                }
             }
             last_a = Some(it.a_original.clone());
-            last_b = Some(it.b_original.clone());
+            last_b_1 = Some(it.b_1_original.clone());
+            if it.b_2_original.as_ref().is_some() {
+                last_b_2 = it.b_2_original.clone();
+            }
             last_new = it.new;
             a_vec.push(it.a_original.clone());
-            b_vec.push(it.b_original.clone());
+            b_1_vec.push(it.b_1_original.clone());
+            if it.b_2_original.as_ref().is_some() {
+                b_2_vec.push(it.b_2_original.as_ref().unwrap().clone());
+            }
         } else {
             if !it.new {
                 last_new = false;
@@ -947,27 +1014,23 @@ fn compact_dataframe_segments(
             queue.push(Reverse(it));
         }
     }
-    let a_ser =
-        Series::from_any_values(PlSmallStr::from_str(col_a), a_vec.as_slice(), false).unwrap();
-    let b_ser =
-        Series::from_any_values(PlSmallStr::from_str(col_b), b_vec.as_slice(), false).unwrap();
-    let df = DataFrame::new(vec![a_ser.into_column(), b_ser.into_column()]).unwrap();
-
+    let df = create_df_from_vecs(a_vec, b_1_vec, b_2_vec, col_a, col_b, &b_fields);
     if last_new {
-        a_new_vec.push(last_a.unwrap().clone());
-        b_new_vec.push(last_b.unwrap().clone());
+        a_new_vec.push(last_a.unwrap());
+        b_1_new_vec.push(last_b_1.unwrap());
+        if let Some(last_b_2) = last_b_2 {
+            b_2_new_vec.push(last_b_2);
+        }
     }
-
     let new_df = if !a_new_vec.is_empty() {
-        let a_new_ser =
-            Series::from_any_values(PlSmallStr::from_str(col_a), a_new_vec.as_slice(), false)
-                .unwrap();
-        let b_new_ser =
-            Series::from_any_values(PlSmallStr::from_str(col_b), b_new_vec.as_slice(), false)
-                .unwrap();
-        let new_df =
-            DataFrame::new(vec![a_new_ser.into_column(), b_new_ser.into_column()]).unwrap();
-        Some(new_df)
+        Some(create_df_from_vecs(
+            a_new_vec,
+            b_1_new_vec,
+            b_2_new_vec,
+            col_a,
+            col_b,
+            &b_fields,
+        ))
     } else {
         None
     };
@@ -975,36 +1038,92 @@ fn compact_dataframe_segments(
     Ok((df, new_df))
 }
 
+fn create_df_from_vecs(
+    a_vec: Vec<AnyValue>,
+    b_1_vec: Vec<AnyValue>,
+    b_2_vec: Vec<AnyValue>,
+    col_a: &str,
+    col_b: &str,
+    fields: &Option<(&str, &str)>,
+) -> DataFrame {
+    let a_ser =
+        Series::from_any_values(PlSmallStr::from_str(col_a), a_vec.as_slice(), false).unwrap();
+    let (b_1_ser, b_2_ser) = if let Some((f1, f2)) = fields {
+        let b_1_ser =
+            Series::from_any_values(PlSmallStr::from_str(*f1), b_1_vec.as_slice(), false).unwrap();
+        let b_2_ser =
+            Series::from_any_values(PlSmallStr::from_str(*f2), b_2_vec.as_slice(), false).unwrap();
+        (b_1_ser, Some(b_2_ser))
+    } else {
+        let b_1_ser =
+            Series::from_any_values(PlSmallStr::from_str(col_b), b_1_vec.as_slice(), false)
+                .unwrap();
+        (b_1_ser, None)
+    };
+
+    let df = if let Some((f1, f2)) = fields {
+        let mut lf = DataFrame::new(vec![
+            a_ser.into_column(),
+            b_1_ser.into_column(),
+            b_2_ser.unwrap().into_column(),
+        ])
+        .unwrap()
+        .lazy();
+        lf = lf
+            .with_column(as_struct(vec![col(*f1), col(*f2)]).alias(col_b))
+            .select([col(col_a), col(col_b)]);
+        lf.collect().unwrap()
+    } else {
+        DataFrame::new(vec![a_ser.into_column(), b_1_ser.into_column()]).unwrap()
+    };
+    df
+}
+
 struct TripleIterator<'a> {
     a_original: AnyValue<'a>,
     a_decode: Option<AnyValue<'a>>,
     a_iterator: SeriesIter<'a>,
-    b_original: AnyValue<'a>,
-    b_decode: Option<AnyValue<'a>>,
-    b_iterator: SeriesIter<'a>,
+    b_1_original: AnyValue<'a>,
+    b_1_decode: Option<AnyValue<'a>>,
+    b_1_iterator: SeriesIter<'a>,
+    b_2_original: Option<AnyValue<'a>>,
+    b_2_decode: Option<AnyValue<'a>>,
+    b_2_iterator: Option<SeriesIter<'a>>,
     new: bool,
 }
 
 impl<'a> TripleIterator<'a> {
     pub fn new(
         mut a_iterator: SeriesIter<'a>,
-        mut b_iterator: SeriesIter<'a>,
+        mut b_1_iterator: SeriesIter<'a>,
+        mut b_2_iterator: Option<SeriesIter<'a>>,
         a_cat_encs: Option<&'a CatEncs>,
         b_cat_encs: Option<&'a CatEncs>,
         new: bool,
     ) -> Option<Self> {
         if let Some(a) = a_iterator.next() {
             let a_original = a;
-            let b_original = b_iterator.next().unwrap();
+            let b_1_original = b_1_iterator.next().unwrap();
+            let (b_2_original, b_2_decode) = if let Some(b_2_iterator) = &mut b_2_iterator {
+                let b_2_original = b_2_iterator.next().unwrap();
+                let b_2_decode = decode_elem(&b_2_original, b_cat_encs);
+                (Some(b_2_original), b_2_decode)
+            } else {
+                (None, None)
+            };
+
             let a_decode = decode_elem(&a_original, a_cat_encs);
-            let b_decode = decode_elem(&b_original, b_cat_encs);
+            let b_1_decode = decode_elem(&b_1_original, b_cat_encs);
             Some(TripleIterator {
                 a_original,
                 a_decode,
                 a_iterator,
-                b_original,
-                b_decode,
-                b_iterator,
+                b_1_original,
+                b_1_decode,
+                b_1_iterator,
+                b_2_original,
+                b_2_iterator,
+                b_2_decode,
                 new,
             })
         } else {
@@ -1019,23 +1138,35 @@ impl<'a> TripleIterator<'a> {
     ) -> Option<Self> {
         let Self {
             mut a_iterator,
-            mut b_iterator,
+            mut b_1_iterator,
+            mut b_2_iterator,
             new,
             ..
         } = self;
 
         if let Some(a) = a_iterator.next() {
             let a_original = a;
-            let b_original = b_iterator.next().unwrap();
+            let b_1_original = b_1_iterator.next().unwrap();
+            let (b_2_original, b_2_decode) = if let Some(b_2_iterator) = &mut b_2_iterator {
+                let b_2_original = b_2_iterator.next().unwrap();
+                let b_2_decode = decode_elem(&b_2_original, b_cat_encs);
+                (Some(b_2_original), b_2_decode)
+            } else {
+                (None, None)
+            };
+
             let a_decode = decode_elem(&a_original, a_cat_encs);
-            let b_decode = decode_elem(&b_original, b_cat_encs);
+            let b_1_decode = decode_elem(&b_1_original, b_cat_encs);
             Some(TripleIterator {
                 a_original,
                 a_decode,
                 a_iterator,
-                b_original,
-                b_decode,
-                b_iterator,
+                b_1_original,
+                b_1_decode,
+                b_1_iterator,
+                b_2_original,
+                b_2_iterator,
+                b_2_decode,
                 new,
             })
         } else {
@@ -1080,31 +1211,51 @@ impl Ord for TripleIterator<'_> {
         } else {
             &self.a_original
         };
-        let use_self_b = if let Some(decoded) = &self.b_decode {
+        let use_self_b_1 = if let Some(decoded) = &self.b_1_decode {
             decoded
         } else {
-            &self.b_original
+            &self.b_1_original
         };
+
         let use_other_a = if let Some(decoded) = &other.a_decode {
             decoded
         } else {
             &other.a_original
         };
-        let use_other_b = if let Some(decoded) = &other.b_decode {
+        let use_other_b_1 = if let Some(decoded) = &other.b_1_decode {
             decoded
         } else {
-            &other.b_original
+            &other.b_1_original
         };
 
         let c = cmp_any(use_self_a, use_other_a);
         if !c.is_eq() {
             c
         } else {
-            cmp_any(use_self_b, use_other_b)
+            let c = cmp_any(use_self_b_1, use_other_b_1);
+            if c.is_eq() && self.b_2_original.is_some() {
+                let use_self_b_2 = if let Some(decoded) = &self.b_2_decode {
+                    decoded
+                } else {
+                    self.b_2_original.as_ref().unwrap()
+                };
+                let use_other_b_2 = if let Some(decoded) = &other.b_2_decode {
+                    decoded
+                } else {
+                    other.b_2_original.as_ref().unwrap()
+                };
+                cmp_any(use_self_b_2, use_other_b_2)
+            } else {
+                c
+            }
         }
     }
 }
 
 fn cmp_any(lhs: &AnyValue, rhs: &AnyValue) -> Ordering {
-    lhs.partial_cmp(rhs).unwrap()
+    if let Some(c) = lhs.partial_cmp(rhs) {
+        c
+    } else {
+        todo!("lhs {:?}, rhs {:?}", lhs, rhs)
+    }
 }

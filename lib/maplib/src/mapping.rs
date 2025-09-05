@@ -17,7 +17,7 @@ use representation::RDFNodeState;
 use shacl::{validate, ValidationReport};
 use std::collections::HashMap;
 use std::io::Write;
-use std::path::{Path};
+use std::path::Path;
 use templates::ast::{ConstantTermOrList, PType, Template};
 use templates::dataset::TemplateDataset;
 use templates::document::document_from_str;
