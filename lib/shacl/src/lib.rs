@@ -6,7 +6,6 @@ use errors::ShaclError;
 use oxrdf::{NamedNode, NamedOrBlankNode};
 use polars::prelude::DataFrame;
 use representation::solution_mapping::SolutionMappings;
-use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 use triplestore::Triplestore;
@@ -63,7 +62,6 @@ pub fn validate(
     _include_conforms: bool,
     _streaming: bool,
     _max_shape_constraint_results: Option<usize>,
-    _folder_path: Option<&PathBuf>,
     _include_transient: bool,
     _only_shapes: Option<Vec<NamedNode>>,
     _deactivate_shapes: Vec<NamedNode>,
