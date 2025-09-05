@@ -9,12 +9,12 @@ use polars::prelude::{
 };
 use polars_core::datatypes::AnyValue;
 use polars_core::frame::DataFrame;
-use polars_core::prelude::{
-    IntoColumn, Series, SortMultipleOptions, UInt32Chunked,
-};
+use polars_core::prelude::{IntoColumn, Series, SortMultipleOptions, UInt32Chunked};
 use polars_core::series::SeriesIter;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
-use representation::cats::{rdf_split_iri_str, CatEncs, Cats, OBJECT_ARG_SORT_COL_NAME};
+use representation::cats::{
+    rdf_split_iri_str, CatEncs, Cats, OBJECT_RANK_COL_NAME, SUBJECT_RANK_COL_NAME,
+};
 use representation::{
     BaseRDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD, OBJECT_COL_NAME,
     SUBJECT_COL_NAME,
@@ -28,7 +28,7 @@ use std::time::Instant;
 const OFFSET_STEP: usize = 100;
 const MIN_SIZE_CACHING: usize = 100_000_000; //100MB
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct SparseIndex {
     map: BTreeMap<String, usize>,
 }
@@ -347,6 +347,7 @@ impl TriplesSegment {
                 } else {
                     None
                 };
+
                 return sorted.get_lazy_frames(offsets);
             }
         }
@@ -448,16 +449,18 @@ fn create_indices(
     if should_index_by_objects {
         let object_now = Instant::now();
         df = df
-            .sort(
-                vec![PlSmallStr::from_str(OBJECT_ARG_SORT_COL_NAME)],
+            .lazy()
+            .sort_by_exprs(
+                [col(OBJECT_RANK_COL_NAME), col(SUBJECT_RANK_COL_NAME)],
                 SortMultipleOptions {
                     descending: vec![false, false],
                     nulls_last: vec![false, false],
-                    multithreaded: false,
+                    multithreaded: true,
                     maintain_order: false,
                     limit: None,
                 },
             )
+            .collect()
             .unwrap();
         let object_encs = get_encs(cats, obj_type);
         let sparse = create_sparse_index(

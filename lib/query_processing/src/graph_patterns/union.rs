@@ -3,10 +3,8 @@ use crate::errors::QueryProcessingError;
 use polars::prelude::{as_struct, col, concat_lf_diagonal, lit, LiteralValue, UnionArgs};
 use representation::cats::Cats;
 use representation::solution_mapping::SolutionMappings;
-use representation::{
-    RDFNodeState, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD,
-};
-use std::collections::{HashMap};
+use representation::{RDFNodeState, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD};
+use std::collections::HashMap;
 use std::sync::Arc;
 
 pub fn union(
@@ -108,8 +106,8 @@ pub fn union(
     } in sms
     {
         to_concat.push(mappings);
-        for (k,v) in rdf_node_types {
-            target_state.insert(k,v);
+        for (k, v) in rdf_node_types {
+            target_state.insert(k, v);
         }
     }
     let output_mappings = concat_lf_diagonal(

@@ -18,13 +18,14 @@ use fts::FtsIndex;
 use log::trace;
 use oxrdf::vocab::{rdf, rdfs, xsd};
 use oxrdf::NamedNode;
-use polars::prelude::{arg_sort_by, col, AnyValue, DataFrame, IntoLazy};
+use polars::prelude::{arg_sort_by, col, AnyValue, DataFrame, IntoLazy, RankMethod, RankOptions};
 use polars_core::prelude::SortMultipleOptions;
 use query_processing::type_constraints::ConstraintBaseRDFNodeType;
 use rayon::iter::ParallelDrainRange;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use representation::cats::{
-    cat_encode_triples, decode_expr, CatTriples, CatType, Cats, OBJECT_ARG_SORT_COL_NAME,
+    cat_encode_triples, decode_expr, CatTriples, CatType, Cats, OBJECT_RANK_COL_NAME,
+    SUBJECT_RANK_COL_NAME,
 };
 use representation::multitype::set_struct_all_null_to_null_row;
 use representation::solution_mapping::{BaseCatState, EagerSolutionMappings};
@@ -526,19 +527,29 @@ pub fn prepare_add_triples_par(
             let object_index = can_and_should_index_object(&t.object_type, &t.predicate, indexing);
             if object_index {
                 // Only create O,S - but no need to deduplicate
-                lf = lf.with_column(
-                    arg_sort_by(
-                        vec![obj_col_expr, subj_col_expr],
-                        SortMultipleOptions {
-                            descending: vec![false, false],
-                            nulls_last: vec![false, false],
-                            multithreaded: true,
-                            maintain_order: false,
-                            limit: None,
-                        },
+                lf = lf
+                    .with_column(
+                        obj_col_expr
+                            .rank(
+                                RankOptions {
+                                    method: RankMethod::Min,
+                                    descending: false,
+                                },
+                                None,
+                            )
+                            .alias(OBJECT_RANK_COL_NAME),
                     )
-                    .alias(OBJECT_ARG_SORT_COL_NAME),
-                );
+                    .with_column(
+                        subj_col_expr
+                            .rank(
+                                RankOptions {
+                                    method: RankMethod::Min,
+                                    descending: false,
+                                },
+                                None,
+                            )
+                            .alias(SUBJECT_RANK_COL_NAME),
+                    );
             }
             t.df = lf.collect().unwrap();
             t

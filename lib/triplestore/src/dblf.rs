@@ -4,9 +4,7 @@ use crate::storage::Triples;
 use oxrdf::{NamedNode, Subject, Term};
 use polars::prelude::{as_struct, by_name, col, concat, lit, IntoLazy, LazyFrame, UnionArgs};
 use polars_core::prelude::{Column, DataFrame};
-use query_processing::expressions::{
-    blank_node_enc, maybe_literal_enc, named_node_enc,
-};
+use query_processing::expressions::{blank_node_enc, maybe_literal_enc, named_node_enc};
 use query_processing::type_constraints::PossibleTypes;
 use representation::cats::{named_node_split_prefix, Cats};
 use representation::multitype::all_multi_cols;
@@ -155,12 +153,8 @@ impl Triplestore {
         include_transient: bool,
     ) -> Result<SolutionMappings, SparqlError> {
         let predicate_uris = predicate_uris.unwrap_or(self.all_predicates());
+
         let mut sms = vec![];
-        if let Some(s) = &subject_keep_rename {
-            if s == "b" {
-                //panic!("Panik b multi");
-            }
-        }
         if !(objects.is_some() && objects.as_ref().unwrap().is_empty())
             || !(subjects.is_some() && subjects.as_ref().unwrap().is_empty())
         {
@@ -191,78 +185,6 @@ impl Triplestore {
             let mut object_types = HashMap::new();
             let mut accumulated_heights = 0usize;
 
-            // // This part is to work around a performance bug in Polars.
-            // // Still present..
-            // if predicate_uris_len > 1 && (subjects.is_some() || objects.is_some()) {
-            //     sms = sms
-            //         .into_par_iter()
-            //         .map(|sm| {
-            //             let HalfBakedSolutionMappings {
-            //                 mut mappings,
-            //                 verb,
-            //                 subject_type,
-            //                 object_type,
-            //                 height_upper_bound: _,
-            //             } = sm;
-            //             if subject_type.is_some() {
-            //                 mappings =
-            //                     mappings.with_column(col(SUBJECT_COL_NAME).cast(DataType::String));
-            //             }
-            //             if let Some(object_type) = &object_type {
-            //                 if object_type.is_lang_string() {
-            //                     mappings = mappings.with_column(
-            //                         as_struct(vec![
-            //                             col(OBJECT_COL_NAME)
-            //                                 .struct_()
-            //                                 .field_by_name(LANG_STRING_VALUE_FIELD)
-            //                                 .cast(DataType::String)
-            //                                 .alias(LANG_STRING_VALUE_FIELD),
-            //                             col(OBJECT_COL_NAME)
-            //                                 .struct_()
-            //                                 .field_by_name(LANG_STRING_LANG_FIELD)
-            //                                 .cast(DataType::String)
-            //                                 .alias(LANG_STRING_LANG_FIELD),
-            //                         ])
-            //                         .alias(OBJECT_COL_NAME),
-            //                     )
-            //                 } else if object_type.polars_data_type() == DataType::String {
-            //                     mappings = mappings
-            //                         .with_column(col(OBJECT_COL_NAME).cast(DataType::String));
-            //                 }
-            //             }
-            //
-            //             let df = mappings.collect().unwrap();
-            //             let height_upper_bound = df.height();
-            //             mappings = df.lazy();
-            //             let mut rdf_node_types = HashMap::new();
-            //             if let Some(subject_type) = &subject_type {
-            //                 rdf_node_types.insert(
-            //                     SUBJECT_COL_NAME.to_string(),
-            //                     subject_type.clone().into_rdf_node_type(),
-            //                 );
-            //             }
-            //             if let Some(object_type) = &object_type {
-            //                 rdf_node_types.insert(
-            //                     OBJECT_COL_NAME.to_string(),
-            //                     object_type.clone().into_rdf_node_type(),
-            //                 );
-            //             }
-            //             mappings = lf_columns_to_polars_categorical(
-            //                 mappings,
-            //                 &rdf_node_types,
-            //                 CategoricalOrdering::Physical,
-            //             );
-            //
-            //             HalfBakedSolutionMappings {
-            //                 mappings,
-            //                 verb,
-            //                 subject_type,
-            //                 object_type,
-            //                 height_upper_bound,
-            //             }
-            //         })
-            //         .collect();
-            // }
             for HalfBakedSolutionMappings {
                 mut mappings,
                 verb,

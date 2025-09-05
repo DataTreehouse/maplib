@@ -16,9 +16,7 @@ use polars::prelude::{
 use representation::cats::{maybe_decode_expr, Cats};
 use representation::multitype::all_multi_main_cols;
 use representation::query_context::Context;
-use representation::rdf_to_polars::{
-    rdf_literal_to_polars_expr,
-};
+use representation::rdf_to_polars::rdf_literal_to_polars_expr;
 use representation::solution_mapping::{BaseCatState, SolutionMappings};
 use representation::{BaseRDFNodeType, RDFNodeState, LANG_STRING_VALUE_FIELD};
 use spargebra::algebra::Expression;

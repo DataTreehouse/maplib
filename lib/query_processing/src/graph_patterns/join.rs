@@ -40,7 +40,6 @@ pub fn join(
         &right_datatypes,
         global_cats,
     );
-
     let (left_mappings, left_datatypes, right_mappings, right_datatypes) =
         create_join_compatible_solution_mappings(
             left_mappings,
@@ -75,9 +74,40 @@ pub fn join_workaround(
 ) -> SolutionMappings {
     assert!(matches!(join_type, JoinType::Left | JoinType::Inner));
 
-    let (mut left_mappings, left_exploded) = unnest_multicols(left_mappings, &left_datatypes);
+    let (mut left_mappings, mut left_exploded) = unnest_multicols(left_mappings, &left_datatypes);
+
+    //Fixes "unnesting" where only one side is multi.
+    for (c, s) in &right_datatypes {
+        if s.is_multi() {
+            if let Some(sl) = left_datatypes.get(c) {
+                if !sl.is_multi() {
+                    let lbt = sl.get_base_type().unwrap();
+                    let fcn = lbt.field_col_name();
+                    let colname = format!("{c}{}", &fcn);
+                    left_mappings = left_mappings.rename([c], [&colname], true);
+                    left_exploded.insert(c.clone(), (vec![fcn], vec![colname]));
+                }
+            }
+        }
+    }
+
     let (mut right_mappings, mut right_exploded) =
         unnest_multicols(right_mappings, &right_datatypes);
+
+    //Fixes "unnesting" where only one side is multi.
+    for (c, s) in &left_datatypes {
+        if s.is_multi() {
+            if let Some(sr) = right_datatypes.get(c) {
+                if !sr.is_multi() && !sr.is_none() {
+                    let rbt = sr.get_base_type().unwrap();
+                    let fcn = rbt.field_col_name();
+                    let colname = format!("{c}{}", &fcn);
+                    right_mappings = right_mappings.rename([c], [&colname], true);
+                    right_exploded.insert(c.clone(), (vec![fcn], vec![colname]));
+                }
+            }
+        }
+    }
 
     let mut on = vec![];
     let mut no_join = false;
@@ -483,16 +513,7 @@ pub fn create_join_compatible_solution_mappings(
                             }
                             JoinType::Left => {
                                 if left_dt.map.contains_key(base_right) {
-                                    right_mappings = right_mappings.with_column(
-                                        convert_lf_col_to_multitype(col(v), right_dt).alias(v),
-                                    );
-                                    new_right_states.insert(
-                                        v.clone(),
-                                        RDFNodeState::from_bases(
-                                            base_right.clone(),
-                                            right_dt.map.get(base_right).unwrap().clone(),
-                                        ),
-                                    );
+                                    //Do nothing
                                 } else {
                                     right_mappings = right_mappings.filter(lit(false)).with_column(
                                         lit(LiteralValue::untyped_null())

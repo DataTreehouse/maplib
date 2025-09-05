@@ -20,8 +20,8 @@ use std::sync::Arc;
 const SUBJECT_PREFIX_COL_NAME: &str = "subject_prefix";
 const OBJECT_PREFIX_COL_NAME: &str = "object_prefix";
 
-pub const OBJECT_ARG_SORT_COL_NAME: &str = "object_arg_sort";
-pub const SUBJECT_ARG_SORT_COL_NAME: &str = "subject_arg_sort";
+pub const OBJECT_RANK_COL_NAME: &str = "object_rank";
+pub const SUBJECT_RANK_COL_NAME: &str = "subject_rank";
 
 pub struct CatTriples {
     pub encoded_triples: Vec<EncodedTriples>,
