@@ -108,7 +108,9 @@ pub fn union(
     } in sms
     {
         to_concat.push(mappings);
-        target_state = rdf_node_types;
+        for (k,v) in rdf_node_types {
+            target_state.insert(k,v);
+        }
     }
     let output_mappings = concat_lf_diagonal(
         to_concat,

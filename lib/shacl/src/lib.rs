@@ -39,11 +39,11 @@ pub struct ValidationReport {
 }
 
 impl ValidationReport {
-    pub fn concatenated_results(&self, _global_cats: Arc<Cats>) -> Result<Option<SolutionMappings>, ShaclError> {
+    pub fn concatenated_results(&self) -> Result<Option<SolutionMappings>, ShaclError> {
         unimplemented!("Contact Data Treehouse to try")
     }
 
-    pub fn concatenated_details(&self, _global_cats: Arc<Cats>, ) -> Result<Option<SolutionMappings>, ShaclError> {
+    pub fn concatenated_details(&self) -> Result<Option<SolutionMappings>, ShaclError> {
         unimplemented!("Contact Data Treehouse to try")
     }
     pub fn performance_df(&self) -> DataFrame {
