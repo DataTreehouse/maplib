@@ -7,7 +7,7 @@ use crate::sparql::QuerySettings;
 use log::trace;
 use oxrdf::{NamedNode, Subject, Term};
 use polars::prelude::{by_name, IntoLazy};
-use polars::prelude::{lit, AnyValue, DataType, JoinType};
+use polars::prelude::{lit, AnyValue, JoinType};
 use query_processing::graph_patterns::join;
 use query_processing::pushdowns::Pushdowns;
 use query_processing::type_constraints::{ConstraintBaseRDFNodeType, PossibleTypes};

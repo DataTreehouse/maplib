@@ -61,7 +61,7 @@ fn construct_result_as_triples_to_add(
                                 subject_type.map.drain().next().unwrap();
                             //Predicate never multi col
                             let new_pred_state =
-                                if let Some(mut s) = rdf_node_types.get(PREDICATE_COL_NAME) {
+                                if let Some(s) = rdf_node_types.get(PREDICATE_COL_NAME) {
                                     let (new_pred_dt, new_pred_state) =
                                         s.clone().map.drain().next().unwrap();
                                     assert!(new_pred_dt.is_iri());

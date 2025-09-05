@@ -127,7 +127,7 @@ fn triples_solution_mappings_to_global_cat_triples(
 ) -> Vec<CatTriples> {
     let mappings_maps_preds: Vec<_> = sm_preds
         .into_par_iter()
-        .map(|(mut sm, predicate)| {
+        .map(|(sm, predicate)| {
             let EagerSolutionMappings {
                 mappings,
                 rdf_node_types,

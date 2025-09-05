@@ -5,12 +5,11 @@ use oxrdf::{NamedNode, Subject, Term};
 use polars::prelude::{as_struct, by_name, col, concat, lit, IntoLazy, LazyFrame, UnionArgs};
 use polars_core::prelude::{Column, DataFrame};
 use query_processing::expressions::{
-    blank_node_enc, maybe_literal_enc, named_node_enc, named_node_local_enc,
+    blank_node_enc, maybe_literal_enc, named_node_enc,
 };
 use query_processing::type_constraints::PossibleTypes;
 use representation::cats::{named_node_split_prefix, Cats};
 use representation::multitype::all_multi_cols;
-use representation::rdf_to_polars::rdf_named_node_to_polars_literal_value;
 use representation::solution_mapping::{BaseCatState, EagerSolutionMappings, SolutionMappings};
 use representation::{
     BaseRDFNodeType, RDFNodeState, OBJECT_COL_NAME, PREDICATE_COL_NAME, SUBJECT_COL_NAME,

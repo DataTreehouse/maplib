@@ -1,8 +1,7 @@
 use super::CatEncs;
-use super::{CatReEnc, CatType, Cats};
-use crate::solution_mapping::{BaseCatState, EagerSolutionMappings, SolutionMappings};
+use super::{CatReEnc, Cats};
+use crate::solution_mapping::{BaseCatState, EagerSolutionMappings};
 use crate::BaseRDFNodeType;
-use polars::prelude::{col, IntoLazy};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
@@ -53,7 +52,7 @@ impl Cats {
                 }
             }
         }
-        let mut cats = self.image(&s);
+        let cats = self.image(&s);
         cats
     }
 

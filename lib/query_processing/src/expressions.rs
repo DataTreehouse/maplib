@@ -17,7 +17,7 @@ use representation::cats::{maybe_decode_expr, Cats};
 use representation::multitype::all_multi_main_cols;
 use representation::query_context::Context;
 use representation::rdf_to_polars::{
-    rdf_literal_to_polars_expr, rdf_literal_to_polars_literal_value, rdf_term_to_polars_expr,
+    rdf_literal_to_polars_expr,
 };
 use representation::solution_mapping::{BaseCatState, SolutionMappings};
 use representation::{BaseRDFNodeType, RDFNodeState, LANG_STRING_VALUE_FIELD};
@@ -460,7 +460,7 @@ pub fn coalesce_expressions(
                     v.push(e.pop().unwrap());
                 }
             } else {
-                for (_, mut e) in to_coalesce {
+                for (_, e) in to_coalesce {
                     v.push(coalesce(e.as_slice()));
                 }
             }

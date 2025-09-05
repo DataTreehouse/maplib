@@ -5,12 +5,12 @@ use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{NamedNode, Subject, Term};
 use polars::prelude::{
     as_struct, col, concat, lit, Expr, IdxSize, IntoLazy, JoinArgs, JoinType, LazyFrame,
-    PlSmallStr, StaticArray, UnionArgs,
+    PlSmallStr, UnionArgs,
 };
 use polars_core::datatypes::AnyValue;
 use polars_core::frame::DataFrame;
 use polars_core::prelude::{
-    IntoColumn, PolarsIterator, Series, SortMultipleOptions, UInt32Chunked,
+    IntoColumn, Series, SortMultipleOptions, UInt32Chunked,
 };
 use polars_core::series::SeriesIter;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
@@ -23,14 +23,10 @@ use std::cmp;
 use std::cmp::{Ordering, Reverse};
 use std::collections::{BTreeMap, BinaryHeap};
 use std::path::{Path, PathBuf};
-use std::rc::Rc;
-use std::sync::Arc;
 use std::time::Instant;
 
 const OFFSET_STEP: usize = 100;
 const MIN_SIZE_CACHING: usize = 100_000_000; //100MB
-
-const EXISTING_COL: &str = "existing";
 
 #[derive(Clone)]
 struct SparseIndex {
@@ -609,7 +605,7 @@ struct TriplesOnDisk {
 
 impl TriplesOnDisk {
     fn new(
-        mut df: DataFrame,
+        df: DataFrame,
         subj_type: &StoredBaseRDFNodeType,
         obj_type: &StoredBaseRDFNodeType,
         storage_folder: &Path,
@@ -935,7 +931,7 @@ fn compact_dataframe_segments(
         let col_a_iter = df.column(col_a).unwrap().as_materialized_series().iter();
         let it = if let Some((f1, f2)) = &b_fields {
             let col_b_1_iter = df.column(f1).unwrap().as_materialized_series().iter();
-            let col_b_2_iter = df.column(f1).unwrap().as_materialized_series().iter();
+            let col_b_2_iter = df.column(f2).unwrap().as_materialized_series().iter();
             field_dfs.push(df);
 
             TripleIterator::new(
@@ -969,7 +965,7 @@ fn compact_dataframe_segments(
     let mut b_2_new_vec = vec![];
 
     while !queue.is_empty() {
-        let mut it = queue.pop().unwrap().0;
+        let it = queue.pop().unwrap().0;
         let dupe = if let (Some(last_a), Some(last_b_1)) = (&last_a, &last_b_1) {
             let dupe = last_a == &it.a_original && last_b_1 == &it.b_1_original;
             if dupe {

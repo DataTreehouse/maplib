@@ -6,8 +6,8 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 pub fn create_compatible_cats(
-    mut expressions: Vec<Option<Expr>>,
-    mut states: Vec<Option<RDFNodeState>>,
+    expressions: Vec<Option<Expr>>,
+    states: Vec<Option<RDFNodeState>>,
     global_cats: Arc<Cats>,
 ) -> Vec<Option<HashMap<BaseRDFNodeType, (Vec<Expr>, BaseCatState)>>> {
     let mut base_types = HashSet::new();
@@ -125,7 +125,7 @@ pub fn create_compatible_cats(
                                     let e_clone = e.clone();
                                     *e = e_clone.map(
                                         move |x| renc.clone().re_encode_column(x, false),
-                                        |x, f| Ok(f.clone()),
+                                        |_, f| Ok(f.clone()),
                                     );
                                 }
                             }

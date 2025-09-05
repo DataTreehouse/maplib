@@ -2,12 +2,11 @@ use crate::cats::create_compatible_cats;
 use crate::errors::QueryProcessingError;
 use polars::prelude::{as_struct, col, concat_lf_diagonal, lit, LiteralValue, UnionArgs};
 use representation::cats::Cats;
-use representation::multitype::convert_lf_col_to_multitype;
 use representation::solution_mapping::SolutionMappings;
 use representation::{
-    BaseRDFNodeType, RDFNodeState, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD,
+    RDFNodeState, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD,
 };
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap};
 use std::sync::Arc;
 
 pub fn union(

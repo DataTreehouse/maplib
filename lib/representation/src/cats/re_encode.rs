@@ -3,7 +3,6 @@ use crate::solution_mapping::{BaseCatState, EagerSolutionMappings};
 use crate::{BaseRDFNodeType, OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use polars::datatypes::PlSmallStr;
 use polars::error::PolarsResult;
-use polars::polars_utils::total_ord::ToTotalOrd;
 use polars::prelude::{col, Column, IntoColumn, IntoLazy, LazyFrame, Series};
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use std::collections::HashMap;
@@ -101,7 +100,7 @@ impl Cats {
         other_cats: Vec<Arc<Cats>>,
     ) -> HashMap<String, HashMap<CatType, CatReEnc>> {
         let mut map = HashMap::new();
-        for mut c in other_cats {
+        for c in other_cats {
             let mut other_map = HashMap::new();
             for (t, mut other_enc) in c.cat_map.iter() {
                 let mut c = self.get_height(&t);
@@ -248,7 +247,7 @@ pub fn reencode_solution_mappings(
                 } else {
                     col(c)
                 };
-                let mut r_cloned = r.clone();
+                let r_cloned = r.clone();
                 reenc_exprs.push(e.map(
                     move |c| r_cloned.clone().re_encode_column(c, false),
                     |_, y| Ok(y.clone()),
