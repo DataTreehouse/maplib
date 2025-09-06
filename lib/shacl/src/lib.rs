@@ -35,7 +35,7 @@ pub struct ValidationReport {
     pub validation_performance: Vec<Performance>,
     pub targets_performance: Vec<Performance>,
     pub shape_targets: Vec<ShapeTargets>,
-    pub cats: Arc<Cats>,
+    pub cats: Option<Arc<Cats>>,
 }
 
 impl ValidationReport {
