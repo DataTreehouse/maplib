@@ -58,7 +58,7 @@ use representation::solution_mapping::EagerSolutionMappings;
 
 #[cfg(not(target_os = "linux"))]
 use mimalloc::MiMalloc;
-use representation::cats::Cats;
+use representation::cats::{new_solution_mapping_cats, set_global_cats_as_local, Cats};
 use representation::polars_to_rdf::XSD_DATETIME_WITH_TZ_FORMAT;
 use representation::rdf_to_polars::rdf_named_node_to_polars_literal_value;
 use representation::{BaseRDFNodeType, OBJECT_COL_NAME, PREDICATE_COL_NAME, SUBJECT_COL_NAME};
@@ -997,6 +997,15 @@ fn insert_sprout_mutex(
         )
         .map_err(PyMaplibError::from)?;
     let out_dict = if let QueryResult::Construct(dfs_and_dts) = res {
+        let (sms, preds): (_, Vec<_>) = dfs_and_dts.into_iter().unzip();
+        let global_cats = inner.get_triplestore(&source_graph).cats.as_ref();
+        let (mut sms, cats) = new_solution_mapping_cats(sms, global_cats);
+        let arc_cats = Arc::new(cats);
+        for sm in &mut sms {
+            set_global_cats_as_local(&mut sm.rdf_node_types, arc_cats.clone());
+        }
+        let dfs_and_dts: Vec<_> = sms.into_iter().zip(preds).collect();
+
         let new_triples = sprout
             .as_mut()
             .unwrap()

@@ -502,7 +502,7 @@ def test_multi_filter_incompatible_datetime_comparison(streaming):
 ┌─────────────────────┐
 │ a                   │
 │ ---                 │
-│ datetime[ns]        │
+│ datetime[ns, UTC]   │
 ╞═════════════════════╡
 │ 2021-01-01 08:00:00 │
 └─────────────────────┘
@@ -527,7 +527,7 @@ def test_multi_filter_incompatible_many_comparison(streaming):
         streaming=streaming,
     )
     f = TESTDATA_PATH / "multi_many_comp.csv"
-    # df.write_csv(f)
+    #df.write_csv(f)
     expected = pl.read_csv(f)
     assert_frame_equal(df, expected)
 
@@ -548,7 +548,7 @@ def test_multi_concat(streaming):
         streaming=streaming,
     )
     f = TESTDATA_PATH / "multi_concat.csv"
-    # df.write_csv(f)
+    #df.write_csv(f)
     expected = pl.read_csv(f)
     assert_frame_equal(df, expected)
 
