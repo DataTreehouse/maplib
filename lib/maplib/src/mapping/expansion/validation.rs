@@ -263,7 +263,7 @@ fn infer_validate_mapping_column_type_from_ptype(
                     ))
                 }
             } else if ptype_is_blank(nn.as_ref()) {
-                if datatype.is_string()  {
+                if datatype.is_string() {
                     Ok(MappingColumnType::Flat(
                         BaseRDFNodeType::BlankNode.into_default_input_rdf_node_state(),
                     ))
@@ -284,9 +284,7 @@ fn infer_validate_mapping_column_type_from_ptype(
                 } else {
                     let ptype_rdf_node_type = BaseRDFNodeType::Literal(nn.clone());
                     let ptype_dt = ptype_rdf_node_type.default_input_polars_data_type();
-                    if ptype_dt.is_string() && datatype.is_string()
-                        || &ptype_dt == datatype
-                    {
+                    if ptype_dt.is_string() && datatype.is_string() || &ptype_dt == datatype {
                         Ok(MappingColumnType::Flat(
                             ptype_rdf_node_type.into_default_input_rdf_node_state(),
                         ))

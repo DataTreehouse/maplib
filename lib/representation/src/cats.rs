@@ -8,15 +8,18 @@ mod split;
 pub use decode::*;
 pub use encode::*;
 pub use globalize::*;
+pub use image::*;
 pub use re_encode::*;
 pub use split::*;
-pub use image::*;
 
 use crate::BaseRDFNodeType;
+use nohash_hasher::NoHashHasher;
 use oxrdf::NamedNode;
 use polars::prelude::DataFrame;
 use std::collections::{BTreeMap, HashMap};
+use std::hash::BuildHasherDefault;
 use std::sync::Arc;
+use uuid::Uuid;
 
 const SUBJECT_PREFIX_COL_NAME: &str = "subject_prefix";
 const OBJECT_PREFIX_COL_NAME: &str = "object_prefix";
@@ -62,7 +65,7 @@ pub struct EncodedTriples {
 pub struct CatEncs {
     // We use a BTree map to keep strings sorted
     pub map: BTreeMap<String, u32>,
-    pub rev_map: HashMap<u32, String>,
+    pub rev_map: HashMap<u32, String, BuildHasherDefault<NoHashHasher<u32>>>,
 }
 
 #[derive(Debug, Clone)]
@@ -101,7 +104,7 @@ impl Cats {
             iri_height: 0,
             blank_height: 0,
             literal_height_map: Default::default(),
-            uuid: uuid::Uuid::new_v4().to_string(),
+            uuid: Uuid::new_v4().to_string(),
         };
         cats.iri_height = cats.calc_new_iri_height();
         cats.blank_height = cats.calc_new_blank_height();

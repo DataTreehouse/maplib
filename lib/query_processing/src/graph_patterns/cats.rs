@@ -1,4 +1,4 @@
-use polars::prelude::{by_name, col, LazyFrame};
+use polars::prelude::{by_name, col, JoinType, LazyFrame};
 use representation::cats::{maybe_decode_expr, optional_maybe_decode_expr, CatReEnc, Cats};
 use representation::solution_mapping::BaseCatState;
 use representation::{BaseRDFNodeType, RDFNodeState};
@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 pub enum CatOperation {
     Decode,
-    ReEnc(CatReEnc, bool),
+    ReEnc(CatReEnc),
 }
 
 impl CatOperation {
@@ -44,14 +44,14 @@ impl CatOperation {
                     ));
                 }
             }
-            CatOperation::ReEnc(cat_re_enc, forget_others) => {
+            CatOperation::ReEnc(cat_re_enc) => {
                 if !t.is_multi() {
-                    mappings = cat_re_enc.re_encode(mappings, c, forget_others);
+                    mappings = cat_re_enc.re_encode(mappings, c, false);
                 } else {
                     let tmp = uuid::Uuid::new_v4().to_string();
                     let n = base_t.field_col_name();
                     mappings = mappings.with_column(col(c).struct_().field_by_name(&n).alias(&tmp));
-                    mappings = cat_re_enc.re_encode(mappings, &tmp, forget_others);
+                    mappings = cat_re_enc.re_encode(mappings, &tmp, false);
                     mappings = mappings
                         .with_column(col(c).struct_().with_fields(vec![col(&tmp).alias(&n)]));
                     mappings = mappings.drop(by_name([tmp], true));
@@ -93,7 +93,7 @@ pub fn create_compatible_cats(
                 (
                     BaseCatState::CategoricalNative(false, Some(left_local_cats.clone())),
                     None,
-                    Some(CatOperation::ReEnc(re_enc, true)),
+                    Some(CatOperation::ReEnc(re_enc)),
                 )
             }
             BaseCatState::String | BaseCatState::NonString => {

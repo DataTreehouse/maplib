@@ -1625,7 +1625,8 @@ pub fn func_expression(
                                 col(first_context.as_str())
                                     .struct_()
                                     .field_by_name(&t.field_col_name())
-                                    .is_null().not(),
+                                    .is_null()
+                                    .not(),
                             )
                             .then(lit(rdf_named_node_to_polars_literal_value(l)))
                             .otherwise(lit(LiteralValue::untyped_null()).cast(iri_dtype.clone())),

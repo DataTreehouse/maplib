@@ -2,8 +2,10 @@ use super::{reencode_solution_mappings, CatEncs};
 use super::{CatReEnc, Cats};
 use crate::solution_mapping::{BaseCatState, EagerSolutionMappings, SolutionMappings};
 use crate::{BaseRDFNodeType, RDFNodeState};
+use nohash_hasher::NoHashHasher;
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::hash::BuildHasherDefault;
 use std::sync::Arc;
 
 impl Cats {
@@ -139,7 +141,7 @@ impl Cats {
 
 impl CatEncs {
     pub fn image(&self, s: &HashSet<u32>) -> Option<CatEncs> {
-        let rev_map: HashMap<_, _> = s
+        let rev_map: HashMap<_, _, BuildHasherDefault<NoHashHasher<u32>>> = s
             .par_iter()
             .map(|x| {
                 if let Some(s) = self.rev_map.get(x) {
@@ -160,18 +162,25 @@ impl CatEncs {
     }
 }
 
-pub fn new_solution_mapping_cats(sms: Vec<EagerSolutionMappings>, global_cats:&Cats) -> (Vec<EagerSolutionMappings>, Cats) {
+pub fn new_solution_mapping_cats(
+    sms: Vec<EagerSolutionMappings>,
+    global_cats: &Cats,
+) -> (Vec<EagerSolutionMappings>, Cats) {
     let smsref: Vec<_> = sms.iter().collect();
     let mut cats = global_cats.mappings_cat_image(&smsref);
 
     let reenc = cats.merge_solution_mappings_locals(&smsref);
-    let new_sms:Vec<_> = sms.into_par_iter().map(|sm| {
-        reencode_solution_mappings(sm, &reenc)
-    }).collect();
+    let new_sms: Vec<_> = sms
+        .into_par_iter()
+        .map(|sm| reencode_solution_mappings(sm, &reenc))
+        .collect();
     (new_sms, cats)
 }
 
-pub fn set_global_cats_as_local(rdf_node_types:&mut HashMap<String, RDFNodeState>, cats:Arc<Cats>)  {
+pub fn set_global_cats_as_local(
+    rdf_node_types: &mut HashMap<String, RDFNodeState>,
+    cats: Arc<Cats>,
+) {
     for (_, s) in rdf_node_types {
         for v in s.map.values_mut() {
             if matches!(v, BaseCatState::CategoricalNative(_, _)) {

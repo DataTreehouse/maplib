@@ -3,7 +3,10 @@ use crate::{IndexingOptions, StoredBaseRDFNodeType};
 use log::trace;
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{NamedNode, Subject, Term};
-use polars::prelude::{as_struct, by_name, col, concat, lit, Expr, IdxSize, IntoLazy, JoinArgs, JoinType, LazyFrame, PlSmallStr, UnionArgs};
+use polars::prelude::{
+    as_struct, by_name, col, concat, lit, Expr, IdxSize, IntoLazy, JoinArgs, JoinType, LazyFrame,
+    PlSmallStr, UnionArgs,
+};
 use polars_core::datatypes::AnyValue;
 use polars_core::frame::DataFrame;
 use polars_core::prelude::{IntoColumn, Series, SortMultipleOptions, UInt32Chunked};
@@ -20,6 +23,7 @@ use std::cmp;
 use std::cmp::{Ordering, Reverse};
 use std::collections::{BTreeMap, BinaryHeap};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::Instant;
 
 const OFFSET_STEP: usize = 100;
@@ -47,7 +51,7 @@ impl Triples {
         object_type: StoredBaseRDFNodeType,
         verb_iri: &NamedNode,
         indexing: &IndexingOptions,
-        cats: &Cats,
+        cats: Arc<Cats>,
     ) -> Result<Self, TriplestoreError> {
         let object_indexing_enabled =
             can_and_should_index_object(&object_type.as_base_rdf_node_type(), verb_iri, indexing);
@@ -60,7 +64,7 @@ impl Triples {
             &subject_type,
             &object_type,
             object_indexing_enabled,
-            cats,
+            cats.as_ref(),
         )?;
         segments.push(segment);
 
@@ -95,7 +99,7 @@ impl Triples {
         &mut self,
         df: DataFrame,
         storage_folder: Option<&PathBuf>,
-        global_cats: &Cats,
+        global_cats: Arc<Cats>,
     ) -> Result<Option<DataFrame>, TriplestoreError> {
         let mut compacting_indexing_time = 0f32;
         let mut subjects_time = 0f32;
@@ -175,12 +179,12 @@ impl Triples {
                     &self.subject_type,
                     &self.object_type,
                     self.object_indexing_enabled,
-                    global_cats,
+                    global_cats.as_ref(),
                 )?;
                 ts.push((incoming_segment, true));
                 let (segment, new_triples) = compact_segments(
                     ts,
-                    global_cats,
+                    global_cats.as_ref(),
                     &self.subject_type,
                     &self.object_type,
                     storage_folder,
@@ -203,7 +207,7 @@ impl Triples {
                     &self.subject_type,
                     &self.object_type,
                     self.object_indexing_enabled,
-                    global_cats,
+                    global_cats.as_ref(),
                 )?;
                 self.height = self.height + new_segment.height;
                 self.segments.push(new_segment);
@@ -223,12 +227,12 @@ impl Triples {
                 &self.subject_type,
                 &self.object_type,
                 self.object_indexing_enabled,
-                global_cats,
+                global_cats.as_ref(),
             )?;
             ts.push((incoming_segment, true));
             let (segment, new_triples) = compact_segments(
                 ts,
-                global_cats,
+                global_cats.as_ref(),
                 &self.subject_type,
                 &self.object_type,
                 storage_folder,
@@ -413,8 +417,8 @@ struct IndexedTriples {
     height: usize,
 }
 
-// LF should always be sorted by subjects underlying string
-// When object is cat or a string, the LF should have an u32-col that can sort the objects by the (underlying) string.
+// DF should always be sorted by subjects underlying string
+// When object indexing LF should have two u32-cols that can sort the objects and subjects by the (underlying) string.
 fn create_indices(
     mut df: DataFrame,
     storage_folder: Option<&PathBuf>,

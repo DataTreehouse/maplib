@@ -3,9 +3,10 @@ use crate::solution_mapping::BaseCatState;
 use crate::BaseRDFNodeType;
 use polars::datatypes::{DataType, Field, PlSmallStr};
 use polars::frame::DataFrame;
-use polars::prelude::{col, Column, Expr, IntoColumn, IntoLazy};
+use polars::prelude::{col, Column, Expr, IntoColumn, IntoLazy, IntoSeries, StringChunked, UInt32Chunked};
 use polars::series::Series;
 use std::sync::Arc;
+use rayon::iter::{IntoParallelRefIterator, ParallelBridge, ParallelIterator};
 
 impl CatEncs {
     pub fn decode(&self, ser: &Series, cat_type: &CatType) -> Series {
@@ -94,8 +95,8 @@ impl Cats {
             encs.extend(local_cats.get_encs(t))
         }
         let u32s = ser.u32().unwrap();
-        let mut strings = Vec::with_capacity(ser.len());
-        for u in u32s {
+        let us:Vec<_> = u32s.iter().collect();
+        let strings: Vec<_> = us.par_iter().map(|u| {
             let s = if let Some(u) = u {
                 let mut s = None;
                 for (t, e) in &encs {
@@ -108,9 +109,9 @@ impl Cats {
             } else {
                 None
             };
-            strings.push(s)
-        }
-        Series::from_iter(strings.into_iter())
+            s
+        }).collect();
+        Series::from_iter(strings)
     }
 }
 
@@ -172,7 +173,7 @@ pub fn decode_expr(
         move |x| {
             let original_name = x.name().to_string();
             let mut s = global_cats.decode(
-                &x.as_materialized_series(),
+                x.as_materialized_series(),
                 &base_rdf_node_type,
                 local_cats.as_ref().map(|x| x.clone()),
             );

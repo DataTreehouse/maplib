@@ -61,19 +61,21 @@ impl Triplestore {
         let mut opt = MmapOptions::new();
         opt.stack();
         let map = unsafe { opt.map(&file).unwrap() };
-        let res = self.read_triples(
+        self.read_triples(
             map.deref(),
             rdf_format,
             base_iri,
             transient,
             parallel,
             checked,
-        );
+        )?;
+        drop(map);
+
         debug!(
             "Reading triples from path took {} seconds",
             now.elapsed().as_secs_f32()
         );
-        res
+        Ok(())
     }
 
     #[allow(clippy::too_many_arguments)]

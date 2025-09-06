@@ -20,6 +20,7 @@ thiserror.workspace = true
 pyo3 = {workspace = true, features = ["chrono-tz", "chrono"]}
 oxsdatatypes.workspace = true
 rayon.workspace = true
+nohash-hasher.workspace = true
 uuid.workspace = true
 
 [lints.rust]

@@ -1,5 +1,6 @@
 use crate::{LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD};
 use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
+use chrono_tz::Tz;
 use log::warn;
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{BlankNode, Literal, NamedNode, NamedNodeRef, Term};
@@ -9,7 +10,6 @@ use polars::prelude::{
 };
 use std::ops::Deref;
 use std::str::FromStr;
-use chrono_tz::Tz;
 
 pub fn rdf_term_to_polars_expr(term: &Term) -> Expr {
     match term {
@@ -399,7 +399,10 @@ pub fn polars_literal_values_to_series(literal_values: Vec<LiteralValue>, name: 
                         })
                         .collect::<Vec<Option<i64>>>(),
                 )
-                .cast(&DataType::Datetime(*t, Some(tz.unwrap_or(&TimeZone::UTC).clone())))
+                .cast(&DataType::Datetime(
+                    *t,
+                    Some(tz.unwrap_or(&TimeZone::UTC).clone()),
+                ))
                 .unwrap(),
                 AnyValue::DatetimeOwned(_, t, tz) => {
                     let tz = tz.as_ref().map(|x| x.deref().clone());
@@ -417,7 +420,10 @@ pub fn polars_literal_values_to_series(literal_values: Vec<LiteralValue>, name: 
                             })
                             .collect::<Vec<Option<i64>>>(),
                     )
-                    .cast(&DataType::Datetime(*t, Some(tz.unwrap_or(TimeZone::UTC).clone())))
+                    .cast(&DataType::Datetime(
+                        *t,
+                        Some(tz.unwrap_or(TimeZone::UTC).clone()),
+                    ))
                     .unwrap()
                 }
                 AnyValue::Date(_) => Series::new(

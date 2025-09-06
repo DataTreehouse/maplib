@@ -10,13 +10,14 @@ use polars::frame::DataFrame;
 use polars::prelude::{col, lit, IntoLazy, Series};
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use std::collections::HashMap;
+use std::hash::BuildHasherDefault;
 use std::sync::Arc;
 
 impl CatEncs {
     pub fn new_empty() -> CatEncs {
         CatEncs {
             map: Default::default(),
-            rev_map: Default::default(),
+            rev_map: HashMap::with_capacity_and_hasher(2, BuildHasherDefault::default()),
         }
     }
 
@@ -532,42 +533,61 @@ pub fn encode_triples(
         let out: Vec<_> = dfs
             .into_par_iter()
             .map(|mut df| {
-                let subject_out =
-                    if let Some(subject_prefix_map) = prefix_maps.get(SUBJECT_COL_NAME) {
-                        let u = df
-                            .drop_in_place(SUBJECT_PREFIX_COL_NAME)
-                            .unwrap()
-                            .as_materialized_series_maintain_scalar()
-                            .u32()
-                            .unwrap()
-                            .first()
-                            .unwrap();
-                        Some(subject_prefix_map.get(&u).unwrap().clone())
-                    } else {
-                        None
-                    };
-                let object_out = if let Some(object_prefix_map) = prefix_maps.get(OBJECT_COL_NAME) {
-                    let u = df
-                        .drop_in_place(OBJECT_PREFIX_COL_NAME)
-                        .unwrap()
-                        .as_materialized_series_maintain_scalar()
-                        .u32()
-                        .unwrap()
-                        .first()
-                        .unwrap();
-                    Some(object_prefix_map.get(&u).unwrap().clone())
-                } else {
+                if df.height() == 0 {
                     None
-                };
-                (df, subject_out, object_out)
+                } else {
+                    let subject_out =
+                        if let Some(subject_prefix_map) = prefix_maps.get(SUBJECT_COL_NAME) {
+                            let ser = df
+                                .drop_in_place(SUBJECT_PREFIX_COL_NAME)
+                                .unwrap()
+                                .as_materialized_series_maintain_scalar();
+                            let u32ch = ser.u32().unwrap();
+                            let i = u32ch.first_non_null();
+                            if let Some(i) = i {
+                                let u = u32ch.get(i);
+                                if let Some(u) = u {
+                                    Some(subject_prefix_map.get(&u).unwrap().clone())
+                                } else {
+                                    None
+                                }
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        };
+                    let object_out =
+                        if let Some(object_prefix_map) = prefix_maps.get(OBJECT_COL_NAME) {
+                            let ser = df
+                                .drop_in_place(OBJECT_PREFIX_COL_NAME)
+                                .unwrap()
+                                .as_materialized_series_maintain_scalar();
+                            let u32ch = ser.u32().unwrap();
+                            let i = u32ch.first_non_null();
+                            if let Some(i) = i {
+                                let u = u32ch.get(i);
+                                if let Some(u) = u {
+                                    Some(object_prefix_map.get(&u).unwrap().clone())
+                                } else {
+                                    None
+                                }
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        };
+                    Some((df, subject_out, object_out))
+                }
             })
             .collect();
         out
     } else {
-        vec![(mappings, None, None)]
+        vec![Some((mappings, None, None))]
     };
     let mut new_out = vec![];
-    for (df, subject, object) in out {
+    for (df, subject, object) in out.into_iter().filter(|x| x.is_some()).map(|x| x.unwrap()) {
         let subject = if matches!(subject_cat_state, BaseCatState::CategoricalNative(..)) {
             if let Some(subject) = subject {
                 Some(CatType::Prefix(NamedNode::new_unchecked(subject)))

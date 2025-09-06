@@ -17,7 +17,7 @@ use file_io::create_folder_if_not_exists;
 use fts::FtsIndex;
 use log::trace;
 use oxrdf::vocab::{rdf, rdfs, xsd};
-use oxrdf::NamedNode;
+use oxrdf::{NamedNode, Triple};
 use polars::prelude::{arg_sort_by, col, AnyValue, DataFrame, IntoLazy, RankMethod, RankOptions};
 use polars_core::prelude::SortMultipleOptions;
 use query_processing::type_constraints::ConstraintBaseRDFNodeType;
@@ -29,7 +29,10 @@ use representation::cats::{
 };
 use representation::multitype::set_struct_all_null_to_null_row;
 use representation::solution_mapping::{BaseCatState, EagerSolutionMappings};
-use representation::{literal_iri_to_namednode, BaseRDFNodeType, RDFNodeState, OBJECT_COL_NAME, PREDICATE_COL_NAME, SUBJECT_COL_NAME};
+use representation::{
+    literal_iri_to_namednode, BaseRDFNodeType, RDFNodeState, OBJECT_COL_NAME, PREDICATE_COL_NAME,
+    SUBJECT_COL_NAME,
+};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -195,11 +198,17 @@ impl NewTriples {
             let mut map = HashMap::new();
             map.insert(
                 SUBJECT_COL_NAME.to_string(),
-                RDFNodeState::from_bases(self.subject_type.clone(), self.subject_type.default_stored_cat_state()),
+                RDFNodeState::from_bases(
+                    self.subject_type.clone(),
+                    self.subject_type.default_stored_cat_state(),
+                ),
             );
             map.insert(
                 OBJECT_COL_NAME.to_string(),
-                RDFNodeState::from_bases(self.object_type.clone(), self.object_type.default_stored_cat_state()),
+                RDFNodeState::from_bases(
+                    self.object_type.clone(),
+                    self.object_type.default_stored_cat_state(),
+                ),
             );
             Some(EagerSolutionMappings::new(df, map))
         } else {
@@ -276,7 +285,7 @@ impl Triplestore {
         transient: bool,
     ) -> Result<Vec<NewTriples>, TriplestoreError> {
         let prepare_triples_now = Instant::now();
-        let dfs_to_add = prepare_add_triples_par(ts, self.cats.clone(), &self.indexing);
+        let dfs_to_add = prepare_add_triples_par(ts, self.cats.clone());
         trace!(
             "Preparing triples took {} seconds",
             prepare_triples_now.elapsed().as_secs_f32()
@@ -304,13 +313,13 @@ impl Triplestore {
         global_cat_triples: Vec<CatTriples>,
         transient: bool,
     ) -> Result<Vec<NewTriples>, TriplestoreError> {
-        let mut out_new_triples = vec![];
         let use_map = if transient {
             &mut self.transient_triples_map
         } else {
             &mut self.triples_map
         };
-        // Todo partition by predicate to improve parallelism
+
+        let mut add_map: HashMap<_, (_, Vec<_>)> = HashMap::new();
         for CatTriples {
             encoded_triples,
             predicate,
@@ -319,30 +328,7 @@ impl Triplestore {
             local_cats: _,
         } in global_cat_triples
         {
-            trace!(
-                "Adding predicate {predicate} subject type {subject_type} object type {object_type}"
-            );
             for encoded_triple in encoded_triples {
-                if matches!(object_type, BaseRDFNodeType::Literal(..)) {
-                    //TODO: Get what is actually updated from db and then only add those things
-                    if let Some(fts_index) = &mut self.fts_index {
-                        let fts_now = Instant::now();
-                        fts_index
-                            .add_literal_string(
-                                &encoded_triple.df,
-                                &predicate,
-                                &subject_type,
-                                &object_type,
-                            )
-                            .map_err(TriplestoreError::FtsError)?;
-                        trace!(
-                            "Adding to fts index took {} seconds",
-                            fts_now.elapsed().as_secs_f32()
-                        );
-                    }
-                }
-
-                let cast_now = Instant::now();
                 let mut map = HashMap::new();
                 map.insert(
                     SUBJECT_COL_NAME.to_string(),
@@ -352,6 +338,7 @@ impl Triplestore {
                     OBJECT_COL_NAME.to_string(),
                     object_type.clone().into_default_stored_rdf_node_state(),
                 );
+
                 let subject_type_stored = StoredBaseRDFNodeType::from_base_and_prefix(
                     &subject_type,
                     &encoded_triple.subject,
@@ -360,73 +347,111 @@ impl Triplestore {
                     &object_type,
                     &encoded_triple.object,
                 );
-
                 let k = (subject_type_stored.clone(), object_type_stored.clone());
-                let mut added_triples = false;
-                trace!(
-                    "Casting to cat took {} seconds",
-                    cast_now.elapsed().as_secs_f32()
-                );
-                let add_now = Instant::now();
-                if let Some(m) = use_map.get_mut(&predicate) {
-                    if let Some(t) = m.get_mut(&k) {
-                        let new_triples_opt = t.add_triples(
-                            encoded_triple.df.clone(),
-                            self.storage_folder.as_ref(),
-                            &self.cats,
-                        )?;
-
-                        let new_triples = NewTriples {
-                            df: new_triples_opt
-                                .map(|x| x.select([SUBJECT_COL_NAME, OBJECT_COL_NAME]).unwrap()),
-                            predicate: predicate.clone(),
-                            subject_type: subject_type.clone(),
-                            object_type: object_type.clone(),
-                        };
-                        out_new_triples.push(new_triples);
-
-                        added_triples = true;
-                    }
+                let triples = if let Some(m) = use_map.get_mut(&predicate) {
+                    m.remove(&k)
                 } else {
-                    use_map.insert(predicate.clone(), HashMap::new());
+                    None
                 };
-                if !added_triples {
-                    let triples = Triples::new(
-                        encoded_triple.df.clone(),
-                        self.storage_folder.as_ref(),
-                        subject_type_stored,
-                        object_type_stored,
-                        &predicate,
-                        &self.indexing,
-                        &self.cats,
-                    )?;
+                let (s, o) = k;
+                let k2 = (predicate.clone(), s, o);
 
-                    let new_triples_now = Instant::now();
-                    let mut lfs = triples.get_lazy_frames(&None, &None, &self.cats)?;
-                    assert_eq!(lfs.len(), 1);
-                    let (lf, _) = lfs.pop().unwrap();
-                    let df = lf.collect().unwrap();
-                    let new_triples = NewTriples {
-                        df: Some(df.select([SUBJECT_COL_NAME, OBJECT_COL_NAME]).unwrap()),
-                        predicate: predicate.clone(),
-                        subject_type: subject_type.clone(),
-                        object_type: object_type.clone(),
-                    };
-                    out_new_triples.push(new_triples);
-                    trace!(
-                        "Creating new triples out took {} seconds",
-                        new_triples_now.elapsed().as_secs_f32()
-                    );
-
-                    let m = use_map.get_mut(&predicate).unwrap();
-                    m.insert(k, triples);
+                if !add_map.contains_key(&k2) {
+                    add_map.insert(k2.clone(), (triples, vec![]));
                 }
-                trace!(
-                    "Adding triples to map took  {} seconds",
-                    add_now.elapsed().as_secs_f32()
-                );
+                let (_, v) = add_map.get_mut(&k2).unwrap();
+                v.push(encoded_triple);
             }
         }
+        let storage_folder = self.storage_folder.clone();
+        let indexing = self.indexing.clone();
+        let cats = self.cats.clone();
+        //Why does not par iter work?
+        let r: Result<Vec<_>, TriplestoreError> = add_map
+            .into_iter()
+            .map(move |((p, s, o), (triples, v))| {
+                let mut new_triples_vec = vec![];
+                let mut v_iter = v.into_iter();
+                let mut triples = if let Some(triples) = triples {
+                    triples
+                } else {
+                    let et = v_iter.next().unwrap();
+                    let new_triples = NewTriples {
+                        df: Some(
+                            et.df
+                                .clone()
+                                .select([SUBJECT_COL_NAME, OBJECT_COL_NAME])
+                                .unwrap(),
+                        ),
+                        predicate: p.clone(),
+                        subject_type: s.as_base_rdf_node_type(),
+                        object_type: o.as_base_rdf_node_type(),
+                    };
+                    new_triples_vec.push(new_triples);
+
+                    let triples = Triples::new(
+                        et.df,
+                        storage_folder.as_ref(),
+                        s.clone(),
+                        o.clone(),
+                        &p,
+                        &indexing,
+                        cats.clone(),
+                    )?;
+                    triples
+                };
+                for enc in v_iter {
+                    let new_triples_opt = triples.add_triples(
+                        enc.df.clone(),
+                        storage_folder.as_ref(),
+                        cats.clone(),
+                    )?;
+                    let new_triples = NewTriples {
+                        df: new_triples_opt
+                            .map(|x| x.select([SUBJECT_COL_NAME, OBJECT_COL_NAME]).unwrap()),
+                        predicate: p.clone(),
+                        subject_type: s.as_base_rdf_node_type(),
+                        object_type: o.as_base_rdf_node_type(),
+                    };
+                    new_triples_vec.push(new_triples);
+                }
+                let k = (p, s, o);
+                Ok(((k, triples), new_triples_vec))
+            })
+            .collect();
+        let (to_add_map, out_new_triples): (HashMap<_, _>, Vec<_>) = r?.into_iter().unzip();
+
+        let out_new_triples: Vec<_> = out_new_triples.into_iter().flatten().collect();
+        for ((p, s, o), v) in to_add_map {
+            if !use_map.contains_key(&p) {
+                use_map.insert(p.clone(), HashMap::new());
+            }
+            let k = (s, o);
+            let m = use_map.get_mut(&p).unwrap();
+            m.insert(k, v);
+        }
+        for nt in &out_new_triples {
+            if matches!(nt.object_type, BaseRDFNodeType::Literal(..)) {
+                if let Some(df) = &nt.df {
+                    if let Some(fts_index) = &mut self.fts_index {
+                        let fts_now = Instant::now();
+                        fts_index
+                            .add_literal_string(
+                                df,
+                                &nt.predicate,
+                                &nt.subject_type,
+                                &nt.object_type,
+                            )
+                            .map_err(TriplestoreError::FtsError)?;
+                        trace!(
+                            "Adding to fts index took {} seconds",
+                            fts_now.elapsed().as_secs_f32()
+                        );
+                    }
+                }
+            }
+        }
+
         Ok(out_new_triples)
     }
 }
@@ -443,7 +468,6 @@ struct TriplesToAddPartitionedPredicate {
 pub fn prepare_add_triples_par(
     mut ts: Vec<TriplesToAdd>,
     global_cats: Arc<Cats>,
-    indexing: &IndexingOptions,
 ) -> Vec<CatTriples> {
     let df_vecs_to_add: Vec<Vec<TriplesToAddPartitionedPredicate>> = ts
         .par_drain(..)
@@ -503,41 +527,45 @@ pub fn prepare_add_triples_par(
                     global_cats.clone(),
                 );
             }
-            lf = lf
-                .with_column(
-                    subj_col_expr
-                        .rank(
-                            RankOptions {
-                                method: RankMethod::Min,
-                                descending: false,
-                            },
-                            None,
-                        )
-                        .alias(SUBJECT_RANK_COL_NAME),
-                );
-            lf = lf
-                .with_column(
-                    obj_col_expr
-                        .rank(
-                            RankOptions {
-                                method: RankMethod::Min,
-                                descending: false,
-                            },
-                            None,
-                        )
-                        .alias(OBJECT_RANK_COL_NAME),
-                );
+            lf = lf.with_column(
+                subj_col_expr
+                    .rank(
+                        RankOptions {
+                            method: RankMethod::Min,
+                            descending: false,
+                        },
+                        None,
+                    )
+                    .alias(SUBJECT_RANK_COL_NAME),
+            );
+            lf = lf.with_column(
+                obj_col_expr
+                    .rank(
+                        RankOptions {
+                            method: RankMethod::Min,
+                            descending: false,
+                        },
+                        None,
+                    )
+                    .alias(OBJECT_RANK_COL_NAME),
+            );
 
-            lf = lf.sort_by_exprs(vec![col(SUBJECT_RANK_COL_NAME), col(OBJECT_RANK_COL_NAME)], SortMultipleOptions {
-                descending: vec![false, false],
-                nulls_last: vec![false, false],
-                multithreaded: true,
-                maintain_order: false,
-                limit: None,
-            }).filter(
-                repeated_from_last_row_expr(SUBJECT_COL_NAME)
-                    .and(repeated_from_last_row_expr(OBJECT_COL_NAME))
-                    .not());
+            lf = lf
+                .sort_by_exprs(
+                    vec![col(SUBJECT_RANK_COL_NAME), col(OBJECT_RANK_COL_NAME)],
+                    SortMultipleOptions {
+                        descending: vec![false, false],
+                        nulls_last: vec![false, false],
+                        multithreaded: true,
+                        maintain_order: false,
+                        limit: None,
+                    },
+                )
+                .filter(
+                    repeated_from_last_row_expr(SUBJECT_COL_NAME)
+                        .and(repeated_from_last_row_expr(OBJECT_COL_NAME))
+                        .not(),
+                );
             t.df = lf.collect().unwrap();
             t
         })
