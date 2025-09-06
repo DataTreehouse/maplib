@@ -7,7 +7,7 @@ use crate::{
 };
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{NamedNode, NamedNodeRef, Subject, Term};
-use polars::datatypes::{DataType, Field, PlSmallStr, TimeUnit};
+use polars::datatypes::{DataType, Field, PlSmallStr, TimeUnit, TimeZone};
 use spargebra::term::GroundTerm;
 use std::fmt::{Display, Formatter};
 
@@ -220,8 +220,8 @@ fn literal_type(
                 }
             }
         }
-        xsd::DATE_TIME => DataType::Datetime(TimeUnit::Nanoseconds, None),
-        xsd::DATE_TIME_STAMP => DataType::Datetime(TimeUnit::Nanoseconds, None),
+        xsd::DATE_TIME => DataType::Datetime(TimeUnit::Nanoseconds, Some(TimeZone::UTC)),
+        xsd::DATE_TIME_STAMP => DataType::Datetime(TimeUnit::Nanoseconds, Some(TimeZone::UTC)),
         xsd::DATE => DataType::Date,
         //TODO: Fix when adding proper list support
         rdf::LIST => DataType::List(Box::new(DataType::Boolean)),

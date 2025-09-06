@@ -9,7 +9,7 @@ representation = {path = "../representation"}
 
 pyo3 = {workspace=true, features = ["extension-module"]}
 polars = {workspace=true, default-features = false }
-polars-core = {workspace=true, features=["dtype-array", "dtype-categorical", "dtype-date", "dtype-datetime",
+polars-core = {workspace=true, features=["dtype-array", "dtype-date", "dtype-datetime",
     "dtype-decimal", "dtype-duration", "dtype-i8", "dtype-i16", "dtype-struct", "dtype-time", "dtype-u8", "dtype-u16"], default-features = false}
 thiserror.workspace = true
 

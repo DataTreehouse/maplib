@@ -10,6 +10,7 @@ pub use encode::*;
 pub use globalize::*;
 pub use re_encode::*;
 pub use split::*;
+pub use image::*;
 
 use crate::BaseRDFNodeType;
 use oxrdf::NamedNode;

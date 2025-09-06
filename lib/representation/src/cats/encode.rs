@@ -76,7 +76,7 @@ impl Cats {
                         to_encode.push((c.clone(), t.clone(), ser));
                     } else if let BaseCatState::CategoricalNative(_, local) = bs {
                         if let Some(map) = &include_cat_type_col {
-                            if map.contains_key(c) {
+                            if t.is_iri() && map.contains_key(c) {
                                 let ser = if s.is_multi() {
                                     mappings
                                         .column(c)
@@ -495,14 +495,18 @@ pub fn encode_triples(
         RDFNodeState::from_bases(object_type.clone(), object_cat_state),
     );
     let mut prefix_name_map = HashMap::new();
-    prefix_name_map.insert(
-        SUBJECT_COL_NAME.to_string(),
-        SUBJECT_PREFIX_COL_NAME.to_string(),
-    );
-    prefix_name_map.insert(
-        OBJECT_COL_NAME.to_string(),
-        OBJECT_PREFIX_COL_NAME.to_string(),
-    );
+    if subject_type.is_iri() {
+        prefix_name_map.insert(
+            SUBJECT_COL_NAME.to_string(),
+            SUBJECT_PREFIX_COL_NAME.to_string(),
+        );
+    }
+    if object_type.is_iri() {
+        prefix_name_map.insert(
+            OBJECT_COL_NAME.to_string(),
+            OBJECT_PREFIX_COL_NAME.to_string(),
+        );
+    }
     let (mut sm, prefix_maps) = global_cats
         .encode_solution_mappings(EagerSolutionMappings::new(df, map), Some(prefix_name_map));
 
@@ -523,7 +527,8 @@ pub fn encode_triples(
         partition_by.push(OBJECT_PREFIX_COL_NAME);
     }
     let out = if !partition_by.is_empty() {
-        let dfs = mappings.partition_by(partition_by, true).unwrap();
+        // Important to preserve ordering
+        let dfs = mappings.partition_by_stable(partition_by, true).unwrap();
         let out: Vec<_> = dfs
             .into_par_iter()
             .map(|mut df| {

@@ -29,10 +29,7 @@ use representation::cats::{
 };
 use representation::multitype::set_struct_all_null_to_null_row;
 use representation::solution_mapping::{BaseCatState, EagerSolutionMappings};
-use representation::{
-    literal_iri_to_namednode, BaseRDFNodeType, OBJECT_COL_NAME, PREDICATE_COL_NAME,
-    SUBJECT_COL_NAME,
-};
+use representation::{literal_iri_to_namednode, BaseRDFNodeType, RDFNodeState, OBJECT_COL_NAME, PREDICATE_COL_NAME, SUBJECT_COL_NAME};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -198,13 +195,11 @@ impl NewTriples {
             let mut map = HashMap::new();
             map.insert(
                 SUBJECT_COL_NAME.to_string(),
-                self.subject_type
-                    .clone()
-                    .into_default_input_rdf_node_state(),
+                RDFNodeState::from_bases(self.subject_type.clone(), self.subject_type.default_stored_cat_state()),
             );
             map.insert(
                 OBJECT_COL_NAME.to_string(),
-                self.object_type.clone().into_default_input_rdf_node_state(),
+                RDFNodeState::from_bases(self.object_type.clone(), self.object_type.default_stored_cat_state()),
             );
             Some(EagerSolutionMappings::new(df, map))
         } else {
@@ -508,49 +503,41 @@ pub fn prepare_add_triples_par(
                     global_cats.clone(),
                 );
             }
-            lf = lf.sort_by_exprs(
-                vec![subj_col_expr.clone(), obj_col_expr.clone()],
-                SortMultipleOptions {
-                    descending: vec![false, false],
-                    nulls_last: vec![false, false],
-                    multithreaded: true,
-                    maintain_order: false,
-                    limit: None,
-                },
-            );
-            lf = lf.filter(
+            lf = lf
+                .with_column(
+                    subj_col_expr
+                        .rank(
+                            RankOptions {
+                                method: RankMethod::Min,
+                                descending: false,
+                            },
+                            None,
+                        )
+                        .alias(SUBJECT_RANK_COL_NAME),
+                );
+            lf = lf
+                .with_column(
+                    obj_col_expr
+                        .rank(
+                            RankOptions {
+                                method: RankMethod::Min,
+                                descending: false,
+                            },
+                            None,
+                        )
+                        .alias(OBJECT_RANK_COL_NAME),
+                );
+
+            lf = lf.sort_by_exprs(vec![col(SUBJECT_RANK_COL_NAME), col(OBJECT_RANK_COL_NAME)], SortMultipleOptions {
+                descending: vec![false, false],
+                nulls_last: vec![false, false],
+                multithreaded: true,
+                maintain_order: false,
+                limit: None,
+            }).filter(
                 repeated_from_last_row_expr(SUBJECT_COL_NAME)
                     .and(repeated_from_last_row_expr(OBJECT_COL_NAME))
-                    .not(),
-            );
-
-            let object_index = can_and_should_index_object(&t.object_type, &t.predicate, indexing);
-            if object_index {
-                // Only create O,S - but no need to deduplicate
-                lf = lf
-                    .with_column(
-                        obj_col_expr
-                            .rank(
-                                RankOptions {
-                                    method: RankMethod::Min,
-                                    descending: false,
-                                },
-                                None,
-                            )
-                            .alias(OBJECT_RANK_COL_NAME),
-                    )
-                    .with_column(
-                        subj_col_expr
-                            .rank(
-                                RankOptions {
-                                    method: RankMethod::Min,
-                                    descending: false,
-                                },
-                                None,
-                            )
-                            .alias(SUBJECT_RANK_COL_NAME),
-                    );
-            }
+                    .not());
             t.df = lf.collect().unwrap();
             t
         })
@@ -566,7 +553,6 @@ pub fn prepare_add_triples_par(
                  subject_cat_state,
                  object_cat_state,
              }| {
-                //sort_triples(df, subject_type, object_type);
                 cat_encode_triples(
                     df,
                     subject_type,

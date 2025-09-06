@@ -1,14 +1,14 @@
-use super::CatEncs;
+use super::{reencode_solution_mappings, CatEncs};
 use super::{CatReEnc, Cats};
-use crate::solution_mapping::{BaseCatState, EagerSolutionMappings};
-use crate::BaseRDFNodeType;
-use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use crate::solution_mapping::{BaseCatState, EagerSolutionMappings, SolutionMappings};
+use crate::{BaseRDFNodeType, RDFNodeState};
+use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
 
 impl Cats {
     pub fn mappings_cat_image(&self, sms: &Vec<&EagerSolutionMappings>) -> Cats {
-        let mut s = HashSet::new();
+        let mut s: HashMap<_, HashSet<u32>> = HashMap::new();
 
         for sm in sms {
             let sm = *sm;
@@ -34,7 +34,11 @@ impl Cats {
                                 .as_materialized_series()
                                 .clone()
                         };
-                        s.extend(
+                        if !s.contains_key(bt) {
+                            s.insert(bt.clone(), HashSet::new());
+                        }
+                        let ss = s.get_mut(bt).unwrap();
+                        ss.extend(
                             ser.u32()
                                 .unwrap()
                                 .into_iter()
@@ -58,7 +62,7 @@ impl Cats {
 
     pub fn merge_solution_mappings_locals(
         &mut self,
-        sms: Vec<&EagerSolutionMappings>,
+        sms: &Vec<&EagerSolutionMappings>,
     ) -> HashMap<String, HashMap<BaseRDFNodeType, CatReEnc>> {
         let mut local_cats = vec![];
 
@@ -114,11 +118,18 @@ impl Cats {
         concat_reenc_cats
     }
 
-    pub fn image(&self, s: &HashSet<u32>) -> Cats {
+    pub fn image(&self, s: &HashMap<BaseRDFNodeType, HashSet<u32>>) -> Cats {
         let map: HashMap<_, _> = self
             .cat_map
             .par_iter()
-            .map(|(t, e)| (t, e.image(s)))
+            .map(|(t, e)| {
+                let ctt = t.as_base_rdf_node_type();
+                if let Some(ss) = s.get(&ctt) {
+                    (t, e.image(ss))
+                } else {
+                    (t, None)
+                }
+            })
             .filter(|(_, e)| e.is_some())
             .map(|(x, y)| (x.clone(), y.unwrap()))
             .collect();
@@ -145,6 +156,27 @@ impl CatEncs {
             Some(CatEncs { map, rev_map })
         } else {
             None
+        }
+    }
+}
+
+pub fn new_solution_mapping_cats(sms: Vec<EagerSolutionMappings>, global_cats:&Cats) -> (Vec<EagerSolutionMappings>, Cats) {
+    let smsref: Vec<_> = sms.iter().collect();
+    let mut cats = global_cats.mappings_cat_image(&smsref);
+
+    let reenc = cats.merge_solution_mappings_locals(&smsref);
+    let new_sms:Vec<_> = sms.into_par_iter().map(|sm| {
+        reencode_solution_mappings(sm, &reenc)
+    }).collect();
+    (new_sms, cats)
+}
+
+pub fn set_global_cats_as_local(rdf_node_types:&mut HashMap<String, RDFNodeState>, cats:Arc<Cats>)  {
+    for (_, s) in rdf_node_types {
+        for v in s.map.values_mut() {
+            if matches!(v, BaseCatState::CategoricalNative(_, _)) {
+                *v = BaseCatState::CategoricalNative(false, Some(cats.clone()));
+            }
         }
     }
 }

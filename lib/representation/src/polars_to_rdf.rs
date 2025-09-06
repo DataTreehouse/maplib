@@ -19,7 +19,7 @@ use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{Literal, NamedNode, Subject, Triple, Variable};
 use polars::prelude::{
     as_struct, col, AnyValue, Column, DataFrame, DataType, IntoColumn, IntoLazy, LiteralValue,
-    PlSmallStr, Scalar, Series, TimeZone,
+    PlSmallStr, Scalar, Series, TimeUnit, TimeZone,
 };
 use rayon::iter::IndexedParallelIterator;
 use rayon::iter::IntoParallelIterator;
@@ -295,10 +295,6 @@ pub fn polars_type_to_literal_type(
             .into_default_input_rdf_node_state()),
         DataType::Duration(_) => Ok(BaseRDFNodeType::Literal(xsd::DURATION.into_owned())
             .into_default_input_rdf_node_state()),
-        DataType::Categorical(_, _) => {
-            Ok(BaseRDFNodeType::Literal(xsd::STRING.into_owned())
-                .into_default_input_rdf_node_state())
-        }
         DataType::Struct(fields) => {
             let names: Vec<_> = fields.iter().map(|x| x.name.as_str()).collect();
             let mut dts = vec![];
@@ -393,6 +389,11 @@ pub fn datetime_column_to_strings(column: &Column, tz_opt: &Option<TimeZone>) ->
             .strftime(XSD_DATETIME_WITHOUT_TZ_FORMAT)
             .expect("Conversion OK")
             .into_column()
+            .cast(&DataType::Datetime(
+                TimeUnit::Nanoseconds,
+                Some(TimeZone::UTC),
+            ))
+            .unwrap()
     }
 }
 

@@ -44,6 +44,7 @@ pub fn typed_equals_expr(
             }
         }
     }
+
     if let Some(eq) = eq {
         eq
     } else {

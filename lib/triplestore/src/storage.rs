@@ -3,10 +3,7 @@ use crate::{IndexingOptions, StoredBaseRDFNodeType};
 use log::trace;
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{NamedNode, Subject, Term};
-use polars::prelude::{
-    as_struct, col, concat, lit, Expr, IdxSize, IntoLazy, JoinArgs, JoinType, LazyFrame,
-    PlSmallStr, UnionArgs,
-};
+use polars::prelude::{as_struct, by_name, col, concat, lit, Expr, IdxSize, IntoLazy, JoinArgs, JoinType, LazyFrame, PlSmallStr, UnionArgs};
 use polars_core::datatypes::AnyValue;
 use polars_core::frame::DataFrame;
 use polars_core::prelude::{IntoColumn, Series, SortMultipleOptions, UInt32Chunked};
@@ -441,6 +438,7 @@ fn create_indices(
     );
     let store_now = Instant::now();
     let height = df.height();
+
     let subject_sort = StoredTriples::new(df.clone(), subj_type, obj_type, storage_folder)?;
     trace!("Storing triples took {}", store_now.elapsed().as_secs_f32());
     let mut object_sort = None;
@@ -550,6 +548,7 @@ impl StoredTriples {
         obj_type: &StoredBaseRDFNodeType,
         storage_folder: Option<&PathBuf>,
     ) -> Result<Self, TriplestoreError> {
+        let df = df.select([SUBJECT_COL_NAME, OBJECT_COL_NAME]).unwrap();
         if let Some(storage_folder) = &storage_folder {
             if MIN_SIZE_CACHING < df.estimated_size() {
                 return Ok(StoredTriples::TriplesOnDisk(TriplesOnDisk::new(

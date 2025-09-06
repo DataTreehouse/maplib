@@ -129,17 +129,6 @@ pub fn minus(
         Ok(left_solution_mappings)
     } else {
         let join_on_cols: Vec<Expr> = join_on.iter().map(|x| col(*x)).collect();
-        for c in join_on {
-            if is_literal_string_col(left_solution_mappings.rdf_node_types.get(c).unwrap()) {
-                todo!("Fix this properly");
-                // right_mappings = right_mappings.with_column(
-                //     col(c).cast(DataType::Categorical(None, CategoricalOrdering::Lexical)),
-                // );
-                // left_solution_mappings.mappings = left_solution_mappings.mappings.with_column(
-                //     col(c).cast(DataType::Categorical(None, CategoricalOrdering::Lexical)),
-                // );
-            }
-        }
         right_mappings = right_mappings.sort_by_exprs(
             join_on_cols.as_slice(),
             SortMultipleOptions::default()

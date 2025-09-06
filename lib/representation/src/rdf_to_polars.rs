@@ -9,6 +9,7 @@ use polars::prelude::{
 };
 use std::ops::Deref;
 use std::str::FromStr;
+use chrono_tz::Tz;
 
 pub fn rdf_term_to_polars_expr(term: &Term) -> Expr {
     match term {
@@ -155,13 +156,13 @@ pub fn rdf_literal_to_polars_literal_value(lit: &Literal) -> LiteralValue {
                 LiteralValue::Scalar(Scalar::new_datetime(
                     dt.and_utc().timestamp_nanos_opt().unwrap(),
                     TimeUnit::Nanoseconds,
-                    None,
+                    Some(TimeZone::from_chrono(&Tz::UTC)),
                 ))
             } else {
                 warn!("Could not parse xsd:dateTime {value}");
                 LiteralValue::Scalar(Scalar::null(DataType::Datetime(
                     TimeUnit::Nanoseconds,
-                    None,
+                    Some(TimeZone::from_chrono(&Tz::UTC)),
                 )))
             }
         }
@@ -179,7 +180,7 @@ pub fn rdf_literal_to_polars_literal_value(lit: &Literal) -> LiteralValue {
             warn!("Could not parse xsd:dateTimeStamp {value} note that timezone is required");
             LiteralValue::Scalar(Scalar::null(DataType::Datetime(
                 TimeUnit::Nanoseconds,
-                None,
+                Some(TimeZone::UTC),
             )))
         }
     } else if datatype == xsd::DATE {
@@ -398,7 +399,7 @@ pub fn polars_literal_values_to_series(literal_values: Vec<LiteralValue>, name: 
                         })
                         .collect::<Vec<Option<i64>>>(),
                 )
-                .cast(&DataType::Datetime(*t, tz.cloned()))
+                .cast(&DataType::Datetime(*t, Some(tz.unwrap_or(&TimeZone::UTC).clone())))
                 .unwrap(),
                 AnyValue::DatetimeOwned(_, t, tz) => {
                     let tz = tz.as_ref().map(|x| x.deref().clone());
@@ -416,7 +417,7 @@ pub fn polars_literal_values_to_series(literal_values: Vec<LiteralValue>, name: 
                             })
                             .collect::<Vec<Option<i64>>>(),
                     )
-                    .cast(&DataType::Datetime(*t, tz))
+                    .cast(&DataType::Datetime(*t, Some(tz.unwrap_or(TimeZone::UTC).clone())))
                     .unwrap()
                 }
                 AnyValue::Date(_) => Series::new(

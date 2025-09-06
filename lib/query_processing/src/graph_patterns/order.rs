@@ -124,12 +124,8 @@ pub fn make_base_cat_sortable(
     global_cats: Arc<Cats>,
 ) -> Expr {
     match base_state {
-        BaseCatState::CategoricalNative(sorted, _) => {
-            if *sorted {
-                expr
-            } else {
-                maybe_decode_expr(expr, base_type, base_state, global_cats)
-            }
+        BaseCatState::CategoricalNative(_, _) => {
+            maybe_decode_expr(expr, base_type, base_state, global_cats)
         }
         BaseCatState::String => expr,
         BaseCatState::NonString => expr,
