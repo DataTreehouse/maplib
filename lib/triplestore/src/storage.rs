@@ -5,7 +5,7 @@ use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{NamedNode, Subject, Term};
 use polars::prelude::{
     as_struct, col, concat, lit, Expr, IdxSize, IntoLazy, JoinArgs, JoinType, LazyFrame,
-    MaintainOrderJoin, PlSmallStr, SeriesMethods, UnionArgs,
+    MaintainOrderJoin, PlSmallStr, UnionArgs,
 };
 use polars_core::datatypes::AnyValue;
 use polars_core::frame::DataFrame;

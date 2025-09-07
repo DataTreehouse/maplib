@@ -1,7 +1,7 @@
 use representation::solution_mapping::EagerSolutionMappings;
+use representation::RDFNodeState;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use representation::RDFNodeState;
 
 #[allow(dead_code)]
 #[derive(Debug, Clone)]

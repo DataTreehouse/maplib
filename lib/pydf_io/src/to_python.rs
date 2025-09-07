@@ -135,7 +135,7 @@ pub fn fix_cats_and_multicolumns(
     if !native_dataframe {
         lf = format_columns(lf, &dts, global_cats)
     } else {
-        lf = format_native_columns(lf, &dts, global_cats)
+        lf = format_native_columns(lf, &mut dts, global_cats)
     }
     df = lf.select(column_ordering).collect().unwrap();
     (df, dts)

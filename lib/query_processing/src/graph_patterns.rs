@@ -25,7 +25,7 @@ use polars::prelude::{
 };
 use representation::multitype::{nest_multicolumns, unnest_multicols};
 use representation::query_context::Context;
-use representation::solution_mapping::{is_literal_string_col, SolutionMappings};
+use representation::solution_mapping::SolutionMappings;
 use representation::{BaseRDFNodeType, RDFNodeState};
 use spargebra::algebra::{Expression, Function};
 use std::collections::{HashMap, HashSet};

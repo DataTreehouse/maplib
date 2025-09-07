@@ -10,7 +10,7 @@ use polars_core::datatypes::AnyValue;
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use representation::cats::{cat_encode_triples, CatTriples, Cats, EncodedTriples};
 use representation::multitype::split_df_multicols;
-use representation::solution_mapping::{BaseCatState, EagerSolutionMappings};
+use representation::solution_mapping::EagerSolutionMappings;
 use representation::{OBJECT_COL_NAME, PREDICATE_COL_NAME, SUBJECT_COL_NAME};
 use std::collections::HashMap;
 use std::time::Instant;
@@ -152,7 +152,7 @@ fn partition_by_global_predicate_col(
             part = part.select([SUBJECT_COL_NAME, OBJECT_COL_NAME]).unwrap();
             sms.push(EagerSolutionMappings::new(part, sm.rdf_node_types.clone()));
         }
-        let predicates = global_cats.decode_iri_u32s(&predicates_u32);
+        let predicates = global_cats.decode_iri_u32s(&predicates_u32, None);
         sms.into_iter().zip(predicates.into_iter()).collect()
     }
 }

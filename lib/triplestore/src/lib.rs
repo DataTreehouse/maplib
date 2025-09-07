@@ -12,13 +12,13 @@ pub mod triples_read;
 pub mod triples_write;
 
 use crate::errors::TriplestoreError;
-use crate::storage::{can_and_should_index_object, repeated_from_last_row_expr, Triples};
+use crate::storage::{repeated_from_last_row_expr, Triples};
 use file_io::create_folder_if_not_exists;
 use fts::FtsIndex;
 use log::trace;
 use oxrdf::vocab::{rdf, rdfs, xsd};
 use oxrdf::{NamedNode, Triple};
-use polars::prelude::{arg_sort_by, col, AnyValue, DataFrame, IntoLazy, RankMethod, RankOptions};
+use polars::prelude::{col, AnyValue, DataFrame, IntoLazy, RankMethod, RankOptions};
 use polars_core::prelude::SortMultipleOptions;
 use query_processing::type_constraints::ConstraintBaseRDFNodeType;
 use rayon::iter::ParallelDrainRange;
@@ -665,7 +665,7 @@ pub fn partition_unpartitioned_predicate(
                     predicate = literal_iri_to_namednode(s.as_str());
                 } else if let AnyValue::UInt32(u) = any_predicate {
                     let cat_state = predicate_cat_state.unwrap();
-                    predicate = global_cats.decode_iri_u32(u, cat_state.get_local_cats())
+                    predicate = global_cats.decode_iri_u32(&u, cat_state.get_local_cats())
                 } else {
                     panic!("Predicate: {any_predicate:?}");
                 }

@@ -1,13 +1,12 @@
 use super::{CatEncs, CatType, Cats};
 use crate::solution_mapping::BaseCatState;
 use crate::BaseRDFNodeType;
+use oxrdf::NamedNode;
 use polars::datatypes::{DataType, Field, PlSmallStr};
 use polars::frame::DataFrame;
-use polars::prelude::{
-    col, Column, Expr, IntoColumn, IntoLazy, IntoSeries, StringChunked, UInt32Chunked,
-};
+use polars::prelude::{col, Column, Expr, IntoColumn, IntoLazy};
 use polars::series::Series;
-use rayon::iter::{IntoParallelRefIterator, ParallelBridge, ParallelIterator};
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use std::sync::Arc;
 
 impl CatEncs {
@@ -47,6 +46,31 @@ impl CatEncs {
 }
 
 impl Cats {
+    pub fn decode_iri_u32s(&self, us: &[u32], local_cats: Option<Arc<Cats>>) -> Vec<NamedNode> {
+        us.par_iter()
+            .map(|x| self.decode_iri_u32(x, local_cats.clone()))
+            .collect()
+    }
+
+    pub fn decode_iri_u32(&self, u: &u32, local_cats: Option<Arc<Cats>>) -> NamedNode {
+        //Very important that we prefer the local encoding over the global encoding.
+        let local = local_cats.as_ref().map(|x| x.as_ref());
+        let mut encs = if let Some(local_cats) = local {
+            local_cats.get_encs(&BaseRDFNodeType::IRI)
+        } else {
+            vec![]
+        };
+        encs.extend(self.get_encs(&BaseRDFNodeType::IRI));
+        let mut s = None;
+        for (ct, e) in encs {
+            if let Some(d) = e.maybe_decode_string(u, ct, true) {
+                s = Some(d);
+                break;
+            }
+        }
+        NamedNode::new_unchecked(s.expect("Should be able to decode"))
+    }
+
     pub fn decode_of_type(&self, ser: &Series, cat_type: &CatType) -> Option<Series> {
         if let Some(enc) = self.cat_map.get(cat_type) {
             Some(enc.decode(ser, cat_type))

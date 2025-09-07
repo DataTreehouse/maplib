@@ -242,19 +242,20 @@ pub fn reencode_solution_mappings(
         let mut reenc_exprs = vec![];
         for (bt, bs) in &t.map {
             if let BaseCatState::CategoricalNative(_, Some(local)) = bs {
-                let rmap = reencs.get(&local.uuid).unwrap();
-                let r = rmap.get(bt).unwrap();
+                if let Some(rmap) = reencs.get(&local.uuid) {
+                    let r = rmap.get(bt).unwrap();
 
-                let e = if t.is_multi() {
-                    col(c).struct_().field_by_name(&bt.field_col_name())
-                } else {
-                    col(c)
-                };
-                let r_cloned = r.clone();
-                reenc_exprs.push(e.map(
-                    move |c| r_cloned.clone().re_encode_column(c, false),
-                    |_, y| Ok(y.clone()),
-                ));
+                    let e = if t.is_multi() {
+                        col(c).struct_().field_by_name(&bt.field_col_name())
+                    } else {
+                        col(c)
+                    };
+                    let r_cloned = r.clone();
+                    reenc_exprs.push(e.map(
+                        move |c| r_cloned.clone().re_encode_column(c, false),
+                        |_, y| Ok(y.clone()),
+                    ));
+                }
             }
         }
         if !reenc_exprs.is_empty() {

@@ -26,8 +26,8 @@ pub fn typed_equals_expr(
     let left_map = exploded.remove(0);
     let mut right_map = exploded.remove(0);
     let mut eq: Option<Expr> = None;
-    for (lt, (les, ls)) in left_map {
-        if let Some((res, rs)) = right_map.remove(&lt) {
+    for (lt, (les, _ls)) in left_map {
+        if let Some((res, _rs)) = right_map.remove(&lt) {
             for le in les {
                 for re in &res {
                     let new_eq = le

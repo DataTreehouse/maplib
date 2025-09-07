@@ -1,4 +1,4 @@
-use polars::prelude::{by_name, col, JoinType, LazyFrame};
+use polars::prelude::{by_name, col, LazyFrame};
 use representation::cats::{maybe_decode_expr, optional_maybe_decode_expr, CatReEnc, Cats};
 use representation::solution_mapping::BaseCatState;
 use representation::{BaseRDFNodeType, RDFNodeState};

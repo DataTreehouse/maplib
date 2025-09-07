@@ -35,7 +35,6 @@ impl Triplestore {
                 if mapping_vars != expected_vars {
                     todo!("Handle mismatching variables in PValues")
                 }
-                let height = mappings.height();
                 EagerSolutionMappings::new(mappings.clone(), rdf_node_types.clone())
             } else {
                 todo!("Handle this error.. ")

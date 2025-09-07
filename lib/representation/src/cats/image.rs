@@ -1,6 +1,6 @@
 use super::{reencode_solution_mappings, CatEncs};
 use super::{CatReEnc, Cats};
-use crate::solution_mapping::{BaseCatState, EagerSolutionMappings, SolutionMappings};
+use crate::solution_mapping::{BaseCatState, EagerSolutionMappings};
 use crate::{BaseRDFNodeType, RDFNodeState};
 use nohash_hasher::NoHashHasher;
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};

@@ -130,16 +130,23 @@ pub fn expression_to_string(
 
 pub fn format_native_columns(
     mut lf: LazyFrame,
-    rdf_node_types: &HashMap<String, RDFNodeState>,
+    rdf_node_types: &mut HashMap<String, RDFNodeState>,
     global_cats: Arc<Cats>,
 ) -> LazyFrame {
-    for (c, t) in rdf_node_types {
+    for (c, t) in rdf_node_types.iter() {
         lf = lf.with_column(expression_to_native(
             col(c),
             c,
             t.clone(),
             global_cats.clone(),
         ));
+    }
+    for s in rdf_node_types.values_mut() {
+        for v in s.map.values_mut() {
+            if matches!(v, BaseCatState::CategoricalNative(..)) {
+                *v = BaseCatState::String;
+            }
+        }
     }
     lf
 }

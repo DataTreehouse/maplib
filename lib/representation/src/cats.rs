@@ -112,16 +112,6 @@ impl Cats {
         cats
     }
 
-    pub fn decode_iri_u32s(&self, us: &[u32]) -> Vec<NamedNode> {
-        todo!();
-        let iris = vec![];
-        iris
-    }
-
-    pub fn decode_iri_u32(&self, u: u32, local_cats: Option<Arc<Cats>>) -> NamedNode {
-        todo!();
-    }
-
     pub fn new_empty() -> Cats {
         Cats {
             cat_map: HashMap::new(),
