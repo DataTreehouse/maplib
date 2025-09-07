@@ -3,10 +3,12 @@ use crate::solution_mapping::BaseCatState;
 use crate::BaseRDFNodeType;
 use polars::datatypes::{DataType, Field, PlSmallStr};
 use polars::frame::DataFrame;
-use polars::prelude::{col, Column, Expr, IntoColumn, IntoLazy, IntoSeries, StringChunked, UInt32Chunked};
+use polars::prelude::{
+    col, Column, Expr, IntoColumn, IntoLazy, IntoSeries, StringChunked, UInt32Chunked,
+};
 use polars::series::Series;
-use std::sync::Arc;
 use rayon::iter::{IntoParallelRefIterator, ParallelBridge, ParallelIterator};
+use std::sync::Arc;
 
 impl CatEncs {
     pub fn decode(&self, ser: &Series, cat_type: &CatType) -> Series {
@@ -22,10 +24,19 @@ impl CatEncs {
         new_ser
     }
 
-    pub fn maybe_decode_string(&self, u: &u32, cat_type: &CatType) -> Option<String> {
+    pub fn maybe_decode_string(
+        &self,
+        u: &u32,
+        cat_type: &CatType,
+        add_prefix: bool,
+    ) -> Option<String> {
         if let Some(s) = self.rev_map.get(u) {
-            if let CatType::Prefix(pre) = cat_type {
-                Some(format!("{}{}", pre.as_str(), s))
+            if add_prefix {
+                if let CatType::Prefix(pre) = cat_type {
+                    Some(format!("{}{}", pre.as_str(), s))
+                } else {
+                    Some(s.to_string())
+                }
             } else {
                 Some(s.to_string())
             }
@@ -88,29 +99,37 @@ impl Cats {
         ser: &Series,
         t: &BaseRDFNodeType,
         local_cats: Option<Arc<Cats>>,
+        add_prefix: bool,
     ) -> Series {
-        let mut encs = self.get_encs(t);
+        //Very important that we prefer the local encoding over the global encoding.
         let local = local_cats.as_ref().map(|x| x.as_ref());
-        if let Some(local_cats) = local {
-            encs.extend(local_cats.get_encs(t))
-        }
+        let mut encs = if let Some(local_cats) = local {
+            local_cats.get_encs(t)
+        } else {
+            vec![]
+        };
+        encs.extend(self.get_encs(t));
+
         let u32s = ser.u32().unwrap();
-        let us:Vec<_> = u32s.iter().collect();
-        let strings: Vec<_> = us.par_iter().map(|u| {
-            let s = if let Some(u) = u {
-                let mut s = None;
-                for (t, e) in &encs {
-                    if let Some(st) = e.maybe_decode_string(&u, t) {
-                        s = Some(st);
-                        break;
+        let us: Vec<_> = u32s.iter().collect();
+        let strings: Vec<_> = us
+            .par_iter()
+            .map(|u| {
+                let s = if let Some(u) = u {
+                    let mut s = None;
+                    for (t, e) in &encs {
+                        if let Some(st) = e.maybe_decode_string(&u, t, add_prefix) {
+                            s = Some(st);
+                            break;
+                        }
                     }
-                }
-                Some(s.expect("Expect all cats to resolve"))
-            } else {
-                None
-            };
-            s
-        }).collect();
+                    Some(s.expect("Expect all cats to resolve"))
+                } else {
+                    None
+                };
+                s
+            })
+            .collect();
         Series::from_iter(strings)
     }
 }
@@ -141,6 +160,7 @@ pub fn maybe_decode_expr(
             base_type.clone(),
             local_cats.as_ref().cloned(),
             global_cats,
+            true,
         ),
         BaseCatState::String | BaseCatState::NonString => expr,
     }
@@ -158,6 +178,7 @@ pub fn optional_maybe_decode_expr(
             base_type.clone(),
             local_cats.as_ref().cloned(),
             global_cats,
+            true,
         )),
         BaseCatState::String | BaseCatState::NonString => None,
     }
@@ -168,6 +189,7 @@ pub fn decode_expr(
     base_rdf_node_type: BaseRDFNodeType,
     local_cats: Option<Arc<Cats>>,
     global_cats: Arc<Cats>,
+    add_prefix: bool,
 ) -> Expr {
     expr.map(
         move |x| {
@@ -176,6 +198,7 @@ pub fn decode_expr(
                 x.as_materialized_series(),
                 &base_rdf_node_type,
                 local_cats.as_ref().map(|x| x.clone()),
+                add_prefix,
             );
             s.rename(PlSmallStr::from_string(original_name));
             Ok(s.into_column())

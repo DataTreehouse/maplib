@@ -507,66 +507,15 @@ pub fn prepare_add_triples_par(
     all_partitioned = all_partitioned
         .into_par_iter()
         .map(|mut t| {
-            // Always sort S,O and deduplicate
-            let mut lf = t.df.clone().lazy();
-            let mut subj_col_expr = col(SUBJECT_COL_NAME);
-            if matches!(t.subject_cat_state, BaseCatState::CategoricalNative(..)) {
-                subj_col_expr = decode_expr(
-                    subj_col_expr,
-                    t.subject_type.clone(),
-                    t.subject_cat_state.get_local_cats(),
-                    global_cats.clone(),
-                );
-            }
-            let mut obj_col_expr = col(OBJECT_COL_NAME);
-            if matches!(t.object_cat_state, BaseCatState::CategoricalNative(..)) {
-                obj_col_expr = decode_expr(
-                    obj_col_expr,
-                    t.object_type.clone(),
-                    t.object_cat_state.get_local_cats(),
-                    global_cats.clone(),
-                );
-            }
-            lf = lf.with_column(
-                subj_col_expr
-                    .rank(
-                        RankOptions {
-                            method: RankMethod::Min,
-                            descending: false,
-                        },
-                        None,
-                    )
-                    .alias(SUBJECT_RANK_COL_NAME),
+            t.df = sort_triples_add_rank(
+                t.df.clone(),
+                &t.subject_type,
+                &t.subject_cat_state,
+                &t.object_type,
+                &t.object_cat_state,
+                global_cats.clone(),
+                true,
             );
-            lf = lf.with_column(
-                obj_col_expr
-                    .rank(
-                        RankOptions {
-                            method: RankMethod::Min,
-                            descending: false,
-                        },
-                        None,
-                    )
-                    .alias(OBJECT_RANK_COL_NAME),
-            );
-
-            lf = lf
-                .sort_by_exprs(
-                    vec![col(SUBJECT_RANK_COL_NAME), col(OBJECT_RANK_COL_NAME)],
-                    SortMultipleOptions {
-                        descending: vec![false, false],
-                        nulls_last: vec![false, false],
-                        multithreaded: true,
-                        maintain_order: false,
-                        limit: None,
-                    },
-                )
-                .filter(
-                    repeated_from_last_row_expr(SUBJECT_COL_NAME)
-                        .and(repeated_from_last_row_expr(OBJECT_COL_NAME))
-                        .not(),
-                );
-            t.df = lf.collect().unwrap();
             t
         })
         .collect();
@@ -593,6 +542,81 @@ pub fn prepare_add_triples_par(
             },
         )
         .collect()
+}
+
+pub fn sort_triples_add_rank(
+    df: DataFrame,
+    subj_type: &BaseRDFNodeType,
+    subj_cat_state: &BaseCatState,
+    obj_type: &BaseRDFNodeType,
+    obj_cat_state: &BaseCatState,
+    global_cats: Arc<Cats>,
+    deduplicate: bool,
+) -> DataFrame {
+    // Always sort S,O and deduplicate
+    let mut lf = df.lazy();
+    let mut subj_col_expr = col(SUBJECT_COL_NAME);
+    if matches!(subj_cat_state, BaseCatState::CategoricalNative(..)) {
+        subj_col_expr = decode_expr(
+            subj_col_expr,
+            subj_type.clone(),
+            subj_cat_state.get_local_cats(),
+            global_cats.clone(),
+            false,
+        );
+    }
+    let mut obj_col_expr = col(OBJECT_COL_NAME);
+    if matches!(obj_cat_state, BaseCatState::CategoricalNative(..)) {
+        obj_col_expr = decode_expr(
+            obj_col_expr,
+            obj_type.clone(),
+            obj_cat_state.get_local_cats(),
+            global_cats.clone(),
+            false,
+        );
+    }
+    lf = lf.with_column(
+        subj_col_expr
+            .rank(
+                RankOptions {
+                    method: RankMethod::Min,
+                    descending: false,
+                },
+                None,
+            )
+            .alias(SUBJECT_RANK_COL_NAME),
+    );
+    lf = lf.with_column(
+        obj_col_expr
+            .rank(
+                RankOptions {
+                    method: RankMethod::Min,
+                    descending: false,
+                },
+                None,
+            )
+            .alias(OBJECT_RANK_COL_NAME),
+    );
+
+    lf = lf.sort_by_exprs(
+        vec![col(SUBJECT_RANK_COL_NAME), col(OBJECT_RANK_COL_NAME)],
+        SortMultipleOptions {
+            descending: vec![false, false],
+            nulls_last: vec![false, false],
+            multithreaded: true,
+            maintain_order: false,
+            limit: None,
+        },
+    );
+    if deduplicate {
+        lf = lf.filter(
+            repeated_from_last_row_expr(SUBJECT_COL_NAME)
+                .and(repeated_from_last_row_expr(OBJECT_COL_NAME))
+                .not(),
+        );
+    }
+    let df = lf.collect().unwrap();
+    df
 }
 
 pub fn partition_unpartitioned_predicate(

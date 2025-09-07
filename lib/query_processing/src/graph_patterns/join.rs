@@ -40,6 +40,7 @@ pub fn join(
         &right_datatypes,
         global_cats,
     );
+
     let (left_mappings, left_datatypes, right_mappings, right_datatypes) =
         create_join_compatible_solution_mappings(
             left_mappings,
@@ -58,6 +59,7 @@ pub fn join(
         right_height,
         join_type,
     );
+
     update_state(&mut solution_mappings.rdf_node_types, target_cat_state);
 
     Ok(solution_mappings)

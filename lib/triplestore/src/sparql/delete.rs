@@ -1,8 +1,8 @@
 use crate::errors::TriplestoreError;
 use crate::sparql::errors::SparqlError;
 use crate::storage::Triples;
-use crate::StoredBaseRDFNodeType;
 use crate::Triplestore;
+use crate::{sort_triples_add_rank, StoredBaseRDFNodeType};
 use log::trace;
 use oxrdf::NamedNode;
 use polars::prelude::{col, concat, IntoLazy, JoinArgs, JoinType, MaintainOrderJoin, UnionArgs};
@@ -10,7 +10,7 @@ use polars_core::datatypes::AnyValue;
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use representation::cats::{cat_encode_triples, CatTriples, Cats, EncodedTriples};
 use representation::multitype::split_df_multicols;
-use representation::solution_mapping::EagerSolutionMappings;
+use representation::solution_mapping::{BaseCatState, EagerSolutionMappings};
 use representation::{OBJECT_COL_NAME, PREDICATE_COL_NAME, SUBJECT_COL_NAME};
 use std::collections::HashMap;
 use std::time::Instant;
@@ -47,8 +47,26 @@ impl Triplestore {
         for gct in gcts {
             let remaining_gct = get_triples_after_deletion(&gct, &self.triples_map, &self.cats)?;
 
-            if let Some(gct) = remaining_gct {
+            if let Some(mut gct) = remaining_gct {
                 self.delete_if_exists(&gct, false);
+                let subject_cat_state = gct.subject_type.default_stored_cat_state();
+                let object_cat_state = gct.object_type.default_stored_cat_state();
+                gct.encoded_triples = gct
+                    .encoded_triples
+                    .into_par_iter()
+                    .map(|mut x| {
+                        x.df = sort_triples_add_rank(
+                            x.df,
+                            &gct.subject_type,
+                            &subject_cat_state,
+                            &gct.object_type,
+                            &object_cat_state,
+                            self.cats.clone(),
+                            false,
+                        );
+                        x
+                    })
+                    .collect();
                 self.add_global_cat_triples(vec![gct], false)?;
             } else {
                 self.delete_if_exists(&gct, false)
@@ -56,8 +74,26 @@ impl Triplestore {
 
             let remaining_gct =
                 get_triples_after_deletion(&gct, &self.transient_triples_map, &self.cats)?;
-            if let Some(gct) = remaining_gct {
+            if let Some(mut gct) = remaining_gct {
                 self.delete_if_exists(&gct, true);
+                let subject_cat_state = gct.subject_type.default_stored_cat_state();
+                let object_cat_state = gct.object_type.default_stored_cat_state();
+                gct.encoded_triples = gct
+                    .encoded_triples
+                    .into_par_iter()
+                    .map(|mut x| {
+                        x.df = sort_triples_add_rank(
+                            x.df,
+                            &gct.subject_type,
+                            &subject_cat_state,
+                            &gct.object_type,
+                            &object_cat_state,
+                            self.cats.clone(),
+                            false,
+                        );
+                        x
+                    })
+                    .collect();
                 self.add_global_cat_triples(vec![gct], true)?;
             } else {
                 self.delete_if_exists(&gct, true)

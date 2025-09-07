@@ -83,8 +83,10 @@ impl Cats {
         }
 
         let remap = self.merge(local_cats);
-        let mut concat_reenc: HashMap<String, HashMap<BaseRDFNodeType, HashMap<u32, u32>>> =
-            HashMap::new();
+        let mut concat_reenc: HashMap<
+            String,
+            HashMap<BaseRDFNodeType, HashMap<u32, u32, BuildHasherDefault<NoHashHasher<u32>>>>,
+        > = HashMap::new();
         for (uuid, reenc) in remap {
             for (ct, cat_reenc) in reenc {
                 let bt = ct.as_base_rdf_node_type();
@@ -98,7 +100,10 @@ impl Cats {
                 let e_reenc = if let Some(e_reenc) = bt_map.get_mut(&bt) {
                     e_reenc
                 } else {
-                    bt_map.insert(bt.clone(), HashMap::new());
+                    bt_map.insert(
+                        bt.clone(),
+                        HashMap::with_capacity_and_hasher(2, BuildHasherDefault::default()),
+                    );
                     bt_map.get_mut(&bt).unwrap()
                 };
                 e_reenc.extend(cat_reenc.cat_map.iter());

@@ -46,7 +46,9 @@ impl Triplestore {
             expression_pushdowns.as_ref(),
             query_settings,
         )?;
+
         output_solution_mappings = filter(output_solution_mappings, &expression_context)?;
+
         Ok(output_solution_mappings)
     }
 }

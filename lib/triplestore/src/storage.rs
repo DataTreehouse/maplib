@@ -4,8 +4,8 @@ use log::trace;
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{NamedNode, Subject, Term};
 use polars::prelude::{
-    as_struct, by_name, col, concat, lit, Expr, IdxSize, IntoLazy, JoinArgs, JoinType, LazyFrame,
-    PlSmallStr, UnionArgs,
+    as_struct, col, concat, lit, Expr, IdxSize, IntoLazy, JoinArgs, JoinType, LazyFrame,
+    MaintainOrderJoin, PlSmallStr, SeriesMethods, UnionArgs,
 };
 use polars_core::datatypes::AnyValue;
 use polars_core::frame::DataFrame;
@@ -169,7 +169,10 @@ impl Triples {
                 i += 1;
             }
             if i < self.segments.len() && incoming_df.height() > 0 {
-                trace!("Stopped dedupe early with something to add");
+                trace!(
+                    "Stopped dedupe early with something to add {}",
+                    incoming_df.height()
+                );
                 // We stopped early, compact the latest segments and the incoming.
                 let compact_now = Instant::now();
                 let mut ts: Vec<_> = self.segments.drain(i..).map(|x| (x, false)).collect();
@@ -199,7 +202,7 @@ impl Triples {
                 compacting_indexing_time += compact_now.elapsed().as_secs_f32();
                 Ok(new_triples)
             } else if incoming_df.height() > 0 {
-                trace!("Dedupe finished, adding remaining");
+                trace!("Dedupe finished, adding remaining {}", incoming_df.height());
                 let compacting_now = Instant::now();
                 let new_segment = TriplesSegment::new(
                     incoming_df.clone(),
@@ -369,7 +372,6 @@ impl TriplesSegment {
         } else {
             None
         };
-        trace!("offsets {:?}", offsets);
         let lfs: Vec<_> = self
             .subject_sort
             .as_ref()
@@ -402,7 +404,7 @@ impl TriplesSegment {
                 slice: None,
                 nulls_equal: false,
                 coalesce: Default::default(),
-                maintain_order: Default::default(),
+                maintain_order: MaintainOrderJoin::Left,
             },
         );
         Ok(lf.collect().unwrap())
@@ -430,6 +432,7 @@ fn create_indices(
     assert!(df.height() > 0);
     let now = Instant::now();
     let subject_encs = get_encs(cats, subj_type);
+    //Should already be sorted by subject, object
     let subject_sparse_index = create_sparse_index(
         df.column(SUBJECT_COL_NAME)
             .unwrap()
@@ -691,6 +694,12 @@ fn get_lookup_interval(
     }
     // We correct here since ranges are exclusive in Polars slice
     let exclusive_to = to + 1;
+    if from > exclusive_to {
+        panic!(
+            "Out of order should never happen: trg {}, map {:?}, from {}, to {}",
+            trg, sparse_map, from, to
+        );
+    }
     (from, exclusive_to)
 }
 
@@ -833,7 +842,9 @@ fn compact_segments(
     ) in segments
     {
         for (lf, _) in subject_sort.unwrap().get_lazy_frames(None)? {
-            subject_segments.push((lf.collect().unwrap(), new));
+            let subject_encs = get_encs(cats, subj_type);
+            let df = lf.collect().unwrap();
+            subject_segments.push((df, new));
         }
         if let Some(object_sort) = object_sort {
             for (lf, _) in object_sort.get_lazy_frames(None)? {
@@ -860,6 +871,7 @@ fn compact_segments(
         subject_encs,
         object_encs,
     )?;
+
     let height = compact_subjects.height();
     let subject_index = create_sparse_index(
         compact_subjects

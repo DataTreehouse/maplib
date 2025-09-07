@@ -89,23 +89,25 @@ pub fn make_sortable(
     mut solution_mappings: SolutionMappings,
     global_cats: Arc<Cats>,
 ) -> SolutionMappings {
-    if let Some(state) = solution_mappings.rdf_node_types.get(c) {
+    if let Some(state) = solution_mappings.rdf_node_types.get_mut(c) {
         let expr = col(c);
         let mut exprs = vec![];
         if !state.is_multi() {
             let b = state.get_base_type().unwrap();
             let s = state.get_base_state().unwrap();
-            solution_mappings.mappings = solution_mappings
-                .mappings
-                .with_column(make_base_cat_sortable(expr, b, s, global_cats));
+            let (e, new_state) = make_base_cat_sortable(expr, b, s, global_cats);
+            state.map.insert(b.clone(), new_state);
+            solution_mappings.mappings = solution_mappings.mappings.with_column(e);
         } else {
-            for (t, s) in &state.map {
-                exprs.push(make_base_cat_sortable(
+            for (t, s) in state.map.iter_mut() {
+                let (e, new_s) = make_base_cat_sortable(
                     expr.clone().struct_().field_by_name(&t.field_col_name()),
                     t,
                     s,
                     global_cats.clone(),
-                ));
+                );
+                *s = new_s;
+                exprs.push(e);
             }
             if !exprs.is_empty() {
                 solution_mappings.mappings = solution_mappings
@@ -122,12 +124,13 @@ pub fn make_base_cat_sortable(
     base_type: &BaseRDFNodeType,
     base_state: &BaseCatState,
     global_cats: Arc<Cats>,
-) -> Expr {
+) -> (Expr, BaseCatState) {
     match base_state {
-        BaseCatState::CategoricalNative(_, _) => {
-            maybe_decode_expr(expr, base_type, base_state, global_cats)
-        }
-        BaseCatState::String => expr,
-        BaseCatState::NonString => expr,
+        BaseCatState::CategoricalNative(_, _) => (
+            maybe_decode_expr(expr, base_type, base_state, global_cats),
+            BaseCatState::String,
+        ),
+        BaseCatState::String => (expr, BaseCatState::String),
+        BaseCatState::NonString => (expr, BaseCatState::NonString),
     }
 }

@@ -364,12 +364,9 @@ impl Cats {
         ser: Series,
         local_cats: Option<Arc<Cats>>,
     ) -> (Series, HashMap<u32, CatType>) {
-        let mut filtered_cat_types = self.filter_cat_types(&BaseRDFNodeType::IRI);
-        let mut encs = Vec::with_capacity(filtered_cat_types.len());
-        for c in &filtered_cat_types {
-            let enc = self.cat_map.get(*c).unwrap();
-            encs.push(enc);
-        }
+        // Important to prefer local cats
+        let mut encs = vec![];
+        let mut filtered_cat_types = vec![];
         let local_cats = local_cats.as_ref().map(|x| x.as_ref());
         if let Some(local_cats) = local_cats {
             let local_filtered_cat_types = local_cats.filter_cat_types(&BaseRDFNodeType::IRI);
@@ -379,6 +376,14 @@ impl Cats {
             }
             filtered_cat_types.extend(local_filtered_cat_types);
         }
+
+        let global_filtered_cat_types = self.filter_cat_types(&BaseRDFNodeType::IRI);
+        for c in &global_filtered_cat_types {
+            let enc = self.cat_map.get(*c).unwrap();
+            encs.push(enc);
+        }
+        filtered_cat_types.extend(global_filtered_cat_types);
+
         let uch = ser.u32().unwrap();
         let mut prefixes = Vec::with_capacity(ser.len());
         for u in uch {

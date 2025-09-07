@@ -99,9 +99,12 @@ impl Triplestore {
                             let bt = dt.get_base_type().unwrap();
                             let bs = dt.get_base_state().unwrap();
                             if matches!(bs, BaseCatState::CategoricalNative(..)) {
-                                predicates_series =
-                                    self.cats
-                                        .decode(&predicates_series, bt, bs.get_local_cats());
+                                predicates_series = self.cats.decode(
+                                    &predicates_series,
+                                    bt,
+                                    bs.get_local_cats(),
+                                    true,
+                                );
                             }
 
                             let predicates_iter = predicates_series.iter();

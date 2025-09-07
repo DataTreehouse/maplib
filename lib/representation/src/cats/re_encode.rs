@@ -1,16 +1,18 @@
 use super::{CatEncs, CatTriples, CatType, Cats};
 use crate::solution_mapping::{BaseCatState, EagerSolutionMappings};
 use crate::{BaseRDFNodeType, OBJECT_COL_NAME, SUBJECT_COL_NAME};
+use nohash_hasher::NoHashHasher;
 use polars::datatypes::PlSmallStr;
 use polars::error::PolarsResult;
 use polars::prelude::{col, Column, IntoColumn, IntoLazy, LazyFrame, Series};
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use std::collections::HashMap;
+use std::hash::BuildHasherDefault;
 use std::sync::Arc;
 
 #[derive(Debug, Clone)]
 pub struct CatReEnc {
-    pub cat_map: Arc<HashMap<u32, u32>>,
+    pub cat_map: Arc<HashMap<u32, u32, BuildHasherDefault<NoHashHasher<u32>>>>,
 }
 
 impl CatReEnc {
@@ -88,7 +90,8 @@ impl Cats {
             .filter(|x| x.is_some())
             .map(|x| x.unwrap())
             .collect();
-        let renc_map: HashMap<_, _> = rencs.into_iter().flatten().map(|x| x).collect();
+        let renc_map: HashMap<_, _, BuildHasherDefault<NoHashHasher<u32>>> =
+            rencs.into_iter().flatten().map(|x| x).collect();
         let cat_re_enc = CatReEnc {
             cat_map: Arc::new(renc_map),
         };
@@ -128,7 +131,7 @@ impl Cats {
                     for (s, u) in numbered_insert {
                         enc.encode_new_string(s, u);
                     }
-                    let remap: HashMap<_, _> = remap
+                    let remap: HashMap<_, _, BuildHasherDefault<NoHashHasher<u32>>> = remap
                         .into_iter()
                         .filter(|x| x.is_some())
                         .map(|x| x.unwrap())
@@ -137,7 +140,6 @@ impl Cats {
                     let reenc = CatReEnc {
                         cat_map: Arc::new(remap),
                     };
-                    self.set_height(c, t);
                     other_map.insert(t.clone(), reenc);
                 } else {
                     let mut remap = Vec::with_capacity(other_enc.map.len());
@@ -148,8 +150,8 @@ impl Cats {
                         c += 1;
                     }
                     self.cat_map.insert(t.clone(), new_enc);
-                    let remap: HashMap<_, _> = remap.into_iter().collect();
-                    self.set_height(c, &t);
+                    let remap: HashMap<_, _, BuildHasherDefault<NoHashHasher<u32>>> =
+                        remap.into_iter().collect();
                     other_map.insert(
                         t.clone(),
                         CatReEnc {
@@ -157,6 +159,7 @@ impl Cats {
                         },
                     );
                 }
+                self.set_height(c, t);
             }
             if !other_map.is_empty() {
                 map.insert(c.uuid.clone(), other_map);

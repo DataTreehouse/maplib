@@ -3,6 +3,7 @@ use representation::cats::{maybe_decode_expr, CatReEnc, CatType, Cats};
 use representation::solution_mapping::BaseCatState;
 use representation::{BaseRDFNodeType, RDFNodeState};
 use std::collections::{HashMap, HashSet};
+use std::hash::BuildHasherDefault;
 use std::sync::Arc;
 
 pub fn create_compatible_cats(
@@ -50,7 +51,8 @@ pub fn create_compatible_cats(
                     let iri_renc = if iri_renc.is_empty() {
                         None
                     } else {
-                        let mut renc_map = HashMap::new();
+                        let mut renc_map =
+                            HashMap::with_capacity_and_hasher(2, BuildHasherDefault::default());
                         for renc in iri_renc {
                             renc_map.extend(renc.cat_map.iter().map(|(x, y)| (*x, *y)))
                         }
