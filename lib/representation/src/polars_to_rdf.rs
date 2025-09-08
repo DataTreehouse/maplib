@@ -193,12 +193,6 @@ pub fn basic_rdf_node_type_column_to_term_vec(
                     })
                     .collect()
             }
-            xsd::STRING => decode_column(column, base_type, base_state, global_cats)
-                .str()
-                .unwrap()
-                .par_iter()
-                .map(|x| x.map(|x| Term::Literal(Literal::new_simple_literal(x))))
-                .collect(),
             xsd::DATE => {
                 let ser = date_column_to_strings(column);
                 ser.str()
@@ -219,6 +213,12 @@ pub fn basic_rdf_node_type_column_to_term_vec(
                     panic!("Invalid state {:?}", column.dtype())
                 }
             }
+            xsd::STRING => decode_column(column, base_type, base_state, global_cats)
+                .str()
+                .unwrap()
+                .par_iter()
+                .map(|x| x.map(|x| Term::Literal(Literal::new_simple_literal(x))))
+                .collect(),
             dt => column
                 .cast(&DataType::String)
                 .unwrap()

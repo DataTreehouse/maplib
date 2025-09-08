@@ -10,6 +10,7 @@ use oxrdf::{NamedNode, NamedNodeRef, Subject, Term};
 use polars::datatypes::{DataType, Field, PlSmallStr, TimeUnit, TimeZone};
 use spargebra::term::GroundTerm;
 use std::fmt::{Display, Formatter};
+use crate::cats::literal_is_cat;
 
 #[derive(Debug, Clone, Ord, PartialOrd, PartialEq, Eq, Hash)]
 pub enum BaseRDFNodeType {
@@ -27,6 +28,10 @@ impl BaseRDFNodeType {
             BaseRDFNodeType::Literal(l) => l.to_string(),
             BaseRDFNodeType::None => MULTI_NONE_DT.to_string(),
         }
+    }
+
+    pub fn stored_cat(&self) -> bool {
+        matches!(self.default_stored_cat_state(), BaseCatState::CategoricalNative(..))
     }
 }
 
@@ -140,7 +145,7 @@ impl BaseRDFNodeType {
         } else if matches!(self, BaseRDFNodeType::IRI | BaseRDFNodeType::BlankNode) {
             BaseCatState::CategoricalNative(false, None)
         } else if let BaseRDFNodeType::Literal(l) = self {
-            if l.as_ref() == xsd::STRING {
+            if literal_is_cat(l.as_ref()) {
                 BaseCatState::CategoricalNative(true, None)
             } else if literal_type(l.as_ref(), &BaseCatState::String, false) == DataType::String {
                 BaseCatState::String

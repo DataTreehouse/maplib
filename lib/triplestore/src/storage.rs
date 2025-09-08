@@ -9,7 +9,7 @@ use polars::prelude::{
 };
 use polars_core::datatypes::AnyValue;
 use polars_core::frame::DataFrame;
-use polars_core::prelude::{IntoColumn, Series, SortMultipleOptions, UInt32Chunked};
+use polars_core::prelude::{IntoColumn, Series, SortMultipleOptions, StringChunked, UInt32Chunked};
 use polars_core::series::SeriesIter;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use representation::cats::{
@@ -437,7 +437,7 @@ fn create_indices(
         df.column(SUBJECT_COL_NAME)
             .unwrap()
             .as_materialized_series(),
-        subject_encs.unwrap(),
+        subject_encs,
     );
     trace!(
         "Creating subject sparse map took {} seconds",
@@ -467,11 +467,12 @@ fn create_indices(
             )
             .collect()
             .unwrap();
-        let object_encs = get_encs(cats, obj_type);
+        let object_encs =  get_encs(cats, obj_type);
         let sparse = create_sparse_index(
             df.column(OBJECT_COL_NAME).unwrap().as_materialized_series(),
-            object_encs.unwrap(),
+            object_encs,
         );
+
         object_sort = Some(StoredTriples::new(
             df.clone(),
             subj_type,
@@ -507,16 +508,7 @@ pub fn can_and_should_index_object(
     verb_iri: &NamedNode,
     indexing: &IndexingOptions,
 ) -> bool {
-    let can_index_object = if matches!(
-        object_type,
-        BaseRDFNodeType::IRI | BaseRDFNodeType::BlankNode
-    ) {
-        true
-    } else if let BaseRDFNodeType::Literal(l) = object_type {
-        l.as_ref() == xsd::STRING
-    } else {
-        false
-    };
+    let can_index_object = can_index(object_type);
 
     if can_index_object {
         if indexing.object_sort_all {
@@ -526,6 +518,17 @@ pub fn can_and_should_index_object(
         } else {
             false
         }
+    } else {
+        false
+    }
+}
+
+
+fn can_index(t:&BaseRDFNodeType) -> bool {
+    if matches!(t, BaseRDFNodeType::IRI | BaseRDFNodeType::BlankNode) {
+        true
+    } else if let BaseRDFNodeType::Literal(l) = t {
+        l.as_ref() == xsd::STRING
     } else {
         false
     }
@@ -777,6 +780,18 @@ fn update_index_at_offset(
     }
 }
 
+fn update_string_index_at_offset(
+    u32_chunked: &StringChunked,
+    offset: usize,
+    sparse_map: &mut BTreeMap<String, usize>,
+) {
+    let u = u32_chunked.get(offset);
+    if let Some(s) = u {
+        let e = sparse_map.entry(s.to_string());
+        e.or_insert(offset);
+    }
+}
+
 pub(crate) fn repeated_from_last_row_expr(c: &str) -> Expr {
     col(c)
         .shift(lit(1))
@@ -784,7 +799,14 @@ pub(crate) fn repeated_from_last_row_expr(c: &str) -> Expr {
         .and(col(c).shift(lit(1)).eq(col(c)))
 }
 
-fn create_sparse_index(ser: &Series, encs: &CatEncs) -> SparseIndex {
+fn create_sparse_index(ser: &Series, encs: Option<&CatEncs>) -> SparseIndex {
+    match encs {
+        None => {create_sparse_string_index(ser)}
+        Some(encs) => {create_sparse_cat_index(ser, encs)}
+    }
+}
+
+fn create_sparse_cat_index(ser: &Series, encs: &CatEncs) -> SparseIndex {
     assert!(!ser.is_empty());
     let strch = ser.u32().unwrap();
     let mut sparse_map = BTreeMap::new();
@@ -797,6 +819,22 @@ fn create_sparse_index(ser: &Series, encs: &CatEncs) -> SparseIndex {
     let final_offset = ser.len() - 1;
     if current_offset != final_offset {
         update_index_at_offset(strch, final_offset, &mut sparse_map, encs);
+    }
+    SparseIndex { map: sparse_map }
+}
+fn create_sparse_string_index(ser: &Series) -> SparseIndex {
+    assert!(!ser.is_empty());
+    let strch = ser.str().unwrap();
+    let mut sparse_map = BTreeMap::new();
+    let mut current_offset = 0;
+    while current_offset < ser.len() {
+        update_string_index_at_offset(strch, current_offset, &mut sparse_map);
+        current_offset += OFFSET_STEP;
+    }
+    //Ensure that we have both ends
+    let final_offset = ser.len() - 1;
+    if current_offset != final_offset {
+        update_string_index_at_offset(strch, final_offset, &mut sparse_map);
     }
     SparseIndex { map: sparse_map }
 }
@@ -878,7 +916,7 @@ fn compact_segments(
             .column(SUBJECT_COL_NAME)
             .unwrap()
             .as_materialized_series(),
-        subject_encs.unwrap(),
+        subject_encs,
     );
     let stored_subjects =
         StoredTriples::new(compact_subjects, subj_type, obj_type, storage_folder)?;
@@ -897,7 +935,7 @@ fn compact_segments(
                 .column(OBJECT_COL_NAME)
                 .unwrap()
                 .as_materialized_series(),
-            object_encs.unwrap(),
+            object_encs,
         );
         let stored_objects =
             StoredTriples::new(compact_objects, subj_type, obj_type, storage_folder)?;

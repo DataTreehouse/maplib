@@ -23,10 +23,7 @@ use polars_core::prelude::SortMultipleOptions;
 use query_processing::type_constraints::ConstraintBaseRDFNodeType;
 use rayon::iter::ParallelDrainRange;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
-use representation::cats::{
-    cat_encode_triples, decode_expr, CatTriples, CatType, Cats, OBJECT_RANK_COL_NAME,
-    SUBJECT_RANK_COL_NAME,
-};
+use representation::cats::{cat_encode_triples, decode_expr, literal_is_cat, CatTriples, CatType, Cats, OBJECT_RANK_COL_NAME, SUBJECT_RANK_COL_NAME};
 use representation::multitype::set_struct_all_null_to_null_row;
 use representation::solution_mapping::{BaseCatState, EagerSolutionMappings};
 use representation::{
@@ -88,8 +85,8 @@ impl StoredBaseRDFNodeType {
             StoredBaseRDFNodeType::IRI(nn) => Some(CatType::Prefix(nn.clone())),
             StoredBaseRDFNodeType::Blank => Some(CatType::Blank),
             StoredBaseRDFNodeType::Literal(l) => {
-                if l.as_ref() == xsd::STRING {
-                    Some(CatType::Literal(xsd::STRING.into_owned()))
+                if literal_is_cat(l.as_ref()) {
+                    Some(CatType::Literal(l.to_owned()))
                 } else {
                     None
                 }

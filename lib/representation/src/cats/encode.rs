@@ -60,7 +60,7 @@ impl Cats {
         let mut to_add_prefix_col = vec![];
         for (c, s) in &rdf_node_types {
             for (t, bs) in &s.map {
-                if t.is_iri() || t.is_blank_node() || t.is_lit_type(xsd::STRING) {
+                if t.stored_cat() {
                     if matches!(bs, BaseCatState::String) {
                         let ser = if s.is_multi() {
                             mappings

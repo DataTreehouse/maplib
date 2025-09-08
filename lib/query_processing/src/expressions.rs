@@ -13,7 +13,7 @@ use polars::prelude::{
     as_struct, by_name, coalesce, col, lit, DataType, Expr, JoinArgs, JoinType, LazyFrame,
     LiteralValue, Operator, Scalar,
 };
-use representation::cats::{maybe_decode_expr, Cats};
+use representation::cats::{literal_is_cat, maybe_decode_expr, Cats};
 use representation::multitype::all_multi_main_cols;
 use representation::query_context::Context;
 use representation::rdf_to_polars::rdf_literal_to_polars_expr;
@@ -44,7 +44,7 @@ pub fn blank_node_enc(bl: &BlankNode, global_cats: &Cats) -> Option<Expr> {
 
 pub fn maybe_literal_enc(l: &Literal, global_cats: &Cats) -> (Expr, BaseRDFNodeType, BaseCatState) {
     let bt = BaseRDFNodeType::Literal(l.datatype().into_owned());
-    if l.datatype() == xsd::STRING {
+    if literal_is_cat(l.datatype()) {
         if let Some(enc) = global_cats
             .encode_literals(&[l.value()], l.datatype().into_owned())
             .pop()
