@@ -14,7 +14,7 @@ pip install maplib
 ```
 Please send us a message, e.g. on LinkedIn (search for Data Treehouse) or on our [webpage](https://www.data-treehouse.com/contact-8) if you want to try out SHACL.  
 
-## Mapping
+## Model
 We can easily map DataFrames to RDF-graphs using the Python library. Below is a reproduction of the example in the paper [1]. Assume that we have a DataFrame given by: 
 
 ```python
@@ -40,7 +40,7 @@ That is, our DataFrame is:
 
 Then we can define a OTTR template, and create our knowledge graph by expanding this template with our DataFrame as input:
 ```python
-from maplib import Mapping, Prefix, Template, Argument, Parameter, Variable, RDFType, Triple, a
+from maplib import Model, Prefix, Template, Argument, Parameter, Variable, RDFType, Triple, a
 pi = Prefix(pi)
 
 p_var = Variable("p")
@@ -65,8 +65,8 @@ template = Template(
     ]
 )
 
-m = Mapping()
-m.expand(template, df)
+m = Model()
+m.map(template, df)
 hpizzas = """
     PREFIX pi:<https://github.com/DataTreehouse/maplib/pizza#>
     CONSTRUCT { ?p a pi:HeterodoxPizza } 
@@ -121,7 +121,7 @@ The resulting triples are given below:
 | str                            | str                                  | str                                   |
 | "<https://.../pizza#Hawaiian>" | "<http://.../22-rdf-syntax-ns#type>" | "<https://.../pizza#UnorthodoxPizza>" |
 
-If we are happy with the output of this construct-query, we can insert it in the mapping state. Afterwards we check that the triple is added with a query.
+If we are happy with the output of this construct-query, we can insert it in the model state. Afterwards we check that the triple is added with a query.
 
 ```python
 m.insert(hpizzas)
@@ -148,7 +148,7 @@ The [API](https://datatreehouse.github.io/maplib/maplib.html) is simple, and con
 - validating with SHACL
 - importing triples (Turtle, RDF/XML, NTriples)
 - writing triples (Turtle, RDF/XML, NTriples)
-- creating a new Mapping object (sprout) based on queries over the current Mapping object.
+- creating a new Model object (sprout) based on queries over the current Model object.
 
 The API is documented [HERE](https://datatreehouse.github.io/maplib/maplib.html)
 
@@ -169,7 +169,7 @@ Roadmap is subject to changes,particularly user and customer requests.
 ## References
 There is an associated paper [1] with associated benchmarks showing superior performance and scalability that can be found [here](https://ieeexplore.ieee.org/document/10106242). OTTR is described in [2].
 
-[1] M. Bakken, "maplib: Interactive, literal RDF model mapping for industry," in IEEE Access, doi: 10.1109/ACCESS.2023.3269093.
+[1] M. Bakken, "maplib: Interactive, literal RDF model model for industry," in IEEE Access, doi: 10.1109/ACCESS.2023.3269093.
 
 [2] M. G. Skjæveland, D. P. Lupp, L. H. Karlsen, and J. W. Klüwer, “Ottr: Formal templates for pattern-based ontology engineering.” in WOP (Book),
 2021, pp. 349–377.
