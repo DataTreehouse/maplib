@@ -1,5 +1,5 @@
 import pytest
-from maplib import Mapping, Triple, Variable, Template, IRI, Parameter, RDFType
+from maplib import Model, Triple, Variable, Template, IRI, Parameter, RDFType
 import polars as pl
 
 
@@ -12,7 +12,7 @@ def test_many_validation_errors_subject():
             "object": [i for i in range(n)],
         }
     )
-    m = Mapping()
+    m = Model()
     subj = Variable("subject")
     pred = Variable("predicate")
     obj = Variable("object")
@@ -22,7 +22,7 @@ def test_many_validation_errors_subject():
         [Triple(subj, pred, obj)],
     )
     with pytest.raises(Exception) as e:
-        m.expand(t, df, validate_iris=True)
+        m.map(t, df, validate_iris=True)
     assert "invalid IRI" in str(e)
 
 
@@ -35,7 +35,7 @@ def test_many_validation_errors_predicate():
             "object": [i for i in range(n)],
         }
     )
-    m = Mapping()
+    m = Model()
     subj = Variable("subject")
     pred = Variable("predicate")
     obj = Variable("object")
@@ -45,7 +45,7 @@ def test_many_validation_errors_predicate():
         [Triple(subj, pred, obj)],
     )
     with pytest.raises(Exception) as e:
-        m.expand(t, df, validate_iris=True)
+        m.map(t, df, validate_iris=True)
     assert "invalid IRI" in str(e)
 
 
@@ -60,7 +60,7 @@ def test_many_validation_errors_nested_object():
             ],
         }
     )
-    m = Mapping()
+    m = Model()
     subj = Variable("subject")
     pred = Variable("predicate")
     obj = Variable("object")
@@ -70,5 +70,5 @@ def test_many_validation_errors_nested_object():
         [Triple(subj, pred, obj)],
     )
     with pytest.raises(Exception) as e:
-        m.expand(t, df, validate_iris=True)
+        m.map(t, df, validate_iris=True)
     assert "invalid IRI" in str(e)

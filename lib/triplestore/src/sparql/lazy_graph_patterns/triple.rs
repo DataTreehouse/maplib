@@ -44,7 +44,7 @@ impl Triplestore {
             &pushdowns.variables_type_constraints,
         );
         let subject_rename = get_keep_rename_term_pattern(&triple_pattern.subject);
-        let verb_rename = get_keep_rename_named_node_pattern(&triple_pattern.predicate);
+        let predicate_rename = get_keep_rename_named_node_pattern(&triple_pattern.predicate);
         let object_rename = get_keep_rename_term_pattern(&triple_pattern.object);
 
         let SolutionMappings {
@@ -55,7 +55,7 @@ impl Triplestore {
             NamedNodePattern::NamedNode(n) => self.get_multi_predicates_solution_mappings(
                 Some(vec![n.to_owned()]),
                 &subject_rename,
-                &verb_rename,
+                &predicate_rename,
                 &object_rename,
                 &subjects,
                 &objects,
@@ -147,7 +147,7 @@ impl Triplestore {
                 self.get_multi_predicates_solution_mappings(
                     predicates,
                     &subject_rename,
-                    &verb_rename,
+                    &predicate_rename,
                     &object_rename,
                     &subjects,
                     &objects,

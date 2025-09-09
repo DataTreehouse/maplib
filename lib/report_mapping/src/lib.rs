@@ -1,12 +1,12 @@
-use maplib::mapping::Mapping;
+use maplib::mapping::Model;
 use shacl::errors::ShaclError;
 use shacl::ValidationReport;
 use triplestore::{IndexingOptions, Triplestore};
 
-pub fn report_to_mapping(
+pub fn report_to_model(
     _report: &ValidationReport,
     _shape_graph: &Option<Triplestore>,
     _indexing: Option<IndexingOptions>,
-) -> Result<Mapping, ShaclError> {
+) -> Result<Model, ShaclError> {
     unimplemented!("Contact Data Treehouse to try")
 }

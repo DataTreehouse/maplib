@@ -1,4 +1,4 @@
-from maplib import Mapping, IndexingOptions
+from maplib import Model, IndexingOptions
 import pytest
 from polars.testing import assert_frame_equal
 import polars as pl
@@ -15,7 +15,7 @@ TESTDATA_PATH = PATH_HERE / "testdata"
 
 
 @pytest.fixture(scope="function", params=[True, False])
-def windpower_mapping(request):
+def windpower_model(request):
     print(request)
     instance_mapping = """
     @prefix tpl:<https://github.com/magbak/chrontext/templates#>.
@@ -56,7 +56,8 @@ def windpower_mapping(request):
 
     n = 40
 
-    mapping = Mapping([instance_mapping])
+    model = Model()
+    model.add_template(instance_mapping)
     # Used as a prefix
     wpex = "https://github.com/magbak/chrontext/windpower_example#"
     rds = "https://github.com/magbak/chrontext/rds_power#"
@@ -72,7 +73,7 @@ def windpower_mapping(request):
             "SiteIRI": site_iris,
         }
     )
-    mapping.expand("tpl:Site", sites)
+    model.map("tpl:Site", sites)
 
     wind_turbine_iris = [wpex + "WindTurbine" + str(i) for i in range(1, n + 1)]
     wind_turbines = pl.DataFrame(
@@ -83,7 +84,7 @@ def windpower_mapping(request):
         }
     )
 
-    mapping.expand("tpl:RDSSystem", wind_turbines)
+    model.map("tpl:RDSSystem", wind_turbines)
     operating_external_ids = ["oper" + str(i) for i in range(1, n + 1)]
     operating = pl.DataFrame(
         {
@@ -97,7 +98,7 @@ def windpower_mapping(request):
         pl.Series("TimeseriesNodeIRI", [wpex] * operating.height)
         + operating["ExternalId"]
     )
-    mapping.expand("tpl:Timeseries", operating)
+    model.map("tpl:Timeseries", operating)
     maximum_power_values = [
         [5_000_000, 10_000_000, 15_000_000][i % 3] for i in range(1, n + 1)
     ]
@@ -112,7 +113,7 @@ def windpower_mapping(request):
             "ValueNodeIRI": maximum_power_node_iri,
         }
     )
-    mapping.expand("tpl:StaticProperty", df=maximum_power)
+    model.map("tpl:StaticProperty", df=maximum_power)
 
     def add_aspect_labeling_by_source(df: pl.DataFrame, prefix: str) -> pl.DataFrame:
         label_df = df.group_by("SourceIRI", maintain_order=True).map_groups(
@@ -137,7 +138,7 @@ def windpower_mapping(request):
         }
     )
     site_has_wind_turbine = add_aspect_labeling_by_source(site_has_wind_turbine, "A")
-    mapping.expand("tpl:FunctionalAspect", site_has_wind_turbine)
+    model.map("tpl:FunctionalAspect", site_has_wind_turbine)
 
     generator_system_iris = [wpex + "GeneratorSystem" + str(i) for i in range(1, n + 1)]
     generator_systems = pl.DataFrame(
@@ -147,7 +148,7 @@ def windpower_mapping(request):
             "RDSType": [rds + "RA"] * n,
         }
     )
-    mapping.expand("tpl:RDSSystem", generator_systems)
+    model.map("tpl:RDSSystem", generator_systems)
     wind_turbine_has_generator_system = pl.DataFrame(
         {
             "SourceIRI": wind_turbine_iris,
@@ -161,7 +162,7 @@ def windpower_mapping(request):
     wind_turbine_has_generator_system = add_aspect_labeling_by_source(
         wind_turbine_has_generator_system, "RA"
     )
-    mapping.expand("tpl:FunctionalAspect", wind_turbine_has_generator_system)
+    model.map("tpl:FunctionalAspect", wind_turbine_has_generator_system)
 
     generator_iris = [wpex + "Generator" + str(i) for i in range(1, n + 1)]
     generators = pl.DataFrame(
@@ -171,7 +172,7 @@ def windpower_mapping(request):
             "Label": ["Generator"] * n,
         }
     )
-    mapping.expand("tpl:RDSSystem", generators)
+    model.map("tpl:RDSSystem", generators)
     energy_production_external_ids = ["ep" + str(i) for i in range(1, n + 1)]
     energy_production = pl.DataFrame(
         {
@@ -185,7 +186,7 @@ def windpower_mapping(request):
         pl.Series("TimeseriesNodeIRI", [wpex] * energy_production.height)
         + energy_production["ExternalId"]
     )
-    mapping.expand("tpl:Timeseries", energy_production)
+    model.map("tpl:Timeseries", energy_production)
     generator_system_has_generator = pl.DataFrame(
         {
             "SourceIRI": generator_system_iris,
@@ -199,7 +200,7 @@ def windpower_mapping(request):
         generator_system_has_generator, "GAA"
     )
 
-    mapping.expand("tpl:FunctionalAspect", generator_system_has_generator)
+    model.map("tpl:FunctionalAspect", generator_system_has_generator)
 
     wms_iris = [wpex + "WeatherMeasuringSystem" + str(i) for i in range(1, n + 1)]
     wms = pl.DataFrame(
@@ -209,7 +210,7 @@ def windpower_mapping(request):
             "Label": ["Weather Measuring System"] * n,
         }
     )
-    mapping.expand("tpl:RDSSystem", wms)
+    model.map("tpl:RDSSystem", wms)
     wind_speed_external_ids = ["wsp" + str(i) for i in range(1, n + 1)]
     wind_speed = pl.DataFrame(
         {
@@ -224,7 +225,7 @@ def windpower_mapping(request):
         + wind_speed["ExternalId"]
     )
 
-    mapping.expand("tpl:Timeseries", wind_speed)
+    model.map("tpl:Timeseries", wind_speed)
     wind_direction_external_ids = ["wdir" + str(i) for i in range(1, n + 1)]
     wind_direction = pl.DataFrame(
         {
@@ -239,7 +240,7 @@ def windpower_mapping(request):
         + wind_direction["ExternalId"]
     )
 
-    mapping.expand("tpl:Timeseries", wind_direction)
+    model.map("tpl:Timeseries", wind_direction)
     wind_turbine_has_wms = pl.DataFrame(
         {
             "SourceIRI": wind_turbine_iris,
@@ -251,13 +252,13 @@ def windpower_mapping(request):
     )
     wind_turbine_has_wms = add_aspect_labeling_by_source(wind_turbine_has_wms, "LE")
 
-    mapping.expand("tpl:FunctionalAspect", df=wind_turbine_has_wms)
-    return mapping
+    model.map("tpl:FunctionalAspect", df=wind_turbine_has_wms)
+    return model
 
 
 @pytest.mark.parametrize("streaming", [True, False])
-def test_simple_query(windpower_mapping, streaming):
-    df = windpower_mapping.query(
+def test_simple_query(windpower_model, streaming):
+    df = windpower_model.query(
         "SELECT ?a ?b WHERE {?a a ?b}", streaming=streaming
     ).sort(["a", "b"])
     filename = TESTDATA_PATH / "simple_query.csv"
@@ -267,15 +268,15 @@ def test_simple_query(windpower_mapping, streaming):
 
 
 @pytest.mark.parametrize("streaming", [True, False])
-def test_everything_from_subject_query(windpower_mapping, streaming):
+def test_everything_from_subject_query(windpower_model, streaming):
     query = """
 SELECT ?b ?c WHERE {
     <https://github.com/magbak/chrontext/windpower_example#Generator31> ?b ?c .
 } ORDER BY ?b ?c"""
-    windpower_mapping.query(query, streaming=streaming)
+    windpower_model.query(query, streaming=streaming)
 
 @pytest.mark.parametrize("streaming", [True, False])
-def test_types(windpower_mapping, streaming):
+def test_types(windpower_model, streaming):
     query = """PREFIX xsd:<http://www.w3.org/2001/XMLSchema#>
 PREFIX ct:<https://github.com/magbak/chrontext#>
 PREFIX wp:<https://github.com/magbak/chrontext/windpower_example#>
@@ -285,14 +286,14 @@ PREFIX rds:<https://github.com/magbak/chrontext/rds_power#>
 SELECT ?n ?t WHERE {
     ?n a ?t .
 }"""
-    df = windpower_mapping.query(query, streaming=streaming)
+    df = windpower_model.query(query, streaming=streaming)
     print(df)
     assert df.height == 164
 
 
 
 @pytest.mark.parametrize("streaming", [True, False])
-def test_missing_predicate(windpower_mapping, streaming):
+def test_missing_predicate(windpower_model, streaming):
     query = """PREFIX xsd:<http://www.w3.org/2001/XMLSchema#>
 PREFIX ct:<https://github.com/magbak/chrontext#>
 PREFIX wp:<https://github.com/magbak/chrontext/windpower_example#>
@@ -302,13 +303,13 @@ PREFIX rds:<https://github.com/magbak/chrontext/rds_power#>
 SELECT ?n ?asp WHERE {
     ?n rds:hasFunctionalAspect ?asp .
 }"""
-    df = windpower_mapping.query(query, streaming=streaming)
+    df = windpower_model.query(query, streaming=streaming)
     print(df)
     assert df.height == 160
 
 
 @pytest.mark.parametrize("streaming", [True, False])
-def test_missing_predicate2(windpower_mapping, streaming):
+def test_missing_predicate2(windpower_model, streaming):
     query = """PREFIX xsd:<http://www.w3.org/2001/XMLSchema#>
 PREFIX ct:<https://github.com/magbak/chrontext#>
 PREFIX wp:<https://github.com/magbak/chrontext/windpower_example#>
@@ -319,14 +320,14 @@ SELECT ?wtur ?wtur_asp WHERE {
         ?wtur rds:hasFunctionalAspectNode ?wtur_asp .
 
 }"""
-    df = windpower_mapping.query(query, streaming=streaming)
+    df = windpower_model.query(query, streaming=streaming)
     print(df)
     assert df.height == 160
 
 
 
 @pytest.mark.parametrize("streaming", [True, False])
-def test_larger_query_simplified(windpower_mapping, streaming):
+def test_larger_query_simplified(windpower_model, streaming):
     query = """PREFIX xsd:<http://www.w3.org/2001/XMLSchema#>
 PREFIX ct:<https://github.com/magbak/chrontext#>
 PREFIX wp:<https://github.com/magbak/chrontext/windpower_example#>
@@ -341,12 +342,12 @@ SELECT ?site_label ?wtur_label WHERE {
     ?wtur rds:hasFunctionalAspectNode ?wtur_asp .
     FILTER(?wtur_label = "A1" && ?site_label = "Wind Mountain") .
 }"""
-    df = windpower_mapping.query(query, streaming=streaming)
+    df = windpower_model.query(query, streaming=streaming)
     print(df)
 
 
 @pytest.mark.parametrize("streaming", [True, False])
-def test_larger_query(windpower_mapping, streaming):
+def test_larger_query(windpower_model, streaming):
     query = """PREFIX xsd:<http://www.w3.org/2001/XMLSchema#>
 PREFIX ct:<https://github.com/magbak/chrontext#>
 PREFIX wp:<https://github.com/magbak/chrontext/windpower_example#>
@@ -371,7 +372,7 @@ SELECT ?site_label ?wtur_label ?ts ?ts_label WHERE {
     FILTER(?wtur_label = "A1" && ?site_label = "Wind Mountain") .
 }"""
     by = ["site_label", "wtur_label", "ts", "ts_label"]
-    df = windpower_mapping.query(query, streaming=streaming).sort(by)
+    df = windpower_model.query(query, streaming=streaming).sort(by)
     filename = TESTDATA_PATH / "larger_query.csv"
     # df.write_csv(filename)
     expected_df = pl.scan_csv(filename).sort(by).collect()
@@ -380,7 +381,7 @@ SELECT ?site_label ?wtur_label ?ts ?ts_label WHERE {
 
 
 @pytest.mark.parametrize("streaming", [True, False])
-def test_bad_pushdown(windpower_mapping, streaming):
+def test_bad_pushdown(windpower_model, streaming):
     query = """PREFIX xsd:<http://www.w3.org/2001/XMLSchema#>
 PREFIX ct:<https://github.com/magbak/chrontext#>
 PREFIX wp:<https://github.com/magbak/chrontext/windpower_example#>
@@ -404,12 +405,12 @@ SELECT ?site_label ?ts ?ts_label WHERE {
     ?ts rdfs:label ?ts_label .
     FILTER(?site_label = "Wind Mountain") .
 }"""
-    df = windpower_mapping.query(query, streaming=streaming)
+    df = windpower_model.query(query, streaming=streaming)
     assert df.shape == (0, 3)
 
 
 @pytest.mark.parametrize("streaming", [True, False])
-def test_larger_ordered_query(windpower_mapping, streaming):
+def test_larger_ordered_query(windpower_model, streaming):
     query = """PREFIX xsd:<http://www.w3.org/2001/XMLSchema#>
 PREFIX ct:<https://github.com/magbak/chrontext#>
 PREFIX wp:<https://github.com/magbak/chrontext/windpower_example#>
@@ -432,7 +433,7 @@ SELECT ?site_label ?wtur_label ?ts ?ts_label WHERE {
     ?generator ct:hasTimeseries ?ts .
     ?ts rdfs:label ?ts_label .
 } ORDER BY ?site_label ?wtur_label ?ts ?ts_label"""
-    df = windpower_mapping.query(query, streaming=streaming)
+    df = windpower_model.query(query, streaming=streaming)
     filename = TESTDATA_PATH / "larger_ordered_query.csv"
     # df.write_csv(filename)
     expected_df = pl.scan_csv(filename).collect()
@@ -440,7 +441,7 @@ SELECT ?site_label ?wtur_label ?ts ?ts_label WHERE {
 
 
 @pytest.mark.parametrize("streaming", [True, False])
-def test_simple_property_path_query(windpower_mapping, streaming):
+def test_simple_property_path_query(windpower_model, streaming):
     query = """PREFIX xsd:<http://www.w3.org/2001/XMLSchema#>
 PREFIX ct:<https://github.com/magbak/chrontext#>
 PREFIX wp:<https://github.com/magbak/chrontext/windpower_example#>
@@ -453,7 +454,7 @@ SELECT ?site_label ?node WHERE {
     ?site rds:hasFunctionalAspect / ^rds:hasFunctionalAspectNode ?node .
 }"""
     by = ["site_label", "node"]
-    df = windpower_mapping.query(query, streaming=streaming).sort(by)
+    df = windpower_model.query(query, streaming=streaming).sort(by)
     filename = TESTDATA_PATH / "simple_property_path_query.csv"
     # df.write_csv(filename)
     expected_df = pl.scan_csv(filename).sort(by).collect()
@@ -461,7 +462,7 @@ SELECT ?site_label ?node WHERE {
 
 
 @pytest.mark.parametrize("streaming", [True, False])
-def test_iterated_property_path_query(windpower_mapping, streaming):
+def test_iterated_property_path_query(windpower_model, streaming):
     query = """PREFIX xsd:<http://www.w3.org/2001/XMLSchema#>
 PREFIX ct:<https://github.com/magbak/chrontext#>
 PREFIX wp:<https://github.com/magbak/chrontext/windpower_example#>
@@ -474,14 +475,14 @@ SELECT ?site_label ?node WHERE {
     ?site (rds:hasFunctionalAspect / ^rds:hasFunctionalAspectNode)+ ?node .
 }"""
     by = ["site_label", "node"]
-    df = windpower_mapping.query(query, streaming=streaming).sort(by)
+    df = windpower_model.query(query, streaming=streaming).sort(by)
     filename = TESTDATA_PATH / "iterated_property_path_query.csv"
     # df.write_csv(filename)
     expected_df = pl.scan_csv(filename).sort(by).collect()
     pl.testing.assert_frame_equal(df, expected_df)
 
 @pytest.mark.parametrize("streaming", [True, False])
-def test_iterated_property_path_constant_object_query(windpower_mapping, streaming):
+def test_iterated_property_path_constant_object_query(windpower_model, streaming):
     query = """PREFIX xsd:<http://www.w3.org/2001/XMLSchema#>
 PREFIX ct:<https://github.com/magbak/chrontext#>
 PREFIX wp:<https://github.com/magbak/chrontext/windpower_example#>
@@ -494,7 +495,7 @@ SELECT ?site_label WHERE {
     ?site (rds:hasFunctionalAspect / ^rds:hasFunctionalAspectNode)+ <https://github.com/magbak/chrontext/windpower_example#Generator40> .
 }"""
     by = ["site_label"]
-    df = windpower_mapping.query(query, streaming=streaming).sort(by)
+    df = windpower_model.query(query, streaming=streaming).sort(by)
     filename = TESTDATA_PATH / "iterated_property_path_constant_object_query.csv"
     # df.write_csv(filename)
     expected_df = pl.scan_csv(filename).sort(by).collect()
@@ -502,7 +503,7 @@ SELECT ?site_label WHERE {
 
 
 @pytest.mark.parametrize("streaming", [True, False])
-def test_iterated_property_path_constant_subject_query(windpower_mapping, streaming):
+def test_iterated_property_path_constant_subject_query(windpower_model, streaming):
     query = """PREFIX xsd:<http://www.w3.org/2001/XMLSchema#>
 PREFIX ct:<https://github.com/magbak/chrontext#>
 PREFIX wp:<https://github.com/magbak/chrontext/windpower_example#>
@@ -514,7 +515,7 @@ SELECT ?node WHERE {
 }"""
     by = ["node"]
     start = time.time()
-    df = windpower_mapping.query(query, streaming=streaming).sort(by)
+    df = windpower_model.query(query, streaming=streaming).sort(by)
     end = time.time()
     print(f"Took {round(end-start, 3)}")
     filename = TESTDATA_PATH / "iterated_property_path_constant_subject_query.csv"
@@ -524,7 +525,7 @@ SELECT ?node WHERE {
 
 
 @pytest.mark.parametrize("streaming", [True, False])
-def test_iterated_property_path_query_with_bug(windpower_mapping, streaming):
+def test_iterated_property_path_query_with_bug(windpower_model, streaming):
     query = """PREFIX xsd:<http://www.w3.org/2001/XMLSchema#>
 PREFIX ct:<https://github.com/magbak/chrontext#>
 PREFIX wp:<https://github.com/magbak/chrontext/windpower_example#>
@@ -539,7 +540,7 @@ SELECT ?site_label ?node_label WHERE {
 }"""
     by = ["site_label", "node_label"]
     start = time.time()
-    df = windpower_mapping.query(query, streaming=streaming).sort(by)
+    df = windpower_model.query(query, streaming=streaming).sort(by)
     end = time.time()
     print(f"Took {round(end-start, 3)}")
     filename = TESTDATA_PATH / "iterated_property_path_query_with_bug.csv"
@@ -549,8 +550,8 @@ SELECT ?site_label ?node_label WHERE {
 
 
 @pytest.mark.parametrize("streaming", [True, False])
-def test_simple_construct_query(windpower_mapping, streaming):
-    dfs = windpower_mapping.query(
+def test_simple_construct_query(windpower_model, streaming):
+    dfs = windpower_model.query(
         """
     PREFIX ct:<https://github.com/magbak/chrontext#>
     CONSTRUCT {
@@ -576,8 +577,8 @@ def test_simple_construct_query(windpower_mapping, streaming):
 
 
 # No idempotency means no streaming parameter.
-def test_simple_insert_construct_query(windpower_mapping):
-    windpower_mapping.insert(
+def test_simple_insert_construct_query(windpower_model):
+    windpower_model.insert(
         """
     PREFIX ct:<https://github.com/magbak/chrontext#>
     CONSTRUCT {
@@ -586,7 +587,7 @@ def test_simple_insert_construct_query(windpower_mapping):
     } WHERE {?a a ?b}""",
     )
 
-    something = windpower_mapping.query(
+    something = windpower_model.query(
         """
         PREFIX ct:<https://github.com/magbak/chrontext#>
         SELECT ?a
@@ -595,7 +596,7 @@ def test_simple_insert_construct_query(windpower_mapping):
         }
     """,
     ).sort(["a"])
-    nothing = windpower_mapping.query(
+    nothing = windpower_model.query(
         """
             PREFIX ct:<https://github.com/magbak/chrontext#>
             SELECT ?a
@@ -615,9 +616,9 @@ def test_simple_insert_construct_query(windpower_mapping):
 
 
 @pytest.mark.parametrize("streaming", [True, False])
-def test_str_functions(windpower_mapping, streaming):
+def test_str_functions(windpower_model, streaming):
     pl.Config.set_tbl_rows(20)
-    df = windpower_mapping.query(
+    df = windpower_model.query(
         """
         PREFIX rdfs:<http://www.w3.org/2000/01/rdf-schema#>
         SELECT 

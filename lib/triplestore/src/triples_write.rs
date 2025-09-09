@@ -28,9 +28,9 @@ impl Triplestore {
     ) -> Result<(), TriplestoreError> {
         if RdfFormat::NTriples == format {
             let n_threads = POOL.current_num_threads();
-            for (verb, df_map) in &self.triples_map {
-                let verb_string = verb.to_string();
-                let verb_bytes = verb_string.as_bytes();
+            for (predicate, df_map) in &self.triples_map {
+                let predicate_string = predicate.to_string();
+                let predicate_bytes = predicate_string.as_bytes();
                 for ((subject_type, object_type), tt) in df_map {
                     let base_subject_type = subject_type.as_base_rdf_node_type();
                     let base_object_type = object_type.as_base_rdf_node_type();
@@ -43,7 +43,7 @@ impl Triplestore {
                             ),
                             (LANG_STRING_LANG_FIELD.to_string(), base_object_type.clone()),
                         ]);
-                        let lfs = tt.get_lazy_frames(&None, &None, &self.cats)?;
+                        let lfs = tt.get_lazy_frames(&None, &None)?;
                         for (lf, _) in lfs {
                             let mut df = lf
                                 .unnest(by_name([OBJECT_COL_NAME], true))
@@ -67,7 +67,12 @@ impl Triplestore {
                                 df.with_column(ser.into_column()).unwrap();
                             }
                             fast_ntriples::write_triples_in_df(
-                                buf, &df, verb_bytes, &types, CHUNK_SIZE, n_threads,
+                                buf,
+                                &df,
+                                predicate_bytes,
+                                &types,
+                                CHUNK_SIZE,
+                                n_threads,
                             )
                             .unwrap();
                         }
@@ -76,7 +81,7 @@ impl Triplestore {
                             (SUBJECT_COL_NAME.to_string(), base_subject_type.clone()),
                             (OBJECT_COL_NAME.to_string(), base_object_type.clone()),
                         ]);
-                        for (lf, _) in tt.get_lazy_frames(&None, &None, &self.cats)? {
+                        for (lf, _) in tt.get_lazy_frames(&None, &None)? {
                             let mut df = lf
                                 .select([col(SUBJECT_COL_NAME), col(OBJECT_COL_NAME)])
                                 .collect()
@@ -107,7 +112,12 @@ impl Triplestore {
                                 df.with_column(ser.into_column()).unwrap();
                             }
                             fast_ntriples::write_triples_in_df(
-                                buf, &df, verb_bytes, &types, CHUNK_SIZE, n_threads,
+                                buf,
+                                &df,
+                                predicate_bytes,
+                                &types,
+                                CHUNK_SIZE,
+                                n_threads,
                             )
                             .unwrap();
                         }
@@ -117,14 +127,14 @@ impl Triplestore {
         } else {
             let mut writer = RdfSerializer::from_format(format).for_writer(buf);
 
-            for (verb, df_map) in &self.triples_map {
+            for (predicate, df_map) in &self.triples_map {
                 for ((subject_type, object_type), tt) in df_map {
-                    for (lf, _) in tt.get_lazy_frames(&None, &None, &self.cats)? {
+                    for (lf, _) in tt.get_lazy_frames(&None, &None)? {
                         let triples = global_df_as_triples(
                             lf.collect().unwrap(),
                             subject_type.as_base_rdf_node_type(),
                             object_type.as_base_rdf_node_type(),
-                            verb,
+                            predicate,
                             self.cats.clone(),
                         );
                         for t in &triples {

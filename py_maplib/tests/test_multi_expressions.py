@@ -1,7 +1,7 @@
 import polars as pl
 import pytest
 
-from maplib import Mapping, RDFType, XSD
+from maplib import Model, RDFType, XSD
 from polars.testing import assert_frame_equal
 import polars as pl
 import pathlib
@@ -13,7 +13,7 @@ TESTDATA_PATH = PATH_HERE / "testdata"
 
 @pytest.mark.parametrize("streaming", [True, False])
 def test_multi_filter_equals(streaming):
-    m = Mapping([])
+    m = Model()
     df = m.query(
         """
     PREFIX : <http://example.net/> 
@@ -30,7 +30,7 @@ def test_multi_filter_equals(streaming):
 
 @pytest.mark.parametrize("streaming", [True, False])
 def test_multi_filter_numerical_equals(streaming):
-    m = Mapping([])
+    m = Model()
     df = m.query(
         """
     PREFIX : <http://example.net/> 
@@ -48,7 +48,7 @@ def test_multi_filter_numerical_equals(streaming):
 
 @pytest.mark.parametrize("streaming", [True, False])
 def test_multi_filter_numerical_cast_real_equals(streaming):
-    m = Mapping([])
+    m = Model()
     df = m.query(
         """
     PREFIX : <http://example.net/> 
@@ -66,7 +66,7 @@ def test_multi_filter_numerical_cast_real_equals(streaming):
 
 @pytest.mark.parametrize("streaming", [True, False])
 def test_multi_filter_numerical_cast_integer_equals(streaming):
-    m = Mapping([])
+    m = Model()
     df = m.query(
         """
     PREFIX : <http://example.net/> 
@@ -84,7 +84,7 @@ def test_multi_filter_numerical_cast_integer_equals(streaming):
 
 @pytest.mark.parametrize("streaming", [True, False])
 def test_multi_filter_numerical_cast_string_equals(streaming):
-    m = Mapping([])
+    m = Model()
     df = m.query(
         """
     PREFIX : <http://example.net/> 
@@ -102,7 +102,7 @@ def test_multi_filter_numerical_cast_string_equals(streaming):
 
 @pytest.mark.parametrize("streaming", [True, False])
 def test_multi_strlen(streaming):
-    m = Mapping([])
+    m = Model()
     df = m.query(
         """
     PREFIX : <http://example.net/> 
@@ -118,7 +118,7 @@ def test_multi_strlen(streaming):
 
 @pytest.mark.parametrize("streaming", [True, False])
 def test_multi_filter_uri_cast_string_equals(streaming):
-    m = Mapping([])
+    m = Model()
     df = m.query(
         """
     PREFIX : <http://example.net/> 
@@ -135,7 +135,7 @@ def test_multi_filter_uri_cast_string_equals(streaming):
 
 @pytest.mark.parametrize("streaming", [True, False])
 def test_filter_uri_cast_string_equals(streaming):
-    m = Mapping([])
+    m = Model()
     df = m.query(
         """
     PREFIX : <http://example.net/> 
@@ -152,7 +152,7 @@ def test_filter_uri_cast_string_equals(streaming):
 
 @pytest.mark.parametrize("streaming", [True, False])
 def test_multi_filter_equals_with_datatypes(streaming):
-    m = Mapping([])
+    m = Model()
     sm = m.query(
         """
     PREFIX : <http://example.net/> 
@@ -173,7 +173,7 @@ def test_multi_filter_equals_with_datatypes(streaming):
 
 @pytest.mark.parametrize("streaming", [True, False])
 def test_multi_value_different_types_filter_equals_with_datatypes(streaming):
-    m = Mapping([])
+    m = Model()
     sm = m.query(
         """
     PREFIX : <http://example.net/> 
@@ -192,7 +192,7 @@ def test_multi_value_different_types_filter_equals_with_datatypes(streaming):
 
 @pytest.mark.parametrize("streaming", [True, False])
 def test_multi_value_different_types_filter_isiri_or_equals_with_datatypes(streaming):
-    m = Mapping([])
+    m = Model()
     sm = m.query(
         """
     PREFIX : <http://example.net/> 
@@ -223,7 +223,7 @@ def test_multi_value_different_types_filter_isiri_or_equals_with_datatypes(strea
 
 @pytest.mark.parametrize("streaming", [True, False])
 def test_coalesce_both_multi_same_types(streaming):
-    m = Mapping([])
+    m = Model()
     sm = m.query(
         """
     PREFIX : <http://example.net/> 
@@ -246,7 +246,7 @@ def test_coalesce_both_multi_same_types(streaming):
 
 @pytest.mark.parametrize("streaming", [True, False])
 def test_coalesce_both_multi_different_types(streaming):
-    m = Mapping([])
+    m = Model()
     sm = m.query(
         """
     PREFIX : <http://example.net/> 
@@ -267,7 +267,7 @@ def test_coalesce_both_multi_different_types(streaming):
 
 @pytest.mark.parametrize("streaming", [True, False])
 def test_coalesce_both_multi_different_types_rhs_less(streaming):
-    m = Mapping([])
+    m = Model()
     sm = m.query(
         """
     PREFIX : <http://example.net/> 
@@ -288,7 +288,7 @@ def test_coalesce_both_multi_different_types_rhs_less(streaming):
 
 @pytest.mark.parametrize("streaming", [True, False])
 def test_coalesce_only_lhs_multi(streaming):
-    m = Mapping([])
+    m = Model()
     sm = m.query(
         """
     PREFIX : <http://example.net/> 
@@ -309,7 +309,7 @@ def test_coalesce_only_lhs_multi(streaming):
 
 @pytest.mark.parametrize("streaming", [True, False])
 def test_coalesce_only_rhs_multi(streaming):
-    m = Mapping([])
+    m = Model()
     sm = m.query(
         """
     PREFIX : <http://example.net/> 
@@ -330,7 +330,7 @@ def test_coalesce_only_rhs_multi(streaming):
 
 @pytest.mark.parametrize("streaming", [True, False])
 def test_div_by_unbound_is_unbound(streaming):
-    m = Mapping([])
+    m = Model()
     sm = m.query(
         """
     PREFIX : <http://example.net/> 
@@ -352,7 +352,7 @@ def test_div_by_unbound_is_unbound(streaming):
 
 @pytest.mark.parametrize("streaming", [True, False])
 def test_coalesce_no_multi(streaming):
-    m = Mapping([])
+    m = Model()
     sm = m.query(
         """
     PREFIX : <http://example.net/> 
@@ -374,7 +374,7 @@ def test_coalesce_no_multi(streaming):
 
 @pytest.mark.parametrize("streaming", [True, False])
 def test_multi_filter_equals_mirrored(streaming):
-    m = Mapping([])
+    m = Model()
     df = m.query(
         """
     PREFIX : <http://example.net/> 
@@ -391,7 +391,7 @@ def test_multi_filter_equals_mirrored(streaming):
 
 @pytest.mark.parametrize("streaming", [True, False])
 def test_multi_filter_equals_two_multi(streaming):
-    m = Mapping([])
+    m = Model()
     df = m.query(
         """
     PREFIX : <http://example.net/> 
@@ -409,7 +409,7 @@ def test_multi_filter_equals_two_multi(streaming):
 
 @pytest.mark.parametrize("streaming", [True, False])
 def test_multi_filter_is_in(streaming):
-    m = Mapping([])
+    m = Model()
     df = m.query(
         """
     PREFIX : <http://example.net/> 
@@ -427,7 +427,7 @@ def test_multi_filter_is_in(streaming):
 
 @pytest.mark.parametrize("streaming", [True, False])
 def test_multi_filter_comparison(streaming):
-    m = Mapping([])
+    m = Model()
     df = m.query(
         """
     PREFIX : <http://example.net/> 
@@ -456,7 +456,7 @@ def test_multi_filter_comparison(streaming):
 
 @pytest.mark.parametrize("streaming", [True, False])
 def test_multi_filter_incompatible_comparison(streaming):
-    m = Mapping([])
+    m = Model()
     df = m.query(
         """
     PREFIX : <http://example.net/> 
@@ -485,7 +485,7 @@ def test_multi_filter_incompatible_comparison(streaming):
 
 @pytest.mark.parametrize("streaming", [True, False])
 def test_multi_filter_incompatible_datetime_comparison(streaming):
-    m = Mapping([])
+    m = Model()
     df = m.query(
         """
     PREFIX : <http://example.net/> 
@@ -513,7 +513,7 @@ def test_multi_filter_incompatible_datetime_comparison(streaming):
 
 @pytest.mark.parametrize("streaming", [True, False])
 def test_multi_filter_incompatible_many_comparison(streaming):
-    m = Mapping([])
+    m = Model()
     df = m.query(
         """
     PREFIX : <http://example.net/> 
@@ -534,7 +534,7 @@ def test_multi_filter_incompatible_many_comparison(streaming):
 
 @pytest.mark.parametrize("streaming", [True, False])
 def test_multi_concat(streaming):
-    m = Mapping([])
+    m = Model()
     df = m.query(
         """
     PREFIX : <http://example.net/> 
@@ -555,7 +555,7 @@ def test_multi_concat(streaming):
 
 @pytest.mark.parametrize("streaming", [True, False])
 def test_multi_filter_incompatible_datetimestamp_comparison(streaming):
-    m = Mapping([])
+    m = Model()
     df = m.query(
         """
     PREFIX : <http://example.net/> 
@@ -583,7 +583,7 @@ def test_multi_filter_incompatible_datetimestamp_comparison(streaming):
 
 @pytest.mark.parametrize("streaming", [True, False])
 def test_generate_uuids(streaming):
-    m = Mapping([])
+    m = Model()
     sm = m.query(
         """
     PREFIX : <http://example.net/> 
@@ -610,7 +610,7 @@ def test_generate_uuids(streaming):
 
 @pytest.mark.parametrize("streaming", [True, False])
 def test_generate_iri_all_strings(streaming):
-    m = Mapping([])
+    m = Model()
     sm = m.query(
         """
     PREFIX : <http://example.net/> 
@@ -644,7 +644,7 @@ def test_generate_iri_all_strings(streaming):
 
 @pytest.mark.parametrize("streaming", [True, False])
 def test_generate_iri(streaming):
-    m = Mapping([])
+    m = Model()
     sm = m.query(
         """
     PREFIX : <http://example.net/> 
@@ -686,7 +686,7 @@ def test_generate_iri(streaming):
 
 @pytest.mark.parametrize("streaming", [True, False])
 def test_generate_str_uuids(streaming):
-    m = Mapping([])
+    m = Model()
     sm = m.query(
         """
     PREFIX : <http://example.net/> 
@@ -709,7 +709,7 @@ def test_generate_str_uuids(streaming):
 
 @pytest.mark.parametrize("streaming", [True, False])
 def test_replace_single(streaming):
-    m = Mapping([])
+    m = Model()
     sm = m.query(
         """
     PREFIX : <http://example.net/> 
@@ -732,7 +732,7 @@ def test_replace_single(streaming):
 
 @pytest.mark.parametrize("streaming", [True, False])
 def test_case_single(streaming):
-    m = Mapping([])
+    m = Model()
     sm = m.query(
         """
     PREFIX : <http://example.net/> 
@@ -758,7 +758,7 @@ def test_case_single(streaming):
 
 @pytest.mark.parametrize("streaming", [True, False])
 def test_mul_types_single(streaming):
-    m = Mapping([])
+    m = Model()
     sm = m.query(
         """
     PREFIX : <http://example.net/> 
@@ -796,7 +796,7 @@ def test_mul_types_single(streaming):
 
 @pytest.mark.parametrize("streaming", [True, False])
 def test_substr_single(streaming):
-    m = Mapping([])
+    m = Model()
     sm = m.query(
         """
     PREFIX : <http://example.net/> 
@@ -822,7 +822,7 @@ def test_substr_single(streaming):
 
 @pytest.mark.parametrize("streaming", [True, False])
 def test_case_single_lang(streaming):
-    m = Mapping([])
+    m = Model()
     sm = m.query(
         """
     PREFIX : <http://example.net/> 
@@ -860,7 +860,7 @@ def test_case_single_lang(streaming):
 
 @pytest.mark.parametrize("streaming", [True, False])
 def test_substr_multi_type_with_only_lang(streaming):
-    m = Mapping([])
+    m = Model()
     sm = m.query(
         """
     PREFIX : <http://example.net/> 
@@ -907,7 +907,7 @@ def test_substr_multi_type_with_only_lang(streaming):
 
 @pytest.mark.parametrize("streaming", [True, False])
 def test_case_multi_type_with_only_lang(streaming):
-    m = Mapping([])
+    m = Model()
     sm = m.query(
         """
     PREFIX : <http://example.net/> 
@@ -954,7 +954,7 @@ def test_case_multi_type_with_only_lang(streaming):
 
 @pytest.mark.parametrize("streaming", [True, False])
 def test_case_multi_type_with_string_and_lang_string_and_other(streaming):
-    m = Mapping([])
+    m = Model()
     sm = m.query(
         """
     PREFIX : <http://example.net/> 
@@ -1015,7 +1015,7 @@ def test_case_multi_type_with_string_and_lang_string_and_other(streaming):
 
 @pytest.mark.parametrize("streaming", [True, False])
 def test_before_after_multi_type_with_string_and_lang_string_and_other(streaming):
-    m = Mapping([])
+    m = Model()
     sm = m.query(
         """
     PREFIX : <http://example.net/> 
@@ -1076,7 +1076,7 @@ def test_before_after_multi_type_with_string_and_lang_string_and_other(streaming
 
 @pytest.mark.parametrize("streaming", [True, False])
 def test_before_after_only_lang_string_and_other(streaming):
-    m = Mapping([])
+    m = Model()
     sm = m.query(
         """
     PREFIX : <http://example.net/> 
@@ -1120,7 +1120,7 @@ def test_before_after_only_lang_string_and_other(streaming):
 
 @pytest.mark.parametrize("streaming", [True, False])
 def test_before_after_only_lang_string_and_other(streaming):
-    m = Mapping([])
+    m = Model()
     sm = m.query(
         """
     PREFIX : <http://example.net/> 
@@ -1153,7 +1153,7 @@ def test_before_after_only_lang_string_and_other(streaming):
 
 @pytest.mark.parametrize("streaming", [True, False])
 def test_before_after_only_string_and_other(streaming):
-    m = Mapping([])
+    m = Model()
     sm = m.query(
         """
     PREFIX : <http://example.net/> 
@@ -1195,7 +1195,7 @@ def test_before_after_only_string_and_other(streaming):
 
 @pytest.mark.parametrize("streaming", [True, False])
 def test_substr_multi_type_with_string_and_lang_string_and_other(streaming):
-    m = Mapping([])
+    m = Model()
     sm = m.query(
         """
     PREFIX : <http://example.net/> 
@@ -1256,7 +1256,7 @@ def test_substr_multi_type_with_string_and_lang_string_and_other(streaming):
 
 @pytest.mark.parametrize("streaming", [True, False])
 def test_replace_multi(streaming):
-    m = Mapping([])
+    m = Model()
     sm = m.query(
         """
     PREFIX : <http://example.net/> 
@@ -1284,7 +1284,7 @@ def test_replace_multi(streaming):
 
 @pytest.mark.parametrize("streaming", [True, False])
 def test_regex_multi(streaming):
-    m = Mapping([])
+    m = Model()
     sm = m.query(
         """
     PREFIX : <http://example.net/> 
@@ -1312,7 +1312,7 @@ def test_regex_multi(streaming):
 
 @pytest.mark.parametrize("streaming", [True, False])
 def test_regex(streaming):
-    m = Mapping([])
+    m = Model()
     sm = m.query(
         """
     PREFIX : <http://example.net/> 
@@ -1335,7 +1335,7 @@ def test_regex(streaming):
 
 @pytest.mark.parametrize("streaming", [True, False])
 def test_issue_22(streaming):
-    m = Mapping([])
+    m = Model()
     sm = m.query(
         """
     PREFIX : <http://example.net/> 

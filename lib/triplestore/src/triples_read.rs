@@ -170,18 +170,18 @@ impl Triplestore {
 
         let mut par_predicate_map: HashMap<String, Vec<MapType>> = HashMap::new();
         for m in predicate_maps {
-            for (verb, map) in m? {
-                if let Some(v) = par_predicate_map.get_mut(&verb) {
+            for (predicate, map) in m? {
+                if let Some(v) = par_predicate_map.get_mut(&predicate) {
                     v.push(map);
                 } else {
-                    par_predicate_map.insert(verb, vec![map]);
+                    par_predicate_map.insert(predicate, vec![map]);
                 }
             }
         }
 
         let predicate_map: HashMap<String, MapType> = par_predicate_map
             .into_par_iter()
-            .map(|(verb, maps)| {
+            .map(|(predicate, maps)| {
                 let mut subject_map: MapType = HashMap::new();
                 for new_subject_map in maps {
                     for (subject_dt, new_object_map) in new_subject_map {
@@ -199,7 +199,7 @@ impl Triplestore {
                         }
                     }
                 }
-                (verb, subject_map)
+                (predicate, subject_map)
             })
             .collect();
 
@@ -303,9 +303,9 @@ fn create_predicate_map(
             if let Some(type_map) = predicate_map.get_mut(predicate.as_str()) {
                 type_map
             } else {
-                let verb_key = predicate.into_string();
-                predicate_map.insert(verb_key.clone(), HashMap::new());
-                predicate_map.get_mut(&verb_key).unwrap()
+                let predicate_key = predicate.into_string();
+                predicate_map.insert(predicate_key.clone(), HashMap::new());
+                predicate_map.get_mut(&predicate_key).unwrap()
             };
 
         let subject_to_insert = subject_to_oxrdf_subject(subject, parser_call);

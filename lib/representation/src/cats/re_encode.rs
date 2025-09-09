@@ -105,7 +105,7 @@ impl Cats {
         let mut map = HashMap::new();
         for c in other_cats {
             let mut other_map = HashMap::new();
-            for (t, mut other_enc) in c.cat_map.iter() {
+            for (t, other_enc) in c.cat_map.iter() {
                 let mut c = self.get_height(&t);
                 if let Some(enc) = self.cat_map.get_mut(t) {
                     let (remap, insert): (Vec<_>, Vec<_>) = other_enc

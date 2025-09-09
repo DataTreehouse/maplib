@@ -1,3 +1,4 @@
+use crate::cats::literal_is_cat;
 use crate::multitype::{MULTI_BLANK_DT, MULTI_IRI_DT, MULTI_NONE_DT};
 use crate::rdf_state::RDFNodeState;
 use crate::solution_mapping::BaseCatState;
@@ -10,7 +11,6 @@ use oxrdf::{NamedNode, NamedNodeRef, Subject, Term};
 use polars::datatypes::{DataType, Field, PlSmallStr, TimeUnit, TimeZone};
 use spargebra::term::GroundTerm;
 use std::fmt::{Display, Formatter};
-use crate::cats::literal_is_cat;
 
 #[derive(Debug, Clone, Ord, PartialOrd, PartialEq, Eq, Hash)]
 pub enum BaseRDFNodeType {
@@ -31,7 +31,10 @@ impl BaseRDFNodeType {
     }
 
     pub fn stored_cat(&self) -> bool {
-        matches!(self.default_stored_cat_state(), BaseCatState::CategoricalNative(..))
+        matches!(
+            self.default_stored_cat_state(),
+            BaseCatState::CategoricalNative(..)
+        )
     }
 }
 

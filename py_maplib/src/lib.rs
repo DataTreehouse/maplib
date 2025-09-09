@@ -7,7 +7,7 @@ use pydf_io::to_rust::polars_df_to_rust_df;
 use crate::shacl::PyValidationReport;
 use log::warn;
 use maplib::errors::MaplibError;
-use maplib::mapping::{ExpandOptions, Mapping as InnerMapping};
+use maplib::mapping::{MapOptions, Model as InnerModel};
 
 use chrono::Utc;
 use cimxml::export::FullModelDetails;
@@ -18,8 +18,6 @@ use std::error::Error;
 use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard};
-use templates::dataset::TemplateDataset;
-use templates::document::document_from_str;
 use triplestore::sparql::{QueryResult as SparqlQueryResult, QueryResult};
 
 //The below snippet controlling alloc-library is from https://github.com/pola-rs/polars/blob/main/py-polars/src/lib.rs
@@ -54,7 +52,7 @@ use pyo3::IntoPyObjectExt;
 use representation::python::{
     PyBlankNode, PyIRI, PyLiteral, PyPrefix, PyRDFType, PySolutionMappings, PyVariable,
 };
-use representation::solution_mapping::EagerSolutionMappings;
+use representation::solution_mapping::{EagerSolutionMappings};
 
 #[cfg(not(target_os = "linux"))]
 use mimalloc::MiMalloc;
@@ -74,15 +72,15 @@ static GLOBAL: Jemalloc = Jemalloc;
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
 
-#[pyclass(name = "Mapping", frozen)]
-pub struct PyMapping {
-    inner: Mutex<InnerMapping>,
-    sprout: Mutex<Option<InnerMapping>>,
+#[pyclass(name = "Model", frozen)]
+pub struct PyModel {
+    inner: Mutex<InnerModel>,
+    sprout: Mutex<Option<InnerModel>>,
 }
 
-impl PyMapping {
-    pub fn from_inner_mapping(inner: InnerMapping) -> PyMapping {
-        PyMapping {
+impl PyModel {
+    pub fn from_inner_mapping(inner: InnerModel) -> PyModel {
+        PyModel {
             inner: Mutex::new(inner),
             sprout: Mutex::new(None),
         }
@@ -135,49 +133,20 @@ impl PyIndexingOptions {
 type ParametersType<'a> = HashMap<String, (Bound<'a, PyAny>, HashMap<String, PyRDFType>)>;
 
 #[pymethods]
-impl PyMapping {
+impl PyModel {
     #[new]
-    #[pyo3(signature = (documents=None, indexing_options=None))]
+    #[pyo3(signature = (indexing_options=None))]
     fn new(
-        documents: Option<&Bound<'_, PyAny>>,
-        //storage_folder: Option<String>,
         indexing_options: Option<PyIndexingOptions>,
-    ) -> PyResult<PyMapping> {
-        let documents = if let Some(documents) = documents {
-            if documents.is_instance_of::<PyList>() {
-                let mut strs = vec![];
-                for doc in documents.try_iter()? {
-                    let docstr = doc?.str()?.to_string();
-                    strs.push(docstr);
-                }
-                Some(strs)
-            } else {
-                let docstr = documents.str()?.to_string();
-                Some(vec![docstr])
-            }
-        } else {
-            None
-        };
-        let mut parsed_documents = vec![];
-        if let Some(documents) = documents {
-            for ds in documents {
-                let parsed_doc = document_from_str(&ds)
-                    .map_err(|x| PyMaplibError::from(MaplibError::from(x)))?;
-                parsed_documents.push(parsed_doc);
-            }
-        }
-        let template_dataset = TemplateDataset::from_documents(parsed_documents)
-            .map_err(MaplibError::from)
-            .map_err(PyMaplibError::from)?;
-
+    ) -> PyResult<PyModel> {
         let indexing = if let Some(indexing_options) = indexing_options {
             Some(indexing_options.inner)
         } else {
             None
         };
-        Ok(PyMapping {
+        Ok(PyModel {
             inner: Mutex::new(
-                InnerMapping::new(&template_dataset, None, indexing)
+                InnerModel::new(None, None, indexing)
                     .map_err(PyMaplibError::from)?,
             ),
             sprout: Mutex::new(None),
@@ -195,13 +164,13 @@ impl PyMapping {
         create_sprout_mutex(&mut inner, &mut sprout)
     }
 
-    fn detach_sprout(&self) -> PyResult<Option<PyMapping>> {
+    fn detach_sprout(&self) -> PyResult<Option<PyModel>> {
         let sprout = self.sprout.lock().unwrap();
         detach_sprout_mutex(sprout)
     }
 
     #[pyo3(signature = (template, df=None, graph=None, types=None, validate_iris=None))]
-    fn expand(
+    fn map(
         &self,
         template: &Bound<'_, PyAny>,
         df: Option<&Bound<'_, PyAny>>,
@@ -210,25 +179,25 @@ impl PyMapping {
         validate_iris: Option<bool>,
     ) -> PyResult<Option<PyObject>> {
         let mut inner = self.inner.lock().unwrap();
-        expand_mutex(&mut inner, template, df, graph, types, validate_iris)
+        map_mutex(&mut inner, template, df, graph, types, validate_iris)
     }
 
-    #[pyo3(signature = (df, verb=None, graph=None, types=None, validate_iris=None))]
-    fn expand_triples(
+    #[pyo3(signature = (df, predicate=None, graph=None, types=None, validate_iris=None))]
+    fn map_triples(
         &self,
         df: &Bound<'_, PyAny>,
-        verb: Option<String>,
+        predicate: Option<String>,
         graph: Option<String>,
         types: Option<HashMap<String, PyRDFType>>,
         validate_iris: Option<bool>,
     ) -> PyResult<Option<PyObject>> {
         let mut inner = self.inner.lock().unwrap();
-        expand_triples_mutex(&mut inner, df, verb, graph, types, validate_iris)
+        map_triples_mutex(&mut inner, df, predicate, graph, types, validate_iris)
     }
 
     #[pyo3(signature = (df, primary_key_column, dry_run=None, graph=None, types=None,
                             validate_iris=None))]
-    fn expand_default(
+    fn map_default(
         &self,
         df: &Bound<'_, PyAny>,
         primary_key_column: String,
@@ -238,7 +207,7 @@ impl PyMapping {
         validate_iris: Option<bool>,
     ) -> PyResult<String> {
         let mut inner = self.inner.lock().unwrap();
-        expand_default_mutex(
+        map_default_mutex(
             &mut inner,
             df,
             primary_key_column,
@@ -433,7 +402,7 @@ impl PyMapping {
 
     #[allow(clippy::too_many_arguments)]
     #[pyo3(signature = (file_path, format=None, base_iri=None, transient=None, parallel=None, checked=None, graph=None, replace_graph=None))]
-    fn read_triples(
+    fn read(
         &self,
         file_path: &Bound<'_, PyAny>,
         format: Option<String>,
@@ -445,7 +414,7 @@ impl PyMapping {
         replace_graph: Option<bool>,
     ) -> PyResult<()> {
         let mut inner = self.inner.lock().unwrap();
-        read_triples_mutex(
+        read_mutex(
             &mut inner,
             file_path,
             format,
@@ -460,7 +429,7 @@ impl PyMapping {
 
     #[allow(clippy::too_many_arguments)]
     #[pyo3(signature = (s, format, base_iri=None, transient=None, parallel=None, checked=None, graph=None, replace_graph=None))]
-    fn read_triples_string(
+    fn reads(
         &self,
         s: &str,
         format: &str,
@@ -472,7 +441,7 @@ impl PyMapping {
         replace_graph: Option<bool>,
     ) -> PyResult<()> {
         let mut inner = self.inner.lock().unwrap();
-        read_triples_string_mutex(
+        reads_mutex(
             &mut inner,
             s,
             format,
@@ -485,14 +454,8 @@ impl PyMapping {
         )
     }
 
-    #[pyo3(signature = (file_path, graph=None))]
-    fn write_ntriples(&self, file_path: &Bound<'_, PyAny>, graph: Option<String>) -> PyResult<()> {
-        warn!("use write_triples with format=\"ntriples\" instead");
-        self.write_triples(file_path, Some("ntriples".to_string()), graph)
-    }
-
     #[pyo3(signature = (file_path, format=None, graph=None))]
-    fn write_triples(
+    fn write(
         &self,
         file_path: &Bound<'_, PyAny>,
         format: Option<String>,
@@ -536,20 +499,14 @@ impl PyMapping {
         )
     }
 
-    #[pyo3(signature = (graph=None))]
-    fn write_ntriples_string(&self, graph: Option<String>) -> PyResult<String> {
-        warn!("use write_triples_string with format=\"ntriples\" instead");
-        self.write_triples_string(Some("ntriples".to_string()), graph)
-    }
-
     #[pyo3(signature = (format=None, graph=None))]
-    fn write_triples_string(
+    fn writes(
         &self,
         format: Option<String>,
         graph: Option<String>,
     ) -> PyResult<String> {
         let mut inner = self.inner.lock().unwrap();
-        write_triples_string_mutex(&mut inner, format, graph)
+        writes_mutex(&mut inner, format, graph)
     }
 
     #[pyo3(signature = (folder_path, graph=None))]
@@ -622,7 +579,7 @@ impl PyMapping {
 // pymethods mutex functions
 
 fn add_template_mutex(
-    inner: &mut MutexGuard<InnerMapping>,
+    inner: &mut MutexGuard<InnerModel>,
     template: Bound<'_, PyAny>,
 ) -> PyResult<()> {
     if let Ok(s) = template.extract::<String>() {
@@ -643,11 +600,11 @@ fn add_template_mutex(
 }
 
 fn create_sprout_mutex(
-    inner: &mut MutexGuard<InnerMapping>,
-    sprout: &mut MutexGuard<Option<InnerMapping>>,
+    inner: &mut MutexGuard<InnerModel>,
+    sprout: &mut MutexGuard<Option<InnerModel>>,
 ) -> PyResult<()> {
     let mut new_sprout =
-        InnerMapping::new(&inner.template_dataset, None, Some(inner.indexing.clone()))
+        InnerModel::new(Some(&inner.template_dataset), None, Some(inner.indexing.clone()))
             .map_err(PyMaplibError::from)?;
     new_sprout.blank_node_counter = inner.blank_node_counter;
     **sprout = Some(new_sprout);
@@ -655,10 +612,10 @@ fn create_sprout_mutex(
 }
 
 fn detach_sprout_mutex(
-    mut sprout: MutexGuard<Option<InnerMapping>>,
-) -> PyResult<Option<PyMapping>> {
+    mut sprout: MutexGuard<Option<InnerModel>>,
+) -> PyResult<Option<PyModel>> {
     if let Some(sprout) = sprout.take() {
-        let m = PyMapping {
+        let m = PyModel {
             inner: Mutex::new(sprout),
             sprout: Mutex::new(None),
         };
@@ -668,8 +625,8 @@ fn detach_sprout_mutex(
     }
 }
 
-fn expand_mutex(
-    inner: &mut MutexGuard<InnerMapping>,
+fn map_mutex(
+    inner: &mut MutexGuard<InnerModel>,
     template: &Bound<'_, PyAny>,
     df: Option<&Bound<'_, PyAny>>,
     graph: Option<String>,
@@ -708,7 +665,7 @@ fn expand_mutex(
         .into());
     };
     let graph = parse_optional_named_node(graph)?;
-    let options = ExpandOptions::from_args(graph, validate_iris);
+    let options = MapOptions::from_args(graph, validate_iris);
     let types = map_types(types);
 
     if let Some(df) = df {
@@ -730,31 +687,31 @@ fn expand_mutex(
     Ok(None)
 }
 
-fn expand_triples_mutex(
-    inner: &mut MutexGuard<InnerMapping>,
+fn map_triples_mutex(
+    inner: &mut MutexGuard<InnerModel>,
     df: &Bound<'_, PyAny>,
-    verb: Option<String>,
+    predicate: Option<String>,
     graph: Option<String>,
     types: Option<HashMap<String, PyRDFType>>,
     validate_iris: Option<bool>,
 ) -> PyResult<Option<PyObject>> {
     let graph = parse_optional_named_node(graph)?;
     let df = polars_df_to_rust_df(df)?;
-    let options = ExpandOptions::from_args(graph, validate_iris);
+    let options = MapOptions::from_args(graph, validate_iris);
     let types = map_types(types);
-    let verb = if let Some(verb) = verb {
-        Some(NamedNode::new(verb).map_err(|x| PyMaplibError::from(MaplibError::from(x)))?)
+    let predicate = if let Some(predicate) = predicate {
+        Some(NamedNode::new(predicate).map_err(|x| PyMaplibError::from(MaplibError::from(x)))?)
     } else {
         None
     };
     inner
-        .expand_triples(df, types, verb, options)
+        .expand_triples(df, types, predicate, options)
         .map_err(PyMaplibError::from)?;
     Ok(None)
 }
 
-fn expand_default_mutex(
-    inner: &mut MutexGuard<InnerMapping>,
+fn map_default_mutex(
+    inner: &mut MutexGuard<InnerModel>,
     df: &Bound<'_, PyAny>,
     primary_key_column: String,
     dry_run: Option<bool>,
@@ -764,7 +721,7 @@ fn expand_default_mutex(
 ) -> PyResult<String> {
     let df = polars_df_to_rust_df(df)?;
     let graph = parse_optional_named_node(graph)?;
-    let options = ExpandOptions::from_args(graph, validate_iris);
+    let options = MapOptions::from_args(graph, validate_iris);
     let dry_run = dry_run.unwrap_or(false);
     let types = map_types(types);
     let tmpl = inner
@@ -777,7 +734,7 @@ fn expand_default_mutex(
 }
 
 fn query_mutex(
-    inner: &mut MutexGuard<InnerMapping>,
+    inner: &mut MutexGuard<InnerModel>,
     py: Python<'_>,
     query: String,
     parameters: Option<ParametersType>,
@@ -811,7 +768,7 @@ fn query_mutex(
 }
 
 fn update_mutex(
-    inner: &mut MutexGuard<InnerMapping>,
+    inner: &mut MutexGuard<InnerModel>,
     py: Python<'_>,
     update: String,
     parameters: Option<ParametersType>,
@@ -835,7 +792,7 @@ fn update_mutex(
 }
 
 fn create_index_mutex(
-    inner: &mut MutexGuard<InnerMapping>,
+    inner: &mut MutexGuard<InnerModel>,
     options: Option<PyIndexingOptions>,
     all: Option<bool>,
     graph: Option<String>,
@@ -853,7 +810,7 @@ fn create_index_mutex(
 }
 
 fn validate_mutex(
-    inner: &mut MutexGuard<InnerMapping>,
+    inner: &mut MutexGuard<InnerModel>,
     py: Python<'_>,
     shape_graph: String,
     include_details: Option<bool>,
@@ -920,8 +877,8 @@ fn validate_mutex(
 }
 
 fn insert_mutex(
-    inner: &mut MutexGuard<InnerMapping>,
-    sprout: &mut MutexGuard<Option<InnerMapping>>,
+    inner: &mut MutexGuard<InnerModel>,
+    sprout: &mut MutexGuard<Option<InnerModel>>,
     py: Python<'_>,
     query: String,
     parameters: Option<ParametersType>,
@@ -967,8 +924,8 @@ fn insert_mutex(
 }
 
 fn insert_sprout_mutex(
-    inner: &mut MutexGuard<InnerMapping>,
-    sprout: &mut MutexGuard<Option<InnerMapping>>,
+    inner: &mut MutexGuard<InnerModel>,
+    sprout: &mut MutexGuard<Option<InnerModel>>,
     py: Python<'_>,
     query: String,
     parameters: Option<ParametersType>,
@@ -1026,8 +983,8 @@ fn insert_sprout_mutex(
     Ok(out_dict)
 }
 
-fn read_triples_mutex(
-    inner: &mut MutexGuard<InnerMapping>,
+fn read_mutex(
+    inner: &mut MutexGuard<InnerModel>,
     file_path: &Bound<'_, PyAny>,
     format: Option<String>,
     base_iri: Option<String>,
@@ -1056,8 +1013,8 @@ fn read_triples_mutex(
     Ok(())
 }
 
-fn read_triples_string_mutex(
-    inner: &mut MutexGuard<InnerMapping>,
+fn reads_mutex(
+    inner: &mut MutexGuard<InnerModel>,
     s: &str,
     format: &str,
     base_iri: Option<String>,
@@ -1070,7 +1027,7 @@ fn read_triples_string_mutex(
     let graph = parse_optional_named_node(graph)?;
     let format = resolve_format(format);
     inner
-        .read_triples_string(
+        .reads(
             s,
             format,
             base_iri,
@@ -1085,7 +1042,7 @@ fn read_triples_string_mutex(
 }
 
 fn write_triples_mutex(
-    inner: &mut MutexGuard<InnerMapping>,
+    inner: &mut MutexGuard<InnerModel>,
     file_path: &Bound<'_, PyAny>,
     format: Option<String>,
     graph: Option<String>,
@@ -1107,7 +1064,7 @@ fn write_triples_mutex(
 }
 
 fn write_cim_xml_mutex(
-    inner: &mut MutexGuard<InnerMapping>,
+    inner: &mut MutexGuard<InnerModel>,
     py: Python<'_>,
     file_path: &Bound<'_, PyAny>,
     profile_graph: String,
@@ -1175,8 +1132,8 @@ fn write_cim_xml_mutex(
     Ok(())
 }
 
-fn write_triples_string_mutex(
-    inner: &mut MutexGuard<InnerMapping>,
+fn writes_mutex(
+    inner: &mut MutexGuard<InnerModel>,
     format: Option<String>,
     graph: Option<String>,
 ) -> PyResult<String> {
@@ -1192,7 +1149,7 @@ fn write_triples_string_mutex(
 }
 
 fn write_native_parquet_mutex(
-    inner: &mut MutexGuard<InnerMapping>,
+    inner: &mut MutexGuard<InnerModel>,
     folder_path: &Bound<'_, PyAny>,
     graph: Option<String>,
 ) -> PyResult<()> {
@@ -1205,7 +1162,7 @@ fn write_native_parquet_mutex(
 }
 
 fn get_predicate_iris_mutex(
-    inner: &mut MutexGuard<InnerMapping>,
+    inner: &mut MutexGuard<InnerModel>,
     graph: Option<String>,
     include_transient: Option<bool>,
 ) -> PyResult<Vec<PyIRI>> {
@@ -1217,7 +1174,7 @@ fn get_predicate_iris_mutex(
 }
 
 fn get_predicate_mutex(
-    inner: &mut MutexGuard<InnerMapping>,
+    inner: &mut MutexGuard<InnerModel>,
     py: Python<'_>,
     iri: PyIRI,
     graph: Option<String>,
@@ -1240,7 +1197,7 @@ fn get_predicate_mutex(
 }
 
 fn infer_mutex(
-    inner: &mut MutexGuard<InnerMapping>,
+    inner: &mut MutexGuard<InnerModel>,
     py: Python<'_>,
     insert: Option<bool>,
     include_datatypes: Option<bool>,
@@ -1283,7 +1240,7 @@ fn _maplib(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Currently deadlocks, likely need to change all above with allow threads: https://docs.rs/pyo3-log/latest/pyo3_log/
     // pyo3_log::init();
     m.add_class::<PyIndexingOptions>()?;
-    m.add_class::<PyMapping>()?;
+    m.add_class::<PyModel>()?;
     m.add_class::<PyValidationReport>()?;
     m.add_class::<PySolutionMappings>()?;
     m.add_class::<PyRDFType>()?;
@@ -1336,14 +1293,14 @@ fn query_to_result(
                     mut mappings,
                     mut rdf_node_types,
                 },
-                verb,
+                predicate,
             ) in dfs
             {
-                if let Some(verb) = verb {
+                if let Some(predicate) = predicate {
                     mappings = mappings
                         .lazy()
                         .with_column(
-                            lit(rdf_named_node_to_polars_literal_value(&verb))
+                            lit(rdf_named_node_to_polars_literal_value(&predicate))
                                 .alias(PREDICATE_COL_NAME),
                         )
                         .select([

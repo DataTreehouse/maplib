@@ -25,6 +25,10 @@ pub struct TemplateDataset {
 }
 
 impl TemplateDataset {
+    pub fn new_empty() -> Result<TemplateDataset, TemplateError> {
+        Self::from_documents(vec![])
+    }
+
     pub fn from_documents(
         mut documents: Vec<StottrDocument>,
     ) -> Result<TemplateDataset, TemplateError> {
@@ -75,7 +79,7 @@ impl TemplateDataset {
             variable: Variable::new_unchecked(SUBJECT_COL_NAME),
             default_value: None,
         };
-        let ottr_triple_verb = Parameter {
+        let ottr_triple_predicate = Parameter {
             optional: false,
             non_blank: false,
             ptype: Some(PType::Basic(NamedNode::new_unchecked(OTTR_IRI))),
@@ -94,7 +98,11 @@ impl TemplateDataset {
             signature: Signature {
                 template_name: NamedNode::new_unchecked(OTTR_TRIPLE),
                 template_prefixed_name: Some("ottr:Triple".to_string()),
-                parameter_list: vec![ottr_triple_subject, ottr_triple_verb, ottr_triple_object],
+                parameter_list: vec![
+                    ottr_triple_subject,
+                    ottr_triple_predicate,
+                    ottr_triple_object,
+                ],
                 annotation_list: None,
             },
             pattern_list: vec![],
@@ -161,10 +169,6 @@ impl TemplateDataset {
     }
 
     pub fn add_template(&mut self, template: Template) -> Result<(), TemplateError> {
-        if let Some(prefix) = &template.signature.template_prefixed_name {
-            self.prefix_map
-                .insert(prefix.clone(), template.signature.template_name.clone());
-        }
         if let Some(pos) = self
             .templates
             .iter()

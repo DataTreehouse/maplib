@@ -7,8 +7,8 @@ use polars::prelude::{
 };
 use representation::cats::Cats;
 use representation::multitype::{
-    all_multi_cols, all_multi_main_cols, convert_lf_col_to_multitype,
-    force_convert_multicol_to_single_col, nest_multicolumns, unnest_multicols,
+    all_multi_cols, all_multi_main_cols, force_convert_multicol_to_single_col, nest_multicolumns,
+    unnest_multicols,
 };
 use representation::solution_mapping::SolutionMappings;
 use representation::{BaseRDFNodeType, RDFNodeState};
@@ -270,7 +270,7 @@ fn create_join_compatible_cats(
                 right_state
                     .map
                     .iter()
-                    .filter(|(t, s)| !left_state.map.contains_key(*t))
+                    .filter(|(t, _)| !left_state.map.contains_key(*t))
                     .map(|(x, y)| (x.clone(), y.clone())),
             );
             state_map.insert(c.clone(), RDFNodeState::from_map(new_bases));

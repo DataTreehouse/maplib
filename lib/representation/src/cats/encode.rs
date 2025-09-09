@@ -4,7 +4,6 @@ use super::{
 };
 use crate::solution_mapping::{BaseCatState, EagerSolutionMappings};
 use crate::{BaseRDFNodeType, RDFNodeState, OBJECT_COL_NAME, SUBJECT_COL_NAME};
-use oxrdf::vocab::xsd;
 use oxrdf::NamedNode;
 use polars::frame::DataFrame;
 use polars::prelude::{col, lit, IntoLazy, Series};

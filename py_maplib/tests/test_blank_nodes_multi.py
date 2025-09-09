@@ -3,7 +3,7 @@ import pytest
 import rdflib
 from polars.testing import assert_frame_equal
 import pathlib
-from maplib import Mapping, RDFType
+from maplib import Model, RDFType
 
 pl.Config.set_fmt_str_lengths(300)
 
@@ -12,7 +12,7 @@ TESTDATA_PATH = PATH_HERE / "testdata"
 
 
 @pytest.fixture(scope="function")
-def blank_person_mapping():
+def blank_person_model() -> Model:
     # The following example comes from https://primer.ottr.xyz/01-basics.html
 
     doc = """
@@ -33,7 +33,8 @@ def blank_person_mapping():
       ottr:Triple(_:person, foaf:mbox, ?email )
     } .
     """
-    m = Mapping([doc])
+    m = Model()
+    m.add_template(doc)
     df = pl.DataFrame(
         {
             "firstName": ["Ann", "Bob"],
@@ -41,13 +42,13 @@ def blank_person_mapping():
             "email": ["mailto:ann.strong@example.com", "mailto:bob.brite@example.com"],
         }
     )
-    m.expand("ex:Person", df)
+    m.map("ex:Person", df)
     return m
 
 
 @pytest.mark.parametrize("streaming", [True, False])
-def test_simple_query_no_error(blank_person_mapping, streaming):
-    qres = blank_person_mapping.query(
+def test_simple_query_no_error(blank_person_model, streaming):
+    qres = blank_person_model.query(
         """
         PREFIX foaf:<http://xmlns.com/foaf/0.1/>
 
@@ -67,8 +68,8 @@ def test_simple_query_no_error(blank_person_mapping, streaming):
     assert_frame_equal(qres, expected_df)
 
 
-def test_simple_query_blank_node_output_no_error(blank_person_mapping):
-    blank_person_mapping.write_ntriples("out.nt")
+def test_simple_query_blank_node_output_no_error(blank_person_model):
+    blank_person_model.write("out.nt", format="ntriples")
     gr = rdflib.Graph()
     gr.parse("out.nt", format="ntriples")
     res = gr.query(
@@ -86,8 +87,8 @@ def test_simple_query_blank_node_output_no_error(blank_person_mapping):
 
 
 @pytest.mark.parametrize("streaming", [True, False])
-def test_multi_datatype_query_no_error(blank_person_mapping, streaming):
-    sm = blank_person_mapping.query(
+def test_multi_datatype_query_no_error(blank_person_model, streaming):
+    sm = blank_person_model.query(
         """
         PREFIX foaf:<http://xmlns.com/foaf/0.1/>
 
@@ -114,8 +115,8 @@ def test_multi_datatype_query_no_error(blank_person_mapping, streaming):
 
 
 @pytest.mark.parametrize("streaming", [True, False])
-def test_multi_datatype_union_query_no_error(blank_person_mapping, streaming):
-    res = blank_person_mapping.query(
+def test_multi_datatype_union_query_no_error(blank_person_model, streaming):
+    res = blank_person_model.query(
         """
         PREFIX foaf:<http://xmlns.com/foaf/0.1/>
 
@@ -137,8 +138,8 @@ def test_multi_datatype_union_query_no_error(blank_person_mapping, streaming):
 
 
 @pytest.mark.parametrize("streaming", [True, False])
-def test_multi_datatype_union_sort_query(blank_person_mapping, streaming):
-    df = blank_person_mapping.query(
+def test_multi_datatype_union_sort_query(blank_person_model, streaming):
+    df = blank_person_model.query(
         """
         PREFIX foaf:<http://xmlns.com/foaf/0.1/>
 
@@ -158,8 +159,8 @@ def test_multi_datatype_union_sort_query(blank_person_mapping, streaming):
 
 
 @pytest.mark.parametrize("streaming", [True, False])
-def test_multi_datatype_union_sort_desc1_query(blank_person_mapping, streaming):
-    df = blank_person_mapping.query(
+def test_multi_datatype_union_sort_desc1_query(blank_person_model, streaming):
+    df = blank_person_model.query(
         """
         PREFIX foaf:<http://xmlns.com/foaf/0.1/>
 
@@ -179,8 +180,8 @@ def test_multi_datatype_union_sort_desc1_query(blank_person_mapping, streaming):
 
 
 @pytest.mark.parametrize("streaming", [True, False])
-def test_multi_datatype_union_query_native_df(blank_person_mapping, streaming):
-    res = blank_person_mapping.query(
+def test_multi_datatype_union_query_native_df(blank_person_model, streaming):
+    res = blank_person_model.query(
         """
         PREFIX foaf:<http://xmlns.com/foaf/0.1/>
 
@@ -204,8 +205,8 @@ def test_multi_datatype_union_query_native_df(blank_person_mapping, streaming):
 
 
 @pytest.mark.parametrize("streaming", [True, False])
-def test_multi_datatype_left_join_query_no_error(blank_person_mapping, streaming):
-    res = blank_person_mapping.query(
+def test_multi_datatype_left_join_query_no_error(blank_person_model, streaming):
+    res = blank_person_model.query(
         """
         PREFIX foaf:<http://xmlns.com/foaf/0.1/>
 
@@ -227,8 +228,8 @@ def test_multi_datatype_left_join_query_no_error(blank_person_mapping, streaming
 
 
 @pytest.mark.parametrize("streaming", [True, False])
-def test_multi_datatype_join_query_two_vars_no_error(blank_person_mapping, streaming):
-    res = blank_person_mapping.query(
+def test_multi_datatype_join_query_two_vars_no_error(blank_person_model, streaming):
+    res = blank_person_model.query(
         """
         PREFIX foaf:<http://xmlns.com/foaf/0.1/>
 
@@ -252,8 +253,8 @@ def test_multi_datatype_join_query_two_vars_no_error(blank_person_mapping, strea
 
 
 @pytest.mark.parametrize("streaming", [True, False])
-def test_multi_datatype_join_query_no_error(blank_person_mapping, streaming):
-    res = blank_person_mapping.query(
+def test_multi_datatype_join_query_no_error(blank_person_model, streaming):
+    res = blank_person_model.query(
         """
         PREFIX foaf:<http://xmlns.com/foaf/0.1/>
 
@@ -277,8 +278,8 @@ def test_multi_datatype_join_query_no_error(blank_person_mapping, streaming):
 
 
 @pytest.mark.parametrize("streaming", [True, False])
-def test_multi_datatype_query_sorting_sorting(blank_person_mapping, streaming):
-    res = blank_person_mapping.query(
+def test_multi_datatype_query_sorting_sorting(blank_person_model, streaming):
+    res = blank_person_model.query(
         """
         PREFIX foaf:<http://xmlns.com/foaf/0.1/>
 

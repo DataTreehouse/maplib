@@ -2,7 +2,7 @@ import polars as pl
 import pytest
 
 from maplib import (
-    Mapping,
+    Model,
     Template,
     IRI,
     Prefix,
@@ -16,7 +16,7 @@ from maplib import (
 from polars.testing import assert_frame_equal
 
 
-def test_create_mapping_from_empty_polars_df():
+def test_create_model_from_empty_polars_df():
     doc = """
     @prefix ex:<http://example.net/ns#>.
     ex:ExampleTemplate [?MyValue] :: {
@@ -25,8 +25,9 @@ def test_create_mapping_from_empty_polars_df():
     """
 
     df = pl.DataFrame({"MyValue": []})
-    mapping = Mapping([doc])
-    mapping.expand("http://example.net/ns#ExampleTemplate", df)
+    model = Model()
+    model.add_template(doc)
+    model.map("http://example.net/ns#ExampleTemplate", df)
 
 
 def test_add_template_instead_of_constructor_df():
@@ -38,13 +39,13 @@ def test_add_template_instead_of_constructor_df():
     """
 
     df = pl.DataFrame({"MyValue": []})
-    mapping = Mapping()
-    mapping.add_template(doc)
-    mapping.expand("http://example.net/ns#ExampleTemplate", df)
+    model = Model()
+    model.add_template(doc)
+    model.map("http://example.net/ns#ExampleTemplate", df)
 
 
 @pytest.mark.parametrize("streaming", [True, False])
-def test_create_mapping_with_optional_value_missing_df(streaming):
+def test_create_model_with_optional_value_missing_df(streaming):
     doc = """
     @prefix ex:<http://example.net/ns#>.
     ex:ExampleTemplate [?MyValue, ??MyOtherValue] :: {
@@ -54,9 +55,10 @@ def test_create_mapping_with_optional_value_missing_df(streaming):
     """
 
     df = pl.DataFrame({"MyValue": ["A"]})
-    mapping = Mapping([doc])
-    mapping.expand("http://example.net/ns#ExampleTemplate", df)
-    qres = mapping.query(
+    model = Model()
+    model.add_template(doc)
+    model.map("http://example.net/ns#ExampleTemplate", df)
+    qres = model.query(
         """
     PREFIX ex:<http://example.net/ns#>
     
@@ -73,7 +75,7 @@ def test_create_mapping_with_optional_value_missing_df(streaming):
     )
     assert_frame_equal(qres, expected_df)
 
-    qres = mapping.query(
+    qres = model.query(
         """
         PREFIX ex:<http://example.net/ns#>
         
@@ -87,9 +89,9 @@ def test_create_mapping_with_optional_value_missing_df(streaming):
 
 
 @pytest.mark.parametrize("streaming", [True, False])
-def test_create_programmatic_mapping_with_optional_value_missing_df(streaming):
+def test_create_programmatic_model_with_optional_value_missing_df(streaming):
     df = pl.DataFrame({"MyValue": ["A"]})
-    mapping = Mapping()
+    model = Model()
     ex = Prefix("http://example.net/ns#")
     my_value = Variable("MyValue")
     my_other_value = Variable("MyOtherValue")
@@ -102,8 +104,8 @@ def test_create_programmatic_mapping_with_optional_value_missing_df(streaming):
             Triple(my_object, ex.suf("hasOtherValue"), my_other_value),
         ],
     )
-    mapping.expand(template, df)
-    qres = mapping.query(
+    model.map(template, df)
+    qres = model.query(
         """
         PREFIX ex:<http://example.net/ns#>
         
@@ -120,7 +122,7 @@ def test_create_programmatic_mapping_with_optional_value_missing_df(streaming):
     )
     assert_frame_equal(qres, expected_df)
 
-    qres = mapping.query(
+    qres = model.query(
         """
         PREFIX ex:<http://example.net/ns#>
         
@@ -134,10 +136,10 @@ def test_create_programmatic_mapping_with_optional_value_missing_df(streaming):
 
 
 @pytest.mark.parametrize("streaming", [True, False])
-def test_create_programmatic_mapping_with_default(streaming):
+def test_create_programmatic_model_with_default(streaming):
     xsd = XSD()
     df = pl.DataFrame({"MyValue": ["A"]})
-    mapping = Mapping()
+    mapping = Model()
     ex = Prefix("http://example.net/ns#")
     my_value = Variable("MyValue")
     my_other_value = Variable("MyOtherValue")
@@ -158,7 +160,7 @@ def test_create_programmatic_mapping_with_default(streaming):
             Triple(my_object, ex.suf("hasYetAnotherValue"), yet_another_value),
         ],
     )
-    mapping.expand(template, df)
+    mapping.map(template, df)
     qres = mapping.query(
         """
         PREFIX ex:<http://example.net/ns#>
@@ -178,7 +180,7 @@ def test_create_programmatic_mapping_with_default(streaming):
 def test_create_programmatic_mapping_with_nested_default(streaming):
     xsd = XSD()
     df = pl.DataFrame({"MyValue": ["A"]})
-    mapping = Mapping()
+    mapping = Model()
     ex = Prefix("http://example.net/ns#")
     my_value = Variable("MyValue")
     my_other_value = Variable("MyOtherValue")
@@ -205,7 +207,7 @@ def test_create_programmatic_mapping_with_nested_default(streaming):
         [template.instance([my_value, None, None])],
     )
     mapping.add_template(template)
-    mapping.expand(template2, df)
+    mapping.map(template2, df)
     qres = mapping.query(
         """
         PREFIX ex:<http://example.net/ns#>
@@ -225,7 +227,7 @@ def test_create_programmatic_mapping_with_nested_default(streaming):
 def test_create_programmatic_mapping_with_nested_default_and_missing_column(streaming):
     xsd = XSD()
     df = pl.DataFrame({"MyValue": ["A"]})
-    mapping = Mapping()
+    mapping = Model()
     ex = Prefix("http://example.net/ns#")
     my_value = Variable("MyValue")
     my_other_value = Variable("MyOtherValue")
@@ -256,7 +258,7 @@ def test_create_programmatic_mapping_with_nested_default_and_missing_column(stre
         [template.instance([my_value, my_other_value, yet_another_value])],
     )
     mapping.add_template(template)
-    mapping.expand(template2, df)
+    mapping.map(template2, df)
     qres = mapping.query(
         """
         PREFIX ex:<http://example.net/ns#>
@@ -282,7 +284,7 @@ def test_create_programmatic_mapping_with_nested_partial_default(streaming):
             "YetAnotherValue": [None, 321],
         }
     )
-    mapping = Mapping()
+    mapping = Model()
     ex = Prefix("http://example.net/ns#")
     my_value = Variable("MyValue")
     my_other_value = Variable("MyOtherValue")
@@ -313,7 +315,7 @@ def test_create_programmatic_mapping_with_nested_partial_default(streaming):
         [template.instance([my_value, my_other_value, yet_another_value])],
     )
     mapping.add_template(template)
-    mapping.expand(template2, df)
+    mapping.map(template2, df)
     qres = mapping.query(
         """
         PREFIX ex:<http://example.net/ns#>
@@ -339,7 +341,7 @@ def test_create_programmatic_mapping_with_nested_partial_default(streaming):
 def test_create_programmatic_mapping_with_nested_none_optional(streaming):
     xsd = XSD()
     df = pl.DataFrame({"MyValue": ["A", "B"]})
-    mapping = Mapping()
+    mapping = Model()
     ex = Prefix("http://example.net/ns#")
     my_value = Variable("MyValue")
     my_other_value = Variable("MyOtherValue")
@@ -361,7 +363,7 @@ def test_create_programmatic_mapping_with_nested_none_optional(streaming):
         ex.suf("ExampleTemplate2"), [my_value], [template.instance([my_value, None])]
     )
     mapping.add_template(template)
-    mapping.expand(template2, df)
+    mapping.map(template2, df)
     qres = mapping.query(
         """
         PREFIX ex:<http://example.net/ns#>
@@ -392,7 +394,7 @@ def test_create_programmatic_mapping_with_partial_default(streaming):
             "YetAnotherValue": [None, 321],
         }
     )
-    mapping = Mapping()
+    mapping = Model()
     ex = Prefix("http://example.net/ns#")
     my_value = Variable("MyValue")
     my_other_value = Variable("MyOtherValue")
@@ -413,7 +415,7 @@ def test_create_programmatic_mapping_with_partial_default(streaming):
             Triple(my_object, ex.suf("hasYetAnotherValue"), yet_another_value),
         ],
     )
-    mapping.expand(template, df)
+    mapping.map(template, df)
     qres = mapping.query(
         """
         PREFIX ex:<http://example.net/ns#>
@@ -444,8 +446,9 @@ def test_create_mapping_from_empty_signature(streaming):
     } .
     """
 
-    mapping = Mapping([doc])
-    mapping.expand("http://example.net/ns#ExampleTemplate")
+    mapping = Model()
+    mapping.add_template(doc)
+    mapping.map("http://example.net/ns#ExampleTemplate")
     qres = mapping.query(
         """
         PREFIX ex:<http://example.net/ns#>
@@ -475,9 +478,10 @@ def test_uri_subject_query(streaming):
     } .
     """
 
-    mapping = Mapping([doc])
-    mapping.expand("http://example.net/ns#ExampleTemplate")
-    qres = mapping.query(
+    model = Model()
+    model.add_template(doc)
+    model.map("http://example.net/ns#ExampleTemplate")
+    qres = model.query(
         """
         PREFIX ex:<http://example.net/ns#>
 
@@ -492,7 +496,7 @@ def test_uri_subject_query(streaming):
     assert_frame_equal(qres, expected_df)
 
 
-def test_programmatic_mapping():
+def test_programmatic_model():
     example_template = Template(
         iri=IRI("http://example.net/ns#ExampleTemplate"),
         parameters=[],
@@ -505,10 +509,10 @@ def test_programmatic_mapping():
         ],
     )
 
-    mapping = Mapping()
-    mapping.add_template(example_template)
-    mapping.expand("http://example.net/ns#ExampleTemplate")
-    qres = mapping.query(
+    model = Model()
+    model.add_template(example_template)
+    model.map("http://example.net/ns#ExampleTemplate")
+    qres = model.query(
         """
         PREFIX ex:<http://example.net/ns#>
 
@@ -522,7 +526,7 @@ def test_programmatic_mapping():
     assert_frame_equal(qres, expected_df)
 
 
-def test_programmatic_mapping_to_string():
+def test_programmatic_model_to_string():
     ex = Prefix("http://example.net/ns#", prefix_name="ex")
     example_template = Template(
         iri=ex.suf("ExampleTemplate"),
@@ -544,7 +548,7 @@ def test_programmatic_mapping_to_string():
     )
 
 
-def test_programmatic_mapping_with_prefix():
+def test_programmatic_model_with_prefix():
     ex = Prefix("http://example.net/ns#", "ex")
     example_template = Template(
         iri=ex.suf("ExampleTemplate"),
@@ -558,9 +562,9 @@ def test_programmatic_mapping_with_prefix():
         ],
     )
 
-    mapping = Mapping()
-    mapping.expand(example_template)
-    qres = mapping.query(
+    model = Model()
+    model.map(example_template)
+    qres = model.query(
         """
         PREFIX ex:<http://example.net/ns#>
 
@@ -583,10 +587,11 @@ def test_create_and_write_no_bug_string_lit_df():
     """
 
     df = pl.DataFrame({"MyString": ['"!!\n#"', "ABC#123\n\t\r"]})
-    mapping = Mapping([doc])
-    mapping.expand("http://example.net/ns#ExampleTemplate", df)
+    model = Model()
+    model.add_template(doc)
+    model.map("http://example.net/ns#ExampleTemplate", df)
     ntfile = "create_and_write_no_bug_string_lit.nt"
-    mapping.write_ntriples(ntfile)
+    model.write(ntfile, format="ntriples")
     with open(ntfile) as f:
         lines = f.readlines()
 
@@ -606,10 +611,11 @@ def test_create_and_write_no_bug_bool_lit_df():
     """
 
     df = pl.DataFrame({"MyBool": [True, False]})
-    mapping = Mapping([doc])
-    mapping.expand("http://example.net/ns#ExampleTemplate", df)
+    model = Model()
+    model.add_template(doc)
+    model.map("http://example.net/ns#ExampleTemplate", df)
     ntfile = "create_and_write_no_bug_bool_lit.nt"
-    mapping.write_ntriples(ntfile)
+    model.write(ntfile, format="ntriples")
     with open(ntfile) as f:
         lines = f.readlines()
 
@@ -621,13 +627,13 @@ def test_create_and_write_no_bug_bool_lit_df():
 
 
 def test_create_and_write_no_bug_lang_string_lit_df():
-    mapping = Mapping()
-    mapping.read_triples_string(
+    model = Model()
+    model.reads(
         '<http://example.net/ns#myObject> <http://example.net/ns#hasValue> "HELLO!!"@en .',
         format="ntriples",
     )
     ntfile = "create_and_write_no_bug_string_lit.nt"
-    mapping.write_ntriples(ntfile)
+    model.write(ntfile, format="ntriples")
     with open(ntfile) as f:
         lines = f.readlines()
 
@@ -649,9 +655,10 @@ def test_nested_template_empty_list():
    <http://example.net/ns#ExampleNestedTemplate>((1,2))
 } . 
     """
-    mapping = Mapping(templates)
-    mapping.expand("http://example.net/ns#ExampleTemplate")
-    r = mapping.query(
+    model = Model()
+    model.add_template(templates)
+    model.map("http://example.net/ns#ExampleTemplate")
+    r = model.query(
         """
     SELECT ?a ?b ?c WHERE {
         ?a ?b ?c
@@ -663,7 +670,7 @@ def test_nested_template_empty_list():
 
 
 def test_bool_func():
-    m = Mapping([])
+    m = Model()
     df = m.query(
         """
     PREFIX : <http://example.net/> 
@@ -677,7 +684,7 @@ def test_bool_func():
     assert_frame_equal(df, pl.DataFrame({"a": ["true"]}))
 
 
-def test_expand_triples():
+def test_map_triples():
     df = pl.DataFrame(
         {
             "subject": [
@@ -693,9 +700,9 @@ def test_expand_triples():
         }
     )
     types = {"subject": RDFType.IRI(), "object": RDFType.IRI()}
-    verb = "http://example.net/ns#hasRel"
-    m = Mapping()
-    m.expand_triples(df, types=types, verb=verb)
+    predicate = "http://example.net/ns#hasRel"
+    m = Model()
+    m.map_triples(df, types=types, predicate=predicate)
     df = m.query(
         """
     SELECT ?a ?b ?c WHERE {?a ?b ?c} ORDER BY ?a ?b ?c
@@ -717,7 +724,7 @@ def test_expand_triples():
     assert_frame_equal(df, expected)
 
 
-def test_expand_default_triples():
+def test_map_default_triples():
     df = pl.DataFrame(
         {
             "subject": [
@@ -732,8 +739,8 @@ def test_expand_default_triples():
             ],
         }
     )
-    m = Mapping()
-    tpl = m.expand_default(df, primary_key_column="subject")
+    m = Model()
+    tpl = m.map_default(df, primary_key_column="subject")
     # print(tpl)
     df = m.query(
         """
@@ -756,7 +763,7 @@ def test_expand_default_triples():
     assert_frame_equal(df, expected)
 
 
-def test_expand_default_triples_non_iri_object():
+def test_map_default_triples_non_iri_object():
     df = pl.DataFrame(
         {
             "subject": [
@@ -771,8 +778,8 @@ def test_expand_default_triples_non_iri_object():
             ],
         }
     )
-    m = Mapping()
-    tpl = m.expand_default(df, primary_key_column="subject")
+    m = Model()
+    tpl = m.map_default(df, primary_key_column="subject")
     # print(tpl)
     df = m.query(
         """
@@ -795,7 +802,7 @@ def test_expand_default_triples_non_iri_object():
     assert_frame_equal(df, expected)
 
 
-def test_expand_generated_default_triples_non_iri_object():
+def test_map_generated_default_triples_non_iri_object():
     df = pl.DataFrame(
         {
             "subject": [
@@ -810,11 +817,11 @@ def test_expand_generated_default_triples_non_iri_object():
             ],
         }
     )
-    m = Mapping()
+    m = Model()
     tpl = """<urn:maplib_default:default_template_0> [ <http://ns.ottr.xyz/0.4/IRI> ?subject,  <http://www.w3.org/2001/XMLSchema#string> ?object ] :: {
                 ottr:Triple(?subject,<urn:maplib_default:object>,?object)
             } . """
-    m.expand(tpl, df)
+    m.map(tpl, df)
     df = m.query(
         """
     SELECT ?a ?b ?c WHERE {?a ?b ?c} ORDER BY ?a ?b ?c
@@ -855,9 +862,10 @@ def test_list_expansion_correct():
   ottr:Triple(?MySubject,<http://example.net/ns#hasValueList>,?MyValue)
 } . 
     """
-    mapping = Mapping(templates)
-    mapping.expand("http://example.net/ns#ExampleTemplate", df)
-    df = mapping.query(
+    model = Model()
+    model.add_template(templates)
+    model.map("http://example.net/ns#ExampleTemplate", df)
+    df = model.query(
         """
     PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> 
     SELECT ?a ?e1 ?e2 ?e3 WHERE {

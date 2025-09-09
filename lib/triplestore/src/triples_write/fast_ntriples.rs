@@ -20,7 +20,7 @@ const DATA_TYPE_SEP_CHARS: [u8; 2] = [b'^', b'^'];
 pub(crate) fn write_triples_in_df<W: Write>(
     writer: &mut W,
     df: &DataFrame,
-    verb: &[u8],
+    predicate: &[u8],
     rdf_node_types: &HashMap<String, BaseRDFNodeType>,
     chunk_size: usize,
     n_threads: usize,
@@ -104,7 +104,7 @@ pub(crate) fn write_triples_in_df<W: Write>(
             for _ in 0..len {
                 serializers[0].serialize(write_buffer);
                 write_buffer.push(SEPARATOR);
-                write_buffer.extend_from_slice(verb);
+                write_buffer.extend_from_slice(predicate);
                 write_buffer.push(SEPARATOR);
                 for (serializer, suffix_use) in serializers[1..].iter_mut().zip(&use_suffix[1..]) {
                     serializer.serialize(write_buffer);

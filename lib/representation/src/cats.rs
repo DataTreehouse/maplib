@@ -14,12 +14,12 @@ pub use split::*;
 
 use crate::BaseRDFNodeType;
 use nohash_hasher::NoHashHasher;
+use oxrdf::vocab::xsd;
 use oxrdf::{NamedNode, NamedNodeRef};
 use polars::prelude::DataFrame;
 use std::collections::{BTreeMap, HashMap};
 use std::hash::BuildHasherDefault;
 use std::sync::Arc;
-use oxrdf::vocab::xsd;
 use uuid::Uuid;
 
 const SUBJECT_PREFIX_COL_NAME: &str = "subject_prefix";
@@ -28,7 +28,7 @@ const OBJECT_PREFIX_COL_NAME: &str = "object_prefix";
 pub const OBJECT_RANK_COL_NAME: &str = "object_rank";
 pub const SUBJECT_RANK_COL_NAME: &str = "subject_rank";
 
-pub fn literal_is_cat(nn:NamedNodeRef) -> bool {
+pub fn literal_is_cat(nn: NamedNodeRef) -> bool {
     nn == xsd::STRING
 }
 

@@ -30,7 +30,7 @@ use triplestore::{IndexingOptions, NewTriples, Triplestore};
 #[cfg(feature = "pyo3")]
 use pyo3::Python;
 
-pub struct Mapping {
+pub struct Model {
     pub template_dataset: TemplateDataset,
     pub base_triplestore: Triplestore,
     pub triplestores_map: HashMap<NamedNode, Triplestore>,
@@ -41,14 +41,14 @@ pub struct Mapping {
 }
 
 #[derive(Clone, Default)]
-pub struct ExpandOptions {
+pub struct MapOptions {
     pub graph: Option<NamedNode>,
     pub validate_iris: bool,
 }
 
-impl ExpandOptions {
+impl MapOptions {
     pub fn from_args(graph: Option<NamedNode>, validate_iris: Option<bool>) -> Self {
-        ExpandOptions {
+        MapOptions {
             graph,
             validate_iris: validate_iris.unwrap_or(true),
         }
@@ -67,15 +67,12 @@ struct StaticColumn {
     ptype: Option<PType>,
 }
 
-#[derive(Debug, PartialEq)]
-pub struct MappingReport {}
-
-impl Mapping {
+impl Model {
     pub fn new(
-        template_dataset: &TemplateDataset,
+        template_dataset: Option<&TemplateDataset>,
         storage_folder: Option<String>,
         indexing: Option<IndexingOptions>,
-    ) -> Result<Mapping, MaplibError> {
+    ) -> Result<Model, MaplibError> {
         #[allow(clippy::match_single_binding)]
         match env_logger::try_init() {
             _ => {}
@@ -95,8 +92,13 @@ impl Mapping {
         } else {
             indexing.unwrap_or_default()
         };
-        Ok(Mapping {
-            template_dataset: template_dataset.clone(),
+        let template_dataset = if let Some(template_dataset) = template_dataset {
+            template_dataset.clone()
+        } else {
+            TemplateDataset::new_empty()?
+        };
+        Ok(Model {
+            template_dataset,
             base_triplestore: Triplestore::new(storage_folder, Some(indexing.clone()))
                 .map_err(MaplibError::TriplestoreError)?,
             triplestores_map: Default::default(),
@@ -111,50 +113,48 @@ impl Mapping {
         path: P,
         recursive: bool,
         storage_folder: Option<String>,
-    ) -> Result<Mapping, MaplibError> {
+    ) -> Result<Model, MaplibError> {
         let dataset =
             TemplateDataset::from_folder(path, recursive).map_err(MaplibError::TemplateError)?;
-        Mapping::new(&dataset, storage_folder, None)
+        Model::new(Some(&dataset), storage_folder, None)
     }
 
     pub fn from_file<P: AsRef<Path>>(
         path: P,
         storage_folder: Option<String>,
-    ) -> Result<Mapping, MaplibError> {
+    ) -> Result<Model, MaplibError> {
         let dataset = TemplateDataset::from_file(path).map_err(MaplibError::TemplateError)?;
-        Mapping::new(&dataset, storage_folder, None)
+        Model::new(Some(&dataset), storage_folder, None)
     }
 
-    pub fn from_str(s: &str, storage_folder: Option<String>) -> Result<Mapping, MaplibError> {
+    pub fn from_str(s: &str, storage_folder: Option<String>) -> Result<Model, MaplibError> {
         let doc = document_from_str(s)?;
         let dataset =
             TemplateDataset::from_documents(vec![doc]).map_err(MaplibError::TemplateError)?;
-        Mapping::new(&dataset, storage_folder, None)
+        Model::new(Some(&dataset), storage_folder, None)
     }
 
-    pub fn from_strs(
-        ss: Vec<&str>,
-        storage_folder: Option<String>,
-    ) -> Result<Mapping, MaplibError> {
+    pub fn from_strs(ss: Vec<&str>, storage_folder: Option<String>) -> Result<Model, MaplibError> {
         let mut docs = vec![];
         for s in ss {
             let doc = document_from_str(s)?;
             docs.push(doc);
         }
         let dataset = TemplateDataset::from_documents(docs).map_err(MaplibError::TemplateError)?;
-        Mapping::new(&dataset, storage_folder, None)
+        Model::new(Some(&dataset), storage_folder, None)
     }
 
     pub fn add_template(&mut self, template: Template) -> Result<(), MaplibError> {
         self.template_dataset
             .add_template(template)
             .map_err(MaplibError::TemplateError)?;
+        println!("Self map {:?}", self.template_dataset.prefix_map);
         Ok(())
     }
 
     pub fn add_templates_from_string(&mut self, s: &str) -> Result<Option<NamedNode>, MaplibError> {
         let doc = document_from_str(s).map_err(MaplibError::TemplateError)?;
-        let dataset =
+        let mut dataset =
             TemplateDataset::from_documents(vec![doc]).map_err(MaplibError::TemplateError)?;
         let return_template_iri = if !dataset.templates.is_empty() {
             Some(
@@ -169,9 +169,13 @@ impl Mapping {
         } else {
             None
         };
+        self.template_dataset
+            .prefix_map
+            .extend(dataset.prefix_map.drain());
         for t in dataset.templates {
             self.add_template(t)?
         }
+
         Ok(return_template_iri)
     }
 
@@ -197,7 +201,7 @@ impl Mapping {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub fn read_triples_string(
+    pub fn reads(
         &mut self,
         s: &str,
         rdf_format: RdfFormat,

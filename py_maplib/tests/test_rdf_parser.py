@@ -3,7 +3,7 @@ import pytest
 import rdflib
 from polars.testing import assert_frame_equal
 import pathlib
-from maplib import Mapping
+from maplib import Model
 
 pl.Config.set_fmt_str_lengths(300)
 
@@ -12,8 +12,8 @@ TESTDATA_PATH = PATH_HERE / "testdata" / "rdf_parser"
 
 
 def test_issue_8():
-    m = Mapping()
-    m.read_triples(TESTDATA_PATH / "date_panic.nt", format="ntriples")
+    m = Model()
+    m.read(TESTDATA_PATH / "date_panic.nt", format="ntriples")
     df = m.query("""SELECT ?c WHERE {?a ?b ?c}""", native_dataframe=True)
     expected = pl.from_repr(
         """

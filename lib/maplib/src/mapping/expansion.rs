@@ -1,6 +1,6 @@
 pub mod validation;
 
-use super::{ExpandOptions, Mapping, MappingReport, OTTRTripleInstance, StaticColumn};
+use super::{MapOptions, Model, OTTRTripleInstance, StaticColumn};
 use crate::errors::MaplibError;
 use crate::mapping::constant_terms::{constant_blank_node_to_series, constant_to_expr};
 use crate::mapping::errors::MappingError;
@@ -34,14 +34,14 @@ const FIRST_COL: &str = "first";
 
 const REST_COL: &str = "rest";
 
-impl Mapping {
+impl Model {
     pub fn expand_triples(
         &mut self,
         mut df: DataFrame,
         mapping_column_types: Option<HashMap<String, MappingColumnType>>,
         verb: Option<NamedNode>,
-        expand_options: ExpandOptions,
-    ) -> Result<MappingReport, MaplibError> {
+        expand_options: MapOptions,
+    ) -> Result<(), MaplibError> {
         if let Some(verb) = verb {
             df = df
                 .lazy()
@@ -59,8 +59,8 @@ impl Mapping {
         template: &str,
         df: Option<DataFrame>,
         mapping_column_types: Option<HashMap<String, MappingColumnType>>,
-        options: ExpandOptions,
-    ) -> Result<MappingReport, MaplibError> {
+        options: MapOptions,
+    ) -> Result<(), MaplibError> {
         if !self.template_dataset.inferred_types {
             self.template_dataset.infer_types()?;
         }
@@ -68,7 +68,7 @@ impl Mapping {
         let target_template = self.resolve_template(template)?.clone();
         let target_template_name = target_template.signature.template_name.as_str().to_string();
 
-        let ExpandOptions {
+        let MapOptions {
             graph,
             validate_iris,
         } = options;
@@ -105,7 +105,7 @@ impl Mapping {
         )?;
         self.process_results(result_vec, new_blank_node_counter, &graph)?;
         debug!("Expansion took {} seconds", now.elapsed().as_secs_f32());
-        Ok(MappingReport {})
+        Ok(())
     }
 
     #[allow(clippy::too_many_arguments)]

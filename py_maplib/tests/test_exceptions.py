@@ -1,10 +1,10 @@
 import pytest
-from maplib import Mapping
+from maplib import Model
 from maplib import MaplibException
 
 
-def test_mapping_exception():
-    m = Mapping()
+def test_model_exception():
+    m = Model()
 
     with pytest.raises(MaplibException) as e:
-        m.read_triples_string("abc", format="turtle", graph="http://example.com/data")
+        m.reads("abc", format="turtle", graph="http://example.com/data")

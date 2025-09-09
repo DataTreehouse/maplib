@@ -2,7 +2,7 @@ import polars as pl
 import pytest
 
 from maplib import (
-    Mapping,
+    Model,
     Template,
     IRI,
     Prefix,
@@ -19,7 +19,7 @@ from polars.testing import assert_frame_equal
 def test_want_float_got_int64():
     xsd = XSD()
     df = pl.DataFrame({"MyValue": [1]})
-    mapping = Mapping()
+    model = Model()
     ex = Prefix("http://example.net/ns#")
     my_value = Variable("MyValue")
     my_object = ex.suf("MyObject")
@@ -31,12 +31,12 @@ def test_want_float_got_int64():
         ],
     )
     with pytest.raises(Exception):
-        mapping.expand(template, df)
+        model.map(template, df)
 
 
 def test_want_rdfs_literal_got_int64():
     df = pl.DataFrame({"MyValue": [1]})
-    mapping = Mapping()
+    model = Model()
     ex = Prefix("http://example.net/ns#")
     my_value = Variable("MyValue")
     my_object = ex.suf("MyObject")
@@ -54,8 +54,8 @@ def test_want_rdfs_literal_got_int64():
             Triple(my_object, ex.suf("hasValue"), my_value),
         ],
     )
-    mapping.expand(template, df)
-    r = mapping.query(
+    model.map(template, df)
+    r = model.query(
         """
     SELECT ?a ?b ?c WHERE {
         ?a ?b ?c
@@ -68,7 +68,7 @@ def test_want_rdfs_literal_got_int64():
 
 def test_want_rdfs_resource_got_int64():
     df = pl.DataFrame({"MyValue": [1]})
-    mapping = Mapping()
+    model = Model()
     ex = Prefix("http://example.net/ns#")
     my_value = Variable("MyValue")
     my_object = ex.suf("MyObject")
@@ -86,8 +86,8 @@ def test_want_rdfs_resource_got_int64():
             Triple(my_object, ex.suf("hasValue"), my_value),
         ],
     )
-    mapping.expand(template, df)
-    r = mapping.query(
+    model.map(template, df)
+    r = model.query(
         """
     SELECT ?a ?b ?c WHERE {
         ?a ?b ?c
@@ -101,7 +101,7 @@ def test_want_rdfs_resource_got_int64():
 def test_want_xsd_int_got_xsd_boolean():
     xsd = XSD()
     df = pl.DataFrame({"MyValue": [True]})
-    mapping = Mapping()
+    model = Model()
     ex = Prefix("http://example.net/ns#")
     my_value = Variable("MyValue")
     my_object = ex.suf("MyObject")
@@ -113,13 +113,13 @@ def test_want_xsd_int_got_xsd_boolean():
         ],
     )
     with pytest.raises(Exception):
-        mapping.expand(template, df)
+        model.map(template, df)
 
 
 def test_autoconverted_datetime_to_date():
     xsd = XSD()
     df = pl.DataFrame({"MyValue": ["2020-02-02T00:00:00Z"]}).cast(pl.Datetime("ns"))
-    mapping = Mapping()
+    model = Model()
     ex = Prefix("http://example.net/ns#")
     my_value = Variable("MyValue")
     my_object = ex.suf("MyObject")
@@ -130,8 +130,8 @@ def test_autoconverted_datetime_to_date():
             Triple(my_object, ex.suf("hasValue"), my_value),
         ],
     )
-    mapping.expand(template, df)
-    r = mapping.query(
+    model.map(template, df)
+    r = model.query(
         """
     SELECT ?a ?b ?c WHERE {
         ?a ?b ?c
@@ -145,7 +145,7 @@ def test_autoconverted_datetime_to_date():
 def test_autoconverted_optional_datetime_to_date():
     xsd = XSD()
     df = pl.DataFrame({"MyValue": ["2020-02-02T00:00:00Z"]}).cast(pl.Datetime("ns"))
-    mapping = Mapping()
+    model = Model()
     ex = Prefix("http://example.net/ns#")
     my_value = Variable("MyValue")
     my_other_value = Variable("MyOtherValue")
@@ -162,8 +162,8 @@ def test_autoconverted_optional_datetime_to_date():
             Triple(my_object, ex.suf("hasValue"), my_value),
         ],
     )
-    mapping.expand(template, df)
-    r = mapping.query(
+    model.map(template, df)
+    r = model.query(
         """
     SELECT ?a ?b ?c WHERE {
         ?a ?b ?c
@@ -179,7 +179,7 @@ def test_autoconverted_datetime_list_to_date_list_1():
     df = pl.DataFrame({"MyValue": [["2020-02-02T00:00:00Z"]]}).cast(
         pl.List(pl.Datetime("ns"))
     )
-    mapping = Mapping()
+    model = Model()
     ex = Prefix("http://example.net/ns#")
     my_value = Variable("MyValue")
     my_object = ex.suf("MyObject")
@@ -190,8 +190,8 @@ def test_autoconverted_datetime_list_to_date_list_1():
             Triple(my_object, ex.suf("hasValue"), my_value),
         ],
     )
-    mapping.expand(template, df)
-    r = mapping.query(
+    model.map(template, df)
+    r = model.query(
         """
     SELECT ?a ?b ?c WHERE {
         ?a ?b ?c
@@ -213,7 +213,7 @@ def test_autoconverted_datetime_list_to_date_list_2():
     df = pl.DataFrame({"MyValue": [["2020-02-02T00:00:00Z"]]}).cast(
         pl.List(pl.Datetime("ns"))
     )
-    mapping = Mapping()
+    model = Model()
     ex = Prefix("http://example.net/ns#")
     my_value = Variable("MyValue")
     my_object = ex.suf("MyObject")
@@ -229,8 +229,8 @@ def test_autoconverted_datetime_list_to_date_list_2():
             ),
         ],
     )
-    mapping.expand(template, df)
-    r = mapping.query(
+    model.map(template, df)
+    r = model.query(
         """
     SELECT ?a ?b ?c WHERE {
         ?a ?b ?c
@@ -245,7 +245,7 @@ def test_want_xsd_long_got_xsd_short():
     xsd = XSD()
     df = pl.DataFrame({"MyValue": [1]})
     df = df.with_columns(pl.col("MyValue").cast(pl.Int16))
-    mapping = Mapping()
+    model = Model()
     ex = Prefix("http://example.net/ns#")
     my_value = Variable("MyValue")
     my_object = ex.suf("MyObject")
@@ -256,8 +256,8 @@ def test_want_xsd_long_got_xsd_short():
             Triple(my_object, ex.suf("hasValue"), my_value),
         ],
     )
-    mapping.expand(template, df)
-    r = mapping.query(
+    model.map(template, df)
+    r = model.query(
         """
     SELECT ?a ?b ?c WHERE {
         ?a ?b ?c
@@ -280,9 +280,10 @@ def test_nested_template_more_general():
   <http://example.net/ns#ExampleNestedTemplate>(?MyValue)
 } . 
     """
-    mapping = Mapping(templates)
-    mapping.expand("http://example.net/ns#ExampleTemplate", df)
-    r = mapping.query(
+    model = Model()
+    model.add_template(templates)
+    model.map("http://example.net/ns#ExampleTemplate", df)
+    r = model.query(
         """
     SELECT ?a ?b ?c WHERE {
         ?a ?b ?c
@@ -306,8 +307,8 @@ def test_nested_template_not_found():
 } . 
     """
     with pytest.raises(Exception):
-        m = Mapping(templates)
-        m.expand("http://example.net/ns#ExampleTemplate", df)
+        m = Model(templates)
+        m.map("http://example.net/ns#ExampleTemplate", df)
 
 
 def test_nested_template_more_specific():
@@ -322,9 +323,10 @@ def test_nested_template_more_specific():
   <http://example.net/ns#ExampleNestedTemplate>(?MyValue)
 } . 
     """
-    mapping = Mapping(templates)
-    mapping.expand("http://example.net/ns#ExampleTemplate", df)
-    r = mapping.query(
+    model = Model()
+    model.add_template(templates)
+    model.map("http://example.net/ns#ExampleTemplate", df)
+    r = model.query(
         """
     SELECT ?a ?b ?c WHERE {
         ?a ?b ?c
@@ -348,8 +350,8 @@ def test_nested_template_more_specific_but_is_iri():
 } . 
     """
     with pytest.raises(Exception):
-        m = Mapping(templates)
-        m.expand("http://example.net/ns#ExampleTemplate", df)
+        m = Model(templates)
+        m.map("http://example.net/ns#ExampleTemplate", df)
 
 
 def test_nested_template_more_general_but_is_iri():
@@ -366,8 +368,8 @@ def test_nested_template_more_general_but_is_iri():
 } . 
     """
     with pytest.raises(Exception):
-        m = Mapping(templates)
-        m.expand("http://example.net/ns#ExampleTemplate", df)
+        m = Model(templates)
+        m.map("http://example.net/ns#ExampleTemplate", df)
 
 
 def test_nested_template_both_general_but_always_incompatible():
@@ -384,8 +386,8 @@ def test_nested_template_both_general_but_always_incompatible():
 } . 
     """
     with pytest.raises(Exception):
-        m = Mapping(templates)
-        m.expand("http://example.net/ns#ExampleTemplate", df)
+        m = Model(templates)
+        m.map("http://example.net/ns#ExampleTemplate", df)
 
 
 def test_nested_template_both_are_general_literal_and_compatible():
@@ -401,9 +403,10 @@ def test_nested_template_both_are_general_literal_and_compatible():
   <http://example.net/ns#ExampleNestedTemplate>(?MyValue)
 } . 
     """
-    mapping = Mapping(templates)
-    mapping.expand("http://example.net/ns#ExampleTemplate", df)
-    r = mapping.query(
+    model = Model()
+    model.add_template(templates)
+    model.map("http://example.net/ns#ExampleTemplate", df)
+    r = model.query(
         """
     SELECT ?a ?b ?c WHERE {
         ?a ?b ?c
@@ -427,9 +430,10 @@ def test_nested_template_both_are_general_literal_and_compatible_2():
   <http://example.net/ns#ExampleNestedTemplate>(?MyValue)
 } . 
     """
-    mapping = Mapping(templates)
-    mapping.expand("http://example.net/ns#ExampleTemplate", df)
-    r = mapping.query(
+    model = Model()
+    model.add_template(templates)
+    model.map("http://example.net/ns#ExampleTemplate", df)
+    r = model.query(
         """
     SELECT ?a ?b ?c WHERE {
         ?a ?b ?c
@@ -453,9 +457,10 @@ def test_nested_template_both_are_general_literal_and_possibly_but_not_necessari
   <http://example.net/ns#ExampleNestedTemplate>(?MyValue)
 } . 
     """
-    mapping = Mapping(templates)
-    mapping.expand("http://example.net/ns#ExampleTemplate", df)
-    r = mapping.query(
+    model = Model()
+    model.add_template(templates)
+    model.map("http://example.net/ns#ExampleTemplate", df)
+    r = model.query(
         """
     SELECT ?a ?b ?c WHERE {
         ?a ?b ?c
@@ -479,9 +484,10 @@ def test_nested_template_both_are_general_and_possibly_but_not_necessarily_incom
   <http://example.net/ns#ExampleNestedTemplate>(?MyValue)
 } . 
     """
-    mapping = Mapping(templates)
-    mapping.expand("http://example.net/ns#ExampleTemplate", df)
-    r = mapping.query(
+    model = Model()
+    model.add_template(templates)
+    model.map("http://example.net/ns#ExampleTemplate", df)
+    r = model.query(
         """
     SELECT ?a ?b ?c WHERE {
         ?a ?b ?c
@@ -505,9 +511,10 @@ def test_nested_template_both_are_general_and_compatible_2():
   <http://example.net/ns#ExampleNestedTemplate>(?MyValue)
 } . 
     """
-    mapping = Mapping(templates)
-    mapping.expand("http://example.net/ns#ExampleTemplate", df)
-    r = mapping.query(
+    model = Model()
+    model.add_template(templates)
+    model.map("http://example.net/ns#ExampleTemplate", df)
+    r = model.query(
         """
     SELECT ?a ?b ?c WHERE {
         ?a ?b ?c
@@ -531,9 +538,10 @@ def test_nested_template_both_are_general_and_possibly_but_not_necessarily_incom
   cross | <http://example.net/ns#ExampleNestedTemplate>(++?MyValue)
 } . 
     """
-    mapping = Mapping(templates)
-    mapping.expand("http://example.net/ns#ExampleTemplate", df)
-    r = mapping.query(
+    model = Model()
+    model.add_template(templates)
+    model.map("http://example.net/ns#ExampleTemplate", df)
+    r = model.query(
         """
     SELECT ?a ?b ?c WHERE {
         ?a ?b ?c
@@ -554,9 +562,10 @@ def test_list_arg_to_ottr_triple_should_get_rdf_representation():
   ottr:Triple(<http://example.net/ns#MyObject>,<http://example.net/ns#hasValueList>,?MyValue)
 } . 
     """
-    mapping = Mapping(templates)
-    mapping.expand("http://example.net/ns#ExampleTemplate", df)
-    r = mapping.query(
+    model = Model()
+    model.add_template(templates)
+    model.map("http://example.net/ns#ExampleTemplate", df)
+    r = model.query(
         """
     SELECT ?a ?b ?c WHERE {
         ?a ?b ?c
@@ -583,9 +592,10 @@ def test_list_arg_to_ottr_triple_should_get_rdf_representation_nested():
     <http://example.net/ns#ExampleNestedTemplate>(<http://example.net/ns#MyObject>,<http://example.net/ns#hasValueList>,?MyValue)
 } . 
     """
-    mapping = Mapping(templates)
-    mapping.expand("http://example.net/ns#ExampleTemplate", df)
-    r = mapping.query(
+    model = Model()
+    model.add_template(templates)
+    model.map("http://example.net/ns#ExampleTemplate", df)
+    r = model.query(
         """
     SELECT ?a ?b ?c WHERE {
         ?a ?b ?c
@@ -610,10 +620,11 @@ def test_list_arg_to_ottr_triple_should_get_rdf_representation_multiple_executio
   ottr:Triple(<http://example.net/ns#MyObject>,<http://example.net/ns#hasValueList>,?MyValue)
 } . 
     """
-    mapping = Mapping(templates)
-    mapping.expand("http://example.net/ns#ExampleTemplate", df1)
-    mapping.expand("http://example.net/ns#ExampleTemplate", df2)
-    r = mapping.query(
+    model = Model()
+    model.add_template(templates)
+    model.map("http://example.net/ns#ExampleTemplate", df1)
+    model.map("http://example.net/ns#ExampleTemplate", df2)
+    r = model.query(
         """
     SELECT ?a ?b ?c WHERE {
         ?a ?b ?c
@@ -640,9 +651,10 @@ def test_constant_arg_has_valid_subtype():
     <http://example.net/ns#ExampleNestedTemplate>(<http://example.net/ns#MyObject>,<http://example.net/ns#hasValueList>, rdf:type)
 } . 
     """
-    mapping = Mapping(templates)
-    mapping.expand("http://example.net/ns#ExampleTemplate")
-    r = mapping.query(
+    model = Model()
+    model.add_template(templates)
+    model.map("http://example.net/ns#ExampleTemplate")
+    r = model.query(
         """
     SELECT ?a ?b ?c WHERE {
         ?a ?b ?c
@@ -667,9 +679,10 @@ def test_iri_datatype():
     <http://example.net/ns#ExampleNestedTemplate>(<http://example.net/ns#MyObject>,<http://example.net/ns#hasValueList>, rdf:type)
 } . 
     """
-    mapping = Mapping(templates)
-    mapping.expand("http://example.net/ns#ExampleTemplate")
-    r = mapping.query(
+    model = Model()
+    model.add_template(templates)
+    model.map("http://example.net/ns#ExampleTemplate")
+    r = model.query(
         """
     SELECT ?a ?b ?c WHERE {
         ?a ?b ?c
@@ -696,4 +709,4 @@ def test_constant_arg_has_invalid_subtype():
 } . 
     """
     with pytest.raises(Exception):
-        Mapping(templates)
+        Model(templates)

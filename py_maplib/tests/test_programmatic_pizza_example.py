@@ -5,7 +5,7 @@ from polars.testing import assert_frame_equal
 from maplib import BlankNode
 
 from maplib import (
-    Mapping,
+    Model,
     Prefix,
     Template,
     Argument,
@@ -51,7 +51,7 @@ def template() -> Template:
 
 
 @pytest.fixture(scope="function")
-def pizzas_mapping(template: Template):
+def pizzas_model(template: Template):
 
     pi = "https://github.com/DataTreehouse/maplib/pizza#"
     df = pl.DataFrame(
@@ -63,8 +63,8 @@ def pizzas_mapping(template: Template):
     )
     # print(df)
 
-    m = Mapping()
-    m.expand(template, df)
+    m = Model()
+    m.map(template, df)
     hpizzas = """
     PREFIX pi:<https://github.com/DataTreehouse/maplib/pizza#>
     CONSTRUCT { ?p a pi:HeterodoxPizza } 
@@ -76,8 +76,8 @@ def pizzas_mapping(template: Template):
     return m
 
 
-def test_simple_query_no_error(pizzas_mapping):
-    res = pizzas_mapping.query(
+def test_simple_query_no_error(pizzas_model):
+    res = pizzas_model.query(
         """
     PREFIX pi:<https://github.com/DataTreehouse/maplib/pizza#>
 
@@ -93,7 +93,7 @@ def test_simple_query_no_error(pizzas_mapping):
     assert_frame_equal(res, expected_df)
 
 
-def test_insert_new_thing(pizzas_mapping):
+def test_insert_new_thing(pizzas_model):
     hpizzas = """
     PREFIX pi:<https://github.com/DataTreehouse/maplib/pizza#>
     CONSTRUCT { ?p a pi:HeterodoxPizza2 } 
@@ -101,15 +101,15 @@ def test_insert_new_thing(pizzas_mapping):
         ?p a pi:Pizza .
         ?p pi:hasIngredient pi:Pineapple .
     }"""
-    res1 = pizzas_mapping.insert(hpizzas)
+    res1 = pizzas_model.insert(hpizzas)
     assert isinstance(res1, dict)
     assert len(res1) == 1
     assert res1["http://www.w3.org/1999/02/22-rdf-syntax-ns#type"].shape == (1, 2)
-    res2 = pizzas_mapping.insert(hpizzas)
+    res2 = pizzas_model.insert(hpizzas)
     assert len(res2) == 0
 
 
-def test_insert_new_things(pizzas_mapping):
+def test_insert_new_things(pizzas_model):
     hpizzas = """
     PREFIX pi:<https://github.com/DataTreehouse/maplib/pizza#>
     CONSTRUCT { 
@@ -119,12 +119,12 @@ def test_insert_new_things(pizzas_mapping):
     WHERE {
         ?p a pi:Pizza .
     }"""
-    res1 = pizzas_mapping.insert(hpizzas)
+    res1 = pizzas_model.insert(hpizzas)
     assert isinstance(res1, dict)
     assert len(res1) == 2
     assert res1["http://www.w3.org/1999/02/22-rdf-syntax-ns#type"].shape == (2, 2)
     assert res1["https://github.com/DataTreehouse/maplib/pizza#abc"].shape == (2, 2)
-    res2 = pizzas_mapping.insert(hpizzas)
+    res2 = pizzas_model.insert(hpizzas)
     assert len(res2) == 0
 
 

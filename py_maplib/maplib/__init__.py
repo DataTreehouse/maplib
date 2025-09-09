@@ -4,10 +4,10 @@
 # '''
 
 __all__ = [
-    "Mapping",
+    "Model",
     "a",
     "Triple",
-    "SolutionMappings",
+    "SolutionModels",
     "IndexingOptions",
     "ValidationReport",
     "Instance",
@@ -35,7 +35,7 @@ if (pathlib.Path(__file__).parent.resolve() / "graph_explorer").exists():
 else:
 
     def explore(
-        m: "Mapping",
+        m: "Model",
         host: str = "localhost",
         port: int = 8000,
         bind: str = "localhost",
@@ -50,7 +50,7 @@ else:
         You can later stop the server with
         >>> server.stop()
 
-        :param m: The Mapping to explore
+        :param m: The Model to explore
         :param host: The hostname that we will point the browser to.
         :param port: The port where the graph explorer webserver listens on.
         :param bind: Bind to the following host / ip.

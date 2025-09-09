@@ -45,7 +45,7 @@ impl Triplestore {
 
     fn delete_global_cat_triples(&mut self, gcts: Vec<CatTriples>) -> Result<(), TriplestoreError> {
         for gct in gcts {
-            let remaining_gct = get_triples_after_deletion(&gct, &self.triples_map, &self.cats)?;
+            let remaining_gct = get_triples_after_deletion(&gct, &self.triples_map)?;
 
             if let Some(mut gct) = remaining_gct {
                 self.delete_if_exists(&gct, false);
@@ -72,8 +72,7 @@ impl Triplestore {
                 self.delete_if_exists(&gct, false)
             }
 
-            let remaining_gct =
-                get_triples_after_deletion(&gct, &self.transient_triples_map, &self.cats)?;
+            let remaining_gct = get_triples_after_deletion(&gct, &self.transient_triples_map)?;
             if let Some(mut gct) = remaining_gct {
                 self.delete_if_exists(&gct, true);
                 let subject_cat_state = gct.subject_type.default_stored_cat_state();
@@ -211,7 +210,6 @@ fn triples_solution_mappings_to_global_cat_triples(
 fn get_triples_after_deletion(
     gct: &CatTriples,
     map: &HashMap<NamedNode, HashMap<(StoredBaseRDFNodeType, StoredBaseRDFNodeType), Triples>>,
-    global_cats: &Cats,
 ) -> Result<Option<CatTriples>, TriplestoreError> {
     if let Some(m) = map.get(&gct.predicate) {
         let out_encoded: Result<Vec<_>, TriplestoreError> = gct
@@ -225,7 +223,7 @@ fn get_triples_after_deletion(
 
                 let type_ = (subj_type, obj_type);
                 if let Some(triples) = m.get(&type_) {
-                    let lfs = triples.get_lazy_frames(&None, &None, global_cats)?;
+                    let lfs = triples.get_lazy_frames(&None, &None)?;
                     let lfs_only: Vec<_> = lfs.into_iter().map(|(lf, _)| lf).collect();
                     let mut lf = concat(
                         lfs_only,

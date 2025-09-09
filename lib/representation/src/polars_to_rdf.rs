@@ -118,7 +118,7 @@ pub fn global_df_as_triples(
     df: DataFrame,
     subject_type: BaseRDFNodeType,
     object_type: BaseRDFNodeType,
-    verb: &NamedNode,
+    predicate: &NamedNode,
     global_cats: Arc<Cats>,
 ) -> Vec<Triple> {
     let subjects = column_as_terms(
@@ -141,7 +141,7 @@ pub fn global_df_as_triples(
                 Term::BlankNode(bl) => Subject::BlankNode(bl),
                 _ => todo!(),
             };
-            Triple::new(subject, verb.clone(), object.unwrap())
+            Triple::new(subject, predicate.clone(), object.unwrap())
         })
         .collect()
 }

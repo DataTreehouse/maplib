@@ -16,14 +16,17 @@ use crate::storage::{repeated_from_last_row_expr, Triples};
 use file_io::create_folder_if_not_exists;
 use fts::FtsIndex;
 use log::trace;
-use oxrdf::vocab::{rdf, rdfs, xsd};
-use oxrdf::{NamedNode, Triple};
+use oxrdf::vocab::{rdf, rdfs};
+use oxrdf::NamedNode;
 use polars::prelude::{col, AnyValue, DataFrame, IntoLazy, RankMethod, RankOptions};
 use polars_core::prelude::SortMultipleOptions;
 use query_processing::type_constraints::ConstraintBaseRDFNodeType;
 use rayon::iter::ParallelDrainRange;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
-use representation::cats::{cat_encode_triples, decode_expr, literal_is_cat, CatTriples, CatType, Cats, OBJECT_RANK_COL_NAME, SUBJECT_RANK_COL_NAME};
+use representation::cats::{
+    cat_encode_triples, decode_expr, literal_is_cat, CatTriples, CatType, Cats,
+    OBJECT_RANK_COL_NAME, SUBJECT_RANK_COL_NAME,
+};
 use representation::multitype::set_struct_all_null_to_null_row;
 use representation::solution_mapping::{BaseCatState, EagerSolutionMappings};
 use representation::{
@@ -256,7 +259,7 @@ impl Triplestore {
                 self.fts_index = Some(FtsIndex::new(fts_path).map_err(TriplestoreError::FtsError)?);
                 for (predicate, map) in &self.triples_map {
                     for ((subject_type, object_type), ts) in map {
-                        for (lf, _) in ts.get_lazy_frames(&None, &None, &self.cats)? {
+                        for (lf, _) in ts.get_lazy_frames(&None, &None)? {
                             self.fts_index
                                 .as_mut()
                                 .unwrap()

@@ -322,7 +322,7 @@ class ValidationReport:
         :return:
         """
 
-class Mapping:
+class Model:
     """
     A mapping session allowing:
 
@@ -332,13 +332,14 @@ class Mapping:
 
     Usage:
 
-    >>> from maplib import Mapping
+    >>> from maplib import Model
     ... doc = '''
     ... :prefix ex:<http://example.net/ns#>.
     ... ex:ExampleTemplate [?MyValue] :: {
     ...    ottr:Triple(ex:myObject, ex:hasValue, ?MyValue)
     ... } .'''
-    ... m = Mapping(doc)
+    ... m = Model()
+    ... m.add_template(doc)
 
     :param documents: a stOTTR document or a list of these
     :param indexing_options: options for indexing
@@ -346,17 +347,16 @@ class Mapping:
 
     def __init__(
         self,
-        documents: Union[str, List[str]] = None,
         indexing_options: "IndexingOptions" = None,
-    ) -> "Mapping": ...
+    ) -> "Model": ...
     def add_template(self, template: Union["Template", str]):
         """
-        Add a template to the mapping. Overwrites any existing template with the same IRI.
+        Add a template to the model. Overwrites any existing template with the same IRI.
         :param template: The template to add, as a stOTTR string or as a programmatically constructed Template.
         :return:
         """
 
-    def expand(
+    def map(
         self,
         template: Union[str, "Template", IRI],
         df: DataFrame = None,
@@ -365,10 +365,10 @@ class Mapping:
         validate_iris: bool = True,
     ) -> None:
         """
-        Expand a template using a DataFrame
+        Map a template using a DataFrame
         Usage:
 
-        >>> m.expand("ex:ExampleTemplate", df)
+        >>> m.map("ex:ExampleTemplate", df)
 
         If the template has no arguments, the df argument is not necessary.
 
@@ -379,20 +379,20 @@ class Mapping:
         :param validate_iris: Validate any IRI-columns.
         """
 
-    def expand_triples(
+    def map_triples(
         self,
         df: DataFrame = None,
-        verb: str = None,
+        predicate: str = None,
         graph: str = None,
         types: Dict[str, RDFType] = None,
         validate_iris: bool = True,
     ) -> None:
         """
-        Expand a template using a DataFrame with columns subject, object and verb
-        The verb column can also be supplied as a string if it is the same for all rows.
+        Map a template using a DataFrame with columns subject, object and predicate
+        The predicate column can also be supplied as a string if it is the same for all rows.
         Usage:
 
-        >>> m.expand_triples(df)
+        >>> m.map_triples(df)
 
         If the template has no arguments, the df argument is not necessary.
 
@@ -403,7 +403,7 @@ class Mapping:
         :param validate_iris: Validate any IRI-columns.
         """
 
-    def expand_default(
+    def map_default(
         self,
         df: DataFrame,
         primary_key_column: str,
@@ -413,15 +413,15 @@ class Mapping:
         validate_iris: bool = True,
     ) -> str:
         """
-        Create a default template and expand it based on a dataframe.
+        Create a default template and map it based on a dataframe.
         Usage:
 
-        >>> template_string = m.expand_default(df, "myKeyCol")
+        >>> template_string = m.map_default(df, "myKeyCol")
         ... print(template_string)
 
         :param df: DataFrame where the columns have the same names as the template arguments
         :param primary_key_column: This column will be the subject of all triples in the generated template.
-        :param dry_run: Do not expand the template, only return the string.
+        :param dry_run: Do not map the template, only return the string.
         :param graph: The IRI of the graph to add triples to.
         :param types: The types of the columns.
         :param validate_iris: Validate any IRI-columns.
@@ -446,7 +446,7 @@ class Mapping:
         Currently, SELECT, CONSTRUCT and INSERT are supported.
         Usage:
 
-        >>> df = mapping.query('''
+        >>> df = model.query('''
         ... PREFIX ex:<http://example.net/ns#>
         ... SELECT ?obj1 ?obj2 WHERE {
         ...    ?obj1 ex:hasObj ?obj2
@@ -477,7 +477,7 @@ class Mapping:
         Useful for being able to use the same query for inspecting what will be inserted and actually inserting.
         Usage:
 
-        >>> m = Mapping(doc)
+        >>> m = Model(doc)
         ... # Omitted
         ... update_pizzas = '''
         ... ...'''
@@ -507,7 +507,7 @@ class Mapping:
         Useful for being able to use the same query for inspecting what will be inserted and actually inserting.
         Usage:
 
-        >>> m = Mapping(doc)
+        >>> m = Model(doc)
         ... # Omitted
         ... hpizzas = '''
         ... PREFIX pizza:<https://github.com/magbak/maplib/pizza#>
@@ -560,7 +560,7 @@ class Mapping:
         :return: Validation report containing a report (report.df) and whether the graph conforms (report.conforms)
         """
 
-    def read_triples(
+    def read(
         self,
         file_path: Union[str, Path],
         format: LiteralType["ntriples", "turtle", "rdf/xml", "xml", "rdfxml"] = None,
@@ -579,7 +579,7 @@ class Mapping:
 
         Usage:
 
-        >>> m.read_triples("my_triples.ttl")
+        >>> m.read("my_triples.ttl")
 
         :param file_path: The path of the file containing triples
         :param format: One of "ntriples", "turtle", "rdf/xml", otherwise it is inferred from the file extension.
@@ -591,7 +591,7 @@ class Mapping:
         :param replace_graph: Replace the graph with these triples? Will replace the default graph if no graph is specified.
         """
 
-    def read_triples_string(
+    def reads(
         self,
         s: str,
         format: LiteralType["ntriples", "turtle", "rdf/xml", "xml", "rdfxml"],
@@ -609,7 +609,7 @@ class Mapping:
 
         Usage:
 
-        >>> m.read_triples(my_ntriples_string, format="ntriples")
+        >>> m.reads(my_ntriples_string, format="ntriples")
 
         :param s: String containing serialized triples.
         :param format: One of "ntriples", "turtle", "rdf/xml".
@@ -619,19 +619,6 @@ class Mapping:
         :param checked: Check IRIs etc.
         :param graph: The IRI of the graph to read the triples into.
         :param replace_graph: Replace the graph with these triples? Will replace the default graph if no graph is specified.
-        """
-
-    def write_ntriples(self, file_path: Union[str, Path], graph: str = None) -> None:
-        """
-        DEPRECATED: use write_triples with format="ntriples"
-        Write the non-transient triples to the file path specified in the NTriples format.
-
-        Usage:
-
-        >>> m.write_ntriples("my_triples.nt")
-
-        :param file_path: The path of the file containing triples
-        :param graph: The IRI of the graph to write.
         """
 
     def write_cim_xml(
@@ -651,10 +638,10 @@ class Mapping:
         Write the legacy CIM XML format.
 
         >>> PROFILE_GRAPH = "urn:graph:profiles"
-        >>> m = Mapping()
-        >>> m.read_triples(model_path, base_iri=publicID, format="rdf/xml")
-        >>> m.read_triples("61970-600-2_Equipment-AP-Voc-RDFS2020_v3-0-0.rdf", graph=PROFILE_GRAPH, format="rdf/xml")
-        >>> m.read_triples("61970-600-2_Operation-AP-Voc-RDFS2020_v3-0-0.rdf", graph=PROFILE_GRAPH, format="rdf/xml")
+        >>> m = Model()
+        >>> m.read(model_path, base_iri=publicID, format="rdf/xml")
+        >>> m.read("61970-600-2_Equipment-AP-Voc-RDFS2020_v3-0-0.rdf", graph=PROFILE_GRAPH, format="rdf/xml")
+        >>> m.read("61970-600-2_Operation-AP-Voc-RDFS2020_v3-0-0.rdf", graph=PROFILE_GRAPH, format="rdf/xml")
         >>> m.write_cim_xml(
         >>>     "model.xml",
         >>>     profile_graph=PROFILE_GRAPH,
@@ -677,7 +664,7 @@ class Mapping:
         :param graph: The graph to write, defaults to the default graph.
         """
 
-    def write_triples(
+    def write(
         self,
         file_path: Union[str, Path],
         format=LiteralType["ntriples", "turtle", "rdf/xml"],
@@ -688,31 +675,18 @@ class Mapping:
 
         Usage:
 
-        >>> m.write_triples("my_triples.nt", format="ntriples")
+        >>> m.write("my_triples.nt", format="ntriples")
 
         :param file_path: The path of the file containing triples
         :param format: One of "ntriples", "turtle", "rdf/xml".
         :param graph: The IRI of the graph to write.
         """
 
-    def write_ntriples_string(self, graph: str = None) -> str:
-        """
-        DEPRECATED: use write_triples_string with format="ntriples"
-        Write the non-transient triples to a string in memory.
-
-        Usage:
-
-        >>> s = m.write_ntriples_string()
-
-        :param graph: The IRI of the graph to write.
-        :return Triples in mapping in the NTriples format (potentially a large string)
-        """
-
-    def write_triples_string(
+    def writes(
         self, format=LiteralType["ntriples", "turtle", "rdf/xml"], graph: str = None
     ) -> str:
         """
-        DEPRECATED: use write_triples_string with format="ntriples"
+        DEPRECATED: use writes with format="ntriples"
         Write the non-transient triples to a string in memory.
 
         Usage:
@@ -721,7 +695,7 @@ class Mapping:
 
         :param format: One of "ntriples", "turtle", "rdf/xml".
         :param graph: The IRI of the graph to write.
-        :return Triples in mapping in the NTriples format (potentially a large string)
+        :return Triples in model in the NTriples format (potentially a large string)
         """
 
     def write_native_parquet(
@@ -741,7 +715,7 @@ class Mapping:
     def create_sprout(self):
         """
         A sprout is a simplified way of dealing with multiple graphs.
-        See also `Mapping.insert_sprout` and `Mapping.detach_sprout`
+        See also `Model.insert_sprout` and `Model.detach_sprout`
 
         :return:
         """
@@ -762,11 +736,12 @@ class Mapping:
         Insert the results of a Construct query in a sprouted graph, which is created if no sprout is active.
         Sprouts are simplified way of dealing with multiple graphs.
         Useful for being able to use the same query for inspecting what will be inserted and actually inserting.
-        See also `Mapping.detach_sprout`
+        See also `Model.detach_sprout`
 
         Usage:
 
-        >>> m = Mapping(doc)
+        >>> m = Model()
+        ... m.add_template(doc)
         ... m.create_sprout()
         ... # Omitted
         ... hpizzas = '''
@@ -791,11 +766,11 @@ class Mapping:
         :return: None
         """
 
-    def detach_sprout(self) -> "Mapping":
+    def detach_sprout(self) -> "Model":
         """
-        Detaches and returns the sprout from the mapping.
+        Detaches and returns the sprout from the model.
 
-        :return: The sprout as its own Mapping.
+        :return: The sprout as its own Model.
         """
 
     def get_predicate_iris(
@@ -829,7 +804,7 @@ class Mapping:
 
     def add_ruleset(self, ruleset: str):
         """
-        Add a Datalog ruleset to the mapping, concatenating it with any existing ruleset.
+        Add a Datalog ruleset to the model, concatenating it with any existing ruleset.
         :param ruleset: The ruleset to add
         :return:
         """

@@ -49,12 +49,15 @@ impl Triples {
         storage_folder: Option<&PathBuf>,
         subject_type: StoredBaseRDFNodeType,
         object_type: StoredBaseRDFNodeType,
-        verb_iri: &NamedNode,
+        predicate_iri: &NamedNode,
         indexing: &IndexingOptions,
         cats: Arc<Cats>,
     ) -> Result<Self, TriplestoreError> {
-        let object_indexing_enabled =
-            can_and_should_index_object(&object_type.as_base_rdf_node_type(), verb_iri, indexing);
+        let object_indexing_enabled = can_and_should_index_object(
+            &object_type.as_base_rdf_node_type(),
+            predicate_iri,
+            indexing,
+        );
         let height = df.height();
         let mut segments = vec![];
 
@@ -81,7 +84,6 @@ impl Triples {
         &self,
         subjects: &Option<Vec<&Subject>>,
         objects: &Option<Vec<&Term>>,
-        global_cats: &Cats,
     ) -> Result<Vec<(LazyFrame, usize)>, TriplestoreError> {
         let mut all_sms = vec![];
         for s in &self.segments {
@@ -265,19 +267,6 @@ pub(crate) struct TriplesSegment {
     subject_sparse_index: Option<SparseIndex>,
     object_sort: Option<StoredTriples>,
     object_sparse_index: Option<SparseIndex>,
-}
-
-impl TriplesSegment {
-    pub(crate) fn get_size(&self) -> usize {
-        let mut size = 0;
-        if let Some(t) = &self.subject_sort {
-            size += t.get_size();
-        }
-        if let Some(t) = &self.object_sort {
-            size += t.get_size();
-        }
-        size
-    }
 }
 
 impl TriplesSegment {
@@ -467,7 +456,7 @@ fn create_indices(
             )
             .collect()
             .unwrap();
-        let object_encs =  get_encs(cats, obj_type);
+        let object_encs = get_encs(cats, obj_type);
         let sparse = create_sparse_index(
             df.column(OBJECT_COL_NAME).unwrap().as_materialized_series(),
             object_encs,
@@ -505,7 +494,7 @@ fn get_encs<'a>(c: &'a Cats, t: &StoredBaseRDFNodeType) -> Option<&'a CatEncs> {
 
 pub fn can_and_should_index_object(
     object_type: &BaseRDFNodeType,
-    verb_iri: &NamedNode,
+    predicate_iri: &NamedNode,
     indexing: &IndexingOptions,
 ) -> bool {
     let can_index_object = can_index(object_type);
@@ -514,7 +503,7 @@ pub fn can_and_should_index_object(
         if indexing.object_sort_all {
             true
         } else if let Some(object_sort_some) = &indexing.object_sort_some {
-            object_sort_some.contains(verb_iri)
+            object_sort_some.contains(predicate_iri)
         } else {
             false
         }
@@ -523,8 +512,7 @@ pub fn can_and_should_index_object(
     }
 }
 
-
-fn can_index(t:&BaseRDFNodeType) -> bool {
+fn can_index(t: &BaseRDFNodeType) -> bool {
     if matches!(t, BaseRDFNodeType::IRI | BaseRDFNodeType::BlankNode) {
         true
     } else if let BaseRDFNodeType::Literal(l) = t {
@@ -538,17 +526,6 @@ fn can_index(t:&BaseRDFNodeType) -> bool {
 enum StoredTriples {
     TriplesOnDisk(TriplesOnDisk),
     TriplesInMemory(Box<TriplesInMemory>),
-}
-
-impl StoredTriples {
-    pub(crate) fn get_size(&self) -> usize {
-        match self {
-            StoredTriples::TriplesOnDisk(_) => {
-                todo!()
-            }
-            StoredTriples::TriplesInMemory(m) => m.get_size(),
-        }
-    }
 }
 
 impl StoredTriples {
@@ -617,10 +594,10 @@ struct TriplesOnDisk {
 
 impl TriplesOnDisk {
     fn new(
-        df: DataFrame,
-        subj_type: &StoredBaseRDFNodeType,
-        obj_type: &StoredBaseRDFNodeType,
-        storage_folder: &Path,
+        _df: DataFrame,
+        _subj_type: &StoredBaseRDFNodeType,
+        _obj_type: &StoredBaseRDFNodeType,
+        _storage_folder: &Path,
     ) -> Result<Self, TriplestoreError> {
         todo!()
         // let height = df.height();
@@ -665,10 +642,6 @@ impl TriplesInMemory {
     pub(crate) fn get_lazy_frame(&self) -> Result<(LazyFrame, usize), TriplestoreError> {
         let height = self.df.as_ref().unwrap().height();
         Ok((self.df.as_ref().unwrap().clone().lazy(), height))
-    }
-
-    pub(crate) fn get_size(&self) -> usize {
-        self.df.as_ref().unwrap().estimated_size()
     }
 }
 
@@ -801,8 +774,8 @@ pub(crate) fn repeated_from_last_row_expr(c: &str) -> Expr {
 
 fn create_sparse_index(ser: &Series, encs: Option<&CatEncs>) -> SparseIndex {
     match encs {
-        None => {create_sparse_string_index(ser)}
-        Some(encs) => {create_sparse_cat_index(ser, encs)}
+        None => create_sparse_string_index(ser),
+        Some(encs) => create_sparse_cat_index(ser, encs),
     }
 }
 
@@ -880,7 +853,6 @@ fn compact_segments(
     ) in segments
     {
         for (lf, _) in subject_sort.unwrap().get_lazy_frames(None)? {
-            let subject_encs = get_encs(cats, subj_type);
             let df = lf.collect().unwrap();
             subject_segments.push((df, new));
         }

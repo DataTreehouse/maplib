@@ -1,9 +1,9 @@
 use crate::error::PyMaplibError;
-use crate::{fix_cats_and_multicolumns, PyIndexingOptions, PyMapping};
+use crate::{fix_cats_and_multicolumns, PyIndexingOptions, PyModel};
 use maplib::errors::MaplibError;
 use pydf_io::to_python::df_to_py_df;
 use pyo3::{pyclass, pymethods, PyObject, PyResult, Python};
-use report_mapping::report_to_mapping;
+use report_mapping::report_to_model;
 use representation::solution_mapping::EagerSolutionMappings;
 use shacl::ValidationReport as RustValidationReport;
 use std::collections::HashMap;
@@ -125,18 +125,18 @@ impl PyValidationReport {
     }
 
     #[pyo3(signature = (indexing=None))]
-    pub fn graph(&self, indexing: Option<PyIndexingOptions>) -> PyResult<PyMapping> {
+    pub fn graph(&self, indexing: Option<PyIndexingOptions>) -> PyResult<PyModel> {
         let indexing = if let Some(indexing) = indexing {
             Some(indexing.inner)
         } else {
             None
         };
-        let m = report_to_mapping(
+        let m = report_to_model(
             &self.inner,
             &self.shape_graph,
             Some(indexing.unwrap_or(self.indexing.clone())),
         )
         .map_err(|x| PyMaplibError::from(MaplibError::from(x)))?;
-        Ok(PyMapping::from_inner_mapping(m))
+        Ok(PyModel::from_inner_mapping(m))
     }
 }

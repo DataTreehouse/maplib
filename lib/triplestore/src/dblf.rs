@@ -74,9 +74,9 @@ impl Triplestore {
     #[allow(clippy::too_many_arguments)]
     fn get_predicate_lf(
         &self,
-        verb_uri: &NamedNode,
+        predicate_uri: &NamedNode,
         keep_subject: bool,
-        keep_verb: bool,
+        keep_predicate: bool,
         keep_object: bool,
         subjects: &Option<Vec<Subject>>,
         objects: &Option<Vec<Term>>,
@@ -85,14 +85,14 @@ impl Triplestore {
         include_transient: bool,
     ) -> Result<Option<Vec<HalfBakedSolutionMappings>>, SparqlError> {
         let mut all_sms = vec![];
-        if self.triples_map.contains_key(verb_uri) {
+        if self.triples_map.contains_key(predicate_uri) {
             let compatible_types = self.all_compatible_types(
-                verb_uri,
+                predicate_uri,
                 false,
                 subject_datatype_ctr,
                 object_datatype_ctr,
             );
-            if let Some(m) = self.triples_map.get(verb_uri) {
+            if let Some(m) = self.triples_map.get(predicate_uri) {
                 if let Some(sms) = multiple_tt_to_lf(
                     m,
                     compatible_types,
@@ -106,14 +106,14 @@ impl Triplestore {
                 }
             }
         }
-        if include_transient && self.transient_triples_map.contains_key(verb_uri) {
+        if include_transient && self.transient_triples_map.contains_key(predicate_uri) {
             let compatible_types = self.all_compatible_types(
-                verb_uri,
+                predicate_uri,
                 true,
                 subject_datatype_ctr,
                 object_datatype_ctr,
             );
-            if let Some(m) = self.transient_triples_map.get(verb_uri) {
+            if let Some(m) = self.transient_triples_map.get(predicate_uri) {
                 if let Some(sms) = multiple_tt_to_lf(
                     m,
                     compatible_types,
@@ -128,9 +128,9 @@ impl Triplestore {
             }
         }
         if !all_sms.is_empty() {
-            if keep_verb {
+            if keep_predicate {
                 for sm in &mut all_sms {
-                    sm.verb = Some(verb_uri.to_owned());
+                    sm.predicate = Some(predicate_uri.to_owned());
                 }
             }
             Ok(Some(all_sms))
@@ -144,7 +144,7 @@ impl Triplestore {
         &self,
         predicate_uris: Option<Vec<NamedNode>>,
         subject_keep_rename: &Option<String>,
-        verb_keep_rename: &Option<String>,
+        predicate_keep_rename: &Option<String>,
         object_keep_rename: &Option<String>,
         subjects: &Option<Vec<Subject>>,
         objects: &Option<Vec<Term>>,
@@ -162,7 +162,7 @@ impl Triplestore {
                 if let Some(sm) = self.get_predicate_lf(
                     &nn,
                     subject_keep_rename.is_some(),
-                    verb_keep_rename.is_some(),
+                    predicate_keep_rename.is_some(),
                     object_keep_rename.is_some(),
                     subjects,
                     objects,
@@ -187,7 +187,7 @@ impl Triplestore {
 
             for HalfBakedSolutionMappings {
                 mut mappings,
-                verb,
+                predicate,
                 subject_type,
                 object_type,
                 height_upper_bound,
@@ -201,8 +201,8 @@ impl Triplestore {
                     }
                     subject_types.insert(subject_type.clone(), subject_state.unwrap().clone());
                 }
-                if verb_keep_rename.is_some() {
-                    let enc = named_node_enc(verb.as_ref().unwrap(), &self.cats).unwrap();
+                if predicate_keep_rename.is_some() {
+                    let enc = named_node_enc(predicate.as_ref().unwrap(), &self.cats).unwrap();
                     mappings = mappings.with_column(enc.alias(PREDICATE_COL_NAME));
                 }
 
@@ -269,7 +269,7 @@ impl Triplestore {
                     rename_trg.push(s);
                 }
             }
-            if let Some(v) = verb_keep_rename {
+            if let Some(v) = predicate_keep_rename {
                 keep.push(PREDICATE_COL_NAME);
                 if v != PREDICATE_COL_NAME {
                     rename_src.push(PREDICATE_COL_NAME);
@@ -297,9 +297,9 @@ impl Triplestore {
                     RDFNodeState::from_map(subject_type_map),
                 );
             }
-            if let Some(verb_col_name) = verb_keep_rename {
+            if let Some(predicate_col_name) = predicate_keep_rename {
                 types.insert(
-                    verb_col_name.clone(),
+                    predicate_col_name.clone(),
                     RDFNodeState::from_bases(
                         BaseRDFNodeType::IRI,
                         BaseCatState::CategoricalNative(false, None),
@@ -318,7 +318,7 @@ impl Triplestore {
         } else {
             Ok(create_empty_lf_datatypes(
                 subject_keep_rename,
-                verb_keep_rename,
+                predicate_keep_rename,
                 object_keep_rename,
             ))
         }
@@ -430,7 +430,7 @@ fn single_triples_to_lf(
     global_cats: &Cats,
 ) -> Result<Option<(LazyFrame, usize)>, SparqlError> {
     let lfs_and_heights = triples
-        .get_lazy_frames(subjects, objects, global_cats)
+        .get_lazy_frames(subjects, objects)
         .map_err(SparqlError::TripleTableReadError)?;
     if lfs_and_heights.is_empty() {
         return Ok(None);
@@ -497,7 +497,7 @@ fn single_triples_to_lf(
 
 struct HalfBakedSolutionMappings {
     pub mappings: LazyFrame,
-    pub verb: Option<NamedNode>,
+    pub predicate: Option<NamedNode>,
     pub subject_type: Option<BaseRDFNodeType>,
     pub object_type: Option<BaseRDFNodeType>,
     pub height_upper_bound: usize,
@@ -561,7 +561,7 @@ fn multiple_tt_to_lf(
 
                 let half_baked = HalfBakedSolutionMappings {
                     mappings: lf.select(select),
-                    verb: None,
+                    predicate: None,
                     subject_type: if keep_subject {
                         Some(base_subject)
                     } else {
@@ -652,7 +652,7 @@ fn filter_subjects<'a>(
 
 pub fn create_empty_lf_datatypes(
     subject_keep_rename: &Option<String>,
-    verb_keep_rename: &Option<String>,
+    predicate_keep_rename: &Option<String>,
     object_keep_rename: &Option<String>,
 ) -> SolutionMappings {
     let mut columns_vec = vec![];
@@ -668,13 +668,13 @@ pub fn create_empty_lf_datatypes(
             &BaseRDFNodeType::None.default_stored_polars_data_type(),
         ))
     }
-    if let Some(verb_rename) = verb_keep_rename {
+    if let Some(predicate_rename) = predicate_keep_rename {
         out_datatypes.insert(
-            verb_rename.to_string(),
+            predicate_rename.to_string(),
             BaseRDFNodeType::None.into_default_stored_rdf_node_state(),
         );
         columns_vec.push(Column::new_empty(
-            verb_rename.into(),
+            predicate_rename.into(),
             &BaseRDFNodeType::None.default_stored_polars_data_type(),
         ))
     }

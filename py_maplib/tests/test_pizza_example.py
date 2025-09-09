@@ -2,13 +2,13 @@ import polars as pl
 import pytest
 from polars.testing import assert_frame_equal
 
-from maplib import Mapping, RDFType
+from maplib import Model, RDFType
 
 pl.Config.set_fmt_str_lengths(300)
 
 
 @pytest.fixture(scope="function")
-def pizzas_mapping():
+def pizzas_model():
     doc = """
     @prefix pizza:<https://github.com/magbak/maplib/pizza#>.
     @prefix xsd:<http://www.w3.org/2001/XMLSchema#>.
@@ -21,7 +21,8 @@ def pizzas_mapping():
     }.
     """
 
-    m = Mapping([doc])
+    m = Model()
+    m.add_template(doc)
 
     co = "https://github.com/magbak/maplib/countries#"
     pi = "https://github.com/magbak/maplib/pizza#"
@@ -34,7 +35,7 @@ def pizzas_mapping():
             "is": [[ing + "Pineapple", ing + "Ham"], [ing + "Pepper", ing + "Meat"]],
         }
     )
-    m.expand("ex:Pizza", df)
+    m.map("ex:Pizza", df)
     hpizzas = """
     PREFIX pizza:<https://github.com/magbak/maplib/pizza#>
     PREFIX ing:<https://github.com/magbak/maplib/pizza/ingredients#>
@@ -69,8 +70,8 @@ def pizzas_mapping():
     return m
 
 
-def test_simple_query_no_error(pizzas_mapping):
-    res = pizzas_mapping.query(
+def test_simple_query_no_error(pizzas_model):
+    res = pizzas_model.query(
         """
     PREFIX pizza:<https://github.com/magbak/maplib/pizza#>
 
@@ -86,7 +87,7 @@ def test_simple_query_no_error(pizzas_mapping):
     assert_frame_equal(res, expected_df)
 
 
-def test_construct_pvalues(pizzas_mapping):
+def test_construct_pvalues(pizzas_model):
     h_df = pl.DataFrame(
         {
             "h1": [
@@ -100,7 +101,7 @@ def test_construct_pvalues(pizzas_mapping):
         }
     )
 
-    res = pizzas_mapping.query(
+    res = pizzas_model.query(
         """
     PREFIX pizza:<https://github.com/magbak/maplib/pizza#>
 
@@ -122,7 +123,7 @@ def test_construct_pvalues(pizzas_mapping):
     assert res1.height == 2
 
 
-def test_construct_pvalues2(pizzas_mapping):
+def test_construct_pvalues2(pizzas_model):
     h_df = pl.DataFrame(
         {
             "h1": [
@@ -131,7 +132,7 @@ def test_construct_pvalues2(pizzas_mapping):
             ]
         }
     )
-    res = pizzas_mapping.query(
+    res = pizzas_model.query(
         """
     PREFIX pizza:<https://github.com/magbak/maplib/pizza#>
 
@@ -151,7 +152,7 @@ def test_construct_pvalues2(pizzas_mapping):
     assert res1.height == 2
 
 
-def test_having_not_so_nice(pizzas_mapping):
+def test_having_not_so_nice(pizzas_model):
     h_df = pl.DataFrame(
         {
             "h1": [
@@ -160,7 +161,7 @@ def test_having_not_so_nice(pizzas_mapping):
             ]
         }
     )
-    res = pizzas_mapping.query(
+    res = pizzas_model.query(
         """
     PREFIX pizza:<https://github.com/magbak/maplib/pizza#>
 
@@ -175,8 +176,8 @@ def test_having_not_so_nice(pizzas_mapping):
     assert res.height == 2
 
 
-def test_update_insert_delete(pizzas_mapping):
-    res = pizzas_mapping.update(
+def test_update_insert_delete(pizzas_model):
+    res = pizzas_model.update(
         """
     PREFIX pizza:<https://github.com/magbak/maplib/pizza#>
     
@@ -189,7 +190,7 @@ def test_update_insert_delete(pizzas_mapping):
     }
     """
     )
-    df = pizzas_mapping.query(
+    df = pizzas_model.query(
         """
         PREFIX pizza:<https://github.com/magbak/maplib/pizza#>
         SELECT ?a ?b ?c WHERE {
@@ -202,8 +203,8 @@ def test_update_insert_delete(pizzas_mapping):
     assert df_filtered.height == 2
 
 
-def test_update_insert(pizzas_mapping):
-    res = pizzas_mapping.update(
+def test_update_insert(pizzas_model):
+    res = pizzas_model.update(
         """
     PREFIX pizza:<https://github.com/magbak/maplib/pizza#>
     
@@ -214,7 +215,7 @@ def test_update_insert(pizzas_mapping):
     }
     """
     )
-    df = pizzas_mapping.query(
+    df = pizzas_model.query(
         """
         PREFIX pizza:<https://github.com/magbak/maplib/pizza#>
         SELECT ?a ?b ?c WHERE {
@@ -229,8 +230,8 @@ def test_update_insert(pizzas_mapping):
     assert df_filtered_new.height == 2
 
 
-def test_update_delete(pizzas_mapping):
-    res = pizzas_mapping.update(
+def test_update_delete(pizzas_model):
+    res = pizzas_model.update(
         """
     PREFIX pizza:<https://github.com/magbak/maplib/pizza#>
     
@@ -241,7 +242,7 @@ def test_update_delete(pizzas_mapping):
     }
     """
     )
-    df = pizzas_mapping.query(
+    df = pizzas_model.query(
         """
         PREFIX pizza:<https://github.com/magbak/maplib/pizza#>
         SELECT ?a ?b ?c WHERE {
@@ -256,8 +257,8 @@ def test_update_delete(pizzas_mapping):
     assert df_filtered_new.height == 0
 
 
-def test_update_insert_delete_multiple(pizzas_mapping):
-    res = pizzas_mapping.update(
+def test_update_insert_delete_multiple(pizzas_model):
+    res = pizzas_model.update(
         """
     PREFIX pizza:<https://github.com/magbak/maplib/pizza#>
     
@@ -272,7 +273,7 @@ def test_update_insert_delete_multiple(pizzas_mapping):
     }
     """
     )
-    df = pizzas_mapping.query(
+    df = pizzas_model.query(
         """
         PREFIX pizza:<https://github.com/magbak/maplib/pizza#>
         SELECT ?a ?b ?c WHERE {

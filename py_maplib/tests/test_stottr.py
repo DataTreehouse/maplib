@@ -1,7 +1,7 @@
 """
 extern crate core;
 #[cfg(not(feature = "pyo3"))]
-use maplib::mapping::Mapping;
+use maplib::mapping::Model;
 #[cfg(not(feature = "pyo3"))]
 use oxrdf::{Literal, NamedNode, Subject, Term, Triple};
 #[cfg(not(feature = "pyo3"))]
@@ -9,7 +9,7 @@ use polars::prelude::{col, AnyValue, DataFrame, IntoLazy, PlSmallStr, Series, Ti
 #[cfg(not(feature = "pyo3"))]
 use representation::polars_to_rdf::df_as_result;
 #[cfg(not(feature = "pyo3"))]
-use representation::solution_mapping::EagerSolutionMappings;
+use representation::solution_mapping::EagerSolutionModels;
 use rstest::*;
 #[cfg(not(feature = "pyo3"))]
 use serial_test::serial;
@@ -21,10 +21,10 @@ use triplestore::sparql::QueryResult;
 
 // TODO: Legacy functionality, these tests should move to Python.
 #[cfg(not(feature = "pyo3"))]
-fn get_triples(mapping: &mut Mapping) -> Vec<Triple> {
+fn get_triples(mapping: &mut Model) -> Vec<Triple> {
     let res = mapping
         .query(
-            "SELECT ?subject ?verb ?object WHERE {?subject ?verb ?object}",
+            "SELECT ?subject ?predicate ?object WHERE {?subject ?predicate ?object}",
             &None,
             None,
             false,
@@ -32,18 +32,18 @@ fn get_triples(mapping: &mut Mapping) -> Vec<Triple> {
         )
         .unwrap();
     let mut triples = vec![];
-    if let QueryResult::Select(EagerSolutionMappings {
+    if let QueryResult::Select(EagerSolutionModels {
         mappings,
         rdf_node_types,
     }) = res
     {
         let solns = df_as_result(mappings, &rdf_node_types);
         for s in solns.solutions {
-            let (subject, verb, object) = triplestore::query_solutions::get_three_query_solutions(
+            let (subject, predicate, object) = triplestore::query_solutions::get_three_query_solutions(
                 s,
                 &solns.variables,
                 "subject",
-                "verb",
+                "predicate",
                 "object",
             );
             let subject = match subject.unwrap() {
@@ -51,7 +51,7 @@ fn get_triples(mapping: &mut Mapping) -> Vec<Triple> {
                 Term::BlankNode(bn) => Subject::BlankNode(bn),
                 _ => panic!(),
             };
-            let verb = match verb.unwrap() {
+            let predicate = match predicate.unwrap() {
                 Term::NamedNode(nn) => nn,
                 _ => panic!(),
             };
@@ -92,9 +92,9 @@ fn test_all_iri_case() {
     let series = [v1];
     let df = DataFrame::from_iter(series);
 
-    let mut mapping = Mapping::from_str(t_str, None).unwrap();
+    let mut mapping = Model::from_str(t_str, None).unwrap();
     let _report = mapping
-        .expand(
+        .map(
             "http://example.net/ns#ExampleTemplate",
             Some(df),
             None,
@@ -140,13 +140,13 @@ fn test_string_language_tag_cases() {
     let series = [my_string];
     let df = DataFrame::from_iter(series);
 
-    let mut mapping = Mapping::from_str(t_str, None).unwrap();
+    let mut mapping = Model::from_str(t_str, None).unwrap();
     let _report = mapping
-        .expand(
+        .map(
             "http://example.net/ns#ExampleTemplate",
             Some(df),
             None,
-            ExpandOptions {
+            MapOptions {
                 ..Default::default()
             },
         )
@@ -197,9 +197,9 @@ fn test_const_list_case() {
     let series = [v1];
     let df = DataFrame::from_iter(series);
 
-    let mut mapping = Mapping::from_str(t_str, None).unwrap();
+    let mut mapping = Model::from_str(t_str, None).unwrap();
     let _report = mapping
-        .expand(
+        .map(
             "http://example.net/ns#ExampleTemplate",
             Some(df),
             None,
@@ -264,7 +264,7 @@ ex:Nested [?myVar] :: {
     ottr:Triple(ex:anObject, ex:hasNumber, ?myVar)
 } .
 "#;
-    let mut mapping = Mapping::from_str(stottr, None).unwrap();
+    let mut mapping = Model::from_str(stottr, None).unwrap();
     let mut v1 = Series::from_iter(&[1, 2i32]);
     v1.rename("myVar1".into());
     let mut v2 = Series::from_iter(&[3, 4i32]);
@@ -272,7 +272,7 @@ ex:Nested [?myVar] :: {
     let series = [v1, v2];
     let df = DataFrame::from_iter(series);
     let _report = mapping
-        .expand(
+        .map(
             "http://example.net/ns#ExampleTemplate",
             Some(df),
             None,
@@ -354,7 +354,7 @@ ex:ExampleTemplate [
     ottr:Triple(ex:yetAnotherObject, ex:hasDateTime, ?Datetime_ms)
   } .
 "#;
-    let mut mapping = Mapping::from_str(stottr, None).unwrap();
+    let mut mapping = Model::from_str(stottr, None).unwrap();
     let mut boolean = Series::from_iter(&[true, false]);
     boolean.rename("Boolean".into());
     let mut uint32 = Series::from_iter(&[5u32, 6u32]);
@@ -412,7 +412,7 @@ ex:ExampleTemplate [
     ];
     let df = DataFrame::from_iter(series);
     let _report = mapping
-        .expand(
+        .map(
             "http://example.net/ns#ExampleTemplate",
             Some(df),
             None,
@@ -618,7 +618,7 @@ ex:AnotherExampleTemplate [?object, ?predicate, ?myList] :: {
     cross | ottr:Triple(?object, ?predicate, ++?myList)
   } .
 "#;
-    let mut mapping = Mapping::from_str(stottr, None).unwrap();
+    let mut mapping = Model::from_str(stottr, None).unwrap();
     let mut object = Series::from_iter([
         "http://example.net/ns#obj1",
         "http://example.net/ns#obj1",
@@ -645,7 +645,7 @@ ex:AnotherExampleTemplate [?object, ?predicate, ?myList] :: {
         .unwrap();
     //println!("{df}");
     let _report = mapping
-        .expand(
+        .map(
             "http://example.net/ns#AnotherExampleTemplate",
             Some(df),
             None,
@@ -706,7 +706,7 @@ ex:AnotherExampleTemplate [?subject, ?myList1, ?myList2] :: {
     ottr:Triple(?subject, ex:hasOtherNumber, ?myVar2)
 } .
 "#;
-    let mut mapping = Mapping::from_str(stottr, None).unwrap();
+    let mut mapping = Model::from_str(stottr, None).unwrap();
     let mut subject = Series::from_iter([
         "http://example.net/ns#obj1",
         "http://example.net/ns#obj1",
@@ -730,7 +730,7 @@ ex:AnotherExampleTemplate [?subject, ?myList1, ?myList2] :: {
 
     //println!("{df}");
     let _report = mapping
-        .expand(
+        .map(
             "http://example.net/ns#AnotherExampleTemplate",
             Some(df),
             None,
@@ -821,7 +821,7 @@ ex:AnotherExampleTemplate [?subject, ?myList1, ?myList2] :: {
 #[rstest]
 #[serial]
 fn test_default() {
-    let mut mapping = Mapping::from_str("", None).unwrap();
+    let mut mapping = Model::from_str("", None).unwrap();
     let mut subject = Series::from_iter([
         "http://example.net/ns#obj1",
         "http://example.net/ns#obj1",
@@ -837,7 +837,7 @@ fn test_default() {
 
     //println!("{df}");
     let _report = mapping
-        .expand_default(
+        .map_default(
             df,
             "subject".to_string(),
             vec![],
@@ -898,7 +898,7 @@ fn test_default() {
 #[rstest]
 #[serial]
 fn test_default_list() {
-    let mut mapping = Mapping::from_str("", None).unwrap();
+    let mut mapping = Model::from_str("", None).unwrap();
     let mut subject = Series::from_iter([
         "http://example.net/ns#obj1",
         "http://example.net/ns#obj1",
@@ -922,7 +922,7 @@ fn test_default_list() {
         .unwrap();
     //println!("{df}");
     let _report = mapping
-        .expand_default(
+        .map_default(
             df,
             "subject".to_string(),
             vec![],

@@ -3,7 +3,7 @@ import pytest
 import rdflib
 from polars.testing import assert_frame_equal
 import pathlib
-from maplib import Mapping
+from maplib import Model
 
 pl.Config.set_fmt_str_lengths(300)
 
@@ -13,8 +13,8 @@ TESTDATA_PATH = PATH_HERE / "testdata"
 
 
 def test_read_ntriples():
-    m = Mapping()
-    m.read_triples(str(TESTDATA_PATH / "read_ntriples.nt"))
+    m = Model()
+    m.read(str(TESTDATA_PATH / "read_ntriples.nt"))
     res = m.query(
         """
             PREFIX foaf:<http://xmlns.com/foaf/0.1/>
@@ -32,9 +32,9 @@ def test_read_ntriples():
 
 
 def test_read_ntriples_twice_with_replace():
-    m = Mapping()
-    m.read_triples(str(TESTDATA_PATH / "read_ntriples.nt"))
-    m.read_triples(str(TESTDATA_PATH / "read_ntriples.nt"), replace_graph=True)
+    m = Model()
+    m.read(str(TESTDATA_PATH / "read_ntriples.nt"))
+    m.read(str(TESTDATA_PATH / "read_ntriples.nt"), replace_graph=True)
     res = m.query(
         """
             PREFIX foaf:<http://xmlns.com/foaf/0.1/>
@@ -51,13 +51,13 @@ def test_read_ntriples_twice_with_replace():
 
 
 def test_read_write_ntriples_string():
-    m = Mapping()
+    m = Model()
     with open(TESTDATA_PATH / "read_ntriples.nt") as f:
         ntstring = f.read()
-    m.read_triples_string(ntstring, format="ntriples")
-    out_str = m.write_triples_string(format="ntriples")
-    m2 = Mapping()
-    m2.read_triples_string(out_str, format="ntriples")
+    m.reads(ntstring, format="ntriples")
+    out_str = m.writes(format="ntriples")
+    m2 = Model()
+    m2.reads(out_str, format="ntriples")
     res = m2.query(
         """
             PREFIX foaf:<http://xmlns.com/foaf/0.1/>
@@ -75,13 +75,13 @@ def test_read_write_ntriples_string():
 
 
 def test_read_write_turtle_string():
-    m = Mapping()
+    m = Model()
     with open(TESTDATA_PATH / "read_ntriples.nt") as f:
         ntstring = f.read()
-    m.read_triples_string(ntstring, format="ntriples")
-    out_str = m.write_triples_string(format="turtle")
-    m2 = Mapping()
-    m2.read_triples_string(out_str, format="turtle")
+    m.reads(ntstring, format="ntriples")
+    out_str = m.writes(format="turtle")
+    m2 = Model()
+    m2.reads(out_str, format="turtle")
     res = m2.query(
         """
             PREFIX foaf:<http://xmlns.com/foaf/0.1/>
@@ -99,13 +99,13 @@ def test_read_write_turtle_string():
 
 
 def test_read_write_xml_string():
-    m = Mapping()
+    m = Model()
     with open(TESTDATA_PATH / "read_ntriples.nt") as f:
         ntstring = f.read()
-    m.read_triples_string(ntstring, format="ntriples")
-    out_str = m.write_triples_string(format="rdf/xml")
-    m2 = Mapping()
-    m2.read_triples_string(out_str, format="rdf/xml")
+    m.reads(ntstring, format="ntriples")
+    out_str = m.writes(format="rdf/xml")
+    m2 = Model()
+    m2.reads(out_str, format="rdf/xml")
     res = m2.query(
         """
             PREFIX foaf:<http://xmlns.com/foaf/0.1/>

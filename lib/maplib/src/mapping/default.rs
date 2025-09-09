@@ -1,6 +1,6 @@
-use super::Mapping;
+use super::Model;
 use crate::mapping::errors::MappingError;
-use crate::mapping::ExpandOptions;
+use crate::mapping::MapOptions;
 use log::warn;
 use std::collections::HashMap;
 use templates::ast::{
@@ -15,7 +15,7 @@ use oxrdf::{NamedNode, Variable};
 use polars::prelude::{col, DataFrame, DataType, IntoLazy};
 use templates::MappingColumnType;
 
-impl Mapping {
+impl Model {
     pub fn expand_default(
         &mut self,
         mut df: DataFrame,
@@ -23,7 +23,7 @@ impl Mapping {
         fk_cols: Vec<String>,
         dry_run: bool,
         mapping_column_types: Option<HashMap<String, MappingColumnType>>,
-        options: ExpandOptions,
+        options: MapOptions,
     ) -> Result<Template, MaplibError> {
         let mut params = vec![];
         let columns: Vec<String> = df

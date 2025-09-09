@@ -1,10 +1,10 @@
-from maplib.maplib import Mapping, Template, IRI, Triple, Variable
+from maplib.maplib import Model, Template, IRI, Triple, Variable
 
 
 def add_triples(
-    source: Mapping, target: Mapping, source_graph: str = None, target_graph: str = None
+    source: Model, target: Model, source_graph: str = None, target_graph: str = None
 ):
-    """(Zero) copy the triples from one Mapping into another.
+    """(Zero) copy the triples from one Model into another.
 
     :param source: The source mapping
     :param target: The target mapping
@@ -21,7 +21,7 @@ def add_triples(
         )
         sms = source.get_predicate(p, source_graph)
         for sm in sms:
-            target.expand(
+            target.map(
                 template,
                 sm.mappings,
                 types=sm.rdf_types,

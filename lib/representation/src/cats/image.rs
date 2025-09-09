@@ -72,7 +72,7 @@ impl Cats {
             let cols: Vec<_> = sm.rdf_node_types.keys().collect();
             for c in cols {
                 let t = sm.rdf_node_types.get(c).unwrap();
-                for (bt, bs) in &t.map {
+                for bs in t.map.values() {
                     if let BaseCatState::CategoricalNative(_, local) = bs {
                         if let Some(local) = local.as_ref() {
                             local_cats.push(local.clone());
