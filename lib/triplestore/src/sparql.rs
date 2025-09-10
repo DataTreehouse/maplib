@@ -5,11 +5,14 @@ pub(crate) mod lazy_aggregate;
 mod lazy_expressions;
 pub(crate) mod lazy_graph_patterns;
 mod lazy_order;
+mod rewrite;
+//mod rewrite;
 
 use utils::polars::{pl_interruptable_collect, InterruptableCollectError};
 
 use super::{NewTriples, Triplestore};
 use crate::sparql::errors::SparqlError;
+use crate::sparql::rewrite::rewrite_pushdown;
 use oxrdf::{NamedNode, Subject, Term, Triple, Variable};
 use oxttl::TurtleSerializer;
 use polars::frame::DataFrame;
@@ -141,7 +144,7 @@ impl QueryResult {
 
 impl Triplestore {
     pub fn query(
-        &mut self,
+        &self,
         query: &str,
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         streaming: bool,
@@ -159,26 +162,7 @@ impl Triplestore {
         )
     }
 
-    pub fn query_indexed(
-        &self,
-        query: &str,
-        parameters: &Option<HashMap<String, EagerSolutionMappings>>,
-        streaming: bool,
-        include_transient: bool,
-        #[cfg(feature = "pyo3")] py: Python<'_>,
-    ) -> Result<QueryResult, SparqlError> {
-        let query = Query::parse(query, None).map_err(SparqlError::ParseError)?;
-        self.query_parsed_indexed(
-            &query,
-            parameters,
-            streaming,
-            include_transient,
-            #[cfg(feature = "pyo3")]
-            py,
-        )
-    }
-
-    pub fn query_indexed_uninterruptable(
+    pub fn query_uninterruptable(
         &self,
         query: &str,
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
@@ -186,28 +170,10 @@ impl Triplestore {
         include_transient: bool,
     ) -> Result<QueryResult, SparqlError> {
         let query = Query::parse(query, None).map_err(SparqlError::ParseError)?;
-        self.query_parsed_indexed_uninterruptable(&query, parameters, streaming, include_transient)
+        self.query_parsed_uninterruptable(&query, parameters, streaming, include_transient)
     }
 
     pub fn query_parsed(
-        &mut self,
-        query: &Query,
-        parameters: &Option<HashMap<String, EagerSolutionMappings>>,
-        streaming: bool,
-        include_transient: bool,
-        #[cfg(feature = "pyo3")] py: Python<'_>,
-    ) -> Result<QueryResult, SparqlError> {
-        self.query_parsed_indexed(
-            query,
-            parameters,
-            streaming,
-            include_transient,
-            #[cfg(feature = "pyo3")]
-            py,
-        )
-    }
-
-    pub fn query_parsed_indexed(
         &self,
         query: &Query,
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
@@ -215,9 +181,10 @@ impl Triplestore {
         include_transient: bool,
         #[cfg(feature = "pyo3")] py: Python<'_>,
     ) -> Result<QueryResult, SparqlError> {
+        let query = rewrite_pushdown(query.clone());
         let qs = QuerySettings { include_transient };
         let context = Context::new();
-        match query {
+        match &query {
             Query::Select {
                 dataset: _,
                 pattern,
@@ -301,16 +268,17 @@ impl Triplestore {
         }
     }
 
-    pub fn query_parsed_indexed_uninterruptable(
+    pub fn query_parsed_uninterruptable(
         &self,
         query: &Query,
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         streaming: bool,
         include_transient: bool,
     ) -> Result<QueryResult, SparqlError> {
+        let query = rewrite_pushdown(query.clone());
         let qs = QuerySettings { include_transient };
         let context = Context::new();
-        match query {
+        match &query {
             Query::Select {
                 dataset: _,
                 pattern,
@@ -429,25 +397,6 @@ impl Triplestore {
         include_transient: bool,
         #[cfg(feature = "pyo3")] py: Python<'_>,
     ) -> Result<(), SparqlError> {
-        self.update_parsed_indexed(
-            update,
-            parameters,
-            streaming,
-            include_transient,
-            #[cfg(feature = "pyo3")]
-            py,
-        )?;
-        Ok(())
-    }
-
-    pub fn update_parsed_indexed(
-        &mut self,
-        update: &Update,
-        parameters: &Option<HashMap<String, EagerSolutionMappings>>,
-        streaming: bool,
-        include_transient: bool,
-        #[cfg(feature = "pyo3")] py: Python<'_>,
-    ) -> Result<(), SparqlError> {
         for u in &update.operations {
             match u {
                 GraphUpdateOperation::InsertData { .. } => {
@@ -499,7 +448,7 @@ impl Triplestore {
                         pattern: p,
                         base_iri: None,
                     };
-                    let r = self.query_parsed_indexed(
+                    let r = self.query_parsed(
                         &q,
                         parameters,
                         streaming,

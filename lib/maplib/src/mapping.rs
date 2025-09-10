@@ -148,7 +148,6 @@ impl Model {
         self.template_dataset
             .add_template(template)
             .map_err(MaplibError::TemplateError)?;
-        println!("Self map {:?}", self.template_dataset.prefix_map);
         Ok(())
     }
 
