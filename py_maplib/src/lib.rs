@@ -52,7 +52,7 @@ use pyo3::IntoPyObjectExt;
 use representation::python::{
     PyBlankNode, PyIRI, PyLiteral, PyPrefix, PyRDFType, PySolutionMappings, PyVariable,
 };
-use representation::solution_mapping::{EagerSolutionMappings};
+use representation::solution_mapping::EagerSolutionMappings;
 
 #[cfg(not(target_os = "linux"))]
 use mimalloc::MiMalloc;
@@ -136,19 +136,14 @@ type ParametersType<'a> = HashMap<String, (Bound<'a, PyAny>, HashMap<String, PyR
 impl PyModel {
     #[new]
     #[pyo3(signature = (indexing_options=None))]
-    fn new(
-        indexing_options: Option<PyIndexingOptions>,
-    ) -> PyResult<PyModel> {
+    fn new(indexing_options: Option<PyIndexingOptions>) -> PyResult<PyModel> {
         let indexing = if let Some(indexing_options) = indexing_options {
             Some(indexing_options.inner)
         } else {
             None
         };
         Ok(PyModel {
-            inner: Mutex::new(
-                InnerModel::new(None, None, indexing)
-                    .map_err(PyMaplibError::from)?,
-            ),
+            inner: Mutex::new(InnerModel::new(None, None, indexing).map_err(PyMaplibError::from)?),
             sprout: Mutex::new(None),
         })
     }
@@ -500,11 +495,7 @@ impl PyModel {
     }
 
     #[pyo3(signature = (format=None, graph=None))]
-    fn writes(
-        &self,
-        format: Option<String>,
-        graph: Option<String>,
-    ) -> PyResult<String> {
+    fn writes(&self, format: Option<String>, graph: Option<String>) -> PyResult<String> {
         let mut inner = self.inner.lock().unwrap();
         writes_mutex(&mut inner, format, graph)
     }
@@ -603,17 +594,18 @@ fn create_sprout_mutex(
     inner: &mut MutexGuard<InnerModel>,
     sprout: &mut MutexGuard<Option<InnerModel>>,
 ) -> PyResult<()> {
-    let mut new_sprout =
-        InnerModel::new(Some(&inner.template_dataset), None, Some(inner.indexing.clone()))
-            .map_err(PyMaplibError::from)?;
+    let mut new_sprout = InnerModel::new(
+        Some(&inner.template_dataset),
+        None,
+        Some(inner.indexing.clone()),
+    )
+    .map_err(PyMaplibError::from)?;
     new_sprout.blank_node_counter = inner.blank_node_counter;
     **sprout = Some(new_sprout);
     Ok(())
 }
 
-fn detach_sprout_mutex(
-    mut sprout: MutexGuard<Option<InnerModel>>,
-) -> PyResult<Option<PyModel>> {
+fn detach_sprout_mutex(mut sprout: MutexGuard<Option<InnerModel>>) -> PyResult<Option<PyModel>> {
     if let Some(sprout) = sprout.take() {
         let m = PyModel {
             inner: Mutex::new(sprout),
@@ -1182,14 +1174,16 @@ fn get_predicate_mutex(
 ) -> PyResult<Vec<PyObject>> {
     let graph = parse_optional_named_node(graph)?;
     let eager_sms = inner
-        .get_predicate(&iri.into_inner(), graph, include_transient.unwrap_or(false))
+        .get_predicate(&iri.into_inner(), graph.clone(), include_transient.unwrap_or(false))
         .map_err(PyMaplibError::from)?;
     let mut out = vec![];
+    let global_cats = inner.get_triplestore(&graph).cats.clone();
     for EagerSolutionMappings {
-        mappings,
-        rdf_node_types,
+        mut mappings,
+        mut rdf_node_types,
     } in eager_sms
     {
+        (mappings, rdf_node_types) = fix_cats_and_multicolumns(mappings, rdf_node_types, true, global_cats.clone());
         let py_sm = df_to_py_df(mappings, rdf_node_types, None, true, py)?;
         out.push(py_sm);
     }

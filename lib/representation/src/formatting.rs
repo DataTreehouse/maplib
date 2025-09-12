@@ -228,7 +228,7 @@ pub fn base_expression_to_native(
                         base_state,
                         global_cats,
                     )
-                    .alias(LANG_STRING_VALUE_FIELD),
+                    .alias(LANG_STRING_LANG_FIELD),
                 );
             } else {
                 exprs.push(maybe_decode_expr(expr, base_type, base_state, global_cats));
