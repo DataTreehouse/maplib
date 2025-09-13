@@ -390,7 +390,7 @@ pub fn datetime_column_to_strings(column: &Column, tz_opt: &Option<TimeZone>) ->
             .expect("Conversion OK")
             .into_column()
             .cast(&DataType::Datetime(
-                TimeUnit::Nanoseconds,
+                TimeUnit::Microseconds,
                 Some(TimeZone::UTC),
             ))
             .unwrap()

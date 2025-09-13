@@ -1,6 +1,6 @@
 use crate::constants::{
-    DATETIME_AS_NANOS, DATETIME_AS_SECONDS, FLOOR_DATETIME_TO_SECONDS_INTERVAL, MODULUS,
-    NANOS_AS_DATETIME, SECONDS_AS_DATETIME,
+    DATETIME_AS_MICROS, DATETIME_AS_SECONDS, FLOOR_DATETIME_TO_SECONDS_INTERVAL,
+    MICROS_AS_DATETIME, MODULUS, SECONDS_AS_DATETIME,
 };
 use crate::errors::QueryProcessingError;
 use crate::expressions::{cast_lang_string_to_string, drop_inner_contexts};
@@ -796,12 +796,12 @@ pub fn func_expression(
                     outer_context.as_str().to_string(),
                     BaseRDFNodeType::Literal(nn.to_owned()).into_default_input_rdf_node_state(),
                 );
-            } else if iri == DATETIME_AS_NANOS {
+            } else if iri == DATETIME_AS_MICROS {
                 assert_eq!(args.len(), 1);
                 let first_context = args_contexts.get(&0).unwrap();
                 solution_mappings.mappings = solution_mappings.mappings.with_column(
                     col(first_context.as_str())
-                        .cast(DataType::Datetime(TimeUnit::Nanoseconds, None))
+                        .cast(DataType::Datetime(TimeUnit::Microseconds, None))
                         .cast(DataType::UInt64)
                         .alias(outer_context.as_str()),
                 );
@@ -825,12 +825,12 @@ pub fn func_expression(
                     BaseRDFNodeType::Literal(xsd::INTEGER.into_owned())
                         .into_default_input_rdf_node_state(),
                 );
-            } else if iri == NANOS_AS_DATETIME {
+            } else if iri == MICROS_AS_DATETIME {
                 assert_eq!(args.len(), 1);
                 let first_context = args_contexts.get(&0).unwrap();
                 solution_mappings.mappings = solution_mappings.mappings.with_column(
                     col(first_context.as_str())
-                        .cast(DataType::Datetime(TimeUnit::Nanoseconds, None))
+                        .cast(DataType::Datetime(TimeUnit::Microseconds, None))
                         .alias(outer_context.as_str()),
                 );
                 solution_mappings.rdf_node_types.insert(

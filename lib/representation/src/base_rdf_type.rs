@@ -228,8 +228,8 @@ fn literal_type(
                 }
             }
         }
-        xsd::DATE_TIME => DataType::Datetime(TimeUnit::Nanoseconds, Some(TimeZone::UTC)),
-        xsd::DATE_TIME_STAMP => DataType::Datetime(TimeUnit::Nanoseconds, Some(TimeZone::UTC)),
+        xsd::DATE_TIME => DataType::Datetime(TimeUnit::Microseconds, Some(TimeZone::UTC)),
+        xsd::DATE_TIME_STAMP => DataType::Datetime(TimeUnit::Microseconds, Some(TimeZone::UTC)),
         xsd::DATE => DataType::Date,
         //TODO: Fix when adding proper list support
         rdf::LIST => DataType::List(Box::new(DataType::Boolean)),
