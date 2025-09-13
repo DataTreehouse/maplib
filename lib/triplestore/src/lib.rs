@@ -267,7 +267,10 @@ impl Triplestore {
                                     &lf.collect().unwrap(),
                                     predicate,
                                     &subject_type.as_base_rdf_node_type(),
+                                    &subject_type.as_base_rdf_node_type().default_stored_cat_state(),
                                     &object_type.as_base_rdf_node_type(),
+                                    &object_type.as_base_rdf_node_type().default_stored_cat_state(),
+                                    self.cats.clone(),
                                 )
                                 .map_err(TriplestoreError::FtsError)?;
                         }
@@ -440,7 +443,10 @@ impl Triplestore {
                                 df,
                                 &nt.predicate,
                                 &nt.subject_type,
+                                &nt.subject_type.default_stored_cat_state(),
                                 &nt.object_type,
+                                &nt.object_type.default_stored_cat_state(),
+                                self.cats.clone(),
                             )
                             .map_err(TriplestoreError::FtsError)?;
                         trace!(

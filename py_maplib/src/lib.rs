@@ -1174,7 +1174,11 @@ fn get_predicate_mutex(
 ) -> PyResult<Vec<PyObject>> {
     let graph = parse_optional_named_node(graph)?;
     let eager_sms = inner
-        .get_predicate(&iri.into_inner(), graph.clone(), include_transient.unwrap_or(false))
+        .get_predicate(
+            &iri.into_inner(),
+            graph.clone(),
+            include_transient.unwrap_or(false),
+        )
         .map_err(PyMaplibError::from)?;
     let mut out = vec![];
     let global_cats = inner.get_triplestore(&graph).cats.clone();
@@ -1183,7 +1187,8 @@ fn get_predicate_mutex(
         mut rdf_node_types,
     } in eager_sms
     {
-        (mappings, rdf_node_types) = fix_cats_and_multicolumns(mappings, rdf_node_types, true, global_cats.clone());
+        (mappings, rdf_node_types) =
+            fix_cats_and_multicolumns(mappings, rdf_node_types, true, global_cats.clone());
         let py_sm = df_to_py_df(mappings, rdf_node_types, None, true, py)?;
         out.push(py_sm);
     }

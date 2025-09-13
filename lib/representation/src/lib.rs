@@ -11,7 +11,6 @@ pub mod cats;
 pub mod errors;
 pub mod formatting;
 pub mod literals;
-pub mod polar_cats;
 pub mod python;
 mod rdf_state;
 mod rdf_type;

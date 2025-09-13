@@ -484,6 +484,33 @@ def test_multi_filter_incompatible_comparison(streaming):
 
 
 @pytest.mark.parametrize("streaming", [True, False])
+def test_parse_strange_year(streaming):
+    m = Model()
+    df = m.query(
+        """
+    PREFIX : <http://example.net/> 
+    PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+    SELECT ?a WHERE {
+        VALUES (?a) { ("9999-01-01T08:00:00"^^xsd:dateTime) }
+    } 
+    """,
+        streaming=streaming,
+    )
+    expected = pl.from_repr(
+        """
+┌─────────────────────┐
+│ a                   │
+│ ---                 │
+│ datetime[μs, UTC]   │
+╞═════════════════════╡
+│ 9999-01-01 08:00:00 │
+└─────────────────────┘
+    """
+    )
+    assert_frame_equal(df, expected)
+
+
+@pytest.mark.parametrize("streaming", [True, False])
 def test_multi_filter_incompatible_datetime_comparison(streaming):
     m = Model()
     df = m.query(
@@ -502,7 +529,7 @@ def test_multi_filter_incompatible_datetime_comparison(streaming):
 ┌─────────────────────┐
 │ a                   │
 │ ---                 │
-│ datetime[ns, UTC]   │
+│ datetime[μs, UTC]   │
 ╞═════════════════════╡
 │ 2021-01-01 08:00:00 │
 └─────────────────────┘
@@ -572,7 +599,7 @@ def test_multi_filter_incompatible_datetimestamp_comparison(streaming):
 ┌─────────────────────┐
 │ a                   │
 │ ---                 │
-│ datetime[ns, UTC]   │
+│ datetime[μs, UTC]   │
 ╞═════════════════════╡
 │ 2021-01-01 08:00:00 │
 └─────────────────────┘
