@@ -9,7 +9,7 @@ pub fn rewrite_pushdown(q: Query) -> Query {
     let q = match q {
         Query::Select {
             dataset,
-            mut pattern,
+            pattern,
             base_iri,
         } => Query::Select {
             dataset,
@@ -19,7 +19,7 @@ pub fn rewrite_pushdown(q: Query) -> Query {
         Query::Construct {
             template,
             dataset,
-            mut pattern,
+            pattern,
             base_iri,
         } => Query::Construct {
             template,
@@ -38,7 +38,7 @@ pub fn rewrite_pushdown(q: Query) -> Query {
         },
         Query::Ask {
             dataset,
-            mut pattern,
+            pattern,
             base_iri,
         } => Query::Ask {
             dataset,
@@ -211,7 +211,7 @@ pub fn rewrite_gp_pushdown(
         }
         GraphPattern::OrderBy { inner, expression } => {
             let inner = rewrite_gp_pushdown(*inner, filters, seen_vars);
-            let mut outer = GraphPattern::OrderBy {
+            let outer = GraphPattern::OrderBy {
                 inner: Box::new(inner),
                 expression,
             };
@@ -229,7 +229,7 @@ pub fn rewrite_gp_pushdown(
         }
         GraphPattern::Distinct { inner } => {
             let inner = rewrite_gp_pushdown(*inner, filters, seen_vars);
-            let mut outer = GraphPattern::Distinct {
+            let outer = GraphPattern::Distinct {
                 inner: Box::new(inner),
             };
             outer

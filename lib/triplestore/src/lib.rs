@@ -267,9 +267,13 @@ impl Triplestore {
                                     &lf.collect().unwrap(),
                                     predicate,
                                     &subject_type.as_base_rdf_node_type(),
-                                    &subject_type.as_base_rdf_node_type().default_stored_cat_state(),
+                                    &subject_type
+                                        .as_base_rdf_node_type()
+                                        .default_stored_cat_state(),
                                     &object_type.as_base_rdf_node_type(),
-                                    &object_type.as_base_rdf_node_type().default_stored_cat_state(),
+                                    &object_type
+                                        .as_base_rdf_node_type()
+                                        .default_stored_cat_state(),
                                     self.cats.clone(),
                                 )
                                 .map_err(TriplestoreError::FtsError)?;

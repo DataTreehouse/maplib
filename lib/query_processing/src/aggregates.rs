@@ -1,9 +1,11 @@
+use crate::expressions::expr_is_null_workaround;
 use oxrdf::vocab::xsd;
 use polars::datatypes::DataType;
-use polars::prelude::{all, col, Expr};
+use polars::prelude::{any_horizontal, col, Expr};
 use representation::query_context::Context;
 use representation::solution_mapping::SolutionMappings;
 use representation::{BaseRDFNodeType, RDFNodeState};
+use std::collections::HashMap;
 
 pub struct AggregateReturn {
     pub solution_mappings: SolutionMappings,
@@ -25,12 +27,18 @@ pub fn count_with_expression(column_context: &Context, distinct: bool) -> (Expr,
     )
 }
 
-pub fn count_without_expression(distinct: bool) -> (Expr, RDFNodeState) {
-    let columns_expr = all().as_expr();
+pub fn count_without_expression(
+    distinct: bool,
+    rdf_node_types: &HashMap<String, RDFNodeState>,
+) -> (Expr, RDFNodeState) {
     let out_expr = if distinct {
-        columns_expr.n_unique()
+        todo!("Try count without distinct")
     } else {
-        columns_expr.len()
+        let mut is_not_null = vec![];
+        for (c, s) in rdf_node_types {
+            is_not_null.push(expr_is_null_workaround(col(c), s).not())
+        }
+        any_horizontal(is_not_null).unwrap().sum()
     };
     (
         out_expr,
