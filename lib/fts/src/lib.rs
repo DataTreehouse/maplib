@@ -1,7 +1,7 @@
 use oxrdf::NamedNode;
 use polars::frame::DataFrame;
 use representation::cats::Cats;
-use representation::solution_mapping::SolutionMappings;
+use representation::solution_mapping::{BaseCatState, SolutionMappings};
 use representation::BaseRDFNodeType;
 use spargebra::term::TriplePattern;
 use std::path::Path;
@@ -24,7 +24,10 @@ impl FtsIndex {
         _df: &DataFrame,
         _predicate: &NamedNode,
         _subject_type: &BaseRDFNodeType,
+        _subject_state: &BaseCatState,
         _object_type: &BaseRDFNodeType,
+        _object_state: &BaseCatState,
+        _global_cats: Arc<Cats>,
     ) -> Result<(), FtsError> {
         unimplemented!("Contact Data Treehouse to enable full text search")
     }

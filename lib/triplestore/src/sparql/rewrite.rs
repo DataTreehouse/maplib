@@ -31,7 +31,7 @@ pub fn rewrite(q: Query) -> Query {
         },
         Query::Describe {
             dataset,
-            mut pattern,
+            pattern,
             base_iri,
         } => Query::Describe {
             dataset,

@@ -258,6 +258,8 @@ fn get_str_counts(e: &Expression, str_counts: &mut HashMap<String, usize>) {
         }
         Expression::If(left, mid, right) => {
             get_str_counts(left, str_counts);
+            get_str_counts(mid, str_counts);
+            get_str_counts(right, str_counts);
         }
         Expression::Coalesce(inners) => {
             for i in inners {
