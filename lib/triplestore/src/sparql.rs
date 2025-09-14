@@ -12,7 +12,7 @@ use utils::polars::{pl_interruptable_collect, InterruptableCollectError};
 
 use super::{NewTriples, Triplestore};
 use crate::sparql::errors::SparqlError;
-use crate::sparql::rewrite::rewrite_pushdown;
+use crate::sparql::rewrite::rewrite;
 use oxrdf::{NamedNode, Subject, Term, Triple, Variable};
 use oxttl::TurtleSerializer;
 use polars::frame::DataFrame;
@@ -181,7 +181,7 @@ impl Triplestore {
         include_transient: bool,
         #[cfg(feature = "pyo3")] py: Python<'_>,
     ) -> Result<QueryResult, SparqlError> {
-        let query = rewrite_pushdown(query.clone());
+        let query = rewrite(query.clone());
         let qs = QuerySettings { include_transient };
         let context = Context::new();
         match &query {
@@ -275,7 +275,7 @@ impl Triplestore {
         streaming: bool,
         include_transient: bool,
     ) -> Result<QueryResult, SparqlError> {
-        let query = rewrite_pushdown(query.clone());
+        let query = rewrite(query.clone());
         let qs = QuerySettings { include_transient };
         let context = Context::new();
         match &query {

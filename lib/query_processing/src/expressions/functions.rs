@@ -1,5 +1,5 @@
 use crate::constants::{
-    DATETIME_AS_MICROS, DATETIME_AS_SECONDS, FLOOR_DATETIME_TO_SECONDS_INTERVAL,
+    DATETIME_AS_MICROS, DATETIME_AS_SECONDS, DECODE, FLOOR_DATETIME_TO_SECONDS_INTERVAL,
     MICROS_AS_DATETIME, MODULUS, SECONDS_AS_DATETIME,
 };
 use crate::errors::QueryProcessingError;
@@ -888,6 +888,53 @@ pub fn func_expression(
                     BaseRDFNodeType::Literal(xsd::DATE_TIME.into_owned())
                         .into_default_input_rdf_node_state(),
                 );
+            } else if iri == DECODE {
+                assert_eq!(args.len(), 1);
+                let first_context = args_contexts.get(&0).unwrap();
+                let mut t_new = solution_mappings
+                    .rdf_node_types
+                    .get(first_context.as_str())
+                    .unwrap()
+                    .clone();
+                let is_multi = t_new.is_multi();
+                let lit_string = BaseRDFNodeType::Literal(xsd::STRING.into_owned());
+                if let Some(bs) = t_new.map.get_mut(&lit_string) {
+                    if is_multi {
+                        solution_mappings.mappings = solution_mappings.mappings.with_column(
+                            col(first_context.as_str())
+                                .struct_()
+                                .with_fields(vec![maybe_decode_expr(
+                                    col(first_context.as_str())
+                                        .struct_()
+                                        .field_by_name(&lit_string.field_col_name()),
+                                    &lit_string,
+                                    bs,
+                                    global_cats.clone(),
+                                )
+                                .alias(&lit_string.field_col_name())])
+                                .alias(outer_context.as_str()),
+                        );
+                    } else {
+                        solution_mappings.mappings = solution_mappings.mappings.with_column(
+                            maybe_decode_expr(
+                                col(first_context.as_str()),
+                                &lit_string,
+                                bs,
+                                global_cats.clone(),
+                            )
+                            .alias(outer_context.as_str()),
+                        );
+                    }
+                    *bs = BaseCatState::String;
+                } else {
+                    solution_mappings.mappings = solution_mappings
+                        .mappings
+                        .with_column(col(first_context.as_str()).alias(outer_context.as_str()));
+                }
+
+                solution_mappings
+                    .rdf_node_types
+                    .insert(outer_context.as_str().to_string(), t_new);
             } else {
                 todo!("Function {nn} is not implemented yet")
             }
