@@ -19,7 +19,7 @@ use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{Literal, NamedNode, Subject, Triple, Variable};
 use polars::prelude::{
     as_struct, col, AnyValue, Column, DataFrame, DataType, IntoColumn, IntoLazy, LiteralValue,
-    PlSmallStr, Scalar, Series, TimeUnit, TimeZone,
+    PlSmallStr, Scalar, Series, TimeZone,
 };
 use rayon::iter::IndexedParallelIterator;
 use rayon::iter::IntoParallelIterator;
@@ -389,11 +389,6 @@ pub fn datetime_column_to_strings(column: &Column, tz_opt: &Option<TimeZone>) ->
             .strftime(XSD_DATETIME_WITHOUT_TZ_FORMAT)
             .expect("Conversion OK")
             .into_column()
-            .cast(&DataType::Datetime(
-                TimeUnit::Microseconds,
-                Some(TimeZone::UTC),
-            ))
-            .unwrap()
     }
 }
 
