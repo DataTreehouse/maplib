@@ -154,8 +154,8 @@ The API is documented [HERE](https://datatreehouse.github.io/maplib/maplib.html)
 
 ## Roadmap of features and optimizations
 Spring 2025
-- Datalog reasoning support
-- Reduced memory footprint
+- Datalog reasoning support ✅
+- Reduced memory footprint ✅
 - Further SPARQL optimizations
 - JSON-LD support
 
