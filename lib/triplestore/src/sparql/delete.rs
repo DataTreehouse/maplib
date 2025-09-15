@@ -167,10 +167,14 @@ fn triples_solution_mappings_to_global_cat_triples(
                 mappings,
                 rdf_node_types,
             } = sm;
+
             let dfs_maps = split_df_multicols(mappings, &rdf_node_types);
             let mut dfs_maps_preds = Vec::with_capacity(dfs_maps.len());
-            for (df, map) in dfs_maps {
-                dfs_maps_preds.push((df, map, predicate.clone()));
+            for (mut df, map) in dfs_maps {
+                df = df.drop_nulls(None::<&[String]>).unwrap();
+                if df.height() > 0 {
+                    dfs_maps_preds.push((df, map, predicate.clone()));
+                }
             }
             dfs_maps_preds
         })
