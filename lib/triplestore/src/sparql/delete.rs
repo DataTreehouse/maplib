@@ -9,7 +9,7 @@ use polars::prelude::{col, concat, IntoLazy, JoinArgs, JoinType, MaintainOrderJo
 use polars_core::datatypes::AnyValue;
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use representation::cats::{cat_encode_triples, CatTriples, Cats, EncodedTriples};
-use representation::multitype::split_df_multicols;
+use representation::multitype::{set_struct_all_null_to_null_row, split_df_multicols};
 use representation::solution_mapping::EagerSolutionMappings;
 use representation::{OBJECT_COL_NAME, PREDICATE_COL_NAME, SUBJECT_COL_NAME};
 use std::collections::HashMap;
@@ -171,7 +171,13 @@ fn triples_solution_mappings_to_global_cat_triples(
             let dfs_maps = split_df_multicols(mappings, &rdf_node_types);
             let mut dfs_maps_preds = Vec::with_capacity(dfs_maps.len());
             for (mut df, map) in dfs_maps {
-                df = df.drop_nulls(None::<&[String]>).unwrap();
+                let mut lf = df.lazy();
+                for (k,v) in &map {
+                    //Important to work around null cols
+                    lf =  lf.with_column(set_struct_all_null_to_null_row(col(k), v));
+                }
+                lf = lf.drop_nulls(None);
+                df = lf.collect().unwrap();
                 if df.height() > 0 {
                     dfs_maps_preds.push((df, map, predicate.clone()));
                 }

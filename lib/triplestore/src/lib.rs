@@ -38,6 +38,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Instant;
 use uuid::Uuid;
+use query_processing::expressions::expr_is_null_workaround;
 
 #[derive(Clone, Hash, Eq, PartialEq, Debug)]
 pub enum StoredBaseRDFNodeType {
@@ -479,7 +480,7 @@ pub fn prepare_add_triples_par(
     mut ts: Vec<TriplesToAdd>,
     global_cats: Arc<Cats>,
 ) -> Vec<CatTriples> {
-    let df_vecs_to_add: Vec<Vec<TriplesToAddPartitionedPredicate>> = ts
+    let mut all_partitioned: Vec<TriplesToAddPartitionedPredicate> = ts
         .par_drain(..)
         .map(|t| {
             let TriplesToAdd {
@@ -511,9 +512,8 @@ pub fn prepare_add_triples_par(
                 })
                 .collect();
             all_partitioned
-        })
+        }).flatten()
         .collect();
-    let mut all_partitioned: Vec<_> = flatten(df_vecs_to_add);
     all_partitioned = all_partitioned
         .into_par_iter()
         .map(|mut t| {
@@ -641,6 +641,7 @@ pub fn partition_unpartitioned_predicate(
         return vec![];
     }
     let mut out_df_vec = vec![];
+
     let map = HashMap::from([
         (
             SUBJECT_COL_NAME.to_string(),
@@ -653,6 +654,7 @@ pub fn partition_unpartitioned_predicate(
     ]);
 
     let mut lf = df.lazy();
+    // Important to remove null structs such as lang strings
     for (c, t) in &map {
         lf = lf.with_column(set_struct_all_null_to_null_row(col(c), t).alias(c));
     }
@@ -696,9 +698,4 @@ fn drop_nulls(mut df: DataFrame) -> Option<DataFrame> {
     } else {
         Some(df)
     }
-}
-
-//From: https://users.rust-lang.org/t/flatten-a-vec-vec-t-to-a-vec-t/24526/3
-fn flatten<T>(nested: Vec<Vec<T>>) -> Vec<T> {
-    nested.into_iter().flatten().collect()
 }

@@ -13,7 +13,7 @@ use polars::prelude::{
     NamedFrom, Series,
 };
 use rayon::iter::{IndexedParallelIterator, ParallelDrainRange, ParallelIterator};
-use representation::multitype::split_df_multicols;
+use representation::multitype::{set_struct_all_null_to_null_row, split_df_multicols};
 use representation::rdf_to_polars::rdf_named_node_to_polars_literal_value;
 use representation::{BaseRDFNodeType, RDFNodeState};
 use representation::{OBJECT_COL_NAME, PREDICATE_COL_NAME, SUBJECT_COL_NAME};
@@ -91,6 +91,7 @@ impl Model {
                 }
             }
         }
+
         df = lf.map(|lf| lf.collect().unwrap());
 
         let (result_vec, new_blank_node_counter) = self._expand(
