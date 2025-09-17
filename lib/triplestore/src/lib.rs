@@ -38,7 +38,6 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Instant;
 use uuid::Uuid;
-use query_processing::expressions::expr_is_null_workaround;
 
 #[derive(Clone, Hash, Eq, PartialEq, Debug)]
 pub enum StoredBaseRDFNodeType {

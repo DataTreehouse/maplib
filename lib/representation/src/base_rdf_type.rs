@@ -329,7 +329,7 @@ impl BaseRDFNodeTypeRef<'_> {
     }
 }
 
-pub fn get_subject_datatype_ref(s: &Subject) -> BaseRDFNodeTypeRef {
+pub fn get_subject_datatype_ref(s: &Subject) -> BaseRDFNodeTypeRef<'_> {
     match s {
         Subject::NamedNode(_) => BaseRDFNodeTypeRef::IRI,
         Subject::BlankNode(_) => BaseRDFNodeTypeRef::BlankNode,
@@ -338,7 +338,7 @@ pub fn get_subject_datatype_ref(s: &Subject) -> BaseRDFNodeTypeRef {
     }
 }
 
-pub fn get_term_datatype_ref(t: &Term) -> BaseRDFNodeTypeRef {
+pub fn get_term_datatype_ref(t: &Term) -> BaseRDFNodeTypeRef<'_> {
     match t {
         Term::NamedNode(_) => BaseRDFNodeTypeRef::IRI,
         Term::BlankNode(_) => BaseRDFNodeTypeRef::BlankNode,
@@ -348,7 +348,7 @@ pub fn get_term_datatype_ref(t: &Term) -> BaseRDFNodeTypeRef {
     }
 }
 
-pub fn get_ground_term_datatype_ref(t: &GroundTerm) -> BaseRDFNodeTypeRef {
+pub fn get_ground_term_datatype_ref(t: &GroundTerm) -> BaseRDFNodeTypeRef<'_> {
     match t {
         GroundTerm::NamedNode(_) => BaseRDFNodeTypeRef::IRI,
         GroundTerm::Literal(l) => BaseRDFNodeTypeRef::Literal(l.datatype()),

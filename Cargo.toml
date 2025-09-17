@@ -22,8 +22,8 @@ rust-version = "1.88.0"
 [workspace.dependencies]
 pyo3 = {version = "0.25", features = ["py-clone"] }
 pyo3-log = {version = "0.12.3" }
-polars = { version = "0.50.0", features = ["nightly", "new_streaming", "performant", "cse", "fmt", "parquet"], default-features = false }
-polars-core = { version = "0.50.0", default-features = false }
+polars = { version = "0.51.0", features = ["nightly", "new_streaming", "performant", "cse", "fmt", "parquet"], default-features = false }
+polars-core = { version = "0.51.0", default-features = false }
 rayon = "1.10.0"
 regex = "1.11.1"
 oxrdf = { version="0.2.4" }
@@ -57,5 +57,5 @@ serial_test = "3.2.0"
 nohash-hasher = "0.2.0"
 
 [patch.crates-io]
-polars = { git = 'https://github.com/pola-rs/polars', rev="665722ac3f3664c589c4827208d173cc16f0ec68" }
-polars-core = { git = 'https://github.com/pola-rs/polars', rev="665722ac3f3664c589c4827208d173cc16f0ec68" }
+#polars = { git = 'https://github.com/pola-rs/polars', rev="665722ac3f3664c589c4827208d173cc16f0ec68" }
+#polars-core = { git = 'https://github.com/pola-rs/polars', rev="665722ac3f3664c589c4827208d173cc16f0ec68" }

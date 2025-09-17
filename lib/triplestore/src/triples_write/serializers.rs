@@ -63,7 +63,7 @@ fn make_serializer<'a, T, I: Iterator<Item = Option<T>>>(
     }
 }
 
-fn integer_serializer<I: NativeType + itoa::Integer>(array: &PrimitiveArray<I>) -> impl Serializer {
+fn integer_serializer<I: NativeType + itoa::Integer>(array: &PrimitiveArray<I>) -> impl Serializer<'_> {
     let f = move |&item, buf: &mut Vec<u8>| {
         let mut buffer = itoa::Buffer::new();
         let value = buffer.format(item);
@@ -81,7 +81,7 @@ fn integer_serializer<I: NativeType + itoa::Integer>(array: &PrimitiveArray<I>) 
 
 fn float_serializer_no_precision_autoformat<I: NativeType + ryu::Float>(
     array: &PrimitiveArray<I>,
-) -> impl Serializer {
+) -> impl Serializer<'_> {
     let f = move |&item, buf: &mut Vec<u8>| {
         let mut buffer = ryu::Buffer::new();
         let value = buffer.format(item);
@@ -97,7 +97,7 @@ fn float_serializer_no_precision_autoformat<I: NativeType + ryu::Float>(
     })
 }
 
-fn bool_serializer(array: &BooleanArray) -> impl Serializer {
+fn bool_serializer(array: &BooleanArray) -> impl Serializer<'_> {
     let f = move |item, buf: &mut Vec<u8>| {
         let s = if item { "true" } else { "false" };
         buf.extend_from_slice(s.as_bytes());
