@@ -286,3 +286,33 @@ def test_update_insert_delete_multiple(pizzas_model):
     assert df_filtered.height == 2
     df_filtered = df.filter(pl.col("b").str.contains(pl.lit("Country")))
     assert df_filtered.height == 0
+
+
+def test_count_star(pizzas_model):
+    count= pizzas_model.query( "SELECT (COUNT(*) as ?count) WHERE { ?s ?p ?o . }" )
+    assert count.height == 1
+    assert count.get_column("count")[0] == 9
+
+
+def test_update_insert_delete_non_existant(pizzas_model):
+    res = pizzas_model.update(
+        """
+    PREFIX pizza:<https://github.com/magbak/maplib/pizza#>
+    
+    DELETE  {
+        ?s ?p ?o .
+    } WHERE {
+        ?s ?p ?o .
+    }
+    """
+    )
+
+    df = pizzas_model.query(
+        """
+        PREFIX pizza:<https://github.com/magbak/maplib/pizza#>
+        SELECT ?a ?b ?c WHERE {
+            ?a ?b ?c
+        }
+    """
+    )
+    assert df.height == 0

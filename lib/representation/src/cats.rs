@@ -32,6 +32,7 @@ pub fn literal_is_cat(nn: NamedNodeRef) -> bool {
     nn == xsd::STRING
 }
 
+#[derive(Debug)]
 pub struct CatTriples {
     pub encoded_triples: Vec<EncodedTriples>,
     pub predicate: NamedNode,

@@ -59,7 +59,7 @@ impl BaseRDFNodeType {
         }
     }
 
-    pub fn as_ref(&self) -> BaseRDFNodeTypeRef {
+    pub fn as_ref(&self) -> BaseRDFNodeTypeRef<'_> {
         match self {
             Self::IRI => BaseRDFNodeTypeRef::IRI,
             Self::BlankNode => BaseRDFNodeTypeRef::BlankNode,

@@ -27,7 +27,6 @@ def test_multi_filter_equals(streaming):
     )
     assert_frame_equal(df, pl.DataFrame({"a": ["<http://example.net/hello2>"]}))
 
-
 @pytest.mark.parametrize("streaming", [True, False])
 def test_multi_filter_numerical_equals(streaming):
     m = Model()
@@ -578,6 +577,23 @@ def test_multi_concat(streaming):
     #df.write_csv(f)
     expected = pl.read_csv(f)
     assert_frame_equal(df, expected)
+
+@pytest.mark.parametrize("streaming", [True, False])
+def test_multi_concat_count(streaming):
+    m = Model()
+    df = m.query(
+        """
+    PREFIX : <http://example.net/> 
+    PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+    SELECT (COUNT(*) AS ?c) WHERE {
+    VALUES (?a) { (1) (3.0) (89) ("String") ("2021-01-01T08:00:00"^^xsd:dateTime) }
+    VALUES (?b) { (2) (2.0) (90) ("AString") ("2021-01-01T08:00:01"^^xsd:dateTime) }
+    } 
+    """,
+        streaming=streaming,
+    )
+    assert df.shape == (1,1)
+    assert df.get_column("c")[0] == 25
 
 
 @pytest.mark.parametrize("streaming", [True, False])

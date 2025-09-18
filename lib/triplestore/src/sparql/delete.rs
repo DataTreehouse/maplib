@@ -126,7 +126,7 @@ impl Triplestore {
 }
 
 fn partition_by_global_predicate_col(
-    sm: EagerSolutionMappings,
+    mut sm: EagerSolutionMappings,
     predicate: Option<NamedNode>,
     global_cats: &Cats,
 ) -> Vec<(EagerSolutionMappings, NamedNode)> {
@@ -139,6 +139,7 @@ fn partition_by_global_predicate_col(
             .unwrap();
         let mut predicates_u32 = vec![];
         let mut sms = vec![];
+        sm.rdf_node_types.remove(PREDICATE_COL_NAME).unwrap();
         for mut part in partitions {
             {
                 let any_predicate = part.column(PREDICATE_COL_NAME).unwrap().get(0);
