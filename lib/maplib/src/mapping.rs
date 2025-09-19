@@ -475,15 +475,18 @@ impl Model {
         if let Some(ruleset) = self.ruleset.take() {
             let res = infer(&mut self.base_triplestore, &ruleset, insert, max_iterations);
             match res {
-                Ok(o) => Ok(o),
-                Err(e) => {
-                    // Put it back.. this is done to be able to make a mutable borrow of the base triplestore
+                Ok(o) => {
                     self.ruleset = Some(ruleset);
+                    Ok(o)
+                }
+                Err(e) => {
+                    self.ruleset = Some(ruleset);
+                    // Put it back.. this is done to be able to make a mutable borrow of the base triplestore
                     Err(MaplibError::DatalogError(e))
                 }
             }
         } else {
-            todo!("Make an error!!")
+            Err(MaplibError::MissingDatalogRuleset)
         }
     }
 }

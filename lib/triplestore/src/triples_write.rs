@@ -1,5 +1,6 @@
 use super::Triplestore;
 use crate::errors::TriplestoreError;
+use log::warn;
 use oxrdfio::{RdfFormat, RdfSerializer};
 use polars::prelude::{by_name, col, IntoLazy};
 use polars_core::datatypes::DataType;
@@ -14,7 +15,6 @@ use representation::{
 };
 use std::collections::HashMap;
 use std::io::Write;
-use log::warn;
 
 mod fast_ntriples;
 mod serializers;
@@ -55,8 +55,17 @@ impl Triplestore {
                                 ])
                                 .collect()
                                 .unwrap();
-                            // Debug to catch error
-                            let nulls_df = df.clone().lazy().filter(col(LANG_STRING_VALUE_FIELD).is_null().or(col(LANG_STRING_LANG_FIELD).is_null())).collect().unwrap();
+                            //Debug to catch error
+                            let nulls_df = df
+                                .clone()
+                                .lazy()
+                                .filter(
+                                    col(LANG_STRING_VALUE_FIELD)
+                                        .is_null()
+                                        .or(col(LANG_STRING_LANG_FIELD).is_null()),
+                                )
+                                .collect()
+                                .unwrap();
                             if nulls_df.height() > 0 {
                                 warn!("Triplestore had null lang strings {}", nulls_df);
                             }

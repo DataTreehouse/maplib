@@ -63,7 +63,9 @@ fn make_serializer<'a, T, I: Iterator<Item = Option<T>>>(
     }
 }
 
-fn integer_serializer<I: NativeType + itoa::Integer>(array: &PrimitiveArray<I>) -> impl Serializer<'_> {
+fn integer_serializer<I: NativeType + itoa::Integer>(
+    array: &PrimitiveArray<I>,
+) -> impl Serializer<'_> {
     let f = move |&item, buf: &mut Vec<u8>| {
         let mut buffer = itoa::Buffer::new();
         let value = buffer.format(item);

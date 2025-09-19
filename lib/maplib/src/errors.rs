@@ -42,4 +42,6 @@ pub enum MaplibError {
     ShaclError(#[from] ShaclError),
     #[error(transparent)]
     IRIParseError(#[from] IriParseError),
+    #[error("Datalog ruleset missing")]
+    MissingDatalogRuleset,
 }

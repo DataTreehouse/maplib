@@ -511,7 +511,8 @@ pub fn prepare_add_triples_par(
                 })
                 .collect();
             all_partitioned
-        }).flatten()
+        })
+        .flatten()
         .collect();
     all_partitioned = all_partitioned
         .into_par_iter()

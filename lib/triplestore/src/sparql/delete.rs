@@ -173,9 +173,9 @@ fn triples_solution_mappings_to_global_cat_triples(
             let mut dfs_maps_preds = Vec::with_capacity(dfs_maps.len());
             for (mut df, map) in dfs_maps {
                 let mut lf = df.lazy();
-                for (k,v) in &map {
+                for (k, v) in &map {
                     //Important to work around null cols
-                    lf =  lf.with_column(set_struct_all_null_to_null_row(col(k), v));
+                    lf = lf.with_column(set_struct_all_null_to_null_row(col(k), v));
                 }
                 lf = lf.drop_nulls(None);
                 df = lf.collect().unwrap();
