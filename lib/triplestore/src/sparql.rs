@@ -19,8 +19,6 @@ use polars::frame::DataFrame;
 use polars::prelude::{as_struct, col, lit, Expr, IntoLazy, LiteralValue};
 use polars_core::frame::UniqueKeepStrategy;
 use polars_core::prelude::DataType;
-#[cfg(feature = "pyo3")]
-use pyo3::Python;
 use query_processing::expressions::expr_is_null_workaround;
 use query_processing::graph_patterns::unique_workaround;
 use query_processing::pushdowns::Pushdowns;
@@ -148,17 +146,9 @@ impl Triplestore {
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         streaming: bool,
         include_transient: bool,
-        #[cfg(feature = "pyo3")] py: Python<'_>,
     ) -> Result<QueryResult, SparqlError> {
         let query = Query::parse(query, None).map_err(SparqlError::ParseError)?;
-        self.query_parsed(
-            &query,
-            parameters,
-            streaming,
-            include_transient,
-            #[cfg(feature = "pyo3")]
-            py,
-        )
+        self.query_parsed(&query, parameters, streaming, include_transient)
     }
 
     pub fn query_uninterruptable(
@@ -178,7 +168,6 @@ impl Triplestore {
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         streaming: bool,
         include_transient: bool,
-        #[cfg(feature = "pyo3")] py: Python<'_>,
     ) -> Result<QueryResult, SparqlError> {
         let query = rewrite(query.clone());
         let qs = QuerySettings { include_transient };
@@ -202,11 +191,7 @@ impl Triplestore {
                     &qs,
                 )?;
 
-                match pl_interruptable_collect(
-                    mappings.with_new_streaming(streaming),
-                    #[cfg(feature = "pyo3")]
-                    py,
-                ) {
+                match pl_interruptable_collect(mappings.with_new_streaming(streaming)) {
                     Ok(df) => Ok(QueryResult::Select(EagerSolutionMappings::new(df, types))),
                     Err(InterruptableCollectError::Interrupted) => {
                         Err(SparqlError::InterruptSignal)
@@ -234,11 +219,7 @@ impl Triplestore {
                     Pushdowns::new(),
                     &qs,
                 )?;
-                match pl_interruptable_collect(
-                    mappings.with_new_streaming(streaming),
-                    #[cfg(feature = "pyo3")]
-                    py,
-                ) {
+                match pl_interruptable_collect(mappings.with_new_streaming(streaming)) {
                     Ok(df) => {
                         let mut solutions = vec![];
                         for t in template {
@@ -342,18 +323,10 @@ impl Triplestore {
         transient: bool,
         streaming: bool,
         include_transient: bool,
-        #[cfg(feature = "pyo3")] py: Python<'_>,
     ) -> Result<Vec<NewTriples>, SparqlError> {
         let query = Query::parse(query, None).map_err(SparqlError::ParseError)?;
         if let Query::Construct { .. } = &query {
-            let res = self.query_parsed(
-                &query,
-                parameters,
-                streaming,
-                include_transient,
-                #[cfg(feature = "pyo3")]
-                py,
-            )?;
+            let res = self.query_parsed(&query, parameters, streaming, include_transient)?;
             match res {
                 QueryResult::Select(_) => {
                     panic!("Should never happen")
@@ -371,17 +344,9 @@ impl Triplestore {
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         streaming: bool,
         include_transient: bool,
-        #[cfg(feature = "pyo3")] py: Python<'_>,
     ) -> Result<(), SparqlError> {
         let update = Update::parse(update, None).map_err(SparqlError::ParseError)?;
-        self.update_parsed(
-            &update,
-            parameters,
-            streaming,
-            include_transient,
-            #[cfg(feature = "pyo3")]
-            py,
-        )?;
+        self.update_parsed(&update, parameters, streaming, include_transient)?;
         Ok(())
     }
 
@@ -391,7 +356,6 @@ impl Triplestore {
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         streaming: bool,
         include_transient: bool,
-        #[cfg(feature = "pyo3")] py: Python<'_>,
     ) -> Result<(), SparqlError> {
         for u in &update.operations {
             match u {
@@ -444,14 +408,7 @@ impl Triplestore {
                         pattern: p,
                         base_iri: None,
                     };
-                    let r = self.query_parsed(
-                        &q,
-                        parameters,
-                        streaming,
-                        include_transient,
-                        #[cfg(feature = "pyo3")]
-                        py,
-                    )?;
+                    let r = self.query_parsed(&q, parameters, streaming, include_transient)?;
                     let EagerSolutionMappings {
                         mappings,
                         rdf_node_types,

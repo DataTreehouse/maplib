@@ -9,8 +9,6 @@ use representation::solution_mapping::SolutionMappings;
 use std::time::Duration;
 use triplestore::Triplestore;
 
-#[cfg(feature = "pyo3")]
-use pyo3::Python;
 use representation::cats::LockedCats;
 
 #[derive(Debug, Clone)]
@@ -65,7 +63,6 @@ pub fn validate(
     _only_shapes: Option<Vec<NamedNode>>,
     _deactivate_shapes: Vec<NamedNode>,
     _dry_run: bool,
-    #[cfg(feature = "pyo3")] _py: Python<'_>,
 ) -> Result<ValidationReport, ShaclError> {
     unimplemented!("Contact Data Treehouse to try")
 }

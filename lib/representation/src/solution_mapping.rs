@@ -5,11 +5,7 @@ use polars::prelude::{DataFrame, IntoLazy, LazyFrame};
 use std::collections::HashMap;
 use utils::polars::InterruptableCollectError;
 
-#[cfg(feature = "pyo3")]
 use utils::polars::pl_interruptable_collect;
-
-#[cfg(feature = "pyo3")]
-use pyo3::Python;
 
 #[derive(Clone, Debug)]
 pub enum BaseCatState {
@@ -93,19 +89,14 @@ impl SolutionMappings {
     pub fn as_eager_interruptable(
         self,
         streaming: bool,
-        #[cfg(feature = "pyo3")] py: Python,
     ) -> Result<EagerSolutionMappings, InterruptableCollectError> {
-        #[cfg(feature = "pyo3")]
         {
-            let df = pl_interruptable_collect(self.mappings.with_new_streaming(streaming), py)?;
+            let df = pl_interruptable_collect(self.mappings.with_new_streaming(streaming))?;
             Ok(EagerSolutionMappings {
                 mappings: df,
                 rdf_node_types: self.rdf_node_types,
             })
         }
-
-        #[cfg(not(feature = "pyo3"))]
-        Ok(self.as_eager(streaming))
     }
 }
 
