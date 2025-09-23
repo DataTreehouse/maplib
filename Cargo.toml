@@ -13,7 +13,7 @@ members = [
     "lib/fts",
     "lib/datalog",
     "lib/cimxml",
-    "py_maplib", 
+    "py_maplib",
 ]
 
 [workspace.package]

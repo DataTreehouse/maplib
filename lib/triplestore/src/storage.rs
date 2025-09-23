@@ -23,7 +23,7 @@ use std::cmp::{Ordering, Reverse};
 use std::collections::{BTreeMap, BinaryHeap};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
-use tracing::{debug, instrument, trace};
+use tracing::{instrument, trace};
 
 const OFFSET_STEP: usize = 100;
 const MIN_SIZE_CACHING: usize = 100_000_000; //100MB
