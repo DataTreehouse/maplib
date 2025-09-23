@@ -16,17 +16,18 @@ pub fn format_columns(
     global_cats: Arc<Cats>,
 ) -> LazyFrame {
     for (c, t) in rdf_node_types {
-        lf = lf.with_column(expression_to_string(
+        lf = lf.with_column(expression_to_formatted(
             col(c),
             c,
             t.clone(),
             global_cats.clone(),
+            false,
         ));
     }
     lf
 }
 
-pub fn base_expression_to_string(
+pub fn base_expression_to_formatted(
     expr: Expr,
     name: &str,
     base_type: &BaseRDFNodeType,
@@ -86,17 +87,18 @@ pub fn base_expression_to_string(
     };
     expr.alias(name)
 }
-pub fn expression_to_string(
+pub fn expression_to_formatted(
     expr: Expr,
     name: &str,
     rdf_node_state: RDFNodeState,
     global_cats: Arc<Cats>,
+    cast_string: bool,
 ) -> Expr {
     if rdf_node_state.is_multi() {
         let mut exprs = vec![];
         for (t, s) in &rdf_node_state.map {
             if t.is_lang_string() {
-                exprs.push(base_expression_to_string(
+                exprs.push(base_expression_to_formatted(
                     expr.clone(),
                     name,
                     t,
@@ -105,7 +107,7 @@ pub fn expression_to_string(
                     true,
                 ));
             } else {
-                exprs.push(base_expression_to_string(
+                exprs.push(base_expression_to_formatted(
                     expr.clone().struct_().field_by_name(&t.field_col_name()),
                     name,
                     t,
@@ -117,13 +119,13 @@ pub fn expression_to_string(
         }
         coalesce(&exprs)
     } else {
-        base_expression_to_string(
+        base_expression_to_formatted(
             expr,
             name,
             rdf_node_state.get_base_type().unwrap(),
             rdf_node_state.get_base_state().unwrap(),
             global_cats,
-            false,
+            cast_string,
         )
     }
 }
