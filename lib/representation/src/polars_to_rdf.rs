@@ -1,4 +1,4 @@
-use crate::cats::{decode_column, Cats};
+use crate::cats::{decode_column, LockedCats};
 use crate::errors::RepresentationError;
 use crate::multitype::{
     extract_column_from_multitype, MULTI_BLANK_DT, MULTI_IRI_DT, MULTI_NONE_DT,
@@ -27,7 +27,6 @@ use rayon::iter::ParallelIterator;
 use rayon::prelude::IntoParallelRefIterator;
 use spargebra::term::Term;
 use std::collections::HashSet;
-use std::sync::Arc;
 use std::vec::IntoIter;
 
 pub const XSD_DATETIME_WITHOUT_TZ_FORMAT: &str = "%Y-%m-%dT%H:%M:%S%.f";
@@ -44,7 +43,7 @@ pub struct QuerySolutions {
 pub fn column_as_terms(
     column: &Column,
     t: &RDFNodeState,
-    global_cats: Arc<Cats>,
+    global_cats: LockedCats,
 ) -> Vec<Option<Term>> {
     let height = column.len();
     let terms: Vec<_> = if !t.is_multi() {
@@ -76,7 +75,7 @@ pub fn column_as_terms(
     terms
 }
 
-pub fn df_as_result(sm: &EagerSolutionMappings, global_cats: Arc<Cats>) -> QuerySolutions {
+pub fn df_as_result(sm: &EagerSolutionMappings, global_cats: LockedCats) -> QuerySolutions {
     if sm.mappings.height() == 0 {
         let variables = sm
             .rdf_node_types
@@ -119,7 +118,7 @@ pub fn global_df_as_triples(
     subject_type: BaseRDFNodeType,
     object_type: BaseRDFNodeType,
     predicate: &NamedNode,
-    global_cats: Arc<Cats>,
+    global_cats: LockedCats,
 ) -> Vec<Triple> {
     let subjects = column_as_terms(
         df.column(SUBJECT_COL_NAME).unwrap(),
@@ -150,7 +149,7 @@ pub fn basic_rdf_node_type_column_to_term_vec(
     column: &Column,
     base_type: &BaseRDFNodeType,
     base_state: &BaseCatState,
-    global_cats: Arc<Cats>,
+    global_cats: LockedCats,
 ) -> Vec<Option<Term>> {
     match &base_type {
         BaseRDFNodeType::IRI => decode_column(column, base_type, base_state, global_cats)

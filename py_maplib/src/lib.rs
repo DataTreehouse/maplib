@@ -17,7 +17,7 @@ use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::fs::File;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Mutex, MutexGuard};
 use triplestore::sparql::{QueryResult as SparqlQueryResult, QueryResult};
 
 //The below snippet controlling alloc-library is from https://github.com/pola-rs/polars/blob/main/py-polars/src/lib.rs
@@ -56,7 +56,7 @@ use representation::solution_mapping::EagerSolutionMappings;
 
 #[cfg(not(target_os = "linux"))]
 use mimalloc::MiMalloc;
-use representation::cats::{new_solution_mapping_cats, set_global_cats_as_local, Cats};
+use representation::cats::{new_solution_mapping_cats, set_global_cats_as_local, LockedCats};
 use representation::polars_to_rdf::XSD_DATETIME_WITH_TZ_FORMAT;
 use representation::rdf_to_polars::rdf_named_node_to_polars_literal_value;
 use representation::{BaseRDFNodeType, OBJECT_COL_NAME, PREDICATE_COL_NAME, SUBJECT_COL_NAME};
@@ -754,7 +754,7 @@ fn query_mutex(
         native_dataframe.unwrap_or(false),
         include_datatypes.unwrap_or(false),
         return_json.unwrap_or(false),
-        inner.get_triplestore(&graph).cats.clone(),
+        inner.get_triplestore(&graph).global_cats.clone(),
         py,
     )
 }
@@ -903,7 +903,7 @@ fn insert_mutex(
             new_triples,
             native_dataframe.unwrap_or(false),
             include_datatypes.unwrap_or(false),
-            inner.get_triplestore(&source_graph).cats.clone(),
+            inner.get_triplestore(&source_graph).global_cats.clone(),
             py,
         )?
     } else {
@@ -947,11 +947,14 @@ fn insert_sprout_mutex(
         .map_err(PyMaplibError::from)?;
     let out_dict = if let QueryResult::Construct(dfs_and_dts) = res {
         let (sms, preds): (_, Vec<_>) = dfs_and_dts.into_iter().unzip();
-        let global_cats = inner.get_triplestore(&source_graph).cats.as_ref();
-        let (mut sms, cats) = new_solution_mapping_cats(sms, global_cats);
-        let arc_cats = Arc::new(cats);
+        let global_cats = &inner.get_triplestore(&source_graph).global_cats;
+        let (mut sms, cats) = {
+            let guard = global_cats.read().unwrap();
+            new_solution_mapping_cats(sms, &guard)
+        };
+        let locked_cats = LockedCats::new(cats);
         for sm in &mut sms {
-            set_global_cats_as_local(&mut sm.rdf_node_types, arc_cats.clone());
+            set_global_cats_as_local(&mut sm.rdf_node_types, locked_cats.clone());
         }
         let dfs_and_dts: Vec<_> = sms.into_iter().zip(preds).collect();
 
@@ -964,7 +967,7 @@ fn insert_sprout_mutex(
             new_triples,
             native_dataframe.unwrap_or(false),
             include_datatypes.unwrap_or(false),
-            inner.get_triplestore(&source_graph).cats.clone(),
+            inner.get_triplestore(&source_graph).global_cats.clone(),
             py,
         )?
     } else {
@@ -1181,7 +1184,7 @@ fn get_predicate_mutex(
         )
         .map_err(PyMaplibError::from)?;
     let mut out = vec![];
-    let global_cats = inner.get_triplestore(&graph).cats.clone();
+    let global_cats = inner.get_triplestore(&graph).global_cats.clone();
     for EagerSolutionMappings {
         mut mappings,
         mut rdf_node_types,
@@ -1222,7 +1225,7 @@ fn infer_mutex(
                 mappings,
                 rdf_node_types,
                 native_dataframe,
-                inner.base_triplestore.cats.clone(),
+                inner.base_triplestore.global_cats.clone(),
             );
             let pydf = df_to_py_df(mappings, rdf_node_types, None, include_datatypes, py)?;
             py_res.insert(nn.as_str().to_string(), pydf);
@@ -1268,7 +1271,7 @@ fn query_to_result(
     native_dataframe: bool,
     include_details: bool,
     return_json: bool,
-    global_cats: Arc<Cats>,
+    global_cats: LockedCats,
     py: Python<'_>,
 ) -> PyResult<PyObject> {
     if return_json {
@@ -1395,7 +1398,7 @@ fn new_triples_to_dict(
     new_triples: Vec<NewTriples>,
     native_dataframe: bool,
     include_datatypes: bool,
-    global_cats: Arc<Cats>,
+    global_cats: LockedCats,
     py: Python<'_>,
 ) -> PyResult<HashMap<String, PyObject>> {
     let mut map = HashMap::new();

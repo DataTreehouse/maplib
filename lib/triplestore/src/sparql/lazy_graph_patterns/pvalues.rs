@@ -42,11 +42,17 @@ impl Triplestore {
         } else {
             todo!("Handle this error")
         };
-        let (sm, _) = self.cats.encode_solution_mappings(sm, None);
+        let cats = self.global_cats.read().unwrap();
+        let (sm, _) = cats.encode_solution_mappings(sm, None);
         if let Some(mut mappings) = solution_mappings {
             //TODO: Remove this workaround
             mappings = mappings.as_eager(false).as_lazy();
-            mappings = join(mappings, sm.as_lazy(), JoinType::Inner, self.cats.clone())?;
+            mappings = join(
+                mappings,
+                sm.as_lazy(),
+                JoinType::Inner,
+                self.global_cats.clone(),
+            )?;
             Ok(mappings)
         } else {
             Ok(sm.as_lazy())

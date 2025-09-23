@@ -1,4 +1,4 @@
-use crate::cats::{maybe_decode_expr, Cats};
+use crate::cats::{maybe_decode_expr, LockedCats};
 use crate::polars_to_rdf::{
     datetime_column_to_strings, XSD_DATETIME_WITH_TZ_FORMAT, XSD_DATE_WITHOUT_TZ_FORMAT,
 };
@@ -8,12 +8,11 @@ use oxrdf::vocab::{rdf, xsd};
 use polars::datatypes::{DataType, Field};
 use polars::prelude::{as_struct, coalesce, col, lit, Expr, IntoColumn, LazyFrame, LiteralValue};
 use std::collections::HashMap;
-use std::sync::Arc;
 
 pub fn format_columns(
     mut lf: LazyFrame,
     rdf_node_types: &HashMap<String, RDFNodeState>,
-    global_cats: Arc<Cats>,
+    global_cats: LockedCats,
 ) -> LazyFrame {
     for (c, t) in rdf_node_types {
         lf = lf.with_column(expression_to_string(
@@ -31,7 +30,7 @@ pub fn base_expression_to_string(
     name: &str,
     base_type: &BaseRDFNodeType,
     base_state: &BaseCatState,
-    global_cats: Arc<Cats>,
+    global_cats: LockedCats,
     literal_string_rep: bool,
 ) -> Expr {
     let expr = match base_type {
@@ -90,7 +89,7 @@ pub fn expression_to_string(
     expr: Expr,
     name: &str,
     rdf_node_state: RDFNodeState,
-    global_cats: Arc<Cats>,
+    global_cats: LockedCats,
 ) -> Expr {
     if rdf_node_state.is_multi() {
         let mut exprs = vec![];
@@ -131,7 +130,7 @@ pub fn expression_to_string(
 pub fn format_native_columns(
     mut lf: LazyFrame,
     rdf_node_types: &mut HashMap<String, RDFNodeState>,
-    global_cats: Arc<Cats>,
+    global_cats: LockedCats,
 ) -> LazyFrame {
     for (c, t) in rdf_node_types.iter() {
         lf = lf.with_column(expression_to_native(
@@ -155,7 +154,7 @@ pub fn expression_to_native(
     expr: Expr,
     name: &str,
     rdf_node_state: RDFNodeState,
-    global_cats: Arc<Cats>,
+    global_cats: LockedCats,
 ) -> Expr {
     if rdf_node_state.is_multi() {
         let mut exprs = vec![];
@@ -198,7 +197,7 @@ pub fn base_expression_to_native(
     expr: Expr,
     base_type: &BaseRDFNodeType,
     base_state: &BaseCatState,
-    global_cats: Arc<Cats>,
+    global_cats: LockedCats,
 ) -> Vec<Expr> {
     let mut exprs = vec![];
     match base_type {

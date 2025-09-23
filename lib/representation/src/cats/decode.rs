@@ -1,4 +1,5 @@
 use super::{CatEncs, CatType, Cats};
+use crate::cats::LockedCats;
 use crate::solution_mapping::BaseCatState;
 use crate::BaseRDFNodeType;
 use oxrdf::NamedNode;
@@ -7,7 +8,6 @@ use polars::frame::DataFrame;
 use polars::prelude::{col, Column, Expr, IntoColumn, IntoLazy};
 use polars::series::Series;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
-use std::sync::Arc;
 
 impl CatEncs {
     pub fn decode(&self, ser: &Series, cat_type: &CatType) -> Series {
@@ -46,15 +46,16 @@ impl CatEncs {
 }
 
 impl Cats {
-    pub fn decode_iri_u32s(&self, us: &[u32], local_cats: Option<Arc<Cats>>) -> Vec<NamedNode> {
+    pub fn decode_iri_u32s(&self, us: &[u32], local_cats: Option<LockedCats>) -> Vec<NamedNode> {
         us.par_iter()
             .map(|x| self.decode_iri_u32(x, local_cats.clone()))
             .collect()
     }
 
-    pub fn decode_iri_u32(&self, u: &u32, local_cats: Option<Arc<Cats>>) -> NamedNode {
+    pub fn decode_iri_u32(&self, u: &u32, local_cats: Option<LockedCats>) -> NamedNode {
         //Very important that we prefer the local encoding over the global encoding.
-        let local = local_cats.as_ref().map(|x| x.as_ref());
+        let local = local_cats.as_ref().map(|x| x.read().unwrap());
+        let local = local.as_ref();
         let mut encs = if let Some(local_cats) = local {
             local_cats.get_encs(&BaseRDFNodeType::IRI)
         } else {
@@ -122,12 +123,12 @@ impl Cats {
         &self,
         ser: &Series,
         t: &BaseRDFNodeType,
-        local_cats: Option<Arc<Cats>>,
+        local_cats: Option<LockedCats>,
         add_prefix: bool,
     ) -> Series {
         //Very important that we prefer the local encoding over the global encoding.
-        let local = local_cats.as_ref().map(|x| x.as_ref());
-        let mut encs = if let Some(local_cats) = local {
+        let local = local_cats.as_ref().map(|x| x.read().unwrap());
+        let mut encs = if let Some(local_cats) = &local {
             local_cats.get_encs(t)
         } else {
             vec![]
@@ -162,7 +163,7 @@ pub fn decode_column(
     column: &Column,
     base_type: &BaseRDFNodeType,
     base_state: &BaseCatState,
-    global_cats: Arc<Cats>,
+    global_cats: LockedCats,
 ) -> Column {
     let name = column.name().to_string();
     let mut df = DataFrame::new(vec![column.clone()]).unwrap();
@@ -176,7 +177,7 @@ pub fn maybe_decode_expr(
     expr: Expr,
     base_type: &BaseRDFNodeType,
     base_state: &BaseCatState,
-    global_cats: Arc<Cats>,
+    global_cats: LockedCats,
 ) -> Expr {
     match base_state {
         BaseCatState::CategoricalNative(_, local_cats) => decode_expr(
@@ -194,7 +195,7 @@ pub fn optional_maybe_decode_expr(
     expr: Expr,
     base_type: &BaseRDFNodeType,
     base_state: &BaseCatState,
-    global_cats: Arc<Cats>,
+    global_cats: LockedCats,
 ) -> Option<Expr> {
     match base_state {
         BaseCatState::CategoricalNative(_, local_cats) => Some(decode_expr(
@@ -211,13 +212,14 @@ pub fn optional_maybe_decode_expr(
 pub fn decode_expr(
     expr: Expr,
     base_rdf_node_type: BaseRDFNodeType,
-    local_cats: Option<Arc<Cats>>,
-    global_cats: Arc<Cats>,
+    local_cats: Option<LockedCats>,
+    global_cats: LockedCats,
     add_prefix: bool,
 ) -> Expr {
     expr.map(
         move |x| {
             let original_name = x.name().to_string();
+            let global_cats = global_cats.read().unwrap();
             let mut s = global_cats.decode(
                 x.as_materialized_series(),
                 &base_rdf_node_type,

@@ -85,6 +85,7 @@ impl Triplestore {
         include_transient: bool,
     ) -> Result<Option<Vec<HalfBakedSolutionMappings>>, SparqlError> {
         let mut all_sms = vec![];
+        let cats = self.global_cats.read()?;
         if self.triples_map.contains_key(predicate_uri) {
             let compatible_types = self.all_compatible_types(
                 predicate_uri,
@@ -100,7 +101,7 @@ impl Triplestore {
                     objects,
                     keep_subject,
                     keep_object,
-                    &self.cats,
+                    &cats,
                 )? {
                     all_sms.extend(sms);
                 }
@@ -121,7 +122,7 @@ impl Triplestore {
                     objects,
                     keep_subject,
                     keep_object,
-                    &self.cats,
+                    &cats,
                 )? {
                     all_sms.extend(sms);
                 }
@@ -153,6 +154,7 @@ impl Triplestore {
         include_transient: bool,
     ) -> Result<SolutionMappings, SparqlError> {
         let predicate_uris = predicate_uris.unwrap_or(self.all_predicates());
+        let cats = self.global_cats.read()?;
 
         let mut sms = vec![];
         if !(objects.is_some() && objects.as_ref().unwrap().is_empty())
@@ -202,7 +204,7 @@ impl Triplestore {
                     subject_types.insert(subject_type.clone(), subject_state.unwrap().clone());
                 }
                 if predicate_keep_rename.is_some() {
-                    let enc = named_node_enc(predicate.as_ref().unwrap(), &self.cats).unwrap();
+                    let enc = named_node_enc(predicate.as_ref().unwrap(), &cats).unwrap();
                     mappings = mappings.with_column(enc.alias(PREDICATE_COL_NAME));
                 }
 

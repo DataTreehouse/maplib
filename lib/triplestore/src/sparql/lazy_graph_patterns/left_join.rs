@@ -88,7 +88,7 @@ impl Triplestore {
             left_solution_mappings,
             right_solution_mappings,
             JoinType::Left,
-            self.cats.clone(),
+            self.global_cats.clone(),
         )?;
         Ok(left_solution_mappings)
     }

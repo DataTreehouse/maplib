@@ -19,7 +19,9 @@ use oxrdf::{NamedNode, NamedNodeRef};
 use polars::prelude::DataFrame;
 use std::collections::{BTreeMap, HashMap};
 use std::hash::BuildHasherDefault;
+use std::ops::Deref;
 use std::sync::Arc;
+use std::sync::RwLock;
 use uuid::Uuid;
 
 const SUBJECT_PREFIX_COL_NAME: &str = "subject_prefix";
@@ -38,7 +40,7 @@ pub struct CatTriples {
     pub predicate: NamedNode,
     pub subject_type: BaseRDFNodeType,
     pub object_type: BaseRDFNodeType,
-    pub local_cats: Vec<Arc<Cats>>,
+    pub local_cats: Vec<LockedCats>,
 }
 
 #[derive(Hash, Eq, PartialEq, Clone, Debug, PartialOrd, Ord)]
@@ -72,6 +74,69 @@ pub struct CatEncs {
     // We use a BTree map to keep strings sorted
     pub map: BTreeMap<String, u32>,
     pub rev_map: HashMap<u32, String, BuildHasherDefault<NoHashHasher<u32>>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct LockedCats {
+    inner: Arc<RwLock<Cats>>,
+}
+
+impl LockedCats {
+    pub fn read(
+        &self,
+    ) -> Result<
+        std::sync::RwLockReadGuard<'_, Cats>,
+        std::sync::PoisonError<std::sync::RwLockReadGuard<'_, Cats>>,
+    > {
+        self.inner.read()
+    }
+
+    pub fn write(
+        &self,
+    ) -> Result<
+        std::sync::RwLockWriteGuard<'_, Cats>,
+        std::sync::PoisonError<std::sync::RwLockWriteGuard<'_, Cats>>,
+    > {
+        self.inner.write()
+    }
+
+    pub fn new(cats: Cats) -> Self {
+        Arc::new(RwLock::new(cats)).into()
+    }
+
+    pub fn new_empty() -> Self {
+        Self::new(Cats::new_empty())
+    }
+
+    pub fn deref(&self) -> Arc<RwLock<Cats>> {
+        // panic!("I got derefed!");
+        self.inner.clone()
+    }
+
+    /// Aquires a lock on self, clones the inner Cats and returns it as a new LockedCats.
+    /// Panics if lock is poisoned
+    pub fn deep_clone(&self) -> Self {
+        let cats = {
+            let lock = self.read().unwrap();
+            lock.deref().clone()
+        };
+        Self::new(cats)
+    }
+
+    pub fn get_cloned_cats(&self) -> Cats {
+        let guard = self.read().unwrap();
+        guard.deref().clone()
+    }
+
+    pub fn ptr_eq(this: &LockedCats, other: &LockedCats) -> bool {
+        Arc::ptr_eq(&this.deref(), &other.deref())
+    }
+}
+
+impl From<Arc<RwLock<Cats>>> for LockedCats {
+    fn from(cats: Arc<RwLock<Cats>>) -> Self {
+        Self { inner: cats }
+    }
 }
 
 #[derive(Debug, Clone)]

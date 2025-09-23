@@ -46,15 +46,15 @@ impl Triplestore {
         let sm = match graph_pattern {
             GraphPattern::Bgp { patterns } => {
                 let patterns = if let Some(fts_index) = &self.fts_index {
-                    let (patterns, fts_solution_mappings) =
-                        fts_index.lookup_from_triple_patterns(patterns, self.cats.clone())?;
+                    let (patterns, fts_solution_mappings) = fts_index
+                        .lookup_from_triple_patterns(patterns, self.global_cats.clone())?;
                     if let Some(fts_solution_mappings) = fts_solution_mappings {
                         solution_mappings = if let Some(solution_mappings) = solution_mappings {
                             Some(join(
                                 solution_mappings,
                                 fts_solution_mappings,
                                 JoinType::Inner,
-                                self.cats.clone(),
+                                self.global_cats.clone(),
                             )?)
                         } else {
                             Some(fts_solution_mappings)

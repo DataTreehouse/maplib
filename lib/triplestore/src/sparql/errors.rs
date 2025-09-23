@@ -1,3 +1,5 @@
+use std::sync::PoisonError;
+
 use crate::errors::TriplestoreError;
 use fts::FtsError;
 use query_processing::errors::QueryProcessingError;
@@ -27,4 +29,12 @@ pub enum SparqlError {
     FtsLookupError(#[from] FtsError),
     #[error("Query interrupted via signal")]
     InterruptSignal,
+    #[error("A lock was open when a thread crashed, cannot guarantee data constitency")]
+    PoisonedLockError,
+}
+
+impl<T> From<PoisonError<T>> for SparqlError {
+    fn from(_: PoisonError<T>) -> Self {
+        Self::PoisonedLockError
+    }
 }

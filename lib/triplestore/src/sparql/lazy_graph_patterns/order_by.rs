@@ -57,7 +57,7 @@ impl Triplestore {
             output_solution_mappings,
             &sort_columns,
             asc_ordering,
-            self.cats.clone(),
+            self.global_cats.clone(),
         )?;
         output_solution_mappings.mappings = output_solution_mappings
             .mappings

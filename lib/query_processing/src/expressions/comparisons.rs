@@ -3,17 +3,16 @@ use crate::expressions::operations::compatible_operation;
 use oxrdf::NamedNodeRef;
 use polars::datatypes::DataType;
 use polars::prelude::{coalesce, col, lit, Expr, LiteralValue};
-use representation::cats::Cats;
+use representation::cats::LockedCats;
 use representation::{BaseRDFNodeType, RDFNodeState};
 use spargebra::algebra::Expression;
-use std::sync::Arc;
 
 pub fn typed_equals_expr(
     left_col: &str,
     right_col: &str,
     left_type: &RDFNodeState,
     right_type: &RDFNodeState,
-    global_cats: Arc<Cats>,
+    global_cats: LockedCats,
 ) -> Expr {
     let mut exploded: Vec<_> = create_compatible_cats(
         vec![Some(col(left_col)), Some(col(right_col))],

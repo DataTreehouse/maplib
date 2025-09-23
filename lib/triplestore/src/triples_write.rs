@@ -72,8 +72,8 @@ impl Triplestore {
                             df = df.lazy().drop_nulls(None).collect().unwrap();
 
                             if let Some(prefix) = subject_type.as_cat_type() {
-                                let ser = self
-                                    .cats
+                                let cats = self.global_cats.read()?;
+                                let ser = cats
                                     .decode_of_type(
                                         &df.column(SUBJECT_COL_NAME)
                                             .unwrap()
@@ -105,8 +105,8 @@ impl Triplestore {
                                 .unwrap();
                             convert_datelike_to_string(&mut df, OBJECT_COL_NAME);
                             if let Some(prefix) = subject_type.as_cat_type() {
-                                let ser = self
-                                    .cats
+                                let cats = self.global_cats.read()?;
+                                let ser = cats
                                     .decode_of_type(
                                         &df.column(SUBJECT_COL_NAME)
                                             .unwrap()
@@ -117,8 +117,8 @@ impl Triplestore {
                                 df.with_column(ser.into_column()).unwrap();
                             }
                             if let Some(prefix) = object_type.as_cat_type() {
-                                let ser = self
-                                    .cats
+                                let cats = self.global_cats.read()?;
+                                let ser = cats
                                     .decode_of_type(
                                         &df.column(OBJECT_COL_NAME)
                                             .unwrap()
@@ -152,7 +152,7 @@ impl Triplestore {
                             subject_type.as_base_rdf_node_type(),
                             object_type.as_base_rdf_node_type(),
                             predicate,
-                            self.cats.clone(),
+                            self.global_cats.clone(),
                         );
                         for t in &triples {
                             writer.serialize_triple(t).unwrap();

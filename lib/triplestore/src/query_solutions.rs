@@ -40,7 +40,7 @@ pub fn query_select(
     } else {
         panic!("Should never happen")
     };
-    Ok(df_as_result(&sm, triplestore.cats.clone()))
+    Ok(df_as_result(&sm, triplestore.global_cats.clone()))
 }
 
 #[allow(clippy::too_many_arguments)]

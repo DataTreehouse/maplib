@@ -1,4 +1,5 @@
 use super::{CatEncs, CatTriples, CatType, Cats};
+use crate::cats::LockedCats;
 use crate::solution_mapping::{BaseCatState, EagerSolutionMappings};
 use crate::{BaseRDFNodeType, OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use nohash_hasher::NoHashHasher;
@@ -75,7 +76,9 @@ impl CatEncs {
 
 impl Cats {
     //Re enc is for right hand side
-    pub fn join(left: Arc<Cats>, right: Arc<Cats>) -> CatReEnc {
+    pub fn join(left: LockedCats, right: LockedCats) -> CatReEnc {
+        let left = left.read().unwrap();
+        let right = right.read().unwrap();
         let rencs: Vec<_> = left
             .cat_map
             .par_iter()
@@ -100,10 +103,11 @@ impl Cats {
 
     pub fn merge(
         &mut self,
-        other_cats: Vec<Arc<Cats>>,
+        other_cats: Vec<LockedCats>,
     ) -> HashMap<String, HashMap<CatType, CatReEnc>> {
         let mut map = HashMap::new();
         for c in other_cats {
+            let c = c.read().unwrap();
             let mut other_map = HashMap::new();
             for (t, other_enc) in c.cat_map.iter() {
                 let mut c = self.get_height(&t);
@@ -242,6 +246,7 @@ pub fn reencode_solution_mappings(
         let mut reenc_exprs = vec![];
         for (bt, bs) in &t.map {
             if let BaseCatState::CategoricalNative(_, Some(local)) = bs {
+                let local = local.read().unwrap();
                 if let Some(rmap) = reencs.get(&local.uuid) {
                     let r = rmap.get(bt).unwrap();
 

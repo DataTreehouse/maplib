@@ -11,14 +11,13 @@ use pyo3::ffi::Py_uintptr_t;
 use pyo3::prelude::*;
 use pyo3::types::PyList;
 use pyo3::IntoPyObjectExt;
-use representation::cats::Cats;
+use representation::cats::LockedCats;
 use representation::formatting::{format_columns, format_native_columns};
 use representation::multitype::compress_actual_multitypes;
 use representation::python::PySolutionMappings;
 use representation::query_context::Context;
 use representation::RDFNodeState;
 use std::collections::HashMap;
-use std::sync::Arc;
 
 /// Arrow array to Python.
 pub(crate) fn to_py_array(
@@ -122,7 +121,7 @@ pub fn fix_cats_and_multicolumns(
     mut df: DataFrame,
     mut dts: HashMap<String, RDFNodeState>,
     native_dataframe: bool,
-    global_cats: Arc<Cats>,
+    global_cats: LockedCats,
 ) -> (DataFrame, HashMap<String, RDFNodeState>) {
     let column_ordering: Vec<_> = df
         .get_column_names()

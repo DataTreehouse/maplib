@@ -41,7 +41,7 @@ impl Triplestore {
                 solution_mappings,
                 project_solution_mappings,
                 JoinType::Inner,
-                self.cats.clone(),
+                self.global_cats.clone(),
             )?
         } else {
             project_solution_mappings

@@ -1,8 +1,9 @@
 use polars::prelude::{by_name, col, LazyFrame};
-use representation::cats::{maybe_decode_expr, optional_maybe_decode_expr, CatReEnc, Cats};
+use representation::cats::{
+    maybe_decode_expr, optional_maybe_decode_expr, CatReEnc, Cats, LockedCats,
+};
 use representation::solution_mapping::BaseCatState;
 use representation::{BaseRDFNodeType, RDFNodeState};
-use std::sync::Arc;
 
 pub enum CatOperation {
     Decode,
@@ -16,7 +17,7 @@ impl CatOperation {
         c: &str,
         t: &RDFNodeState,
         base_t: &BaseRDFNodeType,
-        global_cats: Arc<Cats>,
+        global_cats: LockedCats,
     ) -> LazyFrame {
         match self {
             CatOperation::Decode => {

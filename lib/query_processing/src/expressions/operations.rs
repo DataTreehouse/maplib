@@ -2,7 +2,7 @@ use crate::expressions::coalesce_expressions;
 use oxrdf::vocab::xsd;
 use oxrdf::NamedNodeRef;
 use polars::prelude::{col, lit, Expr, LiteralValue};
-use representation::cats::Cats;
+use representation::cats::LockedCats;
 use representation::{
     literal_is_boolean, literal_is_date, literal_is_datetime, literal_is_numeric,
     literal_is_string, BaseRDFNodeType, RDFNodeState,
@@ -10,7 +10,6 @@ use representation::{
 use spargebra::algebra::Expression;
 use std::cmp;
 use std::ops::{Add, Div, Mul, Sub};
-use std::sync::Arc;
 
 pub fn typed_numerical_operation(
     left_col: &str,
@@ -18,7 +17,7 @@ pub fn typed_numerical_operation(
     left_type: &RDFNodeState,
     right_type: &RDFNodeState,
     expression: &Expression,
-    global_cats: Arc<Cats>,
+    global_cats: LockedCats,
 ) -> (Expr, RDFNodeState) {
     let mut ops = vec![];
     if left_type.is_multi() {

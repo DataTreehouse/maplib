@@ -1,16 +1,15 @@
 use crate::errors::QueryProcessingError;
 use polars::prelude::{col, Expr, SortMultipleOptions};
-use representation::cats::{maybe_decode_expr, Cats};
+use representation::cats::{maybe_decode_expr, LockedCats};
 use representation::solution_mapping::{BaseCatState, SolutionMappings};
 use representation::BaseRDFNodeType;
 use std::cmp::Ordering;
-use std::sync::Arc;
 
 pub fn order_by(
     mut solution_mappings: SolutionMappings,
     columns: &[String],
     asc_ordering: Vec<bool>,
-    global_cats: Arc<Cats>,
+    global_cats: LockedCats,
 ) -> Result<SolutionMappings, QueryProcessingError> {
     if columns.is_empty() {
         return Ok(solution_mappings);
@@ -87,7 +86,7 @@ pub fn order_by(
 pub fn make_sortable(
     c: &str,
     mut solution_mappings: SolutionMappings,
-    global_cats: Arc<Cats>,
+    global_cats: LockedCats,
 ) -> SolutionMappings {
     if let Some(state) = solution_mappings.rdf_node_types.get_mut(c) {
         let expr = col(c);
@@ -123,7 +122,7 @@ pub fn make_base_cat_sortable(
     expr: Expr,
     base_type: &BaseRDFNodeType,
     base_state: &BaseCatState,
-    global_cats: Arc<Cats>,
+    global_cats: LockedCats,
 ) -> (Expr, BaseCatState) {
     match base_state {
         BaseCatState::CategoricalNative(_, _) => (

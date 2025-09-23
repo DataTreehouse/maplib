@@ -1,16 +1,15 @@
 use crate::cats::create_compatible_cats;
 use crate::errors::QueryProcessingError;
 use polars::prelude::{as_struct, col, concat_lf_diagonal, lit, LiteralValue, UnionArgs};
-use representation::cats::Cats;
+use representation::cats::LockedCats;
 use representation::solution_mapping::SolutionMappings;
 use representation::{RDFNodeState, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD};
 use std::collections::HashMap;
-use std::sync::Arc;
 
 pub fn union(
     mut sms: Vec<SolutionMappings>,
     rechunk: bool,
-    global_cats: Arc<Cats>,
+    global_cats: LockedCats,
 ) -> Result<SolutionMappings, QueryProcessingError> {
     assert!(!sms.is_empty());
     if sms.len() == 1 {

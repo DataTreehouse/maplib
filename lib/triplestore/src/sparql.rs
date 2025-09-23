@@ -24,7 +24,7 @@ use pyo3::Python;
 use query_processing::expressions::expr_is_null_workaround;
 use query_processing::graph_patterns::unique_workaround;
 use query_processing::pushdowns::Pushdowns;
-use representation::cats::Cats;
+use representation::cats::{Cats, LockedCats};
 use representation::polars_to_rdf::{df_as_result, QuerySolutions};
 use representation::query_context::Context;
 use representation::rdf_to_polars::{
@@ -42,7 +42,6 @@ use spargebra::term::{
 };
 use spargebra::{GraphUpdateOperation, Query, Update};
 use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
 
 #[derive(Debug)]
 pub enum QueryResult {
@@ -55,7 +54,7 @@ pub struct QuerySettings {
 }
 
 impl QueryResult {
-    pub fn json(&self, global_cats: Arc<Cats>) -> String {
+    pub fn json(&self, global_cats: LockedCats) -> String {
         match self {
             QueryResult::Select(sm) => {
                 let QuerySolutions {
@@ -243,13 +242,14 @@ impl Triplestore {
                     Ok(df) => {
                         let mut solutions = vec![];
                         for t in template {
+                            let cats = self.global_cats.read()?;
                             if let Some((sm, predicate)) = triple_to_solution_mappings(
                                 &df,
                                 &rdf_node_types,
                                 t,
                                 None,
                                 true,
-                                &self.cats,
+                                &cats,
                             )? {
                                 solutions.push((sm, predicate));
                             }
@@ -322,14 +322,10 @@ impl Triplestore {
 
                 let mut solutions = vec![];
                 for t in template {
-                    if let Some((sm, predicate)) = triple_to_solution_mappings(
-                        &df,
-                        &rdf_node_types,
-                        t,
-                        None,
-                        true,
-                        &self.cats,
-                    )? {
+                    let cats = self.global_cats.read()?;
+                    if let Some((sm, predicate)) =
+                        triple_to_solution_mappings(&df, &rdf_node_types, t, None, true, &cats)?
+                    {
                         solutions.push((sm, predicate));
                     }
                 }
@@ -466,13 +462,14 @@ impl Triplestore {
                     };
                     let mut delete_solutions = vec![];
                     for d in delete {
+                        let cats = self.global_cats.read()?;
                         let del = triple_to_solution_mappings(
                             &mappings,
                             &rdf_node_types,
                             &ground_quad_pattern_to_triple_pattern(d),
                             None,
                             false,
-                            &self.cats,
+                            &cats,
                         )?;
                         if let Some(sol) = del {
                             delete_solutions.push(sol);
@@ -483,13 +480,14 @@ impl Triplestore {
                     }
                     let mut insert_solutions = vec![];
                     for i in insert {
+                        let cats = self.global_cats.read()?;
                         let insert = triple_to_solution_mappings(
                             &mappings,
                             &rdf_node_types,
                             &quad_pattern_to_triple_pattern(i),
                             None,
                             true,
-                            &self.cats,
+                            &cats,
                         )?;
                         if let Some(insert) = insert {
                             insert_solutions.push(insert);

@@ -2,6 +2,7 @@ use super::{
     rdf_split_iri_str, split_iri_series, CatEncs, CatType, Cats, EncodedTriples,
     OBJECT_PREFIX_COL_NAME, SUBJECT_PREFIX_COL_NAME,
 };
+use crate::cats::LockedCats;
 use crate::solution_mapping::{BaseCatState, EagerSolutionMappings};
 use crate::{BaseRDFNodeType, RDFNodeState, OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use oxrdf::NamedNode;
@@ -10,7 +11,6 @@ use polars::prelude::{col, lit, IntoLazy, Series};
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
-use std::sync::Arc;
 
 impl CatEncs {
     pub fn new_empty() -> CatEncs {
@@ -145,7 +145,7 @@ impl Cats {
             }
             s.map.insert(
                 t,
-                BaseCatState::CategoricalNative(false, local.map(|x| Arc::new(x))),
+                BaseCatState::CategoricalNative(false, local.map(|x| LockedCats::new(x))),
             );
             if let Some((s, m)) = cat_col {
                 let name = include_cat_type_col.as_ref().unwrap().get(&c).unwrap();
@@ -361,12 +361,13 @@ impl Cats {
     pub fn get_prefix_column(
         &self,
         ser: Series,
-        local_cats: Option<Arc<Cats>>,
+        local_cats: Option<LockedCats>,
     ) -> (Series, HashMap<u32, CatType>) {
         // Important to prefer local cats
         let mut encs = vec![];
         let mut filtered_cat_types = vec![];
-        let local_cats = local_cats.as_ref().map(|x| x.as_ref());
+        let local_cats = local_cats.as_ref().map(|x| x.read().unwrap());
+        let local_cats = local_cats.as_ref();
         if let Some(local_cats) = local_cats {
             let local_filtered_cat_types = local_cats.filter_cat_types(&BaseRDFNodeType::IRI);
             for c in &local_filtered_cat_types {
@@ -428,7 +429,7 @@ impl Cats {
                 u,
                 RDFNodeState::from_bases(
                     BaseRDFNodeType::IRI,
-                    BaseCatState::CategoricalNative(false, Some(Arc::new(l))),
+                    BaseCatState::CategoricalNative(false, Some(LockedCats::new(l))),
                 ),
             )
         }
@@ -450,7 +451,7 @@ impl Cats {
                 u,
                 RDFNodeState::from_bases(
                     BaseRDFNodeType::BlankNode,
-                    BaseCatState::CategoricalNative(false, Some(Arc::new(l))),
+                    BaseCatState::CategoricalNative(false, Some(LockedCats::new(l))),
                 ),
             )
         }
@@ -489,7 +490,7 @@ pub fn encode_triples(
     subject_cat_state: BaseCatState,
     object_cat_state: BaseCatState,
     global_cats: &Cats,
-) -> (Vec<Arc<Cats>>, Vec<EncodedTriples>) {
+) -> (Vec<LockedCats>, Vec<EncodedTriples>) {
     let mut map = HashMap::new();
     map.insert(
         SUBJECT_COL_NAME.to_string(),
@@ -520,8 +521,14 @@ pub fn encode_triples(
     let (subject_type, subject_cat_state) = subject_state.map.drain().next().unwrap();
     let (object_type, object_cat_state) = object_state.map.drain().next().unwrap();
 
-    let subject_local_cat_uuid = subject_cat_state.get_local_cats().map(|x| x.uuid.clone());
-    let object_local_cat_uuid = object_cat_state.get_local_cats().map(|x| x.uuid.clone());
+    let subject_local_cat_uuid = subject_cat_state.get_local_cats().map(|x| {
+        let x = x.read().unwrap();
+        x.uuid.clone()
+    });
+    let object_local_cat_uuid = object_cat_state.get_local_cats().map(|x| {
+        let x = x.read().unwrap();
+        x.uuid.clone()
+    });
 
     let EagerSolutionMappings { mappings, .. } = sm;
     let mut partition_by = vec![];

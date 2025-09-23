@@ -75,7 +75,7 @@ impl Triplestore {
                 solution_mappings,
                 grouped,
                 JoinType::Inner,
-                self.cats.clone(),
+                self.global_cats.clone(),
             )?
         } else {
             grouped
