@@ -34,7 +34,7 @@ polars = {workspace=true, default-features = false, features=[
     "cross_join",
     "cum_agg",
     "coalesce"] }
-log.workspace = true
+tracing.workspace = true
 uuid.workspace = true
 thiserror.workspace = true
 rayon.workspace = true

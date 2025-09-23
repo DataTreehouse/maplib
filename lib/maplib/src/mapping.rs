@@ -27,6 +27,7 @@ use triplestore::sparql::errors::SparqlError;
 use triplestore::sparql::QueryResult;
 use triplestore::{IndexingOptions, NewTriples, Triplestore};
 
+use tracing::instrument;
 
 pub struct Model {
     pub template_dataset: TemplateDataset,
@@ -66,16 +67,12 @@ struct StaticColumn {
 }
 
 impl Model {
+    #[instrument(skip_all)]
     pub fn new(
         template_dataset: Option<&TemplateDataset>,
         storage_folder: Option<String>,
         indexing: Option<IndexingOptions>,
     ) -> Result<Model, MaplibError> {
-        #[allow(clippy::match_single_binding)]
-        match env_logger::try_init() {
-            _ => {}
-        };
-
         let use_disk = storage_folder.is_some();
         let indexing = if use_disk {
             if let Some(indexing) = indexing {
@@ -149,6 +146,7 @@ impl Model {
         Ok(())
     }
 
+    #[instrument(skip_all)]
     pub fn add_templates_from_string(&mut self, s: &str) -> Result<Option<NamedNode>, MaplibError> {
         let doc = document_from_str(s).map_err(MaplibError::TemplateError)?;
         let mut dataset =
@@ -177,6 +175,7 @@ impl Model {
     }
 
     #[allow(clippy::too_many_arguments)]
+    #[instrument(skip_all)]
     pub fn read_triples(
         &mut self,
         p: &Path,
@@ -232,6 +231,7 @@ impl Model {
         }
     }
 
+    #[instrument(skip_all)]
     pub fn query(
         &mut self,
         query: &str,
@@ -392,6 +392,7 @@ impl Model {
         Ok(triplestore.get_predicate_iris(include_transient))
     }
 
+    #[instrument(skip_all)]
     pub fn get_predicate(
         &mut self,
         predicate: &NamedNode,
@@ -404,6 +405,7 @@ impl Model {
             .map_err(|x| x.into())
     }
 
+    #[instrument(skip_all)]
     pub fn create_index(
         &mut self,
         indexing: IndexingOptions,

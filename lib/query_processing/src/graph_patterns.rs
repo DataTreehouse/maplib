@@ -15,7 +15,6 @@ use crate::errors::QueryProcessingError;
 use crate::type_constraints::{
     conjunction_variable_type, equal_variable_type, ConstraintBaseRDFNodeType, PossibleTypes,
 };
-use log::warn;
 use oxrdf::vocab::rdfs;
 use oxrdf::Variable;
 use polars::frame::UniqueKeepStrategy;
@@ -29,6 +28,7 @@ use representation::solution_mapping::SolutionMappings;
 use representation::{BaseRDFNodeType, RDFNodeState};
 use spargebra::algebra::{Expression, Function};
 use std::collections::{HashMap, HashSet};
+use tracing::warn;
 use uuid::Uuid;
 
 pub fn distinct(

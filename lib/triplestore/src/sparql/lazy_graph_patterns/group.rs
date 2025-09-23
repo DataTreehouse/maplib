@@ -1,7 +1,7 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
-use log::trace;
 use oxrdf::Variable;
+use tracing::{instrument, trace};
 
 use crate::sparql::QuerySettings;
 use polars::prelude::JoinType;
@@ -15,6 +15,7 @@ use std::collections::HashMap;
 
 impl Triplestore {
     #[allow(clippy::too_many_arguments)]
+    #[instrument(skip_all)]
     pub(crate) fn lazy_group(
         &self,
         inner: &GraphPattern,

@@ -11,7 +11,7 @@ pyo3 = [ "utils/pyo3" ]
 utils = { path = "../utils" }
 spargebra = {path = "../spargebra"}
 
-log.workspace = true
+tracing.workspace = true
 oxrdf = {workspace = true, features = ["oxsdatatypes"]}
 polars = {workspace = true, features=["cum_agg","diagonal_concat", "merge_sorted", "performant", "new_streaming", "lazy", "dtype-full", "timezones", "polars-time", "partition_by", "strings"], default-features = false }
 chrono.workspace = true

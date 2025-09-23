@@ -4,7 +4,6 @@ use representation::query_context::Context;
 use representation::solution_mapping::{BaseCatState, SolutionMappings};
 
 use crate::sparql::QuerySettings;
-use log::trace;
 use oxrdf::{NamedNode, Subject, Term};
 use polars::prelude::{by_name, IntoLazy};
 use polars::prelude::{lit, AnyValue, JoinType};
@@ -14,8 +13,10 @@ use query_processing::type_constraints::{ConstraintBaseRDFNodeType, PossibleType
 use representation::literal_iri_to_namednode;
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 use std::collections::{HashMap, HashSet};
+use tracing::{instrument, trace};
 
 impl Triplestore {
+    #[instrument(skip_all)]
     pub fn lazy_triple_pattern(
         &self,
         solution_mappings: Option<SolutionMappings>,

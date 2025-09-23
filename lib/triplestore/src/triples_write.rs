@@ -1,6 +1,5 @@
 use super::Triplestore;
 use crate::errors::TriplestoreError;
-use log::warn;
 use oxrdfio::{RdfFormat, RdfSerializer};
 use polars::prelude::{by_name, col, IntoLazy};
 use polars_core::datatypes::DataType;
@@ -15,6 +14,7 @@ use representation::{
 };
 use std::collections::HashMap;
 use std::io::Write;
+use tracing::warn;
 
 mod fast_ntriples;
 mod serializers;
@@ -55,7 +55,6 @@ impl Triplestore {
                                 ])
                                 .collect()
                                 .unwrap();
-                            //Debug to catch error
                             let nulls_df = df
                                 .clone()
                                 .lazy()

@@ -1,6 +1,5 @@
 use crate::errors::TriplestoreError;
 use crate::{IndexingOptions, StoredBaseRDFNodeType};
-use log::trace;
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{NamedNode, Subject, Term};
 use polars::prelude::{
@@ -24,6 +23,7 @@ use std::cmp::{Ordering, Reverse};
 use std::collections::{BTreeMap, BinaryHeap};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
+use tracing::{debug, instrument, trace};
 
 const OFFSET_STEP: usize = 100;
 const MIN_SIZE_CACHING: usize = 100_000_000; //100MB
@@ -97,6 +97,7 @@ impl Triples {
         Ok(all_sms)
     }
 
+    #[instrument(skip_all)]
     pub(crate) fn add_triples(
         &mut self,
         df: DataFrame,
@@ -250,11 +251,10 @@ impl Triples {
 
         let total_time = total_now.elapsed().as_secs_f32();
         trace!(
-            "Took {} compacting:  {}, subjects {}, nonoverlaps {}",
             total_time,
-            compacting_indexing_time / total_time,
-            subjects_time / total_time,
-            nonoverlapping_time / total_time
+            compacting = (compacting_indexing_time / total_time),
+            subject = (subjects_time / total_time),
+            nonoverlapping = (nonoverlapping_time / total_time)
         );
         out
     }

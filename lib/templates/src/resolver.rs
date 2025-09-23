@@ -12,11 +12,11 @@ use crate::parsing::parsing_ast::{
     UnresolvedPType, UnresolvedParameter, UnresolvedSignature, UnresolvedStatement,
     UnresolvedStottrDocument, UnresolvedStottrLiteral, UnresolvedStottrTerm, UnresolvedTemplate,
 };
-use log::warn;
 use oxrdf::{IriParseError, Literal, NamedNode};
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
+use tracing::warn;
 
 #[derive(Debug)]
 pub enum ResolutionError {

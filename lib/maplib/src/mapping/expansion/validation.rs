@@ -1,5 +1,4 @@
 use crate::mapping::errors::MappingError;
-use log::warn;
 use oxiri::Iri;
 use oxrdf::vocab::{rdfs, xsd};
 use oxrdf::NamedNode;
@@ -16,6 +15,7 @@ use std::collections::{HashMap, HashSet};
 use templates::ast::{ptype_is_blank, ptype_is_iri, PType, Parameter, Template};
 use templates::subtypes_ext::is_literal_subtype_ext;
 use templates::MappingColumnType;
+use tracing::warn;
 
 pub fn validate(
     df: Option<DataFrame>,

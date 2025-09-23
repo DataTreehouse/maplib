@@ -1,7 +1,6 @@
 use crate::{LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD};
 use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
 use chrono_tz::Tz;
-use log::warn;
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{BlankNode, Literal, NamedNode, NamedNodeRef, Term};
 use polars::prelude::{
@@ -10,6 +9,7 @@ use polars::prelude::{
 };
 use std::ops::Deref;
 use std::str::FromStr;
+use tracing::warn;
 
 pub fn rdf_term_to_polars_expr(term: &Term) -> Expr {
     match term {

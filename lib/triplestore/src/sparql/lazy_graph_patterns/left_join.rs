@@ -1,6 +1,6 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
-use log::trace;
+use tracing::{instrument, trace};
 
 use crate::sparql::QuerySettings;
 use polars::prelude::{col, JoinType};
@@ -14,6 +14,7 @@ use std::collections::HashMap;
 
 impl Triplestore {
     #[allow(clippy::too_many_arguments)]
+    #[instrument(skip_all)]
     pub fn lazy_left_join(
         &self,
         left: &GraphPattern,

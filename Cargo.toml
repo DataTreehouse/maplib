@@ -49,6 +49,11 @@ fundu = "2.0.1"
 memmap2 = "0.9.5"
 sprs = "0.11.3"
 walkdir = "2.5.0"
+
+tracing = { version = "0.1", features = [ "log" ] }
+tracing-subscriber = "0.3.19"
+tracing-log = "0.2"
+
 itoa = "1.0.15"
 ryu = "1.0.20"
 #dev-dependencies

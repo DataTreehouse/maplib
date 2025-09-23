@@ -3,7 +3,6 @@ use crate::sparql::errors::SparqlError;
 use crate::storage::Triples;
 use crate::Triplestore;
 use crate::{sort_triples_add_rank, StoredBaseRDFNodeType};
-use log::trace;
 use oxrdf::NamedNode;
 use polars::prelude::{col, concat, IntoLazy, JoinArgs, JoinType, MaintainOrderJoin, UnionArgs};
 use polars_core::datatypes::AnyValue;
@@ -14,6 +13,7 @@ use representation::solution_mapping::EagerSolutionMappings;
 use representation::{OBJECT_COL_NAME, PREDICATE_COL_NAME, SUBJECT_COL_NAME};
 use std::collections::HashMap;
 use std::time::Instant;
+use tracing::trace;
 
 impl Triplestore {
     pub fn delete_construct_result(

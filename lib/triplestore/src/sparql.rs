@@ -8,6 +8,7 @@ mod lazy_order;
 mod rewrite;
 //mod rewrite;
 
+use tracing::{instrument, trace, warn};
 use utils::polars::{pl_interruptable_collect, InterruptableCollectError};
 
 use super::{NewTriples, Triplestore};
@@ -47,6 +48,7 @@ pub enum QueryResult {
     Construct(Vec<(EagerSolutionMappings, Option<NamedNode>)>),
 }
 
+#[derive(Debug)]
 pub struct QuerySettings {
     pub include_transient: bool,
 }
@@ -140,6 +142,7 @@ impl QueryResult {
 }
 
 impl Triplestore {
+    #[instrument(skip_all)]
     pub fn query(
         &self,
         query: &str,
@@ -148,6 +151,7 @@ impl Triplestore {
         include_transient: bool,
     ) -> Result<QueryResult, SparqlError> {
         let query = Query::parse(query, None).map_err(SparqlError::ParseError)?;
+        trace!(?query);
         self.query_parsed(&query, parameters, streaming, include_transient)
     }
 

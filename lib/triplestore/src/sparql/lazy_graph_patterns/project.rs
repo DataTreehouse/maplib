@@ -1,7 +1,7 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
-use log::trace;
 use oxrdf::Variable;
+use tracing::{instrument, trace};
 
 use crate::sparql::QuerySettings;
 use polars::prelude::JoinType;
@@ -13,6 +13,7 @@ use spargebra::algebra::GraphPattern;
 use std::collections::HashMap;
 
 impl Triplestore {
+    #[instrument(skip_all)]
     pub(crate) fn lazy_project(
         &self,
         inner: &GraphPattern,

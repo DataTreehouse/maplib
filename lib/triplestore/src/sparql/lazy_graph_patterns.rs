@@ -16,7 +16,7 @@ mod values;
 
 use super::{QuerySettings, Triplestore};
 use crate::sparql::errors::SparqlError;
-use log::{info, trace};
+use tracing::{info, instrument, trace};
 
 use crate::sparql::lazy_graph_patterns::triples_ordering::order_triple_patterns;
 use polars::prelude::{IntoLazy, JoinType};
@@ -29,6 +29,7 @@ use spargebra::algebra::GraphPattern;
 use std::collections::HashMap;
 
 impl Triplestore {
+    #[instrument(skip_all)]
     pub fn lazy_graph_pattern(
         &self,
         graph_pattern: &GraphPattern,

@@ -6,7 +6,7 @@ use crate::ast::{
 use crate::constants::{OTTR_IRI, OTTR_TRIPLE};
 use crate::document::document_from_file;
 use errors::TemplateError;
-use log::warn;
+use tracing::warn;
 
 use crate::subtypes_ext::is_literal_subtype_ext;
 use oxrdf::vocab::rdfs;

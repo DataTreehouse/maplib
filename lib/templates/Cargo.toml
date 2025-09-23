@@ -9,7 +9,7 @@ representation = { path = "../representation" }
 
 oxrdf = { workspace = true }
 unic-char-range = "0.9.0"
-log = { workspace = true }
+tracing = { workspace = true }
 thiserror = { workspace = true }
 nom = { workspace = true, features = ["alloc"] }
 pyo3.workspace = true

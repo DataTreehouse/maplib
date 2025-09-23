@@ -5,7 +5,6 @@ use crate::errors::MaplibError;
 use crate::mapping::constant_terms::{constant_blank_node_to_series, constant_to_expr};
 use crate::mapping::errors::MappingError;
 use crate::mapping::expansion::validation::validate;
-use log::debug;
 use oxrdf::vocab::rdf;
 use oxrdf::{NamedNode, Variable};
 use polars::prelude::{
@@ -27,6 +26,7 @@ use templates::ast::{
 };
 use templates::constants::OTTR_TRIPLE;
 use templates::MappingColumnType;
+use tracing::debug;
 use triplestore::{TriplesToAdd, Triplestore};
 
 const LIST_COL: &str = "list";

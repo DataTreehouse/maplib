@@ -1,7 +1,7 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
-use log::trace;
 use std::cmp::Ordering;
+use tracing::{instrument, trace};
 
 use crate::sparql::QuerySettings;
 use query_processing::pushdowns::Pushdowns;
@@ -69,6 +69,7 @@ impl PartialOrd for BadGraphPatternProperties {
 }
 
 impl Triplestore {
+    #[instrument(skip_all)]
     pub fn lazy_join(
         &self,
         left: &GraphPattern,

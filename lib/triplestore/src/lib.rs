@@ -15,7 +15,6 @@ use crate::errors::TriplestoreError;
 use crate::storage::{repeated_from_last_row_expr, Triples};
 use file_io::create_folder_if_not_exists;
 use fts::FtsIndex;
-use log::trace;
 use oxrdf::vocab::{rdf, rdfs};
 use oxrdf::NamedNode;
 use polars::prelude::{col, AnyValue, DataFrame, IntoLazy, RankMethod, RankOptions};
@@ -37,6 +36,8 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 use uuid::Uuid;
+
+use tracing::{instrument, trace};
 
 #[derive(Clone, Hash, Eq, PartialEq, Debug)]
 pub enum StoredBaseRDFNodeType {
@@ -217,6 +218,7 @@ impl NewTriples {
 }
 
 impl Triplestore {
+    #[instrument(skip_all)]
     pub fn new(
         storage_folder: Option<String>,
         indexing: Option<IndexingOptions>,
@@ -250,6 +252,7 @@ impl Triplestore {
         })
     }
 
+    #[instrument(skip_all)]
     pub fn create_index(&mut self, indexing: IndexingOptions) -> Result<(), TriplestoreError> {
         if let Some(fts_path) = &indexing.fts_path {
             // Only doing anything if the fts index does not already exist.
@@ -285,6 +288,7 @@ impl Triplestore {
         Ok(())
     }
 
+    #[instrument(skip_all)]
     pub fn add_triples_vec(
         &mut self,
         ts: Vec<TriplesToAdd>,
@@ -305,6 +309,7 @@ impl Triplestore {
         Ok(new_triples)
     }
 
+    #[instrument(skip_all)]
     fn add_local_cat_triples(
         &mut self,
         local_cats: Vec<CatTriples>,
@@ -314,6 +319,7 @@ impl Triplestore {
         self.add_global_cat_triples(global_cats, transient)
     }
 
+    #[instrument(skip_all)]
     fn add_global_cat_triples(
         &mut self,
         global_cat_triples: Vec<CatTriples>,
@@ -474,6 +480,7 @@ struct TriplesToAddPartitionedPredicate {
     pub object_cat_state: BaseCatState,
 }
 
+#[instrument(skip_all)]
 pub fn prepare_add_triples_par(
     mut ts: Vec<TriplesToAdd>,
     global_cats: LockedCats,
