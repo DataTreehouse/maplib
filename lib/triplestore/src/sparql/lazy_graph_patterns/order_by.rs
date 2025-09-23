@@ -1,6 +1,6 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
-use log::trace;
+use tracing::{instrument, trace};
 
 use crate::sparql::QuerySettings;
 use polars::prelude::by_name;
@@ -12,6 +12,7 @@ use spargebra::algebra::{GraphPattern, OrderExpression};
 use std::collections::HashMap;
 
 impl Triplestore {
+    #[instrument(skip_all)]
     pub(crate) fn lazy_order_by(
         &self,
         inner: &GraphPattern,
@@ -57,7 +58,7 @@ impl Triplestore {
             output_solution_mappings,
             &sort_columns,
             asc_ordering,
-            self.cats.clone(),
+            self.global_cats.clone(),
         )?;
         output_solution_mappings.mappings = output_solution_mappings
             .mappings

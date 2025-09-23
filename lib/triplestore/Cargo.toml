@@ -24,13 +24,13 @@ polars = { workspace = true, features = [
     "dtype-full", "strings", "rows", "timezones", "polars-time", "temporal", "list_eval", "partition_by", "parquet",
     "diagonal_concat", "cum_agg"], default-features = false }
 polars-core = {workspace = true, default-features = false}
-log.workspace = true
 uuid.workspace = true
 thiserror.workspace = true
 oxrdfio.workspace = true
 oxttl.workspace = true
 memmap2.workspace = true
 sparesults.workspace = true
+tracing.workspace = true
 
 pyo3 = { workspace = true, optional = true }
 

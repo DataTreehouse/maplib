@@ -40,13 +40,13 @@ impl PyValidationReport {
 
     #[getter]
     pub fn shape_targets(&self, py: Python<'_>) -> PyResult<PyObject> {
-        let df = self.inner.shape_targets_df();
+        let df = py.allow_threads(|| self.inner.shape_targets_df());
         df_to_py_df(df, HashMap::new(), None, false, py)
     }
 
     #[getter]
     pub fn performance(&self, py: Python<'_>) -> PyResult<PyObject> {
-        let df = self.inner.performance_df();
+        let df = py.allow_threads(|| self.inner.performance_df());
         df_to_py_df(df, HashMap::new(), None, false, py)
     }
 
@@ -59,32 +59,39 @@ impl PyValidationReport {
         py: Python<'_>,
     ) -> PyResult<Option<PyObject>> {
         let streaming = streaming.unwrap_or(false);
-        let report = if let Some(sm) = self
-            .inner
-            .concatenated_results()
-            .map_err(|x| PyMaplibError::from(MaplibError::from(x)))?
-        {
-            let EagerSolutionMappings {
-                mut mappings,
-                mut rdf_node_types,
-            } = sm.as_eager(streaming);
-            (mappings, rdf_node_types) = fix_cats_and_multicolumns(
-                mappings,
-                rdf_node_types,
-                native_dataframe.unwrap_or(false),
-                self.inner.cats.as_ref().unwrap().clone(),
-            );
-            Some(df_to_py_df(
+        let report = py.allow_threads(|| -> Result<_, PyMaplibError> {
+            let sm = self
+                .inner
+                .concatenated_results()
+                .map_err(|x| PyMaplibError::from(MaplibError::from(x)))?;
+            let cats = self.inner.cats.as_ref().unwrap().clone();
+            match sm {
+                Some(sm) => {
+                    let EagerSolutionMappings {
+                        mut mappings,
+                        mut rdf_node_types,
+                    } = sm.as_eager(streaming);
+                    (mappings, rdf_node_types) = fix_cats_and_multicolumns(
+                        mappings,
+                        rdf_node_types,
+                        native_dataframe.unwrap_or(false),
+                        cats,
+                    );
+                    Ok(Some((mappings, rdf_node_types)))
+                }
+                None => Ok(None),
+            }
+        })?;
+        match report {
+            Some((mappings, rdf_node_types)) => Ok(Some(df_to_py_df(
                 mappings,
                 rdf_node_types,
                 None,
                 include_datatypes.unwrap_or(false),
                 py,
-            )?)
-        } else {
-            None
-        };
-        Ok(report)
+            )?)),
+            None => Ok(None),
+        }
     }
 
     #[pyo3(signature = (native_dataframe=None, include_datatypes=None, streaming=None))]
@@ -96,47 +103,50 @@ impl PyValidationReport {
         py: Python<'_>,
     ) -> PyResult<Option<PyObject>> {
         let streaming = streaming.unwrap_or(false);
-        let details = if let Some(sm) = self
-            .inner
-            .concatenated_details()
-            .map_err(|x| PyMaplibError::from(MaplibError::from(x)))?
-        {
-            let EagerSolutionMappings {
-                mut mappings,
-                mut rdf_node_types,
-            } = sm.as_eager(streaming);
-            (mappings, rdf_node_types) = fix_cats_and_multicolumns(
-                mappings,
-                rdf_node_types,
-                native_dataframe.unwrap_or(false),
-                self.inner.cats.as_ref().unwrap().clone(),
-            );
-            Some(df_to_py_df(
+        let native_dataframe = native_dataframe.unwrap_or(false);
+        let include_datatypes = include_datatypes.unwrap_or(false);
+        let details = py.allow_threads(|| -> Result<_, PyMaplibError> {
+            let sm = self
+                .inner
+                .concatenated_details()
+                .map_err(|x| PyMaplibError::from(MaplibError::from(x)))?;
+            let cats = self.inner.cats.as_ref().unwrap().clone();
+            match sm {
+                Some(sm) => {
+                    let EagerSolutionMappings {
+                        mut mappings,
+                        mut rdf_node_types,
+                    } = sm.as_eager(streaming);
+                    (mappings, rdf_node_types) =
+                        fix_cats_and_multicolumns(mappings, rdf_node_types, native_dataframe, cats);
+                    Ok(Some((mappings, rdf_node_types)))
+                }
+                None => Ok(None),
+            }
+        })?;
+        match details {
+            Some((mappings, rdf_node_types)) => Ok(Some(df_to_py_df(
                 mappings,
                 rdf_node_types,
                 None,
-                include_datatypes.unwrap_or(false),
+                include_datatypes,
                 py,
-            )?)
-        } else {
-            None
-        };
-        Ok(details)
+            )?)),
+            None => Ok(None),
+        }
     }
 
     #[pyo3(signature = (indexing=None))]
-    pub fn graph(&self, indexing: Option<PyIndexingOptions>) -> PyResult<PyModel> {
-        let indexing = if let Some(indexing) = indexing {
-            Some(indexing.inner)
-        } else {
-            None
-        };
-        let m = report_to_model(
-            &self.inner,
-            &self.shape_graph,
-            Some(indexing.unwrap_or(self.indexing.clone())),
-        )
-        .map_err(|x| PyMaplibError::from(MaplibError::from(x)))?;
+    pub fn graph(&self, py: Python<'_>, indexing: Option<PyIndexingOptions>) -> PyResult<PyModel> {
+        let indexing = indexing.map_or(None, move |i| Some(i.inner));
+        let m = py.allow_threads(|| {
+            report_to_model(
+                &self.inner,
+                &self.shape_graph,
+                Some(indexing.unwrap_or(self.indexing.clone())),
+            )
+            .map_err(|x| PyMaplibError::from(MaplibError::from(x)))
+        })?;
         Ok(PyModel::from_inner_mapping(m))
     }
 }

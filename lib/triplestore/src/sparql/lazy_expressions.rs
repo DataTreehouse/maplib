@@ -27,9 +27,10 @@ impl Triplestore {
         pushdowns: Option<&Pushdowns>,
         query_settings: &QuerySettings,
     ) -> Result<SolutionMappings, SparqlError> {
+        let cats = self.global_cats.read().unwrap();
         let output_solution_mappings = match expr {
-            Expression::NamedNode(nn) => named_node(solution_mappings, nn, context, &self.cats)?,
-            Expression::Literal(lit) => literal(solution_mappings, lit, context, &self.cats)?,
+            Expression::NamedNode(nn) => named_node(solution_mappings, nn, context, &cats)?,
+            Expression::Literal(lit) => literal(solution_mappings, lit, context, &cats)?,
             Expression::Variable(v) => variable(solution_mappings, v, context)?,
             Expression::Or(left, right) => {
                 let left_context = context.extension_with(PathEntry::OrLeft);
@@ -56,7 +57,7 @@ impl Triplestore {
                     &left_context,
                     &right_context,
                     context,
-                    self.cats.clone(),
+                    self.global_cats.clone(),
                 )?
             }
             Expression::And(left, right) => {
@@ -84,7 +85,7 @@ impl Triplestore {
                     &left_context,
                     &right_context,
                     context,
-                    self.cats.clone(),
+                    self.global_cats.clone(),
                 )?
             }
             Expression::Equal(left, right) => {
@@ -112,7 +113,7 @@ impl Triplestore {
                     &left_context,
                     &right_context,
                     context,
-                    self.cats.clone(),
+                    self.global_cats.clone(),
                 )?
             }
             Expression::SameTerm(_, _) => {
@@ -143,7 +144,7 @@ impl Triplestore {
                     &left_context,
                     &right_context,
                     context,
-                    self.cats.clone(),
+                    self.global_cats.clone(),
                 )?
             }
             Expression::GreaterOrEqual(left, right) => {
@@ -172,7 +173,7 @@ impl Triplestore {
                     &left_context,
                     &right_context,
                     context,
-                    self.cats.clone(),
+                    self.global_cats.clone(),
                 )?
             }
             Expression::Less(left, right) => {
@@ -200,7 +201,7 @@ impl Triplestore {
                     &left_context,
                     &right_context,
                     context,
-                    self.cats.clone(),
+                    self.global_cats.clone(),
                 )?
             }
             Expression::LessOrEqual(left, right) => {
@@ -228,7 +229,7 @@ impl Triplestore {
                     &left_context,
                     &right_context,
                     context,
-                    self.cats.clone(),
+                    self.global_cats.clone(),
                 )?
             }
             Expression::In(left, right) => {
@@ -261,7 +262,7 @@ impl Triplestore {
                     &left_context,
                     &right_contexts,
                     context,
-                    self.cats.clone(),
+                    self.global_cats.clone(),
                 )?
             }
             Expression::Add(left, right) => {
@@ -289,7 +290,7 @@ impl Triplestore {
                     &left_context,
                     &right_context,
                     context,
-                    self.cats.clone(),
+                    self.global_cats.clone(),
                 )?
             }
             Expression::Subtract(left, right) => {
@@ -317,7 +318,7 @@ impl Triplestore {
                     &left_context,
                     &right_context,
                     context,
-                    self.cats.clone(),
+                    self.global_cats.clone(),
                 )?
             }
             Expression::Multiply(left, right) => {
@@ -345,7 +346,7 @@ impl Triplestore {
                     &left_context,
                     &right_context,
                     context,
-                    self.cats.clone(),
+                    self.global_cats.clone(),
                 )?
             }
             Expression::Divide(left, right) => {
@@ -374,7 +375,7 @@ impl Triplestore {
                     &left_context,
                     &right_context,
                     context,
-                    self.cats.clone(),
+                    self.global_cats.clone(),
                 )?
             }
             Expression::UnaryPlus(inner) => {
@@ -505,7 +506,7 @@ impl Triplestore {
                     output_solution_mappings,
                     inner_contexts,
                     context,
-                    self.cats.clone(),
+                    self.global_cats.clone(),
                 )?
             }
             Expression::FunctionCall(func, args) => {
@@ -529,7 +530,7 @@ impl Triplestore {
                     args,
                     args_contexts,
                     context,
-                    self.cats.clone(),
+                    self.global_cats.clone(),
                 )?
             }
         };

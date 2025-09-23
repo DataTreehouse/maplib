@@ -1,5 +1,6 @@
 use super::{reencode_solution_mappings, CatEncs};
 use super::{CatReEnc, Cats};
+use crate::cats::LockedCats;
 use crate::solution_mapping::{BaseCatState, EagerSolutionMappings};
 use crate::{BaseRDFNodeType, RDFNodeState};
 use nohash_hasher::NoHashHasher;
@@ -184,7 +185,7 @@ pub fn new_solution_mapping_cats(
 
 pub fn set_global_cats_as_local(
     rdf_node_types: &mut HashMap<String, RDFNodeState>,
-    cats: Arc<Cats>,
+    cats: LockedCats,
 ) {
     for (_, s) in rdf_node_types {
         for v in s.map.values_mut() {

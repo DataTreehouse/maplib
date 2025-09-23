@@ -5,7 +5,7 @@ use polars::prelude::{
     as_struct, by_name, col, lit, Expr, JoinArgs, JoinType, LazyFrame, LiteralValue,
     MaintainOrderJoin,
 };
-use representation::cats::Cats;
+use representation::cats::LockedCats;
 use representation::multitype::{
     all_multi_cols, all_multi_main_cols, force_convert_multicol_to_single_col, nest_multicolumns,
     unnest_multicols,
@@ -13,13 +13,12 @@ use representation::multitype::{
 use representation::solution_mapping::SolutionMappings;
 use representation::{BaseRDFNodeType, RDFNodeState};
 use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
 
 pub fn join(
     left_solution_mappings: SolutionMappings,
     right_solution_mappings: SolutionMappings,
     join_type: JoinType,
-    global_cats: Arc<Cats>,
+    global_cats: LockedCats,
 ) -> Result<SolutionMappings, QueryProcessingError> {
     let SolutionMappings {
         mappings: left_mappings,
@@ -229,7 +228,7 @@ fn create_join_compatible_cats(
     left_types: &HashMap<String, RDFNodeState>,
     mut right_mappings: LazyFrame,
     right_types: &HashMap<String, RDFNodeState>,
-    global_cats: Arc<Cats>,
+    global_cats: LockedCats,
 ) -> (LazyFrame, LazyFrame, HashMap<String, RDFNodeState>) {
     let mut state_map = HashMap::new();
     for (c, left_state) in left_types {

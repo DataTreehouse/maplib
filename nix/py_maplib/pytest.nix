@@ -2,7 +2,7 @@
   src,
   buildPythonPackage,
   pytestCheckHook,
-  maplib,  
+  maplib,
   rdflib
 }:
 

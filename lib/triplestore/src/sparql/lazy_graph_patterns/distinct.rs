@@ -1,15 +1,16 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
 use crate::sparql::QuerySettings;
-use log::trace;
 use query_processing::graph_patterns::distinct;
 use query_processing::pushdowns::Pushdowns;
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use spargebra::algebra::GraphPattern;
 use std::collections::HashMap;
+use tracing::{instrument, trace};
 
 impl Triplestore {
+    #[instrument(skip_all)]
     pub(crate) fn lazy_distinct(
         &self,
         inner: &GraphPattern,

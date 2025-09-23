@@ -17,7 +17,6 @@ templates = {path= "../lib/templates"}
 cimxml = {path = "../lib/cimxml", features = [ "pyo3" ]}
 
 pyo3.workspace = true
-pyo3-log.workspace = true
 oxrdf.workspace = true
 oxrdfio.workspace = true
 thiserror.workspace = true
@@ -30,6 +29,10 @@ polars = { workspace = true, features = [
 log.workspace = true
 uuid.workspace = true
 chrono.workspace = true
+
+tracing.workspace = true
+tracing-log.workspace = true
+tracing-subscriber.workspace = true
 
 [lib]
 name = "maplib"

@@ -1,6 +1,6 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
-use log::trace;
+use tracing::{instrument, trace};
 
 use crate::sparql::QuerySettings;
 use query_processing::graph_patterns::union;
@@ -11,6 +11,7 @@ use spargebra::algebra::GraphPattern;
 use std::collections::HashMap;
 
 impl Triplestore {
+    #[instrument(skip_all)]
     pub(crate) fn lazy_union(
         &self,
         left: &GraphPattern,
@@ -47,7 +48,7 @@ impl Triplestore {
         let u = union(
             vec![left_solution_mappings, right_solution_mappings],
             true,
-            self.cats.clone(),
+            self.global_cats.clone(),
         )?;
         Ok(u)
     }

@@ -4,13 +4,12 @@ use crate::type_constraints::{
 };
 use oxrdf::vocab::rdfs;
 use oxrdf::{Term, Variable};
-use representation::cats::{named_node_split_prefix, Cats};
+use representation::cats::{named_node_split_prefix, LockedCats};
 use representation::polars_to_rdf::column_as_terms;
 use representation::solution_mapping::SolutionMappings;
 use spargebra::algebra::{Expression, Function, GraphPattern};
 use spargebra::term::{GroundTerm, NamedNodePattern, TermPattern, TriplePattern};
 use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
 
 pub const SMALL_HEIGHT: usize = 100;
 pub const OWL_REAL: &str = "http://www.w3.org/2002/07/owl#real";
@@ -49,7 +48,7 @@ impl Pushdowns {
     pub fn add_from_solution_mappings(
         &mut self,
         sm: SolutionMappings,
-        global_cats: Arc<Cats>,
+        global_cats: LockedCats,
     ) -> SolutionMappings {
         let mut should_add_from_solution_mappings = false;
         for v in sm.rdf_node_types.keys() {

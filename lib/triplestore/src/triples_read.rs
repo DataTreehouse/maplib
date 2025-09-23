@@ -2,7 +2,6 @@ use super::Triplestore;
 use crate::errors::TriplestoreError;
 use crate::TriplesToAdd;
 
-use log::debug;
 use memmap2::MmapOptions;
 use oxrdf::{BlankNode, GraphName, NamedNode, Quad, Subject, Term};
 use oxrdfio::{RdfFormat, RdfParser, RdfSyntaxError, SliceQuadParser};
@@ -27,11 +26,13 @@ use std::fs::File;
 use std::ops::Deref;
 use std::path::Path;
 use std::time::Instant;
+use tracing::{debug, instrument};
 
 type MapType = HashMap<String, HashMap<String, (Vec<Subject>, Vec<Term>)>>;
 
 impl Triplestore {
     #[allow(clippy::too_many_arguments)]
+    #[instrument(skip(self, rdf_format, base_iri, transient, parallel, checked))]
     pub fn read_triples_from_path(
         &mut self,
         path: &Path,
@@ -42,10 +43,6 @@ impl Triplestore {
         checked: bool,
     ) -> Result<(), TriplestoreError> {
         let now = Instant::now();
-        debug!(
-            "Started reading triples from path {}",
-            path.to_string_lossy()
-        );
         let rdf_format = if let Some(rdf_format) = rdf_format {
             rdf_format
         } else if path.extension() == Some("ttl".as_ref()) {
@@ -99,6 +96,7 @@ impl Triplestore {
     }
 
     #[allow(clippy::too_many_arguments)]
+    #[instrument(skip_all)]
     pub fn read_triples(
         &mut self,
         slice: &[u8],

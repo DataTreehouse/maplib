@@ -1,6 +1,6 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
-use log::trace;
+use tracing::{instrument, trace};
 
 use crate::sparql::QuerySettings;
 use query_processing::expressions::contains_graph_pattern;
@@ -12,6 +12,7 @@ use spargebra::algebra::{Expression, GraphPattern};
 use std::collections::HashMap;
 
 impl Triplestore {
+    #[instrument(skip_all)]
     pub(crate) fn lazy_filter(
         &self,
         inner: &GraphPattern,

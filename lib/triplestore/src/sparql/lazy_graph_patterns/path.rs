@@ -12,7 +12,7 @@ use query_processing::errors::QueryProcessingError;
 use query_processing::expressions::{maybe_literal_enc, named_node_enc};
 use query_processing::graph_patterns::{group_by_workaround, join, union};
 use query_processing::pushdowns::Pushdowns;
-use representation::cats::Cats;
+use representation::cats::LockedCats;
 use representation::multitype::{
     compress_actual_multitypes, force_convert_multicol_to_single_col, nest_multicolumns,
 };
@@ -24,7 +24,6 @@ use spargebra::algebra::{GraphPattern, PropertyPathExpression};
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 use sprs::{CsMatBase, TriMatBase};
 use std::collections::HashMap;
-use std::sync::Arc;
 
 const NAMED_NODE_INDEX_COL: &str = "named_node_index_column";
 const VALUE_COLUMN: &str = "value";
@@ -89,7 +88,12 @@ impl Triplestore {
             }
             sms.mappings = sms.mappings.drop(by_name(intermediaries, true));
             if let Some(solution_mappings) = solution_mappings {
-                sms = join(sms, solution_mappings, JoinType::Inner, self.cats.clone())?;
+                sms = join(
+                    sms,
+                    solution_mappings,
+                    JoinType::Inner,
+                    self.global_cats.clone(),
+                )?;
             }
             return Ok(sms);
         }
@@ -101,7 +105,7 @@ impl Triplestore {
         let mut df_creator = U32DataFrameCreator::new(query_settings);
         df_creator.gather_namednode_dfs(ppe, self)?;
         let (lookup_df, lookup_dtypes, namednode_dfs) =
-            df_creator.create_u32_dfs(self.cats.clone())?;
+            df_creator.create_u32_dfs(self.global_cats.clone())?;
         let max_index: Option<u32> = lookup_df
             .column(LOOKUP_COLUMN)
             .unwrap()
@@ -263,9 +267,10 @@ impl Triplestore {
         let mut rename_src = vec![];
         let mut rename_trg = vec![];
 
+        let cats = self.global_cats.read().unwrap();
         match subject {
             TermPattern::NamedNode(nn) => {
-                let e = named_node_enc(nn, self.cats.as_ref());
+                let e = named_node_enc(nn, &cats);
                 let e = e.unwrap_or(lit(false));
                 out_df = out_df
                     .lazy()
@@ -281,7 +286,7 @@ impl Triplestore {
                 rename_trg.push(bname);
             }
             TermPattern::Literal(l) => {
-                let (l, ..) = maybe_literal_enc(l, self.cats.as_ref());
+                let (l, ..) = maybe_literal_enc(l, &cats);
                 out_df = out_df
                     .lazy()
                     .filter(col(SUBJECT_COL_NAME).eq(l))
@@ -300,7 +305,7 @@ impl Triplestore {
 
         match object {
             TermPattern::NamedNode(nn) => {
-                let e = named_node_enc(nn, self.cats.as_ref());
+                let e = named_node_enc(nn, &cats);
                 let e = e.unwrap_or(lit(false));
                 out_df = out_df
                     .lazy()
@@ -316,7 +321,7 @@ impl Triplestore {
                 rename_trg.push(bname);
             }
             TermPattern::Literal(l) => {
-                let (l, ..) = maybe_literal_enc(l, self.cats.as_ref());
+                let (l, ..) = maybe_literal_enc(l, &cats);
                 out_df = out_df
                     .lazy()
                     .filter(col(OBJECT_COL_NAME).eq(l))
@@ -361,7 +366,7 @@ impl Triplestore {
                 path_solution_mappings,
                 mappings,
                 JoinType::Inner,
-                self.cats.clone(),
+                self.global_cats.clone(),
             )?;
         }
         Ok(path_solution_mappings)
@@ -667,7 +672,7 @@ impl U32DataFrameCreator {
     #[allow(clippy::type_complexity)]
     pub fn create_u32_dfs(
         self,
-        global_cats: Arc<Cats>,
+        global_cats: LockedCats,
     ) -> Result<
         (
             DataFrame,

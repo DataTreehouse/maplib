@@ -1,13 +1,13 @@
 use super::Model;
 use crate::mapping::errors::MappingError;
 use crate::mapping::MapOptions;
-use log::warn;
 use std::collections::HashMap;
 use templates::ast::{
     Argument, ConstantTerm, ConstantTermOrList, Instance, ListExpanderType, PType, Parameter,
     Signature, StottrTerm, Template,
 };
 use templates::constants::{DEFAULT_PREFIX, OTTR_IRI, OTTR_TRIPLE};
+use tracing::warn;
 
 use crate::errors::MaplibError;
 use crate::mapping::expansion::validation::infer_type_from_column;

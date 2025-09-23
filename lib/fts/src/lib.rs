@@ -1,11 +1,10 @@
 use oxrdf::NamedNode;
 use polars::frame::DataFrame;
-use representation::cats::Cats;
+use representation::cats::LockedCats;
 use representation::solution_mapping::{BaseCatState, SolutionMappings};
 use representation::BaseRDFNodeType;
 use spargebra::term::TriplePattern;
 use std::path::Path;
-use std::sync::Arc;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -27,14 +26,14 @@ impl FtsIndex {
         _subject_state: &BaseCatState,
         _object_type: &BaseRDFNodeType,
         _object_state: &BaseCatState,
-        _global_cats: Arc<Cats>,
+        _global_cats: LockedCats,
     ) -> Result<(), FtsError> {
         unimplemented!("Contact Data Treehouse to enable full text search")
     }
     pub fn lookup_from_triple_patterns(
         &self,
         _patterns: &Vec<TriplePattern>,
-        _global_cats: Arc<Cats>,
+        _global_cats: LockedCats,
     ) -> Result<(Vec<TriplePattern>, Option<SolutionMappings>), FtsError> {
         unimplemented!("Contact Data Treehouse to enable full text search")
     }

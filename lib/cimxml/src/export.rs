@@ -4,9 +4,6 @@ use std::io::Write;
 use thiserror::Error;
 use triplestore::Triplestore;
 
-#[cfg(feature = "pyo3")]
-use pyo3::Python;
-
 #[derive(Error, Debug)]
 pub enum CIMXMLError {}
 
@@ -16,7 +13,6 @@ pub fn cim_xml_write<W: Write>(
     _profile_triplestore: &mut Triplestore,
     _prefixes: HashMap<String, NamedNode>,
     _fullmodel_details: FullModelDetails,
-    #[cfg(feature = "pyo3")] _py: Python<'_>,
 ) -> Result<(), CIMXMLError> {
     unimplemented!("Contact Data Treehouse to try")
 }

@@ -51,7 +51,7 @@
       packages = rec {
         default = py_maplib;
         py_maplib = python.pkgs.maplib;
-        python-env = python.withPackages (ps: [ ps.maplib ps.polars ps.rdflib ps.jupyter ]);
+        python-env = python.withPackages (ps: [ ps.maplib ps.polars ps.rdflib ps.jupyter ps.lxml ]);
       };
       legacyPackages.python = python;
       devShells.default = craneLib.devShell {

@@ -15,16 +15,8 @@ pub fn query_select(
     deduplicate: bool,
     streaming: bool,
     include_transient: bool,
-    #[cfg(feature = "pyo3")] py: pyo3::Python<'_>,
 ) -> Result<QuerySolutions, SparqlError> {
-    let qres = triplestore.query(
-        query,
-        &None,
-        streaming,
-        include_transient,
-        #[cfg(feature = "pyo3")]
-        py,
-    )?;
+    let qres = triplestore.query(query, &None, streaming, include_transient)?;
 
     let sm = if let QueryResult::Select(EagerSolutionMappings {
         mut mappings,
@@ -40,7 +32,7 @@ pub fn query_select(
     } else {
         panic!("Should never happen")
     };
-    Ok(df_as_result(&sm, triplestore.cats.clone()))
+    Ok(df_as_result(&sm, triplestore.global_cats.clone()))
 }
 
 #[allow(clippy::too_many_arguments)]

@@ -1,6 +1,6 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
-use log::trace;
+use tracing::{instrument, trace};
 
 use crate::sparql::QuerySettings;
 use query_processing::graph_patterns::minus;
@@ -11,6 +11,7 @@ use spargebra::algebra::GraphPattern;
 use std::collections::HashMap;
 
 impl Triplestore {
+    #[instrument(skip_all)]
     pub(crate) fn lazy_minus(
         &self,
         left: &GraphPattern,

@@ -1,12 +1,13 @@
 use super::{StoredBaseRDFNodeType, Triplestore};
 use crate::errors::TriplestoreError;
 use file_io::{property_to_filename, write_parquet};
-use log::debug;
 use polars::prelude::ParquetCompression;
 use std::path::Path;
 use std::time::Instant;
+use tracing::{debug, instrument};
 
 impl Triplestore {
+    #[instrument(skip_all)]
     pub fn write_native_parquet(&mut self, path: &Path) -> Result<(), TriplestoreError> {
         let now = Instant::now();
         if !path.exists() {
@@ -47,8 +48,8 @@ impl Triplestore {
             }
         }
         debug!(
-            "Writing native parquet took {} seconds",
-            now.elapsed().as_secs_f64()
+            elapsed = now.elapsed().as_secs_f64(),
+            "Writing native parquet"
         );
         Ok(())
     }

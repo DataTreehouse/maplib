@@ -1,5 +1,5 @@
 use polars::prelude::Expr;
-use representation::cats::{maybe_decode_expr, CatReEnc, CatType, Cats};
+use representation::cats::{maybe_decode_expr, CatReEnc, CatType, Cats, LockedCats};
 use representation::solution_mapping::BaseCatState;
 use representation::{BaseRDFNodeType, RDFNodeState};
 use std::collections::{HashMap, HashSet};
@@ -9,7 +9,7 @@ use std::sync::Arc;
 pub fn create_compatible_cats(
     expressions: Vec<Option<Expr>>,
     states: Vec<Option<RDFNodeState>>,
-    global_cats: Arc<Cats>,
+    global_cats: LockedCats,
 ) -> Vec<Option<HashMap<BaseRDFNodeType, (Vec<Expr>, BaseCatState)>>> {
     let mut base_types = HashSet::new();
     for s in &states {
@@ -63,7 +63,7 @@ pub fn create_compatible_cats(
                     (uu, (blank_renc, iri_renc, literal_renc_map))
                 })
                 .collect();
-            let state = BaseCatState::CategoricalNative(false, Some(Arc::new(cats)));
+            let state = BaseCatState::CategoricalNative(false, Some(LockedCats::new(cats)));
             native_cat_map.insert(t.clone(), (renc_local, state));
         }
         let need_string_cast = check_need_string_cast(&t, &states);
@@ -112,6 +112,7 @@ pub fn create_compatible_cats(
             for (e_vec, bt, bs) in v.iter_mut() {
                 if let Some((m, state)) = native_cat_map.get(bt) {
                     let is_local = if let Some(local) = bs.get_local_cats() {
+                        let local = local.read().unwrap();
                         if let Some((blank_renc, iri_renc, literal_renc)) = m.get(&local.uuid) {
                             let renc = match bt {
                                 BaseRDFNodeType::IRI => iri_renc.as_ref(),
@@ -215,7 +216,7 @@ fn check_need_string_cast(t: &BaseRDFNodeType, types: &Vec<Option<RDFNodeState>>
     false
 }
 
-fn find_all_locals(t: &BaseRDFNodeType, states: &Vec<Option<RDFNodeState>>) -> Vec<Arc<Cats>> {
+fn find_all_locals(t: &BaseRDFNodeType, states: &Vec<Option<RDFNodeState>>) -> Vec<LockedCats> {
     let mut locals = vec![];
     for s in states {
         if let Some(s) = s {

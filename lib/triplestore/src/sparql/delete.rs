@@ -3,7 +3,6 @@ use crate::sparql::errors::SparqlError;
 use crate::storage::Triples;
 use crate::Triplestore;
 use crate::{sort_triples_add_rank, StoredBaseRDFNodeType};
-use log::trace;
 use oxrdf::NamedNode;
 use polars::prelude::{col, concat, IntoLazy, JoinArgs, JoinType, MaintainOrderJoin, UnionArgs};
 use polars_core::datatypes::AnyValue;
@@ -14,18 +13,21 @@ use representation::solution_mapping::EagerSolutionMappings;
 use representation::{OBJECT_COL_NAME, PREDICATE_COL_NAME, SUBJECT_COL_NAME};
 use std::collections::HashMap;
 use std::time::Instant;
+use tracing::trace;
 
 impl Triplestore {
     pub fn delete_construct_result(
         &mut self,
         sms: Vec<(EagerSolutionMappings, Option<NamedNode>)>,
     ) -> Result<(), SparqlError> {
+        let cats = self.global_cats.read().unwrap();
         let sms: Vec<_> = sms
             .into_par_iter()
-            .map(|(x, y)| partition_by_global_predicate_col(x, y, &self.cats))
+            .map(|(x, y)| partition_by_global_predicate_col(x, y, &cats))
             .flatten()
             .collect();
-        let global_cat_triples = triples_solution_mappings_to_global_cat_triples(sms, &self.cats);
+        let global_cat_triples = triples_solution_mappings_to_global_cat_triples(sms, &cats);
+        drop(cats);
         if !global_cat_triples.is_empty() {
             self.delete_triples_vec(global_cat_triples)
                 .map_err(SparqlError::StoreTriplesError)?;
@@ -61,7 +63,7 @@ impl Triplestore {
                             &subject_cat_state,
                             &gct.object_type,
                             &object_cat_state,
-                            self.cats.clone(),
+                            self.global_cats.clone(),
                             false,
                         );
                         x
@@ -87,7 +89,7 @@ impl Triplestore {
                             &subject_cat_state,
                             &gct.object_type,
                             &object_cat_state,
-                            self.cats.clone(),
+                            self.global_cats.clone(),
                             false,
                         );
                         x

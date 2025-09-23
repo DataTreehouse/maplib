@@ -3,6 +3,7 @@ use crate::solution_mapping::BaseCatState;
 use crate::BaseRDFNodeType;
 use oxrdf::NamedNode;
 use polars::frame::DataFrame;
+use tracing::instrument;
 
 impl Cats {
     pub fn globalize(&mut self, mut cat_triples: Vec<CatTriples>) -> Vec<CatTriples> {
@@ -33,6 +34,7 @@ impl Cats {
     }
 }
 
+#[instrument(skip_all)]
 pub fn cat_encode_triples(
     df: DataFrame,
     subject_type: BaseRDFNodeType,

@@ -4,7 +4,6 @@ use representation::query_context::Context;
 use representation::solution_mapping::{BaseCatState, SolutionMappings};
 
 use crate::sparql::QuerySettings;
-use log::trace;
 use oxrdf::{NamedNode, Subject, Term};
 use polars::prelude::{by_name, IntoLazy};
 use polars::prelude::{lit, AnyValue, JoinType};
@@ -14,8 +13,10 @@ use query_processing::type_constraints::{ConstraintBaseRDFNodeType, PossibleType
 use representation::literal_iri_to_namednode;
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 use std::collections::{HashMap, HashSet};
+use tracing::{instrument, trace};
 
 impl Triplestore {
+    #[instrument(skip_all)]
     pub fn lazy_triple_pattern(
         &self,
         solution_mappings: Option<SolutionMappings>,
@@ -31,7 +32,7 @@ impl Triplestore {
         );
 
         let mut solution_mappings = solution_mappings.map(|solution_mappings| {
-            pushdowns.add_from_solution_mappings(solution_mappings, self.cats.clone())
+            pushdowns.add_from_solution_mappings(solution_mappings, self.global_cats.clone())
         });
         let subjects = create_subjects(&triple_pattern.subject, &pushdowns.variables_values);
         let subject_type_ctr = create_type_constraint(
@@ -98,13 +99,10 @@ impl Triplestore {
                                 .clone();
                             let bt = dt.get_base_type().unwrap();
                             let bs = dt.get_base_state().unwrap();
+                            let cats = self.global_cats.read()?;
                             if matches!(bs, BaseCatState::CategoricalNative(..)) {
-                                predicates_series = self.cats.decode(
-                                    &predicates_series,
-                                    bt,
-                                    bs.get_local_cats(),
-                                    true,
-                                );
+                                predicates_series =
+                                    cats.decode(&predicates_series, bt, bs.get_local_cats(), true);
                             }
 
                             let predicates_iter = predicates_series.iter();
@@ -199,7 +197,7 @@ impl Triplestore {
                     solution_mappings.unwrap(),
                     new_solution_mappings,
                     JoinType::Inner,
-                    self.cats.clone(),
+                    self.global_cats.clone(),
                 )?);
             }
         } else {

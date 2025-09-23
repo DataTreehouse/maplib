@@ -13,7 +13,7 @@ use polars::prelude::{
 };
 use rayon::iter::IntoParallelIterator;
 use rayon::iter::ParallelIterator;
-use representation::cats::{maybe_decode_expr, Cats};
+use representation::cats::{maybe_decode_expr, LockedCats};
 use representation::multitype::{MULTI_BLANK_DT, MULTI_IRI_DT};
 use representation::query_context::Context;
 use representation::rdf_to_polars::rdf_named_node_to_polars_literal_value;
@@ -24,7 +24,6 @@ use representation::{
 use spargebra::algebra::{Expression, Function};
 use std::collections::HashMap;
 use std::ops::{Div, Mul};
-use std::sync::Arc;
 
 pub fn func_expression(
     mut solution_mappings: SolutionMappings,
@@ -32,7 +31,7 @@ pub fn func_expression(
     args: &[Expression],
     args_contexts: HashMap<usize, Context>,
     outer_context: &Context,
-    global_cats: Arc<Cats>,
+    global_cats: LockedCats,
 ) -> Result<SolutionMappings, QueryProcessingError> {
     match func {
         Function::Year => {
@@ -1713,7 +1712,7 @@ fn create_regex_expr(
     t: &BaseRDFNodeType,
     s: &BaseCatState,
     pattern: &str,
-    global_cats: Arc<Cats>,
+    global_cats: LockedCats,
 ) -> Expr {
     let do_regex = match t {
         BaseRDFNodeType::BlankNode | BaseRDFNodeType::None | BaseRDFNodeType::IRI => false,
@@ -1736,7 +1735,7 @@ fn create_regex_replace_expr(
     s: &BaseCatState,
     pattern: &str,
     replacement: &Expr,
-    global_cats: Arc<Cats>,
+    global_cats: LockedCats,
 ) -> Expr {
     let do_regex_replace = match t {
         BaseRDFNodeType::BlankNode | BaseRDFNodeType::None | BaseRDFNodeType::IRI => false,
@@ -1774,7 +1773,7 @@ fn create_regex_literal(regex_literal: &Literal, flags_expr: Option<&Expression>
     pattern
 }
 
-pub fn str_function(c: &str, t: &RDFNodeState, global_cats: Arc<Cats>) -> Expr {
+pub fn str_function(c: &str, t: &RDFNodeState, global_cats: LockedCats) -> Expr {
     if t.is_multi() {
         let mut to_coalesce = vec![];
         for (t, s) in &t.map {
@@ -1830,7 +1829,7 @@ pub fn xsd_cast_literal(
     c: &str,
     src: &RDFNodeState,
     trg: &BaseRDFNodeType,
-    global_cats: Arc<Cats>,
+    global_cats: LockedCats,
 ) -> Result<Expr, QueryProcessingError> {
     let trg_type = trg.default_input_polars_data_type();
     let trg_nn = if let BaseRDFNodeType::Literal(nn) = trg {
@@ -1902,7 +1901,7 @@ fn cast_iri_to_xsd_literal(
     s: &BaseCatState,
     trg_nn: NamedNodeRef,
     trg_type: DataType,
-    global_cats: Arc<Cats>,
+    global_cats: LockedCats,
 ) -> Result<Expr, QueryProcessingError> {
     if trg_nn == xsd::STRING {
         Ok(maybe_decode_expr(e, t, s, global_cats))
@@ -1920,7 +1919,7 @@ fn cast_literal(
     mut c: Expr,
     src_bt: &BaseRDFNodeType,
     src_bs: &BaseCatState,
-    global_cats: Arc<Cats>,
+    global_cats: LockedCats,
     src: NamedNodeRef,
     trg: NamedNodeRef,
     trg_type: DataType,

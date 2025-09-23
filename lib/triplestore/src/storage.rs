@@ -1,6 +1,5 @@
 use crate::errors::TriplestoreError;
 use crate::{IndexingOptions, StoredBaseRDFNodeType};
-use log::trace;
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{NamedNode, Subject, Term};
 use polars::prelude::{
@@ -13,7 +12,7 @@ use polars_core::prelude::{IntoColumn, Series, SortMultipleOptions, StringChunke
 use polars_core::series::SeriesIter;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use representation::cats::{
-    rdf_split_iri_str, CatEncs, Cats, OBJECT_RANK_COL_NAME, SUBJECT_RANK_COL_NAME,
+    rdf_split_iri_str, CatEncs, Cats, LockedCats, OBJECT_RANK_COL_NAME, SUBJECT_RANK_COL_NAME,
 };
 use representation::{
     BaseRDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD, OBJECT_COL_NAME,
@@ -23,8 +22,8 @@ use std::cmp;
 use std::cmp::{Ordering, Reverse};
 use std::collections::{BTreeMap, BinaryHeap};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use std::time::Instant;
+use tracing::{instrument, trace};
 
 const OFFSET_STEP: usize = 100;
 const MIN_SIZE_CACHING: usize = 100_000_000; //100MB
@@ -51,7 +50,7 @@ impl Triples {
         object_type: StoredBaseRDFNodeType,
         predicate_iri: &NamedNode,
         indexing: &IndexingOptions,
-        cats: Arc<Cats>,
+        cats: LockedCats,
     ) -> Result<Self, TriplestoreError> {
         let object_indexing_enabled = can_and_should_index_object(
             &object_type.as_base_rdf_node_type(),
@@ -61,13 +60,14 @@ impl Triples {
         let height = df.height();
         let mut segments = vec![];
 
+        let cats = cats.read().unwrap();
         let segment = TriplesSegment::new(
             df,
             storage_folder,
             &subject_type,
             &object_type,
             object_indexing_enabled,
-            cats.as_ref(),
+            &cats,
         )?;
         segments.push(segment);
 
@@ -97,16 +97,18 @@ impl Triples {
         Ok(all_sms)
     }
 
+    #[instrument(skip_all)]
     pub(crate) fn add_triples(
         &mut self,
         df: DataFrame,
         storage_folder: Option<&PathBuf>,
-        global_cats: Arc<Cats>,
+        global_cats: LockedCats,
     ) -> Result<Option<DataFrame>, TriplestoreError> {
         let mut compacting_indexing_time = 0f32;
         let mut subjects_time = 0f32;
         let mut nonoverlapping_time = 0f32;
         let total_now = Instant::now();
+        let global_cats = global_cats.read()?;
 
         // Here we decide if segments should be compacted and so on.
         let should_compact = if self.height < df.height() * 2 {
@@ -184,12 +186,12 @@ impl Triples {
                     &self.subject_type,
                     &self.object_type,
                     self.object_indexing_enabled,
-                    global_cats.as_ref(),
+                    &global_cats,
                 )?;
                 ts.push((incoming_segment, true));
                 let (segment, new_triples) = compact_segments(
                     ts,
-                    global_cats.as_ref(),
+                    &global_cats,
                     &self.subject_type,
                     &self.object_type,
                     storage_folder,
@@ -212,7 +214,7 @@ impl Triples {
                     &self.subject_type,
                     &self.object_type,
                     self.object_indexing_enabled,
-                    global_cats.as_ref(),
+                    &global_cats,
                 )?;
                 self.height = self.height + new_segment.height;
                 self.segments.push(new_segment);
@@ -232,12 +234,12 @@ impl Triples {
                 &self.subject_type,
                 &self.object_type,
                 self.object_indexing_enabled,
-                global_cats.as_ref(),
+                &global_cats,
             )?;
             ts.push((incoming_segment, true));
             let (segment, new_triples) = compact_segments(
                 ts,
-                global_cats.as_ref(),
+                &global_cats,
                 &self.subject_type,
                 &self.object_type,
                 storage_folder,
@@ -249,11 +251,10 @@ impl Triples {
 
         let total_time = total_now.elapsed().as_secs_f32();
         trace!(
-            "Took {} compacting:  {}, subjects {}, nonoverlaps {}",
             total_time,
-            compacting_indexing_time / total_time,
-            subjects_time / total_time,
-            nonoverlapping_time / total_time
+            compacting = (compacting_indexing_time / total_time),
+            subject = (subjects_time / total_time),
+            nonoverlapping = (nonoverlapping_time / total_time)
         );
         out
     }
@@ -560,7 +561,7 @@ impl StoredTriples {
             StoredTriples::TriplesInMemory(t) => t.get_lazy_frame()?,
         };
         if let Some(offsets) = offsets {
-            let output: Result<Vec<_>, _> = offsets
+            let output: Result<Vec<_>, TriplestoreError> = offsets
                 .into_par_iter()
                 .map(|(offset, len)| {
                     let lf = lf

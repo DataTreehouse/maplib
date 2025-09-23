@@ -6,13 +6,10 @@ use errors::ShaclError;
 use oxrdf::{NamedNode, NamedOrBlankNode};
 use polars::prelude::DataFrame;
 use representation::solution_mapping::SolutionMappings;
-use std::sync::Arc;
 use std::time::Duration;
 use triplestore::Triplestore;
 
-#[cfg(feature = "pyo3")]
-use pyo3::Python;
-use representation::cats::Cats;
+use representation::cats::LockedCats;
 
 #[derive(Debug, Clone)]
 pub struct ShapeTargets {
@@ -35,7 +32,7 @@ pub struct ValidationReport {
     pub validation_performance: Vec<Performance>,
     pub targets_performance: Vec<Performance>,
     pub shape_targets: Vec<ShapeTargets>,
-    pub cats: Option<Arc<Cats>>,
+    pub cats: Option<LockedCats>,
 }
 
 impl ValidationReport {
@@ -66,7 +63,6 @@ pub fn validate(
     _only_shapes: Option<Vec<NamedNode>>,
     _deactivate_shapes: Vec<NamedNode>,
     _dry_run: bool,
-    #[cfg(feature = "pyo3")] _py: Python<'_>,
 ) -> Result<ValidationReport, ShaclError> {
     unimplemented!("Contact Data Treehouse to try")
 }

@@ -15,7 +15,6 @@ use crate::errors::TriplestoreError;
 use crate::storage::{repeated_from_last_row_expr, Triples};
 use file_io::create_folder_if_not_exists;
 use fts::FtsIndex;
-use log::trace;
 use oxrdf::vocab::{rdf, rdfs};
 use oxrdf::NamedNode;
 use polars::prelude::{col, AnyValue, DataFrame, IntoLazy, RankMethod, RankOptions};
@@ -24,7 +23,7 @@ use query_processing::type_constraints::ConstraintBaseRDFNodeType;
 use rayon::iter::ParallelDrainRange;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use representation::cats::{
-    cat_encode_triples, decode_expr, literal_is_cat, CatTriples, CatType, Cats,
+    cat_encode_triples, decode_expr, literal_is_cat, CatTriples, CatType, Cats, LockedCats,
     OBJECT_RANK_COL_NAME, SUBJECT_RANK_COL_NAME,
 };
 use representation::multitype::set_struct_all_null_to_null_row;
@@ -35,9 +34,10 @@ use representation::{
 };
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use std::time::Instant;
 use uuid::Uuid;
+
+use tracing::{instrument, trace};
 
 #[derive(Clone, Hash, Eq, PartialEq, Debug)]
 pub enum StoredBaseRDFNodeType {
@@ -136,7 +136,7 @@ pub struct Triplestore {
     parser_call: usize,
     indexing: IndexingOptions,
     fts_index: Option<FtsIndex>,
-    pub cats: Arc<Cats>,
+    pub global_cats: LockedCats,
 }
 
 impl Triplestore {
@@ -148,7 +148,7 @@ impl Triplestore {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct IndexingOptions {
     pub object_sort_all: bool,
     pub object_sort_some: Option<HashSet<NamedNode>>,
@@ -218,6 +218,7 @@ impl NewTriples {
 }
 
 impl Triplestore {
+    #[instrument(skip_all)]
     pub fn new(
         storage_folder: Option<String>,
         indexing: Option<IndexingOptions>,
@@ -247,10 +248,11 @@ impl Triplestore {
             parser_call: 0,
             indexing,
             fts_index,
-            cats: Arc::new(Cats::new_empty()),
+            global_cats: LockedCats::new_empty(),
         })
     }
 
+    #[instrument(skip_all)]
     pub fn create_index(&mut self, indexing: IndexingOptions) -> Result<(), TriplestoreError> {
         if let Some(fts_path) = &indexing.fts_path {
             // Only doing anything if the fts index does not already exist.
@@ -274,7 +276,7 @@ impl Triplestore {
                                     &object_type
                                         .as_base_rdf_node_type()
                                         .default_stored_cat_state(),
-                                    self.cats.clone(),
+                                    self.global_cats.clone(),
                                 )
                                 .map_err(TriplestoreError::FtsError)?;
                         }
@@ -286,13 +288,14 @@ impl Triplestore {
         Ok(())
     }
 
+    #[instrument(skip_all)]
     pub fn add_triples_vec(
         &mut self,
         ts: Vec<TriplesToAdd>,
         transient: bool,
     ) -> Result<Vec<NewTriples>, TriplestoreError> {
         let prepare_triples_now = Instant::now();
-        let dfs_to_add = prepare_add_triples_par(ts, self.cats.clone());
+        let dfs_to_add = prepare_add_triples_par(ts, self.global_cats.clone());
         trace!(
             "Preparing triples took {} seconds",
             prepare_triples_now.elapsed().as_secs_f32()
@@ -306,6 +309,7 @@ impl Triplestore {
         Ok(new_triples)
     }
 
+    #[instrument(skip_all)]
     fn add_local_cat_triples(
         &mut self,
         local_cats: Vec<CatTriples>,
@@ -315,6 +319,7 @@ impl Triplestore {
         self.add_global_cat_triples(global_cats, transient)
     }
 
+    #[instrument(skip_all)]
     fn add_global_cat_triples(
         &mut self,
         global_cat_triples: Vec<CatTriples>,
@@ -372,7 +377,7 @@ impl Triplestore {
         }
         let storage_folder = self.storage_folder.clone();
         let indexing = self.indexing.clone();
-        let cats = self.cats.clone();
+        let cats = self.global_cats.clone();
         //Why does not par iter work?
         let r: Result<Vec<_>, TriplestoreError> = add_map
             .into_iter()
@@ -450,7 +455,7 @@ impl Triplestore {
                                 &nt.subject_type.default_stored_cat_state(),
                                 &nt.object_type,
                                 &nt.object_type.default_stored_cat_state(),
-                                self.cats.clone(),
+                                self.global_cats.clone(),
                             )
                             .map_err(TriplestoreError::FtsError)?;
                         trace!(
@@ -475,9 +480,10 @@ struct TriplesToAddPartitionedPredicate {
     pub object_cat_state: BaseCatState,
 }
 
+#[instrument(skip_all)]
 pub fn prepare_add_triples_par(
     mut ts: Vec<TriplesToAdd>,
-    global_cats: Arc<Cats>,
+    global_cats: LockedCats,
 ) -> Vec<CatTriples> {
     let mut all_partitioned: Vec<TriplesToAddPartitionedPredicate> = ts
         .par_drain(..)
@@ -491,14 +497,17 @@ pub fn prepare_add_triples_par(
                 predicate_cat_state,
                 object_cat_state,
             } = t;
-            let df_preds = partition_unpartitioned_predicate(
-                df,
-                &subject_type,
-                &object_type,
-                predicate,
-                predicate_cat_state.as_ref(),
-                global_cats.as_ref(),
-            );
+            let df_preds = {
+                let cats = global_cats.read().unwrap();
+                partition_unpartitioned_predicate(
+                    df,
+                    &subject_type,
+                    &object_type,
+                    predicate,
+                    predicate_cat_state.as_ref(),
+                    &cats,
+                )
+            };
             let all_partitioned: Vec<_> = df_preds
                 .into_iter()
                 .map(|(df, predicate)| TriplesToAddPartitionedPredicate {
@@ -529,7 +538,7 @@ pub fn prepare_add_triples_par(
             t
         })
         .collect();
-    all_partitioned
+    let all_partitioned = all_partitioned
         .into_par_iter()
         .map(
             |TriplesToAddPartitionedPredicate {
@@ -540,6 +549,7 @@ pub fn prepare_add_triples_par(
                  subject_cat_state,
                  object_cat_state,
              }| {
+                let cats = global_cats.read().unwrap();
                 cat_encode_triples(
                     df,
                     subject_type,
@@ -547,11 +557,12 @@ pub fn prepare_add_triples_par(
                     predicate,
                     subject_cat_state,
                     object_cat_state,
-                    global_cats.as_ref(),
+                    &cats,
                 )
             },
         )
-        .collect()
+        .collect();
+    all_partitioned
 }
 
 pub fn sort_triples_add_rank(
@@ -560,7 +571,7 @@ pub fn sort_triples_add_rank(
     subj_cat_state: &BaseCatState,
     obj_type: &BaseRDFNodeType,
     obj_cat_state: &BaseCatState,
-    global_cats: Arc<Cats>,
+    global_cats: LockedCats,
     deduplicate: bool,
 ) -> DataFrame {
     // Always sort S,O and deduplicate

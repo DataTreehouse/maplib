@@ -13,7 +13,7 @@ use polars::prelude::{
     as_struct, by_name, coalesce, col, lit, DataType, Expr, JoinArgs, JoinType, LazyFrame,
     LiteralValue, Operator, Scalar,
 };
-use representation::cats::{literal_is_cat, maybe_decode_expr, Cats};
+use representation::cats::{literal_is_cat, maybe_decode_expr, Cats, LockedCats};
 use representation::multitype::all_multi_main_cols;
 use representation::query_context::Context;
 use representation::rdf_to_polars::rdf_literal_to_polars_expr;
@@ -62,7 +62,7 @@ pub fn maybe_literal_enc(l: &Literal, global_cats: &Cats) -> (Expr, BaseRDFNodeT
             (
                 lit(enc).cast(DataType::UInt32),
                 bt,
-                BaseCatState::CategoricalNative(true, Some(Arc::new(local))),
+                BaseCatState::CategoricalNative(true, Some(LockedCats::new(local))),
             )
         }
     } else {
@@ -83,7 +83,7 @@ pub fn named_node(
         .with_column(enc.alias(context.as_str()));
     let state = RDFNodeState::from_bases(
         BaseRDFNodeType::IRI,
-        BaseCatState::CategoricalNative(true, local.map(|x| Arc::new(x))),
+        BaseCatState::CategoricalNative(true, local.map(|x| LockedCats::new(x))),
     );
     solution_mappings
         .rdf_node_types
@@ -135,7 +135,7 @@ pub fn binary_expression(
     left_context: &Context,
     right_context: &Context,
     outer_context: &Context,
-    global_cats: Arc<Cats>,
+    global_cats: LockedCats,
 ) -> Result<SolutionMappings, QueryProcessingError> {
     let left_type = solution_mappings
         .rdf_node_types
@@ -380,7 +380,7 @@ pub fn coalesce_contexts(
     mut solution_mappings: SolutionMappings,
     inner_contexts: Vec<Context>,
     outer_context: &Context,
-    global_cats: Arc<Cats>,
+    global_cats: LockedCats,
 ) -> Result<SolutionMappings, QueryProcessingError> {
     let mut expressions = vec![];
     let mut types = vec![];
@@ -408,7 +408,7 @@ pub fn coalesce_contexts(
 pub fn coalesce_expressions(
     expressions: Vec<Expr>,
     states: Vec<RDFNodeState>,
-    global_cats: Arc<Cats>,
+    global_cats: LockedCats,
 ) -> (Expr, RDFNodeState) {
     let mut basic_types = HashSet::new();
     let mut keep_exprs = vec![];
@@ -526,7 +526,7 @@ pub fn in_expression(
     left_context: &Context,
     right_contexts: &Vec<Context>,
     outer_context: &Context,
-    global_cats: Arc<Cats>,
+    global_cats: LockedCats,
 ) -> Result<SolutionMappings, QueryProcessingError> {
     let mut expr = Expr::Literal(LiteralValue::Scalar(Scalar::from(false)));
     let left_type = solution_mappings
@@ -588,7 +588,7 @@ fn cast_lang_string_to_string(
     c: &str,
     t: &BaseRDFNodeType,
     s: &BaseCatState,
-    global_cats: Arc<Cats>,
+    global_cats: LockedCats,
 ) -> Expr {
     maybe_decode_expr(
         col(c).struct_().field_by_name(LANG_STRING_VALUE_FIELD),

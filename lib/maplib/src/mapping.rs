@@ -27,8 +27,7 @@ use triplestore::sparql::errors::SparqlError;
 use triplestore::sparql::QueryResult;
 use triplestore::{IndexingOptions, NewTriples, Triplestore};
 
-#[cfg(feature = "pyo3")]
-use pyo3::Python;
+use tracing::instrument;
 
 pub struct Model {
     pub template_dataset: TemplateDataset,
@@ -68,16 +67,12 @@ struct StaticColumn {
 }
 
 impl Model {
+    #[instrument(skip_all)]
     pub fn new(
         template_dataset: Option<&TemplateDataset>,
         storage_folder: Option<String>,
         indexing: Option<IndexingOptions>,
     ) -> Result<Model, MaplibError> {
-        #[allow(clippy::match_single_binding)]
-        match env_logger::try_init() {
-            _ => {}
-        };
-
         let use_disk = storage_folder.is_some();
         let indexing = if use_disk {
             if let Some(indexing) = indexing {
@@ -151,6 +146,7 @@ impl Model {
         Ok(())
     }
 
+    #[instrument(skip_all)]
     pub fn add_templates_from_string(&mut self, s: &str) -> Result<Option<NamedNode>, MaplibError> {
         let doc = document_from_str(s).map_err(MaplibError::TemplateError)?;
         let mut dataset =
@@ -179,6 +175,7 @@ impl Model {
     }
 
     #[allow(clippy::too_many_arguments)]
+    #[instrument(skip_all)]
     pub fn read_triples(
         &mut self,
         p: &Path,
@@ -234,6 +231,7 @@ impl Model {
         }
     }
 
+    #[instrument(skip_all)]
     pub fn query(
         &mut self,
         query: &str,
@@ -241,18 +239,10 @@ impl Model {
         graph: Option<NamedNode>,
         streaming: bool,
         include_transient: bool,
-        #[cfg(feature = "pyo3")] py: pyo3::Python<'_>,
     ) -> Result<QueryResult, MaplibError> {
         let use_triplestore = self.get_triplestore(&graph);
         use_triplestore
-            .query(
-                query,
-                parameters,
-                streaming,
-                include_transient,
-                #[cfg(feature = "pyo3")]
-                py,
-            )
+            .query(query, parameters, streaming, include_transient)
             .map_err(|x| x.into())
     }
 
@@ -263,18 +253,10 @@ impl Model {
         graph: Option<NamedNode>,
         streaming: bool,
         include_transient: bool,
-        #[cfg(feature = "pyo3")] py: pyo3::Python<'_>,
     ) -> Result<(), MaplibError> {
         let use_triplestore = self.get_triplestore(&graph);
         use_triplestore
-            .update(
-                update,
-                parameters,
-                streaming,
-                include_transient,
-                #[cfg(feature = "pyo3")]
-                py,
-            )
+            .update(update, parameters, streaming, include_transient)
             .map_err(|x| x.into())
     }
 
@@ -309,7 +291,6 @@ impl Model {
         prefixes: HashMap<String, NamedNode>,
         graph: Option<NamedNode>,
         profile_graph: NamedNode,
-        #[cfg(feature = "pyo3")] py: Python<'_>,
     ) -> Result<(), MaplibError> {
         let mut profile_triplestore = self.triplestores_map.remove(&profile_graph).unwrap();
         let triplestore = self.get_triplestore(&graph);
@@ -319,8 +300,6 @@ impl Model {
             &mut profile_triplestore,
             prefixes,
             fullmodel_details,
-            #[cfg(feature = "pyo3")]
-            py,
         )
         .map_err(MaplibError::CIMXMLError);
         self.triplestores_map
@@ -374,7 +353,6 @@ impl Model {
         only_shapes: Option<Vec<NamedNode>>,
         deactivate_shapes: Vec<NamedNode>,
         dry_run: bool,
-        #[cfg(feature = "pyo3")] py: Python<'_>,
     ) -> Result<ValidationReport, MaplibError> {
         let (shape_graph, mut shape_triplestore) = if let Some((shape_graph, shape_triplestore)) =
             self.triplestores_map.remove_entry(shape_graph)
@@ -396,8 +374,6 @@ impl Model {
             only_shapes,
             deactivate_shapes,
             dry_run,
-            #[cfg(feature = "pyo3")]
-            py,
         );
         self.triplestores_map.insert(shape_graph, shape_triplestore);
         res.map_err(|x| x.into())
@@ -416,6 +392,7 @@ impl Model {
         Ok(triplestore.get_predicate_iris(include_transient))
     }
 
+    #[instrument(skip_all)]
     pub fn get_predicate(
         &mut self,
         predicate: &NamedNode,
@@ -428,6 +405,7 @@ impl Model {
             .map_err(|x| x.into())
     }
 
+    #[instrument(skip_all)]
     pub fn create_index(
         &mut self,
         indexing: IndexingOptions,

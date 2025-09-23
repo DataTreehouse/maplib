@@ -1,26 +1,21 @@
+use crate::cats::LockedCats;
 use crate::RDFNodeState;
 use oxrdf::vocab::xsd;
 use polars::prelude::{DataFrame, IntoLazy, LazyFrame};
 use std::collections::HashMap;
-use std::sync::Arc;
 use utils::polars::InterruptableCollectError;
 
-#[cfg(feature = "pyo3")]
 use utils::polars::pl_interruptable_collect;
-
-use crate::cats::Cats;
-#[cfg(feature = "pyo3")]
-use pyo3::Python;
 
 #[derive(Clone, Debug)]
 pub enum BaseCatState {
-    CategoricalNative(bool, Option<Arc<Cats>>),
+    CategoricalNative(bool, Option<LockedCats>),
     String,
     NonString,
 }
 
 impl BaseCatState {
-    pub fn get_local_cats(&self) -> Option<Arc<Cats>> {
+    pub fn get_local_cats(&self) -> Option<LockedCats> {
         match self {
             BaseCatState::CategoricalNative(_, local_cats) => {
                 if let Some(local_cats) = local_cats {
@@ -94,19 +89,14 @@ impl SolutionMappings {
     pub fn as_eager_interruptable(
         self,
         streaming: bool,
-        #[cfg(feature = "pyo3")] py: Python,
     ) -> Result<EagerSolutionMappings, InterruptableCollectError> {
-        #[cfg(feature = "pyo3")]
         {
-            let df = pl_interruptable_collect(self.mappings.with_new_streaming(streaming), py)?;
+            let df = pl_interruptable_collect(self.mappings.with_new_streaming(streaming))?;
             Ok(EagerSolutionMappings {
                 mappings: df,
                 rdf_node_types: self.rdf_node_types,
             })
         }
-
-        #[cfg(not(feature = "pyo3"))]
-        Ok(self.as_eager(streaming))
     }
 }
 
