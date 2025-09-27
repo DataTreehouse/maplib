@@ -15,7 +15,6 @@ pub enum DatalogError {
 pub fn infer(
     _triplestore: &mut Triplestore,
     _ruleset: &DatalogRuleset,
-    _insert: bool,
     _max_iterations: Option<usize>,
 ) -> Result<Option<HashMap<NamedNode, EagerSolutionMappings>>, DatalogError> {
     unimplemented!("Contact data treehouse to try")

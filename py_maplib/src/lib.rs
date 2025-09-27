@@ -630,36 +630,30 @@ impl PyModel {
         Ok(out)
     }
 
-    #[pyo3(signature = (ruleset,))]
-    fn add_ruleset(&self, py: Python<'_>, ruleset: &str) -> PyResult<()> {
-        py.allow_threads(|| {
-            let mut inner = self.inner.lock().unwrap();
-            inner.add_ruleset(ruleset)
-        })
-        .map_err(PyMaplibError::from)?;
-        Ok(())
-    }
-
-    fn drop_ruleset(&self) {
-        self.inner.lock().unwrap().drop_ruleset();
-    }
-
-    #[pyo3(signature = (insert=None, include_datatypes=None, native_dataframe=None, max_iterations=None))]
+    #[pyo3(signature = (rulesets, include_datatypes=None, native_dataframe=None, max_iterations=None))]
     fn infer(
         &self,
         py: Python<'_>,
-        insert: Option<bool>,
+        rulesets: PyObject,
         include_datatypes: Option<bool>,
         native_dataframe: Option<bool>,
         max_iterations: Option<usize>,
     ) -> PyResult<Option<HashMap<String, PyObject>>> {
+        let rulesets = if let Ok(s) = rulesets.extract::<String>(py) {
+            vec![s]
+        } else if let Ok(ss) = rulesets.extract::<Vec<String>>(py) {
+            ss
+        } else {
+            return Err(PyMaplibError::FunctionArgumentError("ruleset should be str or List[str]".to_string()).into())
+        };
+
         let (res, cats) = py.allow_threads(
             || -> PyResult<(Option<HashMap<NamedNode, EagerSolutionMappings>>, LockedCats)> {
                 let mut inner = self.inner.lock().unwrap();
 
                 let cats = inner.base_triplestore.global_cats.clone();
 
-                let res = infer_mutex(&mut inner, insert, max_iterations)?;
+                let res = infer_mutex(&mut inner, rulesets, max_iterations)?;
 
                 Ok((res, cats))
             },
@@ -1276,11 +1270,11 @@ fn get_predicate_mutex(
 
 fn infer_mutex(
     inner: &mut MutexGuard<InnerModel>,
-    insert: Option<bool>,
+    rulesets: Vec<String>,
     max_iterations: Option<usize>,
 ) -> Result<Option<HashMap<NamedNode, EagerSolutionMappings>>, PyMaplibError> {
     inner
-        .infer(insert.unwrap_or(true), max_iterations)
+        .infer(rulesets, max_iterations)
         .map_err(PyMaplibError::MaplibError)
 }
 

@@ -6,7 +6,6 @@ pub mod expansion;
 use crate::errors::MaplibError;
 use crate::mapping::errors::MappingError;
 use cimxml::export::{cim_xml_write, FullModelDetails};
-use datalog::ast::DatalogRuleset;
 use datalog::inference::infer;
 use datalog::parser::parse_datalog_ruleset;
 use oxrdf::NamedNode;
@@ -28,6 +27,7 @@ use triplestore::sparql::QueryResult;
 use triplestore::{IndexingOptions, NewTriples, Triplestore};
 
 use tracing::instrument;
+use datalog::ast::DatalogRuleset;
 
 pub struct Model {
     pub template_dataset: TemplateDataset,
@@ -36,7 +36,6 @@ pub struct Model {
     pub blank_node_counter: usize,
     pub default_template_counter: usize,
     pub indexing: IndexingOptions,
-    pub ruleset: Option<DatalogRuleset>,
 }
 
 #[derive(Clone, Default)]
@@ -100,7 +99,6 @@ impl Model {
             blank_node_counter: 0,
             default_template_counter: 0,
             indexing,
-            ruleset: None,
         })
     }
 
@@ -430,41 +428,25 @@ impl Model {
         Ok(())
     }
 
-    pub fn add_ruleset(&mut self, datalog_ruleset: &str) -> Result<(), MaplibError> {
-        let ruleset = parse_datalog_ruleset(datalog_ruleset, None)
-            .map_err(|x| MaplibError::DatalogSyntaxError(x.to_string()))?;
-        if let Some(existing_ruleset) = &mut self.ruleset {
-            existing_ruleset.extend(ruleset)
-        } else {
-            self.ruleset = Some(ruleset);
-        }
-        Ok(())
-    }
-
-    pub fn drop_ruleset(&mut self) {
-        self.ruleset = None;
-    }
-
     pub fn infer(
         &mut self,
-        insert: bool,
+        rulesets: Vec<String>,
         max_iterations: Option<usize>,
     ) -> Result<Option<HashMap<NamedNode, EagerSolutionMappings>>, MaplibError> {
-        if let Some(ruleset) = self.ruleset.take() {
-            let res = infer(&mut self.base_triplestore, &ruleset, insert, max_iterations);
-            match res {
-                Ok(o) => {
-                    self.ruleset = Some(ruleset);
-                    Ok(o)
-                }
-                Err(e) => {
-                    self.ruleset = Some(ruleset);
-                    // Put it back.. this is done to be able to make a mutable borrow of the base triplestore
-                    Err(MaplibError::DatalogError(e))
-                }
-            }
-        } else {
-            Err(MaplibError::MissingDatalogRuleset)
+        if rulesets.is_empty() {
+            return Err(MaplibError::MissingDatalogRuleset)
         }
+        let mut ruleset:Option<DatalogRuleset> = None;
+        for r in rulesets {
+            let new_ruleset = parse_datalog_ruleset(&r, None).map_err(|x| MaplibError::DatalogSyntaxError(x.to_string()))?;
+            if let Some(orig_ruleset) = &mut ruleset {
+                orig_ruleset.extend(new_ruleset);
+            } else {
+                ruleset = Some(new_ruleset);
+            }
+        }
+
+        let res = infer(&mut self.base_triplestore, ruleset.as_ref().unwrap(), max_iterations);
+        Ok(res.map_err(|x|MaplibError::DatalogError(x))?)
     }
 }
