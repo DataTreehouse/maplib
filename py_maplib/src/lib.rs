@@ -5,8 +5,10 @@ use crate::error::*;
 use polars::frame::DataFrame;
 use pydf_io::to_rust::polars_df_to_rust_df;
 
+use tracing::{info, instrument, warn};
+use tracing_subscriber::{filter, prelude::*};
+
 use crate::shacl::PyValidationReport;
-use log::{info, warn};
 use maplib::errors::MaplibError;
 use maplib::mapping::{MapOptions, Model as InnerModel};
 
@@ -97,6 +99,7 @@ pub struct PyIndexingOptions {
 impl PyIndexingOptions {
     #[new]
     #[pyo3(signature = (object_sort_all=None, object_sort_some=None, fts_path=None))]
+    #[instrument(skip_all)]
     pub fn new(
         object_sort_all: Option<bool>,
         object_sort_some: Option<Vec<PyIRI>>,
@@ -136,6 +139,7 @@ type ParametersType<'a> = HashMap<String, (Bound<'a, PyAny>, HashMap<String, PyR
 impl PyModel {
     #[new]
     #[pyo3(signature = (indexing_options=None))]
+    #[instrument(skip_all)]
     fn new(indexing_options: Option<PyIndexingOptions>) -> PyResult<PyModel> {
         let indexing = if let Some(indexing_options) = indexing_options {
             Some(indexing_options.inner)
@@ -148,6 +152,7 @@ impl PyModel {
         })
     }
 
+    #[instrument(skip_all)]
     fn add_template(&self, py: Python<'_>, template: Bound<'_, PyAny>) -> PyResult<()> {
         let template = template.try_into()?;
         py.allow_threads(move || {
@@ -156,6 +161,7 @@ impl PyModel {
         })
     }
 
+    #[instrument(skip_all)]
     fn create_sprout(&self, py: Python<'_>) -> PyResult<()> {
         py.allow_threads(move || {
             let mut inner = self.inner.lock().unwrap();
@@ -164,6 +170,7 @@ impl PyModel {
         })
     }
 
+    #[instrument(skip_all)]
     fn detach_sprout(&self, py: Python<'_>) -> PyResult<Option<PyModel>> {
         py.allow_threads(move || {
             let sprout = self.sprout.lock().unwrap();
@@ -172,6 +179,7 @@ impl PyModel {
     }
 
     #[pyo3(signature = (template, df=None, graph=None, types=None, validate_iris=None))]
+    #[instrument(skip_all)]
     fn map(
         &self,
         py: Python<'_>,
@@ -190,6 +198,7 @@ impl PyModel {
     }
 
     #[pyo3(signature = (df, predicate=None, graph=None, types=None, validate_iris=None))]
+    #[instrument(skip_all)]
     fn map_triples(
         &self,
         py: Python<'_>,
@@ -208,6 +217,7 @@ impl PyModel {
 
     #[pyo3(signature = (df, primary_key_column, dry_run=None, graph=None, types=None,
                             validate_iris=None))]
+    #[instrument(skip_all)]
     fn map_default(
         &self,
         py: Python<'_>,
@@ -237,6 +247,7 @@ impl PyModel {
     #[allow(clippy::too_many_arguments)]
     #[pyo3(signature = (query, parameters=None, include_datatypes=None, native_dataframe=None,
     graph=None, streaming=None, return_json=None, include_transient=None))]
+    #[instrument(skip_all)]
     fn query(
         &self,
         py: Python<'_>,
@@ -277,6 +288,7 @@ impl PyModel {
     #[allow(clippy::too_many_arguments)]
     #[pyo3(signature = (update, parameters=None, graph=None, streaming=None,
         include_transient=None))]
+    #[instrument(skip_all)]
     fn update(
         &self,
         py: Python<'_>,
@@ -301,6 +313,7 @@ impl PyModel {
     }
 
     #[pyo3(signature = (options=None, all=None, graph=None))]
+    #[instrument(skip_all)]
     fn create_index(
         &self,
         py: Python<'_>,
@@ -325,6 +338,7 @@ impl PyModel {
         deactivate_shapes=None,
         dry_run=None,
     ))]
+    #[instrument(skip_all)]
     fn validate(
         &self,
         py: Python<'_>,
@@ -358,6 +372,7 @@ impl PyModel {
     #[pyo3(signature = (query, parameters=None, include_datatypes=None, native_dataframe=None,
                                    transient=None, streaming=None, source_graph=None, target_graph=None,
                                    include_transient=None))]
+    #[instrument(skip_all)]
     fn insert(
         &self,
         py: Python<'_>,
@@ -407,6 +422,7 @@ impl PyModel {
     #[pyo3(signature = (query, parameters=None, include_datatypes=None, native_dataframe=None,
                             transient=None, streaming=None, source_graph=None, target_graph=None,
                             include_transient=None))]
+    #[instrument(skip_all)]
     fn insert_sprout(
         &self,
         py: Python<'_>,
@@ -455,6 +471,7 @@ impl PyModel {
 
     #[allow(clippy::too_many_arguments)]
     #[pyo3(signature = (file_path, format=None, base_iri=None, transient=None, parallel=None, checked=None, graph=None, replace_graph=None))]
+    #[instrument(skip_all)]
     fn read(
         &self,
         py: Python<'_>,
@@ -486,6 +503,7 @@ impl PyModel {
 
     #[allow(clippy::too_many_arguments)]
     #[pyo3(signature = (s, format, base_iri=None, transient=None, parallel=None, checked=None, graph=None, replace_graph=None))]
+    #[instrument(skip_all)]
     fn reads(
         &self,
         py: Python<'_>,
@@ -515,6 +533,7 @@ impl PyModel {
     }
 
     #[pyo3(signature = (file_path, format=None, graph=None))]
+    #[instrument(skip_all)]
     fn write(
         &self,
         py: Python<'_>,
@@ -532,6 +551,7 @@ impl PyModel {
     #[pyo3(signature = (
         file_path, profile_graph, model_iri=None, version=None, description=None, created=None,
         scenario_time=None, modeling_authority_set=None, prefixes=None, graph=None))]
+    #[instrument(skip_all)]
     fn write_cim_xml(
         &self,
         py: Python<'_>,
@@ -566,6 +586,7 @@ impl PyModel {
     }
 
     #[pyo3(signature = (format=None, graph=None))]
+    #[instrument(skip_all)]
     fn writes(
         &self,
         py: Python<'_>,
@@ -579,6 +600,7 @@ impl PyModel {
     }
 
     #[pyo3(signature = (folder_path, graph=None))]
+    #[instrument(skip_all)]
     fn write_native_parquet(
         &self,
         py: Python<'_>,
@@ -593,6 +615,7 @@ impl PyModel {
     }
 
     #[pyo3(signature = (graph=None, include_transient=None))]
+    #[instrument(skip_all)]
     fn get_predicate_iris(
         &self,
         py: Python<'_>,
@@ -606,6 +629,7 @@ impl PyModel {
     }
 
     #[pyo3(signature = (iri, graph=None, include_transient=None))]
+    #[instrument(skip_all)]
     fn get_predicate(
         &self,
         py: Python<'_>,
@@ -631,6 +655,7 @@ impl PyModel {
     }
 
     #[pyo3(signature = (rulesets, include_datatypes=None, native_dataframe=None, max_iterations=None))]
+    #[instrument(skip_all)]
     fn infer(
         &self,
         py: Python<'_>,
@@ -1280,8 +1305,24 @@ fn infer_mutex(
 #[pymodule]
 #[pyo3(name = "maplib")]
 fn _maplib(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
-    // Currently deadlocks, likely need to change all above with allow threads: https://docs.rs/pyo3-log/latest/pyo3_log/
-    // pyo3_log::init();
+    // The python log writer is too slow, needs a logging object cache similar to pyo3-log
+    // let make_writer = tracing_pyo3_logger::PythonLogMakeWriter::new(py)?;
+    // let pyo3_log_layer = tracing_subscriber::fmt::layer()
+    //     .with_writer(make_writer)
+    //     .with_target(false)
+    //     .with_level(false)
+    //     .without_time()
+    //     .with_filter(tracing_subscriber::filter::LevelFilter::INFO);
+
+    // let subscriber = tracing_subscriber::registry().with(pyo3_log_layer);
+    // subscriber.init();
+
+    let fmt = tracing_subscriber::fmt()
+        // .with_span_events(FmtSpan::NEW | FmtSpan::CLOSE)
+        .with_max_level(filter::LevelFilter::INFO)
+        .finish();
+    fmt.init();
+
     m.add_class::<PyIndexingOptions>()?;
     m.add_class::<PyModel>()?;
     m.add_class::<PyValidationReport>()?;
