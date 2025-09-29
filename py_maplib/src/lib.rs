@@ -669,7 +669,10 @@ impl PyModel {
         } else if let Ok(ss) = rulesets.extract::<Vec<String>>(py) {
             ss
         } else {
-            return Err(PyMaplibError::FunctionArgumentError("ruleset should be str or List[str]".to_string()).into())
+            return Err(PyMaplibError::FunctionArgumentError(
+                "ruleset should be str or List[str]".to_string(),
+            )
+            .into());
         };
 
         let (res, cats) = py.allow_threads(
