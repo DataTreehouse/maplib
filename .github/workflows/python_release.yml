@@ -16,7 +16,6 @@ env:
   RUST_TOOLCHAIN: nightly-2025-08-29
   MATURIN_VERSION: '1.7.4'
   MATURIN_PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
-  PYTHON_VERSION: '3.12'
 
 jobs:
   security_audit:
