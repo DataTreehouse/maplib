@@ -6,6 +6,7 @@ use polars::frame::DataFrame;
 use pydf_io::to_rust::polars_df_to_rust_df;
 
 use tracing::{info, instrument, warn};
+use tracing_subscriber::EnvFilter;
 use tracing_subscriber::{filter, prelude::*};
 
 use crate::shacl::PyValidationReport;
@@ -1323,6 +1324,7 @@ fn _maplib(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     let fmt = tracing_subscriber::fmt()
         // .with_span_events(FmtSpan::NEW | FmtSpan::CLOSE)
         .with_max_level(filter::LevelFilter::INFO)
+        .with_env_filter(EnvFilter::from_default_env())
         .finish();
     fmt.init();
 
