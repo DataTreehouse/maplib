@@ -6,7 +6,6 @@ use triplestore::{IndexingOptions, Triplestore};
 pub fn report_to_model(
     _report: &ValidationReport,
     _shape_graph: &Option<Triplestore>,
-    _indexing: Option<IndexingOptions>,
 ) -> Result<Model, ShaclError> {
     unimplemented!("Contact Data Treehouse to try")
 }
