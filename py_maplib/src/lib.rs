@@ -983,7 +983,6 @@ fn validate_mutex(
     Ok(PyValidationReport::new(
         report,
         shape_graph_triplestore,
-        inner.indexing.clone(),
     ))
 }
 

@@ -1,5 +1,5 @@
 use crate::error::PyMaplibError;
-use crate::{fix_cats_and_multicolumns, PyIndexingOptions, PyModel};
+use crate::{fix_cats_and_multicolumns, PyModel};
 use maplib::errors::MaplibError;
 use pydf_io::to_python::df_to_py_df;
 use pyo3::{pyclass, pymethods, PyObject, PyResult, Python};
@@ -7,26 +7,23 @@ use report_mapping::report_to_model;
 use representation::solution_mapping::EagerSolutionMappings;
 use shacl::ValidationReport as RustValidationReport;
 use std::collections::HashMap;
-use triplestore::{IndexingOptions, Triplestore};
+use triplestore::{Triplestore};
 
 #[derive(Clone)]
 #[pyclass(name = "ValidationReport")]
 pub struct PyValidationReport {
     shape_graph: Option<Triplestore>,
     inner: RustValidationReport,
-    indexing: IndexingOptions,
 }
 
 impl PyValidationReport {
     pub fn new(
         inner: RustValidationReport,
         shape_graph: Option<Triplestore>,
-        indexing: IndexingOptions,
     ) -> PyValidationReport {
         PyValidationReport {
             shape_graph,
             inner,
-            indexing,
         }
     }
 }
@@ -136,14 +133,11 @@ impl PyValidationReport {
         }
     }
 
-    #[pyo3(signature = (indexing=None))]
-    pub fn graph(&self, py: Python<'_>, indexing: Option<PyIndexingOptions>) -> PyResult<PyModel> {
-        let indexing = indexing.map_or(None, move |i| Some(i.inner));
+    pub fn graph(&self, py: Python<'_>) -> PyResult<PyModel> {
         let m = py.allow_threads(|| {
             report_to_model(
                 &self.inner,
                 &self.shape_graph,
-                Some(indexing.unwrap_or(self.indexing.clone())),
             )
             .map_err(|x| PyMaplibError::from(MaplibError::from(x)))
         })?;

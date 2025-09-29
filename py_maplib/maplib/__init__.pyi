@@ -312,13 +312,11 @@ class ValidationReport:
         :return: Details of the SHACL validation report, as a DataFrame
         """
 
-    def graph(self, indexing=None) -> "Mapping":
+    def graph(self) -> "Mapping":
         """
         Creates a new mapping object where the base graph is the validation report with results.
         Includes the details of the validation report in the new graph if they exist.
 
-        :param indexing: Should the constructed graph be indexed?
-                         If not specified it is inherited from the mapping where validate was called.
         :return:
         """
 
