@@ -2461,7 +2461,7 @@ dependencies = [
 
 [[package]]
 name = "py_maplib"
-version = "0.17.5"
+version = "0.17.6"
 dependencies = [
  "chrono",
  "cimxml",
