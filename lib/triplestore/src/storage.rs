@@ -382,7 +382,6 @@ impl TriplesSegment {
             },
         )
         .unwrap();
-
         lf = df.lazy().join(
             lf,
             [col(SUBJECT_COL_NAME), col(OBJECT_COL_NAME)],

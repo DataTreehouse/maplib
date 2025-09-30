@@ -336,7 +336,7 @@ impl Triplestore {
         if subject_datatype_ctr.is_none() && object_datatype_ctr.is_none() {
             return None;
         }
-        let mut predicates = HashSet::new();
+        let mut compat_types = HashSet::new();
         let use_map = if transient {
             &self.transient_triples_map
         } else {
@@ -355,10 +355,10 @@ impl Triplestore {
                         continue;
                     }
                 }
-                predicates.insert((subject_type.clone(), object_type.clone()));
+                compat_types.insert((subject_type.clone(), object_type.clone()));
             }
         }
-        Some(predicates)
+        Some(compat_types)
     }
 
     fn all_predicates(&self) -> Vec<NamedNode> {

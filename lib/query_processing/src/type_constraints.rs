@@ -38,7 +38,7 @@ pub enum ConstraintExpr {
 
 impl ConstraintExpr {
     pub(crate) fn compatible_with(&self, t: &ConstraintBaseRDFNodeType) -> bool {
-        match self {
+        let c = match self {
             ConstraintExpr::Bottom => false,
             ConstraintExpr::Top => true,
             ConstraintExpr::Constraint(c) => match c.as_ref() {
@@ -46,10 +46,14 @@ impl ConstraintExpr {
                     matches!(t, ConstraintBaseRDFNodeType::IRI(_))
                 }
                 ConstraintBaseRDFNodeType::IRI(Some(nn)) => {
-                    if let ConstraintBaseRDFNodeType::IRI(Some(nn_c)) = c.as_ref() {
-                        !nn.is_disjoint(nn_c)
+                    if let ConstraintBaseRDFNodeType::IRI(t_iri_c) = t {
+                        if let Some(nn_t) = t_iri_c {
+                            !nn.is_disjoint(nn_t)
+                        } else {
+                            true
+                        }
                     } else {
-                        true
+                        false
                     }
                 }
                 ConstraintBaseRDFNodeType::BlankNode => t == &ConstraintBaseRDFNodeType::BlankNode,
@@ -66,7 +70,8 @@ impl ConstraintExpr {
             },
             ConstraintExpr::And(left, right) => left.compatible_with(t) && right.compatible_with(t),
             ConstraintExpr::Or(left, right) => left.compatible_with(t) || right.compatible_with(t),
-        }
+        };
+        c
     }
 }
 

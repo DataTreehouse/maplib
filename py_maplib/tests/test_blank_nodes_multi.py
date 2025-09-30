@@ -60,7 +60,6 @@ def test_simple_query_no_error(blank_person_model, streaming):
         """,
         streaming=streaming,
     ).sort(["firstName", "lastName"])
-    # Todo: Fix multitype sorting
     expected_df = pl.DataFrame(
         {"firstName": ["Ann", "Bob"], "lastName": ["Strong", "Brite"]}
     )

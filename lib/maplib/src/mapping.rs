@@ -26,8 +26,8 @@ use triplestore::sparql::errors::SparqlError;
 use triplestore::sparql::QueryResult;
 use triplestore::{IndexingOptions, NewTriples, Triplestore};
 
-use tracing::instrument;
 use datalog::ast::DatalogRuleset;
+use tracing::instrument;
 
 pub struct Model {
     pub template_dataset: TemplateDataset,
@@ -398,9 +398,10 @@ impl Model {
         include_transient: bool,
     ) -> Result<Vec<EagerSolutionMappings>, MaplibError> {
         let triplestore = self.get_triplestore(&graph);
-        triplestore
+        let sms = triplestore
             .get_predicate_eager_solution_mappings(predicate, include_transient)
-            .map_err(|x| x.into())
+            .map_err(|x| MaplibError::SparqlError(x))?;
+        Ok(sms)
     }
 
     #[instrument(skip_all)]
@@ -434,11 +435,12 @@ impl Model {
         max_iterations: Option<usize>,
     ) -> Result<Option<HashMap<NamedNode, EagerSolutionMappings>>, MaplibError> {
         if rulesets.is_empty() {
-            return Err(MaplibError::MissingDatalogRuleset)
+            return Err(MaplibError::MissingDatalogRuleset);
         }
-        let mut ruleset:Option<DatalogRuleset> = None;
+        let mut ruleset: Option<DatalogRuleset> = None;
         for r in rulesets {
-            let new_ruleset = parse_datalog_ruleset(&r, None).map_err(|x| MaplibError::DatalogSyntaxError(x.to_string()))?;
+            let new_ruleset = parse_datalog_ruleset(&r, None)
+                .map_err(|x| MaplibError::DatalogSyntaxError(x.to_string()))?;
             if let Some(orig_ruleset) = &mut ruleset {
                 orig_ruleset.extend(new_ruleset);
             } else {
@@ -446,7 +448,11 @@ impl Model {
             }
         }
 
-        let res = infer(&mut self.base_triplestore, ruleset.as_ref().unwrap(), max_iterations);
-        Ok(res.map_err(|x|MaplibError::DatalogError(x))?)
+        let res = infer(
+            &mut self.base_triplestore,
+            ruleset.as_ref().unwrap(),
+            max_iterations,
+        );
+        Ok(res.map_err(|x| MaplibError::DatalogError(x))?)
     }
 }
