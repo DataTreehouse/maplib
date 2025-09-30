@@ -47,7 +47,7 @@ jobs:
           RUSTFLAGS: -C target-feature=+fxsr,+sse,+sse2,+sse3,+ssse3,+sse4.1,+sse4.2,+popcnt,+avx,+fma
         with:
           command: publish
-          args: -m py_maplib/Cargo.toml --skip-existing -o wheels -u magbak
+          args: -m py_maplib/Cargo.toml --skip-existing -o wheels -u magbak --features abi3
           maturin-version: ${{ env.MATURIN_VERSION }}
           rust-toolchain: ${{ env.RUST_TOOLCHAIN }}
           manylinux: 2_28
@@ -77,7 +77,7 @@ jobs:
           RUSTFLAGS: -C target-feature=+fxsr,+sse,+sse2,+sse3,+sse4.1,+sse4.2
         with:
           command: publish
-          args: -m py_maplib/Cargo.toml --no-sdist --skip-existing -o wheels -u magbak
+          args: -m py_maplib/Cargo.toml --no-sdist --skip-existing -o wheels -u magbak --features abi3
           maturin-version: ${{ env.MATURIN_VERSION }}
           rust-toolchain: ${{ env.RUST_TOOLCHAIN }}
 
