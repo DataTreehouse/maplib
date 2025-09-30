@@ -7,7 +7,7 @@ use report_mapping::report_to_model;
 use representation::solution_mapping::EagerSolutionMappings;
 use shacl::ValidationReport as RustValidationReport;
 use std::collections::HashMap;
-use triplestore::{Triplestore};
+use triplestore::Triplestore;
 
 #[derive(Clone)]
 #[pyclass(name = "ValidationReport")]
@@ -21,10 +21,7 @@ impl PyValidationReport {
         inner: RustValidationReport,
         shape_graph: Option<Triplestore>,
     ) -> PyValidationReport {
-        PyValidationReport {
-            shape_graph,
-            inner,
-        }
+        PyValidationReport { shape_graph, inner }
     }
 }
 
@@ -135,11 +132,8 @@ impl PyValidationReport {
 
     pub fn graph(&self, py: Python<'_>) -> PyResult<PyModel> {
         let m = py.allow_threads(|| {
-            report_to_model(
-                &self.inner,
-                &self.shape_graph,
-            )
-            .map_err(|x| PyMaplibError::from(MaplibError::from(x)))
+            report_to_model(&self.inner, &self.shape_graph)
+                .map_err(|x| PyMaplibError::from(MaplibError::from(x)))
         })?;
         Ok(PyModel::from_inner_mapping(m))
     }
