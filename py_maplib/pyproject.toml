@@ -29,5 +29,5 @@ Changelog = "https://github.com/DataTreehouse/maplib/releases"
 explorer = ["fastapi[standard]>=0.115"]
 
 [build-system]
-requires = ["maturin==1.7.4"]
+requires = ["maturin==1.9.4"]
 build-backend = "maturin"
