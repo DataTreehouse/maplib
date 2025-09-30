@@ -18,6 +18,7 @@ classifiers = [
     "Topic :: Database :: Database Engines/Servers",
     "Topic :: Scientific/Engineering",
 ]
+dynamic = ["version"]
 
 [project.urls]
 Homepage = "https://github.com/DataTreehouse/maplib"
