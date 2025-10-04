@@ -1472,76 +1472,62 @@ pub fn func_expression(
                 let bs = t.get_base_state().unwrap();
                 let decoded =
                     maybe_decode_expr(col(first_context.as_str()), bt, bs, global_cats.clone());
-                match func {
-                    Function::StrStarts => {
-                        solution_mappings.mappings = solution_mappings.mappings.with_column(
-                            decoded
-                                .str()
-                                .starts_with(second_decoded)
-                                .alias(outer_context.as_str()),
-                        );
-                    }
-                    Function::StrEnds => {
-                        solution_mappings.mappings = solution_mappings.mappings.with_column(
-                            decoded
-                                .str()
-                                .ends_with(second_decoded)
-                                .alias(outer_context.as_str()),
-                        );
-                    }
-                    Function::Contains => {
-                        solution_mappings.mappings = solution_mappings.mappings.with_column(
-                            decoded
-                                .str()
-                                .contains_literal(second_decoded)
-                                .alias(outer_context.as_str()),
-                        );
-                    }
-                    _ => panic!("Should never happen"),
-                }
+                let expr = str_starts_ends_contains(decoded, second_decoded, func)
+                    .alias(outer_context.as_str());
+                solution_mappings.mappings = solution_mappings.mappings.with_column(expr);
             } else if t.is_lang_string() {
-                match func {
-                    Function::StrStarts => {
-                        solution_mappings.mappings = solution_mappings.mappings.with_column(
+                let expr = str_starts_ends_contains(
+                    col(first_context.as_str())
+                        .struct_()
+                        .field_by_name(LANG_STRING_VALUE_FIELD),
+                    second_decoded,
+                    func,
+                )
+                .alias(outer_context.as_str());
+                solution_mappings.mappings = solution_mappings.mappings.with_column(expr);
+            } else if t.is_multi() {
+                let mut exprs = vec![];
+                for (bt, bs) in &t.map {
+                    if bt.is_lit_type(xsd::STRING) {
+                        exprs.push(
+                            str_starts_ends_contains(
+                                col(first_context.as_str())
+                                    .struct_()
+                                    .field_by_name(&bt.field_col_name()),
+                                second_decoded.clone(),
+                                func,
+                            )
+                            .alias(outer_context.as_str()),
+                        );
+                    } else if bt.is_lang_string() {
+                        exprs.push(str_starts_ends_contains(
                             col(first_context.as_str())
                                 .struct_()
-                                .field_by_name(LANG_STRING_VALUE_FIELD)
-                                .cast(DataType::String)
-                                .str()
-                                .starts_with(second_decoded)
-                                .alias(outer_context.as_str()),
-                        );
+                                .field_by_name(LANG_STRING_VALUE_FIELD),
+                            second_decoded.clone(),
+                            func,
+                        ))
                     }
-                    Function::StrEnds => {
-                        solution_mappings.mappings = solution_mappings.mappings.with_column(
-                            col(first_context.as_str())
-                                .struct_()
-                                .field_by_name(LANG_STRING_VALUE_FIELD)
-                                .cast(DataType::String)
-                                .str()
-                                .ends_with(second_decoded)
-                                .alias(outer_context.as_str()),
-                        );
-                    }
-                    Function::Contains => {
-                        solution_mappings.mappings = solution_mappings.mappings.with_column(
-                            col(first_context.as_str())
-                                .struct_()
-                                .field_by_name(LANG_STRING_VALUE_FIELD)
-                                .cast(DataType::String)
-                                .str()
-                                .contains_literal(second_decoded)
-                                .alias(outer_context.as_str()),
-                        );
-                    }
-                    _ => panic!("Should never happen"),
                 }
-            } else if t.is_none() {
-                solution_mappings.mappings = solution_mappings
-                    .mappings
-                    .with_column(col(first_context.as_str()).alias(outer_context.as_str()));
+                if exprs.is_empty() {
+                    solution_mappings.mappings = solution_mappings.mappings.with_column(
+                        lit(LiteralValue::untyped_null())
+                            .cast(DataType::Boolean)
+                            .alias(outer_context.as_str()),
+                    );
+                } else if exprs.len() == 1 {
+                    solution_mappings.mappings =
+                        solution_mappings.mappings.with_column(exprs.pop().unwrap());
+                } else {
+                    solution_mappings.mappings =
+                        solution_mappings.mappings.with_column(coalesce(&exprs));
+                }
             } else {
-                todo!()
+                solution_mappings.mappings = solution_mappings.mappings.with_column(
+                    lit(LiteralValue::untyped_null())
+                        .cast(DataType::Boolean)
+                        .alias(outer_context.as_str()),
+                );
             }
             solution_mappings.rdf_node_types.insert(
                 outer_context.as_str().to_string(),
@@ -1800,6 +1786,7 @@ pub fn str_function(c: &str, t: &RDFNodeState, global_cats: LockedCats) -> Expr 
                             s,
                             global_cats.clone(),
                         )
+                        .cast(DataType::String)
                     }
                 }
                 BaseRDFNodeType::None => lit(LiteralValue::untyped_null()).cast(DataType::String),
@@ -1972,5 +1959,14 @@ pub fn add_regex_feature_flags(pattern: &str, flags: Option<&str>) -> String {
         format!("(?{flags}){pattern}")
     } else {
         pattern.to_string()
+    }
+}
+
+pub fn str_starts_ends_contains(expr_decoded: Expr, second_decoded: Expr, f: &Function) -> Expr {
+    match f {
+        Function::StrStarts => expr_decoded.str().starts_with(second_decoded),
+        Function::StrEnds => expr_decoded.str().ends_with(second_decoded),
+        Function::Contains => expr_decoded.str().contains_literal(second_decoded),
+        _ => unreachable!("Should never happen"),
     }
 }

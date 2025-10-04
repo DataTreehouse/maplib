@@ -2470,12 +2470,11 @@ dependencies = [
 
 [[package]]
 name = "py_maplib"
-version = "0.17.11"
+version = "0.17.12"
 dependencies = [
  "chrono",
  "cimxml",
  "jemallocator",
- "log",
  "maplib",
  "mimalloc",
  "oxrdf",
@@ -2489,7 +2488,6 @@ dependencies = [
  "templates",
  "thiserror",
  "tracing",
- "tracing-log",
  "tracing-subscriber",
  "triplestore",
  "uuid",

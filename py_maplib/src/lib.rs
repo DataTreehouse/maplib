@@ -5,7 +5,6 @@ use crate::error::*;
 use polars::frame::DataFrame;
 use pydf_io::to_rust::polars_df_to_rust_df;
 
-
 use tracing::{info, instrument, warn};
 use tracing_subscriber::EnvFilter;
 use tracing_subscriber::{filter, prelude::*};

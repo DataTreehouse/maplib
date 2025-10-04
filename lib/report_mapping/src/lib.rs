@@ -1,7 +1,7 @@
 use maplib::mapping::Model;
 use shacl::errors::ShaclError;
 use shacl::ValidationReport;
-use triplestore::{Triplestore};
+use triplestore::Triplestore;
 
 pub fn report_to_model(
     _report: &ValidationReport,
