@@ -153,14 +153,6 @@ def test_construct_pvalues2(pizzas_model):
 
 
 def test_having_not_so_nice(pizzas_model):
-    h_df = pl.DataFrame(
-        {
-            "h1": [
-                "https://github.com/magbak/maplib/pizza#Hawaiian",
-                "https://github.com/magbak/maplib/pizza#Hawaiian2",
-            ]
-        }
-    )
     res = pizzas_model.query(
         """
     PREFIX pizza:<https://github.com/magbak/maplib/pizza#>
@@ -177,7 +169,7 @@ def test_having_not_so_nice(pizzas_model):
 
 
 def test_update_insert_delete(pizzas_model):
-    res = pizzas_model.update(
+    pizzas_model.update(
         """
     PREFIX pizza:<https://github.com/magbak/maplib/pizza#>
     
@@ -204,7 +196,7 @@ def test_update_insert_delete(pizzas_model):
 
 
 def test_update_insert(pizzas_model):
-    res = pizzas_model.update(
+    pizzas_model.update(
         """
     PREFIX pizza:<https://github.com/magbak/maplib/pizza#>
     
@@ -231,7 +223,7 @@ def test_update_insert(pizzas_model):
 
 
 def test_update_delete(pizzas_model):
-    res = pizzas_model.update(
+    pizzas_model.update(
         """
     PREFIX pizza:<https://github.com/magbak/maplib/pizza#>
     
@@ -258,7 +250,7 @@ def test_update_delete(pizzas_model):
 
 
 def test_update_insert_delete_multiple(pizzas_model):
-    res = pizzas_model.update(
+    pizzas_model.update(
         """
     PREFIX pizza:<https://github.com/magbak/maplib/pizza#>
     
@@ -295,7 +287,7 @@ def test_count_star(pizzas_model):
 
 
 def test_update_insert_delete_non_existant(pizzas_model):
-    res = pizzas_model.update(
+    pizzas_model.update(
         """
     PREFIX pizza:<https://github.com/magbak/maplib/pizza#>
     

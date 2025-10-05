@@ -1487,7 +1487,7 @@ pub fn func_expression(
                 solution_mappings.mappings = solution_mappings.mappings.with_column(expr);
             } else if t.is_multi() {
                 let mut exprs = vec![];
-                for (bt, bs) in &t.map {
+                for bt in t.map.keys() {
                     if bt.is_lit_type(xsd::STRING) {
                         exprs.push(
                             str_starts_ends_contains(

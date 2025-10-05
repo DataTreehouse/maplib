@@ -1,6 +1,6 @@
 [package]
 name = "py_maplib"
-version = "0.17.12"
+version = "0.17.13"
 edition = "2021"
 
 [features]
@@ -26,7 +26,7 @@ polars = { workspace = true, features = [
     "dtype-datetime", "dtype-decimal", "dtype-duration",
     "dtype-i8", "dtype-i16", "dtype-struct",
     "dtype-time", "dtype-u8", "dtype-u16"], default-features = false }
-uuid.workspace = true
+quuid.workspace = true
 chrono.workspace = true
 
 tracing.workspace = true

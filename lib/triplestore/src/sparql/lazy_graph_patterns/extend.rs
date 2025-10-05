@@ -55,6 +55,7 @@ impl Triplestore {
             output_solution_mappings,
             &expression_context,
             variable,
+            self.global_cats.clone(),
         )?)
     }
 }

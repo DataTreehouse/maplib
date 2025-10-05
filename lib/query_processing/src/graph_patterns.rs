@@ -12,6 +12,7 @@ pub use union::*;
 pub use values::*;
 
 use crate::errors::QueryProcessingError;
+use crate::expressions::comparisons::typed_equals_expr;
 use crate::type_constraints::{
     conjunction_variable_type, equal_variable_type, ConstraintBaseRDFNodeType, PossibleTypes,
 };
@@ -22,6 +23,7 @@ use polars::prelude::{
     by_name, col, lit, Expr, JoinArgs, JoinType, LazyFrame, LazyGroupBy, LiteralValue,
     SortMultipleOptions,
 };
+use representation::cats::LockedCats;
 use representation::multitype::{nest_multicolumns, unnest_multicols};
 use representation::query_context::Context;
 use representation::solution_mapping::SolutionMappings;
@@ -48,11 +50,33 @@ pub fn extend(
     mut solution_mappings: SolutionMappings,
     expression_context: &Context,
     variable: &Variable,
+    global_cats: LockedCats,
 ) -> Result<SolutionMappings, QueryProcessingError> {
-    solution_mappings.mappings =
-        solution_mappings
-            .mappings
-            .rename([expression_context.as_str()], [variable.as_str()], true);
+    if solution_mappings
+        .rdf_node_types
+        .contains_key(variable.as_str())
+    {
+        let e = typed_equals_expr(
+            variable.as_str(),
+            expression_context.as_str(),
+            solution_mappings
+                .rdf_node_types
+                .get(variable.as_str())
+                .unwrap(),
+            solution_mappings
+                .rdf_node_types
+                .get(expression_context.as_str())
+                .unwrap(),
+            global_cats,
+        );
+        solution_mappings.mappings = solution_mappings.mappings.filter(e);
+    } else {
+        solution_mappings.mappings = solution_mappings.mappings.rename(
+            [expression_context.as_str()],
+            [variable.as_str()],
+            true,
+        );
+    }
     let existing_rdf_node_type = solution_mappings
         .rdf_node_types
         .remove(expression_context.as_str())
@@ -60,6 +84,11 @@ pub fn extend(
     solution_mappings
         .rdf_node_types
         .insert(variable.as_str().to_string(), existing_rdf_node_type);
+    let mut cols: Vec<_> = solution_mappings.rdf_node_types.keys().cloned().collect();
+    cols.sort();
+    solution_mappings.mappings = solution_mappings
+        .mappings
+        .select(cols.into_iter().map(col).collect::<Vec<_>>());
     Ok(solution_mappings)
 }
 

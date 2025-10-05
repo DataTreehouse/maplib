@@ -43,14 +43,24 @@ impl Triplestore {
             prepare_group_by(output_solution_mappings, variables);
         let mut aggregate_expressions = vec![];
         let mut new_rdf_node_types = HashMap::new();
+        for v in variables {
+            new_rdf_node_types.insert(
+                v.as_str().to_string(),
+                output_solution_mappings
+                    .rdf_node_types
+                    .get(v.as_str())
+                    .unwrap()
+                    .clone(),
+            );
+        }
+        let mut aggregate_contexts = vec![];
         for i in 0..aggregates.len() {
             let aggregate_context = context.extension_with(PathEntry::GroupAggregation(i as u16));
             let (v, a) = aggregates.get(i).unwrap();
-            //(aggregate_solution_mappings, expr, used_context, datatype)
             let AggregateReturn {
                 solution_mappings: aggregate_solution_mappings,
                 expr,
-                context: _,
+                context: c,
                 rdf_node_type,
             } = self.sparql_aggregate_expression_as_lazy_column_and_expression(
                 v,
@@ -63,14 +73,20 @@ impl Triplestore {
             output_solution_mappings = aggregate_solution_mappings;
             new_rdf_node_types.insert(v.as_str().to_string(), rdf_node_type);
             aggregate_expressions.push(expr);
+            if let Some(c) = c {
+                aggregate_contexts.push(c);
+            }
         }
-        let grouped = group_by(
+        output_solution_mappings.rdf_node_types = new_rdf_node_types;
+        let mut grouped = group_by(
             output_solution_mappings,
             aggregate_expressions,
             by,
             dummy_varname,
-            new_rdf_node_types,
         )?;
+        for a in aggregate_contexts {
+            grouped.rdf_node_types.remove(a.as_str());
+        }
         let solution_mappings = if let Some(solution_mappings) = solution_mappings {
             join(
                 solution_mappings,
