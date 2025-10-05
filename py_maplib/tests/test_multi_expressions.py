@@ -597,6 +597,22 @@ def test_multi_concat_count(streaming):
 
 
 @pytest.mark.parametrize("streaming", [True, False])
+def test_strlang(streaming):
+    m = Model()
+    df = m.query(
+        """
+    PREFIX : <http://example.net/> 
+    PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+    SELECT * WHERE {
+    BIND(STRLANG("a", "en") AS ?a)
+    } 
+    """,
+        streaming=streaming,
+    )
+    assert df.height == 1
+    assert df.get_column("a")[0] == "\"a\"@en"
+
+@pytest.mark.parametrize("streaming", [True, False])
 def test_multi_filter_incompatible_datetimestamp_comparison(streaming):
     m = Model()
     df = m.query(
