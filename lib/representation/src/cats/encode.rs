@@ -11,6 +11,7 @@ use polars::prelude::{col, lit, IntoLazy, Series};
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
+use std::sync::Arc;
 
 impl CatEncs {
     pub fn new_empty() -> CatEncs {
@@ -20,15 +21,22 @@ impl CatEncs {
         }
     }
 
+    pub fn contains_key(&self, s: &str) -> bool {
+        let s = s.to_string();
+        self.map.contains_key(&s)
+    }
+
     pub fn new_singular(value: &str, u: u32) -> CatEncs {
         let mut sing = Self::new_empty();
-        sing.map.insert(value.to_string(), u);
-        sing.rev_map.insert(u, value.to_string());
+        let s = Arc::new(value.to_string());
+        sing.map.insert(s.clone(), u);
+        sing.rev_map.insert(u, s);
         sing
     }
 
     pub fn maybe_encode_str(&self, s: &str) -> Option<&u32> {
-        self.map.get(s)
+        let s = Arc::new(s.to_string());
+        self.map.get(&s)
     }
 
     pub fn encode_new_str(&mut self, s: &str, u: u32) {
@@ -36,6 +44,12 @@ impl CatEncs {
     }
 
     pub fn encode_new_string(&mut self, s: String, u: u32) {
+        let s = Arc::new(s.clone());
+        self.map.insert(s.clone(), u);
+        self.rev_map.insert(u, s);
+    }
+
+    pub fn encode_new_arc_string(&mut self, s: Arc<String>, u: u32) {
         self.map.insert(s.clone(), u);
         self.rev_map.insert(u, s);
     }

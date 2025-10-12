@@ -26,8 +26,8 @@ impl Cats {
             }
 
             let enc = self.cat_map.get_mut(&ct).unwrap();
-            if !enc.map.contains_key(suf) {
-                enc.encode_new_str(suf, self.iri_height);
+            if !enc.contains_key(suf) {
+                enc.encode_new_str(&suf, self.iri_height);
                 self.iri_height += 1;
             }
         }

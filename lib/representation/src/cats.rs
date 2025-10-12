@@ -72,8 +72,8 @@ pub struct EncodedTriples {
 #[derive(Debug, Clone)]
 pub struct CatEncs {
     // We use a BTree map to keep strings sorted
-    pub map: BTreeMap<String, u32>,
-    pub rev_map: HashMap<u32, String, BuildHasherDefault<NoHashHasher<u32>>>,
+    pub map: BTreeMap<Arc<String>, u32>,
+    pub rev_map: HashMap<u32, Arc<String>, BuildHasherDefault<NoHashHasher<u32>>>,
 }
 
 #[derive(Debug, Clone)]
