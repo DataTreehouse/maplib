@@ -41,6 +41,7 @@ impl Triplestore {
         transient: bool,
         parallel: Option<bool>,
         checked: bool,
+        graph: &Option<NamedNode>,
     ) -> Result<(), TriplestoreError> {
         let now = Instant::now();
         let rdf_format = if let Some(rdf_format) = rdf_format {
@@ -65,6 +66,7 @@ impl Triplestore {
             transient,
             parallel,
             checked,
+            graph,
         )?;
         drop(map);
 
@@ -84,6 +86,7 @@ impl Triplestore {
         transient: bool,
         parallel: Option<bool>,
         checked: bool,
+        graph: &Option<NamedNode>,
     ) -> Result<(), TriplestoreError> {
         self.read_triples(
             s.as_bytes(),
@@ -92,6 +95,7 @@ impl Triplestore {
             transient,
             parallel,
             checked,
+            graph,
         )
     }
 
@@ -105,6 +109,7 @@ impl Triplestore {
         transient: bool,
         parallel: Option<bool>,
         checked: bool,
+        graph: &Option<NamedNode>,
     ) -> Result<(), TriplestoreError> {
         let start_quadproc_now = Instant::now();
         let parallel = if let Some(parallel) = parallel {
@@ -256,7 +261,7 @@ impl Triplestore {
         );
         let start_add_triples_vec = Instant::now();
         self.parser_call += 1;
-        self.add_triples_vec(triples_to_add, transient)?;
+        self.add_triples_vec(triples_to_add, transient, graph)?;
         debug!(
             "Adding triples vec took {} seconds",
             start_add_triples_vec.elapsed().as_secs_f64()

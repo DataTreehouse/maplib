@@ -7,7 +7,7 @@ use query_processing::graph_patterns::minus;
 use query_processing::pushdowns::Pushdowns;
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
-use spargebra::algebra::GraphPattern;
+use spargebra::algebra::{GraphPattern, QueryDataset};
 use std::collections::HashMap;
 
 impl Triplestore {
@@ -21,6 +21,7 @@ impl Triplestore {
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         pushdowns: Pushdowns,
         query_settings: &QuerySettings,
+        dataset: &Option<QueryDataset>,
     ) -> Result<SolutionMappings, SparqlError> {
         trace!("Processing minus graph pattern");
         let left_context = context.extension_with(PathEntry::MinusLeftSide);
@@ -32,6 +33,7 @@ impl Triplestore {
             parameters,
             pushdowns,
             query_settings,
+            dataset,
         )?;
 
         let right_solution_mappings = self.lazy_graph_pattern(
@@ -41,6 +43,7 @@ impl Triplestore {
             parameters,
             Pushdowns::new(),
             query_settings,
+            dataset,
         )?;
 
         Ok(minus(left_solution_mappings, right_solution_mappings)?)

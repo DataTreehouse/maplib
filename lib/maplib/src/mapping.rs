@@ -31,8 +31,7 @@ use tracing::instrument;
 
 pub struct Model {
     pub template_dataset: TemplateDataset,
-    pub base_triplestore: Triplestore,
-    pub triplestores_map: HashMap<NamedNode, Triplestore>,
+    pub triplestore: Triplestore,
     pub blank_node_counter: usize,
     pub default_template_counter: usize,
     pub indexing: IndexingOptions,
@@ -93,7 +92,7 @@ impl Model {
         };
         Ok(Model {
             template_dataset,
-            base_triplestore: Triplestore::new(storage_folder, Some(indexing.clone()))
+            triplestore: Triplestore::new(storage_folder, Some(indexing.clone()))
                 .map_err(MaplibError::TriplestoreError)?,
             triplestores_map: Default::default(),
             blank_node_counter: 0,
@@ -225,7 +224,7 @@ impl Model {
             }
             self.triplestores_map.get_mut(graph).unwrap()
         } else {
-            &mut self.base_triplestore
+            &mut self.triplestore
         }
     }
 
@@ -362,7 +361,7 @@ impl Model {
             );
         };
         let res = validate(
-            &mut self.base_triplestore,
+            &mut self.triplestore,
             &mut shape_triplestore,
             include_details,
             include_conforms,
@@ -386,8 +385,7 @@ impl Model {
         graph: &Option<NamedNode>,
         include_transient: bool,
     ) -> Result<Vec<NamedNode>, MaplibError> {
-        let triplestore = self.get_triplestore(graph);
-        Ok(triplestore.get_predicate_iris(include_transient))
+        Ok(self.triplestore.get_predicate_iris(include_transient, graph).map_err(|x|MaplibError::TriplestoreError(x))?)
     }
 
     #[instrument(skip_all)]
@@ -397,10 +395,9 @@ impl Model {
         graph: Option<NamedNode>,
         include_transient: bool,
     ) -> Result<Vec<EagerSolutionMappings>, MaplibError> {
-        let triplestore = self.get_triplestore(&graph);
-        let sms = triplestore
-            .get_predicate_eager_solution_mappings(predicate, include_transient)
-            .map_err(|x| MaplibError::SparqlError(x))?;
+        let sms = self.triplestore
+            .get_predicate_eager_solution_mappings(predicate, include_transient, &graph)
+            .map_err(|x| MaplibError::TriplestoreError(x))?;
         Ok(sms)
     }
 
@@ -416,7 +413,7 @@ impl Model {
                 t.create_index(indexing.clone())
                     .map_err(MaplibError::TriplestoreError)?;
             }
-            self.base_triplestore
+            self.triplestore
                 .create_index(indexing.clone())
                 .map_err(MaplibError::TriplestoreError)?;
             self.indexing = indexing;
@@ -449,7 +446,7 @@ impl Model {
         }
 
         let res = infer(
-            &mut self.base_triplestore,
+            &mut self.triplestore,
             ruleset.as_ref().unwrap(),
             max_iterations,
         );

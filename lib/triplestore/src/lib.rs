@@ -129,22 +129,24 @@ impl StoredBaseRDFNodeType {
 #[derive(Clone)]
 pub struct Triplestore {
     pub storage_folder: Option<PathBuf>,
-    triples_map:
-        HashMap<NamedNode, HashMap<(StoredBaseRDFNodeType, StoredBaseRDFNodeType), Triples>>,
-    transient_triples_map:
-        HashMap<NamedNode, HashMap<(StoredBaseRDFNodeType, StoredBaseRDFNodeType), Triples>>,
+    graph_triples_map:
+        HashMap<Option<NamedNode>, HashMap<NamedNode, HashMap<(StoredBaseRDFNodeType, StoredBaseRDFNodeType), Triples>>>,
+    graph_transient_triples_map:
+        HashMap<Option<NamedNode>, HashMap<NamedNode, HashMap<(StoredBaseRDFNodeType, StoredBaseRDFNodeType), Triples>>>,
     parser_call: usize,
-    indexing: IndexingOptions,
-    fts_index: Option<FtsIndex>,
+    indexing: HashMap<Option<NamedNode>, IndexingOptions>,
+    fts_index: HashMap<Option<NamedNode>, FtsIndex>,
     pub global_cats: LockedCats,
 }
 
 impl Triplestore {
-    pub fn truncate(&mut self) {
+    pub fn truncate(&mut self, graph: &Option<NamedNode>) {
         if self.storage_folder.is_some() {
             todo!("Should drop this folder.. ")
         }
-        self.triples_map = HashMap::new();
+        self.graph_triples_map.remove(graph);
+        self.graph_transient_triples_map.remove(graph);
+        self.fts_index.remove(graph);
     }
 }
 
@@ -241,50 +243,57 @@ impl Triplestore {
         } else {
             None
         };
+        let fts_index_map = if let Some(fts_index) = fts_index {
+            HashMap::from([(None, fts_index)])
+        } else {
+            HashMap::new()
+        };
         Ok(Triplestore {
-            triples_map: HashMap::new(),
-            transient_triples_map: HashMap::new(),
+            graph_triples_map: HashMap::new(),
+            graph_transient_triples_map: HashMap::new(),
             storage_folder: pathbuf,
             parser_call: 0,
-            indexing,
-            fts_index,
+            indexing: HashMap::from([(None, indexing)]),
+            fts_index: fts_index_map,
             global_cats: LockedCats::new_empty(),
         })
     }
 
     #[instrument(skip_all)]
-    pub fn create_index(&mut self, indexing: IndexingOptions) -> Result<(), TriplestoreError> {
-        if let Some(fts_path) = &indexing.fts_path {
-            // Only doing anything if the fts index does not already exist.
-            // If it exists, then it should be updated as well.
-            if self.fts_index.is_none() {
-                self.fts_index = Some(FtsIndex::new(fts_path).map_err(TriplestoreError::FtsError)?);
-                for (predicate, map) in &self.triples_map {
-                    for ((subject_type, object_type), ts) in map {
-                        for (lf, _) in ts.get_lazy_frames(&None, &None)? {
-                            self.fts_index
-                                .as_mut()
-                                .unwrap()
-                                .add_literal_string(
-                                    &lf.collect().unwrap(),
-                                    predicate,
-                                    &subject_type.as_base_rdf_node_type(),
-                                    &subject_type
-                                        .as_base_rdf_node_type()
-                                        .default_stored_cat_state(),
-                                    &object_type.as_base_rdf_node_type(),
-                                    &object_type
-                                        .as_base_rdf_node_type()
-                                        .default_stored_cat_state(),
-                                    self.global_cats.clone(),
-                                )
-                                .map_err(TriplestoreError::FtsError)?;
+    pub fn create_index(&mut self, indexing: IndexingOptions, graph: &Option<NamedNode>) -> Result<(), TriplestoreError> {
+        if self.graph_triples_map.contains_key(graph) {
+            if let Some(fts_path) = &indexing.fts_path {
+                // Only doing anything if the fts index does not already exist.
+                // If it exists, then it should be updated as well.
+                if !self.fts_index.contains_key(graph) {
+                    let index = FtsIndex::new(fts_path).map_err(TriplestoreError::FtsError)?;
+                    self.fts_index.insert(graph.clone(), index);
+                    for (predicate, map) in self.graph_triples_map.get(graph).unwrap() {
+                        for ((subject_type, object_type), ts) in map {
+                            for (lf, _) in ts.get_lazy_frames(&None, &None)? {
+                                self.fts_index.get_mut(graph)
+                                    .unwrap()
+                                    .add_literal_string(
+                                        &lf.collect().unwrap(),
+                                        predicate,
+                                        &subject_type.as_base_rdf_node_type(),
+                                        &subject_type
+                                            .as_base_rdf_node_type()
+                                            .default_stored_cat_state(),
+                                        &object_type.as_base_rdf_node_type(),
+                                        &object_type
+                                            .as_base_rdf_node_type()
+                                            .default_stored_cat_state(),
+                                        self.global_cats.clone(),
+                                    )
+                                    .map_err(TriplestoreError::FtsError)?;
+                            }
                         }
                     }
                 }
             }
         }
-        self.indexing = indexing;
+        self.indexing.insert(graph.clone(), indexing);
         Ok(())
     }
 
@@ -293,6 +302,7 @@ impl Triplestore {
         &mut self,
         ts: Vec<TriplesToAdd>,
         transient: bool,
+        graph: &Option<NamedNode>,
     ) -> Result<Vec<NewTriples>, TriplestoreError> {
         let prepare_triples_now = Instant::now();
         let dfs_to_add = prepare_add_triples_par(ts, self.global_cats.clone());
@@ -301,7 +311,7 @@ impl Triplestore {
             prepare_triples_now.elapsed().as_secs_f32()
         );
         let add_triples_now = Instant::now();
-        let new_triples = self.add_local_cat_triples(dfs_to_add, transient)?;
+        let new_triples = self.add_local_cat_triples(dfs_to_add, transient, graph)?;
         trace!(
             "Adding triples df took {} seconds",
             add_triples_now.elapsed().as_secs_f32()
@@ -314,9 +324,10 @@ impl Triplestore {
         &mut self,
         local_cats: Vec<CatTriples>,
         transient: bool,
+        graph: &Option<NamedNode>,
     ) -> Result<Vec<NewTriples>, TriplestoreError> {
         let global_cats = self.globalize(local_cats);
-        self.add_global_cat_triples(global_cats, transient)
+        self.add_global_cat_triples(global_cats, transient, graph)
     }
 
     #[instrument(skip_all)]
@@ -324,11 +335,13 @@ impl Triplestore {
         &mut self,
         global_cat_triples: Vec<CatTriples>,
         transient: bool,
+        graph: &Option<NamedNode>,
     ) -> Result<Vec<NewTriples>, TriplestoreError> {
+        self.add_graph_if_not_exists(graph, transient);
         let use_map = if transient {
-            &mut self.transient_triples_map
+            &mut self.graph_transient_triples_map.get_mut(graph).unwrap()
         } else {
-            &mut self.triples_map
+            &mut self.graph_triples_map.get_mut(graph).unwrap()
         };
 
         let mut add_map: HashMap<_, (_, Vec<_>)> = HashMap::new();
@@ -376,7 +389,7 @@ impl Triplestore {
             }
         }
         let storage_folder = self.storage_folder.clone();
-        let indexing = self.indexing.clone();
+        let indexing = self.indexing.get(graph).unwrap().clone();
         let cats = self.global_cats.clone();
         //Why does not par iter work?
         let r: Result<Vec<_>, TriplestoreError> = add_map
@@ -445,7 +458,7 @@ impl Triplestore {
         for nt in &out_new_triples {
             if matches!(nt.object_type, BaseRDFNodeType::Literal(..)) {
                 if let Some(df) = &nt.df {
-                    if let Some(fts_index) = &mut self.fts_index {
+                    if let Some(fts_index) = self.fts_index.get_mut(graph) {
                         let fts_now = Instant::now();
                         fts_index
                             .add_literal_string(
@@ -468,6 +481,18 @@ impl Triplestore {
         }
 
         Ok(out_new_triples)
+    }
+
+    fn add_graph_if_not_exists(&mut self, graph: &Option<NamedNode>, transient:bool) {
+        if transient {
+            if !self.graph_transient_triples_map.contains_key(graph) {
+                self.graph_transient_triples_map.insert(graph.clone(), HashMap::new());
+            }
+        } else {
+            if !self.graph_triples_map.contains_key(graph) {
+               self.graph_triples_map.insert(graph.clone(), HashMap::new());
+            }
+        }
     }
 }
 

@@ -8,7 +8,7 @@ use query_processing::graph_patterns::order_by;
 use query_processing::pushdowns::Pushdowns;
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
-use spargebra::algebra::{GraphPattern, OrderExpression};
+use spargebra::algebra::{GraphPattern, OrderExpression, QueryDataset};
 use std::collections::HashMap;
 
 impl Triplestore {
@@ -22,6 +22,7 @@ impl Triplestore {
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         pushdowns: Pushdowns,
         query_settings: &QuerySettings,
+        dataset: &Option<QueryDataset>,
     ) -> Result<SolutionMappings, SparqlError> {
         trace!("Processing order by graph pattern");
         let mut output_solution_mappings = self.lazy_graph_pattern(
@@ -31,6 +32,7 @@ impl Triplestore {
             parameters,
             pushdowns,
             query_settings,
+            dataset,
         )?;
 
         let order_expression_contexts: Vec<Context> = (0..expression.len())

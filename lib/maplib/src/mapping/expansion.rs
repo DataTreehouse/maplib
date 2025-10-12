@@ -310,7 +310,7 @@ impl Model {
             }
             self.triplestores_map.get_mut(graph).unwrap()
         } else {
-            &mut self.base_triplestore
+            &mut self.triplestore
         };
 
         use_triplestore

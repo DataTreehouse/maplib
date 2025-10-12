@@ -1,3 +1,4 @@
+use oxrdf::NamedNode;
 use super::Triplestore;
 use crate::errors::TriplestoreError;
 use oxrdf::vocab::rdf;
@@ -12,14 +13,15 @@ WHERE {
 "#;
 
 impl Triplestore {
-    pub fn rdfs_class_inheritance(&mut self) -> Result<(), TriplestoreError> {
-        self.insert(SUBCLASS_INFERENCING, &None, true, false, false)
+    pub fn rdfs_class_inheritance(&mut self, graph:&Option<NamedNode>) -> Result<(), TriplestoreError> {
+        self.insert(SUBCLASS_INFERENCING, &None, true, false, false, graph)
             .map_err(|x| TriplestoreError::RDFSClassInheritanceError(x.to_string()))?;
         Ok(())
     }
 
-    pub fn drop_rdfs_class_inheritance(&mut self) -> Result<(), TriplestoreError> {
-        self.transient_triples_map.remove(&rdf::TYPE.into_owned());
+    pub fn drop_rdfs_class_inheritance(&mut self, graph:&Option<NamedNode>) -> Result<(), TriplestoreError> {
+        self.check_graph_exists(graph)?;
+        self.graph_transient_triples_map.get_mut(graph).unwrap().remove(&rdf::TYPE.into_owned());
         Ok(())
     }
 }

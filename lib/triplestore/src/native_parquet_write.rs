@@ -4,11 +4,13 @@ use file_io::{property_to_filename, write_parquet};
 use polars::prelude::ParquetCompression;
 use std::path::Path;
 use std::time::Instant;
+use oxrdf::NamedNode;
 use tracing::{debug, instrument};
 
 impl Triplestore {
     #[instrument(skip_all)]
-    pub fn write_native_parquet(&mut self, path: &Path) -> Result<(), TriplestoreError> {
+    pub fn write_native_parquet(&mut self, path: &Path, graph: &Option<NamedNode>) -> Result<(), TriplestoreError> {
+        self.check_graph_exists(graph)?;
         let now = Instant::now();
         if !path.exists() {
             return Err(TriplestoreError::PathDoesNotExist(
@@ -17,7 +19,7 @@ impl Triplestore {
         }
         let path_buf = path.to_path_buf();
 
-        for (property, tts) in &mut self.triples_map {
+        for (property, tts) in self.graph_triples_map.get_mut(graph).unwrap() {
             for ((_rdf_node_type_s, rdf_node_type_o), tt) in tts {
                 let filename;
                 if let StoredBaseRDFNodeType::Literal(literal_type) = rdf_node_type_o {

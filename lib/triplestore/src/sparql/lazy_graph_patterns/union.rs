@@ -7,7 +7,7 @@ use query_processing::graph_patterns::union;
 use query_processing::pushdowns::Pushdowns;
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
-use spargebra::algebra::GraphPattern;
+use spargebra::algebra::{GraphPattern, QueryDataset};
 use std::collections::HashMap;
 
 impl Triplestore {
@@ -21,6 +21,7 @@ impl Triplestore {
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         mut pushdowns: Pushdowns,
         query_settings: &QuerySettings,
+        dataset: &Option<QueryDataset>,
     ) -> Result<SolutionMappings, SparqlError> {
         trace!("Processing union graph pattern");
         let left_context = context.extension_with(PathEntry::UnionLeftSide);
@@ -34,6 +35,7 @@ impl Triplestore {
             parameters,
             left_pushdowns,
             query_settings,
+            dataset,
         )?;
         pushdowns.add_graph_pattern_pushdowns(right);
         let right_solution_mappings = self.lazy_graph_pattern(
@@ -43,6 +45,7 @@ impl Triplestore {
             parameters,
             pushdowns,
             query_settings,
+            dataset,
         )?;
 
         let u = union(

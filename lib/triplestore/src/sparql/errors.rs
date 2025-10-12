@@ -17,12 +17,8 @@ pub enum SparqlError {
     InconsistentDatatypes(String, RDFNodeState, RDFNodeState, String),
     #[error(transparent)]
     QueryProcessingError(#[from] QueryProcessingError),
-    #[error("Error indexing triples {}", .0)]
-    IndexingError(TriplestoreError),
-    #[error("Read dataframe error {}", .0)]
-    TripleTableReadError(TriplestoreError),
-    #[error("Error storing triples {}", .0)]
-    StoreTriplesError(TriplestoreError),
+    #[error(transparent)]
+    TriplestoreError(#[from] TriplestoreError),
     #[error("Construct query with undefined variable {}", .0)]
     ConstructWithUndefinedVariable(String),
     #[error("Full text search lookup error: {}", .0)]

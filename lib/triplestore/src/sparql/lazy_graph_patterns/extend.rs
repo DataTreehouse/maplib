@@ -9,7 +9,7 @@ use query_processing::graph_patterns::extend;
 use query_processing::pushdowns::Pushdowns;
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
-use spargebra::algebra::{Expression, GraphPattern};
+use spargebra::algebra::{Expression, GraphPattern, QueryDataset};
 use std::collections::HashMap;
 
 impl Triplestore {
@@ -25,6 +25,7 @@ impl Triplestore {
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         mut pushdowns: Pushdowns,
         query_settings: &QuerySettings,
+        dataset: &Option<QueryDataset>,
     ) -> Result<SolutionMappings, SparqlError> {
         trace!("Processing extend graph pattern");
         let inner_context = context.extension_with(PathEntry::ExtendInner);
@@ -42,6 +43,7 @@ impl Triplestore {
             parameters,
             pushdowns,
             query_settings,
+            dataset,
         )?;
         output_solution_mappings = self.lazy_expression(
             expression,

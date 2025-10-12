@@ -15,6 +15,7 @@ use representation::literal_iri_to_namednode;
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 use std::collections::{HashMap, HashSet};
 use tracing::{instrument, trace};
+use spargebra::algebra::QueryDataset;
 
 impl Triplestore {
     #[instrument(skip_all)]
@@ -25,7 +26,12 @@ impl Triplestore {
         context: &Context,
         pushdowns: &mut Pushdowns,
         query_settings: &QuerySettings,
+        dataset: &Option<QueryDataset>,
     ) -> Result<SolutionMappings, SparqlError> {
+        if dataset.is_some() {
+            todo!("Not yet implemented {:?}", dataset)
+            //Fix calls to get predicates below
+        }
         trace!(
             "Processing triple pattern {:?} at {}",
             triple_pattern,
@@ -64,6 +70,7 @@ impl Triplestore {
                 &subject_type_ctr,
                 &object_type_ctr,
                 query_settings.include_transient,
+                None,
             )?,
             NamedNodePattern::Variable(v) => {
                 let mut predicates: Option<HashSet<NamedNode>> = None;
@@ -153,6 +160,7 @@ impl Triplestore {
                     &subject_type_ctr,
                     &object_type_ctr,
                     query_settings.include_transient,
+                    None,
                 )?
             }
         };

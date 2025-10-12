@@ -25,7 +25,7 @@ use query_processing::graph_patterns::join;
 use query_processing::pushdowns::Pushdowns;
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
-use spargebra::algebra::GraphPattern;
+use spargebra::algebra::{GraphPattern, QueryDataset};
 use std::collections::HashMap;
 
 impl Triplestore {
@@ -38,6 +38,7 @@ impl Triplestore {
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         mut pushdowns: Pushdowns,
         query_settings: &QuerySettings,
+        dataset: &Option<QueryDataset>,
     ) -> Result<SolutionMappings, SparqlError> {
         trace!(
             "Start processing graph pattern {:?} at context: {}",
@@ -46,7 +47,10 @@ impl Triplestore {
         );
         let sm = match graph_pattern {
             GraphPattern::Bgp { patterns } => {
-                let patterns = if let Some(fts_index) = &self.fts_index {
+                if dataset.is_some() {
+                    todo!("{:?}", dataset);
+                }
+                let patterns = if let Some(fts_index) = self.fts_index.get(&None) {
                     let (patterns, fts_solution_mappings) = fts_index
                         .lookup_from_triple_patterns(patterns, self.global_cats.clone())?;
                     if let Some(fts_solution_mappings) = fts_solution_mappings {
@@ -78,6 +82,7 @@ impl Triplestore {
                         &bgp_context,
                         &mut pushdowns,
                         query_settings,
+                        dataset,
                     )?);
                 }
 
@@ -104,6 +109,7 @@ impl Triplestore {
                 context,
                 pushdowns,
                 query_settings,
+                dataset,
             ),
             GraphPattern::Join { left, right } => self.lazy_join(
                 left,
@@ -113,6 +119,7 @@ impl Triplestore {
                 parameters,
                 pushdowns,
                 query_settings,
+                dataset
             ),
             GraphPattern::LeftJoin {
                 left,
@@ -127,6 +134,7 @@ impl Triplestore {
                 parameters,
                 pushdowns,
                 query_settings,
+                dataset
             ),
             GraphPattern::Filter { expr, inner } => self.lazy_filter(
                 inner,
@@ -136,6 +144,7 @@ impl Triplestore {
                 parameters,
                 pushdowns,
                 query_settings,
+                dataset
             ),
             GraphPattern::Union { left, right } => self.lazy_union(
                 left,
@@ -145,6 +154,7 @@ impl Triplestore {
                 parameters,
                 pushdowns,
                 query_settings,
+                dataset,
             ),
             GraphPattern::Graph { name: _, inner: _ } => {
                 todo!("Graphs not supported yet")
@@ -162,6 +172,7 @@ impl Triplestore {
                 parameters,
                 pushdowns,
                 query_settings,
+                dataset
             ),
             GraphPattern::Minus { left, right } => self.lazy_minus(
                 left,
@@ -171,6 +182,7 @@ impl Triplestore {
                 parameters,
                 pushdowns,
                 query_settings,
+                dataset,
             ),
             GraphPattern::Values {
                 variables,
@@ -184,6 +196,7 @@ impl Triplestore {
                 parameters,
                 pushdowns,
                 query_settings,
+                dataset,
             ),
             GraphPattern::Project { inner, variables } => self.lazy_project(
                 inner,
@@ -193,6 +206,7 @@ impl Triplestore {
                 parameters,
                 pushdowns,
                 query_settings,
+                dataset,
             ),
             GraphPattern::Distinct { inner } => self.lazy_distinct(
                 inner,
@@ -201,6 +215,7 @@ impl Triplestore {
                 parameters,
                 pushdowns,
                 query_settings,
+                dataset,
             ),
             GraphPattern::Reduced { inner } => {
                 info!("Reduced has no practical effect in this implementation");
@@ -211,6 +226,7 @@ impl Triplestore {
                     parameters,
                     pushdowns,
                     query_settings,
+                    dataset,
                 )
             }
             GraphPattern::Slice {
@@ -225,6 +241,7 @@ impl Triplestore {
                     parameters,
                     pushdowns,
                     query_settings,
+                    dataset,
                 )?;
                 if let Some(length) = length {
                     newsols.mappings = newsols.mappings.slice(*start as i64, *length as u32);
@@ -246,6 +263,7 @@ impl Triplestore {
                 parameters,
                 pushdowns,
                 query_settings,
+                dataset,
             ),
             GraphPattern::Service { .. } => {
                 unimplemented!("Services are not implemented")

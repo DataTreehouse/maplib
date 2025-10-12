@@ -10,7 +10,7 @@ use query_processing::graph_patterns::{group_by, join, prepare_group_by};
 use query_processing::pushdowns::Pushdowns;
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
-use spargebra::algebra::{AggregateExpression, GraphPattern};
+use spargebra::algebra::{AggregateExpression, GraphPattern, QueryDataset};
 use std::collections::HashMap;
 
 impl Triplestore {
@@ -26,6 +26,7 @@ impl Triplestore {
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         mut pushdowns: Pushdowns,
         query_settings: &QuerySettings,
+        dataset: &Option<QueryDataset>,
     ) -> Result<SolutionMappings, SparqlError> {
         trace!("Processing group graph pattern");
         let inner_context = context.extension_with(PathEntry::GroupInner);
@@ -38,6 +39,7 @@ impl Triplestore {
             parameters,
             pushdowns,
             query_settings,
+            dataset,
         )?;
         let (mut output_solution_mappings, by, dummy_varname) =
             prepare_group_by(output_solution_mappings, variables);

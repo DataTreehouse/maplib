@@ -13,11 +13,12 @@ impl Triplestore {
         &mut self,
         sms: Vec<(EagerSolutionMappings, Option<NamedNode>)>,
         transient: bool,
+        graph: &Option<NamedNode>,
     ) -> Result<Vec<NewTriples>, SparqlError> {
         let all_triples_to_add = construct_result_as_triples_to_add(sms);
         let new_triples = if !all_triples_to_add.is_empty() {
-            self.add_triples_vec(all_triples_to_add, transient)
-                .map_err(SparqlError::StoreTriplesError)?
+            self.add_triples_vec(all_triples_to_add, transient, graph)
+                .map_err(SparqlError::TriplestoreError)?
         } else {
             vec![]
         };

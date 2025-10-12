@@ -178,7 +178,7 @@ impl Triplestore {
         let context = Context::new();
         match &query {
             Query::Select {
-                dataset: _,
+                dataset,
                 pattern,
                 base_iri: _,
             } => {
@@ -193,6 +193,7 @@ impl Triplestore {
                     parameters,
                     Pushdowns::new(),
                     &qs,
+                    dataset,
                 )?;
 
                 match pl_interruptable_collect(mappings.with_new_streaming(streaming)) {
@@ -207,7 +208,7 @@ impl Triplestore {
             }
             Query::Construct {
                 template,
-                dataset: _,
+                dataset,
                 pattern,
                 base_iri: _,
             } => {
@@ -222,6 +223,7 @@ impl Triplestore {
                     parameters,
                     Pushdowns::new(),
                     &qs,
+                    dataset,
                 )?;
                 match pl_interruptable_collect(mappings.with_new_streaming(streaming)) {
                     Ok(df) => {
@@ -265,7 +267,7 @@ impl Triplestore {
         let context = Context::new();
         match &query {
             Query::Select {
-                dataset: _,
+                dataset,
                 pattern,
                 base_iri: _,
             } => {
@@ -280,6 +282,7 @@ impl Triplestore {
                     parameters,
                     Pushdowns::new(),
                     &qs,
+                    dataset,
                 )?;
 
                 let df = mappings.with_new_streaming(streaming).collect().unwrap();
@@ -287,7 +290,7 @@ impl Triplestore {
             }
             Query::Construct {
                 template,
-                dataset: _,
+                dataset,
                 pattern,
                 base_iri: _,
             } => {
@@ -302,6 +305,7 @@ impl Triplestore {
                     parameters,
                     Pushdowns::new(),
                     &qs,
+                    dataset,
                 )?;
                 let df = mappings.with_new_streaming(streaming).collect().unwrap();
 
@@ -327,6 +331,7 @@ impl Triplestore {
         transient: bool,
         streaming: bool,
         include_transient: bool,
+        graph: &Option<NamedNode>,
     ) -> Result<Vec<NewTriples>, SparqlError> {
         let query = Query::parse(query, None).map_err(SparqlError::ParseError)?;
         if let Query::Construct { .. } = &query {
@@ -335,7 +340,7 @@ impl Triplestore {
                 QueryResult::Select(_) => {
                     panic!("Should never happen")
                 }
-                QueryResult::Construct(dfs) => self.insert_construct_result(dfs, transient),
+                QueryResult::Construct(dfs) => self.insert_construct_result(dfs, transient, graph),
             }
         } else {
             Err(SparqlError::QueryTypeNotSupported)
@@ -421,7 +426,7 @@ impl Triplestore {
                     } else {
                         unreachable!("Should never happen")
                     };
-                    let mut delete_solutions = vec![];
+                    let mut delete_solutions: HashMap<_, Vec<_>> = HashMap::new();
                     for d in delete {
                         let cats = self.global_cats.read()?;
                         let del = triple_to_solution_mappings(
@@ -433,13 +438,30 @@ impl Triplestore {
                             &cats,
                         )?;
                         if let Some(sol) = del {
-                            delete_solutions.push(sol);
+                            match &d.graph_name {
+                                GraphNamePattern::NamedNode(nn) => {
+                                    let k = Some(nn.clone());
+                                    if let Some(existing) = delete_solutions.get_mut(&k) {
+                                        existing.push(sol)
+                                    } else {
+                                        delete_solutions.insert(k, vec![sol]);
+                                    }
+                                }
+                                GraphNamePattern::DefaultGraph => {
+                                    if let Some(existing) = delete_solutions.get_mut(&None) {
+                                        existing.push(sol)
+                                    } else {
+                                        delete_solutions.insert(None, vec![sol]);
+                                    }
+                                }
+                                GraphNamePattern::Variable(_) => {todo!()}
+                            }
                         }
                     }
-                    if !delete_solutions.is_empty() {
-                        self.delete_construct_result(delete_solutions)?;
+                    for (g, delete_solutions) in delete_solutions {
+                        self.delete_construct_result(delete_solutions, &g)?;
                     }
-                    let mut insert_solutions = vec![];
+                    let mut insert_solutions: HashMap<_,Vec<_>> = HashMap::new();
                     for i in insert {
                         let cats = self.global_cats.read()?;
                         let insert = triple_to_solution_mappings(
@@ -451,11 +473,31 @@ impl Triplestore {
                             &cats,
                         )?;
                         if let Some(insert) = insert {
-                            insert_solutions.push(insert);
+                             match &i.graph_name {
+                                 GraphNamePattern::NamedNode(nn) => {
+                                     let k = Some(nn.clone());
+                                     if let Some(existing) = insert_solutions.get_mut(&k) {
+                                         existing.push(insert);
+                                     } else {
+                                         insert_solutions.insert(k, vec![insert]);
+                                     }
+                                 }
+                                 GraphNamePattern::DefaultGraph => {
+                                     if let Some(existing) = insert_solutions.get_mut(&None) {
+                                         existing.push(insert);
+                                     } else {
+                                         insert_solutions.insert(None, vec![insert]);
+                                     }
+
+                                 }
+                                 GraphNamePattern::Variable(_) => {
+                                     todo!()
+                                 }
+                             }
                         }
                     }
-                    if !insert_solutions.is_empty() {
-                        self.insert_construct_result(insert_solutions, false)?;
+                    for (g,s) in insert_solutions {
+                        self.insert_construct_result(s, false, &g)?;
                     }
                 }
                 GraphUpdateOperation::Load { .. } => {}

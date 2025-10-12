@@ -1,5 +1,6 @@
 use super::Triplestore;
 use crate::errors::TriplestoreError;
+use oxrdf::NamedNode;
 use oxrdfio::{RdfFormat, RdfSerializer};
 use polars::prelude::{by_name, col, IntoLazy};
 use polars_core::datatypes::DataType;
@@ -26,10 +27,12 @@ impl Triplestore {
         &mut self,
         buf: &mut W,
         format: RdfFormat,
+        graph: &Option<NamedNode>,
     ) -> Result<(), TriplestoreError> {
+        self.check_graph_exists(graph)?;
         if RdfFormat::NTriples == format {
             let n_threads = POOL.current_num_threads();
-            for (predicate, df_map) in &self.triples_map {
+            for (predicate, df_map) in self.graph_triples_map.get(graph).unwrap() {
                 let predicate_string = predicate.to_string();
                 let predicate_bytes = predicate_string.as_bytes();
                 for ((subject_type, object_type), tt) in df_map {
@@ -143,7 +146,7 @@ impl Triplestore {
         } else {
             let mut writer = RdfSerializer::from_format(format).for_writer(buf);
 
-            for (predicate, df_map) in &self.triples_map {
+            for (predicate, df_map) in self.graph_triples_map.get(graph).unwrap() {
                 for ((subject_type, object_type), tt) in df_map {
                     for (lf, _) in tt.get_lazy_frames(&None, &None)? {
                         let triples = global_df_as_triples(
@@ -162,6 +165,20 @@ impl Triplestore {
             writer.finish().unwrap();
         }
         Ok(())
+    }
+
+    pub(crate) fn check_graph_exists(&self, graph: &Option<NamedNode>) -> Result<(), TriplestoreError> {
+        if !self.graph_triples_map.contains_key(graph) {
+            let graph_name = if let Some(graph) = graph {
+                graph.to_string()
+            } else {
+                "default graph".to_string()
+            };
+
+            Err(TriplestoreError::GraphDoesNotExist(graph_name))
+        } else {
+            Ok(())
+        }
     }
 }
 

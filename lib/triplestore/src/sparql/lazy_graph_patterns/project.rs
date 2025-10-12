@@ -9,7 +9,7 @@ use query_processing::graph_patterns::{join, project};
 use query_processing::pushdowns::Pushdowns;
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
-use spargebra::algebra::GraphPattern;
+use spargebra::algebra::{GraphPattern, QueryDataset};
 use std::collections::HashMap;
 
 impl Triplestore {
@@ -23,6 +23,7 @@ impl Triplestore {
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         mut pushdowns: Pushdowns,
         query_settings: &QuerySettings,
+        dataset: &Option<QueryDataset>,
     ) -> Result<SolutionMappings, SparqlError> {
         trace!("Processing project graph pattern");
         let inner_context = context.extension_with(PathEntry::ProjectInner);
@@ -35,6 +36,7 @@ impl Triplestore {
             parameters,
             pushdowns,
             query_settings,
+            dataset,
         )?;
         project_solution_mappings = project(project_solution_mappings, variables)?;
         let solution_mappings = if let Some(solution_mappings) = solution_mappings {

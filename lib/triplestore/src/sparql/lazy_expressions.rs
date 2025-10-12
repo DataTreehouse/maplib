@@ -441,6 +441,7 @@ impl Triplestore {
                     parameters,
                     pushdowns.cloned().unwrap_or(Pushdowns::new()),
                     query_settings,
+                    &None,
                 )?;
                 exists(
                     output_solution_mappings,

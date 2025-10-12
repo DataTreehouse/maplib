@@ -7,7 +7,7 @@ use crate::sparql::QuerySettings;
 use query_processing::pushdowns::Pushdowns;
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
-use spargebra::algebra::GraphPattern;
+use spargebra::algebra::{GraphPattern, QueryDataset};
 use spargebra::term::{NamedNodePattern, TermPattern};
 use std::collections::{HashMap, HashSet};
 
@@ -79,6 +79,7 @@ impl Triplestore {
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         pushdowns: Pushdowns,
         query_settings: &QuerySettings,
+        dataset: &Option<QueryDataset>,
     ) -> Result<SolutionMappings, SparqlError> {
         trace!("Processing join graph pattern");
         let left_context = context.extension_with(PathEntry::JoinLeftSide);
@@ -100,6 +101,7 @@ impl Triplestore {
                 parameters,
                 pushdowns.clone(),
                 query_settings,
+                dataset,
             )?;
             output_solution_mappings = self.lazy_graph_pattern(
                 right,
@@ -108,6 +110,7 @@ impl Triplestore {
                 parameters,
                 pushdowns,
                 query_settings,
+                dataset,
             )?;
             output_solution_mappings
         } else {
@@ -118,6 +121,7 @@ impl Triplestore {
                 parameters,
                 pushdowns.clone(),
                 query_settings,
+                dataset,
             )?;
             output_solution_mappings = self.lazy_graph_pattern(
                 left,
@@ -126,6 +130,7 @@ impl Triplestore {
                 parameters,
                 pushdowns,
                 query_settings,
+                dataset,
             )?;
             output_solution_mappings
         };

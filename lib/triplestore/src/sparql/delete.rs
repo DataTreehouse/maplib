@@ -19,6 +19,7 @@ impl Triplestore {
     pub fn delete_construct_result(
         &mut self,
         sms: Vec<(EagerSolutionMappings, Option<NamedNode>)>,
+        graph: &Option<NamedNode>,
     ) -> Result<(), SparqlError> {
         let cats = self.global_cats.read().unwrap();
         let sms: Vec<_> = sms
@@ -29,15 +30,15 @@ impl Triplestore {
         let global_cat_triples = triples_solution_mappings_to_global_cat_triples(sms, &cats);
         drop(cats);
         if !global_cat_triples.is_empty() {
-            self.delete_triples_vec(global_cat_triples)
-                .map_err(SparqlError::StoreTriplesError)?;
+            self.delete_triples_vec(global_cat_triples, graph)
+                .map_err(SparqlError::TriplestoreError)?;
         };
         Ok(())
     }
 
-    pub fn delete_triples_vec(&mut self, ts: Vec<CatTriples>) -> Result<(), TriplestoreError> {
+    pub fn delete_triples_vec(&mut self, ts: Vec<CatTriples>, graph:&Option<NamedNode>) -> Result<(), TriplestoreError> {
         let add_triples_now = Instant::now();
-        self.delete_global_cat_triples(ts)?;
+        self.delete_global_cat_triples(ts, graph)?;
         trace!(
             "Deleting triples df took {} seconds",
             add_triples_now.elapsed().as_secs_f32()
@@ -45,12 +46,13 @@ impl Triplestore {
         Ok(())
     }
 
-    fn delete_global_cat_triples(&mut self, gcts: Vec<CatTriples>) -> Result<(), TriplestoreError> {
+    fn delete_global_cat_triples(&mut self, gcts: Vec<CatTriples>, graph:&Option<NamedNode>) -> Result<(), TriplestoreError> {
+        self.check_graph_exists(graph)?;
         for gct in gcts {
-            let remaining_gct = get_triples_after_deletion(&gct, &self.triples_map)?;
+            let remaining_gct = get_triples_after_deletion(&gct, self.graph_triples_map.get(graph).unwrap())?;
 
             if let Some(mut gct) = remaining_gct {
-                self.delete_if_exists(&gct, false);
+                self.delete_if_exists(&gct, false, graph);
                 let subject_cat_state = gct.subject_type.default_stored_cat_state();
                 let object_cat_state = gct.object_type.default_stored_cat_state();
                 gct.encoded_triples = gct
@@ -69,14 +71,14 @@ impl Triplestore {
                         x
                     })
                     .collect();
-                self.add_global_cat_triples(vec![gct], false)?;
+                self.add_global_cat_triples(vec![gct], false, graph)?;
             } else {
-                self.delete_if_exists(&gct, false)
+                self.delete_if_exists(&gct, false, graph)?;
             }
 
-            let remaining_gct = get_triples_after_deletion(&gct, &self.transient_triples_map)?;
+            let remaining_gct = get_triples_after_deletion(&gct, self.graph_transient_triples_map.get(graph).unwrap())?;
             if let Some(mut gct) = remaining_gct {
-                self.delete_if_exists(&gct, true);
+                self.delete_if_exists(&gct, true, graph);
                 let subject_cat_state = gct.subject_type.default_stored_cat_state();
                 let object_cat_state = gct.object_type.default_stored_cat_state();
                 gct.encoded_triples = gct
@@ -95,19 +97,20 @@ impl Triplestore {
                         x
                     })
                     .collect();
-                self.add_global_cat_triples(vec![gct], true)?;
+                self.add_global_cat_triples(vec![gct], true, graph)?;
             } else {
-                self.delete_if_exists(&gct, true)
+                self.delete_if_exists(&gct, true, graph)?;
             }
         }
         Ok(())
     }
 
-    fn delete_if_exists(&mut self, gct: &CatTriples, transient: bool) {
+    fn delete_if_exists(&mut self, gct: &CatTriples, transient: bool, graph: &Option<NamedNode>) -> Result<(), TriplestoreError> {
+        self.check_graph_exists(graph)?;
         let use_map = if transient {
-            &mut self.transient_triples_map
+            self.graph_transient_triples_map.get_mut(graph).unwrap()
         } else {
-            &mut self.triples_map
+            self.graph_triples_map.get_mut(graph).unwrap()
         };
         let map_empty = if let Some(m1) = use_map.get_mut(&gct.predicate) {
             for e in &gct.encoded_triples {
@@ -124,6 +127,7 @@ impl Triplestore {
         if map_empty {
             use_map.remove(&gct.predicate);
         }
+        Ok(())
     }
 }
 

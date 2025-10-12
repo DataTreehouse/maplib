@@ -20,7 +20,7 @@ use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::SolutionMappings;
 use representation::{BaseRDFNodeType, RDFNodeState};
 use representation::{OBJECT_COL_NAME, SUBJECT_COL_NAME};
-use spargebra::algebra::{GraphPattern, PropertyPathExpression};
+use spargebra::algebra::{GraphPattern, PropertyPathExpression, QueryDataset};
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 use sprs::{CsMatBase, TriMatBase};
 use std::collections::HashMap;
@@ -45,6 +45,7 @@ impl Triplestore {
         context: &Context,
         pushdowns: Pushdowns,
         query_settings: &QuerySettings,
+        dataset: &Option<QueryDataset>,
     ) -> Result<SolutionMappings, SparqlError> {
         let create_sparse = need_sparse_matrix(ppe);
 
@@ -82,6 +83,7 @@ impl Triplestore {
                 &None,
                 pushdowns,
                 query_settings,
+                dataset
             )?;
             for i in &intermediaries {
                 sms.rdf_node_types.remove(i).unwrap();
@@ -102,7 +104,7 @@ impl Triplestore {
         let out_dt_subj;
         let out_dt_obj;
 
-        let mut df_creator = U32DataFrameCreator::new(query_settings);
+        let mut df_creator = U32DataFrameCreator::new(query_settings, dataset.clone());
         df_creator.gather_namednode_dfs(ppe, self)?;
         let (lookup_df, lookup_dtypes, namednode_dfs) =
             df_creator.create_u32_dfs(self.global_cats.clone())?;
@@ -659,13 +661,15 @@ fn sparse_path(
 struct U32DataFrameCreator {
     pub named_nodes: HashMap<NamedNode, (DataFrame, RDFNodeState, RDFNodeState)>,
     include_transient: bool,
+    dataset: Option<QueryDataset>,
 }
 
 impl U32DataFrameCreator {
-    pub fn new(query_settings: &QuerySettings) -> Self {
+    pub fn new(query_settings: &QuerySettings, dataset: Option<QueryDataset>) -> Self {
         U32DataFrameCreator {
             named_nodes: Default::default(),
             include_transient: query_settings.include_transient,
+            dataset,
         }
     }
 
@@ -849,6 +853,7 @@ impl U32DataFrameCreator {
                     &None,
                     &None,
                     self.include_transient,
+                    self.dataset.as_ref(),
                 )?;
                 self.named_nodes.insert(
                     nn.clone(),

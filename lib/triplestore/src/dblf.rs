@@ -1,5 +1,4 @@
 use super::{StoredBaseRDFNodeType, Triplestore};
-use crate::sparql::errors::SparqlError;
 use crate::storage::Triples;
 use oxrdf::{NamedNode, Subject, Term};
 use polars::prelude::{as_struct, by_name, col, concat, lit, IntoLazy, LazyFrame, UnionArgs};
@@ -13,28 +12,38 @@ use representation::{
     BaseRDFNodeType, RDFNodeState, OBJECT_COL_NAME, PREDICATE_COL_NAME, SUBJECT_COL_NAME,
 };
 use std::collections::{HashMap, HashSet};
+use spargebra::algebra::QueryDataset;
+use crate::errors::TriplestoreError;
 
 impl Triplestore {
-    pub fn get_predicate_iris(&self, include_transient: bool) -> Vec<NamedNode> {
+    pub fn get_predicate_iris(&self, include_transient: bool, graph: &Option<NamedNode>) -> Result<Vec<NamedNode>, TriplestoreError> {
+        self.check_graph_exists(graph)?;
         let mut iris = vec![];
-        for nn in self.triples_map.keys() {
+        for nn in self.graph_triples_map.get(graph).unwrap().keys() {
             iris.push(nn.clone());
         }
         if include_transient {
-            for nn in self.transient_triples_map.keys() {
+            for nn in self.graph_transient_triples_map.get(graph).unwrap().keys() {
                 iris.push(nn.clone());
             }
         }
-        iris
+        Ok(iris)
     }
 
     pub fn get_predicate_eager_solution_mappings(
         &mut self,
         predicate: &NamedNode,
         include_transient: bool,
-    ) -> Result<Vec<EagerSolutionMappings>, SparqlError> {
+        graph: &Option<NamedNode>,
+    ) -> Result<Vec<EagerSolutionMappings>, TriplestoreError> {
+        self.check_graph_exists(graph)?;
+        let dataset = if let Some(graph) = graph {
+            Some(QueryDataset { default: vec![], named: Some(vec![graph.clone()]) })
+        } else {
+            None
+        };
         let mut types = vec![];
-        if let Some(map) = self.triples_map.get(predicate) {
+        if let Some(map) = self.graph_triples_map.get(graph).unwrap().get(predicate) {
             for (s, o) in map.keys() {
                 types.push((
                     PossibleTypes::singular(s.as_constrained()),
@@ -43,7 +52,7 @@ impl Triplestore {
             }
         }
         if include_transient {
-            if let Some(map) = self.transient_triples_map.get(predicate) {
+            if let Some(map) = self.graph_transient_triples_map.get(graph).unwrap().get(predicate) {
                 for (s, o) in map.keys() {
                     types.push((
                         PossibleTypes::singular(s.as_constrained()),
@@ -64,6 +73,7 @@ impl Triplestore {
                 &Some(s),
                 &Some(o),
                 include_transient,
+                dataset.as_ref(),
             )?;
             let eager_sm = sm.as_eager(false);
             eager_sms.push(eager_sm);
@@ -83,17 +93,22 @@ impl Triplestore {
         subject_datatype_ctr: &Option<PossibleTypes>,
         object_datatype_ctr: &Option<PossibleTypes>,
         include_transient: bool,
-    ) -> Result<Option<Vec<HalfBakedSolutionMappings>>, SparqlError> {
+        graph: &Option<NamedNode>,
+    ) -> Result<Option<Vec<HalfBakedSolutionMappings>>, TriplestoreError> {
+        if !self.graph_triples_map.contains_key(graph) {
+            return Ok(None)
+        }
         let mut all_sms = vec![];
         let cats = self.global_cats.read()?;
-        if self.triples_map.contains_key(predicate_uri) {
-            let compatible_types = self.all_compatible_types(
+        if self.graph_triples_map.get(graph).unwrap().contains_key(predicate_uri) {
+            let compatible_types = self.all_compatible_types (
                 predicate_uri,
                 false,
                 subject_datatype_ctr,
                 object_datatype_ctr,
+                graph
             );
-            if let Some(m) = self.triples_map.get(predicate_uri) {
+            if let Some(m) = self.graph_triples_map.get(graph).unwrap().get(predicate_uri) {
                 if let Some(sms) = multiple_tt_to_lf(
                     m,
                     compatible_types,
@@ -107,14 +122,15 @@ impl Triplestore {
                 }
             }
         }
-        if include_transient && self.transient_triples_map.contains_key(predicate_uri) {
+        if include_transient && self.graph_transient_triples_map.get(graph).unwrap().contains_key(predicate_uri) {
             let compatible_types = self.all_compatible_types(
                 predicate_uri,
                 true,
                 subject_datatype_ctr,
                 object_datatype_ctr,
+                graph,
             );
-            if let Some(m) = self.transient_triples_map.get(predicate_uri) {
+            if let Some(m) = self.graph_transient_triples_map.get(graph).unwrap().get(predicate_uri) {
                 if let Some(sms) = multiple_tt_to_lf(
                     m,
                     compatible_types,
@@ -152,8 +168,13 @@ impl Triplestore {
         subject_datatype_ctr: &Option<PossibleTypes>,
         object_datatype_ctr: &Option<PossibleTypes>,
         include_transient: bool,
-    ) -> Result<SolutionMappings, SparqlError> {
-        let predicate_uris = predicate_uris.unwrap_or(self.all_predicates());
+        dataset: Option<&QueryDataset>,
+    ) -> Result<SolutionMappings, TriplestoreError> {
+        if dataset.is_some() {
+            todo!("{:?}", dataset);
+            //Fix call below
+        }
+        let predicate_uris = predicate_uris.unwrap_or(self.all_predicates(&None));
         let cats = self.global_cats.read()?;
 
         let mut sms = vec![];
@@ -171,6 +192,7 @@ impl Triplestore {
                     subject_datatype_ctr,
                     object_datatype_ctr,
                     include_transient,
+                    &None,
                 )? {
                     sms.extend(sm);
                 }
@@ -332,15 +354,16 @@ impl Triplestore {
         transient: bool,
         subject_datatype_ctr: &Option<PossibleTypes>,
         object_datatype_ctr: &Option<PossibleTypes>,
+        graph: &Option<NamedNode>,
     ) -> Option<HashSet<(StoredBaseRDFNodeType, StoredBaseRDFNodeType)>> {
         if subject_datatype_ctr.is_none() && object_datatype_ctr.is_none() {
             return None;
         }
         let mut compat_types = HashSet::new();
         let use_map = if transient {
-            &self.transient_triples_map
+            &self.graph_transient_triples_map.get(graph).unwrap()
         } else {
-            &self.triples_map
+            &self.graph_triples_map.get(graph).unwrap()
         };
 
         if let Some(map) = use_map.get(predicate_uri) {
@@ -361,13 +384,17 @@ impl Triplestore {
         Some(compat_types)
     }
 
-    fn all_predicates(&self) -> Vec<NamedNode> {
+    fn all_predicates(&self, graph: &Option<NamedNode>) -> Vec<NamedNode> {
         let mut predicates = vec![];
-        for nn in self.triples_map.keys() {
-            predicates.push(nn.clone());
+        if let Some(g) = self.graph_triples_map.get(graph) {
+            for nn in g.keys() {
+                predicates.push(nn.clone());
+            }
         }
-        for nn in self.transient_triples_map.keys() {
-            predicates.push(nn.clone());
+        if let Some(g) = self.graph_transient_triples_map.get(graph) {
+            for nn in g.keys() {
+                predicates.push(nn.clone());
+            }
         }
         predicates
     }
@@ -430,10 +457,9 @@ fn single_triples_to_lf(
     subjects: &Option<Vec<&Subject>>,
     objects: &Option<Vec<&Term>>,
     global_cats: &Cats,
-) -> Result<Option<(LazyFrame, usize)>, SparqlError> {
+) -> Result<Option<(LazyFrame, usize)>, TriplestoreError> {
     let lfs_and_heights = triples
-        .get_lazy_frames(subjects, objects)
-        .map_err(SparqlError::TripleTableReadError)?;
+        .get_lazy_frames(subjects, objects)?;
     if lfs_and_heights.is_empty() {
         return Ok(None);
     }
@@ -515,7 +541,7 @@ fn multiple_tt_to_lf(
     keep_subject: bool,
     keep_object: bool,
     global_cats: &Cats,
-) -> Result<Option<Vec<HalfBakedSolutionMappings>>, SparqlError> {
+) -> Result<Option<Vec<HalfBakedSolutionMappings>>, TriplestoreError> {
     let mut filtered = vec![];
     for ((subj_type, obj_type), tt) in triples.iter() {
         if let Some(types) = &types {
