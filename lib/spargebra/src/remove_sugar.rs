@@ -414,25 +414,6 @@ impl SyntacticSugarRemover {
                 bindings_parameter,
                 variables,
             }),
-            #[cfg(feature = "sep-0006")]
-            GraphPattern::Lateral { left, right } => {
-                let mut left = self.remove_sugar_from_graph_pattern(
-                    *left,
-                    ts_tps_in_scope.clone(),
-                    &context.extension_with(PathEntry::UnionLeftSide),
-                );
-                let mut right = self.remove_sugar_from_graph_pattern(
-                    *right,
-                    ts_tps_in_scope,
-                    &context.extension_with(PathEntry::UnionRightSide),
-                );
-                let mut out = RemoveSugarGraphPatternReturn::from_pattern(GraphPattern::Lateral {
-                    left: Box::new(left.gp.take().unwrap()),
-                    right: Box::new(right.gp.take().unwrap()),
-                });
-                out.projections_from(&mut left);
-                out
-            }
         }
     }
 

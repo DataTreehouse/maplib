@@ -133,7 +133,7 @@ impl Cats {
                         }
                     }
                     for (s, u) in numbered_insert {
-                        enc.encode_new_string(s, u);
+                        enc.encode_new_arc_string(s, u);
                     }
                     let remap: HashMap<_, _, BuildHasherDefault<NoHashHasher<u32>>> = remap
                         .into_iter()

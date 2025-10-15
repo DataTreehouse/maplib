@@ -377,8 +377,6 @@ pub enum Function {
     Object,
     #[cfg(feature = "rdf-star")]
     IsTriple,
-    #[cfg(feature = "sep-0002")]
-    Adjust,
     Custom(NamedNode),
 }
 
@@ -442,8 +440,6 @@ impl Function {
             Self::Object => f.write_str("object"),
             #[cfg(feature = "rdf-star")]
             Self::IsTriple => f.write_str("istriple"),
-            #[cfg(feature = "sep-0002")]
-            Self::Adjust => f.write_str("adjust"),
             Self::Custom(iri) => write!(f, "{iri}"),
         }
     }
@@ -508,8 +504,7 @@ impl fmt::Display for Function {
             Self::Object => f.write_str("OBJECT"),
             #[cfg(feature = "rdf-star")]
             Self::IsTriple => f.write_str("isTRIPLE"),
-            #[cfg(feature = "sep-0002")]
-            Self::Adjust => f.write_str("ADJUST"),
+
             Self::Custom(iri) => iri.fmt(f),
         }
     }
@@ -535,8 +530,6 @@ pub enum GraphPattern {
         expression: Option<Expression>,
     },
     /// Lateral join i.e. evaluate right for all result row of left
-    #[cfg(feature = "sep-0006")]
-    Lateral { left: Box<Self>, right: Box<Self> },
     /// [Filter](https://www.w3.org/TR/sparql11-query/#defn_algFilter).
     Filter { expr: Expression, inner: Box<Self> },
     /// [Union](https://www.w3.org/TR/sparql11-query/#defn_algUnion).
@@ -622,10 +615,6 @@ impl fmt::Display for GraphPattern {
                         // The second block might be considered as a modification of the first one.
                         write!(f, "{left} {{ {right} }}")
                     }
-                    #[cfg(feature = "sep-0006")]
-                    Self::Lateral { .. } => {
-                        write!(f, "{left} {{ {right} }}")
-                    }
                     _ => write!(f, "{left} {right}"),
                 }
             }
@@ -639,10 +628,6 @@ impl fmt::Display for GraphPattern {
                 } else {
                     write!(f, "{left} OPTIONAL {{ {right} }}")
                 }
-            }
-            #[cfg(feature = "sep-0006")]
-            Self::Lateral { left, right } => {
-                write!(f, "{left} LATERAL {{ {right} }}")
             }
             Self::Filter { expr, inner } => {
                 write!(f, "{inner} FILTER({expr})")
@@ -785,14 +770,6 @@ impl GraphPattern {
                     f.write_str(" ")?;
                     expr.fmt_sse(f)?;
                 }
-                f.write_str(")")
-            }
-            #[cfg(feature = "sep-0006")]
-            Self::Lateral { left, right } => {
-                f.write_str("(lateral ")?;
-                left.fmt_sse(f)?;
-                f.write_str(" ")?;
-                right.fmt_sse(f)?;
                 f.write_str(")")
             }
             Self::Filter { expr, inner } => {
@@ -983,11 +960,6 @@ impl GraphPattern {
             Self::Join { left, right }
             | Self::LeftJoin { left, right, .. }
             | Self::Union { left, right } => {
-                left.lookup_in_scope_variables(callback);
-                right.lookup_in_scope_variables(callback);
-            }
-            #[cfg(feature = "sep-0006")]
-            Self::Lateral { left, right } => {
                 left.lookup_in_scope_variables(callback);
                 right.lookup_in_scope_variables(callback);
             }

@@ -22,6 +22,7 @@ use std::cmp;
 use std::cmp::{Ordering, Reverse};
 use std::collections::{BTreeMap, BinaryHeap};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::Instant;
 use tracing::{instrument, trace};
 
@@ -30,7 +31,7 @@ const MIN_SIZE_CACHING: usize = 100_000_000; //100MB
 
 #[derive(Clone, Debug)]
 struct SparseIndex {
-    map: BTreeMap<String, usize>,
+    map: BTreeMap<Arc<String>, usize>,
 }
 
 #[derive(Clone)]
@@ -646,8 +647,8 @@ impl TriplesInMemory {
 }
 
 fn get_lookup_interval(
-    trg: &String,
-    sparse_map: &BTreeMap<String, usize>,
+    trg: &Arc<String>,
+    sparse_map: &BTreeMap<Arc<String>, usize>,
     height: usize,
 ) -> (usize, usize) {
     let mut from = 0;
@@ -708,13 +709,13 @@ fn get_object_strings<'a>(objects: &[&'a Term]) -> Vec<&'a str> {
 
 fn get_lookup_offsets(
     trgs: &[&str],
-    sparse_map: &BTreeMap<String, usize>,
+    sparse_map: &BTreeMap<Arc<String>, usize>,
     height: usize,
 ) -> Vec<(usize, usize)> {
     //Trgs MUST be sorted
     let offsets = trgs
         .iter()
-        .map(|trg| get_lookup_interval(&trg.to_string(), sparse_map, height));
+        .map(|trg| get_lookup_interval(&Arc::new(trg.to_string()), sparse_map, height));
 
     let mut out_offsets = vec![];
     let mut last_offset: Option<(usize, usize)> = None;
@@ -742,7 +743,7 @@ fn get_lookup_offsets(
 fn update_index_at_offset(
     u32_chunked: &UInt32Chunked,
     offset: usize,
-    sparse_map: &mut BTreeMap<String, usize>,
+    sparse_map: &mut BTreeMap<Arc<String>, usize>,
     encs: &CatEncs,
 ) {
     let u = u32_chunked.get(offset);
@@ -756,11 +757,11 @@ fn update_index_at_offset(
 fn update_string_index_at_offset(
     u32_chunked: &StringChunked,
     offset: usize,
-    sparse_map: &mut BTreeMap<String, usize>,
+    sparse_map: &mut BTreeMap<Arc<String>, usize>,
 ) {
     let u = u32_chunked.get(offset);
     if let Some(s) = u {
-        let e = sparse_map.entry(s.to_string());
+        let e = sparse_map.entry(Arc::new(s.to_string()));
         e.or_insert(offset);
     }
 }
