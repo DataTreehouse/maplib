@@ -1,4 +1,5 @@
 use super::{StoredBaseRDFNodeType, Triplestore};
+use crate::errors::TriplestoreError;
 use crate::storage::Triples;
 use oxrdf::{NamedNode, Subject, Term};
 use polars::prelude::{as_struct, by_name, col, concat, lit, IntoLazy, LazyFrame, UnionArgs};
@@ -6,17 +7,20 @@ use polars_core::prelude::{Column, DataFrame};
 use query_processing::expressions::{blank_node_enc, maybe_literal_enc, named_node_enc};
 use query_processing::type_constraints::PossibleTypes;
 use representation::cats::{named_node_split_prefix, Cats};
+use representation::dataset::{NamedGraph, QueryGraph};
 use representation::multitype::all_multi_cols;
 use representation::solution_mapping::{BaseCatState, EagerSolutionMappings, SolutionMappings};
 use representation::{
     BaseRDFNodeType, RDFNodeState, OBJECT_COL_NAME, PREDICATE_COL_NAME, SUBJECT_COL_NAME,
 };
 use std::collections::{HashMap, HashSet};
-use representation::dataset::{NamedGraph, QueryGraph};
-use crate::errors::TriplestoreError;
 
 impl Triplestore {
-    pub fn get_predicate_iris(&self, include_transient: bool, graph: &NamedGraph) -> Result<Vec<NamedNode>, TriplestoreError> {
+    pub fn get_predicate_iris(
+        &self,
+        include_transient: bool,
+        graph: &NamedGraph,
+    ) -> Result<Vec<NamedNode>, TriplestoreError> {
         self.check_graph_exists(graph)?;
         let mut iris = vec![];
         for nn in self.graph_triples_map.get(graph).unwrap().keys() {
@@ -47,7 +51,12 @@ impl Triplestore {
             }
         }
         if include_transient {
-            if let Some(map) = self.graph_transient_triples_map.get(graph).unwrap().get(predicate) {
+            if let Some(map) = self
+                .graph_transient_triples_map
+                .get(graph)
+                .unwrap()
+                .get(predicate)
+            {
                 for (s, o) in map.keys() {
                     types.push((
                         PossibleTypes::singular(s.as_constrained()),
@@ -91,7 +100,7 @@ impl Triplestore {
         graph: &NamedGraph,
     ) -> Result<Option<Vec<HalfBakedSolutionMappings>>, TriplestoreError> {
         if !self.graph_triples_map.contains_key(graph) {
-            return Ok(None)
+            return Ok(None);
         }
         let mut all_sms = vec![];
         let cats = self.global_cats.read()?;
@@ -102,7 +111,7 @@ impl Triplestore {
                     false,
                     subject_datatype_ctr,
                     object_datatype_ctr,
-                    graph
+                    graph,
                 );
                 if let Some(m) = map.get(predicate_uri) {
                     if let Some(sms) = multiple_tt_to_lf(
@@ -461,8 +470,7 @@ fn single_triples_to_lf(
     objects: &Option<Vec<&Term>>,
     global_cats: &Cats,
 ) -> Result<Option<(LazyFrame, usize)>, TriplestoreError> {
-    let lfs_and_heights = triples
-        .get_lazy_frames(subjects, objects)?;
+    let lfs_and_heights = triples.get_lazy_frames(subjects, objects)?;
     if lfs_and_heights.is_empty() {
         return Ok(None);
     }

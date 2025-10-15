@@ -1,11 +1,11 @@
-use std::fmt::{Display, Formatter};
 use oxrdf::NamedNode;
 use spargebra::algebra::QueryDataset;
+use std::fmt::{Display, Formatter};
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub enum NamedGraph {
     DefaultGraph,
-    NamedGraph(NamedNode)
+    NamedGraph(NamedNode),
 }
 
 impl NamedGraph {
@@ -27,8 +27,12 @@ impl Default for NamedGraph {
 impl Display for NamedGraph {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            NamedGraph::DefaultGraph => {write!(f, "default graph")}
-            NamedGraph::NamedGraph(nn) => {write!(f, "{}", nn)}
+            NamedGraph::DefaultGraph => {
+                write!(f, "default graph")
+            }
+            NamedGraph::NamedGraph(nn) => {
+                write!(f, "{}", nn)
+            }
         }
     }
 }
@@ -40,7 +44,7 @@ pub enum QueryGraph {
 }
 
 impl QueryGraph {
-    pub fn from_named_graph(ng:&NamedGraph) -> QueryGraph {
+    pub fn from_named_graph(ng: &NamedGraph) -> QueryGraph {
         QueryGraph::NamedGraph(ng.clone())
     }
 }

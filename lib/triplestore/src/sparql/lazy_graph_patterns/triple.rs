@@ -11,11 +11,11 @@ use query_processing::graph_patterns::join;
 use query_processing::pushdowns::Pushdowns;
 use query_processing::type_constraints::{ConstraintBaseRDFNodeType, PossibleTypes};
 use representation::cats::rdf_split_iri_str;
+use representation::dataset::QueryGraph;
 use representation::literal_iri_to_namednode;
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 use std::collections::{HashMap, HashSet};
 use tracing::{instrument, trace};
-use representation::dataset::{QueryGraph};
 
 impl Triplestore {
     #[instrument(skip_all)]

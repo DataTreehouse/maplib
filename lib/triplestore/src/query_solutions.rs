@@ -1,11 +1,11 @@
+use crate::sparql::errors::SparqlError;
+use crate::sparql::QueryResult;
+use crate::Triplestore;
 use oxrdf::{Term, Variable};
 use polars::frame::UniqueKeepStrategy;
 use polars::prelude::IntoLazy;
 use query_processing::graph_patterns::unique_workaround;
 use representation::dataset::NamedGraph;
-use crate::sparql::errors::SparqlError;
-use crate::sparql::QueryResult;
-use crate::Triplestore;
 use representation::polars_to_rdf::{df_as_result, QuerySolutions};
 use representation::solution_mapping::EagerSolutionMappings;
 

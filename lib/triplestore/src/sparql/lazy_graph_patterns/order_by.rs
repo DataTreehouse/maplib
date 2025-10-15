@@ -6,11 +6,11 @@ use crate::sparql::QuerySettings;
 use polars::prelude::by_name;
 use query_processing::graph_patterns::order_by;
 use query_processing::pushdowns::Pushdowns;
+use representation::dataset::QueryGraph;
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use spargebra::algebra::{GraphPattern, OrderExpression};
 use std::collections::HashMap;
-use representation::dataset::QueryGraph;
 
 impl Triplestore {
     #[instrument(skip_all)]

@@ -5,12 +5,12 @@ use tracing::{instrument, trace};
 
 use crate::sparql::QuerySettings;
 use query_processing::pushdowns::Pushdowns;
+use representation::dataset::QueryGraph;
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
-use spargebra::algebra::{GraphPattern};
+use spargebra::algebra::GraphPattern;
 use spargebra::term::{NamedNodePattern, TermPattern};
 use std::collections::{HashMap, HashSet};
-use representation::dataset::QueryGraph;
 
 struct BadGraphPatternProperties {
     n_cross_joins: usize,

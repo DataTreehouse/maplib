@@ -23,11 +23,11 @@ use polars::prelude::{IntoLazy, JoinType};
 use polars_core::frame::DataFrame;
 use query_processing::graph_patterns::join;
 use query_processing::pushdowns::Pushdowns;
+use representation::dataset::{NamedGraph, QueryGraph};
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
-use spargebra::algebra::{GraphPattern};
+use spargebra::algebra::GraphPattern;
 use std::collections::HashMap;
-use representation::dataset::{NamedGraph, QueryGraph};
 
 impl Triplestore {
     #[instrument(skip_all)]
@@ -48,25 +48,26 @@ impl Triplestore {
         );
         let sm = match graph_pattern {
             GraphPattern::Bgp { patterns } => {
-                let patterns = if let Some(fts_index) = self.fts_index.get(&NamedGraph::DefaultGraph) {
-                    let (patterns, fts_solution_mappings) = fts_index
-                        .lookup_from_triple_patterns(patterns, self.global_cats.clone())?;
-                    if let Some(fts_solution_mappings) = fts_solution_mappings {
-                        solution_mappings = if let Some(solution_mappings) = solution_mappings {
-                            Some(join(
-                                solution_mappings,
-                                fts_solution_mappings,
-                                JoinType::Inner,
-                                self.global_cats.clone(),
-                            )?)
-                        } else {
-                            Some(fts_solution_mappings)
-                        };
-                    }
-                    patterns
-                } else {
-                    patterns.clone()
-                };
+                let patterns =
+                    if let Some(fts_index) = self.fts_index.get(&NamedGraph::DefaultGraph) {
+                        let (patterns, fts_solution_mappings) = fts_index
+                            .lookup_from_triple_patterns(patterns, self.global_cats.clone())?;
+                        if let Some(fts_solution_mappings) = fts_solution_mappings {
+                            solution_mappings = if let Some(solution_mappings) = solution_mappings {
+                                Some(join(
+                                    solution_mappings,
+                                    fts_solution_mappings,
+                                    JoinType::Inner,
+                                    self.global_cats.clone(),
+                                )?)
+                            } else {
+                                Some(fts_solution_mappings)
+                            };
+                        }
+                        patterns
+                    } else {
+                        patterns.clone()
+                    };
 
                 pushdowns.add_patterns_pushdowns(&patterns);
                 let mut updated_solution_mappings = solution_mappings;
@@ -117,7 +118,7 @@ impl Triplestore {
                 parameters,
                 pushdowns,
                 query_settings,
-                dataset
+                dataset,
             ),
             GraphPattern::LeftJoin {
                 left,
@@ -132,7 +133,7 @@ impl Triplestore {
                 parameters,
                 pushdowns,
                 query_settings,
-                dataset
+                dataset,
             ),
             GraphPattern::Filter { expr, inner } => self.lazy_filter(
                 inner,
@@ -142,7 +143,7 @@ impl Triplestore {
                 parameters,
                 pushdowns,
                 query_settings,
-                dataset
+                dataset,
             ),
             GraphPattern::Union { left, right } => self.lazy_union(
                 left,
@@ -170,7 +171,7 @@ impl Triplestore {
                 parameters,
                 pushdowns,
                 query_settings,
-                dataset
+                dataset,
             ),
             GraphPattern::Minus { left, right } => self.lazy_minus(
                 left,

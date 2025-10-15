@@ -26,8 +26,8 @@ use triplestore::sparql::QueryResult;
 use triplestore::{IndexingOptions, NewTriples, Triplestore};
 
 use datalog::ast::DatalogRuleset;
-use tracing::instrument;
 use representation::dataset::NamedGraph;
+use tracing::instrument;
 
 pub struct Model {
     pub template_dataset: TemplateDataset,
@@ -244,7 +244,9 @@ impl Model {
         transient: bool,
         target_graph: &NamedGraph,
     ) -> Result<Vec<NewTriples>, SparqlError> {
-        let new_triples = self.triplestore.insert_construct_result(sms, transient, &target_graph)?;
+        let new_triples =
+            self.triplestore
+                .insert_construct_result(sms, transient, &target_graph)?;
         Ok(new_triples)
     }
 
@@ -255,7 +257,7 @@ impl Model {
         rdf_format: RdfFormat,
     ) -> Result<(), MaplibError> {
         self.triplestore
-            .write_triples(buffer, rdf_format,graph)
+            .write_triples(buffer, rdf_format, graph)
             .map_err(MaplibError::TriplestoreError)?;
         Ok(())
     }
@@ -285,7 +287,6 @@ impl Model {
         path: &str,
         graph: &NamedGraph,
     ) -> Result<(), MaplibError> {
-
         self.triplestore
             .write_native_parquet(Path::new(path), graph)
             .map_err(MaplibError::TriplestoreError)
@@ -353,7 +354,10 @@ impl Model {
         graph: &NamedGraph,
         include_transient: bool,
     ) -> Result<Vec<NamedNode>, MaplibError> {
-        Ok(self.triplestore.get_predicate_iris(include_transient, graph).map_err(|x|MaplibError::TriplestoreError(x))?)
+        Ok(self
+            .triplestore
+            .get_predicate_iris(include_transient, graph)
+            .map_err(|x| MaplibError::TriplestoreError(x))?)
     }
 
     #[instrument(skip_all)]
@@ -363,7 +367,8 @@ impl Model {
         graph: &NamedGraph,
         include_transient: bool,
     ) -> Result<Vec<EagerSolutionMappings>, MaplibError> {
-        let sms = self.triplestore
+        let sms = self
+            .triplestore
             .get_predicate_eager_solution_mappings(predicate, include_transient, graph)
             .map_err(|x| MaplibError::TriplestoreError(x))?;
         Ok(sms)
@@ -375,8 +380,9 @@ impl Model {
         indexing: IndexingOptions,
         graph: Option<&NamedGraph>,
     ) -> Result<(), MaplibError> {
-        self.triplestore.create_index(indexing.clone(), graph)
-                    .map_err(MaplibError::TriplestoreError)?;
+        self.triplestore
+            .create_index(indexing.clone(), graph)
+            .map_err(MaplibError::TriplestoreError)?;
         Ok(())
     }
 

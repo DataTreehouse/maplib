@@ -12,6 +12,7 @@ use polars::prelude::{as_struct, col, DataFrame, IntoLazy, LiteralValue, PlSmall
 use polars_core::prelude::{IntoColumn, Scalar};
 use rayon::iter::ParallelIterator;
 use rayon::prelude::{IntoParallelIterator, IntoParallelRefIterator};
+use representation::dataset::NamedGraph;
 use representation::rdf_to_polars::{
     polars_literal_values_to_series, rdf_literal_to_polars_literal_value,
     rdf_owned_blank_node_to_polars_literal_value, rdf_owned_named_node_to_polars_literal_value,
@@ -27,7 +28,6 @@ use std::ops::Deref;
 use std::path::Path;
 use std::time::Instant;
 use tracing::{debug, instrument};
-use representation::dataset::NamedGraph;
 
 type MapType = HashMap<String, HashMap<String, (Vec<Subject>, Vec<Term>)>>;
 

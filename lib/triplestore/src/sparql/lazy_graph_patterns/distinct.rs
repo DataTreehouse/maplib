@@ -3,12 +3,12 @@ use crate::sparql::errors::SparqlError;
 use crate::sparql::QuerySettings;
 use query_processing::graph_patterns::distinct;
 use query_processing::pushdowns::Pushdowns;
+use representation::dataset::QueryGraph;
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
-use spargebra::algebra::{GraphPattern};
+use spargebra::algebra::GraphPattern;
 use std::collections::HashMap;
 use tracing::{instrument, trace};
-use representation::dataset::QueryGraph;
 
 impl Triplestore {
     #[instrument(skip_all)]

@@ -37,8 +37,8 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 use uuid::Uuid;
 
-use tracing::{instrument, trace};
 use representation::dataset::NamedGraph;
+use tracing::{instrument, trace};
 
 #[derive(Clone, Hash, Eq, PartialEq, Debug)]
 pub enum StoredBaseRDFNodeType {
@@ -130,10 +130,14 @@ impl StoredBaseRDFNodeType {
 #[derive(Clone)]
 pub struct Triplestore {
     pub storage_folder: Option<PathBuf>,
-    graph_triples_map:
-        HashMap<NamedGraph, HashMap<NamedNode, HashMap<(StoredBaseRDFNodeType, StoredBaseRDFNodeType), Triples>>>,
-    graph_transient_triples_map:
-        HashMap<NamedGraph, HashMap<NamedNode, HashMap<(StoredBaseRDFNodeType, StoredBaseRDFNodeType), Triples>>>,
+    graph_triples_map: HashMap<
+        NamedGraph,
+        HashMap<NamedNode, HashMap<(StoredBaseRDFNodeType, StoredBaseRDFNodeType), Triples>>,
+    >,
+    graph_transient_triples_map: HashMap<
+        NamedGraph,
+        HashMap<NamedNode, HashMap<(StoredBaseRDFNodeType, StoredBaseRDFNodeType), Triples>>,
+    >,
     parser_call: usize,
     indexing: HashMap<NamedGraph, IndexingOptions>,
     fts_index: HashMap<NamedGraph, FtsIndex>,
@@ -261,7 +265,11 @@ impl Triplestore {
     }
 
     #[instrument(skip_all)]
-    pub fn create_index(&mut self, indexing: IndexingOptions, graph: Option<&NamedGraph>) -> Result<(), TriplestoreError> {
+    pub fn create_index(
+        &mut self,
+        indexing: IndexingOptions,
+        graph: Option<&NamedGraph>,
+    ) -> Result<(), TriplestoreError> {
         let graphs = if let Some(graph) = graph {
             vec![graph.clone()]
         } else {
@@ -278,7 +286,8 @@ impl Triplestore {
                         for (predicate, map) in self.graph_triples_map.get(graph).unwrap() {
                             for ((subject_type, object_type), ts) in map {
                                 for (lf, _) in ts.get_lazy_frames(&None, &None)? {
-                                    self.fts_index.get_mut(graph)
+                                    self.fts_index
+                                        .get_mut(graph)
                                         .unwrap()
                                         .add_literal_string(
                                             &lf.collect().unwrap(),
@@ -491,18 +500,20 @@ impl Triplestore {
         Ok(out_new_triples)
     }
 
-    fn add_graph_if_not_exists(&mut self, graph: &NamedGraph, transient:bool) {
+    fn add_graph_if_not_exists(&mut self, graph: &NamedGraph, transient: bool) {
         if transient {
             if !self.graph_transient_triples_map.contains_key(graph) {
-                self.graph_transient_triples_map.insert(graph.clone(), HashMap::new());
+                self.graph_transient_triples_map
+                    .insert(graph.clone(), HashMap::new());
             }
         } else {
             if !self.graph_triples_map.contains_key(graph) {
-               self.graph_triples_map.insert(graph.clone(), HashMap::new());
+                self.graph_triples_map.insert(graph.clone(), HashMap::new());
             }
         }
         if !self.indexing.contains_key(graph) {
-            self.indexing.insert(graph.clone(), IndexingOptions::default());
+            self.indexing
+                .insert(graph.clone(), IndexingOptions::default());
         }
     }
 }

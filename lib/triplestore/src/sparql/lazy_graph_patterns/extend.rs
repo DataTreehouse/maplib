@@ -7,11 +7,11 @@ use crate::sparql::QuerySettings;
 use query_processing::expressions::contains_graph_pattern;
 use query_processing::graph_patterns::extend;
 use query_processing::pushdowns::Pushdowns;
+use representation::dataset::QueryGraph;
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use spargebra::algebra::{Expression, GraphPattern};
 use std::collections::HashMap;
-use representation::dataset::QueryGraph;
 
 impl Triplestore {
     #[allow(clippy::too_many_arguments)]

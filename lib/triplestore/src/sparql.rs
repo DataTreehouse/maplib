@@ -24,6 +24,7 @@ use query_processing::expressions::expr_is_null_workaround;
 use query_processing::graph_patterns::unique_workaround;
 use query_processing::pushdowns::Pushdowns;
 use representation::cats::{Cats, LockedCats};
+use representation::dataset::{NamedGraph, QueryGraph};
 use representation::polars_to_rdf::{df_as_result, QuerySolutions};
 use representation::query_context::Context;
 use representation::rdf_to_polars::{
@@ -41,7 +42,6 @@ use spargebra::term::{
 };
 use spargebra::{GraphUpdateOperation, Query, Update};
 use std::collections::{HashMap, HashSet};
-use representation::dataset::{NamedGraph, QueryGraph};
 
 #[derive(Debug)]
 pub enum QueryResult {
@@ -289,7 +289,7 @@ impl Triplestore {
                     parameters,
                     Pushdowns::new(),
                     &qs,
-                    &qg
+                    &qg,
                 )?;
 
                 let df = mappings.with_new_streaming(streaming).collect().unwrap();
@@ -342,7 +342,13 @@ impl Triplestore {
     ) -> Result<Vec<NewTriples>, SparqlError> {
         let query = Query::parse(query, None).map_err(SparqlError::ParseError)?;
         if let Query::Construct { .. } = &query {
-            let res = self.query_parsed(&query, parameters, streaming, include_transient, Some(graph))?;
+            let res = self.query_parsed(
+                &query,
+                parameters,
+                streaming,
+                include_transient,
+                Some(graph),
+            )?;
             match res {
                 QueryResult::Select(_) => {
                     panic!("Should never happen")
@@ -426,7 +432,8 @@ impl Triplestore {
                         pattern: p,
                         base_iri: None,
                     };
-                    let r = self.query_parsed(&q, parameters, streaming, include_transient, graph)?;
+                    let r =
+                        self.query_parsed(&q, parameters, streaming, include_transient, graph)?;
                     let EagerSolutionMappings {
                         mappings,
                         rdf_node_types,
@@ -464,14 +471,16 @@ impl Triplestore {
                                         delete_solutions.insert(ng, vec![sol]);
                                     }
                                 }
-                                GraphNamePattern::Variable(_) => {todo!()}
+                                GraphNamePattern::Variable(_) => {
+                                    todo!()
+                                }
                             }
                         }
                     }
                     for (g, delete_solutions) in delete_solutions {
                         self.delete_construct_result(delete_solutions, &g)?;
                     }
-                    let mut insert_solutions: HashMap<_,Vec<_>> = HashMap::new();
+                    let mut insert_solutions: HashMap<_, Vec<_>> = HashMap::new();
                     for i in insert {
                         let cats = self.global_cats.read()?;
                         let insert = triple_to_solution_mappings(
@@ -483,31 +492,30 @@ impl Triplestore {
                             &cats,
                         )?;
                         if let Some(insert) = insert {
-                             match &i.graph_name {
-                                 GraphNamePattern::NamedNode(nn) => {
-                                     let k = NamedGraph::NamedGraph(nn.clone());
-                                     if let Some(existing) = insert_solutions.get_mut(&k) {
-                                         existing.push(insert);
-                                     } else {
-                                         insert_solutions.insert(k, vec![insert]);
-                                     }
-                                 }
-                                 GraphNamePattern::DefaultGraph => {
-                                     let k = NamedGraph::DefaultGraph;
-                                     if let Some(existing) = insert_solutions.get_mut(&k) {
-                                         existing.push(insert);
-                                     } else {
-                                         insert_solutions.insert(k, vec![insert]);
-                                     }
-
-                                 }
-                                 GraphNamePattern::Variable(_) => {
-                                     todo!()
-                                 }
-                             }
+                            match &i.graph_name {
+                                GraphNamePattern::NamedNode(nn) => {
+                                    let k = NamedGraph::NamedGraph(nn.clone());
+                                    if let Some(existing) = insert_solutions.get_mut(&k) {
+                                        existing.push(insert);
+                                    } else {
+                                        insert_solutions.insert(k, vec![insert]);
+                                    }
+                                }
+                                GraphNamePattern::DefaultGraph => {
+                                    let k = NamedGraph::DefaultGraph;
+                                    if let Some(existing) = insert_solutions.get_mut(&k) {
+                                        existing.push(insert);
+                                    } else {
+                                        insert_solutions.insert(k, vec![insert]);
+                                    }
+                                }
+                                GraphNamePattern::Variable(_) => {
+                                    todo!()
+                                }
+                            }
                         }
                     }
-                    for (g,s) in insert_solutions {
+                    for (g, s) in insert_solutions {
                         self.insert_construct_result(s, false, &g)?;
                     }
                 }
@@ -736,7 +744,10 @@ fn variable_expression(
     }
 }
 
-fn dataset_or_named_graph(dataset: &Option<QueryDataset>, graph:Option<&NamedGraph>) -> QueryGraph {
+fn dataset_or_named_graph(
+    dataset: &Option<QueryDataset>,
+    graph: Option<&NamedGraph>,
+) -> QueryGraph {
     if let Some(dataset) = dataset {
         QueryGraph::QueryDataset(dataset.clone())
     } else if let Some(graph) = graph {

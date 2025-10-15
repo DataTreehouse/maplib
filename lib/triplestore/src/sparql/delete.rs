@@ -8,13 +8,13 @@ use polars::prelude::{col, concat, IntoLazy, JoinArgs, JoinType, MaintainOrderJo
 use polars_core::datatypes::AnyValue;
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use representation::cats::{cat_encode_triples, CatTriples, Cats, EncodedTriples};
+use representation::dataset::NamedGraph;
 use representation::multitype::{set_struct_all_null_to_null_row, split_df_multicols};
 use representation::solution_mapping::EagerSolutionMappings;
 use representation::{OBJECT_COL_NAME, PREDICATE_COL_NAME, SUBJECT_COL_NAME};
 use std::collections::HashMap;
 use std::time::Instant;
 use tracing::trace;
-use representation::dataset::NamedGraph;
 
 impl Triplestore {
     pub fn delete_construct_result(
@@ -37,7 +37,11 @@ impl Triplestore {
         Ok(())
     }
 
-    pub fn delete_triples_vec(&mut self, ts: Vec<CatTriples>, graph:&NamedGraph) -> Result<(), TriplestoreError> {
+    pub fn delete_triples_vec(
+        &mut self,
+        ts: Vec<CatTriples>,
+        graph: &NamedGraph,
+    ) -> Result<(), TriplestoreError> {
         let add_triples_now = Instant::now();
         self.delete_global_cat_triples(ts, graph)?;
         trace!(
@@ -47,11 +51,16 @@ impl Triplestore {
         Ok(())
     }
 
-    fn delete_global_cat_triples(&mut self, gcts: Vec<CatTriples>, graph:&NamedGraph) -> Result<(), TriplestoreError> {
+    fn delete_global_cat_triples(
+        &mut self,
+        gcts: Vec<CatTriples>,
+        graph: &NamedGraph,
+    ) -> Result<(), TriplestoreError> {
         self.check_graph_exists(graph)?;
         for gct in gcts {
             if self.graph_triples_map.contains_key(graph) {
-                let remaining_gct = get_triples_after_deletion(&gct, self.graph_triples_map.get(graph).unwrap())?;
+                let remaining_gct =
+                    get_triples_after_deletion(&gct, self.graph_triples_map.get(graph).unwrap())?;
 
                 if let Some(mut gct) = remaining_gct {
                     self.delete_if_exists(&gct, false, graph)?;
@@ -80,7 +89,10 @@ impl Triplestore {
             }
 
             if self.graph_transient_triples_map.contains_key(graph) {
-                let remaining_gct = get_triples_after_deletion(&gct, self.graph_transient_triples_map.get(graph).unwrap())?;
+                let remaining_gct = get_triples_after_deletion(
+                    &gct,
+                    self.graph_transient_triples_map.get(graph).unwrap(),
+                )?;
                 if let Some(mut gct) = remaining_gct {
                     self.delete_if_exists(&gct, true, graph)?;
                     let subject_cat_state = gct.subject_type.default_stored_cat_state();
@@ -110,7 +122,12 @@ impl Triplestore {
         Ok(())
     }
 
-    fn delete_if_exists(&mut self, gct: &CatTriples, transient: bool, graph: &NamedGraph) -> Result<(), TriplestoreError> {
+    fn delete_if_exists(
+        &mut self,
+        gct: &CatTriples,
+        transient: bool,
+        graph: &NamedGraph,
+    ) -> Result<(), TriplestoreError> {
         self.check_graph_exists(graph)?;
         let use_map = if transient {
             self.graph_transient_triples_map.get_mut(graph).unwrap()

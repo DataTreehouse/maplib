@@ -5,7 +5,6 @@ use crate::sparql::errors::SparqlError;
 use oxrdf::vocab::xsd;
 use polars::prelude::{col, lit, LiteralValue};
 use polars_core::prelude::Scalar;
-use representation::dataset::{QueryGraph};
 use query_processing::exists_helper::rewrite_exists_graph_pattern;
 use query_processing::expressions::functions::func_expression;
 use query_processing::expressions::{
@@ -13,6 +12,7 @@ use query_processing::expressions::{
     named_node, not_expression, unary_minus, unary_plus, variable,
 };
 use query_processing::pushdowns::Pushdowns;
+use representation::dataset::QueryGraph;
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use representation::BaseRDFNodeType;

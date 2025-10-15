@@ -3,11 +3,11 @@ use crate::sparql::errors::SparqlError;
 use crate::{NewTriples, TriplesToAdd};
 use oxrdf::NamedNode;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use representation::dataset::NamedGraph;
 use representation::multitype::split_df_multicols;
 use representation::solution_mapping::EagerSolutionMappings;
 use representation::{OBJECT_COL_NAME, PREDICATE_COL_NAME, SUBJECT_COL_NAME};
 use std::collections::HashMap;
-use representation::dataset::NamedGraph;
 
 impl Triplestore {
     pub fn insert_construct_result(

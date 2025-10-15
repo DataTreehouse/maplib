@@ -8,11 +8,11 @@ use polars::prelude::JoinType;
 use query_processing::aggregates::AggregateReturn;
 use query_processing::graph_patterns::{group_by, join, prepare_group_by};
 use query_processing::pushdowns::Pushdowns;
+use representation::dataset::QueryGraph;
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use spargebra::algebra::{AggregateExpression, GraphPattern};
 use std::collections::HashMap;
-use representation::dataset::QueryGraph;
 
 impl Triplestore {
     #[allow(clippy::too_many_arguments)]

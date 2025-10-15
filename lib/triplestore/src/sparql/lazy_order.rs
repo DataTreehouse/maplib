@@ -1,11 +1,11 @@
 use super::{QuerySettings, Triplestore};
 use crate::sparql::errors::SparqlError;
 
+use representation::dataset::QueryGraph;
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use spargebra::algebra::OrderExpression;
 use std::collections::HashMap;
-use representation::dataset::QueryGraph;
 
 impl Triplestore {
     pub fn lazy_order_expression(

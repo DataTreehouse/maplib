@@ -6,6 +6,7 @@ use polars_core::datatypes::DataType;
 use polars_core::frame::DataFrame;
 use polars_core::prelude::IntoColumn;
 use polars_core::POOL;
+use representation::dataset::NamedGraph;
 use representation::polars_to_rdf::{
     date_column_to_strings, datetime_column_to_strings, global_df_as_triples,
 };
@@ -15,7 +16,6 @@ use representation::{
 use std::collections::HashMap;
 use std::io::Write;
 use tracing::warn;
-use representation::dataset::NamedGraph;
 
 mod fast_ntriples;
 mod serializers;

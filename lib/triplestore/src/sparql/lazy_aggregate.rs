@@ -7,11 +7,11 @@ use query_processing::aggregates::{
     sample, sum, AggregateReturn,
 };
 use query_processing::constants::LIST_AGGREGATION;
+use representation::dataset::QueryGraph;
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use spargebra::algebra::{AggregateExpression, AggregateFunction};
 use std::collections::HashMap;
-use representation::dataset::QueryGraph;
 
 impl Triplestore {
     pub fn sparql_aggregate_expression_as_lazy_column_and_expression(

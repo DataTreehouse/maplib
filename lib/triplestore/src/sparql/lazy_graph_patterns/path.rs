@@ -13,6 +13,7 @@ use query_processing::expressions::{maybe_literal_enc, named_node_enc};
 use query_processing::graph_patterns::{group_by_workaround, join, union};
 use query_processing::pushdowns::Pushdowns;
 use representation::cats::LockedCats;
+use representation::dataset::QueryGraph;
 use representation::multitype::{
     compress_actual_multitypes, force_convert_multicol_to_single_col, nest_multicolumns,
 };
@@ -24,7 +25,6 @@ use spargebra::algebra::{GraphPattern, PropertyPathExpression};
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 use sprs::{CsMatBase, TriMatBase};
 use std::collections::HashMap;
-use representation::dataset::QueryGraph;
 
 const NAMED_NODE_INDEX_COL: &str = "named_node_index_column";
 const VALUE_COLUMN: &str = "value";
@@ -84,7 +84,7 @@ impl Triplestore {
                 &None,
                 pushdowns,
                 query_settings,
-                dataset
+                dataset,
             )?;
             for i in &intermediaries {
                 sms.rdf_node_types.remove(i).unwrap();

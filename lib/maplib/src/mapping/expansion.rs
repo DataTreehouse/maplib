@@ -12,6 +12,7 @@ use polars::prelude::{
     NamedFrom, Series,
 };
 use rayon::iter::{IndexedParallelIterator, ParallelDrainRange, ParallelIterator};
+use representation::dataset::NamedGraph;
 use representation::multitype::split_df_multicols;
 use representation::rdf_to_polars::rdf_named_node_to_polars_literal_value;
 use representation::{BaseRDFNodeType, RDFNodeState};
@@ -27,8 +28,7 @@ use templates::ast::{
 use templates::constants::OTTR_TRIPLE;
 use templates::MappingColumnType;
 use tracing::debug;
-use representation::dataset::NamedGraph;
-use triplestore::{TriplesToAdd};
+use triplestore::TriplesToAdd;
 
 const LIST_COL: &str = "list";
 const FIRST_COL: &str = "first";
@@ -47,7 +47,8 @@ impl Model {
             df = df
                 .lazy()
                 .with_column(
-                    lit(rdf_named_node_to_polars_literal_value(&predicate)).alias(PREDICATE_COL_NAME),
+                    lit(rdf_named_node_to_polars_literal_value(&predicate))
+                        .alias(PREDICATE_COL_NAME),
                 )
                 .collect()
                 .unwrap();
