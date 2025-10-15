@@ -10,6 +10,7 @@ use std::time::Duration;
 use triplestore::Triplestore;
 
 use representation::cats::LockedCats;
+use representation::dataset::NamedGraph;
 
 #[derive(Debug, Clone)]
 pub struct ShapeTargets {
@@ -54,7 +55,8 @@ impl ValidationReport {
 
 pub fn validate(
     _data_triplestore: &mut Triplestore,
-    _shape_triplestore: &mut Triplestore,
+    _data_graph: &NamedGraph,
+    _shapes_graph: &NamedGraph,
     _include_details: bool,
     _include_conforms: bool,
     _streaming: bool,

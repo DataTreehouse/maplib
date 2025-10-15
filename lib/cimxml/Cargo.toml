@@ -8,6 +8,7 @@ rust-version.workspace = true
 pyo3 = [ "dep:pyo3", "triplestore/pyo3" ]
 
 [dependencies]
+representation = {path ="../representation"}
 triplestore = {path="../triplestore"}
 thiserror.workspace = true
 oxrdf.workspace = true

@@ -385,6 +385,7 @@ version = "0.1.0"
 dependencies = [
  "oxrdf",
  "pyo3",
+ "representation",
  "thiserror",
  "triplestore",
 ]
