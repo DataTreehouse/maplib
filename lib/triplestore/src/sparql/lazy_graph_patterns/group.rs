@@ -10,8 +10,9 @@ use query_processing::graph_patterns::{group_by, join, prepare_group_by};
 use query_processing::pushdowns::Pushdowns;
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
-use spargebra::algebra::{AggregateExpression, GraphPattern, QueryDataset};
+use spargebra::algebra::{AggregateExpression, GraphPattern};
 use std::collections::HashMap;
+use representation::dataset::QueryGraph;
 
 impl Triplestore {
     #[allow(clippy::too_many_arguments)]
@@ -26,7 +27,7 @@ impl Triplestore {
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         mut pushdowns: Pushdowns,
         query_settings: &QuerySettings,
-        dataset: &Option<QueryDataset>,
+        dataset: &QueryGraph,
     ) -> Result<SolutionMappings, SparqlError> {
         trace!("Processing group graph pattern");
         let inner_context = context.extension_with(PathEntry::GroupInner);
@@ -71,6 +72,7 @@ impl Triplestore {
                 &aggregate_context,
                 parameters,
                 query_settings,
+                dataset,
             )?;
             output_solution_mappings = aggregate_solution_mappings;
             new_rdf_node_types.insert(v.as_str().to_string(), rdf_node_type);

@@ -1,6 +1,5 @@
 use super::Triplestore;
 use crate::errors::TriplestoreError;
-use oxrdf::NamedNode;
 use oxrdfio::{RdfFormat, RdfSerializer};
 use polars::prelude::{by_name, col, IntoLazy};
 use polars_core::datatypes::DataType;
@@ -16,6 +15,7 @@ use representation::{
 use std::collections::HashMap;
 use std::io::Write;
 use tracing::warn;
+use representation::dataset::NamedGraph;
 
 mod fast_ntriples;
 mod serializers;
@@ -27,7 +27,7 @@ impl Triplestore {
         &mut self,
         buf: &mut W,
         format: RdfFormat,
-        graph: &Option<NamedNode>,
+        graph: &NamedGraph,
     ) -> Result<(), TriplestoreError> {
         self.check_graph_exists(graph)?;
         if RdfFormat::NTriples == format {
@@ -167,15 +167,9 @@ impl Triplestore {
         Ok(())
     }
 
-    pub(crate) fn check_graph_exists(&self, graph: &Option<NamedNode>) -> Result<(), TriplestoreError> {
+    pub(crate) fn check_graph_exists(&self, graph: &NamedGraph) -> Result<(), TriplestoreError> {
         if !self.graph_triples_map.contains_key(graph) {
-            let graph_name = if let Some(graph) = graph {
-                graph.to_string()
-            } else {
-                "default graph".to_string()
-            };
-
-            Err(TriplestoreError::GraphDoesNotExist(graph_name))
+            Err(TriplestoreError::GraphDoesNotExist(graph.to_string()))
         } else {
             Ok(())
         }

@@ -532,6 +532,7 @@ class Model:
     def validate(
         self,
         shape_graph: str,
+        data_graph: str = None,
         include_details: bool = False,
         include_conforms: bool = False,
         include_shape_graph: bool = True,
@@ -546,6 +547,7 @@ class Model:
         Assumes that the contained knowledge graph also contains SHACL Shapes.
 
         :param shape_graph: The IRI of the Shape Graph.
+        :param data_graph: The IRI of the Data Graph (defaults to the default graph).
         :param include_details: Include details of SHACL evaluation alongside the report. Currently uses a lot of memory.
         :param include_conforms: Include those results that conformed. Also applies to details.
         :param include_shape_graph: Include the shape graph in the report, useful when creating the graph from the report.
@@ -803,12 +805,14 @@ class Model:
     def infer(
         self,
         ruleset: Union[str, List[str]],
+        graph: str = None,
         include_datatypes: bool = False,
         native_dataframe: bool = False,
     ) -> Optional[Dict[str, DataFrame]]:
         """
         Run the inference rules that are provided
         :param ruleset: The Datalog ruleset (a string).
+        :param graph: Apply the ruleset to this graph, defaults to the default graph, or the graph specified in the rules.
         :param native_dataframe: Return columns with maplib-native formatting. Useful for round-trips.
         :param include_datatypes: Datatypes are not returned by default, set to true to return a dict with the solution mappings and the datatypes.
         :return: The inferred N-Tuples.

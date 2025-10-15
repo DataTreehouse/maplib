@@ -27,6 +27,7 @@ use std::ops::Deref;
 use std::path::Path;
 use std::time::Instant;
 use tracing::{debug, instrument};
+use representation::dataset::NamedGraph;
 
 type MapType = HashMap<String, HashMap<String, (Vec<Subject>, Vec<Term>)>>;
 
@@ -41,7 +42,7 @@ impl Triplestore {
         transient: bool,
         parallel: Option<bool>,
         checked: bool,
-        graph: &Option<NamedNode>,
+        graph: &NamedGraph,
     ) -> Result<(), TriplestoreError> {
         let now = Instant::now();
         let rdf_format = if let Some(rdf_format) = rdf_format {
@@ -86,7 +87,7 @@ impl Triplestore {
         transient: bool,
         parallel: Option<bool>,
         checked: bool,
-        graph: &Option<NamedNode>,
+        graph: &NamedGraph,
     ) -> Result<(), TriplestoreError> {
         self.read_triples(
             s.as_bytes(),
@@ -109,7 +110,7 @@ impl Triplestore {
         transient: bool,
         parallel: Option<bool>,
         checked: bool,
-        graph: &Option<NamedNode>,
+        graph: &NamedGraph,
     ) -> Result<(), TriplestoreError> {
         let start_quadproc_now = Instant::now();
         let parallel = if let Some(parallel) = parallel {

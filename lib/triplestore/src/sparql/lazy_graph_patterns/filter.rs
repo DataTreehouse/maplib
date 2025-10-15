@@ -8,8 +8,9 @@ use query_processing::graph_patterns::filter;
 use query_processing::pushdowns::Pushdowns;
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
-use spargebra::algebra::{Expression, GraphPattern, QueryDataset};
+use spargebra::algebra::{Expression, GraphPattern};
 use std::collections::HashMap;
+use representation::dataset::QueryGraph;
 
 impl Triplestore {
     #[instrument(skip_all)]
@@ -22,7 +23,7 @@ impl Triplestore {
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         pushdowns: Pushdowns,
         query_settings: &QuerySettings,
-        dataset: &Option<QueryDataset>,
+        dataset: &QueryGraph,
     ) -> Result<SolutionMappings, SparqlError> {
         trace!("Processing filter graph pattern");
         let inner_context = context.extension_with(PathEntry::FilterInner);
@@ -48,6 +49,7 @@ impl Triplestore {
             parameters,
             expression_pushdowns.as_ref(),
             query_settings,
+            dataset,
         )?;
 
         output_solution_mappings = filter(output_solution_mappings, &expression_context)?;

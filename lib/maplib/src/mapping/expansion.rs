@@ -27,7 +27,8 @@ use templates::ast::{
 use templates::constants::OTTR_TRIPLE;
 use templates::MappingColumnType;
 use tracing::debug;
-use triplestore::{TriplesToAdd, Triplestore};
+use representation::dataset::NamedGraph;
+use triplestore::{TriplesToAdd};
 
 const LIST_COL: &str = "list";
 const FIRST_COL: &str = "first";
@@ -39,14 +40,14 @@ impl Model {
         &mut self,
         mut df: DataFrame,
         mapping_column_types: Option<HashMap<String, MappingColumnType>>,
-        verb: Option<NamedNode>,
+        predicate: Option<NamedNode>,
         expand_options: MapOptions,
     ) -> Result<(), MaplibError> {
-        if let Some(verb) = verb {
+        if let Some(predicate) = predicate {
             df = df
                 .lazy()
                 .with_column(
-                    lit(rdf_named_node_to_polars_literal_value(&verb)).alias(PREDICATE_COL_NAME),
+                    lit(rdf_named_node_to_polars_literal_value(&predicate)).alias(PREDICATE_COL_NAME),
                 )
                 .collect()
                 .unwrap();
@@ -224,7 +225,7 @@ impl Model {
         &mut self,
         mut result_vec: Vec<OTTRTripleInstance>,
         mut new_blank_node_counter: usize,
-        graph: &Option<NamedNode>,
+        graph: &NamedGraph,
     ) -> Result<(), MappingError> {
         let now = Instant::now();
         let triples: Vec<_> = result_vec
@@ -243,7 +244,7 @@ impl Model {
             df,
             subject_type,
             object_type,
-            verb: predicate,
+            predicate,
         } in ok_triples
         {
             let has_multi = subject_type.is_multi() || object_type.is_multi();
@@ -301,20 +302,9 @@ impl Model {
                 });
             }
         }
-        let use_triplestore = if let Some(graph) = graph {
-            if !self.triplestores_map.contains_key(graph) {
-                self.triplestores_map.insert(
-                    graph.clone(),
-                    Triplestore::new(None, Some(self.indexing.clone())).unwrap(),
-                );
-            }
-            self.triplestores_map.get_mut(graph).unwrap()
-        } else {
-            &mut self.triplestore
-        };
 
-        use_triplestore
-            .add_triples_vec(all_triples_to_add, false)
+        self.triplestore
+            .add_triples_vec(all_triples_to_add, false, graph)
             .map_err(MappingError::TriplestoreError)?;
 
         self.blank_node_counter = new_blank_node_counter;
@@ -389,7 +379,7 @@ struct CreateTriplesResult {
     df: DataFrame,
     subject_type: RDFNodeState,
     object_type: RDFNodeState,
-    verb: Option<NamedNode>,
+    predicate: Option<NamedNode>,
 }
 
 fn create_triples(
@@ -409,7 +399,7 @@ fn create_triples(
     let mut results = vec![];
     let mut expressions = vec![];
 
-    let mut verb = None;
+    let mut predicate = None;
 
     if dynamic_columns.is_empty() && df.height() == 0 {
         df.with_column(Series::new("dummy_column".into(), vec!["dummy_row"]))
@@ -419,7 +409,7 @@ fn create_triples(
     for (k, sc) in static_columns {
         if k == PREDICATE_COL_NAME {
             if let ConstantTermOrList::ConstantTerm(ConstantTerm::Iri(nn)) = &sc.constant_term {
-                verb = Some(nn.clone());
+                predicate = Some(nn.clone());
             } else {
                 return Err(MappingError::InvalidPredicateConstant(
                     sc.constant_term.clone(),
@@ -440,7 +430,7 @@ fn create_triples(
     }
 
     let mut keep_cols = vec![col(SUBJECT_COL_NAME), col(OBJECT_COL_NAME)];
-    if verb.is_none() {
+    if predicate.is_none() {
         keep_cols.push(col(PREDICATE_COL_NAME));
     }
     lf = lf.select(keep_cols.as_slice());
@@ -490,7 +480,7 @@ fn create_triples(
         df,
         subject_type: subj_rdf_node_type,
         object_type: obj_rdf_node_type,
-        verb,
+        predicate,
     });
     Ok((
         results,
@@ -584,19 +574,19 @@ fn create_list_triples(
             df: rest_df,
             subject_type: BaseRDFNodeType::BlankNode.into_default_input_rdf_node_state(),
             object_type: BaseRDFNodeType::BlankNode.into_default_input_rdf_node_state(),
-            verb: Some(rdf::REST.into_owned()),
+            predicate: Some(rdf::REST.into_owned()),
         },
         CreateTriplesResult {
             df: rest_nil_df,
             subject_type: BaseRDFNodeType::BlankNode.into_default_input_rdf_node_state(),
             object_type: BaseRDFNodeType::IRI.into_default_input_rdf_node_state(),
-            verb: Some(rdf::REST.into_owned()),
+            predicate: Some(rdf::REST.into_owned()),
         },
         CreateTriplesResult {
             df: first_df,
             subject_type: BaseRDFNodeType::BlankNode.into_default_input_rdf_node_state(),
             object_type: rdf_node_type.clone(),
-            verb: Some(rdf::FIRST.into_owned()),
+            predicate: Some(rdf::FIRST.into_owned()),
         },
     ];
     *blank_node_counter += df.height();

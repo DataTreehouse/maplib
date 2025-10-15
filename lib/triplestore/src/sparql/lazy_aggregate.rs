@@ -11,6 +11,7 @@ use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use spargebra::algebra::{AggregateExpression, AggregateFunction};
 use std::collections::HashMap;
+use representation::dataset::QueryGraph;
 
 impl Triplestore {
     pub fn sparql_aggregate_expression_as_lazy_column_and_expression(
@@ -21,6 +22,7 @@ impl Triplestore {
         context: &Context,
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         query_settings: &QuerySettings,
+        dataset: &QueryGraph,
     ) -> Result<AggregateReturn, SparqlError> {
         let output_solution_mappings;
         let mut out_expr;
@@ -46,6 +48,7 @@ impl Triplestore {
                     parameters,
                     None,
                     query_settings,
+                    dataset,
                 )?;
                 match name {
                     AggregateFunction::Count => {

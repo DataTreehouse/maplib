@@ -7,13 +7,14 @@ use representation::multitype::split_df_multicols;
 use representation::solution_mapping::EagerSolutionMappings;
 use representation::{OBJECT_COL_NAME, PREDICATE_COL_NAME, SUBJECT_COL_NAME};
 use std::collections::HashMap;
+use representation::dataset::NamedGraph;
 
 impl Triplestore {
     pub fn insert_construct_result(
         &mut self,
         sms: Vec<(EagerSolutionMappings, Option<NamedNode>)>,
         transient: bool,
-        graph: &Option<NamedNode>,
+        graph: &NamedGraph,
     ) -> Result<Vec<NewTriples>, SparqlError> {
         let all_triples_to_add = construct_result_as_triples_to_add(sms);
         let new_triples = if !all_triples_to_add.is_empty() {

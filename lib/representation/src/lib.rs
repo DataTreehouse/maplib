@@ -15,6 +15,7 @@ pub mod python;
 mod rdf_state;
 mod rdf_type;
 pub mod subtypes;
+pub mod dataset;
 
 pub use base_rdf_type::*;
 pub use rdf_state::*;

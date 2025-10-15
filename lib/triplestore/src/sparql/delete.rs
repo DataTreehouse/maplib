@@ -14,12 +14,13 @@ use representation::{OBJECT_COL_NAME, PREDICATE_COL_NAME, SUBJECT_COL_NAME};
 use std::collections::HashMap;
 use std::time::Instant;
 use tracing::trace;
+use representation::dataset::NamedGraph;
 
 impl Triplestore {
     pub fn delete_construct_result(
         &mut self,
         sms: Vec<(EagerSolutionMappings, Option<NamedNode>)>,
-        graph: &Option<NamedNode>,
+        graph: &NamedGraph,
     ) -> Result<(), SparqlError> {
         let cats = self.global_cats.read().unwrap();
         let sms: Vec<_> = sms
@@ -36,7 +37,7 @@ impl Triplestore {
         Ok(())
     }
 
-    pub fn delete_triples_vec(&mut self, ts: Vec<CatTriples>, graph:&Option<NamedNode>) -> Result<(), TriplestoreError> {
+    pub fn delete_triples_vec(&mut self, ts: Vec<CatTriples>, graph:&NamedGraph) -> Result<(), TriplestoreError> {
         let add_triples_now = Instant::now();
         self.delete_global_cat_triples(ts, graph)?;
         trace!(
@@ -46,66 +47,70 @@ impl Triplestore {
         Ok(())
     }
 
-    fn delete_global_cat_triples(&mut self, gcts: Vec<CatTriples>, graph:&Option<NamedNode>) -> Result<(), TriplestoreError> {
+    fn delete_global_cat_triples(&mut self, gcts: Vec<CatTriples>, graph:&NamedGraph) -> Result<(), TriplestoreError> {
         self.check_graph_exists(graph)?;
         for gct in gcts {
-            let remaining_gct = get_triples_after_deletion(&gct, self.graph_triples_map.get(graph).unwrap())?;
+            if self.graph_triples_map.contains_key(graph) {
+                let remaining_gct = get_triples_after_deletion(&gct, self.graph_triples_map.get(graph).unwrap())?;
 
-            if let Some(mut gct) = remaining_gct {
-                self.delete_if_exists(&gct, false, graph);
-                let subject_cat_state = gct.subject_type.default_stored_cat_state();
-                let object_cat_state = gct.object_type.default_stored_cat_state();
-                gct.encoded_triples = gct
-                    .encoded_triples
-                    .into_par_iter()
-                    .map(|mut x| {
-                        x.df = sort_triples_add_rank(
-                            x.df,
-                            &gct.subject_type,
-                            &subject_cat_state,
-                            &gct.object_type,
-                            &object_cat_state,
-                            self.global_cats.clone(),
-                            false,
-                        );
-                        x
-                    })
-                    .collect();
-                self.add_global_cat_triples(vec![gct], false, graph)?;
-            } else {
-                self.delete_if_exists(&gct, false, graph)?;
+                if let Some(mut gct) = remaining_gct {
+                    self.delete_if_exists(&gct, false, graph)?;
+                    let subject_cat_state = gct.subject_type.default_stored_cat_state();
+                    let object_cat_state = gct.object_type.default_stored_cat_state();
+                    gct.encoded_triples = gct
+                        .encoded_triples
+                        .into_par_iter()
+                        .map(|mut x| {
+                            x.df = sort_triples_add_rank(
+                                x.df,
+                                &gct.subject_type,
+                                &subject_cat_state,
+                                &gct.object_type,
+                                &object_cat_state,
+                                self.global_cats.clone(),
+                                false,
+                            );
+                            x
+                        })
+                        .collect();
+                    self.add_global_cat_triples(vec![gct], false, graph)?;
+                } else {
+                    self.delete_if_exists(&gct, false, graph)?;
+                }
             }
 
-            let remaining_gct = get_triples_after_deletion(&gct, self.graph_transient_triples_map.get(graph).unwrap())?;
-            if let Some(mut gct) = remaining_gct {
-                self.delete_if_exists(&gct, true, graph);
-                let subject_cat_state = gct.subject_type.default_stored_cat_state();
-                let object_cat_state = gct.object_type.default_stored_cat_state();
-                gct.encoded_triples = gct
-                    .encoded_triples
-                    .into_par_iter()
-                    .map(|mut x| {
-                        x.df = sort_triples_add_rank(
-                            x.df,
-                            &gct.subject_type,
-                            &subject_cat_state,
-                            &gct.object_type,
-                            &object_cat_state,
-                            self.global_cats.clone(),
-                            false,
-                        );
-                        x
-                    })
-                    .collect();
-                self.add_global_cat_triples(vec![gct], true, graph)?;
-            } else {
-                self.delete_if_exists(&gct, true, graph)?;
+            if self.graph_transient_triples_map.contains_key(graph) {
+                let remaining_gct = get_triples_after_deletion(&gct, self.graph_transient_triples_map.get(graph).unwrap())?;
+                if let Some(mut gct) = remaining_gct {
+                    self.delete_if_exists(&gct, true, graph)?;
+                    let subject_cat_state = gct.subject_type.default_stored_cat_state();
+                    let object_cat_state = gct.object_type.default_stored_cat_state();
+                    gct.encoded_triples = gct
+                        .encoded_triples
+                        .into_par_iter()
+                        .map(|mut x| {
+                            x.df = sort_triples_add_rank(
+                                x.df,
+                                &gct.subject_type,
+                                &subject_cat_state,
+                                &gct.object_type,
+                                &object_cat_state,
+                                self.global_cats.clone(),
+                                false,
+                            );
+                            x
+                        })
+                        .collect();
+                    self.add_global_cat_triples(vec![gct], true, graph)?;
+                } else {
+                    self.delete_if_exists(&gct, true, graph)?;
+                }
             }
         }
         Ok(())
     }
 
-    fn delete_if_exists(&mut self, gct: &CatTriples, transient: bool, graph: &Option<NamedNode>) -> Result<(), TriplestoreError> {
+    fn delete_if_exists(&mut self, gct: &CatTriples, transient: bool, graph: &NamedGraph) -> Result<(), TriplestoreError> {
         self.check_graph_exists(graph)?;
         let use_map = if transient {
             self.graph_transient_triples_map.get_mut(graph).unwrap()

@@ -21,13 +21,13 @@ use templates::ast::{ConstantTermOrList, PType, Template};
 use templates::dataset::TemplateDataset;
 use templates::document::document_from_str;
 use templates::MappingColumnType;
-use triplestore::errors::TriplestoreError;
 use triplestore::sparql::errors::SparqlError;
 use triplestore::sparql::QueryResult;
 use triplestore::{IndexingOptions, NewTriples, Triplestore};
 
 use datalog::ast::DatalogRuleset;
 use tracing::instrument;
+use representation::dataset::NamedGraph;
 
 pub struct Model {
     pub template_dataset: TemplateDataset,
@@ -39,12 +39,12 @@ pub struct Model {
 
 #[derive(Clone, Default)]
 pub struct MapOptions {
-    pub graph: Option<NamedNode>,
+    pub graph: NamedGraph,
     pub validate_iris: bool,
 }
 
 impl MapOptions {
-    pub fn from_args(graph: Option<NamedNode>, validate_iris: Option<bool>) -> Self {
+    pub fn from_args(graph: NamedGraph, validate_iris: Option<bool>) -> Self {
         MapOptions {
             graph,
             validate_iris: validate_iris.unwrap_or(true),
@@ -94,7 +94,6 @@ impl Model {
             template_dataset,
             triplestore: Triplestore::new(storage_folder, Some(indexing.clone()))
                 .map_err(MaplibError::TriplestoreError)?,
-            triplestores_map: Default::default(),
             blank_node_counter: 0,
             default_template_counter: 0,
             indexing,
@@ -181,15 +180,14 @@ impl Model {
         transient: bool,
         parallel: Option<bool>,
         checked: bool,
-        graph: Option<NamedNode>,
+        graph: &NamedGraph,
         replace_graph: bool,
     ) -> Result<(), MaplibError> {
         if replace_graph {
             self.truncate_graph(&graph)
         }
-        let triplestore = self.get_triplestore(&graph);
-        triplestore
-            .read_triples_from_path(p, rdf_format, base_iri, transient, parallel, checked)
+        self.triplestore
+            .read_triples_from_path(p, rdf_format, base_iri, transient, parallel, checked, graph)
             .map_err(MaplibError::TriplestoreError)
     }
 
@@ -202,30 +200,15 @@ impl Model {
         transient: bool,
         parallel: Option<bool>,
         checked: bool,
-        graph: Option<NamedNode>,
+        graph: &NamedGraph,
         replace_graph: bool,
     ) -> Result<(), MaplibError> {
         if replace_graph {
             self.truncate_graph(&graph)
         }
-        let triplestore = self.get_triplestore(&graph);
-        triplestore
-            .read_triples_from_string(s, rdf_format, base_iri, transient, parallel, checked)
+        self.triplestore
+            .read_triples_from_string(s, rdf_format, base_iri, transient, parallel, checked, graph)
             .map_err(MaplibError::TriplestoreError)
-    }
-
-    pub fn get_triplestore(&mut self, graph: &Option<NamedNode>) -> &mut Triplestore {
-        if let Some(graph) = graph {
-            if !self.triplestores_map.contains_key(graph) {
-                self.triplestores_map.insert(
-                    graph.clone(),
-                    Triplestore::new(None, Some(self.indexing.clone())).unwrap(),
-                );
-            }
-            self.triplestores_map.get_mut(graph).unwrap()
-        } else {
-            &mut self.triplestore
-        }
     }
 
     #[instrument(skip_all)]
@@ -233,13 +216,12 @@ impl Model {
         &mut self,
         query: &str,
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
-        graph: Option<NamedNode>,
+        graph: Option<&NamedGraph>,
         streaming: bool,
         include_transient: bool,
     ) -> Result<QueryResult, MaplibError> {
-        let use_triplestore = self.get_triplestore(&graph);
-        use_triplestore
-            .query(query, parameters, streaming, include_transient)
+        self.triplestore
+            .query(query, parameters, streaming, include_transient, graph)
             .map_err(|x| x.into())
     }
 
@@ -247,13 +229,12 @@ impl Model {
         &mut self,
         update: &str,
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
-        graph: Option<NamedNode>,
+        graph: Option<&NamedGraph>,
         streaming: bool,
         include_transient: bool,
     ) -> Result<(), MaplibError> {
-        let use_triplestore = self.get_triplestore(&graph);
-        use_triplestore
-            .update(update, parameters, streaming, include_transient)
+        self.triplestore
+            .update(update, parameters, streaming, include_transient, graph)
             .map_err(|x| x.into())
     }
 
@@ -261,22 +242,20 @@ impl Model {
         &mut self,
         sms: Vec<(EagerSolutionMappings, Option<NamedNode>)>,
         transient: bool,
-        target_graph: Option<NamedNode>,
+        target_graph: &NamedGraph,
     ) -> Result<Vec<NewTriples>, SparqlError> {
-        let use_triplestore = self.get_triplestore(&target_graph);
-        let new_triples = use_triplestore.insert_construct_result(sms, transient)?;
+        let new_triples = self.triplestore.insert_construct_result(sms, transient, &target_graph)?;
         Ok(new_triples)
     }
 
     pub fn write_triples<W: Write>(
         &mut self,
         buffer: &mut W,
-        graph: Option<NamedNode>,
+        graph: &NamedGraph,
         rdf_format: RdfFormat,
     ) -> Result<(), MaplibError> {
-        let triplestore = self.get_triplestore(&graph);
-        triplestore
-            .write_triples(buffer, rdf_format)
+        self.triplestore
+            .write_triples(buffer, rdf_format,graph)
             .map_err(MaplibError::TriplestoreError)?;
         Ok(())
     }
@@ -286,32 +265,29 @@ impl Model {
         buffer: &mut W,
         fullmodel_details: FullModelDetails,
         prefixes: HashMap<String, NamedNode>,
-        graph: Option<NamedNode>,
-        profile_graph: NamedNode,
+        graph: &NamedGraph,
+        profile_graph: &NamedGraph,
     ) -> Result<(), MaplibError> {
-        let mut profile_triplestore = self.triplestores_map.remove(&profile_graph).unwrap();
-        let triplestore = self.get_triplestore(&graph);
         let res = cim_xml_write(
             buffer,
-            triplestore,
-            &mut profile_triplestore,
+            &mut self.triplestore,
+            graph,
+            profile_graph,
             prefixes,
             fullmodel_details,
         )
         .map_err(MaplibError::CIMXMLError);
-        self.triplestores_map
-            .insert(profile_graph, profile_triplestore);
         res
     }
 
     pub fn write_native_parquet(
         &mut self,
         path: &str,
-        graph: Option<NamedNode>,
+        graph: &NamedGraph,
     ) -> Result<(), MaplibError> {
-        let triplestore = self.get_triplestore(&graph);
-        triplestore
-            .write_native_parquet(Path::new(path))
+
+        self.triplestore
+            .write_native_parquet(Path::new(path), graph)
             .map_err(MaplibError::TriplestoreError)
     }
 
@@ -341,7 +317,8 @@ impl Model {
 
     pub fn validate(
         &mut self,
-        shape_graph: &NamedNode,
+        data_graph: &NamedGraph,
+        shape_graph: &NamedGraph,
         include_details: bool,
         include_conforms: bool,
         streaming: bool,
@@ -351,18 +328,10 @@ impl Model {
         deactivate_shapes: Vec<NamedNode>,
         dry_run: bool,
     ) -> Result<ValidationReport, MaplibError> {
-        let (shape_graph, mut shape_triplestore) = if let Some((shape_graph, shape_triplestore)) =
-            self.triplestores_map.remove_entry(shape_graph)
-        {
-            (shape_graph, shape_triplestore)
-        } else {
-            return Err(
-                TriplestoreError::GraphDoesNotExist(shape_graph.as_str().to_string()).into(),
-            );
-        };
         let res = validate(
             &mut self.triplestore,
-            &mut shape_triplestore,
+            data_graph,
+            shape_graph,
             include_details,
             include_conforms,
             streaming,
@@ -372,17 +341,16 @@ impl Model {
             deactivate_shapes,
             dry_run,
         );
-        self.triplestores_map.insert(shape_graph, shape_triplestore);
         res.map_err(|x| x.into())
     }
 
-    fn truncate_graph(&mut self, graph: &Option<NamedNode>) {
-        self.get_triplestore(graph).truncate();
+    fn truncate_graph(&mut self, graph: &NamedGraph) {
+        self.triplestore.truncate(graph);
     }
 
     pub fn get_predicate_iris(
         &mut self,
-        graph: &Option<NamedNode>,
+        graph: &NamedGraph,
         include_transient: bool,
     ) -> Result<Vec<NamedNode>, MaplibError> {
         Ok(self.triplestore.get_predicate_iris(include_transient, graph).map_err(|x|MaplibError::TriplestoreError(x))?)
@@ -392,11 +360,11 @@ impl Model {
     pub fn get_predicate(
         &mut self,
         predicate: &NamedNode,
-        graph: Option<NamedNode>,
+        graph: &NamedGraph,
         include_transient: bool,
     ) -> Result<Vec<EagerSolutionMappings>, MaplibError> {
         let sms = self.triplestore
-            .get_predicate_eager_solution_mappings(predicate, include_transient, &graph)
+            .get_predicate_eager_solution_mappings(predicate, include_transient, graph)
             .map_err(|x| MaplibError::TriplestoreError(x))?;
         Ok(sms)
     }
@@ -405,24 +373,10 @@ impl Model {
     pub fn create_index(
         &mut self,
         indexing: IndexingOptions,
-        all: bool,
-        graph: Option<NamedNode>,
+        graph: Option<&NamedGraph>,
     ) -> Result<(), MaplibError> {
-        if all {
-            for t in self.triplestores_map.values_mut() {
-                t.create_index(indexing.clone())
+        self.triplestore.create_index(indexing.clone(), graph)
                     .map_err(MaplibError::TriplestoreError)?;
-            }
-            self.triplestore
-                .create_index(indexing.clone())
-                .map_err(MaplibError::TriplestoreError)?;
-            self.indexing = indexing;
-        } else {
-            let triplestore = self.get_triplestore(&graph);
-            triplestore
-                .create_index(indexing)
-                .map_err(MaplibError::TriplestoreError)?;
-        }
         Ok(())
     }
 
@@ -430,6 +384,7 @@ impl Model {
         &mut self,
         rulesets: Vec<String>,
         max_iterations: Option<usize>,
+        graph: Option<&NamedGraph>,
     ) -> Result<Option<HashMap<NamedNode, EagerSolutionMappings>>, MaplibError> {
         if rulesets.is_empty() {
             return Err(MaplibError::MissingDatalogRuleset);
@@ -447,6 +402,7 @@ impl Model {
 
         let res = infer(
             &mut self.triplestore,
+            graph,
             ruleset.as_ref().unwrap(),
             max_iterations,
         );

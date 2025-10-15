@@ -12,11 +12,11 @@ use representation::{
     BaseRDFNodeType, RDFNodeState, OBJECT_COL_NAME, PREDICATE_COL_NAME, SUBJECT_COL_NAME,
 };
 use std::collections::{HashMap, HashSet};
-use spargebra::algebra::QueryDataset;
+use representation::dataset::{NamedGraph, QueryGraph};
 use crate::errors::TriplestoreError;
 
 impl Triplestore {
-    pub fn get_predicate_iris(&self, include_transient: bool, graph: &Option<NamedNode>) -> Result<Vec<NamedNode>, TriplestoreError> {
+    pub fn get_predicate_iris(&self, include_transient: bool, graph: &NamedGraph) -> Result<Vec<NamedNode>, TriplestoreError> {
         self.check_graph_exists(graph)?;
         let mut iris = vec![];
         for nn in self.graph_triples_map.get(graph).unwrap().keys() {
@@ -34,14 +34,9 @@ impl Triplestore {
         &mut self,
         predicate: &NamedNode,
         include_transient: bool,
-        graph: &Option<NamedNode>,
+        graph: &NamedGraph,
     ) -> Result<Vec<EagerSolutionMappings>, TriplestoreError> {
         self.check_graph_exists(graph)?;
-        let dataset = if let Some(graph) = graph {
-            Some(QueryDataset { default: vec![], named: Some(vec![graph.clone()]) })
-        } else {
-            None
-        };
         let mut types = vec![];
         if let Some(map) = self.graph_triples_map.get(graph).unwrap().get(predicate) {
             for (s, o) in map.keys() {
@@ -73,7 +68,7 @@ impl Triplestore {
                 &Some(s),
                 &Some(o),
                 include_transient,
-                dataset.as_ref(),
+                &QueryGraph::from_named_graph(graph),
             )?;
             let eager_sm = sm.as_eager(false);
             eager_sms.push(eager_sm);
@@ -93,54 +88,60 @@ impl Triplestore {
         subject_datatype_ctr: &Option<PossibleTypes>,
         object_datatype_ctr: &Option<PossibleTypes>,
         include_transient: bool,
-        graph: &Option<NamedNode>,
+        graph: &NamedGraph,
     ) -> Result<Option<Vec<HalfBakedSolutionMappings>>, TriplestoreError> {
         if !self.graph_triples_map.contains_key(graph) {
             return Ok(None)
         }
         let mut all_sms = vec![];
         let cats = self.global_cats.read()?;
-        if self.graph_triples_map.get(graph).unwrap().contains_key(predicate_uri) {
-            let compatible_types = self.all_compatible_types (
-                predicate_uri,
-                false,
-                subject_datatype_ctr,
-                object_datatype_ctr,
-                graph
-            );
-            if let Some(m) = self.graph_triples_map.get(graph).unwrap().get(predicate_uri) {
-                if let Some(sms) = multiple_tt_to_lf(
-                    m,
-                    compatible_types,
-                    subjects,
-                    objects,
-                    keep_subject,
-                    keep_object,
-                    &cats,
-                )? {
-                    all_sms.extend(sms);
+        if let Some(map) = self.graph_triples_map.get(graph) {
+            if map.contains_key(predicate_uri) {
+                let compatible_types = self.all_compatible_types(
+                    predicate_uri,
+                    false,
+                    subject_datatype_ctr,
+                    object_datatype_ctr,
+                    graph
+                );
+                if let Some(m) = map.get(predicate_uri) {
+                    if let Some(sms) = multiple_tt_to_lf(
+                        m,
+                        compatible_types,
+                        subjects,
+                        objects,
+                        keep_subject,
+                        keep_object,
+                        &cats,
+                    )? {
+                        all_sms.extend(sms);
+                    }
                 }
             }
         }
-        if include_transient && self.graph_transient_triples_map.get(graph).unwrap().contains_key(predicate_uri) {
-            let compatible_types = self.all_compatible_types(
-                predicate_uri,
-                true,
-                subject_datatype_ctr,
-                object_datatype_ctr,
-                graph,
-            );
-            if let Some(m) = self.graph_transient_triples_map.get(graph).unwrap().get(predicate_uri) {
-                if let Some(sms) = multiple_tt_to_lf(
-                    m,
-                    compatible_types,
-                    subjects,
-                    objects,
-                    keep_subject,
-                    keep_object,
-                    &cats,
-                )? {
-                    all_sms.extend(sms);
+        if include_transient {
+            if let Some(map) = self.graph_transient_triples_map.get(graph) {
+                if map.contains_key(predicate_uri) {
+                    let compatible_types = self.all_compatible_types(
+                        predicate_uri,
+                        true,
+                        subject_datatype_ctr,
+                        object_datatype_ctr,
+                        graph,
+                    );
+                    if let Some(m) = map.get(predicate_uri) {
+                        if let Some(sms) = multiple_tt_to_lf(
+                            m,
+                            compatible_types,
+                            subjects,
+                            objects,
+                            keep_subject,
+                            keep_object,
+                            &cats,
+                        )? {
+                            all_sms.extend(sms);
+                        }
+                    }
                 }
             }
         }
@@ -168,13 +169,15 @@ impl Triplestore {
         subject_datatype_ctr: &Option<PossibleTypes>,
         object_datatype_ctr: &Option<PossibleTypes>,
         include_transient: bool,
-        dataset: Option<&QueryDataset>,
+        dataset: &QueryGraph,
     ) -> Result<SolutionMappings, TriplestoreError> {
-        if dataset.is_some() {
+        let named_graph = if let QueryGraph::NamedGraph(ng) = dataset {
+            ng
+        } else {
             todo!("{:?}", dataset);
-            //Fix call below
-        }
-        let predicate_uris = predicate_uris.unwrap_or(self.all_predicates(&None));
+            //Fix calls below
+        };
+        let predicate_uris = predicate_uris.unwrap_or(self.all_predicates(named_graph));
         let cats = self.global_cats.read()?;
 
         let mut sms = vec![];
@@ -192,7 +195,7 @@ impl Triplestore {
                     subject_datatype_ctr,
                     object_datatype_ctr,
                     include_transient,
-                    &None,
+                    named_graph,
                 )? {
                     sms.extend(sm);
                 }
@@ -354,7 +357,7 @@ impl Triplestore {
         transient: bool,
         subject_datatype_ctr: &Option<PossibleTypes>,
         object_datatype_ctr: &Option<PossibleTypes>,
-        graph: &Option<NamedNode>,
+        graph: &NamedGraph,
     ) -> Option<HashSet<(StoredBaseRDFNodeType, StoredBaseRDFNodeType)>> {
         if subject_datatype_ctr.is_none() && object_datatype_ctr.is_none() {
             return None;
@@ -384,7 +387,7 @@ impl Triplestore {
         Some(compat_types)
     }
 
-    fn all_predicates(&self, graph: &Option<NamedNode>) -> Vec<NamedNode> {
+    fn all_predicates(&self, graph: &NamedGraph) -> Vec<NamedNode> {
         let mut predicates = vec![];
         if let Some(g) = self.graph_triples_map.get(graph) {
             for nn in g.keys() {

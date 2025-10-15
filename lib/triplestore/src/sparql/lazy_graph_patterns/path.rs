@@ -20,10 +20,11 @@ use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::SolutionMappings;
 use representation::{BaseRDFNodeType, RDFNodeState};
 use representation::{OBJECT_COL_NAME, SUBJECT_COL_NAME};
-use spargebra::algebra::{GraphPattern, PropertyPathExpression, QueryDataset};
+use spargebra::algebra::{GraphPattern, PropertyPathExpression};
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 use sprs::{CsMatBase, TriMatBase};
 use std::collections::HashMap;
+use representation::dataset::QueryGraph;
 
 const NAMED_NODE_INDEX_COL: &str = "named_node_index_column";
 const VALUE_COLUMN: &str = "value";
@@ -45,7 +46,7 @@ impl Triplestore {
         context: &Context,
         pushdowns: Pushdowns,
         query_settings: &QuerySettings,
-        dataset: &Option<QueryDataset>,
+        dataset: &QueryGraph,
     ) -> Result<SolutionMappings, SparqlError> {
         let create_sparse = need_sparse_matrix(ppe);
 
@@ -661,11 +662,11 @@ fn sparse_path(
 struct U32DataFrameCreator {
     pub named_nodes: HashMap<NamedNode, (DataFrame, RDFNodeState, RDFNodeState)>,
     include_transient: bool,
-    dataset: Option<QueryDataset>,
+    dataset: QueryGraph,
 }
 
 impl U32DataFrameCreator {
-    pub fn new(query_settings: &QuerySettings, dataset: Option<QueryDataset>) -> Self {
+    pub fn new(query_settings: &QuerySettings, dataset: QueryGraph) -> Self {
         U32DataFrameCreator {
             named_nodes: Default::default(),
             include_transient: query_settings.include_transient,
@@ -853,7 +854,7 @@ impl U32DataFrameCreator {
                     &None,
                     &None,
                     self.include_transient,
-                    self.dataset.as_ref(),
+                    &self.dataset,
                 )?;
                 self.named_nodes.insert(
                     nn.clone(),

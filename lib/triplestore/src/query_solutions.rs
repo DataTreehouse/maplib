@@ -2,7 +2,7 @@ use oxrdf::{Term, Variable};
 use polars::frame::UniqueKeepStrategy;
 use polars::prelude::IntoLazy;
 use query_processing::graph_patterns::unique_workaround;
-
+use representation::dataset::NamedGraph;
 use crate::sparql::errors::SparqlError;
 use crate::sparql::QueryResult;
 use crate::Triplestore;
@@ -11,12 +11,13 @@ use representation::solution_mapping::EagerSolutionMappings;
 
 pub fn query_select(
     query: &str,
-    triplestore: &mut Triplestore,
+    triplestore: &Triplestore,
+    graph: Option<&NamedGraph>,
     deduplicate: bool,
     streaming: bool,
     include_transient: bool,
 ) -> Result<QuerySolutions, SparqlError> {
-    let qres = triplestore.query(query, &None, streaming, include_transient)?;
+    let qres = triplestore.query(query, &None, streaming, include_transient, graph)?;
 
     let sm = if let QueryResult::Select(EagerSolutionMappings {
         mut mappings,

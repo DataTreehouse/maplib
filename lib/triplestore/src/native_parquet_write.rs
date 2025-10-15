@@ -4,12 +4,12 @@ use file_io::{property_to_filename, write_parquet};
 use polars::prelude::ParquetCompression;
 use std::path::Path;
 use std::time::Instant;
-use oxrdf::NamedNode;
 use tracing::{debug, instrument};
+use representation::dataset::NamedGraph;
 
 impl Triplestore {
     #[instrument(skip_all)]
-    pub fn write_native_parquet(&mut self, path: &Path, graph: &Option<NamedNode>) -> Result<(), TriplestoreError> {
+    pub fn write_native_parquet(&mut self, path: &Path, graph: &NamedGraph) -> Result<(), TriplestoreError> {
         self.check_graph_exists(graph)?;
         let now = Instant::now();
         if !path.exists() {

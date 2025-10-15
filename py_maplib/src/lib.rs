@@ -60,12 +60,14 @@ use representation::solution_mapping::EagerSolutionMappings;
 #[cfg(not(target_os = "linux"))]
 use mimalloc::MiMalloc;
 use representation::cats::{new_solution_mapping_cats, set_global_cats_as_local, LockedCats};
+use representation::dataset::NamedGraph;
 use representation::polars_to_rdf::XSD_DATETIME_WITH_TZ_FORMAT;
 use representation::rdf_to_polars::rdf_named_node_to_polars_literal_value;
 use representation::{BaseRDFNodeType, OBJECT_COL_NAME, PREDICATE_COL_NAME, SUBJECT_COL_NAME};
+use representation::formatting::format_native_columns;
 use templates::python::{a, py_triple, PyArgument, PyInstance, PyParameter, PyTemplate, PyXSD};
 use templates::MappingColumnType;
-use triplestore::{IndexingOptions, NewTriples};
+use triplestore::{IndexingOptions, NewTriples, Triplestore};
 
 #[cfg(target_os = "linux")]
 #[global_allocator]
@@ -233,12 +235,13 @@ impl PyModel {
         py.allow_threads(move || -> PyResult<String> {
             let mut inner = self.inner.lock().unwrap();
             let graph = parse_optional_named_node(graph)?;
+            let named_graph = NamedGraph::from_maybe_named_node(graph.as_ref());
             map_default_mutex(
                 &mut inner,
                 df,
                 primary_key_column,
                 dry_run,
-                graph,
+                named_graph,
                 types,
                 validate_iris,
             )
@@ -263,9 +266,14 @@ impl PyModel {
     ) -> PyResult<PyObject> {
         let mapped_parameters = map_parameters(parameters)?;
         let graph = parse_optional_named_node(graph)?;
+        let graph = if let Some(graph) = graph {
+            Some(NamedGraph::NamedGraph(graph))
+        } else {
+            None
+        };
         let (res, cats) = py.allow_threads(|| -> PyResult<(QueryResult, LockedCats)> {
             let mut inner = self.inner.lock().unwrap();
-            let cats = inner.get_triplestore(&graph).global_cats.clone();
+            let cats = inner.triplestore.global_cats.clone();
             let res = query_mutex(
                 &mut inner,
                 query,
@@ -330,6 +338,7 @@ impl PyModel {
 
     #[pyo3(signature = (
         shape_graph,
+        data_graph=None,
         include_details=None,
         include_conforms=None,
         include_shape_graph=None,
@@ -344,6 +353,7 @@ impl PyModel {
         &self,
         py: Python<'_>,
         shape_graph: String,
+        data_graph: Option<String>,
         include_details: Option<bool>,
         include_conforms: Option<bool>,
         include_shape_graph: Option<bool>,
@@ -358,6 +368,7 @@ impl PyModel {
             validate_mutex(
                 &mut inner,
                 shape_graph,
+                data_graph,
                 include_details,
                 include_conforms,
                 include_shape_graph,
@@ -389,13 +400,15 @@ impl PyModel {
     ) -> PyResult<HashMap<String, PyObject>> {
         let mapped_parameters = map_parameters(parameters)?;
         let source_graph = parse_optional_named_node(source_graph)?;
+        let source_graph = NamedGraph::from_maybe_named_node(source_graph.as_ref());
         let target_graph = parse_optional_named_node(target_graph)?;
+        let target_graph = NamedGraph::from_maybe_named_node(target_graph.as_ref());
         let (new_triples, cats) =
             py.allow_threads(|| -> PyResult<(Vec<NewTriples>, LockedCats)> {
                 let mut inner = self.inner.lock().unwrap();
                 let mut sprout = self.sprout.lock().unwrap();
 
-                let cats = inner.get_triplestore(&source_graph).global_cats.clone();
+                let cats = inner.triplestore.global_cats.clone();
 
                 let new_triples = insert_mutex(
                     &mut inner,
@@ -439,12 +452,14 @@ impl PyModel {
     ) -> PyResult<HashMap<String, PyObject>> {
         let mapped_parameters = map_parameters(parameters)?;
         let source_graph = parse_optional_named_node(source_graph)?;
+        let source_graph = NamedGraph::from_maybe_named_node(source_graph.as_ref());
         let target_graph = parse_optional_named_node(target_graph)?;
+        let target_graph = NamedGraph::from_maybe_named_node(target_graph.as_ref());
         let (new_triples, cats) = py.allow_threads(|| -> PyResult<(_, _)> {
             let mut inner = self.inner.lock().unwrap();
             let mut sprout = self.sprout.lock().unwrap();
 
-            let cats = inner.get_triplestore(&source_graph).global_cats.clone();
+            let cats = inner.triplestore.global_cats.clone();
 
             let new_triples = insert_sprout_mutex(
                 &mut inner,
@@ -655,12 +670,13 @@ impl PyModel {
         Ok(out)
     }
 
-    #[pyo3(signature = (rulesets, include_datatypes=None, native_dataframe=None, max_iterations=None))]
+    #[pyo3(signature = (rulesets, graph=None, include_datatypes=None, native_dataframe=None, max_iterations=None))]
     #[instrument(skip_all)]
     fn infer(
         &self,
         py: Python<'_>,
         rulesets: PyObject,
+        graph: Option<String>,
         include_datatypes: Option<bool>,
         native_dataframe: Option<bool>,
         max_iterations: Option<usize>,
@@ -675,14 +691,19 @@ impl PyModel {
             )
             .into());
         };
-
+        let graph = parse_optional_named_node(graph)?;
+        let named_graph = if let Some(graph) = graph {
+            Some(NamedGraph::NamedGraph(graph))
+        } else {
+            None
+        };
         let (res, cats) = py.allow_threads(
             || -> PyResult<(Option<HashMap<NamedNode, EagerSolutionMappings>>, LockedCats)> {
                 let mut inner = self.inner.lock().unwrap();
 
-                let cats = inner.base_triplestore.global_cats.clone();
+                let cats = inner.triplestore.global_cats.clone();
 
-                let res = infer_mutex(&mut inner, rulesets, max_iterations)?;
+                let res = infer_mutex(&mut inner, rulesets, max_iterations, named_graph.as_ref())?;
 
                 Ok((res, cats))
             },
@@ -829,7 +850,8 @@ fn map_mutex(
     };
 
     let graph = parse_optional_named_node(graph)?;
-    let options = MapOptions::from_args(graph, validate_iris);
+    let named_graph = NamedGraph::from_maybe_named_node(graph.as_ref());
+    let options = MapOptions::from_args(named_graph, validate_iris);
     let types = map_types(types);
 
     if let Some(df) = df {
@@ -858,7 +880,8 @@ fn map_triples_mutex(
     validate_iris: Option<bool>,
 ) -> PyResult<Option<PyObject>> {
     let graph = parse_optional_named_node(graph)?;
-    let options = MapOptions::from_args(graph, validate_iris);
+    let named_graph = NamedGraph::from_maybe_named_node(graph.as_ref());
+    let options = MapOptions::from_args(named_graph, validate_iris);
     let types = map_types(types);
     let predicate = if let Some(predicate) = predicate {
         Some(NamedNode::new(predicate).map_err(|x| PyMaplibError::from(MaplibError::from(x)))?)
@@ -876,7 +899,7 @@ fn map_default_mutex(
     df: DataFrame,
     primary_key_column: String,
     dry_run: Option<bool>,
-    graph: Option<NamedNode>,
+    graph: NamedGraph,
     types: Option<HashMap<String, PyRDFType>>,
     validate_iris: Option<bool>,
 ) -> PyResult<String> {
@@ -896,7 +919,7 @@ fn query_mutex(
     inner: &mut MutexGuard<InnerModel>,
     query: String,
     mapped_parameters: Option<HashMap<String, EagerSolutionMappings>>,
-    graph: Option<NamedNode>,
+    graph: Option<NamedGraph>,
     streaming: Option<bool>,
     include_transient: Option<bool>,
 ) -> PyResult<QueryResult> {
@@ -904,7 +927,7 @@ fn query_mutex(
         .query(
             &query,
             &mapped_parameters,
-            graph.clone(),
+            graph.as_ref(),
             streaming.unwrap_or(false),
             include_transient.unwrap_or(true),
         )
@@ -921,11 +944,16 @@ fn update_mutex(
     include_transient: Option<bool>,
 ) -> PyResult<()> {
     let graph = parse_optional_named_node(graph)?;
+    let named_graph = if let Some(graph) = graph {
+        Some(NamedGraph::NamedGraph(graph))
+    } else {
+        None
+    };
     inner
         .update(
             &update,
             &mapped_parameters,
-            graph,
+            named_graph.as_ref(),
             streaming.unwrap_or(false),
             include_transient.unwrap_or(true),
         )
@@ -939,14 +967,20 @@ fn create_index_mutex(
     all: Option<bool>,
     graph: Option<String>,
 ) -> PyResult<()> {
-    let graph = parse_optional_named_node(graph)?;
+    let named_graph = if all.unwrap_or(true) {
+        None
+    } else {
+        let graph = parse_optional_named_node(graph)?;
+        let named_graph = NamedGraph::from_maybe_named_node(graph.as_ref());
+        Some(named_graph)
+    };
     let options = if let Some(options) = options {
         options.inner
     } else {
         IndexingOptions::default()
     };
     inner
-        .create_index(options, all.unwrap_or(true), graph)
+        .create_index(options, named_graph.as_ref())
         .map_err(PyMaplibError::from)?;
     Ok(())
 }
@@ -954,6 +988,7 @@ fn create_index_mutex(
 fn validate_mutex(
     inner: &mut MutexGuard<InnerModel>,
     shape_graph: String,
+    data_graph: Option<String>,
     include_details: Option<bool>,
     include_conforms: Option<bool>,
     include_shape_graph: Option<bool>,
@@ -963,8 +998,11 @@ fn validate_mutex(
     deactivate_shapes: Option<Vec<String>>,
     dry_run: Option<bool>,
 ) -> PyResult<PyValidationReport> {
-    let shape_graph =
-        NamedNode::new(shape_graph).map_err(|x| PyMaplibError::from(MaplibError::from(x)))?;
+    let data_graph = parse_optional_named_node(data_graph)?;
+    let data_graph = NamedGraph::from_maybe_named_node(data_graph.as_ref());
+    let shape_graph = parse_named_node(shape_graph)?;
+    let shape_graph = NamedGraph::NamedGraph(shape_graph);
+
     if only_shapes.is_some() && deactivate_shapes.is_some() {
         return Err(PyMaplibError::FunctionArgumentError(
             "only_shapes and deactivate_shapes cannot both be set".to_string(),
@@ -993,6 +1031,7 @@ fn validate_mutex(
 
     let report = inner
         .validate(
+            &data_graph,
             &shape_graph,
             include_details.unwrap_or(false),
             include_conforms.unwrap_or(false),
@@ -1004,12 +1043,36 @@ fn validate_mutex(
             dry_run.unwrap_or(false),
         )
         .map_err(PyMaplibError::from)?;
-    let shape_graph_triplestore = if include_shape_graph.unwrap_or(true) {
-        Some(inner.triplestores_map.get(&shape_graph).unwrap().clone())
+
+    let ts = if include_shape_graph.unwrap_or(true) {
+        let mut ts = Triplestore::new(None, None)
+            .map_err(|x| PyMaplibError::MaplibError(MaplibError::TriplestoreError(x)))?;
+        let res = inner
+            .triplestore
+            .query(
+                "CONSTRUCT { ?subject ?predicate ?object } WHERE {?subject ?predicate ?object}",
+                &None,
+                false,
+                false,
+                Some(&shape_graph),
+            )
+            .map_err(|x| PyMaplibError::MaplibError(MaplibError::SparqlError(x)))?;
+        if let QueryResult::Construct(sms) = res {
+            let mut new_sms = Vec::with_capacity(sms.len());
+            for (EagerSolutionMappings{mut mappings, mut rdf_node_types}, pred) in sms {
+                mappings = format_native_columns(mappings.lazy(), &mut rdf_node_types, inner.triplestore.global_cats.clone()).collect().unwrap();
+                new_sms.push((EagerSolutionMappings::new(mappings, rdf_node_types), pred));
+            }
+            ts.insert_construct_result(new_sms, false, &NamedGraph::DefaultGraph)
+                .map_err(|x| PyMaplibError::from(MaplibError::from(x)))?;
+        } else {
+            todo!("Handle this error..")
+        };
+        Some(ts)
     } else {
         None
     };
-    Ok(PyValidationReport::new(report, shape_graph_triplestore))
+    Ok(PyValidationReport::new(report, ts))
 }
 
 fn insert_mutex(
@@ -1019,22 +1082,22 @@ fn insert_mutex(
     mapped_parameters: Option<HashMap<String, EagerSolutionMappings>>,
     transient: Option<bool>,
     streaming: Option<bool>,
-    source_graph: Option<NamedNode>,
-    target_graph: Option<NamedNode>,
+    source_graph: NamedGraph,
+    target_graph: NamedGraph,
     include_transient: Option<bool>,
 ) -> PyResult<Vec<NewTriples>> {
     let res = inner
         .query(
             &query,
             &mapped_parameters,
-            source_graph.clone(),
+            Some(&source_graph),
             streaming.unwrap_or(false),
             include_transient.unwrap_or(true),
         )
         .map_err(PyMaplibError::from)?;
     let new_triples = if let QueryResult::Construct(dfs_and_dts) = res {
         inner
-            .insert_construct_result(dfs_and_dts, transient.unwrap_or(false), target_graph)
+            .insert_construct_result(dfs_and_dts, transient.unwrap_or(false), &target_graph)
             .map_err(|x| PyMaplibError::from(MaplibError::from(x)))?
     } else {
         todo!("Handle this error..")
@@ -1053,8 +1116,8 @@ fn insert_sprout_mutex(
     mapped_parameters: Option<HashMap<String, EagerSolutionMappings>>,
     transient: Option<bool>,
     streaming: Option<bool>,
-    source_graph: Option<NamedNode>,
-    target_graph: Option<NamedNode>,
+    source_graph: NamedGraph,
+    target_graph: NamedGraph,
     include_transient: Option<bool>,
 ) -> PyResult<Vec<NewTriples>> {
     if sprout.is_none() {
@@ -1064,7 +1127,7 @@ fn insert_sprout_mutex(
         .query(
             &query,
             &mapped_parameters,
-            source_graph.clone(),
+            Some(&source_graph),
             streaming.unwrap_or(false),
             include_transient.unwrap_or(true),
         )
@@ -1072,7 +1135,7 @@ fn insert_sprout_mutex(
 
     let new_triples = if let QueryResult::Construct(dfs_and_dts) = res {
         let (sms, preds): (_, Vec<_>) = dfs_and_dts.into_iter().unzip();
-        let global_cats = &inner.get_triplestore(&source_graph).global_cats;
+        let global_cats = &inner.triplestore.global_cats;
         let (mut sms, cats) = {
             let guard = global_cats.read().unwrap();
             new_solution_mapping_cats(sms, &guard)
@@ -1085,7 +1148,7 @@ fn insert_sprout_mutex(
         sprout
             .as_mut()
             .unwrap()
-            .insert_construct_result(dfs_and_dts, transient.unwrap_or(false), target_graph)
+            .insert_construct_result(dfs_and_dts, transient.unwrap_or(false), &target_graph)
             .map_err(|x| PyMaplibError::from(MaplibError::from(x)))
     } else {
         todo!("Handle this error..")
@@ -1108,6 +1171,7 @@ fn read_mutex(
     replace_graph: Option<bool>,
 ) -> PyResult<()> {
     let graph = parse_optional_named_node(graph)?;
+    let named_graph = NamedGraph::from_maybe_named_node(graph.as_ref());
     let path = Path::new(&file_path);
     let format = format.map(|format| resolve_format(&format));
     inner
@@ -1118,7 +1182,7 @@ fn read_mutex(
             transient.unwrap_or(false),
             parallel,
             checked.unwrap_or(true),
-            graph,
+            &named_graph,
             replace_graph.unwrap_or(false),
         )
         .map_err(PyMaplibError::from)?;
@@ -1137,6 +1201,7 @@ fn reads_mutex(
     replace_graph: Option<bool>,
 ) -> PyResult<()> {
     let graph = parse_optional_named_node(graph)?;
+    let named_graph = NamedGraph::from_maybe_named_node(graph.as_ref());
     let format = resolve_format(format);
     inner
         .reads(
@@ -1146,7 +1211,7 @@ fn reads_mutex(
             transient.unwrap_or(false),
             parallel,
             checked.unwrap_or(true),
-            graph,
+            &named_graph,
             replace_graph.unwrap_or(false),
         )
         .map_err(PyMaplibError::from)?;
@@ -1168,8 +1233,9 @@ fn write_triples_mutex(
     let mut actual_file = File::create(path_buf.as_path())
         .map_err(|x| PyMaplibError::from(MaplibError::FileCreateIOError(x)))?;
     let graph = parse_optional_named_node(graph)?;
+    let named_graph = NamedGraph::from_maybe_named_node(graph.as_ref());
     inner
-        .write_triples(&mut actual_file, graph, format)
+        .write_triples(&mut actual_file, &named_graph, format)
         .unwrap();
     Ok(())
 }
@@ -1206,6 +1272,7 @@ fn write_cim_xml_mutex(
     let version = version.map(oxrdf::Literal::new_simple_literal);
     let description = description.map(oxrdf::Literal::new_simple_literal);
     let profile_graph = parse_named_node(profile_graph)?;
+    let profile_graph = NamedGraph::NamedGraph(profile_graph);
     let created = oxrdf::Literal::new_typed_literal(
         created.unwrap_or(Utc::now().format(XSD_DATETIME_WITH_TZ_FORMAT).to_string()),
         xsd::DATE_TIME,
@@ -1216,6 +1283,7 @@ fn write_cim_xml_mutex(
     );
     let modeling_authority_set = modeling_authority_set.map(oxrdf::Literal::new_simple_literal);
     let graph = parse_optional_named_node(graph)?;
+    let graph = NamedGraph::from_maybe_named_node(graph.as_ref());
     let path_buf = PathBuf::from(file_path);
     let mut actual_file = File::create(path_buf.as_path())
         .map_err(|x| PyMaplibError::from(MaplibError::FileCreateIOError(x)))?;
@@ -1233,8 +1301,8 @@ fn write_cim_xml_mutex(
             &mut actual_file,
             fullmodel_details,
             named_node_prefixes,
-            graph,
-            profile_graph,
+            &graph,
+            &profile_graph,
         )
         .unwrap();
     Ok(())
@@ -1252,7 +1320,8 @@ fn writes_mutex(
     };
     let mut out = vec![];
     let graph = parse_optional_named_node(graph)?;
-    inner.write_triples(&mut out, graph, format).unwrap();
+    let named_graph = NamedGraph::from_maybe_named_node(graph.as_ref());
+    inner.write_triples(&mut out, &named_graph, format).unwrap();
     Ok(String::from_utf8(out).unwrap())
 }
 
@@ -1262,8 +1331,9 @@ fn write_native_parquet_mutex(
     graph: Option<String>,
 ) -> PyResult<()> {
     let graph = parse_optional_named_node(graph)?;
+    let named_graph = NamedGraph::from_maybe_named_node(graph.as_ref());
     inner
-        .write_native_parquet(&folder_path, graph)
+        .write_native_parquet(&folder_path, &named_graph)
         .map_err(PyMaplibError::from)?;
     Ok(())
 }
@@ -1274,8 +1344,9 @@ fn get_predicate_iris_mutex(
     include_transient: Option<bool>,
 ) -> PyResult<Vec<PyIRI>> {
     let graph = parse_optional_named_node(graph)?;
+    let named_graph = NamedGraph::from_maybe_named_node(graph.as_ref());
     let nns = inner
-        .get_predicate_iris(&graph, include_transient.unwrap_or(false))
+        .get_predicate_iris(&named_graph, include_transient.unwrap_or(false))
         .map_err(PyMaplibError::from)?;
     Ok(nns.into_iter().map(PyIRI::from).collect())
 }
@@ -1287,10 +1358,11 @@ fn get_predicate_mutex(
     include_transient: bool,
 ) -> PyResult<Vec<EagerSolutionMappings>> {
     let graph = parse_optional_named_node(graph)?;
+    let named_graph = NamedGraph::from_maybe_named_node(graph.as_ref());
     let eager_sms = inner
-        .get_predicate(&iri.into_inner(), graph.clone(), include_transient)
+        .get_predicate(&iri.into_inner(), &named_graph, include_transient)
         .map_err(PyMaplibError::from)?;
-    let global_cats = &inner.get_triplestore(&graph).global_cats;
+    let global_cats = &inner.triplestore.global_cats;
     let mut out_eager_sms = Vec::with_capacity(eager_sms.len());
     for EagerSolutionMappings {
         mut mappings,
@@ -1308,9 +1380,10 @@ fn infer_mutex(
     inner: &mut MutexGuard<InnerModel>,
     rulesets: Vec<String>,
     max_iterations: Option<usize>,
+    graph: Option<&NamedGraph>,
 ) -> Result<Option<HashMap<NamedNode, EagerSolutionMappings>>, PyMaplibError> {
     inner
-        .infer(rulesets, max_iterations)
+        .infer(rulesets, max_iterations, graph)
         .map_err(PyMaplibError::MaplibError)
 }
 

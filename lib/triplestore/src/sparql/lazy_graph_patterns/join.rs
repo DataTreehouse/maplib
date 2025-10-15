@@ -7,9 +7,10 @@ use crate::sparql::QuerySettings;
 use query_processing::pushdowns::Pushdowns;
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
-use spargebra::algebra::{GraphPattern, QueryDataset};
+use spargebra::algebra::{GraphPattern};
 use spargebra::term::{NamedNodePattern, TermPattern};
 use std::collections::{HashMap, HashSet};
+use representation::dataset::QueryGraph;
 
 struct BadGraphPatternProperties {
     n_cross_joins: usize,
@@ -79,7 +80,7 @@ impl Triplestore {
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         pushdowns: Pushdowns,
         query_settings: &QuerySettings,
-        dataset: &Option<QueryDataset>,
+        dataset: &QueryGraph,
     ) -> Result<SolutionMappings, SparqlError> {
         trace!("Processing join graph pattern");
         let left_context = context.extension_with(PathEntry::JoinLeftSide);

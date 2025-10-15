@@ -38,6 +38,7 @@ use std::time::Instant;
 use uuid::Uuid;
 
 use tracing::{instrument, trace};
+use representation::dataset::NamedGraph;
 
 #[derive(Clone, Hash, Eq, PartialEq, Debug)]
 pub enum StoredBaseRDFNodeType {
@@ -130,17 +131,17 @@ impl StoredBaseRDFNodeType {
 pub struct Triplestore {
     pub storage_folder: Option<PathBuf>,
     graph_triples_map:
-        HashMap<Option<NamedNode>, HashMap<NamedNode, HashMap<(StoredBaseRDFNodeType, StoredBaseRDFNodeType), Triples>>>,
+        HashMap<NamedGraph, HashMap<NamedNode, HashMap<(StoredBaseRDFNodeType, StoredBaseRDFNodeType), Triples>>>,
     graph_transient_triples_map:
-        HashMap<Option<NamedNode>, HashMap<NamedNode, HashMap<(StoredBaseRDFNodeType, StoredBaseRDFNodeType), Triples>>>,
+        HashMap<NamedGraph, HashMap<NamedNode, HashMap<(StoredBaseRDFNodeType, StoredBaseRDFNodeType), Triples>>>,
     parser_call: usize,
-    indexing: HashMap<Option<NamedNode>, IndexingOptions>,
-    fts_index: HashMap<Option<NamedNode>, FtsIndex>,
+    indexing: HashMap<NamedGraph, IndexingOptions>,
+    fts_index: HashMap<NamedGraph, FtsIndex>,
     pub global_cats: LockedCats,
 }
 
 impl Triplestore {
-    pub fn truncate(&mut self, graph: &Option<NamedNode>) {
+    pub fn truncate(&mut self, graph: &NamedGraph) {
         if self.storage_folder.is_some() {
             todo!("Should drop this folder.. ")
         }
@@ -244,7 +245,7 @@ impl Triplestore {
             None
         };
         let fts_index_map = if let Some(fts_index) = fts_index {
-            HashMap::from([(None, fts_index)])
+            HashMap::from([(NamedGraph::DefaultGraph, fts_index)])
         } else {
             HashMap::new()
         };
@@ -253,47 +254,54 @@ impl Triplestore {
             graph_transient_triples_map: HashMap::new(),
             storage_folder: pathbuf,
             parser_call: 0,
-            indexing: HashMap::from([(None, indexing)]),
+            indexing: HashMap::from([(NamedGraph::DefaultGraph, indexing)]),
             fts_index: fts_index_map,
             global_cats: LockedCats::new_empty(),
         })
     }
 
     #[instrument(skip_all)]
-    pub fn create_index(&mut self, indexing: IndexingOptions, graph: &Option<NamedNode>) -> Result<(), TriplestoreError> {
-        if self.graph_triples_map.contains_key(graph) {
-            if let Some(fts_path) = &indexing.fts_path {
-                // Only doing anything if the fts index does not already exist.
-                // If it exists, then it should be updated as well.
-                if !self.fts_index.contains_key(graph) {
-                    let index = FtsIndex::new(fts_path).map_err(TriplestoreError::FtsError)?;
-                    self.fts_index.insert(graph.clone(), index);
-                    for (predicate, map) in self.graph_triples_map.get(graph).unwrap() {
-                        for ((subject_type, object_type), ts) in map {
-                            for (lf, _) in ts.get_lazy_frames(&None, &None)? {
-                                self.fts_index.get_mut(graph)
-                                    .unwrap()
-                                    .add_literal_string(
-                                        &lf.collect().unwrap(),
-                                        predicate,
-                                        &subject_type.as_base_rdf_node_type(),
-                                        &subject_type
-                                            .as_base_rdf_node_type()
-                                            .default_stored_cat_state(),
-                                        &object_type.as_base_rdf_node_type(),
-                                        &object_type
-                                            .as_base_rdf_node_type()
-                                            .default_stored_cat_state(),
-                                        self.global_cats.clone(),
-                                    )
-                                    .map_err(TriplestoreError::FtsError)?;
+    pub fn create_index(&mut self, indexing: IndexingOptions, graph: Option<&NamedGraph>) -> Result<(), TriplestoreError> {
+        let graphs = if let Some(graph) = graph {
+            vec![graph.clone()]
+        } else {
+            self.graph_triples_map.keys().cloned().collect()
+        };
+        for graph in &graphs {
+            if self.graph_triples_map.contains_key(graph) {
+                if let Some(fts_path) = &indexing.fts_path {
+                    // Only doing anything if the fts index does not already exist.
+                    // If it exists, then it should be updated as well.
+                    if !self.fts_index.contains_key(graph) {
+                        let index = FtsIndex::new(fts_path).map_err(TriplestoreError::FtsError)?;
+                        self.fts_index.insert(graph.clone(), index);
+                        for (predicate, map) in self.graph_triples_map.get(graph).unwrap() {
+                            for ((subject_type, object_type), ts) in map {
+                                for (lf, _) in ts.get_lazy_frames(&None, &None)? {
+                                    self.fts_index.get_mut(graph)
+                                        .unwrap()
+                                        .add_literal_string(
+                                            &lf.collect().unwrap(),
+                                            predicate,
+                                            &subject_type.as_base_rdf_node_type(),
+                                            &subject_type
+                                                .as_base_rdf_node_type()
+                                                .default_stored_cat_state(),
+                                            &object_type.as_base_rdf_node_type(),
+                                            &object_type
+                                                .as_base_rdf_node_type()
+                                                .default_stored_cat_state(),
+                                            self.global_cats.clone(),
+                                        )
+                                        .map_err(TriplestoreError::FtsError)?;
+                                }
                             }
                         }
                     }
                 }
             }
+            self.indexing.insert(graph.clone(), indexing.clone());
         }
-        self.indexing.insert(graph.clone(), indexing);
         Ok(())
     }
 
@@ -302,7 +310,7 @@ impl Triplestore {
         &mut self,
         ts: Vec<TriplesToAdd>,
         transient: bool,
-        graph: &Option<NamedNode>,
+        graph: &NamedGraph,
     ) -> Result<Vec<NewTriples>, TriplestoreError> {
         let prepare_triples_now = Instant::now();
         let dfs_to_add = prepare_add_triples_par(ts, self.global_cats.clone());
@@ -324,7 +332,7 @@ impl Triplestore {
         &mut self,
         local_cats: Vec<CatTriples>,
         transient: bool,
-        graph: &Option<NamedNode>,
+        graph: &NamedGraph,
     ) -> Result<Vec<NewTriples>, TriplestoreError> {
         let global_cats = self.globalize(local_cats);
         self.add_global_cat_triples(global_cats, transient, graph)
@@ -335,7 +343,7 @@ impl Triplestore {
         &mut self,
         global_cat_triples: Vec<CatTriples>,
         transient: bool,
-        graph: &Option<NamedNode>,
+        graph: &NamedGraph,
     ) -> Result<Vec<NewTriples>, TriplestoreError> {
         self.add_graph_if_not_exists(graph, transient);
         let use_map = if transient {
@@ -483,7 +491,7 @@ impl Triplestore {
         Ok(out_new_triples)
     }
 
-    fn add_graph_if_not_exists(&mut self, graph: &Option<NamedNode>, transient:bool) {
+    fn add_graph_if_not_exists(&mut self, graph: &NamedGraph, transient:bool) {
         if transient {
             if !self.graph_transient_triples_map.contains_key(graph) {
                 self.graph_transient_triples_map.insert(graph.clone(), HashMap::new());
@@ -492,6 +500,9 @@ impl Triplestore {
             if !self.graph_triples_map.contains_key(graph) {
                self.graph_triples_map.insert(graph.clone(), HashMap::new());
             }
+        }
+        if !self.indexing.contains_key(graph) {
+            self.indexing.insert(graph.clone(), IndexingOptions::default());
         }
     }
 }
