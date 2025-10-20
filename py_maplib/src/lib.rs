@@ -61,10 +61,10 @@ use representation::solution_mapping::EagerSolutionMappings;
 use mimalloc::MiMalloc;
 use representation::cats::{new_solution_mapping_cats, set_global_cats_as_local, LockedCats};
 use representation::dataset::NamedGraph;
+use representation::formatting::format_native_columns;
 use representation::polars_to_rdf::XSD_DATETIME_WITH_TZ_FORMAT;
 use representation::rdf_to_polars::rdf_named_node_to_polars_literal_value;
 use representation::{BaseRDFNodeType, OBJECT_COL_NAME, PREDICATE_COL_NAME, SUBJECT_COL_NAME};
-use representation::formatting::format_native_columns;
 use templates::python::{a, py_triple, PyArgument, PyInstance, PyParameter, PyTemplate, PyXSD};
 use templates::MappingColumnType;
 use triplestore::{IndexingOptions, NewTriples, Triplestore};
@@ -1059,8 +1059,21 @@ fn validate_mutex(
             .map_err(|x| PyMaplibError::MaplibError(MaplibError::SparqlError(x)))?;
         if let QueryResult::Construct(sms) = res {
             let mut new_sms = Vec::with_capacity(sms.len());
-            for (EagerSolutionMappings{mut mappings, mut rdf_node_types}, pred) in sms {
-                mappings = format_native_columns(mappings.lazy(), &mut rdf_node_types, inner.triplestore.global_cats.clone()).collect().unwrap();
+            for (
+                EagerSolutionMappings {
+                    mut mappings,
+                    mut rdf_node_types,
+                },
+                pred,
+            ) in sms
+            {
+                mappings = format_native_columns(
+                    mappings.lazy(),
+                    &mut rdf_node_types,
+                    inner.triplestore.global_cats.clone(),
+                )
+                .collect()
+                .unwrap();
                 new_sms.push((EagerSolutionMappings::new(mappings, rdf_node_types), pred));
             }
             ts.insert_construct_result(new_sms, false, &NamedGraph::DefaultGraph)

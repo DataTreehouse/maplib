@@ -1,9 +1,9 @@
 use crate::ast::DatalogRuleset;
 use oxrdf::NamedNode;
+use representation::dataset::NamedGraph;
 use representation::solution_mapping::EagerSolutionMappings;
 use std::collections::HashMap;
 use thiserror::*;
-use representation::dataset::NamedGraph;
 use triplestore::sparql::errors::SparqlError;
 use triplestore::Triplestore;
 

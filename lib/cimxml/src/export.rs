@@ -1,8 +1,8 @@
 use oxrdf::{Literal, NamedNode};
+use representation::dataset::NamedGraph;
 use std::collections::HashMap;
 use std::io::Write;
 use thiserror::Error;
-use representation::dataset::NamedGraph;
 use triplestore::Triplestore;
 
 #[derive(Error, Debug)]

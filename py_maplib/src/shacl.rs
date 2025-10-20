@@ -4,10 +4,10 @@ use maplib::errors::MaplibError;
 use pydf_io::to_python::df_to_py_df;
 use pyo3::{pyclass, pymethods, PyObject, PyResult, Python};
 use report_mapping::report_to_model;
+use representation::solution_mapping::EagerSolutionMappings;
 use shacl::ValidationReport as RustValidationReport;
 use std::collections::HashMap;
 use triplestore::Triplestore;
-use representation::solution_mapping::EagerSolutionMappings;
 
 #[derive(Clone)]
 #[pyclass(name = "ValidationReport")]
