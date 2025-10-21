@@ -7,7 +7,7 @@ __all__ = [
     "Model",
     "a",
     "Triple",
-    "SolutionModels",
+    "SolutionMappings",
     "IndexingOptions",
     "ValidationReport",
     "Instance",
