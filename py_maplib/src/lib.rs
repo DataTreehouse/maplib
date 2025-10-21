@@ -670,7 +670,7 @@ impl PyModel {
         Ok(out)
     }
 
-    #[pyo3(signature = (rulesets, graph=None, include_datatypes=None, native_dataframe=None, max_iterations=None))]
+    #[pyo3(signature = (rulesets, graph=None, include_datatypes=None, native_dataframe=None, max_iterations=100_000, max_results=10_000_000))]
     #[instrument(skip_all)]
     fn infer(
         &self,
@@ -680,6 +680,7 @@ impl PyModel {
         include_datatypes: Option<bool>,
         native_dataframe: Option<bool>,
         max_iterations: Option<usize>,
+        max_results: Option<usize>,
     ) -> PyResult<Option<HashMap<String, PyObject>>> {
         let rulesets = if let Ok(s) = rulesets.extract::<String>(py) {
             vec![s]
@@ -703,7 +704,7 @@ impl PyModel {
 
                 let cats = inner.triplestore.global_cats.clone();
 
-                let res = infer_mutex(&mut inner, rulesets, max_iterations, named_graph.as_ref())?;
+                let res = infer_mutex(&mut inner, rulesets, max_iterations, max_results, named_graph.as_ref())?;
 
                 Ok((res, cats))
             },
@@ -1393,10 +1394,11 @@ fn infer_mutex(
     inner: &mut MutexGuard<InnerModel>,
     rulesets: Vec<String>,
     max_iterations: Option<usize>,
+    max_results: Option<usize>,
     graph: Option<&NamedGraph>,
 ) -> Result<Option<HashMap<NamedNode, EagerSolutionMappings>>, PyMaplibError> {
     inner
-        .infer(rulesets, max_iterations, graph)
+        .infer(rulesets, max_iterations, max_results, graph)
         .map_err(PyMaplibError::MaplibError)
 }
 

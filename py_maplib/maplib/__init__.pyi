@@ -808,6 +808,8 @@ class Model:
         graph: str = None,
         include_datatypes: bool = False,
         native_dataframe: bool = False,
+        max_iterations: int = 100_000,
+        max_results: int = 10_000_000,
     ) -> Optional[Dict[str, DataFrame]]:
         """
         Run the inference rules that are provided
@@ -815,6 +817,8 @@ class Model:
         :param graph: Apply the ruleset to this graph, defaults to the default graph, or the graph specified in the rules.
         :param native_dataframe: Return columns with maplib-native formatting. Useful for round-trips.
         :param include_datatypes: Datatypes are not returned by default, set to true to return a dict with the solution mappings and the datatypes.
+        :param max_iterations: Maximum number of iterations.
+        :param max_results: Maximum number of results.
         :return: The inferred N-Tuples.
         """
 

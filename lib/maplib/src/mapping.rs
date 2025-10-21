@@ -390,6 +390,7 @@ impl Model {
         &mut self,
         rulesets: Vec<String>,
         max_iterations: Option<usize>,
+        max_results: Option<usize>,
         graph: Option<&NamedGraph>,
     ) -> Result<Option<HashMap<NamedNode, EagerSolutionMappings>>, MaplibError> {
         if rulesets.is_empty() {
@@ -411,6 +412,7 @@ impl Model {
             graph,
             ruleset.as_ref().unwrap(),
             max_iterations,
+            max_results,
         );
         Ok(res.map_err(|x| MaplibError::DatalogError(x))?)
     }
