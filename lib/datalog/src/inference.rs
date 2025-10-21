@@ -18,6 +18,7 @@ pub fn infer(
     _graph: Option<&NamedGraph>,
     _ruleset: &DatalogRuleset,
     _max_iterations: Option<usize>,
+    _max_results: Option<usize>,
 ) -> Result<Option<HashMap<NamedNode, EagerSolutionMappings>>, DatalogError> {
     unimplemented!("Contact data treehouse to try")
 }
