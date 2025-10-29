@@ -114,7 +114,7 @@ impl Display for Parameter {
     }
 }
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Eq, PartialOrd, Ord)]
 pub enum PType {
     None,
     Basic(NamedNode),

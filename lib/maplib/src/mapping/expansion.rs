@@ -67,9 +67,9 @@ impl Model {
             self.template_dataset.infer_types()?;
         }
         let now = Instant::now();
+
         let target_template = self.resolve_template(template)?.clone();
         let target_template_name = target_template.signature.template_name.as_str().to_string();
-
         let MapOptions {
             graph,
             validate_iris,
@@ -123,6 +123,12 @@ impl Model {
         dynamic_columns: HashMap<String, MappingColumnType>,
         static_columns: HashMap<String, StaticColumn>,
     ) -> Result<(Vec<OTTRTripleInstance>, usize), MappingError> {
+        if layer > 100 {
+            return Err(MappingError::MaximumRecursionLimit(
+                layer,
+                calling_signature.to_string(),
+            ));
+        }
         if let Some(template) = self.template_dataset.get(name) {
             if template.signature.template_name.as_str() == OTTR_TRIPLE {
                 if let Some(df) = df {

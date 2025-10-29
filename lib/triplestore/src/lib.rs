@@ -306,6 +306,11 @@ impl Triplestore {
                                 }
                             }
                         }
+                        self.fts_index
+                            .get_mut(graph)
+                            .unwrap()
+                            .commit(true)
+                            .map_err(TriplestoreError::FtsError)?;
                     }
                 }
             }
@@ -492,6 +497,7 @@ impl Triplestore {
                             "Adding to fts index took {} seconds",
                             fts_now.elapsed().as_secs_f32()
                         );
+                        fts_index.commit(true).map_err(TriplestoreError::FtsError)?;
                     }
                 }
             }

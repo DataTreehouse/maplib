@@ -30,6 +30,11 @@ impl FtsIndex {
     ) -> Result<(), FtsError> {
         unimplemented!("Contact Data Treehouse to enable full text search")
     }
+
+    pub fn commit(&mut self, _drop_writer:bool) -> Result<(), FtsError> {
+        unimplemented!("Contact Data Treehouse to enable full text search")
+    }
+
     pub fn lookup_from_triple_patterns(
         &self,
         _patterns: &Vec<TriplePattern>,

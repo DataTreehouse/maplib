@@ -6,6 +6,7 @@ use crate::ast::{
 use crate::constants::{OTTR_IRI, OTTR_TRIPLE};
 use crate::document::document_from_file;
 use errors::TemplateError;
+use std::cmp::min;
 use tracing::warn;
 
 use crate::subtypes_ext::is_literal_subtype_ext;
@@ -148,22 +149,67 @@ impl TemplateDataset {
     }
 
     pub fn infer_types(&mut self) -> Result<(), TemplateError> {
-        let mut changed = true;
-        while changed {
-            let mut inner_changed = false;
-            for i in 0..self.templates.len() {
-                let (left, right) = self.templates.split_at_mut(i);
-                let (element, right) = right.split_at_mut(1);
-                inner_changed = inner_changed
-                    || infer_template_types(
-                        element.first_mut().unwrap(),
-                        left.iter().chain(right.iter()).collect(),
-                    )?;
-            }
-            if !inner_changed {
-                changed = false;
+        let template_names: Vec<_> = self
+            .templates
+            .iter()
+            .map(|x| x.signature.template_name.as_str().to_string())
+            .collect();
+        let mut template_map: HashMap<String, Template> = self
+            .templates
+            .drain(..)
+            .map(|x| (x.signature.template_name.as_str().to_string(), x))
+            .collect();
+        let mut affects_map: HashMap<String, Vec<String>> = HashMap::new();
+        for t in template_map.values() {
+            for i in &t.pattern_list {
+                if let Some(v) = affects_map.get_mut(i.template_name.as_str()) {
+                    v.push(t.signature.template_name.as_str().to_string());
+                } else {
+                    affects_map.insert(
+                        i.template_name.as_str().to_string(),
+                        vec![t.signature.template_name.as_str().to_string()],
+                    );
+                }
             }
         }
+
+        let mut changed = HashSet::new();
+
+        for n in &template_names {
+            let (template_name, mut template) = template_map.remove_entry(n).unwrap();
+            let template_changed = infer_template_types(&mut template, &template_map)?;
+            if template_changed {
+                changed.insert(template_name.clone());
+            }
+            template_map.insert(template_name, template);
+        }
+        let mut iters = 0usize;
+        while !changed.is_empty() {
+            let mut new_changed = HashSet::new();
+            for c in &changed {
+                let (template_name, mut template) = template_map.remove_entry(c).unwrap();
+                let template_changed = infer_template_types(&mut template, &template_map)?;
+                if template_changed {
+                    if let Some(affected) = affects_map.get(&template_name) {
+                        for a in affected {
+                            new_changed.insert(a.clone());
+                        }
+                    }
+                }
+                template_map.insert(template_name, template);
+            }
+            changed = new_changed;
+            if iters > 10000 {
+                warn!(
+                    "Reach maximum inference iterations (# templates: {})",
+                    self.templates.len()
+                );
+                changed = HashSet::new();
+            }
+            iters += 1;
+        }
+
+        self.templates = template_map.into_values().collect();
         self.inferred_types = true;
         Ok(())
     }
@@ -184,15 +230,12 @@ impl TemplateDataset {
 
 fn infer_template_types(
     template: &mut Template,
-    templates: Vec<&Template>,
+    templates: &HashMap<String, Template>,
 ) -> Result<bool, TemplateError> {
     let mut changed = false;
     for i in &mut template.pattern_list {
-        let other = if let Some(t) = templates
-            .iter()
-            .find(|t| t.signature.template_name == i.template_name)
-        {
-            (*t).clone()
+        let other = if let Some(t) = templates.get(i.template_name.as_str()) {
+            t
         } else {
             return Err(TemplateError::TemplateNotFound(
                 template.signature.template_name.to_string().clone(),
@@ -291,14 +334,14 @@ fn lub(
     right: &PType,
 ) -> Result<PType, TemplateError> {
     if left == right || left.is_iri() && right.is_iri() {
-        return Ok(left.clone());
+        return Ok(min(left, right).clone());
     } else if let (PType::Basic(left_basic), PType::Basic(right_basic)) = (left, right) {
         if left_basic.as_ref() == rdfs::RESOURCE
             || right_basic.as_ref() == rdfs::RESOURCE
             || is_literal_subtype_ext(left_basic.as_ref(), right_basic.as_ref())
             || is_literal_subtype_ext(right_basic.as_ref(), left_basic.as_ref())
         {
-            return Ok(left.clone());
+            return Ok(min(left, right).clone());
         } else {
             // Returns error
         }
