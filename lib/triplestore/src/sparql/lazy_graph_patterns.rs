@@ -48,26 +48,31 @@ impl Triplestore {
         );
         let sm = match graph_pattern {
             GraphPattern::Bgp { patterns } => {
-                let patterns =
-                    if let Some(fts_index) = self.fts_index.get(&NamedGraph::DefaultGraph) {
-                        let (patterns, fts_solution_mappings) = fts_index
-                            .lookup_from_triple_patterns(patterns, self.global_cats.clone())?;
-                        if let Some(fts_solution_mappings) = fts_solution_mappings {
-                            solution_mappings = if let Some(solution_mappings) = solution_mappings {
-                                Some(join(
-                                    solution_mappings,
-                                    fts_solution_mappings,
-                                    JoinType::Inner,
-                                    self.global_cats.clone(),
-                                )?)
-                            } else {
-                                Some(fts_solution_mappings)
-                            };
-                        }
-                        patterns
-                    } else {
-                        patterns.clone()
-                    };
+                let patterns = if let Some(fts_index) =
+                    self.fts_index.get(&NamedGraph::DefaultGraph)
+                {
+                    let (patterns, fts_solution_mappings) = fts_index.lookup_from_triple_patterns(
+                        patterns,
+                        self.global_cats.clone(),
+                        query_settings.max_rows,
+                    )?;
+                    if let Some(fts_solution_mappings) = fts_solution_mappings {
+                        solution_mappings = if let Some(solution_mappings) = solution_mappings {
+                            Some(join(
+                                solution_mappings,
+                                fts_solution_mappings,
+                                JoinType::Inner,
+                                self.global_cats.clone(),
+                                query_settings.max_rows,
+                            )?)
+                        } else {
+                            Some(fts_solution_mappings)
+                        };
+                    }
+                    patterns
+                } else {
+                    patterns.clone()
+                };
 
                 pushdowns.add_patterns_pushdowns(&patterns);
                 let mut updated_solution_mappings = solution_mappings;
@@ -186,7 +191,14 @@ impl Triplestore {
             GraphPattern::Values {
                 variables,
                 bindings,
-            } => self.lazy_values(solution_mappings, variables, bindings, context, pushdowns),
+            } => self.lazy_values(
+                solution_mappings,
+                variables,
+                bindings,
+                context,
+                pushdowns,
+                query_settings,
+            ),
             GraphPattern::OrderBy { inner, expression } => self.lazy_order_by(
                 inner,
                 expression,
@@ -280,6 +292,7 @@ impl Triplestore {
                 context,
                 parameters,
                 pushdowns,
+                query_settings,
             ),
         };
         trace!(

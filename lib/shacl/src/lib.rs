@@ -62,6 +62,7 @@ pub fn validate(
     _streaming: bool,
     _max_shape_constraint_results: Option<usize>,
     _include_transient: bool,
+    _max_rows: Option<usize>,
     _only_shapes: Option<Vec<NamedNode>>,
     _deactivate_shapes: Vec<NamedNode>,
     _dry_run: bool,

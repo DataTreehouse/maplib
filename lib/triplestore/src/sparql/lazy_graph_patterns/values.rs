@@ -1,5 +1,6 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
+use crate::sparql::QuerySettings;
 use oxrdf::Variable;
 use polars::prelude::JoinType;
 use query_processing::graph_patterns::{join, values_pattern};
@@ -16,6 +17,7 @@ impl Triplestore {
         bindings: &[Vec<Option<GroundTerm>>],
         _context: &Context,
         _pushdowns: Pushdowns,
+        query_settings: &QuerySettings,
     ) -> Result<SolutionMappings, SparqlError> {
         let sm = values_pattern(variables, bindings);
         let (sm, _) = {
@@ -28,6 +30,7 @@ impl Triplestore {
                 sm.as_lazy(),
                 JoinType::Inner,
                 self.global_cats.clone(),
+                query_settings.max_rows,
             )?;
             Ok(mappings)
         } else {

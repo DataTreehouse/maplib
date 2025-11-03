@@ -77,6 +77,9 @@ static GLOBAL: Jemalloc = Jemalloc;
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
 
+const DEFAULT_STREAMING: bool = false;
+const DEFAULT_INCLUDE_TRANSIENT: bool = true;
+
 #[pyclass(name = "Model", frozen)]
 pub struct PyModel {
     inner: Mutex<InnerModel>,
@@ -250,7 +253,7 @@ impl PyModel {
 
     #[allow(clippy::too_many_arguments)]
     #[pyo3(signature = (query, parameters=None, include_datatypes=None, native_dataframe=None,
-    graph=None, streaming=None, return_json=None, include_transient=None))]
+    graph=None, streaming=None, return_json=None, include_transient=None, max_rows=None))]
     #[instrument(skip_all)]
     fn query(
         &self,
@@ -263,6 +266,7 @@ impl PyModel {
         streaming: Option<bool>,
         return_json: Option<bool>,
         include_transient: Option<bool>,
+        max_rows: Option<usize>,
     ) -> PyResult<PyObject> {
         let mapped_parameters = map_parameters(parameters)?;
         let graph = parse_optional_named_node(graph)?;
@@ -281,6 +285,7 @@ impl PyModel {
                 graph,
                 streaming,
                 include_transient,
+                max_rows,
             )?;
             Ok((res, cats))
         })?;
@@ -296,7 +301,7 @@ impl PyModel {
 
     #[allow(clippy::too_many_arguments)]
     #[pyo3(signature = (update, parameters=None, graph=None, streaming=None,
-        include_transient=None))]
+        include_transient=None, max_rows=None))]
     #[instrument(skip_all)]
     fn update(
         &self,
@@ -306,6 +311,7 @@ impl PyModel {
         graph: Option<String>,
         streaming: Option<bool>,
         include_transient: Option<bool>,
+        max_rows: Option<usize>,
     ) -> PyResult<()> {
         let mapped_parameters = map_parameters(parameters)?;
         py.allow_threads(|| {
@@ -317,6 +323,7 @@ impl PyModel {
                 graph,
                 streaming,
                 include_transient,
+                max_rows,
             )
         })
     }
@@ -347,6 +354,7 @@ impl PyModel {
         only_shapes=None,
         deactivate_shapes=None,
         dry_run=None,
+        max_rows=100_000_000,
     ))]
     #[instrument(skip_all)]
     fn validate(
@@ -362,6 +370,7 @@ impl PyModel {
         only_shapes: Option<Vec<String>>,
         deactivate_shapes: Option<Vec<String>>,
         dry_run: Option<bool>,
+        max_rows: Option<usize>,
     ) -> PyResult<PyValidationReport> {
         py.allow_threads(move || {
             let mut inner = self.inner.lock().unwrap();
@@ -377,13 +386,14 @@ impl PyModel {
                 only_shapes,
                 deactivate_shapes,
                 dry_run,
+                max_rows,
             )
         })
     }
 
     #[pyo3(signature = (query, parameters=None, include_datatypes=None, native_dataframe=None,
                                    transient=None, streaming=None, source_graph=None, target_graph=None,
-                                   include_transient=None))]
+                                   include_transient=None, max_rows=None))]
     #[instrument(skip_all)]
     fn insert(
         &self,
@@ -397,6 +407,7 @@ impl PyModel {
         source_graph: Option<String>,
         target_graph: Option<String>,
         include_transient: Option<bool>,
+        max_rows: Option<usize>,
     ) -> PyResult<HashMap<String, PyObject>> {
         let mapped_parameters = map_parameters(parameters)?;
         let source_graph = parse_optional_named_node(source_graph)?;
@@ -420,6 +431,7 @@ impl PyModel {
                     source_graph,
                     target_graph,
                     include_transient,
+                    max_rows,
                 )?;
 
                 Ok((new_triples, cats))
@@ -435,7 +447,7 @@ impl PyModel {
 
     #[pyo3(signature = (query, parameters=None, include_datatypes=None, native_dataframe=None,
                             transient=None, streaming=None, source_graph=None, target_graph=None,
-                            include_transient=None))]
+                            include_transient=None, max_rows=None))]
     #[instrument(skip_all)]
     fn insert_sprout(
         &self,
@@ -449,6 +461,7 @@ impl PyModel {
         source_graph: Option<String>,
         target_graph: Option<String>,
         include_transient: Option<bool>,
+        max_rows: Option<usize>,
     ) -> PyResult<HashMap<String, PyObject>> {
         let mapped_parameters = map_parameters(parameters)?;
         let source_graph = parse_optional_named_node(source_graph)?;
@@ -471,6 +484,7 @@ impl PyModel {
                 source_graph,
                 target_graph,
                 include_transient,
+                max_rows,
             )?;
 
             Ok((new_triples, cats))
@@ -670,7 +684,7 @@ impl PyModel {
         Ok(out)
     }
 
-    #[pyo3(signature = (rulesets, graph=None, include_datatypes=None, native_dataframe=None, max_iterations=100_000, max_results=10_000_000))]
+    #[pyo3(signature = (rulesets, graph=None, include_datatypes=None, native_dataframe=None, max_iterations=100_000, max_results=10_000_000, include_transient=None, max_rows=100_000_000))]
     #[instrument(skip_all)]
     fn infer(
         &self,
@@ -681,6 +695,8 @@ impl PyModel {
         native_dataframe: Option<bool>,
         max_iterations: Option<usize>,
         max_results: Option<usize>,
+        include_transient: Option<bool>,
+        max_rows: Option<usize>,
     ) -> PyResult<Option<HashMap<String, PyObject>>> {
         let rulesets = if let Ok(s) = rulesets.extract::<String>(py) {
             vec![s]
@@ -704,7 +720,13 @@ impl PyModel {
 
                 let cats = inner.triplestore.global_cats.clone();
 
-                let res = infer_mutex(&mut inner, rulesets, max_iterations, max_results, named_graph.as_ref())?;
+                let res = infer_mutex(&mut inner,
+                                      rulesets,
+                                      max_iterations,
+                                      max_results,
+                                      named_graph.as_ref(),
+                                      include_transient.unwrap_or(DEFAULT_INCLUDE_TRANSIENT),
+                                      Some(max_rows.unwrap_or(DEFAULT_MAX_INFERENCE_ROWS)))?;
 
                 Ok((res, cats))
             },
@@ -824,7 +846,9 @@ fn map_mutex(
     let template = match template {
         TemplateType::TemplateIRI(i) => i.into_inner().to_string(),
         TemplateType::TemplateString(s) => {
-            if s.len() < 100 {
+            if let Ok(nn) = NamedNode::new(&s) {
+                nn.as_str().to_string()
+            } else if s.len() < 200 {
                 s
             } else {
                 let s = inner
@@ -923,14 +947,16 @@ fn query_mutex(
     graph: Option<NamedGraph>,
     streaming: Option<bool>,
     include_transient: Option<bool>,
+    max_rows: Option<usize>,
 ) -> PyResult<QueryResult> {
     let res = inner
         .query(
             &query,
             &mapped_parameters,
             graph.as_ref(),
-            streaming.unwrap_or(false),
-            include_transient.unwrap_or(true),
+            streaming.unwrap_or(DEFAULT_STREAMING),
+            include_transient.unwrap_or(DEFAULT_INCLUDE_TRANSIENT),
+            max_rows,
         )
         .map_err(PyMaplibError::from)?;
     Ok(res)
@@ -943,6 +969,7 @@ fn update_mutex(
     graph: Option<String>,
     streaming: Option<bool>,
     include_transient: Option<bool>,
+    max_rows: Option<usize>,
 ) -> PyResult<()> {
     let graph = parse_optional_named_node(graph)?;
     let named_graph = if let Some(graph) = graph {
@@ -955,8 +982,9 @@ fn update_mutex(
             &update,
             &mapped_parameters,
             named_graph.as_ref(),
-            streaming.unwrap_or(false),
-            include_transient.unwrap_or(true),
+            streaming.unwrap_or(DEFAULT_STREAMING),
+            include_transient.unwrap_or(DEFAULT_INCLUDE_TRANSIENT),
+            max_rows,
         )
         .map_err(PyMaplibError::from)?;
     Ok(())
@@ -998,6 +1026,7 @@ fn validate_mutex(
     only_shapes: Option<Vec<String>>,
     deactivate_shapes: Option<Vec<String>>,
     dry_run: Option<bool>,
+    max_rows: Option<usize>,
 ) -> PyResult<PyValidationReport> {
     let data_graph = parse_optional_named_node(data_graph)?;
     let data_graph = NamedGraph::from_maybe_named_node(data_graph.as_ref());
@@ -1039,6 +1068,7 @@ fn validate_mutex(
             streaming.unwrap_or(false),
             max_shape_constraint_results,
             false, //TODO: Needs more work before can be exposed
+            max_rows,
             only_shapes,
             deactivate_shapes,
             dry_run.unwrap_or(false),
@@ -1055,6 +1085,7 @@ fn validate_mutex(
                 &None,
                 false,
                 false,
+                None,
                 Some(&shape_graph),
             )
             .map_err(|x| PyMaplibError::MaplibError(MaplibError::SparqlError(x)))?;
@@ -1099,14 +1130,16 @@ fn insert_mutex(
     source_graph: NamedGraph,
     target_graph: NamedGraph,
     include_transient: Option<bool>,
+    max_rows: Option<usize>,
 ) -> PyResult<Vec<NewTriples>> {
     let res = inner
         .query(
             &query,
             &mapped_parameters,
             Some(&source_graph),
-            streaming.unwrap_or(false),
-            include_transient.unwrap_or(true),
+            streaming.unwrap_or(DEFAULT_STREAMING),
+            include_transient.unwrap_or(DEFAULT_INCLUDE_TRANSIENT),
+            max_rows,
         )
         .map_err(PyMaplibError::from)?;
     let new_triples = if let QueryResult::Construct(dfs_and_dts) = res {
@@ -1133,6 +1166,7 @@ fn insert_sprout_mutex(
     source_graph: NamedGraph,
     target_graph: NamedGraph,
     include_transient: Option<bool>,
+    max_rows: Option<usize>,
 ) -> PyResult<Vec<NewTriples>> {
     if sprout.is_none() {
         create_sprout_mutex(inner, sprout)?;
@@ -1142,8 +1176,9 @@ fn insert_sprout_mutex(
             &query,
             &mapped_parameters,
             Some(&source_graph),
-            streaming.unwrap_or(false),
-            include_transient.unwrap_or(true),
+            streaming.unwrap_or(DEFAULT_STREAMING),
+            include_transient.unwrap_or(DEFAULT_INCLUDE_TRANSIENT),
+            max_rows,
         )
         .map_err(PyMaplibError::from)?;
 
@@ -1396,9 +1431,18 @@ fn infer_mutex(
     max_iterations: Option<usize>,
     max_results: Option<usize>,
     graph: Option<&NamedGraph>,
+    include_transient: bool,
+    max_rows: Option<usize>,
 ) -> Result<Option<HashMap<NamedNode, EagerSolutionMappings>>, PyMaplibError> {
     inner
-        .infer(rulesets, max_iterations, max_results, graph)
+        .infer(
+            rulesets,
+            max_iterations,
+            max_results,
+            graph,
+            include_transient,
+            max_rows,
+        )
         .map_err(PyMaplibError::MaplibError)
 }
 

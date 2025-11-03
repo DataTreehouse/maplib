@@ -203,6 +203,7 @@ impl Triplestore {
                     new_solution_mappings,
                     JoinType::Inner,
                     self.global_cats.clone(),
+                    query_settings.max_rows,
                 )?);
             }
         } else {

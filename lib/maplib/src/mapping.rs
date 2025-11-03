@@ -219,9 +219,17 @@ impl Model {
         graph: Option<&NamedGraph>,
         streaming: bool,
         include_transient: bool,
+        max_rows: Option<usize>,
     ) -> Result<QueryResult, MaplibError> {
         self.triplestore
-            .query(query, parameters, streaming, include_transient, graph)
+            .query(
+                query,
+                parameters,
+                streaming,
+                include_transient,
+                max_rows,
+                graph,
+            )
             .map_err(|x| x.into())
     }
 
@@ -232,9 +240,17 @@ impl Model {
         graph: Option<&NamedGraph>,
         streaming: bool,
         include_transient: bool,
+        max_rows: Option<usize>,
     ) -> Result<(), MaplibError> {
         self.triplestore
-            .update(update, parameters, streaming, include_transient, graph)
+            .update(
+                update,
+                parameters,
+                streaming,
+                include_transient,
+                max_rows,
+                graph,
+            )
             .map_err(|x| x.into())
     }
 
@@ -325,6 +341,7 @@ impl Model {
         streaming: bool,
         max_shape_constraint_results: Option<usize>,
         include_transient: bool,
+        max_rows: Option<usize>,
         only_shapes: Option<Vec<NamedNode>>,
         deactivate_shapes: Vec<NamedNode>,
         dry_run: bool,
@@ -338,6 +355,7 @@ impl Model {
             streaming,
             max_shape_constraint_results,
             include_transient,
+            max_rows,
             only_shapes,
             deactivate_shapes,
             dry_run,
@@ -392,6 +410,8 @@ impl Model {
         max_iterations: Option<usize>,
         max_results: Option<usize>,
         graph: Option<&NamedGraph>,
+        include_transient: bool,
+        max_rows: Option<usize>,
     ) -> Result<Option<HashMap<NamedNode, EagerSolutionMappings>>, MaplibError> {
         if rulesets.is_empty() {
             return Err(MaplibError::MissingDatalogRuleset);
@@ -413,6 +433,8 @@ impl Model {
             ruleset.as_ref().unwrap(),
             max_iterations,
             max_results,
+            include_transient,
+            max_rows,
         );
         Ok(res.map_err(|x| MaplibError::DatalogError(x))?)
     }

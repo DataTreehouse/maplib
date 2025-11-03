@@ -3,6 +3,7 @@ use crate::sparql::errors::SparqlError;
 use oxrdf::Variable;
 use polars::prelude::JoinType;
 
+use crate::sparql::QuerySettings;
 use query_processing::graph_patterns::join;
 use query_processing::pushdowns::Pushdowns;
 use representation::query_context::Context;
@@ -18,6 +19,7 @@ impl Triplestore {
         _context: &Context,
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         _pushdowns: Pushdowns,
+        query_settings: &QuerySettings,
     ) -> Result<SolutionMappings, SparqlError> {
         //Todo: apply pushdowns.
         let sm = if let Some(parameters) = parameters {
@@ -52,6 +54,7 @@ impl Triplestore {
                 sm.as_lazy(),
                 JoinType::Inner,
                 self.global_cats.clone(),
+                query_settings.max_rows,
             )?;
             Ok(mappings)
         } else {

@@ -1,5 +1,5 @@
 use crate::sparql::errors::SparqlError;
-use crate::sparql::QueryResult;
+use crate::sparql::{QueryResult, QuerySettings};
 use crate::Triplestore;
 use oxrdf::{Term, Variable};
 use polars::frame::UniqueKeepStrategy;
@@ -15,9 +15,16 @@ pub fn query_select(
     graph: Option<&NamedGraph>,
     deduplicate: bool,
     streaming: bool,
-    include_transient: bool,
+    query_settings: &QuerySettings,
 ) -> Result<QuerySolutions, SparqlError> {
-    let qres = triplestore.query(query, &None, streaming, include_transient, graph)?;
+    let qres = triplestore.query(
+        query,
+        &None,
+        streaming,
+        query_settings.include_transient,
+        query_settings.max_rows,
+        graph,
+    )?;
 
     let sm = if let QueryResult::Select(EagerSolutionMappings {
         mut mappings,

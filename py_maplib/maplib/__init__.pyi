@@ -436,6 +436,7 @@ class Model:
         streaming: bool = False,
         return_json: bool = False,
         include_transient: bool = True,
+        max_rows: int = None,
     ) -> Union[
         DataFrame, SolutionMappings, List[Union[DataFrame, SolutionMappings, str]], None
     ]:
@@ -459,6 +460,7 @@ class Model:
         :param streaming: Use Polars streaming
         :param return_json: Return JSON string.
         :param include_transient: Include transient triples when querying.
+        :param max_rows: Maximum estimated rows in result, helps avoid out-of-memory errors.
         :return: DataFrame (Select), list of DataFrames (Construct) containing results, or None for Insert-queries
 
         """
@@ -469,6 +471,7 @@ class Model:
             parameters: ParametersType = None,
             streaming: bool = False,
             include_transient: bool = True,
+            max_rows: int = None,
     ):
         """
         Insert the results of a Construct query in the graph.
@@ -485,6 +488,7 @@ class Model:
         :param parameters: PVALUES Parameters, a DataFrame containing the value bindings in the custom PVALUES construction.
         :param streaming: Use Polars streaming
         :param include_transient: Include transient triples when querying (but see "transient" above).
+        :param max_rows: Maximum estimated rows in result, helps avoid out-of-memory errors.
         :return: None
         """
 
@@ -499,6 +503,7 @@ class Model:
         source_graph: str = None,
         target_graph: str = None,
         include_transient: bool = True,
+        max_rows: int = None,
     ):
         """
         Insert the results of a Construct query in the graph.
@@ -526,6 +531,7 @@ class Model:
         :param target_graph: The IRI of the target graph to insert into.
         :param streaming: Use Polars streaming
         :param include_transient: Include transient triples when querying (but see "transient" above).
+        :param max_rows: Maximum estimated rows in result, helps avoid out-of-memory errors.
         :return: None
         """
 
@@ -541,6 +547,7 @@ class Model:
         only_shapes: List[str] = None,
         deactivate_shapes: List[str] = None,
         dry_run: bool = False,
+        max_rows: int = 100_000_000,
     ) -> ValidationReport:
         """
         Validate the contained knowledge graph using SHACL
@@ -557,6 +564,7 @@ class Model:
         :param only_shapes: Validate only these shapes, None means all shapes are validated (must be IRI, cannot be used with deactivate_shapes).
         :param deactivate_shapes: Disable validation of these shapes (must be IRI, cannot be used with deactivate_shapes).
         :param dry_run: Only find targets of shapes, but do not validate them.
+        :param max_rows: Maximum estimated rows in underlying SPARQL results, helps avoid out-of-memory errors.
         :return: Validation report containing a report (report.df) and whether the graph conforms (report.conforms)
         """
 
@@ -731,6 +739,7 @@ class Model:
         source_graph: str = None,
         target_graph: str = None,
         include_transient: bool = True,
+        max_rows:int = None,
     ):
         """
         Insert the results of a Construct query in a sprouted graph, which is created if no sprout is active.
@@ -763,6 +772,7 @@ class Model:
         :param target_graph: The IRI of the target graph to insert into.
         :param streaming: Use Polars streaming
         :param include_transient: Include transient triples when querying (see also "transient" above).
+        :param max_rows: Maximum estimated rows in result, helps avoid out-of-memory errors.
         :return: None
         """
 
@@ -810,6 +820,8 @@ class Model:
         native_dataframe: bool = False,
         max_iterations: int = 100_000,
         max_results: int = 10_000_000,
+        include_transient: bool = True,
+        max_rows: int = 100_000_000,
     ) -> Optional[Dict[str, DataFrame]]:
         """
         Run the inference rules that are provided
@@ -819,7 +831,33 @@ class Model:
         :param include_datatypes: Datatypes are not returned by default, set to true to return a dict with the solution mappings and the datatypes.
         :param max_iterations: Maximum number of iterations.
         :param max_results: Maximum number of results.
+        :param include_transient: Include transient triples when reasoning.
+        :param max_rows: Maximum estimated rows in result, helps avoid out-of-memory errors.
         :return: The inferred N-Tuples.
         """
 
 class MaplibException(Exception): ...
+
+def explore(
+        m: "Model",
+        host: str = "localhost",
+        port: int = 8000,
+        bind: str = "localhost",
+        popup=True,
+        fts=True,
+):
+    """Starts a graph explorer session.
+    To run from Jupyter Notebook use:
+    >>> from maplib import explore
+    >>>
+    >>> server = explore(m)
+    You can later stop the server with
+    >>> server.stop()
+
+    :param m: The Model to explore
+    :param host: The hostname that we will point the browser to.
+    :param port: The port where the graph explorer webserver listens on.
+    :param bind: Bind to the following host / ip.
+    :param popup: Pop up the browser window.
+    :param fts: Enable full text search indexing
+    """

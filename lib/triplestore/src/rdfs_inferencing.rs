@@ -14,7 +14,7 @@ WHERE {
 
 impl Triplestore {
     pub fn rdfs_class_inheritance(&mut self, graph: &NamedGraph) -> Result<(), TriplestoreError> {
-        self.insert(SUBCLASS_INFERENCING, &None, true, false, false, graph)
+        self.insert(SUBCLASS_INFERENCING, &None, true, false, false, None, graph)
             .map_err(|x| TriplestoreError::RDFSClassInheritanceError(x.to_string()))?;
         Ok(())
     }

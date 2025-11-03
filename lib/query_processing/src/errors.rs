@@ -12,4 +12,6 @@ pub enum QueryProcessingError {
     BadCastDatatype(String, BaseRDFNodeType, BaseRDFNodeType),
     #[error("Function {} got wrong number of arguments {}, expected {}", .0, .1, .2)]
     BadNumberOfFunctionArguments(Function, usize, String),
+    #[error("Maximum estimated rows `{}` in result exceeds configured maximum `{}`. You may have a cross join in your query, please double check. Alternatively, try setting the max_rows parameter to a higher value. Left columns: `{}` Right columns: `{}`", .0, .1, .2, .3)]
+    MaxRowsReached(usize, usize, String, String),
 }

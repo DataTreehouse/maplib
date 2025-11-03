@@ -87,14 +87,13 @@ impl Triplestore {
             right_solution_mappings
                 .rdf_node_types
                 .remove(expression_context.as_str());
-            //right_solution_mappings =
-            //    drop_inner_contexts(right_solution_mappings, &vec![&expression_context]);
         }
         let left_solution_mappings = join(
             left_solution_mappings,
             right_solution_mappings,
             JoinType::Left,
             self.global_cats.clone(),
+            query_settings.max_rows,
         )?;
         Ok(left_solution_mappings)
     }

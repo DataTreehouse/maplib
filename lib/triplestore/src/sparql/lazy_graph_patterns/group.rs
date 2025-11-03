@@ -97,6 +97,7 @@ impl Triplestore {
                 grouped,
                 JoinType::Inner,
                 self.global_cats.clone(),
+                query_settings.max_rows,
             )?
         } else {
             grouped

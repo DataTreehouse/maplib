@@ -12,13 +12,16 @@ use representation::multitype::{
 };
 use representation::solution_mapping::SolutionMappings;
 use representation::{BaseRDFNodeType, RDFNodeState};
+use std::cmp;
 use std::collections::{HashMap, HashSet};
+use tracing::warn;
 
 pub fn join(
     left_solution_mappings: SolutionMappings,
     right_solution_mappings: SolutionMappings,
     join_type: JoinType,
     global_cats: LockedCats,
+    max_rows: Option<usize>,
 ) -> Result<SolutionMappings, QueryProcessingError> {
     let SolutionMappings {
         mappings: left_mappings,
@@ -57,7 +60,8 @@ pub fn join(
         right_datatypes,
         right_height,
         join_type,
-    );
+        max_rows,
+    )?;
 
     update_state(&mut solution_mappings.rdf_node_types, target_cat_state);
 
@@ -72,7 +76,8 @@ pub fn join_workaround(
     right_datatypes: HashMap<String, RDFNodeState>,
     right_height: usize,
     join_type: JoinType,
-) -> SolutionMappings {
+    max_rows: Option<usize>,
+) -> Result<SolutionMappings, QueryProcessingError> {
     assert!(matches!(join_type, JoinType::Left | JoinType::Inner));
 
     let (mut left_mappings, mut left_exploded) = unnest_multicols(left_mappings, &left_datatypes);
@@ -144,10 +149,35 @@ pub fn join_workaround(
     let height_upper_bound = if no_join {
         0
     } else if on.is_empty() {
+        let left_cols: Vec<_> = left_datatypes.keys().cloned().collect();
+        let right_cols: Vec<_> = right_datatypes.keys().cloned().collect();
+        warn!(
+            "Cross join detected left columns {} right columns {}",
+            left_cols.join(","),
+            right_cols.join(",")
+        );
         left_height.saturating_mul(right_height)
     } else {
-        left_height.saturating_mul(1 + 4usize.saturating_sub(on.len()))
+        let mut factor = 1.5 - 0.1 * (on.len() as f64);
+        if factor < 1.1 {
+            factor = 1.1;
+        }
+        let new_height = (cmp::max(left_height, right_height) as f64) * factor;
+        new_height.trunc() as usize
     };
+
+    if let Some(max_rows) = max_rows {
+        if height_upper_bound >= max_rows {
+            let left_cols: Vec<_> = left_datatypes.keys().cloned().collect();
+            let right_cols: Vec<_> = right_datatypes.keys().cloned().collect();
+            return Err(QueryProcessingError::MaxRowsReached(
+                height_upper_bound,
+                max_rows,
+                left_cols.join(","),
+                right_cols.join(","),
+            ));
+        }
+    }
 
     if no_join {
         let dummycol = uuid::Uuid::new_v4().to_string();
@@ -220,7 +250,11 @@ pub fn join_workaround(
         left_datatypes.entry(c).or_insert(dt);
     }
 
-    SolutionMappings::new(left_mappings, left_datatypes, height_upper_bound)
+    Ok(SolutionMappings::new(
+        left_mappings,
+        left_datatypes,
+        height_upper_bound,
+    ))
 }
 
 fn create_join_compatible_cats(

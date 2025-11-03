@@ -96,6 +96,7 @@ impl Triplestore {
                     solution_mappings,
                     JoinType::Inner,
                     self.global_cats.clone(),
+                    query_settings.max_rows,
                 )?;
             }
             return Ok(sms);
@@ -370,6 +371,7 @@ impl Triplestore {
                 mappings,
                 JoinType::Inner,
                 self.global_cats.clone(),
+                query_settings.max_rows,
             )?;
         }
         Ok(path_solution_mappings)

@@ -46,6 +46,7 @@ impl Triplestore {
                 project_solution_mappings,
                 JoinType::Inner,
                 self.global_cats.clone(),
+                query_settings.max_rows,
             )?
         } else {
             project_solution_mappings
