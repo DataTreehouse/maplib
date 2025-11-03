@@ -39,6 +39,7 @@ impl FtsIndex {
         &self,
         _patterns: &Vec<TriplePattern>,
         _global_cats: LockedCats,
+        _max_rows: Option<usize>,
     ) -> Result<(Vec<TriplePattern>, Option<SolutionMappings>), FtsError> {
         unimplemented!("Contact Data Treehouse to enable full text search")
     }
