@@ -39,7 +39,11 @@ impl Triplestore {
             query_settings,
             dataset,
         )?;
-        project_solution_mappings = project(project_solution_mappings, variables)?;
+        project_solution_mappings = project(
+            project_solution_mappings,
+            variables,
+            query_settings.strict_project,
+        )?;
         let solution_mappings = if let Some(solution_mappings) = solution_mappings {
             join(
                 solution_mappings,

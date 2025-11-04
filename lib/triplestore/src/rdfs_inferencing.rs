@@ -1,5 +1,6 @@
 use super::Triplestore;
 use crate::errors::TriplestoreError;
+use crate::sparql::QuerySettings;
 use oxrdf::vocab::rdf;
 use representation::dataset::NamedGraph;
 
@@ -14,7 +15,12 @@ WHERE {
 
 impl Triplestore {
     pub fn rdfs_class_inheritance(&mut self, graph: &NamedGraph) -> Result<(), TriplestoreError> {
-        self.insert(SUBCLASS_INFERENCING, &None, true, false, false, None, graph)
+        let qs = QuerySettings {
+            include_transient: false,
+            max_rows: None,
+            strict_project: false,
+        };
+        self.insert(SUBCLASS_INFERENCING, &None, true, false, &qs, graph)
             .map_err(|x| TriplestoreError::RDFSClassInheritanceError(x.to_string()))?;
         Ok(())
     }

@@ -21,7 +21,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard};
-use triplestore::sparql::{QueryResult as SparqlQueryResult, QueryResult};
+use triplestore::sparql::{QueryResult as SparqlQueryResult, QueryResult, QuerySettings};
 
 //The below snippet controlling alloc-library is from https://github.com/pola-rs/polars/blob/main/py-polars/src/lib.rs
 //And has a MIT license:
@@ -726,7 +726,7 @@ impl PyModel {
                                       max_results,
                                       named_graph.as_ref(),
                                       include_transient.unwrap_or(DEFAULT_INCLUDE_TRANSIENT),
-                                      Some(max_rows.unwrap_or(DEFAULT_MAX_INFERENCE_ROWS)))?;
+                                      max_rows)?;
 
                 Ok((res, cats))
             },
@@ -1078,14 +1078,18 @@ fn validate_mutex(
     let ts = if include_shape_graph.unwrap_or(true) {
         let mut ts = Triplestore::new(None, None)
             .map_err(|x| PyMaplibError::MaplibError(MaplibError::TriplestoreError(x)))?;
+        let qs = QuerySettings {
+            include_transient: false,
+            max_rows: None,
+            strict_project: false,
+        };
         let res = inner
             .triplestore
             .query(
                 "CONSTRUCT { ?subject ?predicate ?object } WHERE {?subject ?predicate ?object}",
                 &None,
                 false,
-                false,
-                None,
+                &qs,
                 Some(&shape_graph),
             )
             .map_err(|x| PyMaplibError::MaplibError(MaplibError::SparqlError(x)))?;

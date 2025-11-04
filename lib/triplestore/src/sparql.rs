@@ -53,6 +53,7 @@ pub enum QueryResult {
 pub struct QuerySettings {
     pub include_transient: bool,
     pub max_rows: Option<usize>,
+    pub strict_project: bool,
 }
 
 impl QueryResult {
@@ -150,20 +151,12 @@ impl Triplestore {
         query: &str,
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         streaming: bool,
-        include_transient: bool,
-        max_rows: Option<usize>,
+        query_settings: &QuerySettings,
         graph: Option<&NamedGraph>,
     ) -> Result<QueryResult, SparqlError> {
         let query = Query::parse(query, None).map_err(SparqlError::ParseError)?;
         trace!(?query);
-        self.query_parsed(
-            &query,
-            parameters,
-            streaming,
-            include_transient,
-            max_rows,
-            graph,
-        )
+        self.query_parsed(&query, parameters, streaming, query_settings, graph)
     }
 
     pub fn query_uninterruptable(
@@ -171,19 +164,11 @@ impl Triplestore {
         query: &str,
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         streaming: bool,
-        include_transient: bool,
-        max_rows: Option<usize>,
+        query_settings: &QuerySettings,
         graph: Option<&NamedGraph>,
     ) -> Result<QueryResult, SparqlError> {
         let query = Query::parse(query, None).map_err(SparqlError::ParseError)?;
-        self.query_parsed_uninterruptable(
-            &query,
-            parameters,
-            streaming,
-            include_transient,
-            max_rows,
-            graph,
-        )
+        self.query_parsed_uninterruptable(&query, parameters, streaming, query_settings, graph)
     }
 
     pub fn query_parsed(
@@ -191,15 +176,10 @@ impl Triplestore {
         query: &Query,
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         streaming: bool,
-        include_transient: bool,
-        max_rows: Option<usize>,
+        query_settings: &QuerySettings,
         graph: Option<&NamedGraph>,
     ) -> Result<QueryResult, SparqlError> {
         let query = rewrite(query.clone());
-        let qs = QuerySettings {
-            include_transient,
-            max_rows,
-        };
         let context = Context::new();
         match &query {
             Query::Select {
@@ -217,7 +197,7 @@ impl Triplestore {
                     &context,
                     parameters,
                     Pushdowns::new(),
-                    &qs,
+                    query_settings,
                     &dataset_or_named_graph(dataset, graph),
                 )?;
 
@@ -247,7 +227,7 @@ impl Triplestore {
                     &context,
                     parameters,
                     Pushdowns::new(),
-                    &qs,
+                    query_settings,
                     &dataset_or_named_graph(dataset, graph),
                 )?;
                 match pl_interruptable_collect(mappings.with_new_streaming(streaming)) {
@@ -285,15 +265,10 @@ impl Triplestore {
         query: &Query,
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         streaming: bool,
-        include_transient: bool,
-        max_rows: Option<usize>,
+        query_settings: &QuerySettings,
         graph: Option<&NamedGraph>,
     ) -> Result<QueryResult, SparqlError> {
         let query = rewrite(query.clone());
-        let qs = QuerySettings {
-            include_transient,
-            max_rows,
-        };
         let context = Context::new();
         match &query {
             Query::Select {
@@ -313,7 +288,7 @@ impl Triplestore {
                     &context,
                     parameters,
                     Pushdowns::new(),
-                    &qs,
+                    query_settings,
                     &qg,
                 )?;
 
@@ -336,7 +311,7 @@ impl Triplestore {
                     &context,
                     parameters,
                     Pushdowns::new(),
-                    &qs,
+                    query_settings,
                     &dataset_or_named_graph(dataset, graph),
                 )?;
                 let df = mappings.with_new_streaming(streaming).collect().unwrap();
@@ -362,20 +337,13 @@ impl Triplestore {
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         transient: bool,
         streaming: bool,
-        include_transient: bool,
-        max_rows: Option<usize>,
+        query_settings: &QuerySettings,
         graph: &NamedGraph,
     ) -> Result<Vec<NewTriples>, SparqlError> {
         let query = Query::parse(query, None).map_err(SparqlError::ParseError)?;
         if let Query::Construct { .. } = &query {
-            let res = self.query_parsed(
-                &query,
-                parameters,
-                streaming,
-                include_transient,
-                max_rows,
-                Some(graph),
-            )?;
+            let res =
+                self.query_parsed(&query, parameters, streaming, query_settings, Some(graph))?;
             match res {
                 QueryResult::Select(_) => {
                     panic!("Should never happen")
@@ -392,19 +360,11 @@ impl Triplestore {
         update: &str,
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         streaming: bool,
-        include_transient: bool,
-        max_rows: Option<usize>,
+        query_settings: &QuerySettings,
         graph: Option<&NamedGraph>,
     ) -> Result<(), SparqlError> {
         let update = Update::parse(update, None).map_err(SparqlError::ParseError)?;
-        self.update_parsed(
-            &update,
-            parameters,
-            streaming,
-            include_transient,
-            max_rows,
-            graph,
-        )?;
+        self.update_parsed(&update, parameters, streaming, query_settings, graph)?;
         Ok(())
     }
 
@@ -413,8 +373,7 @@ impl Triplestore {
         update: &Update,
         parameters: &Option<HashMap<String, EagerSolutionMappings>>,
         streaming: bool,
-        include_transient: bool,
-        max_rows: Option<usize>,
+        query_settings: &QuerySettings,
         graph: Option<&NamedGraph>,
     ) -> Result<(), SparqlError> {
         for u in &update.operations {
@@ -468,14 +427,7 @@ impl Triplestore {
                         pattern: p,
                         base_iri: None,
                     };
-                    let r = self.query_parsed(
-                        &q,
-                        parameters,
-                        streaming,
-                        include_transient,
-                        max_rows,
-                        graph,
-                    )?;
+                    let r = self.query_parsed(&q, parameters, streaming, query_settings, graph)?;
                     let EagerSolutionMappings {
                         mappings,
                         rdf_node_types,

@@ -22,7 +22,7 @@ use templates::dataset::TemplateDataset;
 use templates::document::document_from_str;
 use templates::MappingColumnType;
 use triplestore::sparql::errors::SparqlError;
-use triplestore::sparql::QueryResult;
+use triplestore::sparql::{QueryResult, QuerySettings};
 use triplestore::{IndexingOptions, NewTriples, Triplestore};
 
 use datalog::ast::DatalogRuleset;
@@ -221,15 +221,13 @@ impl Model {
         include_transient: bool,
         max_rows: Option<usize>,
     ) -> Result<QueryResult, MaplibError> {
+        let query_settings = QuerySettings {
+            include_transient,
+            max_rows,
+            strict_project: false,
+        };
         self.triplestore
-            .query(
-                query,
-                parameters,
-                streaming,
-                include_transient,
-                max_rows,
-                graph,
-            )
+            .query(query, parameters, streaming, &query_settings, graph)
             .map_err(|x| x.into())
     }
 
@@ -242,15 +240,13 @@ impl Model {
         include_transient: bool,
         max_rows: Option<usize>,
     ) -> Result<(), MaplibError> {
+        let query_settings = QuerySettings {
+            include_transient,
+            max_rows,
+            strict_project: false,
+        };
         self.triplestore
-            .update(
-                update,
-                parameters,
-                streaming,
-                include_transient,
-                max_rows,
-                graph,
-            )
+            .update(update, parameters, streaming, &query_settings, graph)
             .map_err(|x| x.into())
     }
 

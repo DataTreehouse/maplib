@@ -185,11 +185,17 @@ pub fn minus(
 pub fn project(
     mut solution_mappings: SolutionMappings,
     variables: &Vec<Variable>,
+    strict: bool,
 ) -> Result<SolutionMappings, QueryProcessingError> {
     let cols: Vec<Expr> = variables.iter().map(|c| col(c.as_str())).collect();
     let mut new_datatypes = HashMap::new();
     for v in variables {
         if !solution_mappings.rdf_node_types.contains_key(v.as_str()) {
+            if strict {
+                return Err(QueryProcessingError::ProjectedVariableMissing(
+                    v.as_str().to_string(),
+                ));
+            }
             warn!("The variable {v} does not exist in the solution mappings, adding as an unbound variable");
             solution_mappings.mappings = solution_mappings.mappings.with_column(
                 lit(LiteralValue::untyped_null())

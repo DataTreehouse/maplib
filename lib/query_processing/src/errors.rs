@@ -8,6 +8,8 @@ pub enum QueryProcessingError {
     InconsistentDatatypes(String, RDFNodeState, RDFNodeState, String),
     #[error("Variable ?{} not found in context {}",.0, .1)]
     VariableNotFound(String, String),
+    #[error("Variable ?{} not found",.0)]
+    ProjectedVariableMissing(String),
     #[error("Inconsistent datatypes when casting {} to {:?}, got {:?}. Try filtering first.", .0, .1, .2)]
     BadCastDatatype(String, BaseRDFNodeType, BaseRDFNodeType),
     #[error("Function {} got wrong number of arguments {}, expected {}", .0, .1, .2)]

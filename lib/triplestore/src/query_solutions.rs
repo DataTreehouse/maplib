@@ -17,14 +17,7 @@ pub fn query_select(
     streaming: bool,
     query_settings: &QuerySettings,
 ) -> Result<QuerySolutions, SparqlError> {
-    let qres = triplestore.query(
-        query,
-        &None,
-        streaming,
-        query_settings.include_transient,
-        query_settings.max_rows,
-        graph,
-    )?;
+    let qres = triplestore.query(query, &None, streaming, &query_settings, graph)?;
 
     let sm = if let QueryResult::Select(EagerSolutionMappings {
         mut mappings,
