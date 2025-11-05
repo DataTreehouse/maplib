@@ -282,7 +282,7 @@ pub fn polars_type_to_literal_type(
         DataType::Date => Ok(
             BaseRDFNodeType::Literal(xsd::DATE.into_owned()).into_default_input_rdf_node_state()
         ),
-        DataType::Decimal(_, Some(0)) => {
+        DataType::Decimal(_, 0) => {
             Ok(BaseRDFNodeType::Literal(xsd::INTEGER.into_owned())
                 .into_default_input_rdf_node_state())
         }

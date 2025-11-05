@@ -354,7 +354,7 @@ impl PyModel {
         only_shapes=None,
         deactivate_shapes=None,
         dry_run=None,
-        max_rows=100_000_000,
+        max_rows=None,
     ))]
     #[instrument(skip_all)]
     fn validate(

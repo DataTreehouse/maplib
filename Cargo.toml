@@ -21,9 +21,9 @@ rust-version = "1.88.0"
 
 [workspace.dependencies]
 pyo3 = {version = "0.25", features = ["py-clone"] }
-pyo3-log = {version = "0.12.3" }
-polars = { version = "0.51.0", features = ["nightly", "new_streaming", "performant", "cse", "fmt", "parquet"], default-features = false }
-polars-core = { version = "0.51.0", default-features = false }
+#Moment to avoid a feature flag bug
+polars = { version = "0.52.0", features = ["nightly", "new_streaming", "performant", "cse", "fmt", "parquet", "moment"], default-features = false }
+polars-core = { version = "0.52.0", default-features = false }
 rayon = "1.10.0"
 regex = "1.11.1"
 oxrdf = { version="0.2.4" }

@@ -547,7 +547,7 @@ class Model:
         only_shapes: List[str] = None,
         deactivate_shapes: List[str] = None,
         dry_run: bool = False,
-        max_rows: int = 100_000_000,
+        max_rows: int = None,
     ) -> ValidationReport:
         """
         Validate the contained knowledge graph using SHACL
