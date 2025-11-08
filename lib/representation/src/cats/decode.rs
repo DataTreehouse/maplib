@@ -5,21 +5,28 @@ use crate::BaseRDFNodeType;
 use oxrdf::NamedNode;
 use polars::datatypes::{DataType, Field, PlSmallStr};
 use polars::frame::DataFrame;
-use polars::prelude::{col, Column, Expr, IntoColumn, IntoLazy};
+use polars::prelude::{col, Column, Expr, IntoColumn, IntoLazy, NamedFrom};
 use polars::series::Series;
-use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 
 impl CatEncs {
     pub fn decode(&self, ser: &Series, cat_type: &CatType) -> Series {
         let original_name = ser.name().clone();
-        let uch = ser.u32().unwrap();
-        let decoded_ser = uch.iter().map(|x| x.map(|x| self.rev_map.get(&x).unwrap()));
-        let mut new_ser = if let CatType::Prefix(pre) = cat_type {
-            Series::from_iter(decoded_ser.map(|x| x.map(|x| format!("{}{}", pre.as_str(), x))))
+        let uch:Vec<_> = ser.u32().unwrap().iter().collect();
+        let decoded_vec_iter = uch.into_par_iter().map(|x| x.map(|x| self.rev_map.get(&x).unwrap()));
+        let new_ser = if let CatType::Prefix(pre) = cat_type {
+            let decoded_vec:Vec<_> = decoded_vec_iter.map(|x| x.map(|x| format!("{}{}", pre.as_str(), x))).collect();
+            Series::new(original_name, decoded_vec)
         } else {
-            Series::from_iter(decoded_ser.map(|x| x.map(|x| x.as_str())))
+            let decoded_vec: Vec<_> = decoded_vec_iter.map(|x| x.map(|x| x.as_str())).collect();
+            Series::new(original_name, decoded_vec)
         };
-        new_ser.rename(original_name);
+        //
+        // let mut new_ser = if let CatType::Prefix(pre) = cat_type {
+        //     Series::from_iter(decoded_ser.map(|x| x.map(|x| format!("{}{}", pre.as_str(), x))))
+        // } else {
+        //     Series::from_iter(decoded_ser.map(|x| x.map(|x| x.as_str())))
+        // };
         new_ser
     }
 

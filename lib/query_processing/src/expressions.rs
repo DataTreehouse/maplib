@@ -39,7 +39,16 @@ pub fn named_node_local_enc(nn: &NamedNode, global_cats: &Cats) -> (Expr, Option
 
 pub fn blank_node_enc(bl: &BlankNode, global_cats: &Cats) -> Option<Expr> {
     let enc = global_cats.encode_blanks(&[bl.as_str()]).pop().unwrap();
-    enc.map(|enc| lit(enc))
+    enc.map(|enc| lit(enc).cast(DataType::UInt32))
+}
+
+pub fn blank_node_local_enc(bl: &BlankNode, global_cats: &Cats) -> (Expr, Option<Cats>) {
+    if let Some(enc) = global_cats.encode_blanks(&[bl.as_str()]).pop().unwrap() {
+        (lit(enc).cast(DataType::UInt32), None)
+    } else {
+        let (enc, local) = Cats::new_singular_blank(bl.as_str(), global_cats.get_iri_height());
+        (lit(enc).cast(DataType::UInt32), Some(local))
+    }
 }
 
 pub fn maybe_literal_enc(l: &Literal, global_cats: &Cats) -> (Expr, BaseRDFNodeType, BaseCatState) {

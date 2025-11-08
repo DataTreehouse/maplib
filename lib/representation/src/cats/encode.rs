@@ -12,6 +12,7 @@ use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterato
 use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
 use std::sync::Arc;
+use std::time::Instant;
 
 impl CatEncs {
     pub fn new_empty() -> CatEncs {
@@ -124,6 +125,7 @@ impl Cats {
             .collect();
         let mut prefix_maps = HashMap::new();
         let mut mappings = mappings.lazy();
+        let start_third_part = Instant::now();
         let prefix_cols: Vec<_> = to_add_prefix_col
             .into_par_iter()
             .map(|(c, local, ser)| {
@@ -131,15 +133,8 @@ impl Cats {
                 let maps: HashMap<_, _> = maps
                     .into_iter()
                     .map(|(u, ct)| {
-                        if let CatType::Prefix(p) = ct {
-                            Some((u, p.as_str().to_string()))
-                        } else {
-                            None
-                        }
-                    })
-                    .filter(|x| x.is_some())
-                    .map(|x| x.unwrap())
-                    .collect();
+                        (u, ct.as_str().to_string())
+                    }).collect();
                 let name = include_cat_type_col.as_ref().unwrap().get(&c).unwrap();
                 (c, prefix_ser, maps, name)
             })
@@ -376,55 +371,52 @@ impl Cats {
         &self,
         ser: Series,
         local_cats: Option<LockedCats>,
-    ) -> (Series, HashMap<u32, CatType>) {
+    ) -> (Series, HashMap<u32, NamedNode>) {
         // Important to prefer local cats
-        let mut encs = vec![];
-        let mut filtered_cat_types = vec![];
         let local_cats = local_cats.as_ref().map(|x| x.read().unwrap());
         let local_cats = local_cats.as_ref();
-        if let Some(local_cats) = local_cats {
-            let local_filtered_cat_types = local_cats.filter_cat_types(&BaseRDFNodeType::IRI);
-            for c in &local_filtered_cat_types {
-                let enc = local_cats.cat_map.get(*c).unwrap();
-                encs.push(enc);
+        let mut local_remap = HashMap::new();
+        let mut prefix_map = self.prefix_map.clone();
+        let local_belongs_prefix_map = if let Some(local_cats) = local_cats {
+            for (k,v) in &local_cats.prefix_rev_map {
+                if let Some(u) = self.prefix_rev_map.get(k) {
+                    local_remap.insert(*v, *u);
+                } else {
+                    let u = prefix_map.len() as u32;
+                    local_remap.insert(*v, u);
+                    prefix_map.insert(u, k.clone());
+                }
             }
-            filtered_cat_types.extend(local_filtered_cat_types);
-        }
-
-        let global_filtered_cat_types = self.filter_cat_types(&BaseRDFNodeType::IRI);
-        for c in &global_filtered_cat_types {
-            let enc = self.cat_map.get(*c).unwrap();
-            encs.push(enc);
-        }
-        filtered_cat_types.extend(global_filtered_cat_types);
-
+            Some(&local_cats.belongs_prefix_map)
+        } else {
+            None
+        };
         let uch = ser.u32().unwrap();
         let mut prefixes = Vec::with_capacity(ser.len());
         for u in uch {
             let p = if let Some(u) = u {
-                let mut p = None;
-                for (i, enc) in encs.iter().enumerate() {
-                    if enc.rev_map.contains_key(&u) {
-                        p = Some(i as u32);
-                        break;
+                let mut p = if let Some(local_belongs_prefix_map) = local_belongs_prefix_map {
+                    let p = local_belongs_prefix_map.get(&u);
+                    if let Some(p) = p {
+                        local_remap.get(p)
+                    } else  {
+                        self.belongs_prefix_map.get(&u)
                     }
-                }
+                } else {
+                    self.belongs_prefix_map.get(&u)
+                };
                 if p.is_none() {
                     panic!("Should never happen: {u}")
                 }
-                p
+                p.cloned()
             } else {
                 None
             };
             prefixes.push(p);
         }
         let ser = Series::from_iter(prefixes);
-        let map: HashMap<u32, CatType> = filtered_cat_types
-            .iter()
-            .enumerate()
-            .map(|(i, c)| (i as u32, (*c).clone()))
-            .collect();
-        (ser, map)
+
+        (ser, prefix_map)
     }
 
     pub fn encode_iri_or_local_cat(&self, iri: &str) -> (u32, RDFNodeState) {
@@ -470,31 +462,6 @@ impl Cats {
             )
         }
     }
-
-    fn filter_cat_types<'a>(&'a self, bt: &BaseRDFNodeType) -> Vec<&'a CatType> {
-        let mut keep_types = vec![];
-        for t in self.cat_map.keys() {
-            let keep = match t {
-                CatType::Prefix(_) => {
-                    matches!(bt, BaseRDFNodeType::IRI)
-                }
-                CatType::Blank => {
-                    matches!(bt, BaseRDFNodeType::BlankNode)
-                }
-                CatType::Literal(nn) => {
-                    if let BaseRDFNodeType::Literal(l) = bt {
-                        nn == l
-                    } else {
-                        false
-                    }
-                }
-            };
-            if keep {
-                keep_types.push(t);
-            }
-        }
-        keep_types
-    }
 }
 
 pub fn encode_triples(
@@ -505,6 +472,7 @@ pub fn encode_triples(
     object_cat_state: BaseCatState,
     global_cats: &Cats,
 ) -> (Vec<LockedCats>, Vec<EncodedTriples>) {
+    let start_first_half = Instant::now();
     let mut map = HashMap::new();
     map.insert(
         SUBJECT_COL_NAME.to_string(),
@@ -552,6 +520,7 @@ pub fn encode_triples(
     if mappings.column(OBJECT_PREFIX_COL_NAME).is_ok() {
         partition_by.push(OBJECT_PREFIX_COL_NAME);
     }
+    println!("First encode triples ee part took {}", start_first_half.elapsed().as_secs_f32());
     let out = if !partition_by.is_empty() {
         // Important to preserve ordering
         let dfs = mappings.partition_by_stable(partition_by, true).unwrap();

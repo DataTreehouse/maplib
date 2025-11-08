@@ -8,6 +8,7 @@ use representation::multitype::split_df_multicols;
 use representation::solution_mapping::EagerSolutionMappings;
 use representation::{OBJECT_COL_NAME, PREDICATE_COL_NAME, SUBJECT_COL_NAME};
 use std::collections::HashMap;
+use std::time::Instant;
 
 impl Triplestore {
     pub fn insert_construct_result(
@@ -16,7 +17,9 @@ impl Triplestore {
         transient: bool,
         graph: &NamedGraph,
     ) -> Result<Vec<NewTriples>, SparqlError> {
+        let start_create_triples = Instant::now();
         let all_triples_to_add = construct_result_as_triples_to_add(sms);
+        println!("Finished creating triples to add {}", start_create_triples.elapsed().as_secs_f32());
         let new_triples = if !all_triples_to_add.is_empty() {
             self.add_triples_vec(all_triples_to_add, transient, graph)
                 .map_err(SparqlError::TriplestoreError)?

@@ -20,13 +20,21 @@ impl Cats {
     pub fn encode_predicates(&mut self, cat_triples: &Vec<CatTriples>) {
         for ct in cat_triples {
             let (pre, suf) = rdf_split_iri_str(ct.predicate.as_str());
-            let ct = CatType::Prefix(NamedNode::new_unchecked(pre));
-            if !self.cat_map.contains_key(&ct) {
+            let prefix = NamedNode::new_unchecked(pre);
+            let ct = CatType::Prefix(prefix.clone());
+            let prefix_u = if let Some(prefix_u) = self.prefix_rev_map.get(&prefix) {
+                *prefix_u
+            } else {
                 self.cat_map.insert(ct.clone(), CatEncs::new_empty());
-            }
+                let prefix_u = self.prefix_map.len() as u32;
+                self.prefix_map.insert(prefix_u, NamedNode::new_unchecked(pre));
+                self.prefix_rev_map.insert(NamedNode::new_unchecked(pre), prefix_u);
+                prefix_u
+            };
 
             let enc = self.cat_map.get_mut(&ct).unwrap();
             if !enc.contains_key(suf) {
+                self.belongs_prefix_map.insert(self.iri_height, prefix_u);
                 enc.encode_new_str(&suf, self.iri_height);
                 self.iri_height += 1;
             }

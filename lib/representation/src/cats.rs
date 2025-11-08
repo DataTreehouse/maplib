@@ -146,6 +146,9 @@ pub struct Cats {
     blank_height: u32,
     literal_height_map: HashMap<NamedNode, u32>,
     pub uuid: String,
+    belongs_prefix_map: HashMap<u32, u32, BuildHasherDefault<NoHashHasher<u32>>>,
+    prefix_map: HashMap<u32, NamedNode>,
+    prefix_rev_map: HashMap<NamedNode, u32>,
 }
 
 impl Cats {
@@ -155,7 +158,7 @@ impl Cats {
         (u, Cats::from_map(HashMap::from([(t, catenc)])))
     }
 
-    pub(crate) fn new_singular_blank(s: &str, u: u32) -> (u32, Cats) {
+    pub fn new_singular_blank(s: &str, u: u32) -> (u32, Cats) {
         let catenc = CatEncs::new_singular(s, u);
         (u, Cats::from_map(HashMap::from([(CatType::Blank, catenc)])))
     }
@@ -176,10 +179,22 @@ impl Cats {
             blank_height: 0,
             literal_height_map: Default::default(),
             uuid: Uuid::new_v4().to_string(),
+            belongs_prefix_map: HashMap::with_capacity_and_hasher(2, BuildHasherDefault::default()),
+            prefix_map: Default::default(),
+            prefix_rev_map: Default::default(),
         };
         cats.iri_height = cats.calc_new_iri_height();
         cats.blank_height = cats.calc_new_blank_height();
         cats.literal_height_map = cats.calc_new_literal_height();
+        let mut i = 0u32;
+        for (cat_type, cat_enc) in cats.cat_map.iter() {
+            if let CatType::Prefix(nn) = cat_type {
+                cats.prefix_map.insert(i, nn.clone());
+                cats.prefix_rev_map.insert(nn.clone(), i);
+                cats.belongs_prefix_map.extend(cat_enc.rev_map.keys().map(|x|(*x,i)));
+                i += 1;
+            }
+        }
         cats
     }
 
@@ -190,6 +205,9 @@ impl Cats {
             iri_height: 0,
             literal_height_map: Default::default(),
             uuid: uuid::Uuid::new_v4().to_string(),
+            belongs_prefix_map: HashMap::with_capacity_and_hasher(2, BuildHasherDefault::default()),
+            prefix_map: Default::default(),
+            prefix_rev_map: Default::default(),
         }
     }
 

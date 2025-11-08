@@ -4,6 +4,7 @@ use crate::type_constraints::{
 };
 use oxrdf::vocab::rdfs;
 use oxrdf::{Term, Variable};
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use representation::cats::{named_node_split_prefix, LockedCats};
 use representation::polars_to_rdf::column_as_terms;
 use representation::solution_mapping::SolutionMappings;
@@ -11,7 +12,9 @@ use spargebra::algebra::{Expression, Function, GraphPattern};
 use spargebra::term::{GroundTerm, NamedNodePattern, TermPattern, TriplePattern};
 use std::collections::{HashMap, HashSet};
 
-pub const SMALL_HEIGHT: usize = 100;
+pub const CHECK_SMALL_HEIGHT: usize = 10_000;
+
+pub const SMALL_HEIGHT: usize = 500;
 pub const OWL_REAL: &str = "http://www.w3.org/2002/07/owl#real";
 
 //Todos: pushdowns from joins..
@@ -62,26 +65,26 @@ impl Pushdowns {
                 break;
             }
         }
-
-        if should_add_from_solution_mappings && sm.height_estimate <= SMALL_HEIGHT {
+        if should_add_from_solution_mappings && sm.height_estimate <= CHECK_SMALL_HEIGHT {
             let eager_sm = sm.as_eager(false);
-            let colnames = eager_sm.mappings.get_column_names();
-            let columns = eager_sm.mappings.columns(&colnames).unwrap();
-            //Todo: why not par?
-            let pushdowns: HashMap<_, _> = columns
-                .into_iter()
-                .map(|x| {
-                    let name = x.name().as_str();
-                    let maybe_terms = column_as_terms(
-                        x,
-                        eager_sm.rdf_node_types.get(name).unwrap(),
-                        global_cats.clone(),
-                    );
-                    let terms: HashSet<_> = maybe_terms.into_iter().flatten().collect();
-                    (name.to_string(), terms)
-                })
-                .collect();
-            self.variables_values = conjunction(&mut self.variables_values, pushdowns);
+            if eager_sm.mappings.height() <= SMALL_HEIGHT {
+                let colnames = eager_sm.mappings.get_column_names();
+                let columns = eager_sm.mappings.columns(&colnames).unwrap();
+                let pushdowns: HashMap<_, _> = columns
+                    .into_par_iter()
+                    .map(|x| {
+                        let name = x.name().as_str();
+                        let maybe_terms = column_as_terms(
+                            x,
+                            eager_sm.rdf_node_types.get(name).unwrap(),
+                            global_cats.clone(),
+                        );
+                        let terms: HashSet<_> = maybe_terms.into_iter().flatten().collect();
+                        (name.to_string(), terms)
+                    })
+                    .collect();
+                self.variables_values = conjunction(&mut self.variables_values, pushdowns);
+            }
             eager_sm.as_lazy()
         } else {
             sm

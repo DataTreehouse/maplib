@@ -8,8 +8,8 @@ const SUBCLASS_INFERENCING: &str = r#"
 PREFIX rdfs:<http://www.w3.org/2000/01/rdf-schema#>
 CONSTRUCT { ?a a ?b }
 WHERE {
-    ?a a ?c .
     ?c rdfs:subClassOf+ ?b .
+    ?a a ?c .
 }
 "#;
 

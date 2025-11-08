@@ -110,6 +110,19 @@ impl Cats {
             let c = c.read().unwrap();
             let mut other_map = HashMap::new();
             for (t, other_enc) in c.cat_map.iter() {
+                let prefix_u = if let CatType::Prefix(nn) = t {
+                    let i = if let Some(i) = self.prefix_rev_map.get(nn) {
+                        *i
+                    } else {
+                        let i = self.prefix_map.len() as u32;
+                        self.prefix_map.insert(i, nn.clone());
+                        self.prefix_rev_map.insert(nn.clone(), i);
+                        i
+                    };
+                    Some(i)
+                } else {
+                    None
+                };
                 let mut c = self.get_height(&t);
                 if let Some(enc) = self.cat_map.get_mut(t) {
                     let (remap, insert): (Vec<_>, Vec<_>) = other_enc
@@ -134,6 +147,9 @@ impl Cats {
                     }
                     for (s, u) in numbered_insert {
                         enc.encode_new_arc_string(s, u);
+                        if let Some(prefix_u) = &prefix_u {
+                            self.belongs_prefix_map.insert(u, *prefix_u);
+                        }
                     }
                     let remap: HashMap<_, _, BuildHasherDefault<NoHashHasher<u32>>> = remap
                         .into_iter()
@@ -151,6 +167,9 @@ impl Cats {
                     for (s, v) in other_enc.map.iter() {
                         remap.push((*v, c));
                         new_enc.encode_new_str(s, c);
+                        if let Some(prefix_u) = &prefix_u {
+                            self.belongs_prefix_map.insert(c, *prefix_u);
+                        }
                         c += 1;
                     }
                     self.cat_map.insert(t.clone(), new_enc);
