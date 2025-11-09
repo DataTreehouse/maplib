@@ -328,7 +328,6 @@ impl Triplestore {
     ) -> Result<Vec<NewTriples>, TriplestoreError> {
         let prepare_triples_now = Instant::now();
         let dfs_to_add = prepare_add_triples_par(ts, self.global_cats.clone());
-        println!("Prepare triples now {}", prepare_triples_now.elapsed().as_secs_f32());
         trace!(
             "Preparing triples took {} seconds",
             prepare_triples_now.elapsed().as_secs_f32()
@@ -539,7 +538,6 @@ pub fn prepare_add_triples_par(
     mut ts: Vec<TriplesToAdd>,
     global_cats: LockedCats,
 ) -> Vec<CatTriples> {
-    let start_partition = Instant::now();
     let mut all_partitioned: Vec<TriplesToAddPartitionedPredicate> = ts
         .par_drain(..)
         .map(|t| {
@@ -578,7 +576,6 @@ pub fn prepare_add_triples_par(
         })
         .flatten()
         .collect();
-    println!("Finsihed partition a bit {}", start_partition.elapsed().as_secs_f32());
     all_partitioned = all_partitioned
         .into_par_iter()
         .map(|mut t| {
@@ -594,7 +591,6 @@ pub fn prepare_add_triples_par(
             t
         })
         .collect();
-    let start_cat_encode = Instant::now();
     let all_partitioned = all_partitioned
         .into_par_iter()
         .map(
@@ -619,7 +615,6 @@ pub fn prepare_add_triples_par(
             },
         )
         .collect();
-    println!("Finish cat encode partitions {}", start_cat_encode.elapsed().as_secs_f32());
     all_partitioned
 }
 

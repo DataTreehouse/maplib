@@ -12,10 +12,14 @@ use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterato
 impl CatEncs {
     pub fn decode(&self, ser: &Series, cat_type: &CatType) -> Series {
         let original_name = ser.name().clone();
-        let uch:Vec<_> = ser.u32().unwrap().iter().collect();
-        let decoded_vec_iter = uch.into_par_iter().map(|x| x.map(|x| self.rev_map.get(&x).unwrap()));
+        let uch: Vec<_> = ser.u32().unwrap().iter().collect();
+        let decoded_vec_iter = uch
+            .into_par_iter()
+            .map(|x| x.map(|x| self.rev_map.get(&x).unwrap()));
         let new_ser = if let CatType::Prefix(pre) = cat_type {
-            let decoded_vec:Vec<_> = decoded_vec_iter.map(|x| x.map(|x| format!("{}{}", pre.as_str(), x))).collect();
+            let decoded_vec: Vec<_> = decoded_vec_iter
+                .map(|x| x.map(|x| format!("{}{}", pre.as_str(), x)))
+                .collect();
             Series::new(original_name, decoded_vec)
         } else {
             let decoded_vec: Vec<_> = decoded_vec_iter.map(|x| x.map(|x| x.as_str())).collect();

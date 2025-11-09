@@ -12,7 +12,6 @@ use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterato
 use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
 use std::sync::Arc;
-use std::time::Instant;
 
 impl CatEncs {
     pub fn new_empty() -> CatEncs {
@@ -125,16 +124,14 @@ impl Cats {
             .collect();
         let mut prefix_maps = HashMap::new();
         let mut mappings = mappings.lazy();
-        let start_third_part = Instant::now();
         let prefix_cols: Vec<_> = to_add_prefix_col
             .into_par_iter()
             .map(|(c, local, ser)| {
                 let (prefix_ser, maps) = self.get_prefix_column(ser, local);
                 let maps: HashMap<_, _> = maps
                     .into_iter()
-                    .map(|(u, ct)| {
-                        (u, ct.as_str().to_string())
-                    }).collect();
+                    .map(|(u, ct)| (u, ct.as_str().to_string()))
+                    .collect();
                 let name = include_cat_type_col.as_ref().unwrap().get(&c).unwrap();
                 (c, prefix_ser, maps, name)
             })
@@ -176,9 +173,9 @@ impl Cats {
     ) -> (Series, Option<Cats>, Option<(Series, HashMap<u32, String>)>) {
         let original_name = series.name().clone();
         let mut use_height = match t {
-            BaseRDFNodeType::IRI => self.iri_height,
-            BaseRDFNodeType::BlankNode => self.blank_height,
-            BaseRDFNodeType::Literal(l) => self.literal_height_map.get(l).map(|x| *x).unwrap_or(0),
+            BaseRDFNodeType::IRI => self.iri_counter,
+            BaseRDFNodeType::BlankNode => self.blank_counter,
+            BaseRDFNodeType::Literal(l) => self.literal_counter_map.get(l).map(|x| *x).unwrap_or(0),
             BaseRDFNodeType::None => {
                 unreachable!("Should never happen")
             }
@@ -378,7 +375,7 @@ impl Cats {
         let mut local_remap = HashMap::new();
         let mut prefix_map = self.prefix_map.clone();
         let local_belongs_prefix_map = if let Some(local_cats) = local_cats {
-            for (k,v) in &local_cats.prefix_rev_map {
+            for (k, v) in &local_cats.prefix_rev_map {
                 if let Some(u) = self.prefix_rev_map.get(k) {
                     local_remap.insert(*v, *u);
                 } else {
@@ -395,11 +392,11 @@ impl Cats {
         let mut prefixes = Vec::with_capacity(ser.len());
         for u in uch {
             let p = if let Some(u) = u {
-                let mut p = if let Some(local_belongs_prefix_map) = local_belongs_prefix_map {
+                let p = if let Some(local_belongs_prefix_map) = local_belongs_prefix_map {
                     let p = local_belongs_prefix_map.get(&u);
                     if let Some(p) = p {
                         local_remap.get(p)
-                    } else  {
+                    } else {
                         self.belongs_prefix_map.get(&u)
                     }
                 } else {
@@ -430,7 +427,7 @@ impl Cats {
                 ),
             )
         } else {
-            let (u, l) = Cats::new_singular_iri(iri, self.iri_height);
+            let (u, l) = Cats::new_singular_iri(iri, self.iri_counter);
             (
                 u,
                 RDFNodeState::from_bases(
@@ -452,7 +449,7 @@ impl Cats {
                 ),
             )
         } else {
-            let (u, l) = Cats::new_singular_blank(blank, self.blank_height);
+            let (u, l) = Cats::new_singular_blank(blank, self.blank_counter);
             (
                 u,
                 RDFNodeState::from_bases(
@@ -472,7 +469,6 @@ pub fn encode_triples(
     object_cat_state: BaseCatState,
     global_cats: &Cats,
 ) -> (Vec<LockedCats>, Vec<EncodedTriples>) {
-    let start_first_half = Instant::now();
     let mut map = HashMap::new();
     map.insert(
         SUBJECT_COL_NAME.to_string(),
@@ -520,7 +516,6 @@ pub fn encode_triples(
     if mappings.column(OBJECT_PREFIX_COL_NAME).is_ok() {
         partition_by.push(OBJECT_PREFIX_COL_NAME);
     }
-    println!("First encode triples ee part took {}", start_first_half.elapsed().as_secs_f32());
     let out = if !partition_by.is_empty() {
         // Important to preserve ordering
         let dfs = mappings.partition_by_stable(partition_by, true).unwrap();

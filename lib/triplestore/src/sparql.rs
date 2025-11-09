@@ -42,7 +42,6 @@ use spargebra::term::{
 };
 use spargebra::{GraphUpdateOperation, Query, Update};
 use std::collections::{HashMap, HashSet};
-use std::time::Instant;
 
 #[derive(Debug)]
 pub enum QueryResult {
@@ -343,18 +342,14 @@ impl Triplestore {
     ) -> Result<Vec<NewTriples>, SparqlError> {
         let query = Query::parse(query, None).map_err(SparqlError::ParseError)?;
         if let Query::Construct { .. } = &query {
-            let start_query = Instant::now();
             let res =
                 self.query_parsed(&query, parameters, streaming, query_settings, Some(graph))?;
-            println!("Finish query {}", start_query.elapsed().as_secs_f32());
-            let start_insert = Instant::now();
-            let r =match res {
+            let r = match res {
                 QueryResult::Select(_) => {
                     panic!("Should never happen")
                 }
                 QueryResult::Construct(dfs) => self.insert_construct_result(dfs, transient, graph),
             };
-            println!("Finish inserting_triples {}", start_insert.elapsed().as_secs_f32());
             r
         } else {
             Err(SparqlError::QueryTypeNotSupported)

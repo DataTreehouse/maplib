@@ -11,6 +11,7 @@ pub use globalize::*;
 pub use image::*;
 pub use re_encode::*;
 pub use split::*;
+use std::cmp;
 
 use crate::BaseRDFNodeType;
 use nohash_hasher::NoHashHasher;
@@ -142,9 +143,9 @@ impl From<Arc<RwLock<Cats>>> for LockedCats {
 #[derive(Debug, Clone)]
 pub struct Cats {
     pub cat_map: HashMap<CatType, CatEncs>,
-    iri_height: u32,
-    blank_height: u32,
-    literal_height_map: HashMap<NamedNode, u32>,
+    iri_counter: u32,
+    blank_counter: u32,
+    literal_counter_map: HashMap<NamedNode, u32>,
     pub uuid: String,
     belongs_prefix_map: HashMap<u32, u32, BuildHasherDefault<NoHashHasher<u32>>>,
     prefix_map: HashMap<u32, NamedNode>,
@@ -175,23 +176,24 @@ impl Cats {
     pub(crate) fn from_map(cat_map: HashMap<CatType, CatEncs>) -> Self {
         let mut cats = Cats {
             cat_map,
-            iri_height: 0,
-            blank_height: 0,
-            literal_height_map: Default::default(),
+            iri_counter: 0,
+            blank_counter: 0,
+            literal_counter_map: Default::default(),
             uuid: Uuid::new_v4().to_string(),
             belongs_prefix_map: HashMap::with_capacity_and_hasher(2, BuildHasherDefault::default()),
             prefix_map: Default::default(),
             prefix_rev_map: Default::default(),
         };
-        cats.iri_height = cats.calc_new_iri_height();
-        cats.blank_height = cats.calc_new_blank_height();
-        cats.literal_height_map = cats.calc_new_literal_height();
+        cats.iri_counter = cats.calc_new_iri_counter();
+        cats.blank_counter = cats.calc_new_blank_counter();
+        cats.literal_counter_map = cats.calc_new_literal_counter();
         let mut i = 0u32;
         for (cat_type, cat_enc) in cats.cat_map.iter() {
             if let CatType::Prefix(nn) = cat_type {
                 cats.prefix_map.insert(i, nn.clone());
                 cats.prefix_rev_map.insert(nn.clone(), i);
-                cats.belongs_prefix_map.extend(cat_enc.rev_map.keys().map(|x|(*x,i)));
+                cats.belongs_prefix_map
+                    .extend(cat_enc.rev_map.keys().map(|x| (*x, i)));
                 i += 1;
             }
         }
@@ -201,9 +203,9 @@ impl Cats {
     pub fn new_empty() -> Cats {
         Cats {
             cat_map: HashMap::new(),
-            blank_height: 0,
-            iri_height: 0,
-            literal_height_map: Default::default(),
+            blank_counter: 0,
+            iri_counter: 0,
+            literal_counter_map: Default::default(),
             uuid: uuid::Uuid::new_v4().to_string(),
             belongs_prefix_map: HashMap::with_capacity_and_hasher(2, BuildHasherDefault::default()),
             prefix_map: Default::default(),
@@ -211,22 +213,22 @@ impl Cats {
         }
     }
 
-    fn calc_new_blank_height(&self) -> u32 {
-        let mut height = 0;
+    fn calc_new_blank_counter(&self) -> u32 {
+        let mut counter = 0;
         if let Some(enc) = self.cat_map.get(&CatType::Blank) {
-            height += enc.height();
+            counter = cmp::max(enc.rev_map.keys().max().unwrap() + 1, counter);
         }
-        height
+        counter
     }
 
-    fn calc_new_iri_height(&self) -> u32 {
-        let mut height = 0;
+    fn calc_new_iri_counter(&self) -> u32 {
+        let mut counter = 0u32;
         for (p, cat) in &self.cat_map {
             if matches!(p, CatType::Prefix(_)) {
-                height += cat.height();
+                counter = cmp::max(cat.rev_map.keys().max().unwrap() + 1, counter);
             }
         }
-        height
+        counter + 1
     }
 
     fn get_height(&self, c: &CatType) -> u32 {
@@ -240,32 +242,33 @@ impl Cats {
     fn set_height(&mut self, u: u32, c: &CatType) {
         match c {
             CatType::Prefix(..) => {
-                self.iri_height = u;
+                self.iri_counter = u;
             }
             CatType::Blank => {
-                self.blank_height = u;
+                self.blank_counter = u;
             }
             CatType::Literal(nn) => {
-                self.literal_height_map.insert(nn.clone(), u);
+                self.literal_counter_map.insert(nn.clone(), u);
             }
         }
     }
 
     pub fn get_iri_height(&self) -> u32 {
-        self.iri_height
+        self.iri_counter
     }
     pub fn get_blank_height(&self) -> u32 {
-        self.blank_height
+        self.blank_counter
     }
     pub fn get_literal_height(&self, nn: &NamedNode) -> u32 {
-        self.literal_height_map.get(nn).map(|x| *x).unwrap_or(0)
+        self.literal_counter_map.get(nn).map(|x| *x).unwrap_or(0)
     }
 
-    fn calc_new_literal_height(&self) -> HashMap<NamedNode, u32> {
+    fn calc_new_literal_counter(&self) -> HashMap<NamedNode, u32> {
         let mut map = HashMap::new();
         for (p, cat) in &self.cat_map {
             if let CatType::Literal(nn) = p {
-                map.insert(nn.clone(), cat.height());
+                let counter = cat.rev_map.keys().max().unwrap() + 1;
+                map.insert(nn.clone(), counter);
             }
         }
         map

@@ -27,16 +27,18 @@ impl Cats {
             } else {
                 self.cat_map.insert(ct.clone(), CatEncs::new_empty());
                 let prefix_u = self.prefix_map.len() as u32;
-                self.prefix_map.insert(prefix_u, NamedNode::new_unchecked(pre));
-                self.prefix_rev_map.insert(NamedNode::new_unchecked(pre), prefix_u);
+                self.prefix_map
+                    .insert(prefix_u, NamedNode::new_unchecked(pre));
+                self.prefix_rev_map
+                    .insert(NamedNode::new_unchecked(pre), prefix_u);
                 prefix_u
             };
 
             let enc = self.cat_map.get_mut(&ct).unwrap();
             if !enc.contains_key(suf) {
-                self.belongs_prefix_map.insert(self.iri_height, prefix_u);
-                enc.encode_new_str(&suf, self.iri_height);
-                self.iri_height += 1;
+                self.belongs_prefix_map.insert(self.iri_counter, prefix_u);
+                enc.encode_new_str(&suf, self.iri_counter);
+                self.iri_counter += 1;
             }
         }
     }

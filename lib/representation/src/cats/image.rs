@@ -82,7 +82,6 @@ impl Cats {
                 }
             }
         }
-
         let remap = self.merge(local_cats);
         let mut concat_reenc: HashMap<
             String,
@@ -189,8 +188,10 @@ pub fn set_global_cats_as_local(
 ) {
     for (_, s) in rdf_node_types {
         for v in s.map.values_mut() {
-            if matches!(v, BaseCatState::CategoricalNative(_, _)) {
+            if matches!(v, BaseCatState::CategoricalNative(_, None)) {
                 *v = BaseCatState::CategoricalNative(false, Some(cats.clone()));
+            } else if matches!(v, BaseCatState::CategoricalNative(_, Some(..))) {
+                panic!("Should never be called when locals exist")
             }
         }
     }
