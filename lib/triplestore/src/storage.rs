@@ -12,7 +12,7 @@ use polars_core::prelude::{IntoColumn, Series, SortMultipleOptions, StringChunke
 use polars_core::series::SeriesIter;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use representation::cats::{
-    rdf_split_iri_str, CatEncs, Cats, LockedCats, OBJECT_RANK_COL_NAME, SUBJECT_RANK_COL_NAME,
+    rdf_split_iri_str, Cats, LockedCats, OBJECT_RANK_COL_NAME, SUBJECT_RANK_COL_NAME,
 };
 use representation::{
     BaseRDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD, OBJECT_COL_NAME,
@@ -20,15 +20,19 @@ use representation::{
 };
 use std::cmp;
 use std::cmp::{Ordering, Reverse};
-use std::collections::{BTreeMap, BinaryHeap};
+use std::collections::{BTreeMap, BinaryHeap, HashMap};
+use std::hash::BuildHasherDefault;
+use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Instant;
+use nohash_hasher::NoHashHasher;
 use tracing::{instrument, trace};
 
 const OFFSET_STEP: usize = 100;
 const MIN_SIZE_CACHING: usize = 100_000_000; //100MB
 
+type RevMap = HashMap<u32, Arc<String>, BuildHasherDefault<NoHashHasher<u32>>>;
 #[derive(Clone, Debug)]
 struct SparseIndex {
     map: BTreeMap<Arc<String>, usize>,
@@ -137,8 +141,7 @@ impl Triples {
             let now_subjects = Instant::now();
             let subjects_str = if OFFSET_STEP / 10 * incoming_df.height() < remaining_height {
                 let new_subjects_col = incoming_df.column(SUBJECT_COL_NAME).unwrap();
-                let ct = self.subject_type.as_cat_type().unwrap();
-                let encs = global_cats.cat_map.get(&ct).unwrap();
+                let encs = get_rev_map(global_cats.deref(), &self.subject_type).unwrap();
                 let subjects =
                     create_deduplicated_string_vec(new_subjects_col.as_materialized_series(), encs);
                 Some(subjects)
@@ -421,7 +424,7 @@ fn create_indices(
 ) -> Result<IndexedTriples, TriplestoreError> {
     assert!(df.height() > 0);
     let now = Instant::now();
-    let subject_encs = get_encs(cats, subj_type);
+    let subject_encs = get_rev_map(cats, subj_type);
     //Should already be sorted by subject, object
     let subject_sparse_index = create_sparse_index(
         df.column(SUBJECT_COL_NAME)
@@ -457,7 +460,7 @@ fn create_indices(
             )
             .collect()
             .unwrap();
-        let object_encs = get_encs(cats, obj_type);
+        let object_encs = get_rev_map(cats, obj_type);
         let sparse = create_sparse_index(
             df.column(OBJECT_COL_NAME).unwrap().as_materialized_series(),
             object_encs,
@@ -484,12 +487,17 @@ fn create_indices(
     })
 }
 
-fn get_encs<'a>(c: &'a Cats, t: &StoredBaseRDFNodeType) -> Option<&'a CatEncs> {
-    let ct = t.as_cat_type();
-    if let Some(ct) = ct {
-        Some(c.cat_map.get(&ct).unwrap())
+fn get_rev_map<'a>(c: &'a Cats, t: &StoredBaseRDFNodeType) -> Option<&'a RevMap> {
+    if matches!(t, StoredBaseRDFNodeType::IRI(..)) {
+        Some(&c.rev_iri_suffix_map)
     } else {
-        None
+    let ct = t.as_cat_type();
+        if let Some(ct) = ct {
+            let enc = c.cat_map.get(&ct).unwrap();
+            Some(enc.rev_map.as_ref().unwrap())
+        } else {
+            None
+        }
     }
 }
 
@@ -744,11 +752,11 @@ fn update_index_at_offset(
     u32_chunked: &UInt32Chunked,
     offset: usize,
     sparse_map: &mut BTreeMap<Arc<String>, usize>,
-    encs: &CatEncs,
+    rev_map: &RevMap
 ) {
     let u = u32_chunked.get(offset);
     if let Some(u) = u {
-        let s = encs.rev_map.get(&u).unwrap();
+        let s = rev_map.get(&u).unwrap();
         let e = sparse_map.entry(s.clone());
         e.or_insert(offset);
     }
@@ -773,14 +781,14 @@ pub(crate) fn repeated_from_last_row_expr(c: &str) -> Expr {
         .and(col(c).shift(lit(1)).eq(col(c)))
 }
 
-fn create_sparse_index(ser: &Series, encs: Option<&CatEncs>) -> SparseIndex {
-    match encs {
+fn create_sparse_index(ser: &Series, rev_map: Option<&RevMap>) -> SparseIndex {
+    match rev_map {
         None => create_sparse_string_index(ser),
-        Some(encs) => create_sparse_cat_index(ser, encs),
+        Some(rev_map) => create_sparse_cat_index(ser, rev_map),
     }
 }
 
-fn create_sparse_cat_index(ser: &Series, encs: &CatEncs) -> SparseIndex {
+fn create_sparse_cat_index(ser: &Series, encs: &RevMap) -> SparseIndex {
     assert!(!ser.is_empty());
     let strch = ser.u32().unwrap();
     let mut sparse_map = BTreeMap::new();
@@ -814,7 +822,7 @@ fn create_sparse_string_index(ser: &Series) -> SparseIndex {
 }
 
 //Assumes sorted.
-fn create_deduplicated_string_vec<'a>(ser: &Series, cat_encs: &'a CatEncs) -> Vec<&'a str> {
+fn create_deduplicated_string_vec<'a>(ser: &Series, rev_map: &'a RevMap) -> Vec<&'a str> {
     let mut v = Vec::with_capacity(ser.len());
     let mut last = None;
     for any in ser.iter() {
@@ -826,7 +834,7 @@ fn create_deduplicated_string_vec<'a>(ser: &Series, cat_encs: &'a CatEncs) -> Ve
                     }
                 }
                 last = Some(u);
-                let s = cat_encs.rev_map.get(&u).unwrap().as_str();
+                let s = rev_map.get(&u).unwrap().as_str();
                 v.push(s);
             }
             _ => unreachable!("Should never happen"),
@@ -863,8 +871,8 @@ fn compact_segments(
             }
         }
     }
-    let subject_encs = get_encs(cats, subj_type);
-    let object_encs = get_encs(cats, obj_type);
+    let subject_encs = get_rev_map(cats, subj_type);
+    let object_encs = get_rev_map(cats, obj_type);
     let fields = if let StoredBaseRDFNodeType::Literal(nn) = obj_type {
         if nn.as_ref() == rdf::LANG_STRING {
             Some((LANG_STRING_VALUE_FIELD, LANG_STRING_LANG_FIELD))
@@ -933,8 +941,8 @@ fn compact_dataframe_segments(
     col_a: &str,
     col_b: &str,
     b_fields: Option<(&str, &str)>,
-    a_cat_encs: Option<&CatEncs>,
-    b_cat_encs: Option<&CatEncs>,
+    a_cat_encs: Option<&RevMap>,
+    b_cat_encs: Option<&RevMap>,
 ) -> Result<(DataFrame, Option<DataFrame>), TriplestoreError> {
     let mut new_segments = vec![];
     for (mut df, new) in segments {
@@ -1122,8 +1130,8 @@ impl<'a> TripleIterator<'a> {
         mut a_iterator: SeriesIter<'a>,
         mut b_1_iterator: SeriesIter<'a>,
         mut b_2_iterator: Option<SeriesIter<'a>>,
-        a_cat_encs: Option<&'a CatEncs>,
-        b_cat_encs: Option<&'a CatEncs>,
+        a_cat_rev_map: Option<&'a RevMap>,
+        b_cat_rev_map: Option<&'a RevMap>,
         new: bool,
     ) -> Option<Self> {
         if let Some(a) = a_iterator.next() {
@@ -1131,14 +1139,14 @@ impl<'a> TripleIterator<'a> {
             let b_1_original = b_1_iterator.next().unwrap();
             let (b_2_original, b_2_decode) = if let Some(b_2_iterator) = &mut b_2_iterator {
                 let b_2_original = b_2_iterator.next().unwrap();
-                let b_2_decode = decode_elem(&b_2_original, b_cat_encs);
+                let b_2_decode = decode_elem(&b_2_original, b_cat_rev_map);
                 (Some(b_2_original), b_2_decode)
             } else {
                 (None, None)
             };
 
-            let a_decode = decode_elem(&a_original, a_cat_encs);
-            let b_1_decode = decode_elem(&b_1_original, b_cat_encs);
+            let a_decode = decode_elem(&a_original, a_cat_rev_map);
+            let b_1_decode = decode_elem(&b_1_original, b_cat_rev_map);
             Some(TripleIterator {
                 a_original,
                 a_decode,
@@ -1158,8 +1166,8 @@ impl<'a> TripleIterator<'a> {
 
     pub fn next(
         self,
-        a_cat_encs: Option<&'a CatEncs>,
-        b_cat_encs: Option<&'a CatEncs>,
+        a_cat_rev_map: Option<&'a RevMap>,
+        b_cat_rev_map: Option<&'a RevMap>,
     ) -> Option<Self> {
         let Self {
             mut a_iterator,
@@ -1174,14 +1182,14 @@ impl<'a> TripleIterator<'a> {
             let b_1_original = b_1_iterator.next().unwrap();
             let (b_2_original, b_2_decode) = if let Some(b_2_iterator) = &mut b_2_iterator {
                 let b_2_original = b_2_iterator.next().unwrap();
-                let b_2_decode = decode_elem(&b_2_original, b_cat_encs);
+                let b_2_decode = decode_elem(&b_2_original, b_cat_rev_map);
                 (Some(b_2_original), b_2_decode)
             } else {
                 (None, None)
             };
 
-            let a_decode = decode_elem(&a_original, a_cat_encs);
-            let b_1_decode = decode_elem(&b_1_original, b_cat_encs);
+            let a_decode = decode_elem(&a_original, a_cat_rev_map);
+            let b_1_decode = decode_elem(&b_1_original, b_cat_rev_map);
             Some(TripleIterator {
                 a_original,
                 a_decode,
@@ -1202,11 +1210,11 @@ impl<'a> TripleIterator<'a> {
 
 fn decode_elem<'a>(
     any_value: &AnyValue<'a>,
-    cat_encs: Option<&'a CatEncs>,
+    rev_map: Option<&'a RevMap>,
 ) -> Option<AnyValue<'a>> {
-    if let Some(cat_encs) = cat_encs {
+    if let Some(rev_map) = rev_map {
         if let AnyValue::UInt32(u) = any_value {
-            Some(AnyValue::String(cat_encs.rev_map.get(u).unwrap()))
+            Some(AnyValue::String(rev_map.get(u).unwrap()))
         } else {
             unreachable!("Should never happen")
         }

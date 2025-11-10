@@ -3810,6 +3810,7 @@ dependencies = [
  "fts",
  "itoa",
  "memmap2",
+ "nohash-hasher",
  "oxrdf",
  "oxrdfio",
  "oxttl",

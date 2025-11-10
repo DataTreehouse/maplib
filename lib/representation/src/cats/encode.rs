@@ -14,10 +14,15 @@ use std::hash::BuildHasherDefault;
 use std::sync::Arc;
 
 impl CatEncs {
-    pub fn new_empty() -> CatEncs {
+    pub fn new_empty(is_iri:bool) -> CatEncs {
+        let rev_map = if is_iri {
+            None
+        } else {
+            Some(HashMap::with_capacity_and_hasher(2, BuildHasherDefault::default()))
+        };
         CatEncs {
             map: Default::default(),
-            rev_map: HashMap::with_capacity_and_hasher(2, BuildHasherDefault::default()),
+            rev_map,
         }
     }
 
@@ -26,11 +31,13 @@ impl CatEncs {
         self.map.contains_key(&s)
     }
 
-    pub fn new_singular(value: &str, u: u32) -> CatEncs {
-        let mut sing = Self::new_empty();
+    pub fn new_singular(value: &str, u: u32, is_iri:bool) -> CatEncs {
+        let mut sing = Self::new_empty(is_iri);
         let s = Arc::new(value.to_string());
         sing.map.insert(s.clone(), u);
-        sing.rev_map.insert(u, s);
+        if let Some(rev_map) = &mut sing.rev_map {
+            rev_map.insert(u, s);
+        }
         sing
     }
 
@@ -46,12 +53,16 @@ impl CatEncs {
     pub fn encode_new_string(&mut self, s: String, u: u32) {
         let s = Arc::new(s.clone());
         self.map.insert(s.clone(), u);
-        self.rev_map.insert(u, s);
+        if let Some(rev_map) = &mut self.rev_map {
+            rev_map.insert(u, s);
+        }
     }
 
     pub fn encode_new_arc_string(&mut self, s: Arc<String>, u: u32) {
         self.map.insert(s.clone(), u);
-        self.rev_map.insert(u, s);
+        if let Some(rev_map) = &mut self.rev_map {
+            rev_map.insert(u, s);
+        }
     }
 
     pub fn height(&self) -> u32 {
@@ -186,7 +197,7 @@ impl Cats {
             let mut new_enc_map = HashMap::new();
             let mut rev_map = HashMap::new();
             for (k, u) in map {
-                let enc = CatEncs::new_empty();
+                let enc = CatEncs::new_empty(t.is_iri());
                 new_enc_map.insert(u, enc);
                 if let Some(enc) = self
                     .cat_map
@@ -221,7 +232,6 @@ impl Cats {
                     }
                 })
                 .collect();
-
             let mut encoded_global_local = Vec::with_capacity(encoded_global.len());
             for (unencoded, encoded) in encoded_global {
                 let encoded = if let Some((u, s)) = unencoded {
@@ -231,6 +241,7 @@ impl Cats {
                     } else {
                         use_height += 1;
                         let su = use_height;
+                        //Rev map handled by cat constructor
                         enc.encode_new_str(s, su);
                         Some(su)
                     }
@@ -263,7 +274,7 @@ impl Cats {
             (ser, cats, cat_type_things)
         } else {
             let enc = self.get_encs(t).pop();
-            let mut new_enc = CatEncs::new_empty();
+            let mut new_enc = CatEncs::new_empty(t.is_iri());
             let strch = series.str().unwrap();
             let encoded_global: Vec<_> = strch
                 .par_iter()

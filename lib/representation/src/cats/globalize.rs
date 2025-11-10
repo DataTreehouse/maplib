@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use super::{encode_triples, rdf_split_iri_str, re_encode, CatEncs, CatTriples, CatType, Cats};
 use crate::solution_mapping::BaseCatState;
 use crate::BaseRDFNodeType;
@@ -25,7 +26,7 @@ impl Cats {
             let prefix_u = if let Some(prefix_u) = self.prefix_rev_map.get(&prefix) {
                 *prefix_u
             } else {
-                self.cat_map.insert(ct.clone(), CatEncs::new_empty());
+                self.cat_map.insert(ct.clone(), CatEncs::new_empty(true));
                 let prefix_u = self.prefix_map.len() as u32;
                 self.prefix_map
                     .insert(prefix_u, NamedNode::new_unchecked(pre));
@@ -37,7 +38,9 @@ impl Cats {
             let enc = self.cat_map.get_mut(&ct).unwrap();
             if !enc.contains_key(suf) {
                 self.belongs_prefix_map.insert(self.iri_counter, prefix_u);
-                enc.encode_new_str(&suf, self.iri_counter);
+                let arc_suf = Arc::new(suf.to_string());
+                 enc.encode_new_arc_string(arc_suf.clone(), self.iri_counter);
+                self.rev_iri_suffix_map.insert(self.iri_counter, arc_suf);
                 self.iri_counter += 1;
             }
         }

@@ -74,7 +74,7 @@ pub struct EncodedTriples {
 pub struct CatEncs {
     // We use a BTree map to keep strings sorted
     pub map: BTreeMap<Arc<String>, u32>,
-    pub rev_map: HashMap<u32, Arc<String>, BuildHasherDefault<NoHashHasher<u32>>>,
+    pub rev_map: Option<HashMap<u32, Arc<String>, BuildHasherDefault<NoHashHasher<u32>>>>,
 }
 
 #[derive(Debug, Clone)]
@@ -147,6 +147,7 @@ pub struct Cats {
     blank_counter: u32,
     literal_counter_map: HashMap<NamedNode, u32>,
     pub uuid: String,
+    pub rev_iri_suffix_map: HashMap<u32, Arc<String>, BuildHasherDefault<NoHashHasher<u32>>>,
     belongs_prefix_map: HashMap<u32, u32, BuildHasherDefault<NoHashHasher<u32>>>,
     prefix_map: HashMap<u32, NamedNode>,
     prefix_rev_map: HashMap<NamedNode, u32>,
@@ -154,20 +155,21 @@ pub struct Cats {
 
 impl Cats {
     pub fn new_singular_literal(l: &str, dt: NamedNode, u: u32) -> (u32, Cats) {
-        let catenc = CatEncs::new_singular(l, u);
         let t = CatType::Literal(dt);
+        let catenc = CatEncs::new_singular(l, u, false);
         (u, Cats::from_map(HashMap::from([(t, catenc)])))
     }
 
     pub fn new_singular_blank(s: &str, u: u32) -> (u32, Cats) {
-        let catenc = CatEncs::new_singular(s, u);
-        (u, Cats::from_map(HashMap::from([(CatType::Blank, catenc)])))
+        let t = CatType::Blank;
+        let catenc = CatEncs::new_singular(s, u, false);
+        (u, Cats::from_map(HashMap::from([(t, catenc)])))
     }
 
     pub fn new_singular_iri(s: &str, u: u32) -> (u32, Cats) {
         let (pre, suf) = rdf_split_iri_str(s);
-        let catenc = CatEncs::new_singular(suf, u);
         let t = CatType::Prefix(NamedNode::new_unchecked(pre));
+        let catenc = CatEncs::new_singular(suf, u, true);
         (u, Cats::from_map(HashMap::from([(t, catenc)])))
     }
 }
@@ -180,6 +182,7 @@ impl Cats {
             blank_counter: 0,
             literal_counter_map: Default::default(),
             uuid: Uuid::new_v4().to_string(),
+            rev_iri_suffix_map: HashMap::with_capacity_and_hasher(2, BuildHasherDefault::default()),
             belongs_prefix_map: HashMap::with_capacity_and_hasher(2, BuildHasherDefault::default()),
             prefix_map: Default::default(),
             prefix_rev_map: Default::default(),
@@ -192,8 +195,9 @@ impl Cats {
             if let CatType::Prefix(nn) = cat_type {
                 cats.prefix_map.insert(i, nn.clone());
                 cats.prefix_rev_map.insert(nn.clone(), i);
+                    cats.rev_iri_suffix_map.extend(cat_enc.map.iter().map(|(x,y)|(*y,x.clone())));
                 cats.belongs_prefix_map
-                    .extend(cat_enc.rev_map.keys().map(|x| (*x, i)));
+                    .extend(cat_enc.map.values().map(|x| (*x, i)));
                 i += 1;
             }
         }
@@ -207,6 +211,7 @@ impl Cats {
             iri_counter: 0,
             literal_counter_map: Default::default(),
             uuid: uuid::Uuid::new_v4().to_string(),
+            rev_iri_suffix_map: HashMap::with_capacity_and_hasher(2, BuildHasherDefault::default()),
             belongs_prefix_map: HashMap::with_capacity_and_hasher(2, BuildHasherDefault::default()),
             prefix_map: Default::default(),
             prefix_rev_map: Default::default(),
@@ -216,19 +221,25 @@ impl Cats {
     fn calc_new_blank_counter(&self) -> u32 {
         let mut counter = 0;
         if let Some(enc) = self.cat_map.get(&CatType::Blank) {
-            counter = cmp::max(enc.rev_map.keys().max().unwrap() + 1, counter);
+            counter = cmp::max(enc.rev_map.as_ref().unwrap().keys().max().unwrap() + 1, counter);
         }
         counter
     }
 
     fn calc_new_iri_counter(&self) -> u32 {
-        let mut counter = 0u32;
+        let counter = self.rev_iri_suffix_map.keys().max().map(|x|x+1);
+        counter.unwrap_or(0)
+    }
+
+    fn calc_new_literal_counter(&self) -> HashMap<NamedNode, u32> {
+        let mut map = HashMap::new();
         for (p, cat) in &self.cat_map {
-            if matches!(p, CatType::Prefix(_)) {
-                counter = cmp::max(cat.rev_map.keys().max().unwrap() + 1, counter);
+            if let CatType::Literal(nn) = p {
+                let counter = cat.rev_map.as_ref().unwrap().keys().max().unwrap() + 1;
+                map.insert(nn.clone(), counter);
             }
         }
-        counter + 1
+        map
     }
 
     fn get_height(&self, c: &CatType) -> u32 {
@@ -263,14 +274,5 @@ impl Cats {
         self.literal_counter_map.get(nn).map(|x| *x).unwrap_or(0)
     }
 
-    fn calc_new_literal_counter(&self) -> HashMap<NamedNode, u32> {
-        let mut map = HashMap::new();
-        for (p, cat) in &self.cat_map {
-            if let CatType::Literal(nn) = p {
-                let counter = cat.rev_map.keys().max().unwrap() + 1;
-                map.insert(nn.clone(), counter);
-            }
-        }
-        map
-    }
+
 }

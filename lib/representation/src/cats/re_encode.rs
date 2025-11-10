@@ -10,6 +10,7 @@ use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterato
 use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
 use std::sync::Arc;
+use std::time::Instant;
 
 #[derive(Debug, Clone)]
 pub struct CatReEnc {
@@ -30,6 +31,7 @@ impl CatReEnc {
     }
 
     pub fn re_encode_column(self, c: Column, forget_others: bool) -> PolarsResult<Column> {
+        let start_reenc = Instant::now();
         let uch = c.u32().unwrap();
         let mut v = Vec::with_capacity(uch.len());
         for u in uch {
@@ -146,9 +148,10 @@ impl Cats {
                         }
                     }
                     for (s, u) in numbered_insert {
-                        enc.encode_new_arc_string(s, u);
+                        enc.encode_new_arc_string(s.clone(), u);
                         if let Some(prefix_u) = &prefix_u {
                             self.belongs_prefix_map.insert(u, *prefix_u);
+                            self.rev_iri_suffix_map.insert(u, s);
                         }
                     }
                     let remap: HashMap<_, _, BuildHasherDefault<NoHashHasher<u32>>> = remap
@@ -163,12 +166,13 @@ impl Cats {
                     other_map.insert(t.clone(), reenc);
                 } else {
                     let mut remap = Vec::with_capacity(other_enc.map.len());
-                    let mut new_enc = CatEncs::new_empty();
+                    let mut new_enc = CatEncs::new_empty(matches!(t, CatType::Prefix(..)));
                     for (s, v) in other_enc.map.iter() {
                         remap.push((*v, c));
                         new_enc.encode_new_str(s, c);
                         if let Some(prefix_u) = &prefix_u {
                             self.belongs_prefix_map.insert(c, *prefix_u);
+                            self.rev_iri_suffix_map.insert(c, s.clone());
                         }
                         c += 1;
                     }

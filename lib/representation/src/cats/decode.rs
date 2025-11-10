@@ -8,23 +8,22 @@ use polars::frame::DataFrame;
 use polars::prelude::{col, Column, Expr, IntoColumn, IntoLazy, NamedFrom};
 use polars::series::Series;
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
+use std::borrow::Cow;
+use std::time::Instant;
 
 impl CatEncs {
     pub fn decode(&self, ser: &Series, cat_type: &CatType) -> Series {
+        if let CatType::Prefix(..) = cat_type {
+            panic!("Should never happen, this happens on the cats level")
+        }
         let original_name = ser.name().clone();
         let uch: Vec<_> = ser.u32().unwrap().iter().collect();
         let decoded_vec_iter = uch
             .into_par_iter()
-            .map(|x| x.map(|x| self.rev_map.get(&x).unwrap()));
-        let new_ser = if let CatType::Prefix(pre) = cat_type {
-            let decoded_vec: Vec<_> = decoded_vec_iter
-                .map(|x| x.map(|x| format!("{}{}", pre.as_str(), x)))
-                .collect();
-            Series::new(original_name, decoded_vec)
-        } else {
-            let decoded_vec: Vec<_> = decoded_vec_iter.map(|x| x.map(|x| x.as_str())).collect();
-            Series::new(original_name, decoded_vec)
-        };
+            .map(|x| x.map(|x| self.rev_map.as_ref().unwrap().get(&x).unwrap()));
+
+        let decoded_vec: Vec<_> = decoded_vec_iter.map(|x| x.map(|x| x.as_str())).collect();
+        let new_ser = Series::new(original_name, decoded_vec);
         //
         // let mut new_ser = if let CatType::Prefix(pre) = cat_type {
         //     Series::from_iter(decoded_ser.map(|x| x.map(|x| format!("{}{}", pre.as_str(), x))))
@@ -34,25 +33,8 @@ impl CatEncs {
         new_ser
     }
 
-    pub fn maybe_decode_string(
-        &self,
-        u: &u32,
-        cat_type: &CatType,
-        add_prefix: bool,
-    ) -> Option<String> {
-        if let Some(s) = self.rev_map.get(u) {
-            if add_prefix {
-                if let CatType::Prefix(pre) = cat_type {
-                    Some(format!("{}{}", pre.as_str(), s))
-                } else {
-                    Some(s.to_string())
-                }
-            } else {
-                Some(s.to_string())
-            }
-        } else {
-            None
-        }
+    pub fn maybe_decode_non_iri_string(&self, u: &u32) -> Option<&str> {
+        self.rev_map.as_ref().unwrap().get(u).map(|x| x.as_str())
     }
 }
 
@@ -67,27 +49,52 @@ impl Cats {
         //Very important that we prefer the local encoding over the global encoding.
         let local = local_cats.as_ref().map(|x| x.read().unwrap());
         let local = local.as_ref();
-        let mut encs = if let Some(local_cats) = local {
-            local_cats.get_encs(&BaseRDFNodeType::IRI)
+        let mut maybe_s = if let Some(local) = local {
+            local.maybe_decode_iri_string(u, true)
         } else {
-            vec![]
+            None
         };
-        encs.extend(self.get_encs(&BaseRDFNodeType::IRI));
-        let mut s = None;
-        for (ct, e) in encs {
-            if let Some(d) = e.maybe_decode_string(u, ct, true) {
-                s = Some(d);
-                break;
-            }
+        if maybe_s.is_none() {
+            maybe_s = self.maybe_decode_iri_string(u, true);
         }
-        NamedNode::new_unchecked(s.expect("Should be able to decode"))
+        NamedNode::new_unchecked(maybe_s.expect("Should be able to decode"))
     }
 
-    pub fn decode_of_type(&self, ser: &Series, cat_type: &CatType) -> Option<Series> {
-        if let Some(enc) = self.cat_map.get(cat_type) {
-            Some(enc.decode(ser, cat_type))
+    pub fn maybe_decode_iri_string(&self, u: &u32, add_prefix: bool) -> Option<Cow<str>> {
+        if let Some(s) = self.rev_iri_suffix_map.get(u) {
+            if add_prefix {
+                let prefix = self.prefix_map.get(self.belongs_prefix_map.get(u).unwrap()).unwrap();
+                Some(Cow::Owned(format!("{}{}", prefix.as_str(), s)))
+            } else {
+                Some(Cow::Borrowed(s))
+            }
         } else {
-            unreachable!("Should never be called when type does not exist")
+            None
+        }
+    }
+
+    pub fn decode_of_type(&self, ser: &Series, cat_type: &CatType) -> Series {
+        if matches!(cat_type, CatType::Prefix(..)) {
+            let original_name = ser.name().clone();
+            let uch: Vec<_> = ser.u32().unwrap().iter().collect();
+            let decoded_vec: Vec<_> = uch
+                .into_par_iter()
+                .map(|x| x.map(|x| self.maybe_decode_iri_string(&x, true).unwrap())).collect();
+
+            let new_ser = Series::new(original_name, decoded_vec);
+            //
+            // let mut new_ser = if let CatType::Prefix(pre) = cat_type {
+            //     Series::from_iter(decoded_ser.map(|x| x.map(|x| format!("{}{}", pre.as_str(), x))))
+            // } else {
+            //     Series::from_iter(decoded_ser.map(|x| x.map(|x| x.as_str())))
+            // };
+            new_ser
+        } else {
+            if let Some(enc) = self.cat_map.get(cat_type) {
+                enc.decode(ser, cat_type)
+            } else {
+                unreachable!("Should never be called when type does not exist")
+            }
         }
     }
 
@@ -137,36 +144,70 @@ impl Cats {
         local_cats: Option<LockedCats>,
         add_prefix: bool,
     ) -> Series {
-        //Very important that we prefer the local encoding over the global encoding.
         let local = local_cats.as_ref().map(|x| x.read().unwrap());
-        let mut encs = if let Some(local_cats) = &local {
-            local_cats.get_encs(t)
-        } else {
-            vec![]
-        };
-        encs.extend(self.get_encs(t));
-
         let u32s = ser.u32().unwrap();
         let us: Vec<_> = u32s.iter().collect();
-        let strings: Vec<_> = us
-            .par_iter()
-            .map(|u| {
-                let s = if let Some(u) = u {
-                    let mut s = None;
-                    for (t, e) in &encs {
-                        if let Some(st) = e.maybe_decode_string(&u, t, add_prefix) {
-                            s = Some(st);
-                            break;
+        let strings = if t.is_iri() {
+            let strings: Vec<_> = us
+                .par_iter()
+                .map(|u| {
+
+                    let s = if let Some(u) =u {
+                        let mut s = None;
+                        if let Some(local_cats) = &local {
+                            s = local_cats.maybe_decode_iri_string(u, add_prefix);
                         }
-                    }
-                    Some(s.expect("Expect all cats to resolve"))
-                } else {
+                        if s.is_none() {
+                            s = self.maybe_decode_iri_string(u, add_prefix);
+                        }
+
+
+                        Some(s.expect("Expect all cats to resolve"))
+                    } else {
                     None
-                };
-                s
-            })
-            .collect();
-        Series::from_iter(strings)
+                    };
+                    s
+                })
+                .collect();
+            strings
+        } else {
+            //Very important that we prefer the local encoding over the global encoding.
+            let mut encs = if let Some(local_cats) = &local {
+                local_cats.get_encs(t)
+            } else {
+                vec![]
+            };
+            encs.extend(self.get_encs(t));
+
+
+            let strings: Vec<_> = us
+                .par_iter()
+                .map(|u| {
+                    let s = if let Some(u) = u {
+                        let mut s = None;
+                        for (_, e) in &encs {
+                            if let Some(st) = e.maybe_decode_non_iri_string(&u) {
+                                s = Some(st);
+                                break;
+                            }
+                        }
+                        Some(Cow::Borrowed(s.expect("Expect all cats to resolve")))
+                    } else {
+                        None
+                    };
+                    s
+                })
+                .collect();
+            strings
+        };
+        let strs = strings.iter().map(|x| {
+            if let Some(x) = x {
+                Some(x.as_str())
+            } else {
+                None
+            }
+        });
+        Series::from_iter(strs)
     }
 }
 
@@ -229,6 +270,8 @@ pub fn decode_expr(
 ) -> Expr {
     expr.map(
         move |x| {
+            //println!("Start decode {}", x.name());
+            let start_decode = Instant::now();
             let original_name = x.name().to_string();
             let global_cats = global_cats.read().unwrap();
             let mut s = global_cats.decode(
@@ -238,6 +281,7 @@ pub fn decode_expr(
                 add_prefix,
             );
             s.rename(PlSmallStr::from_string(original_name));
+            //println!("End decode {}", start_decode.elapsed().as_secs_f32());
             Ok(s.into_column())
         },
         |_, f| Ok(Field::new(f.name().clone(), DataType::String)),

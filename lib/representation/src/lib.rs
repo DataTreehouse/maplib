@@ -1,4 +1,5 @@
 #![feature(pattern)]
+#![feature(str_as_str)]
 
 pub mod multitype;
 pub mod polars_to_rdf;

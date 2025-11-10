@@ -81,8 +81,7 @@ impl Triplestore {
                                             .unwrap()
                                             .as_materialized_series_maintain_scalar(),
                                         &prefix,
-                                    )
-                                    .unwrap();
+                                    );
                                 df.with_column(ser.into_column()).unwrap();
                             }
                             fast_ntriples::write_triples_in_df(
@@ -114,8 +113,7 @@ impl Triplestore {
                                             .unwrap()
                                             .as_materialized_series_maintain_scalar(),
                                         &prefix,
-                                    )
-                                    .unwrap();
+                                    );
                                 df.with_column(ser.into_column()).unwrap();
                             }
                             if let Some(prefix) = object_type.as_cat_type() {
@@ -126,8 +124,7 @@ impl Triplestore {
                                             .unwrap()
                                             .as_materialized_series_maintain_scalar(),
                                         &prefix,
-                                    )
-                                    .unwrap();
+                                    );
                                 df.with_column(ser.into_column()).unwrap();
                             }
                             fast_ntriples::write_triples_in_df(
