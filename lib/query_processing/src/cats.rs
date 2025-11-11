@@ -4,6 +4,7 @@ use representation::solution_mapping::BaseCatState;
 use representation::{BaseRDFNodeType, RDFNodeState};
 use std::collections::{HashMap, HashSet};
 use std::hash::BuildHasherDefault;
+use std::ops::Deref;
 use std::sync::Arc;
 
 pub fn create_compatible_cats(
@@ -27,7 +28,7 @@ pub fn create_compatible_cats(
         let need_native_cat_cast = check_need_native_cat_cast(&t, &states);
         if need_native_cat_cast {
             let locals = find_all_locals(&t, &states);
-            let mut cats = Cats::new_empty();
+            let mut cats = Cats::new_empty(Some(global_cats.read().unwrap().deref()));
             let renc_local = cats.merge(locals);
             let renc_local: HashMap<_, _> = renc_local
                 .into_iter()
@@ -111,7 +112,7 @@ pub fn create_compatible_cats(
         if let Some(v) = v {
             for (e_vec, bt, bs) in v.iter_mut() {
                 if let Some((m, state)) = native_cat_map.get(bt) {
-                    let is_local = if let Some(local) = bs.get_local_cats() {
+                    if let Some(local) = bs.get_local_cats() {
                         let local = local.read().unwrap();
                         if let Some((blank_renc, iri_renc, literal_renc)) = m.get(&local.uuid) {
                             let renc = match bt {
@@ -133,14 +134,8 @@ pub fn create_compatible_cats(
                                 }
                             }
                         }
-                        true
-                    } else {
-                        false
-                    };
-
-                    if is_local {
-                        *bs = state.clone();
                     }
+                    *bs = state.clone();
                 }
                 if string_cast.contains(bt) {
                     if matches!(bs, BaseCatState::CategoricalNative(..)) {
@@ -176,8 +171,8 @@ fn check_need_native_cat_cast(t: &BaseRDFNodeType, types: &Vec<Option<RDFNodeSta
                 if matches!(b, BaseCatState::String | BaseCatState::NonString) {
                     return false;
                 }
-                let w = matches!(b, BaseCatState::CategoricalNative(_, Some(_)));
-                if w {
+                let is_local = matches!(b, BaseCatState::CategoricalNative(_, Some(_)));
+                if is_local {
                     if found_non_global_witness {
                         return true;
                     } else {

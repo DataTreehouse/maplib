@@ -1,6 +1,6 @@
 [package]
 name = "py_maplib"
-version = "0.18.7"
+version = "0.18.8"
 edition = "2021"
 
 [features]
@@ -21,11 +21,11 @@ oxrdf.workspace = true
 oxrdfio.workspace = true
 thiserror.workspace = true
 polars = { workspace = true, features = [
-    "nightly", "performant", "cse",
+    "simd","nightly", "performant", "cse",
     "dtype-array", "dtype-date",
     "dtype-datetime", "dtype-decimal", "dtype-duration",
     "dtype-i8", "dtype-i16", "dtype-struct",
-    "dtype-time", "dtype-u8", "dtype-u16"], default-features = false }
+    "dtype-time", "dtype-u8", "dtype-u16"] }
 uuid.workspace = true
 chrono.workspace = true
 
@@ -42,7 +42,7 @@ crate-type = ["cdylib"]
 mimalloc = { version = "0.1", default-features = false }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-jemallocator = { version = "0.5.4", features = ["disable_initial_exec_tls"] }
+tikv-jemallocator = { version = "*", features = ["disable_initial_exec_tls"] }
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("gil-refs", "rdf-star"))'] }

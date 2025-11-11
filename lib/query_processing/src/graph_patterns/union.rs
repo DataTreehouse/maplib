@@ -33,6 +33,7 @@ pub fn union(
         }
 
         let exploded = create_compatible_cats(to_union_exprs, to_union_states, global_cats.clone());
+
         let mut target_states = HashMap::new();
         for m in &exploded {
             if let Some(m) = m {
@@ -109,6 +110,7 @@ pub fn union(
             target_state.insert(k, v);
         }
     }
+
     let output_mappings = concat_lf_diagonal(
         to_concat,
         UnionArgs {

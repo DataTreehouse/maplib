@@ -8,17 +8,19 @@ use crate::{BaseRDFNodeType, RDFNodeState, OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use oxrdf::NamedNode;
 use polars::frame::DataFrame;
 use polars::prelude::{col, lit, IntoLazy, Series};
-use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
 use std::sync::Arc;
 
 impl CatEncs {
-    pub fn new_empty(is_iri:bool) -> CatEncs {
+    pub fn new_empty(is_iri: bool) -> CatEncs {
         let rev_map = if is_iri {
             None
         } else {
-            Some(HashMap::with_capacity_and_hasher(2, BuildHasherDefault::default()))
+            Some(HashMap::with_capacity_and_hasher(
+                2,
+                BuildHasherDefault::default(),
+            ))
         };
         CatEncs {
             map: Default::default(),
@@ -31,7 +33,7 @@ impl CatEncs {
         self.map.contains_key(&s)
     }
 
-    pub fn new_singular(value: &str, u: u32, is_iri:bool) -> CatEncs {
+    pub fn new_singular(value: &str, u: u32, is_iri: bool) -> CatEncs {
         let mut sing = Self::new_empty(is_iri);
         let s = Arc::new(value.to_string());
         sing.map.insert(s.clone(), u);
@@ -122,7 +124,7 @@ impl Cats {
             }
         }
         let encoded: Vec<_> = to_encode
-            .into_par_iter()
+            .into_iter()
             .map(|(c, t, ser)| {
                 let t_col = if let Some(map) = &include_cat_type_col {
                     map.contains_key(&c)
@@ -136,7 +138,7 @@ impl Cats {
         let mut prefix_maps = HashMap::new();
         let mut mappings = mappings.lazy();
         let prefix_cols: Vec<_> = to_add_prefix_col
-            .into_par_iter()
+            .into_iter()
             .map(|(c, local, ser)| {
                 let (prefix_ser, maps) = self.get_prefix_column(ser, local);
                 let maps: HashMap<_, _> = maps
@@ -215,7 +217,7 @@ impl Cats {
 
             let to_iter: Vec<_> = pre.into_iter().zip(suf).collect();
             let encoded_global: Vec<_> = to_iter
-                .into_par_iter()
+                .into_iter()
                 .map(|x| {
                     if let (Some(u), Some(s)) = x {
                         if let Some(enc) = enc_map.get(&u) {
@@ -277,7 +279,7 @@ impl Cats {
             let mut new_enc = CatEncs::new_empty(t.is_iri());
             let strch = series.str().unwrap();
             let encoded_global: Vec<_> = strch
-                .par_iter()
+                .iter()
                 .map(|x| {
                     if let Some(x) = x {
                         if let Some((_, enc)) = enc {
@@ -333,7 +335,7 @@ impl Cats {
     pub fn encode_blanks(&self, blanks: &[&str]) -> Vec<Option<u32>> {
         if let Some(encs) = self.cat_map.get(&CatType::Blank) {
             let u32s: Vec<_> = blanks
-                .par_iter()
+                .iter()
                 .map(|x| encs.maybe_encode_str(*x).map(|x| *x))
                 .collect();
             u32s
@@ -345,7 +347,7 @@ impl Cats {
     pub fn encode_literals(&self, literals: &[&str], data_type: NamedNode) -> Vec<Option<u32>> {
         if let Some(encs) = self.cat_map.get(&CatType::Literal(data_type)) {
             let u32s: Vec<_> = literals
-                .par_iter()
+                .iter()
                 .map(|x| encs.maybe_encode_str(*x).map(|x| *x))
                 .collect();
             u32s
@@ -531,7 +533,7 @@ pub fn encode_triples(
         // Important to preserve ordering
         let dfs = mappings.partition_by_stable(partition_by, true).unwrap();
         let out: Vec<_> = dfs
-            .into_par_iter()
+            .into_iter()
             .map(|mut df| {
                 if df.height() == 0 {
                     None

@@ -4,12 +4,12 @@ use crate::solution_mapping::BaseCatState;
 use crate::BaseRDFNodeType;
 use oxrdf::NamedNode;
 use polars::datatypes::{DataType, Field, PlSmallStr};
+use polars::frame::column::ScalarColumn;
 use polars::frame::DataFrame;
-use polars::prelude::{col, Column, Expr, IntoColumn, IntoLazy, NamedFrom};
+use polars::prelude::{col, Column, Expr, IntoColumn, IntoLazy, NamedFrom, SeriesSealed};
 use polars::series::Series;
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use std::borrow::Cow;
-use std::time::Instant;
 
 impl CatEncs {
     pub fn decode(&self, ser: &Series, cat_type: &CatType) -> Series {
@@ -40,7 +40,7 @@ impl CatEncs {
 
 impl Cats {
     pub fn decode_iri_u32s(&self, us: &[u32], local_cats: Option<LockedCats>) -> Vec<NamedNode> {
-        us.par_iter()
+        us.iter()
             .map(|x| self.decode_iri_u32(x, local_cats.clone()))
             .collect()
     }
@@ -60,10 +60,13 @@ impl Cats {
         NamedNode::new_unchecked(maybe_s.expect("Should be able to decode"))
     }
 
-    pub fn maybe_decode_iri_string(&self, u: &u32, add_prefix: bool) -> Option<Cow<str>> {
+    pub fn maybe_decode_iri_string(&self, u: &u32, add_prefix: bool) -> Option<Cow<'_, str>> {
         if let Some(s) = self.rev_iri_suffix_map.get(u) {
             if add_prefix {
-                let prefix = self.prefix_map.get(self.belongs_prefix_map.get(u).unwrap()).unwrap();
+                let prefix = self
+                    .prefix_map
+                    .get(self.belongs_prefix_map.get(u).unwrap())
+                    .unwrap();
                 Some(Cow::Owned(format!("{}{}", prefix.as_str(), s)))
             } else {
                 Some(Cow::Borrowed(s))
@@ -79,7 +82,8 @@ impl Cats {
             let uch: Vec<_> = ser.u32().unwrap().iter().collect();
             let decoded_vec: Vec<_> = uch
                 .into_par_iter()
-                .map(|x| x.map(|x| self.maybe_decode_iri_string(&x, true).unwrap())).collect();
+                .map(|x| x.map(|x| self.maybe_decode_iri_string(&x, true).unwrap()))
+                .collect();
 
             let new_ser = Series::new(original_name, decoded_vec);
             //
@@ -151,8 +155,7 @@ impl Cats {
             let strings: Vec<_> = us
                 .par_iter()
                 .map(|u| {
-
-                    let s = if let Some(u) =u {
+                    let s = if let Some(u) = u {
                         let mut s = None;
                         if let Some(local_cats) = &local {
                             s = local_cats.maybe_decode_iri_string(u, add_prefix);
@@ -160,11 +163,9 @@ impl Cats {
                         if s.is_none() {
                             s = self.maybe_decode_iri_string(u, add_prefix);
                         }
-
-
                         Some(s.expect("Expect all cats to resolve"))
                     } else {
-                    None
+                        None
                     };
                     s
                 })
@@ -178,7 +179,6 @@ impl Cats {
                 vec![]
             };
             encs.extend(self.get_encs(t));
-
 
             let strings: Vec<_> = us
                 .par_iter()
@@ -270,18 +270,40 @@ pub fn decode_expr(
 ) -> Expr {
     expr.map(
         move |x| {
-            //println!("Start decode {}", x.name());
-            let start_decode = Instant::now();
             let original_name = x.name().to_string();
             let global_cats = global_cats.read().unwrap();
-            let mut s = global_cats.decode(
-                x.as_materialized_series(),
-                &base_rdf_node_type,
-                local_cats.as_ref().map(|x| x.clone()),
-                add_prefix,
-            );
+            let len = x.len();
+            let mut s = match x {
+                Column::Series(x) => {
+                    let ser = global_cats.decode(
+                        x.as_series(),
+                        &base_rdf_node_type,
+                        local_cats.as_ref().map(|x| x.clone()),
+                        add_prefix,
+                    );
+                    ser.into_column()
+                }
+                Column::Partitioned(p) => p
+                    .apply_unary_elementwise(|x| {
+                        global_cats.decode(
+                            x,
+                            &base_rdf_node_type,
+                            local_cats.as_ref().map(|x| x.clone()),
+                            add_prefix,
+                        )
+                    })
+                    .into_column(),
+                Column::Scalar(s) => {
+                    let s = global_cats.decode(
+                        &s.as_single_value_series(),
+                        &base_rdf_node_type,
+                        local_cats.as_ref().map(|x| x.clone()),
+                        add_prefix,
+                    );
+                    Column::Scalar(ScalarColumn::from_single_value_series(s, len))
+                }
+            };
             s.rename(PlSmallStr::from_string(original_name));
-            //println!("End decode {}", start_decode.elapsed().as_secs_f32());
             Ok(s.into_column())
         },
         |_, f| Ok(Field::new(f.name().clone(), DataType::String)),

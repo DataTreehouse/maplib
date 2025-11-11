@@ -9,7 +9,7 @@ representation = { path = "../representation"}
 spargebra = { path = "../spargebra"}
 
 oxrdf.workspace = true
-polars = {workspace=true, default-features = false, features=[
+polars = {workspace=true,  features=[
     "performant",
     "nightly",
     "cse",

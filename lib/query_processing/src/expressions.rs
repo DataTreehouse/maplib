@@ -32,7 +32,7 @@ pub fn named_node_local_enc(nn: &NamedNode, global_cats: &Cats) -> (Expr, Option
     if let Some(enc) = global_cats.encode_iri_slice(&[nn.as_str()]).pop().unwrap() {
         (lit(enc).cast(DataType::UInt32), None)
     } else {
-        let (enc, local) = Cats::new_singular_iri(nn.as_str(), global_cats.get_iri_height());
+        let (enc, local) = Cats::new_singular_iri(nn.as_str(), global_cats.get_iri_counter());
         (lit(enc).cast(DataType::UInt32), Some(local))
     }
 }
@@ -46,7 +46,7 @@ pub fn blank_node_local_enc(bl: &BlankNode, global_cats: &Cats) -> (Expr, Option
     if let Some(enc) = global_cats.encode_blanks(&[bl.as_str()]).pop().unwrap() {
         (lit(enc).cast(DataType::UInt32), None)
     } else {
-        let (enc, local) = Cats::new_singular_blank(bl.as_str(), global_cats.get_iri_height());
+        let (enc, local) = Cats::new_singular_blank(bl.as_str(), global_cats.get_iri_counter());
         (lit(enc).cast(DataType::UInt32), Some(local))
     }
 }
@@ -66,7 +66,7 @@ pub fn maybe_literal_enc(l: &Literal, global_cats: &Cats) -> (Expr, BaseRDFNodeT
             )
         } else {
             let dt = l.datatype().into_owned();
-            let offset = global_cats.get_literal_height(&dt);
+            let offset = global_cats.get_literal_counter(&dt);
             let (enc, local) = Cats::new_singular_literal(l.value(), dt, offset);
             (
                 lit(enc).cast(DataType::UInt32),

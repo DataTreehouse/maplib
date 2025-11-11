@@ -1,5 +1,6 @@
 use crate::errors::TriplestoreError;
 use crate::{IndexingOptions, StoredBaseRDFNodeType};
+use nohash_hasher::NoHashHasher;
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{NamedNode, Subject, Term};
 use polars::prelude::{
@@ -26,7 +27,6 @@ use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Instant;
-use nohash_hasher::NoHashHasher;
 use tracing::{instrument, trace};
 
 const OFFSET_STEP: usize = 100;
@@ -488,16 +488,11 @@ fn create_indices(
 }
 
 fn get_rev_map<'a>(c: &'a Cats, t: &StoredBaseRDFNodeType) -> Option<&'a RevMap> {
-    if matches!(t, StoredBaseRDFNodeType::IRI(..)) {
-        Some(&c.rev_iri_suffix_map)
+    let bt = t.as_base_rdf_node_type();
+    if bt.stored_cat() {
+        Some(c.get_rev_map(&bt))
     } else {
-    let ct = t.as_cat_type();
-        if let Some(ct) = ct {
-            let enc = c.cat_map.get(&ct).unwrap();
-            Some(enc.rev_map.as_ref().unwrap())
-        } else {
-            None
-        }
+        None
     }
 }
 
@@ -752,7 +747,7 @@ fn update_index_at_offset(
     u32_chunked: &UInt32Chunked,
     offset: usize,
     sparse_map: &mut BTreeMap<Arc<String>, usize>,
-    rev_map: &RevMap
+    rev_map: &RevMap,
 ) {
     let u = u32_chunked.get(offset);
     if let Some(u) = u {
@@ -1208,10 +1203,7 @@ impl<'a> TripleIterator<'a> {
     }
 }
 
-fn decode_elem<'a>(
-    any_value: &AnyValue<'a>,
-    rev_map: Option<&'a RevMap>,
-) -> Option<AnyValue<'a>> {
+fn decode_elem<'a>(any_value: &AnyValue<'a>, rev_map: Option<&'a RevMap>) -> Option<AnyValue<'a>> {
     if let Some(rev_map) = rev_map {
         if let AnyValue::UInt32(u) = any_value {
             Some(AnyValue::String(rev_map.get(u).unwrap()))

@@ -1,6 +1,5 @@
 use oxrdf::NamedNode;
 use polars::prelude::Series;
-use rayon::iter::ParallelIterator;
 use std::collections::HashMap;
 
 pub fn named_node_split_prefix(nn: &NamedNode) -> NamedNode {
@@ -19,7 +18,7 @@ pub fn split_iri_series<'a>(
     let mut prefixes = Vec::with_capacity(series.len());
 
     let (new_prefixes, suffixes): (Vec<_>, Vec<_>) = series_str
-        .par_iter()
+        .iter()
         .map(|x| {
             if let Some(iri) = x {
                 let (pre, suf) = rdf_split_iri_str(iri);
@@ -47,6 +46,7 @@ pub fn split_iri_series<'a>(
 }
 
 pub fn rdf_split_iri_str(iri: &str) -> (&str, &str) {
+    return ("", iri);
     // Apache 2 / MIT The Rust Project Contributors
     #[inline]
     fn rsplit_once_inclusive_l<P: std::str::pattern::Pattern>(

@@ -75,13 +75,12 @@ impl Triplestore {
 
                             if let Some(prefix) = subject_type.as_cat_type() {
                                 let cats = self.global_cats.read()?;
-                                let ser = cats
-                                    .decode_of_type(
-                                        &df.column(SUBJECT_COL_NAME)
-                                            .unwrap()
-                                            .as_materialized_series_maintain_scalar(),
-                                        &prefix,
-                                    );
+                                let ser = cats.decode_of_type(
+                                    &df.column(SUBJECT_COL_NAME)
+                                        .unwrap()
+                                        .as_materialized_series_maintain_scalar(),
+                                    &prefix,
+                                );
                                 df.with_column(ser.into_column()).unwrap();
                             }
                             fast_ntriples::write_triples_in_df(
@@ -107,24 +106,22 @@ impl Triplestore {
                             convert_datelike_to_string(&mut df, OBJECT_COL_NAME);
                             if let Some(prefix) = subject_type.as_cat_type() {
                                 let cats = self.global_cats.read()?;
-                                let ser = cats
-                                    .decode_of_type(
-                                        &df.column(SUBJECT_COL_NAME)
-                                            .unwrap()
-                                            .as_materialized_series_maintain_scalar(),
-                                        &prefix,
-                                    );
+                                let ser = cats.decode_of_type(
+                                    &df.column(SUBJECT_COL_NAME)
+                                        .unwrap()
+                                        .as_materialized_series_maintain_scalar(),
+                                    &prefix,
+                                );
                                 df.with_column(ser.into_column()).unwrap();
                             }
                             if let Some(prefix) = object_type.as_cat_type() {
                                 let cats = self.global_cats.read()?;
-                                let ser = cats
-                                    .decode_of_type(
-                                        &df.column(OBJECT_COL_NAME)
-                                            .unwrap()
-                                            .as_materialized_series_maintain_scalar(),
-                                        &prefix,
-                                    );
+                                let ser = cats.decode_of_type(
+                                    &df.column(OBJECT_COL_NAME)
+                                        .unwrap()
+                                        .as_materialized_series_maintain_scalar(),
+                                    &prefix,
+                                );
                                 df.with_column(ser.into_column()).unwrap();
                             }
                             fast_ntriples::write_triples_in_df(

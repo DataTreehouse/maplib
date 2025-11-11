@@ -45,7 +45,8 @@ use triplestore::sparql::{QueryResult as SparqlQueryResult, QueryResult, QuerySe
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 #[cfg(target_os = "linux")]
-use jemallocator::Jemalloc;
+use tikv_jemallocator::Jemalloc;
+
 use oxrdf::vocab::xsd;
 use oxrdf::NamedNode;
 use oxrdfio::RdfFormat;
@@ -1466,7 +1467,7 @@ fn _maplib(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     // subscriber.init();
 
     let fmt = tracing_subscriber::fmt()
-        // .with_span_events(FmtSpan::NEW | FmtSpan::CLOSE)
+        //.with_span_events(FmtSpan::NEW | FmtSpan::CLOSE)
         .with_max_level(filter::LevelFilter::INFO)
         .with_env_filter(EnvFilter::from_default_env())
         .finish();

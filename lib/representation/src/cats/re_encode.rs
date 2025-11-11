@@ -6,11 +6,9 @@ use nohash_hasher::NoHashHasher;
 use polars::datatypes::PlSmallStr;
 use polars::error::PolarsResult;
 use polars::prelude::{col, Column, IntoColumn, IntoLazy, LazyFrame, Series};
-use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
 use std::sync::Arc;
-use std::time::Instant;
 
 #[derive(Debug, Clone)]
 pub struct CatReEnc {
@@ -31,7 +29,6 @@ impl CatReEnc {
     }
 
     pub fn re_encode_column(self, c: Column, forget_others: bool) -> PolarsResult<Column> {
-        let start_reenc = Instant::now();
         let uch = c.u32().unwrap();
         let mut v = Vec::with_capacity(uch.len());
         for u in uch {
@@ -57,7 +54,7 @@ impl CatEncs {
     pub fn inner_join_re_enc(&self, other: &CatEncs) -> Vec<(u32, u32)> {
         let renc: Vec<_> = self
             .map
-            .par_iter()
+            .iter()
             .map(|(x, l)| {
                 if let Some(r) = other.maybe_encode_str(x) {
                     if l != r {
@@ -83,7 +80,7 @@ impl Cats {
         let right = right.read().unwrap();
         let rencs: Vec<_> = left
             .cat_map
-            .par_iter()
+            .iter()
             .map(|(t, left_enc)| {
                 if let Some(right_enc) = right.cat_map.get(t) {
                     let renc = left_enc.inner_join_re_enc(right_enc);
@@ -125,11 +122,11 @@ impl Cats {
                 } else {
                     None
                 };
-                let mut c = self.get_height(&t);
+                let mut c = self.get_counter(&t);
                 if let Some(enc) = self.cat_map.get_mut(t) {
                     let (remap, insert): (Vec<_>, Vec<_>) = other_enc
                         .map
-                        .par_iter()
+                        .iter()
                         .map(|(s, u)| {
                             if let Some(e) = enc.map.get(s) {
                                 (Some((*u, *e)), None)
@@ -186,7 +183,7 @@ impl Cats {
                         },
                     );
                 }
-                self.set_height(c, t);
+                self.set_counter(c, t);
             }
             if !other_map.is_empty() {
                 map.insert(c.uuid.clone(), other_map);
@@ -201,7 +198,7 @@ pub fn re_encode(
     re_enc_map: HashMap<String, HashMap<CatType, CatReEnc>>,
 ) -> Vec<CatTriples> {
     let re_encoded: Vec<_> = encoded
-        .into_par_iter()
+        .into_iter()
         .map(|mut x| {
             let mut new_encoded = Vec::with_capacity(x.encoded_triples.len());
             for mut enc in x.encoded_triples {

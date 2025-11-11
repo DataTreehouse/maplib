@@ -22,8 +22,8 @@ polars = { workspace = true, features = [
     "ipc", "range", "rank",
     "is_unique","merge_sorted", "new_streaming", "zip_with", "nightly", "performant", "cse", "semi_anti_join", "abs", "round_series", "lazy", "concat_str", "is_in",
     "dtype-full", "strings", "rows", "timezones", "polars-time", "temporal", "list_eval", "partition_by", "parquet",
-    "diagonal_concat", "cum_agg"], default-features = false }
-polars-core = {workspace = true, default-features = false}
+    "diagonal_concat", "cum_agg"] }
+polars-core = {workspace = true }
 uuid.workspace = true
 thiserror.workspace = true
 oxrdfio.workspace = true

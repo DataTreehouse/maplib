@@ -1,9 +1,9 @@
-use std::sync::Arc;
 use super::{encode_triples, rdf_split_iri_str, re_encode, CatEncs, CatTriples, CatType, Cats};
 use crate::solution_mapping::BaseCatState;
 use crate::BaseRDFNodeType;
 use oxrdf::NamedNode;
 use polars::frame::DataFrame;
+use std::sync::Arc;
 use tracing::instrument;
 
 impl Cats {
@@ -39,7 +39,7 @@ impl Cats {
             if !enc.contains_key(suf) {
                 self.belongs_prefix_map.insert(self.iri_counter, prefix_u);
                 let arc_suf = Arc::new(suf.to_string());
-                 enc.encode_new_arc_string(arc_suf.clone(), self.iri_counter);
+                enc.encode_new_arc_string(arc_suf.clone(), self.iri_counter);
                 self.rev_iri_suffix_map.insert(self.iri_counter, arc_suf);
                 self.iri_counter += 1;
             }

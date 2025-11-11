@@ -89,7 +89,8 @@ impl LockedCats {
         std::sync::RwLockReadGuard<'_, Cats>,
         std::sync::PoisonError<std::sync::RwLockReadGuard<'_, Cats>>,
     > {
-        self.inner.read()
+        let r = self.inner.read();
+        r
     }
 
     pub fn write(
@@ -106,7 +107,7 @@ impl LockedCats {
     }
 
     pub fn new_empty() -> Self {
-        Self::new(Cats::new_empty())
+        Self::new(Cats::new_empty(None))
     }
 
     pub fn deref(&self) -> Arc<RwLock<Cats>> {
@@ -175,6 +176,24 @@ impl Cats {
 }
 
 impl Cats {
+    pub fn get_rev_map(
+        &self,
+        bt: &BaseRDFNodeType,
+    ) -> &HashMap<u32, Arc<String>, BuildHasherDefault<NoHashHasher<u32>>> {
+        if bt.is_iri() {
+            &self.rev_iri_suffix_map
+        } else {
+            let ct = if let BaseRDFNodeType::Literal(l) = bt {
+                CatType::Literal(l.clone())
+            } else if bt.is_blank_node() {
+                CatType::Blank
+            } else {
+                panic!();
+            };
+            self.cat_map.get(&ct).unwrap().rev_map.as_ref().unwrap()
+        }
+    }
+
     pub(crate) fn from_map(cat_map: HashMap<CatType, CatEncs>) -> Self {
         let mut cats = Cats {
             cat_map,
@@ -187,29 +206,42 @@ impl Cats {
             prefix_map: Default::default(),
             prefix_rev_map: Default::default(),
         };
-        cats.iri_counter = cats.calc_new_iri_counter();
-        cats.blank_counter = cats.calc_new_blank_counter();
-        cats.literal_counter_map = cats.calc_new_literal_counter();
+
         let mut i = 0u32;
         for (cat_type, cat_enc) in cats.cat_map.iter() {
             if let CatType::Prefix(nn) = cat_type {
                 cats.prefix_map.insert(i, nn.clone());
                 cats.prefix_rev_map.insert(nn.clone(), i);
-                    cats.rev_iri_suffix_map.extend(cat_enc.map.iter().map(|(x,y)|(*y,x.clone())));
+                cats.rev_iri_suffix_map
+                    .extend(cat_enc.map.iter().map(|(x, y)| (*y, x.clone())));
                 cats.belongs_prefix_map
                     .extend(cat_enc.map.values().map(|x| (*x, i)));
                 i += 1;
             }
         }
+        cats.iri_counter = cats.calc_new_iri_counter();
+        cats.blank_counter = cats.calc_new_blank_counter();
+        cats.literal_counter_map = cats.calc_new_literal_counter();
         cats
     }
 
-    pub fn new_empty() -> Cats {
+    pub fn new_empty(counts_from: Option<&Cats>) -> Cats {
+        let (blank_counter, iri_counter, literal_counter_map) =
+            if let Some(counts_from) = counts_from {
+                (
+                    counts_from.blank_counter,
+                    counts_from.iri_counter,
+                    counts_from.literal_counter_map.clone(),
+                )
+            } else {
+                (0, 0, Default::default())
+            };
+
         Cats {
             cat_map: HashMap::new(),
-            blank_counter: 0,
-            iri_counter: 0,
-            literal_counter_map: Default::default(),
+            blank_counter,
+            iri_counter,
+            literal_counter_map,
             uuid: uuid::Uuid::new_v4().to_string(),
             rev_iri_suffix_map: HashMap::with_capacity_and_hasher(2, BuildHasherDefault::default()),
             belongs_prefix_map: HashMap::with_capacity_and_hasher(2, BuildHasherDefault::default()),
@@ -221,13 +253,16 @@ impl Cats {
     fn calc_new_blank_counter(&self) -> u32 {
         let mut counter = 0;
         if let Some(enc) = self.cat_map.get(&CatType::Blank) {
-            counter = cmp::max(enc.rev_map.as_ref().unwrap().keys().max().unwrap() + 1, counter);
+            counter = cmp::max(
+                enc.rev_map.as_ref().unwrap().keys().max().unwrap() + 1,
+                counter,
+            );
         }
         counter
     }
 
     fn calc_new_iri_counter(&self) -> u32 {
-        let counter = self.rev_iri_suffix_map.keys().max().map(|x|x+1);
+        let counter = self.rev_iri_suffix_map.keys().max().map(|x| x + 1);
         counter.unwrap_or(0)
     }
 
@@ -242,15 +277,15 @@ impl Cats {
         map
     }
 
-    fn get_height(&self, c: &CatType) -> u32 {
+    fn get_counter(&self, c: &CatType) -> u32 {
         match c {
-            CatType::Prefix(..) => self.get_iri_height(),
-            CatType::Blank => self.get_blank_height(),
-            CatType::Literal(nn) => self.get_literal_height(nn),
+            CatType::Prefix(..) => self.get_iri_counter(),
+            CatType::Blank => self.get_blank_counter(),
+            CatType::Literal(nn) => self.get_literal_counter(nn),
         }
     }
 
-    fn set_height(&mut self, u: u32, c: &CatType) {
+    fn set_counter(&mut self, u: u32, c: &CatType) {
         match c {
             CatType::Prefix(..) => {
                 self.iri_counter = u;
@@ -264,15 +299,13 @@ impl Cats {
         }
     }
 
-    pub fn get_iri_height(&self) -> u32 {
+    pub fn get_iri_counter(&self) -> u32 {
         self.iri_counter
     }
-    pub fn get_blank_height(&self) -> u32 {
+    pub fn get_blank_counter(&self) -> u32 {
         self.blank_counter
     }
-    pub fn get_literal_height(&self, nn: &NamedNode) -> u32 {
+    pub fn get_literal_counter(&self, nn: &NamedNode) -> u32 {
         self.literal_counter_map.get(nn).map(|x| *x).unwrap_or(0)
     }
-
-
 }

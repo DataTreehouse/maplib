@@ -5,5 +5,5 @@ edition = "2021"
 rust-version.workspace = true
 
 [dependencies]
-polars = {workspace=true, features=["parquet", "lazy"], default-features = false }
+polars = {workspace=true, features=["parquet", "lazy"] }
 thiserror={ workspace= true }
