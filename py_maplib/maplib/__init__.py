@@ -41,6 +41,7 @@ else:
         bind: str = "localhost",
         popup=True,
         fts=True,
+        fts_path:str="fts",
     ):
         """Starts a graph explorer session.
         To run from Jupyter Notebook use:
@@ -56,5 +57,6 @@ else:
         :param bind: Bind to the following host / ip.
         :param popup: Pop up the browser window.
         :param fts: Enable full text search indexing
+        :param fts_path: Path to the fts index
         """
         print("Contact Data Treehouse to try!")

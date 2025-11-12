@@ -165,6 +165,7 @@ pub fn create_compatible_cats(
 
 fn check_need_native_cat_cast(t: &BaseRDFNodeType, types: &Vec<Option<RDFNodeState>>) -> bool {
     let mut found_non_global_witness = false;
+    let mut found_global_witness = false;
     for s in types {
         if let Some(s) = s {
             if let Some(b) = s.map.get(t) {
@@ -173,10 +174,18 @@ fn check_need_native_cat_cast(t: &BaseRDFNodeType, types: &Vec<Option<RDFNodeSta
                 }
                 let is_local = matches!(b, BaseCatState::CategoricalNative(_, Some(_)));
                 if is_local {
-                    if found_non_global_witness {
+                    if found_non_global_witness || found_global_witness {
                         return true;
                     } else {
                         found_non_global_witness = true;
+                    }
+                }
+                let is_global = matches!(b, BaseCatState::CategoricalNative(_, None));
+                if is_global {
+                    if found_non_global_witness {
+                        return true
+                    } else {
+                        found_global_witness = true;
                     }
                 }
             }

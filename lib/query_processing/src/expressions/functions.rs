@@ -1515,10 +1515,14 @@ pub fn func_expression(
                     .alias(outer_context.as_str());
                 solution_mappings.mappings = solution_mappings.mappings.with_column(expr);
             } else if t.is_lang_string() {
+                let bt = t.get_base_type().unwrap();
+                let bs = t.get_base_state().unwrap();
+                let decoded =
+                    maybe_decode_expr(col(first_context.as_str())
+                                          .struct_()
+                                          .field_by_name(LANG_STRING_VALUE_FIELD), bt, bs, global_cats.clone());
                 let expr = str_starts_ends_contains(
-                    col(first_context.as_str())
-                        .struct_()
-                        .field_by_name(LANG_STRING_VALUE_FIELD),
+                    decoded,
                     second_decoded,
                     func,
                 )
@@ -1526,23 +1530,27 @@ pub fn func_expression(
                 solution_mappings.mappings = solution_mappings.mappings.with_column(expr);
             } else if t.is_multi() {
                 let mut exprs = vec![];
-                for bt in t.map.keys() {
+                for (bt,bs) in &t.map {
                     if bt.is_lit_type(xsd::STRING) {
+                        let decoded =
+                            maybe_decode_expr(col(first_context.as_str())
+                                                  .struct_()
+                                                  .field_by_name(&bt.field_col_name()), bt, bs, global_cats.clone());
                         exprs.push(
                             str_starts_ends_contains(
-                                col(first_context.as_str())
-                                    .struct_()
-                                    .field_by_name(&bt.field_col_name()),
+                                decoded,
                                 second_decoded.clone(),
                                 func,
                             )
                             .alias(outer_context.as_str()),
                         );
                     } else if bt.is_lang_string() {
+                        let decoded =
+                            maybe_decode_expr(col(first_context.as_str())
+                                                  .struct_()
+                                                  .field_by_name(LANG_STRING_VALUE_FIELD), bt, bs, global_cats.clone());
                         exprs.push(str_starts_ends_contains(
-                            col(first_context.as_str())
-                                .struct_()
-                                .field_by_name(LANG_STRING_VALUE_FIELD),
+                            decoded,
                             second_decoded.clone(),
                             func,
                         ))
