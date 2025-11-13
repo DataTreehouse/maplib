@@ -445,7 +445,7 @@ fn to_csr(df: &DataFrame, max_index: usize) -> SparseMatrix {
         .clone()
         .into_series();
     let df = DataFrame::new(vec![sub.into(), obj.into()]).unwrap();
-    let df = df
+    let mut df = df
         .sort(
             vec![SUBJECT_COL_NAME, SUBJECT_COL_NAME],
             SortMultipleOptions::default()
@@ -453,6 +453,7 @@ fn to_csr(df: &DataFrame, max_index: usize) -> SparseMatrix {
                 .with_order_descending(false),
         )
         .unwrap();
+    df.as_single_chunk();
     let subject = df
         .column(SUBJECT_COL_NAME)
         .unwrap()
