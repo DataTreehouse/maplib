@@ -152,7 +152,7 @@ impl Cats {
                 for (k, map) in mmap {
                     let prefix = self.prefix_map.get(&k).unwrap();
                     let ct = CatType::Prefix(prefix.clone());
-                    encs.insert(ct, CatEncs { map, rev_map: None });
+                    encs.insert(ct, CatEncs { forward: map, reverse: None });
                 }
             } else {
                 let ct = if let BaseRDFNodeType::Literal(nn) = t {
@@ -175,28 +175,9 @@ impl Cats {
 
 impl CatEncs {
     pub fn image_of_non_iri(&self, s: &HashSet<u32>) -> Option<CatEncs> {
-        let rev_map_ref = self.rev_map.as_ref().unwrap();
-        let new_map: BTreeMap<_, _> = s
-            .par_iter()
-            .map(|x| {
-                if let Some(s) = rev_map_ref.get(x) {
-                    Some((*x, s.clone()))
-                } else {
-                    None
-                }
-            })
-            .filter(|x| x.is_some())
-            .map(|x| x.unwrap())
-            .map(|(x, y)| (y, x))
-            .collect();
-        let new_rev_map: HashMap<_, _, BuildHasherDefault<NoHashHasher<u32>>> =
-            new_map.iter().map(|(x, y)| (*y, x.clone())).collect();
-
-        if new_map.len() > 0 {
-            Some(CatEncs {
-                map: new_map,
-                rev_map: Some(new_rev_map),
-            })
+        if let Some(new_reverse) = self.reverse.as_ref().unwrap().image(s) {
+            let forward = self.forward.image(&new_reverse);
+            Some(Self { forward, reverse: Some(new_reverse) })
         } else {
             None
         }

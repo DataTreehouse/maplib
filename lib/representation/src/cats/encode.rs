@@ -23,21 +23,21 @@ impl CatEncs {
             ))
         };
         CatEncs {
-            map: Default::default(),
-            rev_map,
+            forward: Default::default(),
+            reverse: rev_map,
         }
     }
 
     pub fn contains_key(&self, s: &str) -> bool {
         let s = s.to_string();
-        self.map.contains_key(&s)
+        self.forward.contains_key(&s)
     }
 
     pub fn new_singular(value: &str, u: u32, is_iri: bool) -> CatEncs {
         let mut sing = Self::new_empty(is_iri);
         let s = Arc::new(value.to_string());
-        sing.map.insert(s.clone(), u);
-        if let Some(rev_map) = &mut sing.rev_map {
+        sing.forward.insert(s.clone(), u);
+        if let Some(rev_map) = &mut sing.reverse {
             rev_map.insert(u, s);
         }
         sing
@@ -45,7 +45,7 @@ impl CatEncs {
 
     pub fn maybe_encode_str(&self, s: &str) -> Option<&u32> {
         let s = Arc::new(s.to_string());
-        self.map.get(&s)
+        self.forward.get(&s)
     }
 
     pub fn encode_new_str(&mut self, s: &str, u: u32) {
@@ -54,21 +54,21 @@ impl CatEncs {
 
     pub fn encode_new_string(&mut self, s: String, u: u32) {
         let s = Arc::new(s.clone());
-        self.map.insert(s.clone(), u);
-        if let Some(rev_map) = &mut self.rev_map {
+        self.forward.insert(s.clone(), u);
+        if let Some(rev_map) = &mut self.reverse {
             rev_map.insert(u, s);
         }
     }
 
     pub fn encode_new_arc_string(&mut self, s: Arc<String>, u: u32) {
-        self.map.insert(s.clone(), u);
-        if let Some(rev_map) = &mut self.rev_map {
+        self.forward.insert(s.clone(), u);
+        if let Some(rev_map) = &mut self.reverse {
             rev_map.insert(u, s);
         }
     }
 
     pub fn height(&self) -> u32 {
-        self.map.len() as u32
+        self.forward.len() as u32
     }
 }
 
@@ -256,7 +256,7 @@ impl Cats {
             let cats = if !new_enc_map.is_empty() {
                 let mut keep_new_enc_map = HashMap::new();
                 for (u, enc) in new_enc_map {
-                    if !enc.map.is_empty() {
+                    if !enc.forward.is_empty() {
                         keep_new_enc_map.insert(
                             CatType::Prefix(NamedNode::new_unchecked(rev_map.get(&u).unwrap())),
                             enc,
@@ -313,7 +313,7 @@ impl Cats {
                 };
                 encoded_global_local.push(encoded);
             }
-            let local = if !new_enc.map.is_empty() {
+            let local = if !new_enc.forward.is_empty() {
                 let cat_type = if let BaseRDFNodeType::Literal(nn) = t {
                     CatType::Literal(nn.clone())
                 } else {

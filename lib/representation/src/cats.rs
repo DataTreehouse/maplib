@@ -4,6 +4,8 @@ mod globalize;
 mod image;
 mod re_encode;
 mod split;
+pub mod forwards;
+pub mod reverse;
 
 pub use decode::*;
 pub use encode::*;
@@ -18,12 +20,14 @@ use nohash_hasher::NoHashHasher;
 use oxrdf::vocab::xsd;
 use oxrdf::{NamedNode, NamedNodeRef};
 use polars::prelude::DataFrame;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{HashMap};
 use std::hash::BuildHasherDefault;
 use std::ops::Deref;
 use std::sync::Arc;
 use std::sync::RwLock;
 use uuid::Uuid;
+use crate::cats::forwards::ForwardsCat;
+use crate::cats::reverse::ReverseCat;
 
 const SUBJECT_PREFIX_COL_NAME: &str = "subject_prefix";
 const OBJECT_PREFIX_COL_NAME: &str = "object_prefix";
@@ -73,8 +77,8 @@ pub struct EncodedTriples {
 #[derive(Debug, Clone)]
 pub struct CatEncs {
     // We use a BTree map to keep strings sorted
-    pub map: BTreeMap<Arc<String>, u32>,
-    pub rev_map: Option<HashMap<u32, Arc<String>, BuildHasherDefault<NoHashHasher<u32>>>>,
+    pub forward: ForwardsCat,
+    pub reverse: Option<ReverseCat>,
 }
 
 #[derive(Debug, Clone)]
@@ -148,7 +152,7 @@ pub struct Cats {
     blank_counter: u32,
     literal_counter_map: HashMap<NamedNode, u32>,
     pub uuid: String,
-    pub rev_iri_suffix_map: HashMap<u32, Arc<String>, BuildHasherDefault<NoHashHasher<u32>>>,
+    pub rev_iri_suffix_map: ForwardsCat,
     belongs_prefix_map: HashMap<u32, u32, BuildHasherDefault<NoHashHasher<u32>>>,
     prefix_map: HashMap<u32, NamedNode>,
     prefix_rev_map: HashMap<NamedNode, u32>,
@@ -190,7 +194,7 @@ impl Cats {
             } else {
                 panic!();
             };
-            self.cat_map.get(&ct).unwrap().rev_map.as_ref().unwrap()
+            self.cat_map.get(&ct).unwrap().reverse.as_ref().unwrap()
         }
     }
 
@@ -213,9 +217,9 @@ impl Cats {
                 cats.prefix_map.insert(i, nn.clone());
                 cats.prefix_rev_map.insert(nn.clone(), i);
                 cats.rev_iri_suffix_map
-                    .extend(cat_enc.map.iter().map(|(x, y)| (*y, x.clone())));
+                    .extend(cat_enc.forward.iter().map(|(x, y)| (*y, x.clone())));
                 cats.belongs_prefix_map
-                    .extend(cat_enc.map.values().map(|x| (*x, i)));
+                    .extend(cat_enc.forward.values().map(|x| (*x, i)));
                 i += 1;
             }
         }
@@ -254,7 +258,7 @@ impl Cats {
         let mut counter = 0;
         if let Some(enc) = self.cat_map.get(&CatType::Blank) {
             counter = cmp::max(
-                enc.rev_map.as_ref().unwrap().keys().max().unwrap() + 1,
+                enc.reverse.as_ref().unwrap().keys().max().unwrap() + 1,
                 counter,
             );
         }
@@ -270,7 +274,7 @@ impl Cats {
         let mut map = HashMap::new();
         for (p, cat) in &self.cat_map {
             if let CatType::Literal(nn) = p {
-                let counter = cat.rev_map.as_ref().unwrap().keys().max().unwrap() + 1;
+                let counter = cat.reverse.as_ref().unwrap().keys().max().unwrap() + 1;
                 map.insert(nn.clone(), counter);
             }
         }

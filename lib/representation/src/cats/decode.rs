@@ -20,7 +20,7 @@ impl CatEncs {
         let uch: Vec<_> = ser.u32().unwrap().iter().collect();
         let decoded_vec_iter = uch
             .into_par_iter()
-            .map(|x| x.map(|x| self.rev_map.as_ref().unwrap().get(&x).unwrap()));
+            .map(|x| x.map(|x| self.reverse.as_ref().unwrap().get(&x).unwrap()));
 
         let decoded_vec: Vec<_> = decoded_vec_iter.map(|x| x.map(|x| x.as_str())).collect();
         let new_ser = Series::new(original_name, decoded_vec);
@@ -34,7 +34,7 @@ impl CatEncs {
     }
 
     pub fn maybe_decode_non_iri_string(&self, u: &u32) -> Option<&str> {
-        self.rev_map.as_ref().unwrap().get(u).map(|x| x.as_str())
+        self.reverse.as_ref().unwrap().get(u).map(|x| x.as_str())
     }
 }
 
