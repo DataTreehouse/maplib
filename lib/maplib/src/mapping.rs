@@ -76,11 +76,7 @@ impl Model {
             if let Some(indexing) = indexing {
                 indexing
             } else {
-                IndexingOptions {
-                    object_sort_all: false,
-                    object_sort_some: None,
-                    fts_path: None,
-                }
+                IndexingOptions::new(false, None, None)
             }
         } else {
             indexing.unwrap_or_default()

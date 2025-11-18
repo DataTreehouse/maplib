@@ -269,7 +269,7 @@ fn find_enforced_variable_type_constraints(
                     if let Expression::Variable(v) = args.first().unwrap() {
                         return Some(HashMap::from([(
                             v.as_str().to_string(),
-                            PossibleTypes::singular(ConstraintBaseRDFNodeType::IRI(None)),
+                            PossibleTypes::singular(ConstraintBaseRDFNodeType::IRI),
                         )]));
                     }
                 }

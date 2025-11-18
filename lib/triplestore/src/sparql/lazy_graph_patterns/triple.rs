@@ -10,7 +10,6 @@ use polars::prelude::{lit, AnyValue, JoinType};
 use query_processing::graph_patterns::join;
 use query_processing::pushdowns::Pushdowns;
 use query_processing::type_constraints::{ConstraintBaseRDFNodeType, PossibleTypes};
-use representation::cats::rdf_split_iri_str;
 use representation::dataset::QueryGraph;
 use representation::literal_iri_to_namednode;
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
@@ -106,7 +105,7 @@ impl Triplestore {
                             let cats = self.global_cats.read()?;
                             if matches!(bs, BaseCatState::CategoricalNative(..)) {
                                 predicates_series =
-                                    cats.decode(&predicates_series, bt, bs.get_local_cats(), true);
+                                    cats.decode(&predicates_series, bt, bs.get_local_cats());
                             }
 
                             let predicates_iter = predicates_series.iter();
@@ -222,11 +221,8 @@ fn create_type_constraint(
     variable_type_constraint: &HashMap<String, PossibleTypes>,
 ) -> Option<PossibleTypes> {
     match term_pattern {
-        TermPattern::NamedNode(nn) => {
-            let (pre, _) = rdf_split_iri_str(nn.as_str());
-            Some(PossibleTypes::singular(ConstraintBaseRDFNodeType::IRI(
-                Some(HashSet::from([NamedNode::new_unchecked(pre)])),
-            )))
+        TermPattern::NamedNode(..) => {
+            Some(PossibleTypes::singular(ConstraintBaseRDFNodeType::IRI))
         }
         TermPattern::Literal(l) => Some(PossibleTypes::singular(
             ConstraintBaseRDFNodeType::Literal(l.datatype().into_owned()),

@@ -1,3 +1,4 @@
+#![feature(str_as_str)]
 extern crate core;
 
 pub mod cats;
@@ -19,12 +20,11 @@ use oxrdf::vocab::{rdf, rdfs};
 use oxrdf::NamedNode;
 use polars::prelude::{col, AnyValue, DataFrame, IntoLazy, RankMethod, RankOptions};
 use polars_core::prelude::SortMultipleOptions;
-use query_processing::type_constraints::ConstraintBaseRDFNodeType;
 use rayon::iter::ParallelDrainRange;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use representation::cats::{
-    cat_encode_triples, decode_expr, literal_is_cat, CatTriples, CatType, Cats, LockedCats,
-    OBJECT_RANK_COL_NAME, SUBJECT_RANK_COL_NAME,
+    cat_encode_triples, decode_expr, CatTriples, Cats, LockedCats, OBJECT_RANK_COL_NAME,
+    SUBJECT_RANK_COL_NAME,
 };
 use representation::multitype::set_struct_all_null_to_null_row;
 use representation::solution_mapping::{BaseCatState, EagerSolutionMappings};
@@ -40,103 +40,16 @@ use uuid::Uuid;
 use representation::dataset::NamedGraph;
 use tracing::{instrument, trace};
 
-#[derive(Clone, Hash, Eq, PartialEq, Debug)]
-pub enum StoredBaseRDFNodeType {
-    IRI(NamedNode),
-    Blank,
-    Literal(NamedNode),
-}
-
-impl StoredBaseRDFNodeType {
-    fn from_base_and_prefix(
-        base: &BaseRDFNodeType,
-        prefix: &Option<CatType>,
-    ) -> StoredBaseRDFNodeType {
-        match base {
-            BaseRDFNodeType::IRI => {
-                if let Some(prefix) = prefix {
-                    if let CatType::Prefix(p) = prefix {
-                        StoredBaseRDFNodeType::IRI(p.clone())
-                    } else {
-                        unreachable!("Should never happen")
-                    }
-                } else {
-                    unreachable!("Should never happen")
-                }
-            }
-            BaseRDFNodeType::BlankNode => StoredBaseRDFNodeType::Blank,
-            BaseRDFNodeType::Literal(l) => StoredBaseRDFNodeType::Literal(l.clone()),
-            BaseRDFNodeType::None => {
-                unreachable!("Should never happen")
-            }
-        }
-    }
-}
-
-impl StoredBaseRDFNodeType {
-    pub(crate) fn as_constrained(&self) -> ConstraintBaseRDFNodeType {
-        match self {
-            StoredBaseRDFNodeType::IRI(i) => {
-                ConstraintBaseRDFNodeType::IRI(Some(HashSet::from([i.clone()])))
-            }
-            StoredBaseRDFNodeType::Blank => ConstraintBaseRDFNodeType::BlankNode,
-            StoredBaseRDFNodeType::Literal(l) => ConstraintBaseRDFNodeType::Literal(l.clone()),
-        }
-    }
-
-    pub fn as_cat_type(&self) -> Option<CatType> {
-        match self {
-            StoredBaseRDFNodeType::IRI(nn) => Some(CatType::Prefix(nn.clone())),
-            StoredBaseRDFNodeType::Blank => Some(CatType::Blank),
-            StoredBaseRDFNodeType::Literal(l) => {
-                if literal_is_cat(l.as_ref()) {
-                    Some(CatType::Literal(l.to_owned()))
-                } else {
-                    None
-                }
-            }
-        }
-    }
-}
-
-impl StoredBaseRDFNodeType {
-    pub fn matches(&self, other: &BaseRDFNodeType) -> bool {
-        match self {
-            StoredBaseRDFNodeType::IRI(_) => {
-                matches!(other, BaseRDFNodeType::IRI)
-            }
-            StoredBaseRDFNodeType::Blank => {
-                matches!(other, BaseRDFNodeType::BlankNode)
-            }
-            StoredBaseRDFNodeType::Literal(l) => {
-                if let BaseRDFNodeType::Literal(l_other) = other {
-                    l == l_other
-                } else {
-                    false
-                }
-            }
-        }
-    }
-
-    pub fn as_base_rdf_node_type(&self) -> BaseRDFNodeType {
-        match self {
-            StoredBaseRDFNodeType::IRI(_) => BaseRDFNodeType::IRI,
-            StoredBaseRDFNodeType::Blank => BaseRDFNodeType::BlankNode,
-            StoredBaseRDFNodeType::Literal(nn) => BaseRDFNodeType::Literal(nn.clone()),
-        }
-    }
-}
-
 #[derive(Clone)]
 pub struct Triplestore {
     pub storage_folder: Option<PathBuf>,
     graph_triples_map: HashMap<
         NamedGraph,
-        HashMap<NamedNode, HashMap<(StoredBaseRDFNodeType, StoredBaseRDFNodeType), Triples>>,
+        HashMap<NamedNode, HashMap<(BaseRDFNodeType, BaseRDFNodeType), Triples>>,
     >,
     graph_transient_triples_map: HashMap<
         NamedGraph,
-        HashMap<NamedNode, HashMap<(StoredBaseRDFNodeType, StoredBaseRDFNodeType), Triples>>,
+        HashMap<NamedNode, HashMap<(BaseRDFNodeType, BaseRDFNodeType), Triples>>,
     >,
     parser_call: usize,
     indexing: HashMap<NamedGraph, IndexingOptions>,
@@ -160,9 +73,23 @@ pub struct IndexingOptions {
     pub object_sort_all: bool,
     pub object_sort_some: Option<HashSet<NamedNode>>,
     pub fts_path: Option<PathBuf>,
+    pub fts_path_uuid: String,
 }
 
 impl IndexingOptions {
+    pub fn new(
+        object_sort_all: bool,
+        object_sort_some: Option<HashSet<NamedNode>>,
+        fts_path: Option<PathBuf>,
+    ) -> Self {
+        Self {
+            object_sort_all,
+            object_sort_some,
+            fts_path,
+            fts_path_uuid: Uuid::new_v4().to_string(),
+        }
+    }
+
     pub fn set_fts_path(&mut self, fts_path: Option<PathBuf>) {
         self.fts_path = fts_path;
     }
@@ -170,14 +97,14 @@ impl IndexingOptions {
 
 impl Default for IndexingOptions {
     fn default() -> IndexingOptions {
-        IndexingOptions {
-            object_sort_all: false,
-            object_sort_some: Some(HashSet::from([
+        IndexingOptions::new(
+            false,
+            Some(HashSet::from([
                 rdfs::LABEL.into_owned(),
                 rdf::TYPE.into_owned(),
             ])),
-            fts_path: None,
-        }
+            None,
+        )
     }
 }
 
@@ -244,7 +171,10 @@ impl Triplestore {
         };
         let indexing = indexing.unwrap_or_default();
         let fts_index = if let Some(fts_path) = &indexing.fts_path {
-            Some(FtsIndex::new(fts_path).map_err(TriplestoreError::FtsError)?)
+            Some(
+                FtsIndex::new(fts_path, &indexing.fts_path_uuid)
+                    .map_err(TriplestoreError::FtsError)?,
+            )
         } else {
             None
         };
@@ -281,7 +211,8 @@ impl Triplestore {
                     // Only doing anything if the fts index does not already exist.
                     // If it exists, then it should be updated as well.
                     if !self.fts_index.contains_key(graph) {
-                        let index = FtsIndex::new(fts_path).map_err(TriplestoreError::FtsError)?;
+                        let index = FtsIndex::new(fts_path, &indexing.fts_path_uuid)
+                            .map_err(TriplestoreError::FtsError)?;
                         self.fts_index.insert(graph.clone(), index);
                         for (predicate, map) in self.graph_triples_map.get(graph).unwrap() {
                             for ((subject_type, object_type), ts) in map {
@@ -292,14 +223,10 @@ impl Triplestore {
                                         .add_literal_string(
                                             &lf.collect().unwrap(),
                                             predicate,
-                                            &subject_type.as_base_rdf_node_type(),
-                                            &subject_type
-                                                .as_base_rdf_node_type()
-                                                .default_stored_cat_state(),
-                                            &object_type.as_base_rdf_node_type(),
-                                            &object_type
-                                                .as_base_rdf_node_type()
-                                                .default_stored_cat_state(),
+                                            &subject_type,
+                                            &subject_type.default_stored_cat_state(),
+                                            &object_type,
+                                            &object_type.default_stored_cat_state(),
                                             self.global_cats.clone(),
                                         )
                                         .map_err(TriplestoreError::FtsError)?;
@@ -344,11 +271,11 @@ impl Triplestore {
     #[instrument(skip_all)]
     fn add_local_cat_triples(
         &mut self,
-        local_cats: Vec<CatTriples>,
+        local_cat_triples: Vec<CatTriples>,
         transient: bool,
         graph: &NamedGraph,
     ) -> Result<Vec<NewTriples>, TriplestoreError> {
-        let global_cats = self.globalize(local_cats);
+        let global_cats = self.globalize(local_cat_triples);
         self.add_global_cat_triples(global_cats, transient, graph)
     }
 
@@ -375,40 +302,30 @@ impl Triplestore {
             local_cats: _,
         } in global_cat_triples
         {
-            for encoded_triple in encoded_triples {
-                let mut map = HashMap::new();
-                map.insert(
-                    SUBJECT_COL_NAME.to_string(),
-                    subject_type.clone().into_default_stored_rdf_node_state(),
-                );
-                map.insert(
-                    OBJECT_COL_NAME.to_string(),
-                    object_type.clone().into_default_stored_rdf_node_state(),
-                );
+            let mut map = HashMap::new();
+            map.insert(
+                SUBJECT_COL_NAME.to_string(),
+                subject_type.clone().into_default_stored_rdf_node_state(),
+            );
+            map.insert(
+                OBJECT_COL_NAME.to_string(),
+                object_type.clone().into_default_stored_rdf_node_state(),
+            );
 
-                let subject_type_stored = StoredBaseRDFNodeType::from_base_and_prefix(
-                    &subject_type,
-                    &encoded_triple.subject,
-                );
-                let object_type_stored = StoredBaseRDFNodeType::from_base_and_prefix(
-                    &object_type,
-                    &encoded_triple.object,
-                );
-                let k = (subject_type_stored.clone(), object_type_stored.clone());
-                let triples = if let Some(m) = use_map.get_mut(&predicate) {
-                    m.remove(&k)
-                } else {
-                    None
-                };
-                let (s, o) = k;
-                let k2 = (predicate.clone(), s, o);
+            let k = (subject_type.clone(), object_type.clone());
+            let triples = if let Some(m) = use_map.get_mut(&predicate) {
+                m.remove(&k)
+            } else {
+                None
+            };
+            let (s, o) = k;
+            let k2 = (predicate.clone(), s, o);
 
-                if !add_map.contains_key(&k2) {
-                    add_map.insert(k2.clone(), (triples, vec![]));
-                }
-                let (_, v) = add_map.get_mut(&k2).unwrap();
-                v.push(encoded_triple);
+            if !add_map.contains_key(&k2) {
+                add_map.insert(k2.clone(), (triples, vec![]));
             }
+            let (_, v) = add_map.get_mut(&k2).unwrap();
+            v.push(encoded_triples);
         }
         let storage_folder = self.storage_folder.clone();
         let indexing = self.indexing.get(graph).unwrap().clone();
@@ -431,8 +348,8 @@ impl Triplestore {
                                 .unwrap(),
                         ),
                         predicate: p.clone(),
-                        subject_type: s.as_base_rdf_node_type(),
-                        object_type: o.as_base_rdf_node_type(),
+                        subject_type: s.clone(),
+                        object_type: o.clone(),
                     };
                     new_triples_vec.push(new_triples);
 
@@ -457,8 +374,8 @@ impl Triplestore {
                         df: new_triples_opt
                             .map(|x| x.select([SUBJECT_COL_NAME, OBJECT_COL_NAME]).unwrap()),
                         predicate: p.clone(),
-                        subject_type: s.as_base_rdf_node_type(),
-                        object_type: o.as_base_rdf_node_type(),
+                        subject_type: s.clone(),
+                        object_type: o.clone(),
                     };
                     new_triples_vec.push(new_triples);
                 }
@@ -636,7 +553,6 @@ pub fn sort_triples_add_rank(
             subj_type.clone(),
             subj_cat_state.get_local_cats(),
             global_cats.clone(),
-            false,
         );
     }
     let mut obj_col_expr = col(OBJECT_COL_NAME);
@@ -646,7 +562,6 @@ pub fn sort_triples_add_rank(
             obj_type.clone(),
             obj_cat_state.get_local_cats(),
             global_cats.clone(),
-            false,
         );
     }
     lf = lf.with_column(

@@ -1,17 +1,17 @@
 use crate::errors::TriplestoreError;
+use crate::sort_triples_add_rank;
 use crate::sparql::errors::SparqlError;
 use crate::storage::Triples;
 use crate::Triplestore;
-use crate::{sort_triples_add_rank, StoredBaseRDFNodeType};
 use oxrdf::NamedNode;
 use polars::prelude::{col, concat, IntoLazy, JoinArgs, JoinType, MaintainOrderJoin, UnionArgs};
 use polars_core::datatypes::AnyValue;
-use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use representation::cats::{cat_encode_triples, CatTriples, Cats, EncodedTriples};
 use representation::dataset::NamedGraph;
 use representation::multitype::{set_struct_all_null_to_null_row, split_df_multicols};
 use representation::solution_mapping::EagerSolutionMappings;
-use representation::{OBJECT_COL_NAME, PREDICATE_COL_NAME, SUBJECT_COL_NAME};
+use representation::{BaseRDFNodeType, OBJECT_COL_NAME, PREDICATE_COL_NAME, SUBJECT_COL_NAME};
 use std::collections::HashMap;
 use std::time::Instant;
 use tracing::trace;
@@ -66,22 +66,15 @@ impl Triplestore {
                     self.delete_if_exists(&gct, false, graph)?;
                     let subject_cat_state = gct.subject_type.default_stored_cat_state();
                     let object_cat_state = gct.object_type.default_stored_cat_state();
-                    gct.encoded_triples = gct
-                        .encoded_triples
-                        .into_par_iter()
-                        .map(|mut x| {
-                            x.df = sort_triples_add_rank(
-                                x.df,
-                                &gct.subject_type,
-                                &subject_cat_state,
-                                &gct.object_type,
-                                &object_cat_state,
-                                self.global_cats.clone(),
-                                false,
-                            );
-                            x
-                        })
-                        .collect();
+                    gct.encoded_triples.df = sort_triples_add_rank(
+                        gct.encoded_triples.df,
+                        &gct.subject_type,
+                        &subject_cat_state,
+                        &gct.object_type,
+                        &object_cat_state,
+                        self.global_cats.clone(),
+                        false,
+                    );
                     self.add_global_cat_triples(vec![gct], false, graph)?;
                 } else {
                     self.delete_if_exists(&gct, false, graph)?;
@@ -97,12 +90,8 @@ impl Triplestore {
                     self.delete_if_exists(&gct, true, graph)?;
                     let subject_cat_state = gct.subject_type.default_stored_cat_state();
                     let object_cat_state = gct.object_type.default_stored_cat_state();
-                    gct.encoded_triples = gct
-                        .encoded_triples
-                        .into_par_iter()
-                        .map(|mut x| {
-                            x.df = sort_triples_add_rank(
-                                x.df,
+                    gct.encoded_triples.df = sort_triples_add_rank(
+                                gct.encoded_triples.df,
                                 &gct.subject_type,
                                 &subject_cat_state,
                                 &gct.object_type,
@@ -110,9 +99,6 @@ impl Triplestore {
                                 self.global_cats.clone(),
                                 false,
                             );
-                            x
-                        })
-                        .collect();
                     self.add_global_cat_triples(vec![gct], true, graph)?;
                 } else {
                     self.delete_if_exists(&gct, true, graph)?;
@@ -135,13 +121,8 @@ impl Triplestore {
             self.graph_triples_map.get_mut(graph).unwrap()
         };
         let map_empty = if let Some(m1) = use_map.get_mut(&gct.predicate) {
-            for e in &gct.encoded_triples {
-                let k = (
-                    StoredBaseRDFNodeType::from_base_and_prefix(&gct.subject_type, &e.subject),
-                    StoredBaseRDFNodeType::from_base_and_prefix(&gct.object_type, &e.object),
-                );
-                m1.remove(&k);
-            }
+            let k = (gct.subject_type.clone(), gct.object_type.clone());
+            m1.remove(&k);
             m1.is_empty()
         } else {
             false
@@ -248,76 +229,60 @@ fn triples_solution_mappings_to_global_cat_triples(
 
 fn get_triples_after_deletion(
     gct: &CatTriples,
-    map: &HashMap<NamedNode, HashMap<(StoredBaseRDFNodeType, StoredBaseRDFNodeType), Triples>>,
+    map: &HashMap<NamedNode, HashMap<(BaseRDFNodeType, BaseRDFNodeType), Triples>>,
 ) -> Result<Option<CatTriples>, TriplestoreError> {
     if let Some(m) = map.get(&gct.predicate) {
-        let out_encoded: Result<Vec<_>, TriplestoreError> = gct
-            .encoded_triples
-            .par_iter()
-            .map(|e| {
-                let subj_type =
-                    StoredBaseRDFNodeType::from_base_and_prefix(&gct.subject_type, &e.subject);
-                let obj_type =
-                    StoredBaseRDFNodeType::from_base_and_prefix(&gct.object_type, &e.object);
+        let type_ = (gct.subject_type.clone(), gct.object_type.clone());
+        let encoded: Result<_,TriplestoreError> = if let Some(triples) = m.get(&type_) {
+            let lfs = triples.get_lazy_frames(&None, &None)?;
+            let lfs_only: Vec<_> = lfs.into_iter().map(|(lf, _)| lf).collect();
+            let mut lf = concat(
+                lfs_only,
+                UnionArgs {
+                    parallel: true,
+                    rechunk: false,
+                    to_supertypes: false,
+                    diagonal: false,
+                    from_partitioned_ds: false,
+                    maintain_order: false,
+                },
+            )
+            .unwrap();
+            let to_delete = gct.encoded_triples.df.clone().lazy();
 
-                let type_ = (subj_type, obj_type);
-                if let Some(triples) = m.get(&type_) {
-                    let lfs = triples.get_lazy_frames(&None, &None)?;
-                    let lfs_only: Vec<_> = lfs.into_iter().map(|(lf, _)| lf).collect();
-                    let mut lf = concat(
-                        lfs_only,
-                        UnionArgs {
-                            parallel: true,
-                            rechunk: false,
-                            to_supertypes: false,
-                            diagonal: false,
-                            from_partitioned_ds: false,
-                            maintain_order: false,
-                        },
-                    )
-                    .unwrap();
-                    let to_delete = e.df.clone().lazy();
-
-                    lf = lf.join(
-                        to_delete,
-                        [col(SUBJECT_COL_NAME), col(OBJECT_COL_NAME)],
-                        [col(SUBJECT_COL_NAME), col(OBJECT_COL_NAME)],
-                        JoinArgs {
-                            how: JoinType::Anti,
-                            validation: Default::default(),
-                            suffix: None,
-                            slice: None,
-                            nulls_equal: false,
-                            coalesce: Default::default(),
-                            maintain_order: MaintainOrderJoin::None,
-                        },
-                    );
-                    let df = lf.collect().unwrap();
-                    if df.height() > 0 {
-                        Ok(Some(EncodedTriples {
-                            df,
-                            subject: e.subject.clone(),
-                            subject_local_cat_uuid: None,
-                            object: e.object.clone(),
-                            object_local_cat_uuid: None,
-                        }))
-                    } else {
-                        Ok(None)
-                    }
-                } else {
-                    Ok(None)
-                }
-            })
-            .collect();
-        let out_encoded = out_encoded?;
-        let out_encoded: Vec<_> = out_encoded
-            .into_iter()
-            .filter(|x| x.is_some())
-            .map(|x| x.unwrap())
-            .collect();
-        if out_encoded.len() > 0 {
+            lf = lf.join(
+                to_delete,
+                [col(SUBJECT_COL_NAME), col(OBJECT_COL_NAME)],
+                [col(SUBJECT_COL_NAME), col(OBJECT_COL_NAME)],
+                JoinArgs {
+                    how: JoinType::Anti,
+                    validation: Default::default(),
+                    suffix: None,
+                    slice: None,
+                    nulls_equal: false,
+                    coalesce: Default::default(),
+                    maintain_order: MaintainOrderJoin::None,
+                },
+            );
+            let df = lf.collect().unwrap();
+            if df.height() > 0 {
+                Ok(Some(EncodedTriples {
+                    df,
+                    subject: gct.encoded_triples.subject.clone(),
+                    subject_local_cat_uuid: None,
+                    object: gct.encoded_triples.object.clone(),
+                    object_local_cat_uuid: None,
+                }))
+            } else {
+                Ok(None)
+            }
+        } else {
+            Ok(None)
+        };
+        let encoded = encoded?;
+        if let Some(encoded) = encoded {
             return Ok(Some(CatTriples {
-                encoded_triples: out_encoded,
+                encoded_triples: encoded,
                 predicate: gct.predicate.clone(),
                 subject_type: gct.subject_type.clone(),
                 object_type: gct.object_type.clone(),

@@ -45,7 +45,7 @@ impl Triplestore {
             todo!("Handle this error")
         };
         let cats = self.global_cats.read().unwrap();
-        let (sm, _) = cats.encode_solution_mappings(sm, None);
+        let sm = cats.encode_solution_mappings(sm);
         if let Some(mut mappings) = solution_mappings {
             //TODO: Remove this workaround
             mappings = mappings.as_eager(false).as_lazy();

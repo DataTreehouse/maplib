@@ -1,18 +1,16 @@
-use super::{StoredBaseRDFNodeType, Triplestore};
+use super::Triplestore;
 use crate::errors::TriplestoreError;
 use crate::storage::Triples;
 use oxrdf::{NamedNode, Subject, Term};
 use polars::prelude::{as_struct, by_name, col, concat, lit, IntoLazy, LazyFrame, UnionArgs};
 use polars_core::prelude::{Column, DataFrame};
 use query_processing::expressions::{blank_node_enc, maybe_literal_enc, named_node_enc};
-use query_processing::type_constraints::PossibleTypes;
-use representation::cats::{named_node_split_prefix, Cats};
+use query_processing::type_constraints::{bt_as_constrained, PossibleTypes};
+use representation::cats::Cats;
 use representation::dataset::{NamedGraph, QueryGraph};
 use representation::multitype::all_multi_cols;
 use representation::solution_mapping::{BaseCatState, EagerSolutionMappings, SolutionMappings};
-use representation::{
-    BaseRDFNodeType, RDFNodeState, OBJECT_COL_NAME, PREDICATE_COL_NAME, SUBJECT_COL_NAME,
-};
+use representation::{BaseRDFNodeType, RDFNodeState, OBJECT_COL_NAME, PREDICATE_COL_NAME, SUBJECT_COL_NAME};
 use std::collections::{HashMap, HashSet};
 
 impl Triplestore {
@@ -45,8 +43,8 @@ impl Triplestore {
         if let Some(map) = self.graph_triples_map.get(graph).unwrap().get(predicate) {
             for (s, o) in map.keys() {
                 types.push((
-                    PossibleTypes::singular(s.as_constrained()),
-                    PossibleTypes::singular(o.as_constrained()),
+                    PossibleTypes::singular(bt_as_constrained(s)),
+                    PossibleTypes::singular(bt_as_constrained(o)),
                 ));
             }
         }
@@ -59,8 +57,8 @@ impl Triplestore {
             {
                 for (s, o) in map.keys() {
                     types.push((
-                        PossibleTypes::singular(s.as_constrained()),
-                        PossibleTypes::singular(o.as_constrained()),
+                        PossibleTypes::singular(bt_as_constrained(s)),
+                        PossibleTypes::singular(bt_as_constrained(o)),
                     ));
                 }
             }
@@ -367,7 +365,7 @@ impl Triplestore {
         subject_datatype_ctr: &Option<PossibleTypes>,
         object_datatype_ctr: &Option<PossibleTypes>,
         graph: &NamedGraph,
-    ) -> Option<HashSet<(StoredBaseRDFNodeType, StoredBaseRDFNodeType)>> {
+    ) -> Option<HashSet<(BaseRDFNodeType, BaseRDFNodeType)>> {
         if subject_datatype_ctr.is_none() && object_datatype_ctr.is_none() {
             return None;
         }
@@ -381,12 +379,12 @@ impl Triplestore {
         if let Some(map) = use_map.get(predicate_uri) {
             for (subject_type, object_type) in map.keys() {
                 if let Some(subject_datatype_ctr) = subject_datatype_ctr {
-                    if !subject_datatype_ctr.compatible_with(&subject_type.as_constrained()) {
+                    if !subject_datatype_ctr.compatible_with(&bt_as_constrained(subject_type)) {
                         continue;
                     }
                 }
                 if let Some(object_datatype_ctr) = object_datatype_ctr {
-                    if !object_datatype_ctr.compatible_with(&object_type.as_constrained()) {
+                    if !object_datatype_ctr.compatible_with(&bt_as_constrained(object_type)) {
                         continue;
                     }
                 }
@@ -523,7 +521,6 @@ fn single_triples_to_lf(
                     Some(e)
                 }
             };
-
             if let Some(enc) = enc {
                 lf = lf.filter(col(OBJECT_COL_NAME).eq(enc));
             } else {
@@ -545,8 +542,8 @@ struct HalfBakedSolutionMappings {
 }
 
 fn multiple_tt_to_lf(
-    triples: &HashMap<(StoredBaseRDFNodeType, StoredBaseRDFNodeType), Triples>,
-    types: Option<HashSet<(StoredBaseRDFNodeType, StoredBaseRDFNodeType)>>,
+    triples: &HashMap<(BaseRDFNodeType, BaseRDFNodeType), Triples>,
+    types: Option<HashSet<(BaseRDFNodeType, BaseRDFNodeType)>>,
     subjects: &Option<Vec<Subject>>,
     objects: &Option<Vec<Term>>,
     keep_subject: bool,
@@ -592,21 +589,22 @@ fn multiple_tt_to_lf(
                     select.push(col(OBJECT_COL_NAME));
                 }
 
-                let base_subject = subj_type.as_base_rdf_node_type();
-                let base_object = obj_type.as_base_rdf_node_type();
-
-                let subject_state = base_subject.default_stored_cat_state();
-                let object_state = base_object.default_stored_cat_state();
+                let subject_state = subj_type.default_stored_cat_state();
+                let object_state = obj_type.default_stored_cat_state();
 
                 let half_baked = HalfBakedSolutionMappings {
                     mappings: lf.select(select),
                     predicate: None,
                     subject_type: if keep_subject {
-                        Some(base_subject)
+                        Some(subj_type.clone())
                     } else {
                         None
                     },
-                    object_type: if keep_object { Some(base_object) } else { None },
+                    object_type: if keep_object {
+                        Some(obj_type.clone())
+                    } else {
+                        None
+                    },
                     height_upper_bound: height,
                     subject_state: if keep_subject {
                         Some(subject_state)
@@ -630,27 +628,15 @@ fn multiple_tt_to_lf(
     }
 }
 
-fn filter_objects<'a>(
-    object_type: &StoredBaseRDFNodeType,
-    objects: &'a Vec<Term>,
-) -> Vec<&'a Term> {
+fn filter_objects<'a>(object_type: &BaseRDFNodeType, objects: &'a Vec<Term>) -> Vec<&'a Term> {
     let mut filtered = vec![];
     for o in objects {
-        let ok = match object_type {
-            StoredBaseRDFNodeType::IRI(prefix) => {
-                if let Term::NamedNode(nn) = o {
-                    let o_prefix = named_node_split_prefix(nn);
-                    prefix == &o_prefix
-                } else {
-                    false
-                }
-            }
-            StoredBaseRDFNodeType::Blank => {
-                matches!(o, Term::BlankNode(_))
-            }
-            StoredBaseRDFNodeType::Literal(l) => {
-                if let Term::Literal(tl) = o {
-                    tl.datatype() == l.as_ref()
+        let ok = match o {
+            Term::NamedNode(..) => object_type.is_iri(),
+            Term::BlankNode(..) => object_type.is_blank_node(),
+            Term::Literal(l) => {
+                if let BaseRDFNodeType::Literal(t) = object_type {
+                    l.datatype() == t.as_ref()
                 } else {
                     false
                 }
@@ -664,22 +650,15 @@ fn filter_objects<'a>(
 }
 
 fn filter_subjects<'a>(
-    subject_type: &StoredBaseRDFNodeType,
+    subject_type: &BaseRDFNodeType,
     subjects: &'a Vec<Subject>,
 ) -> Vec<&'a Subject> {
     let mut filtered = vec![];
     for s in subjects {
         #[allow(unreachable_patterns)]
         let ok = match s {
-            Subject::NamedNode(nn) => {
-                if let StoredBaseRDFNodeType::IRI(prefix) = subject_type {
-                    let pre = named_node_split_prefix(nn);
-                    &pre == prefix
-                } else {
-                    false
-                }
-            }
-            Subject::BlankNode(_) => subject_type == &StoredBaseRDFNodeType::Blank,
+            Subject::NamedNode(..) => subject_type.is_iri(),
+            Subject::BlankNode(_) => subject_type.is_blank_node(),
             _ => unimplemented!("Only blank node and iri subjects"),
         };
         if ok {

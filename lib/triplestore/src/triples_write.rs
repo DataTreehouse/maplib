@@ -36,16 +36,11 @@ impl Triplestore {
                 let predicate_string = predicate.to_string();
                 let predicate_bytes = predicate_string.as_bytes();
                 for ((subject_type, object_type), tt) in df_map {
-                    let base_subject_type = subject_type.as_base_rdf_node_type();
-                    let base_object_type = object_type.as_base_rdf_node_type();
-                    if base_object_type.is_lang_string() {
+                    if object_type.is_lang_string() {
                         let types = HashMap::from([
-                            (SUBJECT_COL_NAME.to_string(), base_subject_type.clone()),
-                            (
-                                LANG_STRING_VALUE_FIELD.to_string(),
-                                base_object_type.clone(),
-                            ),
-                            (LANG_STRING_LANG_FIELD.to_string(), base_object_type.clone()),
+                            (SUBJECT_COL_NAME.to_string(), subject_type.clone()),
+                            (LANG_STRING_VALUE_FIELD.to_string(), object_type.clone()),
+                            (LANG_STRING_LANG_FIELD.to_string(), object_type.clone()),
                         ]);
                         let lfs = tt.get_lazy_frames(&None, &None)?;
                         for (lf, _) in lfs {
@@ -73,13 +68,13 @@ impl Triplestore {
                             }
                             df = df.lazy().drop_nulls(None).collect().unwrap();
 
-                            if let Some(prefix) = subject_type.as_cat_type() {
+                            if subject_type.stored_cat() {
                                 let cats = self.global_cats.read()?;
                                 let ser = cats.decode_of_type(
                                     &df.column(SUBJECT_COL_NAME)
                                         .unwrap()
                                         .as_materialized_series_maintain_scalar(),
-                                    &prefix,
+                                    &subject_type,
                                 );
                                 df.with_column(ser.into_column()).unwrap();
                             }
@@ -95,8 +90,8 @@ impl Triplestore {
                         }
                     } else {
                         let types = HashMap::from([
-                            (SUBJECT_COL_NAME.to_string(), base_subject_type.clone()),
-                            (OBJECT_COL_NAME.to_string(), base_object_type.clone()),
+                            (SUBJECT_COL_NAME.to_string(), subject_type.clone()),
+                            (OBJECT_COL_NAME.to_string(), object_type.clone()),
                         ]);
                         for (lf, _) in tt.get_lazy_frames(&None, &None)? {
                             let mut df = lf
@@ -104,23 +99,23 @@ impl Triplestore {
                                 .collect()
                                 .unwrap();
                             convert_datelike_to_string(&mut df, OBJECT_COL_NAME);
-                            if let Some(prefix) = subject_type.as_cat_type() {
+                            if subject_type.stored_cat() {
                                 let cats = self.global_cats.read()?;
                                 let ser = cats.decode_of_type(
                                     &df.column(SUBJECT_COL_NAME)
                                         .unwrap()
                                         .as_materialized_series_maintain_scalar(),
-                                    &prefix,
+                                    subject_type,
                                 );
                                 df.with_column(ser.into_column()).unwrap();
                             }
-                            if let Some(prefix) = object_type.as_cat_type() {
+                            if object_type.stored_cat() {
                                 let cats = self.global_cats.read()?;
                                 let ser = cats.decode_of_type(
                                     &df.column(OBJECT_COL_NAME)
                                         .unwrap()
                                         .as_materialized_series_maintain_scalar(),
-                                    &prefix,
+                                    &object_type,
                                 );
                                 df.with_column(ser.into_column()).unwrap();
                             }
@@ -145,8 +140,8 @@ impl Triplestore {
                     for (lf, _) in tt.get_lazy_frames(&None, &None)? {
                         let triples = global_df_as_triples(
                             lf.collect().unwrap(),
-                            subject_type.as_base_rdf_node_type(),
-                            object_type.as_base_rdf_node_type(),
+                            subject_type.clone(),
+                            object_type.clone(),
                             predicate,
                             self.global_cats.clone(),
                         );

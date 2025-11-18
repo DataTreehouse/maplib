@@ -5,7 +5,7 @@ use crate::type_constraints::{
 use oxrdf::vocab::rdfs;
 use oxrdf::{Term, Variable};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
-use representation::cats::{named_node_split_prefix, LockedCats};
+use representation::cats::{LockedCats};
 use representation::polars_to_rdf::column_as_terms;
 use representation::solution_mapping::SolutionMappings;
 use spargebra::algebra::{Expression, Function, GraphPattern};
@@ -162,14 +162,14 @@ impl Pushdowns {
                     }
                     let mut terms = HashSet::new();
                     let mut literal_types = HashSet::new();
-                    let mut prefixes = HashSet::new();
+                    let mut iri = false;
                     for gs in bindings {
                         let g = gs.get(i).unwrap();
                         if let Some(g) = g {
                             terms.insert(g.clone());
                             match g {
-                                GroundTerm::NamedNode(nn) => {
-                                    prefixes.insert(named_node_split_prefix(nn));
+                                GroundTerm::NamedNode(..) => {
+                                    iri = true;
                                 }
                                 GroundTerm::Literal(l) => {
                                     literal_types.insert(l.datatype());
@@ -181,8 +181,8 @@ impl Pushdowns {
                         .into_iter()
                         .map(|l| ConstraintBaseRDFNodeType::Literal(l.into_owned()))
                         .collect();
-                    if !prefixes.is_empty() {
-                        types.push(ConstraintBaseRDFNodeType::IRI(Some(prefixes)));
+                    if iri {
+                        types.push(ConstraintBaseRDFNodeType::IRI);
                     }
                     let use_terms: HashSet<_> = terms
                         .into_iter()
@@ -305,7 +305,7 @@ impl Pushdowns {
     fn iri_or_blanknode_constraint(&mut self, v: &Variable) {
         let ctr = ConstraintExpr::Or(
             Box::new(ConstraintExpr::Constraint(Box::new(
-                ConstraintBaseRDFNodeType::IRI(None),
+                ConstraintBaseRDFNodeType::IRI,
             ))),
             Box::new(ConstraintExpr::Constraint(Box::new(
                 ConstraintBaseRDFNodeType::BlankNode,
@@ -435,7 +435,7 @@ fn find_variable_type_constraints(e: &Expression) -> Option<HashMap<String, Poss
                     if let Expression::Variable(v) = args.first().unwrap() {
                         return Some(HashMap::from([(
                             v.as_str().to_string(),
-                            PossibleTypes::singular(ConstraintBaseRDFNodeType::IRI(None)),
+                            PossibleTypes::singular(ConstraintBaseRDFNodeType::IRI),
                         )]));
                     }
                 }

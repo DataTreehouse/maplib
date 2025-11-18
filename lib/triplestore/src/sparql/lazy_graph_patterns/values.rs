@@ -20,9 +20,9 @@ impl Triplestore {
         query_settings: &QuerySettings,
     ) -> Result<SolutionMappings, SparqlError> {
         let sm = values_pattern(variables, bindings);
-        let (sm, _) = {
+        let sm = {
             let cats = self.global_cats.read()?;
-            cats.encode_solution_mappings(sm, None)
+            cats.encode_solution_mappings(sm)
         };
         if let Some(mut mappings) = solution_mappings {
             mappings = join(

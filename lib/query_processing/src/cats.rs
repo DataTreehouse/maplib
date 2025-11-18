@@ -38,7 +38,7 @@ pub fn create_compatible_cats(
                     let mut literal_renc_map = HashMap::new();
                     for (p, renc) in map {
                         match p {
-                            CatType::Prefix(_) => {
+                            CatType::IRI => {
                                 iri_renc.push(renc);
                             }
                             CatType::Blank => {
@@ -183,7 +183,7 @@ fn check_need_native_cat_cast(t: &BaseRDFNodeType, types: &Vec<Option<RDFNodeSta
                 let is_global = matches!(b, BaseCatState::CategoricalNative(_, None));
                 if is_global {
                     if found_non_global_witness {
-                        return true
+                        return true;
                     } else {
                         found_global_witness = true;
                     }

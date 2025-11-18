@@ -1,4 +1,4 @@
-use super::{encode_triples, rdf_split_iri_str, re_encode, CatEncs, CatTriples, CatType, Cats};
+use super::{encode_triples, re_encode, CatEncs, CatTriples, CatType, Cats};
 use crate::solution_mapping::BaseCatState;
 use crate::BaseRDFNodeType;
 use oxrdf::NamedNode;
@@ -14,33 +14,21 @@ impl Cats {
             .flatten()
             .collect();
         let re_enc_map = self.merge(local_cats);
-        let global_cats = re_encode(cat_triples, re_enc_map);
-        global_cats
+        let global_cat_triples = re_encode(cat_triples, re_enc_map);
+        global_cat_triples
     }
 
     pub fn encode_predicates(&mut self, cat_triples: &Vec<CatTriples>) {
         for ct in cat_triples {
-            let (pre, suf) = rdf_split_iri_str(ct.predicate.as_str());
-            let prefix = NamedNode::new_unchecked(pre);
-            let ct = CatType::Prefix(prefix.clone());
-            let prefix_u = if let Some(prefix_u) = self.prefix_rev_map.get(&prefix) {
-                *prefix_u
-            } else {
-                self.cat_map.insert(ct.clone(), CatEncs::new_empty(true));
-                let prefix_u = self.prefix_map.len() as u32;
-                self.prefix_map
-                    .insert(prefix_u, NamedNode::new_unchecked(pre));
-                self.prefix_rev_map
-                    .insert(NamedNode::new_unchecked(pre), prefix_u);
-                prefix_u
-            };
-
-            let enc = self.cat_map.get_mut(&ct).unwrap();
-            if !enc.contains_key(suf) {
-                self.belongs_prefix_map.insert(self.iri_counter, prefix_u);
-                let arc_suf = Arc::new(suf.to_string());
-                enc.encode_new_arc_string(arc_suf.clone(), self.iri_counter);
-                self.rev_iri_suffix_map.insert(self.iri_counter, arc_suf);
+            let t = CatType::IRI;
+            if !self.cat_map.contains_key(&t) {
+                self.cat_map.insert(t.clone(), CatEncs::new_empty());
+            }
+            let enc = self.cat_map.get_mut(&t).unwrap();
+            let pred = ct.predicate.as_str().to_string();
+            if !enc.map.contains_key(&pred) {
+                let arc_pred = Arc::new(pred);
+                enc.encode_new_arc_string(arc_pred.clone(), self.iri_counter);
                 self.iri_counter += 1;
             }
         }

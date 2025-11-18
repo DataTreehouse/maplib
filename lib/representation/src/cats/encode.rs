@@ -1,6 +1,5 @@
 use super::{
-    rdf_split_iri_str, split_iri_series, CatEncs, CatType, Cats, EncodedTriples,
-    OBJECT_PREFIX_COL_NAME, SUBJECT_PREFIX_COL_NAME,
+    CatEncs, CatType, Cats, EncodedTriples
 };
 use crate::cats::LockedCats;
 use crate::solution_mapping::{BaseCatState, EagerSolutionMappings};
@@ -11,17 +10,11 @@ use polars::prelude::{col, lit, IntoLazy, Series};
 use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
 use std::sync::Arc;
+use rayon::iter::ParallelIterator;
 
 impl CatEncs {
-    pub fn new_empty(is_iri: bool) -> CatEncs {
-        let rev_map = if is_iri {
-            None
-        } else {
-            Some(HashMap::with_capacity_and_hasher(
-                2,
-                BuildHasherDefault::default(),
-            ))
-        };
+    pub fn new_empty() -> CatEncs {
+        let rev_map = HashMap::with_capacity_and_hasher(2, BuildHasherDefault::default());
         CatEncs {
             map: Default::default(),
             rev_map,
@@ -33,13 +26,11 @@ impl CatEncs {
         self.map.contains_key(&s)
     }
 
-    pub fn new_singular(value: &str, u: u32, is_iri: bool) -> CatEncs {
-        let mut sing = Self::new_empty(is_iri);
+    pub fn new_singular(value: &str, u: u32) -> CatEncs {
+        let mut sing = Self::new_empty();
         let s = Arc::new(value.to_string());
         sing.map.insert(s.clone(), u);
-        if let Some(rev_map) = &mut sing.rev_map {
-            rev_map.insert(u, s);
-        }
+        sing.rev_map.insert(u, s);
         sing
     }
 
@@ -55,16 +46,12 @@ impl CatEncs {
     pub fn encode_new_string(&mut self, s: String, u: u32) {
         let s = Arc::new(s.clone());
         self.map.insert(s.clone(), u);
-        if let Some(rev_map) = &mut self.rev_map {
-            rev_map.insert(u, s);
-        }
+        self.rev_map.insert(u, s);
     }
 
     pub fn encode_new_arc_string(&mut self, s: Arc<String>, u: u32) {
         self.map.insert(s.clone(), u);
-        if let Some(rev_map) = &mut self.rev_map {
-            rev_map.insert(u, s);
-        }
+        self.rev_map.insert(u, s);
     }
 
     pub fn height(&self) -> u32 {
@@ -73,17 +60,12 @@ impl CatEncs {
 }
 
 impl Cats {
-    pub fn encode_solution_mappings(
-        &self,
-        sm: EagerSolutionMappings,
-        include_cat_type_col: Option<HashMap<String, String>>,
-    ) -> (EagerSolutionMappings, HashMap<String, HashMap<u32, String>>) {
+    pub fn encode_solution_mappings(&self, sm: EagerSolutionMappings) -> EagerSolutionMappings {
         let EagerSolutionMappings {
             mappings,
             mut rdf_node_types,
         } = sm;
         let mut to_encode = vec![];
-        let mut to_add_prefix_col = vec![];
         for (c, s) in &rdf_node_types {
             for (t, bs) in &s.map {
                 if t.stored_cat() {
@@ -101,24 +83,6 @@ impl Cats {
                             mappings.column(c).unwrap().as_materialized_series().clone()
                         };
                         to_encode.push((c.clone(), t.clone(), ser));
-                    } else if let BaseCatState::CategoricalNative(_, local) = bs {
-                        if let Some(map) = &include_cat_type_col {
-                            if t.is_iri() && map.contains_key(c) {
-                                let ser = if s.is_multi() {
-                                    mappings
-                                        .column(c)
-                                        .unwrap()
-                                        .as_materialized_series()
-                                        .struct_()
-                                        .unwrap()
-                                        .field_by_name(&t.field_col_name())
-                                        .unwrap()
-                                } else {
-                                    mappings.column(c).unwrap().as_materialized_series().clone()
-                                };
-                                to_add_prefix_col.push((c.clone(), local.clone(), ser));
-                            }
-                        }
                     }
                 }
             }
@@ -126,35 +90,13 @@ impl Cats {
         let encoded: Vec<_> = to_encode
             .into_iter()
             .map(|(c, t, ser)| {
-                let t_col = if let Some(map) = &include_cat_type_col {
-                    map.contains_key(&c)
-                } else {
-                    false
-                };
-                let (enc, local, cat_col) = self.encode_series(&ser, &t, t_col);
-                (c, t, enc, local, cat_col)
+                let (enc, local) = self.encode_series(&ser, &t);
+                (c, t, enc, local)
             })
             .collect();
-        let mut prefix_maps = HashMap::new();
         let mut mappings = mappings.lazy();
-        let prefix_cols: Vec<_> = to_add_prefix_col
-            .into_iter()
-            .map(|(c, local, ser)| {
-                let (prefix_ser, maps) = self.get_prefix_column(ser, local);
-                let maps: HashMap<_, _> = maps
-                    .into_iter()
-                    .map(|(u, ct)| (u, ct.as_str().to_string()))
-                    .collect();
-                let name = include_cat_type_col.as_ref().unwrap().get(&c).unwrap();
-                (c, prefix_ser, maps, name)
-            })
-            .collect();
 
-        for (c, prefix_ser, maps, name) in prefix_cols {
-            prefix_maps.insert(c, maps);
-            mappings = mappings.with_column(lit(prefix_ser).explode().alias(name));
-        }
-        for (c, t, enc, local, cat_col) in encoded {
+        for (c, t, enc, local) in encoded {
             let s = rdf_node_types.get_mut(&c).unwrap();
             if s.is_multi() {
                 mappings =
@@ -166,24 +108,11 @@ impl Cats {
                 t,
                 BaseCatState::CategoricalNative(false, local.map(|x| LockedCats::new(x))),
             );
-            if let Some((s, m)) = cat_col {
-                let name = include_cat_type_col.as_ref().unwrap().get(&c).unwrap();
-                prefix_maps.insert(c, m);
-                mappings = mappings.with_column(lit(s).explode().alias(name));
-            }
         }
-        (
-            EagerSolutionMappings::new(mappings.collect().unwrap(), rdf_node_types),
-            prefix_maps,
-        )
+        EagerSolutionMappings::new(mappings.collect().unwrap(), rdf_node_types)
     }
 
-    pub fn encode_series(
-        &self,
-        series: &Series,
-        t: &BaseRDFNodeType,
-        include_cat_type: bool,
-    ) -> (Series, Option<Cats>, Option<(Series, HashMap<u32, String>)>) {
+    pub fn encode_series(&self, series: &Series, t: &BaseRDFNodeType) -> (Series, Option<Cats>) {
         let original_name = series.name().clone();
         let mut use_height = match t {
             BaseRDFNodeType::IRI => self.iri_counter,
@@ -193,143 +122,56 @@ impl Cats {
                 unreachable!("Should never happen")
             }
         };
-        let (mut ser, c, ct) = if t.is_iri() {
-            let (pre, suf, map) = split_iri_series(series);
-            let mut enc_map = HashMap::new();
-            let mut new_enc_map = HashMap::new();
-            let mut rev_map = HashMap::new();
-            for (k, u) in map {
-                let enc = CatEncs::new_empty(t.is_iri());
-                new_enc_map.insert(u, enc);
-                if let Some(enc) = self
-                    .cat_map
-                    .get(&CatType::Prefix(NamedNode::new_unchecked(&k)))
-                {
-                    enc_map.insert(u, enc);
-                }
-                rev_map.insert(u, k);
-            }
-            let cat_type_series = if include_cat_type {
-                Some(Series::from_iter(pre.iter().map(|x| x.clone())))
-            } else {
-                None
-            };
 
-            let to_iter: Vec<_> = pre.into_iter().zip(suf).collect();
-            let encoded_global: Vec<_> = to_iter
-                .into_iter()
-                .map(|x| {
-                    if let (Some(u), Some(s)) = x {
-                        if let Some(enc) = enc_map.get(&u) {
-                            if let Some(u) = enc.maybe_encode_str(s).map(|x| *x) {
-                                (None, Some(u))
-                            } else {
-                                (Some((u, s)), None)
-                            }
-                        } else {
-                            (Some((u, s)), None)
-                        }
-                    } else {
-                        (None, None)
-                    }
-                })
-                .collect();
-            let mut encoded_global_local = Vec::with_capacity(encoded_global.len());
-            for (unencoded, encoded) in encoded_global {
-                let encoded = if let Some((u, s)) = unencoded {
-                    let enc = new_enc_map.get_mut(&u).unwrap();
-                    if let Some(su) = enc.maybe_encode_str(s) {
-                        Some(*su)
-                    } else {
-                        use_height += 1;
-                        let su = use_height;
-                        //Rev map handled by cat constructor
-                        enc.encode_new_str(s, su);
-                        Some(su)
-                    }
-                } else {
-                    encoded
-                };
-                encoded_global_local.push(encoded);
-            }
-            let ser = Series::from_iter(encoded_global_local);
-            let cats = if !new_enc_map.is_empty() {
-                let mut keep_new_enc_map = HashMap::new();
-                for (u, enc) in new_enc_map {
-                    if !enc.map.is_empty() {
-                        keep_new_enc_map.insert(
-                            CatType::Prefix(NamedNode::new_unchecked(rev_map.get(&u).unwrap())),
-                            enc,
-                        );
-                    }
-                }
-                let cats = Cats::from_map(keep_new_enc_map);
-                Some(cats)
-            } else {
-                None
-            };
-            let cat_type_things = if let Some(cat_type_series) = cat_type_series {
-                Some((cat_type_series, rev_map))
-            } else {
-                None
-            };
-            (ser, cats, cat_type_things)
-        } else {
-            let enc = self.get_encs(t).pop();
-            let mut new_enc = CatEncs::new_empty(t.is_iri());
-            let strch = series.str().unwrap();
-            let encoded_global: Vec<_> = strch
-                .iter()
-                .map(|x| {
-                    if let Some(x) = x {
-                        if let Some((_, enc)) = enc {
-                            if let Some(su) = enc.maybe_encode_str(x).map(|x| *x) {
-                                (None, Some(su))
-                            } else {
-                                (Some(x), None)
-                            }
+        let enc = self.get_encs(t).pop();
+        let mut new_enc = CatEncs::new_empty();
+        let strch = series.str().unwrap();
+        let encoded_global: Vec<_> = strch
+            .iter()
+            .map(|x| {
+                if let Some(x) = x {
+                    if let Some((_, enc)) = enc {
+                        if let Some(su) = enc.maybe_encode_str(x).map(|x| *x) {
+                            (None, Some(su))
                         } else {
                             (Some(x), None)
                         }
                     } else {
-                        (None, None)
+                        (Some(x), None)
                     }
-                })
-                .collect();
+                } else {
+                    (None, None)
+                }
+            })
+            .collect();
 
-            let mut encoded_global_local = Vec::with_capacity(encoded_global.len());
-            for (unencoded, encoded) in encoded_global {
-                let encoded = if let Some(s) = unencoded {
-                    if let Some(u) = new_enc.maybe_encode_str(s) {
-                        Some(*u)
-                    } else {
-                        use_height += 1;
-                        let su = use_height;
-                        new_enc.encode_new_str(s, su);
-                        Some(su)
-                    }
+        let mut encoded_global_local = Vec::with_capacity(encoded_global.len());
+        for (unencoded, encoded) in encoded_global {
+            let encoded = if let Some(s) = unencoded {
+                if let Some(u) = new_enc.maybe_encode_str(s) {
+                    Some(*u)
                 } else {
-                    encoded
-                };
-                encoded_global_local.push(encoded);
-            }
-            let local = if !new_enc.map.is_empty() {
-                let cat_type = if let BaseRDFNodeType::Literal(nn) = t {
-                    CatType::Literal(nn.clone())
-                } else {
-                    CatType::Blank
-                };
-                let mut map = HashMap::new();
-                map.insert(cat_type, new_enc);
-                Some(Cats::from_map(map))
+                    use_height += 1;
+                    let su = use_height;
+                    new_enc.encode_new_str(s, su);
+                    Some(su)
+                }
             } else {
-                None
+                encoded
             };
-            let ser = Series::from_iter(encoded_global_local);
-            (ser, local, None)
+            encoded_global_local.push(encoded);
+        }
+        let local = if !new_enc.map.is_empty() {
+            let cat_type = CatType::from_base_rdf_node_type(t);
+            let mut map = HashMap::new();
+            map.insert(cat_type, new_enc);
+            Some(Cats::from_map(map))
+        } else {
+            None
         };
+        let mut ser = Series::from_iter(encoded_global_local);
         ser.rename(original_name);
-        (ser, c, ct)
+        (ser, local)
     }
 
     pub fn encode_blanks(&self, blanks: &[&str]) -> Vec<Option<u32>> {
@@ -357,16 +199,12 @@ impl Cats {
     }
 
     pub fn encode_iri_slice(&self, iris: &[&str]) -> Vec<Option<u32>> {
-        let split: Vec<_> = iris.iter().map(|x| rdf_split_iri_str(x)).collect();
-
         let mut u32s = vec![];
-        for (p, s) in split {
-            if let Some(encs) = self
-                .cat_map
-                .get(&CatType::Prefix(NamedNode::new_unchecked(p)))
-            {
-                if let Some(suf) = encs.maybe_encode_str(s) {
-                    u32s.push(Some(*suf));
+        let encs = self.cat_map.get(&CatType::IRI);
+        for s in iris {
+            if let Some(encs) = encs {
+                if let Some(u) = encs.maybe_encode_str(s) {
+                    u32s.push(Some(*u));
                 } else {
                     u32s.push(None)
                 }
@@ -375,58 +213,6 @@ impl Cats {
             }
         }
         u32s
-    }
-
-    pub fn get_prefix_column(
-        &self,
-        ser: Series,
-        local_cats: Option<LockedCats>,
-    ) -> (Series, HashMap<u32, NamedNode>) {
-        // Important to prefer local cats
-        let local_cats = local_cats.as_ref().map(|x| x.read().unwrap());
-        let local_cats = local_cats.as_ref();
-        let mut local_remap = HashMap::new();
-        let mut prefix_map = self.prefix_map.clone();
-        let local_belongs_prefix_map = if let Some(local_cats) = local_cats {
-            for (k, v) in &local_cats.prefix_rev_map {
-                if let Some(u) = self.prefix_rev_map.get(k) {
-                    local_remap.insert(*v, *u);
-                } else {
-                    let u = prefix_map.len() as u32;
-                    local_remap.insert(*v, u);
-                    prefix_map.insert(u, k.clone());
-                }
-            }
-            Some(&local_cats.belongs_prefix_map)
-        } else {
-            None
-        };
-        let uch = ser.u32().unwrap();
-        let mut prefixes = Vec::with_capacity(ser.len());
-        for u in uch {
-            let p = if let Some(u) = u {
-                let p = if let Some(local_belongs_prefix_map) = local_belongs_prefix_map {
-                    let p = local_belongs_prefix_map.get(&u);
-                    if let Some(p) = p {
-                        local_remap.get(p)
-                    } else {
-                        self.belongs_prefix_map.get(&u)
-                    }
-                } else {
-                    self.belongs_prefix_map.get(&u)
-                };
-                if p.is_none() {
-                    panic!("Should never happen: {u}")
-                }
-                p.cloned()
-            } else {
-                None
-            };
-            prefixes.push(p);
-        }
-        let ser = Series::from_iter(prefixes);
-
-        (ser, prefix_map)
     }
 
     pub fn encode_iri_or_local_cat(&self, iri: &str) -> (u32, RDFNodeState) {
@@ -481,7 +267,7 @@ pub fn encode_triples(
     subject_cat_state: BaseCatState,
     object_cat_state: BaseCatState,
     global_cats: &Cats,
-) -> (Vec<LockedCats>, Vec<EncodedTriples>) {
+) -> (Vec<LockedCats>, EncodedTriples) {
     let mut map = HashMap::new();
     map.insert(
         SUBJECT_COL_NAME.to_string(),
@@ -491,21 +277,7 @@ pub fn encode_triples(
         OBJECT_COL_NAME.to_string(),
         RDFNodeState::from_bases(object_type.clone(), object_cat_state),
     );
-    let mut prefix_name_map = HashMap::new();
-    if subject_type.is_iri() {
-        prefix_name_map.insert(
-            SUBJECT_COL_NAME.to_string(),
-            SUBJECT_PREFIX_COL_NAME.to_string(),
-        );
-    }
-    if object_type.is_iri() {
-        prefix_name_map.insert(
-            OBJECT_COL_NAME.to_string(),
-            OBJECT_PREFIX_COL_NAME.to_string(),
-        );
-    }
-    let (mut sm, prefix_maps) = global_cats
-        .encode_solution_mappings(EagerSolutionMappings::new(df, map), Some(prefix_name_map));
+    let mut sm = global_cats.encode_solution_mappings(EagerSolutionMappings::new(df, map));
 
     let mut subject_state = sm.rdf_node_types.remove(SUBJECT_COL_NAME).unwrap();
     let mut object_state = sm.rdf_node_types.remove(OBJECT_COL_NAME).unwrap();
@@ -521,107 +293,24 @@ pub fn encode_triples(
         x.uuid.clone()
     });
 
-    let EagerSolutionMappings { mappings, .. } = sm;
-    let mut partition_by = vec![];
-    if mappings.column(SUBJECT_PREFIX_COL_NAME).is_ok() {
-        partition_by.push(SUBJECT_PREFIX_COL_NAME)
-    }
-    if mappings.column(OBJECT_PREFIX_COL_NAME).is_ok() {
-        partition_by.push(OBJECT_PREFIX_COL_NAME);
-    }
-    let out = if !partition_by.is_empty() {
-        // Important to preserve ordering
-        let dfs = mappings.partition_by_stable(partition_by, true).unwrap();
-        let out: Vec<_> = dfs
-            .into_iter()
-            .map(|mut df| {
-                if df.height() == 0 {
-                    None
-                } else {
-                    let subject_out =
-                        if let Some(subject_prefix_map) = prefix_maps.get(SUBJECT_COL_NAME) {
-                            let ser = df
-                                .drop_in_place(SUBJECT_PREFIX_COL_NAME)
-                                .unwrap()
-                                .as_materialized_series_maintain_scalar();
-                            let u32ch = ser.u32().unwrap();
-                            let i = u32ch.first_non_null();
-                            if let Some(i) = i {
-                                let u = u32ch.get(i);
-                                if let Some(u) = u {
-                                    Some(subject_prefix_map.get(&u).unwrap().clone())
-                                } else {
-                                    None
-                                }
-                            } else {
-                                None
-                            }
-                        } else {
-                            None
-                        };
-                    let object_out =
-                        if let Some(object_prefix_map) = prefix_maps.get(OBJECT_COL_NAME) {
-                            let ser = df
-                                .drop_in_place(OBJECT_PREFIX_COL_NAME)
-                                .unwrap()
-                                .as_materialized_series_maintain_scalar();
-                            let u32ch = ser.u32().unwrap();
-                            let i = u32ch.first_non_null();
-                            if let Some(i) = i {
-                                let u = u32ch.get(i);
-                                if let Some(u) = u {
-                                    Some(object_prefix_map.get(&u).unwrap().clone())
-                                } else {
-                                    None
-                                }
-                            } else {
-                                None
-                            }
-                        } else {
-                            None
-                        };
-                    Some((df, subject_out, object_out))
-                }
-            })
-            .collect();
-        out
+    let subject = if matches!(subject_cat_state, BaseCatState::CategoricalNative(..)) {
+        Some(CatType::from_base_rdf_node_type(&subject_type))
     } else {
-        vec![Some((mappings, None, None))]
+        None
     };
-    let mut new_out = vec![];
-    for (df, subject, object) in out.into_iter().filter(|x| x.is_some()).map(|x| x.unwrap()) {
-        let subject = if matches!(subject_cat_state, BaseCatState::CategoricalNative(..)) {
-            if let Some(subject) = subject {
-                Some(CatType::Prefix(NamedNode::new_unchecked(subject)))
-            } else if subject_type.is_blank_node() {
-                Some(CatType::Blank)
-            } else {
-                None
-            }
-        } else {
-            None
-        };
-        let object = if matches!(object_cat_state, BaseCatState::CategoricalNative(..)) {
-            if let Some(object) = object {
-                Some(CatType::Prefix(NamedNode::new_unchecked(object)))
-            } else if object_type.is_blank_node() {
-                Some(CatType::Blank)
-            } else if let BaseRDFNodeType::Literal(nn) = &object_type {
-                Some(CatType::Literal(nn.clone()))
-            } else {
-                None
-            }
-        } else {
-            None
-        };
-        new_out.push(EncodedTriples {
-            df,
-            subject,
-            subject_local_cat_uuid: subject_local_cat_uuid.clone(),
-            object,
-            object_local_cat_uuid: object_local_cat_uuid.clone(),
-        });
-    }
+    let object = if matches!(object_cat_state, BaseCatState::CategoricalNative(..)) {
+        Some(CatType::from_base_rdf_node_type(&object_type))
+    } else {
+        None
+    };
+
+    let enc_trip = EncodedTriples {
+        df:sm.mappings,
+        subject,
+        subject_local_cat_uuid: subject_local_cat_uuid.clone(),
+        object,
+        object_local_cat_uuid: object_local_cat_uuid.clone(),
+    };
     let mut cats = vec![];
     if let BaseCatState::CategoricalNative(_, Some(c)) = subject_cat_state {
         cats.push(c);
@@ -629,5 +318,5 @@ pub fn encode_triples(
     if let BaseCatState::CategoricalNative(_, Some(c)) = object_cat_state {
         cats.push(c);
     }
-    (cats, new_out)
+    (cats, enc_trip)
 }
