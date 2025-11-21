@@ -100,10 +100,11 @@ impl Triples {
     #[instrument(skip_all)]
     pub(crate) fn add_triples(
         &mut self,
-        df: DataFrame,
+        mut df: DataFrame,
         storage_folder: Option<&PathBuf>,
         global_cats: LockedCats,
     ) -> Result<Option<DataFrame>, TriplestoreError> {
+        df.as_single_chunk_par();
         let mut compacting_indexing_time = 0f32;
         let mut subjects_time = 0f32;
         let mut nonoverlapping_time = 0f32;
