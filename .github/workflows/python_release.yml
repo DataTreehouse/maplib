@@ -26,9 +26,12 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-  manylinux-x64_64:
+  manylinux:
     needs: security_audit
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        architecture: [x86-64, aarch64]
     environment: release
     steps:
       - uses: actions/checkout@v4
