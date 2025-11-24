@@ -27,6 +27,7 @@ __all__ = [
 ]
 
 import pathlib
+from importlib.metadata import version
 from .maplib import *
 from .adding_triples import add_triples
 
@@ -60,3 +61,5 @@ else:
         :param fts_path: Path to the fts index
         """
         print("Contact Data Treehouse to try!")
+
+__version__ = version("maplib") 
