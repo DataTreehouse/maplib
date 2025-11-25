@@ -332,7 +332,7 @@ class Model:
 
     >>> from maplib import Model
     ... doc = '''
-    ... :prefix ex:<http://example.net/ns#>.
+    ... @prefix ex:<http://example.net/ns#>.
     ... ex:ExampleTemplate [?MyValue] :: {
     ...    ottr:Triple(ex:myObject, ex:hasValue, ?MyValue)
     ... } .'''
