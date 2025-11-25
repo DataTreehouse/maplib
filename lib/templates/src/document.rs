@@ -1,13 +1,12 @@
 use crate::ast::StottrDocument;
 use crate::dataset::errors::TemplateError;
-use crate::parsing::whole_stottr_doc;
-use crate::resolver::resolve_document;
 use std::fs::read_to_string;
 use std::path::Path;
+use crate::parsing::peg_parsing::parse_stottr;
 
 pub fn document_from_str(s: &str) -> Result<StottrDocument, TemplateError> {
-    let unresolved = whole_stottr_doc(s).map_err(TemplateError::ParsingError)?;
-    resolve_document(unresolved).map_err(TemplateError::ResolutionError)
+    let doc = parse_stottr(s)?;
+    Ok(doc)
 }
 
 pub fn document_from_file<P: AsRef<Path>>(p: P) -> Result<StottrDocument, TemplateError> {

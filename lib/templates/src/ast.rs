@@ -52,19 +52,14 @@ impl Display for Template {
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct Signature {
-    pub template_name: NamedNode,
-    pub template_prefixed_name: Option<String>,
+    pub iri: NamedNode,
     pub parameter_list: Vec<Parameter>,
     pub annotation_list: Option<Vec<Annotation>>,
 }
 
 impl Display for Signature {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        if let Some(template_prefixed_name) = &self.template_prefixed_name {
-            write!(f, "{template_prefixed_name}")?;
-        } else {
-            write!(f, "{}", &self.template_name)?;
-        }
+        write!(f, "{}", &self.iri)?;
         write!(f, " [")?;
         for (idx, p) in self.parameter_list.iter().enumerate() {
             write!(f, "\n    ")?;
@@ -86,7 +81,7 @@ pub struct Parameter {
     pub non_blank: bool,
     pub ptype: Option<PType>,
     pub variable: Variable,
-    pub default_value: Option<DefaultValue>,
+    pub default_value: Option<ConstantTermOrList>,
 }
 
 impl Display for Parameter {
@@ -218,17 +213,6 @@ impl Display for PType {
 }
 
 #[derive(PartialEq, Debug, Clone)]
-pub struct DefaultValue {
-    pub constant_term: ConstantTermOrList,
-}
-
-impl Display for DefaultValue {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        std::fmt::Display::fmt(&self.constant_term, f)
-    }
-}
-
-#[derive(PartialEq, Debug, Clone)]
 pub enum ConstantTermOrList {
     ConstantTerm(ConstantTerm),
     ConstantList(Vec<ConstantTermOrList>),
@@ -324,8 +308,7 @@ impl Display for ConstantTerm {
 #[derive(PartialEq, Debug, Clone)]
 pub struct Instance {
     pub list_expander: Option<ListExpanderType>,
-    pub template_name: NamedNode,
-    pub prefixed_template_name: Option<String>,
+    pub template_iri: NamedNode,
     pub argument_list: Vec<Argument>,
 }
 
@@ -335,11 +318,7 @@ impl Display for Instance {
             std::fmt::Display::fmt(le, f)?;
             write!(f, " | ")?;
         }
-        if let Some(prefixed_template_name) = &self.prefixed_template_name {
-            write!(f, "{prefixed_template_name}")?;
-        } else {
-            write!(f, "{}", &self.template_name)?;
-        }
+        write!(f, "{}", &self.template_iri)?;
         write!(f, "(")?;
         for (idx, a) in self.argument_list.iter().enumerate() {
             std::fmt::Display::fmt(a, f)?;
@@ -437,3 +416,4 @@ pub struct StottrDocument {
     pub statements: Vec<Statement>,
     pub prefix_map: HashMap<String, NamedNode>,
 }
+

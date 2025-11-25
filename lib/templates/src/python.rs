@@ -1,5 +1,5 @@
 use crate::ast::{
-    ptype_nn_to_rdf_node_type, Argument, ConstantTerm, ConstantTermOrList, DefaultValue, Instance,
+    ptype_nn_to_rdf_node_type, Argument, ConstantTerm, ConstantTermOrList, Instance,
     ListExpanderType, PType, Parameter, Signature, StottrTerm, Template,
 };
 use crate::constants::{OTTR_TRIPLE, XSD_PREFIX_IRI};
@@ -119,7 +119,7 @@ impl PyParameter {
     fn get_default_value(&self, py: Python) -> PyResult<Option<Py<PyAny>>> {
         match &self.parameter.default_value {
             None => Ok(None),
-            Some(def) => match &def.constant_term {
+            Some(def) => match &def {
                 ConstantTermOrList::ConstantTerm(ct) => match ct {
                     ConstantTerm::Iri(i) => {
                         Ok(Some(Py::new(py, PyIRI::from(i.clone()))?.as_any().clone()))
@@ -147,9 +147,8 @@ impl PyParameter {
     fn set_default_value(&mut self, default_value: Option<&Bound<PyAny>>) -> PyResult<()> {
         let default = if let Some(default) = default_value {
             if let Some(ct) = extract_constant_term(default) {
-                Some(DefaultValue {
-                    constant_term: ConstantTermOrList::ConstantTerm(ct),
-                })
+                Some(
+                   ConstantTermOrList::ConstantTerm(ct) )
             } else {
                 return Err(PyRepresentationError::BadArgumentError(
                     "default_value should be IRI, BlankNode, Literal or None".to_string(),
@@ -261,8 +260,7 @@ impl PyInstance {
         }
         let instance = Instance {
             list_expander,
-            template_name: iri.iri,
-            prefixed_template_name: None,
+            template_iri: iri.iri,
             argument_list: new_arguments,
         };
         Ok(PyInstance { instance })
@@ -270,7 +268,7 @@ impl PyInstance {
 
     #[getter]
     fn iri(&self) -> &str {
-        self.instance.template_name.as_str()
+        self.instance.template_iri.as_str()
     }
 }
 
@@ -295,12 +293,11 @@ pub struct PyTemplate {
 #[pymethods]
 impl PyTemplate {
     #[new]
-    #[pyo3(signature = (iri, parameters, instances, prefixed_iri=None))]
+    #[pyo3(signature = (iri, parameters, instances))]
     pub fn new<'py>(
         iri: PyIRI,
         parameters: Vec<Bound<'py, PyAny>>,
         instances: Vec<Bound<'py, PyInstance>>,
-        prefixed_iri: Option<String>,
         py: Python,
     ) -> PyResult<PyTemplate> {
         let mut parameter_list = vec![];
@@ -323,8 +320,7 @@ impl PyTemplate {
             .collect();
         let template = Template {
             signature: Signature {
-                template_name: iri.iri,
-                template_prefixed_name: prefixed_iri,
+                iri: iri.iri,
                 parameter_list,
                 annotation_list: None,
             },
@@ -340,7 +336,7 @@ impl PyTemplate {
         list_expander: Option<String>,
     ) -> PyResult<PyInstance> {
         PyInstance::new(
-            PyIRI::new(self.template.signature.template_name.as_str().to_string())?,
+            PyIRI::new(self.template.signature.iri.as_str().to_string())?,
             arguments,
             list_expander,
         )
@@ -356,7 +352,7 @@ impl PyTemplate {
 
     #[getter]
     fn iri(&self) -> PyIRI {
-        PyIRI::from(self.template.signature.template_name.clone())
+        PyIRI::from(self.template.signature.iri.clone())
     }
 
     #[getter]

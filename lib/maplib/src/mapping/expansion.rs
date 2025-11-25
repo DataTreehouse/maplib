@@ -22,7 +22,7 @@ use std::collections::{HashMap, HashSet};
 use std::ops::Sub;
 use std::time::Instant;
 use templates::ast::{
-    ConstantTerm, ConstantTermOrList, DefaultValue, Instance, ListExpanderType, PType, Signature,
+    ConstantTerm, ConstantTermOrList, Instance, ListExpanderType, PType, Signature,
     StottrTerm,
 };
 use templates::constants::OTTR_TRIPLE;
@@ -69,7 +69,7 @@ impl Model {
         let now = Instant::now();
 
         let target_template = self.resolve_template(template)?.clone();
-        let target_template_name = target_template.signature.template_name.as_str().to_string();
+        let target_template_name = target_template.signature.iri.as_str().to_string();
         let MapOptions {
             graph,
             validate_iris,
@@ -130,7 +130,7 @@ impl Model {
             ));
         }
         if let Some(template) = self.template_dataset.get(name) {
-            if template.signature.template_name.as_str() == OTTR_TRIPLE {
+            if template.signature.iri.as_str() == OTTR_TRIPLE {
                 if let Some(df) = df {
                     Ok((
                         vec![OTTRTripleInstance {
@@ -173,12 +173,12 @@ impl Model {
                     .enumerate()
                     .map(|(i, (instance, series_vec))| {
                         let target_template = if let Some(target_template) =
-                            self.template_dataset.get(instance.template_name.as_str())
+                            self.template_dataset.get(instance.template_iri.as_str())
                         {
                             target_template
                         } else {
                             return Err(MappingError::TemplateNotFound(
-                                instance.template_name.to_string(),
+                                instance.template_iri.to_string(),
                             ));
                         };
                         if let Some(RemapResult {
@@ -202,7 +202,7 @@ impl Model {
                                 layer + 1,
                                 i,
                                 blank_node_counter,
-                                instance.template_name.as_str(),
+                                instance.template_iri.as_str(),
                                 Some(instance_df),
                                 &target_template.signature,
                                 instance_dynamic_columns,
@@ -327,9 +327,9 @@ fn fill_nulls_with_defaults(
     mut lf: LazyFrame,
     current_types: &mut HashMap<String, MappingColumnType>,
     c: &str,
-    default: &DefaultValue,
+    default: &ConstantTermOrList,
 ) -> Result<LazyFrame, MappingError> {
-    if default.constant_term.has_blank_node() {
+    if default.has_blank_node() {
         let df = lf.collect().unwrap();
         if df.column(c).unwrap().is_null().any() {
             todo!();
@@ -337,7 +337,7 @@ fn fill_nulls_with_defaults(
             return Ok(df.lazy());
         }
     }
-    let (expr, _, mct) = constant_to_expr(&default.constant_term, &None)?;
+    let (expr, _, mct) = constant_to_expr(&default, &None)?;
     let is_none = if let MappingColumnType::Flat(inner) = current_types.get(c).unwrap() {
         inner.is_none()
     } else {
@@ -835,13 +835,13 @@ fn create_remapped(
 fn add_default_value(
     static_columns: &mut HashMap<String, StaticColumn>,
     name: &str,
-    default: &DefaultValue,
+    default: &ConstantTermOrList,
 ) {
     static_columns.insert(
         name.to_string(),
         StaticColumn {
-            constant_term: default.constant_term.clone(),
-            ptype: Some(default.constant_term.ptype()),
+            constant_term: default.clone(),
+            ptype: Some(default.ptype()),
         },
     );
 }

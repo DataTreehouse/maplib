@@ -1,8 +1,8 @@
-use crate::resolver::ResolutionError;
 use oxrdf::Variable;
 use std::fmt::{Display, Formatter};
 use std::io;
 use thiserror::Error;
+use crate::parsing::peg_parsing::ParseErrorKind;
 
 #[derive(Error, Debug)]
 pub enum TemplateError {
@@ -10,8 +10,7 @@ pub enum TemplateError {
     IncompatibleTypes(String, Variable, String, String),
     ReadTemplateFileError(io::Error),
     ResolveDirectoryEntryError(walkdir::Error),
-    ParsingError(crate::parsing::errors::ParsingError),
-    ResolutionError(ResolutionError),
+    ParsingError(ParseErrorKind),
     TemplateNotFound(String, String),
 }
 
@@ -38,9 +37,6 @@ impl Display for TemplateError {
             }
             TemplateError::ParsingError(p) => {
                 write!(f, "Template parsing error: {p}")
-            }
-            TemplateError::ResolutionError(r) => {
-                write!(f, "Template resolution error {r}")
             }
             TemplateError::TemplateNotFound(container, inner) => {
                 write!(

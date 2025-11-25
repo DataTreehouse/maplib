@@ -111,8 +111,7 @@ impl Model {
 
                 patterns.push(Instance {
                     list_expander: list_expander.clone(),
-                    template_name: NamedNode::new_unchecked(OTTR_TRIPLE),
-                    prefixed_template_name: Some("ottr:Triple".to_string()),
+                    template_iri: NamedNode::new_unchecked(OTTR_TRIPLE),
                     argument_list: vec![
                         Argument {
                             list_expand: false,
@@ -143,8 +142,7 @@ impl Model {
         self.default_template_counter += 1;
         let template = Template {
             signature: Signature {
-                template_name: NamedNode::new(template_name.clone()).unwrap(),
-                template_prefixed_name: None,
+                iri: NamedNode::new(template_name.clone()).unwrap(),
                 parameter_list: params,
                 annotation_list: None,
             },

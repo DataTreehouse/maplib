@@ -97,8 +97,7 @@ impl TemplateDataset {
 
         let ottr_template = Template {
             signature: Signature {
-                template_name: NamedNode::new_unchecked(OTTR_TRIPLE),
-                template_prefixed_name: Some("ottr:Triple".to_string()),
+                iri: NamedNode::new_unchecked(OTTR_TRIPLE),
                 parameter_list: vec![
                     ottr_triple_subject,
                     ottr_triple_predicate,
@@ -145,29 +144,29 @@ impl TemplateDataset {
     pub fn get(&self, template: &str) -> Option<&Template> {
         self.templates
             .iter()
-            .find(|&t| t.signature.template_name.as_str() == template)
+            .find(|&t| t.signature.iri.as_str() == template)
     }
 
     pub fn infer_types(&mut self) -> Result<(), TemplateError> {
         let template_names: Vec<_> = self
             .templates
             .iter()
-            .map(|x| x.signature.template_name.as_str().to_string())
+            .map(|x| x.signature.iri.as_str().to_string())
             .collect();
         let mut template_map: HashMap<String, Template> = self
             .templates
             .drain(..)
-            .map(|x| (x.signature.template_name.as_str().to_string(), x))
+            .map(|x| (x.signature.iri.as_str().to_string(), x))
             .collect();
         let mut affects_map: HashMap<String, Vec<String>> = HashMap::new();
         for t in template_map.values() {
             for i in &t.pattern_list {
-                if let Some(v) = affects_map.get_mut(i.template_name.as_str()) {
-                    v.push(t.signature.template_name.as_str().to_string());
+                if let Some(v) = affects_map.get_mut(i.template_iri.as_str()) {
+                    v.push(t.signature.iri.as_str().to_string());
                 } else {
                     affects_map.insert(
-                        i.template_name.as_str().to_string(),
-                        vec![t.signature.template_name.as_str().to_string()],
+                        i.template_iri.as_str().to_string(),
+                        vec![t.signature.iri.as_str().to_string()],
                     );
                 }
             }
@@ -218,7 +217,7 @@ impl TemplateDataset {
         if let Some(pos) = self
             .templates
             .iter()
-            .position(|x| x.signature.template_name == template.signature.template_name)
+            .position(|x| x.signature.iri == template.signature.iri)
         {
             self.templates.remove(pos);
         }
@@ -234,18 +233,18 @@ fn infer_template_types(
 ) -> Result<bool, TemplateError> {
     let mut changed = false;
     for i in &mut template.pattern_list {
-        let other = if let Some(t) = templates.get(i.template_name.as_str()) {
+        let other = if let Some(t) = templates.get(i.template_iri.as_str()) {
             t
         } else {
             return Err(TemplateError::TemplateNotFound(
-                template.signature.template_name.to_string().clone(),
-                i.template_name.to_string().clone(),
+                template.signature.iri.to_string().clone(),
+                i.template_iri.to_string().clone(),
             ));
         };
         if i.argument_list.len() != other.signature.parameter_list.len() {
             return Err(TemplateError::InconsistentNumberOfArguments(
-                template.signature.template_name.as_str().to_string(),
-                other.signature.template_name.as_str().to_string(),
+                template.signature.iri.as_str().to_string(),
+                other.signature.iri.as_str().to_string(),
                 i.argument_list.len(),
                 other.signature.parameter_list.len(),
             ));
@@ -264,27 +263,27 @@ fn infer_template_types(
                                     if !other_parameter.optional {
                                         changed = changed
                                             || lub_update(
-                                                &template.signature.template_name,
-                                                v,
-                                                my_parameter,
-                                                &PType::NEList(Box::new(other_ptype.clone())),
+                                            &template.signature.iri,
+                                            v,
+                                            my_parameter,
+                                            &PType::NEList(Box::new(other_ptype.clone())),
                                             )?;
                                     } else {
                                         changed = changed
                                             || lub_update(
-                                                &template.signature.template_name,
-                                                v,
-                                                my_parameter,
-                                                &PType::List(Box::new(other_ptype.clone())),
+                                            &template.signature.iri,
+                                            v,
+                                            my_parameter,
+                                            &PType::List(Box::new(other_ptype.clone())),
                                             )?;
                                     }
                                 } else {
                                     changed = changed
                                         || lub_update(
-                                            &template.signature.template_name,
-                                            v,
-                                            my_parameter,
-                                            other_ptype,
+                                        &template.signature.iri,
+                                        v,
+                                        my_parameter,
+                                        other_ptype,
                                         )?;
                                 }
                             }

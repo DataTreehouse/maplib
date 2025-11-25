@@ -150,7 +150,7 @@ impl Model {
                     .first()
                     .unwrap()
                     .signature
-                    .template_name
+                    .iri
                     .clone(),
             )
         } else {
