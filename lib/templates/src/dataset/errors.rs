@@ -1,8 +1,8 @@
+use crate::parsing::ParseErrorKind;
 use oxrdf::Variable;
 use std::fmt::{Display, Formatter};
 use std::io;
 use thiserror::Error;
-use crate::parsing::peg_parsing::ParseErrorKind;
 
 #[derive(Error, Debug)]
 pub enum TemplateError {
