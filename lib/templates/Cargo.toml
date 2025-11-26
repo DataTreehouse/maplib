@@ -15,4 +15,4 @@ pyo3.workspace = true
 walkdir.workspace = true
 oxiri.workspace = true
 oxilangtag.workspace = true
-peg = {workspace = true, features = ["trace"] }
+peg = {workspace = true }
