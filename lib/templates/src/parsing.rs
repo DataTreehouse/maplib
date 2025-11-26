@@ -25,7 +25,6 @@ pub fn parse_stottr(document: &str) -> Result<StottrDocument, TemplateError> {
     let mut state = ParserState::new();
     let doc = parser::StottrDocumentInit(document, &mut state)
         .map_err(|e| TemplateError::ParsingError(ParseErrorKind::Syntax(e)))?;
-    println!("Doc {:?}", doc);
     Ok(doc)
 }
 
@@ -342,7 +341,6 @@ parser! {
             ns:PNAME_NS() {? if let Some(iri) = state.namespaces.get(ns).cloned() {
                 Iri::parse(iri).map_err(|_| "IRI parsing failed")
             } else {
-                println!("State namespaces {:?}", state.namespaces);
                 println!("Missing prefix: {}", ns);
                 Err("Prefix not found")
             } }
