@@ -1,6 +1,3 @@
-#[cfg(test)]
-#[macro_use]
-extern crate unic_char_range;
 use crate::ast::PType;
 use representation::RDFNodeState;
 
@@ -11,7 +8,6 @@ pub mod dataset;
 pub mod document;
 mod parsing;
 pub mod python;
-mod resolver;
 pub mod subtypes_ext;
 
 #[derive(Clone, Debug)]

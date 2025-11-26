@@ -144,15 +144,7 @@ impl Model {
         let mut dataset =
             TemplateDataset::from_documents(vec![doc]).map_err(MaplibError::TemplateError)?;
         let return_template_iri = if !dataset.templates.is_empty() {
-            Some(
-                dataset
-                    .templates
-                    .first()
-                    .unwrap()
-                    .signature
-                    .template_name
-                    .clone(),
-            )
+            Some(dataset.templates.first().unwrap().signature.iri.clone())
         } else {
             None
         };
