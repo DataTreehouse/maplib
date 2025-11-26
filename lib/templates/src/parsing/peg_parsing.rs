@@ -2,7 +2,7 @@
 
 use oxilangtag::LanguageTag;
 use oxiri::{Iri, IriParseError};
-use oxrdf::vocab::{xsd};
+use oxrdf::vocab::{rdf, xsd};
 use peg::parser;
 use peg::str::LineCol;
 use std::char;
@@ -137,11 +137,16 @@ parser! {
         }
 
         rule StottrStatement() -> Statement =
-        //    i:StottrInstance() {
-        //    Statement::Instance(i)
-        //} /
+        i:StottrInstance() {
+            Statement::Instance(i)
+        } /
         t:StottrTemplate() {
             Statement::Template(t)
+        } /
+        signature:StottrSignature() _ "." {
+            Statement::Template(Template{signature,pattern_list: vec![]})
+        } / signature:StottrSignature() _ "::" _ i("BASE") _ "." {
+            Statement::Template(Template{signature,pattern_list: vec![]})
         }
 
         rule StottrInstance() -> Instance = list_expander:StottrExpander()? _  template_iri:iri() _ "(" _ argument_list:StottrArgumentList() _ ")" {
@@ -170,16 +175,19 @@ parser! {
             ts
         }
 
-        rule StottrTemplate() -> Template = signature:StottrSignature() _ "::" _ "{" _ pattern_list:StottrPatternList() _ "}" _ "." {
+        rule StottrTemplate() -> Template = signature:StottrSignature() _ "::" _ "{" _ pattern_list:StottrPatternList() _ "}" _ trailing_dot:"."? {
+            if trailing_dot.is_none() {
+                println!("Looks like you forgot a period (after \"}}\") for template {}, maplib forgives this error.", signature.iri);
+            }
             Template {signature,pattern_list}
         }
 
-        rule StottrPatternList() -> Vec<Instance> = ts:StottrInstance() ** ("," _) {
+        rule StottrPatternList() -> Vec<Instance> = ts:StottrInstance() ** (","? _) {
             ts
         }
 
         rule StottrSignature() -> Signature =
-            iri:iri() _ "[" _ parameter_list:StottrParameterList() _ "]" _ annotation_list:StottrAnnotationList()? {
+            iri:iri() _ "[" _ parameter_list:StottrParameterList() _ ","? _ "]" _ annotation_list:StottrAnnotationList()? {
             Signature {
                 iri,
                 parameter_list,
@@ -202,7 +210,7 @@ parser! {
             ListExpanderType::ZipMax
         }
 
-        rule StottrParameterList() -> Vec<Parameter> = ts:StottrParameter() ** ("," _){
+        rule StottrParameterList() -> Vec<Parameter> = ts:StottrParameter() ** ("," _) {
             ts
         }
 
@@ -263,7 +271,8 @@ parser! {
             l:RDFLiteral() { ConstantTerm::Literal(l) } /
             l:NumericLiteral() { ConstantTerm::Literal(l) } /
             l:BooleanLiteral() { ConstantTerm::Literal(l) } /
-            b:BlankNode() { ConstantTerm::BlankNode(b) }
+            b:BlankNode() { ConstantTerm::BlankNode(b) } /
+            i("a") {ConstantTerm::Iri(rdf::TYPE.into_owned())}
 
         rule RDFLiteral() -> Literal =
             value:String() _ "^^" _ datatype:iri() { Literal::new_typed_literal(value, datatype) } /
@@ -302,7 +311,7 @@ parser! {
             ns:PNAME_NS() {? if let Some(iri) = state.namespaces.get(ns).cloned() {
                 Iri::parse(iri).map_err(|_| "IRI parsing failed")
             } else {
-                println!("Prefix {}", ns);
+                println!("Missing prefix: {}", ns);
                 Err("Prefix not found")
             } }
 
