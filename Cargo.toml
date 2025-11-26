@@ -39,7 +39,6 @@ uuid = { version = "1.16.0", features = [
     "fast-rng", # Use a faster (but still sufficiently random) RNG
 ] }
 thiserror = "2.0.12"
-nom = { version = "7.1.3" }
 peg = "0.8"
 rand = "0.9.1"
 oxilangtag = "0.1.5"

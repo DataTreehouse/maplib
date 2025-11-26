@@ -9,7 +9,6 @@ representation = { path = "../representation" }
 spargebra = {path = "../spargebra"}
 
 oxrdf = { workspace = true }
-unic-char-range = "0.9.0"
 tracing = { workspace = true }
 thiserror = { workspace = true }
 pyo3.workspace = true

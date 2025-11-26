@@ -263,27 +263,27 @@ fn infer_template_types(
                                     if !other_parameter.optional {
                                         changed = changed
                                             || lub_update(
-                                            &template.signature.iri,
-                                            v,
-                                            my_parameter,
-                                            &PType::NEList(Box::new(other_ptype.clone())),
+                                                &template.signature.iri,
+                                                v,
+                                                my_parameter,
+                                                &PType::NEList(Box::new(other_ptype.clone())),
                                             )?;
                                     } else {
                                         changed = changed
                                             || lub_update(
-                                            &template.signature.iri,
-                                            v,
-                                            my_parameter,
-                                            &PType::List(Box::new(other_ptype.clone())),
+                                                &template.signature.iri,
+                                                v,
+                                                my_parameter,
+                                                &PType::List(Box::new(other_ptype.clone())),
                                             )?;
                                     }
                                 } else {
                                     changed = changed
                                         || lub_update(
-                                        &template.signature.iri,
-                                        v,
-                                        my_parameter,
-                                        other_ptype,
+                                            &template.signature.iri,
+                                            v,
+                                            my_parameter,
+                                            other_ptype,
                                         )?;
                                 }
                             }

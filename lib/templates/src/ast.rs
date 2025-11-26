@@ -416,4 +416,3 @@ pub struct StottrDocument {
     pub statements: Vec<Statement>,
     pub prefix_map: HashMap<String, NamedNode>,
 }
-

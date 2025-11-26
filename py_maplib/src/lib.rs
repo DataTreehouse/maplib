@@ -863,7 +863,7 @@ fn map_mutex(
             }
         }
         TemplateType::TemplatePyTemplate(t) => {
-            let t_string = t.template.signature.template_name.as_str().to_string();
+            let t_string = t.template.signature.iri.as_str().to_string();
             inner
                 .add_template(t.into_inner())
                 .map_err(PyMaplibError::from)?;

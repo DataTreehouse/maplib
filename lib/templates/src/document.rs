@@ -1,8 +1,8 @@
 use crate::ast::StottrDocument;
 use crate::dataset::errors::TemplateError;
+use crate::parsing::parse_stottr;
 use std::fs::read_to_string;
 use std::path::Path;
-use crate::parsing::peg_parsing::parse_stottr;
 
 pub fn document_from_str(s: &str) -> Result<StottrDocument, TemplateError> {
     let doc = parse_stottr(s)?;

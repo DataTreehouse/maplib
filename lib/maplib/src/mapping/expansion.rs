@@ -22,8 +22,7 @@ use std::collections::{HashMap, HashSet};
 use std::ops::Sub;
 use std::time::Instant;
 use templates::ast::{
-    ConstantTerm, ConstantTermOrList, Instance, ListExpanderType, PType, Signature,
-    StottrTerm,
+    ConstantTerm, ConstantTermOrList, Instance, ListExpanderType, PType, Signature, StottrTerm,
 };
 use templates::constants::OTTR_TRIPLE;
 use templates::MappingColumnType;

@@ -147,8 +147,7 @@ impl PyParameter {
     fn set_default_value(&mut self, default_value: Option<&Bound<PyAny>>) -> PyResult<()> {
         let default = if let Some(default) = default_value {
             if let Some(ct) = extract_constant_term(default) {
-                Some(
-                   ConstantTermOrList::ConstantTerm(ct) )
+                Some(ConstantTermOrList::ConstantTerm(ct))
             } else {
                 return Err(PyRepresentationError::BadArgumentError(
                     "default_value should be IRI, BlankNode, Literal or None".to_string(),
