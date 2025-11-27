@@ -198,7 +198,7 @@ parser! {
 
         rule StottrTemplate() -> Template = signature:StottrSignature() _ "::" _ "{" _ pattern_list:StottrPatternList() _ ","? _ "}" _ trailing_dot:"."? {
             if trailing_dot.is_none() {
-                println!("Looks like you forgot a period (after \"}}\") for template {}, maplib forgives this error.", signature.iri);
+                println!("Looks like you forgot a period (after \"}}\") for template {}", signature.iri);
             }
             Template {signature,pattern_list}
         }
