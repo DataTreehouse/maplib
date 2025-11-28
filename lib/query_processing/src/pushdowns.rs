@@ -5,7 +5,7 @@ use crate::type_constraints::{
 use oxrdf::vocab::rdfs;
 use oxrdf::{Term, Variable};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
-use representation::cats::{LockedCats};
+use representation::cats::LockedCats;
 use representation::polars_to_rdf::column_as_terms;
 use representation::solution_mapping::SolutionMappings;
 use spargebra::algebra::{Expression, Function, GraphPattern};

@@ -10,6 +10,7 @@ use polars_core::datatypes::AnyValue;
 use polars_core::frame::DataFrame;
 use polars_core::prelude::{IntoColumn, Series, SortMultipleOptions, StringChunked, UInt32Chunked};
 use polars_core::series::SeriesIter;
+use polars_core::utils::Container;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use representation::cats::{
     Cats, LockedCats, ReverseLookup, OBJECT_RANK_COL_NAME, SUBJECT_RANK_COL_NAME,
@@ -25,7 +26,6 @@ use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Instant;
-use polars_core::utils::Container;
 use tracing::{instrument, trace};
 
 const OFFSET_STEP: usize = 100;

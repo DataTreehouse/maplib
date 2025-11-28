@@ -1,6 +1,4 @@
-use super::{
-    CatEncs, CatType, Cats, EncodedTriples
-};
+use super::{CatEncs, CatType, Cats, EncodedTriples};
 use crate::cats::LockedCats;
 use crate::solution_mapping::{BaseCatState, EagerSolutionMappings};
 use crate::{BaseRDFNodeType, RDFNodeState, OBJECT_COL_NAME, SUBJECT_COL_NAME};
@@ -10,7 +8,6 @@ use polars::prelude::{col, lit, IntoLazy, Series};
 use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
 use std::sync::Arc;
-use rayon::iter::ParallelIterator;
 
 impl CatEncs {
     pub fn new_empty() -> CatEncs {
@@ -305,7 +302,7 @@ pub fn encode_triples(
     };
 
     let enc_trip = EncodedTriples {
-        df:sm.mappings,
+        df: sm.mappings,
         subject,
         subject_local_cat_uuid: subject_local_cat_uuid.clone(),
         object,

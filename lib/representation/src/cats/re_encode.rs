@@ -6,10 +6,10 @@ use nohash_hasher::NoHashHasher;
 use polars::datatypes::PlSmallStr;
 use polars::error::PolarsResult;
 use polars::prelude::{col, Column, IntoColumn, IntoLazy, LazyFrame, Series};
+use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
 use std::sync::Arc;
-use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 
 #[derive(Debug, Clone)]
 pub struct CatReEnc {
@@ -181,48 +181,48 @@ pub fn re_encode(
         .into_par_iter()
         .map(|mut x| {
             let mut enc = x.encoded_triples;
-                let subj_encs = if let Some(s_uuid) = &enc.subject_local_cat_uuid {
-                    if let Some(s_map) = re_enc_map.get(s_uuid) {
-                        if let Some(s) = &enc.subject {
-                            s_map.get(s)
-                        } else {
-                            None
-                        }
+            let subj_encs = if let Some(s_uuid) = &enc.subject_local_cat_uuid {
+                if let Some(s_map) = re_enc_map.get(s_uuid) {
+                    if let Some(s) = &enc.subject {
+                        s_map.get(s)
                     } else {
                         None
                     }
                 } else {
                     None
-                };
-                if let Some(subj_encs) = subj_encs {
-                    let mut renc_col = subj_encs
-                        .clone()
-                        .re_encode_column(enc.df.column(SUBJECT_COL_NAME).unwrap().clone(), false)
-                        .unwrap();
-                    renc_col.rename(PlSmallStr::from_str(SUBJECT_COL_NAME));
-                    enc.df.with_column(renc_col).unwrap();
                 }
-                let obj_encs = if let Some(o_uuid) = &enc.object_local_cat_uuid {
-                    if let Some(o_map) = re_enc_map.get(o_uuid) {
-                        if let Some(o) = &enc.object {
-                            o_map.get(o)
-                        } else {
-                            None
-                        }
+            } else {
+                None
+            };
+            if let Some(subj_encs) = subj_encs {
+                let mut renc_col = subj_encs
+                    .clone()
+                    .re_encode_column(enc.df.column(SUBJECT_COL_NAME).unwrap().clone(), false)
+                    .unwrap();
+                renc_col.rename(PlSmallStr::from_str(SUBJECT_COL_NAME));
+                enc.df.with_column(renc_col).unwrap();
+            }
+            let obj_encs = if let Some(o_uuid) = &enc.object_local_cat_uuid {
+                if let Some(o_map) = re_enc_map.get(o_uuid) {
+                    if let Some(o) = &enc.object {
+                        o_map.get(o)
                     } else {
                         None
                     }
                 } else {
                     None
-                };
-                if let Some(obj_encs) = obj_encs {
-                    let mut renc_col = obj_encs
-                        .clone()
-                        .re_encode_column(enc.df.column(OBJECT_COL_NAME).unwrap().clone(), false)
-                        .unwrap();
-                    renc_col.rename(PlSmallStr::from_str(OBJECT_COL_NAME));
-                    enc.df.with_column(renc_col).unwrap();
                 }
+            } else {
+                None
+            };
+            if let Some(obj_encs) = obj_encs {
+                let mut renc_col = obj_encs
+                    .clone()
+                    .re_encode_column(enc.df.column(OBJECT_COL_NAME).unwrap().clone(), false)
+                    .unwrap();
+                renc_col.rename(PlSmallStr::from_str(OBJECT_COL_NAME));
+                enc.df.with_column(renc_col).unwrap();
+            }
 
             x.encoded_triples = enc;
             x

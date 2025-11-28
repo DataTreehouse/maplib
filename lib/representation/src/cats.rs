@@ -56,12 +56,14 @@ impl CatType {
         }
     }
 
-    pub fn from_base_rdf_node_type(bt:&BaseRDFNodeType) -> Self {
+    pub fn from_base_rdf_node_type(bt: &BaseRDFNodeType) -> Self {
         match bt {
-            BaseRDFNodeType::IRI => {CatType::IRI}
-            BaseRDFNodeType::BlankNode => {CatType::Blank}
-            BaseRDFNodeType::Literal(l) => {CatType::Literal(l.clone())}
-            BaseRDFNodeType::None => {unimplemented!("Should not be called for None")}
+            BaseRDFNodeType::IRI => CatType::IRI,
+            BaseRDFNodeType::BlankNode => CatType::Blank,
+            BaseRDFNodeType::Literal(l) => CatType::Literal(l.clone()),
+            BaseRDFNodeType::None => {
+                unimplemented!("Should not be called for None")
+            }
         }
     }
 }
@@ -153,17 +155,13 @@ pub struct ReverseLookup<'a> {
 impl<'a> ReverseLookup<'a> {}
 
 impl ReverseLookup<'_> {
-    pub fn new<'a>(
-        rev_map: &'a RevMap
-    ) -> ReverseLookup<'a> {
-        ReverseLookup {
-            rev_map,
-        }
+    pub fn new<'a>(rev_map: &'a RevMap) -> ReverseLookup<'a> {
+        ReverseLookup { rev_map }
     }
 
     pub fn lookup(&self, u: &u32) -> Option<&str> {
         let s = self.rev_map.get(u);
-        s.map(|x|x.as_str())
+        s.map(|x| x.as_str())
     }
 }
 
@@ -198,11 +196,9 @@ impl Cats {
 
 impl Cats {
     pub fn get_reverse_lookup(&self, bt: &BaseRDFNodeType) -> ReverseLookup<'_> {
-            let ct = CatType::from_base_rdf_node_type(bt);
-            ReverseLookup::new(
-                &self.cat_map.get(&ct).unwrap().rev_map,
-            )
-        }
+        let ct = CatType::from_base_rdf_node_type(bt);
+        ReverseLookup::new(&self.cat_map.get(&ct).unwrap().rev_map)
+    }
 
     pub(crate) fn from_map(cat_map: HashMap<CatType, CatEncs>) -> Self {
         let mut cats = Cats {
@@ -243,10 +239,7 @@ impl Cats {
     fn calc_new_blank_counter(&self) -> u32 {
         let mut counter = 0;
         if let Some(enc) = self.cat_map.get(&CatType::Blank) {
-            counter = cmp::max(
-                enc.rev_map.keys().max().unwrap() + 1,
-                counter,
-            );
+            counter = cmp::max(enc.rev_map.keys().max().unwrap() + 1, counter);
         }
         counter
     }
@@ -254,10 +247,7 @@ impl Cats {
     fn calc_new_iri_counter(&self) -> u32 {
         let mut counter = 0;
         if let Some(enc) = self.cat_map.get(&CatType::IRI) {
-            counter = cmp::max(
-                enc.rev_map.keys().max().unwrap() + 1,
-                counter,
-            );
+            counter = cmp::max(enc.rev_map.keys().max().unwrap() + 1, counter);
         }
         counter
     }

@@ -10,7 +10,9 @@ use representation::cats::Cats;
 use representation::dataset::{NamedGraph, QueryGraph};
 use representation::multitype::all_multi_cols;
 use representation::solution_mapping::{BaseCatState, EagerSolutionMappings, SolutionMappings};
-use representation::{BaseRDFNodeType, RDFNodeState, OBJECT_COL_NAME, PREDICATE_COL_NAME, SUBJECT_COL_NAME};
+use representation::{
+    BaseRDFNodeType, RDFNodeState, OBJECT_COL_NAME, PREDICATE_COL_NAME, SUBJECT_COL_NAME,
+};
 use std::collections::{HashMap, HashSet};
 
 impl Triplestore {

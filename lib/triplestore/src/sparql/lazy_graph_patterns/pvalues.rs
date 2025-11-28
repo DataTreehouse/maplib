@@ -28,7 +28,7 @@ impl Triplestore {
                 rdf_node_types,
             }) = parameters.get(bindings_name)
             {
-                let mut mappings = mappings.clone();
+                let mappings = mappings.clone();
                 let mapping_vars: HashSet<_> = mappings
                     .get_column_names()
                     .into_iter()

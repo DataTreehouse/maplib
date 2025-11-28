@@ -91,14 +91,14 @@ impl Triplestore {
                     let subject_cat_state = gct.subject_type.default_stored_cat_state();
                     let object_cat_state = gct.object_type.default_stored_cat_state();
                     gct.encoded_triples.df = sort_triples_add_rank(
-                                gct.encoded_triples.df,
-                                &gct.subject_type,
-                                &subject_cat_state,
-                                &gct.object_type,
-                                &object_cat_state,
-                                self.global_cats.clone(),
-                                false,
-                            );
+                        gct.encoded_triples.df,
+                        &gct.subject_type,
+                        &subject_cat_state,
+                        &gct.object_type,
+                        &object_cat_state,
+                        self.global_cats.clone(),
+                        false,
+                    );
                     self.add_global_cat_triples(vec![gct], true, graph)?;
                 } else {
                     self.delete_if_exists(&gct, true, graph)?;
@@ -233,7 +233,7 @@ fn get_triples_after_deletion(
 ) -> Result<Option<CatTriples>, TriplestoreError> {
     if let Some(m) = map.get(&gct.predicate) {
         let type_ = (gct.subject_type.clone(), gct.object_type.clone());
-        let encoded: Result<_,TriplestoreError> = if let Some(triples) = m.get(&type_) {
+        let encoded: Result<_, TriplestoreError> = if let Some(triples) = m.get(&type_) {
             let lfs = triples.get_lazy_frames(&None, &None)?;
             let lfs_only: Vec<_> = lfs.into_iter().map(|(lf, _)| lf).collect();
             let mut lf = concat(

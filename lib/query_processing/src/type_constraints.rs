@@ -4,7 +4,7 @@ use representation::subtypes::{is_literal_subtype, OWL_REAL};
 use representation::BaseRDFNodeType;
 use spargebra::algebra::{Expression, Function};
 use std::cmp::PartialEq;
-use std::collections::{HashMap};
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ConstraintBaseRDFNodeType {
@@ -41,9 +41,7 @@ impl ConstraintExpr {
             ConstraintExpr::Bottom => false,
             ConstraintExpr::Top => true,
             ConstraintExpr::Constraint(c) => match c.as_ref() {
-                ConstraintBaseRDFNodeType::IRI => {
-                    t == &ConstraintBaseRDFNodeType::IRI
-                }
+                ConstraintBaseRDFNodeType::IRI => t == &ConstraintBaseRDFNodeType::IRI,
                 ConstraintBaseRDFNodeType::BlankNode => t == &ConstraintBaseRDFNodeType::BlankNode,
                 ConstraintBaseRDFNodeType::Literal(l_ctr) => {
                     if let ConstraintBaseRDFNodeType::Literal(l) = t {

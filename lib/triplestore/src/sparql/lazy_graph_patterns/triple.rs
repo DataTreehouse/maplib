@@ -221,9 +221,7 @@ fn create_type_constraint(
     variable_type_constraint: &HashMap<String, PossibleTypes>,
 ) -> Option<PossibleTypes> {
     match term_pattern {
-        TermPattern::NamedNode(..) => {
-            Some(PossibleTypes::singular(ConstraintBaseRDFNodeType::IRI))
-        }
+        TermPattern::NamedNode(..) => Some(PossibleTypes::singular(ConstraintBaseRDFNodeType::IRI)),
         TermPattern::Literal(l) => Some(PossibleTypes::singular(
             ConstraintBaseRDFNodeType::Literal(l.datatype().into_owned()),
         )),
