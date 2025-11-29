@@ -76,11 +76,7 @@ impl Model {
             if let Some(indexing) = indexing {
                 indexing
             } else {
-                IndexingOptions {
-                    object_sort_all: false,
-                    object_sort_some: None,
-                    fts_path: None,
-                }
+                IndexingOptions::new(false, None, None)
             }
         } else {
             indexing.unwrap_or_default()
@@ -148,15 +144,7 @@ impl Model {
         let mut dataset =
             TemplateDataset::from_documents(vec![doc]).map_err(MaplibError::TemplateError)?;
         let return_template_iri = if !dataset.templates.is_empty() {
-            Some(
-                dataset
-                    .templates
-                    .first()
-                    .unwrap()
-                    .signature
-                    .template_name
-                    .clone(),
-            )
+            Some(dataset.templates.first().unwrap().signature.iri.clone())
         } else {
             None
         };

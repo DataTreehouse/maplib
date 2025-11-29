@@ -1,15 +1,14 @@
 use oxrdf::vocab::xsd;
 use oxrdf::{NamedNode, Variable};
-use representation::cats::named_node_split_prefix;
 use representation::subtypes::{is_literal_subtype, OWL_REAL};
 use representation::BaseRDFNodeType;
 use spargebra::algebra::{Expression, Function};
 use std::cmp::PartialEq;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ConstraintBaseRDFNodeType {
-    IRI(Option<HashSet<NamedNode>>),
+    IRI,
     BlankNode,
     Literal(NamedNode),
     None,
@@ -18,7 +17,7 @@ pub enum ConstraintBaseRDFNodeType {
 impl ConstraintBaseRDFNodeType {
     pub fn from_base(base: &BaseRDFNodeType) -> Self {
         match base {
-            BaseRDFNodeType::IRI => ConstraintBaseRDFNodeType::IRI(None),
+            BaseRDFNodeType::IRI => ConstraintBaseRDFNodeType::IRI,
             BaseRDFNodeType::BlankNode => ConstraintBaseRDFNodeType::BlankNode,
             BaseRDFNodeType::Literal(l) => ConstraintBaseRDFNodeType::Literal(l.clone()),
             BaseRDFNodeType::None => ConstraintBaseRDFNodeType::None,
@@ -42,20 +41,7 @@ impl ConstraintExpr {
             ConstraintExpr::Bottom => false,
             ConstraintExpr::Top => true,
             ConstraintExpr::Constraint(c) => match c.as_ref() {
-                ConstraintBaseRDFNodeType::IRI(None) => {
-                    matches!(t, ConstraintBaseRDFNodeType::IRI(_))
-                }
-                ConstraintBaseRDFNodeType::IRI(Some(nn)) => {
-                    if let ConstraintBaseRDFNodeType::IRI(t_iri_c) = t {
-                        if let Some(nn_t) = t_iri_c {
-                            !nn.is_disjoint(nn_t)
-                        } else {
-                            true
-                        }
-                    } else {
-                        false
-                    }
-                }
+                ConstraintBaseRDFNodeType::IRI => t == &ConstraintBaseRDFNodeType::IRI,
                 ConstraintBaseRDFNodeType::BlankNode => t == &ConstraintBaseRDFNodeType::BlankNode,
                 ConstraintBaseRDFNodeType::Literal(l_ctr) => {
                     if let ConstraintBaseRDFNodeType::Literal(l) = t {
@@ -157,9 +143,7 @@ pub fn equal_variable_type(
 
 pub fn get_expression_rdf_type(e: &Expression) -> Option<ConstraintBaseRDFNodeType> {
     match e {
-        Expression::NamedNode(nn) => Some(ConstraintBaseRDFNodeType::IRI(Some(HashSet::from([
-            named_node_split_prefix(nn),
-        ])))),
+        Expression::NamedNode(_) => Some(ConstraintBaseRDFNodeType::IRI),
         Expression::Literal(l) => Some(ConstraintBaseRDFNodeType::Literal(
             l.datatype().into_owned(),
         )),
@@ -191,7 +175,7 @@ pub fn get_expression_rdf_type(e: &Expression) -> Option<ConstraintBaseRDFNodeTy
             Function::Str | Function::StrBefore | Function::StrAfter => {
                 Some(ConstraintBaseRDFNodeType::Literal(xsd::STRING.into_owned()))
             }
-            Function::Datatype | Function::Iri => Some(ConstraintBaseRDFNodeType::IRI(None)),
+            Function::Datatype | Function::Iri => Some(ConstraintBaseRDFNodeType::IRI),
             Function::BNode => Some(ConstraintBaseRDFNodeType::BlankNode),
             Function::Contains
             | Function::Regex
@@ -236,5 +220,16 @@ pub fn get_expression_rdf_type(e: &Expression) -> Option<ConstraintBaseRDFNodeTy
             _ => None,
         },
         _ => None,
+    }
+}
+
+pub fn bt_as_constrained(bt: &BaseRDFNodeType) -> ConstraintBaseRDFNodeType {
+    match bt {
+        BaseRDFNodeType::IRI => ConstraintBaseRDFNodeType::IRI,
+        BaseRDFNodeType::BlankNode => ConstraintBaseRDFNodeType::BlankNode,
+        BaseRDFNodeType::Literal(l) => ConstraintBaseRDFNodeType::Literal(l.clone()),
+        BaseRDFNodeType::None => {
+            unreachable!("Should never happen")
+        }
     }
 }

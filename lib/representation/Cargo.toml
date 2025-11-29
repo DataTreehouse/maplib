@@ -22,6 +22,5 @@ oxsdatatypes.workspace = true
 rayon.workspace = true
 nohash-hasher.workspace = true
 uuid.workspace = true
-
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("gil-refs", "rdf-star"))'] }

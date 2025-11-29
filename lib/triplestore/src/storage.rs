@@ -1,6 +1,5 @@
 use crate::errors::TriplestoreError;
-use crate::{IndexingOptions, StoredBaseRDFNodeType};
-use nohash_hasher::NoHashHasher;
+use crate::IndexingOptions;
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{NamedNode, Subject, Term};
 use polars::prelude::{
@@ -11,9 +10,10 @@ use polars_core::datatypes::AnyValue;
 use polars_core::frame::DataFrame;
 use polars_core::prelude::{IntoColumn, Series, SortMultipleOptions, StringChunked, UInt32Chunked};
 use polars_core::series::SeriesIter;
+use polars_core::utils::Container;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use representation::cats::{
-    rdf_split_iri_str, Cats, LockedCats, OBJECT_RANK_COL_NAME, SUBJECT_RANK_COL_NAME,
+    Cats, LockedCats, ReverseLookup, OBJECT_RANK_COL_NAME, SUBJECT_RANK_COL_NAME,
 };
 use representation::{
     BaseRDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD, OBJECT_COL_NAME,
@@ -21,8 +21,7 @@ use representation::{
 };
 use std::cmp;
 use std::cmp::{Ordering, Reverse};
-use std::collections::{BTreeMap, BinaryHeap, HashMap};
-use std::hash::BuildHasherDefault;
+use std::collections::{BTreeMap, BinaryHeap};
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -32,7 +31,6 @@ use tracing::{instrument, trace};
 const OFFSET_STEP: usize = 100;
 const MIN_SIZE_CACHING: usize = 100_000_000; //100MB
 
-type RevMap = HashMap<u32, Arc<String>, BuildHasherDefault<NoHashHasher<u32>>>;
 #[derive(Clone, Debug)]
 struct SparseIndex {
     map: BTreeMap<Arc<String>, usize>,
@@ -42,8 +40,8 @@ struct SparseIndex {
 pub(crate) struct Triples {
     segments: Vec<TriplesSegment>,
     height: usize,
-    subject_type: StoredBaseRDFNodeType,
-    object_type: StoredBaseRDFNodeType,
+    subject_type: BaseRDFNodeType,
+    pub object_type: BaseRDFNodeType,
     object_indexing_enabled: bool,
 }
 
@@ -51,17 +49,14 @@ impl Triples {
     pub fn new(
         df: DataFrame,
         storage_folder: Option<&PathBuf>,
-        subject_type: StoredBaseRDFNodeType,
-        object_type: StoredBaseRDFNodeType,
+        subject_type: BaseRDFNodeType,
+        object_type: BaseRDFNodeType,
         predicate_iri: &NamedNode,
         indexing: &IndexingOptions,
         cats: LockedCats,
     ) -> Result<Self, TriplestoreError> {
-        let object_indexing_enabled = can_and_should_index_object(
-            &object_type.as_base_rdf_node_type(),
-            predicate_iri,
-            indexing,
-        );
+        let object_indexing_enabled =
+            can_and_should_index_object(&object_type, predicate_iri, indexing);
         let height = df.height();
         let mut segments = vec![];
 
@@ -105,16 +100,16 @@ impl Triples {
     #[instrument(skip_all)]
     pub(crate) fn add_triples(
         &mut self,
-        df: DataFrame,
+        mut df: DataFrame,
         storage_folder: Option<&PathBuf>,
         global_cats: LockedCats,
     ) -> Result<Option<DataFrame>, TriplestoreError> {
+        df.as_single_chunk_par();
         let mut compacting_indexing_time = 0f32;
         let mut subjects_time = 0f32;
         let mut nonoverlapping_time = 0f32;
         let total_now = Instant::now();
         let global_cats = global_cats.read()?;
-
         // Here we decide if segments should be compacted and so on.
         let should_compact = if self.height < df.height() * 2 {
             // Compact if amount of existing triples is similar to amount of new triples
@@ -139,11 +134,14 @@ impl Triples {
             let mut i = 0;
 
             let now_subjects = Instant::now();
+            let maybe_subject_encs = get_rev_map(global_cats.deref(), &self.subject_type);
+
             let subjects_str = if OFFSET_STEP / 10 * incoming_df.height() < remaining_height {
                 let new_subjects_col = incoming_df.column(SUBJECT_COL_NAME).unwrap();
-                let encs = get_rev_map(global_cats.deref(), &self.subject_type).unwrap();
-                let subjects =
-                    create_deduplicated_string_vec(new_subjects_col.as_materialized_series(), encs);
+                let subjects = create_deduplicated_string_vec(
+                    new_subjects_col.as_materialized_series(),
+                    maybe_subject_encs.as_ref().unwrap(),
+                );
                 Some(subjects)
             } else {
                 None
@@ -167,7 +165,14 @@ impl Triples {
                     break;
                 }
                 let non_overlap_now = Instant::now();
-                incoming_df = segment.non_overlapping(subjects_str.as_ref(), incoming_df)?;
+                let subjects_str_non_cow = if let Some(subjects_str) = &subjects_str {
+                    let v: Vec<_> = subjects_str.iter().map(|x| x.as_str()).collect();
+                    Some(v)
+                } else {
+                    None
+                };
+                incoming_df =
+                    segment.non_overlapping(subjects_str_non_cow.as_ref(), incoming_df)?;
                 nonoverlapping_time += non_overlap_now.elapsed().as_secs_f32();
 
                 if incoming_df.height() == 0 {
@@ -276,13 +281,14 @@ pub(crate) struct TriplesSegment {
 
 impl TriplesSegment {
     pub(crate) fn new(
-        df: DataFrame,
+        mut df: DataFrame,
         storage_folder: Option<&PathBuf>,
-        subject_type: &StoredBaseRDFNodeType,
-        object_type: &StoredBaseRDFNodeType,
+        subject_type: &BaseRDFNodeType,
+        object_type: &BaseRDFNodeType,
         object_indexing_enabled: bool,
         cats: &Cats,
     ) -> Result<Self, TriplestoreError> {
+        df.as_single_chunk();
         let IndexedTriples {
             subject_sort,
             subject_sparse_index,
@@ -311,8 +317,8 @@ impl TriplesSegment {
         &self,
         subjects: &Option<Vec<&Subject>>,
         objects: &Option<Vec<&Term>>,
-        _subject_type: &StoredBaseRDFNodeType,
-        object_type: &StoredBaseRDFNodeType,
+        _subject_type: &BaseRDFNodeType,
+        object_type: &BaseRDFNodeType,
     ) -> Result<Vec<(LazyFrame, usize)>, TriplestoreError> {
         if let Some(subjects) = subjects {
             let strings = get_subject_strings(subjects);
@@ -328,7 +334,7 @@ impl TriplesSegment {
                 .get_lazy_frames(Some(offsets));
         } else if let Some(objects) = objects {
             if let Some(sorted) = &self.object_sort {
-                let allow_pushdown = if let StoredBaseRDFNodeType::Literal(t) = object_type {
+                let allow_pushdown = if let BaseRDFNodeType::Literal(t) = object_type {
                     t.as_ref() == xsd::STRING
                 } else {
                     true
@@ -418,8 +424,8 @@ fn create_indices(
     mut df: DataFrame,
     storage_folder: Option<&PathBuf>,
     should_index_by_objects: bool,
-    subj_type: &StoredBaseRDFNodeType,
-    obj_type: &StoredBaseRDFNodeType,
+    subj_type: &BaseRDFNodeType,
+    obj_type: &BaseRDFNodeType,
     cats: &Cats,
 ) -> Result<IndexedTriples, TriplestoreError> {
     assert!(df.height() > 0);
@@ -430,7 +436,7 @@ fn create_indices(
         df.column(SUBJECT_COL_NAME)
             .unwrap()
             .as_materialized_series(),
-        subject_encs,
+        subject_encs.as_ref(),
     );
     trace!(
         "Creating subject sparse map took {} seconds",
@@ -463,7 +469,7 @@ fn create_indices(
         let object_encs = get_rev_map(cats, obj_type);
         let sparse = create_sparse_index(
             df.column(OBJECT_COL_NAME).unwrap().as_materialized_series(),
-            object_encs,
+            object_encs.as_ref(),
         );
 
         object_sort = Some(StoredTriples::new(
@@ -487,10 +493,9 @@ fn create_indices(
     })
 }
 
-fn get_rev_map<'a>(c: &'a Cats, t: &StoredBaseRDFNodeType) -> Option<&'a RevMap> {
-    let bt = t.as_base_rdf_node_type();
-    if bt.stored_cat() {
-        Some(c.get_rev_map(&bt))
+fn get_rev_map<'a>(c: &'a Cats, t: &BaseRDFNodeType) -> Option<ReverseLookup<'a>> {
+    if t.stored_cat() {
+        Some(c.get_reverse_lookup(t))
     } else {
         None
     }
@@ -535,8 +540,8 @@ enum StoredTriples {
 impl StoredTriples {
     fn new(
         df: DataFrame,
-        subj_type: &StoredBaseRDFNodeType,
-        obj_type: &StoredBaseRDFNodeType,
+        subj_type: &BaseRDFNodeType,
+        obj_type: &BaseRDFNodeType,
         storage_folder: Option<&PathBuf>,
     ) -> Result<Self, TriplestoreError> {
         let df = df.select([SUBJECT_COL_NAME, OBJECT_COL_NAME]).unwrap();
@@ -563,7 +568,7 @@ impl StoredTriples {
             StoredTriples::TriplesOnDisk(t) => t.get_lazy_frame()?,
             StoredTriples::TriplesInMemory(t) => t.get_lazy_frame()?,
         };
-        if let Some(offsets) = offsets {
+        let out = if let Some(offsets) = offsets {
             let output: Result<Vec<_>, TriplestoreError> = offsets
                 .into_par_iter()
                 .map(|(offset, len)| {
@@ -574,10 +579,11 @@ impl StoredTriples {
                     Ok((lf, len))
                 })
                 .collect();
-            Ok(output?)
+            output?
         } else {
-            Ok(vec![(lf, height)])
-        }
+            vec![(lf, height)]
+        };
+        Ok(out)
     }
 
     pub(crate) fn wipe(&mut self) -> Result<(), TriplestoreError> {
@@ -592,15 +598,15 @@ impl StoredTriples {
 struct TriplesOnDisk {
     height: usize,
     df_path: String,
-    subj_type: StoredBaseRDFNodeType,
-    obj_type: StoredBaseRDFNodeType,
+    subj_type: BaseRDFNodeType,
+    obj_type: BaseRDFNodeType,
 }
 
 impl TriplesOnDisk {
     fn new(
         _df: DataFrame,
-        _subj_type: &StoredBaseRDFNodeType,
-        _obj_type: &StoredBaseRDFNodeType,
+        _subj_type: &BaseRDFNodeType,
+        _obj_type: &BaseRDFNodeType,
         _storage_folder: &Path,
     ) -> Result<Self, TriplestoreError> {
         todo!()
@@ -687,7 +693,7 @@ fn get_subject_strings<'a>(subjects: &[&'a Subject]) -> Vec<&'a str> {
     let mut strings: Vec<_> = subjects
         .iter()
         .map(|x| match *x {
-            Subject::NamedNode(nn) => rdf_split_iri_str(nn.as_str()).1,
+            Subject::NamedNode(nn) => nn.as_str(),
             Subject::BlankNode(bl) => bl.as_str(),
         })
         .collect();
@@ -700,7 +706,7 @@ fn get_object_strings<'a>(objects: &[&'a Term]) -> Vec<&'a str> {
     let mut strings: Vec<_> = objects
         .iter()
         .map(|x| match *x {
-            Term::NamedNode(nn) => rdf_split_iri_str(nn.as_str()).1,
+            Term::NamedNode(nn) => nn.as_str(),
             Term::BlankNode(bl) => bl.as_str(),
             Term::Literal(l) => l.value(),
             _ => panic!("Invalid state"),
@@ -747,12 +753,12 @@ fn update_index_at_offset(
     u32_chunked: &UInt32Chunked,
     offset: usize,
     sparse_map: &mut BTreeMap<Arc<String>, usize>,
-    rev_map: &RevMap,
+    rev_map: &ReverseLookup,
 ) {
     let u = u32_chunked.get(offset);
     if let Some(u) = u {
-        let s = rev_map.get(&u).unwrap();
-        let e = sparse_map.entry(s.clone());
+        let s = rev_map.lookup(&u).unwrap();
+        let e = sparse_map.entry(Arc::new(s.to_string()));
         e.or_insert(offset);
     }
 }
@@ -776,14 +782,14 @@ pub(crate) fn repeated_from_last_row_expr(c: &str) -> Expr {
         .and(col(c).shift(lit(1)).eq(col(c)))
 }
 
-fn create_sparse_index(ser: &Series, rev_map: Option<&RevMap>) -> SparseIndex {
+fn create_sparse_index(ser: &Series, rev_map: Option<&ReverseLookup>) -> SparseIndex {
     match rev_map {
         None => create_sparse_string_index(ser),
         Some(rev_map) => create_sparse_cat_index(ser, rev_map),
     }
 }
 
-fn create_sparse_cat_index(ser: &Series, encs: &RevMap) -> SparseIndex {
+fn create_sparse_cat_index(ser: &Series, encs: &ReverseLookup) -> SparseIndex {
     assert!(!ser.is_empty());
     let strch = ser.u32().unwrap();
     let mut sparse_map = BTreeMap::new();
@@ -817,7 +823,7 @@ fn create_sparse_string_index(ser: &Series) -> SparseIndex {
 }
 
 //Assumes sorted.
-fn create_deduplicated_string_vec<'a>(ser: &Series, rev_map: &'a RevMap) -> Vec<&'a str> {
+fn create_deduplicated_string_vec<'a>(ser: &Series, rev_map: &'a ReverseLookup) -> Vec<&'a str> {
     let mut v = Vec::with_capacity(ser.len());
     let mut last = None;
     for any in ser.iter() {
@@ -829,7 +835,7 @@ fn create_deduplicated_string_vec<'a>(ser: &Series, rev_map: &'a RevMap) -> Vec<
                     }
                 }
                 last = Some(u);
-                let s = rev_map.get(&u).unwrap().as_str();
+                let s = rev_map.lookup(&u).unwrap();
                 v.push(s);
             }
             _ => unreachable!("Should never happen"),
@@ -841,8 +847,8 @@ fn create_deduplicated_string_vec<'a>(ser: &Series, rev_map: &'a RevMap) -> Vec<
 fn compact_segments(
     segments: Vec<(TriplesSegment, bool)>,
     cats: &Cats,
-    subj_type: &StoredBaseRDFNodeType,
-    obj_type: &StoredBaseRDFNodeType,
+    subj_type: &BaseRDFNodeType,
+    obj_type: &BaseRDFNodeType,
     storage_folder: Option<&PathBuf>,
 ) -> Result<(TriplesSegment, Option<DataFrame>), TriplestoreError> {
     let mut subject_segments = Vec::with_capacity(segments.len());
@@ -868,7 +874,7 @@ fn compact_segments(
     }
     let subject_encs = get_rev_map(cats, subj_type);
     let object_encs = get_rev_map(cats, obj_type);
-    let fields = if let StoredBaseRDFNodeType::Literal(nn) = obj_type {
+    let fields = if let BaseRDFNodeType::Literal(nn) = obj_type {
         if nn.as_ref() == rdf::LANG_STRING {
             Some((LANG_STRING_VALUE_FIELD, LANG_STRING_LANG_FIELD))
         } else {
@@ -882,8 +888,8 @@ fn compact_segments(
         SUBJECT_COL_NAME,
         OBJECT_COL_NAME,
         fields,
-        subject_encs,
-        object_encs,
+        subject_encs.as_ref(),
+        object_encs.as_ref(),
     )?;
 
     let height = compact_subjects.height();
@@ -892,7 +898,7 @@ fn compact_segments(
             .column(SUBJECT_COL_NAME)
             .unwrap()
             .as_materialized_series(),
-        subject_encs,
+        subject_encs.as_ref(),
     );
     let stored_subjects =
         StoredTriples::new(compact_subjects, subj_type, obj_type, storage_folder)?;
@@ -903,15 +909,15 @@ fn compact_segments(
             OBJECT_COL_NAME,
             SUBJECT_COL_NAME,
             None,
-            object_encs,
-            subject_encs,
+            object_encs.as_ref(),
+            subject_encs.as_ref(),
         )?;
         let object_index = create_sparse_index(
             compact_objects
                 .column(OBJECT_COL_NAME)
                 .unwrap()
                 .as_materialized_series(),
-            object_encs,
+            object_encs.as_ref(),
         );
         let stored_objects =
             StoredTriples::new(compact_objects, subj_type, obj_type, storage_folder)?;
@@ -936,8 +942,8 @@ fn compact_dataframe_segments(
     col_a: &str,
     col_b: &str,
     b_fields: Option<(&str, &str)>,
-    a_cat_encs: Option<&RevMap>,
-    b_cat_encs: Option<&RevMap>,
+    a_cat_encs: Option<&ReverseLookup>,
+    b_cat_encs: Option<&ReverseLookup>,
 ) -> Result<(DataFrame, Option<DataFrame>), TriplestoreError> {
     let mut new_segments = vec![];
     for (mut df, new) in segments {
@@ -1125,8 +1131,8 @@ impl<'a> TripleIterator<'a> {
         mut a_iterator: SeriesIter<'a>,
         mut b_1_iterator: SeriesIter<'a>,
         mut b_2_iterator: Option<SeriesIter<'a>>,
-        a_cat_rev_map: Option<&'a RevMap>,
-        b_cat_rev_map: Option<&'a RevMap>,
+        a_cat_rev_map: Option<&'a ReverseLookup<'a>>,
+        b_cat_rev_map: Option<&'a ReverseLookup<'a>>,
         new: bool,
     ) -> Option<Self> {
         if let Some(a) = a_iterator.next() {
@@ -1161,8 +1167,8 @@ impl<'a> TripleIterator<'a> {
 
     pub fn next(
         self,
-        a_cat_rev_map: Option<&'a RevMap>,
-        b_cat_rev_map: Option<&'a RevMap>,
+        a_cat_rev_map: Option<&'a ReverseLookup>,
+        b_cat_rev_map: Option<&'a ReverseLookup>,
     ) -> Option<Self> {
         let Self {
             mut a_iterator,
@@ -1203,10 +1209,13 @@ impl<'a> TripleIterator<'a> {
     }
 }
 
-fn decode_elem<'a>(any_value: &AnyValue<'a>, rev_map: Option<&'a RevMap>) -> Option<AnyValue<'a>> {
-    if let Some(rev_map) = rev_map {
+fn decode_elem<'a>(
+    any_value: &AnyValue<'a>,
+    reverse_lookup: Option<&'a ReverseLookup>,
+) -> Option<AnyValue<'a>> {
+    if let Some(reverse_lookup) = reverse_lookup {
         if let AnyValue::UInt32(u) = any_value {
-            Some(AnyValue::String(rev_map.get(u).unwrap()))
+            Some(AnyValue::String(reverse_lookup.lookup(u).unwrap()))
         } else {
             unreachable!("Should never happen")
         }

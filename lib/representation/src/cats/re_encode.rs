@@ -6,6 +6,7 @@ use nohash_hasher::NoHashHasher;
 use polars::datatypes::PlSmallStr;
 use polars::error::PolarsResult;
 use polars::prelude::{col, Column, IntoColumn, IntoLazy, LazyFrame, Series};
+use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
 use std::sync::Arc;
@@ -109,24 +110,11 @@ impl Cats {
             let c = c.read().unwrap();
             let mut other_map = HashMap::new();
             for (t, other_enc) in c.cat_map.iter() {
-                let prefix_u = if let CatType::Prefix(nn) = t {
-                    let i = if let Some(i) = self.prefix_rev_map.get(nn) {
-                        *i
-                    } else {
-                        let i = self.prefix_map.len() as u32;
-                        self.prefix_map.insert(i, nn.clone());
-                        self.prefix_rev_map.insert(nn.clone(), i);
-                        i
-                    };
-                    Some(i)
-                } else {
-                    None
-                };
                 let mut c = self.get_counter(&t);
                 if let Some(enc) = self.cat_map.get_mut(t) {
                     let (remap, insert): (Vec<_>, Vec<_>) = other_enc
-                        .forward
-                        .iter()
+                        .map
+                        .par_iter()
                         .map(|(s, u)| {
                             if let Some(e) = enc.forward.get(s) {
                                 (Some((*u, *e)), None)
@@ -146,10 +134,6 @@ impl Cats {
                     }
                     for (s, u) in numbered_insert {
                         enc.encode_new_arc_string(s.clone(), u);
-                        if let Some(prefix_u) = &prefix_u {
-                            self.belongs_prefix_map.insert(u, *prefix_u);
-                            self.rev_iri_suffix_map.insert(u, s);
-                        }
                     }
                     let remap: HashMap<_, _, BuildHasherDefault<NoHashHasher<u32>>> = remap
                         .into_iter()
@@ -162,15 +146,11 @@ impl Cats {
                     };
                     other_map.insert(t.clone(), reenc);
                 } else {
-                    let mut remap = Vec::with_capacity(other_enc.forward.len());
-                    let mut new_enc = CatEncs::new_empty(matches!(t, CatType::Prefix(..)));
-                    for (s, v) in other_enc.forward.iter() {
+                    let mut remap = Vec::with_capacity(other_enc.map.len());
+                    let mut new_enc = CatEncs::new_empty();
+                    for (s, v) in other_enc.map.iter() {
                         remap.push((*v, c));
                         new_enc.encode_new_str(s, c);
-                        if let Some(prefix_u) = &prefix_u {
-                            self.belongs_prefix_map.insert(c, *prefix_u);
-                            self.rev_iri_suffix_map.insert(c, s.clone());
-                        }
                         c += 1;
                     }
                     self.cat_map.insert(t.clone(), new_enc);
@@ -198,55 +178,53 @@ pub fn re_encode(
     re_enc_map: HashMap<String, HashMap<CatType, CatReEnc>>,
 ) -> Vec<CatTriples> {
     let re_encoded: Vec<_> = encoded
-        .into_iter()
+        .into_par_iter()
         .map(|mut x| {
-            let mut new_encoded = Vec::with_capacity(x.encoded_triples.len());
-            for mut enc in x.encoded_triples {
-                let subj_encs = if let Some(s_uuid) = &enc.subject_local_cat_uuid {
-                    if let Some(s_map) = re_enc_map.get(s_uuid) {
-                        if let Some(s) = &enc.subject {
-                            s_map.get(s)
-                        } else {
-                            None
-                        }
+            let mut enc = x.encoded_triples;
+            let subj_encs = if let Some(s_uuid) = &enc.subject_local_cat_uuid {
+                if let Some(s_map) = re_enc_map.get(s_uuid) {
+                    if let Some(s) = &enc.subject {
+                        s_map.get(s)
                     } else {
                         None
                     }
                 } else {
                     None
-                };
-                if let Some(subj_encs) = subj_encs {
-                    let mut renc_col = subj_encs
-                        .clone()
-                        .re_encode_column(enc.df.column(SUBJECT_COL_NAME).unwrap().clone(), false)
-                        .unwrap();
-                    renc_col.rename(PlSmallStr::from_str(SUBJECT_COL_NAME));
-                    enc.df.with_column(renc_col).unwrap();
                 }
-                let obj_encs = if let Some(o_uuid) = &enc.object_local_cat_uuid {
-                    if let Some(o_map) = re_enc_map.get(o_uuid) {
-                        if let Some(o) = &enc.object {
-                            o_map.get(o)
-                        } else {
-                            None
-                        }
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                };
-                if let Some(obj_encs) = obj_encs {
-                    let mut renc_col = obj_encs
-                        .clone()
-                        .re_encode_column(enc.df.column(OBJECT_COL_NAME).unwrap().clone(), false)
-                        .unwrap();
-                    renc_col.rename(PlSmallStr::from_str(OBJECT_COL_NAME));
-                    enc.df.with_column(renc_col).unwrap();
-                }
-                new_encoded.push(enc);
+            } else {
+                None
+            };
+            if let Some(subj_encs) = subj_encs {
+                let mut renc_col = subj_encs
+                    .clone()
+                    .re_encode_column(enc.df.column(SUBJECT_COL_NAME).unwrap().clone(), false)
+                    .unwrap();
+                renc_col.rename(PlSmallStr::from_str(SUBJECT_COL_NAME));
+                enc.df.with_column(renc_col).unwrap();
             }
-            x.encoded_triples = new_encoded;
+            let obj_encs = if let Some(o_uuid) = &enc.object_local_cat_uuid {
+                if let Some(o_map) = re_enc_map.get(o_uuid) {
+                    if let Some(o) = &enc.object {
+                        o_map.get(o)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+            if let Some(obj_encs) = obj_encs {
+                let mut renc_col = obj_encs
+                    .clone()
+                    .re_encode_column(enc.df.column(OBJECT_COL_NAME).unwrap().clone(), false)
+                    .unwrap();
+                renc_col.rename(PlSmallStr::from_str(OBJECT_COL_NAME));
+                enc.df.with_column(renc_col).unwrap();
+            }
+
+            x.encoded_triples = enc;
             x
         })
         .collect();

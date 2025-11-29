@@ -129,11 +129,7 @@ impl PyIndexingOptions {
                             .map(|x| x.into_inner())
                             .collect()
                     });
-                IndexingOptions {
-                    object_sort_all,
-                    object_sort_some,
-                    fts_path,
-                }
+                IndexingOptions::new(object_sort_all, object_sort_some, fts_path)
             }
         };
         PyIndexingOptions { inner }
@@ -867,7 +863,7 @@ fn map_mutex(
             }
         }
         TemplateType::TemplatePyTemplate(t) => {
-            let t_string = t.template.signature.template_name.as_str().to_string();
+            let t_string = t.template.signature.iri.as_str().to_string();
             inner
                 .add_template(t.into_inner())
                 .map_err(PyMaplibError::from)?;

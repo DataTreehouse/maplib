@@ -4,7 +4,7 @@ use crate::cats::LockedCats;
 use crate::solution_mapping::{BaseCatState, EagerSolutionMappings};
 use crate::{BaseRDFNodeType, RDFNodeState};
 use nohash_hasher::NoHashHasher;
-use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::hash::BuildHasherDefault;
 use std::ops::Deref;
@@ -43,19 +43,19 @@ impl Cats {
                         let local_read_ref = local_read.as_ref().map(|x| x.deref());
 
                         let local_rev_map = if let Some(local) = local_read_ref {
-                            Some(local.get_rev_map(bt))
+                            Some(local.get_reverse_lookup(bt))
                         } else {
                             None
                         };
                         let ss = s.get_mut(bt).unwrap();
-                        let mut new_ss = ser
+                        let new_ss = ser
                             .u32()
                             .unwrap()
                             .into_iter()
                             .filter(|x| x.is_some())
                             .map(|x| x.unwrap());
                         if let Some(local_rev_map) = local_rev_map {
-                            ss.extend(new_ss.filter(|x| !local_rev_map.contains_key(x)));
+                            ss.extend(new_ss.filter(|x| !local_rev_map.rev_map.contains_key(x)));
                         } else {
                             ss.extend(new_ss);
                         }
@@ -132,40 +132,10 @@ impl Cats {
     pub fn image(&self, s: &HashMap<BaseRDFNodeType, HashSet<u32>>) -> Cats {
         let mut encs = HashMap::new();
         for (t, set) in s {
-            if t.is_iri() {
-                let maps: Vec<_> = set
-                    .into_par_iter()
-                    .map(|x| {
-                        let s = self.rev_iri_suffix_map.get(x).unwrap();
-                        let prefix_u = self.belongs_prefix_map.get(x).unwrap();
-                        (*x, s.clone(), *prefix_u)
-                    })
-                    .collect();
-                let mut mmap: HashMap<_, BTreeMap<_, _>> = HashMap::new();
-                for (x, s, prefix_u) in maps {
-                    if let Some(map) = mmap.get_mut(&prefix_u) {
-                        map.insert(s, x);
-                    } else {
-                        mmap.insert(prefix_u, BTreeMap::from([(s, x)]));
-                    }
-                }
-                for (k, map) in mmap {
-                    let prefix = self.prefix_map.get(&k).unwrap();
-                    let ct = CatType::Prefix(prefix.clone());
-                    encs.insert(ct, CatEncs { forward: map, reverse: None });
-                }
-            } else {
-                let ct = if let BaseRDFNodeType::Literal(nn) = t {
-                    CatType::Literal(nn.clone())
-                } else if let BaseRDFNodeType::BlankNode = t {
-                    CatType::Blank
-                } else {
-                    panic!("Should not happen")
-                };
-                if let Some(enc) = self.cat_map.get(&ct) {
-                    if let Some(image_enc) = enc.image_of_non_iri(set) {
-                        encs.insert(ct, image_enc);
-                    }
+            let ct = CatType::from_base_rdf_node_type(t);
+            if let Some(enc) = self.cat_map.get(&ct) {
+                if let Some(image_enc) = enc.image(set) {
+                    encs.insert(ct, image_enc);
                 }
             }
         }
@@ -174,10 +144,28 @@ impl Cats {
 }
 
 impl CatEncs {
-    pub fn image_of_non_iri(&self, s: &HashSet<u32>) -> Option<CatEncs> {
-        if let Some(new_reverse) = self.reverse.as_ref().unwrap().image(s) {
-            let forward = self.forward.image(&new_reverse);
-            Some(Self { forward, reverse: Some(new_reverse) })
+    pub fn image(&self, s: &HashSet<u32>) -> Option<CatEncs> {
+        let new_map: BTreeMap<_, _> = s
+            .par_iter()
+            .map(|x| {
+                if let Some(s) = self.rev_map.get(x) {
+                    Some((*x, s.clone()))
+                } else {
+                    None
+                }
+            })
+            .filter(|x| x.is_some())
+            .map(|x| x.unwrap())
+            .map(|(x, y)| (y, x))
+            .collect();
+        let new_rev_map: HashMap<_, _, BuildHasherDefault<NoHashHasher<u32>>> =
+            new_map.iter().map(|(x, y)| (*y, x.clone())).collect();
+
+        if new_map.len() > 0 {
+            Some(CatEncs {
+                map: new_map,
+                rev_map: new_rev_map,
+            })
         } else {
             None
         }

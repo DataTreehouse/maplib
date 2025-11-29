@@ -28,6 +28,7 @@ impl Triplestore {
                 rdf_node_types,
             }) = parameters.get(bindings_name)
             {
+                let mappings = mappings.clone();
                 let mapping_vars: HashSet<_> = mappings
                     .get_column_names()
                     .into_iter()
@@ -37,7 +38,7 @@ impl Triplestore {
                 if mapping_vars != expected_vars {
                     todo!("Handle mismatching variables in PValues")
                 }
-                EagerSolutionMappings::new(mappings.clone(), rdf_node_types.clone())
+                EagerSolutionMappings::new(mappings, rdf_node_types.clone())
             } else {
                 todo!("Handle this error.. ")
             }
@@ -45,7 +46,8 @@ impl Triplestore {
             todo!("Handle this error")
         };
         let cats = self.global_cats.read().unwrap();
-        let (sm, _) = cats.encode_solution_mappings(sm, None);
+        let mut sm = cats.encode_solution_mappings(sm);
+        sm.mappings.as_single_chunk_par();
         if let Some(mut mappings) = solution_mappings {
             //TODO: Remove this workaround
             mappings = mappings.as_eager(false).as_lazy();

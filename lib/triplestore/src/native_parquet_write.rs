@@ -1,8 +1,9 @@
-use super::{StoredBaseRDFNodeType, Triplestore};
+use super::Triplestore;
 use crate::errors::TriplestoreError;
 use file_io::{property_to_filename, write_parquet};
 use polars::prelude::ParquetCompression;
 use representation::dataset::NamedGraph;
+use representation::BaseRDFNodeType;
 use std::path::Path;
 use std::time::Instant;
 use tracing::{debug, instrument};
@@ -26,7 +27,7 @@ impl Triplestore {
         for (property, tts) in self.graph_triples_map.get_mut(graph).unwrap() {
             for ((_rdf_node_type_s, rdf_node_type_o), tt) in tts {
                 let filename;
-                if let StoredBaseRDFNodeType::Literal(literal_type) = rdf_node_type_o {
+                if let BaseRDFNodeType::Literal(literal_type) = rdf_node_type_o {
                     filename = format!(
                         "{}_{}",
                         property_to_filename(property.as_str()),

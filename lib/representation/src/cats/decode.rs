@@ -12,15 +12,12 @@ use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterato
 use std::borrow::Cow;
 
 impl CatEncs {
-    pub fn decode(&self, ser: &Series, cat_type: &CatType) -> Series {
-        if let CatType::Prefix(..) = cat_type {
-            panic!("Should never happen, this happens on the cats level")
-        }
+    pub fn decode(&self, ser: &Series) -> Series {
         let original_name = ser.name().clone();
         let uch: Vec<_> = ser.u32().unwrap().iter().collect();
         let decoded_vec_iter = uch
             .into_par_iter()
-            .map(|x| x.map(|x| self.reverse.as_ref().unwrap().get(&x).unwrap()));
+            .map(|x| x.map(|x| self.rev_map.get(&x).unwrap()));
 
         let decoded_vec: Vec<_> = decoded_vec_iter.map(|x| x.map(|x| x.as_str())).collect();
         let new_ser = Series::new(original_name, decoded_vec);
@@ -33,8 +30,8 @@ impl CatEncs {
         new_ser
     }
 
-    pub fn maybe_decode_non_iri_string(&self, u: &u32) -> Option<&str> {
-        self.reverse.as_ref().unwrap().get(u).map(|x| x.as_str())
+    pub fn maybe_decode_string(&self, u: &u32) -> Option<&str> {
+        self.rev_map.get(u).map(|x| x.as_str())
     }
 }
 
@@ -50,55 +47,30 @@ impl Cats {
         let local = local_cats.as_ref().map(|x| x.read().unwrap());
         let local = local.as_ref();
         let mut maybe_s = if let Some(local) = local {
-            local.maybe_decode_iri_string(u, true)
+            if let Some(enc) = local.cat_map.get(&CatType::IRI) {
+                enc.maybe_decode_string(u)
+            } else {
+                None
+            }
         } else {
             None
         };
         if maybe_s.is_none() {
-            maybe_s = self.maybe_decode_iri_string(u, true);
+            maybe_s = if let Some(enc) = self.cat_map.get(&CatType::IRI) {
+                enc.maybe_decode_string(u)
+            } else {
+                None
+            }
         }
         NamedNode::new_unchecked(maybe_s.expect("Should be able to decode"))
     }
 
-    pub fn maybe_decode_iri_string(&self, u: &u32, add_prefix: bool) -> Option<Cow<'_, str>> {
-        if let Some(s) = self.rev_iri_suffix_map.get(u) {
-            if add_prefix {
-                let prefix = self
-                    .prefix_map
-                    .get(self.belongs_prefix_map.get(u).unwrap())
-                    .unwrap();
-                Some(Cow::Owned(format!("{}{}", prefix.as_str(), s)))
-            } else {
-                Some(Cow::Borrowed(s))
-            }
+    pub fn decode_of_type(&self, ser: &Series, bt: &BaseRDFNodeType) -> Series {
+        let ct = CatType::from_base_rdf_node_type(bt);
+        if let Some(enc) = self.cat_map.get(&ct) {
+            enc.decode(ser)
         } else {
-            None
-        }
-    }
-
-    pub fn decode_of_type(&self, ser: &Series, cat_type: &CatType) -> Series {
-        if matches!(cat_type, CatType::Prefix(..)) {
-            let original_name = ser.name().clone();
-            let uch: Vec<_> = ser.u32().unwrap().iter().collect();
-            let decoded_vec: Vec<_> = uch
-                .into_par_iter()
-                .map(|x| x.map(|x| self.maybe_decode_iri_string(&x, true).unwrap()))
-                .collect();
-
-            let new_ser = Series::new(original_name, decoded_vec);
-            //
-            // let mut new_ser = if let CatType::Prefix(pre) = cat_type {
-            //     Series::from_iter(decoded_ser.map(|x| x.map(|x| format!("{}{}", pre.as_str(), x))))
-            // } else {
-            //     Series::from_iter(decoded_ser.map(|x| x.map(|x| x.as_str())))
-            // };
-            new_ser
-        } else {
-            if let Some(enc) = self.cat_map.get(cat_type) {
-                enc.decode(ser, cat_type)
-            } else {
-                unreachable!("Should never be called when type does not exist")
-            }
+            unreachable!("Should never be called when type does not exist")
         }
     }
 
@@ -109,7 +81,7 @@ impl Cats {
                     .cat_map
                     .iter()
                     .map(|(k, v)| {
-                        if matches!(k, CatType::Prefix(..)) {
+                        if matches!(k, CatType::IRI) {
                             Some((k, v))
                         } else {
                             None
@@ -146,60 +118,38 @@ impl Cats {
         ser: &Series,
         t: &BaseRDFNodeType,
         local_cats: Option<LockedCats>,
-        add_prefix: bool,
     ) -> Series {
         let local = local_cats.as_ref().map(|x| x.read().unwrap());
         let u32s = ser.u32().unwrap();
         let us: Vec<_> = u32s.iter().collect();
-        let strings = if t.is_iri() {
-            let strings: Vec<_> = us
-                .par_iter()
-                .map(|u| {
-                    let s = if let Some(u) = u {
-                        let mut s = None;
-                        if let Some(local_cats) = &local {
-                            s = local_cats.maybe_decode_iri_string(u, add_prefix);
-                        }
-                        if s.is_none() {
-                            s = self.maybe_decode_iri_string(u, add_prefix);
-                        }
-                        Some(s.expect("Expect all cats to resolve"))
-                    } else {
-                        None
-                    };
-                    s
-                })
-                .collect();
-            strings
-        } else {
-            //Very important that we prefer the local encoding over the global encoding.
-            let mut encs = if let Some(local_cats) = &local {
-                local_cats.get_encs(t)
-            } else {
-                vec![]
-            };
-            encs.extend(self.get_encs(t));
 
-            let strings: Vec<_> = us
-                .par_iter()
-                .map(|u| {
-                    let s = if let Some(u) = u {
-                        let mut s = None;
-                        for (_, e) in &encs {
-                            if let Some(st) = e.maybe_decode_non_iri_string(&u) {
-                                s = Some(st);
-                                break;
-                            }
-                        }
-                        Some(Cow::Borrowed(s.expect("Expect all cats to resolve")))
-                    } else {
-                        None
-                    };
-                    s
-                })
-                .collect();
-            strings
+        //Very important that we prefer the local encoding over the global encoding.
+        let mut encs = if let Some(local_cats) = &local {
+            local_cats.get_encs(t)
+        } else {
+            vec![]
         };
+        encs.extend(self.get_encs(t));
+
+        let strings: Vec<_> = us
+            .par_iter()
+            .map(|u| {
+                let s = if let Some(u) = u {
+                    let mut s = None;
+                    for (_, e) in &encs {
+                        if let Some(st) = e.maybe_decode_string(&u) {
+                            s = Some(st);
+                            break;
+                        }
+                    }
+                    Some(Cow::Borrowed(s.expect("Expect all cats to resolve")))
+                } else {
+                    None
+                };
+                s
+            })
+            .collect();
+
         let strs = strings.iter().map(|x| {
             if let Some(x) = x {
                 Some(x.as_str())
@@ -237,7 +187,6 @@ pub fn maybe_decode_expr(
             base_type.clone(),
             local_cats.as_ref().cloned(),
             global_cats,
-            true,
         ),
         BaseCatState::String | BaseCatState::NonString => expr,
     }
@@ -255,7 +204,6 @@ pub fn optional_maybe_decode_expr(
             base_type.clone(),
             local_cats.as_ref().cloned(),
             global_cats,
-            true,
         )),
         BaseCatState::String | BaseCatState::NonString => None,
     }
@@ -266,7 +214,6 @@ pub fn decode_expr(
     base_rdf_node_type: BaseRDFNodeType,
     local_cats: Option<LockedCats>,
     global_cats: LockedCats,
-    add_prefix: bool,
 ) -> Expr {
     expr.map(
         move |x| {
@@ -279,7 +226,6 @@ pub fn decode_expr(
                         x.as_series(),
                         &base_rdf_node_type,
                         local_cats.as_ref().map(|x| x.clone()),
-                        add_prefix,
                     );
                     ser.into_column()
                 }
@@ -289,7 +235,6 @@ pub fn decode_expr(
                             x,
                             &base_rdf_node_type,
                             local_cats.as_ref().map(|x| x.clone()),
-                            add_prefix,
                         )
                     })
                     .into_column(),
@@ -298,7 +243,6 @@ pub fn decode_expr(
                         &s.as_single_value_series(),
                         &base_rdf_node_type,
                         local_cats.as_ref().map(|x| x.clone()),
-                        add_prefix,
                     );
                     Column::Scalar(ScalarColumn::from_single_value_series(s, len))
                 }
