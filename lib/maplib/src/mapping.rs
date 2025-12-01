@@ -180,6 +180,19 @@ impl Model {
     }
 
     #[allow(clippy::too_many_arguments)]
+    pub fn read_template(
+        &mut self,
+        p: &Path,
+    ) -> Result<(), MaplibError> {
+        let mut dataset = TemplateDataset::from_file(p).map_err(MaplibError::TemplateError)?;
+        self.template_dataset.prefix_map.extend(dataset.prefix_map.drain());
+        for t in dataset.templates {
+            self.add_template(t)?
+        }
+        Ok(())
+    }
+
+    #[allow(clippy::too_many_arguments)]
     pub fn reads(
         &mut self,
         s: &str,

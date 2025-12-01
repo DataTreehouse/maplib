@@ -1,8 +1,11 @@
 import polars as pl
 import pytest
 from datetime import datetime
-from polars.testing import assert_frame_equal
+from pathlib import Path
 from maplib import Model, MaplibException
+
+PATH_HERE = Path(__file__).parent
+TESTDATA_PATH = PATH_HERE / "testdata"
 
 pl.Config.set_fmt_str_lengths(300)
 
@@ -943,3 +946,29 @@ def test_optional_commas():
     """
     m = Model()
     m.add_template(doc)
+
+def test_read_template():
+    m = Model()
+    m.read_template(TESTDATA_PATH / "templates.ttl")
+    df1 = pl.DataFrame(
+        {
+            "myVar1": [
+                "http://example.net/ns#OneThing1",
+                "http://example.net/ns#AnotherThing1",
+            ]
+        }
+    )
+    df2 = pl.DataFrame(
+        {
+            "myVar1": [
+                "http://example.net/ns#OneThing2",
+                "http://example.net/ns#AnotherThing2",
+            ]
+        }
+    )
+
+    m.map("ex:ExampleTemplate1", df1)
+    m.map("http://example.net/ns#ExampleTemplate2", df2)
+
+    df = m.query("""SELECT * WHERE {?a ?b ?c}""")
+    assert df.height == 4

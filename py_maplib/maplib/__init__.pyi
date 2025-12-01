@@ -599,6 +599,20 @@ class Model:
         :param replace_graph: Replace the graph with these triples? Will replace the default graph if no graph is specified.
         """
 
+    def read_template(
+            self,
+            file_path: Union[str, Path],
+    ) -> None:
+        """
+        Reads template(s) from a file path.
+
+        Usage:
+
+        >>> m.read("templates.ttl")
+
+        :param file_path: The path of the file containing templates in stOTTR format
+        """
+
     def reads(
         self,
         s: str,

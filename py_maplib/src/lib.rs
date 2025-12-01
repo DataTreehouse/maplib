@@ -529,6 +529,24 @@ impl PyModel {
     }
 
     #[allow(clippy::too_many_arguments)]
+    #[pyo3(signature = (file_path))]
+    #[instrument(skip_all)]
+    fn read_template(
+        &self,
+        py: Python<'_>,
+        file_path: &Bound<'_, PyAny>,
+    ) -> PyResult<()> {
+        let file_path = file_path.str()?.to_string();
+        py.allow_threads(move || {
+            let mut inner = self.inner.lock().unwrap();
+            read_template_mutex(
+                &mut inner,
+                file_path,
+            )
+        })
+    }
+
+    #[allow(clippy::too_many_arguments)]
     #[pyo3(signature = (s, format, base_iri=None, transient=None, parallel=None, checked=None, graph=None, replace_graph=None))]
     #[instrument(skip_all)]
     fn reads(
@@ -1234,6 +1252,19 @@ fn read_mutex(
             checked.unwrap_or(true),
             &named_graph,
             replace_graph.unwrap_or(false),
+        )
+        .map_err(PyMaplibError::from)?;
+    Ok(())
+}
+
+fn read_template_mutex(
+    inner: &mut MutexGuard<InnerModel>,
+    file_path: String,
+) -> PyResult<()> {
+    let path = Path::new(&file_path);
+    inner
+        .read_template(
+            path,
         )
         .map_err(PyMaplibError::from)?;
     Ok(())
