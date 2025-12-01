@@ -148,7 +148,7 @@ impl CatEncs {
         let new_map: BTreeMap<_, _> = s
             .par_iter()
             .map(|x| {
-                if let Some(s) = self.rev_map.get(x) {
+                if let Some(s) = self.reverse.get(x) {
                     Some((*x, s.clone()))
                 } else {
                     None

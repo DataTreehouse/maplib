@@ -3,7 +3,6 @@ mod encode;
 mod globalize;
 mod image;
 mod re_encode;
-mod split;
 pub mod forwards;
 pub mod reverse;
 
@@ -86,7 +85,7 @@ pub struct EncodedTriples {
 pub struct CatEncs {
     // We use a BTree map to keep strings sorted
     pub forward: ForwardsCat,
-    pub reverse: Option<ReverseCat>,
+    pub reverse: ReverseCat,
 }
 
 #[derive(Debug, Clone)]
@@ -244,7 +243,7 @@ impl Cats {
     fn calc_new_blank_counter(&self) -> u32 {
         let mut counter = 0;
         if let Some(enc) = self.cat_map.get(&CatType::Blank) {
-            counter = cmp::max(enc.rev_map.keys().max().unwrap() + 1, counter);
+            counter = cmp::max(enc.reverse.counter() + 1, counter);
         }
         counter
     }
@@ -252,7 +251,7 @@ impl Cats {
     fn calc_new_iri_counter(&self) -> u32 {
         let mut counter = 0;
         if let Some(enc) = self.cat_map.get(&CatType::IRI) {
-            counter = cmp::max(enc.rev_map.keys().max().unwrap() + 1, counter);
+            counter = cmp::max(enc.reverse.counter() + 1, counter);
         }
         counter
     }
@@ -261,7 +260,7 @@ impl Cats {
         let mut map = HashMap::new();
         for (p, cat) in &self.cat_map {
             if let CatType::Literal(nn) = p {
-                let counter = cat.rev_map.keys().max().unwrap() + 1;
+                let counter = cat.reverse.counter() + 1;
                 map.insert(nn.clone(), counter);
             }
         }

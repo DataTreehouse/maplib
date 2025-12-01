@@ -57,9 +57,9 @@ impl CatEncs {
             .forward
             .iter()
             .map(|(x, l)| {
-                if let Some(r) = other.maybe_encode_str(x) {
-                    if l != r {
-                        Some((*l, *r))
+                if let Some(r) = other.maybe_encode_str(x.as_str()) {
+                    if &l != r {
+                        Some((l, *r))
                     } else {
                         None
                     }
@@ -113,13 +113,13 @@ impl Cats {
                 let mut c = self.get_counter(&t);
                 if let Some(enc) = self.cat_map.get_mut(t) {
                     let (remap, insert): (Vec<_>, Vec<_>) = other_enc
-                        .map
-                        .par_iter()
+                        .forward
+                        .iter()
                         .map(|(s, u)| {
-                            if let Some(e) = enc.forward.get(s) {
-                                (Some((*u, *e)), None)
+                            if let Some(e) = enc.forward.get(&s) {
+                                (Some((u, *e)), None)
                             } else {
-                                (None, Some((s.clone(), *u)))
+                                (None, Some((s.clone(), u)))
                             }
                         })
                         .unzip();
@@ -146,11 +146,11 @@ impl Cats {
                     };
                     other_map.insert(t.clone(), reenc);
                 } else {
-                    let mut remap = Vec::with_capacity(other_enc.map.len());
+                    let mut remap = vec![];
                     let mut new_enc = CatEncs::new_empty();
-                    for (s, v) in other_enc.map.iter() {
-                        remap.push((*v, c));
-                        new_enc.encode_new_str(s, c);
+                    for (s, v) in other_enc.forward.iter() {
+                        remap.push((v, c));
+                        new_enc.encode_new_arc_string(s, c);
                         c += 1;
                     }
                     self.cat_map.insert(t.clone(), new_enc);
