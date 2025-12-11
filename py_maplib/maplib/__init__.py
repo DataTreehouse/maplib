@@ -23,6 +23,7 @@ __all__ = [
     "BlankNode",
     "explore",
     "add_triples",
+    "generate_templates",
     "MaplibException",
 ]
 
@@ -30,6 +31,7 @@ import pathlib
 from importlib.metadata import version
 from .maplib import *
 from .adding_triples import add_triples
+from .template_generator import generate_templates
 
 if (pathlib.Path(__file__).parent.resolve() / "graph_explorer").exists():
     from .graph_explorer import explore

@@ -875,3 +875,13 @@ def explore(
     :param popup: Pop up the browser window.
     :param fts: Enable full text search indexing
     """
+
+def generate_templates(m: Model, graph: Optional[str]) -> Dict[str, Template]:
+    """Generate templates for instantiating the classes in an ontology
+
+    :param m: The model where the ontology is stored. We mainly rely on rdfs:subClassOf, rdfs:range and rdfs:domain.
+    :param graph: The named graph where the ontology is stored.
+
+    :return A dictionary of templates for instantiating the classes in the ontology, where the keys are the class URIs.
+
+    Usage example - note that it is important to add the templates to the Model you want to populate."""
