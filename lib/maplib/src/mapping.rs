@@ -109,8 +109,8 @@ impl Model {
         recursive: bool,
         storage_folder: Option<String>,
     ) -> Result<Model, MaplibError> {
-        let dataset =
-            TemplateDataset::from_folder(path, recursive).map_err(MaplibError::TemplateError)?;
+        let dataset = TemplateDataset::from_folder(path, recursive, Some(&get_default_prefixes()))
+            .map_err(MaplibError::TemplateError)?;
         Model::new(Some(&dataset), storage_folder, None, None)
     }
 
@@ -118,12 +118,13 @@ impl Model {
         path: P,
         storage_folder: Option<String>,
     ) -> Result<Model, MaplibError> {
-        let dataset = TemplateDataset::from_file(path).map_err(MaplibError::TemplateError)?;
+        let dataset = TemplateDataset::from_file(path, Some(&get_default_prefixes()))
+            .map_err(MaplibError::TemplateError)?;
         Model::new(Some(&dataset), storage_folder, None, None)
     }
 
     pub fn from_str(s: &str, storage_folder: Option<String>) -> Result<Model, MaplibError> {
-        let doc = document_from_str(s)?;
+        let doc = document_from_str(s, Some(&get_default_prefixes()))?;
         let dataset =
             TemplateDataset::from_documents(vec![doc]).map_err(MaplibError::TemplateError)?;
         Model::new(Some(&dataset), storage_folder, None, None)
@@ -132,7 +133,7 @@ impl Model {
     pub fn from_strs(ss: Vec<&str>, storage_folder: Option<String>) -> Result<Model, MaplibError> {
         let mut docs = vec![];
         for s in ss {
-            let doc = document_from_str(s)?;
+            let doc = document_from_str(s, Some(&get_default_prefixes()))?;
             docs.push(doc);
         }
         let dataset = TemplateDataset::from_documents(docs).map_err(MaplibError::TemplateError)?;
@@ -148,7 +149,7 @@ impl Model {
 
     #[instrument(skip_all)]
     pub fn add_templates_from_string(&mut self, s: &str) -> Result<Option<NamedNode>, MaplibError> {
-        let doc = document_from_str(s).map_err(MaplibError::TemplateError)?;
+        let doc = document_from_str(s, Some(&self.prefixes)).map_err(MaplibError::TemplateError)?;
         let mut dataset =
             TemplateDataset::from_documents(vec![doc]).map_err(MaplibError::TemplateError)?;
         let return_template_iri = if !dataset.templates.is_empty() {
@@ -189,7 +190,8 @@ impl Model {
 
     #[allow(clippy::too_many_arguments)]
     pub fn read_template(&mut self, p: &Path) -> Result<(), MaplibError> {
-        let mut dataset = TemplateDataset::from_file(p).map_err(MaplibError::TemplateError)?;
+        let mut dataset = TemplateDataset::from_file(p, Some(&self.prefixes))
+            .map_err(MaplibError::TemplateError)?;
         self.template_dataset
             .prefix_map
             .extend(dataset.prefix_map.drain());

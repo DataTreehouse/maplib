@@ -114,6 +114,7 @@ impl TemplateDataset {
     pub fn from_folder<P: AsRef<Path>>(
         path: P,
         recursive: bool,
+        prefixes: Option<&HashMap<String, NamedNode>>,
     ) -> Result<TemplateDataset, TemplateError> {
         let mut docs = vec![];
         let mut walk_dir = WalkDir::new(path);
@@ -127,7 +128,7 @@ impl TemplateDataset {
                 if let Some(s) = e.to_str() {
                     let extension = s.to_lowercase();
                     if "stottr" == &extension {
-                        let doc = document_from_file(f.path())?;
+                        let doc = document_from_file(f.path(), prefixes)?;
                         docs.push(doc);
                     }
                 }
@@ -136,8 +137,11 @@ impl TemplateDataset {
         TemplateDataset::from_documents(docs)
     }
 
-    pub fn from_file<P: AsRef<Path>>(path: P) -> Result<TemplateDataset, TemplateError> {
-        let doc = document_from_file(path)?;
+    pub fn from_file<P: AsRef<Path>>(
+        path: P,
+        prefixes: Option<&HashMap<String, NamedNode>>,
+    ) -> Result<TemplateDataset, TemplateError> {
+        let doc = document_from_file(path, prefixes)?;
         TemplateDataset::from_documents(vec![doc])
     }
 
