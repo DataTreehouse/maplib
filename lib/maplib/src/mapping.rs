@@ -235,7 +235,14 @@ impl Model {
             strict_project: false,
         };
         self.triplestore
-            .query(query, parameters, streaming, &query_settings, graph, Some(&self.prefixes))
+            .query(
+                query,
+                parameters,
+                streaming,
+                &query_settings,
+                graph,
+                Some(&self.prefixes),
+            )
             .map_err(|x| x.into())
     }
 
@@ -254,7 +261,14 @@ impl Model {
             strict_project: false,
         };
         self.triplestore
-            .update(update, parameters, streaming, &query_settings, graph, Some(&self.prefixes))
+            .update(
+                update,
+                parameters,
+                streaming,
+                &query_settings,
+                graph,
+                Some(&self.prefixes),
+            )
             .map_err(|x| x.into())
     }
 
@@ -363,7 +377,7 @@ impl Model {
             only_shapes,
             deactivate_shapes,
             dry_run,
-            Some(self.prefixes.clone())
+            Some(self.prefixes.clone()),
         );
         res.map_err(|x| x.into())
     }
