@@ -2,6 +2,7 @@ use crate::algebra::*;
 use crate::parser::{parse_update, SparqlSyntaxError};
 use crate::term::*;
 use oxiri::Iri;
+use std::collections::HashMap;
 use std::fmt;
 use std::str::FromStr;
 
@@ -26,8 +27,12 @@ pub struct Update {
 
 impl Update {
     /// Parses a SPARQL update with an optional base IRI to resolve relative IRIs in the query.
-    pub fn parse(update: &str, base_iri: Option<&str>) -> Result<Self, SparqlSyntaxError> {
-        parse_update(update, base_iri)
+    pub fn parse(
+        update: &str,
+        base_iri: Option<&str>,
+        prefixes: Option<&HashMap<String, NamedNode>>,
+    ) -> Result<Self, SparqlSyntaxError> {
+        parse_update(update, base_iri, prefixes)
     }
 
     /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
@@ -71,7 +76,7 @@ impl FromStr for Update {
     type Err = SparqlSyntaxError;
 
     fn from_str(update: &str) -> Result<Self, Self::Err> {
-        Self::parse(update, None)
+        Self::parse(update, None, None)
     }
 }
 

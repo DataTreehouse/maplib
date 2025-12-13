@@ -25,6 +25,7 @@ use triplestore::sparql::errors::SparqlError;
 use triplestore::sparql::{QueryResult, QuerySettings};
 use triplestore::{IndexingOptions, NewTriples, Triplestore};
 
+use crate::prefixes::get_default_prefixes;
 use datalog::ast::DatalogRuleset;
 use representation::dataset::NamedGraph;
 use tracing::instrument;
@@ -35,6 +36,7 @@ pub struct Model {
     pub blank_node_counter: usize,
     pub default_template_counter: usize,
     pub indexing: IndexingOptions,
+    pub prefixes: HashMap<String, NamedNode>,
 }
 
 #[derive(Clone, Default)]
@@ -70,6 +72,7 @@ impl Model {
         template_dataset: Option<&TemplateDataset>,
         storage_folder: Option<String>,
         indexing: Option<IndexingOptions>,
+        prefixes: Option<HashMap<String, NamedNode>>,
     ) -> Result<Model, MaplibError> {
         let use_disk = storage_folder.is_some();
         let indexing = if use_disk {
@@ -86,6 +89,10 @@ impl Model {
         } else {
             TemplateDataset::new_empty()?
         };
+        let mut use_prefixes = get_default_prefixes();
+        if let Some(prefixes) = prefixes {
+            use_prefixes.extend(prefixes)
+        };
         Ok(Model {
             template_dataset,
             triplestore: Triplestore::new(storage_folder, Some(indexing.clone()))
@@ -93,6 +100,7 @@ impl Model {
             blank_node_counter: 0,
             default_template_counter: 0,
             indexing,
+            prefixes: use_prefixes,
         })
     }
 
@@ -103,7 +111,7 @@ impl Model {
     ) -> Result<Model, MaplibError> {
         let dataset =
             TemplateDataset::from_folder(path, recursive).map_err(MaplibError::TemplateError)?;
-        Model::new(Some(&dataset), storage_folder, None)
+        Model::new(Some(&dataset), storage_folder, None, None)
     }
 
     pub fn from_file<P: AsRef<Path>>(
@@ -111,14 +119,14 @@ impl Model {
         storage_folder: Option<String>,
     ) -> Result<Model, MaplibError> {
         let dataset = TemplateDataset::from_file(path).map_err(MaplibError::TemplateError)?;
-        Model::new(Some(&dataset), storage_folder, None)
+        Model::new(Some(&dataset), storage_folder, None, None)
     }
 
     pub fn from_str(s: &str, storage_folder: Option<String>) -> Result<Model, MaplibError> {
         let doc = document_from_str(s)?;
         let dataset =
             TemplateDataset::from_documents(vec![doc]).map_err(MaplibError::TemplateError)?;
-        Model::new(Some(&dataset), storage_folder, None)
+        Model::new(Some(&dataset), storage_folder, None, None)
     }
 
     pub fn from_strs(ss: Vec<&str>, storage_folder: Option<String>) -> Result<Model, MaplibError> {
@@ -128,7 +136,7 @@ impl Model {
             docs.push(doc);
         }
         let dataset = TemplateDataset::from_documents(docs).map_err(MaplibError::TemplateError)?;
-        Model::new(Some(&dataset), storage_folder, None)
+        Model::new(Some(&dataset), storage_folder, None, None)
     }
 
     pub fn add_template(&mut self, template: Template) -> Result<(), MaplibError> {
@@ -180,12 +188,11 @@ impl Model {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub fn read_template(
-        &mut self,
-        p: &Path,
-    ) -> Result<(), MaplibError> {
+    pub fn read_template(&mut self, p: &Path) -> Result<(), MaplibError> {
         let mut dataset = TemplateDataset::from_file(p).map_err(MaplibError::TemplateError)?;
-        self.template_dataset.prefix_map.extend(dataset.prefix_map.drain());
+        self.template_dataset
+            .prefix_map
+            .extend(dataset.prefix_map.drain());
         for t in dataset.templates {
             self.add_template(t)?
         }
@@ -228,7 +235,7 @@ impl Model {
             strict_project: false,
         };
         self.triplestore
-            .query(query, parameters, streaming, &query_settings, graph)
+            .query(query, parameters, streaming, &query_settings, graph, Some(&self.prefixes))
             .map_err(|x| x.into())
     }
 
@@ -247,7 +254,7 @@ impl Model {
             strict_project: false,
         };
         self.triplestore
-            .update(update, parameters, streaming, &query_settings, graph)
+            .update(update, parameters, streaming, &query_settings, graph, Some(&self.prefixes))
             .map_err(|x| x.into())
     }
 
@@ -356,6 +363,7 @@ impl Model {
             only_shapes,
             deactivate_shapes,
             dry_run,
+            Some(self.prefixes.clone())
         );
         res.map_err(|x| x.into())
     }
@@ -415,7 +423,7 @@ impl Model {
         }
         let mut ruleset: Option<DatalogRuleset> = None;
         for r in rulesets {
-            let new_ruleset = parse_datalog_ruleset(&r, None)
+            let new_ruleset = parse_datalog_ruleset(&r, None, Some(&self.prefixes))
                 .map_err(|x| MaplibError::DatalogSyntaxError(x.to_string()))?;
             if let Some(orig_ruleset) = &mut ruleset {
                 orig_ruleset.extend(new_ruleset);

@@ -150,7 +150,7 @@ impl PyModel {
             None
         };
         Ok(PyModel {
-            inner: Mutex::new(InnerModel::new(None, None, indexing).map_err(PyMaplibError::from)?),
+            inner: Mutex::new(InnerModel::new(None, None, indexing, None).map_err(PyMaplibError::from)?),
             sprout: Mutex::new(None),
         })
     }
@@ -161,6 +161,34 @@ impl PyModel {
         py.allow_threads(move || {
             let mut inner = self.inner.lock().unwrap();
             add_template_mutex(&mut inner, template)
+        })
+    }
+
+    #[instrument(skip_all)]
+    fn add_prefixes(&self, py: Python<'_>, prefixes: Bound<'_, PyAny>) -> PyResult<()> {
+        let mut use_prefixes = HashMap::new();
+        if let Ok(prefixes) = prefixes.extract::<HashMap<String,String>>() {
+            for (k,v) in prefixes {
+                let nn = NamedNode::new(v).map_err(|x|
+                    PyMaplibError::FunctionArgumentError(format!("Error parsing prefix {}:{}", k, x.to_string()))
+                )?;
+                use_prefixes.insert(k,nn);
+            }
+        } else if let Ok(prefixes) = prefixes.extract::<HashMap<String,PyIRI>>() {
+            for (k,v) in prefixes {
+                use_prefixes.insert(k, v.into_inner());
+            }
+        } else if let Ok(prefixes) = prefixes.extract::<HashMap<String,PyPrefix>>() {
+            for (k,v) in prefixes {
+                use_prefixes.insert(k, v.iri.clone());
+            }
+        }
+        else {
+            return Err(PyMaplibError::FunctionArgumentError(format!("Prefixes should be Dict[str,str]")).into())
+        };
+        py.allow_threads(move || {
+            let mut inner = self.inner.lock().unwrap();
+            add_prefixes_mutex(&mut inner, use_prefixes)
         })
     }
 
@@ -531,18 +559,11 @@ impl PyModel {
     #[allow(clippy::too_many_arguments)]
     #[pyo3(signature = (file_path))]
     #[instrument(skip_all)]
-    fn read_template(
-        &self,
-        py: Python<'_>,
-        file_path: &Bound<'_, PyAny>,
-    ) -> PyResult<()> {
+    fn read_template(&self, py: Python<'_>, file_path: &Bound<'_, PyAny>) -> PyResult<()> {
         let file_path = file_path.str()?.to_string();
         py.allow_threads(move || {
             let mut inner = self.inner.lock().unwrap();
-            read_template_mutex(
-                &mut inner,
-                file_path,
-            )
+            read_template_mutex(&mut inner, file_path)
         })
     }
 
@@ -823,6 +844,11 @@ fn add_template_mutex(inner: &mut MutexGuard<InnerModel>, template: TemplateType
     Ok(())
 }
 
+fn add_prefixes_mutex(inner: &mut MutexGuard<InnerModel>, prefixes: HashMap<String, NamedNode>) -> PyResult<()> {
+    inner.prefixes.extend(prefixes.into_iter());
+    Ok(())
+}
+
 fn create_sprout_mutex(
     inner: &mut MutexGuard<InnerModel>,
     sprout: &mut MutexGuard<Option<InnerModel>>,
@@ -831,6 +857,7 @@ fn create_sprout_mutex(
         Some(&inner.template_dataset),
         None,
         Some(inner.indexing.clone()),
+        None,
     )
     .map_err(PyMaplibError::from)?;
     new_sprout.blank_node_counter = inner.blank_node_counter;
@@ -1106,6 +1133,7 @@ fn validate_mutex(
                 false,
                 &qs,
                 Some(&shape_graph),
+                None,
             )
             .map_err(|x| PyMaplibError::MaplibError(MaplibError::SparqlError(x)))?;
         if let QueryResult::Construct(sms) = res {
@@ -1257,16 +1285,9 @@ fn read_mutex(
     Ok(())
 }
 
-fn read_template_mutex(
-    inner: &mut MutexGuard<InnerModel>,
-    file_path: String,
-) -> PyResult<()> {
+fn read_template_mutex(inner: &mut MutexGuard<InnerModel>, file_path: String) -> PyResult<()> {
     let path = Path::new(&file_path);
-    inner
-        .read_template(
-            path,
-        )
-        .map_err(PyMaplibError::from)?;
+    inner.read_template(path).map_err(PyMaplibError::from)?;
     Ok(())
 }
 

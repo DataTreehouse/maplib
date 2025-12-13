@@ -347,10 +347,22 @@ class Model:
         self,
         indexing_options: "IndexingOptions" = None,
     ) -> "Model": ...
+
     def add_template(self, template: Union["Template", str]):
         """
         Add a template to the model. Overwrites any existing template with the same IRI.
         :param template: The template to add, as a stOTTR string or as a programmatically constructed Template.
+        :return:
+        """
+
+    def add_prefixes(self, template: Dict[str, str]):
+        """
+        Add prefixes that will be used in parsing of SPARQL, Datalog and OTTR.
+
+        Usage:
+        >>> m.add_prefixes({"ex" : "http:://example.net/"})
+
+        :param prefixes: Known prefixes
         :return:
         """
 

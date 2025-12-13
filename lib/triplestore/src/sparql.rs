@@ -153,8 +153,9 @@ impl Triplestore {
         streaming: bool,
         query_settings: &QuerySettings,
         graph: Option<&NamedGraph>,
+        prefixes: Option<&HashMap<String, NamedNode>>,
     ) -> Result<QueryResult, SparqlError> {
-        let query = Query::parse(query, None).map_err(SparqlError::ParseError)?;
+        let query = Query::parse(query, None, prefixes).map_err(SparqlError::ParseError)?;
         trace!(?query);
         self.query_parsed(&query, parameters, streaming, query_settings, graph)
     }
@@ -166,8 +167,9 @@ impl Triplestore {
         streaming: bool,
         query_settings: &QuerySettings,
         graph: Option<&NamedGraph>,
+        prefixes: Option<&HashMap<String, NamedNode>>,
     ) -> Result<QueryResult, SparqlError> {
-        let query = Query::parse(query, None).map_err(SparqlError::ParseError)?;
+        let query = Query::parse(query, None, prefixes).map_err(SparqlError::ParseError)?;
         self.query_parsed_uninterruptable(&query, parameters, streaming, query_settings, graph)
     }
 
@@ -339,8 +341,9 @@ impl Triplestore {
         streaming: bool,
         query_settings: &QuerySettings,
         graph: &NamedGraph,
+        prefixes: Option<&HashMap<String, NamedNode>>,
     ) -> Result<Vec<NewTriples>, SparqlError> {
-        let query = Query::parse(query, None).map_err(SparqlError::ParseError)?;
+        let query = Query::parse(query, None, prefixes).map_err(SparqlError::ParseError)?;
         if let Query::Construct { .. } = &query {
             let res =
                 self.query_parsed(&query, parameters, streaming, query_settings, Some(graph))?;
@@ -363,8 +366,9 @@ impl Triplestore {
         streaming: bool,
         query_settings: &QuerySettings,
         graph: Option<&NamedGraph>,
+        prefixes: Option<&HashMap<String, NamedNode>>,
     ) -> Result<(), SparqlError> {
-        let update = Update::parse(update, None).map_err(SparqlError::ParseError)?;
+        let update = Update::parse(update, None, prefixes).map_err(SparqlError::ParseError)?;
         self.update_parsed(&update, parameters, streaming, query_settings, graph)?;
         Ok(())
     }
