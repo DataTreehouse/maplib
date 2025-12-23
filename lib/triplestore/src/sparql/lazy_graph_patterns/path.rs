@@ -378,7 +378,7 @@ impl Triplestore {
     }
 }
 
-fn create_graph_pattern(
+pub fn create_graph_pattern(
     ppe: &PropertyPathExpression,
     subject: &TermPattern,
     object: &TermPattern,
@@ -540,7 +540,7 @@ fn sum_mat(mat: &SparseMatrix) -> u32 {
     s
 }
 
-fn need_sparse_matrix(ppe: &PropertyPathExpression) -> bool {
+pub fn need_sparse_matrix(ppe: &PropertyPathExpression) -> bool {
     match ppe {
         PropertyPathExpression::NamedNode(_) => false,
         PropertyPathExpression::Reverse(inner) => need_sparse_matrix(inner),

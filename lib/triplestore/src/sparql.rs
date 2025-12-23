@@ -1,3 +1,4 @@
+mod debug;
 pub mod delete;
 pub mod errors;
 mod insert;
@@ -160,19 +161,6 @@ impl Triplestore {
         self.query_parsed(&query, parameters, streaming, query_settings, graph)
     }
 
-    pub fn query_uninterruptable(
-        &self,
-        query: &str,
-        parameters: &Option<HashMap<String, EagerSolutionMappings>>,
-        streaming: bool,
-        query_settings: &QuerySettings,
-        graph: Option<&NamedGraph>,
-        prefixes: Option<&HashMap<String, NamedNode>>,
-    ) -> Result<QueryResult, SparqlError> {
-        let query = Query::parse(query, None, prefixes).map_err(SparqlError::ParseError)?;
-        self.query_parsed_uninterruptable(&query, parameters, streaming, query_settings, graph)
-    }
-
     pub fn query_parsed(
         &self,
         query: &Query,
@@ -257,77 +245,6 @@ impl Triplestore {
                         panic!("Error {e}");
                     }
                 }
-            }
-            _ => Err(SparqlError::QueryTypeNotSupported),
-        }
-    }
-
-    pub fn query_parsed_uninterruptable(
-        &self,
-        query: &Query,
-        parameters: &Option<HashMap<String, EagerSolutionMappings>>,
-        streaming: bool,
-        query_settings: &QuerySettings,
-        graph: Option<&NamedGraph>,
-    ) -> Result<QueryResult, SparqlError> {
-        let query = rewrite(query.clone());
-        let context = Context::new();
-        match &query {
-            Query::Select {
-                dataset,
-                pattern,
-                base_iri: _,
-            } => {
-                let qg = dataset_or_named_graph(dataset, graph);
-
-                let SolutionMappings {
-                    mappings,
-                    rdf_node_types: types,
-                    ..
-                } = self.lazy_graph_pattern(
-                    pattern,
-                    None,
-                    &context,
-                    parameters,
-                    Pushdowns::new(),
-                    query_settings,
-                    &qg,
-                )?;
-
-                let df = mappings.with_new_streaming(streaming).collect().unwrap();
-                Ok(QueryResult::Select(EagerSolutionMappings::new(df, types)))
-            }
-            Query::Construct {
-                template,
-                dataset,
-                pattern,
-                base_iri: _,
-            } => {
-                let SolutionMappings {
-                    mappings,
-                    rdf_node_types,
-                    ..
-                } = self.lazy_graph_pattern(
-                    pattern,
-                    None,
-                    &context,
-                    parameters,
-                    Pushdowns::new(),
-                    query_settings,
-                    &dataset_or_named_graph(dataset, graph),
-                )?;
-                let df = mappings.with_new_streaming(streaming).collect().unwrap();
-
-                let mut solutions = vec![];
-                for t in template {
-                    let cats = self.global_cats.read()?;
-                    if let Some((sm, predicate)) =
-                        triple_to_solution_mappings(&df, &rdf_node_types, t, None, true, &cats)?
-                    {
-                        solutions.push((sm, predicate));
-                    }
-                }
-                Ok(QueryResult::Construct(solutions))
             }
             _ => Err(SparqlError::QueryTypeNotSupported),
         }

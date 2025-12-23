@@ -6,11 +6,11 @@ mod join;
 mod left_join;
 mod minus;
 mod order_by;
-mod path;
+pub mod path;
 mod project;
 mod pvalues;
 mod triple;
-mod triples_ordering;
+pub mod triples_ordering;
 mod union;
 mod values;
 

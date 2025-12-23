@@ -433,6 +433,7 @@ impl Model {
         graph: Option<&NamedGraph>,
         include_transient: bool,
         max_rows: Option<usize>,
+        debug: bool,
     ) -> Result<Option<HashMap<NamedNode, EagerSolutionMappings>>, MaplibError> {
         if rulesets.is_empty() {
             return Err(MaplibError::MissingDatalogRuleset);
@@ -456,6 +457,7 @@ impl Model {
             max_results,
             include_transient,
             max_rows,
+            debug,
         );
         Ok(res.map_err(|x| MaplibError::DatalogError(x))?)
     }
