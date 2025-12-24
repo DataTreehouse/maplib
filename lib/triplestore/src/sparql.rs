@@ -1,4 +1,4 @@
-mod debug;
+pub mod debug;
 pub mod delete;
 pub mod errors;
 mod insert;
@@ -13,6 +13,7 @@ use tracing::{instrument, trace, warn};
 use utils::polars::{pl_interruptable_collect, InterruptableCollectError};
 
 use super::{NewTriples, Triplestore};
+use crate::sparql::debug::DebugOutputs;
 use crate::sparql::errors::SparqlError;
 use crate::sparql::rewrite::rewrite;
 use oxrdf::{NamedNode, Subject, Term, Triple, Variable};
@@ -43,9 +44,19 @@ use spargebra::term::{
 };
 use spargebra::{GraphUpdateOperation, Query, Update};
 use std::collections::{HashMap, HashSet};
+use representation::debug::DebugOutput;
+
+pub struct QueryResult {
+    pub kind: QueryResultKind,
+    pub debug: Option<DebugOutputs>,
+}
+
+pub struct UpdateResult {
+    pub debug: Option<DebugOutputs>,
+}
 
 #[derive(Debug)]
-pub enum QueryResult {
+pub enum QueryResultKind {
     Select(EagerSolutionMappings),
     Construct(Vec<(EagerSolutionMappings, Option<NamedNode>)>),
 }
@@ -57,10 +68,10 @@ pub struct QuerySettings {
     pub strict_project: bool,
 }
 
-impl QueryResult {
+impl QueryResultKind {
     pub fn json(&self, global_cats: LockedCats) -> String {
         match self {
-            QueryResult::Select(sm) => {
+            QueryResultKind::Select(sm) => {
                 let QuerySolutions {
                     variables,
                     solutions,
@@ -82,7 +93,7 @@ impl QueryResult {
                 serializer.finish().unwrap();
                 String::from_utf8(buffer).unwrap()
             }
-            QueryResult::Construct(c) => {
+            QueryResultKind::Construct(c) => {
                 let mut ser = TurtleSerializer::new().for_writer(vec![]);
                 for (sm, predicate) in c {
                     let mut sm = sm.clone();
@@ -155,10 +166,18 @@ impl Triplestore {
         query_settings: &QuerySettings,
         graph: Option<&NamedGraph>,
         prefixes: Option<&HashMap<String, NamedNode>>,
+        debug_no_results: bool,
     ) -> Result<QueryResult, SparqlError> {
         let query = Query::parse(query, None, prefixes).map_err(SparqlError::ParseError)?;
         trace!(?query);
-        self.query_parsed(&query, parameters, streaming, query_settings, graph)
+        self.query_parsed(
+            &query,
+            parameters,
+            streaming,
+            query_settings,
+            graph,
+            debug_no_results,
+        )
     }
 
     pub fn query_parsed(
@@ -168,10 +187,12 @@ impl Triplestore {
         streaming: bool,
         query_settings: &QuerySettings,
         graph: Option<&NamedGraph>,
+        debug_no_results: bool,
     ) -> Result<QueryResult, SparqlError> {
         let query = rewrite(query.clone());
         let context = Context::new();
-        match &query {
+        let mut no_results = false;
+        let res = match &query {
             Query::Select {
                 dataset,
                 pattern,
@@ -192,9 +213,14 @@ impl Triplestore {
                 )?;
 
                 match pl_interruptable_collect(mappings.with_new_streaming(streaming)) {
-                    Ok(df) => Ok(QueryResult::Select(EagerSolutionMappings::new(df, types))),
+                    Ok(df) => {
+                        if df.height() == 0 {
+                            no_results = true;
+                        }
+                        QueryResultKind::Select(EagerSolutionMappings::new(df, types))
+                    }
                     Err(InterruptableCollectError::Interrupted) => {
-                        Err(SparqlError::InterruptSignal)
+                        return Err(SparqlError::InterruptSignal)
                     }
                     Err(e) => {
                         panic!("Error {e}");
@@ -222,6 +248,9 @@ impl Triplestore {
                 )?;
                 match pl_interruptable_collect(mappings.with_new_streaming(streaming)) {
                     Ok(df) => {
+                        if df.height() == 0 {
+                            no_results = true;
+                        }
                         let mut solutions = vec![];
                         for t in template {
                             let cats = self.global_cats.read()?;
@@ -236,18 +265,29 @@ impl Triplestore {
                                 solutions.push((sm, predicate));
                             }
                         }
-                        Ok(QueryResult::Construct(solutions))
+                        QueryResultKind::Construct(solutions)
                     }
                     Err(InterruptableCollectError::Interrupted) => {
-                        Err(SparqlError::InterruptSignal)
+                        return Err(SparqlError::InterruptSignal)
                     }
                     Err(e) => {
                         panic!("Error {e}");
                     }
                 }
             }
-            _ => Err(SparqlError::QueryTypeNotSupported),
-        }
+            _ => return Err(SparqlError::QueryTypeNotSupported),
+        };
+        let debug_output = if debug_no_results && no_results {
+            Some(self.debug(&query, parameters, query_settings, graph)?)
+        } else if debug_no_results {
+            Some(DebugOutputs::new(vec![DebugOutput::HasResults]))
+        } else {
+            None
+        };
+        Ok(QueryResult {
+            kind: res,
+            debug: debug_output,
+        })
     }
 
     pub fn insert(
@@ -259,16 +299,25 @@ impl Triplestore {
         query_settings: &QuerySettings,
         graph: &NamedGraph,
         prefixes: Option<&HashMap<String, NamedNode>>,
+        debug_no_results: bool,
     ) -> Result<Vec<NewTriples>, SparqlError> {
         let query = Query::parse(query, None, prefixes).map_err(SparqlError::ParseError)?;
         if let Query::Construct { .. } = &query {
-            let res =
-                self.query_parsed(&query, parameters, streaming, query_settings, Some(graph))?;
-            let r = match res {
-                QueryResult::Select(_) => {
+            let res = self.query_parsed(
+                &query,
+                parameters,
+                streaming,
+                query_settings,
+                Some(graph),
+                debug_no_results,
+            )?;
+            let r = match res.kind {
+                QueryResultKind::Select(_) => {
                     panic!("Should never happen")
                 }
-                QueryResult::Construct(dfs) => self.insert_construct_result(dfs, transient, graph),
+                QueryResultKind::Construct(dfs) => {
+                    self.insert_construct_result(dfs, transient, graph)
+                }
             };
             r
         } else {
@@ -284,10 +333,18 @@ impl Triplestore {
         query_settings: &QuerySettings,
         graph: Option<&NamedGraph>,
         prefixes: Option<&HashMap<String, NamedNode>>,
-    ) -> Result<(), SparqlError> {
+        debug_no_results: bool,
+    ) -> Result<UpdateResult, SparqlError> {
         let update = Update::parse(update, None, prefixes).map_err(SparqlError::ParseError)?;
-        self.update_parsed(&update, parameters, streaming, query_settings, graph)?;
-        Ok(())
+        let res = self.update_parsed(
+            &update,
+            parameters,
+            streaming,
+            query_settings,
+            graph,
+            debug_no_results,
+        )?;
+        Ok(res)
     }
 
     pub fn update_parsed(
@@ -297,7 +354,9 @@ impl Triplestore {
         streaming: bool,
         query_settings: &QuerySettings,
         graph: Option<&NamedGraph>,
-    ) -> Result<(), SparqlError> {
+        debug_no_results: bool,
+    ) -> Result<UpdateResult, SparqlError> {
+        let mut debug_output = if debug_no_results { Some(vec![]) } else { None };
         for u in &update.operations {
             match u {
                 GraphUpdateOperation::InsertData { .. } => {
@@ -349,11 +408,23 @@ impl Triplestore {
                         pattern: p,
                         base_iri: None,
                     };
-                    let r = self.query_parsed(&q, parameters, streaming, query_settings, graph)?;
+                    let QueryResult { kind, debug } = self.query_parsed(
+                        &q,
+                        parameters,
+                        streaming,
+                        query_settings,
+                        graph,
+                        debug_no_results,
+                    )?;
+                    if debug_no_results {
+                        if let Some(debug) = debug {
+                            debug_output.as_mut().unwrap().extend(debug.debug_outputs);
+                        }
+                    }
                     let EagerSolutionMappings {
                         mappings,
                         rdf_node_types,
-                    } = if let QueryResult::Select(sm) = r {
+                    } = if let QueryResultKind::Select(sm) = kind {
                         sm
                     } else {
                         unreachable!("Should never happen")
@@ -441,7 +512,15 @@ impl Triplestore {
                 GraphUpdateOperation::Drop { .. } => {}
             }
         }
-        Ok(())
+        let debug = if let Some(debug_output) = debug_output {
+            Some(DebugOutputs::new(debug_output))
+        } else if debug_no_results {
+            Some(DebugOutputs::new(vec![DebugOutput::HasResults]))
+        } else {
+            None
+        };
+        let res = UpdateResult { debug };
+        Ok(res)
     }
 }
 

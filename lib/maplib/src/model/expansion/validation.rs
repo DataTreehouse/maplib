@@ -1,4 +1,4 @@
-use crate::mapping::errors::MappingError;
+use crate::model::errors::MappingError;
 use oxiri::Iri;
 use oxrdf::vocab::{rdfs, xsd};
 use oxrdf::NamedNode;

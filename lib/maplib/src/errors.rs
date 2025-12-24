@@ -1,4 +1,4 @@
-use crate::mapping::errors::MappingError;
+use crate::model::errors::MappingError;
 use cimxml::export::CIMXMLError;
 use datalog::inference::DatalogError;
 use oxiri::IriParseError;

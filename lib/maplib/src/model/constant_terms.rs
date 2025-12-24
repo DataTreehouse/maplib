@@ -1,5 +1,5 @@
-use crate::mapping::errors::MappingError;
-use crate::mapping::{MappingColumnType, RDFNodeState};
+use crate::model::errors::MappingError;
+use crate::model::{MappingColumnType, RDFNodeState};
 use templates::ast::{ConstantTerm, ConstantTermOrList, PType};
 
 use oxrdf::{NamedNode, Term};

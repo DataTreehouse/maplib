@@ -2,9 +2,9 @@ pub mod validation;
 
 use super::{MapOptions, Model, OTTRTripleInstance, StaticColumn};
 use crate::errors::MaplibError;
-use crate::mapping::constant_terms::{constant_blank_node_to_series, constant_to_expr};
-use crate::mapping::errors::MappingError;
-use crate::mapping::expansion::validation::validate;
+use crate::model::constant_terms::{constant_blank_node_to_series, constant_to_expr};
+use crate::model::errors::MappingError;
+use crate::model::expansion::validation::validate;
 use oxrdf::vocab::rdf;
 use oxrdf::{NamedNode, Variable};
 use polars::prelude::{

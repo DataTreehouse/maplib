@@ -133,7 +133,7 @@ impl Display for MappingError {
                 write!(f, "Template error: {x}")
             }
             MappingError::TriplestoreError(x) => {
-                write!(f, "Error storing mapping results in triplestore: {x}")
+                write!(f, "Error storing model results in triplestore: {x}")
             }
             MappingError::IriParseError(x) => {
                 write!(f, "IRI parse error: {x}")

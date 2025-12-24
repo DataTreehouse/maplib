@@ -4,9 +4,9 @@ pub mod errors;
 pub mod expansion;
 
 use crate::errors::MaplibError;
-use crate::mapping::errors::MappingError;
+use crate::model::errors::MappingError;
 use cimxml::export::{cim_xml_write, FullModelDetails};
-use datalog::inference::infer;
+use datalog::inference::{infer, InferenceResult};
 use datalog::parser::parse_datalog_ruleset;
 use oxrdf::NamedNode;
 use oxrdfio::RdfFormat;
@@ -22,7 +22,7 @@ use templates::dataset::TemplateDataset;
 use templates::document::document_from_str;
 use templates::MappingColumnType;
 use triplestore::sparql::errors::SparqlError;
-use triplestore::sparql::{QueryResult, QuerySettings};
+use triplestore::sparql::{QueryResult, QuerySettings, UpdateResult};
 use triplestore::{IndexingOptions, NewTriples, Triplestore};
 
 use crate::prefixes::get_default_prefixes;
@@ -230,6 +230,7 @@ impl Model {
         streaming: bool,
         include_transient: bool,
         max_rows: Option<usize>,
+        debug_no_results: bool,
     ) -> Result<QueryResult, MaplibError> {
         let query_settings = QuerySettings {
             include_transient,
@@ -244,6 +245,7 @@ impl Model {
                 &query_settings,
                 graph,
                 Some(&self.prefixes),
+                debug_no_results,
             )
             .map_err(|x| x.into())
     }
@@ -256,7 +258,8 @@ impl Model {
         streaming: bool,
         include_transient: bool,
         max_rows: Option<usize>,
-    ) -> Result<(), MaplibError> {
+        debug_no_results: bool,
+    ) -> Result<UpdateResult, MaplibError> {
         let query_settings = QuerySettings {
             include_transient,
             max_rows,
@@ -270,6 +273,7 @@ impl Model {
                 &query_settings,
                 graph,
                 Some(&self.prefixes),
+                debug_no_results,
             )
             .map_err(|x| x.into())
     }
@@ -433,8 +437,8 @@ impl Model {
         graph: Option<&NamedGraph>,
         include_transient: bool,
         max_rows: Option<usize>,
-        debug: bool,
-    ) -> Result<Option<HashMap<NamedNode, EagerSolutionMappings>>, MaplibError> {
+        debug_no_results: bool,
+    ) -> Result<InferenceResult, MaplibError> {
         if rulesets.is_empty() {
             return Err(MaplibError::MissingDatalogRuleset);
         }
@@ -457,7 +461,7 @@ impl Model {
             max_results,
             include_transient,
             max_rows,
-            debug,
+            debug_no_results,
         );
         Ok(res.map_err(|x| MaplibError::DatalogError(x))?)
     }
