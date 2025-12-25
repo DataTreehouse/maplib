@@ -12,7 +12,7 @@ use std::str::FromStr;
 /// use spargebra::Update;
 ///
 /// let update_str = "CLEAR ALL ;";
-/// let update = Update::parse(update_str, None)?;
+/// let update = Update::parse(update_str, None, None)?;
 /// assert_eq!(update.to_string().trim(), update_str);
 /// assert_eq!(update.to_sse(), "(update (clear all))");
 /// # Ok::<_, spargebra::SparqlSyntaxError>(())

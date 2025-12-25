@@ -12,7 +12,7 @@ use std::str::FromStr;
 /// use spargebra::Query;
 ///
 /// let query_str = "SELECT ?s ?p ?o WHERE { ?s ?p ?o . }";
-/// let query = Query::parse(query_str, None)?;
+/// let query = Query::parse(query_str, None, None)?;
 /// assert_eq!(query.to_string(), query_str);
 /// assert_eq!(
 ///     query.to_sse(),
