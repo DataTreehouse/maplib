@@ -18,11 +18,12 @@ class RDFType:
 
 class SolutionMappings:
     """
-    Detailed information about the solution mappings and the types of the variables.
+    Detailed information about the solution mappings, the types of the variables and debugging for queries.
     """
 
     mappings: DataFrame
     rdf_types: Dict[str, RDFType]
+    debug: Optional[str]
 
 class Variable:
     """
@@ -314,7 +315,7 @@ class ValidationReport:
 
     def graph(self) -> "Mapping":
         """
-        Creates a new mapping object where the base graph is the validation report with results.
+        Creates a new model object where the base graph is the validation report with results.
         Includes the details of the validation report in the new graph if they exist.
 
         :return:
@@ -322,9 +323,9 @@ class ValidationReport:
 
 class Model:
     """
-    A mapping session allowing:
+    A model session allowing:
 
-    * Iterative mapping using OTTR templates
+    * Iterative model using OTTR templates
     * Interactive SPARQL querying and enrichment
     * SHACL validation
 
@@ -449,6 +450,7 @@ class Model:
         return_json: bool = False,
         include_transient: bool = True,
         max_rows: int = None,
+        debug: bool = False,
     ) -> Union[
         DataFrame, SolutionMappings, List[Union[DataFrame, SolutionMappings, str]], None
     ]:
@@ -473,7 +475,8 @@ class Model:
         :param return_json: Return JSON string.
         :param include_transient: Include transient triples when querying.
         :param max_rows: Maximum estimated rows in result, helps avoid out-of-memory errors.
-        :return: DataFrame (Select), list of DataFrames (Construct) containing results, or None for Insert-queries
+        :param debug: Why does my query have no results?
+        :return: DataFrame (Select), list of DataFrames (Construct) containing results, None for Insert-queries, or SolutionMappings when debug or native_dataframe is set.
 
         """
 
@@ -484,6 +487,7 @@ class Model:
             streaming: bool = False,
             include_transient: bool = True,
             max_rows: int = None,
+            debug: bool = False,
     ):
         """
         Insert the results of a Construct query in the graph.
@@ -501,6 +505,7 @@ class Model:
         :param streaming: Use Polars streaming
         :param include_transient: Include transient triples when querying (but see "transient" above).
         :param max_rows: Maximum estimated rows in result, helps avoid out-of-memory errors.
+        :param debug: Why does my query have no results?
         :return: None
         """
 
@@ -516,6 +521,7 @@ class Model:
         target_graph: str = None,
         include_transient: bool = True,
         max_rows: int = None,
+        debug: bool = False,
     ):
         """
         Insert the results of a Construct query in the graph.
@@ -544,6 +550,7 @@ class Model:
         :param streaming: Use Polars streaming
         :param include_transient: Include transient triples when querying (but see "transient" above).
         :param max_rows: Maximum estimated rows in result, helps avoid out-of-memory errors.
+        :param debug: Why does my query have no results?
         :return: None
         """
 
@@ -766,6 +773,7 @@ class Model:
         target_graph: str = None,
         include_transient: bool = True,
         max_rows:int = None,
+        debug:bool = None,
     ):
         """
         Insert the results of a Construct query in a sprouted graph, which is created if no sprout is active.
@@ -799,6 +807,7 @@ class Model:
         :param streaming: Use Polars streaming
         :param include_transient: Include transient triples when querying (see also "transient" above).
         :param max_rows: Maximum estimated rows in result, helps avoid out-of-memory errors.
+        :param debug: Why does my query have no results?
         :return: None
         """
 
@@ -848,6 +857,7 @@ class Model:
         max_results: int = 10_000_000,
         include_transient: bool = True,
         max_rows: int = 100_000_000,
+        debug: bool = False,
     ) -> Optional[Dict[str, DataFrame]]:
         """
         Run the inference rules that are provided
@@ -859,6 +869,7 @@ class Model:
         :param max_results: Maximum number of results.
         :param include_transient: Include transient triples when reasoning.
         :param max_rows: Maximum estimated rows in result, helps avoid out-of-memory errors.
+        :param debug: Debugs rule bodies for executions that give no triples.
         :return: The inferred N-Tuples.
         """
 

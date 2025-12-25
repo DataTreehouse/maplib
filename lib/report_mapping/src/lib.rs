@@ -1,4 +1,4 @@
-use maplib::mapping::Model;
+use maplib::model::Model;
 use shacl::errors::ShaclError;
 use shacl::ValidationReport;
 use triplestore::Triplestore;

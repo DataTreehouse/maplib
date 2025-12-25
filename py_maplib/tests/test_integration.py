@@ -441,6 +441,93 @@ SELECT ?site_label ?wtur_label ?ts ?ts_label WHERE {
 
 
 @pytest.mark.parametrize("streaming", [True, False])
+def test_larger_ordered_query_debug(windpower_model, streaming):
+    query = """PREFIX xsd:<http://www.w3.org/2001/XMLSchema#>
+PREFIX ct:<https://github.com/magbak/chrontext#>
+PREFIX wp:<https://github.com/magbak/chrontext/windpower_example#>
+PREFIX rdfs:<http://www.w3.org/2000/01/rdf-schema#>
+PREFIX rdf:<http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rds:<https://github.com/magbak/chrontext/rds_power#>
+SELECT ?site_label ?wtur_label ?ts ?ts_label WHERE {
+    ?site a rds:Site .
+    ?site rdfs:label ?site_label .
+    ?site rds:hasFunctionalAspect ?wtur_asp .
+    ?wtur_asp rdfs:label ?wtur_label .
+    ?wtur rds:hasFunctionalAspectNode ?wtur_asp .
+    ?wtur rds:hasFunctionalAspect ?gensys_asp .
+    ?wtur a rds:A .
+    ?gensys rds:hasFunctionalAspectNode ?gensys_asp .
+    ?gensys a rds:RA .
+    #This one bad:
+    ?gensys rds:hasFeunctionalAspect ?generator_asp .
+    ?generator rds:hasFunctionalAspectNode ?generator_asp .
+    ?generator a rds:GAA .
+    ?generator ct:hasTimeseries ?ts .
+    ?ts rdfs:label ?ts_label .
+} ORDER BY ?site_label ?wtur_label ?ts ?ts_label"""
+    sm = windpower_model.query(query, streaming=streaming, debug=True)
+    print(sm.debug)
+    assert "hasFeunc" in sm.debug
+
+
+@pytest.mark.parametrize("streaming", [True, False])
+def test_larger_ordered_query_debug_badfilter(windpower_model, streaming):
+    query = """PREFIX xsd:<http://www.w3.org/2001/XMLSchema#>
+PREFIX ct:<https://github.com/magbak/chrontext#>
+PREFIX wp:<https://github.com/magbak/chrontext/windpower_example#>
+PREFIX rdfs:<http://www.w3.org/2000/01/rdf-schema#>
+PREFIX rdf:<http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rds:<https://github.com/magbak/chrontext/rds_power#>
+SELECT ?site_label ?wtur_label ?ts ?ts_label WHERE {
+    ?site a rds:Site .
+    ?site rdfs:label ?site_label .
+    ?site rds:hasFunctionalAspect ?wtur_asp .
+    ?wtur_asp rdfs:label ?wtur_label .
+    ?wtur rds:hasFunctionalAspectNode ?wtur_asp .
+    ?wtur rds:hasFunctionalAspect ?gensys_asp .
+    ?wtur a rds:A .
+    ?gensys rds:hasFunctionalAspectNode ?gensys_asp .
+    ?gensys a rds:RA .
+    ?gensys rds:hasFunctionalAspect ?generator_asp .
+    ?generator rds:hasFunctionalAspectNode ?generator_asp .
+    ?generator a rds:GAA .
+    ?generator ct:hasTimeseries ?ts .
+    ?ts rdfs:label ?ts_label .
+    FILTER(?ts_label = "HALLO")
+} ORDER BY ?site_label ?wtur_label ?ts ?ts_label"""
+    sm = windpower_model.query(query, streaming=streaming, debug=True)
+    print(sm.debug)
+    assert "HALLO" in sm.debug
+
+@pytest.mark.parametrize("streaming", [True, False])
+def test_larger_ordered_query_debug_but_no_error(windpower_model, streaming):
+    query = """PREFIX xsd:<http://www.w3.org/2001/XMLSchema#>
+PREFIX ct:<https://github.com/magbak/chrontext#>
+PREFIX wp:<https://github.com/magbak/chrontext/windpower_example#>
+PREFIX rdfs:<http://www.w3.org/2000/01/rdf-schema#>
+PREFIX rdf:<http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rds:<https://github.com/magbak/chrontext/rds_power#>
+SELECT ?site_label ?wtur_label ?ts ?ts_label WHERE {
+    ?site a rds:Site .
+    ?site rdfs:label ?site_label .
+    ?site rds:hasFunctionalAspect ?wtur_asp .
+    ?wtur_asp rdfs:label ?wtur_label .
+    ?wtur rds:hasFunctionalAspectNode ?wtur_asp .
+    ?wtur rds:hasFunctionalAspect ?gensys_asp .
+    ?wtur a rds:A .
+    ?gensys rds:hasFunctionalAspectNode ?gensys_asp .
+    ?gensys a rds:RA .
+    ?gensys rds:hasFunctionalAspect ?generator_asp .
+    ?generator rds:hasFunctionalAspectNode ?generator_asp .
+    ?generator a rds:GAA .
+    ?generator ct:hasTimeseries ?ts .
+    ?ts rdfs:label ?ts_label .
+} ORDER BY ?site_label ?wtur_label ?ts ?ts_label"""
+    sm = windpower_model.query(query, streaming=streaming, debug=True)
+    assert "has at least one" in sm.debug
+
+
+@pytest.mark.parametrize("streaming", [True, False])
 def test_simple_property_path_query(windpower_model, streaming):
     query = """PREFIX xsd:<http://www.w3.org/2001/XMLSchema#>
 PREFIX ct:<https://github.com/magbak/chrontext#>

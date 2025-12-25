@@ -2455,6 +2455,7 @@ version = "0.18.17"
 dependencies = [
  "chrono",
  "cimxml",
+ "datalog",
  "maplib",
  "mimalloc",
  "oxrdf",

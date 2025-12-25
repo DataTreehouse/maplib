@@ -35,13 +35,13 @@ impl PyValidationReport {
     #[getter]
     pub fn shape_targets(&self, py: Python<'_>) -> PyResult<PyObject> {
         let df = py.allow_threads(|| self.inner.shape_targets_df());
-        df_to_py_df(df, HashMap::new(), None, false, py)
+        df_to_py_df(df, HashMap::new(), None, None, false, py)
     }
 
     #[getter]
     pub fn performance(&self, py: Python<'_>) -> PyResult<PyObject> {
         let df = py.allow_threads(|| self.inner.performance_df());
-        df_to_py_df(df, HashMap::new(), None, false, py)
+        df_to_py_df(df, HashMap::new(), None, None, false, py)
     }
 
     #[pyo3(signature = (native_dataframe=None, include_datatypes=None, streaming=None))]
@@ -80,6 +80,7 @@ impl PyValidationReport {
             Some((mappings, rdf_node_types)) => Ok(Some(df_to_py_df(
                 mappings,
                 rdf_node_types,
+                None,
                 None,
                 include_datatypes.unwrap_or(false),
                 py,
@@ -123,6 +124,7 @@ impl PyValidationReport {
             Some((mappings, rdf_node_types)) => Ok(Some(df_to_py_df(
                 mappings,
                 rdf_node_types,
+                None,
                 None,
                 include_datatypes,
                 py,

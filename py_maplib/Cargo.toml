@@ -15,6 +15,7 @@ pydf_io = { path = "../lib/pydf_io" }
 report_mapping = {path = "../lib/report_mapping"}
 templates = {path= "../lib/templates"}
 cimxml = {path = "../lib/cimxml", features = [ "pyo3" ]}
+datalog = {path = "../lib/datalog"}
 
 pyo3.workspace = true
 oxrdf.workspace = true

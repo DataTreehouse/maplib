@@ -335,7 +335,7 @@ def test_two_list_arguments():
 
 
 def test_default():
-    """Test default mapping without explicit template"""
+    """Test default model without explicit template"""
     m = Model()
 
     df = pl.DataFrame(
@@ -369,7 +369,7 @@ def test_default():
 
 
 def test_default_list():
-    """Test default mapping with lists"""
+    """Test default model with lists"""
     m = Model()
 
     df = pl.DataFrame(
