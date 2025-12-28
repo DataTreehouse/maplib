@@ -12,6 +12,7 @@ use pyo3::prelude::*;
 use pyo3::types::PyList;
 use pyo3::IntoPyObjectExt;
 use representation::cats::LockedCats;
+use representation::debug::DebugOutputs;
 use representation::formatting::{format_columns, format_native_columns};
 use representation::multitype::compress_actual_multitypes;
 use representation::python::PySolutionMappings;
@@ -84,6 +85,7 @@ pub fn to_py_df(
 pub fn df_to_py_df(
     mut df: DataFrame,
     rdf_node_states: HashMap<String, RDFNodeState>,
+    debug_outputs: Option<DebugOutputs>,
     pushdown_paths: Option<Vec<Context>>,
     include_datatypes: bool,
     py: Python,
@@ -102,11 +104,12 @@ pub fn df_to_py_df(
     let pyarrow = PyModule::import(py, "pyarrow")?;
     let polars = PyModule::import(py, "polars")?;
     let py_df = to_py_df(&chunk, names.as_slice(), py, &pyarrow, &polars)?;
-    if include_datatypes {
+    if include_datatypes || debug_outputs.is_some() {
         Py::new(
             py,
             PySolutionMappings {
                 mappings: py_df.into_any(),
+                debug: debug_outputs,
                 rdf_node_states,
                 pushdown_paths,
             },

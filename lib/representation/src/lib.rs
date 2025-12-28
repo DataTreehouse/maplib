@@ -11,6 +11,7 @@ pub mod solution_mapping;
 mod base_rdf_type;
 pub mod cats;
 pub mod dataset;
+pub mod debug;
 pub mod errors;
 pub mod formatting;
 pub mod literals;

@@ -1,6 +1,7 @@
 pub mod errors;
 pub mod storage;
 
+use std::collections::HashMap;
 use crate::storage::StoredResults;
 use errors::ShaclError;
 use oxrdf::{NamedNode, NamedOrBlankNode};
@@ -66,6 +67,7 @@ pub fn validate(
     _only_shapes: Option<Vec<NamedNode>>,
     _deactivate_shapes: Vec<NamedNode>,
     _dry_run: bool,
+    _prefixes: Option<HashMap<String, NamedNode>>,
 ) -> Result<ValidationReport, ShaclError> {
     unimplemented!("Contact Data Treehouse to try")
 }

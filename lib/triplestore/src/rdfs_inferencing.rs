@@ -20,8 +20,17 @@ impl Triplestore {
             max_rows: None,
             strict_project: false,
         };
-        self.insert(SUBCLASS_INFERENCING, &None, true, false, &qs, graph)
-            .map_err(|x| TriplestoreError::RDFSClassInheritanceError(x.to_string()))?;
+        self.insert(
+            SUBCLASS_INFERENCING,
+            &None,
+            true,
+            false,
+            &qs,
+            graph,
+            None,
+            false,
+        )
+        .map_err(|x| TriplestoreError::RDFSClassInheritanceError(x.to_string()))?;
         Ok(())
     }
 

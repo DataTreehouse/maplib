@@ -1,8 +1,5 @@
 use crate::ast::DatalogRuleset;
-use oxrdf::NamedNode;
 use representation::dataset::NamedGraph;
-use representation::solution_mapping::EagerSolutionMappings;
-use std::collections::HashMap;
 use thiserror::*;
 use triplestore::sparql::errors::SparqlError;
 use triplestore::Triplestore;
@@ -13,6 +10,10 @@ pub enum DatalogError {
     SparqlError(SparqlError),
 }
 
+#[derive(Clone)]
+pub struct InferenceResult {
+}
+
 pub fn infer(
     _triplestore: &mut Triplestore,
     _graph: Option<&NamedGraph>,
@@ -21,6 +22,7 @@ pub fn infer(
     _max_results: Option<usize>,
     _include_transient: bool,
     _max_rows: Option<usize>,
-) -> Result<Option<HashMap<NamedNode, EagerSolutionMappings>>, DatalogError> {
+    _debug_no_results: bool,
+) -> Result<InferenceResult, DatalogError> {
     unimplemented!("Contact data treehouse to try")
 }

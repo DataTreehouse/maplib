@@ -28,7 +28,7 @@ Usage example:
 use spargebra::Query;
 
 let query_str = "SELECT ?s ?p ?o WHERE { ?s ?p ?o . }";
-let query = Query::parse(query_str, None).unwrap();
+let query = Query::parse(query_str, None, None).unwrap();
 assert_eq!(query.to_string(), query_str);
 ```
 

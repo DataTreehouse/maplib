@@ -2,6 +2,7 @@ use crate::algebra::*;
 use crate::parser::{parse_query, SparqlSyntaxError};
 use crate::term::*;
 use oxiri::Iri;
+use std::collections::HashMap;
 use std::fmt;
 use std::str::FromStr;
 
@@ -11,7 +12,7 @@ use std::str::FromStr;
 /// use spargebra::Query;
 ///
 /// let query_str = "SELECT ?s ?p ?o WHERE { ?s ?p ?o . }";
-/// let query = Query::parse(query_str, None)?;
+/// let query = Query::parse(query_str, None, None)?;
 /// assert_eq!(query.to_string(), query_str);
 /// assert_eq!(
 ///     query.to_sse(),
@@ -63,8 +64,12 @@ pub enum Query {
 
 impl Query {
     /// Parses a SPARQL query with an optional base IRI to resolve relative IRIs in the query.
-    pub fn parse(query: &str, base_iri: Option<&str>) -> Result<Self, SparqlSyntaxError> {
-        parse_query(query, base_iri)
+    pub fn parse(
+        query: &str,
+        base_iri: Option<&str>,
+        prefixes: Option<&HashMap<String, NamedNode>>,
+    ) -> Result<Self, SparqlSyntaxError> {
+        parse_query(query, base_iri, prefixes)
     }
 
     /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
@@ -279,7 +284,7 @@ impl FromStr for Query {
     type Err = SparqlSyntaxError;
 
     fn from_str(query: &str) -> Result<Self, Self::Err> {
-        Self::parse(query, None)
+        Self::parse(query, None, None)
     }
 }
 

@@ -7,10 +7,6 @@ use crate::ast::{
     Annotation, Argument, ConstantTerm, ConstantTermOrList, Instance, ListExpanderType, PType,
     Parameter, Signature, Statement, StottrDocument, StottrTerm, Template,
 };
-use crate::constants::{
-    OTTR_PREFIX, OTTR_PREFIX_IRI, OWL_PREFIX, OWL_PREFIX_IRI, RDFS_PREFIX, RDFS_PREFIX_IRI,
-    RDF_PREFIX, RDF_PREFIX_IRI, SHACL_PREFIX, SHACL_PREFIX_IRI, XSD_PREFIX, XSD_PREFIX_IRI,
-};
 use crate::dataset::errors::TemplateError;
 use oxilangtag::LanguageTag;
 use oxiri::{Iri, IriParseError};
@@ -21,8 +17,11 @@ use peg::str::LineCol;
 use std::char;
 use std::collections::{HashMap, HashSet};
 
-pub fn parse_stottr(document: &str) -> Result<StottrDocument, TemplateError> {
-    let mut state = ParserState::new();
+pub fn parse_stottr(
+    document: &str,
+    prefixes: Option<&HashMap<String, NamedNode>>,
+) -> Result<StottrDocument, TemplateError> {
+    let mut state = ParserState::new(prefixes);
     let doc = parser::StottrDocumentInit(document, &mut state)
         .map_err(|e| TemplateError::ParsingError(ParseErrorKind::Syntax(e)))?;
     Ok(doc)
@@ -41,21 +40,17 @@ pub struct ParserState {
 }
 
 impl ParserState {
-    pub(crate) fn new() -> Self {
-        let predefined = [
-            (RDFS_PREFIX, RDFS_PREFIX_IRI),
-            (RDF_PREFIX, RDF_PREFIX_IRI),
-            (XSD_PREFIX, XSD_PREFIX_IRI),
-            (OTTR_PREFIX, OTTR_PREFIX_IRI),
-            (OWL_PREFIX, OWL_PREFIX_IRI),
-            (SHACL_PREFIX, SHACL_PREFIX_IRI),
-        ];
+    pub(crate) fn new(prefixes: Option<&HashMap<String, NamedNode>>) -> Self {
+        let namespaces = if let Some(prefixes) = prefixes {
+            prefixes
+                .iter()
+                .map(|(x, y)| (x.clone(), y.as_str().to_string()))
+                .collect()
+        } else {
+            HashMap::new()
+        };
         Self {
-            namespaces: HashMap::from_iter(
-                predefined
-                    .into_iter()
-                    .map(|(x, y)| (x.to_string(), y.to_string())),
-            ),
+            namespaces,
             used_bnodes: HashSet::default(),
             currently_used_bnodes: HashSet::default(),
         }

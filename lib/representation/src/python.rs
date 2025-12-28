@@ -1,3 +1,4 @@
+use crate::debug::DebugOutputs;
 use crate::query_context::Context;
 use crate::rdf_to_polars::rdf_literal_to_polars_literal_value;
 use crate::{BaseRDFNodeType, RDFNodeState};
@@ -495,6 +496,7 @@ pub struct PySolutionMappings {
     pub mappings: Py<PyAny>,
     pub rdf_node_states: HashMap<String, RDFNodeState>,
     pub pushdown_paths: Option<Vec<Context>>,
+    pub debug: Option<DebugOutputs>,
 }
 
 #[pymethods]
@@ -531,6 +533,15 @@ impl PySolutionMappings {
                 all_paths.push(paths);
             }
             Some(all_paths)
+        } else {
+            None
+        }
+    }
+
+    #[getter]
+    fn debug(&self) -> Option<String> {
+        if let Some(debug) = &self.debug {
+            Some(debug.to_string())
         } else {
             None
         }

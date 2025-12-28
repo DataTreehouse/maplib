@@ -18,11 +18,12 @@ class RDFType:
 
 class SolutionMappings:
     """
-    Detailed information about the solution mappings and the types of the variables.
+    Detailed information about the solution mappings, the types of the variables and debugging for queries.
     """
 
     mappings: DataFrame
     rdf_types: Dict[str, RDFType]
+    debug: Optional[str]
 
 class Variable:
     """
@@ -314,7 +315,7 @@ class ValidationReport:
 
     def graph(self) -> "Mapping":
         """
-        Creates a new mapping object where the base graph is the validation report with results.
+        Creates a new model object where the base graph is the validation report with results.
         Includes the details of the validation report in the new graph if they exist.
 
         :return:
@@ -322,9 +323,9 @@ class ValidationReport:
 
 class Model:
     """
-    A mapping session allowing:
+    A model session allowing:
 
-    * Iterative mapping using OTTR templates
+    * Iterative model using OTTR templates
     * Interactive SPARQL querying and enrichment
     * SHACL validation
 
@@ -347,10 +348,22 @@ class Model:
         self,
         indexing_options: "IndexingOptions" = None,
     ) -> "Model": ...
+
     def add_template(self, template: Union["Template", str]):
         """
         Add a template to the model. Overwrites any existing template with the same IRI.
         :param template: The template to add, as a stOTTR string or as a programmatically constructed Template.
+        :return:
+        """
+
+    def add_prefixes(self, template: Dict[str, str]):
+        """
+        Add prefixes that will be used in parsing of SPARQL, Datalog and OTTR.
+
+        Usage:
+        >>> m.add_prefixes({"ex" : "http:://example.net/"})
+
+        :param prefixes: Known prefixes
         :return:
         """
 
@@ -437,6 +450,7 @@ class Model:
         return_json: bool = False,
         include_transient: bool = True,
         max_rows: int = None,
+        debug: bool = False,
     ) -> Union[
         DataFrame, SolutionMappings, List[Union[DataFrame, SolutionMappings, str]], None
     ]:
@@ -461,7 +475,8 @@ class Model:
         :param return_json: Return JSON string.
         :param include_transient: Include transient triples when querying.
         :param max_rows: Maximum estimated rows in result, helps avoid out-of-memory errors.
-        :return: DataFrame (Select), list of DataFrames (Construct) containing results, or None for Insert-queries
+        :param debug: Why does my query have no results?
+        :return: DataFrame (Select), list of DataFrames (Construct) containing results, None for Insert-queries, or SolutionMappings when debug or native_dataframe is set.
 
         """
 
@@ -472,6 +487,7 @@ class Model:
             streaming: bool = False,
             include_transient: bool = True,
             max_rows: int = None,
+            debug: bool = False,
     ):
         """
         Insert the results of a Construct query in the graph.
@@ -489,6 +505,7 @@ class Model:
         :param streaming: Use Polars streaming
         :param include_transient: Include transient triples when querying (but see "transient" above).
         :param max_rows: Maximum estimated rows in result, helps avoid out-of-memory errors.
+        :param debug: Why does my query have no results?
         :return: None
         """
 
@@ -504,6 +521,7 @@ class Model:
         target_graph: str = None,
         include_transient: bool = True,
         max_rows: int = None,
+        debug: bool = False,
     ):
         """
         Insert the results of a Construct query in the graph.
@@ -532,6 +550,7 @@ class Model:
         :param streaming: Use Polars streaming
         :param include_transient: Include transient triples when querying (but see "transient" above).
         :param max_rows: Maximum estimated rows in result, helps avoid out-of-memory errors.
+        :param debug: Why does my query have no results?
         :return: None
         """
 
@@ -597,6 +616,20 @@ class Model:
         :param checked: Check IRIs etc.
         :param graph: The IRI of the graph to read the triples into, if None, it will be the default graph.
         :param replace_graph: Replace the graph with these triples? Will replace the default graph if no graph is specified.
+        """
+
+    def read_template(
+            self,
+            file_path: Union[str, Path],
+    ) -> None:
+        """
+        Reads template(s) from a file path.
+
+        Usage:
+
+        >>> m.read("templates.ttl")
+
+        :param file_path: The path of the file containing templates in stOTTR format
         """
 
     def reads(
@@ -740,6 +773,7 @@ class Model:
         target_graph: str = None,
         include_transient: bool = True,
         max_rows:int = None,
+        debug:bool = None,
     ):
         """
         Insert the results of a Construct query in a sprouted graph, which is created if no sprout is active.
@@ -773,6 +807,7 @@ class Model:
         :param streaming: Use Polars streaming
         :param include_transient: Include transient triples when querying (see also "transient" above).
         :param max_rows: Maximum estimated rows in result, helps avoid out-of-memory errors.
+        :param debug: Why does my query have no results?
         :return: None
         """
 
@@ -822,6 +857,7 @@ class Model:
         max_results: int = 10_000_000,
         include_transient: bool = True,
         max_rows: int = 100_000_000,
+        debug: bool = False,
     ) -> Optional[Dict[str, DataFrame]]:
         """
         Run the inference rules that are provided
@@ -833,6 +869,7 @@ class Model:
         :param max_results: Maximum number of results.
         :param include_transient: Include transient triples when reasoning.
         :param max_rows: Maximum estimated rows in result, helps avoid out-of-memory errors.
+        :param debug: Debugs rule bodies for executions that give no triples.
         :return: The inferred N-Tuples.
         """
 
@@ -861,3 +898,13 @@ def explore(
     :param popup: Pop up the browser window.
     :param fts: Enable full text search indexing
     """
+
+def generate_templates(m: Model, graph: Optional[str]) -> Dict[str, Template]:
+    """Generate templates for instantiating the classes in an ontology
+
+    :param m: The model where the ontology is stored. We mainly rely on rdfs:subClassOf, rdfs:range and rdfs:domain.
+    :param graph: The named graph where the ontology is stored.
+
+    :return A dictionary of templates for instantiating the classes in the ontology, where the keys are the class URIs.
+
+    Usage example - note that it is important to add the templates to the Model you want to populate."""

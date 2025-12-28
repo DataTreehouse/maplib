@@ -1,0 +1,10 @@
+@prefix ex: <http://example.net/ns#> .
+@prefix ottr: <http://ns.ottr.xyz/0.4/> .
+
+ex:ExampleTemplate1 [ottr:IRI ?myVar1] :: {
+    ottr:Triple(ex:anObject, ex:relatesTo1, ?myVar1)
+} .
+
+ex:ExampleTemplate2 [ottr:IRI ?myVar1] :: {
+    ottr:Triple(ex:anObject, ex:relatesTo2, ?myVar1)
+} .

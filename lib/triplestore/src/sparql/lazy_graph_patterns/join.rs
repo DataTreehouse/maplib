@@ -12,6 +12,7 @@ use spargebra::algebra::GraphPattern;
 use spargebra::term::{NamedNodePattern, TermPattern};
 use std::collections::{HashMap, HashSet};
 
+#[derive(Debug)]
 struct BadGraphPatternProperties {
     n_cross_joins: usize,
     n_variable_predicates: usize,
@@ -93,7 +94,6 @@ impl Triplestore {
         };
         let (left_props, _) = self.bad_properties(left, use_vars.as_ref());
         let (right_props, _) = self.bad_properties(right, use_vars.as_ref());
-
         let output_solution_mappings = if left_props < right_props {
             let mut output_solution_mappings = self.lazy_graph_pattern(
                 left,
@@ -144,7 +144,7 @@ impl Triplestore {
         gp: &GraphPattern,
         incoming_cols: Option<&HashSet<String>>,
     ) -> (BadGraphPatternProperties, HashSet<String>) {
-        match gp {
+        let res = match gp {
             GraphPattern::Bgp { patterns } => {
                 let mut n_variable_predicates = 0;
                 let mut variables: Vec<HashSet<_>> = vec![];
@@ -336,6 +336,7 @@ impl Triplestore {
             GraphPattern::DT { .. } => {
                 unreachable!("Should never happen")
             }
-        }
+        };
+        res
     }
 }

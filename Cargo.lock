@@ -2451,10 +2451,11 @@ dependencies = [
 
 [[package]]
 name = "py_maplib"
-version = "0.18.14"
+version = "0.18.18"
 dependencies = [
  "chrono",
  "cimxml",
+ "datalog",
  "maplib",
  "mimalloc",
  "oxrdf",

@@ -11,7 +11,7 @@ use tracing_subscriber::{filter, prelude::*};
 
 use crate::shacl::PyValidationReport;
 use maplib::errors::MaplibError;
-use maplib::mapping::{MapOptions, Model as InnerModel};
+use maplib::model::{MapOptions, Model as InnerModel};
 
 use chrono::Utc;
 use cimxml::export::FullModelDetails;
@@ -21,7 +21,9 @@ use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard};
-use triplestore::sparql::{QueryResult as SparqlQueryResult, QueryResult, QuerySettings};
+use triplestore::sparql::{
+    QueryResult, QueryResultKind as SparqlQueryResult, QueryResultKind, QuerySettings, UpdateResult,
+};
 
 //The below snippet controlling alloc-library is from https://github.com/pola-rs/polars/blob/main/py-polars/src/lib.rs
 //And has a MIT license:
@@ -58,10 +60,13 @@ use representation::python::{
 };
 use representation::solution_mapping::EagerSolutionMappings;
 
+use datalog::inference::InferenceResult;
+use datalog::python::PyInferenceResult;
 #[cfg(not(target_os = "linux"))]
 use mimalloc::MiMalloc;
 use representation::cats::{new_solution_mapping_cats, set_global_cats_as_local, LockedCats};
 use representation::dataset::NamedGraph;
+use representation::debug::DebugOutputs;
 use representation::formatting::format_native_columns;
 use representation::polars_to_rdf::XSD_DATETIME_WITH_TZ_FORMAT;
 use representation::rdf_to_polars::rdf_named_node_to_polars_literal_value;
@@ -80,6 +85,7 @@ static GLOBAL: MiMalloc = MiMalloc;
 
 const DEFAULT_STREAMING: bool = false;
 const DEFAULT_INCLUDE_TRANSIENT: bool = true;
+const DEFAULT_DEBUG_NO_RESULTS: bool = false;
 
 #[pyclass(name = "Model", frozen)]
 pub struct PyModel {
@@ -150,7 +156,9 @@ impl PyModel {
             None
         };
         Ok(PyModel {
-            inner: Mutex::new(InnerModel::new(None, None, indexing).map_err(PyMaplibError::from)?),
+            inner: Mutex::new(
+                InnerModel::new(None, None, indexing, None).map_err(PyMaplibError::from)?,
+            ),
             sprout: Mutex::new(None),
         })
     }
@@ -161,6 +169,40 @@ impl PyModel {
         py.allow_threads(move || {
             let mut inner = self.inner.lock().unwrap();
             add_template_mutex(&mut inner, template)
+        })
+    }
+
+    #[instrument(skip_all)]
+    fn add_prefixes(&self, py: Python<'_>, prefixes: Bound<'_, PyAny>) -> PyResult<()> {
+        let mut use_prefixes = HashMap::new();
+        if let Ok(prefixes) = prefixes.extract::<HashMap<String, String>>() {
+            for (k, v) in prefixes {
+                let nn = NamedNode::new(v).map_err(|x| {
+                    PyMaplibError::FunctionArgumentError(format!(
+                        "Error parsing prefix {}:{}",
+                        k,
+                        x.to_string()
+                    ))
+                })?;
+                use_prefixes.insert(k, nn);
+            }
+        } else if let Ok(prefixes) = prefixes.extract::<HashMap<String, PyIRI>>() {
+            for (k, v) in prefixes {
+                use_prefixes.insert(k, v.into_inner());
+            }
+        } else if let Ok(prefixes) = prefixes.extract::<HashMap<String, PyPrefix>>() {
+            for (k, v) in prefixes {
+                use_prefixes.insert(k, v.iri.clone());
+            }
+        } else {
+            return Err(PyMaplibError::FunctionArgumentError(format!(
+                "Prefixes should be Dict[str,str]"
+            ))
+            .into());
+        };
+        py.allow_threads(move || {
+            let mut inner = self.inner.lock().unwrap();
+            add_prefixes_mutex(&mut inner, use_prefixes)
         })
     }
 
@@ -250,7 +292,7 @@ impl PyModel {
 
     #[allow(clippy::too_many_arguments)]
     #[pyo3(signature = (query, parameters=None, include_datatypes=None, native_dataframe=None,
-    graph=None, streaming=None, return_json=None, include_transient=None, max_rows=None))]
+    graph=None, streaming=None, return_json=None, include_transient=None, max_rows=None, debug=None))]
     #[instrument(skip_all)]
     fn query(
         &self,
@@ -264,6 +306,7 @@ impl PyModel {
         return_json: Option<bool>,
         include_transient: Option<bool>,
         max_rows: Option<usize>,
+        debug: Option<bool>,
     ) -> PyResult<PyObject> {
         let mapped_parameters = map_parameters(parameters)?;
         let graph = parse_optional_named_node(graph)?;
@@ -272,7 +315,7 @@ impl PyModel {
         } else {
             None
         };
-        let (res, cats) = py.allow_threads(|| -> PyResult<(QueryResult, LockedCats)> {
+        let (res, cats) = py.allow_threads(|| -> PyResult<(_, LockedCats)> {
             let mut inner = self.inner.lock().unwrap();
             let cats = inner.triplestore.global_cats.clone();
             let res = query_mutex(
@@ -283,6 +326,7 @@ impl PyModel {
                 streaming,
                 include_transient,
                 max_rows,
+                debug,
             )?;
             Ok((res, cats))
         })?;
@@ -297,8 +341,15 @@ impl PyModel {
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[pyo3(signature = (update, parameters=None, graph=None, streaming=None,
-        include_transient=None, max_rows=None))]
+    #[pyo3(signature = (
+            update,
+            parameters=None,
+            graph=None,
+            streaming=None,
+            include_transient=None,
+            max_rows=None,
+            debug=None,
+    ))]
     #[instrument(skip_all)]
     fn update(
         &self,
@@ -309,9 +360,10 @@ impl PyModel {
         streaming: Option<bool>,
         include_transient: Option<bool>,
         max_rows: Option<usize>,
+        debug: Option<bool>,
     ) -> PyResult<()> {
         let mapped_parameters = map_parameters(parameters)?;
-        py.allow_threads(|| {
+        let res = py.allow_threads(|| {
             let mut inner = self.inner.lock().unwrap();
             update_mutex(
                 &mut inner,
@@ -321,8 +373,11 @@ impl PyModel {
                 streaming,
                 include_transient,
                 max_rows,
+                debug,
             )
-        })
+        })?;
+        print_debug_if_exists(res.debug.as_ref());
+        Ok(())
     }
 
     #[pyo3(signature = (options=None, all=None, graph=None))]
@@ -388,9 +443,19 @@ impl PyModel {
         })
     }
 
-    #[pyo3(signature = (query, parameters=None, include_datatypes=None, native_dataframe=None,
-                                   transient=None, streaming=None, source_graph=None, target_graph=None,
-                                   include_transient=None, max_rows=None))]
+    #[pyo3(signature = (
+            query,
+            parameters=None,
+            include_datatypes=None,
+            native_dataframe=None,
+            transient=None,
+            streaming=None,
+            source_graph=None,
+            target_graph=None,
+            include_transient=None,
+            max_rows=None,
+            debug=None,
+    ))]
     #[instrument(skip_all)]
     fn insert(
         &self,
@@ -405,6 +470,7 @@ impl PyModel {
         target_graph: Option<String>,
         include_transient: Option<bool>,
         max_rows: Option<usize>,
+        debug: Option<bool>,
     ) -> PyResult<HashMap<String, PyObject>> {
         let mapped_parameters = map_parameters(parameters)?;
         let source_graph = parse_optional_named_node(source_graph)?;
@@ -429,6 +495,7 @@ impl PyModel {
                     target_graph,
                     include_transient,
                     max_rows,
+                    debug,
                 )?;
 
                 Ok((new_triples, cats))
@@ -442,9 +509,19 @@ impl PyModel {
         )
     }
 
-    #[pyo3(signature = (query, parameters=None, include_datatypes=None, native_dataframe=None,
-                            transient=None, streaming=None, source_graph=None, target_graph=None,
-                            include_transient=None, max_rows=None))]
+    #[pyo3(signature = (
+            query,
+            parameters=None,
+            include_datatypes=None,
+            native_dataframe=None,
+            transient=None,
+            streaming=None,
+            source_graph=None,
+            target_graph=None,
+            include_transient=None,
+            max_rows=None,
+            debug=None,
+    ))]
     #[instrument(skip_all)]
     fn insert_sprout(
         &self,
@@ -459,6 +536,7 @@ impl PyModel {
         target_graph: Option<String>,
         include_transient: Option<bool>,
         max_rows: Option<usize>,
+        debug: Option<bool>,
     ) -> PyResult<HashMap<String, PyObject>> {
         let mapped_parameters = map_parameters(parameters)?;
         let source_graph = parse_optional_named_node(source_graph)?;
@@ -482,6 +560,7 @@ impl PyModel {
                 target_graph,
                 include_transient,
                 max_rows,
+                debug,
             )?;
 
             Ok((new_triples, cats))
@@ -525,6 +604,17 @@ impl PyModel {
                 graph,
                 replace_graph,
             )
+        })
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    #[pyo3(signature = (file_path))]
+    #[instrument(skip_all)]
+    fn read_template(&self, py: Python<'_>, file_path: &Bound<'_, PyAny>) -> PyResult<()> {
+        let file_path = file_path.str()?.to_string();
+        py.allow_threads(move || {
+            let mut inner = self.inner.lock().unwrap();
+            read_template_mutex(&mut inner, file_path)
         })
     }
 
@@ -675,13 +765,22 @@ impl PyModel {
             rdf_node_types,
         } in eager_sms
         {
-            let py_sm = df_to_py_df(mappings, rdf_node_types, None, true, py)?;
+            let py_sm = df_to_py_df(mappings, rdf_node_types, None, None, true, py)?;
             out.push(py_sm);
         }
         Ok(out)
     }
 
-    #[pyo3(signature = (rulesets, graph=None, include_datatypes=None, native_dataframe=None, max_iterations=100_000, max_results=10_000_000, include_transient=None, max_rows=100_000_000))]
+    #[pyo3(signature = (
+        rulesets,
+        graph=None,
+        include_datatypes=None,
+        native_dataframe=None,
+        max_iterations=100_000,
+        max_results=10_000_000,
+        include_transient=None,
+        max_rows=100_000_000,
+        debug=None))]
     #[instrument(skip_all)]
     fn infer(
         &self,
@@ -694,7 +793,8 @@ impl PyModel {
         max_results: Option<usize>,
         include_transient: Option<bool>,
         max_rows: Option<usize>,
-    ) -> PyResult<Option<HashMap<String, PyObject>>> {
+        debug: Option<bool>,
+    ) -> PyResult<PyInferenceResult> {
         let rulesets = if let Ok(s) = rulesets.extract::<String>(py) {
             vec![s]
         } else if let Ok(ss) = rulesets.extract::<Vec<String>>(py) {
@@ -711,48 +811,25 @@ impl PyModel {
         } else {
             None
         };
-        let (res, cats) = py.allow_threads(
-            || -> PyResult<(Option<HashMap<NamedNode, EagerSolutionMappings>>, LockedCats)> {
-                let mut inner = self.inner.lock().unwrap();
+        let (res, ..) = py.allow_threads(|| -> PyResult<(_, LockedCats)> {
+            let mut inner = self.inner.lock().unwrap();
 
-                let cats = inner.triplestore.global_cats.clone();
+            let cats = inner.triplestore.global_cats.clone();
 
-                let res = infer_mutex(&mut inner,
-                                      rulesets,
-                                      max_iterations,
-                                      max_results,
-                                      named_graph.as_ref(),
-                                      include_transient.unwrap_or(DEFAULT_INCLUDE_TRANSIENT),
-                                      max_rows)?;
+            let res = infer_mutex(
+                &mut inner,
+                rulesets,
+                max_iterations,
+                max_results,
+                named_graph.as_ref(),
+                include_transient.unwrap_or(DEFAULT_INCLUDE_TRANSIENT),
+                max_rows,
+                debug,
+            )?;
 
-                Ok((res, cats))
-            },
-        )?;
-        if let Some(res) = res {
-            let mut py_res = HashMap::new();
-            for (
-                nn,
-                EagerSolutionMappings {
-                    mut mappings,
-                    mut rdf_node_types,
-                },
-            ) in res
-            {
-                let include_datatypes = include_datatypes.unwrap_or(false);
-                let native_dataframe = native_dataframe.unwrap_or(false);
-                (mappings, rdf_node_types) = fix_cats_and_multicolumns(
-                    mappings,
-                    rdf_node_types,
-                    native_dataframe,
-                    cats.clone(),
-                );
-                let pydf = df_to_py_df(mappings, rdf_node_types, None, include_datatypes, py)?;
-                py_res.insert(nn.as_str().to_string(), pydf);
-            }
-            Ok(Some(py_res))
-        } else {
-            Ok(None)
-        }
+            Ok((res, cats))
+        })?;
+        Ok(PyInferenceResult { inner: res })
     }
 }
 
@@ -805,6 +882,14 @@ fn add_template_mutex(inner: &mut MutexGuard<InnerModel>, template: TemplateType
     Ok(())
 }
 
+fn add_prefixes_mutex(
+    inner: &mut MutexGuard<InnerModel>,
+    prefixes: HashMap<String, NamedNode>,
+) -> PyResult<()> {
+    inner.prefixes.extend(prefixes.into_iter());
+    Ok(())
+}
+
 fn create_sprout_mutex(
     inner: &mut MutexGuard<InnerModel>,
     sprout: &mut MutexGuard<Option<InnerModel>>,
@@ -813,6 +898,7 @@ fn create_sprout_mutex(
         Some(&inner.template_dataset),
         None,
         Some(inner.indexing.clone()),
+        None,
     )
     .map_err(PyMaplibError::from)?;
     new_sprout.blank_node_counter = inner.blank_node_counter;
@@ -945,6 +1031,7 @@ fn query_mutex(
     streaming: Option<bool>,
     include_transient: Option<bool>,
     max_rows: Option<usize>,
+    debug: Option<bool>,
 ) -> PyResult<QueryResult> {
     let res = inner
         .query(
@@ -954,6 +1041,7 @@ fn query_mutex(
             streaming.unwrap_or(DEFAULT_STREAMING),
             include_transient.unwrap_or(DEFAULT_INCLUDE_TRANSIENT),
             max_rows,
+            debug.unwrap_or(DEFAULT_DEBUG_NO_RESULTS),
         )
         .map_err(PyMaplibError::from)?;
     Ok(res)
@@ -967,14 +1055,15 @@ fn update_mutex(
     streaming: Option<bool>,
     include_transient: Option<bool>,
     max_rows: Option<usize>,
-) -> PyResult<()> {
+    debug: Option<bool>,
+) -> PyResult<UpdateResult> {
     let graph = parse_optional_named_node(graph)?;
     let named_graph = if let Some(graph) = graph {
         Some(NamedGraph::NamedGraph(graph))
     } else {
         None
     };
-    inner
+    let res = inner
         .update(
             &update,
             &mapped_parameters,
@@ -982,9 +1071,10 @@ fn update_mutex(
             streaming.unwrap_or(DEFAULT_STREAMING),
             include_transient.unwrap_or(DEFAULT_INCLUDE_TRANSIENT),
             max_rows,
+            debug.unwrap_or(DEFAULT_DEBUG_NO_RESULTS),
         )
         .map_err(PyMaplibError::from)?;
-    Ok(())
+    Ok(res)
 }
 
 fn create_index_mutex(
@@ -1088,9 +1178,11 @@ fn validate_mutex(
                 false,
                 &qs,
                 Some(&shape_graph),
+                None,
+                false,
             )
             .map_err(|x| PyMaplibError::MaplibError(MaplibError::SparqlError(x)))?;
-        if let QueryResult::Construct(sms) = res {
+        if let QueryResultKind::Construct(sms) = res.kind {
             let mut new_sms = Vec::with_capacity(sms.len());
             for (
                 EagerSolutionMappings {
@@ -1132,6 +1224,7 @@ fn insert_mutex(
     target_graph: NamedGraph,
     include_transient: Option<bool>,
     max_rows: Option<usize>,
+    debug: Option<bool>,
 ) -> PyResult<Vec<NewTriples>> {
     let res = inner
         .query(
@@ -1141,9 +1234,11 @@ fn insert_mutex(
             streaming.unwrap_or(DEFAULT_STREAMING),
             include_transient.unwrap_or(DEFAULT_INCLUDE_TRANSIENT),
             max_rows,
+            debug.unwrap_or(DEFAULT_DEBUG_NO_RESULTS),
         )
         .map_err(PyMaplibError::from)?;
-    let new_triples = if let QueryResult::Construct(dfs_and_dts) = res {
+    print_debug_if_exists(res.debug.as_ref());
+    let new_triples = if let QueryResultKind::Construct(dfs_and_dts) = res.kind {
         inner
             .insert_construct_result(dfs_and_dts, transient.unwrap_or(false), &target_graph)
             .map_err(|x| PyMaplibError::from(MaplibError::from(x)))?
@@ -1168,6 +1263,7 @@ fn insert_sprout_mutex(
     target_graph: NamedGraph,
     include_transient: Option<bool>,
     max_rows: Option<usize>,
+    debug: Option<bool>,
 ) -> PyResult<Vec<NewTriples>> {
     if sprout.is_none() {
         create_sprout_mutex(inner, sprout)?;
@@ -1180,10 +1276,11 @@ fn insert_sprout_mutex(
             streaming.unwrap_or(DEFAULT_STREAMING),
             include_transient.unwrap_or(DEFAULT_INCLUDE_TRANSIENT),
             max_rows,
+            debug.unwrap_or(DEFAULT_DEBUG_NO_RESULTS),
         )
         .map_err(PyMaplibError::from)?;
 
-    let new_triples = if let QueryResult::Construct(dfs_and_dts) = res {
+    let new_triples = if let QueryResultKind::Construct(dfs_and_dts) = res.kind {
         let (sms, preds): (_, Vec<_>) = dfs_and_dts.into_iter().unzip();
         let global_cats = &inner.triplestore.global_cats;
         let (mut sms, cats) = {
@@ -1236,6 +1333,12 @@ fn read_mutex(
             replace_graph.unwrap_or(false),
         )
         .map_err(PyMaplibError::from)?;
+    Ok(())
+}
+
+fn read_template_mutex(inner: &mut MutexGuard<InnerModel>, file_path: String) -> PyResult<()> {
+    let path = Path::new(&file_path);
+    inner.read_template(path).map_err(PyMaplibError::from)?;
     Ok(())
 }
 
@@ -1434,7 +1537,8 @@ fn infer_mutex(
     graph: Option<&NamedGraph>,
     include_transient: bool,
     max_rows: Option<usize>,
-) -> Result<Option<HashMap<NamedNode, EagerSolutionMappings>>, PyMaplibError> {
+    debug: Option<bool>,
+) -> Result<InferenceResult, PyMaplibError> {
     inner
         .infer(
             rulesets,
@@ -1443,6 +1547,7 @@ fn infer_mutex(
             graph,
             include_transient,
             max_rows,
+            debug.unwrap_or(DEFAULT_DEBUG_NO_RESULTS),
         )
         .map_err(PyMaplibError::MaplibError)
 }
@@ -1473,6 +1578,7 @@ fn _maplib(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyModel>()?;
     m.add_class::<PyValidationReport>()?;
     m.add_class::<PySolutionMappings>()?;
+    m.add_class::<PyInferenceResult>()?;
     m.add_class::<PyRDFType>()?;
     m.add_class::<PyPrefix>()?;
     m.add_class::<PyVariable>()?;
@@ -1495,7 +1601,7 @@ fn _maplib(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
 }
 
 fn query_to_result(
-    res: SparqlQueryResult,
+    res: QueryResult,
     native_dataframe: bool,
     include_details: bool,
     return_json: bool,
@@ -1503,17 +1609,18 @@ fn query_to_result(
     py: Python<'_>,
 ) -> PyResult<PyObject> {
     if return_json {
-        let json = res.json(global_cats.clone());
+        let json = res.kind.json(global_cats.clone());
         return Ok(PyString::new(py, &json).into());
     }
-    match res {
+    let QueryResult { kind, debug } = res;
+    match kind {
         SparqlQueryResult::Select(EagerSolutionMappings {
             mut mappings,
             mut rdf_node_types,
         }) => {
             (mappings, rdf_node_types) =
                 fix_cats_and_multicolumns(mappings, rdf_node_types, native_dataframe, global_cats);
-            let pydf = df_to_py_df(mappings, rdf_node_types, None, include_details, py)?;
+            let pydf = df_to_py_df(mappings, rdf_node_types, debug, None, include_details, py)?;
             Ok(pydf)
         }
         SparqlQueryResult::Construct(dfs) => {
@@ -1551,7 +1658,14 @@ fn query_to_result(
                     native_dataframe,
                     global_cats.clone(),
                 );
-                let pydf = df_to_py_df(mappings, rdf_node_types, None, include_details, py)?;
+                let pydf = df_to_py_df(
+                    mappings,
+                    rdf_node_types,
+                    debug.clone(),
+                    None,
+                    include_details,
+                    py,
+                )?;
                 query_results.push(pydf);
             }
             PyList::new(py, query_results)?.into_py_any(py)
@@ -1650,9 +1764,15 @@ fn new_triples_to_dict(
             );
             (df, types) =
                 fix_cats_and_multicolumns(df, types, native_dataframe, global_cats.clone());
-            let py_sm = df_to_py_df(df, types, None, include_datatypes, py)?;
+            let py_sm = df_to_py_df(df, types, None, None, include_datatypes, py)?;
             map.insert(predicate.as_str().to_string(), py_sm);
         }
     }
     Ok(map)
+}
+
+fn print_debug_if_exists(debug_outputs: Option<&DebugOutputs>) {
+    if let Some(debug_outputs) = debug_outputs {
+        print!("{}", debug_outputs);
+    }
 }

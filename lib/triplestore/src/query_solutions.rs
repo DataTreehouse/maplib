@@ -1,13 +1,14 @@
 use crate::sparql::errors::SparqlError;
-use crate::sparql::{QueryResult, QuerySettings};
+use crate::sparql::{QueryResultKind, QuerySettings};
 use crate::Triplestore;
-use oxrdf::{Term, Variable};
+use oxrdf::{NamedNode, Term, Variable};
 use polars::frame::UniqueKeepStrategy;
 use polars::prelude::IntoLazy;
 use query_processing::graph_patterns::unique_workaround;
 use representation::dataset::NamedGraph;
 use representation::polars_to_rdf::{df_as_result, QuerySolutions};
 use representation::solution_mapping::EagerSolutionMappings;
+use std::collections::HashMap;
 
 pub fn query_select(
     query: &str,
@@ -16,13 +17,22 @@ pub fn query_select(
     deduplicate: bool,
     streaming: bool,
     query_settings: &QuerySettings,
+    prefixes: Option<&HashMap<String, NamedNode>>,
 ) -> Result<QuerySolutions, SparqlError> {
-    let qres = triplestore.query(query, &None, streaming, &query_settings, graph)?;
+    let qres = triplestore.query(
+        query,
+        &None,
+        streaming,
+        &query_settings,
+        graph,
+        prefixes,
+        false,
+    )?;
 
-    let sm = if let QueryResult::Select(EagerSolutionMappings {
+    let sm = if let QueryResultKind::Select(EagerSolutionMappings {
         mut mappings,
         rdf_node_types,
-    }) = qres
+    }) = qres.kind
     {
         if deduplicate {
             let mut lf = mappings.lazy();

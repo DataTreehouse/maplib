@@ -1,9 +1,12 @@
+use std::collections::HashMap;
+use oxrdf::NamedNode;
 use crate::ast::DatalogRuleset;
 use thiserror::*;
 
 pub fn parse_datalog_ruleset(
     _datalog_ruleset: &str,
     _base_iri: Option<&str>,
+    _prefixes: Option<&HashMap<String, NamedNode>>,
 ) -> Result<DatalogRuleset, DatalogSyntaxError> {
     unimplemented!("Contact Data Treehouse to try")
 }

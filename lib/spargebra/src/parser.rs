@@ -22,8 +22,12 @@ use std::mem::take;
 use std::str::FromStr;
 
 /// Parses a SPARQL query with an optional base IRI to resolve relative IRIs in the query.
-pub fn parse_query(query: &str, base_iri: Option<&str>) -> Result<Query, SparqlSyntaxError> {
-    let mut state = ParserState::from_base_iri(base_iri)?;
+pub fn parse_query(
+    query: &str,
+    base_iri: Option<&str>,
+    prefixes: Option<&HashMap<String, NamedNode>>,
+) -> Result<Query, SparqlSyntaxError> {
+    let mut state = ParserState::from_base_iri(base_iri, prefixes)?;
     let mut query = parser::QueryUnit(query, &mut state)
         .map_err(|e| SparqlSyntaxError(ParseErrorKind::Syntax(e)))?;
     let remover = SyntacticSugarRemover::new();
@@ -32,8 +36,12 @@ pub fn parse_query(query: &str, base_iri: Option<&str>) -> Result<Query, SparqlS
 }
 
 /// Parses a SPARQL update with an optional base IRI to resolve relative IRIs in the query.
-pub fn parse_update(update: &str, base_iri: Option<&str>) -> Result<Update, SparqlSyntaxError> {
-    let mut state = ParserState::from_base_iri(base_iri)?;
+pub fn parse_update(
+    update: &str,
+    base_iri: Option<&str>,
+    prefixes: Option<&HashMap<String, NamedNode>>,
+) -> Result<Update, SparqlSyntaxError> {
+    let mut state = ParserState::from_base_iri(base_iri, prefixes)?;
     let operations = parser::UpdateInit(update, &mut state)
         .map_err(|e| SparqlSyntaxError(ParseErrorKind::Syntax(e)))?;
     Ok(Update {
@@ -645,7 +653,19 @@ pub struct ParserState {
 }
 
 impl ParserState {
-    pub(crate) fn from_base_iri(base_iri: Option<&str>) -> Result<Self, SparqlSyntaxError> {
+    pub(crate) fn from_base_iri(
+        base_iri: Option<&str>,
+        prefixes: Option<&HashMap<String, NamedNode>>,
+    ) -> Result<Self, SparqlSyntaxError> {
+        let namespaces = if let Some(prefixes) = prefixes {
+            prefixes
+                .iter()
+                .map(|(x, y)| (x.clone(), y.as_str().to_string()))
+                .collect()
+        } else {
+            HashMap::new()
+        };
+
         Ok(Self {
             base_iri: if let Some(base_iri) = base_iri {
                 Some(
@@ -655,7 +675,7 @@ impl ParserState {
             } else {
                 None
             },
-            namespaces: HashMap::default(),
+            namespaces,
             used_bnodes: HashSet::default(),
             currently_used_bnodes: HashSet::default(),
             aggregates: Vec::new(),
