@@ -32,7 +32,8 @@ pub fn named_node_local_enc(nn: &NamedNode, global_cats: &Cats) -> (Expr, Option
     if let Some(enc) = global_cats.encode_iri_slice(&[nn.as_str()]).pop().unwrap() {
         (lit(enc).cast(DataType::UInt32), None)
     } else {
-        let (enc, local) = Cats::new_singular_iri(nn.as_str(), global_cats.get_iri_counter());
+        // We do not store these local cats to disk
+        let (enc, local) = Cats::new_singular_iri(nn.as_str(), global_cats.get_iri_counter(), None);
         (lit(enc).cast(DataType::UInt32), Some(local))
     }
 }
@@ -46,7 +47,9 @@ pub fn blank_node_local_enc(bl: &BlankNode, global_cats: &Cats) -> (Expr, Option
     if let Some(enc) = global_cats.encode_blanks(&[bl.as_str()]).pop().unwrap() {
         (lit(enc).cast(DataType::UInt32), None)
     } else {
-        let (enc, local) = Cats::new_singular_blank(bl.as_str(), global_cats.get_iri_counter());
+        // Local cats not stored to disk, hence None path
+        let (enc, local) =
+            Cats::new_singular_blank(bl.as_str(), global_cats.get_iri_counter(), None);
         (lit(enc).cast(DataType::UInt32), Some(local))
     }
 }
@@ -67,7 +70,8 @@ pub fn maybe_literal_enc(l: &Literal, global_cats: &Cats) -> (Expr, BaseRDFNodeT
         } else {
             let dt = l.datatype().into_owned();
             let offset = global_cats.get_literal_counter(&dt);
-            let (enc, local) = Cats::new_singular_literal(l.value(), dt, offset);
+            // Local cats are not stored to disk, hence None
+            let (enc, local) = Cats::new_singular_literal(l.value(), dt, offset, None);
             (
                 lit(enc).cast(DataType::UInt32),
                 bt,

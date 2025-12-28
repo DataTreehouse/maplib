@@ -13,7 +13,7 @@ use polars_core::series::SeriesIter;
 use polars_core::utils::Container;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use representation::cats::{
-    Cats, LockedCats, ReverseLookup, OBJECT_RANK_COL_NAME, SUBJECT_RANK_COL_NAME,
+    CatEncs, Cats, LockedCats, OBJECT_RANK_COL_NAME, SUBJECT_RANK_COL_NAME,
 };
 use representation::{
     BaseRDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD, OBJECT_COL_NAME,
@@ -134,7 +134,7 @@ impl Triples {
             let mut i = 0;
 
             let now_subjects = Instant::now();
-            let maybe_subject_encs = get_rev_map(global_cats.deref(), &self.subject_type);
+            let maybe_subject_encs = maybe_get_cat_encs(global_cats.deref(), &self.subject_type);
 
             let subjects_str = if OFFSET_STEP / 10 * incoming_df.height() < remaining_height {
                 let new_subjects_col = incoming_df.column(SUBJECT_COL_NAME).unwrap();
@@ -430,13 +430,13 @@ fn create_indices(
 ) -> Result<IndexedTriples, TriplestoreError> {
     assert!(df.height() > 0);
     let now = Instant::now();
-    let subject_encs = get_rev_map(cats, subj_type);
+    let subject_encs = maybe_get_cat_encs(cats, subj_type);
     //Should already be sorted by subject, object
     let subject_sparse_index = create_sparse_index(
         df.column(SUBJECT_COL_NAME)
             .unwrap()
             .as_materialized_series(),
-        subject_encs.as_ref(),
+        subject_encs,
     );
     trace!(
         "Creating subject sparse map took {} seconds",
@@ -466,10 +466,10 @@ fn create_indices(
             )
             .collect()
             .unwrap();
-        let object_encs = get_rev_map(cats, obj_type);
+        let object_encs = maybe_get_cat_encs(cats, obj_type);
         let sparse = create_sparse_index(
             df.column(OBJECT_COL_NAME).unwrap().as_materialized_series(),
-            object_encs.as_ref(),
+            object_encs,
         );
 
         object_sort = Some(StoredTriples::new(
@@ -493,9 +493,9 @@ fn create_indices(
     })
 }
 
-fn get_rev_map<'a>(c: &'a Cats, t: &BaseRDFNodeType) -> Option<ReverseLookup<'a>> {
+fn maybe_get_cat_encs<'a>(c: &'a Cats, t: &BaseRDFNodeType) -> Option<&'a CatEncs> {
     if t.stored_cat() {
-        Some(c.get_reverse_lookup(t))
+        Some(c.get_cat_encs(t))
     } else {
         None
     }
@@ -753,11 +753,11 @@ fn update_index_at_offset(
     u32_chunked: &UInt32Chunked,
     offset: usize,
     sparse_map: &mut BTreeMap<Arc<String>, usize>,
-    rev_map: &ReverseLookup,
+    cat_encs: &CatEncs,
 ) {
     let u = u32_chunked.get(offset);
     if let Some(u) = u {
-        let s = rev_map.lookup(&u).unwrap();
+        let s = cat_encs.maybe_decode_string(&u).unwrap();
         let e = sparse_map.entry(Arc::new(s.to_string()));
         e.or_insert(offset);
     }
@@ -782,14 +782,14 @@ pub(crate) fn repeated_from_last_row_expr(c: &str) -> Expr {
         .and(col(c).shift(lit(1)).eq(col(c)))
 }
 
-fn create_sparse_index(ser: &Series, rev_map: Option<&ReverseLookup>) -> SparseIndex {
-    match rev_map {
+fn create_sparse_index(ser: &Series, cat_encs: Option<&CatEncs>) -> SparseIndex {
+    match cat_encs {
         None => create_sparse_string_index(ser),
         Some(rev_map) => create_sparse_cat_index(ser, rev_map),
     }
 }
 
-fn create_sparse_cat_index(ser: &Series, encs: &ReverseLookup) -> SparseIndex {
+fn create_sparse_cat_index(ser: &Series, encs: &CatEncs) -> SparseIndex {
     assert!(!ser.is_empty());
     let strch = ser.u32().unwrap();
     let mut sparse_map = BTreeMap::new();
@@ -823,7 +823,7 @@ fn create_sparse_string_index(ser: &Series) -> SparseIndex {
 }
 
 //Assumes sorted.
-fn create_deduplicated_string_vec<'a>(ser: &Series, rev_map: &'a ReverseLookup) -> Vec<&'a str> {
+fn create_deduplicated_string_vec<'a>(ser: &Series, CatEncs: &'a CatEncs) -> Vec<&'a str> {
     let mut v = Vec::with_capacity(ser.len());
     let mut last = None;
     for any in ser.iter() {
@@ -835,7 +835,7 @@ fn create_deduplicated_string_vec<'a>(ser: &Series, rev_map: &'a ReverseLookup) 
                     }
                 }
                 last = Some(u);
-                let s = rev_map.lookup(&u).unwrap();
+                let s = CatEncs.maybe_decode_string(&u).unwrap();
                 v.push(s);
             }
             _ => unreachable!("Should never happen"),
@@ -872,8 +872,8 @@ fn compact_segments(
             }
         }
     }
-    let subject_encs = get_rev_map(cats, subj_type);
-    let object_encs = get_rev_map(cats, obj_type);
+    let subject_encs = maybe_get_cat_encs(cats, subj_type);
+    let object_encs = maybe_get_cat_encs(cats, obj_type);
     let fields = if let BaseRDFNodeType::Literal(nn) = obj_type {
         if nn.as_ref() == rdf::LANG_STRING {
             Some((LANG_STRING_VALUE_FIELD, LANG_STRING_LANG_FIELD))
@@ -888,8 +888,8 @@ fn compact_segments(
         SUBJECT_COL_NAME,
         OBJECT_COL_NAME,
         fields,
-        subject_encs.as_ref(),
-        object_encs.as_ref(),
+        subject_encs,
+        object_encs,
     )?;
 
     let height = compact_subjects.height();
@@ -898,7 +898,7 @@ fn compact_segments(
             .column(SUBJECT_COL_NAME)
             .unwrap()
             .as_materialized_series(),
-        subject_encs.as_ref(),
+        subject_encs,
     );
     let stored_subjects =
         StoredTriples::new(compact_subjects, subj_type, obj_type, storage_folder)?;
@@ -909,15 +909,15 @@ fn compact_segments(
             OBJECT_COL_NAME,
             SUBJECT_COL_NAME,
             None,
-            object_encs.as_ref(),
-            subject_encs.as_ref(),
+            object_encs,
+            subject_encs,
         )?;
         let object_index = create_sparse_index(
             compact_objects
                 .column(OBJECT_COL_NAME)
                 .unwrap()
                 .as_materialized_series(),
-            object_encs.as_ref(),
+            object_encs,
         );
         let stored_objects =
             StoredTriples::new(compact_objects, subj_type, obj_type, storage_folder)?;
@@ -942,8 +942,8 @@ fn compact_dataframe_segments(
     col_a: &str,
     col_b: &str,
     b_fields: Option<(&str, &str)>,
-    a_cat_encs: Option<&ReverseLookup>,
-    b_cat_encs: Option<&ReverseLookup>,
+    a_cat_encs: Option<&CatEncs>,
+    b_cat_encs: Option<&CatEncs>,
 ) -> Result<(DataFrame, Option<DataFrame>), TriplestoreError> {
     let mut new_segments = vec![];
     for (mut df, new) in segments {
@@ -1131,8 +1131,8 @@ impl<'a> TripleIterator<'a> {
         mut a_iterator: SeriesIter<'a>,
         mut b_1_iterator: SeriesIter<'a>,
         mut b_2_iterator: Option<SeriesIter<'a>>,
-        a_cat_rev_map: Option<&'a ReverseLookup<'a>>,
-        b_cat_rev_map: Option<&'a ReverseLookup<'a>>,
+        a_cat_rev_map: Option<&'a CatEncs>,
+        b_cat_rev_map: Option<&'a CatEncs>,
         new: bool,
     ) -> Option<Self> {
         if let Some(a) = a_iterator.next() {
@@ -1167,8 +1167,8 @@ impl<'a> TripleIterator<'a> {
 
     pub fn next(
         self,
-        a_cat_rev_map: Option<&'a ReverseLookup>,
-        b_cat_rev_map: Option<&'a ReverseLookup>,
+        a_cat_rev_map: Option<&'a CatEncs>,
+        b_cat_rev_map: Option<&'a CatEncs>,
     ) -> Option<Self> {
         let Self {
             mut a_iterator,
@@ -1211,11 +1211,13 @@ impl<'a> TripleIterator<'a> {
 
 fn decode_elem<'a>(
     any_value: &AnyValue<'a>,
-    reverse_lookup: Option<&'a ReverseLookup>,
+    reverse_lookup: Option<&'a CatEncs>,
 ) -> Option<AnyValue<'a>> {
     if let Some(reverse_lookup) = reverse_lookup {
         if let AnyValue::UInt32(u) = any_value {
-            Some(AnyValue::String(reverse_lookup.lookup(u).unwrap()))
+            Some(AnyValue::String(
+                reverse_lookup.maybe_decode_string(u).unwrap(),
+            ))
         } else {
             unreachable!("Should never happen")
         }

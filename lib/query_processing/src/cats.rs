@@ -5,6 +5,7 @@ use representation::{BaseRDFNodeType, RDFNodeState};
 use std::collections::{HashMap, HashSet};
 use std::hash::BuildHasherDefault;
 use std::ops::Deref;
+use std::path::Path;
 use std::sync::Arc;
 
 pub fn create_compatible_cats(
@@ -29,7 +30,8 @@ pub fn create_compatible_cats(
         if need_native_cat_cast {
             let locals = find_all_locals(&t, &states);
             let mut cats = Cats::new_empty(Some(global_cats.read().unwrap().deref()));
-            let renc_local = cats.merge(locals);
+            // We do not store local cats to disk
+            let renc_local = cats.merge(locals, None);
             let renc_local: HashMap<_, _> = renc_local
                 .into_iter()
                 .map(|(uu, map)| {

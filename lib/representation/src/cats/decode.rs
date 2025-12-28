@@ -8,30 +8,20 @@ use polars::frame::column::ScalarColumn;
 use polars::frame::DataFrame;
 use polars::prelude::{col, Column, Expr, IntoColumn, IntoLazy, NamedFrom, SeriesSealed};
 use polars::series::Series;
-use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use std::borrow::Cow;
 
 impl CatEncs {
-    pub fn decode(&self, ser: &Series) -> Series {
+    pub fn decode_series(&self, ser: &Series) -> Series {
         let original_name = ser.name().clone();
         let uch: Vec<_> = ser.u32().unwrap().iter().collect();
-        let decoded_vec_iter = uch
-            .into_par_iter()
-            .map(|x| x.map(|x| self.rev_map.get(&x).unwrap()));
-
-        let decoded_vec: Vec<_> = decoded_vec_iter.map(|x| x.map(|x| x.as_str())).collect();
+        let decoded_vec = self.maps.decode_batch(uch.as_ref());
         let new_ser = Series::new(original_name, decoded_vec);
-        //
-        // let mut new_ser = if let CatType::Prefix(pre) = cat_type {
-        //     Series::from_iter(decoded_ser.map(|x| x.map(|x| format!("{}{}", pre.as_str(), x))))
-        // } else {
-        //     Series::from_iter(decoded_ser.map(|x| x.map(|x| x.as_str())))
-        // };
         new_ser
     }
 
     pub fn maybe_decode_string(&self, u: &u32) -> Option<&str> {
-        self.rev_map.get(u).map(|x| x.as_str())
+        self.maps.maybe_decode(u)
     }
 }
 
@@ -68,7 +58,7 @@ impl Cats {
     pub fn decode_of_type(&self, ser: &Series, bt: &BaseRDFNodeType) -> Series {
         let ct = CatType::from_base_rdf_node_type(bt);
         if let Some(enc) = self.cat_map.get(&ct) {
-            enc.decode(ser)
+            enc.decode_series(ser)
         } else {
             unreachable!("Should never be called when type does not exist")
         }
