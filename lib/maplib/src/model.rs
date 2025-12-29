@@ -184,7 +184,16 @@ impl Model {
             self.truncate_graph(&graph)
         }
         self.triplestore
-            .read_triples_from_path(p, rdf_format, base_iri, transient, parallel, checked, graph)
+            .read_triples_from_path(
+                p,
+                rdf_format,
+                base_iri,
+                transient,
+                parallel,
+                checked,
+                graph,
+                &self.prefixes,
+            )
             .map_err(MaplibError::TriplestoreError)
     }
 
@@ -217,7 +226,16 @@ impl Model {
             self.truncate_graph(&graph)
         }
         self.triplestore
-            .read_triples_from_string(s, rdf_format, base_iri, transient, parallel, checked, graph)
+            .read_triples_from_string(
+                s,
+                rdf_format,
+                base_iri,
+                transient,
+                parallel,
+                checked,
+                graph,
+                &self.prefixes,
+            )
             .map_err(MaplibError::TriplestoreError)
     }
 

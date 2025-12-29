@@ -4,11 +4,10 @@ use crate::cats::LockedCats;
 use crate::solution_mapping::{BaseCatState, EagerSolutionMappings};
 use crate::{BaseRDFNodeType, RDFNodeState};
 use nohash_hasher::NoHashHasher;
-use rayon::iter::ParallelIterator;
 use std::collections::{HashMap, HashSet};
 use std::hash::BuildHasherDefault;
 use std::ops::Deref;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 
 impl Cats {

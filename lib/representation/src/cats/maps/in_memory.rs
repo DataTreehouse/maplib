@@ -1,5 +1,4 @@
-use crate::cats::maps::CatMaps;
-use crate::cats::{CatEncs, CatReEnc};
+use crate::cats::CatReEnc;
 use nohash_hasher::NoHashHasher;
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -13,14 +12,13 @@ pub struct CatMapsInMemory {
 }
 
 impl CatMapsInMemory {
-    pub(crate) fn new_remap(maps: &CatMapsInMemory) -> (CatMapsInMemory, CatReEnc) {
-        let mut c = 0;
+    pub fn new_remap(maps: &CatMapsInMemory, c: &mut u32) -> (CatMapsInMemory, CatReEnc) {
         let mut remap = vec![];
         let mut new_maps = CatMapsInMemory::new_empty();
         for (s, v) in maps.map.iter() {
-            remap.push((*v, c));
-            new_maps.encode_new_arc_string(s.clone(), c);
-            c += 1;
+            remap.push((*v, *c));
+            new_maps.encode_new_arc_string(s.clone(), *c);
+            *c += 1;
         }
         let remap: HashMap<_, _, BuildHasherDefault<NoHashHasher<u32>>> =
             remap.into_iter().collect();
@@ -35,68 +33,6 @@ impl CatMapsInMemory {
     fn encode_new_arc_string(&mut self, s: Arc<String>, u: u32) {
         self.map.insert(s.clone(), u);
         self.rev_map.insert(u, s);
-    }
-}
-
-impl CatMapsInMemory {
-    pub(crate) fn inner_join_re_enc(&self, other: &CatMapsInMemory) -> Vec<(u32, u32)> {
-        let renc: Vec<_> = self
-            .map
-            .iter()
-            .map(|(x, l)| {
-                if let Some(r) = other.maybe_encode_string(x.as_str()) {
-                    if l != r {
-                        Some((*l, *r))
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                }
-            })
-            .filter(|x| x.is_some())
-            .map(|x| x.unwrap())
-            .collect();
-        renc
-    }
-}
-
-impl CatMapsInMemory {
-    pub fn merge(&mut self, other: &CatMapsInMemory) -> CatReEnc {
-        let mut c = self.counter();
-        let (remap, insert): (Vec<_>, Vec<_>) = other
-            .map
-            .iter()
-            .map(|(s, u)| {
-                if let Some(e) = self.map.get(s) {
-                    (Some((*u, *e)), None)
-                } else {
-                    (None, Some((s.clone(), u)))
-                }
-            })
-            .unzip();
-        let mut numbered_insert = Vec::new();
-        let mut new_remap = Vec::new();
-        for k in insert {
-            if let Some((s, u)) = k {
-                numbered_insert.push((s, c));
-                new_remap.push((*u, c));
-                c += 1;
-            }
-        }
-        for (s, u) in numbered_insert {
-            self.encode_new_arc_string(s.clone(), u);
-        }
-        let remap: HashMap<_, _, BuildHasherDefault<NoHashHasher<u32>>> = remap
-            .into_iter()
-            .filter(|x| x.is_some())
-            .map(|x| x.unwrap())
-            .chain(new_remap.into_iter())
-            .collect();
-        let reenc = CatReEnc {
-            cat_map: Arc::new(remap),
-        };
-        reenc
     }
 
     pub(crate) fn contains_str(&self, s: &str) -> bool {
@@ -135,16 +71,19 @@ impl CatMapsInMemory {
         sing
     }
 
-    pub(crate) fn new_empty() -> CatMapsInMemory {
-        todo!()
+    pub fn new_empty() -> CatMapsInMemory {
+        CatMapsInMemory {
+            map: Default::default(),
+            rev_map: Default::default(),
+        }
     }
 
     pub fn get(&self, key: &Arc<String>) -> Option<&u32> {
         self.map.get(key)
     }
 
-    pub(crate) fn counter(&self) -> u32 {
-        self.rev_map.keys().max().unwrap().clone()
+    pub fn counter(&self) -> u32 {
+        self.rev_map.keys().max().unwrap().clone() + 1
     }
 
     pub fn get_rev(&self, key: &u32) -> Option<&Arc<String>> {
@@ -162,7 +101,7 @@ impl CatMapsInMemory {
         self.rev_map.get(u).map(|x| x.as_str())
     }
 
-    pub(crate) fn image(&self, s: &HashSet<u32>) -> Option<CatMapsInMemory> {
+    pub fn image(&self, s: &HashSet<u32>) -> Option<CatMapsInMemory> {
         let new_map: HashMap<_, _, BuildHasherDefault<NoHashHasher<u32>>> = s
             .par_iter()
             .map(|x| {
@@ -185,5 +124,62 @@ impl CatMapsInMemory {
                 rev_map: new_map,
             })
         }
+    }
+
+    pub fn inner_join_re_enc(&self, other: &CatMapsInMemory) -> Vec<(u32, u32)> {
+        let renc: Vec<_> = self
+            .map
+            .iter()
+            .map(|(x, l)| {
+                if let Some(r) = other.maybe_encode_string(x.as_str()) {
+                    if l != r {
+                        Some((*l, *r))
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            })
+            .filter(|x| x.is_some())
+            .map(|x| x.unwrap())
+            .collect();
+        renc
+    }
+
+    pub fn merge(&mut self, other: &CatMapsInMemory, c: &mut u32) -> CatReEnc {
+        let (remap, insert): (Vec<_>, Vec<_>) = other
+            .map
+            .iter()
+            .map(|(s, u)| {
+                if let Some(e) = self.map.get(s) {
+                    (Some((*u, *e)), None)
+                } else {
+                    (None, Some((s.clone(), u)))
+                }
+            })
+            .unzip();
+        let mut numbered_insert = Vec::new();
+        let mut new_remap = Vec::new();
+        for k in insert {
+            if let Some((s, u)) = k {
+                numbered_insert.push((s, *c));
+                new_remap.push((*u, *c));
+                *c += 1;
+            }
+        }
+        for (s, u) in numbered_insert {
+            self.encode_new_arc_string(s.clone(), u);
+        }
+        let remap: HashMap<_, _, BuildHasherDefault<NoHashHasher<u32>>> = remap
+            .into_iter()
+            .filter(|x| x.is_some())
+            .map(|x| x.unwrap())
+            .chain(new_remap.into_iter())
+            .collect();
+        let reenc = CatReEnc {
+            cat_map: Arc::new(remap),
+        };
+        reenc
     }
 }

@@ -13,7 +13,7 @@ use representation::multitype::{set_struct_all_null_to_null_row, split_df_multic
 use representation::solution_mapping::EagerSolutionMappings;
 use representation::{BaseRDFNodeType, OBJECT_COL_NAME, PREDICATE_COL_NAME, SUBJECT_COL_NAME};
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::time::Instant;
 use tracing::trace;
 

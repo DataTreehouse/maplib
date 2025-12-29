@@ -7,13 +7,13 @@ pub struct CatMapsOnDisk {
 }
 
 impl CatMapsOnDisk {
-    pub(crate) fn decode_batch(&self, p0: &[Option<u32>]) -> Vec<Option<&str>> {
+    pub(crate) fn decode_batch(&self, us: &[Option<u32>]) -> Vec<Option<&str>> {
         todo!()
     }
 }
 
 impl CatMapsOnDisk {
-    pub(crate) fn image(&self, p0: &HashSet<u32>) -> Option<CatMapsOnDisk> {
+    pub(crate) fn image(&self, s: &HashSet<u32>) -> Option<CatMapsOnDisk> {
         todo!()
     }
 }

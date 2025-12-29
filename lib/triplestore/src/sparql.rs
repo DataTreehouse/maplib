@@ -27,6 +27,7 @@ use query_processing::graph_patterns::unique_workaround;
 use query_processing::pushdowns::Pushdowns;
 use representation::cats::{Cats, LockedCats};
 use representation::dataset::{NamedGraph, QueryGraph};
+use representation::debug::DebugOutput;
 use representation::polars_to_rdf::{df_as_result, QuerySolutions};
 use representation::query_context::Context;
 use representation::rdf_to_polars::{
@@ -44,7 +45,6 @@ use spargebra::term::{
 };
 use spargebra::{GraphUpdateOperation, Query, Update};
 use std::collections::{HashMap, HashSet};
-use representation::debug::DebugOutput;
 
 pub struct QueryResult {
     pub kind: QueryResultKind,

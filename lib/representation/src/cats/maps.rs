@@ -15,12 +15,16 @@ pub enum CatMaps {
 }
 
 impl CatMaps {
-    pub(crate) fn new_remap(maps: &CatMaps, path: Option<&Path>) -> (CatMaps, CatReEnc) {
+    pub(crate) fn new_remap(
+        maps: &CatMaps,
+        path: Option<&Path>,
+        c: &mut u32,
+    ) -> (CatMaps, CatReEnc) {
         if let Some(path) = path {
             todo!()
         } else {
             if let CatMaps::InMemory(mem) = maps {
-                let (mem, re_enc) = CatMapsInMemory::new_remap(mem);
+                let (mem, re_enc) = CatMapsInMemory::new_remap(mem, c);
                 (CatMaps::InMemory(mem), re_enc)
             } else {
                 unreachable!("Should never happen")
@@ -43,11 +47,11 @@ impl CatMaps {
         }
     }
 
-    pub fn merge(&mut self, other: &CatMaps) -> CatReEnc {
+    pub fn merge(&mut self, other: &CatMaps, c: &mut u32) -> CatReEnc {
         match self {
             CatMaps::InMemory(mem) => {
                 if let CatMaps::InMemory(other_mem) = other {
-                    mem.merge(other_mem)
+                    mem.merge(other_mem, c)
                 } else {
                     unreachable!("Should never happen")
                 }
@@ -117,13 +121,6 @@ impl CatMaps {
         } else {
             CatMaps::InMemory(CatMapsInMemory::new_empty())
         }
-    }
-
-    fn batch_decode(&self, keys: &[u32]) -> Vec<Option<&str>> {
-        todo!()
-    }
-    fn batch_encode(&self, kvs: &[(u32, Arc<String>)]) -> u32 {
-        todo!()
     }
 
     pub fn encode(&self, key: &Arc<String>) -> Option<&u32> {

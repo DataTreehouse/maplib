@@ -95,17 +95,17 @@ impl Cats {
             let c = c.read().unwrap();
             let mut other_map = HashMap::new();
             for (t, other_enc) in c.cat_map.iter() {
+                let mut counter = self.get_counter(t);
                 if let Some(enc) = self.cat_map.get_mut(t) {
-                    let re_enc = enc.merge(other_enc);
+                    let re_enc = enc.merge(other_enc, &mut counter);
                     other_map.insert(t.clone(), re_enc);
                 } else {
-                    let (new_enc, re_enc) = CatEncs::new_remap(other_enc, path);
+                    let (new_enc, re_enc) = CatEncs::new_remap(other_enc, path, &mut counter);
 
                     self.cat_map.insert(t.clone(), new_enc);
 
                     other_map.insert(t.clone(), re_enc);
                 }
-                let counter = self.cat_map.get(t).unwrap().counter();
                 self.set_counter(counter, t);
             }
             if !other_map.is_empty() {

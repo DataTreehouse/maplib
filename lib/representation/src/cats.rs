@@ -14,12 +14,10 @@ use std::cmp;
 
 use crate::cats::maps::CatMaps;
 use crate::BaseRDFNodeType;
-use nohash_hasher::NoHashHasher;
 use oxrdf::vocab::xsd;
 use oxrdf::{NamedNode, NamedNodeRef};
 use polars::prelude::DataFrame;
 use std::collections::HashMap;
-use std::hash::BuildHasherDefault;
 use std::ops::Deref;
 use std::path::Path;
 use std::sync::Arc;
@@ -32,7 +30,6 @@ pub const SUBJECT_RANK_COL_NAME: &str = "subject_rank";
 pub fn literal_is_cat(nn: NamedNodeRef) -> bool {
     nn == xsd::STRING
 }
-type RevMap = HashMap<u32, Arc<String>, BuildHasherDefault<NoHashHasher<u32>>>;
 
 #[derive(Debug)]
 pub struct CatTriples {
@@ -86,8 +83,12 @@ pub struct CatEncs {
 }
 
 impl CatEncs {
-    pub(crate) fn new_remap(other: &CatEncs, path: Option<&Path>) -> (CatEncs, CatReEnc) {
-        let (maps, remap) = CatMaps::new_remap(&other.maps, path);
+    pub(crate) fn new_remap(
+        other: &CatEncs,
+        path: Option<&Path>,
+        c: &mut u32,
+    ) -> (CatEncs, CatReEnc) {
+        let (maps, remap) = CatMaps::new_remap(&other.maps, path, c);
         let encs = CatEncs { maps };
         (encs, remap)
     }
@@ -106,8 +107,8 @@ impl CatEncs {
         self.maps.is_empty()
     }
 
-    pub fn merge(&mut self, other: &CatEncs) -> CatReEnc {
-        self.maps.merge(&other.maps)
+    pub fn merge(&mut self, other: &CatEncs, c: &mut u32) -> CatReEnc {
+        self.maps.merge(&other.maps, c)
     }
 }
 
@@ -278,8 +279,8 @@ impl Cats {
         map
     }
 
-    fn get_counter(&self, c: &CatType) -> u32 {
-        match c {
+    fn get_counter(&self, t: &CatType) -> u32 {
+        match t {
             CatType::IRI => self.get_iri_counter(),
             CatType::Blank => self.get_blank_counter(),
             CatType::Literal(nn) => self.get_literal_counter(nn),

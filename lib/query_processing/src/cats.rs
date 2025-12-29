@@ -5,7 +5,6 @@ use representation::{BaseRDFNodeType, RDFNodeState};
 use std::collections::{HashMap, HashSet};
 use std::hash::BuildHasherDefault;
 use std::ops::Deref;
-use std::path::Path;
 use std::sync::Arc;
 
 pub fn create_compatible_cats(
