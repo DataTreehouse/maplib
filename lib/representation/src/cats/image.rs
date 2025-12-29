@@ -4,10 +4,10 @@ use crate::cats::LockedCats;
 use crate::solution_mapping::{BaseCatState, EagerSolutionMappings};
 use crate::{BaseRDFNodeType, RDFNodeState};
 use nohash_hasher::NoHashHasher;
-use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 use std::hash::BuildHasherDefault;
 use std::ops::Deref;
+use std::path::Path;
 use std::sync::Arc;
 
 impl Cats {
@@ -43,7 +43,7 @@ impl Cats {
                         let local_read_ref = local_read.as_ref().map(|x| x.deref());
 
                         let local_rev_map = if let Some(local) = local_read_ref {
-                            Some(local.get_reverse_lookup(bt))
+                            Some(local.get_cat_encs(bt))
                         } else {
                             None
                         };
@@ -55,7 +55,7 @@ impl Cats {
                             .filter(|x| x.is_some())
                             .map(|x| x.unwrap());
                         if let Some(local_rev_map) = local_rev_map {
-                            ss.extend(new_ss.filter(|x| !local_rev_map.rev_map.contains_key(x)));
+                            ss.extend(new_ss.filter(|x| !local_rev_map.contains_u32(x)));
                         } else {
                             ss.extend(new_ss);
                         }
@@ -70,6 +70,7 @@ impl Cats {
     pub fn merge_solution_mappings_locals(
         &mut self,
         sms: &Vec<&EagerSolutionMappings>,
+        path: Option<&Path>,
     ) -> HashMap<String, HashMap<BaseRDFNodeType, CatReEnc>> {
         let mut local_cats = vec![];
 
@@ -86,7 +87,7 @@ impl Cats {
                 }
             }
         }
-        let remap = self.merge(local_cats);
+        let remap = self.merge(local_cats, path);
         let mut concat_reenc: HashMap<
             String,
             HashMap<BaseRDFNodeType, HashMap<u32, u32, BuildHasherDefault<NoHashHasher<u32>>>>,
@@ -145,27 +146,8 @@ impl Cats {
 
 impl CatEncs {
     pub fn image(&self, s: &HashSet<u32>) -> Option<CatEncs> {
-        let new_map: BTreeMap<_, _> = s
-            .par_iter()
-            .map(|x| {
-                if let Some(s) = self.rev_map.get(x) {
-                    Some((*x, s.clone()))
-                } else {
-                    None
-                }
-            })
-            .filter(|x| x.is_some())
-            .map(|x| x.unwrap())
-            .map(|(x, y)| (y, x))
-            .collect();
-        let new_rev_map: HashMap<_, _, BuildHasherDefault<NoHashHasher<u32>>> =
-            new_map.iter().map(|(x, y)| (*y, x.clone())).collect();
-
-        if new_map.len() > 0 {
-            Some(CatEncs {
-                map: new_map,
-                rev_map: new_rev_map,
-            })
+        if let Some(maps) = self.maps.image(s) {
+            Some(CatEncs { maps })
         } else {
             None
         }
@@ -175,10 +157,11 @@ impl CatEncs {
 pub fn new_solution_mapping_cats(
     sms: Vec<EagerSolutionMappings>,
     global_cats: &Cats,
+    path: Option<&Path>,
 ) -> (Vec<EagerSolutionMappings>, Cats) {
     let smsref: Vec<_> = sms.iter().collect();
     let mut cats = global_cats.mappings_cat_image(&smsref);
-    let reenc = cats.merge_solution_mappings_locals(&smsref);
+    let reenc = cats.merge_solution_mappings_locals(&smsref, path);
     let new_sms: Vec<_> = sms
         .into_iter()
         .map(|sm| reencode_solution_mappings(sm, &reenc))

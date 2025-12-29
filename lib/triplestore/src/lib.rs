@@ -254,7 +254,11 @@ impl Triplestore {
         graph: &NamedGraph,
     ) -> Result<Vec<NewTriples>, TriplestoreError> {
         let prepare_triples_now = Instant::now();
-        let dfs_to_add = prepare_add_triples_par(ts, self.global_cats.clone());
+        let dfs_to_add = prepare_add_triples_par(
+            ts,
+            self.global_cats.clone(),
+            self.storage_folder.as_ref().map(|x| x.as_ref()),
+        );
         trace!(
             "Preparing triples took {} seconds",
             prepare_triples_now.elapsed().as_secs_f32()
@@ -454,6 +458,7 @@ struct TriplesToAddPartitionedPredicate {
 pub fn prepare_add_triples_par(
     mut ts: Vec<TriplesToAdd>,
     global_cats: LockedCats,
+    path: Option<&Path>,
 ) -> Vec<CatTriples> {
     let mut all_partitioned: Vec<TriplesToAddPartitionedPredicate> = ts
         .par_drain(..)
@@ -528,6 +533,7 @@ pub fn prepare_add_triples_par(
                     subject_cat_state,
                     object_cat_state,
                     &cats,
+                    path,
                 )
             },
         )

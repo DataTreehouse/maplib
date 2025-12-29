@@ -2,6 +2,7 @@ mod decode;
 mod encode;
 mod globalize;
 mod image;
+pub mod maps;
 mod re_encode;
 
 pub use decode::*;
@@ -11,14 +12,14 @@ pub use image::*;
 pub use re_encode::*;
 use std::cmp;
 
+use crate::cats::maps::CatMaps;
 use crate::BaseRDFNodeType;
-use nohash_hasher::NoHashHasher;
 use oxrdf::vocab::xsd;
 use oxrdf::{NamedNode, NamedNodeRef};
 use polars::prelude::DataFrame;
-use std::collections::{BTreeMap, HashMap};
-use std::hash::BuildHasherDefault;
+use std::collections::HashMap;
 use std::ops::Deref;
+use std::path::Path;
 use std::sync::Arc;
 use std::sync::RwLock;
 use uuid::Uuid;
@@ -29,7 +30,6 @@ pub const SUBJECT_RANK_COL_NAME: &str = "subject_rank";
 pub fn literal_is_cat(nn: NamedNodeRef) -> bool {
     nn == xsd::STRING
 }
-type RevMap = HashMap<u32, Arc<String>, BuildHasherDefault<NoHashHasher<u32>>>;
 
 #[derive(Debug)]
 pub struct CatTriples {
@@ -79,9 +79,37 @@ pub struct EncodedTriples {
 
 #[derive(Debug, Clone)]
 pub struct CatEncs {
-    // We use a BTree map to keep strings sorted
-    pub map: BTreeMap<Arc<String>, u32>,
-    pub rev_map: RevMap,
+    pub maps: CatMaps,
+}
+
+impl CatEncs {
+    pub(crate) fn new_remap(
+        other: &CatEncs,
+        path: Option<&Path>,
+        c: &mut u32,
+    ) -> (CatEncs, CatReEnc) {
+        let (maps, remap) = CatMaps::new_remap(&other.maps, path, c);
+        let encs = CatEncs { maps };
+        (encs, remap)
+    }
+}
+
+impl CatEncs {
+    pub fn contains_str(&self, s: &str) -> bool {
+        self.maps.contains_str(s)
+    }
+
+    pub fn contains_u32(&self, u: &u32) -> bool {
+        self.maps.contains_u32(u)
+    }
+
+    pub(crate) fn is_empty(&self) -> bool {
+        self.maps.is_empty()
+    }
+
+    pub fn merge(&mut self, other: &CatEncs, c: &mut u32) -> CatReEnc {
+        self.maps.merge(&other.maps, c)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -148,23 +176,6 @@ impl From<Arc<RwLock<Cats>>> for LockedCats {
     }
 }
 
-pub struct ReverseLookup<'a> {
-    rev_map: &'a RevMap,
-}
-
-impl<'a> ReverseLookup<'a> {}
-
-impl ReverseLookup<'_> {
-    pub fn new<'a>(rev_map: &'a RevMap) -> ReverseLookup<'a> {
-        ReverseLookup { rev_map }
-    }
-
-    pub fn lookup(&self, u: &u32) -> Option<&str> {
-        let s = self.rev_map.get(u);
-        s.map(|x| x.as_str())
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct Cats {
     pub cat_map: HashMap<CatType, CatEncs>,
@@ -175,29 +186,34 @@ pub struct Cats {
 }
 
 impl Cats {
-    pub fn new_singular_literal(l: &str, dt: NamedNode, u: u32) -> (u32, Cats) {
+    pub fn new_singular_literal(
+        l: &str,
+        dt: NamedNode,
+        u: u32,
+        path: Option<&Path>,
+    ) -> (u32, Cats) {
         let t = CatType::Literal(dt);
-        let catenc = CatEncs::new_singular(l, u);
+        let catenc = CatEncs::new_singular(l, u, path);
         (u, Cats::from_map(HashMap::from([(t, catenc)])))
     }
 
-    pub fn new_singular_blank(s: &str, u: u32) -> (u32, Cats) {
+    pub fn new_singular_blank(s: &str, u: u32, path: Option<&Path>) -> (u32, Cats) {
         let t = CatType::Blank;
-        let catenc = CatEncs::new_singular(s, u);
+        let catenc = CatEncs::new_singular(s, u, path);
         (u, Cats::from_map(HashMap::from([(t, catenc)])))
     }
 
-    pub fn new_singular_iri(s: &str, u: u32) -> (u32, Cats) {
+    pub fn new_singular_iri(s: &str, u: u32, path: Option<&Path>) -> (u32, Cats) {
         let t = CatType::IRI;
-        let catenc = CatEncs::new_singular(s, u);
+        let catenc = CatEncs::new_singular(s, u, path);
         (u, Cats::from_map(HashMap::from([(t, catenc)])))
     }
 }
 
 impl Cats {
-    pub fn get_reverse_lookup(&self, bt: &BaseRDFNodeType) -> ReverseLookup<'_> {
+    pub fn get_cat_encs(&self, bt: &BaseRDFNodeType) -> &CatEncs {
         let ct = CatType::from_base_rdf_node_type(bt);
-        ReverseLookup::new(&self.cat_map.get(&ct).unwrap().rev_map)
+        self.cat_map.get(&ct).unwrap()
     }
 
     pub(crate) fn from_map(cat_map: HashMap<CatType, CatEncs>) -> Self {
@@ -239,7 +255,7 @@ impl Cats {
     fn calc_new_blank_counter(&self) -> u32 {
         let mut counter = 0;
         if let Some(enc) = self.cat_map.get(&CatType::Blank) {
-            counter = cmp::max(enc.rev_map.keys().max().unwrap() + 1, counter);
+            counter = cmp::max(enc.counter() + 1, counter);
         }
         counter
     }
@@ -247,7 +263,7 @@ impl Cats {
     fn calc_new_iri_counter(&self) -> u32 {
         let mut counter = 0;
         if let Some(enc) = self.cat_map.get(&CatType::IRI) {
-            counter = cmp::max(enc.rev_map.keys().max().unwrap() + 1, counter);
+            counter = cmp::max(enc.counter() + 1, counter);
         }
         counter
     }
@@ -256,15 +272,15 @@ impl Cats {
         let mut map = HashMap::new();
         for (p, cat) in &self.cat_map {
             if let CatType::Literal(nn) = p {
-                let counter = cat.rev_map.keys().max().unwrap() + 1;
+                let counter = cat.counter() + 1;
                 map.insert(nn.clone(), counter);
             }
         }
         map
     }
 
-    fn get_counter(&self, c: &CatType) -> u32 {
-        match c {
+    fn get_counter(&self, t: &CatType) -> u32 {
+        match t {
             CatType::IRI => self.get_iri_counter(),
             CatType::Blank => self.get_blank_counter(),
             CatType::Literal(nn) => self.get_literal_counter(nn),

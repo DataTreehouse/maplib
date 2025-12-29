@@ -356,7 +356,7 @@ class Model:
         :return:
         """
 
-    def add_prefixes(self, template: Dict[str, str]):
+    def add_prefixes(self, prefixes: Dict[str, str]):
         """
         Add prefixes that will be used in parsing of SPARQL, Datalog and OTTR.
 

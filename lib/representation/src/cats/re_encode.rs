@@ -6,9 +6,10 @@ use nohash_hasher::NoHashHasher;
 use polars::datatypes::PlSmallStr;
 use polars::error::PolarsResult;
 use polars::prelude::{col, Column, IntoColumn, IntoLazy, LazyFrame, Series};
-use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
+use std::path::Path;
 use std::sync::Arc;
 
 #[derive(Debug, Clone)]
@@ -53,24 +54,7 @@ impl CatReEnc {
 
 impl CatEncs {
     pub fn inner_join_re_enc(&self, other: &CatEncs) -> Vec<(u32, u32)> {
-        let renc: Vec<_> = self
-            .map
-            .iter()
-            .map(|(x, l)| {
-                if let Some(r) = other.maybe_encode_str(x) {
-                    if l != r {
-                        Some((*l, *r))
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                }
-            })
-            .filter(|x| x.is_some())
-            .map(|x| x.unwrap())
-            .collect();
-        renc
+        self.maps.inner_join_re_enc(&other.maps)
     }
 }
 
@@ -104,66 +88,25 @@ impl Cats {
     pub fn merge(
         &mut self,
         other_cats: Vec<LockedCats>,
+        path: Option<&Path>,
     ) -> HashMap<String, HashMap<CatType, CatReEnc>> {
         let mut map = HashMap::new();
         for c in other_cats {
             let c = c.read().unwrap();
             let mut other_map = HashMap::new();
             for (t, other_enc) in c.cat_map.iter() {
-                let mut c = self.get_counter(&t);
+                let mut counter = self.get_counter(t);
                 if let Some(enc) = self.cat_map.get_mut(t) {
-                    let (remap, insert): (Vec<_>, Vec<_>) = other_enc
-                        .map
-                        .par_iter()
-                        .map(|(s, u)| {
-                            if let Some(e) = enc.map.get(s) {
-                                (Some((*u, *e)), None)
-                            } else {
-                                (None, Some((s.clone(), *u)))
-                            }
-                        })
-                        .unzip();
-                    let mut numbered_insert = Vec::new();
-                    let mut new_remap = Vec::new();
-                    for k in insert {
-                        if let Some((s, u)) = k {
-                            numbered_insert.push((s, c));
-                            new_remap.push((u, c));
-                            c += 1;
-                        }
-                    }
-                    for (s, u) in numbered_insert {
-                        enc.encode_new_arc_string(s.clone(), u);
-                    }
-                    let remap: HashMap<_, _, BuildHasherDefault<NoHashHasher<u32>>> = remap
-                        .into_iter()
-                        .filter(|x| x.is_some())
-                        .map(|x| x.unwrap())
-                        .chain(new_remap.into_iter())
-                        .collect();
-                    let reenc = CatReEnc {
-                        cat_map: Arc::new(remap),
-                    };
-                    other_map.insert(t.clone(), reenc);
+                    let re_enc = enc.merge(other_enc, &mut counter);
+                    other_map.insert(t.clone(), re_enc);
                 } else {
-                    let mut remap = Vec::with_capacity(other_enc.map.len());
-                    let mut new_enc = CatEncs::new_empty();
-                    for (s, v) in other_enc.map.iter() {
-                        remap.push((*v, c));
-                        new_enc.encode_new_str(s, c);
-                        c += 1;
-                    }
+                    let (new_enc, re_enc) = CatEncs::new_remap(other_enc, path, &mut counter);
+
                     self.cat_map.insert(t.clone(), new_enc);
-                    let remap: HashMap<_, _, BuildHasherDefault<NoHashHasher<u32>>> =
-                        remap.into_iter().collect();
-                    other_map.insert(
-                        t.clone(),
-                        CatReEnc {
-                            cat_map: Arc::new(remap),
-                        },
-                    );
+
+                    other_map.insert(t.clone(), re_enc);
                 }
-                self.set_counter(c, t);
+                self.set_counter(counter, t);
             }
             if !other_map.is_empty() {
                 map.insert(c.uuid.clone(), other_map);

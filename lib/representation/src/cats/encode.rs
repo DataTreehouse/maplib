@@ -1,4 +1,5 @@
 use super::{CatEncs, CatType, Cats, EncodedTriples};
+use crate::cats::maps::CatMaps;
 use crate::cats::LockedCats;
 use crate::solution_mapping::{BaseCatState, EagerSolutionMappings};
 use crate::{BaseRDFNodeType, RDFNodeState, OBJECT_COL_NAME, SUBJECT_COL_NAME};
@@ -6,34 +7,22 @@ use oxrdf::NamedNode;
 use polars::frame::DataFrame;
 use polars::prelude::{col, lit, IntoLazy, Series};
 use std::collections::HashMap;
-use std::hash::BuildHasherDefault;
-use std::sync::Arc;
+use std::path::Path;
 
 impl CatEncs {
-    pub fn new_empty() -> CatEncs {
-        let rev_map = HashMap::with_capacity_and_hasher(2, BuildHasherDefault::default());
+    pub fn new_empty(path: Option<&Path>) -> CatEncs {
         CatEncs {
-            map: Default::default(),
-            rev_map,
+            maps: CatMaps::new_empty(path),
         }
     }
 
-    pub fn contains_key(&self, s: &str) -> bool {
-        let s = s.to_string();
-        self.map.contains_key(&s)
-    }
-
-    pub fn new_singular(value: &str, u: u32) -> CatEncs {
-        let mut sing = Self::new_empty();
-        let s = Arc::new(value.to_string());
-        sing.map.insert(s.clone(), u);
-        sing.rev_map.insert(u, s);
-        sing
+    pub fn new_singular(value: &str, u: u32, path: Option<&Path>) -> CatEncs {
+        let maps = CatMaps::new_singular(value, u, path);
+        CatEncs { maps }
     }
 
     pub fn maybe_encode_str(&self, s: &str) -> Option<&u32> {
-        let s = Arc::new(s.to_string());
-        self.map.get(&s)
+        self.maps.maybe_encode_string(s)
     }
 
     pub fn encode_new_str(&mut self, s: &str, u: u32) {
@@ -41,23 +30,20 @@ impl CatEncs {
     }
 
     pub fn encode_new_string(&mut self, s: String, u: u32) {
-        let s = Arc::new(s.clone());
-        self.map.insert(s.clone(), u);
-        self.rev_map.insert(u, s);
+        self.maps.encode_new_string(s, u);
     }
 
-    pub fn encode_new_arc_string(&mut self, s: Arc<String>, u: u32) {
-        self.map.insert(s.clone(), u);
-        self.rev_map.insert(u, s);
-    }
-
-    pub fn height(&self) -> u32 {
-        self.map.len() as u32
+    pub fn counter(&self) -> u32 {
+        self.maps.counter()
     }
 }
 
 impl Cats {
-    pub fn encode_solution_mappings(&self, sm: EagerSolutionMappings) -> EagerSolutionMappings {
+    pub fn encode_solution_mappings(
+        &self,
+        sm: EagerSolutionMappings,
+        path: Option<&Path>,
+    ) -> EagerSolutionMappings {
         let EagerSolutionMappings {
             mappings,
             mut rdf_node_types,
@@ -87,7 +73,7 @@ impl Cats {
         let encoded: Vec<_> = to_encode
             .into_iter()
             .map(|(c, t, ser)| {
-                let (enc, local) = self.encode_series(&ser, &t);
+                let (enc, local) = self.encode_series(&ser, &t, path);
                 (c, t, enc, local)
             })
             .collect();
@@ -109,7 +95,12 @@ impl Cats {
         EagerSolutionMappings::new(mappings.collect().unwrap(), rdf_node_types)
     }
 
-    pub fn encode_series(&self, series: &Series, t: &BaseRDFNodeType) -> (Series, Option<Cats>) {
+    pub fn encode_series(
+        &self,
+        series: &Series,
+        t: &BaseRDFNodeType,
+        path: Option<&Path>,
+    ) -> (Series, Option<Cats>) {
         let original_name = series.name().clone();
         let mut use_height = match t {
             BaseRDFNodeType::IRI => self.iri_counter,
@@ -121,7 +112,7 @@ impl Cats {
         };
 
         let enc = self.get_encs(t).pop();
-        let mut new_enc = CatEncs::new_empty();
+        let mut new_enc = CatEncs::new_empty(path);
         let strch = series.str().unwrap();
         let encoded_global: Vec<_> = strch
             .iter()
@@ -158,7 +149,7 @@ impl Cats {
             };
             encoded_global_local.push(encoded);
         }
-        let local = if !new_enc.map.is_empty() {
+        let local = if !new_enc.is_empty() {
             let cat_type = CatType::from_base_rdf_node_type(t);
             let mut map = HashMap::new();
             map.insert(cat_type, new_enc);
@@ -212,7 +203,7 @@ impl Cats {
         u32s
     }
 
-    pub fn encode_iri_or_local_cat(&self, iri: &str) -> (u32, RDFNodeState) {
+    pub fn encode_iri_or_local_cat(&self, iri: &str, path: Option<&Path>) -> (u32, RDFNodeState) {
         let mut v = self.encode_iri_slice(&[iri]);
         if let Some(u) = v.pop().unwrap() {
             (
@@ -223,7 +214,7 @@ impl Cats {
                 ),
             )
         } else {
-            let (u, l) = Cats::new_singular_iri(iri, self.iri_counter);
+            let (u, l) = Cats::new_singular_iri(iri, self.iri_counter, path);
             (
                 u,
                 RDFNodeState::from_bases(
@@ -234,7 +225,11 @@ impl Cats {
         }
     }
 
-    pub fn encode_blank_or_local_cat(&self, blank: &str) -> (u32, RDFNodeState) {
+    pub fn encode_blank_or_local_cat(
+        &self,
+        blank: &str,
+        path: Option<&Path>,
+    ) -> (u32, RDFNodeState) {
         let mut v = self.encode_blanks(&[blank]);
         if let Some(u) = v.pop().unwrap() {
             (
@@ -245,7 +240,7 @@ impl Cats {
                 ),
             )
         } else {
-            let (u, l) = Cats::new_singular_blank(blank, self.blank_counter);
+            let (u, l) = Cats::new_singular_blank(blank, self.blank_counter, path);
             (
                 u,
                 RDFNodeState::from_bases(
@@ -264,6 +259,7 @@ pub fn encode_triples(
     subject_cat_state: BaseCatState,
     object_cat_state: BaseCatState,
     global_cats: &Cats,
+    path: Option<&Path>,
 ) -> (Vec<LockedCats>, EncodedTriples) {
     let mut map = HashMap::new();
     map.insert(
@@ -274,7 +270,7 @@ pub fn encode_triples(
         OBJECT_COL_NAME.to_string(),
         RDFNodeState::from_bases(object_type.clone(), object_cat_state),
     );
-    let mut sm = global_cats.encode_solution_mappings(EagerSolutionMappings::new(df, map));
+    let mut sm = global_cats.encode_solution_mappings(EagerSolutionMappings::new(df, map), path);
 
     let mut subject_state = sm.rdf_node_types.remove(SUBJECT_COL_NAME).unwrap();
     let mut object_state = sm.rdf_node_types.remove(OBJECT_COL_NAME).unwrap();

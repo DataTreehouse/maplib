@@ -43,6 +43,7 @@ impl Triplestore {
         parallel: Option<bool>,
         checked: bool,
         graph: &NamedGraph,
+        prefixes: &HashMap<String, NamedNode>,
     ) -> Result<(), TriplestoreError> {
         let now = Instant::now();
         let rdf_format = if let Some(rdf_format) = rdf_format {
@@ -68,6 +69,7 @@ impl Triplestore {
             parallel,
             checked,
             graph,
+            prefixes,
         )?;
         drop(map);
 
@@ -88,6 +90,7 @@ impl Triplestore {
         parallel: Option<bool>,
         checked: bool,
         graph: &NamedGraph,
+        prefixes: &HashMap<String, NamedNode>,
     ) -> Result<(), TriplestoreError> {
         self.read_triples(
             s.as_bytes(),
@@ -97,6 +100,7 @@ impl Triplestore {
             parallel,
             checked,
             graph,
+            prefixes,
         )
     }
 
@@ -111,6 +115,7 @@ impl Triplestore {
         parallel: Option<bool>,
         checked: bool,
         graph: &NamedGraph,
+        prefixes: &HashMap<String, NamedNode>,
     ) -> Result<(), TriplestoreError> {
         let start_quadproc_now = Instant::now();
         let parallel = if let Some(parallel) = parallel {
@@ -129,6 +134,9 @@ impl Triplestore {
                 let mut readers = vec![];
                 if rdf_format == RdfFormat::Turtle {
                     let mut parser = TurtleParser::new();
+                    for (k, v) in prefixes {
+                        parser = parser.with_prefix(k, v.as_str()).unwrap();
+                    }
                     if !checked {
                         parser = parser.unchecked();
                     }

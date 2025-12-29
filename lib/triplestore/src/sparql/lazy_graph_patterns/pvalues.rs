@@ -46,7 +46,8 @@ impl Triplestore {
             todo!("Handle this error")
         };
         let cats = self.global_cats.read().unwrap();
-        let mut sm = cats.encode_solution_mappings(sm);
+        // No disk based storage of local cats if created
+        let mut sm = cats.encode_solution_mappings(sm, None);
         sm.mappings.as_single_chunk_par();
         if let Some(mut mappings) = solution_mappings {
             //TODO: Remove this workaround
