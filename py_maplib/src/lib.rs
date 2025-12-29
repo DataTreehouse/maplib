@@ -1285,7 +1285,15 @@ fn insert_sprout_mutex(
         let global_cats = &inner.triplestore.global_cats;
         let (mut sms, cats) = {
             let guard = global_cats.read().unwrap();
-            new_solution_mapping_cats(sms, &guard)
+            new_solution_mapping_cats(
+                sms,
+                &guard,
+                inner
+                    .triplestore
+                    .storage_folder
+                    .as_ref()
+                    .map(|x| x.as_ref()),
+            )
         };
         let locked_cats = LockedCats::new(cats);
         for sm in &mut sms {
