@@ -6,7 +6,6 @@ use crate::cats::maps::on_disk::CatMapsOnDisk;
 use crate::cats::CatReEnc;
 use std::collections::HashSet;
 use std::path::Path;
-use std::sync::Arc;
 
 #[derive(Debug, Clone)]
 pub enum CatMaps {
@@ -21,7 +20,12 @@ impl CatMaps {
         c: &mut u32,
     ) -> (CatMaps, CatReEnc) {
         if let Some(path) = path {
-            todo!()
+            if let CatMaps::OnDisk(disk) = maps {
+                let (disk, re_enc) = CatMapsOnDisk::new_remap(disk, c, path);
+                (CatMaps::OnDisk(disk), re_enc)
+            } else {
+                unreachable!("Should never happen")
+            }
         } else {
             if let CatMaps::InMemory(mem) = maps {
                 let (mem, re_enc) = CatMapsInMemory::new_remap(mem, c);
@@ -41,8 +45,12 @@ impl CatMaps {
                     unreachable!("Should never happen")
                 }
             }
-            CatMaps::OnDisk(_) => {
-                todo!()
+            CatMaps::OnDisk(disk) => {
+                if let CatMaps::OnDisk(other_disk) = other {
+                    disk.inner_join_re_enc(other_disk)
+                } else {
+                    unreachable!("Should never happen")
+                }
             }
         }
     }
@@ -56,8 +64,12 @@ impl CatMaps {
                     unreachable!("Should never happen")
                 }
             }
-            CatMaps::OnDisk(_) => {
-                todo!()
+            CatMaps::OnDisk(disk) => {
+                if let CatMaps::OnDisk(other_disk) = other {
+                    disk.merge(other_disk, c)
+                } else {
+                    unreachable!("Should never happen")
+                }
             }
         }
     }
@@ -66,7 +78,7 @@ impl CatMaps {
         match self {
             CatMaps::InMemory(mem) => mem.contains_str(s),
             CatMaps::OnDisk(disk) => {
-                todo!()
+                disk.contains_str(s)
             }
         }
     }
@@ -75,7 +87,7 @@ impl CatMaps {
         match self {
             CatMaps::InMemory(mem) => mem.contains_u32(u),
             CatMaps::OnDisk(disk) => {
-                todo!()
+                disk.contains_u32(u)
             }
         }
     }
@@ -83,8 +95,8 @@ impl CatMaps {
     pub fn is_empty(&self) -> bool {
         match self {
             CatMaps::InMemory(mem) => mem.is_empty(),
-            CatMaps::OnDisk(_) => {
-                todo!()
+            CatMaps::OnDisk(disk) => {
+                disk.is_empty()
             }
         }
     }
@@ -93,23 +105,23 @@ impl CatMaps {
         match self {
             CatMaps::InMemory(mem) => mem.encode_new_string(s, u),
             CatMaps::OnDisk(disk) => {
-                todo!()
+                disk.encode_new_string(s,u)
             }
         }
     }
 
-    pub fn maybe_encode_string(&self, s: &str) -> Option<&u32> {
+    pub fn maybe_encode_str(&self, s: &str) -> Option<&u32> {
         match self {
-            CatMaps::InMemory(mem) => mem.maybe_encode_string(s),
-            CatMaps::OnDisk(_) => {
-                todo!()
+            CatMaps::InMemory(mem) => mem.maybe_encode_str(s),
+            CatMaps::OnDisk(disk) => {
+                disk.maybe_encode_str(s)
             }
         }
     }
 
     pub fn new_singular(value: &str, u: u32, path: Option<&Path>) -> CatMaps {
         if let Some(path) = path {
-            todo!()
+            CatMaps::InMemory(CatMapsOnDisk::new_singular(value, u, path))
         } else {
             CatMaps::InMemory(CatMapsInMemory::new_singular(value, u))
         }
@@ -117,23 +129,16 @@ impl CatMaps {
 
     pub fn new_empty(path: Option<&Path>) -> CatMaps {
         if let Some(path) = path {
-            todo!()
+            CatMaps::OnDisk(CatMapsOnDisk::new_empty(path))
         } else {
             CatMaps::InMemory(CatMapsInMemory::new_empty())
-        }
-    }
-
-    pub fn encode(&self, key: &Arc<String>) -> Option<&u32> {
-        match self {
-            CatMaps::InMemory(mem) => mem.get(key),
-            CatMaps::OnDisk(disk) => todo!(),
         }
     }
 
     pub fn counter(&self) -> u32 {
         match self {
             CatMaps::InMemory(m) => m.counter(),
-            CatMaps::OnDisk(d) => todo!(),
+            CatMaps::OnDisk(d) => d.counter(),
         }
     }
 
@@ -147,7 +152,7 @@ impl CatMaps {
     pub fn maybe_decode(&self, u: &u32) -> Option<&str> {
         match self {
             CatMaps::InMemory(mem) => mem.maybe_decode(u),
-            CatMaps::OnDisk(disk) => disk.maybe_decode_string(u),
+            CatMaps::OnDisk(disk) => disk.maybe_decode(u),
         }
     }
 

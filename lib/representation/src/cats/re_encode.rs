@@ -97,7 +97,7 @@ impl Cats {
             for (t, other_enc) in c.cat_map.iter() {
                 let mut counter = self.get_counter(t);
                 if let Some(enc) = self.cat_map.get_mut(t) {
-                    let re_enc = enc.merge(other_enc, &mut counter);
+                    let re_enc = enc.maps.merge(&other_enc.maps, &mut counter);
                     other_map.insert(t.clone(), re_enc);
                 } else {
                     let (new_enc, re_enc) = CatEncs::new_remap(other_enc, path, &mut counter);

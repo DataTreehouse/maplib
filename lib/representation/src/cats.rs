@@ -94,24 +94,6 @@ impl CatEncs {
     }
 }
 
-impl CatEncs {
-    pub fn contains_str(&self, s: &str) -> bool {
-        self.maps.contains_str(s)
-    }
-
-    pub fn contains_u32(&self, u: &u32) -> bool {
-        self.maps.contains_u32(u)
-    }
-
-    pub(crate) fn is_empty(&self) -> bool {
-        self.maps.is_empty()
-    }
-
-    pub fn merge(&mut self, other: &CatEncs, c: &mut u32) -> CatReEnc {
-        self.maps.merge(&other.maps, c)
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct LockedCats {
     inner: Arc<RwLock<Cats>>,

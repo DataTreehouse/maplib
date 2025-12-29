@@ -55,7 +55,7 @@ impl Cats {
                             .filter(|x| x.is_some())
                             .map(|x| x.unwrap());
                         if let Some(local_rev_map) = local_rev_map {
-                            ss.extend(new_ss.filter(|x| !local_rev_map.contains_u32(x)));
+                            ss.extend(new_ss.filter(|x| !local_rev_map.maps.contains_u32(x)));
                         } else {
                             ss.extend(new_ss);
                         }

@@ -22,7 +22,7 @@ impl CatEncs {
     }
 
     pub fn maybe_encode_str(&self, s: &str) -> Option<&u32> {
-        self.maps.maybe_encode_string(s)
+        self.maps.maybe_encode_str(s)
     }
 
     pub fn encode_new_str(&mut self, s: &str, u: u32) {
@@ -149,7 +149,7 @@ impl Cats {
             };
             encoded_global_local.push(encoded);
         }
-        let local = if !new_enc.is_empty() {
+        let local = if !new_enc.maps.is_empty() {
             let cat_type = CatType::from_base_rdf_node_type(t);
             let mut map = HashMap::new();
             map.insert(cat_type, new_enc);

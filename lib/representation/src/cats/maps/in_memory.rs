@@ -58,7 +58,7 @@ impl CatMapsInMemory {
         self.rev_map.insert(u, s);
     }
 
-    pub fn maybe_encode_string(&self, s: &str) -> Option<&u32> {
+    pub fn maybe_encode_str(&self, s: &str) -> Option<&u32> {
         let s = Arc::new(s.to_string());
         self.map.get(&s)
     }
@@ -131,7 +131,7 @@ impl CatMapsInMemory {
             .map
             .iter()
             .map(|(x, l)| {
-                if let Some(r) = other.maybe_encode_string(x.as_str()) {
+                if let Some(r) = other.maybe_encode_str(x.as_str()) {
                     if l != r {
                         Some((*l, *r))
                     } else {
