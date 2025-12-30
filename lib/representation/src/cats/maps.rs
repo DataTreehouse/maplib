@@ -77,45 +77,35 @@ impl CatMaps {
     pub fn contains_str(&self, s: &str) -> bool {
         match self {
             CatMaps::InMemory(mem) => mem.contains_str(s),
-            CatMaps::OnDisk(disk) => {
-                disk.contains_str(s)
-            }
+            CatMaps::OnDisk(disk) => disk.contains_str(s),
         }
     }
 
     pub fn contains_u32(&self, u: &u32) -> bool {
         match self {
             CatMaps::InMemory(mem) => mem.contains_u32(u),
-            CatMaps::OnDisk(disk) => {
-                disk.contains_u32(u)
-            }
+            CatMaps::OnDisk(disk) => disk.contains_u32(u),
         }
     }
 
     pub fn is_empty(&self) -> bool {
         match self {
             CatMaps::InMemory(mem) => mem.is_empty(),
-            CatMaps::OnDisk(disk) => {
-                disk.is_empty()
-            }
+            CatMaps::OnDisk(disk) => disk.is_empty(),
         }
     }
 
     pub fn encode_new_string(&mut self, s: String, u: u32) {
         match self {
             CatMaps::InMemory(mem) => mem.encode_new_string(s, u),
-            CatMaps::OnDisk(disk) => {
-                disk.encode_new_string(s,u)
-            }
+            CatMaps::OnDisk(disk) => disk.encode_new_string(s, u),
         }
     }
 
     pub fn maybe_encode_str(&self, s: &str) -> Option<&u32> {
         match self {
             CatMaps::InMemory(mem) => mem.maybe_encode_str(s),
-            CatMaps::OnDisk(disk) => {
-                disk.maybe_encode_str(s)
-            }
+            CatMaps::OnDisk(disk) => disk.maybe_encode_str(s),
         }
     }
 

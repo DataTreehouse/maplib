@@ -5,7 +5,7 @@
 #![doc(html_logo_url = "https://raw.githubusercontent.com/oxigraph/oxigraph/main/logo.svg")]
 
 pub mod algebra;
-mod parser;
+pub mod parser;
 mod query;
 pub mod query_context;
 pub mod remove_sugar;

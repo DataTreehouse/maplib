@@ -50,6 +50,18 @@ pub fn parse_update(
     })
 }
 
+/// Parses a construct ruleset (used in datalog)
+pub fn parse_construct_ruleset(
+    constructs: &str,
+    base_iri: Option<&str>,
+    prefixes: Option<&HashMap<String, NamedNode>>,
+) -> Result<Vec<Query>, SparqlSyntaxError> {
+    let mut state = ParserState::from_base_iri(base_iri, prefixes)?;
+    let queries = parser::ConstructRulesetUnit(constructs, &mut state)
+        .map_err(|e| SparqlSyntaxError(ParseErrorKind::Syntax(e)))?;
+    Ok(queries)
+}
+
 /// Error returned during SPARQL parsing.
 #[derive(Debug, thiserror::Error)]
 #[error(transparent)]
@@ -774,6 +786,12 @@ fn variable() -> Variable {
 parser! {
     //See https://www.w3.org/TR/turtle/#sec-grammar
     grammar parser(state: &mut ParserState) for str {
+        pub rule ConstructRulesetUnit() -> Vec<Query> = ConstructRuleset()
+
+        rule ConstructRuleset() -> Vec<Query> = _ Prologue() _ qs: (ConstructQuery() ** (_ "."? _)) _ "."? _ {
+            qs
+        }
+
         pub rule QueryUnit() -> Query = Query()
 
         rule Query() -> Query = _ Prologue() _ q:(SelectQuery() / ConstructQuery() / DescribeQuery() / AskQuery()) _ {
