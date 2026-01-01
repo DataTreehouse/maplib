@@ -64,7 +64,7 @@ use datalog::inference::InferenceResult;
 use datalog::python::PyInferenceResult;
 #[cfg(not(target_os = "linux"))]
 use mimalloc::MiMalloc;
-use representation::cats::{LockedCats};
+use representation::cats::LockedCats;
 use representation::dataset::NamedGraph;
 use representation::debug::DebugOutputs;
 use representation::formatting::format_native_columns;
@@ -1596,6 +1596,7 @@ fn new_triples_to_dict(
     //TODO: Handle case where same predicate occurs multiple times
     for NewTriples {
         df,
+        graph: _,
         predicate,
         subject_type,
         object_type,
