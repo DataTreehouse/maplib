@@ -753,69 +753,12 @@ class Model:
         :param graph: The IRI of the graph to write.
         """
 
-    def create_sprout(self):
+    def detach_graph(self, graph:str) -> "Model":
         """
-        A sprout is a simplified way of dealing with multiple graphs.
-        See also `Model.insert_sprout` and `Model.detach_sprout`
+        Detaches and returns a named graph as their own Model object.
+        The named graph is removed from the original Model.
 
-        :return:
-        """
-
-    def insert_sprout(
-        self,
-        query: str,
-        parameters: ParametersType = None,
-        include_datatypes: bool = False,
-        native_dataframe: bool = False,
-        transient: bool = False,
-        streaming: bool = False,
-        source_graph: str = None,
-        target_graph: str = None,
-        include_transient: bool = True,
-        max_rows:int = None,
-        debug:bool = None,
-    ):
-        """
-        Insert the results of a Construct query in a sprouted graph, which is created if no sprout is active.
-        Sprouts are simplified way of dealing with multiple graphs.
-        Useful for being able to use the same query for inspecting what will be inserted and actually inserting.
-        See also `Model.detach_sprout`
-
-        Usage:
-
-        >>> m = Model()
-        ... m.add_template(doc)
-        ... m.create_sprout()
-        ... # Omitted
-        ... hpizzas = '''
-        ... PREFIX pizza:<https://github.com/magbak/maplib/pizza#>
-        ... PREFIX ing:<https://github.com/magbak/maplib/pizza/ingredients#>
-        ... CONSTRUCT { ?p a pizza:HeterodoxPizza }
-        ... WHERE {
-        ... ?p a pizza:Pizza .
-        ... ?p pizza:hasIngredient ing:Pineapple .
-        ... }'''
-        ... m.insert_sprout(hpizzas)
-
-        :param query: The SPARQL Insert query string
-        :param parameters: PVALUES Parameters, a DataFrame containing the value bindings in the custom PVALUES construction.
-        :param native_dataframe: Return columns with maplib-native formatting. Useful for round-trips.
-        :param include_datatypes: Datatypes are not returned by default, set to true to return a dict with the solution mappings and the datatypes.
-        :param transient: Should the inserted triples be included in exports?
-        :param source_graph: The IRI of the source graph to execute the construct query.
-        :param target_graph: The IRI of the target graph to insert into.
-        :param streaming: Use Polars streaming
-        :param include_transient: Include transient triples when querying (see also "transient" above).
-        :param max_rows: Maximum estimated rows in result, helps avoid out-of-memory errors.
-        :param debug: Why does my query have no results?
-        :return: None
-        """
-
-    def detach_sprout(self) -> "Model":
-        """
-        Detaches and returns the sprout from the model.
-
-        :return: The sprout as its own Model.
+        :return: A model.
         """
 
     def get_predicate_iris(

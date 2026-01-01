@@ -64,7 +64,7 @@ use datalog::inference::InferenceResult;
 use datalog::python::PyInferenceResult;
 #[cfg(not(target_os = "linux"))]
 use mimalloc::MiMalloc;
-use representation::cats::{new_solution_mapping_cats, set_global_cats_as_local, LockedCats};
+use representation::cats::{LockedCats};
 use representation::dataset::NamedGraph;
 use representation::debug::DebugOutputs;
 use representation::formatting::format_native_columns;
@@ -90,14 +90,12 @@ const DEFAULT_DEBUG_NO_RESULTS: bool = false;
 #[pyclass(name = "Model", frozen)]
 pub struct PyModel {
     inner: Mutex<InnerModel>,
-    sprout: Mutex<Option<InnerModel>>,
 }
 
 impl PyModel {
     pub fn from_inner_mapping(inner: InnerModel) -> PyModel {
         PyModel {
             inner: Mutex::new(inner),
-            sprout: Mutex::new(None),
         }
     }
 }
@@ -159,7 +157,6 @@ impl PyModel {
             inner: Mutex::new(
                 InnerModel::new(None, None, indexing, None).map_err(PyMaplibError::from)?,
             ),
-            sprout: Mutex::new(None),
         })
     }
 
@@ -206,20 +203,18 @@ impl PyModel {
         })
     }
 
+    #[pyo3(signature=(graph=None))]
     #[instrument(skip_all)]
-    fn create_sprout(&self, py: Python<'_>) -> PyResult<()> {
+    fn detach_graph(&self, py: Python<'_>, graph: Option<String>) -> PyResult<PyModel> {
+        let graph = parse_optional_named_node(graph)?;
+        let graph = if let Some(graph) = graph {
+            NamedGraph::NamedGraph(graph)
+        } else {
+            NamedGraph::DefaultGraph
+        };
         py.allow_threads(move || {
             let mut inner = self.inner.lock().unwrap();
-            let mut sprout = self.sprout.lock().unwrap();
-            create_sprout_mutex(&mut inner, &mut sprout)
-        })
-    }
-
-    #[instrument(skip_all)]
-    fn detach_sprout(&self, py: Python<'_>) -> PyResult<Option<PyModel>> {
-        py.allow_threads(move || {
-            let sprout = self.sprout.lock().unwrap();
-            detach_sprout_mutex(sprout)
+            detach_graph_mutex(&mut inner, &graph)
         })
     }
 
@@ -480,13 +475,11 @@ impl PyModel {
         let (new_triples, cats) =
             py.allow_threads(|| -> PyResult<(Vec<NewTriples>, LockedCats)> {
                 let mut inner = self.inner.lock().unwrap();
-                let mut sprout = self.sprout.lock().unwrap();
 
                 let cats = inner.triplestore.global_cats.clone();
 
                 let new_triples = insert_mutex(
                     &mut inner,
-                    &mut sprout,
                     query,
                     mapped_parameters,
                     transient,
@@ -500,72 +493,6 @@ impl PyModel {
 
                 Ok((new_triples, cats))
             })?;
-        new_triples_to_dict(
-            new_triples,
-            native_dataframe.unwrap_or(false),
-            include_datatypes.unwrap_or(false),
-            cats,
-            py,
-        )
-    }
-
-    #[pyo3(signature = (
-            query,
-            parameters=None,
-            include_datatypes=None,
-            native_dataframe=None,
-            transient=None,
-            streaming=None,
-            source_graph=None,
-            target_graph=None,
-            include_transient=None,
-            max_rows=None,
-            debug=None,
-    ))]
-    #[instrument(skip_all)]
-    fn insert_sprout(
-        &self,
-        py: Python<'_>,
-        query: String,
-        parameters: Option<ParametersType>,
-        include_datatypes: Option<bool>,
-        native_dataframe: Option<bool>,
-        transient: Option<bool>,
-        streaming: Option<bool>,
-        source_graph: Option<String>,
-        target_graph: Option<String>,
-        include_transient: Option<bool>,
-        max_rows: Option<usize>,
-        debug: Option<bool>,
-    ) -> PyResult<HashMap<String, PyObject>> {
-        let mapped_parameters = map_parameters(parameters)?;
-        let source_graph = parse_optional_named_node(source_graph)?;
-        let source_graph = NamedGraph::from_maybe_named_node(source_graph.as_ref());
-        let target_graph = parse_optional_named_node(target_graph)?;
-        let target_graph = NamedGraph::from_maybe_named_node(target_graph.as_ref());
-        let (new_triples, cats) = py.allow_threads(|| -> PyResult<(_, _)> {
-            let mut inner = self.inner.lock().unwrap();
-            let mut sprout = self.sprout.lock().unwrap();
-
-            let cats = inner.triplestore.global_cats.clone();
-
-            let new_triples = insert_sprout_mutex(
-                &mut inner,
-                &mut sprout,
-                query,
-                mapped_parameters,
-                transient,
-                streaming,
-                source_graph,
-                target_graph,
-                include_transient,
-                max_rows,
-                debug,
-            )?;
-
-            Ok((new_triples, cats))
-        })?;
-
         new_triples_to_dict(
             new_triples,
             native_dataframe.unwrap_or(false),
@@ -890,32 +817,12 @@ fn add_prefixes_mutex(
     Ok(())
 }
 
-fn create_sprout_mutex(
-    inner: &mut MutexGuard<InnerModel>,
-    sprout: &mut MutexGuard<Option<InnerModel>>,
-) -> PyResult<()> {
-    let mut new_sprout = InnerModel::new(
-        Some(&inner.template_dataset),
-        None,
-        Some(inner.indexing.clone()),
-        None,
-    )
-    .map_err(PyMaplibError::from)?;
-    new_sprout.blank_node_counter = inner.blank_node_counter;
-    **sprout = Some(new_sprout);
-    Ok(())
-}
-
-fn detach_sprout_mutex(mut sprout: MutexGuard<Option<InnerModel>>) -> PyResult<Option<PyModel>> {
-    if let Some(sprout) = sprout.take() {
-        let m = PyModel {
-            inner: Mutex::new(sprout),
-            sprout: Mutex::new(None),
-        };
-        Ok(Some(m))
-    } else {
-        Ok(None)
-    }
+fn detach_graph_mutex(model: &mut MutexGuard<InnerModel>, graph: &NamedGraph) -> PyResult<PyModel> {
+    let sprout = model.detach_graph(graph).map_err(PyMaplibError::from)?;
+    let m = PyModel {
+        inner: Mutex::new(sprout),
+    };
+    Ok(m)
 }
 
 fn map_mutex(
@@ -1215,7 +1122,6 @@ fn validate_mutex(
 
 fn insert_mutex(
     inner: &mut MutexGuard<InnerModel>,
-    sprout: &mut MutexGuard<Option<InnerModel>>,
     query: String,
     mapped_parameters: Option<HashMap<String, EagerSolutionMappings>>,
     transient: Option<bool>,
@@ -1245,71 +1151,6 @@ fn insert_mutex(
     } else {
         todo!("Handle this error..")
     };
-
-    if sprout.is_some() {
-        sprout.as_mut().unwrap().blank_node_counter = inner.blank_node_counter;
-    }
-    Ok(new_triples)
-}
-
-fn insert_sprout_mutex(
-    inner: &mut MutexGuard<InnerModel>,
-    sprout: &mut MutexGuard<Option<InnerModel>>,
-    query: String,
-    mapped_parameters: Option<HashMap<String, EagerSolutionMappings>>,
-    transient: Option<bool>,
-    streaming: Option<bool>,
-    source_graph: NamedGraph,
-    target_graph: NamedGraph,
-    include_transient: Option<bool>,
-    max_rows: Option<usize>,
-    debug: Option<bool>,
-) -> PyResult<Vec<NewTriples>> {
-    if sprout.is_none() {
-        create_sprout_mutex(inner, sprout)?;
-    }
-    let res = inner
-        .query(
-            &query,
-            &mapped_parameters,
-            Some(&source_graph),
-            streaming.unwrap_or(DEFAULT_STREAMING),
-            include_transient.unwrap_or(DEFAULT_INCLUDE_TRANSIENT),
-            max_rows,
-            debug.unwrap_or(DEFAULT_DEBUG_NO_RESULTS),
-        )
-        .map_err(PyMaplibError::from)?;
-
-    let new_triples = if let QueryResultKind::Construct(dfs_and_dts) = res.kind {
-        let (sms, preds): (_, Vec<_>) = dfs_and_dts.into_iter().unzip();
-        let global_cats = &inner.triplestore.global_cats;
-        let (mut sms, cats) = {
-            let guard = global_cats.read().unwrap();
-            new_solution_mapping_cats(
-                sms,
-                &guard,
-                inner
-                    .triplestore
-                    .storage_folder
-                    .as_ref()
-                    .map(|x| x.as_ref()),
-            )
-        };
-        let locked_cats = LockedCats::new(cats);
-        for sm in &mut sms {
-            set_global_cats_as_local(&mut sm.rdf_node_types, locked_cats.clone());
-        }
-        let dfs_and_dts: Vec<_> = sms.into_iter().zip(preds).collect();
-        sprout
-            .as_mut()
-            .unwrap()
-            .insert_construct_result(dfs_and_dts, transient.unwrap_or(false), &target_graph)
-            .map_err(|x| PyMaplibError::from(MaplibError::from(x)))
-    } else {
-        todo!("Handle this error..")
-    }?;
-
-    inner.blank_node_counter = sprout.as_ref().unwrap().blank_node_counter;
 
     Ok(new_triples)
 }

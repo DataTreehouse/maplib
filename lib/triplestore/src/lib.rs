@@ -29,8 +29,8 @@ use representation::cats::{
 use representation::multitype::set_struct_all_null_to_null_row;
 use representation::solution_mapping::{BaseCatState, EagerSolutionMappings};
 use representation::{
-    literal_iri_to_namednode, BaseRDFNodeType, RDFNodeState, OBJECT_COL_NAME, PREDICATE_COL_NAME,
-    SUBJECT_COL_NAME,
+    literal_iri_to_namednode, BaseRDFNodeType, RDFNodeState, LANG_STRING_LANG_FIELD,
+    LANG_STRING_VALUE_FIELD, OBJECT_COL_NAME, PREDICATE_COL_NAME, SUBJECT_COL_NAME,
 };
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -55,6 +55,114 @@ pub struct Triplestore {
     indexing: HashMap<NamedGraph, IndexingOptions>,
     fts_index: HashMap<NamedGraph, FtsIndex>,
     pub global_cats: LockedCats,
+}
+
+impl Triplestore {
+    pub fn detach_graph(&mut self, graph: &NamedGraph) -> Result<Triplestore, TriplestoreError> {
+        let mut us = HashMap::new();
+        let mut predicates = vec![];
+        if let Some(graph_triples_map) = self.graph_triples_map.get(graph) {
+            for (k, v) in graph_triples_map {
+                predicates.push(k.as_str());
+                for ((st, ot), triples) in v {
+                    if st.stored_cat() {
+                        if !us.contains_key(st) {
+                            us.insert(st.clone(), HashSet::new());
+                        }
+                        let uset = us.get_mut(&st).unwrap();
+                        let lfs = triples.get_lazy_frames(&None, &None)?;
+                        for (lf, _) in lfs {
+                            let subjects_df = lf.select([col(SUBJECT_COL_NAME)]).collect().unwrap();
+                            let subjects_ser = subjects_df.column(SUBJECT_COL_NAME).unwrap();
+                            for u in subjects_ser.u32().unwrap() {
+                                uset.insert(u.unwrap());
+                            }
+                        }
+                    }
+                    if ot.stored_cat() {
+                        if !us.contains_key(&ot) {
+                            us.insert(ot.clone(), HashSet::new());
+                        }
+                        let uset = us.get_mut(&ot).unwrap();
+                        let lfs = triples.get_lazy_frames(&None, &None)?;
+                        for (lf, _) in lfs {
+                            let objects_df = lf.select([col(OBJECT_COL_NAME)]).collect().unwrap();
+                            let objects_ser = objects_df.column(OBJECT_COL_NAME).unwrap();
+                            if ot.is_lang_string() {
+                                let langs_ser = objects_ser
+                                    .struct_()
+                                    .unwrap()
+                                    .field_by_name(LANG_STRING_LANG_FIELD)
+                                    .unwrap();
+                                for u in langs_ser.u32().unwrap() {
+                                    uset.insert(u.unwrap());
+                                }
+                                let vals_ser = objects_ser
+                                    .struct_()
+                                    .unwrap()
+                                    .field_by_name(LANG_STRING_VALUE_FIELD)
+                                    .unwrap();
+                                for u in vals_ser.u32().unwrap() {
+                                    uset.insert(u.unwrap());
+                                }
+                            } else {
+                                let objects_ser = objects_df.column(OBJECT_COL_NAME).unwrap();
+                                for u in objects_ser.u32().unwrap() {
+                                    uset.insert(u.unwrap());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            // Adding the predicates
+            let pred_us = self.global_cats.read()?.encode_iri_slice(&predicates);
+            if !us.contains_key(&BaseRDFNodeType::IRI) {
+                us.insert(BaseRDFNodeType::IRI, HashSet::new());
+            }
+            let us_iris = us.get_mut(&BaseRDFNodeType::IRI).unwrap();
+            for up in pred_us {
+                if let Some(up) = up {
+                    us_iris.insert(up);
+                }
+            }
+            // Creating the cats image
+            let c = self.global_cats.read()?;
+            let cats_image = c.image(&us);
+
+            let new_graph_triples = self.graph_triples_map.remove(graph).unwrap();
+            let new_graph_transient_triples = self.graph_transient_triples_map.remove(graph);
+            let mut new_graph_transient_triples_map = HashMap::new();
+            if let Some(new_graph_transient_triples) = new_graph_transient_triples {
+                new_graph_transient_triples_map.insert(graph.clone(), new_graph_transient_triples);
+            }
+            let new_indexing = self.indexing.remove(graph).unwrap();
+            let new_fts_index = self.fts_index.remove(graph);
+            let mut new_fts_index_map = HashMap::new();
+            if let Some(new_fts_index) = new_fts_index {
+                new_fts_index_map.insert(graph.clone(), new_fts_index);
+            }
+
+            if matches!(graph, NamedGraph::DefaultGraph) {
+                self.graph_triples_map
+                    .insert(NamedGraph::default(), HashMap::new());
+                self.indexing
+                    .insert(NamedGraph::default(), new_indexing.clone());
+            }
+
+            Ok(Triplestore {
+                storage_folder: self.storage_folder.clone(),
+                graph_triples_map: HashMap::from_iter([(graph.clone(), new_graph_triples)]),
+                graph_transient_triples_map: new_graph_transient_triples_map,
+                parser_call: self.parser_call,
+                indexing: HashMap::from_iter([(graph.clone(), new_indexing)]),
+                fts_index: new_fts_index_map,
+                global_cats: LockedCats::new(cats_image),
+            })
+        } else {
+            Err(TriplestoreError::GraphDoesNotExist(graph.to_string()))
+        }
+    }
 }
 
 impl Triplestore {

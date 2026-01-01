@@ -15,6 +15,9 @@ from maplib import (
 )
 from polars.testing import assert_frame_equal
 
+def test_write_empty_model():
+    m = Model()
+    s = m.writes()
 
 def test_create_model_from_empty_polars_df():
     doc = """

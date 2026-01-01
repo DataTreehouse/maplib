@@ -483,4 +483,16 @@ impl Model {
         );
         Ok(res.map_err(|x| MaplibError::DatalogError(x))?)
     }
+
+    pub fn detach_graph(&mut self, graph: &NamedGraph) -> Result<Model, MaplibError> {
+        let triplestore = self.triplestore.detach_graph(graph)?;
+        Ok(Model {
+            template_dataset: self.template_dataset.clone(),
+            triplestore,
+            blank_node_counter: self.blank_node_counter,
+            default_template_counter: self.default_template_counter,
+            indexing: self.indexing.clone(),
+            prefixes: self.prefixes.clone(),
+        })
+    }
 }

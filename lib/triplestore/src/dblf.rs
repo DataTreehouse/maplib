@@ -220,7 +220,6 @@ impl Triplestore {
             let mut subject_types = HashMap::new();
             let mut object_types = HashMap::new();
             let mut accumulated_heights = 0usize;
-
             for HalfBakedSolutionMappings {
                 mut mappings,
                 predicate,
