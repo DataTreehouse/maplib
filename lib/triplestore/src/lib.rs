@@ -185,7 +185,10 @@ impl Triplestore {
         };
         Ok(Triplestore {
             graph_triples_map: HashMap::from([(NamedGraph::DefaultGraph, Default::default())]),
-            graph_transient_triples_map: HashMap::from([(NamedGraph::DefaultGraph, Default::default())]),
+            graph_transient_triples_map: HashMap::from([(
+                NamedGraph::DefaultGraph,
+                Default::default(),
+            )]),
             storage_folder: pathbuf,
             parser_call: 0,
             indexing: HashMap::from([(NamedGraph::DefaultGraph, indexing)]),

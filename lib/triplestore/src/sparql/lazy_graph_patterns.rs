@@ -1,6 +1,7 @@
 mod distinct;
 mod extend;
 mod filter;
+mod graph;
 mod group;
 mod join;
 mod left_join;
@@ -160,9 +161,15 @@ impl Triplestore {
                 query_settings,
                 dataset,
             ),
-            GraphPattern::Graph { name: _, inner: _ } => {
-                todo!("Graphs not supported yet")
-            }
+            GraphPattern::Graph { name, inner } => self.lazy_graph(
+                name,
+                inner,
+                solution_mappings,
+                context,
+                parameters,
+                pushdowns,
+                query_settings,
+            ),
             GraphPattern::Extend {
                 inner,
                 variable,
@@ -229,8 +236,7 @@ impl Triplestore {
                 dataset,
             ),
             GraphPattern::Reduced { inner } => {
-                info!("Reduced has no practical effect in this implementation");
-                self.lazy_graph_pattern(
+                let mut sm = self.lazy_graph_pattern(
                     inner,
                     solution_mappings,
                     &context.extension_with(PathEntry::ReducedInner),
@@ -238,7 +244,9 @@ impl Triplestore {
                     pushdowns,
                     query_settings,
                     dataset,
-                )
+                )?;
+                sm.mappings = sm.mappings.first();
+                Ok(sm)
             }
             GraphPattern::Slice {
                 inner,

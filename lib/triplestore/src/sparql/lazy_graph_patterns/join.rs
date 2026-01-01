@@ -274,9 +274,7 @@ impl Triplestore {
                 left_vars.extend(right_vars);
                 (left_p, left_vars)
             }
-            GraphPattern::Graph { .. } => {
-                todo!()
-            }
+            GraphPattern::Graph { name: _name, inner } => self.bad_properties(inner, incoming_cols),
             GraphPattern::Minus { left, right } => {
                 let (mut left_properties, left_vars) = self.bad_properties(left, incoming_cols);
                 let (right_properties, _) = self.bad_properties(right, incoming_cols);
