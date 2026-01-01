@@ -17,7 +17,7 @@ use crate::storage::{repeated_from_last_row_expr, Triples};
 use file_io::create_folder_if_not_exists;
 use fts::FtsIndex;
 use oxrdf::vocab::{rdf, rdfs};
-use oxrdf::NamedNode;
+use oxrdf::{GraphName, NamedNode};
 use polars::prelude::{col, AnyValue, DataFrame, IntoLazy, RankMethod, RankOptions};
 use polars_core::prelude::SortMultipleOptions;
 use rayon::iter::ParallelDrainRange;
@@ -216,11 +216,13 @@ impl Default for IndexingOptions {
     }
 }
 
+#[derive(Debug)]
 pub struct TriplesToAdd {
     pub df: DataFrame,
     pub subject_type: BaseRDFNodeType,
     pub object_type: BaseRDFNodeType,
     pub predicate: Option<NamedNode>,
+    pub graph: NamedGraph,
     pub subject_cat_state: BaseCatState,
     pub object_cat_state: BaseCatState,
     pub predicate_cat_state: Option<BaseCatState>,
@@ -229,6 +231,7 @@ pub struct TriplesToAdd {
 #[derive(Debug)]
 pub struct NewTriples {
     pub df: Option<DataFrame>,
+    pub graph: NamedGraph,
     pub predicate: NamedNode,
     pub subject_type: BaseRDFNodeType,
     pub object_type: BaseRDFNodeType,
@@ -362,7 +365,6 @@ impl Triplestore {
         &mut self,
         ts: Vec<TriplesToAdd>,
         transient: bool,
-        graph: &NamedGraph,
     ) -> Result<Vec<NewTriples>, TriplestoreError> {
         let prepare_triples_now = Instant::now();
         let dfs_to_add = prepare_add_triples_par(
@@ -375,7 +377,7 @@ impl Triplestore {
             prepare_triples_now.elapsed().as_secs_f32()
         );
         let add_triples_now = Instant::now();
-        let new_triples = self.add_local_cat_triples(dfs_to_add, transient, graph)?;
+        let new_triples = self.add_local_cat_triples(dfs_to_add, transient)?;
         trace!(
             "Adding triples df took {} seconds",
             add_triples_now.elapsed().as_secs_f32()
@@ -388,10 +390,9 @@ impl Triplestore {
         &mut self,
         local_cat_triples: Vec<CatTriples>,
         transient: bool,
-        graph: &NamedGraph,
     ) -> Result<Vec<NewTriples>, TriplestoreError> {
         let global_cats = self.globalize(local_cat_triples);
-        self.add_global_cat_triples(global_cats, transient, graph)
+        self.add_global_cat_triples(global_cats, transient)
     }
 
     #[instrument(skip_all)]
@@ -399,24 +400,23 @@ impl Triplestore {
         &mut self,
         global_cat_triples: Vec<CatTriples>,
         transient: bool,
-        graph: &NamedGraph,
     ) -> Result<Vec<NewTriples>, TriplestoreError> {
-        self.add_graph_if_not_exists(graph, transient);
-        let use_map = if transient {
-            &mut self.graph_transient_triples_map.get_mut(graph).unwrap()
-        } else {
-            &mut self.graph_triples_map.get_mut(graph).unwrap()
-        };
-
         let mut add_map: HashMap<_, (_, Vec<_>)> = HashMap::new();
         for CatTriples {
             encoded_triples,
             predicate,
+            graph,
             subject_type,
             object_type,
             local_cats: _,
         } in global_cat_triples
         {
+            self.add_graph_if_not_exists(&graph, transient);
+            let use_map = if transient {
+                &mut self.graph_transient_triples_map.get_mut(&graph).unwrap()
+            } else {
+                &mut self.graph_triples_map.get_mut(&graph).unwrap()
+            };
             let mut map = HashMap::new();
             map.insert(
                 SUBJECT_COL_NAME.to_string(),
@@ -434,7 +434,8 @@ impl Triplestore {
                 None
             };
             let (s, o) = k;
-            let k2 = (predicate.clone(), s, o);
+
+            let k2 = (graph.clone(), predicate.clone(), s, o);
 
             if !add_map.contains_key(&k2) {
                 add_map.insert(k2.clone(), (triples, vec![]));
@@ -443,12 +444,16 @@ impl Triplestore {
             v.push(encoded_triples);
         }
         let storage_folder = self.storage_folder.clone();
-        let indexing = self.indexing.get(graph).unwrap().clone();
         let cats = self.global_cats.clone();
+        let mut add_vec = vec![];
+        for ((graph, p, s, o), (t1, t2)) in add_map.into_iter() {
+            let indexing = self.indexing.get(&graph).unwrap().clone();
+            add_vec.push((graph, indexing, p, s, o, t1, t2));
+        }
         //Why does not par iter work?
-        let r: Result<Vec<_>, TriplestoreError> = add_map
+        let r: Result<Vec<_>, TriplestoreError> = add_vec
             .into_iter()
-            .map(move |((p, s, o), (triples, v))| {
+            .map(move |((graph, indexing, p, s, o, triples, v))| {
                 let mut new_triples_vec = vec![];
                 let mut v_iter = v.into_iter();
                 let mut triples = if let Some(triples) = triples {
@@ -462,6 +467,7 @@ impl Triplestore {
                                 .select([SUBJECT_COL_NAME, OBJECT_COL_NAME])
                                 .unwrap(),
                         ),
+                        graph: graph.clone(),
                         predicate: p.clone(),
                         subject_type: s.clone(),
                         object_type: o.clone(),
@@ -488,20 +494,26 @@ impl Triplestore {
                     let new_triples = NewTriples {
                         df: new_triples_opt
                             .map(|x| x.select([SUBJECT_COL_NAME, OBJECT_COL_NAME]).unwrap()),
+                        graph: graph.clone(),
                         predicate: p.clone(),
                         subject_type: s.clone(),
                         object_type: o.clone(),
                     };
                     new_triples_vec.push(new_triples);
                 }
-                let k = (p, s, o);
+                let k = (graph, p, s, o);
                 Ok(((k, triples), new_triples_vec))
             })
             .collect();
         let (to_add_map, out_new_triples): (HashMap<_, _>, Vec<_>) = r?.into_iter().unzip();
 
         let out_new_triples: Vec<_> = out_new_triples.into_iter().flatten().collect();
-        for ((p, s, o), v) in to_add_map {
+        for ((graph, p, s, o), v) in to_add_map {
+            let use_map = if transient {
+                self.graph_transient_triples_map.get_mut(&graph).unwrap()
+            } else {
+                self.graph_triples_map.get_mut(&graph).unwrap()
+            };
             if !use_map.contains_key(&p) {
                 use_map.insert(p.clone(), HashMap::new());
             }
@@ -512,7 +524,7 @@ impl Triplestore {
         for nt in &out_new_triples {
             if matches!(nt.object_type, BaseRDFNodeType::Literal(..)) {
                 if let Some(df) = &nt.df {
-                    if let Some(fts_index) = self.fts_index.get_mut(graph) {
+                    if let Some(fts_index) = self.fts_index.get_mut(&nt.graph) {
                         let fts_now = Instant::now();
                         fts_index
                             .add_literal_string(
@@ -561,6 +573,7 @@ struct TriplesToAddPartitionedPredicate {
     pub subject_type: BaseRDFNodeType,
     pub object_type: BaseRDFNodeType,
     pub predicate: NamedNode,
+    pub graph: NamedGraph,
     pub subject_cat_state: BaseCatState,
     pub object_cat_state: BaseCatState,
 }
@@ -579,6 +592,7 @@ pub fn prepare_add_triples_par(
                 subject_type,
                 object_type,
                 predicate,
+                graph,
                 subject_cat_state,
                 predicate_cat_state,
                 object_cat_state,
@@ -601,6 +615,7 @@ pub fn prepare_add_triples_par(
                     subject_type: subject_type.clone(),
                     object_type: object_type.clone(),
                     predicate,
+                    graph: graph.clone(),
                     subject_cat_state: subject_cat_state.clone(),
                     object_cat_state: object_cat_state.clone(),
                 })
@@ -632,6 +647,7 @@ pub fn prepare_add_triples_par(
                  subject_type,
                  object_type,
                  predicate,
+                 graph,
                  subject_cat_state,
                  object_cat_state,
              }| {
@@ -641,6 +657,7 @@ pub fn prepare_add_triples_par(
                     subject_type,
                     object_type,
                     predicate,
+                    graph,
                     subject_cat_state,
                     object_cat_state,
                     &cats,

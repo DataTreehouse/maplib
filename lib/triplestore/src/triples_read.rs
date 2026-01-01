@@ -180,20 +180,24 @@ impl Triplestore {
             .map(|r| create_predicate_map(r, &parser_call))
             .collect();
 
-        let mut par_predicate_map: HashMap<String, Vec<MapType>> = HashMap::new();
+        let mut par_graph_predicate_map: HashMap<(GraphName, String), Vec<MapType>> =
+            HashMap::new();
         for m in predicate_maps {
-            for (predicate, map) in m? {
-                if let Some(v) = par_predicate_map.get_mut(&predicate) {
-                    v.push(map);
-                } else {
-                    par_predicate_map.insert(predicate, vec![map]);
+            for (graph_name, map) in m? {
+                for (predicate, map) in map {
+                    let key = (graph_name.clone(), predicate);
+                    if let Some(v) = par_graph_predicate_map.get_mut(&key) {
+                        v.push(map);
+                    } else {
+                        par_graph_predicate_map.insert(key, vec![map]);
+                    }
                 }
             }
         }
 
-        let predicate_map: HashMap<String, MapType> = par_predicate_map
+        let predicate_map: HashMap<(GraphName, String), MapType> = par_graph_predicate_map
             .into_par_iter()
-            .map(|(predicate, maps)| {
+            .map(|((graph_name, predicate), maps)| {
                 let mut subject_map: MapType = HashMap::new();
                 for new_subject_map in maps {
                     for (subject_dt, new_object_map) in new_subject_map {
@@ -211,7 +215,7 @@ impl Triplestore {
                         }
                     }
                 }
-                (predicate, subject_map)
+                ((graph_name, predicate), subject_map)
             })
             .collect();
 
@@ -223,7 +227,7 @@ impl Triplestore {
         let start_tripleproc_now = Instant::now();
         let triples_to_add: Vec<_> = predicate_map
             .into_par_iter()
-            .map(|(k, map)| {
+            .map(|((graph_name, predicate), map)| {
                 let mut triples_to_add = vec![];
                 for (subject_dt, obj_map) in map {
                     let subject_dt = BaseRDFNodeType::from_string(subject_dt);
@@ -248,12 +252,19 @@ impl Triplestore {
                                 OBJECT_COL_NAME.to_string(),
                             ]))
                             .unwrap();
+                        // Are we overriding the default graph?
+                        let use_graph = if matches!(graph, NamedGraph::DefaultGraph) {
+                            NamedGraph::from(&graph_name)
+                        } else {
+                            graph.clone()
+                        };
 
                         triples_to_add.push(TriplesToAdd {
                             df,
                             subject_type: subject_dt.clone(),
                             object_type: object_dt.clone(),
-                            predicate: Some(NamedNode::new_unchecked(k.clone())),
+                            predicate: Some(NamedNode::new_unchecked(predicate.clone())),
+                            graph: use_graph,
                             subject_cat_state: subject_dt.default_input_cat_state(),
                             predicate_cat_state: None,
                             object_cat_state: object_dt.default_input_cat_state(),
@@ -270,7 +281,7 @@ impl Triplestore {
         );
         let start_add_triples_vec = Instant::now();
         self.parser_call += 1;
-        self.add_triples_vec(triples_to_add, transient, graph)?;
+        self.add_triples_vec(triples_to_add, transient)?;
         debug!(
             "Adding triples vec took {} seconds",
             start_add_triples_vec.elapsed().as_secs_f64()
@@ -302,15 +313,21 @@ fn blank_node_to_oxrdf_blank_node(bn: BlankNode, parser_call: &str) -> BlankNode
 fn create_predicate_map(
     r: MyFromSliceQuadReader,
     parser_call: &str,
-) -> Result<HashMap<String, MapType>, TriplestoreError> {
-    let mut predicate_map = HashMap::new();
+) -> Result<HashMap<GraphName, HashMap<String, MapType>>, TriplestoreError> {
+    let mut graph_predicate_map = HashMap::new();
     for q in r {
         let Quad {
             subject,
             predicate,
             object,
-            ..
+            graph_name,
         } = q.map_err(TriplestoreError::RDFSyntaxError)?;
+        let predicate_map = if let Some(predicate_map) = graph_predicate_map.get_mut(&graph_name) {
+            predicate_map
+        } else {
+            graph_predicate_map.insert(graph_name.clone(), HashMap::new());
+            graph_predicate_map.get_mut(&graph_name).unwrap()
+        };
         let type_map: &mut HashMap<_, HashMap<_, (Vec<Subject>, Vec<Term>)>> =
             if let Some(type_map) = predicate_map.get_mut(predicate.as_str()) {
                 type_map
@@ -344,7 +361,7 @@ fn create_predicate_map(
             type_map.insert(subject_datatype_string, obj_type_map);
         }
     }
-    Ok(predicate_map)
+    Ok(graph_predicate_map)
 }
 
 //Adapted from proposed change to https://github.com/oxigraph/

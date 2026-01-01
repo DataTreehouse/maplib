@@ -33,6 +33,7 @@ impl Triplestore {
             sms,
             &cats,
             self.storage_folder.as_ref().map(|x| x.as_ref()),
+            graph,
         );
         drop(cats);
         if !global_cat_triples.is_empty() {
@@ -80,7 +81,7 @@ impl Triplestore {
                         self.global_cats.clone(),
                         false,
                     );
-                    self.add_global_cat_triples(vec![gct], false, graph)?;
+                    self.add_global_cat_triples(vec![gct], false)?;
                 } else {
                     self.delete_if_exists(&gct, false, graph)?;
                 }
@@ -104,7 +105,7 @@ impl Triplestore {
                         self.global_cats.clone(),
                         false,
                     );
-                    self.add_global_cat_triples(vec![gct], true, graph)?;
+                    self.add_global_cat_triples(vec![gct], true)?;
                 } else {
                     self.delete_if_exists(&gct, true, graph)?;
                 }
@@ -175,6 +176,7 @@ fn triples_solution_mappings_to_global_cat_triples(
     sm_preds: Vec<(EagerSolutionMappings, NamedNode)>,
     global_cats: &Cats,
     storage_path: Option<&Path>,
+    graph: &NamedGraph,
 ) -> Vec<CatTriples> {
     let mappings_maps_preds: Vec<_> = sm_preds
         .into_par_iter()
@@ -224,6 +226,7 @@ fn triples_solution_mappings_to_global_cat_triples(
                 subject_type,
                 object_type,
                 predicate,
+                graph.clone(),
                 subject_state,
                 object_state,
                 global_cats,
@@ -291,6 +294,7 @@ fn get_triples_after_deletion(
             return Ok(Some(CatTriples {
                 encoded_triples: encoded,
                 predicate: gct.predicate.clone(),
+                graph: gct.graph.clone(),
                 subject_type: gct.subject_type.clone(),
                 object_type: gct.object_type.clone(),
                 local_cats: vec![],

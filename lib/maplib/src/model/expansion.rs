@@ -302,6 +302,7 @@ impl Model {
                     subject_type: subject_type,
                     object_type: object_type,
                     predicate: predicate.clone(),
+                    graph: graph.clone(),
                     subject_cat_state: subject_state,
                     object_cat_state: object_state,
                     predicate_cat_state: predicate_state,
@@ -310,7 +311,7 @@ impl Model {
         }
 
         self.triplestore
-            .add_triples_vec(all_triples_to_add, false, graph)
+            .add_triples_vec(all_triples_to_add, false)
             .map_err(MappingError::TriplestoreError)?;
 
         self.blank_node_counter = new_blank_node_counter;

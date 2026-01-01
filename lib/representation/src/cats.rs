@@ -13,9 +13,10 @@ pub use re_encode::*;
 use std::cmp;
 
 use crate::cats::maps::CatMaps;
+use crate::dataset::NamedGraph;
 use crate::BaseRDFNodeType;
 use oxrdf::vocab::xsd;
-use oxrdf::{NamedNode, NamedNodeRef};
+use oxrdf::{GraphName, NamedNode, NamedNodeRef};
 use polars::prelude::DataFrame;
 use std::collections::HashMap;
 use std::ops::Deref;
@@ -35,6 +36,7 @@ pub fn literal_is_cat(nn: NamedNodeRef) -> bool {
 pub struct CatTriples {
     pub encoded_triples: EncodedTriples,
     pub predicate: NamedNode,
+    pub graph: NamedGraph,
     pub subject_type: BaseRDFNodeType,
     pub object_type: BaseRDFNodeType,
     pub local_cats: Vec<LockedCats>,

@@ -1,7 +1,8 @@
 use super::{encode_triples, re_encode, CatEncs, CatTriples, CatType, Cats};
+use crate::dataset::NamedGraph;
 use crate::solution_mapping::BaseCatState;
 use crate::BaseRDFNodeType;
-use oxrdf::NamedNode;
+use oxrdf::{GraphName, NamedNode};
 use polars::frame::DataFrame;
 use std::path::Path;
 use tracing::instrument;
@@ -44,6 +45,7 @@ pub fn cat_encode_triples(
     subject_type: BaseRDFNodeType,
     object_type: BaseRDFNodeType,
     predicate: NamedNode,
+    graph: NamedGraph,
     subject_cat_state: BaseCatState,
     object_cat_state: BaseCatState,
     global_cats: &Cats,
@@ -62,6 +64,7 @@ pub fn cat_encode_triples(
     CatTriples {
         encoded_triples,
         predicate,
+        graph,
         subject_type,
         object_type,
         local_cats,

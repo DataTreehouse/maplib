@@ -1,7 +1,7 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
 use crate::{NewTriples, TriplesToAdd};
-use oxrdf::NamedNode;
+use oxrdf::{GraphName, NamedNode};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use representation::dataset::NamedGraph;
 use representation::multitype::split_df_multicols;
@@ -16,9 +16,9 @@ impl Triplestore {
         transient: bool,
         graph: &NamedGraph,
     ) -> Result<Vec<NewTriples>, SparqlError> {
-        let all_triples_to_add = construct_result_as_triples_to_add(sms);
+        let all_triples_to_add = construct_result_as_triples_to_add(sms, graph);
         let new_triples = if !all_triples_to_add.is_empty() {
-            self.add_triples_vec(all_triples_to_add, transient, graph)
+            self.add_triples_vec(all_triples_to_add, transient)
                 .map_err(SparqlError::TriplestoreError)?
         } else {
             vec![]
@@ -29,6 +29,7 @@ impl Triplestore {
 
 fn construct_result_as_triples_to_add(
     sms: Vec<(EagerSolutionMappings, Option<NamedNode>)>,
+    graph: &NamedGraph,
 ) -> Vec<TriplesToAdd> {
     let tta: Vec<Vec<_>> = sms
         .into_par_iter()
@@ -81,6 +82,7 @@ fn construct_result_as_triples_to_add(
                                 subject_type: new_subj_dt,
                                 object_type: new_obj_dt,
                                 predicate: predicate.clone(),
+                                graph: graph.clone(),
                                 subject_cat_state: new_subj_state,
                                 object_cat_state: new_obj_state,
                                 predicate_cat_state: new_pred_state,
@@ -113,6 +115,7 @@ fn construct_result_as_triples_to_add(
                             subject_type,
                             object_type,
                             predicate,
+                            graph: graph.clone(),
                             subject_cat_state: subject_state,
                             predicate_cat_state: predicate_state,
                             object_cat_state: object_state,

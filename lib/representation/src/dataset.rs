@@ -1,4 +1,4 @@
-use oxrdf::NamedNode;
+use oxrdf::{BlankNode, GraphName, NamedNode};
 use spargebra::algebra::QueryDataset;
 use std::fmt::{Display, Formatter};
 
@@ -6,6 +6,7 @@ use std::fmt::{Display, Formatter};
 pub enum NamedGraph {
     DefaultGraph,
     NamedGraph(NamedNode),
+    BlankNode(BlankNode),
 }
 
 impl NamedGraph {
@@ -14,6 +15,16 @@ impl NamedGraph {
             NamedGraph::NamedGraph(nn.clone())
         } else {
             NamedGraph::DefaultGraph
+        }
+    }
+}
+
+impl From<&GraphName> for NamedGraph {
+    fn from(graph: &GraphName) -> Self {
+        match graph {
+            GraphName::NamedNode(nn) => NamedGraph::NamedGraph(nn.clone()),
+            GraphName::BlankNode(bn) => NamedGraph::BlankNode(bn.clone()),
+            GraphName::DefaultGraph => NamedGraph::DefaultGraph,
         }
     }
 }
@@ -32,6 +43,9 @@ impl Display for NamedGraph {
             }
             NamedGraph::NamedGraph(nn) => {
                 write!(f, "{}", nn)
+            }
+            NamedGraph::BlankNode(bn) => {
+                write!(f, "{}", bn)
             }
         }
     }
