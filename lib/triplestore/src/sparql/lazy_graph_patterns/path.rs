@@ -34,6 +34,7 @@ type SparseMatrix = CsMatBase<u32, usize, Vec<usize>, Vec<usize>, Vec<u32>, usiz
 
 struct SparsePathReturn {
     sparmat: SparseMatrix,
+    eye: bool,
 }
 
 impl Triplestore {
@@ -49,6 +50,7 @@ impl Triplestore {
         dataset: &QueryGraph,
     ) -> Result<SolutionMappings, SparqlError> {
         let create_sparse = need_sparse_matrix(ppe);
+        println!("create_sparse: {:?}", create_sparse);
 
         let mut var_cols = vec![];
         match subject {
@@ -110,163 +112,128 @@ impl Triplestore {
         df_creator.gather_namednode_dfs(ppe, self)?;
         let (lookup_df, lookup_dtypes, namednode_dfs) =
             df_creator.create_u32_dfs(self.global_cats.clone())?;
-        let max_index: Option<u32> = lookup_df
+        let max_index: u32 = lookup_df
             .column(LOOKUP_COLUMN)
             .unwrap()
             .as_materialized_series()
             .max()
-            .unwrap();
+            .unwrap()
+            .unwrap_or(0);
+        let SparsePathReturn { sparmat, .. } = sparse_path(ppe, &namednode_dfs, max_index as usize);
 
-        if let Some(max_index) = max_index {
-            if let Some(SparsePathReturn { sparmat }) =
-                sparse_path(ppe, &namednode_dfs, max_index as usize)
-            {
-                let mut subject_vec = vec![];
-                let mut object_vec = vec![];
-                for (i, row) in sparmat.outer_iterator().enumerate() {
-                    for (j, v) in row.iter() {
-                        if v > &0 {
-                            subject_vec.push(i as u32);
-                            object_vec.push(j as u32);
-                        }
-                    }
+        println!("sparmat: {:?}", sparmat);
+        let mut subject_vec = vec![];
+        let mut object_vec = vec![];
+        for (i, row) in sparmat.outer_iterator().enumerate() {
+            for (j, v) in row.iter() {
+                if v > &0 {
+                    subject_vec.push(i as u32);
+                    object_vec.push(j as u32);
                 }
-                let mut subject_series = Series::from_iter(subject_vec);
-                subject_series.rename("subject_key".into());
-                let mut object_series = Series::from_iter(object_vec);
-                object_series.rename("object_key".into());
-                let mut out_lf = DataFrame::new(vec![subject_series.into(), object_series.into()])
-                    .unwrap()
-                    .lazy();
-                let lookup_subject_lf =
-                    lookup_df
-                        .clone()
-                        .lazy()
-                        .rename([VALUE_COLUMN], [SUBJECT_COL_NAME], true);
-                out_lf = out_lf
-                    .join(
-                        lookup_subject_lf,
-                        &[col("subject_key")],
-                        &[col(LOOKUP_COLUMN)],
-                        JoinArgs::new(JoinType::Inner),
-                    )
-                    .drop(by_name(["subject_key"], true));
-                let lookup_object_lf =
-                    lookup_df
-                        .lazy()
-                        .rename([VALUE_COLUMN], [OBJECT_COL_NAME], true);
-                out_lf = out_lf
-                    .join(
-                        lookup_object_lf,
-                        &[col("object_key")],
-                        &[col(LOOKUP_COLUMN)],
-                        JoinArgs::new(JoinType::Inner),
-                    )
-                    .drop(by_name(["object_key"], true));
-                out_df = out_lf.collect().unwrap();
-                let mut dtypes = HashMap::new();
+            }
+        }
+        let mut subject_series = Series::from_iter(subject_vec);
+        subject_series.rename("subject_key".into());
+        let mut object_series = Series::from_iter(object_vec);
+        object_series.rename("object_key".into());
+        let mut out_lf = DataFrame::new(vec![subject_series.into(), object_series.into()])
+            .unwrap()
+            .lazy();
+        let lookup_subject_lf =
+            lookup_df
+                .clone()
+                .lazy()
+                .rename([VALUE_COLUMN], [SUBJECT_COL_NAME], true);
+        out_lf = out_lf
+            .join(
+                lookup_subject_lf,
+                &[col("subject_key")],
+                &[col(LOOKUP_COLUMN)],
+                JoinArgs::new(JoinType::Inner),
+            )
+            .drop(by_name(["subject_key"], true));
+        let lookup_object_lf = lookup_df
+            .lazy()
+            .rename([VALUE_COLUMN], [OBJECT_COL_NAME], true);
+        out_lf = out_lf
+            .join(
+                lookup_object_lf,
+                &[col("object_key")],
+                &[col(LOOKUP_COLUMN)],
+                JoinArgs::new(JoinType::Inner),
+            )
+            .drop(by_name(["object_key"], true));
+        out_df = out_lf.collect().unwrap();
+        let mut dtypes = HashMap::new();
+        dtypes.insert(
+            SUBJECT_COL_NAME.to_string(),
+            lookup_dtypes.get(VALUE_COLUMN).unwrap().clone(),
+        );
+        dtypes.insert(
+            OBJECT_COL_NAME.to_string(),
+            lookup_dtypes.get(VALUE_COLUMN).unwrap().clone(),
+        );
+
+        if lookup_dtypes.get(VALUE_COLUMN).unwrap().is_multi() {
+            if let TermPattern::NamedNode(_) = subject {
+                out_df = force_convert_multicol_to_single_col(
+                    out_df.lazy(),
+                    SUBJECT_COL_NAME,
+                    &BaseRDFNodeType::IRI,
+                )
+                .collect()
+                .unwrap();
                 dtypes.insert(
                     SUBJECT_COL_NAME.to_string(),
-                    lookup_dtypes.get(VALUE_COLUMN).unwrap().clone(),
+                    BaseRDFNodeType::IRI.into_default_stored_rdf_node_state(),
                 );
+            }
+            if let TermPattern::NamedNode(_) = object {
+                out_df = force_convert_multicol_to_single_col(
+                    out_df.lazy(),
+                    OBJECT_COL_NAME,
+                    &BaseRDFNodeType::IRI,
+                )
+                .collect()
+                .unwrap();
                 dtypes.insert(
                     OBJECT_COL_NAME.to_string(),
-                    lookup_dtypes.get(VALUE_COLUMN).unwrap().clone(),
+                    BaseRDFNodeType::IRI.into_default_stored_rdf_node_state(),
                 );
-
-                if lookup_dtypes.get(VALUE_COLUMN).unwrap().is_multi() {
-                    if let TermPattern::NamedNode(_) = subject {
-                        out_df = force_convert_multicol_to_single_col(
-                            out_df.lazy(),
-                            SUBJECT_COL_NAME,
-                            &BaseRDFNodeType::IRI,
-                        )
-                        .collect()
-                        .unwrap();
-                        dtypes.insert(
-                            SUBJECT_COL_NAME.to_string(),
-                            BaseRDFNodeType::IRI.into_default_stored_rdf_node_state(),
-                        );
-                    }
-                    if let TermPattern::NamedNode(_) = object {
-                        out_df = force_convert_multicol_to_single_col(
-                            out_df.lazy(),
-                            OBJECT_COL_NAME,
-                            &BaseRDFNodeType::IRI,
-                        )
-                        .collect()
-                        .unwrap();
-                        dtypes.insert(
-                            OBJECT_COL_NAME.to_string(),
-                            BaseRDFNodeType::IRI.into_default_stored_rdf_node_state(),
-                        );
-                    }
-                    if let TermPattern::Literal(l) = subject {
-                        out_df = force_convert_multicol_to_single_col(
-                            out_df.lazy(),
-                            SUBJECT_COL_NAME,
-                            &BaseRDFNodeType::Literal(l.datatype().into_owned()),
-                        )
-                        .collect()
-                        .unwrap();
-                        dtypes.insert(
-                            SUBJECT_COL_NAME.to_string(),
-                            BaseRDFNodeType::Literal(l.datatype().into_owned())
-                                .into_default_stored_rdf_node_state(),
-                        );
-                    }
-                    if let TermPattern::Literal(l) = object {
-                        out_df = force_convert_multicol_to_single_col(
-                            out_df.lazy(),
-                            OBJECT_COL_NAME,
-                            &BaseRDFNodeType::Literal(l.datatype().into_owned()),
-                        )
-                        .collect()
-                        .unwrap();
-                        dtypes.insert(
-                            OBJECT_COL_NAME.to_string(),
-                            BaseRDFNodeType::Literal(l.datatype().into_owned())
-                                .into_default_stored_rdf_node_state(),
-                        );
-                    }
-                }
-                (out_df, dtypes) = compress_actual_multitypes(out_df, dtypes);
-                out_dt_subj = dtypes.remove(SUBJECT_COL_NAME).unwrap();
-                out_dt_obj = dtypes.remove(OBJECT_COL_NAME).unwrap();
-            } else {
-                out_df = DataFrame::new(vec![
-                    Series::new_empty(
-                        SUBJECT_COL_NAME.into(),
-                        &BaseRDFNodeType::None.default_stored_polars_data_type(),
-                    )
-                    .into(),
-                    Series::new_empty(
-                        OBJECT_COL_NAME.into(),
-                        &BaseRDFNodeType::None.default_stored_polars_data_type(),
-                    )
-                    .into(),
-                ])
-                .unwrap();
-                out_dt_obj = BaseRDFNodeType::None.into_default_stored_rdf_node_state();
-                out_dt_subj = BaseRDFNodeType::None.into_default_stored_rdf_node_state();
             }
-        } else {
-            out_df = DataFrame::new(vec![
-                Series::new_empty(
-                    SUBJECT_COL_NAME.into(),
-                    &BaseRDFNodeType::None.default_stored_polars_data_type(),
+            if let TermPattern::Literal(l) = subject {
+                out_df = force_convert_multicol_to_single_col(
+                    out_df.lazy(),
+                    SUBJECT_COL_NAME,
+                    &BaseRDFNodeType::Literal(l.datatype().into_owned()),
                 )
-                .into(),
-                Series::new_empty(
-                    OBJECT_COL_NAME.into(),
-                    &BaseRDFNodeType::None.default_stored_polars_data_type(),
+                .collect()
+                .unwrap();
+                dtypes.insert(
+                    SUBJECT_COL_NAME.to_string(),
+                    BaseRDFNodeType::Literal(l.datatype().into_owned())
+                        .into_default_stored_rdf_node_state(),
+                );
+            }
+            if let TermPattern::Literal(l) = object {
+                out_df = force_convert_multicol_to_single_col(
+                    out_df.lazy(),
+                    OBJECT_COL_NAME,
+                    &BaseRDFNodeType::Literal(l.datatype().into_owned()),
                 )
-                .into(),
-            ])
-            .unwrap();
-            out_dt_obj = BaseRDFNodeType::None.into_default_stored_rdf_node_state();
-            out_dt_subj = BaseRDFNodeType::None.into_default_stored_rdf_node_state();
+                .collect()
+                .unwrap();
+                dtypes.insert(
+                    OBJECT_COL_NAME.to_string(),
+                    BaseRDFNodeType::Literal(l.datatype().into_owned())
+                        .into_default_stored_rdf_node_state(),
+                );
+            }
         }
+        (out_df, dtypes) = compress_actual_multitypes(out_df, dtypes);
+        out_dt_subj = dtypes.remove(SUBJECT_COL_NAME).unwrap();
+        out_dt_obj = dtypes.remove(OBJECT_COL_NAME).unwrap();
+
         let mut var_cols = vec![];
         let mut rename_src = vec![];
         let mut rename_trg = vec![];
@@ -364,7 +331,6 @@ impl Triplestore {
             rdf_node_types: datatypes,
             height_estimate: out_df_height,
         };
-
         if let Some(mappings) = solution_mappings {
             path_solution_mappings = join(
                 path_solution_mappings,
@@ -486,6 +452,16 @@ fn to_csr(df: &DataFrame, max_index: usize) -> SparseMatrix {
     trimat.to_csr()
 }
 
+fn empty_csr(max_index: usize) -> SparseMatrix {
+    let trimat = TriMatBase::from_triplets(
+        (max_index + 1, max_index + 1),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+    );
+    trimat.to_csr()
+}
+
 fn zero_or_more(mut rel_mat: SparseMatrix) -> SparseMatrix {
     let rows = rel_mat.rows();
     let eye = SparseMatrix::eye(rows);
@@ -559,102 +535,104 @@ fn sparse_path(
     ppe: &PropertyPathExpression,
     namednode_map: &HashMap<NamedNode, DataFrame>,
     max_index: usize,
-) -> Option<SparsePathReturn> {
+) -> SparsePathReturn {
     match ppe {
         PropertyPathExpression::NamedNode(nn) => {
             if let Some(df) = namednode_map.get(nn) {
                 let sparmat = to_csr(df, max_index);
-                Some(SparsePathReturn { sparmat })
+                SparsePathReturn {
+                    sparmat,
+                    eye: false,
+                }
             } else {
-                None
+                let sparmat = empty_csr(max_index);
+                SparsePathReturn {
+                    sparmat,
+                    eye: false,
+                }
             }
         }
         PropertyPathExpression::Reverse(inner) => {
-            if let Some(SparsePathReturn { sparmat }) = sparse_path(inner, namednode_map, max_index)
-            {
-                Some(SparsePathReturn {
-                    sparmat: sparmat.transpose_into(),
-                })
-            } else {
-                None
+            let SparsePathReturn { sparmat, eye } = sparse_path(inner, namednode_map, max_index);
+
+            SparsePathReturn {
+                sparmat: sparmat.transpose_into(),
+                eye,
             }
         }
         PropertyPathExpression::Sequence(left, right) => {
             let res_left = sparse_path(left, namednode_map, max_index);
             let res_right = sparse_path(right, namednode_map, max_index);
-            if let Some(SparsePathReturn {
+            let SparsePathReturn {
                 sparmat: sparmat_left,
-            }) = res_left
-            {
-                if let Some(SparsePathReturn {
-                    sparmat: sparmat_right,
-                }) = res_right
-                {
-                    let sparmat = (&sparmat_left * &sparmat_right).to_csr();
-                    Some(SparsePathReturn { sparmat })
-                } else {
-                    None
-                }
-            } else {
-                None
+                eye: eye_left,
+            } = res_left;
+
+            let SparsePathReturn {
+                sparmat: sparmat_right,
+                eye: eye_right,
+            } = res_right;
+
+            let mut sparmat = (&sparmat_left * &sparmat_right).to_csr();
+            if eye_left {
+                sparmat = (&sparmat + &sparmat_right).to_csr();
+            }
+            if eye_right {
+                sparmat = (&sparmat + &sparmat_left).to_csr();
+            }
+            println!("Eye left {} right {}", eye_left, eye_right);
+            //println!("Sparmat {:?}", sparmat);
+            SparsePathReturn {
+                sparmat,
+                eye: eye_left && eye_right,
             }
         }
         PropertyPathExpression::Alternative(left, right) => {
             let res_left = sparse_path(left, namednode_map, max_index);
             let res_right = sparse_path(right, namednode_map, max_index);
-            if let Some(SparsePathReturn {
+            let SparsePathReturn {
                 sparmat: sparmat_left,
-            }) = res_left
-            {
-                if let Some(SparsePathReturn {
-                    sparmat: sparmat_right,
-                }) = res_right
-                {
-                    let sparmat = (&sparmat_left + &sparmat_right)
-                        .to_csr()
-                        .map(|x| (x > &0) as u32);
-                    Some(SparsePathReturn { sparmat })
-                } else {
-                    Some(SparsePathReturn {
-                        sparmat: sparmat_left,
-                    })
-                }
-            } else {
-                res_right
+                eye: eye_left,
+            } = res_left;
+
+            let SparsePathReturn {
+                sparmat: sparmat_right,
+                eye: eye_right,
+            } = res_right;
+
+            let sparmat = (&sparmat_left + &sparmat_right)
+                .to_csr()
+                .map(|x| (x > &0) as u32);
+            SparsePathReturn {
+                sparmat,
+                eye: eye_left || eye_right,
             }
         }
         PropertyPathExpression::ZeroOrMore(inner) => {
-            if let Some(SparsePathReturn {
+            let SparsePathReturn {
                 sparmat: sparmat_inner,
-            }) = sparse_path(inner, namednode_map, max_index)
-            {
-                let sparmat = zero_or_more(sparmat_inner);
-                Some(SparsePathReturn { sparmat })
-            } else {
-                None
-            }
+                ..
+            } = sparse_path(inner, namednode_map, max_index);
+
+            let sparmat = zero_or_more(sparmat_inner);
+            SparsePathReturn { sparmat, eye: true }
         }
         PropertyPathExpression::OneOrMore(inner) => {
-            if let Some(SparsePathReturn {
+            let SparsePathReturn {
                 sparmat: sparmat_inner,
-            }) = sparse_path(inner, namednode_map, max_index)
-            {
-                let sparmat = one_or_more(sparmat_inner);
-                Some(SparsePathReturn { sparmat })
-            } else {
-                None
-            }
+                eye,
+            } = sparse_path(inner, namednode_map, max_index);
+
+            let sparmat = one_or_more(sparmat_inner);
+            SparsePathReturn { sparmat, eye }
         }
         PropertyPathExpression::ZeroOrOne(inner) => {
-            if let Some(SparsePathReturn {
+            let SparsePathReturn {
                 sparmat: sparmat_inner,
-            }) = sparse_path(inner, namednode_map, max_index)
-            {
-                let sparmat = zero_or_one(sparmat_inner);
-                Some(SparsePathReturn { sparmat })
-            } else {
-                None
-            }
+                ..
+            } = sparse_path(inner, namednode_map, max_index);
+            let sparmat = zero_or_one(sparmat_inner);
+            SparsePathReturn { sparmat, eye: true }
         }
         PropertyPathExpression::NegatedPropertySet(_nns) => {
             todo!()
@@ -689,6 +667,7 @@ impl U32DataFrameCreator {
         ),
         QueryProcessingError,
     > {
+        println!("DFs {:?}", self.named_nodes);
         // TODO! Possible to constrain lookup to only nodes that may occur as subj/obj in path expr.
         // Can reduce size of a join
         let mut nns: Vec<_> = self.named_nodes.keys().cloned().collect();
@@ -833,6 +812,7 @@ impl U32DataFrameCreator {
             .unwrap()
             .unique::<(), ()>(None, UniqueKeepStrategy::Any, None)
             .unwrap();
+        println!("{:?}", lookup_df);
         Ok((lookup_df, lookup_df_types, out_df_map))
     }
 
@@ -843,6 +823,7 @@ impl U32DataFrameCreator {
     ) -> Result<(), SparqlError> {
         match ppe {
             PropertyPathExpression::NamedNode(nn) => {
+                println!("nn {:?}", nn);
                 let SolutionMappings {
                     mappings,
                     mut rdf_node_types,
@@ -859,10 +840,11 @@ impl U32DataFrameCreator {
                     self.include_transient,
                     &self.dataset,
                 )?;
+                let df = mappings.collect().unwrap();
                 self.named_nodes.insert(
                     nn.clone(),
                     (
-                        mappings.collect().unwrap(),
+                        df,
                         rdf_node_types.remove(SUBJECT_COL_NAME).unwrap(),
                         rdf_node_types.remove(OBJECT_COL_NAME).unwrap(),
                     ),

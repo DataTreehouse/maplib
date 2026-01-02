@@ -51,7 +51,7 @@ def test_detach_graph():
     m = Model()
     m.reads(gr1, format="ntriples", graph=ng1)
     m.reads(gr2, format="ntriples", graph=ng2)
-    m2 = m.detach_graph(ng2)
+    m2 = m.detach_graph(ng2, preserve_name=True)
 
     df = m.query("""
     SELECT * WHERE {

@@ -175,30 +175,6 @@ fn add_to_triple_or_path_patterns(
                 },
                 patterns,
             )?,
-            PropertyPathExpression::Sequence(a, b) => {
-                if !object.annotations.is_empty() {
-                    return Err("Annotations are not allowed on property paths");
-                }
-                let middle = BlankNode::default();
-                add_to_triple_or_path_patterns(
-                    subject,
-                    *a,
-                    AnnotatedTermPath {
-                        term: middle.clone().into(),
-                        annotations: Vec::new(),
-                    },
-                    patterns,
-                )?;
-                add_to_triple_or_path_patterns(
-                    middle.into(),
-                    *b,
-                    AnnotatedTermPath {
-                        term: object.term,
-                        annotations: Vec::new(),
-                    },
-                    patterns,
-                )?;
-            }
             path => {
                 if !object.annotations.is_empty() {
                     return Err("Annotations are not allowed on property paths");

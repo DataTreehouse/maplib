@@ -155,7 +155,7 @@ impl Triplestore {
                 new_fts_index_map.insert(new_graph_name.clone(), new_fts_index);
             }
 
-            if !matches!(new_graph_name, NamedGraph::DefaultGraph) {
+            if matches!(graph, NamedGraph::DefaultGraph) {
                 self.graph_triples_map
                     .insert(NamedGraph::default(), HashMap::new());
                 self.indexing
