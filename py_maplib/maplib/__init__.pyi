@@ -753,11 +753,13 @@ class Model:
         :param graph: The IRI of the graph to write.
         """
 
-    def detach_graph(self, graph:str) -> "Model":
+    def detach_graph(self, graph:str=None, preserve_name:bool=False) -> "Model":
         """
         Detaches and returns a named graph as their own Model object.
         The named graph is removed from the original Model.
 
+        :param graph: The name of the graph to detach. Defaults to the default graph.
+        :param preserve_name: Preserve the name of the graph in the new Model, defaults to False.
         :return: A model.
         """
 

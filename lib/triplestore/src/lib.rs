@@ -17,7 +17,7 @@ use crate::storage::{repeated_from_last_row_expr, Triples};
 use file_io::create_folder_if_not_exists;
 use fts::FtsIndex;
 use oxrdf::vocab::{rdf, rdfs};
-use oxrdf::{GraphName, NamedNode};
+use oxrdf::NamedNode;
 use polars::prelude::{col, AnyValue, DataFrame, IntoLazy, RankMethod, RankOptions};
 use polars_core::prelude::SortMultipleOptions;
 use rayon::iter::ParallelDrainRange;
@@ -58,7 +58,11 @@ pub struct Triplestore {
 }
 
 impl Triplestore {
-    pub fn detach_graph(&mut self, graph: &NamedGraph) -> Result<Triplestore, TriplestoreError> {
+    pub fn detach_graph(
+        &mut self,
+        graph: &NamedGraph,
+        preserve_name: bool,
+    ) -> Result<Triplestore, TriplestoreError> {
         let mut us = HashMap::new();
         let mut predicates = vec![];
         if let Some(graph_triples_map) = self.graph_triples_map.get(graph) {
@@ -132,18 +136,26 @@ impl Triplestore {
 
             let new_graph_triples = self.graph_triples_map.remove(graph).unwrap();
             let new_graph_transient_triples = self.graph_transient_triples_map.remove(graph);
+
+            let new_graph_name = if preserve_name {
+                graph.clone()
+            } else {
+                NamedGraph::DefaultGraph
+            };
+
             let mut new_graph_transient_triples_map = HashMap::new();
             if let Some(new_graph_transient_triples) = new_graph_transient_triples {
-                new_graph_transient_triples_map.insert(graph.clone(), new_graph_transient_triples);
+                new_graph_transient_triples_map
+                    .insert(new_graph_name.clone(), new_graph_transient_triples);
             }
             let new_indexing = self.indexing.remove(graph).unwrap();
             let new_fts_index = self.fts_index.remove(graph);
             let mut new_fts_index_map = HashMap::new();
             if let Some(new_fts_index) = new_fts_index {
-                new_fts_index_map.insert(graph.clone(), new_fts_index);
+                new_fts_index_map.insert(new_graph_name.clone(), new_fts_index);
             }
 
-            if matches!(graph, NamedGraph::DefaultGraph) {
+            if !matches!(new_graph_name, NamedGraph::DefaultGraph) {
                 self.graph_triples_map
                     .insert(NamedGraph::default(), HashMap::new());
                 self.indexing
@@ -152,10 +164,13 @@ impl Triplestore {
 
             Ok(Triplestore {
                 storage_folder: self.storage_folder.clone(),
-                graph_triples_map: HashMap::from_iter([(graph.clone(), new_graph_triples)]),
+                graph_triples_map: HashMap::from_iter([(
+                    new_graph_name.clone(),
+                    new_graph_triples,
+                )]),
                 graph_transient_triples_map: new_graph_transient_triples_map,
                 parser_call: self.parser_call,
-                indexing: HashMap::from_iter([(graph.clone(), new_indexing)]),
+                indexing: HashMap::from_iter([(new_graph_name.clone(), new_indexing)]),
                 fts_index: new_fts_index_map,
                 global_cats: LockedCats::new(cats_image),
             })
@@ -453,7 +468,7 @@ impl Triplestore {
         //Why does not par iter work?
         let r: Result<Vec<_>, TriplestoreError> = add_vec
             .into_iter()
-            .map(move |((graph, indexing, p, s, o, triples, v))| {
+            .map(move |(graph, indexing, p, s, o, triples, v)| {
                 let mut new_triples_vec = vec![];
                 let mut v_iter = v.into_iter();
                 let mut triples = if let Some(triples) = triples {
@@ -473,7 +488,6 @@ impl Triplestore {
                         object_type: o.clone(),
                     };
                     new_triples_vec.push(new_triples);
-
                     let triples = Triples::new(
                         et.df,
                         storage_folder.as_ref(),

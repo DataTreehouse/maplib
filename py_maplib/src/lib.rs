@@ -203,9 +203,14 @@ impl PyModel {
         })
     }
 
-    #[pyo3(signature=(graph=None))]
+    #[pyo3(signature=(graph=None, preserve_name=None))]
     #[instrument(skip_all)]
-    fn detach_graph(&self, py: Python<'_>, graph: Option<String>) -> PyResult<PyModel> {
+    fn detach_graph(
+        &self,
+        py: Python<'_>,
+        graph: Option<String>,
+        preserve_name: Option<bool>,
+    ) -> PyResult<PyModel> {
         let graph = parse_optional_named_node(graph)?;
         let graph = if let Some(graph) = graph {
             NamedGraph::NamedGraph(graph)
@@ -214,7 +219,7 @@ impl PyModel {
         };
         py.allow_threads(move || {
             let mut inner = self.inner.lock().unwrap();
-            detach_graph_mutex(&mut inner, &graph)
+            detach_graph_mutex(&mut inner, &graph, preserve_name.unwrap_or(false))
         })
     }
 
@@ -817,8 +822,14 @@ fn add_prefixes_mutex(
     Ok(())
 }
 
-fn detach_graph_mutex(model: &mut MutexGuard<InnerModel>, graph: &NamedGraph) -> PyResult<PyModel> {
-    let sprout = model.detach_graph(graph).map_err(PyMaplibError::from)?;
+fn detach_graph_mutex(
+    model: &mut MutexGuard<InnerModel>,
+    graph: &NamedGraph,
+    preserve_name: bool,
+) -> PyResult<PyModel> {
+    let sprout = model
+        .detach_graph(graph, preserve_name)
+        .map_err(PyMaplibError::from)?;
     let m = PyModel {
         inner: Mutex::new(sprout),
     };

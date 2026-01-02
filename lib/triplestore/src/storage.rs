@@ -1,4 +1,8 @@
+mod deduplication;
+mod so_index;
+
 use crate::errors::TriplestoreError;
+use crate::storage::so_index::SubjectObjectIndex;
 use crate::IndexingOptions;
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{NamedNode, Subject, Term};
@@ -43,6 +47,7 @@ pub(crate) struct Triples {
     subject_type: BaseRDFNodeType,
     pub object_type: BaseRDFNodeType,
     object_indexing_enabled: bool,
+    subject_object_index: Option<SubjectObjectIndex>,
 }
 
 impl Triples {
@@ -59,8 +64,10 @@ impl Triples {
             can_and_should_index_object(&object_type, predicate_iri, indexing);
         let height = df.height();
         let mut segments = vec![];
+        let subject_object_index = SubjectObjectIndex::maybe_create(&df, &object_type);
 
         let cats = cats.read().unwrap();
+
         let segment = TriplesSegment::new(
             df,
             storage_folder,
@@ -77,6 +84,7 @@ impl Triples {
             subject_type,
             object_type,
             object_indexing_enabled,
+            subject_object_index,
         })
     }
 
@@ -105,167 +113,14 @@ impl Triples {
         global_cats: LockedCats,
     ) -> Result<Option<DataFrame>, TriplestoreError> {
         df.as_single_chunk_par();
-        let mut compacting_indexing_time = 0f32;
-        let mut subjects_time = 0f32;
-        let mut nonoverlapping_time = 0f32;
+
         let total_now = Instant::now();
         let global_cats = global_cats.read()?;
-        // Here we decide if segments should be compacted and so on.
-        let should_compact = if self.height < df.height() * 2 {
-            // Compact if amount of existing triples is similar to amount of new triples
-            true
-        } else if self.segments.len() > 1 {
-            // Compact if we are getting too fragmented
-            let first_height = self.segments.get(0).unwrap().height;
-            let others_height: usize = self.segments[1..].iter().map(|x| x.height).sum();
-            others_height * 2 > first_height
-        } else {
-            // Do not compact otherwise
-            false
-        };
-        let out = if !should_compact {
-            trace!(
-                "Deduping incoming {} triples, existing {}",
-                df.height(),
-                self.height
-            );
-            let mut incoming_df = df;
-            let mut remaining_height = self.height;
-            let mut i = 0;
-
-            let now_subjects = Instant::now();
-            let maybe_subject_encs = maybe_get_cat_encs(global_cats.deref(), &self.subject_type);
-
-            let subjects_str = if OFFSET_STEP / 10 * incoming_df.height() < remaining_height {
-                let new_subjects_col = incoming_df.column(SUBJECT_COL_NAME).unwrap();
-                let subjects = create_deduplicated_string_vec(
-                    new_subjects_col.as_materialized_series(),
-                    maybe_subject_encs.as_ref().unwrap(),
-                );
-                Some(subjects)
-            } else {
-                None
-            };
-            subjects_time += now_subjects.elapsed().as_secs_f32();
-
-            while i < self.segments.len() {
-                trace!(
-                    "Iter {} remaining height {} df height {}",
-                    i,
-                    remaining_height,
-                    incoming_df.height()
-                );
-                let segment = self.segments.get(i).unwrap();
-                if i > 0 && segment.height < (remaining_height - segment.height) * 2 {
-                    // Compact if we reach a segment that is too similar in size to the remaining segments
-                    break;
-                }
-                if i > 0 && remaining_height < incoming_df.height() * 2 {
-                    // We compact if the incoming triples is too similar to the remaining triples
-                    break;
-                }
-                let non_overlap_now = Instant::now();
-                let subjects_str_non_cow = if let Some(subjects_str) = &subjects_str {
-                    let v: Vec<_> = subjects_str.iter().map(|x| x.as_str()).collect();
-                    Some(v)
-                } else {
-                    None
-                };
-                incoming_df =
-                    segment.non_overlapping(subjects_str_non_cow.as_ref(), incoming_df)?;
-                nonoverlapping_time += non_overlap_now.elapsed().as_secs_f32();
-
-                if incoming_df.height() == 0 {
-                    break;
-                }
-                remaining_height -= segment.height;
-                i += 1;
-            }
-            if i < self.segments.len() && incoming_df.height() > 0 {
-                trace!(
-                    "Stopped dedupe early with something to add {}",
-                    incoming_df.height()
-                );
-                // We stopped early, compact the latest segments and the incoming.
-                let compact_now = Instant::now();
-                let mut ts: Vec<_> = self.segments.drain(i..).map(|x| (x, false)).collect();
-                let incoming_segment = TriplesSegment::new(
-                    incoming_df,
-                    storage_folder,
-                    &self.subject_type,
-                    &self.object_type,
-                    self.object_indexing_enabled,
-                    &global_cats,
-                )?;
-                ts.push((incoming_segment, true));
-                let (segment, new_triples) = compact_segments(
-                    ts,
-                    &global_cats,
-                    &self.subject_type,
-                    &self.object_type,
-                    storage_folder,
-                )?;
-                let new_triples_height = if let Some(new_triples) = &new_triples {
-                    new_triples.height()
-                } else {
-                    0
-                };
-                self.height = self.height - remaining_height + new_triples_height;
-                self.segments.push(segment);
-                compacting_indexing_time += compact_now.elapsed().as_secs_f32();
-                Ok(new_triples)
-            } else if incoming_df.height() > 0 {
-                trace!("Dedupe finished, adding remaining {}", incoming_df.height());
-                let compacting_now = Instant::now();
-                let new_segment = TriplesSegment::new(
-                    incoming_df.clone(),
-                    storage_folder,
-                    &self.subject_type,
-                    &self.object_type,
-                    self.object_indexing_enabled,
-                    &global_cats,
-                )?;
-                self.height = self.height + new_segment.height;
-                self.segments.push(new_segment);
-                compacting_indexing_time += compacting_now.elapsed().as_secs_f32();
-                Ok(Some(incoming_df))
-            } else {
-                trace!("Nothing to add");
-                Ok(None)
-            }
-        } else {
-            trace!("Creating compacted segment");
-            let compacting_now = Instant::now();
-            let mut ts: Vec<_> = self.segments.drain(..).map(|x| (x, false)).collect();
-            let incoming_segment = TriplesSegment::new(
-                df,
-                storage_folder,
-                &self.subject_type,
-                &self.object_type,
-                self.object_indexing_enabled,
-                &global_cats,
-            )?;
-            ts.push((incoming_segment, true));
-            let (segment, new_triples) = compact_segments(
-                ts,
-                &global_cats,
-                &self.subject_type,
-                &self.object_type,
-                storage_folder,
-            )?;
-            self.segments.push(segment);
-            compacting_indexing_time += compacting_now.elapsed().as_secs_f32();
-            Ok(new_triples)
-        };
+        let df = self.deduplicate_and_insert(df, global_cats.deref(), storage_folder)?;
 
         let total_time = total_now.elapsed().as_secs_f32();
-        trace!(
-            total_time,
-            compacting = (compacting_indexing_time / total_time),
-            subject = (subjects_time / total_time),
-            nonoverlapping = (nonoverlapping_time / total_time)
-        );
-        out
+        trace!(total_time);
+        Ok(df)
     }
 }
 
