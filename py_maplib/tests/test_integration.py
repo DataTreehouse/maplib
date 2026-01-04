@@ -325,6 +325,24 @@ SELECT ?wtur ?wtur_asp WHERE {
     assert df.height == 160
 
 
+@pytest.mark.parametrize("streaming", [True, False])
+def test_property_path_bug(windpower_model, streaming):
+    query = """PREFIX xsd:<http://www.w3.org/2001/XMLSchema#>
+PREFIX ct:<https://github.com/magbak/chrontext#>
+PREFIX wp:<https://github.com/magbak/chrontext/windpower_example#>
+PREFIX rdfs:<http://www.w3.org/2000/01/rdf-schema#>
+PREFIX rdf:<http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rds:<https://github.com/magbak/chrontext/rds_power#>
+SELECT ?wtur ?wtur_asp WHERE {
+        ?wtur rds:hasFunctionalAspectNode / rdfs:abc* ?wtur_asp .
+
+}"""
+    df = windpower_model.query(query, streaming=streaming)
+    print(df)
+    assert df.height == 160
+
+
+
 
 @pytest.mark.parametrize("streaming", [True, False])
 def test_larger_query_simplified(windpower_model, streaming):

@@ -53,7 +53,7 @@ impl Triples {
                 let mut ts: Vec<_> = self.segments.drain(..).map(|x| (x, false)).collect();
 
                 ts.push((new_segment, true));
-                let (segment, new_triples) = compact_segments(
+                let (segment, _) = compact_segments(
                     ts,
                     &global_cats,
                     &self.subject_type,

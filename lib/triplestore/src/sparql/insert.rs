@@ -1,7 +1,7 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
 use crate::{NewTriples, TriplesToAdd};
-use oxrdf::{GraphName, NamedNode};
+use oxrdf::NamedNode;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use representation::dataset::NamedGraph;
 use representation::multitype::split_df_multicols;

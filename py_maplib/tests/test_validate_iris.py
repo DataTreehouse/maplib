@@ -66,7 +66,7 @@ def test_many_validation_errors_nested_object():
     obj = Variable("object")
     t = Template(
         IRI("https://github.com/DataTreehouse/maplib/my_template"),
-        [subj, pred, Parameter(obj, rdf_type=RDFType.Nested(RDFType.IRI()))],
+        [subj, pred, Parameter(obj, rdf_type=RDFType.Nested(RDFType.IRI))],
         [Triple(subj, pred, obj)],
     )
     with pytest.raises(Exception) as e:

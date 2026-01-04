@@ -1,14 +1,18 @@
+pub mod owl;
+pub mod rdf;
+pub mod rdfs;
+pub mod xsd;
+
 use crate::ast::{
     ptype_nn_to_rdf_node_type, Argument, ConstantTerm, ConstantTermOrList, Instance,
     ListExpanderType, PType, Parameter, Signature, StottrTerm, Template,
 };
-use crate::constants::{OTTR_TRIPLE, XSD_PREFIX_IRI};
+use crate::constants::OTTR_TRIPLE;
 use crate::MappingColumnType;
-use oxrdf::vocab::rdf;
 use oxrdf::IriParseError;
 use pyo3::prelude::*;
 use representation::python::{
-    PyBlankNode, PyIRI, PyLiteral, PyPrefix, PyRDFType, PyRepresentationError, PyVariable,
+    PyBlankNode, PyIRI, PyLiteral, PyRDFType, PyRepresentationError, PyVariable,
 };
 use representation::BaseRDFNodeType;
 
@@ -425,105 +429,6 @@ pub fn py_rdf_type_to_rdf_node_state(
             py_rdf_type.borrow(py).as_rdf_node_state(),
         ))
     }
-}
-
-#[derive(Clone, Debug)]
-#[pyclass(name = "XSD")]
-pub struct PyXSD {
-    prefix: PyPrefix,
-}
-
-#[pymethods]
-impl PyXSD {
-    #[new]
-    #[allow(clippy::new_without_default)]
-    pub fn new() -> PyXSD {
-        PyXSD {
-            prefix: PyPrefix::new(XSD_PREFIX_IRI.to_string(), Some("xsd".to_string())).unwrap(),
-        }
-    }
-
-    #[getter]
-    fn boolean(&self) -> PyIRI {
-        self.prefix.suf("boolean".to_string()).unwrap()
-    }
-
-    #[getter]
-    fn byte(&self) -> PyIRI {
-        self.prefix.suf("byte".to_string()).unwrap()
-    }
-
-    #[getter]
-    fn date(&self) -> PyIRI {
-        self.prefix.suf("date".to_string()).unwrap()
-    }
-
-    #[getter]
-    #[pyo3(name = "dateTime")]
-    fn date_time(&self) -> PyIRI {
-        self.prefix.suf("dateTime".to_string()).unwrap()
-    }
-
-    #[getter]
-    #[pyo3(name = "dateTimeStamp")]
-    fn date_time_stamp(&self) -> PyIRI {
-        self.prefix.suf("dateTimeStamp".to_string()).unwrap()
-    }
-
-    #[getter]
-    fn decimal(&self) -> PyIRI {
-        self.prefix.suf("decimal".to_string()).unwrap()
-    }
-
-    #[getter]
-    fn double(&self) -> PyIRI {
-        self.prefix.suf("double".to_string()).unwrap()
-    }
-
-    #[getter]
-    fn duration(&self) -> PyIRI {
-        self.prefix.suf("duration".to_string()).unwrap()
-    }
-
-    #[getter]
-    fn float(&self) -> PyIRI {
-        self.prefix.suf("float".to_string()).unwrap()
-    }
-
-    #[getter]
-    fn int_(&self) -> PyIRI {
-        self.prefix.suf("int".to_string()).unwrap()
-    }
-
-    #[getter]
-    fn integer(&self) -> PyIRI {
-        self.prefix.suf("integer".to_string()).unwrap()
-    }
-
-    #[getter]
-    fn language(&self) -> PyIRI {
-        self.prefix.suf("language".to_string()).unwrap()
-    }
-
-    #[getter]
-    fn long(&self) -> PyIRI {
-        self.prefix.suf("long".to_string()).unwrap()
-    }
-
-    #[getter]
-    fn short(&self) -> PyIRI {
-        self.prefix.suf("short".to_string()).unwrap()
-    }
-
-    #[getter]
-    fn string(&self) -> PyIRI {
-        self.prefix.suf("string".to_string()).unwrap()
-    }
-}
-
-#[pyfunction]
-pub fn a() -> PyIRI {
-    PyIRI::new(rdf::TYPE.as_str().to_string()).unwrap()
 }
 
 fn extract_constant_term(term: &Bound<PyAny>) -> Option<ConstantTerm> {

@@ -102,10 +102,10 @@ def test_multi_datatype_query_no_error(blank_person_model, streaming):
     df = sm.mappings.sort(by=by)
     assert sm.rdf_types == {
         "o": RDFType.Multi(
-            [RDFType.IRI(), RDFType.Literal("http://www.w3.org/2001/XMLSchema#string")]
+            [RDFType.IRI, RDFType.Literal("http://www.w3.org/2001/XMLSchema#string")]
         ),
-        "s": RDFType.BlankNode(),
-        "v": RDFType.IRI(),
+        "s": RDFType.BlankNode,
+        "v": RDFType.IRI,
     }
     filename = TESTDATA_PATH / "multi_datatype_query.csv"
     # df.write_csv(filename)

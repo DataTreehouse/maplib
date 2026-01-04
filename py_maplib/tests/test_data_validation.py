@@ -9,7 +9,7 @@ from maplib import (
     Triple,
     Variable,
     Parameter,
-    XSD,
+    xsd,
     RDFType,
     Argument,
 )
@@ -17,7 +17,6 @@ from polars.testing import assert_frame_equal
 
 
 def test_want_float_got_int64():
-    xsd = XSD()
     df = pl.DataFrame({"MyValue": [1]})
     model = Model()
     ex = Prefix("http://example.net/ns#")
@@ -63,7 +62,7 @@ def test_want_rdfs_literal_got_int64():
     """,
         include_datatypes=True,
     )
-    assert r.rdf_types["c"] == RDFType.Literal(XSD().long)
+    assert r.rdf_types["c"] == RDFType.Literal(xsd.long)
 
 
 def test_want_rdfs_resource_got_int64():
@@ -95,11 +94,11 @@ def test_want_rdfs_resource_got_int64():
     """,
         include_datatypes=True,
     )
-    assert r.rdf_types["c"] == RDFType.Literal(XSD().long)
+    assert r.rdf_types["c"] == RDFType.Literal(xsd.long)
 
 
 def test_want_xsd_int_got_xsd_boolean():
-    xsd = XSD()
+    
     df = pl.DataFrame({"MyValue": [True]})
     model = Model()
     ex = Prefix("http://example.net/ns#")
@@ -117,7 +116,7 @@ def test_want_xsd_int_got_xsd_boolean():
 
 
 def test_autoconverted_datetime_to_date():
-    xsd = XSD()
+    
     df = pl.DataFrame({"MyValue": ["2020-02-02T00:00:00Z"]}).cast(pl.Datetime("ns"))
     model = Model()
     ex = Prefix("http://example.net/ns#")
@@ -139,11 +138,11 @@ def test_autoconverted_datetime_to_date():
     """,
         include_datatypes=True,
     )
-    assert r.rdf_types["c"] == RDFType.Literal(XSD().date)
+    assert r.rdf_types["c"] == RDFType.Literal(xsd.date)
 
 
 def test_autoconverted_optional_datetime_to_date():
-    xsd = XSD()
+    
     df = pl.DataFrame({"MyValue": ["2020-02-02T00:00:00Z"]}).cast(pl.Datetime("ns"))
     model = Model()
     ex = Prefix("http://example.net/ns#")
@@ -171,11 +170,11 @@ def test_autoconverted_optional_datetime_to_date():
     """,
         include_datatypes=True,
     )
-    assert r.rdf_types["c"] == RDFType.Literal(XSD().date)
+    assert r.rdf_types["c"] == RDFType.Literal(xsd.date)
 
 
 def test_autoconverted_datetime_list_to_date_list_1():
-    xsd = XSD()
+    
     df = pl.DataFrame({"MyValue": [["2020-02-02T00:00:00Z"]]}).cast(
         pl.List(pl.Datetime("ns"))
     )
@@ -201,15 +200,15 @@ def test_autoconverted_datetime_list_to_date_list_1():
     )
     assert r.rdf_types["c"] == RDFType.Multi(
         [
-            RDFType.IRI(),
-            RDFType.BlankNode(),
+            RDFType.IRI,
+            RDFType.BlankNode,
             RDFType.Literal("http://www.w3.org/2001/XMLSchema#date"),
         ]
     )
 
 
 def test_autoconverted_datetime_list_to_date_list_2():
-    xsd = XSD()
+    
     df = pl.DataFrame({"MyValue": [["2020-02-02T00:00:00Z"]]}).cast(
         pl.List(pl.Datetime("ns"))
     )
@@ -242,7 +241,7 @@ def test_autoconverted_datetime_list_to_date_list_2():
 
 
 def test_want_xsd_long_got_xsd_short():
-    xsd = XSD()
+    
     df = pl.DataFrame({"MyValue": [1]})
     df = df.with_columns(pl.col("MyValue").cast(pl.Int16))
     model = Model()
@@ -265,7 +264,7 @@ def test_want_xsd_long_got_xsd_short():
     """,
         include_datatypes=True,
     )
-    assert r.rdf_types["c"] == RDFType.Literal(XSD().short)
+    assert r.rdf_types["c"] == RDFType.Literal(xsd.short)
 
 
 def test_nested_template_more_general():
@@ -291,7 +290,7 @@ def test_nested_template_more_general():
     """,
         include_datatypes=True,
     )
-    assert r.rdf_types["c"] == RDFType.Literal(XSD().string)
+    assert r.rdf_types["c"] == RDFType.Literal(xsd.string)
 
 
 def test_nested_template_not_found():
@@ -334,10 +333,10 @@ def test_nested_template_more_specific():
     """,
         include_datatypes=True,
     )
-    assert r.rdf_types["c"] == RDFType.Literal(XSD().string)
+    assert r.rdf_types["c"] == RDFType.Literal(xsd.string)
 
 
-def test_nested_template_more_specific_but_is_iri():
+def test_nested_template_more_specific_but_is_IRI():
     df = pl.DataFrame({"MyValue": ["hello"]})
     templates = """
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
@@ -354,7 +353,7 @@ def test_nested_template_more_specific_but_is_iri():
         m.map("http://example.net/ns#ExampleTemplate", df)
 
 
-def test_nested_template_more_general_but_is_iri():
+def test_nested_template_more_general_but_is_IRI():
     df = pl.DataFrame({"MyValue": ["http://example.net/ns#MyValue"]})
     templates = """
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
@@ -414,7 +413,7 @@ def test_nested_template_both_are_general_literal_and_compatible():
     """,
         include_datatypes=True,
     )
-    assert r.rdf_types["c"] == RDFType.Literal(XSD().long)
+    assert r.rdf_types["c"] == RDFType.Literal(xsd.long)
 
 
 def test_nested_template_both_are_general_literal_and_compatible_2():
@@ -441,7 +440,7 @@ def test_nested_template_both_are_general_literal_and_compatible_2():
     """,
         include_datatypes=True,
     )
-    assert r.rdf_types["c"] == RDFType.Literal(XSD().long)
+    assert r.rdf_types["c"] == RDFType.Literal(xsd.long)
 
 
 def test_nested_template_both_are_general_literal_and_possibly_but_not_necessarily_incompatible():
@@ -468,7 +467,7 @@ def test_nested_template_both_are_general_literal_and_possibly_but_not_necessari
     """,
         include_datatypes=True,
     )
-    assert r.rdf_types["c"] == RDFType.Literal(XSD().long)
+    assert r.rdf_types["c"] == RDFType.Literal(xsd.long)
 
 
 def test_nested_template_both_are_general_and_possibly_but_not_necessarily_incompatible():
@@ -495,7 +494,7 @@ def test_nested_template_both_are_general_and_possibly_but_not_necessarily_incom
     """,
         include_datatypes=True,
     )
-    assert r.rdf_types["c"] == RDFType.Literal(XSD().long)
+    assert r.rdf_types["c"] == RDFType.Literal(xsd.long)
 
 
 def test_nested_template_both_are_general_and_compatible_2():
@@ -522,7 +521,7 @@ def test_nested_template_both_are_general_and_compatible_2():
     """,
         include_datatypes=True,
     )
-    assert r.rdf_types["c"] == RDFType.Literal(XSD().long)
+    assert r.rdf_types["c"] == RDFType.Literal(xsd.long)
 
 
 def test_nested_template_both_are_general_and_possibly_but_not_necessarily_incompatible_list():
@@ -549,7 +548,7 @@ def test_nested_template_both_are_general_and_possibly_but_not_necessarily_incom
     """,
         include_datatypes=True,
     )
-    assert r.rdf_types["c"] == RDFType.Literal(XSD().long)
+    assert r.rdf_types["c"] == RDFType.Literal(xsd.long)
 
 
 def test_list_arg_to_ottr_triple_should_get_rdf_representation():
@@ -575,7 +574,7 @@ def test_list_arg_to_ottr_triple_should_get_rdf_representation():
     )
     assert r.mappings.height == 3
     assert r.rdf_types["c"] == RDFType.Multi(
-        [RDFType.IRI(), RDFType.BlankNode(), RDFType.Literal(XSD().long)]
+        [RDFType.IRI, RDFType.BlankNode, RDFType.Literal(xsd.long)]
     )
 
 
@@ -605,7 +604,7 @@ def test_list_arg_to_ottr_triple_should_get_rdf_representation_nested():
     )
     assert r.mappings.height == 5
     assert r.rdf_types["c"] == RDFType.Multi(
-        [RDFType.IRI(), RDFType.BlankNode(), RDFType.Literal(XSD().long)]
+        [RDFType.IRI, RDFType.BlankNode, RDFType.Literal(xsd.long)]
     )
 
 
@@ -634,7 +633,7 @@ def test_list_arg_to_ottr_triple_should_get_rdf_representation_multiple_executio
     )
     assert r.mappings.height == 10
     assert r.rdf_types["c"] == RDFType.Multi(
-        [RDFType.IRI(), RDFType.BlankNode(), RDFType.Literal(XSD().long)]
+        [RDFType.IRI, RDFType.BlankNode, RDFType.Literal(xsd.long)]
     )
 
 
@@ -663,7 +662,7 @@ def test_constant_arg_has_valid_subtype():
         include_datatypes=True,
     )
     assert r.mappings.height == 1
-    assert r.rdf_types["c"] == RDFType.IRI()
+    assert r.rdf_types["c"] == RDFType.IRI
 
 
 def test_iri_datatype():
@@ -691,7 +690,7 @@ def test_iri_datatype():
         include_datatypes=True,
     )
     assert r.mappings.height == 1
-    assert r.rdf_types["c"] == RDFType.IRI()
+    assert r.rdf_types["c"] == RDFType.IRI
 
 
 @pytest.mark.skip("Missing general validation logic")

@@ -50,7 +50,6 @@ impl Triplestore {
         dataset: &QueryGraph,
     ) -> Result<SolutionMappings, SparqlError> {
         let create_sparse = need_sparse_matrix(ppe);
-        println!("create_sparse: {:?}", create_sparse);
 
         let mut var_cols = vec![];
         match subject {
@@ -121,7 +120,6 @@ impl Triplestore {
             .unwrap_or(0);
         let SparsePathReturn { sparmat, .. } = sparse_path(ppe, &namednode_dfs, max_index as usize);
 
-        println!("sparmat: {:?}", sparmat);
         let mut subject_vec = vec![];
         let mut object_vec = vec![];
         for (i, row) in sparmat.outer_iterator().enumerate() {
@@ -580,8 +578,6 @@ fn sparse_path(
             if eye_right {
                 sparmat = (&sparmat + &sparmat_left).to_csr();
             }
-            println!("Eye left {} right {}", eye_left, eye_right);
-            //println!("Sparmat {:?}", sparmat);
             SparsePathReturn {
                 sparmat,
                 eye: eye_left && eye_right,
@@ -667,7 +663,6 @@ impl U32DataFrameCreator {
         ),
         QueryProcessingError,
     > {
-        println!("DFs {:?}", self.named_nodes);
         // TODO! Possible to constrain lookup to only nodes that may occur as subj/obj in path expr.
         // Can reduce size of a join
         let mut nns: Vec<_> = self.named_nodes.keys().cloned().collect();
@@ -812,7 +807,6 @@ impl U32DataFrameCreator {
             .unwrap()
             .unique::<(), ()>(None, UniqueKeepStrategy::Any, None)
             .unwrap();
-        println!("{:?}", lookup_df);
         Ok((lookup_df, lookup_df_types, out_df_map))
     }
 
@@ -823,7 +817,6 @@ impl U32DataFrameCreator {
     ) -> Result<(), SparqlError> {
         match ppe {
             PropertyPathExpression::NamedNode(nn) => {
-                println!("nn {:?}", nn);
                 let SolutionMappings {
                     mappings,
                     mut rdf_node_types,

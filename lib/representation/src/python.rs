@@ -158,7 +158,7 @@ impl PyRDFType {
             )
         }
     }
-    #[staticmethod]
+    #[classattr]
     #[pyo3(name = "IRI")]
     fn iri() -> PyRDFType {
         PyRDFType {
@@ -167,7 +167,7 @@ impl PyRDFType {
         }
     }
 
-    #[staticmethod]
+    #[classattr]
     #[pyo3(name = "BlankNode")]
     fn blank_node() -> PyRDFType {
         PyRDFType {
@@ -176,7 +176,7 @@ impl PyRDFType {
         }
     }
 
-    #[staticmethod]
+    #[classattr]
     #[pyo3(name = "Unknown")]
     fn unknown() -> PyRDFType {
         PyRDFType {
@@ -246,6 +246,14 @@ impl PyIRI {
     #[getter]
     fn get_iri(&self) -> &str {
         self.iri.as_str()
+    }
+
+    fn __str__(&self) -> PyResult<String> {
+        Ok(self.iri.as_str().to_string())
+    }
+
+    fn __repr__(&self) -> PyResult<String> {
+        Ok(format!("IRI({})", self.iri.as_str()))
     }
 }
 

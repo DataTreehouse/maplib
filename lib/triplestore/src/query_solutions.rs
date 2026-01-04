@@ -96,6 +96,51 @@ pub fn get_seven_query_solutions(
     (s1, s2, s3, s4, s5, s6, s7)
 }
 
+#[allow(clippy::too_many_arguments)]
+#[allow(clippy::type_complexity)]
+pub fn get_six_query_solutions(
+    query_solution: Vec<Option<Term>>,
+    variables: &[Variable],
+    first: &str,
+    second: &str,
+    third: &str,
+    fourth: &str,
+    fifth: &str,
+    sixth: &str,
+) -> (
+    Option<Term>,
+    Option<Term>,
+    Option<Term>,
+    Option<Term>,
+    Option<Term>,
+    Option<Term>,
+) {
+    let mut s1 = None;
+    let mut s2 = None;
+    let mut s3 = None;
+    let mut s4 = None;
+    let mut s5 = None;
+    let mut s6 = None;
+    for (var, val) in variables.iter().zip(query_solution.into_iter()) {
+        if var.as_str() == first {
+            s1 = val;
+        } else if var.as_str() == second {
+            s2 = val;
+        } else if var.as_str() == third {
+            s3 = val;
+        } else if var.as_str() == fourth {
+            s4 = val;
+        } else if var.as_str() == fifth {
+            s5 = val;
+        } else if var.as_str() == sixth {
+            s6 = val;
+        } else {
+            panic!("var {var:?}, val {val:?}");
+        }
+    }
+    (s1, s2, s3, s4, s5, s6)
+}
+
 #[allow(clippy::type_complexity)]
 pub fn get_five_query_solutions(
     query_solution: Vec<Option<Term>>,

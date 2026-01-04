@@ -2,7 +2,7 @@ use super::{encode_triples, re_encode, CatEncs, CatTriples, CatType, Cats};
 use crate::dataset::NamedGraph;
 use crate::solution_mapping::BaseCatState;
 use crate::BaseRDFNodeType;
-use oxrdf::{GraphName, NamedNode};
+use oxrdf::NamedNode;
 use polars::frame::DataFrame;
 use std::path::Path;
 use tracing::instrument;

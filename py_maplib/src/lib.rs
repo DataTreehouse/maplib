@@ -71,8 +71,12 @@ use representation::formatting::format_native_columns;
 use representation::polars_to_rdf::XSD_DATETIME_WITH_TZ_FORMAT;
 use representation::rdf_to_polars::rdf_named_node_to_polars_literal_value;
 use representation::{BaseRDFNodeType, OBJECT_COL_NAME, PREDICATE_COL_NAME, SUBJECT_COL_NAME};
-use templates::python::{a, py_triple, PyArgument, PyInstance, PyParameter, PyTemplate, PyXSD};
+use templates::python::{py_triple, PyArgument, PyInstance, PyParameter, PyTemplate};
 use templates::MappingColumnType;
+use templates::python::owl::PyOWL;
+use templates::python::rdf::PyRDF;
+use templates::python::rdfs::PyRDFS;
+use templates::python::xsd::PyXSD;
 use triplestore::{IndexingOptions, NewTriples, Triplestore};
 
 #[cfg(target_os = "linux")]
@@ -248,11 +252,24 @@ impl PyModel {
         &self,
         py: Python<'_>,
         df: &Bound<'_, PyAny>,
-        predicate: Option<String>,
+        predicate: Option<PyObject>,
         graph: Option<String>,
         types: Option<HashMap<String, PyRDFType>>,
         validate_iris: Option<bool>,
     ) -> PyResult<Option<PyObject>> {
+        let predicate = if let Some(predicate) = predicate {
+            Some(if let Ok(predicate) = predicate.extract::<PyIRI>(py) {
+                predicate.iri.as_str().to_string()
+            } else if let Ok(predicate) = predicate.extract::<String>(py) {
+                predicate
+            } else {
+                return Err(PyMaplibError::FunctionArgumentError(
+                    "predicate argument should be IRI or str, but was neither".to_string()
+                ).into())
+            })
+        } else {
+            None
+        };
         let df = polars_df_to_rust_df(df)?;
         py.allow_threads(move || {
             let mut inner = self.inner.lock().unwrap();
@@ -1446,12 +1463,14 @@ fn _maplib(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyBlankNode>()?;
     m.add_class::<PyIRI>()?;
     m.add_class::<PyXSD>()?;
+    m.add_class::<PyRDF>()?;
+    m.add_class::<PyRDFS>()?;
+    m.add_class::<PyOWL>()?;
     m.add_class::<PyParameter>()?;
     m.add_class::<PyArgument>()?;
     m.add_class::<PyTemplate>()?;
     m.add_class::<PyInstance>()?;
     m.add_function(wrap_pyfunction!(py_triple, m)?)?;
-    m.add_function(wrap_pyfunction!(a, m)?)?;
     m.add("MaplibException", py.get_type::<MaplibException>())?;
     m.add(
         "FunctionArgumentException",

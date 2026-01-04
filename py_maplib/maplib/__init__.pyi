@@ -6,15 +6,15 @@ from datetime import datetime, date
 class RDFType:
     """
     The type of a column containing a RDF variable.
-    For instance, xsd:string is RDFType.Literal("http://www.w3.org/2001/XMLSchema#string")
+    For instance, IRIs are RDFType.IRI and a string literal is RDFType.Literal("http://www.w3.org/2001/XMLSchema#string")
     """
 
-    IRI: Callable[[], "RDFType"]
-    BlankNode: Callable[[], "RDFType"]
+    IRI: "RDFType"
+    BlankNode: "RDFType"
     Literal: Callable[[Union[str, "IRI"]], "RDFType"]
     Multi: Callable[[List["RDFType"]], "RDFType"]
     Nested: Callable[["RDFType"], "RDFType"]
-    Unknown: Callable[[], "RDFType"]
+    Unknown: "RDFType"
 
 class SolutionMappings:
     """
@@ -238,11 +238,6 @@ class XSD:
         """
         Create the xsd namespace helper.
         """
-
-def a() -> IRI:
-    """
-    :return: IRI("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
-    """
 
 # END COMMON WITH CHRONTEXT
 

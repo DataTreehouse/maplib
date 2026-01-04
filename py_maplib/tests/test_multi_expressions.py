@@ -1,7 +1,7 @@
 import polars as pl
 import pytest
 
-from maplib import Model, RDFType, XSD
+from maplib import Model, RDFType, xsd
 from polars.testing import assert_frame_equal
 import polars as pl
 import pathlib
@@ -164,7 +164,7 @@ def test_multi_filter_equals_with_datatypes(streaming):
         include_datatypes=True,
         streaming=streaming,
     )
-    assert sm.rdf_types == {"a": RDFType.IRI()}
+    assert sm.rdf_types == {"a": RDFType.IRI}
     assert_frame_equal(
         sm.mappings, pl.DataFrame({"a": ["<http://example.net/hello2>"]})
     )
@@ -185,7 +185,7 @@ def test_multi_value_different_types_filter_equals_with_datatypes(streaming):
         include_datatypes=True,
         streaming=streaming,
     )
-    assert sm.rdf_types == {"a": RDFType.Literal(XSD().boolean)}
+    assert sm.rdf_types == {"a": RDFType.Literal(xsd.boolean)}
     assert_frame_equal(sm.mappings, pl.DataFrame({"a": [True]}))
 
 
@@ -205,7 +205,7 @@ def test_multi_value_different_types_filter_isiri_or_equals_with_datatypes(strea
         streaming=streaming,
     )
     assert sm.rdf_types == {
-        "a": RDFType.Multi([RDFType.IRI(), RDFType.Literal(XSD().integer)])
+        "a": RDFType.Multi([RDFType.IRI, RDFType.Literal(xsd.integer)])
     }
     assert_frame_equal(
         sm.mappings,
@@ -367,7 +367,7 @@ def test_coalesce_no_multi(streaming):
         include_datatypes=True,
         streaming=streaming,
     )
-    assert sm.rdf_types == {"c": RDFType.IRI(), "b": RDFType.IRI(), "a": RDFType.IRI()}
+    assert sm.rdf_types == {"c": RDFType.IRI, "b": RDFType.IRI, "a": RDFType.IRI}
     assert sm.mappings.get_column("c").is_null().sum() == 0
 
 
@@ -657,7 +657,7 @@ def test_generate_uuids(streaming):
     )
     assert sm.rdf_types == {
         "a": RDFType.Literal("http://www.w3.org/2001/XMLSchema#integer"),
-        "uuid": RDFType.IRI(),
+        "uuid": RDFType.IRI,
     }
     assert sm.mappings.height == 3
     df = sm.mappings.with_columns(
@@ -684,7 +684,7 @@ def test_generate_iri_all_strings(streaming):
     )
     assert sm.rdf_types == {
         "a": RDFType.Literal("http://www.w3.org/2001/XMLSchema#string"),
-        "iri": RDFType.IRI(),
+        "iri": RDFType.IRI,
     }
     expected = pl.from_repr(
         """
@@ -719,12 +719,12 @@ def test_generate_iri(streaming):
     assert sm.rdf_types == {
         "a": RDFType.Multi(
             [
-                RDFType.IRI(),
+                RDFType.IRI,
                 RDFType.Literal("http://www.w3.org/2001/XMLSchema#integer"),
                 RDFType.Literal("http://www.w3.org/2001/XMLSchema#string"),
             ]
         ),
-        "iri": RDFType.IRI(),
+        "iri": RDFType.IRI,
     }
     expected = pl.from_repr(
         """
@@ -1030,7 +1030,7 @@ def test_case_multi_type_with_string_and_lang_string_and_other(streaming):
     assert sm.rdf_types == {
         "a": RDFType.Multi(
             [
-                RDFType.IRI(),
+                RDFType.IRI,
                 RDFType.Literal(
                     "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString"
                 ),
@@ -1091,7 +1091,7 @@ def test_before_after_multi_type_with_string_and_lang_string_and_other(streaming
     assert sm.rdf_types == {
         "a": RDFType.Multi(
             [
-                RDFType.IRI(),
+                RDFType.IRI,
                 RDFType.Literal(
                     "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString"
                 ),
@@ -1152,7 +1152,7 @@ def test_before_after_only_lang_string_and_other(streaming):
     assert sm.rdf_types == {
         "a": RDFType.Multi(
             [
-                RDFType.IRI(),
+                RDFType.IRI,
                 RDFType.Literal(
                     "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString"
                 ),
@@ -1229,7 +1229,7 @@ def test_before_after_only_string_and_other(streaming):
     assert sm.rdf_types == {
         "a": RDFType.Multi(
             [
-                RDFType.IRI(),
+                RDFType.IRI,
                 RDFType.Literal("http://www.w3.org/2001/XMLSchema#integer"),
                 RDFType.Literal("http://www.w3.org/2001/XMLSchema#string"),
             ]
@@ -1271,7 +1271,7 @@ def test_substr_multi_type_with_string_and_lang_string_and_other(streaming):
     assert sm.rdf_types == {
         "a": RDFType.Multi(
             [
-                RDFType.IRI(),
+                RDFType.IRI,
                 RDFType.Literal(
                     "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString"
                 ),

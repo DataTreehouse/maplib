@@ -31,12 +31,12 @@ def template() -> Template:
     template = Template(
         iri=pi.suf("PizzaTemplate"),
         parameters=[
-            Parameter(variable=p_var, rdf_type=RDFType.IRI()),
-            Parameter(variable=c_var, rdf_type=RDFType.IRI()),
-            Parameter(variable=ings_var, rdf_type=RDFType.Nested(RDFType.IRI())),
+            Parameter(variable=p_var, rdf_type=RDFType.IRI),
+            Parameter(variable=c_var, rdf_type=RDFType.IRI),
+            Parameter(variable=ings_var, rdf_type=RDFType.Nested(RDFType.IRI)),
         ],
         instances=[
-            Triple(p_var, a(), pi.suf("Pizza")),
+            Triple(p_var, a, pi.suf("Pizza")),
             Triple(p_var, pi.suf("fromCountry"), c_var),
             Triple(p_var, pi.suf("hasBlank"), BlankNode("MyBlank")),
             Triple(

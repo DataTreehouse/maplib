@@ -10,7 +10,7 @@ from maplib import (
     Variable,
     Parameter,
     Literal,
-    XSD,
+    xsd,
     RDFType,
 )
 from polars.testing import assert_frame_equal
@@ -140,7 +140,6 @@ def test_create_programmatic_model_with_optional_value_missing_df(streaming):
 
 @pytest.mark.parametrize("streaming", [True, False])
 def test_create_programmatic_model_with_default(streaming):
-    xsd = XSD()
     df = pl.DataFrame({"MyValue": ["A"]})
     mapping = Model()
     ex = Prefix("http://example.net/ns#")
@@ -181,7 +180,7 @@ def test_create_programmatic_model_with_default(streaming):
 
 @pytest.mark.parametrize("streaming", [True, False])
 def test_create_programmatic_mapping_with_nested_default(streaming):
-    xsd = XSD()
+    
     df = pl.DataFrame({"MyValue": ["A"]})
     mapping = Model()
     ex = Prefix("http://example.net/ns#")
@@ -228,7 +227,7 @@ def test_create_programmatic_mapping_with_nested_default(streaming):
 
 @pytest.mark.parametrize("streaming", [True, False])
 def test_create_programmatic_mapping_with_nested_default_and_missing_column(streaming):
-    xsd = XSD()
+    
     df = pl.DataFrame({"MyValue": ["A"]})
     mapping = Model()
     ex = Prefix("http://example.net/ns#")
@@ -279,7 +278,7 @@ def test_create_programmatic_mapping_with_nested_default_and_missing_column(stre
 
 @pytest.mark.parametrize("streaming", [True, False])
 def test_create_programmatic_mapping_with_nested_partial_default(streaming):
-    xsd = XSD()
+    
     df = pl.DataFrame(
         {
             "MyValue": ["A", "B"],
@@ -342,7 +341,7 @@ def test_create_programmatic_mapping_with_nested_partial_default(streaming):
 
 @pytest.mark.parametrize("streaming", [True, False])
 def test_create_programmatic_mapping_with_nested_none_optional(streaming):
-    xsd = XSD()
+    
     df = pl.DataFrame({"MyValue": ["A", "B"]})
     mapping = Model()
     ex = Prefix("http://example.net/ns#")
@@ -389,7 +388,7 @@ def test_create_programmatic_mapping_with_nested_none_optional(streaming):
 
 @pytest.mark.parametrize("streaming", [True, False])
 def test_create_programmatic_mapping_with_partial_default(streaming):
-    xsd = XSD()
+    
     df = pl.DataFrame(
         {
             "MyValue": ["A", "B"],
@@ -669,7 +668,7 @@ def test_nested_template_empty_list():
     """,
         include_datatypes=True,
     )
-    assert r.rdf_types["c"] == RDFType.Literal(XSD().integer)
+    assert r.rdf_types["c"] == RDFType.Literal(xsd.integer)
 
 
 def test_bool_func():
@@ -702,7 +701,7 @@ def test_map_triples():
             ],
         }
     )
-    types = {"subject": RDFType.IRI(), "object": RDFType.IRI()}
+    types = {"subject": RDFType.IRI, "object": RDFType.IRI}
     predicate = "http://example.net/ns#hasRel"
     m = Model()
     m.map_triples(df, types=types, predicate=predicate)

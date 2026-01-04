@@ -17,7 +17,7 @@ mod values;
 
 use super::{QuerySettings, Triplestore};
 use crate::sparql::errors::SparqlError;
-use tracing::{info, instrument, trace};
+use tracing::{instrument, trace};
 
 use crate::sparql::lazy_graph_patterns::triples_ordering::order_triple_patterns;
 use polars::prelude::{IntoLazy, JoinType};

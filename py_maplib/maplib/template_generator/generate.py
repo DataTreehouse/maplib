@@ -1,9 +1,8 @@
 from typing import Dict, Optional
 from .ordering import topological_sort
-import pathlib
 import polars as pl
 
-from maplib import Model, Variable, RDFType, Parameter, Triple, IRI, Instance, Template
+from maplib import Model, Variable, RDFType, Parameter, Triple, IRI, Template
 
 
 def generate_templates(m: Model, graph: Optional[str]) -> Dict[str, Template]:
@@ -157,7 +156,7 @@ def generate_templates_without_typing(
 
         # Check dupe!!
         subj_parameter = Parameter(
-            variable=subj, optional=False, rdf_type=RDFType.IRI()
+            variable=subj, optional=False, rdf_type=RDFType.IRI
         )
         parameters.append(subj_parameter)
         if c in properties_by_domain:
@@ -169,7 +168,7 @@ def generate_templates_without_typing(
                 v = uri_to_variable(p["property"])
                 existing_varnames.add(v.name)
                 if p["property_type"] == "http://www.w3.org/2002/07/owl#ObjectProperty":
-                    t = RDFType.IRI()
+                    t = RDFType.IRI
                 elif p["range"]:
                     t = RDFType.Literal(p["range"])
                 else:
@@ -187,7 +186,7 @@ def generate_templates_without_typing(
                 existing_preds.add(p["property"])
                 v = uri_to_variable(p["property"])
                 existing_varnames.add(v.name)
-                t = RDFType.IRI()
+                t = RDFType.IRI
                 param = Parameter(variable=v, optional=True, rdf_type=t)
                 parameters.append(param)
                 predicate = IRI(p["property"])

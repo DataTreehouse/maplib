@@ -16,7 +16,7 @@ use crate::cats::maps::CatMaps;
 use crate::dataset::NamedGraph;
 use crate::BaseRDFNodeType;
 use oxrdf::vocab::xsd;
-use oxrdf::{GraphName, NamedNode, NamedNodeRef};
+use oxrdf::{NamedNode, NamedNodeRef};
 use polars::prelude::DataFrame;
 use std::collections::HashMap;
 use std::ops::Deref;
