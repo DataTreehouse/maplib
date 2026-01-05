@@ -105,6 +105,82 @@ impl Triples {
         Ok(all_sms)
     }
 
+    pub fn get_lazy_frame_between_offsets(
+        &self,
+        offset: usize,
+        height: usize,
+    ) -> Result<Option<LazyFrame>, TriplestoreError> {
+        let mut use_lfs = vec![];
+        let mut current_height = 0;
+        for seg in self.segments.iter() {
+            if current_height + seg.height <= offset {
+                // Before target segment
+                current_height += seg.height;
+            } else if current_height > offset + height {
+                // After target segment
+                break;
+            } else {
+                // In target segment
+                let lf = seg.get_subject_sort_lazy_frame()?;
+                let use_rel_from = cmp::max(offset - current_height, 0);
+                let use_height = cmp::min(offset + height - current_height, height - use_rel_from);
+                current_height = current_height + height;
+                if use_height > 0 {
+                    use_lfs.push(lf.slice(use_rel_from as i64, use_height as u32));
+                } else {
+                    break;
+                }
+            }
+        }
+        if use_lfs.is_empty() {
+            Ok(None)
+        } else {
+            let lf = concat(
+                use_lfs,
+                UnionArgs {
+                    parallel: true,
+                    rechunk: false,
+                    to_supertypes: false,
+                    diagonal: false,
+                    from_partitioned_ds: false,
+                    maintain_order: false,
+                },
+            )
+            .unwrap();
+            Ok(Some(lf))
+        }
+    }
+
+    pub fn get_lazy_frame_between_subject_strings(
+        &self,
+        from: &str,
+        to: &str,
+    ) -> Result<Option<LazyFrame>, TriplestoreError> {
+        let mut use_lfs = vec![];
+        for seg in self.segments.iter() {
+            if let Some(lf) = seg.get_lazy_frames_between_subject_strings(from, to)? {
+                use_lfs.push(lf);
+            }
+        }
+        if use_lfs.is_empty() {
+            Ok(None)
+        } else {
+            let lf = concat(
+                use_lfs,
+                UnionArgs {
+                    parallel: true,
+                    rechunk: false,
+                    to_supertypes: false,
+                    diagonal: false,
+                    from_partitioned_ds: false,
+                    maintain_order: false,
+                },
+            )
+            .unwrap();
+            Ok(Some(lf))
+        }
+    }
+
     #[instrument(skip_all)]
     pub(crate) fn add_triples(
         &mut self,
@@ -122,6 +198,10 @@ impl Triples {
         trace!(total_time);
         Ok(df)
     }
+
+    pub fn height(&self) -> usize {
+        self.height
+    }
 }
 
 #[derive(Clone)]
@@ -132,6 +212,36 @@ pub(crate) struct TriplesSegment {
     subject_sparse_index: Option<SparseIndex>,
     object_sort: Option<StoredTriples>,
     object_sparse_index: Option<SparseIndex>,
+}
+
+impl TriplesSegment {
+    pub fn get_lazy_frames_between_subject_strings(
+        &self,
+        from: &str,
+        to: &str,
+    ) -> Result<Option<LazyFrame>, TriplestoreError> {
+        let subject_index = self.subject_sparse_index.as_ref().unwrap();
+        let mut range_backwards = subject_index.map.range(..from.to_string());
+        let from_i = if let Some((s, prev)) = range_backwards.next_back() {
+            *prev
+        } else {
+            0
+        };
+        //Todo: remove this clone..
+        let mut range_forwards = subject_index.map.range(to.to_string()..);
+        let to_i = if let Some((s, next)) = range_forwards.next() {
+            *next
+        } else {
+            self.height - 1
+        };
+        let height = to_i - from_i;
+        if height > 0 {
+            let lf = self.get_subject_sort_lazy_frame()?;
+            Ok(Some(lf.slice(from_i as i64, height as u32)))
+        } else {
+            Ok(None)
+        }
+    }
 }
 
 impl TriplesSegment {
@@ -211,6 +321,10 @@ impl TriplesSegment {
             }
         }
         self.subject_sort.as_ref().unwrap().get_lazy_frames(None)
+    }
+
+    pub fn get_subject_sort_lazy_frame(&self) -> Result<LazyFrame, TriplestoreError> {
+        self.subject_sort.as_ref().unwrap().get_lazy_frame()
     }
 
     pub(crate) fn non_overlapping(
@@ -393,6 +507,15 @@ enum StoredTriples {
 }
 
 impl StoredTriples {
+    pub fn get_lazy_frame(&self) -> Result<LazyFrame, TriplestoreError> {
+        match self {
+            StoredTriples::TriplesOnDisk(_) => {
+                todo!()
+            }
+            StoredTriples::TriplesInMemory(mem) => mem.get_lazy_frame().map(|(lf, _)| lf),
+        }
+    }
+
     fn new(
         df: DataFrame,
         subj_type: &BaseRDFNodeType,

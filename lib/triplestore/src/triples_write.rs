@@ -18,6 +18,7 @@ use std::io::Write;
 use tracing::warn;
 
 mod fast_ntriples;
+mod pretty_turtle;
 mod serializers;
 
 const CHUNK_SIZE: usize = 1_024;
