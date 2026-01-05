@@ -46,6 +46,7 @@ impl Triples {
                 self.object_indexing_enabled,
                 &global_cats,
             )?;
+            self.height = self.height + new_segment.height;
 
             if should_compact {
                 trace!("Creating compacted segment");
@@ -63,7 +64,6 @@ impl Triples {
                 self.segments.push(segment);
                 trace!(compacting = compacting_now.elapsed().as_secs_f32());
             } else {
-                self.height = self.height + new_segment.height;
                 self.segments.push(new_segment);
             }
             Ok(Some(new_df))
@@ -73,7 +73,7 @@ impl Triples {
     }
 
     pub fn deduplicate_segment_no_index(
-        &mut self,
+        &self,
         df: DataFrame,
         global_cats: &Cats,
     ) -> Result<Option<DataFrame>, TriplestoreError> {
