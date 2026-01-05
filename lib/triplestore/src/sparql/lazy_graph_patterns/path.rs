@@ -578,6 +578,7 @@ fn sparse_path(
             if eye_right {
                 sparmat = (&sparmat + &sparmat_left).to_csr();
             }
+            sparmat = sparmat.map(|x| (x > &0) as u32);
             SparsePathReturn {
                 sparmat,
                 eye: eye_left && eye_right,
