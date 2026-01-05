@@ -12,6 +12,8 @@ pub struct SubjectObjectIndex {
 }
 
 pub fn is_so_indexed(object_type: &BaseRDFNodeType) -> bool {
+    //We disable the SO-index for the time being.
+    return false;
     object_type.is_iri() || object_type.is_blank_node() || object_type.is_lit_type(xsd::STRING)
 }
 
