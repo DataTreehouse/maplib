@@ -9,7 +9,7 @@ use polars::prelude::{
 };
 use polars_core::prelude::{DataType, SortMultipleOptions};
 use query_processing::errors::QueryProcessingError;
-use query_processing::expressions::{maybe_literal_enc, named_node_enc};
+use query_processing::expressions::{literal_enc, named_node_enc};
 use query_processing::graph_patterns::{group_by_workaround, join, union};
 use query_processing::pushdowns::Pushdowns;
 use representation::cats::LockedCats;
@@ -255,7 +255,7 @@ impl Triplestore {
                 rename_trg.push(bname);
             }
             TermPattern::Literal(l) => {
-                let (l, ..) = maybe_literal_enc(l, &cats);
+                let (l, ..) = literal_enc(l, &cats);
                 out_df = out_df
                     .lazy()
                     .filter(col(SUBJECT_COL_NAME).eq(l))
@@ -290,7 +290,7 @@ impl Triplestore {
                 rename_trg.push(bname);
             }
             TermPattern::Literal(l) => {
-                let (l, ..) = maybe_literal_enc(l, &cats);
+                let (l, ..) = literal_enc(l, &cats);
                 out_df = out_df
                     .lazy()
                     .filter(col(OBJECT_COL_NAME).eq(l))

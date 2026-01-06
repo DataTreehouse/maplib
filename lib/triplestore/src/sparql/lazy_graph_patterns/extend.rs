@@ -46,6 +46,7 @@ impl Triplestore {
             query_settings,
             dataset,
         )?;
+
         output_solution_mappings = self.lazy_expression(
             expression,
             output_solution_mappings,

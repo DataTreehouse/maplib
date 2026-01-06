@@ -1,14 +1,14 @@
 use super::Triplestore;
 use crate::errors::TriplestoreError;
 use oxrdf::vocab::rdf;
-use oxrdf::{Literal, NamedNode, Term};
+use oxrdf::{NamedNode, Term};
 use polars_core::frame::DataFrame;
-use representation::cats::{Cats, LockedCats};
+use representation::cats::LockedCats;
 use representation::dataset::NamedGraph;
 use representation::polars_to_rdf::column_as_terms;
 use representation::{BaseRDFNodeType, RDFNodeState, OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use std::cmp;
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap};
 use std::io::Write;
 
 const STRIDE: usize = 10_000;
@@ -24,8 +24,6 @@ impl Triplestore {
         writer: &mut W,
         graph: &NamedGraph,
     ) -> Result<(), TriplestoreError> {
-        let mut written_bn_subjects_u32 = HashSet::new();
-
         let map = if let Some(map) = self.graph_triples_map.get(graph) {
             map
         } else {
@@ -47,7 +45,6 @@ impl Triplestore {
         }
         let mut current_offset = 0;
         for i in 0..(driver_height % STRIDE + 1) {
-            let ser_map = HashMap::new();
             let triples = map
                 .get(&driver_predicate)
                 .unwrap()
@@ -95,7 +92,14 @@ impl Triplestore {
                         t.get_lazy_frame_between_subject_strings(first.as_str(), last.as_str())?
                     {
                         let other_df = lf.collect().unwrap();
-                        update_blocks_map(&mut blocks_map, &other_df, p, s, o, self.global_cats.clone())?;
+                        update_blocks_map(
+                            &mut blocks_map,
+                            &other_df,
+                            p,
+                            s,
+                            o,
+                            self.global_cats.clone(),
+                        )?;
                     }
                 }
             }

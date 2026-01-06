@@ -25,52 +25,54 @@ pub fn create_compatible_cats(
     let mut string_cast = HashSet::new();
 
     for t in base_types {
-        let need_native_cat_cast = check_need_native_cat_cast(&t, &states);
-        if need_native_cat_cast {
-            let locals = find_all_locals(&t, &states);
-            let mut cats = Cats::new_empty(Some(global_cats.read().unwrap().deref()));
-            // We do not store local cats to disk
-            let renc_local = cats.merge(locals, None);
-            let renc_local: HashMap<_, _> = renc_local
-                .into_iter()
-                .map(|(uu, map)| {
-                    let mut blank_renc = None;
-                    let mut iri_renc = vec![];
-                    let mut literal_renc_map = HashMap::new();
-                    for (p, renc) in map {
-                        match p {
-                            CatType::IRI => {
-                                iri_renc.push(renc);
-                            }
-                            CatType::Blank => {
-                                blank_renc = Some(renc);
-                            }
-                            CatType::Literal(l) => {
-                                literal_renc_map.insert(l, renc);
-                            }
-                        }
-                    }
-                    let iri_renc = if iri_renc.is_empty() {
-                        None
-                    } else {
-                        let mut renc_map =
-                            HashMap::with_capacity_and_hasher(2, BuildHasherDefault::default());
-                        for renc in iri_renc {
-                            renc_map.extend(renc.cat_map.iter().map(|(x, y)| (*x, *y)))
-                        }
-                        Some(CatReEnc {
-                            cat_map: Arc::new(renc_map),
-                        })
-                    };
-                    (uu, (blank_renc, iri_renc, literal_renc_map))
-                })
-                .collect();
-            let state = BaseCatState::CategoricalNative(false, Some(LockedCats::new(cats)));
-            native_cat_map.insert(t.clone(), (renc_local, state));
-        }
         let need_string_cast = check_need_string_cast(&t, &states);
         if need_string_cast {
             string_cast.insert(t.clone());
+        }
+        if !need_string_cast {
+            let need_native_cat_cast = check_need_native_cat_cast(&t, &states);
+            if need_native_cat_cast {
+                let locals = find_all_locals(&t, &states);
+                let mut cats = Cats::new_empty(Some(global_cats.read().unwrap().deref()));
+                // We do not store local cats to disk
+                let renc_local = cats.merge(locals, None);
+                let renc_local: HashMap<_, _> = renc_local
+                    .into_iter()
+                    .map(|(uu, map)| {
+                        let mut blank_renc = None;
+                        let mut iri_renc = vec![];
+                        let mut literal_renc_map = HashMap::new();
+                        for (p, renc) in map {
+                            match p {
+                                CatType::IRI => {
+                                    iri_renc.push(renc);
+                                }
+                                CatType::Blank => {
+                                    blank_renc = Some(renc);
+                                }
+                                CatType::Literal(l) => {
+                                    literal_renc_map.insert(l, renc);
+                                }
+                            }
+                        }
+                        let iri_renc = if iri_renc.is_empty() {
+                            None
+                        } else {
+                            let mut renc_map =
+                                HashMap::with_capacity_and_hasher(2, BuildHasherDefault::default());
+                            for renc in iri_renc {
+                                renc_map.extend(renc.cat_map.iter().map(|(x, y)| (*x, *y)))
+                            }
+                            Some(CatReEnc {
+                                cat_map: Arc::new(renc_map),
+                            })
+                        };
+                        (uu, (blank_renc, iri_renc, literal_renc_map))
+                    })
+                    .collect();
+                let state = BaseCatState::CategoricalNative(false, Some(LockedCats::new(cats)));
+                native_cat_map.insert(t.clone(), (renc_local, state));
+            }
         }
     }
 

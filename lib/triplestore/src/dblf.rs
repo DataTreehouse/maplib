@@ -4,7 +4,7 @@ use crate::storage::Triples;
 use oxrdf::{NamedNode, Subject, Term};
 use polars::prelude::{as_struct, by_name, col, concat, lit, IntoLazy, LazyFrame, UnionArgs};
 use polars_core::prelude::{Column, DataFrame};
-use query_processing::expressions::{blank_node_enc, maybe_literal_enc, named_node_enc};
+use query_processing::expressions::{blank_node_enc, literal_enc, named_node_enc};
 use query_processing::type_constraints::{bt_as_constrained, PossibleTypes};
 use representation::cats::Cats;
 use representation::dataset::{NamedGraph, QueryGraph};
@@ -518,7 +518,7 @@ fn single_triples_to_lf(
                 Term::NamedNode(nn) => named_node_enc(nn, global_cats),
                 Term::BlankNode(bl) => blank_node_enc(bl, global_cats),
                 Term::Literal(l) => {
-                    let (e, _, _) = maybe_literal_enc(l, global_cats);
+                    let (e, _, _) = literal_enc(l, global_cats);
                     Some(e)
                 }
             };

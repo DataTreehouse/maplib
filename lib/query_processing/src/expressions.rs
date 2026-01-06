@@ -54,7 +54,7 @@ pub fn blank_node_local_enc(bl: &BlankNode, global_cats: &Cats) -> (Expr, Option
     }
 }
 
-pub fn maybe_literal_enc(l: &Literal, global_cats: &Cats) -> (Expr, BaseRDFNodeType, BaseCatState) {
+pub fn literal_enc(l: &Literal, global_cats: &Cats) -> (Expr, BaseRDFNodeType, BaseCatState) {
     let bt = BaseRDFNodeType::Literal(l.datatype().into_owned());
     if literal_is_cat(l.datatype()) {
         if let Some(enc) = global_cats
@@ -110,7 +110,7 @@ pub fn literal(
     context: &Context,
     global_cats: &Cats,
 ) -> Result<SolutionMappings, QueryProcessingError> {
-    let (e, bt, bs) = maybe_literal_enc(lit, global_cats);
+    let (e, bt, bs) = literal_enc(lit, global_cats);
     solution_mappings.mappings = solution_mappings
         .mappings
         .with_column(e.alias(context.as_str()));
