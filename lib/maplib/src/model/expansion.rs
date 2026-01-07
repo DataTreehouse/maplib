@@ -12,6 +12,7 @@ use polars::prelude::{
     NamedFrom, Series,
 };
 use rayon::iter::{IndexedParallelIterator, ParallelDrainRange, ParallelIterator};
+use representation::constants::OTTR_TRIPLE;
 use representation::dataset::NamedGraph;
 use representation::multitype::split_df_multicols;
 use representation::rdf_to_polars::rdf_named_node_to_polars_literal_value;
@@ -24,7 +25,6 @@ use std::time::Instant;
 use templates::ast::{
     ConstantTerm, ConstantTermOrList, Instance, ListExpanderType, PType, Signature, StottrTerm,
 };
-use templates::constants::OTTR_TRIPLE;
 use templates::MappingColumnType;
 use tracing::debug;
 use triplestore::TriplesToAdd;

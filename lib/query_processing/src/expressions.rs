@@ -369,14 +369,31 @@ pub fn if_expression(
 ) -> Result<SolutionMappings, QueryProcessingError> {
     //
     let mut exploded: Vec<_> = create_compatible_cats(
-        vec![Some(col(middle_context.as_str())), Some(col(right_context.as_str()))],
-        vec![Some(solution_mappings.rdf_node_types.get(middle_context.as_str()).unwrap().clone()),
-             Some(solution_mappings.rdf_node_types.get(right_context.as_str()).unwrap().clone())],
+        vec![
+            Some(col(middle_context.as_str())),
+            Some(col(right_context.as_str())),
+        ],
+        vec![
+            Some(
+                solution_mappings
+                    .rdf_node_types
+                    .get(middle_context.as_str())
+                    .unwrap()
+                    .clone(),
+            ),
+            Some(
+                solution_mappings
+                    .rdf_node_types
+                    .get(right_context.as_str())
+                    .unwrap()
+                    .clone(),
+            ),
+        ],
         global_cats,
     )
-        .into_iter()
-        .map(|x| x.unwrap())
-        .collect();
+    .into_iter()
+    .map(|x| x.unwrap())
+    .collect();
     assert_eq!(exploded.len(), 2);
 
     let right_exploded = exploded.pop().unwrap();
@@ -413,9 +430,10 @@ pub fn if_expression(
         })
         .alias(outer_context.as_str()),
     );
-    solution_mappings
-        .rdf_node_types
-        .insert(outer_context.as_str().to_string(), RDFNodeState::from_map(base_type_map));
+    solution_mappings.rdf_node_types.insert(
+        outer_context.as_str().to_string(),
+        RDFNodeState::from_map(base_type_map),
+    );
     solution_mappings = drop_inner_contexts(
         solution_mappings,
         &vec![left_context, middle_context, right_context],

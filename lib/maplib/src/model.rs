@@ -25,9 +25,9 @@ use triplestore::sparql::errors::SparqlError;
 use triplestore::sparql::{QueryResult, QuerySettings, UpdateResult};
 use triplestore::{IndexingOptions, NewTriples, Triplestore};
 
-use crate::prefixes::get_default_prefixes;
 use datalog::ast::DatalogRuleset;
 use representation::dataset::NamedGraph;
+use representation::prefixes::get_default_prefixes;
 use tracing::instrument;
 
 pub struct Model {

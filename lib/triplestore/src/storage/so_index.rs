@@ -11,16 +11,19 @@ pub struct SubjectObjectIndex {
     set: HashSet<(u32, u32)>,
 }
 
-pub fn is_so_indexed(object_type: &BaseRDFNodeType, subject_object_indexing:bool) -> bool {
+pub fn is_so_indexed(object_type: &BaseRDFNodeType, subject_object_indexing: bool) -> bool {
     //We disable the SO-index for the time being.
-    subject_object_indexing && (object_type.is_iri() || object_type.is_blank_node() || object_type.is_lit_type(xsd::STRING))
+    subject_object_indexing
+        && (object_type.is_iri()
+            || object_type.is_blank_node()
+            || object_type.is_lit_type(xsd::STRING))
 }
 
 impl SubjectObjectIndex {
     pub fn maybe_create(
         df: &DataFrame,
         object_type: &BaseRDFNodeType,
-        subject_object_indexing:bool
+        subject_object_indexing: bool,
     ) -> Option<SubjectObjectIndex> {
         if is_so_indexed(object_type, subject_object_indexing) {
             let s = df.column(SUBJECT_COL_NAME).unwrap();

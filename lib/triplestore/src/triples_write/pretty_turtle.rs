@@ -8,7 +8,7 @@ use representation::dataset::NamedGraph;
 use representation::polars_to_rdf::column_as_terms;
 use representation::{BaseRDFNodeType, RDFNodeState, OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use std::cmp;
-use std::collections::{HashMap};
+use std::collections::HashMap;
 use std::io::Write;
 
 const STRIDE: usize = 10_000;

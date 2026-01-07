@@ -10,11 +10,13 @@ pub mod solution_mapping;
 
 mod base_rdf_type;
 pub mod cats;
+pub mod constants;
 pub mod dataset;
 pub mod debug;
 pub mod errors;
 pub mod formatting;
 pub mod literals;
+pub mod prefixes;
 pub mod python;
 mod rdf_state;
 mod rdf_type;

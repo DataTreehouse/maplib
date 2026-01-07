@@ -1,12 +1,12 @@
 use super::Model;
 use crate::model::errors::MappingError;
 use crate::model::MapOptions;
+use representation::constants::{DEFAULT_PREFIX_IRI, OTTR_IRI, OTTR_TRIPLE};
 use std::collections::HashMap;
 use templates::ast::{
     Argument, ConstantTerm, ConstantTermOrList, Instance, ListExpanderType, PType, Parameter,
     Signature, StottrTerm, Template,
 };
-use templates::constants::{DEFAULT_PREFIX, OTTR_IRI, OTTR_TRIPLE};
 use tracing::warn;
 
 use crate::errors::MaplibError;
@@ -121,7 +121,7 @@ impl Model {
                             list_expand: false,
                             term: StottrTerm::ConstantTerm(ConstantTermOrList::ConstantTerm(
                                 ConstantTerm::Iri(
-                                    NamedNode::new(format!("{DEFAULT_PREFIX}{c}"))
+                                    NamedNode::new(format!("{DEFAULT_PREFIX_IRI}{c}"))
                                         .map_err(MappingError::IriParseError)?,
                                 ),
                             )),
@@ -137,7 +137,7 @@ impl Model {
 
         let template_name = format!(
             "{}default_template_{}",
-            DEFAULT_PREFIX, &self.default_template_counter
+            DEFAULT_PREFIX_IRI, &self.default_template_counter
         );
         self.default_template_counter += 1;
         let template = Template {

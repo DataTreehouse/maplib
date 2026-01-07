@@ -3,9 +3,9 @@ pub mod errors;
 use crate::ast::{
     Instance, PType, Parameter, Signature, Statement, StottrDocument, StottrTerm, Template,
 };
-use crate::constants::{OTTR_IRI, OTTR_TRIPLE};
 use crate::document::document_from_file;
 use errors::TemplateError;
+use representation::constants::{OTTR_IRI, OTTR_TRIPLE};
 use std::cmp::min;
 use tracing::warn;
 
@@ -14,6 +14,7 @@ use oxrdf::vocab::rdfs;
 use oxrdf::{NamedNode, Variable};
 use representation::{OBJECT_COL_NAME, PREDICATE_COL_NAME, SUBJECT_COL_NAME};
 use std::collections::{HashMap, HashSet};
+use std::fmt::{Display, Formatter};
 use std::path::Path;
 use walkdir::WalkDir;
 
@@ -227,6 +228,64 @@ impl TemplateDataset {
         }
         self.templates.push(template);
         self.inferred_types = false;
+        Ok(())
+    }
+}
+
+impl Display for TemplateDataset {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        let mut nns = vec![];
+        for t in &self.templates {
+            t.find_named_nodes(&mut nns);
+        }
+        let mut new_prefixes: HashMap<String, NamedNode> = HashMap::new();
+        let mut p = 0usize;
+        for nn in &nns {
+            let mut found = false;
+            'inner: for prefix in new_prefixes.values() {
+                if nn.as_str().starts_with(prefix.as_str()) {
+                    found = true;
+                    break 'inner;
+                }
+            }
+            if !found {
+                'inner: for (prefix, val) in &self.prefix_map {
+                    if nn.as_str().starts_with(val.as_str()) {
+                        found = true;
+                        new_prefixes.insert(prefix.clone(), val.clone());
+                        break 'inner;
+                    }
+                }
+            }
+            if !found {
+                let f = nn.as_str().rfind(|x| x == '#' || x == '/' || x == ':');
+                if let Some(f) = f {
+                    let s = nn.as_str()[0..f + 1].to_string();
+                    let possible_prefix_value = NamedNode::new(s);
+                    if let Ok(poss) = possible_prefix_value {
+                        let prefix = format!("p{}", p);
+                        p = p + 1;
+                        new_prefixes.insert(prefix, poss);
+                    }
+                }
+            }
+        }
+        for (p, nn) in &new_prefixes {
+            writeln!(f, "@prefix {}:{}.", p, nn)?;
+        }
+        if !new_prefixes.is_empty() {
+            writeln!(f, "")?;
+        }
+        for t in &self.templates {
+            if t.signature.iri.as_str() != OTTR_TRIPLE {
+                t.fmt_prefix(f, &new_prefixes)?;
+                writeln!(f)?;
+            }
+        }
+        for i in &self.ground_instances {
+            i.fmt_prefixes(f, &new_prefixes)?;
+            writeln!(f)?;
+        }
         Ok(())
     }
 }

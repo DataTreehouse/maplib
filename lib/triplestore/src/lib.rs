@@ -216,8 +216,10 @@ impl IndexingOptions {
         }
     }
 
-    pub fn new_default_object_sort(fts_path: Option<PathBuf>,
-                               subject_object_index: bool) -> IndexingOptions {
+    pub fn new_default_object_sort(
+        fts_path: Option<PathBuf>,
+        subject_object_index: bool,
+    ) -> IndexingOptions {
         IndexingOptions::new(
             false,
             Some(HashSet::from([
@@ -228,7 +230,6 @@ impl IndexingOptions {
             subject_object_index,
         )
     }
-
 
     pub fn set_fts_path(&mut self, fts_path: Option<PathBuf>) {
         self.fts_path = fts_path;

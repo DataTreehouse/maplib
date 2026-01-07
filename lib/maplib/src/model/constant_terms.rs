@@ -8,13 +8,13 @@ use polars::prelude::{
 };
 use rayon::iter::ParallelIterator;
 use rayon::prelude::IntoParallelIterator;
+use representation::constants::{OTTR_BLANK_NODE, OTTR_IRI};
 use representation::rdf_to_polars::{
     polars_literal_values_to_series, rdf_named_node_to_polars_literal_value,
     rdf_term_to_polars_expr,
 };
 use representation::BaseRDFNodeType;
 use std::ops::Deref;
-use templates::constants::{OTTR_BLANK_NODE, OTTR_IRI};
 
 const BLANK_NODE_SERIES_NAME: &str = "blank_node_series";
 

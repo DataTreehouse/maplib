@@ -1,6 +1,8 @@
-use crate::constants::{OTTR_BLANK_NODE, OTTR_IRI};
+use crate::dataset::TemplateDataset;
 use oxrdf::vocab::rdfs;
 use oxrdf::{BlankNode, Literal, NamedNode, NamedNodeRef, Variable};
+use representation::constants::{OTTR_BLANK_NODE, OTTR_IRI};
+use representation::prefixes::get_default_prefixes;
 use representation::{BaseRDFNodeType, RDFNodeState};
 use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter};
@@ -35,18 +37,40 @@ pub struct Template {
     pub pattern_list: Vec<Instance>,
 }
 
-impl Display for Template {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        std::fmt::Display::fmt(&self.signature, f)?;
+impl Template {
+    pub fn find_named_nodes(&self, nns: &mut Vec<NamedNode>) {
+        self.signature.find_named_nodes(nns);
+        for i in &self.pattern_list {
+            i.find_named_nodes(nns);
+        }
+    }
+}
+
+impl Template {
+    pub fn fmt_prefix(
+        &self,
+        f: &mut Formatter<'_>,
+        prefixes: &HashMap<String, NamedNode>,
+    ) -> std::fmt::Result {
+        &self.signature.fmt_prefix(f, prefixes)?;
         writeln!(f, " :: {{")?;
         for (idx, inst) in self.pattern_list.iter().enumerate() {
             write!(f, "  ")?;
-            std::fmt::Display::fmt(inst, f)?;
+            inst.fmt_prefixes(f, prefixes)?;
             if idx + 1 != self.pattern_list.len() {
                 writeln!(f, " ,")?;
             }
         }
         writeln!(f, "\n}} . ")
+    }
+}
+
+impl Display for Template {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let mut dataset = TemplateDataset::new_empty().unwrap();
+        dataset.templates.push(self.clone());
+        dataset.prefix_map = get_default_prefixes();
+        write!(f, "{}", dataset)
     }
 }
 
@@ -57,13 +81,26 @@ pub struct Signature {
     pub annotation_list: Option<Vec<Annotation>>,
 }
 
-impl Display for Signature {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", &self.iri)?;
+impl Signature {
+    pub fn find_named_nodes(&self, nns: &mut Vec<NamedNode>) {
+        nns.push(self.iri.clone());
+        for p in &self.parameter_list {
+            p.find_named_nodes(nns);
+        }
+    }
+}
+
+impl Signature {
+    pub fn fmt_prefix(
+        &self,
+        f: &mut Formatter<'_>,
+        prefixes: &HashMap<String, NamedNode>,
+    ) -> std::fmt::Result {
+        write_prefixed_namednode(f, &self.iri, prefixes)?;
         write!(f, " [")?;
         for (idx, p) in self.parameter_list.iter().enumerate() {
             write!(f, "\n    ")?;
-            std::fmt::Display::fmt(p, f)?;
+            p.fmt_prefix(f, prefixes)?;
             if idx + 1 != self.parameter_list.len() {
                 write!(f, ", ")?;
             }
@@ -72,6 +109,12 @@ impl Display for Signature {
             todo!();
         }
         write!(f, " ]")
+    }
+}
+
+impl Display for Signature {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        self.fmt_prefix(f, &HashMap::new())
     }
 }
 
@@ -84,8 +127,23 @@ pub struct Parameter {
     pub default_value: Option<ConstantTermOrList>,
 }
 
-impl Display for Parameter {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+impl Parameter {
+    pub(crate) fn find_named_nodes(&self, nns: &mut Vec<NamedNode>) {
+        if let Some(d) = &self.default_value {
+            d.find_named_nodes(nns);
+        }
+        if let Some(t) = &self.ptype {
+            t.find_named_nodes(nns);
+        }
+    }
+}
+
+impl Parameter {
+    pub fn fmt_prefix(
+        &self,
+        f: &mut Formatter<'_>,
+        prefixes: &HashMap<String, NamedNode>,
+    ) -> std::fmt::Result {
         if self.optional {
             write!(f, "?")?;
         }
@@ -95,7 +153,7 @@ impl Display for Parameter {
 
         if let Some(ptype) = &self.ptype {
             write!(f, " ")?;
-            std::fmt::Display::fmt(ptype, f)?;
+            ptype.fmt_prefix(f, prefixes)?;
             write!(f, " ")?;
         }
 
@@ -103,7 +161,7 @@ impl Display for Parameter {
 
         if let Some(def) = &self.default_value {
             write!(f, " = ")?;
-            std::fmt::Display::fmt(def, f)?;
+            def.fmt_prefix(f, prefixes)?;
         }
         Ok(())
     }
@@ -116,6 +174,20 @@ pub enum PType {
     Lub(Box<PType>),
     List(Box<PType>),
     NEList(Box<PType>),
+}
+
+impl PType {
+    pub(crate) fn find_named_nodes(&self, nns: &mut Vec<NamedNode>) {
+        match self {
+            PType::None => {}
+            PType::Basic(b) => {
+                nns.push(b.clone());
+            }
+            PType::Lub(l) | PType::List(l) | PType::NEList(l) => {
+                l.find_named_nodes(nns);
+            }
+        }
+    }
 }
 
 impl PType {
@@ -189,21 +261,28 @@ pub fn ptype_nn_to_rdf_node_type(nn: NamedNodeRef) -> RDFNodeState {
     }
 }
 
-impl Display for PType {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+impl PType {
+    pub fn fmt_prefix(
+        &self,
+        f: &mut Formatter<'_>,
+        prefixes: &HashMap<String, NamedNode>,
+    ) -> std::fmt::Result {
         match self {
-            PType::Basic(t) => write!(f, "{t}"),
+            PType::Basic(t) => write_prefixed_namednode(f, t, prefixes),
             PType::Lub(lt) => {
-                let s = lt.to_string();
-                write!(f, "LUB<{s}>")
+                write!(f, "LUB<")?;
+                lt.fmt_prefix(f, prefixes)?;
+                write!(f, ">")
             }
             PType::List(lt) => {
-                let s = lt.to_string();
-                write!(f, "List<{s}>")
+                write!(f, "List<")?;
+                lt.fmt_prefix(f, prefixes)?;
+                write!(f, ">")
             }
             PType::NEList(lt) => {
-                let s = lt.to_string();
-                write!(f, "NEList<{s}>")
+                write!(f, "NEList<")?;
+                lt.fmt_prefix(f, prefixes)?;
+                write!(f, ">")
             }
             PType::None => {
                 write!(f, "")
@@ -212,10 +291,29 @@ impl Display for PType {
     }
 }
 
+impl Display for PType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        self.fmt_prefix(f, &HashMap::new())
+    }
+}
+
 #[derive(PartialEq, Debug, Clone)]
 pub enum ConstantTermOrList {
     ConstantTerm(ConstantTerm),
     ConstantList(Vec<ConstantTermOrList>),
+}
+
+impl ConstantTermOrList {
+    pub(crate) fn find_named_nodes(&self, nns: &mut Vec<NamedNode>) {
+        match self {
+            ConstantTermOrList::ConstantTerm(ct) => ct.find_named_nodes(nns),
+            ConstantTermOrList::ConstantList(l) => {
+                for c in l {
+                    c.find_named_nodes(nns)
+                }
+            }
+        }
+    }
 }
 
 impl ConstantTermOrList {
@@ -252,14 +350,18 @@ impl ConstantTermOrList {
     }
 }
 
-impl Display for ConstantTermOrList {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+impl ConstantTermOrList {
+    pub fn fmt_prefix(
+        &self,
+        f: &mut Formatter<'_>,
+        prefixes: &HashMap<String, NamedNode>,
+    ) -> std::fmt::Result {
         match self {
-            ConstantTermOrList::ConstantTerm(c) => std::fmt::Display::fmt(c, f),
+            ConstantTermOrList::ConstantTerm(c) => c.fmt_prefix(f, prefixes),
             ConstantTermOrList::ConstantList(l) => {
                 write!(f, "(")?;
                 for (idx, ct) in l.iter().enumerate() {
-                    std::fmt::Display::fmt(ct, f)?;
+                    ct.fmt_prefix(f, prefixes)?;
                     if idx + 1 != l.len() {
                         write!(f, ", ")?;
                     }
@@ -270,12 +372,26 @@ impl Display for ConstantTermOrList {
     }
 }
 
+impl Display for ConstantTermOrList {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        self.fmt_prefix(f, &HashMap::new())
+    }
+}
+
 #[derive(PartialEq, Debug, Clone)]
 pub enum ConstantTerm {
     Iri(NamedNode),
     BlankNode(BlankNode),
     Literal(Literal),
     None,
+}
+
+impl ConstantTerm {
+    pub(crate) fn find_named_nodes(&self, nns: &mut Vec<NamedNode>) {
+        if let ConstantTerm::Iri(i) = self {
+            nns.push(i.clone());
+        }
+    }
 }
 
 impl ConstantTerm {
@@ -292,10 +408,14 @@ impl ConstantTerm {
     }
 }
 
-impl Display for ConstantTerm {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+impl ConstantTerm {
+    pub fn fmt_prefix(
+        &self,
+        f: &mut Formatter<'_>,
+        prefixes: &HashMap<String, NamedNode>,
+    ) -> std::fmt::Result {
         match self {
-            ConstantTerm::Iri(i) => std::fmt::Display::fmt(i, f),
+            ConstantTerm::Iri(i) => write_prefixed_namednode(f, i, prefixes),
             ConstantTerm::BlankNode(bn) => std::fmt::Display::fmt(bn, f),
             ConstantTerm::Literal(lit) => std::fmt::Display::fmt(lit, f),
             ConstantTerm::None => {
@@ -312,16 +432,29 @@ pub struct Instance {
     pub argument_list: Vec<Argument>,
 }
 
-impl Display for Instance {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+impl Instance {
+    pub(crate) fn find_named_nodes(&self, nns: &mut Vec<NamedNode>) {
+        nns.push(self.template_iri.clone());
+        for arg in self.argument_list.iter() {
+            arg.find_named_nodes(nns);
+        }
+    }
+}
+
+impl Instance {
+    pub fn fmt_prefixes(
+        &self,
+        f: &mut Formatter<'_>,
+        prefixes: &HashMap<String, NamedNode>,
+    ) -> std::fmt::Result {
         if let Some(le) = &self.list_expander {
             std::fmt::Display::fmt(le, f)?;
             write!(f, " | ")?;
         }
-        write!(f, "{}", &self.template_iri)?;
+        write_prefixed_namednode(f, &self.template_iri, prefixes)?;
         write!(f, "(")?;
         for (idx, a) in self.argument_list.iter().enumerate() {
-            std::fmt::Display::fmt(a, f)?;
+            a.fmt_prefixes(f, prefixes)?;
             if idx + 1 != self.argument_list.len() {
                 write!(f, ", ")?;
             }
@@ -341,12 +474,22 @@ pub struct Argument {
     pub term: StottrTerm,
 }
 
-impl Display for Argument {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+impl Argument {
+    pub fn find_named_nodes(&self, nns: &mut Vec<NamedNode>) {
+        self.term.find_named_nodes(nns);
+    }
+}
+
+impl Argument {
+    pub fn fmt_prefixes(
+        &self,
+        f: &mut Formatter<'_>,
+        prefixes: &HashMap<String, NamedNode>,
+    ) -> std::fmt::Result {
         if self.list_expand {
             write!(f, "++ ")?;
         }
-        std::fmt::Display::fmt(&self.term, f)
+        self.term.fmt_prefixes(f, prefixes)
     }
 }
 
@@ -391,15 +534,35 @@ pub enum StottrTerm {
     List(Vec<StottrTerm>),
 }
 
-impl Display for StottrTerm {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+impl StottrTerm {
+    pub(crate) fn find_named_nodes(&self, nns: &mut Vec<NamedNode>) {
+        match self {
+            StottrTerm::Variable(_) => {}
+            StottrTerm::ConstantTerm(ct) => {
+                ct.find_named_nodes(nns);
+            }
+            StottrTerm::List(l) => {
+                for st in l {
+                    st.find_named_nodes(nns);
+                }
+            }
+        }
+    }
+}
+
+impl StottrTerm {
+    pub fn fmt_prefixes(
+        &self,
+        f: &mut Formatter<'_>,
+        prefixes: &HashMap<String, NamedNode>,
+    ) -> std::fmt::Result {
         match self {
             StottrTerm::Variable(var) => std::fmt::Display::fmt(var, f),
-            StottrTerm::ConstantTerm(ct) => std::fmt::Display::fmt(ct, f),
+            StottrTerm::ConstantTerm(ct) => ct.fmt_prefix(f, prefixes),
             StottrTerm::List(li) => {
                 write!(f, "(")?;
                 for (idx, el) in li.iter().enumerate() {
-                    std::fmt::Display::fmt(el, f)?;
+                    el.fmt_prefixes(f, prefixes)?;
                     if idx + 1 != li.len() {
                         write!(f, ", ")?;
                     }
@@ -415,4 +578,18 @@ pub struct StottrDocument {
     pub directives: Vec<Directive>,
     pub statements: Vec<Statement>,
     pub prefix_map: HashMap<String, NamedNode>,
+}
+
+fn write_prefixed_namednode(
+    f: &mut Formatter<'_>,
+    nn: &NamedNode,
+    prefixes: &HashMap<String, NamedNode>,
+) -> std::fmt::Result {
+    for (k, v) in prefixes.iter() {
+        if nn.as_str().starts_with(v.as_str()) {
+            write!(f, "{}:{}", k, nn.as_str().strip_prefix(v.as_str()).unwrap())?;
+            return Ok(());
+        }
+    }
+    write!(f, "{}", nn)
 }

@@ -7,7 +7,9 @@ pub const RDFS_PREFIX: &str = "rdfs";
 pub const RDFS_PREFIX_IRI: &str = "http://www.w3.org/2000/01/rdf-schema#";
 pub const XSD_PREFIX: &str = "xsd";
 pub const XSD_PREFIX_IRI: &str = "http://www.w3.org/2001/XMLSchema#";
-pub const DEFAULT_PREFIX: &str = "urn:maplib_default:";
+
+pub const DEFAULT_PREFIX: &str = "def";
+pub const DEFAULT_PREFIX_IRI: &str = "urn:maplib_default:";
 pub const OTTR_IRI: &str = "http://ns.ottr.xyz/0.4/IRI";
 pub const OTTR_BLANK_NODE: &str = "http://ns.ottr.xyz/0.4/BlankNode";
 

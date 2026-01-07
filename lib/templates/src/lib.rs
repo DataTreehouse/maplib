@@ -3,7 +3,6 @@ use representation::RDFNodeState;
 
 pub mod ast;
 mod compatible;
-pub mod constants;
 pub mod dataset;
 pub mod document;
 mod parsing;
