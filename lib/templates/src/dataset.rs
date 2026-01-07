@@ -271,7 +271,7 @@ impl Display for TemplateDataset {
             }
         }
         for (p, nn) in &new_prefixes {
-            writeln!(f, "@prefix {}:{}.", p, nn)?;
+            writeln!(f, "@prefix {}: {} .", p, nn)?;
         }
         if !new_prefixes.is_empty() {
             writeln!(f, "")?;

@@ -350,8 +350,9 @@ def test_default():
         }
     )
 
-    m.map_default(df, "subject")
-
+    t = m.map_default(df, "subject")
+    #Checks that the template can be added ok.
+    m.add_template(t)
     result = m.query(
         """
         PREFIX ex: <http://example.net/ns#>
