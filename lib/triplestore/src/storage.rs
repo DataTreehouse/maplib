@@ -64,7 +64,7 @@ impl Triples {
             can_and_should_index_object(&object_type, predicate_iri, indexing);
         let height = df.height();
         let mut segments = vec![];
-        let subject_object_index = SubjectObjectIndex::maybe_create(&df, &object_type);
+        let subject_object_index = SubjectObjectIndex::maybe_create(&df, &object_type, indexing.subject_object_index);
 
         let cats = cats.read().unwrap();
 

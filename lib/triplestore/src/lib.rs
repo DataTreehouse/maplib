@@ -197,6 +197,7 @@ pub struct IndexingOptions {
     pub object_sort_some: Option<HashSet<NamedNode>>,
     pub fts_path: Option<PathBuf>,
     pub fts_path_uuid: String,
+    pub subject_object_index: bool,
 }
 
 impl IndexingOptions {
@@ -204,14 +205,30 @@ impl IndexingOptions {
         object_sort_all: bool,
         object_sort_some: Option<HashSet<NamedNode>>,
         fts_path: Option<PathBuf>,
+        subject_object_index: bool,
     ) -> Self {
         Self {
             object_sort_all,
             object_sort_some,
             fts_path,
             fts_path_uuid: Uuid::new_v4().to_string(),
+            subject_object_index,
         }
     }
+
+    pub fn new_default_object_sort(fts_path: Option<PathBuf>,
+                               subject_object_index: bool) -> IndexingOptions {
+        IndexingOptions::new(
+            false,
+            Some(HashSet::from([
+                rdfs::LABEL.into_owned(),
+                rdf::TYPE.into_owned(),
+            ])),
+            fts_path,
+            subject_object_index,
+        )
+    }
+
 
     pub fn set_fts_path(&mut self, fts_path: Option<PathBuf>) {
         self.fts_path = fts_path;
@@ -219,15 +236,8 @@ impl IndexingOptions {
 }
 
 impl Default for IndexingOptions {
-    fn default() -> IndexingOptions {
-        IndexingOptions::new(
-            false,
-            Some(HashSet::from([
-                rdfs::LABEL.into_owned(),
-                rdf::TYPE.into_owned(),
-            ])),
-            None,
-        )
+    fn default() -> Self {
+        IndexingOptions::new_default_object_sort(None, false)
     }
 }
 

@@ -422,6 +422,7 @@ class IndexingOptions:
         object_sort_all: bool = None,
         object_sort_some: List["IRI"] = None,
         fts_path: str = None,
+        subject_object_index = None,
     ):
         """
         Defaults to indexing on subjects and objects for select types (e.g. rdf:type and rdfs:label)
@@ -429,6 +430,7 @@ class IndexingOptions:
         :param object_sort_all: Enable object-indexing for all suitable predicates (doubles memory requirement).
         :param object_sort_some: Enable object-indexing for a selected list of predicates.
         :param fts_path: Enable full text search, stored at the path
+        :param subject_object_index: An index used to deduplicate before insertion, speeds up mapping at a moderate memory cost
         """
 
 ParametersType = Dict[str, Tuple[DataFrame, Dict[str, RDFType]]]

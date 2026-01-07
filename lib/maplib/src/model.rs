@@ -79,7 +79,7 @@ impl Model {
             if let Some(indexing) = indexing {
                 indexing
             } else {
-                IndexingOptions::new(false, None, None)
+                IndexingOptions::default()
             }
         } else {
             indexing.unwrap_or_default()

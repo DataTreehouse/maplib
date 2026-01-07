@@ -114,16 +114,17 @@ pub struct PyIndexingOptions {
 impl PyIndexingOptions {
     #[new]
     #[instrument(skip_all)]
-    #[pyo3(signature = (object_sort_all=None, object_sort_some=None, fts_path=None))]
+    #[pyo3(signature = (object_sort_all=None, object_sort_some=None, fts_path=None, subject_object_index=None))]
     pub fn new(
         object_sort_all: Option<bool>,
         object_sort_some: Option<Vec<PyIRI>>,
         fts_path: Option<String>,
+        subject_object_index: Option<bool>,
     ) -> PyIndexingOptions {
         let fts_path = fts_path.map(|fts_path| Path::new(&fts_path).to_owned());
+        let subject_object_index = subject_object_index.unwrap_or(false);
         let inner = if object_sort_all.is_none() && object_sort_some.is_none() {
-            let mut opts = IndexingOptions::default();
-            opts.set_fts_path(fts_path);
+            let mut opts = IndexingOptions::new_default_object_sort(fts_path, subject_object_index);
             opts
         } else {
             let object_sort_all = object_sort_all.unwrap_or(false);
@@ -137,7 +138,7 @@ impl PyIndexingOptions {
                             .map(|x| x.into_inner())
                             .collect()
                     });
-                IndexingOptions::new(object_sort_all, object_sort_some, fts_path)
+                IndexingOptions::new(object_sort_all, object_sort_some, fts_path, subject_object_index)
             }
         };
         PyIndexingOptions { inner }
