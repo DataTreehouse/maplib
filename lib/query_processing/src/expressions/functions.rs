@@ -935,7 +935,7 @@ pub fn func_expression(
                     .rdf_node_types
                     .insert(outer_context.as_str().to_string(), t_new);
             } else {
-                todo!("Function {nn} is not implemented yet")
+                return Err(QueryProcessingError::UnimplementedFunction(nn.to_string()))
             }
         }
         Function::StrBefore | Function::StrAfter => {

@@ -16,4 +16,6 @@ pub enum QueryProcessingError {
     BadNumberOfFunctionArguments(Function, usize, String),
     #[error("Maximum estimated rows `{}` in result exceeds configured maximum `{}`. You may have a cross join in your query, please double check. Alternatively, try setting the max_rows parameter to a higher value. Left columns: `{}` Right columns: `{}`", .0, .1, .2, .3)]
     MaxRowsReached(usize, usize, String, String),
+    #[error("The function `{}` is not implemented yet", .0)]
+    UnimplementedFunction(String),
 }
