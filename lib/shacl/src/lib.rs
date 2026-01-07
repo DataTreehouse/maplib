@@ -68,6 +68,7 @@ pub fn validate(
     _deactivate_shapes: Vec<NamedNode>,
     _dry_run: bool,
     _prefixes: Option<HashMap<String, NamedNode>>,
+    _serial: bool,
 ) -> Result<ValidationReport, ShaclError> {
     unimplemented!("Contact Data Treehouse to try")
 }
