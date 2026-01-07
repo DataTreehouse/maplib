@@ -387,6 +387,7 @@ impl Model {
         only_shapes: Option<Vec<NamedNode>>,
         deactivate_shapes: Vec<NamedNode>,
         dry_run: bool,
+        serial: bool,
     ) -> Result<ValidationReport, MaplibError> {
         let res = validate(
             &mut self.triplestore,
@@ -402,6 +403,7 @@ impl Model {
             deactivate_shapes,
             dry_run,
             Some(self.prefixes.clone()),
+            serial,
         );
         res.map_err(|x| x.into())
     }

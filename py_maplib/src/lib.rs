@@ -71,12 +71,12 @@ use representation::formatting::format_native_columns;
 use representation::polars_to_rdf::XSD_DATETIME_WITH_TZ_FORMAT;
 use representation::rdf_to_polars::rdf_named_node_to_polars_literal_value;
 use representation::{BaseRDFNodeType, OBJECT_COL_NAME, PREDICATE_COL_NAME, SUBJECT_COL_NAME};
-use templates::python::{py_triple, PyArgument, PyInstance, PyParameter, PyTemplate};
-use templates::MappingColumnType;
 use templates::python::owl::PyOWL;
 use templates::python::rdf::PyRDF;
 use templates::python::rdfs::PyRDFS;
 use templates::python::xsd::PyXSD;
+use templates::python::{py_triple, PyArgument, PyInstance, PyParameter, PyTemplate};
+use templates::MappingColumnType;
 use triplestore::{IndexingOptions, NewTriples, Triplestore};
 
 #[cfg(target_os = "linux")]
@@ -264,8 +264,9 @@ impl PyModel {
                 predicate
             } else {
                 return Err(PyMaplibError::FunctionArgumentError(
-                    "predicate argument should be IRI or str, but was neither".to_string()
-                ).into())
+                    "predicate argument should be IRI or str, but was neither".to_string(),
+                )
+                .into());
             })
         } else {
             None
@@ -424,6 +425,7 @@ impl PyModel {
         deactivate_shapes=None,
         dry_run=None,
         max_rows=None,
+        serial=None,
     ))]
     #[instrument(skip_all)]
     fn validate(
@@ -440,6 +442,7 @@ impl PyModel {
         deactivate_shapes: Option<Vec<String>>,
         dry_run: Option<bool>,
         max_rows: Option<usize>,
+        serial: Option<bool>,
     ) -> PyResult<PyValidationReport> {
         py.allow_threads(move || {
             let mut inner = self.inner.lock().unwrap();
@@ -456,6 +459,7 @@ impl PyModel {
                 deactivate_shapes,
                 dry_run,
                 max_rows,
+                serial,
             )
         })
     }
@@ -1049,6 +1053,7 @@ fn validate_mutex(
     deactivate_shapes: Option<Vec<String>>,
     dry_run: Option<bool>,
     max_rows: Option<usize>,
+    serial: Option<bool>,
 ) -> PyResult<PyValidationReport> {
     let data_graph = parse_optional_named_node(data_graph)?;
     let data_graph = NamedGraph::from_maybe_named_node(data_graph.as_ref());
@@ -1094,6 +1099,7 @@ fn validate_mutex(
             only_shapes,
             deactivate_shapes,
             dry_run.unwrap_or(false),
+            serial.unwrap_or(false),
         )
         .map_err(PyMaplibError::from)?;
 

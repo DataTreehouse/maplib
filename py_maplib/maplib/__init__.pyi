@@ -2,6 +2,177 @@ from pathlib import Path
 from typing import Union, List, Dict, Optional, Callable, Tuple, Literal as LiteralType
 from polars import DataFrame
 from datetime import datetime, date
+from maplib.maplib import rdf
+
+a = rdf.type
+
+class xsd:
+    """
+    The xsd namespace: http://www.w3.org/2001/XMLSchema#
+    """
+    anyURI:IRI
+    base64Binary:IRI
+    boolean:IRI
+    byte:IRI
+    date:IRI
+    dateTime:IRI
+    dateTimeStamp:IRI
+    dayTimeDuration:IRI
+    decimal:IRI
+    double:IRI
+    duration:IRI
+    float:IRI
+    gDay:IRI
+    gMonth:IRI
+    gMonthDay:IRI
+    gYear:IRI
+    gYearMonth:IRI
+    hexBinary:IRI
+    int_:IRI
+    integer:IRI
+    language:IRI
+    long:IRI
+    negativeInteger:IRI
+    nonNegativeInteger:IRI
+    nonPositiveInteger:IRI
+    normalizedString:IRI
+    short:IRI
+    string:IRI
+    token:IRI
+    unsignedByte:IRI
+    unsignedInt:IRI
+    unsignedLong:IRI
+    unsignedShort:IRI
+    yearMonthDuration:IRI
+
+
+class rdf:
+    """
+    The rdf namespace: http://www.w3.org/1999/02/22-rdf-syntax-ns#
+    """
+    Alt:IRI
+    Bag:IRI
+    HTML:IRI
+    List:IRI
+    Property:IRI
+    Seq:IRI
+    Statement:IRI
+    XMLLiteral:IRI
+    first:IRI
+    langString:IRI
+    nil:IRI
+    object:IRI
+    predicate:IRI
+    rest:IRI
+    subject:IRI
+    type:IRI
+    value:IRI
+
+
+class rdfs:
+    """
+    The rdfs namespace: http://www.w3.org/1999/02/22-rdf-syntax-ns#
+    """
+    Class:IRI
+    Container:IRI
+    ContainerMembershipProperty:IRI
+    Datatype:IRI
+    Literal:IRI
+    Resource:IRI
+    comment:IRI
+    domain:IRI
+    isDefinedBy:IRI
+    label:IRI
+    member:IRI
+    range:IRI
+    seeAlso:IRI
+    subClassOf:IRI
+    subPropertyOf:IRI
+
+
+class owl:
+    """
+    The owl namespace: http://www.w3.org/2002/07/owl#
+    """
+    AllDifferent:IRI
+    AllDisjointClasses:IRI
+    AllDisjointProperties:IRI
+    Annotation:IRI
+    AnnotationProperty:IRI
+    Axiom:IRI
+    Class:IRI
+    DataRange:IRI
+    DatatypeProperty:IRI
+    DeprecatedClass:IRI
+    DeprecatedProperty:IRI
+    FunctionalProperty:IRI
+    InverseFunctionalProperty:IRI
+    IrreflexiveProperty:IRI
+    NamedIndividual:IRI
+    NegativePropertyAssertion:IRI
+    Nothing:IRI
+    ObjectProperty:IRI
+    Ontology:IRI
+    OntologyProperty:IRI
+    ReflexiveProperty:IRI
+    Restriction:IRI
+    SymmetricProperty:IRI
+    Thing:IRI
+    TransitiveProperty:IRI
+    allValuesFrom:IRI
+    annotatedProperty:IRI
+    annotatedSource:IRI
+    annotatedTarget:IRI
+    assertionProperty:IRI
+    backwardCompatibleWith:IRI
+    bottomDataProperty:IRI
+    bottomObjectProperty:IRI
+    cardinality:IRI
+    complementOf:IRI
+    datatypeComplementOf:IRI
+    deprecated:IRI
+    differentFrom:IRI
+    disjointUnionOf:IRI
+    disjointWith:IRI
+    distinctMembers:IRI
+    equivalentClass:IRI
+    equivalentProperty:IRI
+    hasKey:IRI
+    hasSelf:IRI
+    hasValue:IRI
+    imports:IRI
+    incompatibleWith:IRI
+    intersectionOf:IRI
+    inverseOf:IRI
+    maxCardinality:IRI
+    maxQualifiedCardinality:IRI
+    members:IRI
+    minCardinality:IRI
+    minQualifiedCardinality:IRI
+    onClass:IRI
+    onDataRange:IRI
+    onDatatype:IRI
+    onProperties:IRI
+    onProperty:IRI
+    oneOf:IRI
+    priorVersion:IRI
+    propertyChainAxiom:IRI
+    propertyDisjointWith:IRI
+    qualifiedCardinality:IRI
+    rational:IRI
+    real:IRI
+    sameAs:IRI
+    someValuesFrom:IRI
+    sourceIndividual:IRI
+    targetIndividual:IRI
+    targetValue:IRI
+    topDataProperty:IRI
+    topObjectProperty:IRI
+    unionOf:IRI
+    versionIRI:IRI
+    versionInfo:IRI
+    withRestrictions:IRI
+
 
 class RDFType:
     """
@@ -562,6 +733,7 @@ class Model:
         deactivate_shapes: List[str] = None,
         dry_run: bool = False,
         max_rows: int = None,
+        serial: bool = False,
     ) -> ValidationReport:
         """
         Validate the contained knowledge graph using SHACL
@@ -579,6 +751,7 @@ class Model:
         :param deactivate_shapes: Disable validation of these shapes (must be IRI, cannot be used with deactivate_shapes).
         :param dry_run: Only find targets of shapes, but do not validate them.
         :param max_rows: Maximum estimated rows in underlying SPARQL results, helps avoid out-of-memory errors.
+        :param serial: Turns off most parallell validation of shapes.
         :return: Validation report containing a report (report.df) and whether the graph conforms (report.conforms)
         """
 
