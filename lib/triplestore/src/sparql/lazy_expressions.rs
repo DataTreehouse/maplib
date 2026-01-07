@@ -517,6 +517,7 @@ impl Triplestore {
                     &middle_context,
                     &right_context,
                     context,
+                    self.global_cats.clone(),
                 )?
             }
             Expression::Coalesce(inner) => {

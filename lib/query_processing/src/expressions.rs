@@ -365,23 +365,57 @@ pub fn if_expression(
     middle_context: &Context,
     right_context: &Context,
     outer_context: &Context,
+    global_cats: LockedCats,
 ) -> Result<SolutionMappings, QueryProcessingError> {
+    //
+    let mut exploded: Vec<_> = create_compatible_cats(
+        vec![Some(col(middle_context.as_str())), Some(col(right_context.as_str()))],
+        vec![Some(solution_mappings.rdf_node_types.get(middle_context.as_str()).unwrap().clone()),
+             Some(solution_mappings.rdf_node_types.get(right_context.as_str()).unwrap().clone())],
+        global_cats,
+    )
+        .into_iter()
+        .map(|x| x.unwrap())
+        .collect();
+    assert_eq!(exploded.len(), 2);
+
+    let right_exploded = exploded.pop().unwrap();
+    let mid_exploded = exploded.pop().unwrap();
+
+    let mut mid_exprs = vec![];
+    let mut right_exprs = vec![];
+
+    let mut base_type_map = HashMap::new();
+    for (t, (exprs, base_state)) in right_exploded {
+        base_type_map.insert(t, base_state);
+        right_exprs.extend(exprs);
+    }
+    for (_, (exprs, _)) in mid_exploded {
+        mid_exprs.extend(exprs);
+    }
+    let mid_expr = if mid_exprs.len() > 1 {
+        as_struct(mid_exprs)
+    } else {
+        mid_exprs.pop().unwrap()
+    };
+
+    let right_expr = if right_exprs.len() > 1 {
+        as_struct(right_exprs)
+    } else {
+        right_exprs.pop().unwrap()
+    };
+
     solution_mappings.mappings = solution_mappings.mappings.with_column(
         (Expr::Ternary {
             predicate: Arc::new(col(left_context.as_str())),
-            truthy: Arc::new(col(middle_context.as_str())),
-            falsy: Arc::new(col(right_context.as_str())),
+            truthy: Arc::new(mid_expr),
+            falsy: Arc::new(right_expr),
         })
         .alias(outer_context.as_str()),
     );
-    //Todo: generalize..
-    let existing_type = solution_mappings
-        .rdf_node_types
-        .get(middle_context.as_str())
-        .unwrap();
     solution_mappings
         .rdf_node_types
-        .insert(outer_context.as_str().to_string(), existing_type.clone());
+        .insert(outer_context.as_str().to_string(), RDFNodeState::from_map(base_type_map));
     solution_mappings = drop_inner_contexts(
         solution_mappings,
         &vec![left_context, middle_context, right_context],

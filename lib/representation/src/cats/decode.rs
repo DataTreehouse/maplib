@@ -110,6 +110,9 @@ impl Cats {
         local_cats: Option<LockedCats>,
     ) -> Series {
         let local = local_cats.as_ref().map(|x| x.read().unwrap());
+        if ser.dtype() != &DataType::UInt32 {
+            panic!("Series should have datatype UInt32 {:?}", ser);
+        }
         let u32s = ser.u32().unwrap();
         let us: Vec<_> = u32s.iter().collect();
 
