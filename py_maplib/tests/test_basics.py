@@ -542,11 +542,14 @@ def test_programmatic_model_to_string():
         ],
     )
     assert (
-        str(example_template)
-        == """<http://example.net/ns#ExampleTemplate> [ ] :: {
-  <http://ns.ottr.xyz/0.4/Triple>(<http://example.net/ns#myObject>, <http://example.net/ns#hasObj>, <http://example.net/ns#myOtherObject>)
+        str(example_template).strip()
+        == """@prefix ottr: <http://ns.ottr.xyz/0.4/> .
+@prefix p0: <http://example.net/ns#> .
+
+p0:ExampleTemplate [ ] :: {
+  ottr:Triple(p0:myObject, p0:hasObj, p0:myOtherObject)
 } . 
-"""
+""".strip()
     )
 
 
