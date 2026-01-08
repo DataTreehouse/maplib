@@ -270,7 +270,10 @@ impl Display for TemplateDataset {
                 }
             }
         }
-        for (p, nn) in &new_prefixes {
+        let mut prefix_keys: Vec<_> = new_prefixes.keys().collect();
+        prefix_keys.sort();
+        for p in prefix_keys {
+            let nn = new_prefixes.get(p).unwrap();
             writeln!(f, "@prefix {}: {} .", p, nn)?;
         }
         if !new_prefixes.is_empty() {
