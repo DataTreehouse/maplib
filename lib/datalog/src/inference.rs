@@ -11,8 +11,7 @@ pub enum DatalogError {
 }
 
 #[derive(Clone)]
-pub struct InferenceResult {
-}
+pub struct InferenceResult {}
 
 pub fn infer(
     _triplestore: &mut Triplestore,

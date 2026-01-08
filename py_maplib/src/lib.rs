@@ -138,7 +138,12 @@ impl PyIndexingOptions {
                             .map(|x| x.into_inner())
                             .collect()
                     });
-                IndexingOptions::new(object_sort_all, object_sort_some, fts_path, subject_object_index)
+                IndexingOptions::new(
+                    object_sort_all,
+                    object_sort_some,
+                    fts_path,
+                    subject_object_index,
+                )
             }
         };
         PyIndexingOptions { inner }

@@ -7,12 +7,10 @@ use crate::ast::{
     ptype_nn_to_rdf_node_type, Argument, ConstantTerm, ConstantTermOrList, Instance,
     ListExpanderType, PType, Parameter, Signature, StottrTerm, Template,
 };
-use crate::dataset::TemplateDataset;
 use crate::MappingColumnType;
 use oxrdf::IriParseError;
 use pyo3::prelude::*;
 use representation::constants::OTTR_TRIPLE;
-use representation::prefixes::get_default_prefixes;
 use representation::python::{
     PyBlankNode, PyIRI, PyLiteral, PyRDFType, PyRepresentationError, PyVariable,
 };

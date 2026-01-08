@@ -1,12 +1,12 @@
 pub mod errors;
 pub mod storage;
 
-use std::collections::HashMap;
 use crate::storage::StoredResults;
 use errors::ShaclError;
 use oxrdf::{NamedNode, NamedOrBlankNode};
 use polars::prelude::DataFrame;
 use representation::solution_mapping::SolutionMappings;
+use std::collections::HashMap;
 use std::time::Duration;
 use triplestore::Triplestore;
 

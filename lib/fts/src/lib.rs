@@ -14,7 +14,7 @@ pub enum FtsError {}
 pub struct FtsIndex {}
 
 impl FtsIndex {
-    pub fn new(_path: &Path, _uuid:&str) -> Result<FtsIndex, FtsError> {
+    pub fn new(_path: &Path, _uuid: &str) -> Result<FtsIndex, FtsError> {
         unimplemented!("Contact Data Treehouse to enable full text search")
     }
 
@@ -31,7 +31,7 @@ impl FtsIndex {
         unimplemented!("Contact Data Treehouse to enable full text search")
     }
 
-    pub fn commit(&mut self, _drop_writer:bool) -> Result<(), FtsError> {
+    pub fn commit(&mut self, _drop_writer: bool) -> Result<(), FtsError> {
         unimplemented!("Contact Data Treehouse to enable full text search")
     }
 

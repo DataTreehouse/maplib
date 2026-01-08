@@ -14,7 +14,7 @@ use oxrdf::vocab::rdfs;
 use oxrdf::{NamedNode, Variable};
 use representation::{OBJECT_COL_NAME, PREDICATE_COL_NAME, SUBJECT_COL_NAME};
 use std::collections::{HashMap, HashSet};
-use std::fmt::{Display, Formatter};
+use std::fmt::Display;
 use std::path::Path;
 use walkdir::WalkDir;
 

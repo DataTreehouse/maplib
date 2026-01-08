@@ -1,6 +1,6 @@
-use std::collections::HashMap;
-use oxrdf::NamedNode;
 use crate::ast::DatalogRuleset;
+use oxrdf::NamedNode;
+use std::collections::HashMap;
 use thiserror::*;
 
 pub fn parse_datalog_ruleset(
