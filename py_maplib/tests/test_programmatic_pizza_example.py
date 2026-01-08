@@ -130,16 +130,21 @@ def test_insert_new_things(pizzas_model):
 
 def test_print_template(template: Template):
     s = str(template)
+    print(s)
     assert (
-        s
-        == """<https://github.com/DataTreehouse/maplib/pizza#PizzaTemplate> [
-     <http://ns.ottr.xyz/0.4/IRI> ?p, 
-     <http://ns.ottr.xyz/0.4/IRI> ?c, 
-     List<<http://ns.ottr.xyz/0.4/IRI>> ?ings ] :: {
-  <http://ns.ottr.xyz/0.4/Triple>(?p, <http://www.w3.org/1999/02/22-rdf-syntax-ns#type>, <https://github.com/DataTreehouse/maplib/pizza#Pizza>) ,
-  <http://ns.ottr.xyz/0.4/Triple>(?p, <https://github.com/DataTreehouse/maplib/pizza#fromCountry>, ?c) ,
-  <http://ns.ottr.xyz/0.4/Triple>(?p, <https://github.com/DataTreehouse/maplib/pizza#hasBlank>, _:MyBlank) ,
-  cross | <http://ns.ottr.xyz/0.4/Triple>(?p, <https://github.com/DataTreehouse/maplib/pizza#hasIngredient>, ++ ?ings)
+        s.strip()
+        == """@prefix ottr: <http://ns.ottr.xyz/0.4/> .
+@prefix p0: <https://github.com/DataTreehouse/maplib/pizza#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+
+p0:PizzaTemplate [
+     ottr:IRI ?p, 
+     ottr:IRI ?c, 
+     List<ottr:IRI> ?ings ] :: {
+  ottr:Triple(?p, rdf:type, p0:Pizza) ,
+  ottr:Triple(?p, p0:fromCountry, ?c) ,
+  ottr:Triple(?p, p0:hasBlank, _:MyBlank) ,
+  cross | ottr:Triple(?p, p0:hasIngredient, ++ ?ings)
 } . 
-"""
+""".strip()
     )
