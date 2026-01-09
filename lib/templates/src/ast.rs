@@ -52,7 +52,7 @@ impl Template {
         f: &mut Formatter<'_>,
         prefixes: &HashMap<String, NamedNode>,
     ) -> std::fmt::Result {
-        &self.signature.fmt_prefix(f, prefixes)?;
+        self.signature.fmt_prefix(f, prefixes)?;
         writeln!(f, " :: {{")?;
         for (idx, inst) in self.pattern_list.iter().enumerate() {
             write!(f, "  ")?;
