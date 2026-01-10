@@ -483,7 +483,7 @@ SELECT ?site_label ?wtur_label ?ts ?ts_label WHERE {
     ?generator ct:hasTimeseries ?ts .
     ?ts rdfs:label ?ts_label .
 } ORDER BY ?site_label ?wtur_label ?ts ?ts_label"""
-    sm = windpower_model.query(query, streaming=streaming, debug=True, native_dataframe=True)
+    sm = windpower_model.query(query, streaming=streaming, debug=True, include_datatypes=True)
     print(sm.debug)
     assert "hasFeunc" in sm.debug
 
@@ -513,7 +513,7 @@ SELECT ?site_label ?wtur_label ?ts ?ts_label WHERE {
     ?ts rdfs:label ?ts_label .
     FILTER(?ts_label = "HALLO")
 } ORDER BY ?site_label ?wtur_label ?ts ?ts_label"""
-    sm = windpower_model.query(query, streaming=streaming, debug=True, native_dataframe=True)
+    sm = windpower_model.query(query, streaming=streaming, debug=True, include_datatypes=True)
     print(sm.debug)
     assert "HALLO" in sm.debug
 
@@ -541,7 +541,7 @@ SELECT ?site_label ?wtur_label ?ts ?ts_label WHERE {
     ?generator ct:hasTimeseries ?ts .
     ?ts rdfs:label ?ts_label .
 } ORDER BY ?site_label ?wtur_label ?ts ?ts_label"""
-    sm = windpower_model.query(query, streaming=streaming, debug=True, native_dataframe=True)
+    sm = windpower_model.query(query, streaming=streaming, debug=True, include_datatypes=True)
     assert "has at least one" in sm.debug
 
 
