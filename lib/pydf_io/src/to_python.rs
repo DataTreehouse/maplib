@@ -104,7 +104,7 @@ pub fn df_to_py_df(
     let pyarrow = PyModule::import(py, "pyarrow")?;
     let polars = PyModule::import(py, "polars")?;
     let py_df = to_py_df(&chunk, names.as_slice(), py, &pyarrow, &polars)?;
-    if include_datatypes || debug_outputs.is_some() {
+    if include_datatypes {
         Py::new(
             py,
             PySolutionMappings {

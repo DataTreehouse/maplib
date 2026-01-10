@@ -124,7 +124,7 @@ impl PyIndexingOptions {
         let fts_path = fts_path.map(|fts_path| Path::new(&fts_path).to_owned());
         let subject_object_index = subject_object_index.unwrap_or(false);
         let inner = if object_sort_all.is_none() && object_sort_some.is_none() {
-            let mut opts = IndexingOptions::new_default_object_sort(fts_path, subject_object_index);
+            let opts = IndexingOptions::new_default_object_sort(fts_path, subject_object_index);
             opts
         } else {
             let object_sort_all = object_sort_all.unwrap_or(false);
@@ -354,6 +354,7 @@ impl PyModel {
             )?;
             Ok((res, cats))
         })?;
+        print_debug_if_exists(res.debug.as_ref());
         query_to_result(
             res,
             native_dataframe.unwrap_or(false),
