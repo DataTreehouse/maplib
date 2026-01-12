@@ -521,7 +521,6 @@ fn build_select(
                     pv.push(v.clone());
                 }
             });
-            pv.sort();
             true
         }
         SelectionVariables::Everything => false,

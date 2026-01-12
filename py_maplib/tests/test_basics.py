@@ -33,6 +33,11 @@ def test_create_model_from_empty_polars_df():
     model.map("http://example.net/ns#ExampleTemplate", df)
 
 
+def test_wildcard_query_variable_ordering():
+    model = Model()
+    df = model.query("""SELECT * WHERE {?s ?p ?o}""")
+    assert df.columns == ["s", "p", "o"]
+
 def test_add_template_instead_of_constructor_df():
     doc = """
     @prefix ex:<http://example.net/ns#>.

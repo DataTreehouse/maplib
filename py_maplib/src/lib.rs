@@ -114,7 +114,12 @@ pub struct PyIndexingOptions {
 impl PyIndexingOptions {
     #[new]
     #[instrument(skip_all)]
-    #[pyo3(signature = (object_sort_all=None, object_sort_some=None, fts_path=None, subject_object_index=None))]
+    #[pyo3(signature = (
+        object_sort_all=None,
+        object_sort_some=None,
+        fts_path=None,
+        subject_object_index=None,
+    ))]
     pub fn new(
         object_sort_all: Option<bool>,
         object_sort_some: Option<Vec<PyIRI>>,
