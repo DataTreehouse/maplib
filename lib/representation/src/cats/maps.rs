@@ -1,11 +1,13 @@
 pub mod in_memory;
 pub mod on_disk;
 
+use std::borrow::Cow;
 use crate::cats::maps::in_memory::CatMapsInMemory;
 use crate::cats::maps::on_disk::CatMapsOnDisk;
 use crate::cats::CatReEnc;
 use std::collections::HashSet;
 use std::path::Path;
+use crate::BaseRDFNodeType;
 
 #[derive(Debug, Clone)]
 pub enum CatMaps {
@@ -109,19 +111,19 @@ impl CatMaps {
         }
     }
 
-    pub fn new_singular(value: &str, u: u32, path: Option<&Path>) -> CatMaps {
+    pub fn new_singular(value: &str, u: u32, path: Option<&Path>, bt:&BaseRDFNodeType) -> CatMaps {
         if let Some(path) = path {
             CatMaps::InMemory(CatMapsOnDisk::new_singular(value, u, path))
         } else {
-            CatMaps::InMemory(CatMapsInMemory::new_singular(value, u))
+            CatMaps::InMemory(CatMapsInMemory::new_singular(value, u, bt))
         }
     }
 
-    pub fn new_empty(path: Option<&Path>) -> CatMaps {
+    pub fn new_empty(path: Option<&Path>, bt:&BaseRDFNodeType) -> CatMaps {
         if let Some(path) = path {
             CatMaps::OnDisk(CatMapsOnDisk::new_empty(path))
         } else {
-            CatMaps::InMemory(CatMapsInMemory::new_empty())
+            CatMaps::InMemory(CatMapsInMemory::new_empty(bt))
         }
     }
 
@@ -132,14 +134,14 @@ impl CatMaps {
         }
     }
 
-    pub fn decode_batch(&self, v: &[Option<u32>]) -> Vec<Option<&str>> {
+    pub fn decode_batch(&self, v: &[Option<u32>]) -> Vec<Option<Cow<str>>> {
         match self {
             CatMaps::InMemory(mem) => mem.decode_batch(v),
             CatMaps::OnDisk(disk) => disk.decode_batch(v),
         }
     }
 
-    pub fn maybe_decode(&self, u: &u32) -> Option<&str> {
+    pub fn maybe_decode(&self, u: &u32) -> Option<Cow<str>> {
         match self {
             CatMaps::InMemory(mem) => mem.maybe_decode(u),
             CatMaps::OnDisk(disk) => disk.maybe_decode(u),

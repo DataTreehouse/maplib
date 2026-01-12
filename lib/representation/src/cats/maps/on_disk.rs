@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use crate::cats::maps::in_memory::CatMapsInMemory;
 use crate::cats::CatReEnc;
 use std::collections::HashSet;
@@ -48,11 +49,11 @@ impl CatMapsOnDisk {
         todo!()
     }
 
-    pub fn maybe_decode(&self, u: &u32) -> Option<&str> {
+    pub fn maybe_decode(&self, u: &u32) -> Option<Cow<str>> {
         todo!()
     }
 
-    pub fn decode_batch(&self, us: &[Option<u32>]) -> Vec<Option<&str>> {
+    pub fn decode_batch(&self, us: &[Option<u32>]) -> Vec<Option<Cow<str>>> {
         todo!()
     }
 

@@ -110,7 +110,7 @@ impl Triples {
 
             let non_overlap_now = Instant::now();
             let subjects_str_non_cow = if let Some(subjects_str) = &subjects_str {
-                let v: Vec<_> = subjects_str.iter().map(|x| x.as_str()).collect();
+                let v: Vec<&str> = subjects_str.iter().map(|x| x.as_str()).collect();
                 Some(v)
             } else {
                 None

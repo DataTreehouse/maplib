@@ -41,6 +41,8 @@ pub enum TriplestoreError {
     GraphDoesNotExist(String),
     #[error("A lock was open when a thread crashed, cannot guarantee data consistency")]
     PoisonedLockError,
+    #[error("Error writing Turtle {0}")]
+    WriteTurtleError(String),
 }
 
 impl<T> From<PoisonError<T>> for TriplestoreError {

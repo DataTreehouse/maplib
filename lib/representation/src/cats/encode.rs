@@ -10,14 +10,14 @@ use std::collections::HashMap;
 use std::path::Path;
 
 impl CatEncs {
-    pub fn new_empty(path: Option<&Path>) -> CatEncs {
+    pub fn new_empty(path: Option<&Path>,bt:&BaseRDFNodeType) -> CatEncs {
         CatEncs {
-            maps: CatMaps::new_empty(path),
+            maps: CatMaps::new_empty(path, bt),
         }
     }
 
-    pub fn new_singular(value: &str, u: u32, path: Option<&Path>) -> CatEncs {
-        let maps = CatMaps::new_singular(value, u, path);
+    pub fn new_singular(value: &str, u: u32, path: Option<&Path>, bt:&BaseRDFNodeType) -> CatEncs {
+        let maps = CatMaps::new_singular(value, u, path, bt);
         CatEncs { maps }
     }
 
@@ -112,7 +112,7 @@ impl Cats {
         };
 
         let enc = self.get_encs(t).pop();
-        let mut new_enc = CatEncs::new_empty(path);
+        let mut new_enc = CatEncs::new_empty(path, t);
         let strch = series.str().unwrap();
         let encoded_global: Vec<_> = strch
             .iter()

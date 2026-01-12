@@ -20,7 +20,7 @@ impl CatEncs {
         new_ser
     }
 
-    pub fn maybe_decode_string(&self, u: &u32) -> Option<&str> {
+    pub fn maybe_decode_string(&self, u: &u32) -> Option<Cow<str>> {
         self.maps.maybe_decode(u)
     }
 }
@@ -135,7 +135,7 @@ impl Cats {
                             break;
                         }
                     }
-                    Some(Cow::Borrowed(s.expect("Expect all cats to resolve")))
+                    Some(s.expect("Expect all cats to resolve"))
                 } else {
                     None
                 };

@@ -1,6 +1,7 @@
 mod deduplication;
 mod so_index;
 
+use std::borrow::Cow;
 use crate::errors::TriplestoreError;
 use crate::storage::so_index::SubjectObjectIndex;
 use crate::IndexingOptions;
@@ -802,7 +803,7 @@ fn create_sparse_string_index(ser: &Series) -> SparseIndex {
 }
 
 //Assumes sorted.
-fn create_deduplicated_string_vec<'a>(ser: &Series, cat_encs: &'a CatEncs) -> Vec<&'a str> {
+fn create_deduplicated_string_vec<'a>(ser: &Series, cat_encs: &'a CatEncs) -> Vec<Cow<'a, str>> {
     let mut v = Vec::with_capacity(ser.len());
     let mut last = None;
     for any in ser.iter() {
@@ -1194,8 +1195,8 @@ fn decode_elem<'a>(
 ) -> Option<AnyValue<'a>> {
     if let Some(reverse_lookup) = reverse_lookup {
         if let AnyValue::UInt32(u) = any_value {
-            Some(AnyValue::String(
-                reverse_lookup.maybe_decode_string(u).unwrap(),
+            Some(AnyValue::StringOwned(
+                PlSmallStr::from_str(reverse_lookup.maybe_decode_string(u).unwrap().as_ref()),
             ))
         } else {
             unreachable!("Should never happen")

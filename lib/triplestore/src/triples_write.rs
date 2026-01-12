@@ -15,6 +15,7 @@ use representation::{
 };
 use std::collections::HashMap;
 use std::io::Write;
+use polars::prelude::StringFunction::Format;
 use tracing::warn;
 
 mod fast_ntriples;
@@ -133,6 +134,8 @@ impl Triplestore {
                     }
                 }
             }
+        } else if false && RdfFormat::Turtle == format {
+            self.write_pretty_turtle(buf, graph)?;
         } else {
             let mut writer = RdfSerializer::from_format(format).for_writer(buf);
 

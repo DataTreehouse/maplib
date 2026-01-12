@@ -176,20 +176,25 @@ impl Cats {
         u: u32,
         path: Option<&Path>,
     ) -> (u32, Cats) {
-        let t = CatType::Literal(dt);
-        let catenc = CatEncs::new_singular(l, u, path);
+        let dt = BaseRDFNodeType::Literal(dt);
+        let catenc = CatEncs::new_singular(l, u, path, &dt);
+        let t = if let BaseRDFNodeType::Literal(dt) = dt {
+            CatType::Literal(dt)
+        } else {
+            unreachable!("Should never happen")
+        };
         (u, Cats::from_map(HashMap::from([(t, catenc)])))
     }
 
     pub fn new_singular_blank(s: &str, u: u32, path: Option<&Path>) -> (u32, Cats) {
         let t = CatType::Blank;
-        let catenc = CatEncs::new_singular(s, u, path);
+        let catenc = CatEncs::new_singular(s, u, path, &BaseRDFNodeType::BlankNode);
         (u, Cats::from_map(HashMap::from([(t, catenc)])))
     }
 
     pub fn new_singular_iri(s: &str, u: u32, path: Option<&Path>) -> (u32, Cats) {
         let t = CatType::IRI;
-        let catenc = CatEncs::new_singular(s, u, path);
+        let catenc = CatEncs::new_singular(s, u, path, &BaseRDFNodeType::IRI);
         (u, Cats::from_map(HashMap::from([(t, catenc)])))
     }
 }

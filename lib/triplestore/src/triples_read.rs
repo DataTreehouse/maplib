@@ -52,7 +52,9 @@ impl Triplestore {
             RdfFormat::Turtle
         } else if path.extension() == Some("nt".as_ref()) {
             RdfFormat::NTriples
-        } else if path.extension() == Some("xml".as_ref()) {
+        } else if path.extension() == Some("xml".as_ref())
+            || path.extension() == Some("rdf".as_ref())
+        {
             RdfFormat::RdfXml
         } else {
             todo!("Have not implemented file format {:?}", path);
