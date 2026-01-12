@@ -1,2 +1,5 @@
 [advisories]
-ignore = ["RUSTSEC-2024-0436", "RUSTSEC-2025-0141"] # Unmaintained package "paste" used by Polars, bincode issue
+ignore = ["RUSTSEC-2024-0436", "RUSTSEC-2025-0141", "RUSTSEC-2026-0002"]
+# Unmaintained package "paste" used by Polars,
+# bincode issue
+# itermut issue
