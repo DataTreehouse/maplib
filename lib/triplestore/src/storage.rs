@@ -1,7 +1,6 @@
 mod deduplication;
 mod so_index;
 
-use std::borrow::Cow;
 use crate::errors::TriplestoreError;
 use crate::storage::so_index::SubjectObjectIndex;
 use crate::IndexingOptions;
@@ -24,6 +23,7 @@ use representation::{
     BaseRDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD, OBJECT_COL_NAME,
     SUBJECT_COL_NAME,
 };
+use std::borrow::Cow;
 use std::cmp;
 use std::cmp::{Ordering, Reverse};
 use std::collections::{BTreeMap, BinaryHeap};
@@ -107,13 +107,14 @@ impl Triples {
         Ok(all_sms)
     }
 
-    pub fn get_lazy_frame_between_offsets(
+    pub fn get_lazy_frame_slice(
         &self,
         offset: usize,
-        height: usize,
+        height: Option<usize>,
     ) -> Result<Option<LazyFrame>, TriplestoreError> {
         let mut use_lfs = vec![];
         let mut current_height = 0;
+        let height = height.unwrap_or(self.height);
         for seg in self.segments.iter() {
             if current_height + seg.height <= offset {
                 // Before target segment
@@ -157,11 +158,13 @@ impl Triples {
         &self,
         from: &str,
         to: &str,
+        global_cats: LockedCats,
+        subject_type: &BaseRDFNodeType,
     ) -> Result<Option<LazyFrame>, TriplestoreError> {
         let mut use_lfs = vec![];
         for seg in self.segments.iter() {
-            if let Some(lf) = seg.get_lazy_frames_between_subject_strings(from, to)? {
-                use_lfs.push(lf);
+            if let Some(df) = seg.get_data_frame_between_subject_strings(from, to, global_cats.clone(), subject_type)? {
+                use_lfs.push(df.lazy());
             }
         }
         if use_lfs.is_empty() {
@@ -217,11 +220,13 @@ pub(crate) struct TriplesSegment {
 }
 
 impl TriplesSegment {
-    pub fn get_lazy_frames_between_subject_strings(
+    pub fn get_data_frame_between_subject_strings(
         &self,
         from: &str,
         to: &str,
-    ) -> Result<Option<LazyFrame>, TriplestoreError> {
+        global_cats: LockedCats,
+        subject_type: &BaseRDFNodeType,
+    ) -> Result<Option<DataFrame>, TriplestoreError> {
         let subject_index = self.subject_sparse_index.as_ref().unwrap();
         let mut range_backwards = subject_index.map.range(..from.to_string());
         let from_i = if let Some((s, prev)) = range_backwards.next_back() {
@@ -231,15 +236,43 @@ impl TriplesSegment {
         };
         //Todo: remove this clone..
         let mut range_forwards = subject_index.map.range(to.to_string()..);
-        let to_i = if let Some((s, next)) = range_forwards.next() {
-            *next
-        } else {
-            self.height - 1
-        };
+        let mut to_i = None;
+        while let Some((s, next)) = range_forwards.next() {
+            if to < s.as_str() {
+                to_i = Some(*next);
+                break;
+            }
+        }
+        let to_i = to_i.unwrap_or(self.height);
         let height = to_i - from_i;
         if height > 0 {
-            let lf = self.get_subject_sort_lazy_frame()?;
-            Ok(Some(lf.slice(from_i as i64, height as u32)))
+            let df = self.get_subject_sort_lazy_frame()?.collect().unwrap();
+            let mut offset = 0;
+            let subjects = df
+                .column(SUBJECT_COL_NAME)
+                .unwrap()
+                .as_materialized_series();
+            let subjects_start = global_cats
+                .read()?
+                .decode_of_type(&subjects.slice(0, OFFSET_STEP), subject_type);
+            let subjects_end = global_cats.read()?.decode_of_type(
+                &subjects.slice((0 - OFFSET_STEP as i64), OFFSET_STEP),
+                subject_type,
+            );
+            for (i, s) in subjects_start.str().unwrap().iter().enumerate() {
+                if s.unwrap() >= from {
+                    offset = i;
+                    break;
+                }
+            }
+            let mut height = df.height() - offset;
+            for (i, s) in subjects_end.str().unwrap().iter().rev().enumerate() {
+                if s.unwrap() <= to {
+                    height = height - i;
+                    break;
+                }
+            }
+            Ok(Some(df.slice(offset as i64, height)))
         } else {
             Ok(None)
         }
@@ -1195,9 +1228,9 @@ fn decode_elem<'a>(
 ) -> Option<AnyValue<'a>> {
     if let Some(reverse_lookup) = reverse_lookup {
         if let AnyValue::UInt32(u) = any_value {
-            Some(AnyValue::StringOwned(
-                PlSmallStr::from_str(reverse_lookup.maybe_decode_string(u).unwrap().as_ref()),
-            ))
+            Some(AnyValue::StringOwned(PlSmallStr::from_str(
+                reverse_lookup.maybe_decode_string(u).unwrap().as_ref(),
+            )))
         } else {
             unreachable!("Should never happen")
         }

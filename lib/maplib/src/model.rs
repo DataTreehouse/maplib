@@ -313,9 +313,10 @@ impl Model {
         buffer: &mut W,
         graph: &NamedGraph,
         rdf_format: RdfFormat,
+        prefixes: &HashMap<String, NamedNode>,
     ) -> Result<(), MaplibError> {
         self.triplestore
-            .write_triples(buffer, rdf_format, graph)
+            .write_triples(buffer, rdf_format, graph, &prefixes)
             .map_err(MaplibError::TriplestoreError)?;
         Ok(())
     }

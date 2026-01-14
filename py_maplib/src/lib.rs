@@ -69,6 +69,7 @@ use representation::dataset::NamedGraph;
 use representation::debug::DebugOutputs;
 use representation::formatting::format_native_columns;
 use representation::polars_to_rdf::XSD_DATETIME_WITH_TZ_FORMAT;
+use representation::prefixes::get_default_prefixes;
 use representation::rdf_to_polars::rdf_named_node_to_polars_literal_value;
 use representation::{BaseRDFNodeType, OBJECT_COL_NAME, PREDICATE_COL_NAME, SUBJECT_COL_NAME};
 use templates::python::owl::PyOWL;
@@ -186,32 +187,7 @@ impl PyModel {
 
     #[instrument(skip_all)]
     fn add_prefixes(&self, py: Python<'_>, prefixes: Bound<'_, PyAny>) -> PyResult<()> {
-        let mut use_prefixes = HashMap::new();
-        if let Ok(prefixes) = prefixes.extract::<HashMap<String, String>>() {
-            for (k, v) in prefixes {
-                let nn = NamedNode::new(v).map_err(|x| {
-                    PyMaplibError::FunctionArgumentError(format!(
-                        "Error parsing prefix {}:{}",
-                        k,
-                        x.to_string()
-                    ))
-                })?;
-                use_prefixes.insert(k, nn);
-            }
-        } else if let Ok(prefixes) = prefixes.extract::<HashMap<String, PyIRI>>() {
-            for (k, v) in prefixes {
-                use_prefixes.insert(k, v.into_inner());
-            }
-        } else if let Ok(prefixes) = prefixes.extract::<HashMap<String, PyPrefix>>() {
-            for (k, v) in prefixes {
-                use_prefixes.insert(k, v.iri.clone());
-            }
-        } else {
-            return Err(PyMaplibError::FunctionArgumentError(format!(
-                "Prefixes should be Dict[str,str]"
-            ))
-            .into());
-        };
+        let use_prefixes = create_prefix_map(Some(prefixes))?.unwrap();
         py.allow_threads(move || {
             let mut inner = self.inner.lock().unwrap();
             add_prefixes_mutex(&mut inner, use_prefixes)
@@ -614,7 +590,7 @@ impl PyModel {
         })
     }
 
-    #[pyo3(signature = (file_path, format=None, graph=None))]
+    #[pyo3(signature = (file_path, format=None, graph=None, prefixes=None))]
     #[instrument(skip_all)]
     fn write(
         &self,
@@ -622,11 +598,14 @@ impl PyModel {
         file_path: &Bound<'_, PyAny>,
         format: Option<String>,
         graph: Option<String>,
+        prefixes: Option<Bound<'_, PyAny>>,
     ) -> PyResult<()> {
         let file_path = file_path.str()?.to_string();
+        let prefixes = create_prefix_map(prefixes)?;
+
         py.allow_threads(move || {
             let mut inner = self.inner.lock().unwrap();
-            write_triples_mutex(&mut inner, file_path, format, graph)
+            write_triples_mutex(&mut inner, file_path, format, graph, prefixes)
         })
     }
 
@@ -645,10 +624,12 @@ impl PyModel {
         created: Option<String>,
         scenario_time: Option<String>,
         modeling_authority_set: Option<String>,
-        prefixes: Option<HashMap<String, String>>,
+        prefixes: Option<Bound<'_, PyAny>>,
         graph: Option<String>,
     ) -> PyResult<()> {
         let file_path = file_path.str()?.to_string();
+        let use_prefixes = create_prefix_map(prefixes)?.unwrap_or(Default::default());
+
         py.allow_threads(move || {
             let mut inner = self.inner.lock().unwrap();
             write_cim_xml_mutex(
@@ -661,23 +642,26 @@ impl PyModel {
                 created,
                 scenario_time,
                 modeling_authority_set,
-                prefixes,
+                use_prefixes,
                 graph,
             )
         })
     }
 
-    #[pyo3(signature = (format=None, graph=None))]
+    #[pyo3(signature = (format=None, graph=None, prefixes=None))]
     #[instrument(skip_all)]
     fn writes(
         &self,
         py: Python<'_>,
         format: Option<String>,
         graph: Option<String>,
+        prefixes: Option<Bound<'_, PyAny>>,
     ) -> PyResult<String> {
+        let use_prefixes = create_prefix_map(prefixes)?;
+
         py.allow_threads(|| {
             let mut inner = self.inner.lock().unwrap();
-            writes_mutex(&mut inner, format, graph)
+            writes_mutex(&mut inner, format, graph, use_prefixes)
         })
     }
 
@@ -1271,6 +1255,7 @@ fn write_triples_mutex(
     file_path: String,
     format: Option<String>,
     graph: Option<String>,
+    prefixes: Option<HashMap<String, NamedNode>>,
 ) -> PyResult<()> {
     let format = if let Some(format) = format {
         resolve_format(&format)
@@ -1283,7 +1268,12 @@ fn write_triples_mutex(
     let graph = parse_optional_named_node(graph)?;
     let named_graph = NamedGraph::from_maybe_named_node(graph.as_ref());
     inner
-        .write_triples(&mut actual_file, &named_graph, format)
+        .write_triples(
+            &mut actual_file,
+            &named_graph,
+            format,
+            &prefixes.unwrap_or(get_default_prefixes()),
+        )
         .unwrap();
     Ok(())
 }
@@ -1298,18 +1288,11 @@ fn write_cim_xml_mutex(
     created: Option<String>,
     scenario_time: Option<String>,
     modeling_authority_set: Option<String>,
-    prefixes: Option<HashMap<String, String>>,
+    mut prefixes: HashMap<String, NamedNode>,
     graph: Option<String>,
 ) -> PyResult<()> {
-    let mut named_node_prefixes = HashMap::new();
-    if let Some(prefixes) = prefixes {
-        for (k, v) in prefixes {
-            let v_nn = parse_named_node(v)?;
-            named_node_prefixes.insert(k, v_nn);
-        }
-    }
-    if !named_node_prefixes.contains_key("cim") {
-        named_node_prefixes.insert(
+    if !prefixes.contains_key("cim") {
+        prefixes.insert(
             "cim".to_string(),
             NamedNode::new_unchecked("http://iec.ch/TC57/CIM100#"),
         );
@@ -1348,7 +1331,7 @@ fn write_cim_xml_mutex(
         .write_cim_xml(
             &mut actual_file,
             fullmodel_details,
-            named_node_prefixes,
+            prefixes,
             &graph,
             &profile_graph,
         )
@@ -1360,6 +1343,7 @@ fn writes_mutex(
     inner: &mut MutexGuard<InnerModel>,
     format: Option<String>,
     graph: Option<String>,
+    prefixes: Option<HashMap<String, NamedNode>>,
 ) -> PyResult<String> {
     let format = if let Some(format) = format {
         resolve_format(&format)
@@ -1369,7 +1353,14 @@ fn writes_mutex(
     let mut out = vec![];
     let graph = parse_optional_named_node(graph)?;
     let named_graph = NamedGraph::from_maybe_named_node(graph.as_ref());
-    inner.write_triples(&mut out, &named_graph, format).unwrap();
+    inner
+        .write_triples(
+            &mut out,
+            &named_graph,
+            format,
+            &prefixes.unwrap_or(get_default_prefixes()),
+        )
+        .unwrap();
     Ok(String::from_utf8(out).unwrap())
 }
 
@@ -1672,5 +1663,41 @@ fn new_triples_to_dict(
 fn print_debug_if_exists(debug_outputs: Option<&DebugOutputs>) {
     if let Some(debug_outputs) = debug_outputs {
         print!("{}", debug_outputs);
+    }
+}
+
+fn create_prefix_map(
+    prefixes: Option<Bound<'_, PyAny>>,
+) -> PyResult<Option<HashMap<String, NamedNode>>> {
+    if let Some(prefixes) = prefixes {
+        let mut use_prefixes = HashMap::new();
+        if let Ok(prefixes) = prefixes.extract::<HashMap<String, String>>() {
+            for (k, v) in prefixes {
+                let nn = NamedNode::new(v).map_err(|x| {
+                    PyMaplibError::FunctionArgumentError(format!(
+                        "Error parsing prefix {}:{}",
+                        k,
+                        x.to_string()
+                    ))
+                })?;
+                use_prefixes.insert(k, nn);
+            }
+        } else if let Ok(prefixes) = prefixes.extract::<HashMap<String, PyIRI>>() {
+            for (k, v) in prefixes {
+                use_prefixes.insert(k, v.into_inner());
+            }
+        } else if let Ok(prefixes) = prefixes.extract::<HashMap<String, PyPrefix>>() {
+            for (k, v) in prefixes {
+                use_prefixes.insert(k, v.iri.clone());
+            }
+        } else {
+            return Err(PyMaplibError::FunctionArgumentError(format!(
+                "Prefixes should be Dict[str,str]"
+            ))
+            .into());
+        };
+        Ok(Some(use_prefixes))
+    } else {
+        Ok(None)
     }
 }

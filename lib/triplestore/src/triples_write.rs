@@ -1,6 +1,7 @@
 use super::Triplestore;
 use crate::errors::TriplestoreError;
 use oxrdfio::{RdfFormat, RdfSerializer};
+use polars::prelude::StringFunction::Format;
 use polars::prelude::{by_name, col, IntoLazy};
 use polars_core::datatypes::DataType;
 use polars_core::frame::DataFrame;
@@ -15,7 +16,7 @@ use representation::{
 };
 use std::collections::HashMap;
 use std::io::Write;
-use polars::prelude::StringFunction::Format;
+use oxrdf::NamedNode;
 use tracing::warn;
 
 mod fast_ntriples;
@@ -30,6 +31,7 @@ impl Triplestore {
         buf: &mut W,
         format: RdfFormat,
         graph: &NamedGraph,
+        prefixes: &HashMap<String, NamedNode>,
     ) -> Result<(), TriplestoreError> {
         self.check_graph_exists(graph)?;
         if RdfFormat::NTriples == format {
@@ -134,8 +136,8 @@ impl Triplestore {
                     }
                 }
             }
-        } else if false && RdfFormat::Turtle == format {
-            self.write_pretty_turtle(buf, graph)?;
+        } else if RdfFormat::Turtle == format {
+            self.write_pretty_turtle(buf, graph, prefixes)?;
         } else {
             let mut writer = RdfSerializer::from_format(format).for_writer(buf);
 

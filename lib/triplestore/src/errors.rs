@@ -43,6 +43,8 @@ pub enum TriplestoreError {
     PoisonedLockError,
     #[error("Error writing Turtle {0}")]
     WriteTurtleError(String),
+    #[error("Sparql query error {0}")]
+    SparqlQueryError(String),
 }
 
 impl<T> From<PoisonError<T>> for TriplestoreError {

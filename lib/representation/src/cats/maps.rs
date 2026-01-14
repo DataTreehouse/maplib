@@ -1,13 +1,13 @@
 pub mod in_memory;
 pub mod on_disk;
 
-use std::borrow::Cow;
 use crate::cats::maps::in_memory::CatMapsInMemory;
 use crate::cats::maps::on_disk::CatMapsOnDisk;
 use crate::cats::CatReEnc;
+use crate::BaseRDFNodeType;
+use std::borrow::Cow;
 use std::collections::HashSet;
 use std::path::Path;
-use crate::BaseRDFNodeType;
 
 #[derive(Debug, Clone)]
 pub enum CatMaps {
@@ -111,7 +111,7 @@ impl CatMaps {
         }
     }
 
-    pub fn new_singular(value: &str, u: u32, path: Option<&Path>, bt:&BaseRDFNodeType) -> CatMaps {
+    pub fn new_singular(value: &str, u: u32, path: Option<&Path>, bt: &BaseRDFNodeType) -> CatMaps {
         if let Some(path) = path {
             CatMaps::InMemory(CatMapsOnDisk::new_singular(value, u, path))
         } else {
@@ -119,7 +119,7 @@ impl CatMaps {
         }
     }
 
-    pub fn new_empty(path: Option<&Path>, bt:&BaseRDFNodeType) -> CatMaps {
+    pub fn new_empty(path: Option<&Path>, bt: &BaseRDFNodeType) -> CatMaps {
         if let Some(path) = path {
             CatMaps::OnDisk(CatMapsOnDisk::new_empty(path))
         } else {

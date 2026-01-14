@@ -21,3 +21,6 @@ pub const SHACL_PREFIX: &str = "sh";
 pub const SHACL_PREFIX_IRI: &str = "http://www.w3.org/ns/shacl#";
 
 pub const XSD_ANY_URI: &str = "http://www.w3.org/2001/XMLSchema#anyURI";
+
+pub const FOAF_PREFIX: &str = "foaf";
+pub const FOAF_PREFIX_IRI: &str = "http://xmlns.com/foaf/0.1/";

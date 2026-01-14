@@ -1,6 +1,6 @@
-use std::borrow::Cow;
 use crate::cats::maps::in_memory::CatMapsInMemory;
 use crate::cats::CatReEnc;
+use std::borrow::Cow;
 use std::collections::HashSet;
 use std::path::Path;
 

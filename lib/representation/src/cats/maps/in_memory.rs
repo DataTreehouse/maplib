@@ -1,17 +1,17 @@
-use std::borrow::Cow;
 use crate::cats::CatReEnc;
+use crate::BaseRDFNodeType;
 use nohash_hasher::NoHashHasher;
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
+use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt::{Display, Formatter};
 use std::hash::BuildHasherDefault;
 use std::sync::Arc;
-use crate::BaseRDFNodeType;
 
 #[derive(Debug, Clone, Ord, Eq, PartialEq, PartialOrd)]
 pub struct PrefixCompressedString {
-    prefix:Arc<String>,
-    suffix:Arc<String>,
+    prefix: Arc<String>,
+    suffix: Arc<String>,
 }
 
 impl Display for PrefixCompressedString {
@@ -21,8 +21,8 @@ impl Display for PrefixCompressedString {
 }
 
 impl PrefixCompressedString {
-    pub fn new(iri:&str, prefix_map: &mut HashMap<String, Arc<String>>) -> Self {
-        let (pre,suf) = split_iri(iri);
+    pub fn new(iri: &str, prefix_map: &mut HashMap<String, Arc<String>>) -> Self {
+        let (pre, suf) = split_iri(iri);
         let arc_pre = if let Some(arc_pre) = prefix_map.get(pre) {
             arc_pre.clone()
         } else {
@@ -32,7 +32,7 @@ impl PrefixCompressedString {
             arc_pre
         };
         PrefixCompressedString {
-            prefix:arc_pre,
+            prefix: arc_pre,
             suffix: Arc::new(suf.to_string()),
         }
     }
@@ -60,7 +60,10 @@ impl PrefixCompressedCatMapsInMemory {
         }
     }
 
-    pub fn new_remap(maps: &PrefixCompressedCatMapsInMemory, c: &mut u32) -> (PrefixCompressedCatMapsInMemory, CatReEnc) {
+    pub fn new_remap(
+        maps: &PrefixCompressedCatMapsInMemory,
+        c: &mut u32,
+    ) -> (PrefixCompressedCatMapsInMemory, CatReEnc) {
         let mut remap = vec![];
         let mut new_maps = PrefixCompressedCatMapsInMemory::new_empty();
         for (s, v) in maps.map.iter() {
@@ -124,7 +127,7 @@ impl PrefixCompressedCatMapsInMemory {
         self.rev_map.insert(u, compr);
     }
 
-    fn encode_or_add_new_prefix(&mut self, pre:&Arc<String>) -> Arc<String> {
+    fn encode_or_add_new_prefix(&mut self, pre: &Arc<String>) -> Arc<String> {
         if let Some(arc_pre) = self.prefix_map.get(pre.as_str()) {
             arc_pre.clone()
         } else {
@@ -133,7 +136,7 @@ impl PrefixCompressedCatMapsInMemory {
         }
     }
 
-    fn encode_or_add_new_prefix_str(&mut self, pre:&str) -> Arc<String> {
+    fn encode_or_add_new_prefix_str(&mut self, pre: &str) -> Arc<String> {
         if let Some(arc_pre) = self.prefix_map.get(pre.as_str()) {
             arc_pre.clone()
         } else {
@@ -201,7 +204,7 @@ impl PrefixCompressedCatMapsInMemory {
         } else {
             let map = new_map.iter().map(|(x, y)| (y.clone(), *x)).collect();
             let mut prefix_map = HashMap::new();
-            for p in new_map.values()  {
+            for p in new_map.values() {
                 if !prefix_map.contains_key(p.prefix.as_str()) {
                     prefix_map.insert(p.prefix.to_string(), p.prefix.clone());
                 }
@@ -209,7 +212,7 @@ impl PrefixCompressedCatMapsInMemory {
             Some(Self {
                 map,
                 rev_map: new_map,
-                prefix_map
+                prefix_map,
             })
         }
     }
@@ -286,24 +289,26 @@ impl UncompressedCatMapsInMemory {
         }
     }
 
-    pub fn new_remap(maps: &UncompressedCatMapsInMemory, c: &mut u32) -> (UncompressedCatMapsInMemory, CatReEnc) {
-            let mut remap = vec![];
-            let mut new_maps = UncompressedCatMapsInMemory::new_empty();
-            for (s, v) in maps.map.iter() {
-                remap.push((*v, *c));
-                new_maps.encode_new_arc_string(s.clone(), *c);
-                *c += 1;
-            }
-            let remap: HashMap<_, _, BuildHasherDefault<NoHashHasher<u32>>> =
-                remap.into_iter().collect();
-            (
-                new_maps,
-                CatReEnc {
-                    cat_map: Arc::new(remap),
-                },
-            )
+    pub fn new_remap(
+        maps: &UncompressedCatMapsInMemory,
+        c: &mut u32,
+    ) -> (UncompressedCatMapsInMemory, CatReEnc) {
+        let mut remap = vec![];
+        let mut new_maps = UncompressedCatMapsInMemory::new_empty();
+        for (s, v) in maps.map.iter() {
+            remap.push((*v, *c));
+            new_maps.encode_new_arc_string(s.clone(), *c);
+            *c += 1;
         }
-
+        let remap: HashMap<_, _, BuildHasherDefault<NoHashHasher<u32>>> =
+            remap.into_iter().collect();
+        (
+            new_maps,
+            CatReEnc {
+                cat_map: Arc::new(remap),
+            },
+        )
+    }
 
     pub fn encode_new_arc_string(&mut self, s: Arc<String>, u: u32) {
         self.map.insert(s.clone(), u);
@@ -345,7 +350,6 @@ impl UncompressedCatMapsInMemory {
         sing.rev_map.insert(u, s);
         sing
     }
-
 
     pub fn counter(&self) -> u32 {
         self.rev_map.keys().max().unwrap().clone() + 1
@@ -449,45 +453,41 @@ impl CatMapsInMemory {
     pub fn new_remap(maps: &CatMapsInMemory, c: &mut u32) -> (CatMapsInMemory, CatReEnc) {
         match maps {
             CatMapsInMemory::Compressed(m) => {
-                let (m,r) = PrefixCompressedCatMapsInMemory::new_remap(m, c);
+                let (m, r) = PrefixCompressedCatMapsInMemory::new_remap(m, c);
                 (CatMapsInMemory::Compressed(m), r)
             }
             CatMapsInMemory::Uncompressed(m) => {
-                let (m,r) = UncompressedCatMapsInMemory::new_remap(m, c);
+                let (m, r) = UncompressedCatMapsInMemory::new_remap(m, c);
                 (CatMapsInMemory::Uncompressed(m), r)
             }
         }
-
     }
 
     pub(crate) fn contains_str(&self, s: &str) -> bool {
         match self {
-            CatMapsInMemory::Compressed(c) => {c.contains_str(s)}
-            CatMapsInMemory::Uncompressed(u) => {u.contains_str(s)}
+            CatMapsInMemory::Compressed(c) => c.contains_str(s),
+            CatMapsInMemory::Uncompressed(u) => u.contains_str(s),
         }
     }
 
     pub(crate) fn contains_u32(&self, u: &u32) -> bool {
         match self {
-            CatMapsInMemory::Compressed(m) => {m.contains_u32(u)}
-            CatMapsInMemory::Uncompressed(m) => {m.contains_u32(u)}
+            CatMapsInMemory::Compressed(m) => m.contains_u32(u),
+            CatMapsInMemory::Uncompressed(m) => m.contains_u32(u),
         }
     }
 
     pub fn is_empty(&self) -> bool {
-
         match self {
-            CatMapsInMemory::Compressed(m) => {
-                m.is_empty()
-            }
-            CatMapsInMemory::Uncompressed(m) => {m.is_empty()}
+            CatMapsInMemory::Compressed(m) => m.is_empty(),
+            CatMapsInMemory::Uncompressed(m) => m.is_empty(),
         }
     }
 
     pub fn height(&self) -> u32 {
         match self {
-            CatMapsInMemory::Compressed(m) => {m.height()}
-            CatMapsInMemory::Uncompressed(m) => {m.height()}
+            CatMapsInMemory::Compressed(m) => m.height(),
+            CatMapsInMemory::Uncompressed(m) => m.height(),
         }
     }
 
@@ -497,23 +497,19 @@ impl CatMapsInMemory {
                 m.encode_new_string(s, u);
             }
             CatMapsInMemory::Uncompressed(m) => {
-                m.encode_new_string(s,u);
+                m.encode_new_string(s, u);
             }
         }
     }
 
     pub fn maybe_encode_str(&self, s: &str) -> Option<&u32> {
         match self {
-            CatMapsInMemory::Compressed(m) => {
-                m.maybe_encode_str(s)
-            }
-            CatMapsInMemory::Uncompressed(m) => {
-                m.maybe_encode_str(s)
-            }
+            CatMapsInMemory::Compressed(m) => m.maybe_encode_str(s),
+            CatMapsInMemory::Uncompressed(m) => m.maybe_encode_str(s),
         }
     }
 
-    pub fn new_singular(value: &str, u: u32, bt:&BaseRDFNodeType) -> Self {
+    pub fn new_singular(value: &str, u: u32, bt: &BaseRDFNodeType) -> Self {
         if bt.is_iri() {
             CatMapsInMemory::Compressed(PrefixCompressedCatMapsInMemory::new_singular(value, u))
         } else {
@@ -521,7 +517,7 @@ impl CatMapsInMemory {
         }
     }
 
-    pub fn new_empty(bt:&BaseRDFNodeType) -> CatMapsInMemory {
+    pub fn new_empty(bt: &BaseRDFNodeType) -> CatMapsInMemory {
         if bt.is_iri() {
             CatMapsInMemory::Compressed(PrefixCompressedCatMapsInMemory::new_empty())
         } else {
@@ -531,37 +527,29 @@ impl CatMapsInMemory {
 
     pub fn counter(&self) -> u32 {
         match self {
-            CatMapsInMemory::Compressed(m) => {m.counter()}
-            CatMapsInMemory::Uncompressed(m) => {m.counter()}
+            CatMapsInMemory::Compressed(m) => m.counter(),
+            CatMapsInMemory::Uncompressed(m) => m.counter(),
         }
     }
 
     pub fn decode_batch(&self, v: &[Option<u32>]) -> Vec<Option<Cow<str>>> {
         match self {
-            CatMapsInMemory::Compressed(m) => {m.decode_batch(v)}
-            CatMapsInMemory::Uncompressed(m) => {m.decode_batch(v)}
+            CatMapsInMemory::Compressed(m) => m.decode_batch(v),
+            CatMapsInMemory::Uncompressed(m) => m.decode_batch(v),
         }
     }
 
     pub fn maybe_decode(&self, u: &u32) -> Option<Cow<str>> {
         match self {
-            CatMapsInMemory::Compressed(m) => {
-                m.maybe_decode(u)
-            }
-            CatMapsInMemory::Uncompressed(m) => {
-                m.maybe_decode(u)
-            }
+            CatMapsInMemory::Compressed(m) => m.maybe_decode(u),
+            CatMapsInMemory::Uncompressed(m) => m.maybe_decode(u),
         }
     }
 
     pub fn image(&self, s: &HashSet<u32>) -> Option<CatMapsInMemory> {
         match self {
-            CatMapsInMemory::Compressed(m) => {
-                m.image(s).map(CatMapsInMemory::Compressed)
-            }
-            CatMapsInMemory::Uncompressed(m) => {
-                m.image(s).map(CatMapsInMemory::Uncompressed)
-            }
+            CatMapsInMemory::Compressed(m) => m.image(s).map(CatMapsInMemory::Compressed),
+            CatMapsInMemory::Uncompressed(m) => m.image(s).map(CatMapsInMemory::Uncompressed),
         }
     }
 
@@ -599,7 +587,6 @@ impl CatMapsInMemory {
                 } else {
                     unreachable!("Should never happen")
                 }
-
             }
         }
     }
@@ -613,7 +600,7 @@ pub fn split_iri(iri: &str) -> (&str, &str) {
         delimiter: P,
     ) -> Option<(&'_ str, &'_ str)>
     where
-            for<'a> P::Searcher<'a>: std::str::pattern::ReverseSearcher<'a>,
+        for<'a> P::Searcher<'a>: std::str::pattern::ReverseSearcher<'a>,
     {
         let (_, end) = std::str::pattern::ReverseSearcher::next_match_back(
             &mut delimiter.into_searcher(this),

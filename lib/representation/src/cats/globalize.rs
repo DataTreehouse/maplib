@@ -27,7 +27,8 @@ impl Cats {
         for ct in cat_triples {
             let t = CatType::IRI;
             if !self.cat_map.contains_key(&t) {
-                self.cat_map.insert(t.clone(), CatEncs::new_empty(path, &BaseRDFNodeType::IRI));
+                self.cat_map
+                    .insert(t.clone(), CatEncs::new_empty(path, &BaseRDFNodeType::IRI));
             }
             let enc = self.cat_map.get_mut(&t).unwrap();
             let pred = ct.predicate.as_str().to_string();
