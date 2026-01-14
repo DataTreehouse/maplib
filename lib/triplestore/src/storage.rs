@@ -113,23 +113,23 @@ impl Triples {
         height: Option<usize>,
     ) -> Result<Option<LazyFrame>, TriplestoreError> {
         let mut use_lfs = vec![];
-        let mut current_height = 0;
+        let mut current_offset = 0;
         let height = height.unwrap_or(self.height);
         for seg in self.segments.iter() {
-            if current_height + seg.height <= offset {
+            if current_offset + seg.height <= offset {
                 // Before target segment
-                current_height += seg.height;
-            } else if current_height > offset + height {
+                current_offset += seg.height;
+            } else if current_offset > offset + height {
                 // After target segment
                 break;
             } else {
                 // In target segment
                 let lf = seg.get_subject_sort_lazy_frame()?;
-                let use_rel_from = cmp::max(offset - current_height, 0);
-                let use_height = cmp::min(offset + height - current_height, height - use_rel_from);
-                current_height = current_height + height;
-                if use_height > 0 {
-                    use_lfs.push(lf.slice(use_rel_from as i64, use_height as u32));
+                let use_rel_from = offset.saturating_sub(current_offset);
+                let use_seg_height = cmp::min(offset + height - current_offset, seg.height);
+                current_offset = current_offset + use_seg_height;
+                if use_seg_height > 0 {
+                    use_lfs.push(lf.slice(use_rel_from as i64, use_seg_height as u32));
                 } else {
                     break;
                 }
@@ -229,19 +229,21 @@ impl TriplesSegment {
     ) -> Result<Option<DataFrame>, TriplestoreError> {
         let subject_index = self.subject_sparse_index.as_ref().unwrap();
         let mut range_backwards = subject_index.map.range(..from.to_string());
-        let from_i = if let Some((s, prev)) = range_backwards.next_back() {
-            *prev
-        } else {
-            0
-        };
-        //Todo: remove this clone..
+        let mut from_i = None;
+        while let Some((s, prev)) = range_backwards.next_back() {
+            if from > s.as_str() {
+                from_i = Some(*prev);
+                break;
+            } 
+        }
+        let from_i = from_i.unwrap_or(0);
         let mut range_forwards = subject_index.map.range(to.to_string()..);
         let mut to_i = None;
         while let Some((s, next)) = range_forwards.next() {
             if to < s.as_str() {
                 to_i = Some(*next);
                 break;
-            }
+            } 
         }
         let to_i = to_i.unwrap_or(self.height);
         let height = to_i - from_i;

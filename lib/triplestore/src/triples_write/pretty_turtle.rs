@@ -35,19 +35,12 @@ impl TurtleBlock {
         prefixes: &mut HashMap<String, NamedNode>,
         lists_map: Option<&Vec<Arc<Term>>>,
         prefix_replacer: &PrefixReplacer,
-    ) -> Result<(), std::io::Error> {
+    ) -> std::io::Result<()> {
         write_term_prefixed(writer, &self.subject, prefix_replacer)?;
         let mut has_type = false;
         if let Some(ts) = self.pred_term_map.get(type_nn) {
             write!(writer, " a ")?;
-            let mut i = 0usize;
-            for t in ts {
-                write_term_prefixed(writer, t, prefix_replacer)?;
-                if i < ts.len() - 1 {
-                    write!(writer, ", ")?;
-                }
-                i += 1;
-            }
+            write_term_objects(writer, ts.as_slice(), prefix_replacer)?;
             if self.pred_term_map.len() > 1 {
                 writeln!(writer, " ; ")?;
             }
@@ -63,24 +56,32 @@ impl TurtleBlock {
                 }
                 prefix_replacer.write_with_prefix(writer, key)?;
                 write!(writer, " ")?;
-                if values.len() == 1 {
-                    write_term_prefixed(writer, values.get(0).unwrap(), prefix_replacer)?;
-                } else {
-                    write!(writer, "(")?;
-                    for v in values {
-                        write_term_prefixed(writer, v, prefix_replacer)?;
-                    }
-                    write!(writer, ")")?;
-                }
-                i += 1;
+                write_term_objects(writer, values.as_slice(), prefix_replacer)?;
                 if i < self.pred_term_map.len() - 1 {
                     writeln!(writer, " ;")?;
                 }
             }
+            i += 1;
         }
         writeln!(writer, " .\n")?;
         Ok(())
     }
+}
+
+fn write_term_objects<W: Write>(writer: &mut W, terms: &[Term], prefix_replacer: &PrefixReplacer) -> std::io::Result<()> {
+    if terms.len() == 1 {
+        write_term_prefixed(writer, terms.get(0).unwrap(), prefix_replacer)?;
+    } else {
+        write!(writer, "(")?;
+        for (i,v) in terms.iter().enumerate() {
+            write_term_prefixed(writer, v, prefix_replacer)?;
+            if i < terms.len() - 1 {
+                write!(writer, ", ")?;
+            }
+        }
+        write!(writer, ")")?;
+    }
+    Ok(())
 }
 
 impl Triplestore {
@@ -90,11 +91,12 @@ impl Triplestore {
         graph: &NamedGraph,
         prefixes: &HashMap<String, NamedNode>,
     ) -> Result<(), TriplestoreError> {
-        for (k,v) in prefixes {
-            writeln!(writer, "@prefix {}: {} .", k,v).map_err(|x|TriplestoreError::WriteTurtleError(x.to_string()))?;
+        for (k, v) in prefixes {
+            writeln!(writer, "@prefix {}: {} .", k, v)
+                .map_err(|x| TriplestoreError::WriteTurtleError(x.to_string()))?;
         }
         if !prefixes.is_empty() {
-            writeln!(writer, "").map_err(|x|TriplestoreError::WriteTurtleError(x.to_string()))?;
+            writeln!(writer, "").map_err(|x| TriplestoreError::WriteTurtleError(x.to_string()))?;
         }
 
         let map = if let Some(map) = self.graph_triples_map.get(graph) {
@@ -103,14 +105,16 @@ impl Triplestore {
             return Err(TriplestoreError::GraphDoesNotExist(graph.to_string()));
         };
 
-        let lists_map = None;//self.create_lists_map(map, graph)?;
+        let lists_map = None; //self.create_lists_map(map, graph)?;
 
         let mut drivers = vec![];
         for (pred, m) in map.iter() {
             for k in m.keys() {
                 if pred.as_ref() != rdf::TYPE
-                    && (lists_map.is_none() || !(pred.as_ref() == rdf::FIRST && &k.0 == &BaseRDFNodeType::BlankNode))
-                    && (lists_map.is_none() || !(pred.as_ref() == rdf::REST && &k.0 == &BaseRDFNodeType::BlankNode && &k.1 == &BaseRDFNodeType::BlankNode))
+                    && (lists_map.is_none()
+                        || !(pred.as_ref() == rdf::FIRST && &k.0 == &BaseRDFNodeType::BlankNode))
+                    && (lists_map.is_none()
+                        || !(pred.as_ref() == rdf::REST && &k.0 == &BaseRDFNodeType::BlankNode))
                 {
                     drivers.push((pred.clone(), k.clone()));
                 }
@@ -118,16 +122,21 @@ impl Triplestore {
         }
         drivers.sort();
         if let Some(m) = map.get(&rdf::TYPE.into_owned()) {
-            let k = (BaseRDFNodeType::IRI, BaseRDFNodeType::IRI);
-            if m.contains_key(&k) {
-                drivers.push((rdf::TYPE.into_owned(), k));
+            let k1 = (BaseRDFNodeType::IRI, BaseRDFNodeType::IRI);
+            if m.contains_key(&k1) {
+                drivers.push((rdf::TYPE.into_owned(), k1));
+            }
+
+            let k2 = (BaseRDFNodeType::BlankNode, BaseRDFNodeType::IRI);
+            if m.contains_key(&k2) {
+                drivers.push((rdf::TYPE.into_owned(), k2));
             }
         }
         let mut used_drivers: HashMap<_, HashSet<(BaseRDFNodeType, BaseRDFNodeType)>> =
             HashMap::new();
         let mut used_iri_subjects = HashSet::new();
         let mut used_blank_subjects = HashSet::new();
-        for (driver_predicate, k) in drivers {
+        for (driver_predicate, k) in drivers.into_iter().rev() {
             if let Some(ks) = used_drivers.get_mut(&driver_predicate) {
                 ks.insert(k.clone());
             } else {
@@ -140,11 +149,11 @@ impl Triplestore {
             let driver_height = t.height();
 
             let mut current_offset = 0;
-            for i in 0..(driver_height % STRIDE + 1) {
+            for i in 0..((driver_height % STRIDE) + 1) {
                 let triples = map.get(&driver_predicate).unwrap().get(&k).unwrap();
                 let offset_start = i * STRIDE;
                 let height = cmp::min(STRIDE, driver_height - current_offset);
-                current_offset += STRIDE;
+                current_offset += height;
                 let df =
                     if let Some(lf) = triples.get_lazy_frame_slice(offset_start, Some(height))? {
                         lf.collect().unwrap()
@@ -174,7 +183,6 @@ impl Triplestore {
                     &used_iri_subjects,
                     &used_blank_subjects,
                 )?;
-
                 let first_u32 = df
                     .column(SUBJECT_COL_NAME)
                     .unwrap()
@@ -186,9 +194,7 @@ impl Triplestore {
                     .column(SUBJECT_COL_NAME)
                     .unwrap()
                     .u32()
-                    .unwrap()
-                    .last()
-                    .unwrap();
+                    .unwrap().last().unwrap();
 
                 let first = self
                     .global_cats
@@ -240,7 +246,13 @@ impl Triplestore {
                 }
                 let type_nn = rdf::TYPE.into_owned();
                 let prefix_replacer = PrefixReplacer::new(prefixes);
-                write_blocks(writer, blocks_map, &type_nn, lists_map.as_ref(), &prefix_replacer)?;
+                write_blocks(
+                    writer,
+                    blocks_map,
+                    &type_nn,
+                    lists_map.as_ref(),
+                    &prefix_replacer,
+                )?;
             }
         }
         Ok(())
@@ -249,10 +261,7 @@ impl Triplestore {
         &self,
         map: &HashMap<NamedNode, HashMap<(BaseRDFNodeType, BaseRDFNodeType), Triples>>,
         graph: &NamedGraph,
-    ) -> Result<
-        Option<(HashMap<u32, Vec<Arc<Term>>>)>,
-        TriplestoreError,
-    > {
+    ) -> Result<Option<(HashMap<u32, Vec<Arc<Term>>>)>, TriplestoreError> {
         let mut inv_rest_blank_blank_map: HashMap<u32, Vec<u32>> = HashMap::new();
         let mut first_blank_term_map = HashMap::new();
         let mut blank_lists_map = HashMap::new();
@@ -339,7 +348,7 @@ impl Triplestore {
 
         if let Some(rest_triple_map) = map.get(&rdf::REST.into_owned()) {
             for ((s, o), v) in rest_triple_map {
-                if s.is_blank_node() && o.is_blank_node(){
+                if s.is_blank_node() && o.is_blank_node() {
                     let lf = v.get_lazy_frame_slice(0, None)?;
                     if let Some(lf) = lf {
                         let df = lf
@@ -469,7 +478,13 @@ fn write_blocks<W: Write>(
             let r = blocks_map
                 .get(k)
                 .unwrap()
-                .write_block(writer, type_nn, &mut HashMap::new(), lists_map, prefix_replacer)
+                .write_block(
+                    writer,
+                    type_nn,
+                    &mut HashMap::new(),
+                    lists_map,
+                    prefix_replacer,
+                )
                 .map_err(|x| TriplestoreError::WriteTurtleError(x.to_string()));
             r?;
             Ok(())
@@ -485,34 +500,47 @@ struct PrefixReplacer {
 }
 
 impl PrefixReplacer {
-    pub fn new(prefixes:&HashMap<String, NamedNode>) -> Self {
+    pub fn new(prefixes: &HashMap<String, NamedNode>) -> Self {
         let (patterns, replacements): (Vec<_>, Vec<_>) = prefixes
             .iter()
             .map(|(x, y)| (y.as_str(), x.to_string()))
             .unzip();
         let mut builder = AhoCorasick::builder();
-        builder
-            .match_kind(MatchKind::LeftmostLongest);
+        builder.match_kind(MatchKind::LeftmostLongest);
         let aho_corasick = builder.build(patterns).unwrap();
-        Self { aho_corasick, replacements }
+        Self {
+            aho_corasick,
+            replacements,
+        }
     }
 
-    pub fn write_with_prefix<W: Write>(&self, writer: &mut W, nn:&NamedNode) -> std::io::Result<()> {
+    pub fn write_with_prefix<W: Write>(
+        &self,
+        writer: &mut W,
+        nn: &NamedNode,
+    ) -> std::io::Result<()> {
         let mut repl = self.aho_corasick.find_iter(nn.as_str());
         if let Some(find) = repl.next() {
-           let rest = &nn.as_str()[find.end()..];
-            write!(writer, "{}:{}", self.replacements.get(find.pattern().as_usize()).unwrap(), rest)
+            let rest = &nn.as_str()[find.end()..];
+            write!(
+                writer,
+                "{}:{}",
+                self.replacements.get(find.pattern().as_usize()).unwrap(),
+                rest
+            )
         } else {
             write!(writer, "{}", nn)
         }
     }
 }
 
-fn write_term_prefixed<W: Write>(writer: &mut W, term:&Term, prefix_replacer: &PrefixReplacer) -> std::io::Result<()> {
+fn write_term_prefixed<W: Write>(
+    writer: &mut W,
+    term: &Term,
+    prefix_replacer: &PrefixReplacer,
+) -> std::io::Result<()> {
     match term {
-        Term::NamedNode(nn) => {
-            prefix_replacer.write_with_prefix(writer, nn)
-        }
+        Term::NamedNode(nn) => prefix_replacer.write_with_prefix(writer, nn),
         t => write!(writer, "{}", t),
     }
 }
