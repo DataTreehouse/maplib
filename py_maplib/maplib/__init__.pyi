@@ -880,6 +880,7 @@ class Model:
         file_path: Union[str, Path],
         format=LiteralType["ntriples", "turtle", "rdf/xml"],
         graph: str = None,
+        prefixes: Dict[str, str] = None,
     ) -> None:
         """
         Write the non-transient triples to the file path specified in the NTriples format.
@@ -891,21 +892,25 @@ class Model:
         :param file_path: The path of the file containing triples
         :param format: One of "ntriples", "turtle", "rdf/xml".
         :param graph: The IRI of the graph to write.
+        :param prefixes: The prefixes that will be used in turtle serialization.
         """
 
     def writes(
-        self, format=LiteralType["ntriples", "turtle", "rdf/xml"], graph: str = None
+        self,
+        format=LiteralType["ntriples", "turtle", "rdf/xml"],
+        graph: str = None,
+        prefixes: Dict[str, str] = None,
     ) -> str:
         """
-        DEPRECATED: use writes with format="ntriples"
         Write the non-transient triples to a string in memory.
 
         Usage:
 
-        >>> s = m.write_ntriples_string(format="turtle")
+        >>> s = m.writes(format="turtle")
 
         :param format: One of "ntriples", "turtle", "rdf/xml".
         :param graph: The IRI of the graph to write.
+        :param prefixes: The prefixes used for turtle serialization.
         :return Triples in model in the NTriples format (potentially a large string)
         """
 

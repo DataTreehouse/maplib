@@ -72,14 +72,12 @@ fn write_term_objects<W: Write>(writer: &mut W, terms: &[Term], prefix_replacer:
     if terms.len() == 1 {
         write_term_prefixed(writer, terms.get(0).unwrap(), prefix_replacer)?;
     } else {
-        write!(writer, "(")?;
         for (i,v) in terms.iter().enumerate() {
             write_term_prefixed(writer, v, prefix_replacer)?;
             if i < terms.len() - 1 {
                 write!(writer, ", ")?;
             }
         }
-        write!(writer, ")")?;
     }
     Ok(())
 }
