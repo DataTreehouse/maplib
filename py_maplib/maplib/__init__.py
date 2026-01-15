@@ -3,6 +3,9 @@
 #
 # '''
 
+import logging
+logger = logging.getLogger(__name__)
+
 __all__ = [
     "Model",
     "a",
@@ -42,10 +45,10 @@ http://www.w3.org/1999/02/22-rdf-syntax-ns#type
 a = rdf.type
 
 if (pathlib.Path(__file__).parent.resolve() / "graph_explorer").exists():
-    from .graph_explorer import explore
+    from .graph_explorer import explore as _explore
 else:
 
-    def explore(
+    def _explore(
         m: "Model",
         host: str = "localhost",
         port: int = 8000,
@@ -54,22 +57,34 @@ else:
         fts=True,
         fts_path:str="fts",
     ):
-        """Starts a graph explorer session.
-        To run from Jupyter Notebook use:
-        >>> from maplib import explore
-        >>>
-        >>> server = explore(m)
-        You can later stop the server with
-        >>> server.stop()
-
-        :param m: The Model to explore
-        :param host: The hostname that we will point the browser to.
-        :param port: The port where the graph explorer webserver listens on.
-        :param bind: Bind to the following host / ip.
-        :param popup: Pop up the browser window.
-        :param fts: Enable full text search indexing
-        :param fts_path: Path to the fts index
-        """
         print("Contact Data Treehouse to try!")
 
-__version__ = version("maplib") 
+
+def explore(*args, **kwargs):
+    """Deprecated way to start an explore session.
+Use the explore method on a Model object instead
+"""
+    logger.warn("Calling `maplib.explore` is deprecated, use `m.explore()` on a `Model` object instead")
+    if kwargs.get("popup") == None or kwargs.get("popup") == True:
+        logger.warn("""Calling explore without a popup argument defaults to it being on.
+The popup argument is deprecated, so if you are relying on explore() opening a browser window
+please change this to something like
+
+```
+import webbrowser
+from maplib import Model
+
+m = Model()
+...
+s = m.explore()
+webbrowser.open(s.url, new=2)
+```
+""")
+        kwargs["popup"] = True
+    elif kwargs.get("popup") == False:
+        logger.warn("The new explore function on a Model, no longer defaults to popping up the browser ")
+
+
+    return _explore(*args, **kwargs)
+
+__version__ = version("maplib")
