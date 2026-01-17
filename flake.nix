@@ -5,7 +5,7 @@
 
     crane.url = "github:ipetkov/crane";
 
-    fenix.url = "github:nix-community/fenix/monthly";
+    fenix.url = "github:nix-community/fenix/80b1a19a713e2558c411f3259fecb1edd4b5b327";
     fenix.inputs.nixpkgs.follows = "nixpkgs";
   };
 
@@ -36,7 +36,7 @@
       };
 
       cargoVendorDir = craneLib.vendorCargoDeps { inherit src; };
-      cargoArtifacts = craneLib.buildDepsOnly { inherit src; };
+      cargoArtifacts = craneLib.buildDepsOnly { inherit src; buildInputs = [pkgs.python3 ]; };
 
       python = let
         packageOverrides = self: super: {
@@ -84,6 +84,7 @@
         cargo_test = craneLib.cargoTest {
           inherit src cargoArtifacts;
           inherit (craneLib.crateNameFromCargoToml { cargoToml = ./py_maplib/Cargo.toml; }) pname version;
+          PYO3_PYTHON = "${lib.getExe pkgs.python3}";
         };
       };
       apps = {

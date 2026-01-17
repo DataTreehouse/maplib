@@ -334,8 +334,8 @@ class Template:
     instances: List[Instance]
     """
     An OTTR Template.
-    Note that accessing parameters- or instances-fields returns copies. 
-    To change these fields, you must assign new lists of parameters or instances.  
+    Note that accessing parameters- or instances-fields returns copies.
+    To change these fields, you must assign new lists of parameters or instances.
     """
 
     def __init__(
@@ -606,6 +606,27 @@ class Model:
         :param validate_iris: Validate any IRI-columns.
         :return: The generated template
         """
+
+    def explore(
+        self,
+                host: str = "localhost",
+                port: int = 8000,
+                bind: str = "localhost",
+                popup=False,
+                fts=True,
+                fts_path:str="fts",
+            ) -> ExploreServer:
+                """Starts a graph explorer session.
+                To run from Jupyter Notebook use:
+                >>> server = m.explore()
+                You can later stop the server with
+                >>> server.stop()
+
+                :param host: The hostname that we will point the browser to.
+                :param port: The port where the graph explorer webserver listens on.
+                :param bind: Bind to the following host / ip.
+                :param fts: Enable full text search indexing
+                """
 
     def query(
         self,

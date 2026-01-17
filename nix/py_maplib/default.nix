@@ -10,6 +10,7 @@
   rustPlatform,
   polars,
   pyarrow,
+  fastapi,
 }:
 let
   cargoName = craneLib.crateNameFromCargoToml {
@@ -41,6 +42,7 @@ buildPythonPackage rec {
   propagatedBuildInputs = [
     polars
     pyarrow
+    fastapi
   ];
 
   buildAndTestSubdir = "py_maplib";

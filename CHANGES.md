@@ -1,4 +1,9 @@
 # Change log
+## Unreleased
+- `maplib.explore()` is deprecated, use the explore method on a `Model` instead.
+- `Model.explore()` no longer supports opening a browser window automatically.
+  Use `webbrowser.open(s.url, new=2)` instead. Where `s` is returned from `explore()`
+
 ## v0.19.6
 ### Improvements
 - IRIs are now compressed in memory

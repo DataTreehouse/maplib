@@ -295,6 +295,45 @@ impl PyModel {
         })
     }
 
+    /// Starts a graph explorer session.
+    ///
+    /// To run from Jupyter Notebook use:
+    /// ```
+    /// from maplib import Model
+    /// m = Model()
+    /// ...
+    /// server = m.explore()
+    /// ```
+    /// You can later stop the server with
+    /// `server.stop()`
+
+    /// :param host: The hostname that we will point the browser to.
+    /// :param port: The port where the graph explorer webserver listens on.
+    /// :param bind: Bind to the following host / ip.
+    /// :param popup: Pop up the browser window.
+    /// :param fts: Enable full text search indexing
+    /// :param fts_path: Path to the fts index.
+    #[pyo3(signature = (*args, **kwargs), text_signature = "(/)")]
+    fn explore(
+        self_: PyRef<'_, Self>,
+        py: Python<'_>,
+        args: &Bound<'_, pyo3::types::PyTuple>,
+        kwargs: Option<&Bound<'_, pyo3::types::PyDict>>,
+    ) -> PyResult<PyObject> {
+        let module = py.import("maplib")?;
+        let func = module.getattr("_explore")?;
+
+        let mut old_args: Vec<_> = args.iter().collect();
+        let mut new_args = Vec::new();
+        new_args.push(self_.into_pyobject(py)?.into_any());
+        new_args.append(&mut old_args);
+
+        let new_args = pyo3::types::PyTuple::new(py, new_args)?;
+
+        let res = func.call(new_args, kwargs)?;
+        Ok(res.into())
+    }
+
     #[allow(clippy::too_many_arguments)]
     #[pyo3(signature = (query, parameters=None, include_datatypes=None, native_dataframe=None,
     graph=None, streaming=None, return_json=None, include_transient=None, max_rows=None, debug=None))]
