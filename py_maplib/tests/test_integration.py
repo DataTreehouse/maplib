@@ -746,3 +746,20 @@ def test_str_functions(windpower_model, streaming):
     # df.write_csv(filename)
     expected_df = pl.scan_csv(filename).sort(["label"]).collect()
     assert_frame_equal(df, expected_df)
+
+
+def test_write_multi_turtle_provided_prefixes(windpower_model):
+    df = windpower_model.query("""SELECT * WHERE {?a ?b ?c}""")
+    out = windpower_model.writes(format="turtle", prefixes={
+        "wex": "https://github.com/magbak/chrontext/windpower_example#",
+        "xsd": "http://www.w3.org/2001/XMLSchema#",
+        "rds": "https://github.com/magbak/chrontext/rds_power#",
+        "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+        "ct": "https://github.com/magbak/chrontext#",
+    })
+    #print(out)
+    m2 = Model()
+    m2.reads(out, format="turtle")
+    df2 = m2.query("""SELECT * WHERE {?a ?b ?c}""")
+    #print(df.join(df2, on=["a","b","c"], how="anti"))
+    assert df2.height == df.height

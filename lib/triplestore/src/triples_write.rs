@@ -34,7 +34,7 @@ impl Triplestore {
         prefixes: &HashMap<String, NamedNode>,
     ) -> Result<(), TriplestoreError> {
         self.check_graph_exists(graph)?;
-        if RdfFormat::NTriples == format || RdfFormat::Turtle == format{
+        if RdfFormat::NTriples == format {
             let n_threads = POOL.current_num_threads();
             for (predicate, df_map) in self.graph_triples_map.get(graph).unwrap() {
                 let predicate_string = predicate.to_string();
@@ -136,7 +136,7 @@ impl Triplestore {
                     }
                 }
             }
-        } else if false && RdfFormat::Turtle == format {
+        } else if RdfFormat::Turtle == format {
             self.write_pretty_turtle(buf, graph, prefixes)?;
         } else {
             let mut writer = RdfSerializer::from_format(format).for_writer(buf);

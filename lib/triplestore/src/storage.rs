@@ -107,11 +107,11 @@ impl Triples {
         Ok(all_sms)
     }
 
-    pub fn get_lazy_frame_slice(
+    pub fn get_lazy_frame_slices(
         &self,
         offset: usize,
         height: Option<usize>,
-    ) -> Result<Option<LazyFrame>, TriplestoreError> {
+    ) -> Result<Option<Vec<LazyFrame>>, TriplestoreError> {
         let mut use_lfs = vec![];
         let mut current_offset = 0;
         let height = height.unwrap_or(self.height);
@@ -138,19 +138,7 @@ impl Triples {
         if use_lfs.is_empty() {
             Ok(None)
         } else {
-            let lf = concat(
-                use_lfs,
-                UnionArgs {
-                    parallel: true,
-                    rechunk: false,
-                    to_supertypes: false,
-                    diagonal: false,
-                    from_partitioned_ds: false,
-                    maintain_order: false,
-                },
-            )
-            .unwrap();
-            Ok(Some(lf))
+            Ok(Some(use_lfs))
         }
     }
 
@@ -228,10 +216,10 @@ impl TriplesSegment {
         subject_type: &BaseRDFNodeType,
     ) -> Result<Option<DataFrame>, TriplestoreError> {
         let subject_index = self.subject_sparse_index.as_ref().unwrap();
-        let mut range_backwards = subject_index.map.range(..from.to_string());
+        let mut range_backwards = subject_index.map.range(..from.to_string()).rev();
         let mut from_i = None;
-        while let Some((s, prev)) = range_backwards.next_back() {
-            if from > s.as_str() {
+        while let Some((s, prev)) = range_backwards.next() {
+            if from < s.as_str() {
                 from_i = Some(*prev);
                 break;
             } 
@@ -240,7 +228,7 @@ impl TriplesSegment {
         let mut range_forwards = subject_index.map.range(to.to_string()..);
         let mut to_i = None;
         while let Some((s, next)) = range_forwards.next() {
-            if to < s.as_str() {
+            if s.as_str() < to {
                 to_i = Some(*next);
                 break;
             } 
@@ -249,32 +237,34 @@ impl TriplesSegment {
         let height = to_i - from_i;
         if height > 0 {
             let df = self.get_subject_sort_lazy_frame()?.collect().unwrap();
-            let mut offset = 0;
             let subjects = df
                 .column(SUBJECT_COL_NAME)
                 .unwrap()
                 .as_materialized_series();
             let subjects_start = global_cats
                 .read()?
-                .decode_of_type(&subjects.slice(0, OFFSET_STEP), subject_type);
+                .decode_of_type(&subjects.slice(from_i as i64, OFFSET_STEP*2), subject_type);
+            let start_end_iter = to_i.saturating_sub(OFFSET_STEP*2);
             let subjects_end = global_cats.read()?.decode_of_type(
-                &subjects.slice((0 - OFFSET_STEP as i64), OFFSET_STEP),
+                &subjects.slice(start_end_iter as i64, OFFSET_STEP*2),
                 subject_type,
             );
+            let mut from_i = from_i;
             for (i, s) in subjects_start.str().unwrap().iter().enumerate() {
                 if s.unwrap() >= from {
-                    offset = i;
+                    from_i = from_i + i;
                     break;
                 }
             }
-            let mut height = df.height() - offset;
-            for (i, s) in subjects_end.str().unwrap().iter().rev().enumerate() {
-                if s.unwrap() <= to {
-                    height = height - i;
+            let mut to_i = to_i;
+            for (i, s) in subjects_end.str().unwrap().iter().enumerate() {
+                if s.unwrap() > to  {
+                    to_i = start_end_iter + i;
                     break;
                 }
             }
-            Ok(Some(df.slice(offset as i64, height)))
+            let height = to_i - from_i;
+            Ok(Some(df.slice(from_i as i64, height)))
         } else {
             Ok(None)
         }
