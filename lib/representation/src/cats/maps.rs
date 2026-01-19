@@ -134,14 +134,14 @@ impl CatMaps {
         }
     }
 
-    pub fn decode_batch(&self, v: &[Option<u32>]) -> Vec<Option<Cow<str>>> {
+    pub fn decode_batch(&self, v: &[Option<u32>]) -> Vec<Option<Cow<'_, str>>> {
         match self {
             CatMaps::InMemory(mem) => mem.decode_batch(v),
             CatMaps::OnDisk(disk) => disk.decode_batch(v),
         }
     }
 
-    pub fn maybe_decode(&self, u: &u32) -> Option<Cow<str>> {
+    pub fn maybe_decode(&self, u: &u32) -> Option<Cow<'_, str>> {
         match self {
             CatMaps::InMemory(mem) => mem.maybe_decode(u),
             CatMaps::OnDisk(disk) => disk.maybe_decode(u),

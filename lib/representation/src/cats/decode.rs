@@ -20,13 +20,13 @@ impl CatEncs {
         new_ser
     }
 
-    pub fn maybe_decode_string(&self, u: &u32) -> Option<Cow<str>> {
+    pub fn maybe_decode_string(&self, u: &u32) -> Option<Cow<'_, str>> {
         self.maps.maybe_decode(u)
     }
 }
 
 impl Cats {
-    pub fn maybe_decode_of_type(&self, u:&u32, bt:&BaseRDFNodeType) -> Option<Cow<str>> {
+    pub fn maybe_decode_of_type(&self, u:&u32, bt:&BaseRDFNodeType) -> Option<Cow<'_, str>> {
         let ct = CatType::from_base_rdf_node_type(bt);
         if let Some(cat_encs) = self.cat_map.get(&ct) {
             cat_encs.maybe_decode_string(u)

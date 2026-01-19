@@ -4,7 +4,7 @@ use crate::sparql::{QueryResultKind, QuerySettings};
 use crate::storage::Triples;
 use aho_corasick::{AhoCorasick, MatchKind};
 use oxrdf::vocab::rdf;
-use oxrdf::{NamedNode, NamedNodeRef, Term, TermRef, Variable};
+use oxrdf::{BlankNode, NamedNode, NamedNodeRef, Term, TermRef, Variable};
 use polars::prelude::{col, collect_all, concat, LazyFrame, UnionArgs};
 use polars_core::frame::DataFrame;
 use polars_core::utils::concat_df;
@@ -27,19 +27,45 @@ struct TurtleBlock {
     pred_term_map: BTreeMap<NamedNode, Vec<TermOrList>>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 enum TermOrList {
     List(Vec<TermOrList>),
     Elem(Rc<Term>),
 }
 
 impl TermOrList {
+    pub fn remove_first(&mut self) -> TermOrList  {
+        match self {
+            TermOrList::List(list) => {
+                let el = list.remove(0);
+                if list.is_empty() {
+                    *self = TermOrList::Elem(Rc::new(Term::NamedNode(rdf::NIL.into_owned())));
+                }
+                el
+            }
+            TermOrList::Elem(..) => {
+                unreachable!("Should never happen")
+            }
+        }
+    }
+
     pub fn push(&mut self, term: TermOrList) {
         match self {
             TermOrList::List(l) => {
                 l.push(term);
             }
-            TermOrList::Elem(e) => {
+            TermOrList::Elem(..) => {
+                unreachable!("Should never be called when not a list")
+            }
+        }
+    }
+
+    pub fn reverse(&mut self) {
+        match self {
+            TermOrList::List(l) => {
+                l.reverse();
+            }
+            TermOrList::Elem(..) => {
                 unreachable!("Should never be called when not a list")
             }
         }
@@ -163,16 +189,16 @@ impl Triplestore {
             writeln!(writer, "").map_err(|x| TriplestoreError::WriteTurtleError(x.to_string()))?;
         }
 
+        let prefix_replacer = PrefixReplacer::new(prefixes);
+
         let map = if let Some(map) = self.graph_triples_map.get(graph) {
             map
         } else {
             return Err(TriplestoreError::GraphDoesNotExist(graph.to_string()));
         };
 
-        // Disable until properly tested:
-        // let mut lists_map = self.create_lists_map(map, graph)?;
-        let mut lists_map = None;
-
+        let lists_map = self.create_lists_map(map, graph)?;
+        let mut used_lists = HashSet::new();
         let mut drivers = vec![];
         for (pred, m) in map.iter() {
             for k in m.keys() {
@@ -310,7 +336,8 @@ impl Triplestore {
                     self.global_cats.clone(),
                     &new_subj_u32,
                     &use_used_subjects,
-                    lists_map.as_mut(),
+                    lists_map.as_ref(),
+                    &mut used_lists,
                 )?;
 
                 // First stride through and do the "left join"
@@ -321,7 +348,7 @@ impl Triplestore {
                                 continue;
                             }
                         }
-                        
+
                         if lists_map.is_some() && is_list_pred_and_subject_type(p, &k.0) {
                             continue;
                         }
@@ -343,7 +370,8 @@ impl Triplestore {
                                 self.global_cats.clone(),
                                 &new_subj_u32,
                                 &use_used_subjects,
-                                lists_map.as_mut(),
+                                lists_map.as_ref(),
+                                &mut used_lists,
                             )?;
                         }
                     }
@@ -354,7 +382,6 @@ impl Triplestore {
                     used_blank_subjects.extend(new_subj_u32);
                 }
                 let type_nn = rdf::TYPE.into_owned();
-                let prefix_replacer = PrefixReplacer::new(prefixes);
 
                 write_blocks(
                     writer,
@@ -363,6 +390,23 @@ impl Triplestore {
                     &prefix_replacer,
                     &subjects_ordering,
                 )?;
+            }
+        }
+        if let Some(lists_map) = lists_map {
+            let type_nn = rdf::TYPE.into_owned();
+            for (u, mut l) in lists_map {
+                if !used_lists.contains(&u) {
+                    let bl = self.global_cats.read()?.maybe_decode_of_type(&u, &BaseRDFNodeType::BlankNode).unwrap().into_owned();
+                    let bl = BlankNode::new_unchecked(bl);
+                    let first = l.remove_first();
+                    let turtle_block = TurtleBlock { subject: Term::BlankNode(bl),
+                        pred_term_map: BTreeMap::from_iter([
+                            (rdf::FIRST.into_owned(), vec![first]),
+                            (rdf::REST.into_owned(), vec![l]),
+                        ]) };
+                    turtle_block.write_block(writer, &type_nn, &prefix_replacer)
+                        .map_err(|x| TriplestoreError::WriteTurtleError(x.to_string()))?;
+                }
             }
         }
         Ok(())
@@ -443,19 +487,20 @@ impl Triplestore {
             }
             let su32 = sm.mappings.column(SUBJECT_COL_NAME).unwrap().u32().unwrap();
             for u in su32 {
-                if let Some(term) = first_blank_term_map.get(&u.unwrap()) {
-                    blank_lists_map.insert(u.unwrap(), term.clone());
+                if let Some(first) = first_blank_term_map.get(&u.unwrap()) {
+                    blank_lists_map.insert(u.unwrap(), TermOrList::List(vec![first.clone()]));
                 } else {
-                    // Todo handle invalid list
-                    return Ok(None);
+                    return Err(TriplestoreError::BadListError(
+                        "Some list is missing rdf:first".to_string(),
+                    ));
                 }
             }
         } else {
             unreachable!("Should never happen")
         }
-
         if let Some(rest_triple_map) = map.get(&rdf::REST.into_owned()) {
             for ((s, o), v) in rest_triple_map {
+                //The last elements must already be added (see above), since o is iri rdf:nil for last elems.
                 if s.is_blank_node() && o.is_blank_node() {
                     let lf = v.get_lazy_frame_slices(0, None)?;
                     if let Some(lfs) = lf {
@@ -475,24 +520,32 @@ impl Triplestore {
                     }
                 }
             }
-            let mut finished_iri_lists_map = HashMap::new();
-
+            let mut finished_blank_lists_map = HashMap::new();
             while !blank_lists_map.is_empty() {
                 let mut new_blank_lists_map = HashMap::new();
 
                 for (blank, mut list) in blank_lists_map {
-                    if let Some(blanks) = inv_rest_blank_blank_map.remove(&blank) {
-                        let first = first_blank_term_map.get(&blank).unwrap();
-                        list.push(first.clone());
+                    if let Some(blanks) = inv_rest_blank_blank_map.get(&blank) {
                         for blank in blanks {
-                            new_blank_lists_map.insert(blank, list.clone());
+                            if let Some(first) = first_blank_term_map.get(&blank) {
+                                list.push(first.clone());
+                                new_blank_lists_map.insert(*blank, list.clone());
+                            }
+                            else {
+                                return Err(TriplestoreError::BadListError(
+                                    "Some list is missing rdf:first".to_string(),
+                                ));
+                            }
                         }
+
                     } else {
-                        finished_iri_lists_map.insert(blank, list);
+                        list.reverse();
+                        finished_blank_lists_map.insert(blank, list);
                     }
                 }
                 blank_lists_map = new_blank_lists_map;
             }
+            blank_lists_map = finished_blank_lists_map;
         } else {
             return Ok(None);
         }
@@ -510,7 +563,8 @@ fn update_blocks_map(
     global_cats: LockedCats,
     current_subjects: &HashSet<u32>,
     used_subjects: &HashSet<u32>,
-    lists_map: Option<&mut HashMap<u32, TermOrList>>,
+    lists_map: Option<&HashMap<u32, TermOrList>>,
+    used_lists: &mut HashSet<u32>,
 ) -> Result<(), TriplestoreError> {
     let subj_u32s = df.column(SUBJECT_COL_NAME).unwrap().u32().unwrap();
     let subj_terms = column_as_terms(
@@ -527,8 +581,15 @@ fn update_blocks_map(
             let mut obj_lists = Vec::with_capacity(obj_u32s.len());
             for u in obj_u32s {
                 let u = u.unwrap();
-                obj_lists.push(lists_map.remove(&u));
+                if let Some(list) = lists_map.get(&u) {
+                    obj_lists.push(Some(list.clone()));
+                    used_lists.insert(u);
+                } else {
+                    obj_lists.push(None);
+                }
             }
+
+            obj_lists.reverse();
             Some(obj_lists)
         } else {
             None
@@ -542,11 +603,6 @@ fn update_blocks_map(
         global_cats.clone(),
     );
     for ((s_u32, s), o) in subj_u32s.iter().zip(subj_terms).zip(obj_terms) {
-        let s_u32 = s_u32.unwrap();
-        if used_subjects.contains(&s_u32) || !current_subjects.contains(&s_u32) {
-            continue;
-        }
-
         let s = s.unwrap();
         let o = if let Some(lists) = &mut lists {
             if let Some(list) = lists.pop().unwrap() {
@@ -557,6 +613,11 @@ fn update_blocks_map(
         } else {
             TermOrList::Elem(Rc::new(o.unwrap()))
         };
+        // Very important that this happens after the list iterator has been popped
+        let s_u32 = s_u32.unwrap();
+        if used_subjects.contains(&s_u32) || !current_subjects.contains(&s_u32) {
+            continue;
+        }
 
         let block = if let Some(block) = map.get_mut(&s_u32) {
             block
@@ -664,5 +725,5 @@ fn concat_lfs_subject_object(lfs: Vec<LazyFrame>) -> LazyFrame {
 }
 
 fn is_list_pred_and_subject_type(nn: &NamedNode, subject_type: &BaseRDFNodeType) -> bool {
-    (nn.as_str() == rdf::FIRST || nn.as_str() == rdf::REST ) && subject_type.is_blank_node()
+    (nn.as_str() == rdf::FIRST || nn.as_str() == rdf::REST) && subject_type.is_blank_node()
 }

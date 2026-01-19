@@ -36,7 +36,7 @@ impl Triplestore {
                 query_settings,
                 &QueryGraph::NamedGraph(NamedGraph::NamedGraph(nn.clone())),
             )?,
-            NamedNodePattern::Variable(v) => {
+            NamedNodePattern::Variable(..) => {
                 todo!()
             }
         };

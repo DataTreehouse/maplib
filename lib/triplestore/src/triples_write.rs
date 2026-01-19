@@ -1,7 +1,6 @@
 use super::Triplestore;
 use crate::errors::TriplestoreError;
 use oxrdfio::{RdfFormat, RdfSerializer};
-use polars::prelude::StringFunction::Format;
 use polars::prelude::{by_name, col, IntoLazy};
 use polars_core::datatypes::DataType;
 use polars_core::frame::DataFrame;

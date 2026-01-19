@@ -45,6 +45,8 @@ pub enum TriplestoreError {
     WriteTurtleError(String),
     #[error("Sparql query error {0}")]
     SparqlQueryError(String),
+    #[error("Found bad list: {0}")]
+    BadListError(String),
 }
 
 impl<T> From<PoisonError<T>> for TriplestoreError {

@@ -174,14 +174,14 @@ impl PrefixCompressedCatMapsInMemory {
         self.rev_map.keys().max().unwrap().clone() + 1
     }
 
-    pub fn decode_batch(&self, v: &[Option<u32>]) -> Vec<Option<Cow<str>>> {
+    pub fn decode_batch(&self, v: &[Option<u32>]) -> Vec<Option<Cow<'_, str>>> {
         let decoded_vec_iter = v
             .into_par_iter()
             .map(|x| x.map(|x| Cow::Owned(self.rev_map.get(&x).unwrap().to_string())));
         decoded_vec_iter.collect()
     }
 
-    pub fn maybe_decode(&self, u: &u32) -> Option<Cow<str>> {
+    pub fn maybe_decode(&self, u: &u32) -> Option<Cow<'_, str>> {
         self.rev_map.get(u).map(|x| Cow::Owned(x.to_string()))
     }
 
@@ -355,14 +355,14 @@ impl UncompressedCatMapsInMemory {
         self.rev_map.keys().max().unwrap().clone() + 1
     }
 
-    pub fn decode_batch(&self, v: &[Option<u32>]) -> Vec<Option<Cow<str>>> {
+    pub fn decode_batch(&self, v: &[Option<u32>]) -> Vec<Option<Cow<'_, str>>> {
         let decoded_vec_iter = v
             .into_par_iter()
             .map(|x| x.map(|x| Cow::Borrowed(self.rev_map.get(&x).unwrap().as_str())));
         decoded_vec_iter.collect()
     }
 
-    pub fn maybe_decode(&self, u: &u32) -> Option<Cow<str>> {
+    pub fn maybe_decode(&self, u: &u32) -> Option<Cow<'_, str>> {
         self.rev_map.get(u).map(|x| Cow::Borrowed(x.as_str()))
     }
 
@@ -532,14 +532,14 @@ impl CatMapsInMemory {
         }
     }
 
-    pub fn decode_batch(&self, v: &[Option<u32>]) -> Vec<Option<Cow<str>>> {
+    pub fn decode_batch(&self, v: &[Option<u32>]) -> Vec<Option<Cow<'_, str>>> {
         match self {
             CatMapsInMemory::Compressed(m) => m.decode_batch(v),
             CatMapsInMemory::Uncompressed(m) => m.decode_batch(v),
         }
     }
 
-    pub fn maybe_decode(&self, u: &u32) -> Option<Cow<str>> {
+    pub fn maybe_decode(&self, u: &u32) -> Option<Cow<'_, str>> {
         match self {
             CatMapsInMemory::Compressed(m) => m.maybe_decode(u),
             CatMapsInMemory::Uncompressed(m) => m.maybe_decode(u),

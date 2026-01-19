@@ -49,11 +49,11 @@ impl CatMapsOnDisk {
         todo!()
     }
 
-    pub fn maybe_decode(&self, u: &u32) -> Option<Cow<str>> {
+    pub fn maybe_decode(&self, u: &u32) -> Option<Cow<'_, str>> {
         todo!()
     }
 
-    pub fn decode_batch(&self, us: &[Option<u32>]) -> Vec<Option<Cow<str>>> {
+    pub fn decode_batch(&self, us: &[Option<u32>]) -> Vec<Option<Cow<'_, str>>> {
         todo!()
     }
 
