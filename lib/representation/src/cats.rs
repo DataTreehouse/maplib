@@ -15,7 +15,7 @@ use std::cmp;
 use crate::cats::maps::CatMaps;
 use crate::dataset::NamedGraph;
 use crate::BaseRDFNodeType;
-use oxrdf::vocab::xsd;
+use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{NamedNode, NamedNodeRef};
 use polars::prelude::DataFrame;
 use std::collections::HashMap;
@@ -29,7 +29,7 @@ pub const OBJECT_RANK_COL_NAME: &str = "object_rank";
 pub const SUBJECT_RANK_COL_NAME: &str = "subject_rank";
 
 pub fn literal_is_cat(nn: NamedNodeRef) -> bool {
-    nn == xsd::STRING
+    matches!(nn, xsd::STRING)
 }
 
 #[derive(Debug)]

@@ -67,7 +67,7 @@ impl Triplestore {
                                 .collect()
                                 .unwrap();
                             if nulls_df.height() > 0 {
-                                warn!("Triplestore had null lang strings {}", nulls_df);
+                                warn!("Triplestore had null lang strings {} for predicate {}", nulls_df, predicate);
                             }
                             df = df.lazy().drop_nulls(None).collect().unwrap();
 

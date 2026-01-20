@@ -2,7 +2,7 @@ use super::{reencode_solution_mappings, CatEncs, CatType};
 use super::{CatReEnc, Cats};
 use crate::cats::LockedCats;
 use crate::solution_mapping::{BaseCatState, EagerSolutionMappings};
-use crate::{BaseRDFNodeType, RDFNodeState};
+use crate::{BaseRDFNodeType, RDFNodeState, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD};
 use nohash_hasher::NoHashHasher;
 use std::collections::{HashMap, HashSet};
 use std::hash::BuildHasherDefault;
@@ -21,20 +21,40 @@ impl Cats {
                 let t = sm.rdf_node_types.get(c).unwrap();
                 for (bt, bs) in &t.map {
                     if let BaseCatState::CategoricalNative(_, local) = bs {
-                        let ser = if t.is_multi() {
-                            sm.mappings
+                        let mut sers = vec![];
+                        if bt.is_lang_string() {
+                            let ser1 = sm.mappings
+                                .column(c)
+                                .unwrap()
+                                .struct_()
+                                .unwrap()
+                                .field_by_name(LANG_STRING_VALUE_FIELD)
+                                .unwrap();
+                            sers.push(ser1);
+                            let ser2 = sm.mappings
+                                .column(c)
+                                .unwrap()
+                                .struct_()
+                                .unwrap()
+                                .field_by_name(LANG_STRING_LANG_FIELD)
+                                .unwrap();
+                            sers.push(ser2);
+                        } else if t.is_multi() {
+                            let ser = sm.mappings
                                 .column(c)
                                 .unwrap()
                                 .struct_()
                                 .unwrap()
                                 .field_by_name(&bt.field_col_name())
-                                .unwrap()
+                                .unwrap();
+                            sers.push(ser);
                         } else {
-                            sm.mappings
+                            let ser = sm.mappings
                                 .column(c)
                                 .unwrap()
                                 .as_materialized_series()
-                                .clone()
+                                .clone();
+                            sers.push(ser);
                         };
                         if !s.contains_key(bt) {
                             s.insert(bt.clone(), HashSet::new());
@@ -48,16 +68,18 @@ impl Cats {
                             None
                         };
                         let ss = s.get_mut(bt).unwrap();
-                        let new_ss = ser
-                            .u32()
-                            .unwrap()
-                            .into_iter()
-                            .filter(|x| x.is_some())
-                            .map(|x| x.unwrap());
-                        if let Some(local_rev_map) = local_rev_map {
-                            ss.extend(new_ss.filter(|x| !local_rev_map.maps.contains_u32(x)));
-                        } else {
-                            ss.extend(new_ss);
+                        for ser in sers {
+                            let new_ss = ser
+                                .u32()
+                                .unwrap()
+                                .into_iter()
+                                .filter(|x| x.is_some())
+                                .map(|x| x.unwrap());
+                            if let Some(local_rev_map) = local_rev_map {
+                                ss.extend(new_ss.filter(|x| !local_rev_map.maps.contains_u32(x)));
+                            } else {
+                                ss.extend(new_ss);
+                            }
                         }
                     }
                 }

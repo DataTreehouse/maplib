@@ -8,6 +8,8 @@ use representation::multitype::split_df_multicols;
 use representation::solution_mapping::EagerSolutionMappings;
 use representation::{OBJECT_COL_NAME, PREDICATE_COL_NAME, SUBJECT_COL_NAME};
 use std::collections::HashMap;
+use polars::prelude::{col, IntoLazy};
+use query_processing::expressions::{expr_is_null_workaround, non_multi_col_is_null_workaround};
 
 impl Triplestore {
     pub fn insert_construct_result(
@@ -76,6 +78,18 @@ fn construct_result_as_triples_to_add(
                                 map.remove(OBJECT_COL_NAME).unwrap_or(obj_dt.clone());
                             let (new_obj_dt, new_obj_state) =
                                 object_type.map.drain().next().unwrap();
+
+                            // Separate dataframes for multicolumns introduces nulls that must be dropped
+                            let mut lf = df.lazy();
+                            for (c,_) in &multicols {
+                                let t = if c == SUBJECT_COL_NAME {
+                                    &new_subj_dt
+                                } else {
+                                    &new_obj_dt
+                                };
+                                lf = lf.filter(non_multi_col_is_null_workaround(col(c), t).not());
+                            }
+                            let df = lf.collect().unwrap();
 
                             all_triples_to_add.push(TriplesToAdd {
                                 df,

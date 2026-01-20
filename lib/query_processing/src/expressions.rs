@@ -159,15 +159,37 @@ pub fn binary_expression(
         .get(right_context.as_str())
         .unwrap();
     if left_type.is_none() || right_type.is_none() {
-        solution_mappings.mappings = solution_mappings.mappings.with_column(
-            lit(LiteralValue::untyped_null())
-                .cast(BaseRDFNodeType::None.default_input_polars_data_type())
-                .alias(outer_context.as_str()),
-        );
-        solution_mappings.rdf_node_types.insert(
-            outer_context.as_str().to_string(),
-            BaseRDFNodeType::None.into_default_input_rdf_node_state(),
-        );
+        if matches!(
+            expression,
+            Expression::Equal(..)
+                | Expression::Less(..)
+                | Expression::Greater(..)
+                | Expression::GreaterOrEqual(..)
+                | Expression::LessOrEqual(..)
+                | Expression::And(..)
+                | Expression::Or(..)
+        ) {
+            let bool = BaseRDFNodeType::Literal(xsd::BOOLEAN.into_owned());
+            solution_mappings.mappings = solution_mappings.mappings.with_column(
+                lit(LiteralValue::untyped_null())
+                    .cast(bool.default_input_polars_data_type())
+                    .alias(outer_context.as_str()),
+            );
+            solution_mappings.rdf_node_types.insert(
+                outer_context.as_str().to_string(),
+                bool.into_default_input_rdf_node_state(),
+            );
+        } else {
+            solution_mappings.mappings = solution_mappings.mappings.with_column(
+                lit(LiteralValue::untyped_null())
+                    .cast(BaseRDFNodeType::None.default_input_polars_data_type())
+                    .alias(outer_context.as_str()),
+            );
+            solution_mappings.rdf_node_types.insert(
+                outer_context.as_str().to_string(),
+                BaseRDFNodeType::None.into_default_input_rdf_node_state(),
+            );
+        }
         solution_mappings =
             drop_inner_contexts(solution_mappings, &vec![left_context, right_context]);
         return Ok(solution_mappings);
@@ -342,20 +364,24 @@ pub fn bound(
 pub fn expr_is_null_workaround(expr: Expr, rdf_node_type: &RDFNodeState) -> Expr {
     if !rdf_node_type.is_multi() {
         let b = rdf_node_type.get_base_type().unwrap();
-        match b {
-            BaseRDFNodeType::Literal(l) => {
-                if l.as_ref() == rdf::LANG_STRING {
-                    expr.struct_()
-                        .field_by_name(LANG_STRING_VALUE_FIELD)
-                        .is_null()
-                } else {
-                    expr.is_null()
-                }
-            }
-            _ => expr.is_null(),
-        }
+        non_multi_col_is_null_workaround(expr, b)
     } else {
         create_all_types_null_expression(expr, rdf_node_type.get_sorted_types())
+    }
+}
+
+pub fn non_multi_col_is_null_workaround(expr: Expr, base_rdf_node_type: &BaseRDFNodeType) -> Expr {
+    match base_rdf_node_type {
+        BaseRDFNodeType::Literal(l) => {
+            if l.as_ref() == rdf::LANG_STRING {
+                expr.struct_()
+                    .field_by_name(LANG_STRING_VALUE_FIELD)
+                    .is_null()
+            } else {
+                expr.is_null()
+            }
+        }
+        _ => expr.is_null(),
     }
 }
 

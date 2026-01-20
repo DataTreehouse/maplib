@@ -1,7 +1,7 @@
 use super::{CatEncs, CatTriples, CatType, Cats};
 use crate::cats::LockedCats;
 use crate::solution_mapping::{BaseCatState, EagerSolutionMappings};
-use crate::{BaseRDFNodeType, OBJECT_COL_NAME, SUBJECT_COL_NAME};
+use crate::{BaseRDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD, OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use nohash_hasher::NoHashHasher;
 use polars::datatypes::PlSmallStr;
 use polars::error::PolarsResult;
@@ -190,17 +190,22 @@ pub fn reencode_solution_mappings(
                 let local = local.read().unwrap();
                 if let Some(rmap) = reencs.get(&local.uuid) {
                     let r = rmap.get(bt).unwrap();
-
-                    let e = if t.is_multi() {
-                        col(c).struct_().field_by_name(&bt.field_col_name())
+                    let mut es = vec![];
+                    if t.is_lang_string() {
+                        es.push(col(c).struct_().field_by_name(LANG_STRING_VALUE_FIELD));
+                        es.push(col(c).struct_().field_by_name(LANG_STRING_LANG_FIELD));
+                    } else if t.is_multi() {
+                        es.push(col(c).struct_().field_by_name(&bt.field_col_name()));
                     } else {
-                        col(c)
+                        es.push(col(c));
                     };
-                    let r_cloned = r.clone();
-                    reenc_exprs.push(e.map(
-                        move |c| r_cloned.clone().re_encode_column(c, false),
-                        |_, y| Ok(y.clone()),
-                    ));
+                    for e in es {
+                        let r_cloned = r.clone();
+                        reenc_exprs.push(e.map(
+                            move |c| r_cloned.clone().re_encode_column(c, false),
+                            |_, y| Ok(y.clone()),
+                        ));
+                    }
                 }
             }
         }

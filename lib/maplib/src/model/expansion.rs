@@ -27,11 +27,11 @@ use templates::ast::{
 };
 use templates::MappingColumnType;
 use tracing::debug;
+use query_processing::expressions::non_multi_col_is_null_workaround;
 use triplestore::TriplesToAdd;
 
 const LIST_COL: &str = "list";
 const FIRST_COL: &str = "first";
-
 const REST_COL: &str = "rest";
 
 impl Model {
@@ -253,7 +253,9 @@ impl Model {
             predicate,
         } in ok_triples
         {
-            let has_multi = subject_type.is_multi() || object_type.is_multi();
+            let subject_multi = subject_type.is_multi();
+            let object_multi = object_type.is_multi();
+            let has_multi = subject_multi || object_multi;
 
             let mut types = HashMap::from([
                 (SUBJECT_COL_NAME.to_string(), subject_type),
@@ -270,23 +272,34 @@ impl Model {
             } else {
                 vec![(df, types)]
             };
-            for (df, mut types) in dfs {
-                let (subject_type, subject_state) = types
+            for (mut df, mut part_types) in dfs {
+                let (subject_type, subject_state) = part_types
                     .remove(SUBJECT_COL_NAME)
                     .unwrap()
                     .map
                     .into_iter()
                     .next()
                     .unwrap();
-                let (object_type, object_state) = types
+                let (object_type, object_state) = part_types
                     .remove(OBJECT_COL_NAME)
                     .unwrap()
                     .map
                     .into_iter()
                     .next()
                     .unwrap();
+                // Splitting by multi introduces nulls
+                if has_multi {
+                    let mut lf = df.lazy();
+                    if subject_multi {
+                        lf = lf.filter(non_multi_col_is_null_workaround(col(SUBJECT_COL_NAME), &subject_type).not())
+                    }
+                    if object_multi {
+                        lf = lf.filter(non_multi_col_is_null_workaround(col(OBJECT_COL_NAME), &object_type).not())
+                    }
+                    df = lf.collect().unwrap();
+                }
                 let predicate_state = if predicate.is_none() {
-                    let (_, s) = types
+                    let (_, s) = part_types
                         .remove(PREDICATE_COL_NAME)
                         .unwrap()
                         .map

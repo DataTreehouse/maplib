@@ -14,6 +14,7 @@ shacl = { path = "../shacl" }
 representation = { path = "../representation" }
 datalog = {path = "../datalog"}
 cimxml = {path = "../cimxml"}
+query_processing = {path ="../query_processing"}
 
 rayon = { workspace = true }
 oxrdf = { workspace = true }
