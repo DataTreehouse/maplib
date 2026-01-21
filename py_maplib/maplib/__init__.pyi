@@ -10,168 +10,168 @@ class xsd:
     """
     The xsd namespace: http://www.w3.org/2001/XMLSchema#
     """
-    anyURI:IRI
-    base64Binary:IRI
-    boolean:IRI
-    byte:IRI
-    date:IRI
-    dateTime:IRI
-    dateTimeStamp:IRI
-    dayTimeDuration:IRI
-    decimal:IRI
-    double:IRI
-    duration:IRI
-    float:IRI
-    gDay:IRI
-    gMonth:IRI
-    gMonthDay:IRI
-    gYear:IRI
-    gYearMonth:IRI
-    hexBinary:IRI
-    int_:IRI
-    integer:IRI
-    language:IRI
-    long:IRI
-    negativeInteger:IRI
-    nonNegativeInteger:IRI
-    nonPositiveInteger:IRI
-    normalizedString:IRI
-    short:IRI
-    string:IRI
-    token:IRI
-    unsignedByte:IRI
-    unsignedInt:IRI
-    unsignedLong:IRI
-    unsignedShort:IRI
-    yearMonthDuration:IRI
+    anyURI: "IRI"
+    base64Binary: "IRI"
+    boolean: "IRI"
+    byte: "IRI"
+    date: "IRI"
+    dateTime: "IRI"
+    dateTimeStamp: "IRI"
+    dayTimeDuration: "IRI"
+    decimal: "IRI"
+    double: "IRI"
+    duration: "IRI"
+    float: "IRI"
+    gDay: "IRI"
+    gMonth: "IRI"
+    gMonthDay: "IRI"
+    gYear: "IRI"
+    gYearMonth: "IRI"
+    hexBinary: "IRI"
+    int_: "IRI"
+    integer: "IRI"
+    language: "IRI"
+    long: "IRI"
+    negativeInteger: "IRI"
+    nonNegativeInteger: "IRI"
+    nonPositiveInteger: "IRI"
+    normalizedString: "IRI"
+    short: "IRI"
+    string: "IRI"
+    token: "IRI"
+    unsignedByte: "IRI"
+    unsignedInt: "IRI"
+    unsignedLong: "IRI"
+    unsignedShort: "IRI"
+    yearMonthDuration: "IRI"
 
 
 class rdf:
     """
     The rdf namespace: http://www.w3.org/1999/02/22-rdf-syntax-ns#
     """
-    Alt:IRI
-    Bag:IRI
-    HTML:IRI
-    List:IRI
-    Property:IRI
-    Seq:IRI
-    Statement:IRI
-    XMLLiteral:IRI
-    first:IRI
-    langString:IRI
-    nil:IRI
-    object:IRI
-    predicate:IRI
-    rest:IRI
-    subject:IRI
-    type:IRI
-    value:IRI
+    Alt: "IRI"
+    Bag: "IRI"
+    HTML: "IRI"
+    List: "IRI"
+    Property: "IRI"
+    Seq: "IRI"
+    Statement: "IRI"
+    XMLLiteral: "IRI"
+    first: "IRI"
+    langString: "IRI"
+    nil: "IRI"
+    object: "IRI"
+    predicate: "IRI"
+    rest: "IRI"
+    subject: "IRI"
+    type: "IRI"
+    value: "IRI"
 
 
 class rdfs:
     """
     The rdfs namespace: http://www.w3.org/1999/02/22-rdf-syntax-ns#
     """
-    Class:IRI
-    Container:IRI
-    ContainerMembershipProperty:IRI
-    Datatype:IRI
-    Literal:IRI
-    Resource:IRI
-    comment:IRI
-    domain:IRI
-    isDefinedBy:IRI
-    label:IRI
-    member:IRI
-    range:IRI
-    seeAlso:IRI
-    subClassOf:IRI
-    subPropertyOf:IRI
+    Class: "IRI"
+    Container: "IRI"
+    ContainerMembershipProperty: "IRI"
+    Datatype: "IRI"
+    Literal: "IRI"
+    Resource: "IRI"
+    comment: "IRI"
+    domain: "IRI"
+    isDefinedBy: "IRI"
+    label: "IRI"
+    member: "IRI"
+    range: "IRI"
+    seeAlso: "IRI"
+    subClassOf: "IRI"
+    subPropertyOf: "IRI"
 
 
 class owl:
     """
     The owl namespace: http://www.w3.org/2002/07/owl#
     """
-    AllDifferent:IRI
-    AllDisjointClasses:IRI
-    AllDisjointProperties:IRI
-    Annotation:IRI
-    AnnotationProperty:IRI
-    Axiom:IRI
-    Class:IRI
-    DataRange:IRI
-    DatatypeProperty:IRI
-    DeprecatedClass:IRI
-    DeprecatedProperty:IRI
-    FunctionalProperty:IRI
-    InverseFunctionalProperty:IRI
-    IrreflexiveProperty:IRI
-    NamedIndividual:IRI
-    NegativePropertyAssertion:IRI
-    Nothing:IRI
-    ObjectProperty:IRI
-    Ontology:IRI
-    OntologyProperty:IRI
-    ReflexiveProperty:IRI
-    Restriction:IRI
-    SymmetricProperty:IRI
-    Thing:IRI
-    TransitiveProperty:IRI
-    allValuesFrom:IRI
-    annotatedProperty:IRI
-    annotatedSource:IRI
-    annotatedTarget:IRI
-    assertionProperty:IRI
-    backwardCompatibleWith:IRI
-    bottomDataProperty:IRI
-    bottomObjectProperty:IRI
-    cardinality:IRI
-    complementOf:IRI
-    datatypeComplementOf:IRI
-    deprecated:IRI
-    differentFrom:IRI
-    disjointUnionOf:IRI
-    disjointWith:IRI
-    distinctMembers:IRI
-    equivalentClass:IRI
-    equivalentProperty:IRI
-    hasKey:IRI
-    hasSelf:IRI
-    hasValue:IRI
-    imports:IRI
-    incompatibleWith:IRI
-    intersectionOf:IRI
-    inverseOf:IRI
-    maxCardinality:IRI
-    maxQualifiedCardinality:IRI
-    members:IRI
-    minCardinality:IRI
-    minQualifiedCardinality:IRI
-    onClass:IRI
-    onDataRange:IRI
-    onDatatype:IRI
-    onProperties:IRI
-    onProperty:IRI
-    oneOf:IRI
-    priorVersion:IRI
-    propertyChainAxiom:IRI
-    propertyDisjointWith:IRI
-    qualifiedCardinality:IRI
-    rational:IRI
-    real:IRI
-    sameAs:IRI
-    someValuesFrom:IRI
-    sourceIndividual:IRI
-    targetIndividual:IRI
-    targetValue:IRI
-    topDataProperty:IRI
-    topObjectProperty:IRI
-    unionOf:IRI
-    versionIRI:IRI
-    versionInfo:IRI
-    withRestrictions:IRI
+    AllDifferent: "IRI"
+    AllDisjointClasses: "IRI"
+    AllDisjointProperties: "IRI"
+    Annotation: "IRI"
+    AnnotationProperty: "IRI"
+    Axiom: "IRI"
+    Class: "IRI"
+    DataRange: "IRI"
+    DatatypeProperty: "IRI"
+    DeprecatedClass: "IRI"
+    DeprecatedProperty: "IRI"
+    FunctionalProperty: "IRI"
+    InverseFunctionalProperty: "IRI"
+    IrreflexiveProperty: "IRI"
+    NamedIndividual: "IRI"
+    NegativePropertyAssertion: "IRI"
+    Nothing: "IRI"
+    ObjectProperty: "IRI"
+    Ontology: "IRI"
+    OntologyProperty: "IRI"
+    ReflexiveProperty: "IRI"
+    Restriction: "IRI"
+    SymmetricProperty: "IRI"
+    Thing: "IRI"
+    TransitiveProperty: "IRI"
+    allValuesFrom: "IRI"
+    annotatedProperty: "IRI"
+    annotatedSource: "IRI"
+    annotatedTarget: "IRI"
+    assertionProperty: "IRI"
+    backwardCompatibleWith: "IRI"
+    bottomDataProperty: "IRI"
+    bottomObjectProperty: "IRI"
+    cardinality: "IRI"
+    complementOf: "IRI"
+    datatypeComplementOf: "IRI"
+    deprecated: "IRI"
+    differentFrom: "IRI"
+    disjointUnionOf: "IRI"
+    disjointWith: "IRI"
+    distinctMembers: "IRI"
+    equivalentClass: "IRI"
+    equivalentProperty: "IRI"
+    hasKey: "IRI"
+    hasSelf: "IRI"
+    hasValue: "IRI"
+    imports: "IRI"
+    incompatibleWith: "IRI"
+    intersectionOf: "IRI"
+    inverseOf: "IRI"
+    maxCardinality: "IRI"
+    maxQualifiedCardinality: "IRI"
+    members: "IRI"
+    minCardinality: "IRI"
+    minQualifiedCardinality: "IRI"
+    onClass: "IRI"
+    onDataRange: "IRI"
+    onDatatype: "IRI"
+    onProperties: "IRI"
+    onProperty: "IRI"
+    oneOf: "IRI"
+    priorVersion: "IRI"
+    propertyChainAxiom: "IRI"
+    propertyDisjointWith: "IRI"
+    qualifiedCardinality: "IRI"
+    rational: "IRI"
+    real: "IRI"
+    sameAs: "IRI"
+    someValuesFrom: "IRI"
+    sourceIndividual: "IRI"
+    targetIndividual: "IRI"
+    targetValue: "IRI"
+    topDataProperty: "IRI"
+    topObjectProperty: "IRI"
+    unionOf: "IRI"
+    versionIRI: "IRI"
+    versionInfo: "IRI"
+    withRestrictions: "IRI"
 
 
 class RDFType:
@@ -263,7 +263,7 @@ class Literal:
     datatype: Optional[IRI]
     language: Optional[str]
 
-    def __init__(self, value: str, data_type: IRI = None, language: str = None):
+    def __init__(self, value: str, data_type: "IRI" = None, language: str = None):
         """
         Create a new RDF Literal
         :param value: The lexical representation of the value.
@@ -317,7 +317,7 @@ class Argument:
 class Instance:
     def __init__(
         self,
-        iri: IRI,
+        iri: "IRI",
         arguments: List[Union[Argument, Variable, IRI, Literal, BlankNode, None]],
         list_expander: Optional[LiteralType["cross", "zipMin", "zipMax"]] = None,
     ):
@@ -340,7 +340,7 @@ class Template:
 
     def __init__(
         self,
-        iri: IRI,
+        iri: "IRI",
         parameters: List[Union[Parameter, Variable]],
         instances: List[Instance],
     ):
@@ -389,21 +389,21 @@ class XSD:
     The xsd namespace, for convenience.
     """
 
-    boolean: IRI
-    byte: IRI
-    date: IRI
-    dateTime: IRI
-    dateTimeStamp: IRI
-    decimal: IRI
-    double: IRI
-    duration: IRI
-    float: IRI
-    int_: IRI
-    integer: IRI
-    language: IRI
-    long: IRI
-    short: IRI
-    string: IRI
+    boolean: "IRI"
+    byte: "IRI"
+    date: "IRI"
+    dateTime: "IRI"
+    dateTimeStamp: "IRI"
+    decimal: "IRI"
+    double: "IRI"
+    duration: "IRI"
+    float: "IRI"
+    int_: "IRI"
+    integer: "IRI"
+    language: "IRI"
+    long: "IRI"
+    short: "IRI"
+    string: "IRI"
 
     def __init__(self):
         """
