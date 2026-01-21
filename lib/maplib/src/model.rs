@@ -313,8 +313,9 @@ impl Model {
         buffer: &mut W,
         graph: &NamedGraph,
         rdf_format: RdfFormat,
-        prefixes: &HashMap<String, NamedNode>,
+        prefixes: Option<&HashMap<String, NamedNode>>,
     ) -> Result<(), MaplibError> {
+        let prefixes = prefixes.unwrap_or(&self.prefixes);
         self.triplestore
             .write_triples(buffer, rdf_format, graph, &prefixes)
             .map_err(MaplibError::TriplestoreError)?;

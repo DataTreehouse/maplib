@@ -69,7 +69,6 @@ use representation::dataset::NamedGraph;
 use representation::debug::DebugOutputs;
 use representation::formatting::format_native_columns;
 use representation::polars_to_rdf::XSD_DATETIME_WITH_TZ_FORMAT;
-use representation::prefixes::get_default_prefixes;
 use representation::rdf_to_polars::rdf_named_node_to_polars_literal_value;
 use representation::{BaseRDFNodeType, OBJECT_COL_NAME, PREDICATE_COL_NAME, SUBJECT_COL_NAME};
 use templates::python::owl::PyOWL;
@@ -1311,7 +1310,7 @@ fn write_triples_mutex(
             &mut actual_file,
             &named_graph,
             format,
-            &prefixes.unwrap_or(get_default_prefixes()),
+            prefixes.as_ref(),
         )
         .unwrap();
     Ok(())
@@ -1397,7 +1396,7 @@ fn writes_mutex(
             &mut out,
             &named_graph,
             format,
-            &prefixes.unwrap_or(get_default_prefixes()),
+            prefixes.as_ref(),
         )
         .unwrap();
     Ok(String::from_utf8(out).unwrap())
