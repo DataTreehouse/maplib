@@ -615,7 +615,7 @@ class Model:
                 popup=False,
                 fts=True,
                 fts_path:str="fts",
-            ) -> ExploreServer:
+            ) -> "ExploreServer":
                 """Starts a graph explorer session.
                 To run from Jupyter Notebook use:
                 >>> server = m.explore()
