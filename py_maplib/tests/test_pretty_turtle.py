@@ -34,6 +34,15 @@ def test_write_turtle_global_provided_prefixes():
     m2.reads(out, format="turtle")
     assert "myfoaf:" in out
 
+def test_write_turtle_global_provided_prefixes_and_provided():
+    m = Model()
+    m.read(str(TESTDATA_PATH / "read_ntriples.nt"))
+    m.add_prefixes({"myfoaf": "http://xmlns.com/foaf/0.1/"})
+    out = m.writes(format="turtle", prefixes={})
+    m2 = Model()
+    m2.reads(out, format="turtle")
+    assert "myfoaf:" in out
+
 def test_write_multi_turtle_provided_prefixes():
     m = Model()
     m.read(str(TESTDATA_PATH / "read_ntriples.nt"))

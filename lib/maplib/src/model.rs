@@ -315,9 +315,12 @@ impl Model {
         rdf_format: RdfFormat,
         prefixes: Option<&HashMap<String, NamedNode>>,
     ) -> Result<(), MaplibError> {
-        let prefixes = prefixes.unwrap_or(&self.prefixes);
+        let mut use_prefixes = self.prefixes.clone();
+        if let Some(prefixes) = prefixes {
+            use_prefixes.extend(prefixes.clone());
+        }
         self.triplestore
-            .write_triples(buffer, rdf_format, graph, &prefixes)
+            .write_triples(buffer, rdf_format, graph, &use_prefixes)
             .map_err(MaplibError::TriplestoreError)?;
         Ok(())
     }
