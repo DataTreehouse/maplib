@@ -1,8 +1,22 @@
 # Change log
-## Unreleased
+## v0.19.9
+### Improvements
 - `maplib.explore()` is deprecated, use the explore method on a `Model` instead.
 - `Model.explore()` no longer supports opening a browser window automatically.
   Use `webbrowser.open(s.url, new=2)` instead. Where `s` is returned from `explore()`
+- Release of pretty turtle printer. It is still missing:
+  - Anonymization of blank nodes that only have a single incoming reference.
+  - Support for nested lists
+- Datalog inference now works on SPARQL construct in preparation for SHACL rules support
+- Improvements to prefix handling:
+  - Default prefixes only shadowed by adding prefixes to Model
+  - Prefixes set in pretty turtle print only shadow Model prefixes
+
+### Bugfixes
+- Fixed improper serialization of e.g. newlines in new pretty turtle printer
+- Fixed issue where empty triples could be added
+- Fixed several issues that could lead to OOM in the SHACL engine
+- Fixed panic in CIM xml exporter that should be error message
 
 ## v0.19.6
 ### Improvements
