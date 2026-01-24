@@ -58,6 +58,10 @@ pub struct Triplestore {
 }
 
 impl Triplestore {
+    pub fn contains_graph(&self, graph: &NamedGraph) -> bool {
+        self.graph_triples_map.contains_key(graph)
+    }
+
     pub fn detach_graph(
         &mut self,
         graph: &NamedGraph,

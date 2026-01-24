@@ -99,7 +99,11 @@ fn write_term_prefixed<W: Write>(
     match term.as_ref() {
         TermRef::NamedNode(nn) => prefix_replacer.write_with_prefix(writer, nn),
         TermRef::Literal(l) => {
-            write!(writer, "\"{}\"", l.value())?;
+            write!(writer, "\"")?;
+            for c in l.value().chars() {
+                write_escaped_char(c, writer)?;
+            }
+            write!(writer, "\"")?;
             if !l.is_plain() {
                 if let Some(language) = l.language() {
                     write!(writer, "@{}", language)?;
@@ -111,6 +115,26 @@ fn write_term_prefixed<W: Write>(
             Ok(())
         }
         t => write!(writer, "{}", t),
+    }
+}
+
+fn write_escaped_char<W:Write>(c: char, w: &mut W) -> std::io::Result<()> {
+    match c {
+        '\n' => {
+            write!(w, "\\n")
+        }
+        '\t' => {
+            write!(w, "\\t")
+        }
+        '\r' => {
+            write!(w, "\\r")
+        }
+        '"' | '\\' => {
+            write!(w, "\\{c}")
+        }
+        _ => {
+            write!(w, "{c}")
+        }
     }
 }
 

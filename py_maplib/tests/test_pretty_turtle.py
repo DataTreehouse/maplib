@@ -17,6 +17,13 @@ def test_write_turtle_default_prefixes():
     m2 = Model()
     m2.reads(out, format="turtle")
 
+def test_write_turtle_newline_bug():
+    m = Model()
+    m.read(str(TESTDATA_PATH / "write_turtle_newlines_bug.nt"))
+    out = m.writes(format="turtle")
+    m2 = Model()
+    m2.reads(out, format="turtle")
+
 def test_write_turtle_provided_prefixes():
     m = Model()
     m.read(str(TESTDATA_PATH / "read_ntriples.nt"))

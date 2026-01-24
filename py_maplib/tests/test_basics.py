@@ -11,7 +11,7 @@ from maplib import (
     Parameter,
     Literal,
     xsd,
-    RDFType,
+    RDFType, rdf,
 )
 from polars.testing import assert_frame_equal
 
@@ -900,3 +900,19 @@ def test_list_expansion_correct():
     """
     )
     assert_frame_equal(df, expected)
+
+def test_lang_tagged():
+    df = pl.DataFrame({"id":["urn:ex:a", "urn:ex:b"],
+                       "value":["abc", "def"],
+                       "lang": ["en", "fr"]
+                       })
+    df = df.with_columns(
+        pl.struct([
+            pl.col("value").alias("<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>"),
+            pl.col("lang").alias("l")]
+        ).alias("my_lang_col")
+    )
+    m = Model()
+    m.map_default(df.select("id", "my_lang_col"), "id")
+    sm = m.query("SELECT * WHERE {?a ?b ?c}", include_datatypes=True)
+    assert sm.rdf_types["c"] == RDFType.Literal(rdf.langString)
