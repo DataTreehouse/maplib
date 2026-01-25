@@ -558,6 +558,29 @@ class Model:
         :param validate_iris: Validate any IRI-columns.
         """
 
+    def map_json(
+            self,
+            path_or_string: str,
+            graph: str = None,
+            prefix: str = None,
+            transient: bool = True,
+    ) -> None:
+        """
+        Map a JSON file or string to triples.
+        Usage:
+
+        >>> m.map_json("my_doc.json")
+
+        or:
+
+        >>> m.map_json('{"my_key":[true, "abc"]}')
+
+        :param path_or_string: Path to a JSON document or a JSON string.
+        :param graph: The IRI of the graph to add triples to.
+        :param prefix: The prefix of the IRIs generated from the keys in the JSON document.
+        :param transient: Should the triples be included when serializing the graph?
+        """
+
     def map_triples(
         self,
         df: DataFrame = None,

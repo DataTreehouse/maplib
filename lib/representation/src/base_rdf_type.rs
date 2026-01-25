@@ -196,7 +196,11 @@ impl BaseRDFNodeType {
         } else if matches!(self, BaseRDFNodeType::IRI | BaseRDFNodeType::BlankNode) {
             DataType::UInt32
         } else if let BaseRDFNodeType::Literal(l) = self {
-            literal_type(l.as_ref(), &BaseCatState::CategoricalNative(false, None), false)
+            literal_type(
+                l.as_ref(),
+                &BaseCatState::CategoricalNative(false, None),
+                false,
+            )
         } else {
             unreachable!("Should never happen")
         }
@@ -225,7 +229,9 @@ fn literal_type(
                 DataType::Struct(polars_lang_fields(base_cat_state))
             } else {
                 match base_cat_state {
-                    BaseCatState::String | BaseCatState::NonString | BaseCatState::CategoricalNative(..) => DataType::String,
+                    BaseCatState::String
+                    | BaseCatState::NonString
+                    | BaseCatState::CategoricalNative(..) => DataType::String,
                 }
             }
         }

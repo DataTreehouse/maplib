@@ -32,6 +32,8 @@ memmap2.workspace = true
 sparesults.workspace = true
 tracing.workspace = true
 aho-corasick.workspace = true
+simd-json.workspace = true
+serde_json.workspace = true
 
 pyo3 = { workspace = true, optional = true }
 

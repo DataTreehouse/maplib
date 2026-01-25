@@ -151,7 +151,12 @@ impl Triples {
     ) -> Result<Option<LazyFrame>, TriplestoreError> {
         let mut use_lfs = vec![];
         for seg in self.segments.iter() {
-            if let Some(df) = seg.get_data_frame_between_subject_strings(from, to, global_cats.clone(), subject_type)? {
+            if let Some(df) = seg.get_data_frame_between_subject_strings(
+                from,
+                to,
+                global_cats.clone(),
+                subject_type,
+            )? {
                 use_lfs.push(df.lazy());
             }
         }
@@ -222,7 +227,7 @@ impl TriplesSegment {
             if from < s.as_str() {
                 from_i = Some(*prev);
                 break;
-            } 
+            }
         }
         let from_i = from_i.unwrap_or(0);
         let mut range_forwards = subject_index.map.range(to.to_string()..);
@@ -231,7 +236,7 @@ impl TriplesSegment {
             if s.as_str() < to {
                 to_i = Some(*next);
                 break;
-            } 
+            }
         }
         let to_i = to_i.unwrap_or(self.height);
         let height = to_i - from_i;
@@ -241,12 +246,13 @@ impl TriplesSegment {
                 .column(SUBJECT_COL_NAME)
                 .unwrap()
                 .as_materialized_series();
-            let subjects_start = global_cats
-                .read()?
-                .decode_of_type(&subjects.slice(from_i as i64, OFFSET_STEP*2), subject_type);
-            let start_end_iter = to_i.saturating_sub(OFFSET_STEP*2);
+            let subjects_start = global_cats.read()?.decode_of_type(
+                &subjects.slice(from_i as i64, OFFSET_STEP * 2),
+                subject_type,
+            );
+            let start_end_iter = to_i.saturating_sub(OFFSET_STEP * 2);
             let subjects_end = global_cats.read()?.decode_of_type(
-                &subjects.slice(start_end_iter as i64, OFFSET_STEP*2),
+                &subjects.slice(start_end_iter as i64, OFFSET_STEP * 2),
                 subject_type,
             );
             let mut from_i = from_i;
@@ -258,7 +264,7 @@ impl TriplesSegment {
             }
             let mut to_i = to_i;
             for (i, s) in subjects_end.str().unwrap().iter().enumerate() {
-                if s.unwrap() > to  {
+                if s.unwrap() > to {
                     to_i = start_end_iter + i;
                     break;
                 }

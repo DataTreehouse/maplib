@@ -26,7 +26,7 @@ impl CatEncs {
 }
 
 impl Cats {
-    pub fn maybe_decode_of_type(&self, u:&u32, bt:&BaseRDFNodeType) -> Option<Cow<'_, str>> {
+    pub fn maybe_decode_of_type(&self, u: &u32, bt: &BaseRDFNodeType) -> Option<Cow<'_, str>> {
         let ct = CatType::from_base_rdf_node_type(bt);
         if let Some(cat_encs) = self.cat_map.get(&ct) {
             cat_encs.maybe_decode_string(u)

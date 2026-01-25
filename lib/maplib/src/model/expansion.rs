@@ -11,6 +11,7 @@ use polars::prelude::{
     by_name, col, lit, Column, DataFrame, DataType, Expr, IntoColumn, IntoLazy, LazyFrame,
     NamedFrom, Series,
 };
+use query_processing::expressions::non_multi_col_is_null_workaround;
 use rayon::iter::{IndexedParallelIterator, ParallelDrainRange, ParallelIterator};
 use representation::constants::OTTR_TRIPLE;
 use representation::dataset::NamedGraph;
@@ -27,7 +28,6 @@ use templates::ast::{
 };
 use templates::MappingColumnType;
 use tracing::debug;
-use query_processing::expressions::non_multi_col_is_null_workaround;
 use triplestore::TriplesToAdd;
 
 const LIST_COL: &str = "list";
@@ -291,10 +291,16 @@ impl Model {
                 if has_multi {
                     let mut lf = df.lazy();
                     if subject_multi {
-                        lf = lf.filter(non_multi_col_is_null_workaround(col(SUBJECT_COL_NAME), &subject_type).not())
+                        lf = lf.filter(
+                            non_multi_col_is_null_workaround(col(SUBJECT_COL_NAME), &subject_type)
+                                .not(),
+                        )
                     }
                     if object_multi {
-                        lf = lf.filter(non_multi_col_is_null_workaround(col(OBJECT_COL_NAME), &object_type).not())
+                        lf = lf.filter(
+                            non_multi_col_is_null_workaround(col(OBJECT_COL_NAME), &object_type)
+                                .not(),
+                        )
                     }
                     df = lf.collect().unwrap();
                 }

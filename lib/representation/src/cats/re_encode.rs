@@ -1,7 +1,10 @@
 use super::{CatEncs, CatTriples, CatType, Cats};
 use crate::cats::LockedCats;
 use crate::solution_mapping::{BaseCatState, EagerSolutionMappings};
-use crate::{BaseRDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD, OBJECT_COL_NAME, SUBJECT_COL_NAME};
+use crate::{
+    BaseRDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD, OBJECT_COL_NAME,
+    SUBJECT_COL_NAME,
+};
 use nohash_hasher::NoHashHasher;
 use polars::datatypes::PlSmallStr;
 use polars::error::PolarsResult;

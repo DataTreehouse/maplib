@@ -1,5 +1,6 @@
 use super::Triplestore;
 use crate::errors::TriplestoreError;
+use oxrdf::NamedNode;
 use oxrdfio::{RdfFormat, RdfSerializer};
 use polars::prelude::{by_name, col, IntoLazy};
 use polars_core::datatypes::DataType;
@@ -15,7 +16,6 @@ use representation::{
 };
 use std::collections::HashMap;
 use std::io::Write;
-use oxrdf::NamedNode;
 use tracing::warn;
 
 mod fast_ntriples;
@@ -67,7 +67,10 @@ impl Triplestore {
                                 .collect()
                                 .unwrap();
                             if nulls_df.height() > 0 {
-                                warn!("Triplestore had null lang strings {} for predicate {}", nulls_df, predicate);
+                                warn!(
+                                    "Triplestore had null lang strings {} for predicate {}",
+                                    nulls_df, predicate
+                                );
                             }
                             df = df.lazy().drop_nulls(None).collect().unwrap();
 

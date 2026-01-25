@@ -76,10 +76,14 @@ pub fn rdf_literal_to_polars_expr(l: &Literal) -> Expr {
     }
 }
 
-pub fn rdf_literal_to_polars_literal_value(lit: &Literal) -> LiteralValue {
-    let datatype = lit.datatype();
-    let value = lit.value();
+pub fn rdf_literal_to_polars_literal_value(literal: &Literal) -> LiteralValue {
+    rdf_literal_to_polars_literal_value_impl(literal.value(), literal.datatype())
+}
 
+pub fn rdf_literal_to_polars_literal_value_impl(
+    value: &str,
+    datatype: NamedNodeRef,
+) -> LiteralValue {
     if datatype == xsd::STRING {
         LiteralValue::Scalar(Scalar::from(PlSmallStr::from_string(value.to_string())))
     } else if datatype == rdf::LANG_STRING {

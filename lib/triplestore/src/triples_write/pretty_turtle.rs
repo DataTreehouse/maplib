@@ -34,7 +34,7 @@ enum TermOrList {
 }
 
 impl TermOrList {
-    pub fn remove_first(&mut self) -> TermOrList  {
+    pub fn remove_first(&mut self) -> TermOrList {
         match self {
             TermOrList::List(list) => {
                 let el = list.remove(0);
@@ -118,7 +118,7 @@ fn write_term_prefixed<W: Write>(
     }
 }
 
-fn write_escaped_char<W:Write>(c: char, w: &mut W) -> std::io::Result<()> {
+fn write_escaped_char<W: Write>(c: char, w: &mut W) -> std::io::Result<()> {
     match c {
         '\n' => {
             write!(w, "\\n")
@@ -420,15 +420,23 @@ impl Triplestore {
             let type_nn = rdf::TYPE.into_owned();
             for (u, mut l) in lists_map {
                 if !used_lists.contains(&u) {
-                    let bl = self.global_cats.read()?.maybe_decode_of_type(&u, &BaseRDFNodeType::BlankNode).unwrap().into_owned();
+                    let bl = self
+                        .global_cats
+                        .read()?
+                        .maybe_decode_of_type(&u, &BaseRDFNodeType::BlankNode)
+                        .unwrap()
+                        .into_owned();
                     let bl = BlankNode::new_unchecked(bl);
                     let first = l.remove_first();
-                    let turtle_block = TurtleBlock { subject: Term::BlankNode(bl),
+                    let turtle_block = TurtleBlock {
+                        subject: Term::BlankNode(bl),
                         pred_term_map: BTreeMap::from_iter([
                             (rdf::FIRST.into_owned(), vec![first]),
                             (rdf::REST.into_owned(), vec![l]),
-                        ]) };
-                    turtle_block.write_block(writer, &type_nn, &prefix_replacer)
+                        ]),
+                    };
+                    turtle_block
+                        .write_block(writer, &type_nn, &prefix_replacer)
                         .map_err(|x| TriplestoreError::WriteTurtleError(x.to_string()))?;
                 }
             }
@@ -554,14 +562,12 @@ impl Triplestore {
                             if let Some(first) = first_blank_term_map.get(&blank) {
                                 list.push(first.clone());
                                 new_blank_lists_map.insert(*blank, list.clone());
-                            }
-                            else {
+                            } else {
                                 return Err(TriplestoreError::BadListError(
                                     "Some list is missing rdf:first".to_string(),
                                 ));
                             }
                         }
-
                     } else {
                         list.reverse();
                         finished_blank_lists_map.insert(blank, list);

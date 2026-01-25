@@ -7,6 +7,7 @@ pub mod errors;
 pub mod native_parquet_write;
 pub mod query_solutions;
 pub mod rdfs_inferencing;
+mod map_json;
 pub mod sparql;
 mod storage;
 pub mod triples_read;

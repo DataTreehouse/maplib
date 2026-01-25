@@ -89,7 +89,11 @@ static GLOBAL: MiMalloc = MiMalloc;
 
 const DEFAULT_STREAMING: bool = false;
 const DEFAULT_INCLUDE_TRANSIENT: bool = true;
+
+const DEFAULT_MAP_TO_TRANSIENT: bool = false;
+
 const DEFAULT_DEBUG_NO_RESULTS: bool = false;
+const DEFAULT_JSON_KEYS_PREFIX: &str = "urn:maplib_json_keys:";
 
 #[pyclass(name = "Model", frozen)]
 pub struct PyModel {
@@ -229,6 +233,22 @@ impl PyModel {
         py.allow_threads(move || {
             let mut inner = self.inner.lock().unwrap();
             map_mutex(&mut inner, template, df, graph, types, validate_iris)
+        })
+    }
+
+    #[pyo3(signature = (path_or_string, graph=None, prefix=None, transient=None))]
+    #[instrument(skip_all)]
+    fn map_json(
+        &self,
+        py: Python<'_>,
+        path_or_string: String,
+        graph: Option<String>,
+        prefix: Option<String>,
+        transient: Option<bool>,
+    ) -> PyResult<()> {
+        py.allow_threads(move || {
+            let mut inner = self.inner.lock().unwrap();
+            map_json_mutex(&mut inner, path_or_string, graph, prefix, transient)
         })
     }
 
@@ -952,6 +972,27 @@ fn map_mutex(
     Ok(None)
 }
 
+fn map_json_mutex(
+    inner: &mut MutexGuard<InnerModel>,
+    string_or_path: String,
+    prefix: Option<String>,
+    graph: Option<String>,
+    transient: Option<bool>,
+) -> PyResult<()> {
+    let graph = parse_optional_named_node(graph)?;
+    let named_graph = NamedGraph::from_maybe_named_node(graph.as_ref());
+    let prefix = parse_optional_named_node(prefix)?.unwrap_or(NamedNode::new_unchecked(DEFAULT_JSON_KEYS_PREFIX));
+
+    let is_json_string = string_or_path.is_empty() || string_or_path.contains("{") || string_or_path.contains("[");
+    if is_json_string {
+        inner.map_json_string(string_or_path, &prefix, &named_graph, transient.unwrap_or(DEFAULT_MAP_TO_TRANSIENT)).map_err(PyMaplibError::from)?;
+    } else {
+        let p = PathBuf::from(string_or_path);
+        inner.map_json_path(p.as_ref(), &prefix, &named_graph, transient.unwrap_or(DEFAULT_MAP_TO_TRANSIENT)).map_err(PyMaplibError::from)?;
+    }
+    Ok(())
+}
+
 fn map_triples_mutex(
     inner: &mut MutexGuard<InnerModel>,
     df: DataFrame,
@@ -1306,12 +1347,7 @@ fn write_triples_mutex(
     let graph = parse_optional_named_node(graph)?;
     let named_graph = NamedGraph::from_maybe_named_node(graph.as_ref());
     inner
-        .write_triples(
-            &mut actual_file,
-            &named_graph,
-            format,
-            prefixes.as_ref(),
-        )
+        .write_triples(&mut actual_file, &named_graph, format, prefixes.as_ref())
         .unwrap();
     Ok(())
 }
@@ -1392,12 +1428,7 @@ fn writes_mutex(
     let graph = parse_optional_named_node(graph)?;
     let named_graph = NamedGraph::from_maybe_named_node(graph.as_ref());
     inner
-        .write_triples(
-            &mut out,
-            &named_graph,
-            format,
-            prefixes.as_ref(),
-        )
+        .write_triples(&mut out, &named_graph, format, prefixes.as_ref())
         .unwrap();
     Ok(String::from_utf8(out).unwrap())
 }

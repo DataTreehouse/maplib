@@ -47,6 +47,10 @@ pub enum TriplestoreError {
     SparqlQueryError(String),
     #[error("Found bad list: {0}")]
     BadListError(String),
+    #[error("Error reading JSON file: {0}")]
+    ReadJSONFileError(String),
+    #[error("Prefix IRI is invalid: {0}")]
+    InvalidPrefixIRI(String),
 }
 
 impl<T> From<PoisonError<T>> for TriplestoreError {

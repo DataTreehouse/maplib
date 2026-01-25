@@ -2,14 +2,14 @@ use super::Triplestore;
 use crate::sparql::errors::SparqlError;
 use crate::{NewTriples, TriplesToAdd};
 use oxrdf::NamedNode;
+use polars::prelude::{col, IntoLazy};
+use query_processing::expressions::{non_multi_col_is_null_workaround};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use representation::dataset::NamedGraph;
 use representation::multitype::split_df_multicols;
 use representation::solution_mapping::EagerSolutionMappings;
 use representation::{OBJECT_COL_NAME, PREDICATE_COL_NAME, SUBJECT_COL_NAME};
 use std::collections::HashMap;
-use polars::prelude::{col, IntoLazy};
-use query_processing::expressions::{expr_is_null_workaround, non_multi_col_is_null_workaround};
 
 impl Triplestore {
     pub fn insert_construct_result(
@@ -81,7 +81,7 @@ fn construct_result_as_triples_to_add(
 
                             // Separate dataframes for multicolumns introduces nulls that must be dropped
                             let mut lf = df.lazy();
-                            for (c,_) in &multicols {
+                            for (c, _) in &multicols {
                                 let t = if c == SUBJECT_COL_NAME {
                                     &new_subj_dt
                                 } else {

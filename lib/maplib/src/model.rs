@@ -15,6 +15,7 @@ use representation::solution_mapping::EagerSolutionMappings;
 use representation::RDFNodeState;
 use shacl::{validate, ValidationReport};
 use std::collections::HashMap;
+use std::fs;
 use std::io::Write;
 use std::path::Path;
 use templates::ast::{ConstantTermOrList, PType, Template};
@@ -29,6 +30,7 @@ use datalog::ast::DatalogRuleset;
 use representation::dataset::NamedGraph;
 use representation::prefixes::get_default_prefixes;
 use tracing::instrument;
+use triplestore::errors::TriplestoreError;
 
 pub struct Model {
     pub template_dataset: TemplateDataset,
@@ -165,6 +167,39 @@ impl Model {
         }
 
         Ok(return_template_iri)
+    }
+
+    #[instrument(skip_all)]
+    pub fn map_json_path(
+        &mut self,
+        path: &Path,
+        prefix: &NamedNode,
+        graph: &NamedGraph,
+        transient: bool,
+    ) -> Result<(), MaplibError> {
+        let mut u8s =
+            fs::read(path).map_err(|x| TriplestoreError::ReadJSONFileError(x.to_string()))?;
+
+        self.triplestore
+            .map_json(&mut u8s, prefix, graph, transient)
+            .map_err(MaplibError::TriplestoreError)
+    }
+
+    #[instrument(skip_all)]
+    pub fn map_json_string(
+        &mut self,
+        mut p: String,
+        prefix: &NamedNode,
+        graph: &NamedGraph,
+        transient: bool,
+    ) -> Result<(), MaplibError> {
+        //Safety: we are never reading this vec back to a string
+        let u8s = unsafe {
+             p.as_mut_vec()
+        };
+        self.triplestore
+            .map_json(u8s, prefix, graph, transient)
+            .map_err(MaplibError::TriplestoreError)
     }
 
     #[allow(clippy::too_many_arguments)]

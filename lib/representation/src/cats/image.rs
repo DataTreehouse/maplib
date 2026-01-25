@@ -23,7 +23,8 @@ impl Cats {
                     if let BaseCatState::CategoricalNative(_, local) = bs {
                         let mut sers = vec![];
                         if bt.is_lang_string() {
-                            let ser1 = sm.mappings
+                            let ser1 = sm
+                                .mappings
                                 .column(c)
                                 .unwrap()
                                 .struct_()
@@ -31,7 +32,8 @@ impl Cats {
                                 .field_by_name(LANG_STRING_VALUE_FIELD)
                                 .unwrap();
                             sers.push(ser1);
-                            let ser2 = sm.mappings
+                            let ser2 = sm
+                                .mappings
                                 .column(c)
                                 .unwrap()
                                 .struct_()
@@ -40,7 +42,8 @@ impl Cats {
                                 .unwrap();
                             sers.push(ser2);
                         } else if t.is_multi() {
-                            let ser = sm.mappings
+                            let ser = sm
+                                .mappings
                                 .column(c)
                                 .unwrap()
                                 .struct_()
@@ -49,7 +52,8 @@ impl Cats {
                                 .unwrap();
                             sers.push(ser);
                         } else {
-                            let ser = sm.mappings
+                            let ser = sm
+                                .mappings
                                 .column(c)
                                 .unwrap()
                                 .as_materialized_series()
