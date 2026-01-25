@@ -194,9 +194,7 @@ impl Model {
         transient: bool,
     ) -> Result<(), MaplibError> {
         //Safety: we are never reading this vec back to a string
-        let u8s = unsafe {
-             p.as_mut_vec()
-        };
+        let u8s = unsafe { p.as_mut_vec() };
         self.triplestore
             .map_json(u8s, prefix, graph, transient)
             .map_err(MaplibError::TriplestoreError)

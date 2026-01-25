@@ -21,7 +21,7 @@ def test_map_json_1():
     m = Model()
     m.map_json(str(json_1))
     df = m.query("""SELECT * WHERE {?a ?b ?c}""")
-    assert df.height == 46
+    assert df.height == 52
 
     df2 = m.query("""
     PREFIX mj:  <urn:maplib_json:> 
@@ -67,7 +67,7 @@ def test_map_json_2():
     m = Model()
     m.map_json(str(json_2))
     df = m.query("""SELECT * WHERE {?a ?b ?c}""")
-    assert df.height == 63
+    assert df.height == 83
     # We expect this number to increase when we start caring about array ordering
 
     df2 = m.query("""
@@ -86,7 +86,7 @@ def test_map_json_3():
     m = Model()
     m.map_json(str(json_3))
     df = m.query("""SELECT * WHERE {?a ?b ?c}""")
-    assert df.height == 227
+    assert df.height == 239
     # We expect this number to increase when we start caring about array ordering
 
     df2 = m.query("""

@@ -3,7 +3,7 @@ use crate::sparql::errors::SparqlError;
 use crate::{NewTriples, TriplesToAdd};
 use oxrdf::NamedNode;
 use polars::prelude::{col, IntoLazy};
-use query_processing::expressions::{non_multi_col_is_null_workaround};
+use query_processing::expressions::non_multi_col_is_null_workaround;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use representation::dataset::NamedGraph;
 use representation::multitype::split_df_multicols;
