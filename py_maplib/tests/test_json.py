@@ -21,7 +21,7 @@ def test_map_json_1():
     m = Model()
     m.map_json(str(json_1))
     df = m.query("""SELECT * WHERE {?a ?b ?c}""")
-    assert df.height == 52
+    assert df.height == 60
 
     df2 = m.query("""
     PREFIX mj:  <urn:maplib_json:> 
@@ -67,41 +67,47 @@ def test_map_json_2():
     m = Model()
     m.map_json(str(json_2))
     df = m.query("""SELECT * WHERE {?a ?b ?c}""")
-    assert df.height == 83
+    assert df.height == 154
     # We expect this number to increase when we start caring about array ordering
-
     df2 = m.query("""
     PREFIX mj:  <urn:maplib_json:> 
     PREFIX mjk: <urn:maplib_json_keys:>
-    SELECT ?item WHERE {
+    SELECT ?item ?seq WHERE {
     ?d a mj:Root .
     ?d mj:contains ?n1 .
     ?n1 mjk:menu ?n2 .
-    ?n2 mjk:items ?item . 
-    }""")
-    assert df2.height == 19
+    ?n2 mjk:items ?arr .
+    ?arr mj:element ?el .
+    ?el mj:value ?item .
+    ?el mj:sequence ?seq .
+    } ORDER BY ?seq""")
+    assert df2.height == 22
 
 def test_map_json_3():
     json_3 = TESTDATA_PATH / "3.json"
     m = Model()
     m.map_json(str(json_3))
     df = m.query("""SELECT * WHERE {?a ?b ?c}""")
-    assert df.height == 239
+    assert df.height == 259
     # We expect this number to increase when we start caring about array ordering
 
     df2 = m.query("""
     PREFIX mj:  <urn:maplib_json:> 
     PREFIX mjk: <urn:maplib_json_keys:>
-    SELECT ?log ?betaserver WHERE {
+    SELECT ?log ?betaserver ?myfloat WHERE {
     ?d a mj:Root .
     ?d mj:contains ?n1 .
     ?n1 mjk:web-app ?n2 .
-    ?n2 mjk:servlet ?n3 .
+    ?n2 mjk:servlet ?arr .
+    ?arr mj:element ?el .
+    ?el mj:value ?n3 .
     ?n3 mjk:init-param ?n4 . 
     ?n4 mjk:log ?log .
-    ?n5 mjk:betaServer ?betaserver .
+    ?n4 mjk:betaServer ?betaserver .
+    ?n5 mjk:myFloat ?myfloat .
     }""")
     assert df2.height == 1
     assert df2.get_column("log").dtype == pl.Int64
     assert df2.get_column("betaserver").dtype == pl.Boolean
+    assert df2.get_column("myfloat").dtype == pl.Float64
 

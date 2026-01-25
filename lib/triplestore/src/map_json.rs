@@ -28,6 +28,13 @@ const IRI: u8 = 5;
 const JSON_CONTAINS: &str = "urn:maplib_json:contains";
 const JSON_ROOT: &str = "urn:maplib_json:Root";
 const JSON_NODE: &str = "urn:maplib_json:Node";
+const JSON_ARRAY: &str = "urn:maplib_json:Array";
+const JSON_ARRAY_ELEMENT: &str = "urn:maplib_json:ArrayElement";
+const JSON_ELEMENT_PROPERTY: &str = "urn:maplib_json:element";
+const JSON_ELEMENT_SEQUENCE: &str = "urn:maplib_json:sequence";
+const JSON_ELEMENT_VALUE: &str = "urn:maplib_json:value";
+
+
 const JSON_NULL: &str = "urn:maplib_json:Null";
 const JSON_KEY: &str = "urn:maplib_json:Key";
 const JSON_KEY_STRING: &str = "urn:maplib_json:keyString";
@@ -190,6 +197,13 @@ impl Triplestore {
         let json_contains = NamedNode::new_unchecked(JSON_CONTAINS);
         pred_map.insert(json_contains.clone(), TripleTableBuilder::new());
 
+        let element_property = NamedNode::new_unchecked(JSON_ELEMENT_PROPERTY);
+        pred_map.insert(element_property.clone(), TripleTableBuilder::new());
+        let sequence_property = NamedNode::new_unchecked(JSON_ELEMENT_SEQUENCE);
+        pred_map.insert(sequence_property.clone(), TripleTableBuilder::new());
+        let value_property = NamedNode::new_unchecked(JSON_ELEMENT_VALUE);
+        pred_map.insert(value_property.clone(), TripleTableBuilder::new());
+
         pred_map.insert(
             NamedNode::new_unchecked(JSON_KEY_STRING),
             TripleTableBuilder::new(),
@@ -201,6 +215,9 @@ impl Triplestore {
             prefix,
             v,
             &rdf_type,
+            &element_property,
+            &sequence_property,
+            &value_property,
             &mut pred_map,
         );
         let mut triples_to_add = Vec::new();
@@ -240,6 +257,9 @@ fn process_value(
     prefix: &NamedNode,
     value: Value,
     rdf_type: &NamedNode,
+    element_property: &NamedNode,
+    sequence_property: &NamedNode,
+    value_property: &NamedNode,
     map: &mut HashMap<NamedNode, TripleTableBuilder>,
 ) {
     match value {
@@ -272,12 +292,28 @@ fn process_value(
 
             for (key, val) in obj {
                 let property = new_property(key, prefix, map);
-                process_value(&new_subject, &property, prefix, val, rdf_type, map);
+                process_value(&new_subject, &property, prefix, val, rdf_type, element_property, sequence_property, value_property, map);
             }
         }
         Value::Array(arr) => {
-            for value in arr {
-                process_value(&subject, &property, prefix, value, rdf_type, map);
+            let array_subject = new_blank_subject(JSON_ARRAY, rdf_type, map);
+            let builder = map.get_mut(property).unwrap();
+            builder.push_blank_blank(subject, &array_subject);
+
+            let element_subjects:Vec<_> = arr.iter().map(|_|new_blank_subject(JSON_ARRAY_ELEMENT, rdf_type, map)).collect();
+
+            let builder = map.get_mut(element_property).unwrap();
+            for element_subject in &element_subjects {
+                builder.push_blank_blank(&array_subject, &element_subject);
+            }
+
+            let builder = map.get_mut(sequence_property).unwrap();
+            for (i, element_subject) in element_subjects.iter().enumerate() {
+                builder.push_blank_int(&element_subject, i as i64);
+            }
+
+            for (value, element_subject) in arr.into_iter().zip(element_subjects.into_iter()) {
+                process_value(&element_subject, value_property, prefix, value, rdf_type, element_property, sequence_property, value_property, map);
             }
         }
     }
