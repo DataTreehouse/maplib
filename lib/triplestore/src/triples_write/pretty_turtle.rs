@@ -378,6 +378,11 @@ impl Triplestore {
                         }
 
                         let (s, o) = k;
+
+                        if subject_type != s {
+                            continue;
+                        }
+
                         if let Some(lf) = t.get_lazy_frame_between_subject_strings(
                             first.as_str(),
                             last.as_str(),

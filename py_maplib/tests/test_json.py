@@ -111,3 +111,42 @@ def test_map_json_3():
     assert df2.get_column("betaserver").dtype == pl.Boolean
     assert df2.get_column("myfloat").dtype == pl.Float64
 
+def test_map_json_string():
+    s = """
+    { "maplib_users": {
+    "Alice": { "name": "Alice", "address": { "city": "Swansea" } },
+    "Bob": { "name": "Bob", "address": { "city": "Swansea" } }
+    }}
+    """
+    m = Model()
+    m.map_json(s)
+    height = m.query("SELECT * WHERE {?a ?b ?c}").height
+    r = m.writes(format="turtle", prefixes={
+        "mjk":"urn:maplib_json_keys:",
+        "mj":"urn:maplib_json:"
+    })
+    #print(r)
+    m2 = Model()
+    m2.reads(r, format="turtle")
+    height_after = m2.query("SELECT * WHERE {?a ?b ?c}").height
+    assert height == height_after
+
+def test_map_json_list_string():
+    s = """
+    { "maplib_users": [
+    { "name": "Alice", "address": { "city": "Swansea" } },
+    { "name": "Bob", "address": { "city": "Swansea" } }
+    ]}
+    """
+    m = Model()
+    m.map_json(s)
+    height = m.query("SELECT * WHERE {?a ?b ?c}").height
+    r = m.writes(format="turtle", prefixes={
+        "mjk":"urn:maplib_json_keys:",
+        "mj":"urn:maplib_json:"
+    })
+    #print(r)
+    m2 = Model()
+    m2.reads(r, format="turtle")
+    height_after = m2.query("SELECT * WHERE {?a ?b ?c}").height
+    assert height == height_after

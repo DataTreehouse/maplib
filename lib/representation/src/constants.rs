@@ -1,3 +1,6 @@
+pub const LANG_LANG_FIELD_ALT_NAME: &str = "language";
+pub const LANG_VALUE_FIELD_ALT_NAME: &str = "value";
+
 pub const OTTR_TRIPLE: &str = "http://ns.ottr.xyz/0.4/Triple";
 pub const OTTR_PREFIX: &str = "ottr";
 pub const OTTR_PREFIX_IRI: &str = "http://ns.ottr.xyz/0.4/";

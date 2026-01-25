@@ -34,7 +34,6 @@ const JSON_ELEMENT_PROPERTY: &str = "urn:maplib_json:element";
 const JSON_ELEMENT_SEQUENCE: &str = "urn:maplib_json:sequence";
 const JSON_ELEMENT_VALUE: &str = "urn:maplib_json:value";
 
-
 const JSON_NULL: &str = "urn:maplib_json:Null";
 const JSON_KEY: &str = "urn:maplib_json:Key";
 const JSON_KEY_STRING: &str = "urn:maplib_json:keyString";
@@ -292,7 +291,17 @@ fn process_value(
 
             for (key, val) in obj {
                 let property = new_property(key, prefix, map);
-                process_value(&new_subject, &property, prefix, val, rdf_type, element_property, sequence_property, value_property, map);
+                process_value(
+                    &new_subject,
+                    &property,
+                    prefix,
+                    val,
+                    rdf_type,
+                    element_property,
+                    sequence_property,
+                    value_property,
+                    map,
+                );
             }
         }
         Value::Array(arr) => {
@@ -300,7 +309,10 @@ fn process_value(
             let builder = map.get_mut(property).unwrap();
             builder.push_blank_blank(subject, &array_subject);
 
-            let element_subjects:Vec<_> = arr.iter().map(|_|new_blank_subject(JSON_ARRAY_ELEMENT, rdf_type, map)).collect();
+            let element_subjects: Vec<_> = arr
+                .iter()
+                .map(|_| new_blank_subject(JSON_ARRAY_ELEMENT, rdf_type, map))
+                .collect();
 
             let builder = map.get_mut(element_property).unwrap();
             for element_subject in &element_subjects {
@@ -313,7 +325,17 @@ fn process_value(
             }
 
             for (value, element_subject) in arr.into_iter().zip(element_subjects.into_iter()) {
-                process_value(&element_subject, value_property, prefix, value, rdf_type, element_property, sequence_property, value_property, map);
+                process_value(
+                    &element_subject,
+                    value_property,
+                    prefix,
+                    value,
+                    rdf_type,
+                    element_property,
+                    sequence_property,
+                    value_property,
+                    map,
+                );
             }
         }
     }
