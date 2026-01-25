@@ -1,4 +1,10 @@
 # Change log
+## v0.19.10
+### Features
+- m.map_json() maps a json file or string to rdf triples.
+### Bugfixes
+- Writing turtle could sometimes write erroneous triples. 
+
 ## v0.19.9
 ### Improvements
 - `maplib.explore()` is deprecated, use the explore method on a `Model` instead.
