@@ -140,4 +140,6 @@ def test_insert():
             ?u xyz:address/xyz:city "Swansea"; xyz:name ?name.
         }"""
     m.insert(users, source_graph="urn:graph:tmp")
-    print(m.writes(format="turtle"))
+    #print(m.writes(format="turtle", prefixes={"":"https://github.com/DataTreehouse/maplib/users#"}))
+    df = m.query("SELECT * WHERE {?a ?b ?c}")
+    assert df.height == 4
