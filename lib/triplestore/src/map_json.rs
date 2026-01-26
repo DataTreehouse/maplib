@@ -174,16 +174,10 @@ impl Triplestore {
     pub fn map_json(
         &mut self,
         u8s: &mut Vec<u8>,
-        prefix: Option<&NamedNode>,
         named_graph: &NamedGraph,
         transient: bool,
     ) -> Result<(), TriplestoreError> {
-        let prefix = prefix
-            .cloned()
-            .unwrap_or(NamedNode::new_unchecked(DEFAULT_JSON_KEYS_PREFIX));
-        NamedNode::new(format!("{}a", prefix.as_str()))
-            .map_err(|_| TriplestoreError::InvalidPrefixIRI(prefix.as_str().to_string()))?;
-
+        let prefix = NamedNode::new_unchecked(DEFAULT_JSON_KEYS_PREFIX);
         let v: Value = simd_json::serde::from_slice(u8s).unwrap();
 
         let mut pred_map = HashMap::new();

@@ -1,14 +1,7 @@
-import os
-
 from maplib import Model
-import pytest
 from polars.testing import assert_frame_equal
 import polars as pl
-from math import floor
 import pathlib
-import time
-
-from pyparsing import stringStart
 
 pl.Config.set_fmt_str_lengths(300)
 
@@ -128,3 +121,23 @@ def test_map_json_list_string():
     m2.reads(r, format="turtle")
     height_after = m2.query("SELECT * WHERE {?a ?b ?c}").height
     assert height == height_after
+
+def test_insert():
+    s = """
+    { "maplib_users": [
+    { "name": "Alice", "address": { "city": "Swansea" } },
+    { "name": "Bob", "address": { "city": "Swansea" } }
+    ]}
+    """
+    m = Model()
+    m.map_json(s, graph="urn:graph:tmp")
+    users = """
+        PREFIX :<https://github.com/DataTreehouse/maplib/users#>
+        CONSTRUCT { ?u a :SwanseaUser; :name ?name } 
+        WHERE {
+            ?root xyz:maplib_users ?users.
+            ?users ?i ?u.
+            ?u xyz:address/xyz:city "Swansea"; xyz:name ?name.
+        }"""
+    m.insert(users, source_graph="urn:graph:tmp")
+    print(m.writes(format="turtle"))

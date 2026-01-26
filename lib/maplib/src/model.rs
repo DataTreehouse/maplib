@@ -174,7 +174,6 @@ impl Model {
     pub fn map_json_path(
         &mut self,
         path: &Path,
-        prefix: Option<&NamedNode>,
         graph: &NamedGraph,
         transient: bool,
     ) -> Result<(), MaplibError> {
@@ -183,7 +182,7 @@ impl Model {
             fs::read(path).map_err(|x| TriplestoreError::ReadJSONFileError(x.to_string()))?;
 
         self.triplestore
-            .map_json(&mut u8s, prefix, graph, transient)
+            .map_json(&mut u8s, graph, transient)
             .map_err(MaplibError::TriplestoreError)
     }
 
@@ -191,7 +190,6 @@ impl Model {
     pub fn map_json_string(
         &mut self,
         mut p: String,
-        prefix: Option<&NamedNode>,
         graph: &NamedGraph,
         transient: bool,
     ) -> Result<(), MaplibError> {
@@ -199,7 +197,7 @@ impl Model {
         //Safety: we are never reading this vec back to a string
         let u8s = unsafe { p.as_mut_vec() };
         self.triplestore
-            .map_json(u8s, prefix, graph, transient)
+            .map_json(u8s, graph, transient)
             .map_err(MaplibError::TriplestoreError)
     }
 

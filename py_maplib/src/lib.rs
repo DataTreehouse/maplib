@@ -234,19 +234,18 @@ impl PyModel {
         })
     }
 
-    #[pyo3(signature = (path_or_string, graph=None, prefix=None, transient=None))]
+    #[pyo3(signature = (path_or_string, graph=None, transient=None))]
     #[instrument(skip_all)]
     fn map_json(
         &self,
         py: Python<'_>,
         path_or_string: String,
         graph: Option<String>,
-        prefix: Option<String>,
         transient: Option<bool>,
     ) -> PyResult<()> {
         py.allow_threads(move || {
             let mut inner = self.inner.lock().unwrap();
-            map_json_mutex(&mut inner, path_or_string, graph, prefix, transient)
+            map_json_mutex(&mut inner, path_or_string, graph, transient)
         })
     }
 
@@ -973,13 +972,11 @@ fn map_mutex(
 fn map_json_mutex(
     inner: &mut MutexGuard<InnerModel>,
     string_or_path: String,
-    prefix: Option<String>,
     graph: Option<String>,
     transient: Option<bool>,
 ) -> PyResult<()> {
     let graph = parse_optional_named_node(graph)?;
     let named_graph = NamedGraph::from_maybe_named_node(graph.as_ref());
-    let prefix = parse_optional_named_node(prefix)?;
 
     let is_json_string =
         string_or_path.is_empty() || string_or_path.contains("{") || string_or_path.contains("[");
@@ -987,7 +984,6 @@ fn map_json_mutex(
         inner
             .map_json_string(
                 string_or_path,
-                prefix.as_ref(),
                 &named_graph,
                 transient.unwrap_or(DEFAULT_MAP_TO_TRANSIENT),
             )
@@ -997,7 +993,6 @@ fn map_json_mutex(
         inner
             .map_json_path(
                 p.as_ref(),
-                prefix.as_ref(),
                 &named_graph,
                 transient.unwrap_or(DEFAULT_MAP_TO_TRANSIENT),
             )
