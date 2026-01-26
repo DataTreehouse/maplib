@@ -93,8 +93,6 @@ const DEFAULT_INCLUDE_TRANSIENT: bool = true;
 const DEFAULT_MAP_TO_TRANSIENT: bool = false;
 
 const DEFAULT_DEBUG_NO_RESULTS: bool = false;
-const DEFAULT_JSON_KEYS_PREFIX: &str = "urn:maplib_json_keys:";
-
 #[pyclass(name = "Model", frozen)]
 pub struct PyModel {
     inner: Mutex<InnerModel>,
@@ -981,14 +979,29 @@ fn map_json_mutex(
 ) -> PyResult<()> {
     let graph = parse_optional_named_node(graph)?;
     let named_graph = NamedGraph::from_maybe_named_node(graph.as_ref());
-    let prefix = parse_optional_named_node(prefix)?.unwrap_or(NamedNode::new_unchecked(DEFAULT_JSON_KEYS_PREFIX));
+    let prefix = parse_optional_named_node(prefix)?;
 
-    let is_json_string = string_or_path.is_empty() || string_or_path.contains("{") || string_or_path.contains("[");
+    let is_json_string =
+        string_or_path.is_empty() || string_or_path.contains("{") || string_or_path.contains("[");
     if is_json_string {
-        inner.map_json_string(string_or_path, &prefix, &named_graph, transient.unwrap_or(DEFAULT_MAP_TO_TRANSIENT)).map_err(PyMaplibError::from)?;
+        inner
+            .map_json_string(
+                string_or_path,
+                prefix.as_ref(),
+                &named_graph,
+                transient.unwrap_or(DEFAULT_MAP_TO_TRANSIENT),
+            )
+            .map_err(PyMaplibError::from)?;
     } else {
         let p = PathBuf::from(string_or_path);
-        inner.map_json_path(p.as_ref(), &prefix, &named_graph, transient.unwrap_or(DEFAULT_MAP_TO_TRANSIENT)).map_err(PyMaplibError::from)?;
+        inner
+            .map_json_path(
+                p.as_ref(),
+                prefix.as_ref(),
+                &named_graph,
+                transient.unwrap_or(DEFAULT_MAP_TO_TRANSIENT),
+            )
+            .map_err(PyMaplibError::from)?;
     }
     Ok(())
 }

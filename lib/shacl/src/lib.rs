@@ -7,11 +7,23 @@ use oxrdf::{NamedNode, NamedOrBlankNode};
 use polars::prelude::DataFrame;
 use representation::solution_mapping::SolutionMappings;
 use std::collections::HashMap;
+use std::fmt::Display;
 use std::time::Duration;
 use triplestore::Triplestore;
 
 use representation::cats::LockedCats;
 use representation::dataset::NamedGraph;
+
+#[derive(Clone)]
+pub struct ShaclInferenceResult {
+
+}
+
+impl Display for ShaclInferenceResult {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Ok(())
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct ShapeTargets {
@@ -70,5 +82,20 @@ pub fn validate(
     _prefixes: Option<HashMap<String, NamedNode>>,
     _serial: bool,
 ) -> Result<ValidationReport, ShaclError> {
+    unimplemented!("Contact Data Treehouse to try")
+}
+
+
+pub fn infer_shacl(
+    _triplestore: &mut Triplestore,
+    _data_graph: &NamedGraph,
+    _shapes_graph: &NamedGraph,
+    _streaming: bool,
+    _max_iterations: Option<usize>,
+    _max_results: Option<usize>,
+    _include_transient: bool,
+    _max_rows: Option<usize>,
+    _debug_no_results: bool,
+) -> Result<ShaclInferenceResult, ShaclError> {
     unimplemented!("Contact Data Treehouse to try")
 }

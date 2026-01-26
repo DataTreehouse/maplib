@@ -25,18 +25,13 @@ const FLOAT: u8 = 3;
 const BLANK: u8 = 4;
 const IRI: u8 = 5;
 
-const JSON_CONTAINS: &str = "urn:maplib_json:contains";
-const JSON_ROOT: &str = "urn:maplib_json:Root";
-const JSON_NODE: &str = "urn:maplib_json:Node";
-const JSON_ARRAY: &str = "urn:maplib_json:Array";
-const JSON_ARRAY_ELEMENT: &str = "urn:maplib_json:ArrayElement";
-const JSON_ELEMENT_PROPERTY: &str = "urn:maplib_json:element";
-const JSON_ELEMENT_SEQUENCE: &str = "urn:maplib_json:sequence";
-const JSON_ELEMENT_VALUE: &str = "urn:maplib_json:value";
+const JSON_ROOT: &str = "http://sparql.xyz/facade-x/ns/root";
+const JSON_ARRAY: &str = "http://sparql.xyz/facade-x/ns/arr";
+const JSON_NULL: &str = "http://sparql.xyz/facade-x/ns/null";
 
-const JSON_NULL: &str = "urn:maplib_json:Null";
-const JSON_KEY: &str = "urn:maplib_json:Key";
-const JSON_KEY_STRING: &str = "urn:maplib_json:keyString";
+const DEFAULT_JSON_KEYS_PREFIX: &str = "http://sparql.xyz/facade-x/data/";
+
+const ROOT_ELEMENT_PROPERTY: &str = "urn:maplib_json:rootElement";
 
 struct TripleTableBuilder<'a> {
     map: HashMap<(u8, u8), TypedSubjectObjectBuilder<'a>>,
@@ -178,10 +173,11 @@ impl Triplestore {
     pub fn map_json(
         &mut self,
         u8s: &mut Vec<u8>,
-        prefix: &NamedNode,
+        prefix: Option<&NamedNode>,
         named_graph: &NamedGraph,
         transient: bool,
     ) -> Result<(), TriplestoreError> {
+        let prefix = prefix.cloned().unwrap_or(NamedNode::new_unchecked(DEFAULT_JSON_KEYS_PREFIX));
         NamedNode::new(format!("{}a", prefix.as_str()))
             .map_err(|_| TriplestoreError::InvalidPrefixIRI(prefix.as_str().to_string()))?;
 
@@ -191,32 +187,22 @@ impl Triplestore {
         let rdf_type = rdf::TYPE.into_owned();
         pred_map.insert(rdf_type.clone(), TripleTableBuilder::new());
 
-        let doc_subject = new_blank_subject(JSON_ROOT, &rdf_type, &mut pred_map);
+        let doc_subject = new_blank_typed_subject(JSON_ROOT, &rdf_type, &mut pred_map);
 
-        let json_contains = NamedNode::new_unchecked(JSON_CONTAINS);
-        pred_map.insert(json_contains.clone(), TripleTableBuilder::new());
+        let json_arr_property = NamedNode::new_unchecked(JSON_ARRAY);
+        pred_map.insert(json_arr_property.clone(), TripleTableBuilder::new());
 
-        let element_property = NamedNode::new_unchecked(JSON_ELEMENT_PROPERTY);
-        pred_map.insert(element_property.clone(), TripleTableBuilder::new());
-        let sequence_property = NamedNode::new_unchecked(JSON_ELEMENT_SEQUENCE);
-        pred_map.insert(sequence_property.clone(), TripleTableBuilder::new());
-        let value_property = NamedNode::new_unchecked(JSON_ELEMENT_VALUE);
-        pred_map.insert(value_property.clone(), TripleTableBuilder::new());
-
-        pred_map.insert(
-            NamedNode::new_unchecked(JSON_KEY_STRING),
-            TripleTableBuilder::new(),
-        );
+        let root_elem_property = NamedNode::new_unchecked(ROOT_ELEMENT_PROPERTY);
+        pred_map.insert(root_elem_property.clone(), TripleTableBuilder::new());
 
         process_value(
             &doc_subject,
-            &json_contains,
-            prefix,
+            None,
+            &prefix,
             v,
             &rdf_type,
-            &element_property,
-            &sequence_property,
-            &value_property,
+            &json_arr_property,
+            &root_elem_property,
             &mut pred_map,
         );
         let mut triples_to_add = Vec::new();
@@ -252,22 +238,21 @@ impl Triplestore {
 
 fn process_value(
     subject: &str,
-    property: &NamedNode,
+    property: Option<&NamedNode>,
     prefix: &NamedNode,
     value: Value,
     rdf_type: &NamedNode,
-    element_property: &NamedNode,
-    sequence_property: &NamedNode,
-    value_property: &NamedNode,
+    arr_property: &NamedNode,
+    root_elem_property: &NamedNode,
     map: &mut HashMap<NamedNode, TripleTableBuilder>,
 ) {
     match value {
         Value::Bool(b) => {
-            let builder = map.get_mut(property).unwrap();
+            let builder = map.get_mut(property.unwrap_or(root_elem_property)).unwrap();
             builder.push_blank_bool(subject, b);
         }
         Value::Number(num) => {
-            let builder = map.get_mut(property).unwrap();
+            let builder = map.get_mut(property.unwrap_or(root_elem_property)).unwrap();
             if let Some(i) = num.as_i64() {
                 builder.push_blank_int(subject, i);
             } else if let Some(f) = num.as_f64() {
@@ -277,63 +262,56 @@ fn process_value(
             }
         }
         Value::String(s) => {
-            let builder = map.get_mut(property).unwrap();
+            let builder = map.get_mut(property.unwrap_or(root_elem_property)).unwrap();
             builder.push_blank_string(subject, s);
         }
         Value::Null => {
-            let builder = map.get_mut(property).unwrap();
+            let builder = map.get_mut(property.unwrap_or(root_elem_property)).unwrap();
             builder.push_blank_iri(subject, JSON_NULL);
         }
         Value::Object(obj) => {
-            let new_subject = new_blank_subject(JSON_NODE, rdf_type, map);
-            let builder = map.get_mut(property).unwrap();
-            builder.push_blank_blank(subject, &new_subject);
+            let new_subject = if let Some(property) = property {
+                let new_subject = new_blank_subject();
+                let builder = map.get_mut(property).unwrap();
+                builder.push_blank_blank(subject, &new_subject);
+                new_subject
+            } else {
+                subject.to_string()
+            };
 
             for (key, val) in obj {
                 let property = new_property(key, prefix, map);
                 process_value(
                     &new_subject,
-                    &property,
+                    Some(&property),
                     prefix,
                     val,
                     rdf_type,
-                    element_property,
-                    sequence_property,
-                    value_property,
+                    arr_property,
+                    root_elem_property,
                     map,
                 );
             }
         }
         Value::Array(arr) => {
-            let array_subject = new_blank_subject(JSON_ARRAY, rdf_type, map);
-            let builder = map.get_mut(property).unwrap();
-            builder.push_blank_blank(subject, &array_subject);
+            let array_subject = if let Some(property) = property {
+                let array_subject = new_blank_subject();
+                let builder = map.get_mut(property).unwrap();
+                builder.push_blank_blank(subject, &array_subject);
+                array_subject
+            } else {
+                subject.to_string()
+            };
 
-            let element_subjects: Vec<_> = arr
-                .iter()
-                .map(|_| new_blank_subject(JSON_ARRAY_ELEMENT, rdf_type, map))
-                .collect();
-
-            let builder = map.get_mut(element_property).unwrap();
-            for element_subject in &element_subjects {
-                builder.push_blank_blank(&array_subject, &element_subject);
-            }
-
-            let builder = map.get_mut(sequence_property).unwrap();
-            for (i, element_subject) in element_subjects.iter().enumerate() {
-                builder.push_blank_int(&element_subject, i as i64);
-            }
-
-            for (value, element_subject) in arr.into_iter().zip(element_subjects.into_iter()) {
+            for value in arr {
                 process_value(
-                    &element_subject,
-                    value_property,
+                    &array_subject,
+                    Some(arr_property),
                     prefix,
                     value,
                     rdf_type,
-                    element_property,
-                    sequence_property,
-                    value_property,
+                    arr_property,
+                    root_elem_property,
                     map,
                 );
             }
@@ -341,15 +319,22 @@ fn process_value(
     }
 }
 
-fn new_blank_subject(
+fn new_blank_typed_subject(
     t: &str,
     rdf_type: &NamedNode,
     map: &mut HashMap<NamedNode, TripleTableBuilder>,
 ) -> String {
-    let bstr = format!("b{}", uuid::Uuid::new_v4());
+    let bstr = new_blank_subject();
     map.get_mut(rdf_type).unwrap().push_blank_iri(&bstr, t);
     bstr
 }
+
+fn new_blank_subject(
+) -> String {
+    let bstr = format!("b{}", uuid::Uuid::new_v4());
+    bstr
+}
+
 
 fn new_property(
     key: String,
@@ -372,16 +357,6 @@ fn new_property(
     let keep_key: String = keep_chars.into_iter().collect();
     let key_nn = NamedNode::new(format!("{}{}", prefix.as_str(), keep_key)).unwrap();
     if !map.contains_key(&key_nn) {
-        {
-            let type_ttb = map.get_mut(&rdf::TYPE.into_owned()).unwrap();
-            type_ttb.push_iri_iri(key_nn.as_str(), JSON_KEY);
-        }
-        {
-            let s_ttb = map
-                .get_mut(&NamedNode::new_unchecked(JSON_KEY_STRING))
-                .unwrap();
-            s_ttb.push_iri_string(key_nn.as_str(), &key);
-        }
         map.insert(key_nn.clone(), TripleTableBuilder::new());
     }
     key_nn

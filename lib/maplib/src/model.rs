@@ -13,7 +13,7 @@ use oxrdfio::RdfFormat;
 use polars::prelude::DataFrame;
 use representation::solution_mapping::EagerSolutionMappings;
 use representation::RDFNodeState;
-use shacl::{validate, ValidationReport};
+use shacl::{infer_shacl, validate, ShaclInferenceResult, ValidationReport};
 use std::collections::HashMap;
 use std::fs;
 use std::io::Write;
@@ -30,6 +30,7 @@ use datalog::ast::DatalogRuleset;
 use representation::dataset::NamedGraph;
 use representation::prefixes::get_default_prefixes;
 use tracing::instrument;
+use representation::constants::{FX_PREFIX, FX_PREFIX_IRI, XYZ_PREFIX, XYZ_PREFIX_IRI};
 use triplestore::errors::TriplestoreError;
 
 pub struct Model {
@@ -173,10 +174,11 @@ impl Model {
     pub fn map_json_path(
         &mut self,
         path: &Path,
-        prefix: &NamedNode,
+        prefix: Option<&NamedNode>,
         graph: &NamedGraph,
         transient: bool,
     ) -> Result<(), MaplibError> {
+        self.add_json_prefixes();
         let mut u8s =
             fs::read(path).map_err(|x| TriplestoreError::ReadJSONFileError(x.to_string()))?;
 
@@ -189,10 +191,11 @@ impl Model {
     pub fn map_json_string(
         &mut self,
         mut p: String,
-        prefix: &NamedNode,
+        prefix: Option<&NamedNode>,
         graph: &NamedGraph,
         transient: bool,
     ) -> Result<(), MaplibError> {
+        self.add_json_prefixes();
         //Safety: we are never reading this vec back to a string
         let u8s = unsafe { p.as_mut_vec() };
         self.triplestore
@@ -524,6 +527,31 @@ impl Model {
         Ok(res.map_err(|x| MaplibError::DatalogError(x))?)
     }
 
+    pub fn infer_shacl(
+        &mut self,
+        data_graph: &NamedGraph,
+        shape_graph: &NamedGraph,
+        streaming: bool,
+        include_transient: bool,
+        max_iterations: Option<usize>,
+        max_results: Option<usize>,
+        max_rows: Option<usize>,
+        debug_no_results: bool,
+    ) -> Result<ShaclInferenceResult, MaplibError> {
+        let res = infer_shacl(
+            &mut self.triplestore,
+            data_graph,
+            shape_graph,
+            streaming,
+            max_iterations,
+            max_results,
+            include_transient,
+            max_rows,
+            debug_no_results,
+        );
+        Ok(res.map_err(|x|MaplibError::ShaclError(x))?)
+    }
+
     pub fn detach_graph(
         &mut self,
         graph: &NamedGraph,
@@ -538,5 +566,10 @@ impl Model {
             indexing: self.indexing.clone(),
             prefixes: self.prefixes.clone(),
         })
+    }
+
+    fn add_json_prefixes(&mut self) {
+        self.prefixes.insert(XYZ_PREFIX.to_string(), NamedNode::new_unchecked(XYZ_PREFIX_IRI));
+        self.prefixes.insert(FX_PREFIX.to_string(), NamedNode::new_unchecked(FX_PREFIX_IRI));
     }
 }

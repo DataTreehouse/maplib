@@ -562,7 +562,7 @@ class Model:
             self,
             path_or_string: str,
             graph: str = None,
-            prefix: str = None,
+            prefix: str = "http://sparql.xyz/facade-x/data/",
             transient: bool = True,
     ) -> None:
         """
@@ -577,7 +577,7 @@ class Model:
 
         :param path_or_string: Path to a JSON document or a JSON string.
         :param graph: The IRI of the graph to add triples to.
-        :param prefix: The prefix of the IRIs generated from the keys in the JSON document.
+        :param prefix: The prefix of the IRIs generated from the keys in the JSON document. 
         :param transient: Should the triples be included when serializing the graph?
         """
 
