@@ -27,10 +27,10 @@ use triplestore::sparql::{QueryResult, QuerySettings, UpdateResult};
 use triplestore::{IndexingOptions, NewTriples, Triplestore};
 
 use datalog::ast::DatalogRuleset;
+use representation::constants::{FX_PREFIX, FX_PREFIX_IRI, XYZ_PREFIX, XYZ_PREFIX_IRI};
 use representation::dataset::NamedGraph;
 use representation::prefixes::get_default_prefixes;
 use tracing::instrument;
-use representation::constants::{FX_PREFIX, FX_PREFIX_IRI, XYZ_PREFIX, XYZ_PREFIX_IRI};
 use triplestore::errors::TriplestoreError;
 
 pub struct Model {
@@ -549,7 +549,7 @@ impl Model {
             max_rows,
             debug_no_results,
         );
-        Ok(res.map_err(|x|MaplibError::ShaclError(x))?)
+        Ok(res.map_err(|x| MaplibError::ShaclError(x))?)
     }
 
     pub fn detach_graph(
@@ -569,7 +569,13 @@ impl Model {
     }
 
     fn add_json_prefixes(&mut self) {
-        self.prefixes.insert(XYZ_PREFIX.to_string(), NamedNode::new_unchecked(XYZ_PREFIX_IRI));
-        self.prefixes.insert(FX_PREFIX.to_string(), NamedNode::new_unchecked(FX_PREFIX_IRI));
+        self.prefixes.insert(
+            XYZ_PREFIX.to_string(),
+            NamedNode::new_unchecked(XYZ_PREFIX_IRI),
+        );
+        self.prefixes.insert(
+            FX_PREFIX.to_string(),
+            NamedNode::new_unchecked(FX_PREFIX_IRI),
+        );
     }
 }

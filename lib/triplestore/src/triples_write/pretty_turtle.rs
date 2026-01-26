@@ -28,6 +28,11 @@ struct TurtleBlock {
     pred_term_map: BTreeMap<NamedNode, Vec<TermOrList>>,
 }
 
+enum TurtleBlockOrTermOrList {
+    TurtleBlock(TurtleBlock),
+    Term(TermOrList),
+}
+
 #[derive(Clone, Debug)]
 enum TermOrList {
     List(Vec<TermOrList>),
@@ -78,14 +83,20 @@ impl TermOrList {
         writer: &mut W,
         type_nn: &NamedNode,
         prefix_replacer: &PrefixReplacer,
-        in_degree_one_map: &mut HashMap<u32, TurtleBlock>,
-        nesting: usize
+        in_degree_one_map: &mut HashMap<u32, TurtleBlockOrTermOrList>,
+        nesting: usize,
     ) -> std::io::Result<()> {
         match self {
             TermOrList::List(list) => {
                 write!(writer, "( ")?;
                 for tol in list {
-                    tol.write_prefixed(writer, type_nn, prefix_replacer, in_degree_one_map, nesting + 1)?;
+                    tol.write_prefixed(
+                        writer,
+                        type_nn,
+                        prefix_replacer,
+                        in_degree_one_map,
+                        nesting + 1,
+                    )?;
                     write!(writer, " ")?;
                 }
                 write!(writer, ")")?;
@@ -94,7 +105,27 @@ impl TermOrList {
             TermOrList::Elem(term) => write_term_prefixed(writer, term.as_ref(), prefix_replacer),
             TermOrList::BlankPlaceholder(u) => {
                 let t = in_degree_one_map.remove(u).unwrap();
-                t.write_block(writer, type_nn, prefix_replacer, false, in_degree_one_map, nesting)?;
+                match t {
+                    TurtleBlockOrTermOrList::TurtleBlock(t) => {
+                        t.write_block(
+                            writer,
+                            type_nn,
+                            prefix_replacer,
+                            false,
+                            in_degree_one_map,
+                            nesting,
+                        )?;
+                    }
+                    TurtleBlockOrTermOrList::Term(t) => {
+                        t.write_prefixed(
+                            writer,
+                            type_nn,
+                            prefix_replacer,
+                            in_degree_one_map,
+                            nesting,
+                        )?;
+                    }
+                }
                 Ok(())
             }
         }
@@ -155,7 +186,7 @@ impl TurtleBlock {
         type_nn: &NamedNode,
         prefix_replacer: &PrefixReplacer,
         try_write_subject: bool,
-        in_degree_one_map: &mut HashMap<u32, TurtleBlock>,
+        in_degree_one_map: &mut HashMap<u32, TurtleBlockOrTermOrList>,
         nesting: usize,
     ) -> std::io::Result<()> {
         let use_write_subject = if try_write_subject {
@@ -185,7 +216,7 @@ impl TurtleBlock {
                 type_nn,
                 prefix_replacer,
                 in_degree_one_map,
-                nesting + 1
+                nesting + 1,
             )?;
             has_type = true;
             to_write -= 1;
@@ -206,7 +237,7 @@ impl TurtleBlock {
                     type_nn,
                     prefix_replacer,
                     in_degree_one_map,
-                    nesting + 1
+                    nesting + 1,
                 )?;
                 to_write -= 1;
                 if to_write > 0 {
@@ -232,7 +263,7 @@ fn write_term_objects<W: Write>(
     terms: &[TermOrList],
     type_nn: &NamedNode,
     prefix_replacer: &PrefixReplacer,
-    in_degree_one_map: &mut HashMap<u32, TurtleBlock>,
+    in_degree_one_map: &mut HashMap<u32, TurtleBlockOrTermOrList>,
     nesting: usize,
 ) -> std::io::Result<()> {
     if terms.len() == 1 {
@@ -288,6 +319,10 @@ impl Triplestore {
                     continue;
                 }
 
+                if p.as_ref() == rdf::REST || p.as_ref() == rdf::FIRST {
+                    continue;
+                }
+
                 if let Some(lfs) = t.get_lazy_frame_slices(0, None)? {
                     for lf in lfs {
                         let df = lf.collect().unwrap();
@@ -307,7 +342,20 @@ impl Triplestore {
                 }
             }
         }
-        let lists_map = self.create_lists_map(map, graph, &blanks_in_degree_one)?;
+        let mut in_degree_one_blocks_map: HashMap<_, _> = in_degree_one_blocks_map
+            .into_iter()
+            .map(|(k, v)| (k, TurtleBlockOrTermOrList::TurtleBlock(v)))
+            .collect();
+        let mut lists_map = self.create_lists_map(map, graph, &blanks_in_degree_one)?;
+        if let Some(lists) = &mut lists_map {
+            let keys: Vec<_> = lists.keys().cloned().collect();
+            for k in keys {
+                if blanks_in_degree_one.contains(&k) {
+                    let l = lists.remove(&k).unwrap();
+                    in_degree_one_blocks_map.insert(k, TurtleBlockOrTermOrList::Term(l));
+                }
+            }
+        }
 
         let mut drivers = vec![];
         for (pred, m) in map.iter() {
@@ -540,10 +588,11 @@ impl Triplestore {
                         &prefix_replacer,
                         has_subject,
                         &mut in_degree_one_blocks_map,
-                        1
+                        1,
                     )
                     .map_err(|x| TriplestoreError::WriteTurtleError(x.to_string()))?;
-                writeln!(writer, " .\n").map_err(|x| TriplestoreError::WriteTurtleError(x.to_string()))?;;
+                writeln!(writer, " .\n")
+                    .map_err(|x| TriplestoreError::WriteTurtleError(x.to_string()))?;
             }
         }
         Ok(())
@@ -568,7 +617,7 @@ impl Triplestore {
                         let os = o.default_stored_cat_state();
 
                         let to_replace_terms = if o.is_blank_node() {
-                            let mut to_replace_terms: Vec<_> = df
+                            let to_replace_terms: Vec<_> = df
                                 .column(OBJECT_COL_NAME)
                                 .unwrap()
                                 .u32()
@@ -720,6 +769,7 @@ impl Triplestore {
         } else {
             return Ok(None);
         }
+        // We fix the nested lists here
         let mut seen_lists = HashMap::new();
         let keys = blank_lists_map.keys().cloned().collect::<Vec<_>>();
         for k in keys {
@@ -735,8 +785,13 @@ impl Triplestore {
                             } else {
                                 new_l.push(TermOrList::BlankPlaceholder(u));
                             }
+                        } else {
+                            new_l.push(l);
                         }
                     }
+                    seen_lists.insert(k, TermOrList::List(new_l));
+                } else {
+                    seen_lists.insert(k, l);
                 }
             }
         }
@@ -893,7 +948,7 @@ fn write_blocks<W: Write>(
     type_nn: &NamedNode,
     prefix_replacer: &PrefixReplacer,
     subjects_ordering: &Vec<u32>,
-    in_degree_one_map: &mut HashMap<u32, TurtleBlock>,
+    in_degree_one_map: &mut HashMap<u32, TurtleBlockOrTermOrList>,
 ) -> Result<(), TriplestoreError> {
     let out: Result<Vec<()>, TriplestoreError> = subjects_ordering
         .iter()
@@ -903,7 +958,8 @@ fn write_blocks<W: Write>(
                     .write_block(writer, type_nn, prefix_replacer, true, in_degree_one_map, 1)
                     .map_err(|x| TriplestoreError::WriteTurtleError(x.to_string()));
                 r?;
-                writeln!(writer, " .\n").map_err(|x| TriplestoreError::WriteTurtleError(x.to_string()))?;
+                writeln!(writer, " .\n")
+                    .map_err(|x| TriplestoreError::WriteTurtleError(x.to_string()))?;
             }
             Ok(())
         })

@@ -12,6 +12,8 @@ use oxrdf::vocab::{rdf, xsd};
 use oxrdf::NamedNode;
 use polars::prelude::PlSmallStr;
 use polars_core::prelude::{AnyValue, Column, DataFrame};
+use query_processing::expressions::named_node;
+use representation::constants::RDF_PREFIX_IRI;
 use representation::dataset::NamedGraph;
 use representation::{BaseRDFNodeType, OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use serde_json::Value;
@@ -26,7 +28,6 @@ const BLANK: u8 = 4;
 const IRI: u8 = 5;
 
 const JSON_ROOT: &str = "http://sparql.xyz/facade-x/ns/root";
-const JSON_ARRAY: &str = "http://sparql.xyz/facade-x/ns/arr";
 const JSON_NULL: &str = "http://sparql.xyz/facade-x/ns/null";
 
 const DEFAULT_JSON_KEYS_PREFIX: &str = "http://sparql.xyz/facade-x/data/";
@@ -177,7 +178,9 @@ impl Triplestore {
         named_graph: &NamedGraph,
         transient: bool,
     ) -> Result<(), TriplestoreError> {
-        let prefix = prefix.cloned().unwrap_or(NamedNode::new_unchecked(DEFAULT_JSON_KEYS_PREFIX));
+        let prefix = prefix
+            .cloned()
+            .unwrap_or(NamedNode::new_unchecked(DEFAULT_JSON_KEYS_PREFIX));
         NamedNode::new(format!("{}a", prefix.as_str()))
             .map_err(|_| TriplestoreError::InvalidPrefixIRI(prefix.as_str().to_string()))?;
 
@@ -189,9 +192,6 @@ impl Triplestore {
 
         let doc_subject = new_blank_typed_subject(JSON_ROOT, &rdf_type, &mut pred_map);
 
-        let json_arr_property = NamedNode::new_unchecked(JSON_ARRAY);
-        pred_map.insert(json_arr_property.clone(), TripleTableBuilder::new());
-
         let root_elem_property = NamedNode::new_unchecked(ROOT_ELEMENT_PROPERTY);
         pred_map.insert(root_elem_property.clone(), TripleTableBuilder::new());
 
@@ -201,7 +201,6 @@ impl Triplestore {
             &prefix,
             v,
             &rdf_type,
-            &json_arr_property,
             &root_elem_property,
             &mut pred_map,
         );
@@ -242,7 +241,6 @@ fn process_value(
     prefix: &NamedNode,
     value: Value,
     rdf_type: &NamedNode,
-    arr_property: &NamedNode,
     root_elem_property: &NamedNode,
     map: &mut HashMap<NamedNode, TripleTableBuilder>,
 ) {
@@ -280,14 +278,13 @@ fn process_value(
             };
 
             for (key, val) in obj {
-                let property = new_property(key, prefix, map);
+                let property = new_key_property(key, prefix, map);
                 process_value(
                     &new_subject,
                     Some(&property),
                     prefix,
                     val,
                     rdf_type,
-                    arr_property,
                     root_elem_property,
                     map,
                 );
@@ -303,14 +300,16 @@ fn process_value(
                 subject.to_string()
             };
 
-            for value in arr {
+            for (i, value) in arr.into_iter().enumerate() {
+                let rdfi_property =
+                    NamedNode::new(format!("{}_{}", RDF_PREFIX_IRI, i + 1)).unwrap();
+                add_new_property(&rdfi_property, map);
                 process_value(
                     &array_subject,
-                    Some(arr_property),
+                    Some(&rdfi_property),
                     prefix,
                     value,
                     rdf_type,
-                    arr_property,
                     root_elem_property,
                     map,
                 );
@@ -329,14 +328,12 @@ fn new_blank_typed_subject(
     bstr
 }
 
-fn new_blank_subject(
-) -> String {
+fn new_blank_subject() -> String {
     let bstr = format!("b{}", uuid::Uuid::new_v4());
     bstr
 }
 
-
-fn new_property(
+fn new_key_property(
     key: String,
     prefix: &NamedNode,
     map: &mut HashMap<NamedNode, TripleTableBuilder>,
@@ -356,8 +353,12 @@ fn new_property(
     }
     let keep_key: String = keep_chars.into_iter().collect();
     let key_nn = NamedNode::new(format!("{}{}", prefix.as_str(), keep_key)).unwrap();
-    if !map.contains_key(&key_nn) {
-        map.insert(key_nn.clone(), TripleTableBuilder::new());
-    }
+    add_new_property(&key_nn, map);
     key_nn
+}
+
+fn add_new_property(property: &NamedNode, map: &mut HashMap<NamedNode, TripleTableBuilder>) {
+    if !map.contains_key(&property) {
+        map.insert(property.clone(), TripleTableBuilder::new());
+    }
 }

@@ -49,7 +49,7 @@ def test_map_json_2():
     m = Model()
     m.map_json(str(json_2))
     df = m.query("""SELECT * WHERE {?a ?b ?c}""")
-    assert df.height == 53
+    assert df.height == 56
     # We expect this number to increase when we start caring about array ordering
     df2 = m.query("""
     PREFIX fx:  <http://sparql.xyz/facade-x/ns/> 
@@ -59,9 +59,9 @@ def test_map_json_2():
     ?n1 a fx:root .
     ?n1 xyz:menu ?n2 .
     ?n2 xyz:items ?arr .
-    ?arr fx:arr ?item .
+    ?arr ?ref ?item .
     } """)
-    assert df2.height == 19
+    assert df2.height == 22
 
 def test_map_json_3():
     json_3 = TESTDATA_PATH / "3.json"
@@ -74,12 +74,13 @@ def test_map_json_3():
     df2 = m.query("""
     PREFIX fx:  <http://sparql.xyz/facade-x/ns/> 
     PREFIX xyz: <http://sparql.xyz/facade-x/data/>
+    PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> 
     PREFIX mj:  <urn:maplib_json:> 
     SELECT ?log ?betaserver ?myfloat WHERE {
     ?n1 a fx:root .
     ?n1 xyz:web-app ?n2 .
     ?n2 xyz:servlet ?arr .
-    ?arr fx:arr ?n3 .
+    ?arr rdf:_5 ?n3 .
     ?n3 xyz:init-param ?n4 . 
     ?n4 xyz:log ?log .
     ?n4 xyz:betaServer ?betaserver .

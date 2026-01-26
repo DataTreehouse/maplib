@@ -6,3 +6,5 @@ _:person_l0_p0_r0 <http://xmlns.com/foaf/0.1/firstName> "Ann" .
 _:person_l0_p0_r1 <http://xmlns.com/foaf/0.1/firstName> "Bob" .
 _:person_l0_p0_r0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://xmlns.com/foaf/0.1/Person> .
 _:person_l0_p0_r1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://xmlns.com/foaf/0.1/Person> .
+_:a <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> <mailto:a@example.com> .
+_:a <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> (<mailto:b@example.com> <mailto:c@example.com>) .

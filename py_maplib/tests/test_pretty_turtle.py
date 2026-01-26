@@ -68,11 +68,11 @@ def test_write_lists():
     m = Model()
     m.read(str(TESTDATA_PATH / "read_lists.ttl"))
     df = m.query("""SELECT * WHERE {?a ?b ?c}""")
-    assert df.height == 24
+    assert df.height == 30
 
     out = m.writes(format="turtle", prefixes={"myfoaf": "http://xmlns.com/foaf/0.1/"})
-    #print(out)
+    print(out)
     m2 = Model()
     m2.reads(out, format="turtle")
     df2 = m2.query("""SELECT * WHERE {?a ?b ?c}""")
-    assert df2.height == 24
+    assert df2.height == 30
