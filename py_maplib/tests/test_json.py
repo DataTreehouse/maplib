@@ -21,16 +21,16 @@ def test_map_json_1():
     m = Model()
     m.map_json(str(json_1))
     df = m.query("""SELECT * WHERE {?a ?b ?c}""")
-    assert df.height == 60
+    assert df.height == 18
 
+    print(m.writes("turtle"))
     df2 = m.query("""
-    PREFIX mj:  <urn:maplib_json:> 
-    PREFIX mjk: <urn:maplib_json_keys:>
+    PREFIX fx:  <http://sparql.xyz/facade-x/ns/> 
+    PREFIX xyz: <http://sparql.xyz/facade-x/data/>
     SELECT ?title WHERE {
-    ?d a mj:Root .
-    ?d mj:contains ?n1 .
-    ?n1 mjk:glossary ?n2 .
-    ?n2 mjk:title ?title . 
+    ?n1 a fx:root .
+    ?n1 xyz:glossary ?n2 .
+    ?n2 xyz:title ?title . 
     }""")
     expect2 = pl.from_repr("""
 ┌──────────────────┐
@@ -43,68 +43,47 @@ def test_map_json_1():
 """)
     assert_frame_equal(df2, expect2)
 
-    df3 = m.query("""
-    PREFIX mj:  <urn:maplib_json:> 
-    PREFIX mjk: <urn:maplib_json_keys:>
-    SELECT ?ks WHERE {
-    mjk:glossary a mj:Key .
-    mjk:glossary mj:keyString ?ks .  
-    }""")
-    expect3 = pl.from_repr("""
-┌──────────────────┐
-│ ks               │
-│ ---              │
-│ str              │
-╞══════════════════╡
-│ glossary         │
-└──────────────────┘
-""")
-    assert_frame_equal(df3, expect3)
-
 
 def test_map_json_2():
     json_2 = TESTDATA_PATH / "2.json"
     m = Model()
     m.map_json(str(json_2))
     df = m.query("""SELECT * WHERE {?a ?b ?c}""")
-    assert df.height == 154
+    assert df.height == 53
     # We expect this number to increase when we start caring about array ordering
     df2 = m.query("""
+    PREFIX fx:  <http://sparql.xyz/facade-x/ns/> 
+    PREFIX xyz: <http://sparql.xyz/facade-x/data/>
     PREFIX mj:  <urn:maplib_json:> 
-    PREFIX mjk: <urn:maplib_json_keys:>
-    SELECT ?item ?seq WHERE {
-    ?d a mj:Root .
-    ?d mj:contains ?n1 .
-    ?n1 mjk:menu ?n2 .
-    ?n2 mjk:items ?arr .
-    ?arr mj:element ?el .
-    ?el mj:value ?item .
-    ?el mj:sequence ?seq .
-    } ORDER BY ?seq""")
-    assert df2.height == 22
+    SELECT ?item WHERE {
+    ?n1 a fx:root .
+    ?n1 xyz:menu ?n2 .
+    ?n2 xyz:items ?arr .
+    ?arr fx:arr ?item .
+    } """)
+    assert df2.height == 19
 
 def test_map_json_3():
     json_3 = TESTDATA_PATH / "3.json"
     m = Model()
     m.map_json(str(json_3))
     df = m.query("""SELECT * WHERE {?a ?b ?c}""")
-    assert df.height == 259
+    assert df.height == 88
     # We expect this number to increase when we start caring about array ordering
 
     df2 = m.query("""
+    PREFIX fx:  <http://sparql.xyz/facade-x/ns/> 
+    PREFIX xyz: <http://sparql.xyz/facade-x/data/>
     PREFIX mj:  <urn:maplib_json:> 
-    PREFIX mjk: <urn:maplib_json_keys:>
     SELECT ?log ?betaserver ?myfloat WHERE {
-    ?d a mj:Root .
-    ?d mj:contains ?n1 .
-    ?n1 mjk:web-app ?n2 .
-    ?n2 mjk:servlet ?arr .
-    ?arr mj:element ?el .
-    ?el mj:value ?n3 .
-    ?n3 mjk:init-param ?n4 . 
-    ?n4 mjk:log ?log .
-    ?n4 mjk:betaServer ?betaserver .
-    ?n5 mjk:myFloat ?myfloat .
+    ?n1 a fx:root .
+    ?n1 xyz:web-app ?n2 .
+    ?n2 xyz:servlet ?arr .
+    ?arr fx:arr ?n3 .
+    ?n3 xyz:init-param ?n4 . 
+    ?n4 xyz:log ?log .
+    ?n4 xyz:betaServer ?betaserver .
+    ?n5 xyz:myFloat ?myfloat .
     }""")
     assert df2.height == 1
     assert df2.get_column("log").dtype == pl.Int64
@@ -122,10 +101,9 @@ def test_map_json_string():
     m.map_json(s)
     height = m.query("SELECT * WHERE {?a ?b ?c}").height
     r = m.writes(format="turtle", prefixes={
-        "mjk":"urn:maplib_json_keys:",
         "mj":"urn:maplib_json:"
     })
-    #print(r)
+    print(r)
     m2 = Model()
     m2.reads(r, format="turtle")
     height_after = m2.query("SELECT * WHERE {?a ?b ?c}").height
@@ -142,10 +120,9 @@ def test_map_json_list_string():
     m.map_json(s)
     height = m.query("SELECT * WHERE {?a ?b ?c}").height
     r = m.writes(format="turtle", prefixes={
-        "mjk":"urn:maplib_json_keys:",
         "mj":"urn:maplib_json:"
     })
-    #print(r)
+    print(r)
     m2 = Model()
     m2.reads(r, format="turtle")
     height_after = m2.query("SELECT * WHERE {?a ?b ?c}").height
