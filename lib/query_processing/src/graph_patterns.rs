@@ -96,13 +96,16 @@ pub fn filter(
     mut solution_mappings: SolutionMappings,
     expression_context: &Context,
 ) -> Result<SolutionMappings, QueryProcessingError> {
-    let dt = solution_mappings.rdf_node_types.get(expression_context.as_str()).unwrap();
+    let dt = solution_mappings
+        .rdf_node_types
+        .get(expression_context.as_str())
+        .unwrap();
     for t in dt.map.keys() {
         if !(t.is_none() || t.is_lit_type(xsd::BOOLEAN)) {
-            return Err(QueryProcessingError::FilterMustBeBoolean(t.clone()))
+            return Err(QueryProcessingError::FilterMustBeBoolean(t.clone()));
         }
     }
-    
+
     solution_mappings.mappings = solution_mappings
         .mappings
         .filter(col(expression_context.as_str()))

@@ -1,6 +1,7 @@
 use super::Triplestore;
 use crate::errors::TriplestoreError;
 use crate::TriplesToAdd;
+use std::cmp;
 
 use memmap2::MmapOptions;
 use oxrdf::{BlankNode, GraphName, NamedNode, Quad, Subject, Term};
@@ -31,31 +32,38 @@ use tracing::{debug, instrument};
 
 type MapType = HashMap<String, HashMap<String, (Vec<Subject>, Vec<Term>)>>;
 
+#[derive(Eq, PartialEq, Debug, Clone)]
+pub enum ExtendedRdfFormat {
+    Normal(RdfFormat),
+    CIMXML,
+}
+
 impl Triplestore {
     #[allow(clippy::too_many_arguments)]
     #[instrument(skip(self, rdf_format, base_iri, transient, parallel, checked))]
     pub fn read_triples_from_path(
         &mut self,
         path: &Path,
-        rdf_format: Option<RdfFormat>,
+        rdf_format: Option<ExtendedRdfFormat>,
         base_iri: Option<String>,
         transient: bool,
         parallel: Option<bool>,
         checked: bool,
         graph: &NamedGraph,
         prefixes: &HashMap<String, NamedNode>,
+        triples_batch_size: Option<usize>,
     ) -> Result<(), TriplestoreError> {
         let now = Instant::now();
         let rdf_format = if let Some(rdf_format) = rdf_format {
             rdf_format
         } else if path.extension() == Some("ttl".as_ref()) {
-            RdfFormat::Turtle
+            ExtendedRdfFormat::Normal(RdfFormat::Turtle)
         } else if path.extension() == Some("nt".as_ref()) {
-            RdfFormat::NTriples
+            ExtendedRdfFormat::Normal(RdfFormat::NTriples)
         } else if path.extension() == Some("xml".as_ref())
             || path.extension() == Some("rdf".as_ref())
         {
-            RdfFormat::RdfXml
+            ExtendedRdfFormat::Normal(RdfFormat::RdfXml)
         } else {
             todo!("Have not implemented file format {:?}", path);
         };
@@ -72,6 +80,7 @@ impl Triplestore {
             checked,
             graph,
             prefixes,
+            triples_batch_size,
         )?;
         drop(map);
 
@@ -86,13 +95,14 @@ impl Triplestore {
     pub fn read_triples_from_string(
         &mut self,
         s: &str,
-        rdf_format: RdfFormat,
+        rdf_format: ExtendedRdfFormat,
         base_iri: Option<String>,
         transient: bool,
         parallel: Option<bool>,
         checked: bool,
         graph: &NamedGraph,
         prefixes: &HashMap<String, NamedNode>,
+        triples_batch_size: Option<usize>,
     ) -> Result<(), TriplestoreError> {
         self.read_triples(
             s.as_bytes(),
@@ -103,6 +113,7 @@ impl Triplestore {
             checked,
             graph,
             prefixes,
+            triples_batch_size,
         )
     }
 
@@ -111,183 +122,218 @@ impl Triplestore {
     pub fn read_triples(
         &mut self,
         slice: &[u8],
-        rdf_format: RdfFormat,
+        rdf_format: ExtendedRdfFormat,
         base_iri: Option<String>,
         transient: bool,
         parallel: Option<bool>,
         checked: bool,
         graph: &NamedGraph,
         prefixes: &HashMap<String, NamedNode>,
+        triples_batch_size: Option<usize>,
     ) -> Result<(), TriplestoreError> {
         let start_quadproc_now = Instant::now();
         let parallel = if let Some(parallel) = parallel {
             parallel
         } else {
-            RdfFormat::NTriples == rdf_format
+            rdf_format == ExtendedRdfFormat::Normal(RdfFormat::NTriples)
         };
-        let readers =
-            if (rdf_format == RdfFormat::Turtle || rdf_format == RdfFormat::NTriples) && parallel {
-                let threads = if let Ok(threads) = std::thread::available_parallelism() {
-                    threads.get()
-                } else {
-                    1
-                };
-
-                let mut readers = vec![];
-                if rdf_format == RdfFormat::Turtle {
-                    let mut parser = TurtleParser::new();
-                    for (k, v) in prefixes {
-                        parser = parser.with_prefix(k, v.as_str()).unwrap();
-                    }
-                    if !checked {
-                        parser = parser.unchecked();
-                    }
-                    if let Some(base_iri) = base_iri {
-                        parser = parser.with_base_iri(base_iri).unwrap();
-                    }
-                    for r in parser.split_slice_for_parallel_parsing(slice, threads) {
-                        readers.push(MyFromSliceQuadReader {
-                            parser: MyFromSliceQuadReaderKind::TurtlePar(r),
-                        });
-                    }
-                } else if rdf_format == RdfFormat::NTriples {
-                    let mut parser = NTriplesParser::new();
-                    if !checked {
-                        parser = parser.unchecked();
-                    }
-                    for r in parser.split_slice_for_parallel_parsing(slice, threads) {
-                        readers.push(MyFromSliceQuadReader {
-                            parser: MyFromSliceQuadReaderKind::NTriplesPar(r),
-                        });
-                    }
-                }
-                readers
+        let mut readers = if (rdf_format == ExtendedRdfFormat::Normal(RdfFormat::Turtle)
+            || rdf_format == ExtendedRdfFormat::Normal(RdfFormat::NTriples))
+            && parallel
+        {
+            let threads = if let Ok(threads) = std::thread::available_parallelism() {
+                threads.get()
             } else {
-                let mut parser = RdfParser::from(rdf_format);
+                1
+            };
+
+            let mut readers = vec![];
+            if rdf_format == ExtendedRdfFormat::Normal(RdfFormat::Turtle) {
+                let mut parser = TurtleParser::new();
+                for (k, v) in prefixes {
+                    parser = parser.with_prefix(k, v.as_str()).unwrap();
+                }
                 if !checked {
                     parser = parser.unchecked();
                 }
                 if let Some(base_iri) = base_iri {
                     parser = parser.with_base_iri(base_iri).unwrap();
                 }
-                vec![MyFromSliceQuadReader {
-                    parser: MyFromSliceQuadReaderKind::Other(parser.for_slice(slice)),
-                }]
+                for r in parser.split_slice_for_parallel_parsing(slice, threads) {
+                    readers.push(MyFromSliceQuadReader {
+                        parser: MyFromSliceQuadReaderKind::TurtlePar(r),
+                    });
+                }
+            } else if rdf_format == ExtendedRdfFormat::Normal(RdfFormat::NTriples) {
+                let mut parser = NTriplesParser::new();
+                if !checked {
+                    parser = parser.unchecked();
+                }
+                for r in parser.split_slice_for_parallel_parsing(slice, threads) {
+                    readers.push(MyFromSliceQuadReader {
+                        parser: MyFromSliceQuadReaderKind::NTriplesPar(r),
+                    });
+                }
+            }
+            readers
+        } else {
+            let use_format = match rdf_format {
+                ExtendedRdfFormat::Normal(n) => n,
+                ExtendedRdfFormat::CIMXML => RdfFormat::RdfXml,
             };
+            let mut parser = RdfParser::from(use_format);
+            if !checked {
+                parser = parser.unchecked();
+            }
+            if let Some(base_iri) = base_iri {
+                parser = parser.with_base_iri(base_iri).unwrap();
+            }
+            vec![MyFromSliceQuadReader {
+                parser: MyFromSliceQuadReaderKind::Other(parser.for_slice(slice)),
+            }]
+        };
         debug!("Effective parallelization for reading is {}", readers.len());
 
         let parser_call = self.parser_call.to_string();
-        let predicate_maps: Vec<_> = readers
-            .into_par_iter()
-            .map(|r| create_predicate_map(r, &parser_call))
-            .collect();
+        while !readers.is_empty() {
+            let reader_batch_size = if let Some(triples_batch_size) = &triples_batch_size {
+                Some(triples_batch_size / cmp::max(1, readers.len()))
+            } else {
+                None
+            };
+            let readers_predicate_maps: Vec<_> = readers
+                .into_par_iter()
+                .map(|r| create_predicate_map(r, &parser_call, reader_batch_size))
+                .collect();
 
-        let mut par_graph_predicate_map: HashMap<(GraphName, String), Vec<MapType>> =
-            HashMap::new();
-        for m in predicate_maps {
-            for (graph_name, map) in m? {
-                for (predicate, map) in map {
-                    let key = (graph_name.clone(), predicate);
-                    if let Some(v) = par_graph_predicate_map.get_mut(&key) {
-                        v.push(map);
-                    } else {
-                        par_graph_predicate_map.insert(key, vec![map]);
-                    }
+            let mut updated_readers = vec![];
+            let mut predicate_maps = vec![];
+            for rp in readers_predicate_maps {
+                let (reader, predicate_map) = rp?;
+                if let Some(reader) = reader {
+                    updated_readers.push(reader);
                 }
+                predicate_maps.push(predicate_map);
             }
-        }
+            readers = updated_readers;
+            // We are remapping the datatypes here
+            if rdf_format == ExtendedRdfFormat::CIMXML {
+                predicate_maps = predicate_maps
+                    .into_iter()
+                    .map(|x| cimxml_import::remap_predicate_datatype(x))
+                    .collect();
+            }
 
-        let predicate_map: HashMap<(GraphName, String), MapType> = par_graph_predicate_map
-            .into_par_iter()
-            .map(|((graph_name, predicate), maps)| {
-                let mut subject_map: MapType = HashMap::new();
-                for new_subject_map in maps {
-                    for (subject_dt, new_object_map) in new_subject_map {
-                        if let Some(object_map) = subject_map.get_mut(&subject_dt) {
-                            for (object_dt, (new_subjects, new_objects)) in new_object_map {
-                                if let Some((subjects, objects)) = object_map.get_mut(&object_dt) {
-                                    subjects.extend(new_subjects);
-                                    objects.extend(new_objects);
-                                } else {
-                                    object_map.insert(object_dt, (new_subjects, new_objects));
-                                }
-                            }
+            let mut par_graph_predicate_map: HashMap<(GraphName, String), Vec<MapType>> =
+                HashMap::new();
+            for m in predicate_maps {
+                for (graph_name, map) in m {
+                    for (predicate, map) in map {
+                        let key = (graph_name.clone(), predicate);
+                        if let Some(v) = par_graph_predicate_map.get_mut(&key) {
+                            v.push(map);
                         } else {
-                            subject_map.insert(subject_dt, new_object_map);
+                            par_graph_predicate_map.insert(key, vec![map]);
                         }
                     }
                 }
-                ((graph_name, predicate), subject_map)
-            })
-            .collect();
+            }
 
-        debug!(
-            "Processing quads took {} seconds",
-            start_quadproc_now.elapsed().as_secs_f64()
-        );
-
-        let start_tripleproc_now = Instant::now();
-        let triples_to_add: Vec<_> = predicate_map
-            .into_par_iter()
-            .map(|((graph_name, predicate), map)| {
-                let mut triples_to_add = vec![];
-                for (subject_dt, obj_map) in map {
-                    let subject_dt = BaseRDFNodeType::from_string(subject_dt);
-                    for (object_dt, (subjects, objects)) in obj_map {
-                        let object_dt = BaseRDFNodeType::from_string(object_dt);
-                        let strings_iter = subjects.into_iter().map(|s| match s {
-                            Subject::NamedNode(nn) => nn.into_string(),
-                            Subject::BlankNode(bl) => bl.into_string(),
-                        });
-                        let mut subjects_ser = Series::from_iter(strings_iter);
-                        subjects_ser.rename(SUBJECT_COL_NAME.into());
-
-                        let objects_ser = particular_term_vec_to_series(objects, object_dt.clone());
-
-                        let all_series =
-                            vec![subjects_ser.into_column(), objects_ser.into_column()];
-                        let mut df = DataFrame::new(all_series).unwrap();
-                        // TODO: Include bad data also
-                        df = df
-                            .drop_nulls(Some(&[
-                                SUBJECT_COL_NAME.to_string(),
-                                OBJECT_COL_NAME.to_string(),
-                            ]))
-                            .unwrap();
-                        // Are we overriding the default graph?
-                        let use_graph = if matches!(graph, NamedGraph::DefaultGraph) {
-                            NamedGraph::from(&graph_name)
-                        } else {
-                            graph.clone()
-                        };
-
-                        triples_to_add.push(TriplesToAdd {
-                            df,
-                            subject_type: subject_dt.clone(),
-                            object_type: object_dt.clone(),
-                            predicate: Some(NamedNode::new_unchecked(predicate.clone())),
-                            graph: use_graph,
-                            subject_cat_state: subject_dt.default_input_cat_state(),
-                            predicate_cat_state: None,
-                            object_cat_state: object_dt.default_input_cat_state(),
-                        });
+            let predicate_map: HashMap<(GraphName, String), MapType> = par_graph_predicate_map
+                .into_par_iter()
+                .map(|((graph_name, predicate), maps)| {
+                    let mut subject_map: MapType = HashMap::new();
+                    for new_subject_map in maps {
+                        for (subject_dt, new_object_map) in new_subject_map {
+                            if let Some(object_map) = subject_map.get_mut(&subject_dt) {
+                                for (object_dt, (new_subjects, new_objects)) in new_object_map {
+                                    if let Some((subjects, objects)) =
+                                        object_map.get_mut(&object_dt)
+                                    {
+                                        subjects.extend(new_subjects);
+                                        objects.extend(new_objects);
+                                    } else {
+                                        object_map.insert(object_dt, (new_subjects, new_objects));
+                                    }
+                                }
+                            } else {
+                                subject_map.insert(subject_dt, new_object_map);
+                            }
+                        }
                     }
-                }
-                triples_to_add
-            })
-            .collect();
-        let triples_to_add: Vec<_> = triples_to_add.into_iter().flatten().collect();
-        debug!(
-            "Creating the triples to add as DFs took {} seconds",
-            start_tripleproc_now.elapsed().as_secs_f64()
-        );
-        let start_add_triples_vec = Instant::now();
-        self.parser_call += 1;
-        self.add_triples_vec(triples_to_add, transient)?;
-        debug!(
-            "Adding triples vec took {} seconds",
-            start_add_triples_vec.elapsed().as_secs_f64()
-        );
+                    ((graph_name, predicate), subject_map)
+                })
+                .collect();
+
+            debug!(
+                "Processing quads took {} seconds",
+                start_quadproc_now.elapsed().as_secs_f64()
+            );
+
+            let start_tripleproc_now = Instant::now();
+            let triples_to_add: Vec<_> = predicate_map
+                .into_par_iter()
+                .map(|((graph_name, predicate), map)| {
+                    let mut triples_to_add = vec![];
+                    for (subject_dt, obj_map) in map {
+                        let subject_dt = BaseRDFNodeType::from_string(subject_dt);
+                        for (object_dt, (subjects, objects)) in obj_map {
+                            let object_dt = BaseRDFNodeType::from_string(object_dt);
+                            let strings_iter = subjects.into_iter().map(|s| match s {
+                                Subject::NamedNode(nn) => nn.into_string(),
+                                Subject::BlankNode(bl) => bl.into_string(),
+                            });
+                            let mut subjects_ser = Series::from_iter(strings_iter);
+                            subjects_ser.rename(SUBJECT_COL_NAME.into());
+
+                            let objects_ser =
+                                particular_term_vec_to_series(objects, object_dt.clone());
+
+                            let all_series =
+                                vec![subjects_ser.into_column(), objects_ser.into_column()];
+                            let mut df = DataFrame::new(all_series).unwrap();
+                            // TODO: Include bad data also
+                            df = df
+                                .drop_nulls(Some(&[
+                                    SUBJECT_COL_NAME.to_string(),
+                                    OBJECT_COL_NAME.to_string(),
+                                ]))
+                                .unwrap();
+                            // Are we overriding the default graph?
+                            let use_graph = if matches!(graph, NamedGraph::DefaultGraph) {
+                                NamedGraph::from(&graph_name)
+                            } else {
+                                graph.clone()
+                            };
+
+                            triples_to_add.push(TriplesToAdd {
+                                df,
+                                subject_type: subject_dt.clone(),
+                                object_type: object_dt.clone(),
+                                predicate: Some(NamedNode::new_unchecked(predicate.clone())),
+                                graph: use_graph,
+                                subject_cat_state: subject_dt.default_input_cat_state(),
+                                predicate_cat_state: None,
+                                object_cat_state: object_dt.default_input_cat_state(),
+                            });
+                        }
+                    }
+                    triples_to_add
+                })
+                .collect();
+            let triples_to_add: Vec<_> = triples_to_add.into_iter().flatten().collect();
+            debug!(
+                "Creating the triples to add as DFs took {} seconds",
+                start_tripleproc_now.elapsed().as_secs_f64()
+            );
+            let start_add_triples_vec = Instant::now();
+            self.parser_call += 1;
+            self.add_triples_vec(triples_to_add, transient)?;
+            debug!(
+                "Adding triples vec took {} seconds",
+                start_add_triples_vec.elapsed().as_secs_f64()
+            );
+        }
         Ok(())
     }
 }
@@ -312,58 +358,80 @@ fn blank_node_to_oxrdf_blank_node(bn: BlankNode, parser_call: &str) -> BlankNode
     BlankNode::new_unchecked(format!("{}_{}", bn.as_str(), parser_call))
 }
 
-fn create_predicate_map(
-    r: MyFromSliceQuadReader,
+fn create_predicate_map<'a>(
+    mut r: MyFromSliceQuadReader<'a>,
     parser_call: &str,
-) -> Result<HashMap<GraphName, HashMap<String, MapType>>, TriplestoreError> {
+    max_iterations: Option<usize>,
+) -> Result<
+    (
+        Option<MyFromSliceQuadReader<'a>>,
+        HashMap<GraphName, HashMap<String, MapType>>,
+    ),
+    TriplestoreError,
+> {
     let mut graph_predicate_map = HashMap::new();
-    for q in r {
-        let Quad {
-            subject,
-            predicate,
-            object,
-            graph_name,
-        } = q.map_err(TriplestoreError::RDFSyntaxError)?;
-        let predicate_map = if let Some(predicate_map) = graph_predicate_map.get_mut(&graph_name) {
-            predicate_map
-        } else {
-            graph_predicate_map.insert(graph_name.clone(), HashMap::new());
-            graph_predicate_map.get_mut(&graph_name).unwrap()
-        };
-        let type_map: &mut HashMap<_, HashMap<_, (Vec<Subject>, Vec<Term>)>> =
-            if let Some(type_map) = predicate_map.get_mut(predicate.as_str()) {
-                type_map
-            } else {
-                let predicate_key = predicate.into_string();
-                predicate_map.insert(predicate_key.clone(), HashMap::new());
-                predicate_map.get_mut(&predicate_key).unwrap()
-            };
+    let mut empty_iter = false;
+    let mut reached_max = false;
+    let mut i = 0usize;
+    while !empty_iter && !reached_max {
+        if let Some(q) = r.next() {
+            let Quad {
+                subject,
+                predicate,
+                object,
+                graph_name,
+            } = q.map_err(TriplestoreError::RDFSyntaxError)?;
+            let predicate_map =
+                if let Some(predicate_map) = graph_predicate_map.get_mut(&graph_name) {
+                    predicate_map
+                } else {
+                    graph_predicate_map.insert(graph_name.clone(), HashMap::new());
+                    graph_predicate_map.get_mut(&graph_name).unwrap()
+                };
+            let type_map: &mut HashMap<_, HashMap<_, (Vec<Subject>, Vec<Term>)>> =
+                if let Some(type_map) = predicate_map.get_mut(predicate.as_str()) {
+                    type_map
+                } else {
+                    let predicate_key = predicate.into_string();
+                    predicate_map.insert(predicate_key.clone(), HashMap::new());
+                    predicate_map.get_mut(&predicate_key).unwrap()
+                };
 
-        let subject_to_insert = subject_to_oxrdf_subject(subject, parser_call);
-        let object_to_insert = term_to_oxrdf_term(object, parser_call);
-        let subject_datatype = get_subject_datatype_ref(&subject_to_insert);
-        let object_datatype = get_term_datatype_ref(&object_to_insert);
-        if let Some(obj_type_map) = type_map.get_mut(subject_datatype.as_str()) {
-            if let Some((subjects, objects)) = obj_type_map.get_mut(object_datatype.as_str()) {
-                subjects.push(subject_to_insert);
-                objects.push(object_to_insert);
+            let subject_to_insert = subject_to_oxrdf_subject(subject, parser_call);
+            let object_to_insert = term_to_oxrdf_term(object, parser_call);
+            let subject_datatype = get_subject_datatype_ref(&subject_to_insert);
+            let object_datatype = get_term_datatype_ref(&object_to_insert);
+            if let Some(obj_type_map) = type_map.get_mut(subject_datatype.as_str()) {
+                if let Some((subjects, objects)) = obj_type_map.get_mut(object_datatype.as_str()) {
+                    subjects.push(subject_to_insert);
+                    objects.push(object_to_insert);
+                } else {
+                    obj_type_map.insert(
+                        object_datatype.as_str().to_string(),
+                        (vec![subject_to_insert], vec![object_to_insert]),
+                    );
+                }
             } else {
+                let mut obj_type_map = HashMap::new();
+                let subject_datatype_string = subject_datatype.as_str().to_string();
                 obj_type_map.insert(
                     object_datatype.as_str().to_string(),
                     (vec![subject_to_insert], vec![object_to_insert]),
                 );
+                type_map.insert(subject_datatype_string, obj_type_map);
             }
         } else {
-            let mut obj_type_map = HashMap::new();
-            let subject_datatype_string = subject_datatype.as_str().to_string();
-            obj_type_map.insert(
-                object_datatype.as_str().to_string(),
-                (vec![subject_to_insert], vec![object_to_insert]),
-            );
-            type_map.insert(subject_datatype_string, obj_type_map);
+            empty_iter = true;
         }
+        if let Some(max_iterations) = &max_iterations {
+            if &i >= max_iterations {
+                reached_max = true;
+            }
+        }
+        i += 1;
     }
-    Ok(graph_predicate_map)
+    let out_r = if empty_iter { None } else { Some(r) };
+    Ok((out_r, graph_predicate_map))
 }
 
 //Adapted from proposed change to https://github.com/oxigraph/
@@ -437,12 +505,17 @@ fn particular_term_vec_to_series(term_vec: Vec<Term>, dt: BaseRDFNodeType) -> Se
             .unwrap()
             .take_materialized_series()
     } else {
+        let use_dt = if let BaseRDFNodeType::Literal(l) = &dt {
+            Some(l.as_ref())
+        } else {
+            None
+        };
         let any_iter: Vec<_> = term_vec
             .into_par_iter()
             .map(|t| match t {
                 Term::NamedNode(nn) => rdf_owned_named_node_to_polars_literal_value(nn),
                 Term::BlankNode(bb) => rdf_owned_blank_node_to_polars_literal_value(bb),
-                Term::Literal(l) => rdf_literal_to_polars_literal_value(&l),
+                Term::Literal(l) => rdf_literal_to_polars_literal_value(&l, use_dt.clone()),
             })
             .collect();
         polars_literal_values_to_series(any_iter, OBJECT_COL_NAME)

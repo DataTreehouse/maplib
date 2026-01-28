@@ -658,7 +658,7 @@ fn term_pattern_expression(
             unimplemented!("Blank node term pattern not supported")
         }
         TermPattern::Literal(thelit) => {
-            let l = lit(rdf_literal_to_polars_literal_value(thelit)).alias(name);
+            let l = lit(rdf_literal_to_polars_literal_value(thelit, None)).alias(name);
             Ok((
                 l,
                 BaseRDFNodeType::Literal(thelit.datatype().into_owned())

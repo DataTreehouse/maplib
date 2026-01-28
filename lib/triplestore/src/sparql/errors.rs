@@ -1,12 +1,12 @@
-use std::sync::PoisonError;
-use oxrdf::Variable;
 use crate::errors::TriplestoreError;
 use fts::FtsError;
+use oxrdf::Variable;
 use query_processing::errors::QueryProcessingError;
 use representation::RDFNodeState;
-use spargebra::SparqlSyntaxError;
-use thiserror::Error;
 use spargebra::algebra::GraphPattern;
+use spargebra::SparqlSyntaxError;
+use std::sync::PoisonError;
+use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum SparqlError {

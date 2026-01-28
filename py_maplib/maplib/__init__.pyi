@@ -575,7 +575,7 @@ class Model:
         >>> m.map_json('{"my_key":[true, "abc"]}')
 
         :param path_or_string: Path to a JSON document or a JSON string.
-        :param graph: The IRI of the graph to add triples to. None is the default graph. 
+        :param graph: The IRI of the graph to add triples to. None is the default graph.
         :param transient: Should the triples be included when serializing the graph?
         """
 
@@ -802,7 +802,7 @@ class Model:
     def read(
         self,
         file_path: Union[str, Path],
-        format: LiteralType["ntriples", "turtle", "rdf/xml", "xml", "rdfxml"] = None,
+        format: LiteralType["ntriples", "turtle", "rdf/xml", "cim/xml"] = None,
         base_iri: str = None,
         transient: bool = False,
         parallel: bool = None,
@@ -821,7 +821,7 @@ class Model:
         >>> m.read("my_triples.ttl")
 
         :param file_path: The path of the file containing triples
-        :param format: One of "ntriples", "turtle", "rdf/xml", otherwise it is inferred from the file extension.
+        :param format: One of "ntriples", "turtle", "rdf/xml" or "cim/xml", otherwise it is inferred from the file extension.
         :param base_iri: Base iri
         :param transient: Should these triples be included when writing the graph to the file system?
         :param parallel: Parse triples in parallel, currently only NTRiples and Turtle. Assumes all prefixes are in the beginning of the document. Defaults to true only for NTriples.
@@ -847,7 +847,7 @@ class Model:
     def reads(
         self,
         s: str,
-        format: LiteralType["ntriples", "turtle", "rdf/xml", "xml", "rdfxml"],
+        format: LiteralType["ntriples", "turtle", "rdf/xml", "cim/xml"],
         base_iri: str = None,
         transient: bool = False,
         parallel: bool = None,
@@ -865,7 +865,7 @@ class Model:
         >>> m.reads(my_ntriples_string, format="ntriples")
 
         :param s: String containing serialized triples.
-        :param format: One of "ntriples", "turtle", "rdf/xml".
+        :param format: One of "ntriples", "turtle", "rdf/xml" or "cim/xml".
         :param base_iri: Base iri
         :param transient: Should these triples be included when writing the graph to the file system?
         :param parallel: Parse triples in parallel, currently only NTRiples and Turtle. Assumes all prefixes are in the beginning of the document. Defaults to true for NTriples.

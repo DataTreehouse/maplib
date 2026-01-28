@@ -499,7 +499,7 @@ pub fn particular_opt_term_vec_to_series(
                     match t {
                         Term::NamedNode(nn) => rdf_owned_named_node_to_polars_literal_value(nn),
                         Term::BlankNode(bb) => rdf_owned_blank_node_to_polars_literal_value(bb),
-                        Term::Literal(l) => rdf_literal_to_polars_literal_value(&l),
+                        Term::Literal(l) => rdf_literal_to_polars_literal_value(&l, None),
                         #[cfg(feature = "rdf-star")]
                         _ => unimplemented!(),
                     }

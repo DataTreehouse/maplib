@@ -5,7 +5,7 @@ edition = "2021"
 rust-version.workspace = true
 
 [features]
-pyo3 = [ "dep:pyo3", "triplestore/pyo3", "shacl/pyo3", "datalog/pyo3", "cimxml/pyo3" ]
+pyo3 = [ "dep:pyo3", "triplestore/pyo3", "shacl/pyo3", "datalog/pyo3", "cimxml_export/pyo3" ]
 
 [dependencies]
 templates = {path = "../templates"}
@@ -13,7 +13,7 @@ triplestore = { path = "../triplestore" }
 shacl = { path = "../shacl" }
 representation = { path = "../representation" }
 datalog = {path = "../datalog"}
-cimxml = {path = "../cimxml"}
+cimxml_export = {path = "../cimxml_export"}
 query_processing = {path ="../query_processing"}
 
 rayon = { workspace = true }
@@ -25,14 +25,9 @@ polars = { workspace = true,  features = [
 ] }
 chrono = { workspace = true }
 chrono-tz = { workspace = true }
-uuid = { workspace = true }
 thiserror = { workspace = true }
 oxrdfio = { workspace = true }
 tracing = { workspace = true }
 
 pyo3 = { workspace = true, optional = true }
 
-
-[dev-dependencies]
-rstest.workspace=true
-serial_test.workspace = true

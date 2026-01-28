@@ -364,7 +364,7 @@ impl PyLiteral {
             return PyXSDDuration { duration }.into_py_any(py);
         }
 
-        match rdf_literal_to_polars_literal_value(&self.literal) {
+        match rdf_literal_to_polars_literal_value(&self.literal, None) {
             LiteralValue::Scalar(s) => {
                 match s.into_value() {
                     AnyValue::Boolean(b) => b.into_py_any(py),

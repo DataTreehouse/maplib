@@ -5,7 +5,7 @@ pub mod expansion;
 
 use crate::errors::MaplibError;
 use crate::model::errors::MappingError;
-use cimxml::export::{cim_xml_write, FullModelDetails};
+use cimxml_export::export::{cim_xml_write, FullModelDetails};
 use datalog::inference::{infer, InferenceResult};
 use datalog::parser::parse_datalog_ruleset;
 use oxrdf::NamedNode;
@@ -32,6 +32,7 @@ use representation::dataset::NamedGraph;
 use representation::prefixes::get_default_prefixes;
 use tracing::instrument;
 use triplestore::errors::TriplestoreError;
+use triplestore::triples_read::ExtendedRdfFormat;
 
 pub struct Model {
     pub template_dataset: TemplateDataset,
@@ -206,13 +207,14 @@ impl Model {
     pub fn read_triples(
         &mut self,
         p: &Path,
-        rdf_format: Option<RdfFormat>,
+        rdf_format: Option<ExtendedRdfFormat>,
         base_iri: Option<String>,
         transient: bool,
         parallel: Option<bool>,
         checked: bool,
         graph: &NamedGraph,
         replace_graph: bool,
+        triples_batch_size: Option<usize>,
     ) -> Result<(), MaplibError> {
         if replace_graph {
             self.truncate_graph(&graph)
@@ -227,6 +229,7 @@ impl Model {
                 checked,
                 graph,
                 &self.prefixes,
+                triples_batch_size,
             )
             .map_err(MaplibError::TriplestoreError)
     }
@@ -248,13 +251,14 @@ impl Model {
     pub fn reads(
         &mut self,
         s: &str,
-        rdf_format: RdfFormat,
+        rdf_format: ExtendedRdfFormat,
         base_iri: Option<String>,
         transient: bool,
         parallel: Option<bool>,
         checked: bool,
         graph: &NamedGraph,
         replace_graph: bool,
+        triples_batch_size: Option<usize>,
     ) -> Result<(), MaplibError> {
         if replace_graph {
             self.truncate_graph(&graph)
@@ -269,6 +273,7 @@ impl Model {
                 checked,
                 graph,
                 &self.prefixes,
+                triples_batch_size,
             )
             .map_err(MaplibError::TriplestoreError)
     }

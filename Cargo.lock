@@ -380,7 +380,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "cimxml"
+name = "cimxml_export"
 version = "0.1.0"
 dependencies = [
  "oxrdf",
@@ -388,6 +388,14 @@ dependencies = [
  "representation",
  "thiserror",
  "triplestore",
+]
+
+[[package]]
+name = "cimxml_import"
+version = "0.1.0"
+dependencies = [
+ "oxrdf",
+ "representation",
 ]
 
 [[package]]
@@ -1407,7 +1415,7 @@ version = "0.6.0"
 dependencies = [
  "chrono",
  "chrono-tz",
- "cimxml",
+ "cimxml_export",
  "datalog",
  "oxiri",
  "oxrdf",
@@ -1417,14 +1425,11 @@ dependencies = [
  "query_processing",
  "rayon",
  "representation",
- "rstest",
- "serial_test",
  "shacl",
  "templates",
  "thiserror",
  "tracing",
  "triplestore",
- "uuid",
 ]
 
 [[package]]
@@ -2452,10 +2457,10 @@ dependencies = [
 
 [[package]]
 name = "py_maplib"
-version = "0.19.12"
+version = "0.19.10"
 dependencies = [
  "chrono",
- "cimxml",
+ "cimxml_export",
  "datalog",
  "maplib",
  "mimalloc",
@@ -3082,15 +3087,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "scc"
-version = "2.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "46e6f046b7fef48e2660c57ed794263155d713de679057f2d0c169bfc6e756cc"
-dependencies = [
- "sdd",
-]
-
-[[package]]
 name = "schannel"
 version = "0.1.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3104,12 +3100,6 @@ name = "scopeguard"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
-
-[[package]]
-name = "sdd"
-version = "3.0.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "490dcfcbfef26be6800d11870ff2df8774fa6e86d047e3e8c8a76b25655e41ca"
 
 [[package]]
 name = "security-framework"
@@ -3204,31 +3194,6 @@ dependencies = [
  "itoa",
  "ryu",
  "serde",
-]
-
-[[package]]
-name = "serial_test"
-version = "3.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1b258109f244e1d6891bf1053a55d63a5cd4f8f4c30cf9a1280989f80e7a1fa9"
-dependencies = [
- "futures",
- "log",
- "once_cell",
- "parking_lot",
- "scc",
- "serial_test_derive",
-]
-
-[[package]]
-name = "serial_test_derive"
-version = "3.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5d69265a08751de7844521fd15003ae0a888e035773ba05695c5c759a6f89eef"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
 ]
 
 [[package]]
@@ -3795,6 +3760,7 @@ name = "triplestore"
 version = "0.5.0"
 dependencies = [
  "aho-corasick",
+ "cimxml_import",
  "file_io",
  "fts",
  "itoa",

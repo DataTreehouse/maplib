@@ -14,6 +14,7 @@ representation = { path = "../representation" }
 file_io = { path = "../file_io" }
 spargebra = { path = "../spargebra" }
 fts = {path ="../fts"}
+cimxml_import = {path = "../cimxml_import"}
 
 rayon.workspace = true
 sprs = { workspace = true, features = ["multi_thread"] }

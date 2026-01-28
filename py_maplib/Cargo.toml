@@ -1,6 +1,6 @@
 [package]
 name = "py_maplib"
-version = "0.19.12"
+version = "0.19.10"
 edition = "2021"
 
 [features]
@@ -14,7 +14,7 @@ shacl = { path = "../lib/shacl", features = [ "pyo3" ] }
 pydf_io = { path = "../lib/pydf_io" }
 report_mapping = {path = "../lib/report_mapping"}
 templates = {path= "../lib/templates"}
-cimxml = {path = "../lib/cimxml", features = [ "pyo3" ]}
+cimxml_export = {path = "../lib/cimxml_export", features = [ "pyo3" ]}
 datalog = {path = "../lib/datalog"}
 
 pyo3.workspace = true

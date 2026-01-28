@@ -1,4 +1,4 @@
-use crate::{LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD};
+use crate::{BaseRDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD};
 use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
 use chrono_tz::Tz;
 use oxrdf::vocab::{rdf, xsd};
@@ -72,12 +72,18 @@ pub fn rdf_literal_to_polars_expr(l: &Literal) -> Expr {
             lit(l.language().unwrap()).alias(LANG_STRING_LANG_FIELD),
         ])
     } else {
-        lit(rdf_literal_to_polars_literal_value(l))
+        lit(rdf_literal_to_polars_literal_value(l, None))
     }
 }
 
-pub fn rdf_literal_to_polars_literal_value(literal: &Literal) -> LiteralValue {
-    rdf_literal_to_polars_literal_value_impl(literal.value(), literal.datatype())
+pub fn rdf_literal_to_polars_literal_value(
+    literal: &Literal,
+    override_dt: Option<NamedNodeRef>,
+) -> LiteralValue {
+    rdf_literal_to_polars_literal_value_impl(
+        literal.value(),
+        override_dt.unwrap_or(literal.datatype()),
+    )
 }
 
 pub fn rdf_literal_to_polars_literal_value_impl(

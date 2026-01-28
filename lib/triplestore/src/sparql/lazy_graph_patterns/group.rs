@@ -13,7 +13,6 @@ use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use spargebra::algebra::{AggregateExpression, GraphPattern};
 use std::collections::HashMap;
-use crate::errors::TriplestoreError;
 
 impl Triplestore {
     #[allow(clippy::too_many_arguments)]
@@ -48,17 +47,16 @@ impl Triplestore {
         let mut aggregate_expressions = vec![];
         let mut new_rdf_node_types = HashMap::new();
         for v in variables {
-            let maybe_t = output_solution_mappings
-                .rdf_node_types
-                .get(v.as_str());
+            let maybe_t = output_solution_mappings.rdf_node_types.get(v.as_str());
             if let Some(t) = maybe_t {
-            new_rdf_node_types.insert(
-                v.as_str().to_string(),
-                t.clone(),
-            ); }else {
-                return Err(SparqlError::GroupByWithUndefinedVariable(v.clone(), inner.clone()));    
+                new_rdf_node_types.insert(v.as_str().to_string(), t.clone());
+            } else {
+                return Err(SparqlError::GroupByWithUndefinedVariable(
+                    v.clone(),
+                    inner.clone(),
+                ));
             }
-            }
+        }
         let mut aggregate_contexts = vec![];
         for i in 0..aggregates.len() {
             let aggregate_context = context.extension_with(PathEntry::GroupAggregation(i as u16));

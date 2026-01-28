@@ -14,7 +14,7 @@ use maplib::errors::MaplibError;
 use maplib::model::{MapOptions, Model as InnerModel};
 
 use chrono::Utc;
-use cimxml::export::FullModelDetails;
+use cimxml_export::export::FullModelDetails;
 use pydf_io::to_python::{df_to_py_df, fix_cats_and_multicolumns};
 use pyo3::prelude::*;
 use std::collections::{HashMap, HashSet};
@@ -77,6 +77,7 @@ use templates::python::rdfs::PyRDFS;
 use templates::python::xsd::PyXSD;
 use templates::python::{py_triple, PyArgument, PyInstance, PyParameter, PyTemplate};
 use templates::MappingColumnType;
+use triplestore::triples_read::ExtendedRdfFormat;
 use triplestore::{IndexingOptions, NewTriples, Triplestore};
 
 #[cfg(target_os = "linux")]
@@ -572,7 +573,17 @@ impl PyModel {
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[pyo3(signature = (file_path, format=None, base_iri=None, transient=None, parallel=None, checked=None, graph=None, replace_graph=None))]
+    #[pyo3(signature = (
+        file_path,
+        format=None,
+        base_iri=None,
+        transient=None,
+        parallel=None,
+        checked=None,
+        graph=None,
+        replace_graph=None,
+        triples_batch_size=None,
+    ))]
     #[instrument(skip_all)]
     fn read(
         &self,
@@ -585,6 +596,7 @@ impl PyModel {
         checked: Option<bool>,
         graph: Option<String>,
         replace_graph: Option<bool>,
+        triples_batch_size: Option<usize>,
     ) -> PyResult<()> {
         let file_path = file_path.str()?.to_string();
         py.allow_threads(move || {
@@ -599,6 +611,7 @@ impl PyModel {
                 checked,
                 graph,
                 replace_graph,
+                triples_batch_size,
             )
         })
     }
@@ -615,7 +628,17 @@ impl PyModel {
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[pyo3(signature = (s, format, base_iri=None, transient=None, parallel=None, checked=None, graph=None, replace_graph=None))]
+    #[pyo3(signature = (
+        s,
+        format,
+        base_iri=None,
+        transient=None,
+        parallel=None,
+        checked=None,
+        graph=None,
+        replace_graph=None,
+        triples_batch_size=None,
+    ))]
     #[instrument(skip_all)]
     fn reads(
         &self,
@@ -628,6 +651,7 @@ impl PyModel {
         checked: Option<bool>,
         graph: Option<String>,
         replace_graph: Option<bool>,
+        triples_batch_size: Option<usize>,
     ) -> PyResult<()> {
         py.allow_threads(|| {
             let mut inner = self.inner.lock().unwrap();
@@ -641,6 +665,7 @@ impl PyModel {
                 checked,
                 graph,
                 replace_graph,
+                triples_batch_size,
             )
         })
     }
@@ -1282,11 +1307,16 @@ fn read_mutex(
     checked: Option<bool>,
     graph: Option<String>,
     replace_graph: Option<bool>,
+    triples_batch_size: Option<usize>,
 ) -> PyResult<()> {
     let graph = parse_optional_named_node(graph)?;
     let named_graph = NamedGraph::from_maybe_named_node(graph.as_ref());
     let path = Path::new(&file_path);
-    let format = format.map(|format| resolve_format(&format));
+    let format = if let Some(format) = format {
+        Some(resolve_format(&format).map_err(PyMaplibError::from)?)
+    } else {
+        None
+    };
     inner
         .read_triples(
             path,
@@ -1297,6 +1327,7 @@ fn read_mutex(
             checked.unwrap_or(true),
             &named_graph,
             replace_graph.unwrap_or(false),
+            triples_batch_size,
         )
         .map_err(PyMaplibError::from)?;
     Ok(())
@@ -1318,10 +1349,11 @@ fn reads_mutex(
     checked: Option<bool>,
     graph: Option<String>,
     replace_graph: Option<bool>,
+    triples_batch_size: Option<usize>,
 ) -> PyResult<()> {
     let graph = parse_optional_named_node(graph)?;
     let named_graph = NamedGraph::from_maybe_named_node(graph.as_ref());
-    let format = resolve_format(format);
+    let format = resolve_format(format).map_err(PyMaplibError::from)?;
     inner
         .reads(
             s,
@@ -1332,6 +1364,7 @@ fn reads_mutex(
             checked.unwrap_or(true),
             &named_graph,
             replace_graph.unwrap_or(false),
+            triples_batch_size,
         )
         .map_err(PyMaplibError::from)?;
     Ok(())
@@ -1345,7 +1378,7 @@ fn write_triples_mutex(
     prefixes: Option<HashMap<String, NamedNode>>,
 ) -> PyResult<()> {
     let format = if let Some(format) = format {
-        resolve_format(&format)
+        resolve_normal_format(&format).map_err(PyMaplibError::from)?
     } else {
         RdfFormat::NTriples
     };
@@ -1428,7 +1461,7 @@ fn writes_mutex(
     prefixes: Option<HashMap<String, NamedNode>>,
 ) -> PyResult<String> {
     let format = if let Some(format) = format {
-        resolve_format(&format)
+        resolve_normal_format(&format).map_err(PyMaplibError::from)?
     } else {
         RdfFormat::NTriples
     };
@@ -1665,12 +1698,25 @@ fn map_parameters(
     }
 }
 
-fn resolve_format(format: &str) -> RdfFormat {
+fn resolve_normal_format(format: &str) -> Result<RdfFormat, PyMaplibError> {
     match format.to_lowercase().as_str() {
-        "ntriples" => RdfFormat::NTriples,
-        "turtle" => RdfFormat::Turtle,
-        "rdf/xml" | "xml" | "rdfxml" => RdfFormat::RdfXml,
-        _ => unimplemented!("Unknown format {}", format),
+        "ntriples" => Ok(RdfFormat::NTriples),
+        "turtle" => Ok(RdfFormat::Turtle),
+        "rdf/xml" | "xml" | "rdfxml" => Ok(RdfFormat::RdfXml),
+        _ => Err(PyMaplibError::FunctionArgumentError(format!(
+            "Unknown format: {}",
+            format
+        ))),
+    }
+}
+
+fn resolve_format(format: &str) -> Result<ExtendedRdfFormat, PyMaplibError> {
+    match format.to_lowercase().as_str() {
+        "cim" | "cim/xml" | "cimxml" => Ok(ExtendedRdfFormat::CIMXML),
+        f => match resolve_normal_format(format) {
+            Ok(o) => Ok(ExtendedRdfFormat::Normal(o)),
+            Err(e) => Err(e),
+        },
     }
 }
 

@@ -12,7 +12,8 @@ members = [
     "lib/shacl",
     "lib/fts",
     "lib/datalog",
-    "lib/cimxml",
+    "lib/cimxml_export",
+    "lib/cimxml_import",
     "py_maplib",
 ]
 

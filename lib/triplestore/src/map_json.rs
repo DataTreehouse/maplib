@@ -12,7 +12,6 @@ use oxrdf::vocab::{rdf, xsd};
 use oxrdf::NamedNode;
 use polars::prelude::PlSmallStr;
 use polars_core::prelude::{AnyValue, Column, DataFrame};
-use query_processing::expressions::named_node;
 use representation::constants::RDF_PREFIX_IRI;
 use representation::dataset::NamedGraph;
 use representation::{BaseRDFNodeType, OBJECT_COL_NAME, SUBJECT_COL_NAME};
