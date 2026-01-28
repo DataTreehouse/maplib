@@ -16,7 +16,7 @@ use crate::expressions::comparisons::typed_equals_expr;
 use crate::type_constraints::{
     conjunction_variable_type, equal_variable_type, ConstraintBaseRDFNodeType, PossibleTypes,
 };
-use oxrdf::vocab::rdfs;
+use oxrdf::vocab::{rdfs, xsd};
 use oxrdf::Variable;
 use polars::frame::UniqueKeepStrategy;
 use polars::prelude::{
@@ -96,6 +96,13 @@ pub fn filter(
     mut solution_mappings: SolutionMappings,
     expression_context: &Context,
 ) -> Result<SolutionMappings, QueryProcessingError> {
+    let dt = solution_mappings.rdf_node_types.get(expression_context.as_str()).unwrap();
+    for t in dt.map.keys() {
+        if !(t.is_none() || t.is_lit_type(xsd::BOOLEAN)) {
+            return Err(QueryProcessingError::FilterMustBeBoolean(t.clone()))
+        }
+    }
+    
     solution_mappings.mappings = solution_mappings
         .mappings
         .filter(col(expression_context.as_str()))

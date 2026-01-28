@@ -18,4 +18,6 @@ pub enum QueryProcessingError {
     MaxRowsReached(usize, usize, String, String),
     #[error("The function `{}` is not implemented yet", .0)]
     UnimplementedFunction(String),
+    #[error("A filter must be of the type xsd:boolean, but was: {}", .0)]
+    FilterMustBeBoolean(BaseRDFNodeType),
 }
