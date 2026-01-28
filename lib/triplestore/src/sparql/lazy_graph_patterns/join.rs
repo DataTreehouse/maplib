@@ -188,7 +188,7 @@ impl Triplestore {
                     }
                     n_cross_joins
                 } else {
-                    variables.len() - 1
+                    variables.len().saturating_sub(1)
                 };
                 let mut all_variables = HashSet::new();
                 for v in variables {
