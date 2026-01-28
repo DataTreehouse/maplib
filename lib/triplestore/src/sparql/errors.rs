@@ -1,11 +1,12 @@
 use std::sync::PoisonError;
-
+use oxrdf::Variable;
 use crate::errors::TriplestoreError;
 use fts::FtsError;
 use query_processing::errors::QueryProcessingError;
 use representation::RDFNodeState;
 use spargebra::SparqlSyntaxError;
 use thiserror::Error;
+use spargebra::algebra::GraphPattern;
 
 #[derive(Error, Debug)]
 pub enum SparqlError {
@@ -27,6 +28,8 @@ pub enum SparqlError {
     InterruptSignal,
     #[error("A lock was open when a thread crashed, cannot guarantee data constitency")]
     PoisonedLockError,
+    #[error("Tried grouping on a variable `{0}` that is not defined in the inner query: `{1}`")]
+    GroupByWithUndefinedVariable(Variable, GraphPattern),
 }
 
 impl<T> From<PoisonError<T>> for SparqlError {
