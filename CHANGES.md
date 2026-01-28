@@ -1,4 +1,15 @@
 # Change log
+## v0.19.13 
+### Features
+- CIM XML parsing is now natively supported
+
+### Improvements
+- Added possibility of setting number of triples per batch when reading serialization formats.
+- map_json is now compliant with Facade X. 
+
+### Bugfixes
+- Fixed various cases where a panic or unwrap happens instead of a proper error. 
+
 ## v0.19.10
 ### Features
 - m.map_json() maps a json file or string to rdf triples.
