@@ -8,6 +8,8 @@ use oxrdf::{BlankNode, NamedNode, NamedNodeRef, Term, TermRef, Variable};
 use polars::prelude::{col, collect_all, concat, LazyFrame, UnionArgs};
 use polars_core::frame::DataFrame;
 use polars_core::utils::concat_df;
+use polars_core::POOL;
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use representation::cats::LockedCats;
 use representation::dataset::NamedGraph;
 use representation::polars_to_rdf::column_as_terms;
@@ -18,9 +20,9 @@ use spargebra::Query;
 use std::cmp;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::io::Write;
-use std::rc::Rc;
+use std::sync::Arc;
 
-const STRIDE: usize = 10_000;
+const STRIDE: usize = 200_000;
 
 #[derive(Debug, Clone)]
 struct TurtleBlock {
@@ -36,7 +38,7 @@ enum TurtleBlockOrTermOrList {
 #[derive(Clone, Debug)]
 enum TermOrList {
     List(Vec<TermOrList>),
-    Elem(Rc<Term>),
+    Elem(Arc<Term>),
     BlankPlaceholder(u32),
 }
 
@@ -46,7 +48,7 @@ impl TermOrList {
             TermOrList::List(list) => {
                 let el = list.remove(0);
                 if list.is_empty() {
-                    *self = TermOrList::Elem(Rc::new(Term::NamedNode(rdf::NIL.into_owned())));
+                    *self = TermOrList::Elem(Arc::new(Term::NamedNode(rdf::NIL.into_owned())));
                 }
                 el
             }
@@ -83,31 +85,37 @@ impl TermOrList {
         writer: &mut W,
         type_nn: &NamedNode,
         prefix_replacer: &PrefixReplacer,
-        in_degree_one_map: &mut HashMap<u32, TurtleBlockOrTermOrList>,
+        in_degree_one_map: &HashMap<u32, TurtleBlockOrTermOrList>,
         nesting: usize,
-    ) -> std::io::Result<()> {
+    ) -> std::io::Result<Vec<u32>> {
         match self {
             TermOrList::List(list) => {
                 write!(writer, "( ")?;
+                let mut outs = vec![];
                 for tol in list {
-                    tol.write_prefixed(
+                    let out = tol.write_prefixed(
                         writer,
                         type_nn,
                         prefix_replacer,
                         in_degree_one_map,
                         nesting + 1,
                     )?;
+                    outs.extend(out);
                     write!(writer, " ")?;
                 }
                 write!(writer, ")")?;
-                Ok(())
+                Ok(outs)
             }
-            TermOrList::Elem(term) => write_term_prefixed(writer, term.as_ref(), prefix_replacer),
+            TermOrList::Elem(term) => {
+                write_term_prefixed(writer, term.as_ref(), prefix_replacer)?;
+                Ok(vec![])
+            },
             TermOrList::BlankPlaceholder(u) => {
-                let t = in_degree_one_map.remove(u).unwrap();
+                let mut outs = vec![*u];
+                let t = in_degree_one_map.get(u).unwrap();
                 match t {
                     TurtleBlockOrTermOrList::TurtleBlock(t) => {
-                        t.write_block(
+                        let out = t.write_block(
                             writer,
                             type_nn,
                             prefix_replacer,
@@ -115,18 +123,20 @@ impl TermOrList {
                             in_degree_one_map,
                             nesting,
                         )?;
+                        outs.extend(out);
                     }
                     TurtleBlockOrTermOrList::Term(t) => {
-                        t.write_prefixed(
+                        let out = t.write_prefixed(
                             writer,
                             type_nn,
                             prefix_replacer,
                             in_degree_one_map,
                             nesting,
                         )?;
+                        outs.extend(out);
                     }
                 }
-                Ok(())
+                Ok(outs)
             }
         }
     }
@@ -186,9 +196,10 @@ impl TurtleBlock {
         type_nn: &NamedNode,
         prefix_replacer: &PrefixReplacer,
         try_write_subject: bool,
-        in_degree_one_map: &mut HashMap<u32, TurtleBlockOrTermOrList>,
+        in_degree_one_map: &HashMap<u32, TurtleBlockOrTermOrList>,
         nesting: usize,
-    ) -> std::io::Result<()> {
+    ) -> std::io::Result<Vec<u32>> {
+        let mut outs = Vec::new();
         let use_write_subject = if try_write_subject {
             if let Some(subject) = &self.subject {
                 write_term_prefixed(writer, subject, prefix_replacer)?;
@@ -210,7 +221,7 @@ impl TurtleBlock {
             }
             write!(writer, "a ")?;
 
-            write_term_objects(
+            let replaced = write_term_objects(
                 writer,
                 ts.as_slice(),
                 type_nn,
@@ -218,6 +229,7 @@ impl TurtleBlock {
                 in_degree_one_map,
                 nesting + 1,
             )?;
+            outs.extend(replaced);
             has_type = true;
             to_write -= 1;
             if to_write > 0 {
@@ -231,7 +243,7 @@ impl TurtleBlock {
                 }
                 prefix_replacer.write_with_prefix(writer, key.as_ref())?;
                 write!(writer, " ")?;
-                write_term_objects(
+                let replaced = write_term_objects(
                     writer,
                     values.as_slice(),
                     type_nn,
@@ -239,6 +251,7 @@ impl TurtleBlock {
                     in_degree_one_map,
                     nesting + 1,
                 )?;
+                outs.extend(replaced);
                 to_write -= 1;
                 if to_write > 0 {
                     writeln!(writer, " ;")?;
@@ -254,7 +267,7 @@ impl TurtleBlock {
             }
             write!(writer, "]")?;
         }
-        Ok(())
+        Ok(outs)
     }
 }
 
@@ -263,26 +276,29 @@ fn write_term_objects<W: Write>(
     terms: &[TermOrList],
     type_nn: &NamedNode,
     prefix_replacer: &PrefixReplacer,
-    in_degree_one_map: &mut HashMap<u32, TurtleBlockOrTermOrList>,
+    in_degree_one_map: &HashMap<u32, TurtleBlockOrTermOrList>,
     nesting: usize,
-) -> std::io::Result<()> {
+) -> std::io::Result<Vec<u32>> {
+    let mut outs = Vec::new();
     if terms.len() == 1 {
-        terms.get(0).unwrap().write_prefixed(
+        let out = terms.get(0).unwrap().write_prefixed(
             writer,
             type_nn,
             prefix_replacer,
             in_degree_one_map,
             nesting,
         )?;
+        outs.extend(out);
     } else {
         for (i, v) in terms.iter().enumerate() {
-            v.write_prefixed(writer, type_nn, prefix_replacer, in_degree_one_map, nesting)?;
+            let out = v.write_prefixed(writer, type_nn, prefix_replacer, in_degree_one_map, nesting)?;
+            outs.extend(out);
             if i < terms.len() - 1 {
                 write!(writer, ", ")?;
             }
         }
     }
-    Ok(())
+    Ok(outs)
 }
 
 impl Triplestore {
@@ -383,6 +399,8 @@ impl Triplestore {
             HashMap::new();
         let mut used_iri_subjects = HashSet::new();
         let mut used_blank_subjects = in_degree_one_blocks_map.keys().cloned().collect();
+        let type_nn = rdf::TYPE.into_owned();
+
         for (driver_predicate, k) in drivers.into_iter().rev() {
             if let Some(ks) = used_drivers.get_mut(&driver_predicate) {
                 ks.insert(k.clone());
@@ -396,168 +414,103 @@ impl Triplestore {
             let driver_height = t.height();
 
             let mut current_offset = 0;
+
+            let n_threads = POOL.current_num_threads();
+
             for i in 0..((driver_height % STRIDE) + 1) {
                 let triples = map.get(&driver_predicate).unwrap().get(&k).unwrap();
                 let offset_start = i * STRIDE;
                 let height = cmp::min(STRIDE, driver_height - current_offset);
                 current_offset += height;
-                let dfs =
-                    if let Some(lfs) = triples.get_lazy_frame_slices(offset_start, Some(height))? {
-                        collect_all(lfs).unwrap()
-                    } else {
-                        break;
-                    };
-                let mut first = None;
-                let mut last = None;
-                for df in &dfs {
-                    let new_first_u32 = df
-                        .column(SUBJECT_COL_NAME)
-                        .unwrap()
-                        .u32()
-                        .unwrap()
-                        .first()
-                        .unwrap();
-                    let new_last_u32 = df
-                        .column(SUBJECT_COL_NAME)
-                        .unwrap()
-                        .u32()
-                        .unwrap()
-                        .last()
-                        .unwrap();
-                    let new_first = self
-                        .global_cats
-                        .read()?
-                        .maybe_decode_of_type(&new_first_u32, &k.0)
-                        .unwrap()
-                        .into_owned();
-                    let new_last = self
-                        .global_cats
-                        .read()?
-                        .maybe_decode_of_type(&new_last_u32, &k.0)
-                        .unwrap()
-                        .into_owned();
-                    first = if let Some(first) = first {
-                        if new_first < first {
-                            Some(new_first)
-                        } else {
-                            Some(first)
-                        }
-                    } else {
-                        Some(new_first)
-                    };
-                    last = if let Some(last) = last {
-                        if new_last > last {
-                            Some(new_last)
-                        } else {
-                            Some(last)
-                        }
-                    } else {
-                        Some(new_last)
-                    };
-                }
-                let df = concat_df(&dfs).unwrap();
-                let last = last.unwrap();
-                let first = first.unwrap();
-
                 let (subject_type, object_type) = &k;
                 let use_used_subjects = if subject_type.is_iri() {
                     &used_iri_subjects
                 } else {
                     &used_blank_subjects
                 };
-                let new_subj_u32: HashSet<u32> = df
-                    .column(SUBJECT_COL_NAME)
-                    .unwrap()
-                    .u32()
-                    .unwrap()
-                    .iter()
-                    .map(|x| x.unwrap())
+                let mut thread_offsets = Vec::with_capacity(n_threads);
+                let mut new_offset = offset_start;
+                let mut each = height / n_threads;
+                let mut remaining_height = height;
+                for i in 0..n_threads {
+                    let thread_height = if i == n_threads - 1 {
+                        remaining_height
+                    } else {
+                        each
+                    };
+                    thread_offsets.push((new_offset, thread_height));
+                    new_offset += thread_height;
+                    remaining_height -= thread_height;
+                }
+
+                let r: Result<Vec<_>, TriplestoreError> = POOL
+                    .install(|| {
+                        thread_offsets
+                            .into_par_iter()
+                            .map(|(thread_offset, thread_height)| {
+                                let r = self.create_block_segment(
+                                    &driver_predicate,
+                                    subject_type,
+                                    object_type,
+                                    map,
+                                    triples,
+                                    thread_offset,
+                                    thread_height,
+                                    &used_drivers,
+                                    use_used_subjects,
+                                    &blanks_in_degree_zero,
+                                    &blanks_in_degree_one,
+                                    lists_map.is_some(),
+                                );
+                                r
+                            })
+                    })
                     .collect();
-                let subjects_ordering: Vec<_> = df
-                    .column(SUBJECT_COL_NAME)
-                    .unwrap()
-                    .unique_stable()
-                    .unwrap()
-                    .u32()
-                    .unwrap()
-                    .iter()
-                    .map(|x| x.unwrap())
+
+                let r = r?;
+
+                let mut new_r = Vec::with_capacity(n_threads);
+                for (new_map, subjects_ordering) in r {
+                    if subject_type.is_iri() {
+                        used_iri_subjects.extend(new_map.keys().cloned());
+                    } else if subject_type.is_blank_node() {
+                        used_blank_subjects.extend(new_map.keys().cloned());
+                    };
+                    new_r.push((new_map, subjects_ordering));
+                }
+
+                let written: Result<(Vec<_>,Vec<_>), TriplestoreError> = POOL
+                    .install(|| {
+                        new_r.into_par_iter().map(
+                            |(new_map, subjects_ordering)| {
+                                let mut writer: Vec<u8> = Vec::new();
+                                let replaced = write_blocks(
+                                    &mut writer,
+                                    new_map,
+                                    &type_nn,
+                                    &prefix_replacer,
+                                    &subjects_ordering,
+                                    &in_degree_one_blocks_map,
+                                )?;
+                                Ok((writer,replaced))
+                            },
+                        )
+                    })
                     .collect();
-                let mut blocks_map = HashMap::new();
-
-                update_blocks_map(
-                    &mut blocks_map,
-                    &df,
-                    &driver_predicate,
-                    subject_type,
-                    object_type,
-                    self.global_cats.clone(),
-                    &new_subj_u32,
-                    &use_used_subjects,
-                    &blanks_in_degree_zero,
-                    &blanks_in_degree_one,
-                )?;
-
-                // First stride through and do the "left join"
-                for (p, m) in map.iter() {
-                    for (k, t) in m.iter() {
-                        if let Some(ks) = used_drivers.get(p) {
-                            if ks.contains(k) {
-                                continue;
-                            }
-                        }
-
-                        if lists_map.is_some() && is_list_pred_and_subject_type(p, &k.0) {
-                            continue;
-                        }
-
-                        let (s, o) = k;
-
-                        if subject_type != s {
-                            continue;
-                        }
-
-                        if let Some(lf) = t.get_lazy_frame_between_subject_strings(
-                            first.as_str(),
-                            last.as_str(),
-                            self.global_cats.clone(),
-                            s,
-                        )? {
-                            let other_df = lf.collect().unwrap();
-                            update_blocks_map(
-                                &mut blocks_map,
-                                &other_df,
-                                p,
-                                s,
-                                o,
-                                self.global_cats.clone(),
-                                &new_subj_u32,
-                                &use_used_subjects,
-                                &blanks_in_degree_zero,
-                                &blanks_in_degree_one,
-                            )?;
-                        }
+                let (written,replaced) = written?;
+                for r in replaced {
+                    for u in r {
+                        in_degree_one_blocks_map.remove(&u).unwrap();
                     }
                 }
-                if subject_type.is_iri() {
-                    used_iri_subjects.extend(new_subj_u32);
-                } else if subject_type.is_blank_node() {
-                    used_blank_subjects.extend(new_subj_u32);
+                for mut w in written {
+                    writer
+                        .write_all(&mut w)
+                        .map_err(|x| TriplestoreError::WriteTurtleError(x.to_string()))?;
                 }
-                let type_nn = rdf::TYPE.into_owned();
-
-                write_blocks(
-                    writer,
-                    blocks_map,
-                    &type_nn,
-                    &prefix_replacer,
-                    &subjects_ordering,
-                    &mut in_degree_one_blocks_map,
-                )?;
             }
         }
 
-        let type_nn = rdf::TYPE.into_owned();
         if let Some(lists_map) = lists_map {
             for (u, mut l) in lists_map {
                 let subject = if blanks_in_degree_zero.contains(&u) {
@@ -597,6 +550,157 @@ impl Triplestore {
         }
         Ok(())
     }
+
+    fn create_block_segment(
+        &self,
+        driver_predicate: &NamedNode,
+        subject_type: &BaseRDFNodeType,
+        object_type: &BaseRDFNodeType,
+        map: &HashMap<NamedNode, HashMap<(BaseRDFNodeType, BaseRDFNodeType), Triples>>,
+        triples: &Triples,
+        offset_start: usize,
+        height: usize,
+        used_drivers: &HashMap<NamedNode, HashSet<(BaseRDFNodeType, BaseRDFNodeType)>>,
+        used_subjects: &HashSet<u32>,
+        blanks_in_degree_zero: &HashSet<u32>,
+        blanks_in_degree_one: &HashSet<u32>,
+        has_lists: bool,
+    ) -> Result<(HashMap<u32, TurtleBlock>, Vec<u32>), TriplestoreError> {
+        let mut blocks_map = HashMap::new();
+        let dfs = if let Some(lfs) = triples.get_lazy_frame_slices(offset_start, Some(height))? {
+            collect_all(lfs).unwrap()
+        } else {
+            return Ok((blocks_map, Vec::new()));
+        };
+        let mut first = None;
+        let mut last = None;
+        for df in &dfs {
+            let new_first_u32 = df
+                .column(SUBJECT_COL_NAME)
+                .unwrap()
+                .u32()
+                .unwrap()
+                .first()
+                .unwrap();
+            let new_last_u32 = df
+                .column(SUBJECT_COL_NAME)
+                .unwrap()
+                .u32()
+                .unwrap()
+                .last()
+                .unwrap();
+            let new_first = self
+                .global_cats
+                .read()?
+                .maybe_decode_of_type(&new_first_u32, subject_type)
+                .unwrap()
+                .into_owned();
+            let new_last = self
+                .global_cats
+                .read()?
+                .maybe_decode_of_type(&new_last_u32, subject_type)
+                .unwrap()
+                .into_owned();
+            first = if let Some(first) = first {
+                if new_first < first {
+                    Some(new_first)
+                } else {
+                    Some(first)
+                }
+            } else {
+                Some(new_first)
+            };
+            last = if let Some(last) = last {
+                if new_last > last {
+                    Some(new_last)
+                } else {
+                    Some(last)
+                }
+            } else {
+                Some(new_last)
+            };
+        }
+        let df = concat_df(&dfs).unwrap();
+        let last = last.unwrap();
+        let first = first.unwrap();
+
+        let new_subj_u32: HashSet<u32> = df
+            .column(SUBJECT_COL_NAME)
+            .unwrap()
+            .u32()
+            .unwrap()
+            .iter()
+            .map(|x| x.unwrap())
+            .collect();
+        let subjects_ordering: Vec<_> = df
+            .column(SUBJECT_COL_NAME)
+            .unwrap()
+            .unique_stable()
+            .unwrap()
+            .u32()
+            .unwrap()
+            .iter()
+            .map(|x| x.unwrap())
+            .collect();
+        let mut blocks_map = HashMap::new();
+
+        update_blocks_map(
+            &mut blocks_map,
+            &df,
+            &driver_predicate,
+            subject_type,
+            object_type,
+            self.global_cats.clone(),
+            &new_subj_u32,
+            &used_subjects,
+            &blanks_in_degree_zero,
+            &blanks_in_degree_one,
+        )?;
+
+        // Stride through and do the "left join"
+        for (p, m) in map.iter() {
+            for (k, t) in m.iter() {
+                if let Some(ks) = used_drivers.get(p) {
+                    if ks.contains(k) {
+                        continue;
+                    }
+                }
+
+                if has_lists && is_list_pred_and_subject_type(p, &k.0) {
+                    continue;
+                }
+
+                let (s, o) = k;
+
+                if subject_type != s {
+                    continue;
+                }
+
+                if let Some(lf) = t.get_lazy_frame_between_subject_strings(
+                    first.as_str(),
+                    last.as_str(),
+                    self.global_cats.clone(),
+                    s,
+                )? {
+                    let other_df = lf.collect().unwrap();
+                    update_blocks_map(
+                        &mut blocks_map,
+                        &other_df,
+                        p,
+                        s,
+                        o,
+                        self.global_cats.clone(),
+                        &new_subj_u32,
+                        &used_subjects,
+                        &blanks_in_degree_zero,
+                        &blanks_in_degree_one,
+                    )?;
+                }
+            }
+        }
+        Ok((blocks_map, subjects_ordering))
+    }
+
     fn create_lists_map(
         &self,
         map: &HashMap<NamedNode, HashMap<(BaseRDFNodeType, BaseRDFNodeType), Triples>>,
@@ -651,13 +755,13 @@ impl Triplestore {
                                     first_blank_term_map.insert(s.unwrap(), r);
                                 } else {
                                     first_blank_term_map
-                                        .insert(s.unwrap(), TermOrList::Elem(Rc::new(t.unwrap())));
+                                        .insert(s.unwrap(), TermOrList::Elem(Arc::new(t.unwrap())));
                                 }
                             }
                         } else {
                             for (s, t) in subject_u32s.iter().zip(terms.into_iter()) {
                                 first_blank_term_map
-                                    .insert(s.unwrap(), TermOrList::Elem(Rc::new(t.unwrap())));
+                                    .insert(s.unwrap(), TermOrList::Elem(Arc::new(t.unwrap())));
                             }
                         }
                     }
@@ -911,10 +1015,10 @@ fn update_blocks_map(
             if let Some(defer) = to_replace.pop().unwrap() {
                 defer
             } else {
-                TermOrList::Elem(Rc::new(o.unwrap()))
+                TermOrList::Elem(Arc::new(o.unwrap()))
             }
         } else {
-            TermOrList::Elem(Rc::new(o.unwrap()))
+            TermOrList::Elem(Arc::new(o.unwrap()))
         };
         // Very important that this happens after the replace iterator has been popped
         if used_subjects.contains(&s_u32) || !current_subjects.contains(&s_u32) {
@@ -948,24 +1052,27 @@ fn write_blocks<W: Write>(
     type_nn: &NamedNode,
     prefix_replacer: &PrefixReplacer,
     subjects_ordering: &Vec<u32>,
-    in_degree_one_map: &mut HashMap<u32, TurtleBlockOrTermOrList>,
-) -> Result<(), TriplestoreError> {
-    let out: Result<Vec<()>, TriplestoreError> = subjects_ordering
+    in_degree_one_map: &HashMap<u32, TurtleBlockOrTermOrList>,
+) -> Result<Vec<u32>, TriplestoreError> {
+    let out: Result<Vec<Vec<_>>, TriplestoreError> = subjects_ordering
         .iter()
         .map(|k| {
-            if let Some(block) = blocks_map.get(k) {
+            let r = if let Some(block) = blocks_map.get(k) {
                 let r = block
                     .write_block(writer, type_nn, prefix_replacer, true, in_degree_one_map, 1)
                     .map_err(|x| TriplestoreError::WriteTurtleError(x.to_string()));
-                r?;
+                let replaced = r?;
                 writeln!(writer, " .\n")
                     .map_err(|x| TriplestoreError::WriteTurtleError(x.to_string()))?;
-            }
-            Ok(())
+                replaced
+            } else {
+                vec![]
+            };
+            Ok(r)
         })
         .collect();
-    out?;
-    Ok(())
+    let outs = out?.into_iter().flatten().collect();
+    Ok(outs)
 }
 
 struct PrefixReplacer {
