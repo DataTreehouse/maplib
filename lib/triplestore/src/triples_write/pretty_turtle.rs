@@ -622,6 +622,7 @@ impl Triplestore {
         let df = concat_df(&dfs).unwrap();
         let last = last.unwrap();
         let first = first.unwrap();
+        println!("Pred {} offset {} height {} first {} last {}", driver_predicate, offset_start, height, first, last);
 
         let new_subj_u32: HashSet<u32> = df
             .column(SUBJECT_COL_NAME)
