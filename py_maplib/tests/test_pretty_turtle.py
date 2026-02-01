@@ -62,6 +62,19 @@ def test_write_multi_turtle_provided_prefixes():
     m2 = Model()
     m2.reads(out, format="turtle")
     df2 = m2.query("""SELECT * WHERE {?a ?b ?c}""")
+    expected_path = TESTDATA_PATH / "pretty_turtle_write_multi_provided_expected.csv"
+    #df2.write_csv(expected_path)
+    print(df2)
+    df2_expected = pl.read_csv(expected_path)
+    df2 = df2.with_columns(
+        pl.when(pl.col("a").str.starts_with("_:")).then(pl.lit("blank!")).otherwise(pl.col("a")).alias("a"),
+        pl.when(pl.col("c").str.starts_with("_:")).then(pl.lit("blank!")).otherwise(pl.col("c")).alias("c"),
+    ).sort(["a", "b", "c"])
+    df2_expected = df2_expected.with_columns(
+        pl.when(pl.col("a").str.starts_with("_:")).then(pl.lit("blank!")).otherwise(pl.col("a")).alias("a"),
+        pl.when(pl.col("c").str.starts_with("_:")).then(pl.lit("blank!")).otherwise(pl.col("c")).alias("c"),
+    ).sort(["a", "b", "c"])
+    assert_frame_equal(df2_expected, df2)
     assert df2.height == 24
 
 def test_write_lists():
