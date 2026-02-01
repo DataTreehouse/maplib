@@ -809,6 +809,7 @@ class Model:
         checked: bool = True,
         graph: str = None,
         replace_graph: bool = False,
+        known_contexts: Dict[str, str] = None,
     ) -> None:
         """
         Reads triples from a file path.
@@ -828,6 +829,7 @@ class Model:
         :param checked: Check IRIs etc.
         :param graph: The IRI of the graph to read the triples into, if None, it will be the default graph.
         :param replace_graph: Replace the graph with these triples? Will replace the default graph if no graph is specified.
+        :param known_contexts: Contexts in JSON-LD documents are resolved towards this dict.
         """
 
     def read_template(
@@ -854,6 +856,7 @@ class Model:
         checked: bool = True,
         graph: str = None,
         replace_graph: bool = False,
+        known_contexts: Dict[str, str] = None,
     ) -> None:
         """
         Reads triples from a string.
@@ -872,6 +875,7 @@ class Model:
         :param checked: Check IRIs etc.
         :param graph: The IRI of the graph to read the triples into.
         :param replace_graph: Replace the graph with these triples? Will replace the default graph if no graph is specified.
+        :param known_contexts: Contexts in JSON-LD documents are resolved towards this dict.
         """
 
     def write_cim_xml(

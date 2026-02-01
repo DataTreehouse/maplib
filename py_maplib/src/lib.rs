@@ -583,6 +583,7 @@ impl PyModel {
         graph=None,
         replace_graph=None,
         triples_batch_size=None,
+        known_contexts=None,
     ))]
     #[instrument(skip_all)]
     fn read(
@@ -597,6 +598,7 @@ impl PyModel {
         graph: Option<String>,
         replace_graph: Option<bool>,
         triples_batch_size: Option<usize>,
+        known_contexts: Option<HashMap<String, String>>,
     ) -> PyResult<()> {
         let file_path = file_path.str()?.to_string();
         py.allow_threads(move || {
@@ -612,6 +614,7 @@ impl PyModel {
                 graph,
                 replace_graph,
                 triples_batch_size,
+                known_contexts.unwrap_or_default(),
             )
         })
     }
@@ -638,6 +641,7 @@ impl PyModel {
         graph=None,
         replace_graph=None,
         triples_batch_size=None,
+        known_contexts=None,
     ))]
     #[instrument(skip_all)]
     fn reads(
@@ -652,6 +656,7 @@ impl PyModel {
         graph: Option<String>,
         replace_graph: Option<bool>,
         triples_batch_size: Option<usize>,
+        known_contexts: Option<HashMap<String, String>>,
     ) -> PyResult<()> {
         py.allow_threads(|| {
             let mut inner = self.inner.lock().unwrap();
@@ -666,6 +671,7 @@ impl PyModel {
                 graph,
                 replace_graph,
                 triples_batch_size,
+                known_contexts.unwrap_or_default(),
             )
         })
     }
@@ -1308,6 +1314,7 @@ fn read_mutex(
     graph: Option<String>,
     replace_graph: Option<bool>,
     triples_batch_size: Option<usize>,
+    known_contexts: HashMap<String, String>,
 ) -> PyResult<()> {
     let graph = parse_optional_named_node(graph)?;
     let named_graph = NamedGraph::from_maybe_named_node(graph.as_ref());
@@ -1328,6 +1335,7 @@ fn read_mutex(
             &named_graph,
             replace_graph.unwrap_or(false),
             triples_batch_size,
+            known_contexts,
         )
         .map_err(PyMaplibError::from)?;
     Ok(())
@@ -1350,6 +1358,7 @@ fn reads_mutex(
     graph: Option<String>,
     replace_graph: Option<bool>,
     triples_batch_size: Option<usize>,
+    known_contexts: HashMap<String, String>,
 ) -> PyResult<()> {
     let graph = parse_optional_named_node(graph)?;
     let named_graph = NamedGraph::from_maybe_named_node(graph.as_ref());
@@ -1365,6 +1374,7 @@ fn reads_mutex(
             &named_graph,
             replace_graph.unwrap_or(false),
             triples_batch_size,
+            known_contexts,
         )
         .map_err(PyMaplibError::from)?;
     Ok(())
@@ -1700,7 +1710,9 @@ fn map_parameters(
 
 fn resolve_normal_format(format: &str) -> Result<RdfFormat, PyMaplibError> {
     match format.to_lowercase().as_str() {
-        "json-ld" | "json" | "jsonld" => Ok(RdfFormat::JsonLd { profile: Default::default() }),
+        "json-ld" | "json" | "jsonld" => Ok(RdfFormat::JsonLd {
+            profile: Default::default(),
+        }),
         "ntriples" => Ok(RdfFormat::NTriples),
         "turtle" => Ok(RdfFormat::Turtle),
         "rdf/xml" | "xml" | "rdfxml" => Ok(RdfFormat::RdfXml),

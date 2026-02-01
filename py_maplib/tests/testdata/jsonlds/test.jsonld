@@ -1,0 +1,112 @@
+{
+    "@context": [
+        "https://opengeospatial.github.io/ELFIE/contexts/elfie-2/elf-index.jsonld",
+        "https://opengeospatial.github.io/ELFIE/contexts/elfie-2/elf-data.jsonld",
+        "https://opengeospatial.github.io/ELFIE/contexts/elfie-2/gwml2.jsonld"
+    ],
+    "@id": "https://lab.scinfo.org.nz/selfie/id/aquifersystem/richelieu",
+    "@type": "gw:GW_AquiferSystem",
+    "name": "Aquifer system : Richelieu",
+    "description": "The Richelieu is an Aquifer System comprising these Hydrogeologic Units: the Appalachian Internal Zone, the Appalachian External Zone, the Northern St Lawrence Platform, the Southern St Lawrence Platform and the Monteregian intrusions",
+    "image": "http://external.opengis.org/twiki_public/pub/HydrologyDWG/05-08May2014--GW2IEMeeting18/GW2IE_Vienna2014_Photo2.JPG",
+    "spatialCoverage": {
+        "@type": "Place",
+        "geo": {
+            "@type": "GeoShape",
+            "polygon": "44.981603,-73.628946 46.087463,-73.628946 46.087463,-72.987920 44.981603,-72.987920 44.981603,-73.628946"
+        }
+    },
+    "label": [
+        {
+            "@language": "en",
+            "@value": "Aquifer system : Richelieu"
+        },
+        {
+            "@language": "fr",
+            "@value": "Systeme aquifere : Richelieu"
+        }
+    ],
+    "gwAquiferSystemPart": [
+        {
+            "@id": "https://lab.scinfo.org.nz/selfie/id/hydrogeounit/richelieu-1",
+            "@type": "gw:GW_HydrogeoUnit",
+            "name": "Southern St Lawrence Platform"
+        },
+        {
+            "@id": "https://lab.scinfo.org.nz/selfie/id/hydrogeounit/richelieu-2",
+            "@type": "gw:GW_HydrogeoUnit",
+            "name": "Northern St Lawrence Platform"
+        }
+    ],
+    "sameAs": {
+        "@id": "https://geoconnex.ca/id/aquiferSystems/Richelieu",
+        "@type": [
+            "gw:GW_HydrogeoUnit",
+            "gw:GW_AquiferUnit",
+            "gwl:GW_AquiferSystem",
+            "owl:Thing",
+            "rdfs:Resource"
+        ],
+        "name": [
+            {
+                "@language": "en",
+                "@value": "Aquifer system : Richelieu"
+            },
+            {
+                "@language": "fr",
+                "@value": "Systeme aquifere : Richelieu"
+            }
+        ]
+    },
+    "subjectOf": [
+        {
+            "url": "https://lab.scinfo.org.nz/selfie/data/aquifersystem/richelieu",
+            "@type": "foaf:Document",
+            "primaryTopic": "gw:GW_AquiferSystem",
+            "format": [
+                "text/ttl",
+                "application/ld+json"
+            ],
+            "conformsTo": "https://www.opengis.net/def/gwml2",
+            "provider": "https://opengeospatial.github.io/SELFIE/"
+        },
+        {
+            "url": "https://lab.scinfo.org.nz/service/selfie/api/collections/data/items/aquifersystem-richelieu",
+            "@type": "foaf:Document",
+            "primaryTopic": "gw:GW_AquiferSystem",
+            "format": [
+                "application/vnd.geo+json",
+                "text/html"
+            ],
+            "conformsTo": "https://www.opengis.net/def/gwml2",
+            "provider": "https://opengeospatial.github.io/SELFIE/"
+        },
+        {
+            "url": "https://lab.scinfo.org.nz/selfie/representations/richelieu.geojson",
+            "@type": "foaf:Document",
+            "primaryTopic": "gw:GW_AquiferSystem",
+            "format": [
+                "application/vnd.geo+json"
+            ],
+            "conformsTo": "https://www.opengis.net/def/gwml2",
+            "provider": "https://opengeospatial.github.io/SELFIE/"
+        },
+        {
+            "url": "https://lab.scinfo.org.nz/selfie/representations/richelieu.html",
+            "@type": "foaf:Document",
+            "primaryTopic": "gw:GW_AquiferSystem",
+            "format": [
+                "text/html"
+            ],
+            "conformsTo": "https://www.opengis.net/def/gwml2",
+            "provider": "https://opengeospatial.github.io/SELFIE/"
+        },
+        {
+            "url": "https://opengeospatial.github.io/SELFIE/examples/landing-resource.jsonld",
+            "format": [
+                "application/ld+json"
+            ],
+            "provider": "https://opengeospatial.github.io/SELFIE/"
+        }
+    ]
+}

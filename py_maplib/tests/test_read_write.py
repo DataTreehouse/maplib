@@ -120,3 +120,4 @@ def test_read_write_xml_string():
     # res.write_csv(str(filename))
     expected_df = pl.scan_csv(filename).select(["v", "o"]).sort(["v", "o"]).collect()
     pl.testing.assert_frame_equal(res, expected_df)
+

@@ -1,0 +1,28 @@
+{
+  "@context": ["http://www.w3.org/ns/csvw", {"@language": "en"}],
+  "tables": [{
+    "url": "http://opendata.leeds.gov.uk/downloads/gritting/grit_bins.csv",
+    "tableSchema": {
+      "columns": [
+        {
+          "name": "location",
+          "datatype": "integer"
+        },
+        {
+          "name": "easting",
+          "datatype": "decimal",
+          "propertyUrl": "http://data.ordnancesurvey.co.uk/ontology/spatialrelations/easting"
+        },
+        {
+          "name": "northing",
+          "datatype": "decimal",
+          "propertyUrl": "http://data.ordnancesurvey.co.uk/ontology/spatialrelations/northing"
+        }
+      ],
+      "aboutUrl": "#{location}"
+    }
+  }],
+  "dialect": {
+    "header": false
+  }
+}
