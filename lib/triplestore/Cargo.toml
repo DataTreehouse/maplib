@@ -29,6 +29,7 @@ uuid.workspace = true
 thiserror.workspace = true
 oxrdfio.workspace = true
 oxttl.workspace = true
+oxjsonld.workspace = true
 memmap2.workspace = true
 sparesults.workspace = true
 tracing.workspace = true

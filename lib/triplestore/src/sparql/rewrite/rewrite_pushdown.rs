@@ -291,7 +291,6 @@ fn contains_variable_predicate(graph_pattern: &GraphPattern) -> bool {
         | GraphPattern::Service { .. }
         | GraphPattern::Slice { .. }
         | GraphPattern::Reduced { .. }
-        | GraphPattern::DT { .. }
         | GraphPattern::PValues { .. } => false,
         GraphPattern::Join { left, right }
         | GraphPattern::LeftJoin { left, right, .. }

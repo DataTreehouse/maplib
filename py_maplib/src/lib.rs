@@ -1700,6 +1700,7 @@ fn map_parameters(
 
 fn resolve_normal_format(format: &str) -> Result<RdfFormat, PyMaplibError> {
     match format.to_lowercase().as_str() {
+        "json-ld" | "json" | "jsonld" => Ok(RdfFormat::JsonLd { profile: Default::default() }),
         "ntriples" => Ok(RdfFormat::NTriples),
         "turtle" => Ok(RdfFormat::Turtle),
         "rdf/xml" | "xml" | "rdfxml" => Ok(RdfFormat::RdfXml),

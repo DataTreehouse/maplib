@@ -109,7 +109,7 @@ impl TermOrList {
             TermOrList::Elem(term) => {
                 write_term_prefixed(writer, term.as_ref(), prefix_replacer)?;
                 Ok(vec![])
-            },
+            }
             TermOrList::BlankPlaceholder(u) => {
                 let mut outs = vec![*u];
                 let t = in_degree_one_map.get(u).unwrap();
@@ -291,7 +291,8 @@ fn write_term_objects<W: Write>(
         outs.extend(out);
     } else {
         for (i, v) in terms.iter().enumerate() {
-            let out = v.write_prefixed(writer, type_nn, prefix_replacer, in_degree_one_map, nesting)?;
+            let out =
+                v.write_prefixed(writer, type_nn, prefix_replacer, in_degree_one_map, nesting)?;
             outs.extend(out);
             if i < terms.len() - 1 {
                 write!(writer, ", ")?;
@@ -479,25 +480,23 @@ impl Triplestore {
                     new_r.push((new_map, subjects_ordering));
                 }
 
-                let written: Result<(Vec<_>,Vec<_>), TriplestoreError> = POOL
+                let written: Result<(Vec<_>, Vec<_>), TriplestoreError> = POOL
                     .install(|| {
-                        new_r.into_par_iter().map(
-                            |(new_map, subjects_ordering)| {
-                                let mut writer: Vec<u8> = Vec::new();
-                                let replaced = write_blocks(
-                                    &mut writer,
-                                    new_map,
-                                    &type_nn,
-                                    &prefix_replacer,
-                                    &subjects_ordering,
-                                    &in_degree_one_blocks_map,
-                                )?;
-                                Ok((writer,replaced))
-                            },
-                        )
+                        new_r.into_par_iter().map(|(new_map, subjects_ordering)| {
+                            let mut writer: Vec<u8> = Vec::new();
+                            let replaced = write_blocks(
+                                &mut writer,
+                                new_map,
+                                &type_nn,
+                                &prefix_replacer,
+                                &subjects_ordering,
+                                &in_degree_one_blocks_map,
+                            )?;
+                            Ok((writer, replaced))
+                        })
                     })
                     .collect();
-                let (written,replaced) = written?;
+                let (written, replaced) = written?;
                 for r in replaced {
                     for u in r {
                         in_degree_one_blocks_map.remove(&u).unwrap();

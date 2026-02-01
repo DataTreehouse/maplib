@@ -215,6 +215,7 @@ impl Model {
         graph: &NamedGraph,
         replace_graph: bool,
         triples_batch_size: Option<usize>,
+        known_contexts: HashMap<String, String>,
     ) -> Result<(), MaplibError> {
         if replace_graph {
             self.truncate_graph(&graph)
@@ -230,6 +231,7 @@ impl Model {
                 graph,
                 &self.prefixes,
                 triples_batch_size,
+                known_contexts,
             )
             .map_err(MaplibError::TriplestoreError)
     }
@@ -259,6 +261,7 @@ impl Model {
         graph: &NamedGraph,
         replace_graph: bool,
         triples_batch_size: Option<usize>,
+        known_contexts: HashMap<String, String>,
     ) -> Result<(), MaplibError> {
         if replace_graph {
             self.truncate_graph(&graph)
@@ -274,6 +277,7 @@ impl Model {
                 graph,
                 &self.prefixes,
                 triples_batch_size,
+                known_contexts,
             )
             .map_err(MaplibError::TriplestoreError)
     }

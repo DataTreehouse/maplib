@@ -331,9 +331,6 @@ impl Triplestore {
             GraphPattern::Service { .. } => {
                 todo!()
             }
-            GraphPattern::DT { .. } => {
-                unreachable!("Should never happen")
-            }
         };
         res
     }

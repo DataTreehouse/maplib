@@ -4,8 +4,11 @@ use crate::TriplesToAdd;
 use std::cmp;
 
 use memmap2::MmapOptions;
+use oxjsonld::JsonLdParser;
 use oxrdf::{BlankNode, GraphName, NamedNode, Quad, Subject, Term};
-use oxrdfio::{RdfFormat, RdfParser, RdfSyntaxError, SliceQuadParser};
+use oxrdfio::{
+    JsonLdProfileSet, LoadedDocument, RdfFormat, RdfParser, RdfSyntaxError, SliceQuadParser,
+};
 use oxttl::ntriples::SliceNTriplesParser;
 use oxttl::turtle::SliceTurtleParser;
 use oxttl::{NTriplesParser, TurtleParser};
@@ -52,6 +55,7 @@ impl Triplestore {
         graph: &NamedGraph,
         prefixes: &HashMap<String, NamedNode>,
         triples_batch_size: Option<usize>,
+        known_contexts: HashMap<String, String>,
     ) -> Result<(), TriplestoreError> {
         let now = Instant::now();
         let rdf_format = if let Some(rdf_format) = rdf_format {
@@ -64,6 +68,12 @@ impl Triplestore {
             || path.extension() == Some("rdf".as_ref())
         {
             ExtendedRdfFormat::Normal(RdfFormat::RdfXml)
+        } else if path.extension() == Some("jsonld".as_ref())
+            || path.extension() == Some("json".as_ref())
+        {
+            ExtendedRdfFormat::Normal(RdfFormat::JsonLd {
+                profile: JsonLdProfileSet::empty(),
+            })
         } else {
             todo!("Have not implemented file format {:?}", path);
         };
@@ -81,6 +91,7 @@ impl Triplestore {
             graph,
             prefixes,
             triples_batch_size,
+            known_contexts,
         )?;
         drop(map);
 
@@ -103,6 +114,7 @@ impl Triplestore {
         graph: &NamedGraph,
         prefixes: &HashMap<String, NamedNode>,
         triples_batch_size: Option<usize>,
+        known_contexts: HashMap<String, String>,
     ) -> Result<(), TriplestoreError> {
         self.read_triples(
             s.as_bytes(),
@@ -114,6 +126,7 @@ impl Triplestore {
             graph,
             prefixes,
             triples_batch_size,
+            known_contexts,
         )
     }
 
@@ -130,6 +143,7 @@ impl Triplestore {
         graph: &NamedGraph,
         prefixes: &HashMap<String, NamedNode>,
         triples_batch_size: Option<usize>,
+        known_contexts: HashMap<String, String>,
     ) -> Result<(), TriplestoreError> {
         let start_quadproc_now = Instant::now();
         let parallel = if let Some(parallel) = parallel {
@@ -154,7 +168,7 @@ impl Triplestore {
                     parser = parser.with_prefix(k, v.as_str()).unwrap();
                 }
                 if !checked {
-                    parser = parser.unchecked();
+                    parser = parser.lenient();
                 }
                 if let Some(base_iri) = base_iri {
                     parser = parser.with_base_iri(base_iri).unwrap();
@@ -167,7 +181,7 @@ impl Triplestore {
             } else if rdf_format == ExtendedRdfFormat::Normal(RdfFormat::NTriples) {
                 let mut parser = NTriplesParser::new();
                 if !checked {
-                    parser = parser.unchecked();
+                    parser = parser.lenient();
                 }
                 for r in parser.split_slice_for_parallel_parsing(slice, threads) {
                     readers.push(MyFromSliceQuadReader {
@@ -181,15 +195,31 @@ impl Triplestore {
                 ExtendedRdfFormat::Normal(n) => n,
                 ExtendedRdfFormat::CIMXML => RdfFormat::RdfXml,
             };
-            let mut parser = RdfParser::from(use_format);
+            let mut parser = RdfParser::from(use_format.clone());
             if !checked {
-                parser = parser.unchecked();
+                parser = parser.lenient();
             }
             if let Some(base_iri) = base_iri {
                 parser = parser.with_base_iri(base_iri).unwrap();
             }
+            let mut for_slice = parser.for_slice(slice);
+            if matches!(use_format, RdfFormat::JsonLd { .. }) {
+                for_slice = for_slice.with_document_loader(move |url| {
+                    if let Some(doc) = known_contexts.get(url) {
+                        Ok(LoadedDocument {
+                            url: url.to_string(),
+                            content: doc.clone().into_bytes(),
+                            format: RdfFormat::JsonLd {
+                                profile: JsonLdProfileSet::empty(),
+                            },
+                        })
+                    } else {
+                        Err(Box::new(TriplestoreError::MissingContext(url.to_string())))
+                    }
+                });
+            }
             vec![MyFromSliceQuadReader {
-                parser: MyFromSliceQuadReaderKind::Other(parser.for_slice(slice)),
+                parser: MyFromSliceQuadReaderKind::Other(for_slice),
             }]
         };
         debug!("Effective parallelization for reading is {}", readers.len());

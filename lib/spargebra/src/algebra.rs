@@ -1,7 +1,6 @@
 //! [SPARQL 1.1 Query Algebra](https://www.w3.org/TR/sparql11-query/#sparqlQuery) representation.
 
 use crate::term::*;
-use crate::treehouse::DataTreehousePattern;
 use oxrdf::LiteralRef;
 use std::fmt;
 
@@ -213,6 +212,59 @@ impl Expression {
             }
         }
     }
+
+    fn walk<'a>(&'a self, callback: &mut impl FnMut(&'a Self)) {
+        callback(self);
+        match self {
+            Self::Variable(_)
+            | Self::Bound(_)
+            | Self::NamedNode(_)
+            | Self::Literal(_)
+            | Self::Exists(_) => (),
+            Self::UnaryPlus(i) | Self::UnaryMinus(i) | Self::Not(i) => i.walk(callback),
+            Self::Or(l, r)
+            | Self::And(l, r)
+            | Self::Equal(l, r)
+            | Self::SameTerm(l, r)
+            | Self::Greater(l, r)
+            | Self::GreaterOrEqual(l, r)
+            | Self::Less(l, r)
+            | Self::LessOrEqual(l, r)
+            | Self::Add(l, r)
+            | Self::Subtract(l, r)
+            | Self::Multiply(l, r)
+            | Self::Divide(l, r) => {
+                l.walk(callback);
+                r.walk(callback);
+            }
+            Self::If(c, l, r) => {
+                c.walk(callback);
+                l.walk(callback);
+                r.walk(callback);
+            }
+            Self::Coalesce(l) | Self::FunctionCall(_, l) => {
+                for e in l {
+                    e.walk(callback);
+                }
+            }
+            Self::In(l, r) => {
+                l.walk(callback);
+                for e in r {
+                    e.walk(callback);
+                }
+            }
+        }
+    }
+
+    fn lookup_used_variable<'a>(&'a self, callback: &mut impl FnMut(&'a Variable)) {
+        self.walk(&mut |e| {
+            if let Self::Variable(v) | Self::Bound(v) = e {
+                callback(v)
+            } else if let Self::Exists(p) = e {
+                p.lookup_used_variables(callback)
+            }
+        })
+    }
 }
 
 impl fmt::Display for Expression {
@@ -367,16 +419,26 @@ pub enum Function {
     IsLiteral,
     IsNumeric,
     Regex,
-    #[cfg(feature = "rdf-star")]
+    #[cfg(feature = "sparql-12")]
     Triple,
-    #[cfg(feature = "rdf-star")]
+    #[cfg(feature = "sparql-12")]
     Subject,
-    #[cfg(feature = "rdf-star")]
+    #[cfg(feature = "sparql-12")]
     Predicate,
-    #[cfg(feature = "rdf-star")]
+    #[cfg(feature = "sparql-12")]
     Object,
-    #[cfg(feature = "rdf-star")]
+    #[cfg(feature = "sparql-12")]
     IsTriple,
+    #[cfg(feature = "sparql-12")]
+    LangDir,
+    #[cfg(feature = "sparql-12")]
+    HasLang,
+    #[cfg(feature = "sparql-12")]
+    HasLangDir,
+    #[cfg(feature = "sparql-12")]
+    StrLangDir,
+    #[cfg(feature = "sep-0002")]
+    Adjust,
     Custom(NamedNode),
 }
 
@@ -430,16 +492,26 @@ impl Function {
             Self::IsLiteral => f.write_str("isliteral"),
             Self::IsNumeric => f.write_str("isnumeric"),
             Self::Regex => f.write_str("regex"),
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "sparql-12")]
             Self::Triple => f.write_str("triple"),
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "sparql-12")]
             Self::Subject => f.write_str("subject"),
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "sparql-12")]
             Self::Predicate => f.write_str("predicate"),
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "sparql-12")]
             Self::Object => f.write_str("object"),
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "sparql-12")]
             Self::IsTriple => f.write_str("istriple"),
+            #[cfg(feature = "sparql-12")]
+            Function::LangDir => f.write_str("langdir"),
+            #[cfg(feature = "sparql-12")]
+            Function::HasLang => f.write_str("haslang"),
+            #[cfg(feature = "sparql-12")]
+            Function::HasLangDir => f.write_str("haslangdir"),
+            #[cfg(feature = "sparql-12")]
+            Function::StrLangDir => f.write_str("strlangdir"),
+            #[cfg(feature = "sep-0002")]
+            Self::Adjust => f.write_str("adjust"),
             Self::Custom(iri) => write!(f, "{iri}"),
         }
     }
@@ -494,17 +566,26 @@ impl fmt::Display for Function {
             Self::IsLiteral => f.write_str("isLITERAL"),
             Self::IsNumeric => f.write_str("isNUMERIC"),
             Self::Regex => f.write_str("REGEX"),
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "sparql-12")]
             Self::Triple => f.write_str("TRIPLE"),
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "sparql-12")]
             Self::Subject => f.write_str("SUBJECT"),
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "sparql-12")]
             Self::Predicate => f.write_str("PREDICATE"),
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "sparql-12")]
             Self::Object => f.write_str("OBJECT"),
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "sparql-12")]
             Self::IsTriple => f.write_str("isTRIPLE"),
-
+            #[cfg(feature = "sparql-12")]
+            Function::LangDir => f.write_str("LANGDIR"),
+            #[cfg(feature = "sparql-12")]
+            Function::HasLang => f.write_str("hasLANG"),
+            #[cfg(feature = "sparql-12")]
+            Function::HasLangDir => f.write_str("hasLANGDIR"),
+            #[cfg(feature = "sparql-12")]
+            Function::StrLangDir => f.write_str("STRLANGDIR"),
+            #[cfg(feature = "sep-0002")]
+            Self::Adjust => f.write_str("ADJUST"),
             Self::Custom(iri) => iri.fmt(f),
         }
     }
@@ -530,6 +611,8 @@ pub enum GraphPattern {
         expression: Option<Expression>,
     },
     /// Lateral join i.e. evaluate right for all result row of left
+    #[cfg(feature = "sep-0006")]
+    Lateral { left: Box<Self>, right: Box<Self> },
     /// [Filter](https://www.w3.org/TR/sparql11-query/#defn_algFilter).
     Filter { expr: Expression, inner: Box<Self> },
     /// [Union](https://www.w3.org/TR/sparql11-query/#defn_algUnion).
@@ -587,8 +670,6 @@ pub enum GraphPattern {
         inner: Box<Self>,
         silent: bool,
     },
-    /// [Data Treehouse](https://www.data-treehouse.com/)
-    DT { dt: DataTreehousePattern },
 }
 
 impl fmt::Display for GraphPattern {
@@ -606,13 +687,16 @@ impl fmt::Display for GraphPattern {
                 object,
             } => write!(f, "{subject} {path} {object} ."),
             Self::Join { left, right } => {
-                #[allow(clippy::match_same_arms)]
                 match right.as_ref() {
                     Self::LeftJoin { .. }
                     | Self::Minus { .. }
                     | Self::Extend { .. }
                     | Self::Filter { .. } => {
                         // The second block might be considered as a modification of the first one.
+                        write!(f, "{left} {{ {right} }}")
+                    }
+                    #[cfg(feature = "sep-0006")]
+                    Self::Lateral { .. } => {
                         write!(f, "{left} {{ {right} }}")
                     }
                     _ => write!(f, "{left} {right}"),
@@ -628,6 +712,10 @@ impl fmt::Display for GraphPattern {
                 } else {
                     write!(f, "{left} OPTIONAL {{ {right} }}")
                 }
+            }
+            #[cfg(feature = "sep-0006")]
+            Self::Lateral { left, right } => {
+                write!(f, "{left} LATERAL {{ {right} }}")
             }
             Self::Filter { expr, inner } => {
                 write!(f, "{inner} FILTER({expr})")
@@ -720,7 +808,7 @@ impl fmt::Display for GraphPattern {
 impl Default for GraphPattern {
     fn default() -> Self {
         Self::Bgp {
-            patterns: Vec::default(),
+            patterns: Vec::new(),
         }
     }
 }
@@ -770,6 +858,14 @@ impl GraphPattern {
                     f.write_str(" ")?;
                     expr.fmt_sse(f)?;
                 }
+                f.write_str(")")
+            }
+            #[cfg(feature = "sep-0006")]
+            Self::Lateral { left, right } => {
+                f.write_str("(lateral ")?;
+                left.fmt_sse(f)?;
+                f.write_str(" ")?;
+                right.fmt_sse(f)?;
                 f.write_str(")")
             }
             Self::Filter { expr, inner } => {
@@ -915,10 +1011,7 @@ impl GraphPattern {
                     write!(f, "(slice {start} _ ")?;
                 }
                 inner.fmt_sse(f)?;
-                write!(f, ")")
-            }
-            GraphPattern::DT { .. } => {
-                unimplemented!("Please create a query without the custom DT construction")
+                f.write_str(")")
             }
             GraphPattern::PValues { .. } => {
                 unimplemented!("Please create a query without the custom PVALUES construction")
@@ -932,7 +1025,6 @@ impl GraphPattern {
     }
 
     fn lookup_in_scope_variables<'a>(&'a self, callback: &mut impl FnMut(&'a Variable)) {
-        #[allow(clippy::match_same_arms)]
         match self {
             Self::Bgp { patterns } => {
                 for pattern in patterns {
@@ -945,14 +1037,14 @@ impl GraphPattern {
                 if let TermPattern::Variable(s) = subject {
                     callback(s);
                 }
-                #[cfg(feature = "rdf-star")]
+                #[cfg(feature = "sparql-12")]
                 if let TermPattern::Triple(s) = subject {
                     lookup_triple_pattern_variables(s, callback)
                 }
                 if let TermPattern::Variable(o) = object {
                     callback(o);
                 }
-                #[cfg(feature = "rdf-star")]
+                #[cfg(feature = "sparql-12")]
                 if let TermPattern::Triple(o) = object {
                     lookup_triple_pattern_variables(o, callback)
                 }
@@ -960,6 +1052,11 @@ impl GraphPattern {
             Self::Join { left, right }
             | Self::LeftJoin { left, right, .. }
             | Self::Union { left, right } => {
+                left.lookup_in_scope_variables(callback);
+                right.lookup_in_scope_variables(callback);
+            }
+            #[cfg(feature = "sep-0006")]
+            Self::Lateral { left, right } => {
                 left.lookup_in_scope_variables(callback);
                 right.lookup_in_scope_variables(callback);
             }
@@ -1001,8 +1098,110 @@ impl GraphPattern {
             | Self::Distinct { inner }
             | Self::Reduced { inner }
             | Self::Slice { inner, .. } => inner.lookup_in_scope_variables(callback),
-            GraphPattern::DT { dt } => {
-                dt.lookup_in_scope_variables(callback);
+        }
+    }
+
+    fn lookup_used_variables<'a>(&'a self, callback: &mut impl FnMut(&'a Variable)) {
+        match self {
+            Self::Bgp { patterns } => {
+                for pattern in patterns {
+                    lookup_triple_pattern_variables(pattern, callback)
+                }
+            }
+            Self::Path {
+                subject, object, ..
+            } => {
+                if let TermPattern::Variable(s) = subject {
+                    callback(s);
+                }
+                #[cfg(feature = "sparql-12")]
+                if let TermPattern::Triple(s) = subject {
+                    lookup_triple_pattern_variables(s, callback)
+                }
+                if let TermPattern::Variable(o) = object {
+                    callback(o);
+                }
+                #[cfg(feature = "sparql-12")]
+                if let TermPattern::Triple(o) = object {
+                    lookup_triple_pattern_variables(o, callback)
+                }
+            }
+            Self::Join { left, right }
+            | Self::Minus { left, right }
+            | Self::Union { left, right } => {
+                left.lookup_used_variables(callback);
+                right.lookup_used_variables(callback);
+            }
+            Self::LeftJoin {
+                left,
+                right,
+                expression,
+            } => {
+                left.lookup_used_variables(callback);
+                right.lookup_used_variables(callback);
+                if let Some(expr) = expression {
+                    expr.lookup_used_variable(callback);
+                }
+            }
+            #[cfg(feature = "sep-0006")]
+            Self::Lateral { left, right } => {
+                left.lookup_used_variables(callback);
+                right.lookup_used_variables(callback);
+            }
+            Self::Graph { name, inner } => {
+                if let NamedNodePattern::Variable(g) = &name {
+                    callback(g);
+                }
+                inner.lookup_used_variables(callback);
+            }
+            Self::Extend {
+                inner,
+                variable,
+                expression,
+            } => {
+                callback(variable);
+                expression.lookup_used_variable(callback);
+                inner.lookup_used_variables(callback);
+            }
+            Self::Group {
+                inner,
+                variables,
+                aggregates,
+            } => {
+                inner.lookup_used_variables(callback);
+                for v in variables {
+                    callback(v);
+                }
+                for (v, expr) in aggregates {
+                    callback(v);
+                    expr.lookup_used_variables(callback);
+                }
+            }
+            Self::Values { variables, .. }
+            | Self::PValues { variables, .. }
+            | Self::Project { variables, .. } => {
+                for v in variables {
+                    callback(v);
+                }
+            }
+            Self::Filter { inner, expr } => {
+                expr.lookup_used_variable(callback);
+                inner.lookup_used_variables(callback);
+            }
+            Self::Service { inner, name, .. } => {
+                if let NamedNodePattern::Variable(s) = &name {
+                    callback(s);
+                }
+                inner.lookup_used_variables(callback);
+            }
+            Self::OrderBy { inner, expression } => {
+                for e in expression {
+                    e.lookup_used_variables(callback);
+                }
+                inner.lookup_used_variables(callback);
+            }
+            Self::Distinct { inner } | Self::Reduced { inner } | Self::Slice { inner, .. } => {
+                inner.lookup_used_variables(callback)
             }
         }
     }
@@ -1015,7 +1214,7 @@ fn lookup_triple_pattern_variables<'a>(
     if let TermPattern::Variable(s) = &pattern.subject {
         callback(s);
     }
-    #[cfg(feature = "rdf-star")]
+    #[cfg(feature = "sparql-12")]
     if let TermPattern::Triple(s) = &pattern.subject {
         lookup_triple_pattern_variables(s, callback)
     }
@@ -1025,15 +1224,21 @@ fn lookup_triple_pattern_variables<'a>(
     if let TermPattern::Variable(o) = &pattern.object {
         callback(o);
     }
-    #[cfg(feature = "rdf-star")]
+    #[cfg(feature = "sparql-12")]
     if let TermPattern::Triple(o) = &pattern.object {
         lookup_triple_pattern_variables(o, callback)
     }
 }
 
 pub(crate) struct SparqlGraphRootPattern<'a> {
-    pub(crate) pattern: &'a GraphPattern,
-    pub(crate) dataset: Option<&'a QueryDataset>,
+    pattern: &'a GraphPattern,
+    dataset: Option<&'a QueryDataset>,
+}
+
+impl<'a> SparqlGraphRootPattern<'a> {
+    pub fn new(pattern: &'a GraphPattern, dataset: Option<&'a QueryDataset>) -> Self {
+        Self { pattern, dataset }
+    }
 }
 
 impl fmt::Display for SparqlGraphRootPattern<'_> {
@@ -1043,7 +1248,7 @@ impl fmt::Display for SparqlGraphRootPattern<'_> {
         let mut order = None;
         let mut start = 0;
         let mut length = None;
-        let mut project: &[Variable] = &[];
+        let mut project = Vec::new();
 
         let mut child = self.pattern;
         loop {
@@ -1053,7 +1258,7 @@ impl fmt::Display for SparqlGraphRootPattern<'_> {
                     child = inner;
                 }
                 GraphPattern::Project { inner, variables } if project.is_empty() => {
-                    project = variables;
+                    project.extend(variables.iter().map(|v| (v, None)));
                     child = inner;
                 }
                 GraphPattern::Distinct { inner } => {
@@ -1073,6 +1278,27 @@ impl fmt::Display for SparqlGraphRootPattern<'_> {
                     length = *l;
                     child = inner;
                 }
+                GraphPattern::Extend {
+                    inner,
+                    expression,
+                    variable,
+                } if project.iter().any(|(v, _)| *v == variable)
+                    && !project.iter().any(|(_, expr)| {
+                        expr.is_some_and(|expr: &Expression| {
+                            let mut found = false;
+                            expr.lookup_used_variable(&mut |v| found |= v == variable);
+                            found
+                        })
+                    }) =>
+                {
+                    // This simplification only works if the extended variable is in the projection and not used in another expression of the projection.
+                    project
+                        .iter_mut()
+                        .find(|(v, _)| *v == variable)
+                        .ok_or(fmt::Error)?
+                        .1 = Some(expression);
+                    child = inner
+                }
                 p => {
                     f.write_str("SELECT")?;
                     if distinct {
@@ -1084,8 +1310,12 @@ impl fmt::Display for SparqlGraphRootPattern<'_> {
                     if project.is_empty() {
                         f.write_str(" *")?;
                     } else {
-                        for v in project {
-                            write!(f, " {v}")?;
+                        for (variable, expr) in project {
+                            if let Some(expr) = expr {
+                                write!(f, " ({expr} AS {variable})")
+                            } else {
+                                write!(f, " {variable}")
+                            }?;
                         }
                     }
                     if let Some(dataset) = self.dataset {
@@ -1163,6 +1393,12 @@ impl AggregateExpression {
                 expr.fmt_sse(f)?;
                 f.write_str(")")
             }
+        }
+    }
+
+    fn lookup_used_variables<'a>(&'a self, callback: &mut impl FnMut(&'a Variable)) {
+        if let Self::FunctionCall { expr, .. } = self {
+            expr.lookup_used_variable(callback);
         }
     }
 }
@@ -1293,6 +1529,11 @@ impl OrderExpression {
                 f.write_str(")")
             }
         }
+    }
+
+    fn lookup_used_variables<'a>(&'a self, callback: &mut impl FnMut(&'a Variable)) {
+        let (Self::Asc(e) | Self::Desc(e)) = self;
+        e.lookup_used_variable(callback);
     }
 }
 

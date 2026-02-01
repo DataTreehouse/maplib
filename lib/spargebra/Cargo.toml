@@ -16,7 +16,6 @@ rust-version.workspace = true
 
 [features]
 default = []
-rdf-star = ["oxrdf/rdf-star"]
 
 [dependencies]
 rand.workspace = true
@@ -24,8 +23,6 @@ peg.workspace = true
 oxrdf.workspace = true
 oxiri.workspace = true
 oxilangtag.workspace = true
-chrono.workspace = true
-fundu = { workspace=true, features = ["custom", "chrono"] }
 thiserror.workspace = true
 
 [package.metadata.docs.rs]

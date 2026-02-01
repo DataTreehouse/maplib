@@ -1,6 +1,7 @@
 use crate::algebra::*;
-use crate::parser::{parse_query, SparqlSyntaxError};
+use crate::parser::SparqlSyntaxError;
 use crate::term::*;
+use crate::SparqlParser;
 use oxiri::Iri;
 use std::collections::HashMap;
 use std::fmt;
@@ -9,10 +10,10 @@ use std::str::FromStr;
 /// A parsed [SPARQL query](https://www.w3.org/TR/sparql11-query/).
 ///
 /// ```
-/// use spargebra::Query;
+/// use spargebra::SparqlParser;
 ///
 /// let query_str = "SELECT ?s ?p ?o WHERE { ?s ?p ?o . }";
-/// let query = Query::parse(query_str, None, None)?;
+/// let query = SparqlParser::new().parse_query(query_str)?;
 /// assert_eq!(query.to_string(), query_str);
 /// assert_eq!(
 ///     query.to_sse(),
@@ -64,12 +65,58 @@ pub enum Query {
 
 impl Query {
     /// Parses a SPARQL query with an optional base IRI to resolve relative IRIs in the query.
+    #[deprecated(
+        note = "Use `SparqlParser::new().parse_query` instead",
+        since = "0.4.0"
+    )]
     pub fn parse(
         query: &str,
         base_iri: Option<&str>,
         prefixes: Option<&HashMap<String, NamedNode>>,
     ) -> Result<Self, SparqlSyntaxError> {
-        parse_query(query, base_iri, prefixes)
+        let mut parser = SparqlParser::new();
+        if let Some(base_iri) = base_iri {
+            parser = parser
+                .with_base_iri(base_iri)
+                .map_err(SparqlSyntaxError::from_bad_base_iri)?;
+        }
+        if let Some(prefixes) = prefixes {
+            for (prefix, iri) in prefixes {
+                // Never a parser error as this should be an iri already.
+                parser = parser.with_prefix(prefix, iri.as_str()).unwrap();
+            }
+        }
+        parser.parse_query(query)
+    }
+
+    #[inline]
+    pub fn dataset(&self) -> Option<&QueryDataset> {
+        match self {
+            Query::Select { dataset, .. }
+            | Query::Construct { dataset, .. }
+            | Query::Describe { dataset, .. }
+            | Query::Ask { dataset, .. } => dataset.as_ref(),
+        }
+    }
+
+    #[inline]
+    pub fn dataset_mut(&mut self) -> Option<&mut QueryDataset> {
+        match self {
+            Query::Select { dataset, .. }
+            | Query::Construct { dataset, .. }
+            | Query::Describe { dataset, .. }
+            | Query::Ask { dataset, .. } => dataset.as_mut(),
+        }
+    }
+
+    #[inline]
+    pub fn base_iri(&self) -> Option<&Iri<String>> {
+        match self {
+            Query::Select { base_iri, .. }
+            | Query::Construct { base_iri, .. }
+            | Query::Describe { base_iri, .. }
+            | Query::Ask { base_iri, .. } => base_iri.as_ref(),
+        }
     }
 
     /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
@@ -202,10 +249,7 @@ impl fmt::Display for Query {
                 write!(
                     f,
                     "{}",
-                    SparqlGraphRootPattern {
-                        pattern,
-                        dataset: dataset.as_ref()
-                    }
+                    SparqlGraphRootPattern::new(pattern, dataset.as_ref())
                 )
             }
             Self::Construct {
@@ -228,10 +272,7 @@ impl fmt::Display for Query {
                 write!(
                     f,
                     " WHERE {{ {} }}",
-                    SparqlGraphRootPattern {
-                        pattern,
-                        dataset: None
-                    }
+                    SparqlGraphRootPattern::new(pattern, None)
                 )
             }
             Self::Describe {
@@ -249,10 +290,7 @@ impl fmt::Display for Query {
                 write!(
                     f,
                     " WHERE {{ {} }}",
-                    SparqlGraphRootPattern {
-                        pattern,
-                        dataset: None
-                    }
+                    SparqlGraphRootPattern::new(pattern, None)
                 )
             }
             Self::Ask {
@@ -270,10 +308,7 @@ impl fmt::Display for Query {
                 write!(
                     f,
                     " WHERE {{ {} }}",
-                    SparqlGraphRootPattern {
-                        pattern,
-                        dataset: None
-                    }
+                    SparqlGraphRootPattern::new(pattern, None)
                 )
             }
         }
@@ -284,7 +319,7 @@ impl FromStr for Query {
     type Err = SparqlSyntaxError;
 
     fn from_str(query: &str) -> Result<Self, Self::Err> {
-        Self::parse(query, None, None)
+        SparqlParser::new().parse_query(query)
     }
 }
 

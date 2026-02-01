@@ -1,5 +1,6 @@
 This repository is forked from https://github.com/oxigraph/oxigraph in order to support some custom constructions.
 We recommend that you use the original library, and to support the original creator Thomas Tanon. 
+License can be found in /licensing
 
 Spargebra
 =========
@@ -8,7 +9,7 @@ Spargebra
 [![Released API docs](https://docs.rs/spargebra/badge.svg)](https://docs.rs/spargebra)
 [![Crates.io downloads](https://img.shields.io/crates/d/spargebra)](https://crates.io/crates/spargebra)
 [![actions status](https://github.com/oxigraph/oxigraph/workflows/build/badge.svg)](https://github.com/oxigraph/oxigraph/actions)
-[![Gitter](https://badges.gitter.im/oxigraph/community.svg)](https://gitter.im/oxigraph/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
+[![Gitter](https://badges.gitter.im/oxigraph/community.svg)](https://gitter.im/oxigraph/community)
 
 Spargebra is a [SPARQL](https://www.w3.org/TR/sparql11-overview/) parser.
 
@@ -18,17 +19,20 @@ The emitted tree is based on [SPARQL 1.1 Query Algebra](https://www.w3.org/TR/sp
 
 The API entry point for SPARQL queries is the [`Query`] struct and the API entry point for SPARQL updates is the [`Update`] struct.
 
-Support for [SPARQL-star](https://w3c.github.io/rdf-star/cg-spec/2021-12-17.html#sparql-star) is also available behind the `rdf-star` feature.
+Support for [SPARQL 1.2](https://www.w3.org/TR/sparql12-query/) is also available behind the `sparql-12` feature.
 
 This crate is intended to be a building piece for SPARQL implementations in Rust like [Oxigraph](https://oxigraph.org).
+
+Note that, opposite to the SPARQL specification, the parser does not allow `\uXXXX` escape sequences anywhere in the SPARQL syntax but only in IRIs and string literals, just like in Turtle.
+To use the standard SPARQL behavior (i.e. allow `\uXXXX` escape sequences in all strings), enable the `standard-unicode-escaping` feature.
 
 Usage example:
 
 ```rust
-use spargebra::Query;
+use spargebra::SparqlParser;
 
 let query_str = "SELECT ?s ?p ?o WHERE { ?s ?p ?o . }";
-let query = Query::parse(query_str, None, None).unwrap();
+let query = SparqlParser::new().parse_query(query_str).unwrap();
 assert_eq!(query.to_string(), query_str);
 ```
 

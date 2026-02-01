@@ -96,7 +96,7 @@ impl Triplestore {
             | GraphPattern::Reduced { inner, .. }
             | GraphPattern::Slice { inner, .. }
             | GraphPattern::Group { inner, .. } => self.debug_gp(inner, parameters, qs, qg),
-            GraphPattern::Service { .. } | GraphPattern::DT { .. } | GraphPattern::Graph { .. } => {
+            GraphPattern::Service { .. } | GraphPattern::Graph { .. } => {
                 todo!()
             }
         }

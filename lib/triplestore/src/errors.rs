@@ -51,6 +51,8 @@ pub enum TriplestoreError {
     ReadJSONFileError(String),
     #[error("Prefix IRI is invalid: {0}")]
     InvalidPrefixIRI(String),
+    #[error("Please add the document string corresponding to the url to known_contexts: {0}")]
+    MissingContext(String),
 }
 
 impl<T> From<PoisonError<T>> for TriplestoreError {
