@@ -5,9 +5,8 @@ use crate::storage::Triples;
 use aho_corasick::{AhoCorasick, MatchKind};
 use oxrdf::vocab::rdf;
 use oxrdf::{BlankNode, NamedNode, NamedNodeRef, Term, TermRef, Variable};
-use polars::prelude::{col, collect_all, concat, LazyFrame, UnionArgs};
+use polars::prelude::{col, concat, LazyFrame, UnionArgs};
 use polars_core::frame::DataFrame;
-use polars_core::utils::concat_df;
 use polars_core::POOL;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use representation::cats::LockedCats;
@@ -17,12 +16,12 @@ use representation::{BaseRDFNodeType, RDFNodeState, OBJECT_COL_NAME, SUBJECT_COL
 use spargebra::algebra::{Expression, Function, GraphPattern};
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 use spargebra::Query;
-use std::cmp;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::io::Write;
 use std::sync::Arc;
+use polars_core::prelude::BooleanChunked;
 
-const STRIDE: usize = 200_000;
+const STRIDE: usize = 2_000;
 
 #[derive(Debug, Clone)]
 struct TurtleBlock {
@@ -213,7 +212,6 @@ impl TurtleBlock {
         if !use_write_subject {
             writeln!(writer, "[")?;
         }
-        let mut has_type = false;
         let mut to_write = self.pred_term_map.len();
         if let Some(ts) = self.pred_term_map.get(type_nn) {
             for _ in 0..nesting {
@@ -230,7 +228,6 @@ impl TurtleBlock {
                 nesting + 1,
             )?;
             outs.extend(replaced);
-            has_type = true;
             to_write -= 1;
             if to_write > 0 {
                 writeln!(writer, " ; ")?;
@@ -340,7 +337,7 @@ impl Triplestore {
                     continue;
                 }
 
-                if let Some(lfs) = t.get_lazy_frame_slices(0, None)? {
+                if let Some(lfs) = t.get_lazy_frame_slices()? {
                     for lf in lfs {
                         let df = lf.collect().unwrap();
                         update_blocks_map(
@@ -411,52 +408,78 @@ impl Triplestore {
                     HashSet::from_iter(vec![k.clone()]),
                 );
             }
-            let t = map.get(&driver_predicate).unwrap().get(&(k)).unwrap();
-            let driver_height = t.height();
-
-            let mut current_offset = 0;
+            let triples = map.get(&driver_predicate).unwrap().get(&(k)).unwrap();
 
             let n_threads = POOL.current_num_threads();
-
-            for i in 0..((driver_height % STRIDE) + 1) {
-                let triples = map.get(&driver_predicate).unwrap().get(&k).unwrap();
-                let offset_start = i * STRIDE;
-                let height = cmp::min(STRIDE, driver_height - current_offset);
-                current_offset += height;
-                let (subject_type, object_type) = &k;
+            let mut exhausted_driver = false;
+            let mut found_first = false;
+            let mut last_string: Option<String> = None;
+            while !exhausted_driver {
+                let (subject_type, _) = &k;
                 let use_used_subjects = if subject_type.is_iri() {
                     &used_iri_subjects
                 } else {
                     &used_blank_subjects
                 };
-                let mut thread_offsets = Vec::with_capacity(n_threads);
-                let mut new_offset = offset_start;
-                let mut each = height / n_threads;
-                let mut remaining_height = height;
-                for i in 0..n_threads {
-                    let thread_height = if i == n_threads - 1 {
-                        remaining_height
+                let mut thread_strings = Vec::with_capacity(n_threads);
+                for _ in 0..n_threads {
+                    println!("Last string {:?}", last_string);
+                    let mut start_string = if let Some(last_string) = last_string.take() {
+                        if let Some((next_string)) = triples
+                            .get_next_different_subject(
+                                self.global_cats.clone(),
+                                last_string.as_str(),
+                            )?
+                        {
+                            assert!(next_string > last_string);
+                            next_string
+                        } else {
+                            exhausted_driver = true;
+                            break;
+                        }
                     } else {
-                        each
+                        assert!(!found_first);
+                        if let Some(start_string) =
+                            triples.get_first_subject_string()?
+                        {
+                            found_first = true;
+                            start_string
+                        } else {
+                            exhausted_driver = true;
+                            break;
+                        }
                     };
-                    thread_offsets.push((new_offset, thread_height));
-                    new_offset += thread_height;
-                    remaining_height -= thread_height;
+                    let end_string = triples.get_next_different_approximately_n_distance_away(
+                        &start_string,
+                        STRIDE / n_threads
+                    )?;
+                    let end_string = if let Some(end_string) = end_string {
+                        assert!(start_string < end_string);
+                        last_string = Some(end_string.clone());
+                        end_string
+                    } else {
+                        exhausted_driver = true;
+                        start_string.clone()
+                    };
+                    let start_end_equal = start_string == end_string;
+
+                    thread_strings.push((start_string, end_string));
+                    if start_end_equal {
+                        break;
+                    }
                 }
 
                 let r: Result<Vec<_>, TriplestoreError> = POOL
                     .install(|| {
-                        thread_offsets
+                        thread_strings
                             .into_par_iter()
-                            .map(|(thread_offset, thread_height)| {
+                            .map(|(from_string, to_string)| {
                                 let r = self.create_block_segment(
                                     &driver_predicate,
-                                    subject_type,
-                                    object_type,
                                     map,
                                     triples,
-                                    thread_offset,
-                                    thread_height,
+                                    from_string.as_str(),
+                                    to_string.as_str(),
                                     &used_drivers,
                                     use_used_subjects,
                                     &blanks_in_degree_zero,
@@ -553,76 +576,36 @@ impl Triplestore {
     fn create_block_segment(
         &self,
         driver_predicate: &NamedNode,
-        subject_type: &BaseRDFNodeType,
-        object_type: &BaseRDFNodeType,
         map: &HashMap<NamedNode, HashMap<(BaseRDFNodeType, BaseRDFNodeType), Triples>>,
         triples: &Triples,
-        offset_start: usize,
-        height: usize,
+        string_start: &str,
+        string_ends: &str,
         used_drivers: &HashMap<NamedNode, HashSet<(BaseRDFNodeType, BaseRDFNodeType)>>,
         used_subjects: &HashSet<u32>,
         blanks_in_degree_zero: &HashSet<u32>,
         blanks_in_degree_one: &HashSet<u32>,
         has_lists: bool,
     ) -> Result<(HashMap<u32, TurtleBlock>, Vec<u32>), TriplestoreError> {
-        let mut blocks_map = HashMap::new();
-        let dfs = if let Some(lfs) = triples.get_lazy_frame_slices(offset_start, Some(height))? {
-            collect_all(lfs).unwrap()
+        let lf = triples.get_lazy_frame_between_subject_strings(
+            string_start,
+            string_ends,
+            self.global_cats.clone(),
+        )?;
+        let mut df = if let Some(lf) = lf {
+            lf.collect().unwrap()
         } else {
-            return Ok((blocks_map, Vec::new()));
+            return Ok((HashMap::new(), Vec::new()));
         };
-        let mut first = None;
-        let mut last = None;
-        for df in &dfs {
-            let new_first_u32 = df
-                .column(SUBJECT_COL_NAME)
-                .unwrap()
-                .u32()
-                .unwrap()
-                .first()
-                .unwrap();
-            let new_last_u32 = df
-                .column(SUBJECT_COL_NAME)
-                .unwrap()
-                .u32()
-                .unwrap()
-                .last()
-                .unwrap();
-            let new_first = self
-                .global_cats
-                .read()?
-                .maybe_decode_of_type(&new_first_u32, subject_type)
-                .unwrap()
-                .into_owned();
-            let new_last = self
-                .global_cats
-                .read()?
-                .maybe_decode_of_type(&new_last_u32, subject_type)
-                .unwrap()
-                .into_owned();
-            first = if let Some(first) = first {
-                if new_first < first {
-                    Some(new_first)
-                } else {
-                    Some(first)
-                }
-            } else {
-                Some(new_first)
-            };
-            last = if let Some(last) = last {
-                if new_last > last {
-                    Some(new_last)
-                } else {
-                    Some(last)
-                }
-            } else {
-                Some(new_last)
-            };
+        let mut keep = vec![];
+        for s in df.column(SUBJECT_COL_NAME).unwrap().u32().unwrap() {
+            let s = s.unwrap();
+            keep.push(!used_subjects.contains(&s));
         }
-        let df = concat_df(&dfs).unwrap();
-        let last = last.unwrap();
-        let first = first.unwrap();
-        println!("Pred {} offset {} height {} first {} last {}", driver_predicate, offset_start, height, first, last);
+        df = df.filter(&BooleanChunked::from_iter(keep)).unwrap();
+        if df.is_empty() {
+            return Ok((HashMap::new(), Vec::new()));
+        }
+        df.as_single_chunk();
 
         let new_subj_u32: HashSet<u32> = df
             .column(SUBJECT_COL_NAME)
@@ -648,8 +631,8 @@ impl Triplestore {
             &mut blocks_map,
             &df,
             &driver_predicate,
-            subject_type,
-            object_type,
+            &triples.subject_type,
+            &triples.object_type,
             self.global_cats.clone(),
             &new_subj_u32,
             &used_subjects,
@@ -672,15 +655,14 @@ impl Triplestore {
 
                 let (s, o) = k;
 
-                if subject_type != s {
+                if &t.subject_type != s {
                     continue;
                 }
 
                 if let Some(lf) = t.get_lazy_frame_between_subject_strings(
-                    first.as_str(),
-                    last.as_str(),
+                    string_start,
+                    string_ends,
                     self.global_cats.clone(),
-                    s,
                 )? {
                     let other_df = lf.collect().unwrap();
                     update_blocks_map(
@@ -714,7 +696,7 @@ impl Triplestore {
         if let Some(first_triple_map) = map.get(&rdf::FIRST.into_owned()) {
             for ((s, o), v) in first_triple_map {
                 if s.is_blank_node() {
-                    let lfs = v.get_lazy_frame_slices(0, None)?;
+                    let lfs = v.get_lazy_frame_slices()?;
                     if let Some(lfs) = lfs {
                         let df = concat_lfs_subject_object(lfs).collect().unwrap();
                         let subject_u32s = df.column(SUBJECT_COL_NAME).unwrap().u32().unwrap();
@@ -828,7 +810,7 @@ impl Triplestore {
             for ((s, o), v) in rest_triple_map {
                 //The last elements must already be added (see above), since o is iri rdf:nil for last elems.
                 if s.is_blank_node() && o.is_blank_node() {
-                    let lf = v.get_lazy_frame_slices(0, None)?;
+                    let lf = v.get_lazy_frame_slices()?;
                     if let Some(lfs) = lf {
                         let df = concat_lfs_subject_object(lfs).collect().unwrap();
                         let subject_u32s = df.column(SUBJECT_COL_NAME).unwrap().u32().unwrap();
@@ -912,7 +894,7 @@ impl Triplestore {
             for (k, v) in m {
                 let object_type = &k.1;
                 if object_type.is_blank_node() {
-                    if let Some(lfs) = v.get_lazy_frame_slices(0, None)? {
+                    if let Some(lfs) = v.get_lazy_frame_slices()? {
                         for lf in lfs {
                             let df = lf.select([col(OBJECT_COL_NAME)]).collect().unwrap();
                             let objects_u32_iter =
@@ -935,7 +917,7 @@ impl Triplestore {
             for (k, v) in m {
                 let subject_type = &k.0;
                 if subject_type.is_blank_node() {
-                    if let Some(lfs) = v.get_lazy_frame_slices(0, None)? {
+                    if let Some(lfs) = v.get_lazy_frame_slices()? {
                         for lf in lfs {
                             let df = lf.select([col(SUBJECT_COL_NAME)]).collect().unwrap();
                             let subjects_u32_iter =

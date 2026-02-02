@@ -7,8 +7,8 @@ use crate::IndexingOptions;
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{NamedNode, Subject, Term};
 use polars::prelude::{
-    as_struct, col, concat, lit, Expr, IdxSize, IntoLazy, JoinArgs, JoinType, LazyFrame,
-    MaintainOrderJoin, PlSmallStr, UnionArgs,
+    as_struct, col, collect_all, concat, lit, Expr, IdxSize, IntoLazy, JoinArgs, JoinType,
+    LazyFrame, MaintainOrderJoin, PlSmallStr, UnionArgs,
 };
 use polars_core::datatypes::AnyValue;
 use polars_core::frame::DataFrame;
@@ -26,7 +26,8 @@ use representation::{
 use std::borrow::Cow;
 use std::cmp;
 use std::cmp::{Ordering, Reverse};
-use std::collections::{BTreeMap, BinaryHeap};
+use std::collections::btree_map::Range;
+use std::collections::{BTreeMap, BinaryHeap, HashMap};
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -41,11 +42,41 @@ struct SparseIndex {
     map: BTreeMap<Arc<String>, usize>,
 }
 
+struct LastIterResult {
+    pub res: Arc<String>,
+    pub iter: usize,
+}
+
+impl Eq for LastIterResult {}
+
+impl PartialEq<Self> for LastIterResult {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp(other) == Ordering::Equal
+    }
+}
+
+impl PartialOrd<Self> for LastIterResult {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for LastIterResult {
+    fn cmp(&self, other: &Self) -> Ordering {
+        let r = self.res.cmp(&other.res);
+        if r.is_eq() {
+            self.iter.cmp(&other.iter)
+        } else {
+            r
+        }
+    }
+}
+
 #[derive(Clone)]
 pub(crate) struct Triples {
     segments: Vec<TriplesSegment>,
     height: usize,
-    subject_type: BaseRDFNodeType,
+    pub(crate) subject_type: BaseRDFNodeType,
     pub object_type: BaseRDFNodeType,
     object_indexing_enabled: bool,
     subject_object_index: Option<SubjectObjectIndex>,
@@ -107,39 +138,99 @@ impl Triples {
         Ok(all_sms)
     }
 
-    pub fn get_lazy_frame_slices(
+    pub(crate) fn get_lazy_frame_slices(
         &self,
-        offset: usize,
-        height: Option<usize>,
-    ) -> Result<Option<Vec<LazyFrame>>, TriplestoreError> {
-        let mut use_lfs = vec![];
-        let mut current_offset = 0;
-        let height = height.unwrap_or(self.height);
-        for seg in self.segments.iter() {
-            if current_offset + seg.height <= offset {
-                // Before target segment
-                current_offset += seg.height;
-            } else if current_offset > offset + height {
-                // After target segment
-                break;
-            } else {
-                // In target segment
-                let lf = seg.get_subject_sort_lazy_frame()?;
-                let use_rel_from = offset.saturating_sub(current_offset);
-                let use_seg_height = cmp::min(offset + height - current_offset, seg.height);
-                current_offset = current_offset + use_seg_height;
-                if use_seg_height > 0 {
-                    use_lfs.push(lf.slice(use_rel_from as i64, use_seg_height as u32));
+    ) -> Result<Option<Vec<(LazyFrame)>>, TriplestoreError> {
+        let mut all_lfs = vec![];
+        for s in &self.segments {
+            let lf_is = s.get_lazy_frames(&None, &None, &self.subject_type, &self.object_type)?;
+            for (lf, _) in lf_is {
+                all_lfs.push(lf);
+            }
+        }
+        if all_lfs.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(all_lfs))
+        }
+    }
+
+    pub fn get_next_different_subject(
+        &self,
+        global_cats: LockedCats,
+        s: &str,
+    ) -> Result<Option<String>, TriplestoreError> {
+        let mut min_next = None;
+        for seg in &self.segments {
+            if let Some(next) =
+                seg.get_next_different_subject(global_cats.clone(), s, &self.subject_type)?
+            {
+                min_next = if let Some(min_next) = min_next {
+                    Some(cmp::min(min_next, next))
                 } else {
-                    break;
+                    Some(next)
+                };
+            }
+        }
+        Ok(min_next)
+    }
+
+    pub fn get_first_subject_string(&self) -> Result<Option<String>, TriplestoreError> {
+        let mut min_next = None;
+        for seg in &self.segments {
+            if let Some(subject_index) = &seg.subject_sparse_index {
+                if let Some((s, _)) = subject_index.map.range(Arc::new("".to_string())..).next() {
+                    min_next = if let Some(min_next) = min_next {
+                        Some(cmp::min(min_next, s.clone()))
+                    } else {
+                        Some(s.clone())
+                    }
                 }
             }
         }
-        if use_lfs.is_empty() {
-            Ok(None)
-        } else {
-            Ok(Some(use_lfs))
+        Ok(min_next.map(|n| n.as_ref().to_string()))
+    }
+
+    pub fn get_next_different_approximately_n_distance_away(
+        &self,
+        s: &str,
+        n: usize,
+    ) -> Result<Option<String>, TriplestoreError> {
+        let arcs = Arc::new(s.to_string());
+        let mut iters_map = HashMap::new();
+        let mut last_res = BinaryHeap::new();
+        for (i, seg) in self.segments.iter().enumerate() {
+            if let Some(subject_sparse) = &seg.subject_sparse_index {
+                let mut iter = subject_sparse.map.range(arcs.clone()..);
+                if let Some((nexts, _)) = iter.next() {
+                    last_res.push(Reverse(LastIterResult {
+                        res: nexts.clone(),
+                        iter: i,
+                    }));
+                    iters_map.insert(i, iter);
+                }
+            }
         }
+        let mut approx_cumulative = 0usize;
+        let mut next = None;
+        while let Some(last) = last_res.pop() {
+            let LastIterResult { res, iter } = last.0;
+            approx_cumulative += OFFSET_STEP;
+            if approx_cumulative >= n && &arcs < &res {
+                next = Some(res);
+                break;
+            } else {
+                next = Some(res);
+            }
+            if let Some((nexts, _)) = iters_map.get_mut(&iter).unwrap().next() {
+                last_res.push(Reverse(LastIterResult {
+                    res: nexts.clone(),
+                    iter,
+                }));
+            }
+        }
+
+        Ok(next.map(|x| x.as_ref().to_string()))
     }
 
     pub fn get_lazy_frame_between_subject_strings(
@@ -147,7 +238,6 @@ impl Triples {
         from: &str,
         to: &str,
         global_cats: LockedCats,
-        subject_type: &BaseRDFNodeType,
     ) -> Result<Option<LazyFrame>, TriplestoreError> {
         let mut use_lfs = vec![];
         for seg in self.segments.iter() {
@@ -155,7 +245,7 @@ impl Triples {
                 from,
                 to,
                 global_cats.clone(),
-                subject_type,
+                &self.subject_type,
             )? {
                 use_lfs.push(df.lazy());
             }
@@ -213,6 +303,48 @@ pub(crate) struct TriplesSegment {
 }
 
 impl TriplesSegment {
+    pub fn get_next_different_subject(
+        &self,
+        global_cats: LockedCats,
+        s: &str,
+        subject_type: &BaseRDFNodeType,
+    ) -> Result<Option<String>, TriplestoreError> {
+        if let Some(subject_sparse_index) = &self.subject_sparse_index {
+            let mut upper_bound = None;
+            let arcs = Arc::new(s.to_string());
+            for (sn, i) in subject_sparse_index.map.range(arcs.clone()..) {
+                if &arcs < sn {
+                    upper_bound = Some(*i);
+                    break;
+                }
+            }
+            if let Some(upper_bound) = upper_bound {
+                let offset = upper_bound.saturating_sub(OFFSET_STEP);
+                let df = self
+                    .get_subject_sort_lazy_frame()?
+                    .slice(offset as i64, OFFSET_STEP as u32)
+                    .select([col(SUBJECT_COL_NAME)])
+                    .collect()
+                    .unwrap();
+                let subject_ser = df.column(SUBJECT_COL_NAME).unwrap();
+                let vs = global_cats
+                    .read()?
+                    .decode_of_type(subject_ser.as_materialized_series(), subject_type);
+                for (found_s) in vs.str().unwrap() {
+                    let found_s = found_s.unwrap();
+                    if s < found_s {
+                        return Ok(Some(found_s.to_string()));
+                    }
+                }
+            }
+            Ok(None)
+        } else {
+            unreachable!("Should never happen")
+        }
+    }
+}
+
+impl TriplesSegment {
     pub fn get_data_frame_between_subject_strings(
         &self,
         from: &str,
@@ -221,56 +353,84 @@ impl TriplesSegment {
         subject_type: &BaseRDFNodeType,
     ) -> Result<Option<DataFrame>, TriplestoreError> {
         let subject_index = self.subject_sparse_index.as_ref().unwrap();
+        // The range of the iteration is exclusive, therefore the first hit is before from.
         let mut range_backwards = subject_index.map.range(..from.to_string()).rev();
-        let mut from_i = None;
-        while let Some((s, prev)) = range_backwards.next() {
-            if from < s.as_str() {
-                from_i = Some(*prev);
-                break;
-            }
-        }
-        let from_i = from_i.unwrap_or(0);
+        let mut from_i = if let Some((s, prev)) = range_backwards.next_back() {
+            *prev
+        } else {
+            0
+        };
+        // The range of this iteration is inclusive, therefore we must keep going until s is bigger than to.
         let mut range_forwards = subject_index.map.range(to.to_string()..);
         let mut to_i = None;
         while let Some((s, next)) = range_forwards.next() {
-            if s.as_str() < to {
+            if to < s.as_str() {
                 to_i = Some(*next);
                 break;
             }
         }
-        let to_i = to_i.unwrap_or(self.height);
+        let mut to_i = to_i.unwrap_or(self.height);
+
+        // At this point the true range is between from_i and to_i
         let height = to_i - from_i;
         if height > 0 {
-            let df = self.get_subject_sort_lazy_frame()?.collect().unwrap();
-            let subjects = df
-                .column(SUBJECT_COL_NAME)
-                .unwrap()
-                .as_materialized_series();
+            let lf = self
+                .get_subject_sort_lazy_frame()?;
+            let lf_subj = lf.clone().select([col(SUBJECT_COL_NAME)]);
             let subjects_start = global_cats.read()?.decode_of_type(
-                &subjects.slice(from_i as i64, OFFSET_STEP * 2),
+                &lf_subj.clone().slice(from_i as i64, (OFFSET_STEP * 2) as u32)
+                    .collect()
+                    .unwrap()
+                    .column(SUBJECT_COL_NAME)
+                    .unwrap()
+                    .as_materialized_series(),
                 subject_type,
             );
-            let start_end_iter = to_i.saturating_sub(OFFSET_STEP * 2);
+            to_i = to_i.saturating_sub(OFFSET_STEP * 2);
             let subjects_end = global_cats.read()?.decode_of_type(
-                &subjects.slice(start_end_iter as i64, OFFSET_STEP * 2),
+                &lf_subj.slice(to_i as i64, (OFFSET_STEP * 2) as u32)
+                    .collect()
+                    .unwrap()
+                    .column(SUBJECT_COL_NAME)
+                    .unwrap()
+                    .as_materialized_series(),
                 subject_type,
             );
-            let mut from_i = from_i;
-            for (i, s) in subjects_start.str().unwrap().iter().enumerate() {
-                if s.unwrap() >= from {
-                    from_i = from_i + i;
+
+            // case exact:
+            // from = "c"
+            // ["a", "b", "c"]
+            // then if starting at 0
+            // we should stop when from_i == 2 and "c" == "c" i.e. from == s
+
+            // case non_exact:
+            // from = "c"
+            // ["a", "b", "d"]
+            // then if starting at 0
+            // we should stop when from_i == 2 and "c" < "d", i.e. from < s
+            for s in subjects_start.str().unwrap() {
+                let s = s.unwrap();
+                if from <= s {
                     break;
                 }
+                from_i += 1;
             }
-            let mut to_i = to_i;
-            for (i, s) in subjects_end.str().unwrap().iter().enumerate() {
-                if s.unwrap() > to {
-                    to_i = start_end_iter + i;
+            // to = "c"
+            // ["a", "b", "c", "d"]
+            // then if starting at 0
+            // we should stop when i == 3 and "c" < "d" i.e. to < s
+            // to_i is exclusive and should be set to 3
+
+            for s in subjects_end.str().unwrap() {
+                let s = s.unwrap();
+                if to < s {
                     break;
                 }
+                to_i += 1;
             }
-            let height = to_i - from_i;
-            Ok(Some(df.slice(from_i as i64, height)))
+            let height = to_i.saturating_sub(from_i);
+            let ret = lf.clone().slice(from_i as i64, height as u32).collect().unwrap();
+            Ok(Some(ret))
         } else {
             Ok(None)
         }

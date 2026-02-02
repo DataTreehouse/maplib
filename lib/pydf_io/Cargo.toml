@@ -1,7 +1,7 @@
 [package]
 name = "pydf_io"
 version = "0.7.6"
-edition = "2021"
+edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]

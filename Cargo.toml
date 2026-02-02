@@ -19,6 +19,7 @@ members = [
 
 [workspace.package]
 rust-version = "1.88.0"
+edition = "2021"
 
 [workspace.dependencies]
 pyo3 = {version = "0.25", features = ["py-clone"] }
