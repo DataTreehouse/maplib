@@ -409,13 +409,13 @@ impl Triplestore {
                 );
             }
             let triples = map.get(&driver_predicate).unwrap().get(&(k)).unwrap();
-
+            let (subject_type, _) = &k;
             let n_threads = POOL.current_num_threads();
             let mut exhausted_driver = false;
             let mut found_first = false;
             let mut last_string: Option<String> = None;
+            let mut n_driver_subjects = 0;
             while !exhausted_driver {
-                let (subject_type, _) = &k;
                 let use_used_subjects = if subject_type.is_iri() {
                     &used_iri_subjects
                 } else {
@@ -423,7 +423,6 @@ impl Triplestore {
                 };
                 let mut thread_strings = Vec::with_capacity(n_threads);
                 for _ in 0..n_threads {
-                    println!("Last string {:?}", last_string);
                     let mut start_string = if let Some(last_string) = last_string.take() {
                         if let Some((next_string)) = triples
                             .get_next_different_subject(
@@ -454,21 +453,17 @@ impl Triplestore {
                         STRIDE / n_threads
                     )?;
                     let end_string = if let Some(end_string) = end_string {
-                        assert!(start_string < end_string);
+                        if start_string == end_string {
+                            exhausted_driver = true;
+                        }
                         last_string = Some(end_string.clone());
                         end_string
                     } else {
                         exhausted_driver = true;
                         start_string.clone()
                     };
-                    let start_end_equal = start_string == end_string;
-
                     thread_strings.push((start_string, end_string));
-                    if start_end_equal {
-                        break;
-                    }
                 }
-
                 let r: Result<Vec<_>, TriplestoreError> = POOL
                     .install(|| {
                         thread_strings
@@ -500,6 +495,9 @@ impl Triplestore {
                     } else if subject_type.is_blank_node() {
                         used_blank_subjects.extend(new_map.keys().cloned());
                     };
+                    n_driver_subjects += new_map.len();
+                    let mut mapkeys: Vec<_> = new_map.keys().collect();
+                    mapkeys.sort();
                     new_r.push((new_map, subjects_ordering));
                 }
 
@@ -531,6 +529,7 @@ impl Triplestore {
                         .map_err(|x| TriplestoreError::WriteTurtleError(x.to_string()))?;
                 }
             }
+            println!("Driver {} len {}", driver_predicate, n_driver_subjects);
         }
 
         if let Some(lists_map) = lists_map {
@@ -596,6 +595,7 @@ impl Triplestore {
         } else {
             return Ok((HashMap::new(), Vec::new()));
         };
+        df.as_single_chunk();
         let mut keep = vec![];
         for s in df.column(SUBJECT_COL_NAME).unwrap().u32().unwrap() {
             let s = s.unwrap();
@@ -605,7 +605,9 @@ impl Triplestore {
         if df.is_empty() {
             return Ok((HashMap::new(), Vec::new()));
         }
-        df.as_single_chunk();
+        //let r = self.global_cats.read()?.decode_of_type(df.column(SUBJECT_COL_NAME).unwrap().as_materialized_series(), &BaseRDFNodeType::BlankNode);
+        //assert!(string_start <= r.str().unwrap().first().unwrap());
+        //assert!(r.str().unwrap().last().unwrap() <= string_ends);
 
         let new_subj_u32: HashSet<u32> = df
             .column(SUBJECT_COL_NAME)

@@ -179,7 +179,8 @@ impl Triples {
         let mut min_next = None;
         for seg in &self.segments {
             if let Some(subject_index) = &seg.subject_sparse_index {
-                if let Some((s, _)) = subject_index.map.range(Arc::new("".to_string())..).next() {
+                if let Some((s, i)) = subject_index.map.range(Arc::new("".to_string())..).next() {
+                    assert_eq!(i, &0);
                     min_next = if let Some(min_next) = min_next {
                         Some(cmp::min(min_next, s.clone()))
                     } else {
@@ -261,7 +262,7 @@ impl Triples {
                     to_supertypes: false,
                     diagonal: false,
                     from_partitioned_ds: false,
-                    maintain_order: false,
+                    maintain_order: true,
                 },
             )
             .unwrap();
@@ -355,7 +356,7 @@ impl TriplesSegment {
         let subject_index = self.subject_sparse_index.as_ref().unwrap();
         // The range of the iteration is exclusive, therefore the first hit is before from.
         let mut range_backwards = subject_index.map.range(..from.to_string()).rev();
-        let mut from_i = if let Some((s, prev)) = range_backwards.next_back() {
+        let mut from_i = if let Some((_, prev)) = range_backwards.next() {
             *prev
         } else {
             0
@@ -370,9 +371,8 @@ impl TriplesSegment {
             }
         }
         let mut to_i = to_i.unwrap_or(self.height);
-
         // At this point the true range is between from_i and to_i
-        let height = to_i - from_i;
+        let height = to_i.saturating_sub(from_i);
         if height > 0 {
             let lf = self
                 .get_subject_sort_lazy_frame()?;
@@ -386,6 +386,7 @@ impl TriplesSegment {
                     .as_materialized_series(),
                 subject_type,
             );
+
             to_i = to_i.saturating_sub(OFFSET_STEP * 2);
             let subjects_end = global_cats.read()?.decode_of_type(
                 &lf_subj.slice(to_i as i64, (OFFSET_STEP * 2) as u32)
@@ -396,6 +397,7 @@ impl TriplesSegment {
                     .as_materialized_series(),
                 subject_type,
             );
+
 
             // case exact:
             // from = "c"
@@ -428,8 +430,20 @@ impl TriplesSegment {
                 }
                 to_i += 1;
             }
+            assert!(from_i <= to_i);
             let height = to_i.saturating_sub(from_i);
-            let ret = lf.clone().slice(from_i as i64, height as u32).collect().unwrap();
+            if height == 0 {
+                return Ok(None);
+            }
+            //let r2 = global_cats.read()?.decode_of_type(lf.clone().collect().unwrap().column(SUBJECT_COL_NAME).unwrap().as_materialized_series(), &BaseRDFNodeType::BlankNode);
+
+            let ret = lf.slice(
+                from_i as i64,
+                height as u32
+            ).collect().unwrap();
+            //let r = global_cats.read()?.decode_of_type(ret.column(SUBJECT_COL_NAME).unwrap().as_materialized_series(), &BaseRDFNodeType::BlankNode);
+            //assert!(from <= r.str().unwrap().first().unwrap(),"from {} to {} ret r {} from_i {}, to_i {} r2 {}", from, to, r, from_i, to_i, r2);
+            //assert!(r.str().unwrap().last().unwrap() <= to,"from {} to {} ret r {}", from, to, r);
             Ok(Some(ret))
         } else {
             Ok(None)
