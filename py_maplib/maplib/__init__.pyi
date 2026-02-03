@@ -422,7 +422,7 @@ class IndexingOptions:
         object_sort_all: bool = None,
         object_sort_some: List["IRI"] = None,
         fts_path: str = None,
-        subject_object_index = None,
+        subject_object_index: bool = None,
     ):
         """
         Defaults to indexing on subjects and objects for select types (e.g. rdf:type and rdfs:label)

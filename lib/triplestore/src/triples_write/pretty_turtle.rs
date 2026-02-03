@@ -21,7 +21,7 @@ use std::io::Write;
 use std::sync::Arc;
 use polars_core::prelude::BooleanChunked;
 
-const STRIDE: usize = 2_000;
+const STRIDE: usize = 20_000;
 
 #[derive(Debug, Clone)]
 struct TurtleBlock {

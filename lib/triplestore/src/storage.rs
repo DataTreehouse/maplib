@@ -7,7 +7,7 @@ use crate::IndexingOptions;
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{NamedNode, Subject, Term};
 use polars::prelude::{
-    as_struct, col, collect_all, concat, lit, Expr, IdxSize, IntoLazy, JoinArgs, JoinType,
+    as_struct, col, concat, lit, Expr, IdxSize, IntoLazy, JoinArgs, JoinType,
     LazyFrame, MaintainOrderJoin, PlSmallStr, UnionArgs,
 };
 use polars_core::datatypes::AnyValue;
@@ -26,7 +26,6 @@ use representation::{
 use std::borrow::Cow;
 use std::cmp;
 use std::cmp::{Ordering, Reverse};
-use std::collections::btree_map::Range;
 use std::collections::{BTreeMap, BinaryHeap, HashMap};
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
@@ -321,9 +320,10 @@ impl TriplesSegment {
             }
             if let Some(upper_bound) = upper_bound {
                 let offset = upper_bound.saturating_sub(OFFSET_STEP);
+                // + 1 is important since if we are exactly at the upper bound we miss it.
                 let df = self
                     .get_subject_sort_lazy_frame()?
-                    .slice(offset as i64, OFFSET_STEP as u32)
+                    .slice(offset as i64, (OFFSET_STEP + 1) as u32)
                     .select([col(SUBJECT_COL_NAME)])
                     .collect()
                     .unwrap();
@@ -331,7 +331,7 @@ impl TriplesSegment {
                 let vs = global_cats
                     .read()?
                     .decode_of_type(subject_ser.as_materialized_series(), subject_type);
-                for (found_s) in vs.str().unwrap() {
+                for found_s in vs.str().unwrap() {
                     let found_s = found_s.unwrap();
                     if s < found_s {
                         return Ok(Some(found_s.to_string()));
@@ -388,8 +388,9 @@ impl TriplesSegment {
             );
 
             to_i = to_i.saturating_sub(OFFSET_STEP * 2);
+            // The to_i may be exactly at the sparse index, so without + 1 we may miss it.
             let subjects_end = global_cats.read()?.decode_of_type(
-                &lf_subj.slice(to_i as i64, (OFFSET_STEP * 2) as u32)
+                &lf_subj.slice(to_i as i64, (OFFSET_STEP * 2 + 1) as u32)
                     .collect()
                     .unwrap()
                     .column(SUBJECT_COL_NAME)
