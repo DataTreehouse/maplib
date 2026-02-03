@@ -414,7 +414,6 @@ impl Triplestore {
             let mut exhausted_driver = false;
             let mut found_first = false;
             let mut last_string: Option<String> = None;
-            let mut n_driver_subjects = 0;
             while !exhausted_driver {
                 let use_used_subjects = if subject_type.is_iri() {
                     &used_iri_subjects
@@ -495,7 +494,6 @@ impl Triplestore {
                     } else if subject_type.is_blank_node() {
                         used_blank_subjects.extend(new_map.keys().cloned());
                     };
-                    n_driver_subjects += new_map.len();
                     let mut mapkeys: Vec<_> = new_map.keys().collect();
                     mapkeys.sort();
                     new_r.push((new_map, subjects_ordering));
@@ -529,7 +527,6 @@ impl Triplestore {
                         .map_err(|x| TriplestoreError::WriteTurtleError(x.to_string()))?;
                 }
             }
-            println!("Driver {} len {}", driver_predicate, n_driver_subjects);
         }
 
         if let Some(lists_map) = lists_map {
