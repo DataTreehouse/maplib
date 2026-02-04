@@ -1,4 +1,12 @@
 # Change log
+
+## v0.19.14
+### Features
+- read() and reads() for json-ld is now supported. Note that contexts are not resolved against the internet but must be provided in a dict due to security concerns.
+
+### Improvements
+- Pretty turtle writing has been parallelized, improving performance.
+
 ## v0.19.13 
 ### Features
 - CIM XML parsing is now natively supported
