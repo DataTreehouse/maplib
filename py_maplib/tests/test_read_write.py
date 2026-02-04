@@ -30,6 +30,29 @@ def test_read_ntriples():
     expected_df = pl.scan_csv(filename).collect()
     pl.testing.assert_frame_equal(res, expected_df)
 
+def test_read_many_different_numbers():
+    m = Model()
+    m.read(str(TESTDATA_PATH / "read_nums.ttl"))
+    res = m.query(
+        """
+            PREFIX foaf:<http://xmlns.com/foaf/0.1/>
+            PREFIX :<https://example.net/nums/> 
+
+            SELECT ?s ?byte ?ubyte ?short ?ushort WHERE {
+            ?s :byte ?byte ;
+               :unsignedByte ?ubyte ;
+               :short ?short ;
+               :unsignedShort ?ushort .
+            } 
+        """
+    )
+    assert res.height == 1
+    assert res.get_column("byte").dtype == pl.Int8
+    assert res.get_column("ubyte").dtype == pl.UInt8
+    assert res.get_column("short").dtype == pl.Int16
+    assert res.get_column("ushort").dtype == pl.UInt16
+
+
 
 def test_read_ntriples_twice_with_replace():
     m = Model()

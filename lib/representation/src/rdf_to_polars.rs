@@ -101,12 +101,40 @@ pub fn rdf_literal_to_polars_literal_value_impl(
             warn!("Could not parse xsd:unsignedInt {value}");
             LiteralValue::Scalar(Scalar::null(DataType::UInt32))
         }
+    } else if datatype == xsd::UNSIGNED_SHORT {
+        if let Ok(u) = u16::from_str(value) {
+            LiteralValue::Scalar(Scalar::from(u))
+        } else {
+            warn!("Could not parse xsd:unsignedShort {value}");
+            LiteralValue::Scalar(Scalar::null(DataType::UInt16))
+        }
+    } else if datatype == xsd::UNSIGNED_BYTE {
+        if let Ok(u) = u8::from_str(value) {
+            LiteralValue::Scalar(Scalar::from(u))
+        } else {
+            warn!("Could not parse xsd:unsignedByte {value}");
+            LiteralValue::Scalar(Scalar::null(DataType::UInt8))
+        }
     } else if datatype == xsd::UNSIGNED_LONG {
         if let Ok(u) = u64::from_str(value) {
             LiteralValue::Scalar(Scalar::from(u))
         } else {
             warn!("Could not parse xsd:unsignedLong {value}");
             LiteralValue::Scalar(Scalar::null(DataType::UInt64))
+        }
+    } else if datatype == xsd::BYTE {
+        if let Ok(i) = i8::from_str(value) {
+            LiteralValue::Scalar(Scalar::from(i))
+        } else {
+            warn!("Could not parse xsd:byte {value}");
+            LiteralValue::Scalar(Scalar::null(DataType::Int8))
+        }
+    } else if datatype == xsd::SHORT {
+        if let Ok(i) = i16::from_str(value) {
+            LiteralValue::Scalar(Scalar::from(i))
+        } else {
+            warn!("Could not parse xsd:short {value}");
+            LiteralValue::Scalar(Scalar::null(DataType::Int16))
         }
     } else if datatype == xsd::INTEGER {
         if let Ok(i) = i64::from_str(value) {

@@ -24,7 +24,17 @@ edition = "2021"
 [workspace.dependencies]
 pyo3 = {version = "0.25", features = ["py-clone"] }
 #Moment is there to work around a feature toggle bug
-polars = { version = "0.52.0", features = ["simd", "nightly", "new_streaming", "performant", "cse", "fmt", "parquet", "moment", "timezones"] }
+polars = { version = "0.52.0", features = [
+    "simd",
+    "nightly",
+    "new_streaming",
+    "performant",
+    "cse",
+    "fmt",
+    "parquet",
+    "moment",
+    "timezones"
+] }
 polars-core = { version = "0.52.0" }
 rayon = "1.10.0"
 regex = "1.11.1"

@@ -1,0 +1,7 @@
+@prefix :<https://example.net/nums/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+:subj :byte "-2"^^xsd:byte;
+      :short "-1"^^xsd:short;
+      :unsignedByte "1"^^xsd:unsignedByte;
+      :unsignedShort "2"^^xsd:unsignedShort .
