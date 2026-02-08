@@ -17,6 +17,7 @@ use representation::{
 use std::collections::HashMap;
 use std::io::Write;
 use tracing::warn;
+use crate::triples_read::ExtendedRdfFormat;
 
 mod fast_ntriples;
 mod pretty_turtle;
@@ -28,12 +29,12 @@ impl Triplestore {
     pub fn write_triples<W: Write>(
         &mut self,
         buf: &mut W,
-        format: RdfFormat,
+        format: ExtendedRdfFormat,
         graph: &NamedGraph,
         prefixes: &HashMap<String, NamedNode>,
     ) -> Result<(), TriplestoreError> {
         self.check_graph_exists(graph)?;
-        if RdfFormat::NTriples == format {
+        if ExtendedRdfFormat::Normal(RdfFormat::NTriples) == format {
             let n_threads = POOL.current_num_threads();
             for (predicate, df_map) in self.graph_triples_map.get(graph).unwrap() {
                 let predicate_string = predicate.to_string();
@@ -138,10 +139,10 @@ impl Triplestore {
                     }
                 }
             }
-        } else if RdfFormat::Turtle == format {
+        } else if ExtendedRdfFormat::Normal(RdfFormat::Turtle) == format {
             self.write_pretty_turtle(buf, graph, prefixes)?;
-        } else {
-            let mut writer = RdfSerializer::from_format(format).for_writer(buf);
+        } else if let ExtendedRdfFormat::Normal(rdf_format) = format {
+            let mut writer = RdfSerializer::from_format(rdf_format).for_writer(buf);
 
             for (predicate, df_map) in self.graph_triples_map.get(graph).unwrap() {
                 for ((subject_type, object_type), tt) in df_map {
