@@ -18,6 +18,7 @@ use std::collections::HashMap;
 use std::io::Write;
 use tracing::warn;
 use crate::triples_read::ExtendedRdfFormat;
+use jelly::*;
 
 mod fast_ntriples;
 mod pretty_turtle;
@@ -161,6 +162,23 @@ impl Triplestore {
                 }
             }
             writer.finish().unwrap();
+        } else if ExtendedRdfFormat::Jelly == format {
+            let mut all_triples = Vec::new();
+            for (predicate, df_map) in self.graph_triples_map.get(graph).unwrap() {
+                for ((subject_type, object_type), tt) in df_map {
+                    for (lf, _) in tt.get_lazy_frames(&None, &None)? {
+                        all_triples.extend(global_df_as_triples(
+                            lf.collect().unwrap(),
+                            subject_type.clone(),
+                            object_type.clone(),
+                            predicate,
+                            self.global_cats.clone(),
+                        ));
+                    }
+                }
+            }
+            write_jelly(buf, &all_triples)
+                .map_err(|e| TriplestoreError::WriteJellyError(e.to_string()))?;
         }
         Ok(())
     }

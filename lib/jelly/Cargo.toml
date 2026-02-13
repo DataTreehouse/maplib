@@ -5,5 +5,5 @@ rust-version.workspace = true
 edition.workspace = true
 
 [dependencies]
+oxrdf = { version = "0.3.2" }
 quick-protobuf = "0.8.1"
-jelly = { git = "https://github.com/Jelly-RDF/jelly_rs" }

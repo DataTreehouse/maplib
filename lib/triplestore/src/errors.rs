@@ -7,6 +7,8 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum TriplestoreError {
+    #[error("Error writing Jelly {0}")]
+    WriteJellyError(String),
     #[error("Error writing NTriples {0}")]
     WriteNTriplesError(String),
     #[error("Path {0} does not exist")]

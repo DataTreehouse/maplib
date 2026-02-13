@@ -15,7 +15,7 @@ file_io = { path = "../file_io" }
 spargebra = { path = "../spargebra" }
 fts = {path ="../fts"}
 cimxml_import = {path = "../cimxml_import"}
-jelly = { git = "https://github.com/Jelly-RDF/jelly_rs" }
+jelly = {path = "../jelly" }
 
 rayon.workspace = true
 sprs = { workspace = true, features = ["multi_thread"] }

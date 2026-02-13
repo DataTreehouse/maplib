@@ -355,7 +355,7 @@ impl Model {
         &mut self,
         buffer: &mut W,
         graph: &NamedGraph,
-        rdf_format: RdfFormat,
+        rdf_format: ExtendedRdfFormat,
         prefixes: Option<&HashMap<String, NamedNode>>,
     ) -> Result<(), MaplibError> {
         let mut use_prefixes = self.prefixes.clone();

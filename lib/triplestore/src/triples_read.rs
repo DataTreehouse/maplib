@@ -199,6 +199,9 @@ impl Triplestore {
             let use_format = match rdf_format {
                 ExtendedRdfFormat::Normal(n) => n,
                 ExtendedRdfFormat::CIMXML => RdfFormat::RdfXml,
+                ExtendedRdfFormat::Jelly => RdfFormat::JsonLd {
+                    profile: JsonLdProfileSet::empty(),
+                },
             };
             let mut parser = RdfParser::from(use_format.clone());
             if !checked {

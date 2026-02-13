@@ -1388,9 +1388,9 @@ fn write_triples_mutex(
     prefixes: Option<HashMap<String, NamedNode>>,
 ) -> PyResult<()> {
     let format = if let Some(format) = format {
-        resolve_normal_format(&format).map_err(PyMaplibError::from)?
+        resolve_format(&format).map_err(PyMaplibError::from)?
     } else {
-        RdfFormat::NTriples
+        ExtendedRdfFormat::Normal(RdfFormat::NTriples)
     };
     let path_buf = PathBuf::from(file_path);
     let mut actual_file = File::create(path_buf.as_path())
@@ -1471,9 +1471,9 @@ fn writes_mutex(
     prefixes: Option<HashMap<String, NamedNode>>,
 ) -> PyResult<String> {
     let format = if let Some(format) = format {
-        resolve_normal_format(&format).map_err(PyMaplibError::from)?
+        resolve_format(&format).map_err(PyMaplibError::from)?
     } else {
-        RdfFormat::NTriples
+        ExtendedRdfFormat::Normal(RdfFormat::NTriples)
     };
     let mut out = vec![];
     let graph = parse_optional_named_node(graph)?;
@@ -1725,7 +1725,8 @@ fn resolve_normal_format(format: &str) -> Result<RdfFormat, PyMaplibError> {
 
 fn resolve_format(format: &str) -> Result<ExtendedRdfFormat, PyMaplibError> {
     match format.to_lowercase().as_str() {
-        "cim" | "cim/xml" | "cimxml" | "jelly" => Ok(ExtendedRdfFormat::CIMXML),
+        "cim" | "cim/xml" | "cimxml" => Ok(ExtendedRdfFormat::CIMXML),
+        "jelly" => Ok(ExtendedRdfFormat::Jelly),
         f => match resolve_normal_format(format) {
             Ok(o) => Ok(ExtendedRdfFormat::Normal(o)),
             Err(e) => Err(e),
