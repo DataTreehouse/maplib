@@ -12,6 +12,7 @@ pub mod sparql;
 mod storage;
 pub mod triples_read;
 pub mod triples_write;
+mod jelly;
 
 use crate::errors::TriplestoreError;
 use crate::storage::{repeated_from_last_row_expr, Triples};

@@ -1,9 +1,0 @@
-[package]
-name = "jelly"
-version = "0.1.0"
-rust-version.workspace = true
-edition.workspace = true
-
-[dependencies]
-oxrdf = { version = "0.3.2" }
-quick-protobuf = "0.8.1"

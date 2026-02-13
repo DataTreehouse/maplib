@@ -18,7 +18,7 @@ use std::collections::HashMap;
 use std::io::Write;
 use tracing::warn;
 use crate::triples_read::ExtendedRdfFormat;
-use jelly::*;
+use crate::jelly::*;
 
 mod fast_ntriples;
 mod pretty_turtle;

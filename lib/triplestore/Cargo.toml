@@ -15,7 +15,6 @@ file_io = { path = "../file_io" }
 spargebra = { path = "../spargebra" }
 fts = {path ="../fts"}
 cimxml_import = {path = "../cimxml_import"}
-jelly = {path = "../jelly" }
 
 rayon.workspace = true
 sprs = { workspace = true, features = ["multi_thread"] }
@@ -37,6 +36,7 @@ tracing.workspace = true
 aho-corasick.workspace = true
 simd-json.workspace = true
 serde_json.workspace = true
+quick-protobuf.workspace = true
 
 pyo3 = { workspace = true, optional = true }
 

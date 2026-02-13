@@ -1,17 +1,15 @@
 mod eu;
-
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::io::Write;
 
 use quick_protobuf::{MessageWrite, Writer};
 
-use eu::ostrzyciel::jelly::core::proto::v1::mod_RdfLiteral::OneOfliteralKind;
-use eu::ostrzyciel::jelly::core::proto::v1::mod_RdfStreamRow::OneOfrow;
-use eu::ostrzyciel::jelly::core::proto::v1::mod_RdfTriple::{OneOfobject, OneOfpredicate, OneOfsubject};
-use eu::ostrzyciel::jelly::core::proto::v1::*;
-
 use oxrdf::{NamedOrBlankNode, Term, Triple};
+use crate::jelly::eu::ostrzyciel::jelly::core::proto::v1::mod_RdfStreamRow::OneOfrow;
+use crate::jelly::eu::ostrzyciel::jelly::core::proto::v1::{LogicalStreamType, PhysicalStreamType, RdfDatatypeEntry, RdfIri, RdfLiteral, RdfNameEntry, RdfPrefixEntry, RdfStreamFrame, RdfStreamOptions, RdfStreamRow, RdfTriple};
+use crate::jelly::eu::ostrzyciel::jelly::core::proto::v1::mod_RdfLiteral::OneOfliteralKind;
+use crate::jelly::eu::ostrzyciel::jelly::core::proto::v1::mod_RdfTriple::{OneOfobject, OneOfpredicate, OneOfsubject};
 
 const JELLY_FRAME_SIZE: usize = 1024;
 
@@ -37,7 +35,7 @@ impl JellyEncoder {
             pending_rows: Vec::new(),
         }
     }
-    
+
     fn get_or_insert_prefix(&mut self, prefix: &str) -> u32 {
         if let Some(&id) = self.prefix_table.get(prefix) {
             return id;
@@ -53,7 +51,7 @@ impl JellyEncoder {
         });
         id
     }
-    
+
     fn get_or_insert_name(&mut self, name: &str) -> u32 {
         if let Some(&id) = self.name_table.get(name) {
             return id;
@@ -69,7 +67,7 @@ impl JellyEncoder {
         });
         id
     }
-    
+
     fn get_or_insert_datatype(&mut self, dt_iri: &str) -> u32 {
         if let Some(&id) = self.datatype_table.get(dt_iri) {
             return id;
@@ -85,18 +83,18 @@ impl JellyEncoder {
         });
         id
     }
-    
+
     fn encode_iri(&mut self, iri: &str) -> RdfIri {
         let (prefix, local) = split_iri(iri);
         let prefix_id = self.get_or_insert_prefix(prefix);
         let name_id = self.get_or_insert_name(local);
         RdfIri { prefix_id, name_id }
     }
-    
+
     fn take_pending(&mut self) -> Vec<RdfStreamRow<'static>> {
         std::mem::take(&mut self.pending_rows)
     }
-    
+
     fn encode_triple(&mut self, triple: &Triple) -> RdfStreamRow<'static> {
         let subject = match &triple.subject {
             NamedOrBlankNode::NamedNode(nn) => {
@@ -108,11 +106,11 @@ impl JellyEncoder {
             #[allow(unreachable_patterns)]
             _ => OneOfsubject::None,
         };
-        
+
         let predicate = OneOfpredicate::p_iri(
             self.encode_iri(triple.predicate.as_str()),
         );
-        
+
         let object = match &triple.object {
             Term::NamedNode(nn) => {
                 OneOfobject::o_iri(self.encode_iri(nn.as_str()))
@@ -202,21 +200,21 @@ pub fn write_jelly<W: Write>(
     write_delimit_frame(buf, options_frame)?;
 
     let mut current_rows: Vec<RdfStreamRow<'static>> = Vec::new();
-    
+
     for t in triples {
         let triple_row = encoder.encode_triple(t);
         current_rows.extend(encoder.take_pending());
         current_rows.push(triple_row);
-        
+
         if current_rows.len() >= JELLY_FRAME_SIZE {
             let frame = RdfStreamFrame {
                 rows: std::mem::take(&mut current_rows),
                 metadata: Default::default(),
-             };
+            };
             write_delimit_frame(buf, frame)?;
         }
     }
-    
+
     if !current_rows.is_empty() {
         let frame = RdfStreamFrame {
             rows: current_rows,
@@ -224,6 +222,6 @@ pub fn write_jelly<W: Write>(
         };
         write_delimit_frame(buf, frame)?;
     }
-    
+
     Ok(())
 }

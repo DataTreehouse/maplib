@@ -33,7 +33,7 @@ use std::path::Path;
 use std::time::Instant;
 use tracing::{debug, instrument};
 
-use jelly::*;
+use crate::jelly::*;
 
 type MapType = HashMap<String, HashMap<String, (Vec<Subject>, Vec<Term>)>>;
 
