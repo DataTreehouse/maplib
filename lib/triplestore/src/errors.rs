@@ -55,6 +55,8 @@ pub enum TriplestoreError {
     InvalidPrefixIRI(String),
     #[error("Please add the document string corresponding to the url to known_contexts: {0}")]
     MissingContext(String),
+    #[error("Error flushing buffer when writing triples: {0}")]
+    FlushError(String),
 }
 
 impl<T> From<PoisonError<T>> for TriplestoreError {

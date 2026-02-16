@@ -5,6 +5,7 @@ use crate::polars_to_rdf::{
 use crate::solution_mapping::BaseCatState;
 use crate::{BaseRDFNodeType, RDFNodeState, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD};
 use oxrdf::vocab::{rdf, xsd};
+use oxrdf::{NamedNode, NamedNodeRef};
 use polars::datatypes::{DataType, Field};
 use polars::prelude::{as_struct, coalesce, col, lit, Expr, IntoColumn, LazyFrame, LiteralValue};
 use std::collections::HashMap;
@@ -86,6 +87,48 @@ pub fn base_expression_to_formatted(
     };
     expr.alias(name)
 }
+
+pub fn base_literal_expression_to_string(
+    expr: Expr,
+    base_type: &BaseRDFNodeType,
+    base_state: &BaseCatState,
+    global_cats: LockedCats,
+) -> Vec<Expr> {
+    let base_literal_datatype = if let BaseRDFNodeType::Literal(l) = base_type {
+        l.as_ref()
+    } else {
+        unreachable!("Should only be called with literal")
+    };
+    let mut exprs = vec![];
+    if base_literal_datatype == xsd::DATE_TIME {
+        exprs.push(expr.map(
+            |x| {
+                let dt = x.dtype();
+                let tz = if let DataType::Datetime(_, tz) = dt {
+                    tz
+                } else {
+                    panic!()
+                };
+                Ok(datetime_column_to_strings(&x, tz).into_column())
+            },
+            |_, f| Ok(Field::new(f.name().clone(), DataType::String)),
+        ))
+    } else if base_literal_datatype == xsd::DATE_TIME_STAMP {
+        exprs.push(expr.dt().strftime(XSD_DATETIME_WITH_TZ_FORMAT))
+    } else if base_literal_datatype == xsd::DATE {
+        exprs.push(expr.dt().strftime(XSD_DATE_WITHOUT_TZ_FORMAT))
+    } else if base_literal_datatype == rdf::LANG_STRING {
+        exprs.push(expr
+                .clone()
+                .struct_()
+                .field_by_name(LANG_STRING_VALUE_FIELD));
+            exprs.push(expr.struct_().field_by_name(LANG_STRING_LANG_FIELD));
+    } else {
+        exprs.push(maybe_decode_expr(expr, base_type, base_state, global_cats).cast(DataType::String))
+    };
+    exprs
+}
+
 pub fn expression_to_formatted(
     expr: Expr,
     name: &str,

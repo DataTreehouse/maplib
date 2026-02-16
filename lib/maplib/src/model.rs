@@ -9,7 +9,6 @@ use cimxml_export::export::{cim_xml_write, FullModelDetails};
 use datalog::inference::{infer, InferenceResult};
 use datalog::parser::parse_datalog_ruleset;
 use oxrdf::NamedNode;
-use oxrdfio::RdfFormat;
 use polars::prelude::DataFrame;
 use representation::solution_mapping::EagerSolutionMappings;
 use representation::RDFNodeState;

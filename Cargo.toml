@@ -71,7 +71,7 @@ itoa = "1.0.15"
 ryu = "1.0.20"
 #dev-dependencies
 nohash-hasher = "0.2.0"
-quick-protobuf = "0.8.1"
+quick-protobuf = { version = "0.8.1" }
 
 [patch.crates-io]
 #polars = { git = 'https://github.com/pola-rs/polars', rev="665722ac3f3664c589c4827208d173cc16f0ec68" }
