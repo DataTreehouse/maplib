@@ -11,7 +11,11 @@ use std::path::Path;
 use std::sync::Arc;
 
 impl Cats {
-    pub fn mappings_cat_image(&self, sms: &Vec<&EagerSolutionMappings>) -> Cats {
+    pub fn mappings_cat_image(
+        &self,
+        sms: &Vec<&EagerSolutionMappings>,
+        path: Option<&Path>,
+    ) -> Cats {
         let mut s: HashMap<_, HashSet<u32>> = HashMap::new();
 
         for sm in sms {
@@ -89,7 +93,7 @@ impl Cats {
                 }
             }
         }
-        let cats = self.image(&s);
+        let cats = self.image(&s, path);
         cats
     }
 
@@ -113,7 +117,7 @@ impl Cats {
                 }
             }
         }
-        let remap = self.merge(local_cats, path);
+        let remap = self.merge(local_cats);
         let mut concat_reenc: HashMap<
             String,
             HashMap<BaseRDFNodeType, HashMap<u32, u32, BuildHasherDefault<NoHashHasher<u32>>>>,
@@ -156,23 +160,28 @@ impl Cats {
         concat_reenc_cats
     }
 
-    pub fn image(&self, s: &HashMap<BaseRDFNodeType, HashSet<u32>>) -> Cats {
+    pub fn image(&self, s: &HashMap<BaseRDFNodeType, HashSet<u32>>, path: Option<&Path>) -> Cats {
         let mut encs = HashMap::new();
         for (t, set) in s {
             let ct = CatType::from_base_rdf_node_type(t);
             if let Some(enc) = self.cat_map.get(&ct) {
-                if let Some(image_enc) = enc.image(set) {
+                if let Some(image_enc) = enc.image(set, t, path) {
                     encs.insert(ct, image_enc);
                 }
             }
         }
-        Cats::from_map(encs)
+        Cats::from_map(encs, path)
     }
 }
 
 impl CatEncs {
-    pub fn image(&self, s: &HashSet<u32>) -> Option<CatEncs> {
-        if let Some(maps) = self.maps.image(s) {
+    pub fn image(
+        &self,
+        s: &HashSet<u32>,
+        dt: &BaseRDFNodeType,
+        path: Option<&Path>,
+    ) -> Option<CatEncs> {
+        if let Some(maps) = self.maps.image(path, s, dt) {
             Some(CatEncs { maps })
         } else {
             None
@@ -186,7 +195,7 @@ pub fn new_solution_mapping_cats(
     path: Option<&Path>,
 ) -> (Vec<EagerSolutionMappings>, Cats) {
     let smsref: Vec<_> = sms.iter().collect();
-    let mut cats = global_cats.mappings_cat_image(&smsref);
+    let mut cats = global_cats.mappings_cat_image(&smsref, None);
     let reenc = cats.merge_solution_mappings_locals(&smsref, path);
     let new_sms: Vec<_> = sms
         .into_iter()

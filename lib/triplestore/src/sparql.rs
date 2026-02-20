@@ -682,8 +682,7 @@ fn named_node_pattern_expr(
 }
 
 fn named_node_u32_lit(nn: &NamedNode, name: &str, global_cats: &Cats) -> (Expr, RDFNodeState) {
-    // No disk based storage of local cat, hence path is None
-    let (u, state) = global_cats.encode_iri_or_local_cat(nn.as_str(), None);
+    let (u, state) = global_cats.encode_iri_or_local_cat(nn.as_str());
     (lit(u).cast(DataType::UInt32).alias(name), state)
 }
 

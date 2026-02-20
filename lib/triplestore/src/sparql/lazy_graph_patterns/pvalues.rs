@@ -47,7 +47,7 @@ impl Triplestore {
         };
         let cats = self.global_cats.read().unwrap();
         // No disk based storage of local cats if created
-        let mut sm = cats.encode_solution_mappings(sm, None);
+        let mut sm = cats.encode_solution_mappings(sm);
         sm.mappings.as_single_chunk_par();
         if let Some(mut mappings) = solution_mappings {
             //TODO: Remove this workaround

@@ -1,4 +1,5 @@
 use super::{CatEncs, CatType, Cats, EncodedTriples};
+use crate::cats::maps::in_memory::CatMapsInMemory;
 use crate::cats::maps::CatMaps;
 use crate::cats::LockedCats;
 use crate::solution_mapping::{BaseCatState, EagerSolutionMappings};
@@ -16,21 +17,15 @@ impl CatEncs {
         }
     }
 
-    pub fn new_singular(value: &str, u: u32, path: Option<&Path>, bt: &BaseRDFNodeType) -> CatEncs {
-        let maps = CatMaps::new_singular(value, u, path, bt);
-        CatEncs { maps }
+    pub fn new_local_singular(value: &str, u: u32, bt: &BaseRDFNodeType) -> CatEncs {
+        let maps = CatMapsInMemory::new_singular(value, u, bt);
+        CatEncs {
+            maps: CatMaps::InMemory(maps),
+        }
     }
 
-    pub fn maybe_encode_str(&self, s: &str) -> Option<&u32> {
-        self.maps.maybe_encode_str(s)
-    }
-
-    pub fn encode_new_str(&mut self, s: &str, u: u32) {
-        self.encode_new_string(s.to_string(), u);
-    }
-
-    pub fn encode_new_string(&mut self, s: String, u: u32) {
-        self.maps.encode_new_string(s, u);
+    pub fn maybe_encode_strs(&self, s: &[Option<&str>]) -> Vec<Option<u32>> {
+        self.maps.maybe_encode_strs(s)
     }
 
     pub fn counter(&self) -> u32 {
@@ -39,11 +34,7 @@ impl CatEncs {
 }
 
 impl Cats {
-    pub fn encode_solution_mappings(
-        &self,
-        sm: EagerSolutionMappings,
-        path: Option<&Path>,
-    ) -> EagerSolutionMappings {
+    pub fn encode_solution_mappings(&self, sm: EagerSolutionMappings) -> EagerSolutionMappings {
         let EagerSolutionMappings {
             mappings,
             mut rdf_node_types,
@@ -73,7 +64,7 @@ impl Cats {
         let encoded: Vec<_> = to_encode
             .into_iter()
             .map(|(c, t, ser)| {
-                let (enc, local) = self.encode_series(&ser, &t, path);
+                let (enc, local) = self.encode_series(&ser, &t);
                 (c, t, enc, local)
             })
             .collect();
@@ -95,12 +86,7 @@ impl Cats {
         EagerSolutionMappings::new(mappings.collect().unwrap(), rdf_node_types)
     }
 
-    pub fn encode_series(
-        &self,
-        series: &Series,
-        t: &BaseRDFNodeType,
-        path: Option<&Path>,
-    ) -> (Series, Option<Cats>) {
+    pub fn encode_series(&self, series: &Series, t: &BaseRDFNodeType) -> (Series, Option<Cats>) {
         let original_name = series.name().clone();
         let mut use_height = match t {
             BaseRDFNodeType::IRI => self.iri_counter,
@@ -112,48 +98,58 @@ impl Cats {
         };
 
         let enc = self.get_encs(t).pop();
-        let mut new_enc = CatEncs::new_empty(path, t);
-        let strch = series.str().unwrap();
-        let encoded_global: Vec<_> = strch
-            .iter()
-            .map(|x| {
-                if let Some(x) = x {
-                    if let Some((_, enc)) = enc {
-                        if let Some(su) = enc.maybe_encode_str(x).map(|x| *x) {
-                            (None, Some(su))
+        // Local cat encs are always in memory
+        let mut new_enc = CatEncs::new_empty(None, t);
+        let maybe_encoded_global = if let Some((_, enc)) = enc {
+            let strch = series.str().unwrap();
+            let strvec: Vec<_> = strch.iter().collect();
+            Some(enc.maybe_encode_strs(&strvec))
+        } else {
+            None
+        };
+        let mut encoded_global_local = Vec::with_capacity(series.len());
+
+        if let Some(enc) = maybe_encoded_global {
+            for (glob, s) in enc.into_iter().zip(series.str().unwrap().iter()) {
+                if let Some(glob) = glob {
+                    encoded_global_local.push(Some(glob));
+                } else {
+                    if let Some(s) = s {
+                        if let Some(u) = new_enc.maps.maybe_encode_in_memory_str(s) {
+                            encoded_global_local.push(Some(u))
                         } else {
-                            (Some(x), None)
+                            use_height += 1;
+                            let su = use_height;
+                            new_enc.maps.encode_new_in_memory_string(s.to_string(), su);
+                            encoded_global_local.push(Some(su))
                         }
                     } else {
-                        (Some(x), None)
+                        encoded_global_local.push(None);
+                    }
+                }
+            }
+        } else {
+            for s in series.str().unwrap().iter() {
+                if let Some(s) = s {
+                    if let Some(u) = new_enc.maps.maybe_encode_in_memory_str(s) {
+                        encoded_global_local.push(Some(u))
+                    } else {
+                        use_height += 1;
+                        let su = use_height;
+                        new_enc.maps.encode_new_in_memory_string(s.to_string(), su);
+                        encoded_global_local.push(Some(su))
                     }
                 } else {
-                    (None, None)
+                    encoded_global_local.push(None);
                 }
-            })
-            .collect();
-
-        let mut encoded_global_local = Vec::with_capacity(encoded_global.len());
-        for (unencoded, encoded) in encoded_global {
-            let encoded = if let Some(s) = unencoded {
-                if let Some(u) = new_enc.maybe_encode_str(s) {
-                    Some(*u)
-                } else {
-                    use_height += 1;
-                    let su = use_height;
-                    new_enc.encode_new_str(s, su);
-                    Some(su)
-                }
-            } else {
-                encoded
-            };
-            encoded_global_local.push(encoded);
+            }
         }
+
         let local = if !new_enc.maps.is_empty() {
             let cat_type = CatType::from_base_rdf_node_type(t);
             let mut map = HashMap::new();
             map.insert(cat_type, new_enc);
-            Some(Cats::from_map(map))
+            Some(Cats::from_map(map, None))
         } else {
             None
         };
@@ -162,49 +158,37 @@ impl Cats {
         (ser, local)
     }
 
-    pub fn encode_blanks(&self, blanks: &[&str]) -> Vec<Option<u32>> {
+    pub fn maybe_encode_blanks(&self, blanks: &[Option<&str>]) -> Vec<Option<u32>> {
         if let Some(encs) = self.cat_map.get(&CatType::Blank) {
-            let u32s: Vec<_> = blanks
-                .iter()
-                .map(|x| encs.maybe_encode_str(*x).map(|x| *x))
-                .collect();
-            u32s
+            encs.maybe_encode_strs(blanks)
         } else {
             vec![None].repeat(blanks.len())
         }
     }
 
-    pub fn encode_literals(&self, literals: &[&str], data_type: NamedNode) -> Vec<Option<u32>> {
+    pub fn maybe_encode_literals(
+        &self,
+        literals: &[Option<&str>],
+        data_type: NamedNode,
+    ) -> Vec<Option<u32>> {
         if let Some(encs) = self.cat_map.get(&CatType::Literal(data_type)) {
-            let u32s: Vec<_> = literals
-                .iter()
-                .map(|x| encs.maybe_encode_str(*x).map(|x| *x))
-                .collect();
-            u32s
+            encs.maybe_encode_strs(literals)
         } else {
             vec![None].repeat(literals.len())
         }
     }
 
-    pub fn encode_iri_slice(&self, iris: &[&str]) -> Vec<Option<u32>> {
-        let mut u32s = vec![];
+    pub fn maybe_encode_iri_slice(&self, iris: &[Option<&str>]) -> Vec<Option<u32>> {
         let encs = self.cat_map.get(&CatType::IRI);
-        for s in iris {
-            if let Some(encs) = encs {
-                if let Some(u) = encs.maybe_encode_str(s) {
-                    u32s.push(Some(*u));
-                } else {
-                    u32s.push(None)
-                }
-            } else {
-                u32s.push(None)
-            }
+        if let Some(encs) = encs {
+            encs.maybe_encode_strs(iris)
+        } else {
+            vec![None].repeat(iris.len())
         }
-        u32s
     }
 
-    pub fn encode_iri_or_local_cat(&self, iri: &str, path: Option<&Path>) -> (u32, RDFNodeState) {
-        let mut v = self.encode_iri_slice(&[iri]);
+    pub fn encode_iri_or_local_cat(&self, iri: &str) -> (u32, RDFNodeState) {
+        let mut v = self.maybe_encode_iri_slice(&[Some(iri)]);
         if let Some(u) = v.pop().unwrap() {
             (
                 u,
@@ -214,7 +198,8 @@ impl Cats {
                 ),
             )
         } else {
-            let (u, l) = Cats::new_singular_iri(iri, self.iri_counter, path);
+            // Locals always in memory
+            let (u, l) = Cats::new_local_singular_iri(iri, self.iri_counter);
             (
                 u,
                 RDFNodeState::from_bases(
@@ -225,12 +210,8 @@ impl Cats {
         }
     }
 
-    pub fn encode_blank_or_local_cat(
-        &self,
-        blank: &str,
-        path: Option<&Path>,
-    ) -> (u32, RDFNodeState) {
-        let mut v = self.encode_blanks(&[blank]);
+    pub fn encode_blank_or_local_cat(&self, blank: &str) -> (u32, RDFNodeState) {
+        let mut v = self.maybe_encode_blanks(&[Some(blank)]);
         if let Some(u) = v.pop().unwrap() {
             (
                 u,
@@ -240,7 +221,7 @@ impl Cats {
                 ),
             )
         } else {
-            let (u, l) = Cats::new_singular_blank(blank, self.blank_counter, path);
+            let (u, l) = Cats::new_local_singular_blank(blank, self.blank_counter);
             (
                 u,
                 RDFNodeState::from_bases(
@@ -259,7 +240,6 @@ pub fn encode_triples(
     subject_cat_state: BaseCatState,
     object_cat_state: BaseCatState,
     global_cats: &Cats,
-    path: Option<&Path>,
 ) -> (Vec<LockedCats>, EncodedTriples) {
     let mut map = HashMap::new();
     map.insert(
@@ -270,7 +250,7 @@ pub fn encode_triples(
         OBJECT_COL_NAME.to_string(),
         RDFNodeState::from_bases(object_type.clone(), object_cat_state),
     );
-    let mut sm = global_cats.encode_solution_mappings(EagerSolutionMappings::new(df, map), path);
+    let mut sm = global_cats.encode_solution_mappings(EagerSolutionMappings::new(df, map));
 
     let mut subject_state = sm.rdf_node_types.remove(SUBJECT_COL_NAME).unwrap();
     let mut object_state = sm.rdf_node_types.remove(OBJECT_COL_NAME).unwrap();

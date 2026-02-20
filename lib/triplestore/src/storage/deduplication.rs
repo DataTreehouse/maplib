@@ -26,7 +26,7 @@ impl Triples {
         if let Some(new_df) = new_df {
             // Here we decide if segments should be compacted
             // Important that this is done after deduplication as otherwise insertion of lots of dupes leads to write amplification
-            let should_compact = if self.height < new_df.height() * 2 {
+            let mut should_compact = if self.height < new_df.height() * 2 {
                 // Compact if amount of existing triples is similar to amount of new triples
                 true
             } else if self.segments.len() > 1 {
@@ -62,7 +62,10 @@ impl Triples {
                     storage_folder,
                 )?;
                 self.segments.push(segment);
-                trace!(compacting = compacting_now.elapsed().as_secs_f32());
+                trace!(
+                    "Compacting took: {}",
+                    compacting_now.elapsed().as_secs_f32()
+                );
             } else {
                 self.segments.push(new_segment);
             }

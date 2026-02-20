@@ -29,12 +29,7 @@ impl Triplestore {
             .map(|(x, y)| partition_by_global_predicate_col(x, y, &cats))
             .flatten()
             .collect();
-        let global_cat_triples = triples_solution_mappings_to_global_cat_triples(
-            sms,
-            &cats,
-            self.storage_folder.as_ref().map(|x| x.as_ref()),
-            graph,
-        );
+        let global_cat_triples = triples_solution_mappings_to_global_cat_triples(sms, &cats, graph);
         drop(cats);
         if !global_cat_triples.is_empty() {
             self.delete_triples_vec(global_cat_triples, graph)
@@ -175,7 +170,6 @@ fn partition_by_global_predicate_col(
 fn triples_solution_mappings_to_global_cat_triples(
     sm_preds: Vec<(EagerSolutionMappings, NamedNode)>,
     global_cats: &Cats,
-    storage_path: Option<&Path>,
     graph: &NamedGraph,
 ) -> Vec<CatTriples> {
     let mappings_maps_preds: Vec<_> = sm_preds
@@ -230,7 +224,6 @@ fn triples_solution_mappings_to_global_cat_triples(
                 subject_state,
                 object_state,
                 global_cats,
-                storage_path,
             );
             e
         })

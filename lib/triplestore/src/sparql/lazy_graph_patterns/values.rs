@@ -23,7 +23,7 @@ impl Triplestore {
         // No disk based storage of local cats if they are created
         let sm = {
             let cats = self.global_cats.read()?;
-            cats.encode_solution_mappings(sm, None)
+            cats.encode_solution_mappings(sm)
         };
         if let Some(mut mappings) = solution_mappings {
             mappings = join(

@@ -7,6 +7,7 @@ use oxrdf::vocab::rdf;
 use oxrdf::{BlankNode, NamedNode, NamedNodeRef, Term, TermRef, Variable};
 use polars::prelude::{col, concat, LazyFrame, UnionArgs};
 use polars_core::frame::DataFrame;
+use polars_core::prelude::BooleanChunked;
 use polars_core::POOL;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use representation::cats::LockedCats;
@@ -19,7 +20,6 @@ use spargebra::Query;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::io::Write;
 use std::sync::Arc;
-use polars_core::prelude::BooleanChunked;
 
 const STRIDE: usize = 20_000;
 
@@ -423,12 +423,10 @@ impl Triplestore {
                 let mut thread_strings = Vec::with_capacity(n_threads);
                 for _ in 0..n_threads {
                     let mut start_string = if let Some(last_string) = last_string.take() {
-                        if let Some((next_string)) = triples
-                            .get_next_different_subject(
-                                self.global_cats.clone(),
-                                last_string.as_str(),
-                            )?
-                        {
+                        if let Some(next_string) = triples.get_next_different_subject(
+                            self.global_cats.clone(),
+                            last_string.as_str(),
+                        )? {
                             assert!(next_string > last_string);
                             next_string
                         } else {
@@ -437,9 +435,7 @@ impl Triplestore {
                         }
                     } else {
                         assert!(!found_first);
-                        if let Some(start_string) =
-                            triples.get_first_subject_string()?
-                        {
+                        if let Some(start_string) = triples.get_first_subject_string()? {
                             found_first = true;
                             start_string
                         } else {
@@ -449,7 +445,7 @@ impl Triplestore {
                     };
                     let end_string = triples.get_next_different_approximately_n_distance_away(
                         &start_string,
-                        STRIDE / n_threads
+                        STRIDE / n_threads,
                     )?;
                     let end_string = if let Some(end_string) = end_string {
                         if start_string == end_string {

@@ -33,9 +33,8 @@ pub fn create_compatible_cats(
             let need_native_cat_cast = check_need_native_cat_cast(&t, &states);
             if need_native_cat_cast {
                 let locals = find_all_locals(&t, &states);
-                let mut cats = Cats::new_empty(Some(global_cats.read().unwrap().deref()));
-                // We do not store local cats to disk
-                let renc_local = cats.merge(locals, None);
+                let mut cats = Cats::new_empty(Some(global_cats.read().unwrap().deref()), None);
+                let renc_local = cats.merge(locals);
                 let renc_local: HashMap<_, _> = renc_local
                     .into_iter()
                     .map(|(uu, map)| {

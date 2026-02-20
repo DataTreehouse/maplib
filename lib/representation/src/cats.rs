@@ -14,13 +14,14 @@ use std::cmp;
 
 use crate::cats::maps::CatMaps;
 use crate::dataset::NamedGraph;
-use crate::BaseRDFNodeType;
+use crate::{BaseRDFNodeType, OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{NamedNode, NamedNodeRef};
 use polars::prelude::DataFrame;
-use std::collections::HashMap;
+use rayon::prelude::{IntoParallelIterator, ParallelIterator};
+use std::collections::{HashMap, HashSet};
 use std::ops::Deref;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::RwLock;
 use uuid::Uuid;
@@ -84,18 +85,6 @@ pub struct CatEncs {
     pub maps: CatMaps,
 }
 
-impl CatEncs {
-    pub(crate) fn new_remap(
-        other: &CatEncs,
-        path: Option<&Path>,
-        c: &mut u32,
-    ) -> (CatEncs, CatReEnc) {
-        let (maps, remap) = CatMaps::new_remap(&other.maps, path, c);
-        let encs = CatEncs { maps };
-        (encs, remap)
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct LockedCats {
     inner: Arc<RwLock<Cats>>,
@@ -125,8 +114,8 @@ impl LockedCats {
         Arc::new(RwLock::new(cats)).into()
     }
 
-    pub fn new_empty() -> Self {
-        Self::new(Cats::new_empty(None))
+    pub fn new_empty(path: Option<&Path>) -> Self {
+        Self::new(Cats::new_empty(None, path))
     }
 
     pub fn deref(&self) -> Arc<RwLock<Cats>> {
@@ -167,35 +156,31 @@ pub struct Cats {
     blank_counter: u32,
     literal_counter_map: HashMap<NamedNode, u32>,
     pub uuid: String,
+    path: Option<PathBuf>,
 }
 
 impl Cats {
-    pub fn new_singular_literal(
-        l: &str,
-        dt: NamedNode,
-        u: u32,
-        path: Option<&Path>,
-    ) -> (u32, Cats) {
+    pub fn new_local_singular_literal(l: &str, dt: NamedNode, u: u32) -> (u32, Cats) {
         let dt = BaseRDFNodeType::Literal(dt);
-        let catenc = CatEncs::new_singular(l, u, path, &dt);
+        let catenc = CatEncs::new_local_singular(l, u, &dt);
         let t = if let BaseRDFNodeType::Literal(dt) = dt {
             CatType::Literal(dt)
         } else {
             unreachable!("Should never happen")
         };
-        (u, Cats::from_map(HashMap::from([(t, catenc)])))
+        (u, Cats::from_map(HashMap::from([(t, catenc)]), None))
     }
 
-    pub fn new_singular_blank(s: &str, u: u32, path: Option<&Path>) -> (u32, Cats) {
+    pub fn new_local_singular_blank(s: &str, u: u32) -> (u32, Cats) {
         let t = CatType::Blank;
-        let catenc = CatEncs::new_singular(s, u, path, &BaseRDFNodeType::BlankNode);
-        (u, Cats::from_map(HashMap::from([(t, catenc)])))
+        let catenc = CatEncs::new_local_singular(s, u, &BaseRDFNodeType::BlankNode);
+        (u, Cats::from_map(HashMap::from([(t, catenc)]), None))
     }
 
-    pub fn new_singular_iri(s: &str, u: u32, path: Option<&Path>) -> (u32, Cats) {
+    pub fn new_local_singular_iri(s: &str, u: u32) -> (u32, Cats) {
         let t = CatType::IRI;
-        let catenc = CatEncs::new_singular(s, u, path, &BaseRDFNodeType::IRI);
-        (u, Cats::from_map(HashMap::from([(t, catenc)])))
+        let catenc = CatEncs::new_local_singular(s, u, &BaseRDFNodeType::IRI);
+        (u, Cats::from_map(HashMap::from([(t, catenc)]), None))
     }
 }
 
@@ -205,13 +190,15 @@ impl Cats {
         self.cat_map.get(&ct).unwrap()
     }
 
-    pub(crate) fn from_map(cat_map: HashMap<CatType, CatEncs>) -> Self {
+    pub(crate) fn from_map(cat_map: HashMap<CatType, CatEncs>, path: Option<&Path>) -> Self {
+        let path_buf = path.map(new_cat_path);
         let mut cats = Cats {
             cat_map,
             iri_counter: 0,
             blank_counter: 0,
             literal_counter_map: Default::default(),
             uuid: Uuid::new_v4().to_string(),
+            path: path_buf,
         };
 
         cats.iri_counter = cats.calc_new_iri_counter();
@@ -220,7 +207,7 @@ impl Cats {
         cats
     }
 
-    pub fn new_empty(counts_from: Option<&Cats>) -> Cats {
+    pub fn new_empty(counts_from: Option<&Cats>, path: Option<&Path>) -> Cats {
         let (blank_counter, iri_counter, literal_counter_map) =
             if let Some(counts_from) = counts_from {
                 (
@@ -231,13 +218,14 @@ impl Cats {
             } else {
                 (0, 0, Default::default())
             };
-
+        let path_buf = path.map(new_cat_path);
         Cats {
             cat_map: HashMap::new(),
             blank_counter,
             iri_counter,
             literal_counter_map,
             uuid: Uuid::new_v4().to_string(),
+            path: path_buf,
         }
     }
 
@@ -299,4 +287,79 @@ impl Cats {
     pub fn get_literal_counter(&self, nn: &NamedNode) -> u32 {
         self.literal_counter_map.get(nn).map(|x| *x).unwrap_or(0)
     }
+
+    pub fn rank_maps(
+        &self,
+        dfs: Vec<&DataFrame>,
+        subject_type: &BaseRDFNodeType,
+        object_type: &BaseRDFNodeType,
+    ) -> HashMap<BaseRDFNodeType, HashMap<u32, u32>> {
+        let mut src_u_map: HashMap<BaseRDFNodeType, HashSet<u32>> = HashMap::new();
+        for df in dfs {
+            if subject_type.stored_cat() {
+                if let Some(v) = src_u_map.get_mut(subject_type) {
+                    v.extend(
+                        df.column(SUBJECT_COL_NAME)
+                            .unwrap()
+                            .u32()
+                            .unwrap()
+                            .iter()
+                            .map(|x| x.unwrap()),
+                    );
+                } else {
+                    let v: HashSet<_> = df
+                        .column(SUBJECT_COL_NAME)
+                        .unwrap()
+                        .u32()
+                        .unwrap()
+                        .iter()
+                        .map(|x| x.unwrap())
+                        .collect();
+                    src_u_map.insert(subject_type.clone(), v);
+                }
+            }
+            if object_type.stored_cat() {
+                if let Some(v) = src_u_map.get_mut(subject_type) {
+                    v.extend(
+                        df.column(OBJECT_COL_NAME)
+                            .unwrap()
+                            .u32()
+                            .unwrap()
+                            .iter()
+                            .map(|x| x.unwrap()),
+                    );
+                } else {
+                    let v: HashSet<_> = df
+                        .column(OBJECT_COL_NAME)
+                        .unwrap()
+                        .u32()
+                        .unwrap()
+                        .iter()
+                        .map(|x| x.unwrap())
+                        .collect();
+                    src_u_map.insert(subject_type.clone(), v);
+                }
+            }
+        }
+        let rank_maps: HashMap<_, _> = src_u_map
+            .into_par_iter()
+            .map(|(k, v)| {
+                let rm = self.rank_map(v, &k);
+                (k, rm)
+            })
+            .collect();
+        rank_maps
+    }
+
+    pub fn rank_map(&self, us: HashSet<u32>, dt: &BaseRDFNodeType) -> HashMap<u32, u32> {
+        if let Some(cm) = self.cat_map.get(&CatType::from_base_rdf_node_type(dt)) {
+            cm.maps.rank_map(us)
+        } else {
+            HashMap::new()
+        }
+    }
+}
+
+fn new_cat_path(path: &Path) -> PathBuf {
+    path.join(uuid::Uuid::new_v4().to_string())
 }

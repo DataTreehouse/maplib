@@ -24,32 +24,44 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 pub fn named_node_enc(nn: &NamedNode, global_cats: &Cats) -> Option<Expr> {
-    let enc = global_cats.encode_iri_slice(&[nn.as_str()]).pop().unwrap();
+    let enc = global_cats
+        .maybe_encode_iri_slice(&[Some(nn.as_str())])
+        .pop()
+        .unwrap();
     enc.map(|enc| lit(enc).cast(DataType::UInt32))
 }
 
 pub fn named_node_local_enc(nn: &NamedNode, global_cats: &Cats) -> (Expr, Option<Cats>) {
-    if let Some(enc) = global_cats.encode_iri_slice(&[nn.as_str()]).pop().unwrap() {
+    if let Some(enc) = global_cats
+        .maybe_encode_iri_slice(&[Some(nn.as_str())])
+        .pop()
+        .unwrap()
+    {
         (lit(enc).cast(DataType::UInt32), None)
     } else {
-        // We do not store these local cats to disk
-        let (enc, local) = Cats::new_singular_iri(nn.as_str(), global_cats.get_iri_counter(), None);
+        let (enc, local) = Cats::new_local_singular_iri(nn.as_str(), global_cats.get_iri_counter());
         (lit(enc).cast(DataType::UInt32), Some(local))
     }
 }
 
 pub fn blank_node_enc(bl: &BlankNode, global_cats: &Cats) -> Option<Expr> {
-    let enc = global_cats.encode_blanks(&[bl.as_str()]).pop().unwrap();
+    let enc = global_cats
+        .maybe_encode_blanks(&[Some(bl.as_str())])
+        .pop()
+        .unwrap();
     enc.map(|enc| lit(enc).cast(DataType::UInt32))
 }
 
 pub fn blank_node_local_enc(bl: &BlankNode, global_cats: &Cats) -> (Expr, Option<Cats>) {
-    if let Some(enc) = global_cats.encode_blanks(&[bl.as_str()]).pop().unwrap() {
+    if let Some(enc) = global_cats
+        .maybe_encode_blanks(&[Some(bl.as_str())])
+        .pop()
+        .unwrap()
+    {
         (lit(enc).cast(DataType::UInt32), None)
     } else {
-        // Local cats not stored to disk, hence None path
         let (enc, local) =
-            Cats::new_singular_blank(bl.as_str(), global_cats.get_iri_counter(), None);
+            Cats::new_local_singular_blank(bl.as_str(), global_cats.get_iri_counter());
         (lit(enc).cast(DataType::UInt32), Some(local))
     }
 }
@@ -58,7 +70,7 @@ pub fn literal_enc(l: &Literal, global_cats: &Cats) -> (Expr, BaseRDFNodeType, B
     let bt = BaseRDFNodeType::Literal(l.datatype().into_owned());
     if literal_is_cat(l.datatype()) {
         if let Some(enc) = global_cats
-            .encode_literals(&[l.value()], l.datatype().into_owned())
+            .maybe_encode_literals(&[Some(l.value())], l.datatype().into_owned())
             .pop()
             .unwrap()
         {
@@ -70,8 +82,7 @@ pub fn literal_enc(l: &Literal, global_cats: &Cats) -> (Expr, BaseRDFNodeType, B
         } else {
             let dt = l.datatype().into_owned();
             let offset = global_cats.get_literal_counter(&dt);
-            // Local cats are not stored to disk, hence None
-            let (enc, local) = Cats::new_singular_literal(l.value(), dt, offset, None);
+            let (enc, local) = Cats::new_local_singular_literal(l.value(), dt, offset);
             (
                 lit(enc).cast(DataType::UInt32),
                 bt,

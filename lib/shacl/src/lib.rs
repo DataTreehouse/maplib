@@ -15,9 +15,7 @@ use representation::cats::LockedCats;
 use representation::dataset::NamedGraph;
 
 #[derive(Clone)]
-pub struct ShaclInferenceResult {
-
-}
+pub struct ShaclInferenceResult {}
 
 impl Display for ShaclInferenceResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -84,7 +82,6 @@ pub fn validate(
 ) -> Result<ValidationReport, ShaclError> {
     unimplemented!("Contact Data Treehouse to try")
 }
-
 
 pub fn infer_shacl(
     _triplestore: &mut Triplestore,

@@ -1,4 +1,5 @@
 use super::{CatEncs, CatTriples, CatType, Cats};
+use crate::cats::maps::CatMaps;
 use crate::cats::LockedCats;
 use crate::solution_mapping::{BaseCatState, EagerSolutionMappings};
 use crate::{
@@ -91,7 +92,6 @@ impl Cats {
     pub fn merge(
         &mut self,
         other_cats: Vec<LockedCats>,
-        path: Option<&Path>,
     ) -> HashMap<String, HashMap<CatType, CatReEnc>> {
         let mut map = HashMap::new();
         for c in other_cats {
@@ -103,10 +103,12 @@ impl Cats {
                     let re_enc = enc.maps.merge(&other_enc.maps, &mut counter);
                     other_map.insert(t.clone(), re_enc);
                 } else {
-                    let (new_enc, re_enc) = CatEncs::new_remap(other_enc, path, &mut counter);
-
-                    self.cat_map.insert(t.clone(), new_enc);
-
+                    let mut enc = CatEncs::new_empty(
+                        self.path.as_ref().map(|x| x.as_ref()),
+                        &t.as_base_rdf_node_type(),
+                    );
+                    let re_enc = enc.maps.merge(&other_enc.maps, &mut counter);
+                    self.cat_map.insert(t.clone(), enc);
                     other_map.insert(t.clone(), re_enc);
                 }
                 self.set_counter(counter, t);

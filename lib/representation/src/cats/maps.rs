@@ -1,13 +1,13 @@
 pub mod in_memory;
-pub mod on_disk;
 
 use crate::cats::maps::in_memory::CatMapsInMemory;
-use crate::cats::maps::on_disk::CatMapsOnDisk;
 use crate::cats::CatReEnc;
 use crate::BaseRDFNodeType;
+use disk::CatMapsOnDisk;
 use std::borrow::Cow;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
+use std::sync::Arc;
 
 #[derive(Debug, Clone)]
 pub enum CatMaps {
@@ -16,154 +16,155 @@ pub enum CatMaps {
 }
 
 impl CatMaps {
-    pub(crate) fn new_remap(
-        maps: &CatMaps,
-        path: Option<&Path>,
-        c: &mut u32,
-    ) -> (CatMaps, CatReEnc) {
-        if let Some(path) = path {
-            if let CatMaps::OnDisk(disk) = maps {
-                let (disk, re_enc) = CatMapsOnDisk::new_remap(disk, c, path);
-                (CatMaps::OnDisk(disk), re_enc)
-            } else {
-                unreachable!("Should never happen")
-            }
-        } else {
-            if let CatMaps::InMemory(mem) = maps {
-                let (mem, re_enc) = CatMapsInMemory::new_remap(mem, c);
-                (CatMaps::InMemory(mem), re_enc)
-            } else {
-                unreachable!("Should never happen")
-            }
-        }
-    }
-
-    pub(crate) fn inner_join_re_enc(&self, other: &CatMaps) -> Vec<(u32, u32)> {
+    pub fn inner_join_re_enc(&self, other: &Self) -> Vec<(u32, u32)> {
         match self {
-            CatMaps::InMemory(mem) => {
-                if let CatMaps::InMemory(other_mem) = other {
-                    mem.inner_join_re_enc(other_mem)
-                } else {
-                    unreachable!("Should never happen")
+            CatMaps::InMemory(m) => match other {
+                CatMaps::InMemory(other_m) => m.inner_join_re_enc(other_m),
+                CatMaps::OnDisk(_) => {
+                    todo!()
                 }
-            }
-            CatMaps::OnDisk(disk) => {
-                if let CatMaps::OnDisk(other_disk) = other {
-                    disk.inner_join_re_enc(other_disk)
-                } else {
-                    unreachable!("Should never happen")
+            },
+            CatMaps::OnDisk(d) => {
+                match other {
+                    CatMaps::InMemory(m) => {
+                        d.inner_join_re_enc_in_memory(m.to_record_batch())
+                    } CatMaps::OnDisk(d) => {
+                        d.inner_join_re_enc_on_disk(d)
+                    }
                 }
             }
         }
     }
-
-    pub fn merge(&mut self, other: &CatMaps, c: &mut u32) -> CatReEnc {
+    pub fn merge(&mut self, other: &Self, c: &mut u32) -> CatReEnc {
         match self {
-            CatMaps::InMemory(mem) => {
-                if let CatMaps::InMemory(other_mem) = other {
-                    mem.merge(other_mem, c)
-                } else {
-                    unreachable!("Should never happen")
+            CatMaps::InMemory(m) => match other {
+                CatMaps::InMemory(other) => m.merge(other, c),
+                CatMaps::OnDisk(..) => {
+                    unreachable!()
                 }
-            }
-            CatMaps::OnDisk(disk) => {
-                if let CatMaps::OnDisk(other_disk) = other {
-                    disk.merge(other_disk, c)
-                } else {
-                    unreachable!("Should never happen")
+            },
+            CatMaps::OnDisk(d) => match other {
+                CatMaps::InMemory(m) => {
+                    let cat_map = d.merge_other_in_memory(m.to_record_batch(), c);
+                    let cat_reenc = CatReEnc {
+                        cat_map: Arc::new(cat_map),
+                    };
+                    cat_reenc
                 }
-            }
+                CatMaps::OnDisk(..) => {
+                    unreachable!()
+                }
+            },
         }
     }
-
-    pub fn contains_str(&self, s: &str) -> bool {
-        match self {
-            CatMaps::InMemory(mem) => mem.contains_str(s),
-            CatMaps::OnDisk(disk) => disk.contains_str(s),
-        }
-    }
-
     pub fn contains_u32(&self, u: &u32) -> bool {
         match self {
-            CatMaps::InMemory(mem) => mem.contains_u32(u),
-            CatMaps::OnDisk(disk) => disk.contains_u32(u),
+            CatMaps::InMemory(m) => m.contains_u32(u),
+            CatMaps::OnDisk(d) => d.contains_u32(u),
         }
     }
-
     pub fn is_empty(&self) -> bool {
         match self {
-            CatMaps::InMemory(mem) => mem.is_empty(),
-            CatMaps::OnDisk(disk) => disk.is_empty(),
+            CatMaps::InMemory(m) => m.is_empty(),
+            CatMaps::OnDisk(d) => d.is_empty(),
         }
     }
-
-    pub fn encode_new_string(&mut self, s: String, u: u32) {
+    pub fn maybe_encode_strs(&self, s: &[Option<&str>]) -> Vec<Option<u32>> {
         match self {
-            CatMaps::InMemory(mem) => mem.encode_new_string(s, u),
-            CatMaps::OnDisk(disk) => disk.encode_new_string(s, u),
+            CatMaps::InMemory(m) => m.maybe_encode_strs(s),
+            CatMaps::OnDisk(d) => d.maybe_encode_strs(s),
         }
     }
 
-    pub fn maybe_encode_str(&self, s: &str) -> Option<&u32> {
+    //
+    pub fn encode_all_new_non_duplicated_strings(
+        &mut self,
+        maybe_new_strings: Vec<String>,
+        c: &mut u32,
+    ) {
         match self {
-            CatMaps::InMemory(mem) => mem.maybe_encode_str(s),
-            CatMaps::OnDisk(disk) => disk.maybe_encode_str(s),
+            CatMaps::InMemory(m) => {
+                m.encode_all_new_non_duplicated_strings(maybe_new_strings, c);
+            }
+            CatMaps::OnDisk(d) => {
+                d.encode_all_new_non_duplicated_strings(maybe_new_strings, c);
+            }
         }
     }
-
-    pub fn new_singular(value: &str, u: u32, path: Option<&Path>, bt: &BaseRDFNodeType) -> CatMaps {
-        if let Some(path) = path {
-            CatMaps::InMemory(CatMapsOnDisk::new_singular(value, u, path))
-        } else {
-            CatMaps::InMemory(CatMapsInMemory::new_singular(value, u, bt))
+    pub fn encode_new_in_memory_string(&mut self, s: String, u: u32) {
+        match self {
+            CatMaps::InMemory(m) => {
+                m.encode_new_in_memory_string(s, u);
+            }
+            CatMaps::OnDisk(..) => {
+                unreachable!("Should never happen")
+            }
         }
     }
-
-    pub fn new_empty(path: Option<&Path>, bt: &BaseRDFNodeType) -> CatMaps {
-        if let Some(path) = path {
-            CatMaps::OnDisk(CatMapsOnDisk::new_empty(path))
-        } else {
-            CatMaps::InMemory(CatMapsInMemory::new_empty(bt))
+    pub fn maybe_encode_in_memory_str(&self, s: &str) -> Option<u32> {
+        match self {
+            CatMaps::InMemory(m) => m.maybe_encode_in_memory_str(s),
+            CatMaps::OnDisk(..) => {
+                unreachable!("Should never happen")
+            }
         }
     }
-
     pub fn counter(&self) -> u32 {
         match self {
             CatMaps::InMemory(m) => m.counter(),
             CatMaps::OnDisk(d) => d.counter(),
         }
     }
-
     pub fn decode_batch(&self, v: &[Option<u32>]) -> Vec<Option<Cow<'_, str>>> {
         match self {
-            CatMaps::InMemory(mem) => mem.decode_batch(v),
-            CatMaps::OnDisk(disk) => disk.decode_batch(v),
+            CatMaps::InMemory(m) => m.decode_batch(v),
+            CatMaps::OnDisk(d) => d.decode_batch(v),
         }
     }
-
     pub fn maybe_decode(&self, u: &u32) -> Option<Cow<'_, str>> {
         match self {
-            CatMaps::InMemory(mem) => mem.maybe_decode(u),
-            CatMaps::OnDisk(disk) => disk.maybe_decode(u),
+            CatMaps::InMemory(m) => m.maybe_decode(u),
+            CatMaps::OnDisk(d) => d.maybe_decode(u),
+        }
+    }
+    pub fn image(
+        &self,
+        path: Option<&Path>,
+        s: &HashSet<u32>,
+        dt: &BaseRDFNodeType,
+    ) -> Option<Self> {
+        match self {
+            CatMaps::InMemory(m) => m.image(s),
+            CatMaps::OnDisk(d) => {
+                if let Some(path) = path {
+                    d.image_disk(path,s).map(CatMaps::OnDisk)
+                } else {
+                    let im = d.image_memory(s);
+                    if let Some(im) = im {
+                        let mut inmem = CatMapsInMemory::new_empty(dt);
+                        for (s,u) in im {
+                            inmem.encode_new_in_memory_string(s, u)
+                        }
+                        Some(CatMaps::InMemory(inmem))
+                    } else {
+                        None
+                    }
+                }
+
+            },
+        }
+    }
+    pub fn new_empty(path: Option<&Path>, bt: &BaseRDFNodeType) -> Self {
+        match path {
+            None => CatMaps::InMemory(CatMapsInMemory::new_empty(bt)),
+            Some(p) => CatMaps::OnDisk(CatMapsOnDisk::new_empty(p)),
         }
     }
 
-    pub fn image(&self, s: &HashSet<u32>) -> Option<Self> {
+    pub fn rank_map(&self, us: HashSet<u32>) -> HashMap<u32, u32> {
         match self {
-            CatMaps::InMemory(m) => {
-                if let Some(m) = m.image(s) {
-                    Some(CatMaps::InMemory(m))
-                } else {
-                    None
-                }
-            }
-            CatMaps::OnDisk(d) => {
-                if let Some(m) = d.image(s) {
-                    Some(CatMaps::OnDisk(m))
-                } else {
-                    None
-                }
-            }
+            CatMaps::InMemory(m) => m.rank_map(us),
+            CatMaps::OnDisk(d) => d.rank_map(us),
         }
     }
 }

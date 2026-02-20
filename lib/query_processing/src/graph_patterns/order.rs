@@ -1,9 +1,13 @@
 use crate::errors::QueryProcessingError;
-use polars::prelude::{col, Expr, SortMultipleOptions};
+use polars::datatypes::{DataType, Field};
+use polars::frame::DataFrame;
+use polars::prelude::{col, Column, Expr, IntoColumn, SortMultipleOptions};
+use polars::series::Series;
 use representation::cats::{maybe_decode_expr, LockedCats};
 use representation::solution_mapping::{BaseCatState, SolutionMappings};
 use representation::BaseRDFNodeType;
 use std::cmp::Ordering;
+use std::collections::HashSet;
 
 pub fn order_by(
     mut solution_mappings: SolutionMappings,
@@ -18,14 +22,13 @@ pub fn order_by(
     let mut order_exprs = vec![];
     let mut asc_bools = vec![];
     for (c, a) in columns.iter().zip(asc_ordering) {
-        solution_mappings = make_sortable(c, solution_mappings, global_cats.clone());
         solution_mappings = solution_mappings.as_eager(false).as_lazy();
 
         let t = solution_mappings.rdf_node_types.get(c).unwrap();
         if t.is_multi() {
-            let ts: Vec<_> = t.map.keys().collect();
+            let ts: Vec<_> = t.map.iter().collect();
             let mut ts = ts.clone();
-            ts.sort_by(|x, y| {
+            ts.sort_by(|(x, _), (y, _)| {
                 if x.is_none() {
                     if y.is_none() {
                         Ordering::Equal
@@ -62,13 +65,23 @@ pub fn order_by(
             // Nulls are first in ascending sort
             // By placing literals first, we are using the subsequent types to break ties where the literal is null.
             ts.reverse();
-            for t in ts {
+            for (t, s) in ts {
                 asc_bools.push(a);
-                order_exprs.push(col(c).struct_().field_by_name(&t.field_col_name()))
+                order_exprs.push(make_ordering_expr(
+                    col(c).struct_().field_by_name(&t.field_col_name()),
+                    global_cats.clone(),
+                    t.clone(),
+                    s.clone(),
+                ));
             }
         } else {
             asc_bools.push(a);
-            order_exprs.push(col(c))
+            order_exprs.push(make_ordering_expr(
+                col(c),
+                global_cats.clone(),
+                t.get_base_type().unwrap().clone(),
+                t.get_base_state().unwrap().clone(),
+            ));
         }
     }
 
@@ -83,53 +96,45 @@ pub fn order_by(
     Ok(solution_mappings)
 }
 
-pub fn make_sortable(
-    c: &str,
-    mut solution_mappings: SolutionMappings,
-    global_cats: LockedCats,
-) -> SolutionMappings {
-    if let Some(state) = solution_mappings.rdf_node_types.get_mut(c) {
-        let expr = col(c);
-        let mut exprs = vec![];
-        if !state.is_multi() {
-            let b = state.get_base_type().unwrap();
-            let s = state.get_base_state().unwrap();
-            let (e, new_state) = make_base_cat_sortable(expr, b, s, global_cats);
-            state.map.insert(b.clone(), new_state);
-            solution_mappings.mappings = solution_mappings.mappings.with_column(e);
-        } else {
-            for (t, s) in state.map.iter_mut() {
-                let (e, new_s) = make_base_cat_sortable(
-                    expr.clone().struct_().field_by_name(&t.field_col_name()),
-                    t,
-                    s,
-                    global_cats.clone(),
-                );
-                *s = new_s;
-                exprs.push(e);
-            }
-            if !exprs.is_empty() {
-                solution_mappings.mappings = solution_mappings
-                    .mappings
-                    .with_column(expr.struct_().with_fields(exprs));
-            }
-        }
-    }
-    solution_mappings
-}
+fn make_ordering_expr(e: Expr, cats: LockedCats, t: BaseRDFNodeType, s: BaseCatState) -> Expr {
+    if let BaseCatState::CategoricalNative(_, local) = s {
+        e.map(
+            move |x| {
+                let x_len = x.len();
+                let original_name = x.name().clone();
 
-pub fn make_base_cat_sortable(
-    expr: Expr,
-    base_type: &BaseRDFNodeType,
-    base_state: &BaseCatState,
-    global_cats: LockedCats,
-) -> (Expr, BaseCatState) {
-    match base_state {
-        BaseCatState::CategoricalNative(_, _) => (
-            maybe_decode_expr(expr, base_type, base_state, global_cats),
-            BaseCatState::String,
-        ),
-        BaseCatState::String => (expr, BaseCatState::String),
-        BaseCatState::NonString => (expr, BaseCatState::NonString),
+                let u32s: HashSet<_> = x
+                    .u32()
+                    .unwrap()
+                    .iter()
+                    .filter(|x| x.is_some())
+                    .map(|x| x.unwrap())
+                    .collect();
+                let t = t.clone();
+                let local = local.clone();
+                let local_rank_map = if let Some(local) = local {
+                    let rank = local.read().unwrap().rank_map(u32s.clone(), &t);
+                    Some(rank)
+                } else {
+                    None
+                };
+                let mut global_rank_map = cats.read().unwrap().rank_map(u32s, &t);
+                if let Some(local_rank_map) = local_rank_map {
+                    global_rank_map.extend(local_rank_map);
+                }
+                let mut ser = Series::from_iter(x.u32().unwrap().iter().map(|x| {
+                    if let Some(x) = x {
+                        global_rank_map.get(&x).cloned()
+                    } else {
+                        None
+                    }
+                }));
+                ser.rename(original_name);
+                Ok(ser.into_column())
+            },
+            |_, f| Ok(Field::new(f.name().clone(), DataType::UInt32)),
+        )
+    } else {
+        e
     }
 }

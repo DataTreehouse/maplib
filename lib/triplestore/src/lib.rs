@@ -72,7 +72,7 @@ impl Triplestore {
         let mut predicates = vec![];
         if let Some(graph_triples_map) = self.graph_triples_map.get(graph) {
             for (k, v) in graph_triples_map {
-                predicates.push(k.as_str());
+                predicates.push(Some(k.as_str()));
                 for ((st, ot), triples) in v {
                     if st.stored_cat() {
                         if !us.contains_key(st) {
@@ -125,7 +125,7 @@ impl Triplestore {
                 }
             }
             // Adding the predicates
-            let pred_us = self.global_cats.read()?.encode_iri_slice(&predicates);
+            let pred_us = self.global_cats.read()?.maybe_encode_iri_slice(&predicates);
             if !us.contains_key(&BaseRDFNodeType::IRI) {
                 us.insert(BaseRDFNodeType::IRI, HashSet::new());
             }
@@ -137,7 +137,7 @@ impl Triplestore {
             }
             // Creating the cats image
             let c = self.global_cats.read()?;
-            let cats_image = c.image(&us);
+            let cats_image = c.image(&us, None);
 
             let new_graph_triples = self.graph_triples_map.remove(graph).unwrap();
             let new_graph_transient_triples = self.graph_transient_triples_map.remove(graph);
@@ -325,6 +325,7 @@ impl Triplestore {
         } else {
             HashMap::new()
         };
+        let locked_cats = LockedCats::new_empty(pathbuf.as_ref().map(|x| x.as_ref()));
         Ok(Triplestore {
             graph_triples_map: HashMap::from([(NamedGraph::DefaultGraph, Default::default())]),
             graph_transient_triples_map: HashMap::from([(
@@ -335,7 +336,7 @@ impl Triplestore {
             parser_call: 0,
             indexing: HashMap::from([(NamedGraph::DefaultGraph, indexing)]),
             fts_index: fts_index_map,
-            global_cats: LockedCats::new_empty(),
+            global_cats: locked_cats,
         })
     }
 
@@ -398,11 +399,7 @@ impl Triplestore {
         transient: bool,
     ) -> Result<Vec<NewTriples>, TriplestoreError> {
         let prepare_triples_now = Instant::now();
-        let dfs_to_add = prepare_add_triples_par(
-            ts,
-            self.global_cats.clone(),
-            self.storage_folder.as_ref().map(|x| x.as_ref()),
-        );
+        let dfs_to_add = prepare_add_triples_par(ts, self.global_cats.clone());
         trace!(
             "Preparing triples took {} seconds",
             prepare_triples_now.elapsed().as_secs_f32()
@@ -423,7 +420,8 @@ impl Triplestore {
         transient: bool,
     ) -> Result<Vec<NewTriples>, TriplestoreError> {
         let global_cats = self.globalize(local_cat_triples);
-        self.add_global_cat_triples(global_cats, transient)
+        let res = self.add_global_cat_triples(global_cats, transient);
+        res
     }
 
     #[instrument(skip_all)]
@@ -612,7 +610,6 @@ struct TriplesToAddPartitionedPredicate {
 pub fn prepare_add_triples_par(
     mut ts: Vec<TriplesToAdd>,
     global_cats: LockedCats,
-    path: Option<&Path>,
 ) -> Vec<CatTriples> {
     let mut all_partitioned: Vec<TriplesToAddPartitionedPredicate> = ts
         .par_drain(..)
@@ -691,7 +688,6 @@ pub fn prepare_add_triples_par(
                     subject_cat_state,
                     object_cat_state,
                     &cats,
-                    path,
                 )
             },
         )
