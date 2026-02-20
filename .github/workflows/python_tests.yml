@@ -10,7 +10,7 @@ env:
   CARGO_TERM_COLOR: always
   RUST_LOG: debug
   MATURIN_VERSION: '1.9.4'
-  RUST_TOOLCHAIN: nightly-2025-10-24
+  RUST_TOOLCHAIN: nightly-2025-11-11
   PYTHON_VERSION: '3.12'
 
 jobs:
