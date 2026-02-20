@@ -163,9 +163,12 @@ type ParametersType<'a> = HashMap<String, (Bound<'a, PyAny>, HashMap<String, PyR
 #[pymethods]
 impl PyModel {
     #[new]
-    #[pyo3(signature = (indexing_options=None))]
+    #[pyo3(signature = (indexing_options=None, storage_folder=None))]
     #[instrument(skip_all)]
-    fn new(indexing_options: Option<PyIndexingOptions>) -> PyResult<PyModel> {
+    fn new(
+        indexing_options: Option<PyIndexingOptions>,
+        storage_folder: Option<String>,
+    ) -> PyResult<PyModel> {
         let indexing = if let Some(indexing_options) = indexing_options {
             Some(indexing_options.inner)
         } else {
@@ -173,7 +176,8 @@ impl PyModel {
         };
         Ok(PyModel {
             inner: Mutex::new(
-                InnerModel::new(None, None, indexing, None).map_err(PyMaplibError::from)?,
+                InnerModel::new(None, storage_folder, indexing, None)
+                    .map_err(PyMaplibError::from)?,
             ),
         })
     }

@@ -1,3 +1,4 @@
+from disk import disk_params
 from maplib import Model, IndexingOptions
 import pytest
 from polars.testing import assert_frame_equal
@@ -14,9 +15,8 @@ PATH_HERE = pathlib.Path(__file__).parent
 TESTDATA_PATH = PATH_HERE / "testdata"
 
 
-@pytest.fixture(scope="function", params=[True, False])
+@pytest.fixture(scope="function", params=disk_params())
 def windpower_model(request):
-    print(request)
     instance_mapping = """
     @prefix tpl:<https://github.com/magbak/chrontext/templates#>.
     @prefix rds:<https://github.com/magbak/chrontext/rds_power#>.
@@ -55,8 +55,9 @@ def windpower_model(request):
     """
 
     n = 40
-
-    model = Model()
+    disk=request.param
+    start_time = time.time()
+    model = Model(IndexingOptions(subject_object_index=True), storage_folder=disk)
     model.add_template(instance_mapping)
     # Used as a prefix
     wpex = "https://github.com/magbak/chrontext/windpower_example#"
@@ -253,6 +254,7 @@ def windpower_model(request):
     wind_turbine_has_wms = add_aspect_labeling_by_source(wind_turbine_has_wms, "LE")
 
     model.map("tpl:FunctionalAspect", df=wind_turbine_has_wms)
+    print(f"mapping took {str(time.time() - start_time)}")
     return model
 
 

@@ -1,20 +1,33 @@
+import os
+from typing import List, Optional
+
+import pytest
+
+from disk import disk_params
 from maplib import Model
 from polars.testing import assert_frame_equal
 import polars as pl
 import pathlib
+import time
 
 pl.Config.set_fmt_str_lengths(300)
 
 PATH_HERE = pathlib.Path(__file__).parent
 TESTDATA_PATH = PATH_HERE / "testdata" / "jsons"
 
-
-def test_map_json_1():
+@pytest.mark.parametrize("disk", disk_params())
+def test_map_json_1(disk):
     json_1 = TESTDATA_PATH / "1.json"
-    m = Model()
+    m = Model(storage_folder=disk)
+    start_map = time.time()
     m.map_json(str(json_1))
+    map_took = time.time() - start_map
+    print(f"Map took {round(map_took, 5)}")
+    start_query = time.time()
     df = m.query("""SELECT * WHERE {?a ?b ?c}""")
     assert df.height == 18
+    query_took = time.time() - start_query
+    print(f"Query took {round(query_took, 5)}")
 
     print(m.writes("turtle"))
     df2 = m.query("""
@@ -36,10 +49,10 @@ def test_map_json_1():
 """)
     assert_frame_equal(df2, expect2)
 
-
-def test_map_json_2():
+@pytest.mark.parametrize("disk", disk_params())
+def test_map_json_2(disk):
     json_2 = TESTDATA_PATH / "2.json"
-    m = Model()
+    m = Model(storage_folder=disk)
     m.map_json(str(json_2))
     df = m.query("""SELECT * WHERE {?a ?b ?c}""")
     assert df.height == 56
@@ -122,14 +135,15 @@ def test_map_json_list_string():
     height_after = m2.query("SELECT * WHERE {?a ?b ?c}").height
     assert height == height_after
 
-def test_insert():
+@pytest.mark.parametrize("disk", disk_params())
+def test_insert(disk):
     s = """
     { "maplib_users": [
     { "name": "Alice", "address": { "city": "Swansea" } },
     { "name": "Bob", "address": { "city": "Swansea" } }
     ]}
     """
-    m = Model()
+    m = Model(storage_folder=disk)
     m.map_json(s, graph="urn:graph:tmp")
     users = """
         PREFIX :<https://github.com/DataTreehouse/maplib/users#>

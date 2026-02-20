@@ -1,7 +1,6 @@
 import pytest
 
 from maplib import Model, MaplibException
-from polars.testing import assert_frame_equal
 import polars as pl
 import pathlib
 
