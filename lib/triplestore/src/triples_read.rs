@@ -33,6 +33,8 @@ use std::path::Path;
 use std::time::Instant;
 use tracing::{debug, instrument};
 
+const UTF8_BOM:[u8;3] = [0xEF,0xBB,0xBF];
+
 type MapType = HashMap<String, HashMap<String, (Vec<Subject>, Vec<Term>)>>;
 
 #[derive(Eq, PartialEq, Debug, Clone)]
@@ -145,6 +147,12 @@ impl Triplestore {
         triples_batch_size: Option<usize>,
         known_contexts: HashMap<String, String>,
     ) -> Result<(), TriplestoreError> {
+        let use_slice = if slice.starts_with(&UTF8_BOM) {
+            &slice[UTF8_BOM.len()..]
+        } else {
+            slice
+        };
+
         let start_quadproc_now = Instant::now();
         let parallel = if let Some(parallel) = parallel {
             parallel
@@ -173,7 +181,7 @@ impl Triplestore {
                 if let Some(base_iri) = base_iri {
                     parser = parser.with_base_iri(base_iri).unwrap();
                 }
-                for r in parser.split_slice_for_parallel_parsing(slice, threads) {
+                for r in parser.split_slice_for_parallel_parsing(use_slice, threads) {
                     readers.push(MyFromSliceQuadReader {
                         parser: MyFromSliceQuadReaderKind::TurtlePar(r),
                     });
@@ -183,7 +191,7 @@ impl Triplestore {
                 if !checked {
                     parser = parser.lenient();
                 }
-                for r in parser.split_slice_for_parallel_parsing(slice, threads) {
+                for r in parser.split_slice_for_parallel_parsing(use_slice, threads) {
                     readers.push(MyFromSliceQuadReader {
                         parser: MyFromSliceQuadReaderKind::NTriplesPar(r),
                     });
@@ -202,7 +210,7 @@ impl Triplestore {
             if let Some(base_iri) = base_iri {
                 parser = parser.with_base_iri(base_iri).unwrap();
             }
-            let mut for_slice = parser.for_slice(slice);
+            let mut for_slice = parser.for_slice(use_slice);
             if matches!(use_format, RdfFormat::JsonLd { .. }) {
                 for_slice = for_slice.with_document_loader(move |url| {
                     if let Some(doc) = known_contexts.get(url) {

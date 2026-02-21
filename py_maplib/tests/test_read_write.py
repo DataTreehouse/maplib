@@ -12,6 +12,31 @@ PATH_HERE = pathlib.Path(__file__).parent
 TESTDATA_PATH = PATH_HERE / "testdata"
 
 
+
+def test_read_ntriples_utf8_bom():
+    # Produced this way:
+    #with open(TESTDATA_PATH / "read_ntriples.nt") as f:
+    #    c = f.read()
+    #with open(TESTDATA_PATH / "read_ntriples_utf8_bom.nt", "w", encoding="utf-8-sig") as f:
+    #    f.write(c)
+
+    m = Model()
+    m.read(str(TESTDATA_PATH / "read_ntriples_utf8_bom.nt"))
+    res = m.query(
+        """
+            PREFIX foaf:<http://xmlns.com/foaf/0.1/>
+
+            SELECT ?s ?v ?o WHERE {
+            ?s ?v ?o .
+            } ORDER BY ?s ?v ?o
+            """
+    ).sort(["s", "v", "o"])
+    # TODO: Fix multitype sorting
+    filename = TESTDATA_PATH / "read_ntriples.csv"
+    # res.write_csv(str(filename))
+    expected_df = pl.scan_csv(filename).collect()
+    pl.testing.assert_frame_equal(res, expected_df)
+
 def test_read_ntriples():
     m = Model()
     m.read(str(TESTDATA_PATH / "read_ntriples.nt"))
