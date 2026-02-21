@@ -1,0 +1,229 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix cc: <http://creativecommons.org/ns#> .
+@prefix era: <http://data.europa.eu/949/> .
+@prefix era-skos: <http://data.europa.eu/949/concepts/> .
+@prefix era-vehicle-types: <http://data.europa.eu/949/concepts/vehicle-types/> .
+@prefix era-vehicle-types-eratv: <http://data.europa.eu/949/concepts/vehicle-types/eratv/> .
+
+
+#################################################################
+#
+#    Concept Schemes
+#
+#################################################################
+
+
+era-vehicle-types:SubCategories a skos:ConceptScheme ;
+    dct:issued "2020-09-01"^^xsd:date ;
+    dct:modified "2022-09-09"^^xsd:date ,
+                  "2025-01-27"^^xsd:date ;
+    cc:license <https://creativecommons.org/licenses/by/4.0/> ;
+    rdfs:comment "Controlled SKOS-based vocabularies defined by the European Union Agency for Railways to describe concepts related to the European railway infrastructure and the vehicles authorized to operate over it."@en ;
+    rdfs:label "Vehicle Sub Categories"@en ;
+    skos:prefLabel "Vehicle Sub Categories"@en ;
+    skos:changeNote """ Revision 2025-01-27: 
+                        - removed previous text for skos:note on retrieved from the ERATV database
+                        - Added the code associated to the sub categories in skos:notation
+                      """@en ;
+    dct:title "Concept scheme grouping vehicle sub categories"@en .
+
+
+#################################################################
+#
+#    Concept instances
+#
+#################################################################
+
+
+########## Vehicle subcategories ##########
+
+era-vehicle-types-eratv:locomotive a skos:Concept ;
+    skos:inScheme era-vehicle-types:SubCategories ; 
+    skos:topConceptOf  era-vehicle-types:SubCategories ;  
+    skos:notation "11"^^xsd:string ;
+    skos:broader era-vehicle-types-eratv:11 ;
+    skos:prefLabel "Locomotive"@en .
+
+era-vehicle-types-eratv:powerUnit a skos:Concept ;
+    skos:inScheme era-vehicle-types:SubCategories ; 
+    skos:topConceptOf  era-vehicle-types:SubCategories ;  
+    skos:notation "12"^^xsd:string;
+    skos:broader era-vehicle-types-eratv:11 ;
+    skos:prefLabel "Power Unit (or power car)"@en .
+
+era-vehicle-types-eratv:passengerTrainset a skos:Concept ;
+    skos:inScheme era-vehicle-types:SubCategories ; 
+    skos:topConceptOf  era-vehicle-types:SubCategories ;  
+    skos:notation "13"^^xsd:string;
+    skos:broader era-vehicle-types-eratv:11 ;
+    skos:prefLabel "Self-propelled passenger trainset"@en .
+
+era-vehicle-types-eratv:freightTrainset a skos:Concept ;
+    skos:inScheme era-vehicle-types:SubCategories ; 
+    skos:topConceptOf  era-vehicle-types:SubCategories ;  
+    skos:notation "15"^^xsd:string;
+    skos:broader era-vehicle-types-eratv:11 ;
+    skos:prefLabel "Self-propelled freight trainset"@en .
+
+era-vehicle-types-eratv:railcar a skos:Concept ;
+    skos:inScheme era-vehicle-types:SubCategories ; 
+    skos:topConceptOf  era-vehicle-types:SubCategories ;  
+    skos:notation "16"^^xsd:string;
+    skos:broader era-vehicle-types-eratv:11 ;
+    skos:prefLabel "Railcar"@en .
+
+era-vehicle-types-eratv:shunter a skos:Concept ;
+    skos:inScheme era-vehicle-types:SubCategories ; 
+    skos:topConceptOf  era-vehicle-types:SubCategories ;  
+    skos:notation "17"^^xsd:string ;
+    skos:broader era-vehicle-types-eratv:11 ;
+    skos:prefLabel "Shunter"@en .
+
+era-vehicle-types-eratv:tramTrain a skos:Concept ;
+    skos:inScheme era-vehicle-types:SubCategories ; 
+    skos:topConceptOf  era-vehicle-types:SubCategories ;  
+    skos:notation "18"^^xsd:string ;
+    skos:broader era-vehicle-types-eratv:11 ;
+    skos:prefLabel "Tram-Train"@en .
+
+era-vehicle-types-eratv:otherTractionVehicles a skos:Concept ;
+    skos:inScheme era-vehicle-types:SubCategories ; 
+    skos:topConceptOf  era-vehicle-types:SubCategories ;  
+    skos:notation "19"^^xsd:string ;
+    skos:broader era-vehicle-types-eratv:tractionVehicles ;
+    skos:prefLabel "Other (tramways, light rail vehicles, etc)"@en .
+
+era-vehicle-types-eratv:passengerCoach a skos:Concept ;
+    skos:inScheme era-vehicle-types:SubCategories ; 
+    skos:topConceptOf  era-vehicle-types:SubCategories ; 
+    skos:editorialNote "TODO - check the correct ctegory value"@en ;
+    skos:notation "41"^^xsd:string ;
+    skos:broader era-vehicle-types-eratv:31 ;
+    skos:prefLabel "Passenger Coach (incl. sleeping cars, restaurant, etc.)"@en .
+
+era-vehicle-types-eratv:van a skos:Concept ;
+    skos:inScheme era-vehicle-types:SubCategories ; 
+    skos:topConceptOf  era-vehicle-types:SubCategories ;  
+    skos:notation "33"^^xsd:string ;
+    skos:broader era-vehicle-types-eratv:31 ;
+    skos:prefLabel "Van"@en .
+
+era-vehicle-types-eratv:carCarrier a skos:Concept ;
+    skos:inScheme era-vehicle-types:SubCategories ; 
+    skos:topConceptOf  era-vehicle-types:SubCategories ;  
+    skos:notation "35"^^xsd:string ;
+    skos:broader era-vehicle-types-eratv:31 ;
+    skos:prefLabel "Car Carrier"@en .
+
+era-vehicle-types-eratv:drivingCoach a skos:Concept ;
+    skos:inScheme era-vehicle-types:SubCategories ; 
+    skos:topConceptOf  era-vehicle-types:SubCategories ;  
+    skos:notation "36"^^xsd:string ;
+    skos:broader era-vehicle-types-eratv:31 ;
+    skos:prefLabel "Driving Coach"@en .
+
+era-vehicle-types-eratv:serviceVehicle a skos:Concept ;
+    skos:inScheme era-vehicle-types:SubCategories ; 
+    skos:topConceptOf  era-vehicle-types:SubCategories ;  
+    skos:notation "37"^^xsd:string ;
+    skos:broader era-vehicle-types-eratv:31 ;
+    skos:prefLabel "Vehicle for services (e.g. kitchen)"@en .
+
+era-vehicle-types-eratv:drivingVan a skos:Concept ;
+    skos:inScheme era-vehicle-types:SubCategories ; 
+    skos:topConceptOf  era-vehicle-types:SubCategories ;  
+    skos:notation "38"^^xsd:string ;
+    skos:broader era-vehicle-types-eratv:31 ;
+    skos:prefLabel "Driving Van"@en .
+
+era-vehicle-types-eratv:coachesRake a skos:Concept ;
+    skos:inScheme era-vehicle-types:SubCategories ; 
+    skos:topConceptOf  era-vehicle-types:SubCategories ;  
+    skos:notation "39"^^xsd:string ;
+    skos:broader era-vehicle-types-eratv:31 ;
+    skos:prefLabel "Fixed rake of coaches"@en .
+
+era-vehicle-types-eratv:otherHauledPassenger a skos:Concept ;
+    skos:inScheme era-vehicle-types:SubCategories ;
+    skos:topConceptOf  era-vehicle-types:SubCategories ;  
+    skos:notation "41"^^xsd:string ;
+    skos:broader era-vehicle-types-eratv:31 ;
+    skos:prefLabel "Other hauled passenger vehicles"@en .
+
+era-vehicle-types-eratv:freightWagon a skos:Concept ;
+    skos:inScheme era-vehicle-types:SubCategories ; 
+    skos:topConceptOf  era-vehicle-types:SubCategories ;  
+    skos:notation "51"^^xsd:string ;
+    skos:broader era-vehicle-types-eratv:51 ;
+    skos:prefLabel "Freight wagon"@en .
+
+era-vehicle-types-eratv:separateRailBogies a skos:Concept ;
+    skos:inScheme era-vehicle-types:SubCategories ; 
+    skos:topConceptOf  era-vehicle-types:SubCategories ;  
+    skos:notation "54"^^xsd:string ;
+    skos:broader era-vehicle-types-eratv:51 ;
+    skos:prefLabel "Separate rail bogies connected to compatible road vehicle(s)"@en .
+
+era-vehicle-types-eratv:freightWagonsRake a skos:Concept ;
+    skos:inScheme era-vehicle-types:SubCategories ; 
+    skos:topConceptOf  era-vehicle-types:SubCategories ;  
+    skos:notation "53"^^xsd:string ;
+    skos:broader era-vehicle-types-eratv:freightWagons ;
+    skos:prefLabel "Fixed rake of freight wagons"@en .
+
+era-vehicle-types-eratv:selfPropelledSpecialVehicle a skos:Concept ;
+    skos:inScheme era-vehicle-types:SubCategories ; 
+    skos:topConceptOf  era-vehicle-types:SubCategories ;  
+    skos:notation "71"^^xsd:string ;
+    skos:scopeNote "This code shall not to be used after 2023-08-10"@en ;
+    skos:broader era-vehicle-types-eratv:71 ;
+    skos:prefLabel "Self-propelled special vehicle"@en .
+
+era-vehicle-types-eratv:hauledSpecialVehicle a skos:Concept ;
+    skos:inScheme era-vehicle-types:SubCategories ; 
+    skos:topConceptOf  era-vehicle-types:SubCategories ; 
+    skos:notation "73"^^xsd:string ;
+    skos:scopeNote "This code shall not to be used after 2023-08-10"@en ; 
+    skos:broader era-vehicle-types-eratv:71 ;
+    skos:prefLabel "Hauled special vehicle"@en .
+
+era-vehicle-types-eratv:onTrackMachines a skos:Concept ;
+    skos:inScheme era-vehicle-types:SubCategories ; 
+    skos:topConceptOf  era-vehicle-types:SubCategories ; 
+    skos:notation "72"^^xsd:string ;
+    skos:broader era-vehicle-types-eratv:71 ;
+    skos:prefLabel "On track Machines"@en ;
+    skos:altLabel "OTMs"@en . 
+
+era-vehicle-types-eratv:infraInspectionVehicles a skos:Concept ;
+    skos:inScheme era-vehicle-types:SubCategories ; 
+    skos:topConceptOf  era-vehicle-types:SubCategories ; 
+    skos:notation "74"^^xsd:string ;
+    skos:broader era-vehicle-types-eratv:71 ;
+    skos:prefLabel "Infrastructure inspection vehicles"@en .
+
+era-vehicle-types-eratv:envrionmentVehicles a skos:Concept ;
+    skos:inScheme era-vehicle-types:SubCategories ; 
+    skos:topConceptOf  era-vehicle-types:SubCategories ; 
+    skos:notation "75"^^xsd:string ;
+    skos:broader era-vehicle-types-eratv:71 ;
+    skos:prefLabel "Environment vehicles"@en .
+
+era-vehicle-types-eratv:emergencyVehicles a skos:Concept ;
+    skos:inScheme era-vehicle-types:SubCategories ; 
+    skos:topConceptOf  era-vehicle-types:SubCategories ; 
+    skos:notation "76"^^xsd:string ;
+    skos:broader era-vehicle-types-eratv:71 ;
+    skos:prefLabel "Emergency vehicles"@en .
+
+era-vehicle-types-eratv:roadRailVehicles a skos:Concept ;
+    skos:inScheme era-vehicle-types:SubCategories ; 
+    skos:topConceptOf  era-vehicle-types:SubCategories ; 
+    skos:notation "77"^^xsd:string ;
+    skos:broader era-vehicle-types-eratv:71 ;
+    skos:prefLabel "Road-Rail vehicles"@en .
