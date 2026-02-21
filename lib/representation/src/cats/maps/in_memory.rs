@@ -1,20 +1,57 @@
 use crate::cats::maps::CatMaps;
 use crate::cats::CatReEnc;
 use crate::BaseRDFNodeType;
-use arrow::array::{Array, RecordBatch, StringArray, StringViewArray, UInt32Array};
-use arrow::datatypes::{DataType, Field, Schema};
+use arrow::array::{Array, RecordBatch, StringArray, UInt32Array};
+use arrow::datatypes::{Field, Schema};
 use nohash_hasher::NoHashHasher;
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use std::borrow::Cow;
+use std::cmp;
+use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt::{Display, Formatter};
 use std::hash::BuildHasherDefault;
 use std::sync::Arc;
 
-#[derive(Debug, Clone, Ord, Eq, PartialEq, PartialOrd)]
+#[derive(Debug, Clone)]
 pub struct PrefixCompressedString {
     prefix: Arc<String>,
     suffix: Arc<String>,
+}
+
+impl PartialEq for PrefixCompressedString {
+    fn eq(&self, other: &Self) -> bool {
+        self.prefix == other.prefix && self.suffix == other.suffix
+    }
+}
+
+impl Eq for PrefixCompressedString {}
+
+impl PartialOrd for PrefixCompressedString {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for PrefixCompressedString {
+    fn cmp(&self, other: &Self) -> Ordering {
+        let self_prefix_slice = self.prefix.as_bytes();
+        let other_prefix_slice = other.prefix.as_bytes();
+        let self_suffix_slice = self.suffix.as_bytes();
+        let other_suffix_slice = other.suffix.as_bytes();
+        for (s, o) in self_prefix_slice
+            .iter()
+            .chain(self_suffix_slice.iter())
+            .zip(other_prefix_slice.iter().chain(other_suffix_slice.iter()))
+        {
+            let cmp = s.cmp(o);
+            if cmp != Ordering::Equal {
+                return cmp;
+            }
+        }
+        (self_prefix_slice.len() + self_suffix_slice.len())
+            .cmp(&(other_prefix_slice.len() + other_suffix_slice.len()))
+    }
 }
 
 impl Display for PrefixCompressedString {

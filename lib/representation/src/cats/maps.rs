@@ -24,15 +24,10 @@ impl CatMaps {
                     todo!()
                 }
             },
-            CatMaps::OnDisk(d) => {
-                match other {
-                    CatMaps::InMemory(m) => {
-                        d.inner_join_re_enc_in_memory(m.to_record_batch())
-                    } CatMaps::OnDisk(d) => {
-                        d.inner_join_re_enc_on_disk(d)
-                    }
-                }
-            }
+            CatMaps::OnDisk(d) => match other {
+                CatMaps::InMemory(m) => d.inner_join_re_enc_in_memory(m.to_record_batch()),
+                CatMaps::OnDisk(d) => d.inner_join_re_enc_on_disk(d),
+            },
         }
     }
     pub fn merge(&mut self, other: &Self, c: &mut u32) -> CatReEnc {
@@ -137,12 +132,12 @@ impl CatMaps {
             CatMaps::InMemory(m) => m.image(s),
             CatMaps::OnDisk(d) => {
                 if let Some(path) = path {
-                    d.image_disk(path,s).map(CatMaps::OnDisk)
+                    d.image_disk(path, s).map(CatMaps::OnDisk)
                 } else {
                     let im = d.image_memory(s);
                     if let Some(im) = im {
                         let mut inmem = CatMapsInMemory::new_empty(dt);
-                        for (s,u) in im {
+                        for (s, u) in im {
                             inmem.encode_new_in_memory_string(s, u)
                         }
                         Some(CatMaps::InMemory(inmem))
@@ -150,8 +145,7 @@ impl CatMaps {
                         None
                     }
                 }
-
-            },
+            }
         }
     }
     pub fn new_empty(path: Option<&Path>, bt: &BaseRDFNodeType) -> Self {

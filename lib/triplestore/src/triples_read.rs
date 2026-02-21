@@ -33,7 +33,7 @@ use std::path::Path;
 use std::time::Instant;
 use tracing::{debug, instrument};
 
-const UTF8_BOM:[u8;3] = [0xEF,0xBB,0xBF];
+const UTF8_BOM: [u8; 3] = [0xEF, 0xBB, 0xBF];
 
 type MapType = HashMap<String, HashMap<String, (Vec<Subject>, Vec<Term>)>>;
 
