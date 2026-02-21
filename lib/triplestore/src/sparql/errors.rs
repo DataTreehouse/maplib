@@ -22,6 +22,8 @@ pub enum SparqlError {
     TriplestoreError(#[from] TriplestoreError),
     #[error("Construct query with undefined variable {}", .0)]
     ConstructWithUndefinedVariable(String),
+    #[error("Construct query with undefined blank node {}", .0)]
+    ConstructWithUndefinedBlankNode(String),
     #[error("Full text search lookup error: {}", .0)]
     FtsLookupError(#[from] FtsError),
     #[error("Query interrupted via signal")]
@@ -30,6 +32,8 @@ pub enum SparqlError {
     PoisonedLockError,
     #[error("Tried grouping on a variable `{0}` that is not defined in the inner query: `{1}`")]
     GroupByWithUndefinedVariable(Variable, GraphPattern),
+    #[error("Functionality not supported: {0}")]
+    NotSupportedYet(String),
 }
 
 impl<T> From<PoisonError<T>> for SparqlError {

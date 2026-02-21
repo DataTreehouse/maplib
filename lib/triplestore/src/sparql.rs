@@ -7,24 +7,25 @@ mod lazy_expressions;
 pub(crate) mod lazy_graph_patterns;
 mod lazy_order;
 mod rewrite;
-//mod rewrite;
 
 use tracing::{instrument, trace, warn};
 use utils::polars::{pl_interruptable_collect, InterruptableCollectError};
 
 use super::{NewTriples, Triplestore};
+use crate::errors::TriplestoreError;
 use crate::sparql::debug::DebugOutputs;
 use crate::sparql::errors::SparqlError;
 use crate::sparql::rewrite::rewrite;
-use oxrdf::{NamedNode, Subject, Term, Triple, Variable};
+use oxrdf::{BlankNode, NamedNode, Subject, Term, Triple, Variable};
 use oxttl::TurtleSerializer;
 use polars::frame::DataFrame;
-use polars::prelude::{as_struct, col, lit, Expr, IntoLazy, LiteralValue};
+use polars::prelude::{as_struct, col, lit, Expr, IntoLazy, LiteralValue, PlSmallStr};
 use polars_core::frame::UniqueKeepStrategy;
-use polars_core::prelude::DataType;
+use polars_core::prelude::{DataType, Series};
 use query_processing::expressions::expr_is_null_workaround;
 use query_processing::graph_patterns::unique_workaround;
 use query_processing::pushdowns::Pushdowns;
+use rayon::prelude::{IntoParallelIterator, ParallelIterator};
 use representation::cats::{Cats, LockedCats};
 use representation::dataset::{NamedGraph, QueryGraph};
 use representation::debug::DebugOutput;
@@ -33,7 +34,7 @@ use representation::query_context::Context;
 use representation::rdf_to_polars::{
     rdf_literal_to_polars_literal_value, rdf_named_node_to_polars_literal_value,
 };
-use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
+use representation::solution_mapping::{BaseCatState, EagerSolutionMappings, SolutionMappings};
 use representation::{BaseRDFNodeType, RDFNodeState};
 use representation::{OBJECT_COL_NAME, PREDICATE_COL_NAME, SUBJECT_COL_NAME};
 use sparesults::QueryResultsFormat;
@@ -251,20 +252,25 @@ impl Triplestore {
                         if df.height() == 0 {
                             no_results = true;
                         }
-                        let mut solutions = vec![];
-                        for t in template {
-                            let cats = self.global_cats.read()?;
-                            if let Some((sm, predicate)) = triple_to_solution_mappings(
-                                &df,
-                                &rdf_node_types,
-                                t,
-                                None,
-                                true,
-                                &cats,
-                            )? {
-                                solutions.push((sm, predicate));
-                            }
-                        }
+                        let quad_template: Vec<_> = template
+                            .iter()
+                            .map(|x| QuadPattern {
+                                subject: x.subject.clone(),
+                                predicate: x.predicate.clone(),
+                                object: x.object.clone(),
+                                graph_name: GraphNamePattern::DefaultGraph,
+                            })
+                            .collect();
+
+                        let mut solutions_map = template_to_solution_mappings(
+                            df,
+                            rdf_node_types,
+                            &quad_template,
+                            self.global_cats.clone(),
+                        )?;
+                        let solutions = solutions_map
+                            .remove(&NamedGraph::DefaultGraph)
+                            .unwrap_or(Vec::new());
                         QueryResultKind::Construct(solutions)
                     }
                     Err(InterruptableCollectError::Interrupted) => {
@@ -467,41 +473,12 @@ impl Triplestore {
                     for (g, delete_solutions) in delete_solutions {
                         self.delete_construct_result(delete_solutions, &g)?;
                     }
-                    let mut insert_solutions: HashMap<_, Vec<_>> = HashMap::new();
-                    for i in insert {
-                        let cats = self.global_cats.read()?;
-                        let insert = triple_to_solution_mappings(
-                            &mappings,
-                            &rdf_node_types,
-                            &quad_pattern_to_triple_pattern(i),
-                            None,
-                            true,
-                            &cats,
-                        )?;
-                        if let Some(insert) = insert {
-                            match &i.graph_name {
-                                GraphNamePattern::NamedNode(nn) => {
-                                    let k = NamedGraph::NamedGraph(nn.clone());
-                                    if let Some(existing) = insert_solutions.get_mut(&k) {
-                                        existing.push(insert);
-                                    } else {
-                                        insert_solutions.insert(k, vec![insert]);
-                                    }
-                                }
-                                GraphNamePattern::DefaultGraph => {
-                                    let k = NamedGraph::DefaultGraph;
-                                    if let Some(existing) = insert_solutions.get_mut(&k) {
-                                        existing.push(insert);
-                                    } else {
-                                        insert_solutions.insert(k, vec![insert]);
-                                    }
-                                }
-                                GraphNamePattern::Variable(_) => {
-                                    todo!()
-                                }
-                            }
-                        }
-                    }
+                    let insert_solutions = template_to_solution_mappings(
+                        mappings,
+                        rdf_node_types,
+                        insert,
+                        self.global_cats.clone(),
+                    )?;
                     for (g, s) in insert_solutions {
                         self.insert_construct_result(s, false, &g)?;
                     }
@@ -522,6 +499,39 @@ impl Triplestore {
         let res = UpdateResult { debug };
         Ok(res)
     }
+}
+
+fn mint_blank_nodes(
+    df: DataFrame,
+    rdf_node_types: &mut HashMap<String, RDFNodeState>,
+    template: &Vec<QuadPattern>,
+) -> DataFrame {
+    let height = df.height();
+    let mut blanks = HashSet::new();
+    for t in template {
+        if let TermPattern::BlankNode(bn) = &t.subject {
+            blanks.insert(bn.to_string());
+        }
+        if let TermPattern::BlankNode(bn) = &t.object {
+            blanks.insert(bn.to_string());
+        }
+    }
+    let mut lf = df.lazy();
+    for b in blanks {
+        let mut blank_ser = Series::from_iter(
+            (0..height)
+                .into_par_iter()
+                .map(|_| format!("b{}", uuid::Uuid::new_v4()))
+                .collect::<Vec<_>>(),
+        );
+        blank_ser.rename(PlSmallStr::from_str(&b));
+        lf = lf.with_column(lit(blank_ser).explode());
+        rdf_node_types.insert(
+            b,
+            RDFNodeState::from_bases(BaseRDFNodeType::BlankNode, BaseCatState::String),
+        );
+    }
+    lf.collect().unwrap()
 }
 
 fn quad_pattern_to_triple_pattern(qp: &QuadPattern) -> TriplePattern {
@@ -559,6 +569,43 @@ fn ground_quad_pattern_to_triple_pattern(qp: &GroundQuadPattern) -> TriplePatter
         predicate,
         object,
     }
+}
+
+pub fn template_to_solution_mappings(
+    mut df: DataFrame,
+    mut rdf_node_types: HashMap<String, RDFNodeState>,
+    template: &Vec<QuadPattern>,
+    global_cats: LockedCats,
+) -> Result<HashMap<NamedGraph, Vec<(EagerSolutionMappings, Option<NamedNode>)>>, SparqlError> {
+    df = mint_blank_nodes(df, &mut rdf_node_types, template);
+    let mut solutions_map: HashMap<_, Vec<_>> = HashMap::new();
+    for t in template {
+        let gr = match &t.graph_name {
+            GraphNamePattern::NamedNode(nn) => NamedGraph::NamedGraph(nn.clone()),
+            GraphNamePattern::DefaultGraph => NamedGraph::DefaultGraph,
+            GraphNamePattern::Variable(_) => {
+                return Err(SparqlError::NotSupportedYet(
+                    "We do not support variable named graphs yet".to_string(),
+                ))
+            }
+        };
+        let cats = global_cats.read()?;
+        if let Some((sm, predicate)) = triple_to_solution_mappings(
+            &df,
+            &rdf_node_types,
+            &quad_pattern_to_triple_pattern(t),
+            None,
+            true,
+            &cats,
+        )? {
+            if let Some(solutions) = solutions_map.get_mut(&gr) {
+                solutions.push((sm, predicate));
+            } else {
+                solutions_map.insert(gr, vec![(sm, predicate)]);
+            }
+        }
+    }
+    Ok(solutions_map)
 }
 
 pub fn triple_to_solution_mappings(
@@ -654,9 +701,7 @@ fn term_pattern_expression(
 ) -> Result<(Expr, RDFNodeState), SparqlError> {
     match tp {
         TermPattern::NamedNode(nn) => Ok(named_node_u32_lit(nn, name, global_cats)),
-        TermPattern::BlankNode(_) => {
-            unimplemented!("Blank node term pattern not supported")
-        }
+        TermPattern::BlankNode(bl) => Ok(blank_node_expresson(rdf_node_types, bl, name)?),
         TermPattern::Literal(thelit) => {
             let l = lit(rdf_literal_to_polars_literal_value(thelit, None)).alias(name);
             Ok((
@@ -736,6 +781,18 @@ fn variable_expression(
         Err(SparqlError::ConstructWithUndefinedVariable(
             v.as_str().to_string(),
         ))
+    }
+}
+
+fn blank_node_expresson(
+    rdf_node_types: &HashMap<String, RDFNodeState>,
+    b: &BlankNode,
+    name: &str,
+) -> Result<(Expr, RDFNodeState), SparqlError> {
+    if let Some(t) = rdf_node_types.get(b.to_string().as_str()) {
+        Ok((col(b.to_string()).alias(name), t.clone()))
+    } else {
+        Err(SparqlError::ConstructWithUndefinedBlankNode(b.to_string()))
     }
 }
 

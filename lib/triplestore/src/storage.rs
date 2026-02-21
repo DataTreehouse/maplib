@@ -437,12 +437,8 @@ impl TriplesSegment {
             if height == 0 {
                 return Ok(None);
             }
-            //let r2 = global_cats.read()?.decode_of_type(lf.clone().collect().unwrap().column(SUBJECT_COL_NAME).unwrap().as_materialized_series(), &BaseRDFNodeType::BlankNode);
 
             let ret = lf.slice(from_i as i64, height as u32).collect().unwrap();
-            //let r = global_cats.read()?.decode_of_type(ret.column(SUBJECT_COL_NAME).unwrap().as_materialized_series(), &BaseRDFNodeType::BlankNode);
-            //assert!(from <= r.str().unwrap().first().unwrap(),"from {} to {} ret r {} from_i {}, to_i {} r2 {}", from, to, r, from_i, to_i, r2);
-            //assert!(r.str().unwrap().last().unwrap() <= to,"from {} to {} ret r {}", from, to, r);
             Ok(Some(ret))
         } else {
             Ok(None)
@@ -1074,7 +1070,6 @@ fn compact_segments(
     };
     let dfs: Vec<_> = subject_segments.iter().map(|(df, _)| df).collect();
     let rank_maps = cats.rank_maps(dfs, subj_type, obj_type);
-
     let (compact_subjects, new_df) = compact_dataframe_segments(
         subject_segments,
         SUBJECT_COL_NAME,
@@ -1101,8 +1096,8 @@ fn compact_segments(
             OBJECT_COL_NAME,
             SUBJECT_COL_NAME,
             None,
-            rank_maps.get(subj_type),
             rank_maps.get(obj_type),
+            rank_maps.get(subj_type),
         )?;
         let object_index = create_sparse_index(
             compact_objects

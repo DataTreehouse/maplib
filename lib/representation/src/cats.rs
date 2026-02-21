@@ -319,7 +319,7 @@ impl Cats {
                 }
             }
             if object_type.stored_cat() {
-                if let Some(v) = src_u_map.get_mut(subject_type) {
+                if let Some(v) = src_u_map.get_mut(object_type) {
                     v.extend(
                         df.column(OBJECT_COL_NAME)
                             .unwrap()
@@ -337,7 +337,7 @@ impl Cats {
                         .iter()
                         .map(|x| x.unwrap())
                         .collect();
-                    src_u_map.insert(subject_type.clone(), v);
+                    src_u_map.insert(object_type.clone(), v);
                 }
             }
         }
