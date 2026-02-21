@@ -1,8 +1,8 @@
 use crate::cats::maps::CatMaps;
 use crate::cats::CatReEnc;
 use crate::BaseRDFNodeType;
-use duckdb::arrow::array::{Array, RecordBatch, StringArray, StringViewArray, UInt32Array};
-use duckdb::arrow::datatypes::{DataType, Field, Schema};
+use arrow::array::{Array, RecordBatch, StringArray, StringViewArray, UInt32Array};
+use arrow::datatypes::{DataType, Field, Schema};
 use nohash_hasher::NoHashHasher;
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use std::borrow::Cow;

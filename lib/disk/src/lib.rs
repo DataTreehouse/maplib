@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::hash::BuildHasherDefault;
 use std::path::Path;
-use duckdb::arrow::array::RecordBatch;
+use arrow::array::RecordBatch;
 use nohash_hasher::NoHashHasher;
 
 #[derive(Clone, Debug)]

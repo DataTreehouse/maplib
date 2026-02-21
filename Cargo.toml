@@ -72,7 +72,7 @@ itoa = "1.0.15"
 ryu = "1.0.20"
 #dev-dependencies
 nohash-hasher = "0.2.0"
-duckdb = { version = "=1.4.4", features = ["bundled", "vtab-arrow", "polars", "appender-arrow"] }
+arrow = "56"
 
 [patch.crates-io]
 #polars = { git = 'https://github.com/pola-rs/polars', rev="665722ac3f3664c589c4827208d173cc16f0ec68" }

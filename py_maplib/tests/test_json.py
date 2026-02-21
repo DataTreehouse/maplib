@@ -3,7 +3,7 @@ from typing import List, Optional
 
 import pytest
 
-from disk import disk_params
+from .disk import disk_params
 from maplib import Model
 from polars.testing import assert_frame_equal
 import polars as pl
