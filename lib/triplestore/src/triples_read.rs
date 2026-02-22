@@ -28,7 +28,6 @@ use representation::{
 use representation::{OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use std::collections::HashMap;
 use std::fs::File;
-use std::ops::Deref;
 use std::path::Path;
 use std::time::Instant;
 use tracing::{debug, instrument};
@@ -84,7 +83,7 @@ impl Triplestore {
         opt.stack();
         let map = unsafe { opt.map(&file).unwrap() };
         self.read_triples(
-            map.deref(),
+            map.as_ref(),
             rdf_format,
             base_iri,
             transient,
