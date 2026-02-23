@@ -1,11 +1,15 @@
-## maplib: High-performance RDF knowledge graph construction, SHACL validation and SPARQL-based enrichment in Python
-maplib is a knowledge graph construction library for building RDF knowledge graphs using template expansion ([OTTR](https://ottr.xyz/) Templates). Maplib features SPARQL- and SHACL-engines that are available as the graph is being constructed, allowing enrichment and validation. It can construct and validate knowledge graphs with millions of nodes in seconds.
+## maplib: High-performance RDF knowledge graph construction, SHACL validation, SPARQL and Datalog in Python
+maplib is written in Rust, it is built on [Apache Arrow](https://arrow.apache.org/) using [Pola.rs](https://www.pola.rs/) and uses libraries from [Oxigraph](https://github.com/oxigraph/oxigraph) for handling linked data as well as parsing SPARQL queries.
 
 maplib allows you to leverage your existing skills with Pandas or Polars to extract and wrangle data from existing databases and spreadsheets, before applying simple templates to them to build a knowledge graph. 
+You can also read knowledge graphs extremely quickly from a wide variety of serialization formats. 
+Using the built-in SPARQL, SHACL and Datalog engines means you can query, inspect, enrich and validate and then serialize the knowledge graph immediately. 
+All query results are Polars Dataframes that are transferred zero-copy from Rust to Python. 
+Currently, maplib is in-memory and supports around 100M triples on 32GB of RAM. 
 
-Template expansion is typically zero-copy and nearly instantaneous, and the built-in SPARQL and SHACL engines means you can query, inspect, enrich and validate the knowledge graph immediately.      
-
-maplib is written in Rust, it is built on [Apache Arrow](https://arrow.apache.org/) using [Pola.rs](https://www.pola.rs/) and uses libraries from [Oxigraph](https://github.com/oxigraph/oxigraph) for handling linked data as well as parsing SPARQL queries.
+The core functionality of maplib (mapping, querying, serialization) is open source, but SHACL and Datalog functionality are not.
+Please send us a message, e.g. on LinkedIn (search for Data Treehouse) or on email (magnus at data-treehouse.com) if you want to try out these features.
+See our roadmap for upcoming features.
 
 ## Installing
 The package is published on [PyPi](https://pypi.org/project/maplib/) and the API documented [here](https://datatreehouse.github.io/maplib/maplib.html):
@@ -146,23 +150,19 @@ The [API](https://datatreehouse.github.io/maplib/maplib.html) is simple, and con
 - expanding templates
 - querying with SPARQL
 - validating with SHACL
-- importing triples (Turtle, RDF/XML, NTriples)
+- reading JSON to triples using Façade-X
+- importing triples (Turtle, RDF/XML, NTriples, JSON-LD)
 - writing triples (Turtle, RDF/XML, NTriples)
-- creating a new Model object (sprout) based on queries over the current Model object.
+- creating a new Model from a named graph
 
 The API is documented [HERE](https://datatreehouse.github.io/maplib/maplib.html)
 
 ## Roadmap of features and optimizations
-Spring 2025
-- Datalog reasoning support ✅
-- Reduced memory footprint ✅
-- Further SPARQL optimizations
-- JSON-LD support
-
-Fall 2025
-- SHACL rules support
-- Improved TTL serialization (prettier and faster)
-+++
+Spring 2026
+- SHACL Rules
+- Disk based storage and internal serialization format
+- Jelly
+- Graph virtualization using chrontext
 
 Roadmap is subject to changes,particularly user and customer requests. 
 
