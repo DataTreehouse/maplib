@@ -1,0 +1,16 @@
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix time: <http://www.w3.org/2006/time#>.
+@prefix sosa: <http://www.w3.org/ns/sosa/> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+@base <http://example.org/data/> .
+
+# The result of an observation of the sunspot number is available a few minutes 
+# after the phenomenon time, due to the light travel duration.
+
+<Observation/7536> rdf:type sosa:Observation ;
+  sosa:observedProperty  <Sun#sunspotNumber> ;
+  sosa:hasSimpleResult 66 ;
+  sosa:phenomenonTime [
+    rdf:type time:Instant ;
+    time:inXSDDateTimeStamp "2017-03-31T11:51:42+00:00"^^xsd:dateTimeStamp ] ;
+  sosa:resultTime "2017-03-31T12:00:00+00:00"^^xsd:dateTimeStamp .

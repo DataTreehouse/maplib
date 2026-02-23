@@ -64,9 +64,9 @@ impl JellyEncoder {
                     physical_type: PhysicalStreamType::PHYSICAL_STREAM_TYPE_TRIPLES,
                     logical_type: LogicalStreamType::LOGICAL_STREAM_TYPE_FLAT_TRIPLES,
                     version: 1,
-                    max_name_table_size: 0,
-                    max_prefix_table_size: 0,
-                    max_datatype_table_size: 0,
+                    max_name_table_size: 4096,
+                    max_prefix_table_size: 4096,
+                    max_datatype_table_size: 4096,
                     ..Default::default()
                 }),
             }],
@@ -397,9 +397,10 @@ impl JellyEncoder {
                 .unzip();
 
             for (new_u, suf) in seen_iri_out_u32s.iter().zip(sufs) {
+                let jelly_id = *self.name_table.get(new_u).unwrap();
                 self.pending_rows.push(RdfStreamRow {
                     row: OneOfrow::name(RdfNameEntry {
-                        id: *new_u,
+                        id: jelly_id,
                         value: Cow::Owned(suf.to_string()),
                     }),
                 });

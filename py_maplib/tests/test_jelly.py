@@ -2,6 +2,8 @@ import polars as pl
 import pathlib
 from maplib import Model
 
+from rdflib import Graph
+
 pl.Config.set_fmt_str_lengths(300)
 
 
@@ -10,7 +12,7 @@ TESTDATA_PATH = PATH_HERE / "testdata"
 
 def test_write_jelly():
     m = Model()
-    m.read(TESTDATA_PATH / "read_lists.ttl")
+    m.read(TESTDATA_PATH / "sunspots.ttl")
 
     filename = TESTDATA_PATH / "output.jelly"
     m.write(filename, format="jelly")
@@ -29,3 +31,10 @@ def test_write_jelly():
     # assert original.frame_equal(read_back), (
     #     f"Read back mismatch: \nOriginal:\n{original}\nRead back:\n{read_back}"
     # )
+    
+    g = Graph()
+    g.parse(filename, format="jelly")
+    
+    print("Triples from Jelly file:")
+    for s, p, o in g:
+        print(f"{s} {p} {o}")
