@@ -16,8 +16,6 @@ The package is published on [PyPi](https://pypi.org/project/maplib/) and the API
 ```shell
 pip install maplib
 ```
-Please send us a message, e.g. on LinkedIn (search for Data Treehouse) or on our [webpage](https://www.data-treehouse.com/contact-8) if you want to try out SHACL.  
-
 ## Model
 We can easily map DataFrames to RDF-graphs using the Python library. Below is a reproduction of the example in the paper [1]. Assume that we have a DataFrame given by: 
 
