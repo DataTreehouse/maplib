@@ -1,5 +1,13 @@
 # Change log
 
+## v0.19.17
+### Features
+- Basic support for disk based storage of categorical maps.
+- Fix extra characters in CIM XML URIs by default
+
+### Bug fixes
+- Multiple bugfixes for SHACL
+
 ## v0.19.14
 ### Features
 - read() and reads() for json-ld is now supported. Note that contexts are not resolved against the internet but must be provided in a dict due to security concerns.

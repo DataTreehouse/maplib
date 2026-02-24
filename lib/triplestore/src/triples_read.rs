@@ -3,9 +3,10 @@ use crate::errors::TriplestoreError;
 use crate::TriplesToAdd;
 use std::cmp;
 
+use cimxml_import::fix_cim_quad;
 use memmap2::MmapOptions;
 use oxjsonld::JsonLdParser;
-use oxrdf::{BlankNode, GraphName, NamedNode, Quad, Subject, Term};
+use oxrdf::{BlankNode, GraphName, NamedNode, NamedOrBlankNode, Quad, Subject, Term};
 use oxrdfio::{
     JsonLdProfileSet, LoadedDocument, RdfFormat, RdfParser, RdfSyntaxError, SliceQuadParser,
 };
@@ -206,7 +207,7 @@ impl Triplestore {
             if !checked {
                 parser = parser.lenient();
             }
-            if let Some(base_iri) = base_iri {
+            if let Some(base_iri) = &base_iri {
                 parser = parser.with_base_iri(base_iri).unwrap();
             }
             let mut for_slice = parser.for_slice(use_slice);
@@ -225,9 +226,15 @@ impl Triplestore {
                     }
                 });
             }
-            vec![MyFromSliceQuadReader {
-                parser: MyFromSliceQuadReaderKind::Other(for_slice),
-            }]
+            if matches!(rdf_format, ExtendedRdfFormat::CIMXML) {
+                vec![MyFromSliceQuadReader {
+                    parser: MyFromSliceQuadReaderKind::CIMXML(for_slice, base_iri.clone()),
+                }]
+            } else {
+                vec![MyFromSliceQuadReader {
+                    parser: MyFromSliceQuadReaderKind::Other(for_slice),
+                }]
+            }
         };
         debug!("Effective parallelization for reading is {}", readers.len());
 
@@ -479,6 +486,7 @@ pub struct MyFromSliceQuadReader<'a> {
 
 pub enum MyFromSliceQuadReaderKind<'a> {
     Other(SliceQuadParser<'a>),
+    CIMXML(SliceQuadParser<'a>, Option<String>),
     TurtlePar(SliceTurtleParser<'a>),
     NTriplesPar(SliceNTriplesParser<'a>),
 }
@@ -489,6 +497,16 @@ impl Iterator for MyFromSliceQuadReader<'_> {
     fn next(&mut self) -> Option<Self::Item> {
         Some(match &mut self.parser {
             MyFromSliceQuadReaderKind::Other(parser) => parser.next()?,
+            MyFromSliceQuadReaderKind::CIMXML(parser, base_iri) => {
+                let q = parser.next()?;
+                match q {
+                    Ok(mut quad) => {
+                        quad = fix_cim_quad(quad, base_iri.as_ref());
+                        Ok(quad)
+                    }
+                    Err(e) => Err(e.into()),
+                }
+            }
             MyFromSliceQuadReaderKind::TurtlePar(parser) => match parser.next()? {
                 Ok(triple) => Ok(triple.in_graph(GraphName::default())),
                 Err(e) => Err(e.into()),
