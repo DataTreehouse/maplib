@@ -11,7 +11,7 @@ use tracing_subscriber::{filter, prelude::*};
 
 use crate::shacl::PyValidationReport;
 use maplib::errors::MaplibError;
-use maplib::model::{MapOptions, Model as InnerModel};
+use maplib::model::{MapOptions, Model as InnerModel, Model};
 
 use chrono::Utc;
 use cimxml_export::export::FullModelDetails;
@@ -1045,7 +1045,7 @@ fn map_triples_mutex(
     let options = MapOptions::from_args(named_graph, validate_iris);
     let types = map_types(types);
     let predicate = if let Some(predicate) = predicate {
-        Some(NamedNode::new(predicate).map_err(|x| PyMaplibError::from(MaplibError::from(x)))?)
+        Some(resolve_predicate(&predicate, &inner.prefixes)?)
     } else {
         None
     };
@@ -1053,6 +1053,21 @@ fn map_triples_mutex(
         .expand_triples(df, types, predicate, options)
         .map_err(PyMaplibError::from)?;
     Ok(None)
+}
+
+fn resolve_predicate(
+    predicate: &str,
+    prefixes: &HashMap<String, NamedNode>,
+) -> PyResult<NamedNode> {
+    if let Some((prefix, suffix)) = predicate.split_once(':') {
+        if let Some(prefix_iri) = prefixes.get(prefix) {
+            let pre_and_suf = format!("{}{}", prefix_iri.as_str(), suffix);
+            if let Ok(nn) = NamedNode::new(&pre_and_suf) {
+                return Ok(nn);
+            }
+        }
+    }
+    NamedNode::new(predicate).map_err(|x| PyMaplibError::from(MaplibError::from(x)).into())
 }
 
 fn map_default_mutex(
