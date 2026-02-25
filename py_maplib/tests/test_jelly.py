@@ -1,5 +1,9 @@
 import polars as pl
 import pathlib
+
+from polars import read_csv
+from polars.testing import assert_frame_equal
+
 from maplib import Model
 
 from rdflib import Graph
@@ -16,21 +20,6 @@ def test_write_jelly():
 
     filename = TESTDATA_PATH / "output.jelly"
     m.write(filename, format="jelly")
-
-    # m2 = Model()
-    # m2.read(filename, format="jelly")
-    #
-    # query = """
-    # SELECT ?s ?p ?o WHERE {
-    #     ?s ?p ?o .
-    # } ORDER BY ?s ?p ?o
-    # """
-    # original = m.query(query).df
-    # read_back = m2.query(query).df
-    #
-    # assert original.frame_equal(read_back), (
-    #     f"Read back mismatch: \nOriginal:\n{original}\nRead back:\n{read_back}"
-    # )
     
     g = Graph()
     g.parse(filename, format="jelly")
@@ -39,4 +28,31 @@ def test_write_jelly():
     for s, p, o in g:
         print(f"{s} {p} {o}")
 
-    m.read(filename)
+def test_read_jelly():
+    m = Model()
+    if not (TESTDATA_PATH / "output.jelly").exists():
+        test_write_jelly()
+
+    filename = TESTDATA_PATH / "output.jelly"
+
+    m.read(filename, format="jelly")
+
+    df = m.query(
+        """
+            SELECT ?s ?p ?o WHERE {
+                ?s ?p ?o .
+            } ORDER BY ?s ?p ?o
+        """
+    )
+
+    df.write_csv(TESTDATA_PATH / "output.csv")
+    read_csv(TESTDATA_PATH / "output.csv")
+
+    expected = read_csv(TESTDATA_PATH / "output.csv")
+
+    print("\nDataFrame from Jelly file:")
+    print(df)
+    print("Expected DataFrame:")
+    print(expected)
+
+    assert_frame_equal(df, expected)
