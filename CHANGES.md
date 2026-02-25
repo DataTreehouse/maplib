@@ -1,5 +1,9 @@
 # Change log
 
+## v0.19.18
+### Features
+- CIM XML import removes superfluous "#_" from iris. 
+
 ## v0.19.17
 ### Features
 - Basic support for disk based storage of categorical maps.
