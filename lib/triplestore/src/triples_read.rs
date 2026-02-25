@@ -151,6 +151,10 @@ impl Triplestore {
         known_contexts: HashMap<String, String>,
     ) -> Result<(), TriplestoreError> {
         let start_quadproc_now = Instant::now();
+        if let ExtendedRdfFormat::Jelly = &rdf_format {
+            return self.parse_jelly(slice, graph, triples_batch_size);
+        }
+
         let parallel = if let Some(parallel) = parallel {
             parallel
         } else {

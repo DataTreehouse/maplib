@@ -1,4 +1,5 @@
 use crate::cats::CatReEnc;
+use crate::iri_split::split_iri;
 use crate::BaseRDFNodeType;
 use nohash_hasher::NoHashHasher;
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
@@ -7,12 +8,11 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt::{Display, Formatter};
 use std::hash::BuildHasherDefault;
 use std::sync::Arc;
-use crate::iri_split::split_iri;
 
 #[derive(Debug, Clone, Ord, Eq, PartialEq, PartialOrd)]
 pub struct PrefixCompressedString {
-    prefix: Arc<String>,
-    suffix: Arc<String>,
+    pub prefix: Arc<String>,
+    pub suffix: Arc<String>,
 }
 
 impl Display for PrefixCompressedString {
@@ -115,6 +115,16 @@ impl PrefixCompressedCatMapsInMemory {
 
     pub fn encode_new_string(&mut self, s: String, u: u32) {
         self.encode_new_str(&s, u)
+    }
+
+    pub fn encode_new_prefix_suffix_str(&mut self, pre: Cow<str>, suf: String, u: u32) {
+        let arc_pre = self.encode_or_add_new_prefix_str(pre.as_ref());
+        let compr = PrefixCompressedString {
+            prefix: arc_pre,
+            suffix: Arc::new(suf),
+        };
+        self.map.insert(compr.clone(), u);
+        self.rev_map.insert(u, compr);
     }
 
     fn encode_new_str(&mut self, s: &str, u: u32) {

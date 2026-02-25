@@ -118,13 +118,16 @@ pub fn base_literal_expression_to_string(
     } else if base_literal_datatype == xsd::DATE {
         exprs.push(expr.dt().strftime(XSD_DATE_WITHOUT_TZ_FORMAT))
     } else if base_literal_datatype == rdf::LANG_STRING {
-        exprs.push(expr
-                .clone()
+        exprs.push(
+            expr.clone()
                 .struct_()
-                .field_by_name(LANG_STRING_VALUE_FIELD));
-            exprs.push(expr.struct_().field_by_name(LANG_STRING_LANG_FIELD));
+                .field_by_name(LANG_STRING_VALUE_FIELD),
+        );
+        exprs.push(expr.struct_().field_by_name(LANG_STRING_LANG_FIELD));
     } else {
-        exprs.push(maybe_decode_expr(expr, base_type, base_state, global_cats).cast(DataType::String))
+        exprs.push(
+            maybe_decode_expr(expr, base_type, base_state, global_cats).cast(DataType::String),
+        )
     };
     exprs
 }

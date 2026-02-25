@@ -15,13 +15,13 @@ pub mod dataset;
 pub mod debug;
 pub mod errors;
 pub mod formatting;
+pub mod iri_split;
 pub mod literals;
 pub mod prefixes;
 pub mod python;
 mod rdf_state;
 mod rdf_type;
 pub mod subtypes;
-pub mod iri_split;
 
 pub use base_rdf_type::*;
 pub use rdf_state::*;

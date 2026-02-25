@@ -1,4 +1,3 @@
-
 use oxrdf::{GraphName, Subject, Term};
 use std::collections::HashMap;
 type MapType = HashMap<String, HashMap<String, (Vec<Subject>, Vec<Term>)>>;

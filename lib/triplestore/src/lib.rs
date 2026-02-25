@@ -4,6 +4,7 @@ extern crate core;
 pub mod cats;
 mod dblf;
 pub mod errors;
+mod jelly;
 mod map_json;
 pub mod native_parquet_write;
 pub mod query_solutions;
@@ -12,7 +13,6 @@ pub mod sparql;
 mod storage;
 pub mod triples_read;
 pub mod triples_write;
-mod jelly;
 
 use crate::errors::TriplestoreError;
 use crate::storage::{repeated_from_last_row_expr, Triples};
@@ -399,7 +399,7 @@ impl Triplestore {
         transient: bool,
     ) -> Result<Vec<NewTriples>, TriplestoreError> {
         let prepare_triples_now = Instant::now();
-        let dfs_to_add = prepare_add_triples_par(
+        let cat_triples_to_add = prepare_add_triples_par(
             ts,
             self.global_cats.clone(),
             self.storage_folder.as_ref().map(|x| x.as_ref()),
@@ -409,7 +409,7 @@ impl Triplestore {
             prepare_triples_now.elapsed().as_secs_f32()
         );
         let add_triples_now = Instant::now();
-        let new_triples = self.add_local_cat_triples(dfs_to_add, transient)?;
+        let new_triples = self.add_local_cat_triples(cat_triples_to_add, transient)?;
         trace!(
             "Adding triples df took {} seconds",
             add_triples_now.elapsed().as_secs_f32()

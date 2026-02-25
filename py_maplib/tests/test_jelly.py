@@ -38,3 +38,5 @@ def test_write_jelly():
     print("Triples from Jelly file:")
     for s, p, o in g:
         print(f"{s} {p} {o}")
+
+    m.read(filename)

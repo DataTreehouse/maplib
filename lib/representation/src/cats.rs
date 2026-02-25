@@ -205,7 +205,7 @@ impl Cats {
         self.cat_map.get(&ct).unwrap()
     }
 
-    pub(crate) fn from_map(cat_map: HashMap<CatType, CatEncs>) -> Self {
+    pub fn from_map(cat_map: HashMap<CatType, CatEncs>) -> Self {
         let mut cats = Cats {
             cat_map,
             iri_counter: 0,

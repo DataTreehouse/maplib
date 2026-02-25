@@ -1,11 +1,12 @@
 mod eu;
+use quick_protobuf::{serialize_into_vec, BytesReader, MessageWrite, Writer};
 use std::borrow::Cow;
 use std::cmp;
 use std::collections::{HashMap, HashSet};
 use std::io::Write;
+use std::sync::Arc;
 
-use quick_protobuf::{serialize_into_vec, BytesWriter, MessageWrite, Writer};
-
+use super::{TriplesToAdd, Triplestore};
 use crate::errors::TriplestoreError;
 use crate::jelly::eu::ostrzyciel::jelly::core::proto::v1::mod_RdfLiteral::OneOfliteralKind;
 use crate::jelly::eu::ostrzyciel::jelly::core::proto::v1::mod_RdfStreamRow::OneOfrow;
@@ -16,21 +17,389 @@ use crate::jelly::eu::ostrzyciel::jelly::core::proto::v1::{
     LogicalStreamType, PhysicalStreamType, RdfDatatypeEntry, RdfIri, RdfLiteral, RdfNameEntry,
     RdfPrefixEntry, RdfStreamFrame, RdfStreamOptions, RdfStreamRow, RdfTriple,
 };
+use oxrdf::vocab::{rdf, xsd};
 use oxrdf::NamedNode;
-use polars::polars_utils::parma::raw::Key;
-use polars::polars_utils::pl_serialize::serialize_into_writer;
-use polars::prelude::{col, IntoLazy};
+use polars::prelude::{as_struct, col, IntoLazy, LiteralValue, PlSmallStr};
 use polars_core::datatypes::UInt32Chunked;
 use polars_core::frame::DataFrame;
-use polars_core::prelude::{Column, LhsNumOps};
+use polars_core::prelude::{Column, IntoColumn, LhsNumOps, Scalar};
 use polars_core::POOL;
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
-use representation::cats::LockedCats;
+use representation::cats::maps::in_memory::{
+    CatMapsInMemory, PrefixCompressedCatMapsInMemory, PrefixCompressedString,
+    UncompressedCatMapsInMemory,
+};
+use representation::cats::maps::CatMaps;
+use representation::cats::{CatEncs, CatType, Cats, LockedCats};
+use representation::dataset::NamedGraph;
 use representation::formatting::base_literal_expression_to_string;
 use representation::iri_split::split_iri;
-use representation::{BaseRDFNodeType, OBJECT_COL_NAME, SUBJECT_COL_NAME};
+use representation::rdf_to_polars::{
+    polars_literal_values_to_series, rdf_literal_to_polars_literal_value_impl,
+};
+use representation::solution_mapping::BaseCatState;
+use representation::{
+    BaseRDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD, OBJECT_COL_NAME,
+    SUBJECT_COL_NAME,
+};
 
 const JELLY_FRAME_SIZE: usize = 1024;
+const LANG_STRING_U32: u32 = u32::MAX - 1;
+const IRI_U32: u32 = 0;
+const BLANK_U32: u32 = u32::MAX;
+const STRING_U32: u32 = u32::MAX - 2;
+
+impl Triplestore {
+    pub fn parse_jelly(
+        &mut self,
+        slice: &[u8],
+        graph: &NamedGraph,
+        triples_batch_size: Option<usize>,
+    ) -> Result<(), TriplestoreError> {
+        // we can build a bytes reader directly out of the bytes
+        let mut reader = BytesReader::from_bytes(slice);
+        let options: RdfStreamFrame = reader.read_message(slice).map_err(|x| {
+            TriplestoreError::ReadJellyError(format!("Error reading initial options: {}", x))
+        })?;
+        let mut prefix_map: HashMap<u32, Arc<String>> = Default::default();
+        let mut name_map: HashMap<u32, Arc<String>> = Default::default();
+        let mut iri_map: HashMap<(u32, u32), u32> = HashMap::new();
+        let mut iri_rev_map: HashMap<u32, (u32, u32)> = HashMap::new();
+        let mut blank_map: HashMap<String, u32> = HashMap::new();
+        let mut datatype_map: HashMap<u32, NamedNode> = Default::default();
+        let mut predicate_map: HashMap<
+            u32,
+            HashMap<bool, HashMap<u32, (Vec<LiteralValue>, Vec<LiteralValue>, Vec<LiteralValue>)>>,
+        > = Default::default();
+        while !reader.is_eof() {
+            let frame: RdfStreamFrame = reader.read_message(slice).map_err(|x| {
+                TriplestoreError::ReadJellyError(format!("Error reading row: {}", x))
+            })?;
+            for r in frame.rows {
+                match r.row {
+                    OneOfrow::options(_) => {}
+                    OneOfrow::triple(t) => {
+                        let pred = match t.predicate {
+                            OneOfpredicate::p_iri(i) => (i.prefix_id, i.name_id),
+                            p => {
+                                unimplemented!("Predicate {:?}", p)
+                            }
+                        };
+                        let pred_iri_u32 = if let Some(pi) = iri_map.get(&pred) {
+                            *pi
+                        } else {
+                            let pi = iri_map.len() as u32;
+                            iri_map.insert(pred.clone(), pi);
+                            iri_rev_map.insert(pi, pred);
+                            pi
+                        };
+                        let subject_type_map =
+                            if let Some(sm) = predicate_map.get_mut(&pred_iri_u32) {
+                                sm
+                            } else {
+                                predicate_map.insert(pred_iri_u32, Default::default());
+                                predicate_map.get_mut(&pred_iri_u32).unwrap()
+                            };
+                        let (subject, object_map) = match t.subject {
+                            OneOfsubject::s_iri(i) => {
+                                let om = if let Some(om) = subject_type_map.get_mut(&true) {
+                                    om
+                                } else {
+                                    subject_type_map.insert(true, Default::default());
+                                    subject_type_map.get_mut(&true).unwrap()
+                                };
+                                let k = (i.prefix_id, i.name_id);
+                                let iri_id = if let Some(iri_id) = iri_map.get(&k) {
+                                    *iri_id
+                                } else {
+                                    let v = iri_map.len() as u32;
+                                    iri_map.insert(k, v);
+                                    v
+                                };
+                                (LiteralValue::Scalar(Scalar::from(iri_id)), om)
+                            }
+                            OneOfsubject::s_bnode(b) => {
+                                let om = if let Some(om) = subject_type_map.get_mut(&true) {
+                                    om
+                                } else {
+                                    subject_type_map.insert(false, Default::default());
+                                    subject_type_map.get_mut(&false).unwrap()
+                                };
+                                let blank_id = if let Some(u) = blank_map.get(b.as_ref()) {
+                                    *u
+                                } else {
+                                    let u = blank_map.len() as u32;
+                                    blank_map.insert(b.into_owned(), u);
+                                    u
+                                };
+                                (LiteralValue::Scalar(Scalar::from(blank_id)), om)
+                            }
+                            OneOfsubject::s_literal(_) => {
+                                unreachable!()
+                            }
+                            OneOfsubject::s_triple_term(_) => {
+                                unimplemented!()
+                            }
+                            OneOfsubject::None => {
+                                unreachable!()
+                            }
+                        };
+                        let (object, lang_tag, (subj_vec, obj_vec, lang_tag_vec)) = match t.object {
+                            OneOfobject::o_iri(i) => {
+                                let vecs = if let Some(vecs) = object_map.get_mut(&IRI_U32) {
+                                    vecs
+                                } else {
+                                    object_map.insert(IRI_U32, Default::default());
+                                    object_map.get_mut(&IRI_U32).unwrap()
+                                };
+                                let k = (i.prefix_id, i.name_id);
+                                let iri_id = if let Some(iri_id) = iri_map.get(&k) {
+                                    *iri_id
+                                } else {
+                                    let v = iri_map.len() as u32;
+                                    iri_map.insert(k, v);
+                                    v
+                                };
+                                (LiteralValue::Scalar(Scalar::from(iri_id)), None, vecs)
+                            }
+                            OneOfobject::o_bnode(b) => {
+                                let om = if let Some(om) = object_map.get_mut(&BLANK_U32) {
+                                    om
+                                } else {
+                                    object_map.insert(BLANK_U32, Default::default());
+                                    object_map.get_mut(&BLANK_U32).unwrap()
+                                };
+                                let blank_id = if let Some(u) = blank_map.get(b.as_ref()) {
+                                    *u
+                                } else {
+                                    let u = blank_map.len() as u32;
+                                    blank_map.insert(b.into_owned(), u);
+                                    u
+                                };
+                                (LiteralValue::Scalar(Scalar::from(blank_id)), None, om)
+                            }
+                            OneOfobject::o_literal(l) => {
+                                let value;
+                                let mut lang_tag = None;
+                                let dt_id = match &l.literalKind {
+                                    OneOfliteralKind::langtag(t) => {
+                                        lang_tag = Some(LiteralValue::Scalar(Scalar::from(
+                                            PlSmallStr::from_string(t.to_string()),
+                                        )));
+                                        value = LiteralValue::Scalar(Scalar::from(
+                                            PlSmallStr::from_string(l.lex.to_string()),
+                                        ));
+
+                                        LANG_STRING_U32
+                                    }
+                                    OneOfliteralKind::datatype(t) => {
+                                        let dt = datatype_map.get(t).unwrap();
+                                        value = rdf_literal_to_polars_literal_value_impl(
+                                            l.lex.as_str(),
+                                            dt.as_ref(),
+                                        );
+                                        *t
+                                    }
+                                    OneOfliteralKind::None => {
+                                        value = LiteralValue::Scalar(Scalar::from(
+                                            PlSmallStr::from_string(l.lex.to_string()),
+                                        ));
+                                        STRING_U32
+                                    }
+                                };
+                                let vecs = if let Some(vecs) = object_map.get_mut(&dt_id) {
+                                    vecs
+                                } else {
+                                    object_map.insert(dt_id, Default::default());
+                                    object_map.get_mut(&dt_id).unwrap()
+                                };
+                                (value, lang_tag, vecs)
+                            }
+                            OneOfobject::o_triple_term(_) => {
+                                unimplemented!()
+                            }
+                            OneOfobject::None => {
+                                unimplemented!()
+                            }
+                        };
+                        subj_vec.push(subject);
+                        obj_vec.push(object);
+                        if let Some(lang_tag) = lang_tag {
+                            lang_tag_vec.push(lang_tag);
+                        }
+                    }
+                    OneOfrow::quad(_) => {
+                        unimplemented!()
+                    }
+                    OneOfrow::graph_start(_) => {
+                        unimplemented!()
+                    }
+                    OneOfrow::graph_end(_) => {
+                        unimplemented!()
+                    }
+                    OneOfrow::namespace(_) => {
+                        unimplemented!()
+                    }
+                    OneOfrow::name(n) => {
+                        name_map.insert(n.id, Arc::new(n.value.to_string()));
+                    }
+                    OneOfrow::prefix(p) => {
+                        prefix_map.insert(p.id, Arc::new(p.value.into_owned()));
+                    }
+                    OneOfrow::datatype(dt) => {
+                        datatype_map.insert(dt.id, NamedNode::new(dt.value.as_str()).unwrap());
+                    }
+                    OneOfrow::None => {
+                        unimplemented!()
+                    }
+                }
+            }
+        }
+        let mut iri_cat_enc = PrefixCompressedCatMapsInMemory::new_empty();
+
+        for ((pre, suf), u) in iri_map {
+            let prefix = prefix_map.get(&pre).unwrap();
+            let suffix = name_map.get(&suf).unwrap();
+            let (pre, suf) = split_iri(suffix.as_str());
+            if pre.is_empty() {
+                let (pre, suf) = split_iri(prefix.as_str());
+                if suf.is_empty() {
+                    iri_cat_enc.encode_new_prefix_suffix_str(
+                        Cow::Borrowed(prefix),
+                        suffix.to_string(),
+                        u,
+                    );
+                } else {
+                    iri_cat_enc.encode_new_prefix_suffix_str(
+                        Cow::Borrowed(pre),
+                        format!("{}{}", suf, suffix),
+                        u,
+                    );
+                }
+            } else {
+                iri_cat_enc.encode_new_prefix_suffix_str(
+                    Cow::Owned(format!("{}{}", prefix, pre)),
+                    suf.to_string(),
+                    u,
+                );
+            }
+        }
+        let iri_cat_enc = CatEncs {
+            maps: CatMaps::InMemory(CatMapsInMemory::Compressed(iri_cat_enc)),
+        };
+
+        let mut blank_cat_enc = UncompressedCatMapsInMemory::new_empty();
+        for u in blank_map.values() {
+            let uuid = uuid::Uuid::new_v4().to_string();
+            blank_cat_enc.encode_new_string(uuid, *u);
+        }
+        let blank_cat_enc = CatEncs {
+            maps: CatMaps::InMemory(CatMapsInMemory::Uncompressed(blank_cat_enc)),
+        };
+        let maps =
+            HashMap::from_iter([(CatType::IRI, iri_cat_enc), (CatType::Blank, blank_cat_enc)]);
+        let local = LockedCats::new(Cats::from_map(maps));
+
+        let mut triples_to_add = Vec::new();
+        for (p, m) in predicate_map {
+            let (pre, suf) = iri_rev_map.get(&p).unwrap();
+            let predicate = NamedNode::new(format!(
+                "{}{}",
+                prefix_map.get(pre).unwrap(),
+                name_map.get(suf).unwrap()
+            ))
+            .unwrap();
+            for (subject_is_iri, om) in m {
+                let subject_type = if subject_is_iri {
+                    BaseRDFNodeType::IRI
+                } else {
+                    BaseRDFNodeType::BlankNode
+                };
+                for (dt, (subject_vec, object_vec, lang_tag_vec)) in om {
+                    let object_type = if dt == IRI_U32 {
+                        BaseRDFNodeType::IRI
+                    } else if dt == BLANK_U32 {
+                        BaseRDFNodeType::BlankNode
+                    } else if dt == LANG_STRING_U32 {
+                        BaseRDFNodeType::Literal(rdf::LANG_STRING.into_owned())
+                    } else if dt == STRING_U32 {
+                        BaseRDFNodeType::Literal(xsd::STRING.into_owned())
+                    } else {
+                        let literal_iri = datatype_map.get(&dt).unwrap();
+                        BaseRDFNodeType::Literal(literal_iri.clone())
+                    };
+                    let subject_ser =
+                        polars_literal_values_to_series(subject_vec, SUBJECT_COL_NAME);
+                    let object_ser = match &object_type {
+                        BaseRDFNodeType::IRI | BaseRDFNodeType::BlankNode => {
+                            polars_literal_values_to_series(object_vec, OBJECT_COL_NAME)
+                        }
+                        BaseRDFNodeType::Literal(l) => {
+                            if l.as_ref() == rdf::LANG_STRING {
+                                let lex_ser = polars_literal_values_to_series(
+                                    object_vec,
+                                    LANG_STRING_VALUE_FIELD,
+                                );
+                                let lang_ser = polars_literal_values_to_series(
+                                    lang_tag_vec,
+                                    LANG_STRING_LANG_FIELD,
+                                );
+                                let mut df = DataFrame::new(vec![
+                                    lex_ser.into_column(),
+                                    lang_ser.into_column(),
+                                ])
+                                .unwrap();
+                                df = df
+                                    .lazy()
+                                    .with_column(
+                                        as_struct(vec![
+                                            col(LANG_STRING_VALUE_FIELD),
+                                            col(LANG_STRING_LANG_FIELD),
+                                        ])
+                                        .alias(OBJECT_COL_NAME),
+                                    )
+                                    .select([col(OBJECT_COL_NAME)])
+                                    .collect()
+                                    .unwrap();
+                                df.column(OBJECT_COL_NAME)
+                                    .unwrap()
+                                    .as_materialized_series()
+                                    .clone()
+                            } else {
+                                polars_literal_values_to_series(object_vec, OBJECT_COL_NAME)
+                            }
+                        }
+                        BaseRDFNodeType::None => {
+                            unreachable!()
+                        }
+                    };
+                    let df =
+                        DataFrame::new(vec![subject_ser.into_column(), object_ser.into_column()])
+                            .unwrap();
+                    let object_cat_state = if object_type.is_iri() || object_type.is_blank_node() {
+                        BaseCatState::CategoricalNative(false, Some(local.clone()))
+                    } else {
+                        object_type.default_input_cat_state()
+                    };
+                    let trips = TriplesToAdd {
+                        df,
+                        subject_type: subject_type.clone(),
+                        object_type,
+                        predicate: Some(predicate.clone()),
+                        graph: Default::default(),
+                        subject_cat_state: BaseCatState::CategoricalNative(false, None),
+                        object_cat_state,
+                        predicate_cat_state: None,
+                    };
+                    triples_to_add.push(trips);
+                }
+            }
+        }
+        self.add_triples_vec(triples_to_add, false)?;
+
+        Ok(())
+    }
+}
 
 pub struct JellyEncoder {
     prefix_table: HashMap<u32, u32>,
@@ -410,7 +779,6 @@ impl JellyEncoder {
                 self.get_or_insert_prefix(u, *prefix);
             }
         }
-        println!("PRefixes {:?}", self.pending_rows);
     }
 }
 

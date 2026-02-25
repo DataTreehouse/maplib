@@ -7,8 +7,8 @@ use crate::IndexingOptions;
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{NamedNode, Subject, Term};
 use polars::prelude::{
-    as_struct, col, concat, lit, Expr, IdxSize, IntoLazy, JoinArgs, JoinType,
-    LazyFrame, MaintainOrderJoin, PlSmallStr, UnionArgs,
+    as_struct, col, concat, lit, Expr, IdxSize, IntoLazy, JoinArgs, JoinType, LazyFrame,
+    MaintainOrderJoin, PlSmallStr, UnionArgs,
 };
 use polars_core::datatypes::AnyValue;
 use polars_core::frame::DataFrame;
@@ -374,11 +374,12 @@ impl TriplesSegment {
         // At this point the true range is between from_i and to_i
         let height = to_i.saturating_sub(from_i);
         if height > 0 {
-            let lf = self
-                .get_subject_sort_lazy_frame()?;
+            let lf = self.get_subject_sort_lazy_frame()?;
             let lf_subj = lf.clone().select([col(SUBJECT_COL_NAME)]);
             let subjects_start = global_cats.read()?.decode_of_type(
-                &lf_subj.clone().slice(from_i as i64, (OFFSET_STEP * 2) as u32)
+                &lf_subj
+                    .clone()
+                    .slice(from_i as i64, (OFFSET_STEP * 2) as u32)
                     .collect()
                     .unwrap()
                     .column(SUBJECT_COL_NAME)
@@ -390,7 +391,8 @@ impl TriplesSegment {
             to_i = to_i.saturating_sub(OFFSET_STEP * 2);
             // The to_i may be exactly at the sparse index, so without + 1 we may miss it.
             let subjects_end = global_cats.read()?.decode_of_type(
-                &lf_subj.slice(to_i as i64, (OFFSET_STEP * 2 + 1) as u32)
+                &lf_subj
+                    .slice(to_i as i64, (OFFSET_STEP * 2 + 1) as u32)
                     .collect()
                     .unwrap()
                     .column(SUBJECT_COL_NAME)
@@ -398,7 +400,6 @@ impl TriplesSegment {
                     .as_materialized_series(),
                 subject_type,
             );
-
 
             // case exact:
             // from = "c"
@@ -438,10 +439,7 @@ impl TriplesSegment {
             }
             //let r2 = global_cats.read()?.decode_of_type(lf.clone().collect().unwrap().column(SUBJECT_COL_NAME).unwrap().as_materialized_series(), &BaseRDFNodeType::BlankNode);
 
-            let ret = lf.slice(
-                from_i as i64,
-                height as u32
-            ).collect().unwrap();
+            let ret = lf.slice(from_i as i64, height as u32).collect().unwrap();
             //let r = global_cats.read()?.decode_of_type(ret.column(SUBJECT_COL_NAME).unwrap().as_materialized_series(), &BaseRDFNodeType::BlankNode);
             //assert!(from <= r.str().unwrap().first().unwrap(),"from {} to {} ret r {} from_i {}, to_i {} r2 {}", from, to, r, from_i, to_i, r2);
             //assert!(r.str().unwrap().last().unwrap() <= to,"from {} to {} ret r {}", from, to, r);

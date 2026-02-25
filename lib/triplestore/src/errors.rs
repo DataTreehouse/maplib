@@ -9,6 +9,8 @@ use thiserror::Error;
 pub enum TriplestoreError {
     #[error("Error writing Jelly {0}")]
     WriteJellyError(String),
+    #[error("Error reading Jelly {0}")]
+    ReadJellyError(String),
     #[error("Error writing NTriples {0}")]
     WriteNTriplesError(String),
     #[error("Path {0} does not exist")]

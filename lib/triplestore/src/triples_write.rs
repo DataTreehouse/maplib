@@ -1,5 +1,7 @@
 use super::Triplestore;
 use crate::errors::TriplestoreError;
+use crate::jelly::*;
+use crate::triples_read::ExtendedRdfFormat;
 use oxrdf::NamedNode;
 use oxrdfio::{RdfFormat, RdfSerializer, WriterQuadSerializer};
 use polars::prelude::{by_name, col, IntoLazy};
@@ -17,8 +19,6 @@ use representation::{
 use std::collections::HashMap;
 use std::io::{BufWriter, Write};
 use tracing::warn;
-use crate::triples_read::ExtendedRdfFormat;
-use crate::jelly::*;
 
 mod fast_ntriples;
 mod pretty_turtle;
@@ -163,38 +163,50 @@ impl Triplestore {
                 }
             }
             writer.finish().unwrap();
-            buffered.flush().map_err(|x|TriplestoreError::FlushError(x.to_string()))?;
+            buffered
+                .flush()
+                .map_err(|x| TriplestoreError::FlushError(x.to_string()))?;
         } else if ExtendedRdfFormat::Jelly == format {
             let mut buffered = BufWriter::new(buf);
             let mut jelly_encoder = JellyEncoder::new();
             // Single roundtrip to cat map
-            let all_predicates:Vec<_> = self.graph_triples_map.get(graph).unwrap().keys().map(|x| {
-                x.as_str()
-            }).collect();
+            let all_predicates: Vec<_> = self
+                .graph_triples_map
+                .get(graph)
+                .unwrap()
+                .keys()
+                .map(|x| x.as_str())
+                .collect();
             let all_predicates_u32 = self.global_cats.read()?.encode_iri_slice(&all_predicates);
-            let all_predicates_u32_map: HashMap<_,_> = all_predicates.into_iter().zip(all_predicates_u32.into_iter()).map(|(x,y)|{
-                (x.to_string(), y.unwrap())
-            }).collect();
+            let all_predicates_u32_map: HashMap<_, _> = all_predicates
+                .into_iter()
+                .zip(all_predicates_u32.into_iter())
+                .map(|(x, y)| (x.to_string(), y.unwrap()))
+                .collect();
             jelly_encoder.write_options(&mut buffered)?;
 
             for (predicate, df_map) in self.graph_triples_map.get(graph).unwrap() {
                 let pred_u32 = all_predicates_u32_map.get(predicate.as_str()).unwrap();
                 for ((subject_type, object_type), tt) in df_map {
                     for (lf, _) in tt.get_lazy_frames(&None, &None)? {
-                        jelly_encoder.write_jelly(
-                            &mut buffered,
-                            lf.collect().unwrap(),
-                            predicate,
-                            *pred_u32,
-                            subject_type,
-                            object_type,
-                            self.global_cats.clone(),
-                        ) .map_err(|e| TriplestoreError::WriteJellyError(e.to_string()))?;
+                        jelly_encoder
+                            .write_jelly(
+                                &mut buffered,
+                                lf.collect().unwrap(),
+                                predicate,
+                                *pred_u32,
+                                subject_type,
+                                object_type,
+                                self.global_cats.clone(),
+                            )
+                            .map_err(|e| TriplestoreError::WriteJellyError(e.to_string()))?;
                     }
                 }
             }
             jelly_encoder.write_rows(&mut buffered, true)?;
-            buffered.flush().map_err(|x|TriplestoreError::FlushError(x.to_string()))?;
+            buffered
+                .flush()
+                .map_err(|x| TriplestoreError::FlushError(x.to_string()))?;
         }
         Ok(())
     }

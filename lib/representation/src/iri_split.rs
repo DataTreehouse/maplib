@@ -6,7 +6,7 @@ pub fn split_iri(iri: &str) -> (&str, &str) {
         delimiter: P,
     ) -> Option<(&'_ str, &'_ str)>
     where
-            for<'a> P::Searcher<'a>: std::str::pattern::ReverseSearcher<'a>,
+        for<'a> P::Searcher<'a>: std::str::pattern::ReverseSearcher<'a>,
     {
         let (_, end) = std::str::pattern::ReverseSearcher::next_match_back(
             &mut delimiter.into_searcher(this),
