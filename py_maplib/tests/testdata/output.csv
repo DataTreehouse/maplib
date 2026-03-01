@@ -1,8 +1,0 @@
-s,p,o
-<http://example.org/data/Observation/7536>,<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>,<http://www.w3.org/ns/sosa/Observation>
-<http://example.org/data/Observation/7536>,<http://www.w3.org/ns/sosa/hasSimpleResult>,"""66""^^<http://www.w3.org/2001/XMLSchema#integer>"
-<http://example.org/data/Observation/7536>,<http://www.w3.org/ns/sosa/observedProperty>,<http://example.org/data/Sun#sunspotNumber>
-<http://example.org/data/Observation/7536>,<http://www.w3.org/ns/sosa/phenomenonTime>,_:994b9aff-6122-4413-a4f2-b6e40bc68af8
-<http://example.org/data/Observation/7536>,<http://www.w3.org/ns/sosa/resultTime>,"""2017-03-31T12:00:00+00:00""^^<http://www.w3.org/2001/XMLSchema#dateTimeStamp>"
-_:994b9aff-6122-4413-a4f2-b6e40bc68af8,<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>,<http://www.w3.org/2006/time#Instant>
-_:994b9aff-6122-4413-a4f2-b6e40bc68af8,<http://www.w3.org/2006/time#inXSDDateTimeStamp>,"""2017-03-31T11:51:42+00:00""^^<http://www.w3.org/2001/XMLSchema#dateTimeStamp>"

@@ -1,5 +1,7 @@
 import polars as pl
 import pathlib
+import pytest
+import os
 
 from polars import read_csv
 from polars.testing import assert_frame_equal
@@ -14,6 +16,7 @@ pl.Config.set_fmt_str_lengths(300)
 PATH_HERE = pathlib.Path(__file__).parent
 TESTDATA_PATH = PATH_HERE / "testdata"
 
+@pytest.mark.skip
 def test_write_jelly():
     m = Model()
     m.read(TESTDATA_PATH / "sunspots.ttl")
@@ -30,6 +33,9 @@ def test_write_jelly():
 
 def test_read_jelly():
     m = Model()
+    if (TESTDATA_PATH / "output.jelly").exists():
+        os.remove(TESTDATA_PATH / "output.jelly")
+
     if not (TESTDATA_PATH / "output.jelly").exists():
         test_write_jelly()
 
