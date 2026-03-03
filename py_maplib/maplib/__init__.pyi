@@ -1,5 +1,7 @@
 from pathlib import Path
 from typing import Union, List, Dict, Optional, Callable, Tuple, Literal as LiteralType
+
+import polars
 from polars import DataFrame
 from datetime import datetime, date
 from maplib.maplib import rdf
@@ -732,7 +734,7 @@ class Model:
         include_transient: bool = True,
         max_rows: int = None,
         debug: bool = False,
-    ):
+    ) -> Dict[str, polars.DataFrame]:
         """
         Insert the results of a Construct query in the graph.
         Useful for being able to use the same query for inspecting what will be inserted and actually inserting.
