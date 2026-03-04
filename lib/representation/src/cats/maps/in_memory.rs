@@ -8,6 +8,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt::{Display, Formatter};
 use std::hash::BuildHasherDefault;
 use std::sync::Arc;
+use std::time::Instant;
 
 #[derive(Debug, Clone, Ord, Eq, PartialEq, PartialOrd)]
 pub struct PrefixCompressedString {
@@ -363,7 +364,7 @@ impl UncompressedCatMapsInMemory {
     }
 
     pub fn counter(&self) -> u32 {
-        self.rev_map.keys().max().unwrap().clone() + 1
+        self.rev_map.keys().max().cloned().unwrap_or(0) + 1
     }
 
     pub fn decode_batch(&self, v: &[Option<u32>]) -> Vec<Option<Cow<'_, str>>> {

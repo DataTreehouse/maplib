@@ -98,7 +98,7 @@ impl Triplestore {
                                 sm
                             } else {
                                 predicate_map.insert(pred_iri_u32, Default::default());
-                                predicate_map.get_mut(&pred_iri_u32).unwrap()
+                                predicate_map.get_mut(&pred_iri_u32).expect("Just inserted")
                             };
                         let (subject, object_map) = match t.subject {
                             OneOfsubject::s_iri(i) => {
@@ -106,7 +106,7 @@ impl Triplestore {
                                     om
                                 } else {
                                     subject_type_map.insert(true, Default::default());
-                                    subject_type_map.get_mut(&true).unwrap()
+                                    subject_type_map.get_mut(&true).expect("Just inserted")
                                 };
                                 let k = (i.prefix_id, i.name_id);
                                 let iri_id = if let Some(iri_id) = iri_map.get(&k) {
@@ -123,7 +123,7 @@ impl Triplestore {
                                     om
                                 } else {
                                     subject_type_map.insert(false, Default::default());
-                                    subject_type_map.get_mut(&false).unwrap()
+                                    subject_type_map.get_mut(&false).expect("Just inserted")
                                 };
                                 let blank_id = if let Some(u) = blank_map.get(b.as_ref()) {
                                     *u
@@ -150,7 +150,7 @@ impl Triplestore {
                                     vecs
                                 } else {
                                     object_map.insert(IRI_U32, Default::default());
-                                    object_map.get_mut(&IRI_U32).unwrap()
+                                    object_map.get_mut(&IRI_U32).expect("Just inserted")
                                 };
                                 let k = (i.prefix_id, i.name_id);
                                 let iri_id = if let Some(iri_id) = iri_map.get(&k) {
@@ -167,7 +167,7 @@ impl Triplestore {
                                     om
                                 } else {
                                     object_map.insert(BLANK_U32, Default::default());
-                                    object_map.get_mut(&BLANK_U32).unwrap()
+                                    object_map.get_mut(&BLANK_U32).expect("Just inserted")
                                 };
                                 let blank_id = if let Some(u) = blank_map.get(b.as_ref()) {
                                     *u
@@ -193,7 +193,14 @@ impl Triplestore {
                                         LANG_STRING_U32
                                     }
                                     OneOfliteralKind::datatype(t) => {
-                                        let dt = datatype_map.get(t).unwrap();
+                                        let dt = match datatype_map.get(t) {
+                                            Some(dt) => dt,
+                                            None => {
+                                                return Err(TriplestoreError::ReadJellyError(
+                                                    format!("Datatype id {} not found", t).into(),
+                                                ))
+                                            }
+                                        };
                                         value = rdf_literal_to_polars_literal_value_impl(
                                             l.lex.as_str(),
                                             dt.as_ref(),
@@ -211,7 +218,7 @@ impl Triplestore {
                                     vecs
                                 } else {
                                     object_map.insert(dt_id, Default::default());
-                                    object_map.get_mut(&dt_id).unwrap()
+                                    object_map.get_mut(&dt_id).expect("Just inserted")
                                 };
                                 (value, lang_tag, vecs)
                             }
@@ -247,7 +254,13 @@ impl Triplestore {
                         prefix_map.insert(p.id, Arc::new(p.value.into_owned()));
                     }
                     OneOfrow::datatype(dt) => {
-                        datatype_map.insert(dt.id, NamedNode::new(dt.value.as_str()).unwrap());
+                        let nn = NamedNode::new(dt.value.as_str()).map_err(|e| {
+                            TriplestoreError::ReadJellyError(format!(
+                                "Invalid datatype IRI {}: {}",
+                                dt.value, e
+                            ))
+                        })?;
+                        datatype_map.insert(dt.id, nn);
                     }
                     OneOfrow::None => {
                         unimplemented!()
@@ -258,8 +271,22 @@ impl Triplestore {
         let mut iri_cat_enc = PrefixCompressedCatMapsInMemory::new_empty();
 
         for ((pre, suf), u) in iri_map {
-            let prefix = prefix_map.get(&pre).unwrap();
-            let suffix = name_map.get(&suf).unwrap();
+            let prefix = match prefix_map.get(&pre) {
+                Some(p) => p,
+                None => {
+                    return Err(TriplestoreError::ReadJellyError(
+                        format!("Prefix id {} not found", pre).into(),
+                    ))
+                }
+            };
+            let suffix = match name_map.get(&suf) {
+                Some(s) => s,
+                None => {
+                    return Err(TriplestoreError::ReadJellyError(
+                        format!("Name id {} not found", suf).into(),
+                    ))
+                }
+            };
             let (pre, suf) = split_iri(suffix.as_str());
             if pre.is_empty() {
                 let (pre, suf) = split_iri(prefix.as_str());
@@ -302,13 +329,28 @@ impl Triplestore {
 
         let mut triples_to_add = Vec::new();
         for (p, m) in predicate_map {
-            let (pre, suf) = iri_rev_map.get(&p).unwrap();
-            let predicate = NamedNode::new(format!(
-                "{}{}",
-                prefix_map.get(pre).unwrap(),
-                name_map.get(suf).unwrap()
-            ))
-            .unwrap();
+            let (pre, suf) = iri_rev_map.get(&p).ok_or_else(|| {
+                TriplestoreError::ReadJellyError(format!(
+                    "Missing IRI reverse mapping for predicate {}",
+                    p
+                ))
+            })?;
+
+            let prefix = prefix_map.get(pre).ok_or_else(|| {
+                TriplestoreError::ReadJellyError(format!("Missing prefix for id {}", pre))
+            })?;
+
+            let name = name_map.get(suf).ok_or_else(|| {
+                TriplestoreError::ReadJellyError(format!("Missing name for id {}", suf))
+            })?;
+
+            let predicate = NamedNode::new(format!("{}{}", prefix, name)).map_err(|e| {
+                TriplestoreError::ReadJellyError(format!(
+                    "Invalid predicate IRI {}{}: {}",
+                    prefix, name, e
+                ))
+            })?;
+
             for (subject_is_iri, om) in m {
                 let subject_type = if subject_is_iri {
                     BaseRDFNodeType::IRI
@@ -325,7 +367,14 @@ impl Triplestore {
                     } else if dt == STRING_U32 {
                         BaseRDFNodeType::Literal(xsd::STRING.into_owned())
                     } else {
-                        let literal_iri = datatype_map.get(&dt).unwrap();
+                        let literal_iri = match datatype_map.get(&dt) {
+                            Some(dt) => dt,
+                            None => {
+                                return Err(TriplestoreError::ReadJellyError(
+                                    format!("Datatype id {} not found", dt).into(),
+                                ))
+                            }
+                        };
                         BaseRDFNodeType::Literal(literal_iri.clone())
                     };
                     let subject_ser =
@@ -348,7 +397,12 @@ impl Triplestore {
                                     lex_ser.into_column(),
                                     lang_ser.into_column(),
                                 ])
-                                .unwrap();
+                                .map_err(|e| {
+                                    TriplestoreError::ReadJellyError(format!(
+                                        "Error creating DataFrame for language tagged string: {}",
+                                        e
+                                    ))
+                                })?;
                                 df = df
                                     .lazy()
                                     .with_column(
@@ -360,9 +414,19 @@ impl Triplestore {
                                     )
                                     .select([col(OBJECT_COL_NAME)])
                                     .collect()
-                                    .unwrap();
+                                    .map_err(|e| {
+                                        TriplestoreError::ReadJellyError(format!(
+                                            "Error structuring DataFrame for language tagged string: {}",
+                                            e
+                                        ))
+                                    })?;
                                 df.column(OBJECT_COL_NAME)
-                                    .unwrap()
+                                    .map_err(|e| {
+                                        TriplestoreError::ReadJellyError(format!(
+                                            "Missing column {}: {}",
+                                            OBJECT_COL_NAME, e
+                                        ))
+                                    })?
                                     .as_materialized_series()
                                     .clone()
                             } else {
@@ -375,7 +439,12 @@ impl Triplestore {
                     };
                     let df =
                         DataFrame::new(vec![subject_ser.into_column(), object_ser.into_column()])
-                            .unwrap();
+                            .map_err(|e| {
+                            TriplestoreError::ReadJellyError(format!(
+                                "Error creating DataFrame for triple: {}",
+                                e
+                            ))
+                        })?;
                     let object_cat_state = if object_type.is_iri() || object_type.is_blank_node() {
                         BaseCatState::CategoricalNative(false, Some(local.clone()))
                     } else {
@@ -387,7 +456,10 @@ impl Triplestore {
                         object_type,
                         predicate: Some(predicate.clone()),
                         graph: Default::default(),
-                        subject_cat_state: BaseCatState::CategoricalNative(false, Some(local.clone())),
+                        subject_cat_state: BaseCatState::CategoricalNative(
+                            false,
+                            Some(local.clone()),
+                        ),
                         object_cat_state,
                         predicate_cat_state: None,
                     };
@@ -461,15 +533,19 @@ impl JellyEncoder {
         global_cats: LockedCats,
     ) -> Result<(), TriplestoreError> {
         self.maybe_prepare_new_names_prefixes(
-            df.column(SUBJECT_COL_NAME).unwrap(),
+            df.column(SUBJECT_COL_NAME).map_err(|e| {
+                TriplestoreError::WriteJellyError(format!("Missing subject column: {}", e))
+            })?,
             subject_type,
             global_cats.clone(),
-        );
+        )?;
         self.maybe_prepare_new_names_prefixes(
-            df.column(OBJECT_COL_NAME).unwrap(),
+            df.column(OBJECT_COL_NAME).map_err(|e| {
+                TriplestoreError::WriteJellyError(format!("Missing object column: {}", e))
+            })?,
             object_type,
             global_cats.clone(),
-        );
+        )?;
         let (pre, suf) = split_iri(predicate.as_str());
         let pre_u32 = self.get_or_insert_prefix(predicate_cat, pre);
         let name_u32 = self.get_or_insert_name(predicate_cat, suf);
@@ -478,12 +554,20 @@ impl JellyEncoder {
             name_id: name_u32,
         });
 
-        let subject_u32s = df.column(SUBJECT_COL_NAME).unwrap().u32().unwrap();
+        let subject_u32s = df
+            .column(SUBJECT_COL_NAME)
+            .map_err(|e| {
+                TriplestoreError::WriteJellyError(format!("Missing subject column: {}", e))
+            })?
+            .u32()
+            .map_err(|e| {
+                TriplestoreError::WriteJellyError(format!("Subject column is not u32: {}", e))
+            })?;
 
         let subjects = if subject_type.is_iri() {
-            self.create_iri_subjects(subject_u32s)
+            self.create_iri_subjects(subject_u32s)?
         } else {
-            create_blank_subjects(subject_u32s)
+            create_blank_subjects(subject_u32s)?
         };
 
         //Todo: push datatype row and predicate row.
@@ -500,19 +584,54 @@ impl JellyEncoder {
                 new_exprs.push(e.alias(format!("{i}")));
             }
             lf = lf.with_columns(new_exprs);
-            let df = lf.collect().unwrap();
+            let df = lf.collect().map_err(|e| {
+                TriplestoreError::WriteJellyError(format!(
+                    "Error evaluating literal expressions for object column: {}",
+                    e
+                ))
+            })?;
 
             if object_type.is_lang_string() {
                 for ((subject, o_lex), o_lang) in subjects
                     .into_iter()
-                    .zip(df.column("0").unwrap().str().unwrap())
-                    .zip(df.column("1").unwrap().str().unwrap())
+                    .zip(df.column("0").map_err(|e| {
+                        TriplestoreError::WriteJellyError(format!(
+                            "Missing object column after evaluating literal expressions: {}",
+                            e
+                        ))
+                    })?.str().map_err(|e| {
+                        TriplestoreError::WriteJellyError(format!(
+                            "Object column is not string after evaluating literal expressions: {}",
+                            e
+                        ))
+                    })?)
+                    .zip(df.column("1").map_err(|e| {
+                        TriplestoreError::WriteJellyError(format!(
+                            "Missing language tag column after evaluating literal expressions: {}",
+                            e
+                        ))
+                    })?.str().map_err(|e| {
+                        TriplestoreError::WriteJellyError(format!(
+                            "Language tag column is not string after evaluating literal expressions: {}",
+                            e
+                        ))
+                    })?)
                 {
-                    let o_lex = o_lex.unwrap();
+                    let o_lex = match o_lex {
+                        Some(o) => o,
+                        None => return Err(TriplestoreError::WriteJellyError(
+                            "Missing lexical form for language tagged literal".into(),
+                        )),
+                    };
+                    let o_lang = o_lang.ok_or_else(|| {
+                        TriplestoreError::WriteJellyError(
+                            "Missing language tag for language tagged literal".into(),
+                        )
+                    })?;
                     let object = OneOfobject::o_literal(RdfLiteral {
                         lex: Cow::Owned(o_lex.to_string()),
                         literalKind: OneOfliteralKind::langtag(Cow::Owned(
-                            o_lang.unwrap().to_string(),
+                            o_lang.to_string(),
                         )),
                     });
                     self.pending_rows.push(RdfStreamRow {
@@ -538,11 +657,25 @@ impl JellyEncoder {
                     self.next_datatype_id += 1;
                     dt_o
                 };
-                for (subject, o) in subjects
-                    .into_iter()
-                    .zip(df.column("0").unwrap().str().unwrap())
-                {
-                    let o = o.unwrap();
+                for (subject, o) in subjects.into_iter().zip(
+                    df.column("0")
+                        .map_err(|e| {
+                            TriplestoreError::WriteJellyError(format!(
+                                "Missing object column after evaluating literal expressions: {}",
+                                e
+                            ))
+                        })?
+                        .str()
+                        .map_err(|e| {
+                            TriplestoreError::WriteJellyError(format!(
+                            "Object column is not string after evaluating literal expressions: {}",
+                            e
+                        ))
+                        })?,
+                ) {
+                    let o = o.ok_or_else(|| {
+                        TriplestoreError::WriteJellyError("Missing lexical form for literal".into())
+                    })?;
                     let object = OneOfobject::o_literal(RdfLiteral {
                         lex: Cow::Owned(o.to_string()),
                         literalKind: OneOfliteralKind::datatype(dt_o),
@@ -558,11 +691,19 @@ impl JellyEncoder {
             }
         } else {
             // subject and object are both either blank or iri: u32 cols..
-            let object_u32s = df.column(OBJECT_COL_NAME).unwrap().u32().unwrap();
+            let object_u32s = df
+                .column(OBJECT_COL_NAME)
+                .map_err(|e| {
+                    TriplestoreError::WriteJellyError(format!("Missing object column: {}", e))
+                })?
+                .u32()
+                .map_err(|e| {
+                    TriplestoreError::WriteJellyError(format!("Object column is not u32: {}", e))
+                })?;
             let objects = if object_type.is_iri() {
-                self.create_iri_objects(object_u32s)
+                self.create_iri_objects(object_u32s)?
             } else {
-                create_blank_objects(object_u32s)
+                create_blank_objects(object_u32s)?
             };
             for (subject, object) in subjects.into_iter().zip(objects.into_iter()) {
                 self.pending_rows.push(RdfStreamRow {
@@ -578,22 +719,42 @@ impl JellyEncoder {
         Ok(())
     }
 
-    fn create_iri(&self, u: &u32) -> RdfIri {
-        RdfIri {
-            prefix_id: *self.prefix_table.get(u).unwrap(),
-            name_id: *self.name_table.get(u).unwrap(),
-        }
+    fn create_iri(&self, u: &u32) -> Result<RdfIri, TriplestoreError> {
+        Ok(RdfIri {
+            prefix_id: *self.prefix_table.get(u).ok_or_else(|| {
+                TriplestoreError::WriteJellyError(format!("Prefix id not found for u32 {}", u))
+            })?,
+            name_id: *self.name_table.get(u).ok_or_else(|| {
+                TriplestoreError::WriteJellyError(format!("Name id not found for u32 {}", u))
+            })?,
+        })
     }
 
-    fn create_iri_subjects(&self, u32s: &UInt32Chunked) -> Vec<OneOfsubject<'static>> {
+    fn create_iri_subjects(
+        &self,
+        u32s: &UInt32Chunked,
+    ) -> Result<Vec<OneOfsubject<'static>>, TriplestoreError> {
         u32s.iter()
-            .map(|x| OneOfsubject::s_iri(self.create_iri(&x.unwrap())))
+            .map(|x| {
+                let u = x.ok_or_else(|| {
+                    TriplestoreError::WriteJellyError("Null value in subject column".into())
+                })?;
+                Ok(OneOfsubject::s_iri(self.create_iri(&u)?))
+            })
             .collect()
     }
 
-    fn create_iri_objects(&self, u32s: &UInt32Chunked) -> Vec<OneOfobject<'static>> {
+    fn create_iri_objects(
+        &self,
+        u32s: &UInt32Chunked,
+    ) -> Result<Vec<OneOfobject<'static>>, TriplestoreError> {
         u32s.iter()
-            .map(|x| OneOfobject::o_iri(self.create_iri(&x.unwrap())))
+            .map(|x| {
+                let u = x.ok_or_else(|| {
+                    TriplestoreError::WriteJellyError("Null value in object column".into())
+                })?;
+                Ok(OneOfobject::o_iri(self.create_iri(&u)?))
+            })
             .collect()
     }
 
@@ -734,14 +895,19 @@ impl JellyEncoder {
         c: &Column,
         t: &BaseRDFNodeType,
         global_cats: LockedCats,
-    ) {
-        let read_cats = global_cats.read().unwrap();
+    ) -> Result<(), TriplestoreError> {
+        let read_cats = global_cats.read().map_err(|e| {
+            TriplestoreError::WriteJellyError(format!(
+                "Error acquiring read lock on global categories: {}",
+                e
+            ))
+        })?;
         let mut seen_iri_u32s = Vec::new();
         let mut seen_iri_out_u32s = Vec::new();
         match t {
             BaseRDFNodeType::IRI => {
-                for u in c.u32().unwrap() {
-                    let u = u.unwrap();
+                for u in c.u32().expect("IRI column should be u32") {
+                    let u = u.expect("Null value in IRI column");
                     if !self.name_table.contains_key(&u) {
                         self.name_table.insert(u, self.next_name_id);
                         seen_iri_u32s.push(u);
@@ -766,7 +932,10 @@ impl JellyEncoder {
                 .unzip();
 
             for (new_u, suf) in seen_iri_out_u32s.iter().zip(sufs) {
-                let jelly_id = *self.name_table.get(new_u).unwrap();
+                let jelly_id = *self
+                    .name_table
+                    .get(new_u)
+                    .expect("Just inserted name id should be present");
                 self.pending_rows.push(RdfStreamRow {
                     row: OneOfrow::name(RdfNameEntry {
                         id: jelly_id,
@@ -779,6 +948,7 @@ impl JellyEncoder {
                 self.get_or_insert_prefix(u, *prefix);
             }
         }
+        Ok(())
     }
 }
 
@@ -793,14 +963,28 @@ fn create_blank_object(u: u32) -> OneOfobject<'static> {
 fn create_blank_cow(u: u32) -> Cow<'static, str> {
     Cow::Owned(format!("b{}", u))
 }
-fn create_blank_subjects(u32s: &UInt32Chunked) -> Vec<OneOfsubject<'static>> {
+fn create_blank_subjects(
+    u32s: &UInt32Chunked,
+) -> Result<Vec<OneOfsubject<'static>>, TriplestoreError> {
     u32s.iter()
-        .map(|x| create_blank_subject(x.unwrap()))
+        .map(|x| {
+            let u = x.ok_or_else(|| {
+                TriplestoreError::WriteJellyError("Null value in subject column".into())
+            })?;
+            Ok(create_blank_subject(u))
+        })
         .collect()
 }
 
-fn create_blank_objects(u32s: &UInt32Chunked) -> Vec<OneOfobject<'static>> {
+fn create_blank_objects(
+    u32s: &UInt32Chunked,
+) -> Result<Vec<OneOfobject<'static>>, TriplestoreError> {
     u32s.iter()
-        .map(|x| create_blank_object(x.unwrap()))
+        .map(|x| {
+            let u = x.ok_or_else(|| {
+                TriplestoreError::WriteJellyError("Null value in object column".into())
+            })?;
+            Ok(create_blank_object(u))
+        })
         .collect()
 }
