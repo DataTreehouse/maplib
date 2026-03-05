@@ -118,6 +118,7 @@ pub fn union(
             rechunk,
             to_supertypes: false,
             diagonal: true,
+            strict: false,
             from_partitioned_ds: false,
             maintain_order: false,
         },

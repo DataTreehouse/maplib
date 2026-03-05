@@ -588,14 +588,14 @@ impl Triplestore {
         } else {
             return Ok((HashMap::new(), Vec::new()));
         };
-        df.as_single_chunk();
+        df.rechunk_mut();
         let mut keep = vec![];
         for s in df.column(SUBJECT_COL_NAME).unwrap().u32().unwrap() {
             let s = s.unwrap();
             keep.push(!used_subjects.contains(&s));
         }
         df = df.filter(&BooleanChunked::from_iter(keep)).unwrap();
-        if df.is_empty() {
+        if df.columns().is_empty() {
             return Ok((HashMap::new(), Vec::new()));
         }
         //let r = self.global_cats.read()?.decode_of_type(df.column(SUBJECT_COL_NAME).unwrap().as_materialized_series(), &BaseRDFNodeType::BlankNode);
@@ -1106,6 +1106,7 @@ fn concat_lfs_subject_object(lfs: Vec<LazyFrame>) -> LazyFrame {
             diagonal: false,
             from_partitioned_ds: false,
             maintain_order: true,
+            strict: false,
         },
     )
     .unwrap();

@@ -329,13 +329,14 @@ impl Triplestore {
                             });
                             let mut subjects_ser = Series::from_iter(strings_iter);
                             subjects_ser.rename(SUBJECT_COL_NAME.into());
+                            let len = subjects_ser.len();
 
                             let objects_ser =
                                 particular_term_vec_to_series(objects, object_dt.clone());
 
                             let all_series =
                                 vec![subjects_ser.into_column(), objects_ser.into_column()];
-                            let mut df = DataFrame::new(all_series).unwrap();
+                            let mut df = DataFrame::new(len, all_series).unwrap();
                             // TODO: Include bad data also
                             df = df
                                 .drop_nulls(Some(&[
@@ -544,7 +545,7 @@ fn particular_term_vec_to_series(term_vec: Vec<Term>, dt: BaseRDFNodeType) -> Se
 
         let val_ser = polars_literal_values_to_series(vals, LANG_STRING_VALUE_FIELD);
         let lang_ser = polars_literal_values_to_series(langs, LANG_STRING_LANG_FIELD);
-        let mut df = DataFrame::new(vec![val_ser.into(), lang_ser.into()])
+        let mut df = DataFrame::new(val_ser.len(), vec![val_ser.into(), lang_ser.into()])
             .unwrap()
             .lazy()
             .with_column(

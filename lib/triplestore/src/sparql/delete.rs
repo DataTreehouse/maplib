@@ -248,6 +248,7 @@ fn get_triples_after_deletion(
                     diagonal: false,
                     from_partitioned_ds: false,
                     maintain_order: false,
+                    strict: false,
                 },
             )
             .unwrap();
@@ -265,6 +266,7 @@ fn get_triples_after_deletion(
                     nulls_equal: false,
                     coalesce: Default::default(),
                     maintain_order: MaintainOrderJoin::None,
+                    build_side: None,
                 },
             );
             let df = lf.collect().unwrap();

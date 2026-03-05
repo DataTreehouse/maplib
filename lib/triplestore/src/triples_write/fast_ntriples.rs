@@ -4,6 +4,7 @@
 use crate::triples_write::serializers::serializer_for;
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::NamedNode;
+use polars::polars_utils::index::Bounded;
 use polars_core::prelude::*;
 use polars_core::POOL;
 use rayon::prelude::*;
@@ -30,7 +31,7 @@ pub(crate) fn write_triples_in_df<W: Write>(
 
     let mut n_rows_finished = 0;
     let use_suffix = df
-        .get_columns()
+        .columns()
         .iter()
         .map(|x| {
             if x.name() == LANG_STRING_VALUE_FIELD {
@@ -65,8 +66,8 @@ pub(crate) fn write_triples_in_df<W: Write>(
             // so will be faster.
             // and allows writing `pl.concat([df] * 100, rechunk=False).write_csv()` as the rechunk
             // would go OOM
-            df.as_single_chunk();
-            let cols = df.get_columns();
+            df.rechunk_mut();
+            let cols = df.columns();
 
             // SAFETY:
             // the bck thinks the lifetime is bounded to write_buffer_pool, but at the time we return
@@ -74,7 +75,7 @@ pub(crate) fn write_triples_in_df<W: Write>(
             // in other words, the lifetime does not leave this scope
             let cols = unsafe { std::mem::transmute::<&[Column], &[Column]>(cols) };
 
-            if df.is_empty() {
+            if df.columns().is_empty() {
                 return Ok(());
             }
 

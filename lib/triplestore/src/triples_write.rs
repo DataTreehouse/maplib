@@ -48,7 +48,7 @@ impl Triplestore {
                         let lfs = tt.get_lazy_frames(&None, &None)?;
                         for (lf, _) in lfs {
                             let mut df = lf
-                                .unnest(by_name([OBJECT_COL_NAME], true), None)
+                                .unnest(by_name([OBJECT_COL_NAME], true, false), None)
                                 .select([
                                     col(SUBJECT_COL_NAME),
                                     col(LANG_STRING_VALUE_FIELD),

@@ -1,5 +1,5 @@
 use polars::prelude::{
-    DataFrame, LazyFrame, ParallelStrategy, ParquetCompression, ParquetWriter, PlPathRef,
+    DataFrame, LazyFrame, ParallelStrategy, ParquetCompression, ParquetWriter, PlRefPath,
     PolarsError, ScanArgsParquet,
 };
 use std::fs::{create_dir, File};
@@ -61,7 +61,7 @@ pub fn write_parquet(
 
 pub fn scan_parquet(file_path: &Path) -> Result<LazyFrame, FileIOError> {
     LazyFrame::scan_parquet(
-        PlPathRef::Local(file_path).into_owned(),
+        PlRefPath::try_from_path(file_path).map_err(FileIOError::ReadParquetError)?,
         ScanArgsParquet {
             n_rows: None,
             cache: false,

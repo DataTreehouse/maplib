@@ -8,8 +8,8 @@ use crate::model::expansion::validation::validate;
 use oxrdf::vocab::rdf;
 use oxrdf::{NamedNode, Variable};
 use polars::prelude::{
-    by_name, col, lit, Column, DataFrame, DataType, Expr, IntoColumn, IntoLazy, LazyFrame,
-    NamedFrom, Series,
+    by_name, col, lit, Column, DataFrame, DataType, ExplodeOptions, Expr, IntoColumn, IntoLazy,
+    LazyFrame, NamedFrom, Series,
 };
 use query_processing::expressions::non_multi_col_is_null_workaround;
 use rayon::iter::{IndexedParallelIterator, ParallelDrainRange, ParallelIterator};
@@ -428,7 +428,7 @@ fn create_triples(
     let mut predicate = None;
 
     if dynamic_columns.is_empty() && df.height() == 0 {
-        df.with_column(Series::new("dummy_column".into(), vec!["dummy_row"]))
+        df.with_column(Series::new("dummy_column".into(), vec!["dummy_row"]).into_column())
             .unwrap();
     }
 
@@ -528,7 +528,13 @@ fn create_list_triples(
     let mut list_df = my_df.select([c, LIST_COL]).unwrap();
     list_df = list_df
         .lazy()
-        .explode(by_name([c], true))
+        .explode(
+            by_name([c], true, false),
+            ExplodeOptions {
+                empty_as_null: false,
+                keep_nulls: true,
+            },
+        )
         .with_column(
             col(c)
                 .cum_count(false)
@@ -554,7 +560,7 @@ fn create_list_triples(
         .unwrap();
     *df = my_df
         .lazy()
-        .drop(by_name([c], true))
+        .drop(by_name([c], true, false))
         .with_column(
             (lit(format!("l_{i}_"))
                 + (col(LIST_COL) + lit(*blank_node_counter as u32)).cast(DataType::String)
@@ -788,8 +794,12 @@ fn create_remapped(
     for s in columns_vec {
         column_vec.push(s.into_column());
     }
-
-    let mut lf = DataFrame::new(column_vec).unwrap().lazy();
+    let l = if let Some(c) = column_vec.get(0) {
+        c.len()
+    } else {
+        0
+    };
+    let mut lf = DataFrame::new(l, column_vec).unwrap().lazy();
 
     for expr in expressions {
         lf = lf.with_column(expr);
@@ -812,15 +822,33 @@ fn create_remapped(
         match le {
             ListExpanderType::Cross => {
                 for c in to_expand {
-                    lf = lf.explode(by_name([c], true));
+                    lf = lf.explode(
+                        by_name([c], true, false),
+                        ExplodeOptions {
+                            empty_as_null: false,
+                            keep_nulls: true,
+                        },
+                    );
                 }
             }
             ListExpanderType::ZipMin => {
-                lf = lf.explode(by_name(to_expand.iter().map(|x| *x), true));
-                lf = lf.drop_nulls(Some(by_name(to_expand, true)));
+                lf = lf.explode(
+                    by_name(to_expand.iter().map(|x| *x), true, false),
+                    ExplodeOptions {
+                        empty_as_null: false,
+                        keep_nulls: true,
+                    },
+                );
+                lf = lf.drop_nulls(Some(by_name(to_expand, true, false)));
             }
             ListExpanderType::ZipMax => {
-                lf = lf.explode(by_name(to_expand, true));
+                lf = lf.explode(
+                    by_name(to_expand, true, false),
+                    ExplodeOptions {
+                        empty_as_null: false,
+                        keep_nulls: true,
+                    },
+                );
             }
         }
         //Todo: List expanders for constant terms..

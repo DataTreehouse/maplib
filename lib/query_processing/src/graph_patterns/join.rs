@@ -193,14 +193,14 @@ pub fn join_workaround(
                 }
             }
         }
-        right_mappings = right_mappings.drop(by_name(to_drop_right, true));
+        right_mappings = right_mappings.drop(by_name(to_drop_right, true, false));
         left_mappings = left_mappings.join(
             right_mappings,
             &[col(&dummycol)],
             &[col(&dummycol)],
             join_type.into(),
         );
-        left_mappings = left_mappings.drop(by_name([dummycol], true));
+        left_mappings = left_mappings.drop(by_name([dummycol], true, false));
     } else {
         let dummy = if on.is_empty() {
             let dummy = uuid::Uuid::new_v4().to_string();
@@ -219,10 +219,11 @@ pub fn join_workaround(
             nulls_equal: true,
             coalesce: Default::default(),
             maintain_order: MaintainOrderJoin::None,
+            build_side: None,
         };
         left_mappings = left_mappings.join(right_mappings, &on, &on, join_args);
         if let Some(dummy) = dummy {
-            left_mappings = left_mappings.drop(by_name([dummy], true));
+            left_mappings = left_mappings.drop(by_name([dummy], true, false));
         }
     }
 

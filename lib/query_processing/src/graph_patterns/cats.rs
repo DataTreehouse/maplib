@@ -55,7 +55,7 @@ impl CatOperation {
                     mappings = cat_re_enc.re_encode(mappings, &tmp, false);
                     mappings = mappings
                         .with_column(col(c).struct_().with_fields(vec![col(&tmp).alias(&n)]));
-                    mappings = mappings.drop(by_name([tmp], true));
+                    mappings = mappings.drop(by_name([tmp], true, false));
                 }
             }
         }

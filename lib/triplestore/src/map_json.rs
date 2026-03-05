@@ -19,7 +19,7 @@ use serde_json::Value;
 use std::collections::HashMap;
 
 const BOOLEAN: u8 = 0;
-const INT: u8 = 1;
+const INTEGER: u8 = 1;
 const STRING: u8 = 2;
 const FLOAT: u8 = 3;
 
@@ -42,7 +42,7 @@ impl<'a> TripleTableBuilder<'a> {
         TripleTableBuilder {
             map: HashMap::from_iter([
                 ((BLANK, BOOLEAN), TypedSubjectObjectBuilder::new()),
-                ((BLANK, INT), TypedSubjectObjectBuilder::new()),
+                ((BLANK, INTEGER), TypedSubjectObjectBuilder::new()),
                 ((BLANK, STRING), TypedSubjectObjectBuilder::new()),
                 ((BLANK, FLOAT), TypedSubjectObjectBuilder::new()),
                 ((BLANK, BLANK), TypedSubjectObjectBuilder::new()),
@@ -63,7 +63,7 @@ impl<'a> TripleTableBuilder<'a> {
     }
 
     pub fn push_blank_int(&mut self, subj: &str, v: i64) {
-        if let Some(values) = self.map.get_mut(&(BLANK, INT)) {
+        if let Some(values) = self.map.get_mut(&(BLANK, INTEGER)) {
             values.subjects.push(subj.to_string());
             values.objects.push(AnyValue::Int64(v));
         } else {
@@ -153,8 +153,8 @@ impl<'a> TypedSubjectObjectBuilder<'a> {
 fn type_from_u8(u: u8) -> BaseRDFNodeType {
     let t = if u == BOOLEAN {
         BaseRDFNodeType::Literal(xsd::BOOLEAN.into_owned())
-    } else if u == INT {
-        BaseRDFNodeType::Literal(xsd::INT.into_owned())
+    } else if u == INTEGER {
+        BaseRDFNodeType::Literal(xsd::LONG.into_owned())
     } else if u == STRING {
         BaseRDFNodeType::Literal(xsd::STRING.into_owned())
     } else if u == FLOAT {
@@ -210,7 +210,8 @@ impl Triplestore {
                     let subject_state = subject_type.default_input_cat_state();
                     let object_state = object_type.default_input_cat_state();
                     let tta = TriplesToAdd {
-                        df: DataFrame::new(vec![subjects_col, objects_col]).unwrap(),
+                        df: DataFrame::new(subjects_col.len(), vec![subjects_col, objects_col])
+                            .unwrap(),
                         subject_type: subject_type,
                         object_type: object_type,
                         predicate: Some(pred.clone()),

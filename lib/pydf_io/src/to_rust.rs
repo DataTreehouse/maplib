@@ -110,8 +110,13 @@ pub fn array_to_rust_df(rb: &[Bound<'_, PyAny>]) -> PyResult<DataFrame> {
                     })
                     .collect::<PyResult<Vec<_>>>()
             }?;
+            let l = if let Some(col) = columns.get(0) {
+                col.len()
+            } else {
+                0
+            };
 
-            Ok(DataFrame::new(columns).map_err(ToRustError::from)?)
+            Ok(DataFrame::new(l, columns).map_err(ToRustError::from)?)
         })
         .collect::<PyResult<Vec<_>>>()?;
 

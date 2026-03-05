@@ -1,5 +1,4 @@
 use super::{CatEncs, CatTriples, CatType, Cats};
-use crate::cats::maps::CatMaps;
 use crate::cats::LockedCats;
 use crate::solution_mapping::{BaseCatState, EagerSolutionMappings};
 use crate::{
@@ -7,13 +6,15 @@ use crate::{
     SUBJECT_COL_NAME,
 };
 use nohash_hasher::NoHashHasher;
-use polars::datatypes::PlSmallStr;
-use polars::error::PolarsResult;
-use polars::prelude::{col, Column, IntoColumn, IntoLazy, LazyFrame, Series};
+use polars::datatypes::{AnyValue, PlSmallStr};
+use polars::error::{ErrString, PolarsError, PolarsResult};
+use polars::frame::column::ScalarColumn;
+use polars::prelude::{
+    col, Column, DataType, IntoColumn, IntoLazy, LazyFrame, Series,
+};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
-use std::path::Path;
 use std::sync::Arc;
 
 #[derive(Debug, Clone)]
@@ -35,24 +36,52 @@ impl CatReEnc {
     }
 
     pub fn re_encode_column(self, c: Column, forget_others: bool) -> PolarsResult<Column> {
-        let uch = c.u32().unwrap();
-        let mut v = Vec::with_capacity(uch.len());
-        for u in uch {
-            let u = if let Some(u) = u {
-                if let Some(remap_u) = self.cat_map.get(&u) {
-                    Some(*remap_u)
-                } else if !forget_others {
-                    Some(u)
-                } else {
-                    None
+        let name = c.name().clone();
+        match c {
+            Column::Series(c) => {
+                let uch = c.u32().unwrap();
+                let mut v = Vec::with_capacity(uch.len());
+                for u in uch {
+                    let u = if let Some(u) = u {
+                        if let Some(remap_u) = self.cat_map.get(&u) {
+                            Some(*remap_u)
+                        } else if !forget_others {
+                            Some(u)
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    };
+                    v.push(u);
                 }
-            } else {
-                None
-            };
-            v.push(u);
+                let mut s = Series::from_iter(v);
+                s.rename(name);
+                Ok(s.into_column())
+            }
+            Column::Scalar(sc) => {
+                let len = sc.len();
+                let av = match sc.scalar().as_any_value() {
+                    AnyValue::Null => AnyValue::Null,
+                    AnyValue::UInt32(u) => {
+                        if let Some(remap_u) = self.cat_map.get(&u) {
+                            AnyValue::UInt32(*remap_u)
+                        } else if !forget_others {
+                            AnyValue::UInt32(u)
+                        } else {
+                            AnyValue::Null
+                        }
+                    }
+                    _ => {
+                        return Err(PolarsError::SchemaMismatch(ErrString::new_static(
+                            "Expected UInt32 for cat, got other type",
+                        )))
+                    }
+                };
+                let ser = Series::from_any_values_and_dtype(name, &[av], &DataType::UInt32, true)?;
+                Ok(ScalarColumn::from_single_value_series(ser, len).into())
+            }
         }
-        let s = Series::from_iter(v);
-        Ok(s.into_column())
     }
 }
 

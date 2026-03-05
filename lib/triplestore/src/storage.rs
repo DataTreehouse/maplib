@@ -262,6 +262,7 @@ impl Triples {
                     diagonal: false,
                     from_partitioned_ds: false,
                     maintain_order: true,
+                    strict: false,
                 },
             )
             .unwrap();
@@ -276,7 +277,7 @@ impl Triples {
         storage_folder: Option<&PathBuf>,
         global_cats: LockedCats,
     ) -> Result<Option<DataFrame>, TriplestoreError> {
-        df.as_single_chunk_par();
+        df.rechunk_mut_par();
 
         let total_now = Instant::now();
         let global_cats = global_cats.read()?;
@@ -455,7 +456,7 @@ impl TriplesSegment {
         object_indexing_enabled: bool,
         cats: &Cats,
     ) -> Result<Self, TriplestoreError> {
-        df.as_single_chunk();
+        df.rechunk_mut();
         let IndexedTriples {
             subject_sort,
             subject_sparse_index,
@@ -560,6 +561,7 @@ impl TriplesSegment {
                 diagonal: false,
                 from_partitioned_ds: false,
                 maintain_order: false,
+                strict: false,
             },
         )
         .unwrap();
@@ -575,6 +577,7 @@ impl TriplesSegment {
                 nulls_equal: false,
                 coalesce: Default::default(),
                 maintain_order: MaintainOrderJoin::Left,
+                build_side: None,
             },
         );
         Ok(lf.collect().unwrap())
@@ -1135,7 +1138,7 @@ fn compact_dataframe_segments(
     let mut new_segments = vec![];
 
     for (mut df, new) in segments {
-        df.as_single_chunk();
+        df.rechunk_mut();
         if let Some((f1, f2)) = b_fields {
             df = df
                 .lazy()
@@ -1284,11 +1287,14 @@ fn create_df_from_vecs(
     };
 
     let df = if let Some((f1, f2)) = fields {
-        let mut lf = DataFrame::new(vec![
-            a_ser.into_column(),
-            b_1_ser.into_column(),
-            b_2_ser.unwrap().into_column(),
-        ])
+        let mut lf = DataFrame::new(
+            a_ser.len(),
+            vec![
+                a_ser.into_column(),
+                b_1_ser.into_column(),
+                b_2_ser.unwrap().into_column(),
+            ],
+        )
         .unwrap()
         .lazy();
         lf = lf
@@ -1296,7 +1302,11 @@ fn create_df_from_vecs(
             .select([col(col_a), col(col_b)]);
         lf.collect().unwrap()
     } else {
-        DataFrame::new(vec![a_ser.into_column(), b_1_ser.into_column()]).unwrap()
+        DataFrame::new(
+            a_ser.len(),
+            vec![a_ser.into_column(), b_1_ser.into_column()],
+        )
+        .unwrap()
     };
     df
 }

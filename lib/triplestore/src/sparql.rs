@@ -21,7 +21,7 @@ use oxttl::TurtleSerializer;
 use polars::frame::DataFrame;
 use polars::prelude::{as_struct, col, lit, Expr, IntoLazy, LiteralValue, PlSmallStr};
 use polars_core::frame::UniqueKeepStrategy;
-use polars_core::prelude::{DataType, Series};
+use polars_core::prelude::{DataType, ExplodeOptions, Series};
 use query_processing::expressions::expr_is_null_workaround;
 use query_processing::graph_patterns::unique_workaround;
 use query_processing::pushdowns::Pushdowns;
@@ -438,35 +438,20 @@ impl Triplestore {
                     let mut delete_solutions: HashMap<_, Vec<_>> = HashMap::new();
                     for d in delete {
                         let cats = self.global_cats.read()?;
-                        let del = triple_to_solution_mappings(
+                        let del = quad_patterns_to_solution_mappings(
                             &mappings,
                             &rdf_node_types,
-                            &ground_quad_pattern_to_triple_pattern(d),
+                            &ground_quad_pattern_to_quad_pattern(d),
                             None,
                             false,
                             &cats,
                         )?;
-                        if let Some(sol) = del {
-                            match &d.graph_name {
-                                GraphNamePattern::NamedNode(nn) => {
-                                    let k = NamedGraph::NamedGraph(nn.clone());
-                                    if let Some(existing) = delete_solutions.get_mut(&k) {
-                                        existing.push(sol)
-                                    } else {
-                                        delete_solutions.insert(k, vec![sol]);
-                                    }
-                                }
-                                GraphNamePattern::DefaultGraph => {
-                                    let ng = NamedGraph::DefaultGraph;
-                                    if let Some(existing) = delete_solutions.get_mut(&ng) {
-                                        existing.push(sol)
-                                    } else {
-                                        delete_solutions.insert(ng, vec![sol]);
-                                    }
-                                }
-                                GraphNamePattern::Variable(_) => {
-                                    todo!()
-                                }
+                        if let Some((df, pred, graph)) = del {
+                            let sol = (df, pred);
+                            if let Some(existing) = delete_solutions.get_mut(&graph) {
+                                existing.push(sol)
+                            } else {
+                                delete_solutions.insert(graph, vec![sol]);
                             }
                         }
                     }
@@ -525,7 +510,10 @@ fn mint_blank_nodes(
                 .collect::<Vec<_>>(),
         );
         blank_ser.rename(PlSmallStr::from_str(&b));
-        lf = lf.with_column(lit(blank_ser).explode());
+        lf = lf.with_column(lit(blank_ser).explode(ExplodeOptions {
+            empty_as_null: false,
+            keep_nulls: true,
+        }));
         rdf_node_types.insert(
             b,
             RDFNodeState::from_bases(BaseRDFNodeType::BlankNode, BaseCatState::String),
@@ -551,23 +539,16 @@ fn quad_pattern_to_triple_pattern(qp: &QuadPattern) -> TriplePattern {
     }
 }
 
-fn ground_quad_pattern_to_triple_pattern(qp: &GroundQuadPattern) -> TriplePattern {
-    match qp.graph_name {
-        GraphNamePattern::NamedNode(_) => {
-            todo!()
-        }
-        GraphNamePattern::DefaultGraph => {}
-        GraphNamePattern::Variable(_) => {
-            todo!()
-        }
-    }
+fn ground_quad_pattern_to_quad_pattern(qp: &GroundQuadPattern) -> QuadPattern {
     let subject = TermPattern::from(qp.subject.clone());
     let predicate = qp.predicate.clone();
     let object = TermPattern::from(qp.object.clone());
-    TriplePattern {
+    let graph_name = qp.graph_name.clone();
+    QuadPattern {
         subject,
         predicate,
         object,
+        graph_name,
     }
 }
 
@@ -579,43 +560,36 @@ pub fn template_to_solution_mappings(
 ) -> Result<HashMap<NamedGraph, Vec<(EagerSolutionMappings, Option<NamedNode>)>>, SparqlError> {
     df = mint_blank_nodes(df, &mut rdf_node_types, template);
     let mut solutions_map: HashMap<_, Vec<_>> = HashMap::new();
-    for t in template {
-        let gr = match &t.graph_name {
-            GraphNamePattern::NamedNode(nn) => NamedGraph::NamedGraph(nn.clone()),
-            GraphNamePattern::DefaultGraph => NamedGraph::DefaultGraph,
-            GraphNamePattern::Variable(_) => {
-                return Err(SparqlError::NotSupportedYet(
-                    "We do not support variable named graphs yet".to_string(),
-                ))
-            }
-        };
+    for qp in template {
         let cats = global_cats.read()?;
-        if let Some((sm, predicate)) = triple_to_solution_mappings(
-            &df,
-            &rdf_node_types,
-            &quad_pattern_to_triple_pattern(t),
-            None,
-            true,
-            &cats,
-        )? {
-            if let Some(solutions) = solutions_map.get_mut(&gr) {
+        if let Some((sm, predicate, graph)) =
+            quad_patterns_to_solution_mappings(&df, &rdf_node_types, qp, None, true, &cats)?
+        {
+            if let Some(solutions) = solutions_map.get_mut(&graph) {
                 solutions.push((sm, predicate));
             } else {
-                solutions_map.insert(gr, vec![(sm, predicate)]);
+                solutions_map.insert(graph, vec![(sm, predicate)]);
             }
         }
     }
     Ok(solutions_map)
 }
 
-pub fn triple_to_solution_mappings(
+pub fn quad_patterns_to_solution_mappings(
     df: &DataFrame,
     rdf_node_types: &HashMap<String, RDFNodeState>,
-    t: &TriplePattern,
+    quad_pattern: &QuadPattern,
     preserve_column: Option<&str>,
     unique: bool,
     global_cats: &Cats,
-) -> Result<Option<(EagerSolutionMappings, Option<NamedNode>)>, SparqlError> {
+) -> Result<Option<(EagerSolutionMappings, Option<NamedNode>, NamedGraph)>, SparqlError> {
+    let graph = match &quad_pattern.graph_name {
+        GraphNamePattern::NamedNode(nn) => NamedGraph::NamedGraph(nn.clone()),
+        GraphNamePattern::DefaultGraph => NamedGraph::DefaultGraph,
+        GraphNamePattern::Variable(_) => {
+            todo!()
+        }
+    };
     let mut select_expr = vec![];
     let mut triple_types = HashMap::new();
     if let Some(preserve_column) = preserve_column {
@@ -627,7 +601,7 @@ pub fn triple_to_solution_mappings(
     }
     let (subj_expr, subj_dt) = term_pattern_expression(
         rdf_node_types,
-        &t.subject,
+        &quad_pattern.subject,
         SUBJECT_COL_NAME,
         global_cats,
         true,
@@ -639,12 +613,12 @@ pub fn triple_to_solution_mappings(
     )
     .not();
     select_expr.push(subj_expr);
-    let predicate = match &t.predicate {
+    let predicate = match &quad_pattern.predicate {
         NamedNodePattern::NamedNode(predicate) => Some(predicate.clone()),
         NamedNodePattern::Variable(_) => {
             let (predicate_expr, predicate_dt) = named_node_pattern_expr(
                 rdf_node_types,
-                &t.predicate,
+                &quad_pattern.predicate,
                 PREDICATE_COL_NAME,
                 global_cats,
             )?;
@@ -663,7 +637,7 @@ pub fn triple_to_solution_mappings(
 
     let (obj_expr, obj_dt) = term_pattern_expression(
         rdf_node_types,
-        &t.object,
+        &quad_pattern.object,
         OBJECT_COL_NAME,
         global_cats,
         false,
@@ -686,6 +660,7 @@ pub fn triple_to_solution_mappings(
         Ok(Some((
             EagerSolutionMappings::new(df, triple_types),
             predicate,
+            graph,
         )))
     } else {
         Ok(None)

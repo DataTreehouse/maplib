@@ -109,7 +109,7 @@ pub fn filter(
     solution_mappings.mappings = solution_mappings
         .mappings
         .filter(col(expression_context.as_str()))
-        .drop(by_name([expression_context.as_str()], true));
+        .drop(by_name([expression_context.as_str()], true, false));
     solution_mappings
         .rdf_node_types
         .remove(expression_context.as_str())
@@ -335,9 +335,15 @@ pub fn unique_workaround(
         None
     };
     if stable {
-        lf = lf.unique_stable(unique_set.map(|x| by_name(x, true)), unique_keep_strategy);
+        lf = lf.unique_stable(
+            unique_set.map(|x| by_name(x, true, false)),
+            unique_keep_strategy,
+        );
     } else {
-        lf = lf.unique(unique_set.map(|x| by_name(x, true)), unique_keep_strategy);
+        lf = lf.unique(
+            unique_set.map(|x| by_name(x, true, false)),
+            unique_keep_strategy,
+        );
     }
     lf = nest_multicolumns(lf, maps);
     lf

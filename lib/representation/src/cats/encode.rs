@@ -6,7 +6,7 @@ use crate::solution_mapping::{BaseCatState, EagerSolutionMappings};
 use crate::{BaseRDFNodeType, RDFNodeState, OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use oxrdf::NamedNode;
 use polars::frame::DataFrame;
-use polars::prelude::{col, lit, IntoLazy, Series};
+use polars::prelude::{col, lit, ExplodeOptions, IntoLazy, Series};
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -74,9 +74,17 @@ impl Cats {
             let s = rdf_node_types.get_mut(&c).unwrap();
             if s.is_multi() {
                 mappings =
-                    mappings.with_column(col(&c).struct_().with_fields(vec![lit(enc).explode()]));
+                    mappings.with_column(col(&c).struct_().with_fields(vec![lit(enc).explode(
+                        ExplodeOptions {
+                            empty_as_null: false,
+                            keep_nulls: true,
+                        },
+                    )]));
             } else {
-                mappings = mappings.with_column(lit(enc).explode());
+                mappings = mappings.with_column(lit(enc).explode(ExplodeOptions {
+                    empty_as_null: false,
+                    keep_nulls: true,
+                }));
             }
             s.map.insert(
                 t,

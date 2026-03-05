@@ -7,7 +7,8 @@ use polars::prelude::{
     by_name, col, lit, AnyValue, DataFrame, IntoLazy, IntoSeries, JoinArgs, JoinType, Series,
     UniqueKeepStrategy,
 };
-use polars_core::prelude::{DataType, SortMultipleOptions};
+use polars_core::prelude::{DataType, ExplodeOptions, SortMultipleOptions};
+use polars_core::utils::Container;
 use query_processing::errors::QueryProcessingError;
 use query_processing::expressions::{literal_enc, named_node_enc};
 use query_processing::graph_patterns::{group_by_workaround, join, union};
@@ -90,7 +91,7 @@ impl Triplestore {
             for i in &intermediaries {
                 sms.rdf_node_types.remove(i).unwrap();
             }
-            sms.mappings = sms.mappings.drop(by_name(intermediaries, true));
+            sms.mappings = sms.mappings.drop(by_name(intermediaries, true, false));
             if let Some(solution_mappings) = solution_mappings {
                 sms = join(
                     sms,
@@ -134,9 +135,12 @@ impl Triplestore {
         subject_series.rename("subject_key".into());
         let mut object_series = Series::from_iter(object_vec);
         object_series.rename("object_key".into());
-        let mut out_lf = DataFrame::new(vec![subject_series.into(), object_series.into()])
-            .unwrap()
-            .lazy();
+        let mut out_lf = DataFrame::new(
+            subject_series.len(),
+            vec![subject_series.into(), object_series.into()],
+        )
+        .unwrap()
+        .lazy();
         let lookup_subject_lf =
             lookup_df
                 .clone()
@@ -149,7 +153,7 @@ impl Triplestore {
                 &[col(LOOKUP_COLUMN)],
                 JoinArgs::new(JoinType::Inner),
             )
-            .drop(by_name(["subject_key"], true));
+            .drop(by_name(["subject_key"], true, false));
         let lookup_object_lf = lookup_df
             .lazy()
             .rename([VALUE_COLUMN], [OBJECT_COL_NAME], true);
@@ -160,7 +164,7 @@ impl Triplestore {
                 &[col(LOOKUP_COLUMN)],
                 JoinArgs::new(JoinType::Inner),
             )
-            .drop(by_name(["object_key"], true));
+            .drop(by_name(["object_key"], true, false));
         out_df = out_lf.collect().unwrap();
         let mut dtypes = HashMap::new();
         dtypes.insert(
@@ -408,7 +412,7 @@ fn to_csr(df: &DataFrame, max_index: usize) -> SparseMatrix {
         .unwrap()
         .clone()
         .into_series();
-    let df = DataFrame::new(vec![sub.into(), obj.into()]).unwrap();
+    let df = DataFrame::new(sub.len(), vec![sub.into(), obj.into()]).unwrap();
     let mut df = df
         .sort(
             vec![SUBJECT_COL_NAME, SUBJECT_COL_NAME],
@@ -417,7 +421,7 @@ fn to_csr(df: &DataFrame, max_index: usize) -> SparseMatrix {
                 .with_order_descending(false),
         )
         .unwrap();
-    df.as_single_chunk();
+    df.rechunk_mut();
     let subject = df
         .column(SUBJECT_COL_NAME)
         .unwrap()
@@ -755,7 +759,13 @@ impl U32DataFrameCreator {
         mappings = nest_multicolumns(mappings, maps);
 
         mappings = mappings.with_row_index(LOOKUP_COLUMN, None);
-        mappings = mappings.explode(by_name([&subject_row_index, &object_row_index], true));
+        mappings = mappings.explode(
+            by_name([&subject_row_index, &object_row_index], true, false),
+            ExplodeOptions {
+                empty_as_null: false,
+                keep_nulls: true,
+            },
+        );
         let mut lookup_df = mappings.collect().unwrap();
 
         let out_dfs = df.partition_by([NAMED_NODE_INDEX_COL], true).unwrap();

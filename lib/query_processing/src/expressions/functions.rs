@@ -523,9 +523,10 @@ pub fn func_expression(
                     ))
                 .alias(outer_context.as_str()),
             );
-            solution_mappings.mappings = solution_mappings
-                .mappings
-                .drop(by_name([&tmp_column], true));
+            solution_mappings.mappings =
+                solution_mappings
+                    .mappings
+                    .drop(by_name([&tmp_column], true, false));
             solution_mappings.rdf_node_types.insert(
                 outer_context.as_str().to_string(),
                 BaseRDFNodeType::IRI.into_default_input_rdf_node_state(),
@@ -667,9 +668,10 @@ pub fn func_expression(
                     )
                     .alias(outer_context.as_str()),
             );
-            solution_mappings.mappings = solution_mappings
-                .mappings
-                .drop(by_name([&tmp_column], true));
+            solution_mappings.mappings =
+                solution_mappings
+                    .mappings
+                    .drop(by_name([&tmp_column], true, false));
             solution_mappings.rdf_node_types.insert(
                 outer_context.as_str().to_string(),
                 BaseRDFNodeType::Literal(xsd::STRING.into_owned())

@@ -57,6 +57,7 @@ pub fn values_pattern(
 
     let mut all_columns = vec![];
     let mut all_datatypes = HashMap::new();
+    let mut height = 0;
     for (i, m) in variable_datatype_opt_term_vecs {
         let mut types_columns = vec![];
         for (t, v) in m {
@@ -68,10 +69,12 @@ pub fn values_pattern(
         types_columns.sort_unstable_by(|(x, _), (y, _)| x.cmp(y));
 
         let (dt, column) = if types_columns.len() > 1 {
+            let mut height = 0;
             let mut struct_exprs = vec![];
             let mut columns = vec![];
             let mut types = vec![];
             for (i, (t, mut c)) in types_columns.into_iter().enumerate() {
+                height = c.len();
                 let name = format!("c{i}");
                 c.rename(PlSmallStr::from_str(&name));
                 let tname = t.field_col_name();
@@ -105,7 +108,7 @@ pub fn values_pattern(
                     .collect(),
             );
 
-            let mut df = DataFrame::new(columns)
+            let mut df = DataFrame::new(height, columns)
                 .unwrap()
                 .lazy()
                 .with_column(as_struct(struct_exprs).alias("struct"))
@@ -122,11 +125,12 @@ pub fn values_pattern(
             column.rename(PlSmallStr::from_str(variables.get(i).unwrap().as_str()));
             (t.into_default_input_rdf_node_state(), column)
         };
+        height = column.len();
         all_columns.push(column);
         all_datatypes.insert(variables.get(i).unwrap().as_str().to_string(), dt);
     }
     let varexpr: Vec<_> = variables.iter().map(|x| col(x.as_str())).collect();
-    let df = DataFrame::new(all_columns)
+    let df = DataFrame::new(height, all_columns)
         .unwrap()
         .lazy()
         .select(varexpr)

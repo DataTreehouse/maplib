@@ -262,6 +262,7 @@ impl Triplestore {
                         diagonal: true,
                         from_partitioned_ds: false,
                         maintain_order: false,
+                        strict: false,
                     },
                 )
                 .unwrap()
@@ -430,7 +431,7 @@ pub fn unnest_non_multi_col(mut mappings: LazyFrame, c: &str, dt: &BaseRDFNodeTy
     drop_cols.push(c);
 
     mappings = mappings.with_columns(exprs);
-    mappings = mappings.drop(by_name(drop_cols, true));
+    mappings = mappings.drop(by_name(drop_cols, true, false));
     mappings
 }
 
@@ -489,6 +490,7 @@ fn single_triples_to_lf(
                 diagonal: false,
                 from_partitioned_ds: false,
                 maintain_order: false,
+                strict: false,
             },
         )
         .unwrap()
@@ -705,8 +707,9 @@ pub fn create_empty_lf_datatypes(
         out_datatypes.insert(object_rename.to_string(), use_datatype);
         columns_vec.push(Column::new_empty(object_rename.into(), &polars_dt))
     }
+
     SolutionMappings::new(
-        DataFrame::new(columns_vec).unwrap().lazy(),
+        DataFrame::new(0, columns_vec).unwrap().lazy(),
         out_datatypes,
         0,
     )

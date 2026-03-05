@@ -21,6 +21,7 @@ pub fn format_columns(
             t.clone(),
             global_cats.clone(),
             false,
+            None,
         ));
     }
     lf
@@ -92,6 +93,7 @@ pub fn expression_to_formatted(
     rdf_node_state: RDFNodeState,
     global_cats: LockedCats,
     cast_string: bool,
+    default: Option<Expr>, // Used to work around polars issue
 ) -> Expr {
     if rdf_node_state.is_multi() {
         let mut exprs = vec![];
@@ -116,16 +118,24 @@ pub fn expression_to_formatted(
                 ));
             }
         }
+        if let Some(default) = default {
+            exprs.push(default);
+        }
         coalesce(&exprs)
     } else {
-        base_expression_to_formatted(
+        let expr = base_expression_to_formatted(
             expr,
             name,
             rdf_node_state.get_base_type().unwrap(),
             rdf_node_state.get_base_state().unwrap(),
             global_cats,
             cast_string,
-        )
+        );
+        if let Some(default) = default {
+            coalesce(&[expr, default])
+        } else {
+            expr
+        }
     }
 }
 

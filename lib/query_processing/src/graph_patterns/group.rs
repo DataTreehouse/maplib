@@ -17,7 +17,7 @@ pub fn group_by(
 
     mappings = grouped_mappings.agg(aggregate_expressions.as_slice());
     if let Some(dummy_varname) = dummy_varname {
-        mappings = mappings.drop(by_name([&dummy_varname], false));
+        mappings = mappings.drop(by_name([&dummy_varname], false, false));
     }
     Ok(SolutionMappings::new(
         mappings,

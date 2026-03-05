@@ -170,7 +170,7 @@ pub fn decode_column(
     global_cats: LockedCats,
 ) -> Column {
     let name = column.name().to_string();
-    let mut df = DataFrame::new(vec![column.clone()]).unwrap();
+    let mut df = DataFrame::new(column.len(), vec![column.clone()]).unwrap();
     let mut expr = col(&name);
     expr = maybe_decode_expr(expr, base_type, base_state, global_cats);
     df = df.lazy().with_column(expr.alias(&name)).collect().unwrap();
@@ -224,22 +224,12 @@ pub fn decode_expr(
             let len = x.len();
             let mut s = match x {
                 Column::Series(x) => {
-                    let ser = global_cats.decode(
-                        x.as_series(),
+                    let ser = global_cats.decode(x.as_series(),
                         &base_rdf_node_type,
                         local_cats.as_ref().map(|x| x.clone()),
                     );
                     ser.into_column()
                 }
-                Column::Partitioned(p) => p
-                    .apply_unary_elementwise(|x| {
-                        global_cats.decode(
-                            x,
-                            &base_rdf_node_type,
-                            local_cats.as_ref().map(|x| x.clone()),
-                        )
-                    })
-                    .into_column(),
                 Column::Scalar(s) => {
                     let s = global_cats.decode(
                         &s.as_single_value_series(),

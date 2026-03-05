@@ -478,7 +478,7 @@ pub fn particular_opt_term_vec_to_series(
 
         let val_ser = polars_literal_values_to_series(vals, LANG_STRING_VALUE_FIELD);
         let lang_ser = polars_literal_values_to_series(langs, LANG_STRING_LANG_FIELD);
-        let mut df = DataFrame::new(vec![val_ser.into(), lang_ser.into()])
+        let mut df = DataFrame::new(val_ser.len(), vec![val_ser.into(), lang_ser.into()])
             .unwrap()
             .lazy()
             .with_column(

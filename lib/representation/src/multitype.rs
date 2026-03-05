@@ -51,7 +51,6 @@ pub fn extract_column_from_multitype(
 /// Takes a column containing a multitype and creates a new column with only the fields specified in the names argument
 fn filter_multitype(multitype_column: &Column, names: &Vec<&str>, col_name: &str) -> Column {
     let mt_struct = multitype_column.struct_().unwrap();
-
     match names.len() {
         0 => panic!("There are probably better ways of constructing an empty column"),
         1 => {
@@ -64,7 +63,9 @@ fn filter_multitype(multitype_column: &Column, names: &Vec<&str>, col_name: &str
                 .iter()
                 .map(|n| mt_struct.field_by_name(n).unwrap().clone().into_column())
                 .collect();
-            let mut lf = DataFrame::new(new_columns).unwrap().lazy();
+            let mut lf = DataFrame::new(multitype_column.len(), new_columns)
+                .unwrap()
+                .lazy();
 
             let struct_exprs: Vec<Expr> = names.iter().map(|&n| col(n)).collect();
             lf = lf.with_column(as_struct(struct_exprs).alias(col_name));
@@ -74,7 +75,7 @@ fn filter_multitype(multitype_column: &Column, names: &Vec<&str>, col_name: &str
                 .filter(|&n| *n != col_name)
                 .map(|x| *x) // Make sure not to drop col_name even if it overlaps with one of the provided field names
                 .collect();
-            lf = lf.drop(by_name(columns_drop, true));
+            lf = lf.drop(by_name(columns_drop, true, false));
             let df = lf.collect();
 
             df.unwrap().drop_in_place(col_name).unwrap()
@@ -265,7 +266,7 @@ pub fn unnest_multicols(
     }
     mappings = mappings.with_columns(exprs);
     for c in drop_cols {
-        mappings = mappings.drop(by_name([c], true));
+        mappings = mappings.drop(by_name([c], true, false));
     }
     (mappings, out_map)
 }
@@ -284,7 +285,9 @@ pub fn nest_multicolumns(
         drop_cols.extend(prefixed_inner_cols);
         structs.push(as_struct(struct_exprs).alias(&c));
     }
-    let mapping = mapping.with_columns(structs).drop(by_name(drop_cols, true));
+    let mapping = mapping
+        .with_columns(structs)
+        .drop(by_name(drop_cols, true, false));
     mapping
 }
 

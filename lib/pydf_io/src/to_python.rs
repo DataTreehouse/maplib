@@ -97,7 +97,7 @@ pub fn df_to_py_df(
         .collect();
     let names: Vec<&str> = names_vec.iter().map(|x| x.as_str()).collect();
     let chunk = df
-        .as_single_chunk()
+        .rechunk_mut()
         .iter_chunks(CompatLevel::oldest(), true)
         .next()
         .unwrap();

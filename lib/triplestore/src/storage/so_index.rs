@@ -80,12 +80,15 @@ impl SubjectObjectIndex {
             let o_rank_series =
                 UInt32Chunked::from_vec(PlSmallStr::from_str(OBJECT_RANK_COL_NAME), new_oranks)
                     .into_series();
-            let new_df = DataFrame::new(vec![
-                s_series.into_column(),
-                o_series.into_column(),
-                s_rank_series.into_column(),
-                o_rank_series.into_column(),
-            ])
+            let new_df = DataFrame::new(
+                s_series.len(),
+                vec![
+                    s_series.into_column(),
+                    o_series.into_column(),
+                    s_rank_series.into_column(),
+                    o_rank_series.into_column(),
+                ],
+            )
             .unwrap();
             Some(new_df)
         }

@@ -573,6 +573,7 @@ pub fn coalesce_expressions(
         for b in base_types_sorted {
             exprs.extend(coalesce_map.remove(&b).unwrap())
         }
+
         let expr = if exprs.len() > 1 {
             as_struct(exprs)
         } else {
@@ -610,6 +611,7 @@ pub fn exists(
                 nulls_equal: false,
                 coalesce: Default::default(),
                 maintain_order: Default::default(),
+                build_side: None,
             },
         )
         .with_column(col(outer_context.as_str()).fill_null(lit(false)));
@@ -669,7 +671,7 @@ pub fn drop_inner_contexts(mut sm: SolutionMappings, contexts: &Vec<&Context>) -
         sm.rdf_node_types.remove(cstr);
         inner.push(cstr.to_string());
     }
-    sm.mappings = sm.mappings.drop(by_name(inner, true));
+    sm.mappings = sm.mappings.drop(by_name(inner, true, false));
     sm
 }
 

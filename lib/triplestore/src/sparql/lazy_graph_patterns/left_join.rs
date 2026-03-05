@@ -88,6 +88,7 @@ impl Triplestore {
                 .rdf_node_types
                 .remove(expression_context.as_str());
         }
+
         let left_solution_mappings = join(
             left_solution_mappings,
             right_solution_mappings,

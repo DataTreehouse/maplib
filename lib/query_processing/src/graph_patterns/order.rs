@@ -100,7 +100,6 @@ fn make_ordering_expr(e: Expr, cats: LockedCats, t: BaseRDFNodeType, s: BaseCatS
     if let BaseCatState::CategoricalNative(_, local) = s {
         e.map(
             move |x| {
-                let x_len = x.len();
                 let original_name = x.name().clone();
 
                 let u32s: HashSet<_> = x
