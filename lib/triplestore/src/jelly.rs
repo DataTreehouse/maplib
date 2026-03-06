@@ -1,11 +1,11 @@
 mod eu;
-use quick_protobuf::{serialize_into_vec, BytesReader, MessageWrite, Writer};
+use quick_protobuf::{serialize_into_vec, BytesReader, Writer};
 use std::borrow::Cow;
 use std::cmp;
 use std::collections::{HashMap, HashSet};
 use std::io::Write;
 use std::sync::Arc;
-
+use std::time::Instant;
 use super::{TriplesToAdd, Triplestore};
 use crate::errors::TriplestoreError;
 use crate::jelly::eu::ostrzyciel::jelly::core::proto::v1::mod_RdfLiteral::OneOfliteralKind;
@@ -22,9 +22,10 @@ use oxrdf::NamedNode;
 use polars::prelude::{as_struct, col, IntoLazy, LiteralValue, PlSmallStr};
 use polars_core::datatypes::UInt32Chunked;
 use polars_core::frame::DataFrame;
-use polars_core::prelude::{Column, IntoColumn, LhsNumOps, Scalar};
+use polars_core::prelude::{Column, IntoColumn, Scalar};
 use polars_core::POOL;
-use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use tracing::trace;
 use representation::cats::maps::in_memory::{
     CatMapsInMemory, PrefixCompressedCatMapsInMemory, PrefixCompressedString,
     UncompressedCatMapsInMemory,
@@ -44,10 +45,11 @@ use representation::{
 };
 
 const JELLY_FRAME_SIZE: usize = 1024;
-const LANG_STRING_U32: u32 = u32::MAX - 1;
-const IRI_U32: u32 = 0;
-const BLANK_U32: u32 = u32::MAX;
+const IRI_U32: u32 = u32::MAX;
+const BLANK_U32: u32 = u32::MAX -1 ;
 const STRING_U32: u32 = u32::MAX - 2;
+const LANG_STRING_U32: u32 = u32::MAX - 3;
+
 
 impl Triplestore {
     pub fn parse_jelly(
@@ -90,9 +92,12 @@ impl Triplestore {
                         } else {
                             let pi = iri_map.len() as u32;
                             iri_map.insert(pred.clone(), pi);
-                            iri_rev_map.insert(pi, pred);
                             pi
                         };
+                        if !iri_rev_map.contains_key(&pred_iri_u32) {
+                            iri_rev_map.insert(pred_iri_u32, pred);
+                        }
+
                         let subject_type_map =
                             if let Some(sm) = predicate_map.get_mut(&pred_iri_u32) {
                                 sm
@@ -189,7 +194,6 @@ impl Triplestore {
                                         value = LiteralValue::Scalar(Scalar::from(
                                             PlSmallStr::from_string(l.lex.to_string()),
                                         ));
-
                                         LANG_STRING_U32
                                     }
                                     OneOfliteralKind::datatype(t) => {
@@ -465,36 +469,33 @@ impl Triplestore {
                     } else {
                         blank_reenc
                     };
+                    let mut lf = df.lazy();
                     if let Some(reenc) = sub_reenc {
-                        df = reenc
-                            .re_encode(df.lazy(), SUBJECT_COL_NAME, false)
-                            .collect()
-                            .map_err(|e| {
-                                TriplestoreError::ReadJellyError(format!(
-                                    "Error remapping subject column: {}",
-                                    e
-                                ))
-                            })?;
+                        lf = reenc.clone()
+                            .re_encode(lf, SUBJECT_COL_NAME, false);
                     }
 
-                    if object_type.is_iri() || object_type.is_blank_node() {
-                        let obj_reenc = if object_type.is_iri() {
+                    let obj_reenc = if object_type.is_iri() || object_type.is_blank_node() {
+                        if object_type.is_iri() {
                             iri_reenc
                         } else {
                             blank_reenc
-                        };
-                        if let Some(reenc) = obj_reenc {
-                            df = reenc.clone()
-                                .re_encode(df.lazy(), OBJECT_COL_NAME, false)
-                                .collect()
-                                .map_err(|e| {
-                                    TriplestoreError::ReadJellyError(format!(
-                                        "Error remapping object column: {}",
-                                        e
-                                    ))
-                                })?;
                         }
+                    } else {
+                        None
+                    };
+
+                    if let Some(reenc) = obj_reenc {
+                        lf = reenc.clone().re_encode(lf, OBJECT_COL_NAME, false);
                     }
+
+                    df = lf.collect()
+                        .map_err(|e| {
+                            TriplestoreError::ReadJellyError(format!(
+                                "Error remapping: {}",
+                                e
+                            ))
+                        })?;
 
                     let object_cat_state = if object_type.is_iri() || object_type.is_blank_node() {
                         BaseCatState::CategoricalNative(false, None)
@@ -515,7 +516,9 @@ impl Triplestore {
                 }
             }
         }
+        let start_add_triples_vec = Instant::now();
         self.add_triples_vec(triples_to_add, false)?;
+        trace!("Adding triples vec took {}", start_add_triples_vec.elapsed().as_secs_f32());
 
         Ok(())
     }

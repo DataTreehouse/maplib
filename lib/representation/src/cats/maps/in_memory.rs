@@ -9,7 +9,6 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt::{Display, Formatter};
 use std::hash::BuildHasherDefault;
 use std::sync::Arc;
-use std::time::Instant;
 
 #[derive(Debug, Clone, Ord, Eq, PartialEq, PartialOrd)]
 pub struct PrefixCompressedString {
@@ -252,7 +251,6 @@ impl PrefixCompressedCatMapsInMemory {
     }
 
     pub fn merge(&mut self, other: &PrefixCompressedCatMapsInMemory, c: &mut u32) -> CatReEnc {
-        let remap_insert_now = Instant::now();
         let (remap, insert): (Vec<_>, Vec<_>) = other
             .map
             .par_iter()
@@ -264,8 +262,6 @@ impl PrefixCompressedCatMapsInMemory {
                 }
             })
             .unzip();
-        println!("remap_insert_now took: {:?}", remap_insert_now.elapsed());
-
         let mut remap: DashMap<_, _, BuildHasherDefault<NoHashHasher<u32>>> = remap
             .into_par_iter()
             .filter(|x| x.is_some())
