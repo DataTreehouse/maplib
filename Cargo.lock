@@ -2542,6 +2542,7 @@ dependencies = [
 name = "query_processing"
 version = "0.3.12"
 dependencies = [
+ "dashmap",
  "oxrdf",
  "polars",
  "rayon",

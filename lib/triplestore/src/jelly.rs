@@ -461,14 +461,12 @@ impl Triplestore {
                         })?;
 
                     let sub_reenc = if subject_is_iri {
-                        &iri_reenc
+                        iri_reenc
                     } else {
-                        &blank_reenc
+                        blank_reenc
                     };
                     if let Some(reenc) = sub_reenc {
                         df = reenc
-                            .clone()
-                            .clone()
                             .re_encode(df.lazy(), SUBJECT_COL_NAME, false)
                             .collect()
                             .map_err(|e| {
@@ -481,14 +479,12 @@ impl Triplestore {
 
                     if object_type.is_iri() || object_type.is_blank_node() {
                         let obj_reenc = if object_type.is_iri() {
-                            &iri_reenc
+                            iri_reenc
                         } else {
-                            &blank_reenc
+                            blank_reenc
                         };
                         if let Some(reenc) = obj_reenc {
-                            df = reenc
-                                .clone()
-                                .clone()
+                            df = reenc.clone()
                                 .re_encode(df.lazy(), OBJECT_COL_NAME, false)
                                 .collect()
                                 .map_err(|e| {

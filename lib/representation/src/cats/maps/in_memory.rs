@@ -284,8 +284,6 @@ impl PrefixCompressedCatMapsInMemory {
             self.encode_new_prefix_compressed_string(s.clone(), u);
         }
 
-        remap.extend(remap.into_iter());
-
         let reenc = CatReEnc {
             cat_map: Arc::new(remap),
         };
@@ -460,8 +458,6 @@ impl UncompressedCatMapsInMemory {
         for (s, u) in numbered_insert {
             self.encode_new_arc_string(s.clone(), u);
         }
-
-        remap.extend(remap.into_iter());
 
         let reenc = CatReEnc {
             cat_map: Arc::new(remap),

@@ -9,6 +9,8 @@ use std::hash::BuildHasherDefault;
 use std::ops::Deref;
 use std::path::Path;
 use std::sync::Arc;
+use dashmap::DashMap;
+use rayon::iter::{IntoParallelRefIterator, ParallelExtend, ParallelIterator};
 
 impl Cats {
     pub fn mappings_cat_image(&self, sms: &Vec<&EagerSolutionMappings>) -> Cats {
@@ -116,7 +118,7 @@ impl Cats {
         let remap = self.merge(local_cats, path);
         let mut concat_reenc: HashMap<
             String,
-            HashMap<BaseRDFNodeType, HashMap<u32, u32, BuildHasherDefault<NoHashHasher<u32>>>>,
+            HashMap<BaseRDFNodeType, DashMap<u32, u32, BuildHasherDefault<NoHashHasher<u32>>>>,
         > = HashMap::new();
         for (uuid, reenc) in remap {
             for (ct, cat_reenc) in reenc {
@@ -124,7 +126,7 @@ impl Cats {
                 let bt_map = if let Some(bt_map) = concat_reenc.get_mut(&uuid) {
                     bt_map
                 } else {
-                    concat_reenc.insert(uuid.clone(), HashMap::new());
+                    concat_reenc.insert(uuid.clone(), HashMap::default());
                     concat_reenc.get_mut(&uuid).unwrap()
                 };
 
@@ -133,11 +135,11 @@ impl Cats {
                 } else {
                     bt_map.insert(
                         bt.clone(),
-                        HashMap::with_capacity_and_hasher(2, BuildHasherDefault::default()),
+                        DashMap::with_capacity_and_hasher(2, BuildHasherDefault::default()),
                     );
                     bt_map.get_mut(&bt).unwrap()
                 };
-                e_reenc.extend(cat_reenc.cat_map.iter());
+                e_reenc.par_extend(cat_reenc.cat_map.par_iter().map(|x|(*x.key(),*x.value())));
             }
         }
         let mut concat_reenc_cats = HashMap::new();
