@@ -420,7 +420,7 @@ impl PrefixCompressedCatMapsInMemory {
     pub fn merge(&mut self, other: &PrefixCompressedCatMapsInMemory, c: &mut u32) -> CatReEnc {
         let (remap, insert): (Vec<_>, Vec<_>) = other
             .map
-            .iter()
+            .par_iter()
             .map(|(s, u)| {
                 if let Some(e) = self.map.get(s) {
                     (Some((*u, *e)), None)
@@ -614,7 +614,7 @@ impl UncompressedCatMapsInMemory {
     pub fn merge(&mut self, other: &UncompressedCatMapsInMemory, c: &mut u32) -> CatReEnc {
         let (remap, insert): (Vec<_>, Vec<_>) = other
             .map
-            .iter()
+            .par_iter()
             .map(|(s, u)| {
                 if let Some(e) = self.map.get(s) {
                     (Some((*u, *e)), None)
