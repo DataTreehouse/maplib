@@ -550,6 +550,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "dashmap"
+version = "7.0.0-rc2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e4a1e35a65fe0538a60167f0ada6e195ad5d477f6ddae273943596d4a1a5730b"
+dependencies = [
+ "cfg-if",
+ "crossbeam-utils",
+ "equivalent",
+ "hashbrown 0.15.5",
+ "lock_api",
+ "parking_lot_core",
+ "rayon",
+]
+
+[[package]]
 name = "datalog"
 version = "0.1.0"
 dependencies = [
@@ -2802,6 +2817,7 @@ version = "0.6.10"
 dependencies = [
  "chrono",
  "chrono-tz",
+ "dashmap",
  "nohash-hasher",
  "oxrdf",
  "oxsdatatypes",

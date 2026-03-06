@@ -69,6 +69,8 @@ tracing-log = "0.2"
 
 itoa = "1.0.15"
 ryu = "1.0.20"
+dashmap = { version = "7.0.0-rc2", features = ["rayon"] }
+
 #dev-dependencies
 nohash-hasher = "0.2.0"
 quick-protobuf = { version = "0.8.1" }

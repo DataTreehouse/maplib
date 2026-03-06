@@ -327,6 +327,20 @@ impl Triplestore {
             HashMap::from_iter([(CatType::IRI, iri_cat_enc), (CatType::Blank, blank_cat_enc)]);
         let local = LockedCats::new(Cats::from_map(maps));
 
+        let local_uuid = local.read().expect("Could not read LockedCat").uuid.clone();
+        let mut reencs_map = {
+            let mut global = self.global_cats.write().map_err(|e| {
+                TriplestoreError::ReadJellyError(format!(
+                    "Could not acquire write lock on global cats: {}",
+                    e
+                ))
+            })?;
+            global.merge(vec![local.clone()], None)
+        };
+        let reencs = reencs_map.remove(&local_uuid).unwrap_or_default();
+        let iri_reenc = reencs.get(&CatType::IRI);
+        let blank_reenc = reencs.get(&CatType::Blank);
+
         let mut triples_to_add = Vec::new();
         for (p, m) in predicate_map {
             let (pre, suf) = iri_rev_map.get(&p).ok_or_else(|| {
@@ -437,7 +451,7 @@ impl Triplestore {
                             unreachable!()
                         }
                     };
-                    let df =
+                    let mut df =
                         DataFrame::new(vec![subject_ser.into_column(), object_ser.into_column()])
                             .map_err(|e| {
                             TriplestoreError::ReadJellyError(format!(
@@ -445,8 +459,49 @@ impl Triplestore {
                                 e
                             ))
                         })?;
+
+                    let sub_reenc = if subject_is_iri {
+                        &iri_reenc
+                    } else {
+                        &blank_reenc
+                    };
+                    if let Some(reenc) = sub_reenc {
+                        df = reenc
+                            .clone()
+                            .clone()
+                            .re_encode(df.lazy(), SUBJECT_COL_NAME, false)
+                            .collect()
+                            .map_err(|e| {
+                                TriplestoreError::ReadJellyError(format!(
+                                    "Error remapping subject column: {}",
+                                    e
+                                ))
+                            })?;
+                    }
+
+                    if object_type.is_iri() || object_type.is_blank_node() {
+                        let obj_reenc = if object_type.is_iri() {
+                            &iri_reenc
+                        } else {
+                            &blank_reenc
+                        };
+                        if let Some(reenc) = obj_reenc {
+                            df = reenc
+                                .clone()
+                                .clone()
+                                .re_encode(df.lazy(), OBJECT_COL_NAME, false)
+                                .collect()
+                                .map_err(|e| {
+                                    TriplestoreError::ReadJellyError(format!(
+                                        "Error remapping object column: {}",
+                                        e
+                                    ))
+                                })?;
+                        }
+                    }
+
                     let object_cat_state = if object_type.is_iri() || object_type.is_blank_node() {
-                        BaseCatState::CategoricalNative(false, Some(local.clone()))
+                        BaseCatState::CategoricalNative(false, None)
                     } else {
                         object_type.default_input_cat_state()
                     };
@@ -456,10 +511,7 @@ impl Triplestore {
                         object_type,
                         predicate: Some(predicate.clone()),
                         graph: Default::default(),
-                        subject_cat_state: BaseCatState::CategoricalNative(
-                            false,
-                            Some(local.clone()),
-                        ),
+                        subject_cat_state: BaseCatState::CategoricalNative(false, None),
                         object_cat_state,
                         predicate_cat_state: None,
                     };

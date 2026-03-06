@@ -14,10 +14,11 @@ use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
 use std::path::Path;
 use std::sync::Arc;
+use dashmap::DashMap;
 
 #[derive(Debug, Clone)]
 pub struct CatReEnc {
-    pub cat_map: Arc<HashMap<u32, u32, BuildHasherDefault<NoHashHasher<u32>>>>,
+    pub cat_map: Arc<DashMap<u32, u32, BuildHasherDefault<NoHashHasher<u32>>>>,
 }
 
 impl CatReEnc {
@@ -80,7 +81,7 @@ impl Cats {
             .filter(|x| x.is_some())
             .map(|x| x.unwrap())
             .collect();
-        let renc_map: HashMap<_, _, BuildHasherDefault<NoHashHasher<u32>>> =
+        let renc_map: DashMap<_, _, BuildHasherDefault<NoHashHasher<u32>>> =
             rencs.into_iter().flatten().map(|x| x).collect();
         let cat_re_enc = CatReEnc {
             cat_map: Arc::new(renc_map),

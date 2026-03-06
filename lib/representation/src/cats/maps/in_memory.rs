@@ -1,6 +1,7 @@
 use crate::cats::CatReEnc;
 use crate::iri_split::split_iri;
 use crate::BaseRDFNodeType;
+use dashmap::DashMap;
 use nohash_hasher::NoHashHasher;
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use std::borrow::Cow;
@@ -73,7 +74,7 @@ impl PrefixCompressedCatMapsInMemory {
             new_maps.encode_new_prefix_compressed_string(s.clone(), *c);
             *c += 1;
         }
-        let remap: HashMap<_, _, BuildHasherDefault<NoHashHasher<u32>>> =
+        let remap: DashMap<_, _, BuildHasherDefault<NoHashHasher<u32>>> =
             remap.into_iter().collect();
         (
             new_maps,
@@ -251,9 +252,10 @@ impl PrefixCompressedCatMapsInMemory {
     }
 
     pub fn merge(&mut self, other: &PrefixCompressedCatMapsInMemory, c: &mut u32) -> CatReEnc {
+        let remap_insert_now = Instant::now();
         let (remap, insert): (Vec<_>, Vec<_>) = other
             .map
-            .iter()
+            .par_iter()
             .map(|(s, u)| {
                 if let Some(e) = self.map.get(s) {
                     (Some((*u, *e)), None)
@@ -262,24 +264,28 @@ impl PrefixCompressedCatMapsInMemory {
                 }
             })
             .unzip();
+        println!("remap_insert_now took: {:?}", remap_insert_now.elapsed());
+
+        let mut remap: DashMap<_, _, BuildHasherDefault<NoHashHasher<u32>>> = remap
+            .into_par_iter()
+            .filter(|x| x.is_some())
+            .map(|x| x.unwrap())
+            .collect();
+
         let mut numbered_insert = Vec::new();
-        let mut new_remap = Vec::new();
         for k in insert {
             if let Some((s, u)) = k {
                 numbered_insert.push((s, *c));
-                new_remap.push((*u, *c));
+                remap.insert(*u, *c);
                 *c += 1;
             }
         }
         for (s, u) in numbered_insert {
             self.encode_new_prefix_compressed_string(s.clone(), u);
         }
-        let remap: HashMap<_, _, BuildHasherDefault<NoHashHasher<u32>>> = remap
-            .into_iter()
-            .filter(|x| x.is_some())
-            .map(|x| x.unwrap())
-            .chain(new_remap.into_iter())
-            .collect();
+
+        remap.extend(remap.into_iter());
+
         let reenc = CatReEnc {
             cat_map: Arc::new(remap),
         };
@@ -312,7 +318,7 @@ impl UncompressedCatMapsInMemory {
             new_maps.encode_new_arc_string(s.clone(), *c);
             *c += 1;
         }
-        let remap: HashMap<_, _, BuildHasherDefault<NoHashHasher<u32>>> =
+        let remap: DashMap<_, _, BuildHasherDefault<NoHashHasher<u32>>> =
             remap.into_iter().collect();
         (
             new_maps,
@@ -427,7 +433,7 @@ impl UncompressedCatMapsInMemory {
     pub fn merge(&mut self, other: &UncompressedCatMapsInMemory, c: &mut u32) -> CatReEnc {
         let (remap, insert): (Vec<_>, Vec<_>) = other
             .map
-            .iter()
+            .par_iter()
             .map(|(s, u)| {
                 if let Some(e) = self.map.get(s) {
                     (Some((*u, *e)), None)
@@ -436,24 +442,27 @@ impl UncompressedCatMapsInMemory {
                 }
             })
             .unzip();
+
+        let mut remap: DashMap<_, _, BuildHasherDefault<NoHashHasher<u32>>> = remap
+            .into_par_iter()
+            .filter(|x| x.is_some())
+            .map(|x| x.unwrap())
+            .collect();
+
         let mut numbered_insert = Vec::new();
-        let mut new_remap = Vec::new();
         for k in insert {
             if let Some((s, u)) = k {
                 numbered_insert.push((s, *c));
-                new_remap.push((*u, *c));
+                remap.insert(*u, *c);
                 *c += 1;
             }
         }
         for (s, u) in numbered_insert {
-            self.encode_new_arc_string(s, u);
+            self.encode_new_arc_string(s.clone(), u);
         }
-        let remap: HashMap<_, _, BuildHasherDefault<NoHashHasher<u32>>> = remap
-            .into_iter()
-            .filter(|x| x.is_some())
-            .map(|x| x.unwrap())
-            .chain(new_remap.into_iter())
-            .collect();
+
+        remap.extend(remap.into_iter());
+
         let reenc = CatReEnc {
             cat_map: Arc::new(remap),
         };
