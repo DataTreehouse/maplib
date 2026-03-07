@@ -66,12 +66,21 @@ pub fn base_expression_to_formatted(
                 lit("\"") + expr.dt().strftime(XSD_DATE_WITHOUT_TZ_FORMAT) + lit(format!("\"^^{l}"))
             } else if l.as_ref() == rdf::LANG_STRING {
                 lit("\"")
-                    + expr
-                        .clone()
-                        .struct_()
-                        .field_by_name(LANG_STRING_VALUE_FIELD)
+                    + maybe_decode_expr(
+                        expr.clone()
+                            .struct_()
+                            .field_by_name(LANG_STRING_VALUE_FIELD),
+                        base_type,
+                        base_state,
+                        global_cats.clone(),
+                    )
                     + lit("\"@")
-                    + expr.struct_().field_by_name(LANG_STRING_LANG_FIELD)
+                    + maybe_decode_expr(
+                        expr.struct_().field_by_name(LANG_STRING_LANG_FIELD),
+                        base_type,
+                        base_state,
+                        global_cats,
+                    )
             } else if literal_string_rep && l.as_ref() == xsd::STRING {
                 lit("\"") + maybe_decode_expr(expr, base_type, base_state, global_cats) + lit("\"")
             } else if literal_string_rep {

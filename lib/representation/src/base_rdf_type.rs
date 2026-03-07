@@ -1,4 +1,3 @@
-use crate::cats::literal_is_cat;
 use crate::multitype::{MULTI_BLANK_DT, MULTI_IRI_DT, MULTI_NONE_DT};
 use crate::rdf_state::RDFNodeState;
 use crate::solution_mapping::BaseCatState;
@@ -146,12 +145,10 @@ impl BaseRDFNodeType {
         if matches!(self, BaseRDFNodeType::None) {
             BaseCatState::NonString
         } else if matches!(self, BaseRDFNodeType::IRI | BaseRDFNodeType::BlankNode) {
-            BaseCatState::CategoricalNative(false, None)
+            BaseCatState::CategoricalNative(None)
         } else if let BaseRDFNodeType::Literal(l) = self {
-            if literal_is_cat(l.as_ref()) {
-                BaseCatState::CategoricalNative(true, None)
-            } else if literal_type(l.as_ref(), &BaseCatState::String, false) == DataType::String {
-                BaseCatState::String
+            if literal_type(l.as_ref(), &BaseCatState::String, true) == DataType::String {
+                BaseCatState::CategoricalNative(None)
             } else {
                 BaseCatState::NonString
             }
@@ -165,7 +162,7 @@ impl BaseRDFNodeType {
             DataType::Boolean
         } else if matches!(self, BaseRDFNodeType::IRI | BaseRDFNodeType::BlankNode) {
             match base_cat_state {
-                BaseCatState::CategoricalNative(_, _) => DataType::UInt32,
+                BaseCatState::CategoricalNative(_) => DataType::UInt32,
                 BaseCatState::String => DataType::String,
                 BaseCatState::NonString => {
                     unreachable!("Should never happen")
@@ -184,7 +181,7 @@ impl BaseRDFNodeType {
         } else if matches!(self, BaseRDFNodeType::IRI | BaseRDFNodeType::BlankNode) {
             DataType::String
         } else if let BaseRDFNodeType::Literal(l) = self {
-            literal_type(l.as_ref(), &BaseCatState::String, false)
+            literal_type(l.as_ref(), &BaseCatState::String, true)
         } else {
             unreachable!("Should never happen")
         }
@@ -196,11 +193,7 @@ impl BaseRDFNodeType {
         } else if matches!(self, BaseRDFNodeType::IRI | BaseRDFNodeType::BlankNode) {
             DataType::UInt32
         } else if let BaseRDFNodeType::Literal(l) = self {
-            literal_type(
-                l.as_ref(),
-                &BaseCatState::CategoricalNative(false, None),
-                false,
-            )
+            literal_type(l.as_ref(), &BaseCatState::CategoricalNative(None), false)
         } else {
             unreachable!("Should never happen")
         }
@@ -229,9 +222,8 @@ fn literal_type(
                 DataType::Struct(polars_lang_fields(base_cat_state))
             } else {
                 match base_cat_state {
-                    BaseCatState::String
-                    | BaseCatState::NonString
-                    | BaseCatState::CategoricalNative(..) => DataType::String,
+                    BaseCatState::String | BaseCatState::NonString => DataType::String,
+                    BaseCatState::CategoricalNative(..) => DataType::UInt32,
                 }
             }
         }
@@ -241,7 +233,7 @@ fn literal_type(
         //TODO: Fix when adding proper list support
         rdf::LIST => DataType::List(Box::new(DataType::Boolean)),
         xsd::STRING | _ => match base_cat_state {
-            BaseCatState::CategoricalNative(_, _) => DataType::UInt32,
+            BaseCatState::CategoricalNative(_) => DataType::UInt32,
             BaseCatState::String => DataType::String,
             BaseCatState::NonString => {
                 unreachable!("Should never happen")
@@ -272,7 +264,7 @@ impl Display for BaseRDFNodeType {
 pub fn polars_lang_fields(base_cat_state: &BaseCatState) -> Vec<Field> {
     let mut fields = vec![];
     match base_cat_state {
-        BaseCatState::CategoricalNative(_, _) => {
+        BaseCatState::CategoricalNative(_) => {
             fields.push(Field::new(
                 PlSmallStr::from_str(LANG_STRING_VALUE_FIELD),
                 DataType::UInt32,

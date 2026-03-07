@@ -158,7 +158,7 @@ fn type_from_u8(u: u8) -> BaseRDFNodeType {
     } else if u == STRING {
         BaseRDFNodeType::Literal(xsd::STRING.into_owned())
     } else if u == FLOAT {
-        BaseRDFNodeType::Literal(xsd::FLOAT.into_owned())
+        BaseRDFNodeType::Literal(xsd::DOUBLE.into_owned())
     } else if u == BLANK {
         BaseRDFNodeType::BlankNode
     } else if u == IRI {

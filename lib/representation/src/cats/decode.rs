@@ -1,12 +1,14 @@
 use super::{CatEncs, CatType, Cats};
 use crate::cats::LockedCats;
 use crate::solution_mapping::BaseCatState;
-use crate::BaseRDFNodeType;
+use crate::{BaseRDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD};
 use oxrdf::NamedNode;
 use polars::datatypes::{DataType, Field, PlSmallStr};
 use polars::frame::column::ScalarColumn;
 use polars::frame::DataFrame;
-use polars::prelude::{col, Column, Expr, IntoColumn, IntoLazy, NamedFrom, SeriesSealed};
+use polars::prelude::{
+    as_struct, col, Column, Expr, IntoColumn, IntoLazy, NamedFrom, SeriesSealed,
+};
 use polars::series::Series;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use std::borrow::Cow;
@@ -67,7 +69,43 @@ impl Cats {
     pub fn decode_of_type(&self, ser: &Series, bt: &BaseRDFNodeType) -> Series {
         let ct = CatType::from_base_rdf_node_type(bt);
         if let Some(enc) = self.cat_map.get(&ct) {
-            enc.decode_series(ser)
+            if bt.is_lang_string() {
+                let value_ser = ser
+                    .struct_()
+                    .unwrap()
+                    .field_by_name(LANG_STRING_VALUE_FIELD)
+                    .unwrap();
+                let lang_ser = ser
+                    .struct_()
+                    .unwrap()
+                    .field_by_name(LANG_STRING_LANG_FIELD)
+                    .unwrap();
+                let mut value_decoded = enc.decode_series(&value_ser);
+                value_decoded.rename(PlSmallStr::from_str(LANG_STRING_VALUE_FIELD));
+                let mut lang_decoded = enc.decode_series(&lang_ser);
+                lang_decoded.rename(PlSmallStr::from_str(LANG_STRING_LANG_FIELD));
+                let mut df = DataFrame::new(
+                    ser.len(),
+                    vec![value_decoded.into_column(), lang_decoded.into_column()],
+                )
+                .unwrap();
+                df = df
+                    .lazy()
+                    .with_column(
+                        as_struct(vec![
+                            col(LANG_STRING_VALUE_FIELD),
+                            col(LANG_STRING_LANG_FIELD),
+                        ])
+                        .alias(ser.name().as_str()),
+                    )
+                    .select([col(ser.name().as_str())])
+                    .collect()
+                    .unwrap();
+                let column = df.drop_in_place(ser.name().as_str()).unwrap();
+                column.as_materialized_series().clone()
+            } else {
+                enc.decode_series(ser)
+            }
         } else {
             unreachable!("Should never be called when type does not exist")
         }
@@ -184,7 +222,7 @@ pub fn maybe_decode_expr(
     global_cats: LockedCats,
 ) -> Expr {
     match base_state {
-        BaseCatState::CategoricalNative(_, local_cats) => decode_expr(
+        BaseCatState::CategoricalNative(local_cats) => decode_expr(
             expr,
             base_type.clone(),
             local_cats.as_ref().cloned(),
@@ -201,7 +239,7 @@ pub fn optional_maybe_decode_expr(
     global_cats: LockedCats,
 ) -> Option<Expr> {
     match base_state {
-        BaseCatState::CategoricalNative(_, local_cats) => Some(decode_expr(
+        BaseCatState::CategoricalNative(local_cats) => Some(decode_expr(
             expr,
             base_type.clone(),
             local_cats.as_ref().cloned(),
@@ -224,7 +262,8 @@ pub fn decode_expr(
             let len = x.len();
             let mut s = match x {
                 Column::Series(x) => {
-                    let ser = global_cats.decode(x.as_series(),
+                    let ser = global_cats.decode(
+                        x.as_series(),
                         &base_rdf_node_type,
                         local_cats.as_ref().map(|x| x.clone()),
                     );

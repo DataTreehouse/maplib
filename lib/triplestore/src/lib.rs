@@ -239,11 +239,15 @@ impl IndexingOptions {
     pub fn set_fts_path(&mut self, fts_path: Option<PathBuf>) {
         self.fts_path = fts_path;
     }
+
+    pub fn default_subject_object_index() -> bool {
+        false
+    }
 }
 
 impl Default for IndexingOptions {
     fn default() -> Self {
-        IndexingOptions::new_default_object_sort(None, false)
+        IndexingOptions::new_default_object_sort(None, Self::default_subject_object_index())
     }
 }
 

@@ -1,13 +1,16 @@
 use crate::errors::QueryProcessingError;
 use polars::datatypes::{DataType, Field};
+use polars::error::PolarsResult;
 use polars::frame::DataFrame;
-use polars::prelude::{col, Column, Expr, IntoColumn, SortMultipleOptions};
+use polars::prelude::{
+    as_struct, col, Column, Expr, IntoColumn, IntoLazy, PlSmallStr, SortMultipleOptions,
+};
 use polars::series::Series;
 use representation::cats::{maybe_decode_expr, LockedCats};
 use representation::solution_mapping::{BaseCatState, SolutionMappings};
-use representation::BaseRDFNodeType;
+use representation::{BaseRDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD};
 use std::cmp::Ordering;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 pub fn order_by(
     mut solution_mappings: SolutionMappings,
@@ -67,12 +70,21 @@ pub fn order_by(
             ts.reverse();
             for (t, s) in ts {
                 asc_bools.push(a);
-                order_exprs.push(make_ordering_expr(
-                    col(c).struct_().field_by_name(&t.field_col_name()),
-                    global_cats.clone(),
-                    t.clone(),
-                    s.clone(),
-                ));
+                if t.is_lang_string() {
+                    order_exprs.push(make_ordering_expr(
+                        col(c),
+                        global_cats.clone(),
+                        t.clone(),
+                        s.clone(),
+                    ));
+                } else {
+                    order_exprs.push(make_ordering_expr(
+                        col(c).struct_().field_by_name(&t.field_col_name()),
+                        global_cats.clone(),
+                        t.clone(),
+                        s.clone(),
+                    ));
+                }
             }
         } else {
             asc_bools.push(a);
@@ -97,18 +109,28 @@ pub fn order_by(
 }
 
 fn make_ordering_expr(e: Expr, cats: LockedCats, t: BaseRDFNodeType, s: BaseCatState) -> Expr {
-    if let BaseCatState::CategoricalNative(_, local) = s {
+    if let BaseCatState::CategoricalNative(local) = s {
         e.map(
             move |x| {
                 let original_name = x.name().clone();
+                let mut u32_ser_vec = vec![];
+                if t.is_lang_string() {
+                    u32_ser_vec.push(x.struct_()?.field_by_name(LANG_STRING_VALUE_FIELD)?);
+                    u32_ser_vec.push(x.struct_()?.field_by_name(LANG_STRING_LANG_FIELD)?);
+                } else {
+                    u32_ser_vec.push(x.as_materialized_series_maintain_scalar());
+                }
+                let mut u32s = HashSet::new();
+                for u32_ser in u32_ser_vec {
+                    u32s.extend(
+                        u32_ser
+                            .u32()?
+                            .iter()
+                            .filter(|x| x.is_some())
+                            .map(|x| x.unwrap()),
+                    )
+                }
 
-                let u32s: HashSet<_> = x
-                    .u32()
-                    .unwrap()
-                    .iter()
-                    .filter(|x| x.is_some())
-                    .map(|x| x.unwrap())
-                    .collect();
                 let t = t.clone();
                 let local = local.clone();
                 let local_rank_map = if let Some(local) = local {
@@ -121,13 +143,34 @@ fn make_ordering_expr(e: Expr, cats: LockedCats, t: BaseRDFNodeType, s: BaseCatS
                 if let Some(local_rank_map) = local_rank_map {
                     global_rank_map.extend(local_rank_map);
                 }
-                let mut ser = Series::from_iter(x.u32().unwrap().iter().map(|x| {
-                    if let Some(x) = x {
-                        global_rank_map.get(&x).cloned()
-                    } else {
-                        None
-                    }
-                }));
+                let mut ser = if t.is_lang_string() {
+                    let value_ser = x.struct_()?.field_by_name(LANG_STRING_VALUE_FIELD)?;
+                    let lang_ser = x.struct_()?.field_by_name(LANG_STRING_LANG_FIELD)?;
+
+                    let mut value_ser_rank = map_to_rank(&value_ser, &global_rank_map)?;
+                    value_ser_rank.rename(PlSmallStr::from_str(LANG_STRING_VALUE_FIELD));
+                    let mut lang_ser_rank = map_to_rank(&lang_ser, &global_rank_map)?;
+                    lang_ser_rank.rename(PlSmallStr::from_str(LANG_STRING_LANG_FIELD));
+                    let mut df = DataFrame::new(
+                        x.len(),
+                        vec![value_ser_rank.into_column(), lang_ser_rank.into_column()],
+                    )?;
+                    df = df
+                        .lazy()
+                        .with_column(
+                            as_struct(vec![
+                                col(LANG_STRING_VALUE_FIELD),
+                                col(LANG_STRING_LANG_FIELD),
+                            ])
+                            .alias(original_name.as_str()),
+                        )
+                        .select([col(original_name.as_str())])
+                        .collect()?;
+                    let column = df.drop_in_place(original_name.as_str())?;
+                    column.as_materialized_series().clone()
+                } else {
+                    map_to_rank(x.as_materialized_series(), &global_rank_map)?
+                };
                 ser.rename(original_name);
                 Ok(ser.into_column())
             },
@@ -136,4 +179,15 @@ fn make_ordering_expr(e: Expr, cats: LockedCats, t: BaseRDFNodeType, s: BaseCatS
     } else {
         e
     }
+}
+
+fn map_to_rank(series: &Series, global_rank_map: &HashMap<u32, u32>) -> PolarsResult<Series> {
+    let ser = Series::from_iter(series.u32()?.iter().map(|x| {
+        if let Some(x) = x {
+            global_rank_map.get(&x).cloned()
+        } else {
+            None
+        }
+    }));
+    Ok(ser)
 }

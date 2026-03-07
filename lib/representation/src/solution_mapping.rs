@@ -9,7 +9,7 @@ use utils::polars::pl_interruptable_collect;
 
 #[derive(Clone, Debug)]
 pub enum BaseCatState {
-    CategoricalNative(bool, Option<LockedCats>),
+    CategoricalNative(Option<LockedCats>),
     String,
     NonString,
 }
@@ -17,7 +17,7 @@ pub enum BaseCatState {
 impl BaseCatState {
     pub fn get_local_cats(&self) -> Option<LockedCats> {
         match self {
-            BaseCatState::CategoricalNative(_, local_cats) => {
+            BaseCatState::CategoricalNative(local_cats) => {
                 if let Some(local_cats) = local_cats {
                     Some(local_cats.clone())
                 } else {

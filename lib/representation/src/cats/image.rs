@@ -24,7 +24,7 @@ impl Cats {
             for c in cols {
                 let t = sm.rdf_node_types.get(c).unwrap();
                 for (bt, bs) in &t.map {
-                    if let BaseCatState::CategoricalNative(_, local) = bs {
+                    if let BaseCatState::CategoricalNative(local) = bs {
                         let mut sers = vec![];
                         if bt.is_lang_string() {
                             let ser1 = sm
@@ -109,7 +109,7 @@ impl Cats {
             for c in cols {
                 let t = sm.rdf_node_types.get(c).unwrap();
                 for bs in t.map.values() {
-                    if let BaseCatState::CategoricalNative(_, local) = bs {
+                    if let BaseCatState::CategoricalNative(local) = bs {
                         if let Some(local) = local.as_ref() {
                             local_cats.push(local.clone());
                         }
@@ -210,9 +210,9 @@ pub fn set_global_cats_as_local(
 ) {
     for (_, s) in rdf_node_types {
         for v in s.map.values_mut() {
-            if matches!(v, BaseCatState::CategoricalNative(_, None)) {
-                *v = BaseCatState::CategoricalNative(false, Some(cats.clone()));
-            } else if matches!(v, BaseCatState::CategoricalNative(_, Some(..))) {
+            if matches!(v, BaseCatState::CategoricalNative(None)) {
+                *v = BaseCatState::CategoricalNative(Some(cats.clone()));
+            } else if matches!(v, BaseCatState::CategoricalNative(Some(..))) {
                 panic!("Should never be called when locals exist")
             }
         }

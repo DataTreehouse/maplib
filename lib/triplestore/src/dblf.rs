@@ -338,7 +338,7 @@ impl Triplestore {
                     predicate_col_name.clone(),
                     RDFNodeState::from_bases(
                         BaseRDFNodeType::IRI,
-                        BaseCatState::CategoricalNative(false, None),
+                        BaseCatState::CategoricalNative(None),
                     ),
                 );
             }

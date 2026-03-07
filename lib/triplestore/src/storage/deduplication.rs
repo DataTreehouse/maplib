@@ -17,27 +17,30 @@ impl Triples {
         global_cats: &Cats,
         storage_folder: Option<&PathBuf>,
     ) -> Result<Option<DataFrame>, TriplestoreError> {
+        let start_deduplication = Instant::now();
         let new_df = if let Some(so_index) = &mut self.subject_object_index {
-            so_index.update_so_index(df)
+            let new_df = so_index.update_so_index(df, &self.object_type);
+            trace!(
+                "Deduplication using subject object index took: {}",
+                start_deduplication.elapsed().as_secs_f32()
+            );
+            new_df
         } else {
-            self.deduplicate_segment_no_index(df, global_cats)?
+            let new_df = self.deduplicate_segment_no_index(df, global_cats)?;
+            trace!(
+                "Deduplication using scan took: {} for datatype {}",
+                start_deduplication.elapsed().as_secs_f32(),
+                &self.object_type
+            );
+            new_df
         };
 
         if let Some(new_df) = new_df {
             // Here we decide if segments should be compacted
-            // Important that this is done after deduplication as otherwise insertion of lots of dupes leads to write amplification
-            let mut should_compact = if self.height < new_df.height() * 2 {
-                // Compact if amount of existing triples is similar to amount of new triples
-                true
-            } else if self.segments.len() > 1 {
-                // Compact if we are getting too fragmented
-                let first_height = self.segments.get(0).unwrap().height;
-                let others_height: usize = self.segments[1..].iter().map(|x| x.height).sum();
-                others_height * 2 > first_height
-            } else {
-                // Do not compact otherwise
-                false
-            };
+            let mut should_compact = self.segments.len() > 10 && self
+                .height
+                .saturating_mul(self.segments.len().saturating_mul(self.segments.len()))
+                > 100_000;
             let new_segment = TriplesSegment::new(
                 new_df.clone(),
                 storage_folder,

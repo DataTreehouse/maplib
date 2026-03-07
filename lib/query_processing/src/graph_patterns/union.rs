@@ -124,6 +124,7 @@ pub fn union(
         },
     )
     .expect("Concat problem");
+
     Ok(SolutionMappings::new(
         output_mappings,
         target_state,

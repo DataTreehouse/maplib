@@ -167,19 +167,27 @@ pub fn basic_rdf_node_type_column_to_term_vec(
         BaseRDFNodeType::Literal(l) => match l.as_ref() {
             rdf::LANG_STRING => {
                 let col_struct = column.struct_().unwrap();
-                let value_ser = col_struct
-                    .field_by_name(LANG_STRING_VALUE_FIELD)
-                    .unwrap()
-                    .cast(&DataType::String)
-                    .unwrap();
-                let value_iter = value_ser.str().unwrap().into_iter();
+                let value_col = decode_column(
+                    &col_struct
+                        .field_by_name(LANG_STRING_VALUE_FIELD)
+                        .unwrap()
+                        .into_column(),
+                    base_type,
+                    base_state,
+                    global_cats.clone(),
+                );
+                let value_iter = value_col.str().unwrap().into_iter();
 
-                let lang_ser = col_struct
-                    .field_by_name(LANG_STRING_LANG_FIELD)
-                    .unwrap()
-                    .cast(&DataType::String)
-                    .unwrap();
-                let lang_iter = lang_ser.str().unwrap().into_iter();
+                let lang_col = decode_column(
+                    &col_struct
+                        .field_by_name(LANG_STRING_LANG_FIELD)
+                        .unwrap()
+                        .into_column(),
+                    base_type,
+                    base_state,
+                    global_cats,
+                );
+                let lang_iter = lang_col.str().unwrap().into_iter();
 
                 value_iter
                     .zip(lang_iter)
@@ -212,20 +220,40 @@ pub fn basic_rdf_node_type_column_to_term_vec(
                     panic!("Invalid state {:?}", column.dtype())
                 }
             }
-            xsd::STRING => decode_column(column, base_type, base_state, global_cats)
-                .str()
-                .unwrap()
-                .par_iter()
-                .map(|x| x.map(|x| Term::Literal(Literal::new_simple_literal(x))))
-                .collect(),
-            dt => column
-                .cast(&DataType::String)
-                .unwrap()
-                .str()
-                .unwrap()
-                .par_iter()
-                .map(|x| x.map(|x| Term::Literal(Literal::new_typed_literal(x, dt.into_owned()))))
-                .collect(),
+            dt => {
+                if base_type.stored_cat() {
+                    if base_type.is_lit_type(xsd::STRING) {
+                        decode_column(column, base_type, base_state, global_cats)
+                            .str()
+                            .unwrap()
+                            .par_iter()
+                            .map(|x| x.map(|x| Term::Literal(Literal::new_simple_literal(x))))
+                            .collect()
+                    } else {
+                        decode_column(column, base_type, base_state, global_cats)
+                            .str()
+                            .unwrap()
+                            .par_iter()
+                            .map(|x| {
+                                x.map(|x| {
+                                    Term::Literal(Literal::new_typed_literal(x, dt.into_owned()))
+                                })
+                            })
+                            .collect()
+                    }
+                } else {
+                    column
+                        .cast(&DataType::String)
+                        .unwrap()
+                        .str()
+                        .unwrap()
+                        .par_iter()
+                        .map(|x| {
+                            x.map(|x| Term::Literal(Literal::new_typed_literal(x, dt.into_owned())))
+                        })
+                        .collect()
+                }
+            }
         },
         BaseRDFNodeType::None => {
             let mut v = vec![];

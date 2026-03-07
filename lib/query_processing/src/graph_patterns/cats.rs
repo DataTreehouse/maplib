@@ -46,17 +46,7 @@ impl CatOperation {
                 }
             }
             CatOperation::ReEnc(cat_re_enc) => {
-                if !t.is_multi() {
-                    mappings = cat_re_enc.re_encode(mappings, c, false);
-                } else {
-                    let tmp = uuid::Uuid::new_v4().to_string();
-                    let n = base_t.field_col_name();
-                    mappings = mappings.with_column(col(c).struct_().field_by_name(&n).alias(&tmp));
-                    mappings = cat_re_enc.re_encode(mappings, &tmp, false);
-                    mappings = mappings
-                        .with_column(col(c).struct_().with_fields(vec![col(&tmp).alias(&n)]));
-                    mappings = mappings.drop(by_name([tmp], true, false));
-                }
+                mappings = cat_re_enc.re_encode(mappings, c, t.is_multi(), base_t.clone(), false);
             }
         }
         mappings
@@ -68,13 +58,12 @@ pub fn create_compatible_cats(
     right: &BaseCatState,
 ) -> (BaseCatState, Option<CatOperation>, Option<CatOperation>) {
     match left {
-        BaseCatState::CategoricalNative(_left_sorted, None) => match right {
-            BaseCatState::CategoricalNative(_right_sorted, None) => {
-                //TODO! FIX SO THAT WE CAN SET TO && BECAUSE DEPENDS ON GLOBAL SORT STATE
-                (BaseCatState::CategoricalNative(false, None), None, None)
+        BaseCatState::CategoricalNative(None) => match right {
+            BaseCatState::CategoricalNative(None) => {
+                (BaseCatState::CategoricalNative(None), None, None)
             }
-            BaseCatState::CategoricalNative(_, right_local_cats) => (
-                BaseCatState::CategoricalNative(false, right_local_cats.as_ref().cloned()),
+            BaseCatState::CategoricalNative(right_local_cats) => (
+                BaseCatState::CategoricalNative(right_local_cats.as_ref().cloned()),
                 None,
                 None,
             ),
@@ -83,16 +72,16 @@ pub fn create_compatible_cats(
                 unreachable!("Should never happen")
             }
         },
-        BaseCatState::CategoricalNative(_, Some(left_local_cats)) => match right {
-            BaseCatState::CategoricalNative(_, None) => (
-                BaseCatState::CategoricalNative(false, Some(left_local_cats.clone())),
+        BaseCatState::CategoricalNative(Some(left_local_cats)) => match right {
+            BaseCatState::CategoricalNative(None) => (
+                BaseCatState::CategoricalNative(Some(left_local_cats.clone())),
                 None,
                 None,
             ),
-            BaseCatState::CategoricalNative(_, Some(right_local_cats)) => {
+            BaseCatState::CategoricalNative(Some(right_local_cats)) => {
                 let re_enc = Cats::join(left_local_cats.clone(), right_local_cats.clone());
                 (
-                    BaseCatState::CategoricalNative(false, Some(left_local_cats.clone())),
+                    BaseCatState::CategoricalNative(Some(left_local_cats.clone())),
                     None,
                     Some(CatOperation::ReEnc(re_enc)),
                 )

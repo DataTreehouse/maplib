@@ -14,7 +14,10 @@ use std::cmp;
 
 use crate::cats::maps::CatMaps;
 use crate::dataset::NamedGraph;
-use crate::{BaseRDFNodeType, OBJECT_COL_NAME, SUBJECT_COL_NAME};
+use crate::{
+    BaseRDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD, OBJECT_COL_NAME,
+    SUBJECT_COL_NAME,
+};
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{NamedNode, NamedNodeRef};
 use polars::prelude::DataFrame;
@@ -28,10 +31,6 @@ use uuid::Uuid;
 
 pub const OBJECT_RANK_COL_NAME: &str = "object_rank";
 pub const SUBJECT_RANK_COL_NAME: &str = "subject_rank";
-
-pub fn literal_is_cat(nn: NamedNodeRef) -> bool {
-    matches!(nn, xsd::STRING)
-}
 
 #[derive(Debug)]
 pub struct CatTriples {
@@ -169,6 +168,25 @@ impl Cats {
             unreachable!("Should never happen")
         };
         (u, Cats::from_map(HashMap::from([(t, catenc)]), None))
+    }
+
+    pub fn new_local_lang_string(val: &str, lang: &str, u: u32) -> (u32, u32, Cats) {
+        let dt = BaseRDFNodeType::Literal(rdf::LANG_STRING.into_owned());
+        let mut catenc = CatEncs::new_local_singular(val, u, &dt);
+        let lang_u = u + 1;
+        catenc
+            .maps
+            .encode_new_in_memory_string(lang.to_string(), lang_u);
+        let t = if let BaseRDFNodeType::Literal(dt) = dt {
+            CatType::Literal(dt)
+        } else {
+            unreachable!("Should never happen")
+        };
+        (
+            u,
+            lang_u,
+            Cats::from_map(HashMap::from([(t, catenc)]), None),
+        )
     }
 
     pub fn new_local_singular_blank(s: &str, u: u32) -> (u32, Cats) {
@@ -319,25 +337,38 @@ impl Cats {
                 }
             }
             if object_type.stored_cat() {
-                if let Some(v) = src_u_map.get_mut(object_type) {
-                    v.extend(
+                let mut obj_u32_series = vec![];
+                if object_type.is_lang_string() {
+                    obj_u32_series.push(
                         df.column(OBJECT_COL_NAME)
                             .unwrap()
-                            .u32()
+                            .struct_()
                             .unwrap()
-                            .iter()
-                            .map(|x| x.unwrap()),
+                            .field_by_name(LANG_STRING_VALUE_FIELD)
+                            .unwrap(),
+                    );
+                    obj_u32_series.push(
+                        df.column(OBJECT_COL_NAME)
+                            .unwrap()
+                            .struct_()
+                            .unwrap()
+                            .field_by_name(LANG_STRING_LANG_FIELD)
+                            .unwrap(),
                     );
                 } else {
-                    let v: HashSet<_> = df
-                        .column(OBJECT_COL_NAME)
-                        .unwrap()
-                        .u32()
-                        .unwrap()
-                        .iter()
-                        .map(|x| x.unwrap())
-                        .collect();
-                    src_u_map.insert(object_type.clone(), v);
+                    obj_u32_series.push(
+                        df.column(OBJECT_COL_NAME)
+                            .unwrap()
+                            .as_materialized_series_maintain_scalar(),
+                    );
+                }
+                for c in obj_u32_series {
+                    if let Some(v) = src_u_map.get_mut(object_type) {
+                        v.extend(c.u32().unwrap().iter().map(|x| x.unwrap()));
+                    } else {
+                        let v: HashSet<_> = c.u32().unwrap().iter().map(|x| x.unwrap()).collect();
+                        src_u_map.insert(object_type.clone(), v);
+                    }
                 }
             }
         }

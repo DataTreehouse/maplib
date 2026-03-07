@@ -9,9 +9,8 @@ use nohash_hasher::NoHashHasher;
 use polars::datatypes::{AnyValue, PlSmallStr};
 use polars::error::{ErrString, PolarsError, PolarsResult};
 use polars::frame::column::ScalarColumn;
-use polars::prelude::{
-    col, Column, DataType, IntoColumn, IntoLazy, LazyFrame, Series,
-};
+use polars::frame::DataFrame;
+use polars::prelude::{as_struct, col, Column, DataType, IntoColumn, IntoLazy, LazyFrame, Series};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
@@ -23,19 +22,127 @@ pub struct CatReEnc {
 }
 
 impl CatReEnc {
-    pub fn re_encode(self, mut lf: LazyFrame, c: &str, forget_others: bool) -> LazyFrame {
-        lf = lf.with_column(
-            col(c)
-                .map(
-                    move |x| self.clone().re_encode_column(x, forget_others),
-                    |_, f| Ok(f.clone()),
-                )
-                .alias(c),
-        );
+    pub fn re_encode(
+        self,
+        mut lf: LazyFrame,
+        c: &str,
+        is_multi: bool,
+        bt: BaseRDFNodeType,
+        forget_others: bool,
+    ) -> LazyFrame {
+        if bt.is_lang_string() {
+            let move_bt1 = bt.clone();
+            let move_bt2 = bt.clone();
+            let self_clone = self.clone();
+            lf = lf.with_column(
+                col(c)
+                    .struct_()
+                    .with_fields(vec![
+                        col(c)
+                            .struct_()
+                            .field_by_name(LANG_STRING_VALUE_FIELD)
+                            .map(
+                                move |x| {
+                                    self_clone.clone().re_encode_column(
+                                        x,
+                                        move_bt1.clone(),
+                                        forget_others,
+                                    )
+                                },
+                                |_, f| Ok(f.clone()),
+                            )
+                            .alias(LANG_STRING_VALUE_FIELD),
+                        col(c)
+                            .struct_()
+                            .field_by_name(LANG_STRING_LANG_FIELD)
+                            .map(
+                                move |x| {
+                                    self.clone().re_encode_column(
+                                        x,
+                                        move_bt2.clone(),
+                                        forget_others,
+                                    )
+                                },
+                                |_, f| Ok(f.clone()),
+                            )
+                            .alias(LANG_STRING_LANG_FIELD),
+                    ])
+                    .alias(c),
+            );
+        } else if is_multi {
+            let move_bt = bt.clone();
+            lf = lf.with_column(
+                col(c)
+                    .struct_()
+                    .with_fields(vec![col(c)
+                        .struct_()
+                        .field_by_name(&bt.field_col_name())
+                        .map(
+                            move |x| {
+                                self.clone()
+                                    .re_encode_column(x, move_bt.clone(), forget_others)
+                            },
+                            |_, f| Ok(f.clone()),
+                        )
+                        .alias(&bt.field_col_name())])
+                    .alias(c),
+            );
+        } else {
+            lf = lf.with_column(
+                col(c)
+                    .map(
+                        move |x| self.clone().re_encode_column(x, bt.clone(), forget_others),
+                        |_, f| Ok(f.clone()),
+                    )
+                    .alias(c),
+            );
+        }
         lf
     }
 
-    pub fn re_encode_column(self, c: Column, forget_others: bool) -> PolarsResult<Column> {
+    pub fn re_encode_column(
+        self,
+        c: Column,
+        t: BaseRDFNodeType,
+        forget_others: bool,
+    ) -> PolarsResult<Column> {
+        if t.is_lang_string() {
+            let value_col = c
+                .struct_()
+                .unwrap()
+                .field_by_name(LANG_STRING_VALUE_FIELD)
+                .unwrap();
+            let mut value_renc = self
+                .clone()
+                .re_encode_single_column(value_col.into_column(), forget_others)?;
+            value_renc.rename(PlSmallStr::from_str(LANG_STRING_VALUE_FIELD));
+            let lang_col = c
+                .struct_()
+                .unwrap()
+                .field_by_name(LANG_STRING_LANG_FIELD)
+                .unwrap();
+            let mut lang_renc =
+                self.re_encode_single_column(lang_col.into_column(), forget_others)?;
+            lang_renc.rename(PlSmallStr::from_str(LANG_STRING_LANG_FIELD));
+            let mut df = DataFrame::new(c.len(), vec![value_renc, lang_renc]).unwrap();
+            df = df
+                .lazy()
+                .with_column(
+                    as_struct(vec![
+                        col(LANG_STRING_VALUE_FIELD),
+                        col(LANG_STRING_LANG_FIELD),
+                    ])
+                    .alias(c.name().as_str()),
+                )
+                .select([col(c.name().as_str())])
+                .collect()?;
+            Ok(df.drop_in_place(c.name().as_str())?)
+        } else {
+            self.re_encode_single_column(c, forget_others)
+        }
+    }
+
+    pub fn re_encode_single_column(self, c: Column, forget_others: bool) -> PolarsResult<Column> {
         let name = c.name().clone();
         match c {
             Column::Series(c) => {
@@ -174,7 +281,11 @@ pub fn re_encode(
             if let Some(subj_encs) = subj_encs {
                 let mut renc_col = subj_encs
                     .clone()
-                    .re_encode_column(enc.df.column(SUBJECT_COL_NAME).unwrap().clone(), false)
+                    .re_encode_column(
+                        enc.df.column(SUBJECT_COL_NAME).unwrap().clone(),
+                        x.subject_type.clone(),
+                        false,
+                    )
                     .unwrap();
                 renc_col.rename(PlSmallStr::from_str(SUBJECT_COL_NAME));
                 enc.df.with_column(renc_col).unwrap();
@@ -195,7 +306,11 @@ pub fn re_encode(
             if let Some(obj_encs) = obj_encs {
                 let mut renc_col = obj_encs
                     .clone()
-                    .re_encode_column(enc.df.column(OBJECT_COL_NAME).unwrap().clone(), false)
+                    .re_encode_column(
+                        enc.df.column(OBJECT_COL_NAME).unwrap().clone(),
+                        x.object_type.clone(),
+                        false,
+                    )
                     .unwrap();
                 renc_col.rename(PlSmallStr::from_str(OBJECT_COL_NAME));
                 enc.df.with_column(renc_col).unwrap();
@@ -220,26 +335,21 @@ pub fn reencode_solution_mappings(
     for (c, t) in &rdf_node_types {
         let mut reenc_exprs = vec![];
         for (bt, bs) in &t.map {
-            if let BaseCatState::CategoricalNative(_, Some(local)) = bs {
+            if let BaseCatState::CategoricalNative(Some(local)) = bs {
                 let local = local.read().unwrap();
                 if let Some(rmap) = reencs.get(&local.uuid) {
                     let r = rmap.get(bt).unwrap();
-                    let mut es = vec![];
-                    if t.is_lang_string() {
-                        es.push(col(c).struct_().field_by_name(LANG_STRING_VALUE_FIELD));
-                        es.push(col(c).struct_().field_by_name(LANG_STRING_LANG_FIELD));
-                    } else if t.is_multi() {
-                        es.push(col(c).struct_().field_by_name(&bt.field_col_name()));
+                    let e = if t.is_multi() {
+                        col(c).struct_().field_by_name(&bt.field_col_name())
                     } else {
-                        es.push(col(c));
+                        col(c)
                     };
-                    for e in es {
-                        let r_cloned = r.clone();
-                        reenc_exprs.push(e.map(
-                            move |c| r_cloned.clone().re_encode_column(c, false),
-                            |_, y| Ok(y.clone()),
-                        ));
-                    }
+                    let r_cloned = r.clone();
+                    let bt = bt.clone();
+                    reenc_exprs.push(e.map(
+                        move |c| r_cloned.clone().re_encode_column(c, bt.clone(), false),
+                        |_, y| Ok(y.clone()),
+                    ));
                 }
             }
         }
@@ -254,7 +364,7 @@ pub fn reencode_solution_mappings(
     for v in rdf_node_types.values_mut() {
         for v2 in v.map.values_mut() {
             if matches!(v2, BaseCatState::CategoricalNative(..)) {
-                *v2 = BaseCatState::CategoricalNative(false, None);
+                *v2 = BaseCatState::CategoricalNative(None);
             }
         }
     }

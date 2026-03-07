@@ -69,7 +69,7 @@ pub fn create_compatible_cats(
                         (uu, (blank_renc, iri_renc, literal_renc_map))
                     })
                     .collect();
-                let state = BaseCatState::CategoricalNative(false, Some(LockedCats::new(cats)));
+                let state = BaseCatState::CategoricalNative(Some(LockedCats::new(cats)));
                 native_cat_map.insert(t.clone(), (renc_local, state));
             }
         }
@@ -129,8 +129,15 @@ pub fn create_compatible_cats(
                                 for e in e_vec.iter_mut() {
                                     let renc = renc.clone();
                                     let e_clone = e.clone();
+                                    let bt_clone = bt.clone();
                                     *e = e_clone.map(
-                                        move |x| renc.clone().re_encode_column(x, false),
+                                        move |x| {
+                                            renc.clone().re_encode_column(
+                                                x,
+                                                bt_clone.clone(),
+                                                false,
+                                            )
+                                        },
                                         |_, f| Ok(f.clone()),
                                     );
                                 }
@@ -174,7 +181,7 @@ fn check_need_native_cat_cast(t: &BaseRDFNodeType, types: &Vec<Option<RDFNodeSta
                 if matches!(b, BaseCatState::String | BaseCatState::NonString) {
                     return false;
                 }
-                let is_local = matches!(b, BaseCatState::CategoricalNative(_, Some(_)));
+                let is_local = matches!(b, BaseCatState::CategoricalNative(Some(_)));
                 if is_local {
                     if found_non_global_witness || found_global_witness {
                         return true;
@@ -182,7 +189,7 @@ fn check_need_native_cat_cast(t: &BaseRDFNodeType, types: &Vec<Option<RDFNodeSta
                         found_non_global_witness = true;
                     }
                 }
-                let is_global = matches!(b, BaseCatState::CategoricalNative(_, None));
+                let is_global = matches!(b, BaseCatState::CategoricalNative(None));
                 if is_global {
                     if found_non_global_witness {
                         return true;
@@ -202,7 +209,7 @@ fn check_need_string_cast(t: &BaseRDFNodeType, types: &Vec<Option<RDFNodeState>>
     for s in types {
         if let Some(s) = s {
             if let Some(b) = s.map.get(t) {
-                if matches!(b, BaseCatState::CategoricalNative(_, _)) {
+                if matches!(b, BaseCatState::CategoricalNative(_)) {
                     if found_string {
                         return true;
                     } else {

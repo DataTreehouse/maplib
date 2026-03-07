@@ -13,12 +13,14 @@ use polars::prelude::{
     as_struct, by_name, coalesce, col, lit, DataType, Expr, JoinArgs, JoinType, LazyFrame,
     LiteralValue, Operator, Scalar,
 };
-use representation::cats::{literal_is_cat, maybe_decode_expr, Cats, LockedCats};
+use representation::cats::{maybe_decode_expr, Cats, LockedCats};
 use representation::multitype::all_multi_main_cols;
 use representation::query_context::Context;
 use representation::rdf_to_polars::rdf_literal_to_polars_expr;
 use representation::solution_mapping::{BaseCatState, SolutionMappings};
-use representation::{BaseRDFNodeType, RDFNodeState, LANG_STRING_VALUE_FIELD};
+use representation::{
+    BaseRDFNodeType, RDFNodeState, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD,
+};
 use spargebra::algebra::Expression;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -68,31 +70,73 @@ pub fn blank_node_local_enc(bl: &BlankNode, global_cats: &Cats) -> (Expr, Option
 
 pub fn literal_enc(l: &Literal, global_cats: &Cats) -> (Expr, BaseRDFNodeType, BaseCatState) {
     let bt = BaseRDFNodeType::Literal(l.datatype().into_owned());
-    if literal_is_cat(l.datatype()) {
-        if let Some(enc) = global_cats
-            .maybe_encode_literals(&[Some(l.value())], l.datatype().into_owned())
-            .pop()
-            .unwrap()
-        {
+    let encoded_res = if bt.stored_cat() {
+        if bt.is_lang_string() {
+            let mut enc = global_cats.maybe_encode_literals(
+                &[Some(l.value()), Some(l.language().unwrap())],
+                l.datatype().into_owned(),
+            );
+            let lang_enc = enc.pop().unwrap();
+            let value_enc = enc.pop().unwrap();
+            let (value_enc, lang_enc, local) = if value_enc.is_some() && lang_enc.is_some() {
+                (value_enc.unwrap(), lang_enc.unwrap(), None)
+            } else if value_enc.is_some() {
+                let dt = l.datatype().into_owned();
+                let offset = global_cats.get_literal_counter(&dt);
+                let (lang_enc, local) =
+                    Cats::new_local_singular_literal(l.language().unwrap(), dt, offset);
+                (value_enc.unwrap(), lang_enc, Some(local))
+            } else if lang_enc.is_some() {
+                let dt = l.datatype().into_owned();
+                let offset = global_cats.get_literal_counter(&dt);
+                let (value_enc, local) = Cats::new_local_singular_literal(l.value(), dt, offset);
+                (value_enc, lang_enc.unwrap(), Some(local))
+            } else {
+                let dt = l.datatype().into_owned();
+                let offset_value = global_cats.get_literal_counter(&dt);
+                let (value_enc, lang_enc, mut local) =
+                    Cats::new_local_lang_string(l.value(), l.language().unwrap(), offset_value);
+                (value_enc, lang_enc, Some(local))
+            };
             (
-                lit(enc).cast(DataType::UInt32),
+                as_struct(vec![
+                    lit(value_enc)
+                        .cast(DataType::UInt32)
+                        .alias(LANG_STRING_VALUE_FIELD),
+                    lit(lang_enc)
+                        .cast(DataType::UInt32)
+                        .alias(LANG_STRING_LANG_FIELD),
+                ]),
                 bt,
-                BaseCatState::CategoricalNative(true, None),
+                BaseCatState::CategoricalNative(local.map(LockedCats::new)),
             )
         } else {
-            let dt = l.datatype().into_owned();
-            let offset = global_cats.get_literal_counter(&dt);
-            let (enc, local) = Cats::new_local_singular_literal(l.value(), dt, offset);
-            (
-                lit(enc).cast(DataType::UInt32),
-                bt,
-                BaseCatState::CategoricalNative(true, Some(LockedCats::new(local))),
-            )
+            if let Some(enc) = global_cats
+                .maybe_encode_literals(&[Some(l.value())], l.datatype().into_owned())
+                .pop()
+                .unwrap()
+            {
+                (
+                    lit(enc).cast(DataType::UInt32),
+                    bt,
+                    BaseCatState::CategoricalNative(None),
+                )
+            } else {
+                let dt = l.datatype().into_owned();
+                let offset = global_cats.get_literal_counter(&dt);
+                let (enc, local) = Cats::new_local_singular_literal(l.value(), dt, offset);
+                (
+                    lit(enc).cast(DataType::UInt32),
+                    bt,
+                    BaseCatState::CategoricalNative(Some(LockedCats::new(local))),
+                )
+            }
         }
     } else {
         let bs = bt.default_input_cat_state().clone();
         (rdf_literal_to_polars_expr(l), bt, bs)
-    }
+    };
+    encoded_res
 }
 
 pub fn named_node(
@@ -107,7 +151,7 @@ pub fn named_node(
         .with_column(enc.alias(context.as_str()));
     let state = RDFNodeState::from_bases(
         BaseRDFNodeType::IRI,
-        BaseCatState::CategoricalNative(true, local.map(|x| LockedCats::new(x))),
+        BaseCatState::CategoricalNative(local.map(|x| LockedCats::new(x))),
     );
     solution_mappings
         .rdf_node_types

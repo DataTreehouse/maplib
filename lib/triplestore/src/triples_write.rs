@@ -39,15 +39,43 @@ impl Triplestore {
                 let predicate_string = predicate.to_string();
                 let predicate_bytes = predicate_string.as_bytes();
                 for ((subject_type, object_type), tt) in df_map {
-                    if object_type.is_lang_string() {
-                        let types = HashMap::from([
+                    let types = if object_type.is_lang_string() {
+                        HashMap::from([
                             (SUBJECT_COL_NAME.to_string(), subject_type.clone()),
                             (LANG_STRING_VALUE_FIELD.to_string(), object_type.clone()),
                             (LANG_STRING_LANG_FIELD.to_string(), object_type.clone()),
-                        ]);
-                        let lfs = tt.get_lazy_frames(&None, &None)?;
-                        for (lf, _) in lfs {
-                            let mut df = lf
+                        ])
+                    } else {
+                        HashMap::from([
+                            (SUBJECT_COL_NAME.to_string(), subject_type.clone()),
+                            (OBJECT_COL_NAME.to_string(), object_type.clone()),
+                        ])
+                    };
+                    for (lf, _) in tt.get_lazy_frames(&None, &None)? {
+                        let mut df = lf.collect().unwrap();
+                        if subject_type.stored_cat() {
+                            let cats = self.global_cats.read()?;
+                            let ser = cats.decode_of_type(
+                                &df.column(SUBJECT_COL_NAME)
+                                    .unwrap()
+                                    .as_materialized_series_maintain_scalar(),
+                                subject_type,
+                            );
+                            df.with_column(ser.into_column()).unwrap();
+                        }
+                        if object_type.stored_cat() {
+                            let cats = self.global_cats.read()?;
+                            let ser = cats.decode_of_type(
+                                &df.column(OBJECT_COL_NAME)
+                                    .unwrap()
+                                    .as_materialized_series_maintain_scalar(),
+                                &object_type,
+                            );
+                            df.with_column(ser.into_column()).unwrap();
+                        }
+                        if object_type.is_lang_string() {
+                            df = df
+                                .lazy()
                                 .unnest(by_name([OBJECT_COL_NAME], true, false), None)
                                 .select([
                                     col(SUBJECT_COL_NAME),
@@ -56,85 +84,24 @@ impl Triplestore {
                                 ])
                                 .collect()
                                 .unwrap();
-                            let nulls_df = df
-                                .clone()
+                        } else {
+                            df = df
                                 .lazy()
-                                .filter(
-                                    col(LANG_STRING_VALUE_FIELD)
-                                        .is_null()
-                                        .or(col(LANG_STRING_LANG_FIELD).is_null()),
-                                )
-                                .collect()
-                                .unwrap();
-                            if nulls_df.height() > 0 {
-                                warn!(
-                                    "Triplestore had null lang strings {} for predicate {}",
-                                    nulls_df, predicate
-                                );
-                            }
-                            df = df.lazy().drop_nulls(None).collect().unwrap();
-
-                            if subject_type.stored_cat() {
-                                let cats = self.global_cats.read()?;
-                                let ser = cats.decode_of_type(
-                                    &df.column(SUBJECT_COL_NAME)
-                                        .unwrap()
-                                        .as_materialized_series_maintain_scalar(),
-                                    &subject_type,
-                                );
-                                df.with_column(ser.into_column()).unwrap();
-                            }
-                            fast_ntriples::write_triples_in_df(
-                                buf,
-                                &df,
-                                predicate_bytes,
-                                &types,
-                                CHUNK_SIZE,
-                                n_threads,
-                            )
-                            .unwrap();
-                        }
-                    } else {
-                        let types = HashMap::from([
-                            (SUBJECT_COL_NAME.to_string(), subject_type.clone()),
-                            (OBJECT_COL_NAME.to_string(), object_type.clone()),
-                        ]);
-                        for (lf, _) in tt.get_lazy_frames(&None, &None)? {
-                            let mut df = lf
                                 .select([col(SUBJECT_COL_NAME), col(OBJECT_COL_NAME)])
                                 .collect()
                                 .unwrap();
                             convert_datelike_to_string(&mut df, OBJECT_COL_NAME);
-                            if subject_type.stored_cat() {
-                                let cats = self.global_cats.read()?;
-                                let ser = cats.decode_of_type(
-                                    &df.column(SUBJECT_COL_NAME)
-                                        .unwrap()
-                                        .as_materialized_series_maintain_scalar(),
-                                    subject_type,
-                                );
-                                df.with_column(ser.into_column()).unwrap();
-                            }
-                            if object_type.stored_cat() {
-                                let cats = self.global_cats.read()?;
-                                let ser = cats.decode_of_type(
-                                    &df.column(OBJECT_COL_NAME)
-                                        .unwrap()
-                                        .as_materialized_series_maintain_scalar(),
-                                    &object_type,
-                                );
-                                df.with_column(ser.into_column()).unwrap();
-                            }
-                            fast_ntriples::write_triples_in_df(
-                                buf,
-                                &df,
-                                predicate_bytes,
-                                &types,
-                                CHUNK_SIZE,
-                                n_threads,
-                            )
-                            .unwrap();
-                        }
+                        };
+
+                        fast_ntriples::write_triples_in_df(
+                            buf,
+                            &df,
+                            predicate_bytes,
+                            &types,
+                            CHUNK_SIZE,
+                            n_threads,
+                        )
+                        .unwrap();
                     }
                 }
             }

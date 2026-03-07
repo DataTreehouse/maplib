@@ -3,10 +3,15 @@ use crate::cats::maps::in_memory::CatMapsInMemory;
 use crate::cats::maps::CatMaps;
 use crate::cats::LockedCats;
 use crate::solution_mapping::{BaseCatState, EagerSolutionMappings};
-use crate::{BaseRDFNodeType, RDFNodeState, OBJECT_COL_NAME, SUBJECT_COL_NAME};
+use crate::{
+    BaseRDFNodeType, RDFNodeState, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD,
+    OBJECT_COL_NAME, SUBJECT_COL_NAME,
+};
 use oxrdf::NamedNode;
 use polars::frame::DataFrame;
-use polars::prelude::{col, lit, ExplodeOptions, IntoLazy, Series};
+use polars::prelude::{
+    as_struct, col, lit, ExplodeOptions, IntoColumn, IntoLazy, PlSmallStr, Series,
+};
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -44,7 +49,9 @@ impl Cats {
             for (t, bs) in &s.map {
                 if t.stored_cat() {
                     if matches!(bs, BaseCatState::String) {
-                        let ser = if s.is_multi() {
+                        let ser = if t.is_lang_string() || !s.is_multi() {
+                            mappings.column(c).unwrap().as_materialized_series().clone()
+                        } else {
                             mappings
                                 .column(c)
                                 .unwrap()
@@ -53,8 +60,6 @@ impl Cats {
                                 .unwrap()
                                 .field_by_name(&t.field_col_name())
                                 .unwrap()
-                        } else {
-                            mappings.column(c).unwrap().as_materialized_series().clone()
                         };
                         to_encode.push((c.clone(), t.clone(), ser));
                     }
@@ -72,7 +77,28 @@ impl Cats {
 
         for (c, t, enc, local) in encoded {
             let s = rdf_node_types.get_mut(&c).unwrap();
-            if s.is_multi() {
+            if t.is_lang_string() {
+                let value_series = enc
+                    .struct_()
+                    .unwrap()
+                    .field_by_name(LANG_STRING_VALUE_FIELD)
+                    .unwrap();
+                let lang_series = enc
+                    .struct_()
+                    .unwrap()
+                    .field_by_name(LANG_STRING_LANG_FIELD)
+                    .unwrap();
+                mappings = mappings.with_column(col(&c).struct_().with_fields(vec![
+                    lit(value_series).explode(ExplodeOptions {
+                        empty_as_null: false,
+                        keep_nulls: true,
+                    }),
+                    lit(lang_series).explode(ExplodeOptions {
+                        empty_as_null: false,
+                        keep_nulls: true,
+                    }),
+                ]));
+            } else if s.is_multi() {
                 mappings =
                     mappings.with_column(col(&c).struct_().with_fields(vec![lit(enc).explode(
                         ExplodeOptions {
@@ -88,7 +114,7 @@ impl Cats {
             }
             s.map.insert(
                 t,
-                BaseCatState::CategoricalNative(false, local.map(|x| LockedCats::new(x))),
+                BaseCatState::CategoricalNative(local.map(|x| LockedCats::new(x))),
             );
         }
         EagerSolutionMappings::new(mappings.collect().unwrap(), rdf_node_types)
@@ -105,53 +131,53 @@ impl Cats {
             }
         };
 
-        let enc = self.get_encs(t).pop();
+        let enc = self.get_encs(t).pop().map(|(_, enc)| enc);
         // Local cat encs are always in memory
         let mut new_enc = CatEncs::new_empty(None, t);
-        let maybe_encoded_global = if let Some((_, enc)) = enc {
-            let strch = series.str().unwrap();
-            let strvec: Vec<_> = strch.iter().collect();
-            Some(enc.maybe_encode_strs(&strvec))
-        } else {
-            None
-        };
-        let mut encoded_global_local = Vec::with_capacity(series.len());
 
-        if let Some(enc) = maybe_encoded_global {
-            for (glob, s) in enc.into_iter().zip(series.str().unwrap().iter()) {
-                if let Some(glob) = glob {
-                    encoded_global_local.push(Some(glob));
-                } else {
-                    if let Some(s) = s {
-                        if let Some(u) = new_enc.maps.maybe_encode_in_memory_str(s) {
-                            encoded_global_local.push(Some(u))
-                        } else {
-                            use_height += 1;
-                            let su = use_height;
-                            new_enc.maps.encode_new_in_memory_string(s.to_string(), su);
-                            encoded_global_local.push(Some(su))
-                        }
-                    } else {
-                        encoded_global_local.push(None);
-                    }
-                }
-            }
+        let mut ser = if t.is_lang_string() {
+            let value_ser = series
+                .struct_()
+                .unwrap()
+                .field_by_name(LANG_STRING_VALUE_FIELD)
+                .unwrap();
+            let mut value_encoded =
+                encode_single_string_series(&value_ser, &mut use_height, &mut new_enc, enc);
+            value_encoded.rename(PlSmallStr::from_str(LANG_STRING_VALUE_FIELD));
+            let lang_ser = series
+                .struct_()
+                .unwrap()
+                .field_by_name(LANG_STRING_LANG_FIELD)
+                .unwrap();
+            let mut lang_encoded =
+                encode_single_string_series(&lang_ser, &mut use_height, &mut new_enc, enc);
+            lang_encoded.rename(PlSmallStr::from_str(LANG_STRING_LANG_FIELD));
+            let mut df = DataFrame::new(
+                lang_encoded.len(),
+                vec![value_encoded.into_column(), lang_encoded.into_column()],
+            )
+            .unwrap();
+            df = df
+                .lazy()
+                .with_column(
+                    as_struct(vec![
+                        col(LANG_STRING_VALUE_FIELD),
+                        col(LANG_STRING_LANG_FIELD),
+                    ])
+                    .alias(original_name.as_str()),
+                )
+                .select(vec![col(original_name.as_str())])
+                .collect()
+                .unwrap();
+            df.column(original_name.as_str())
+                .unwrap()
+                .as_materialized_series()
+                .clone()
         } else {
-            for s in series.str().unwrap().iter() {
-                if let Some(s) = s {
-                    if let Some(u) = new_enc.maps.maybe_encode_in_memory_str(s) {
-                        encoded_global_local.push(Some(u))
-                    } else {
-                        use_height += 1;
-                        let su = use_height;
-                        new_enc.maps.encode_new_in_memory_string(s.to_string(), su);
-                        encoded_global_local.push(Some(su))
-                    }
-                } else {
-                    encoded_global_local.push(None);
-                }
-            }
-        }
+            let mut ser = encode_single_string_series(series, &mut use_height, &mut new_enc, enc);
+            ser.rename(original_name);
+            ser
+        };
 
         let local = if !new_enc.maps.is_empty() {
             let cat_type = CatType::from_base_rdf_node_type(t);
@@ -161,8 +187,6 @@ impl Cats {
         } else {
             None
         };
-        let mut ser = Series::from_iter(encoded_global_local);
-        ser.rename(original_name);
         (ser, local)
     }
 
@@ -202,7 +226,7 @@ impl Cats {
                 u,
                 RDFNodeState::from_bases(
                     BaseRDFNodeType::IRI,
-                    BaseCatState::CategoricalNative(false, None),
+                    BaseCatState::CategoricalNative(None),
                 ),
             )
         } else {
@@ -212,7 +236,7 @@ impl Cats {
                 u,
                 RDFNodeState::from_bases(
                     BaseRDFNodeType::IRI,
-                    BaseCatState::CategoricalNative(false, Some(LockedCats::new(l))),
+                    BaseCatState::CategoricalNative(Some(LockedCats::new(l))),
                 ),
             )
         }
@@ -225,7 +249,7 @@ impl Cats {
                 u,
                 RDFNodeState::from_bases(
                     BaseRDFNodeType::BlankNode,
-                    BaseCatState::CategoricalNative(false, None),
+                    BaseCatState::CategoricalNative(None),
                 ),
             )
         } else {
@@ -234,11 +258,66 @@ impl Cats {
                 u,
                 RDFNodeState::from_bases(
                     BaseRDFNodeType::BlankNode,
-                    BaseCatState::CategoricalNative(false, Some(LockedCats::new(l))),
+                    BaseCatState::CategoricalNative(Some(LockedCats::new(l))),
                 ),
             )
         }
     }
+}
+
+fn encode_single_string_series(
+    series: &Series,
+    use_height: &mut u32,
+    new_enc: &mut CatEncs,
+    enc: Option<&CatEncs>,
+) -> Series {
+    let maybe_encoded_global = if let Some(enc) = enc {
+        let strch = series.str().unwrap();
+        let strvec: Vec<_> = strch.iter().collect();
+        Some(enc.maybe_encode_strs(&strvec))
+    } else {
+        None
+    };
+
+    let mut encoded_global_local = Vec::with_capacity(series.len());
+
+    if let Some(enc) = maybe_encoded_global {
+        for (glob, s) in enc.into_iter().zip(series.str().unwrap().iter()) {
+            if let Some(glob) = glob {
+                encoded_global_local.push(Some(glob));
+            } else {
+                if let Some(s) = s {
+                    if let Some(u) = new_enc.maps.maybe_encode_in_memory_str(s) {
+                        encoded_global_local.push(Some(u))
+                    } else {
+                        *use_height += 1;
+                        let su = *use_height;
+                        new_enc.maps.encode_new_in_memory_string(s.to_string(), su);
+                        encoded_global_local.push(Some(su))
+                    }
+                } else {
+                    encoded_global_local.push(None);
+                }
+            }
+        }
+    } else {
+        for s in series.str().unwrap().iter() {
+            if let Some(s) = s {
+                if let Some(u) = new_enc.maps.maybe_encode_in_memory_str(s) {
+                    encoded_global_local.push(Some(u))
+                } else {
+                    *use_height += 1;
+                    let su = *use_height;
+                    new_enc.maps.encode_new_in_memory_string(s.to_string(), su);
+                    encoded_global_local.push(Some(su))
+                }
+            } else {
+                encoded_global_local.push(None);
+            }
+        }
+    }
+    let mut ser = Series::from_iter(encoded_global_local);
+    ser
 }
 
 pub fn encode_triples(
@@ -293,10 +372,10 @@ pub fn encode_triples(
         object_local_cat_uuid: object_local_cat_uuid.clone(),
     };
     let mut cats = vec![];
-    if let BaseCatState::CategoricalNative(_, Some(c)) = subject_cat_state {
+    if let BaseCatState::CategoricalNative(Some(c)) = subject_cat_state {
         cats.push(c);
     }
-    if let BaseCatState::CategoricalNative(_, Some(c)) = object_cat_state {
+    if let BaseCatState::CategoricalNative(Some(c)) = object_cat_state {
         cats.push(c);
     }
     (cats, enc_trip)
