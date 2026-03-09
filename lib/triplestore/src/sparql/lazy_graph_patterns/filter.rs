@@ -53,7 +53,6 @@ impl Triplestore {
         )?;
 
         output_solution_mappings = filter(output_solution_mappings, &expression_context)?;
-
         Ok(output_solution_mappings)
     }
 }

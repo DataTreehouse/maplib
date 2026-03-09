@@ -24,8 +24,8 @@ use polars_core::prelude::SortMultipleOptions;
 use rayon::iter::ParallelDrainRange;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use representation::cats::{
-    cat_encode_triples, decode_expr, CatTriples, Cats, LockedCats, OBJECT_RANK_COL_NAME,
-    SUBJECT_RANK_COL_NAME,
+    cat_encode_triples, decode_expr, maybe_decode_complex_expr, maybe_decode_expr, CatTriples,
+    Cats, LockedCats, OBJECT_RANK_COL_NAME, SUBJECT_RANK_COL_NAME,
 };
 use representation::multitype::set_struct_all_null_to_null_row;
 use representation::solution_mapping::{BaseCatState, EagerSolutionMappings};
@@ -633,7 +633,9 @@ pub fn prepare_add_triples_par(
                 partition_unpartitioned_predicate(
                     df,
                     &subject_type,
+                    &subject_cat_state,
                     &object_type,
+                    &object_cat_state,
                     predicate,
                     predicate_cat_state.as_ref(),
                     &cats,
@@ -711,23 +713,15 @@ pub fn sort_triples_add_rank(
     // Always sort S,O and deduplicate
     let mut lf = df.lazy();
     let mut subj_col_expr = col(SUBJECT_COL_NAME);
-    if matches!(subj_cat_state, BaseCatState::CategoricalNative(..)) {
-        subj_col_expr = decode_expr(
-            subj_col_expr,
-            subj_type.clone(),
-            subj_cat_state.get_local_cats(),
-            global_cats.clone(),
-        );
-    }
+    subj_col_expr = maybe_decode_complex_expr(
+        subj_col_expr,
+        subj_type,
+        subj_cat_state,
+        global_cats.clone(),
+    );
     let mut obj_col_expr = col(OBJECT_COL_NAME);
-    if matches!(obj_cat_state, BaseCatState::CategoricalNative(..)) {
-        obj_col_expr = decode_expr(
-            obj_col_expr,
-            obj_type.clone(),
-            obj_cat_state.get_local_cats(),
-            global_cats.clone(),
-        );
-    }
+    obj_col_expr =
+        maybe_decode_complex_expr(obj_col_expr, obj_type, obj_cat_state, global_cats.clone());
     lf = lf.with_column(
         subj_col_expr
             .rank(
@@ -775,7 +769,9 @@ pub fn sort_triples_add_rank(
 pub fn partition_unpartitioned_predicate(
     df: DataFrame,
     subject_type: &BaseRDFNodeType,
+    subject_state: &BaseCatState,
     object_type: &BaseRDFNodeType,
+    object_state: &BaseCatState,
     predicate: Option<NamedNode>,
     predicate_cat_state: Option<&BaseCatState>,
     global_cats: &Cats,
@@ -788,11 +784,11 @@ pub fn partition_unpartitioned_predicate(
     let map = HashMap::from([
         (
             SUBJECT_COL_NAME.to_string(),
-            subject_type.clone().into_default_input_rdf_node_state(),
+            RDFNodeState::from_bases(subject_type.clone(), subject_state.clone()),
         ),
         (
             OBJECT_COL_NAME.to_string(),
-            object_type.clone().into_default_input_rdf_node_state(),
+            RDFNodeState::from_bases(object_type.clone(), object_state.clone()),
         ),
     ]);
 
@@ -802,7 +798,6 @@ pub fn partition_unpartitioned_predicate(
         lf = lf.with_column(set_struct_all_null_to_null_row(col(c), t).alias(c));
     }
     let mut df = lf.collect().unwrap();
-
     if let Some(predicate) = predicate {
         df = df.select([SUBJECT_COL_NAME, OBJECT_COL_NAME]).unwrap();
         if let Some(df) = drop_nulls(df) {

@@ -7,19 +7,74 @@ use polars::datatypes::{DataType, Field, PlSmallStr};
 use polars::frame::column::ScalarColumn;
 use polars::frame::DataFrame;
 use polars::prelude::{
-    as_struct, col, Column, Expr, IntoColumn, IntoLazy, NamedFrom, SeriesSealed,
+    as_struct, col, Column, Expr, IntoColumn, IntoLazy, NamedFrom, PolarsResult, SeriesSealed,
 };
 use polars::series::Series;
-use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use rayon::iter::ParallelIterator;
 use std::borrow::Cow;
 
 impl CatEncs {
-    pub fn decode_series(&self, ser: &Series) -> Series {
+    // Does not break apart lang strings, assumes only series of u32 in input, not struct.
+    pub fn decode_series(
+        &self,
+        ser: &Series,
+        bt: &BaseRDFNodeType,
+        local_cats: Option<LockedCats>,
+    ) -> PolarsResult<Series> {
         let original_name = ser.name().clone();
-        let uch: Vec<_> = ser.u32().unwrap().iter().collect();
-        let decoded_vec = self.maps.decode_batch(uch.as_ref());
+        let mut uch: Vec<_> = ser.u32()?.iter().collect();
+        let mut need_global = true;
+        //Just a trick for the unlocked local to live long enough
+        let mut unlocked_local = None;
+        let decoded_local_vec = if let Some(local_cats) = &local_cats {
+            unlocked_local = Some(local_cats.read().unwrap());
+
+            if let Some(cat_encs) = unlocked_local.as_ref().unwrap().get_enc(bt) {
+                let local_decoded = cat_encs.maps.decode_batch(uch.as_ref());
+
+                let mut new_uch = Vec::with_capacity(uch.len());
+                let mut any_global = false;
+                for (u, d) in uch.into_iter().zip(&local_decoded) {
+                    if u.is_some() {
+                        if d.is_none() {
+                            any_global = true;
+                            new_uch.push(u)
+                        } else {
+                            new_uch.push(None);
+                        }
+                    } else {
+                        new_uch.push(u);
+                    }
+                }
+                need_global = any_global;
+                uch = new_uch;
+                Some(local_decoded)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+        let decoded_vec = if let Some(decoded_local_vec) = decoded_local_vec {
+            if need_global {
+                let decoded_global_vec = self.maps.decode_batch(uch.as_ref());
+                let mut decoded_vec = Vec::with_capacity(decoded_local_vec.len());
+                for (l, g) in decoded_local_vec.into_iter().zip(decoded_global_vec) {
+                    if l.is_some() {
+                        decoded_vec.push(l);
+                    } else {
+                        decoded_vec.push(g);
+                    }
+                }
+                decoded_vec
+            } else {
+                decoded_local_vec
+            }
+        } else {
+            self.maps.decode_batch(uch.as_ref())
+        };
         let new_ser = Series::new(original_name, decoded_vec);
-        new_ser
+        Ok(new_ser)
     }
 
     pub fn maybe_decode_string(&self, u: &u32) -> Option<Cow<'_, str>> {
@@ -66,138 +121,23 @@ impl Cats {
         NamedNode::new_unchecked(maybe_s.expect("Should be able to decode"))
     }
 
-    pub fn decode_of_type(&self, ser: &Series, bt: &BaseRDFNodeType) -> Series {
-        let ct = CatType::from_base_rdf_node_type(bt);
-        if let Some(enc) = self.cat_map.get(&ct) {
-            if bt.is_lang_string() {
-                let value_ser = ser
-                    .struct_()
-                    .unwrap()
-                    .field_by_name(LANG_STRING_VALUE_FIELD)
-                    .unwrap();
-                let lang_ser = ser
-                    .struct_()
-                    .unwrap()
-                    .field_by_name(LANG_STRING_LANG_FIELD)
-                    .unwrap();
-                let mut value_decoded = enc.decode_series(&value_ser);
-                value_decoded.rename(PlSmallStr::from_str(LANG_STRING_VALUE_FIELD));
-                let mut lang_decoded = enc.decode_series(&lang_ser);
-                lang_decoded.rename(PlSmallStr::from_str(LANG_STRING_LANG_FIELD));
-                let mut df = DataFrame::new(
-                    ser.len(),
-                    vec![value_decoded.into_column(), lang_decoded.into_column()],
-                )
-                .unwrap();
-                df = df
-                    .lazy()
-                    .with_column(
-                        as_struct(vec![
-                            col(LANG_STRING_VALUE_FIELD),
-                            col(LANG_STRING_LANG_FIELD),
-                        ])
-                        .alias(ser.name().as_str()),
-                    )
-                    .select([col(ser.name().as_str())])
-                    .collect()
-                    .unwrap();
-                let column = df.drop_in_place(ser.name().as_str()).unwrap();
-                column.as_materialized_series().clone()
-            } else {
-                enc.decode_series(ser)
-            }
-        } else {
-            unreachable!("Should never be called when type does not exist")
-        }
-    }
-
-    pub fn get_encs(&self, t: &BaseRDFNodeType) -> Vec<(&CatType, &CatEncs)> {
-        let encs = match t {
-            BaseRDFNodeType::IRI => {
-                let encs: Vec<_> = self
-                    .cat_map
-                    .iter()
-                    .map(|(k, v)| {
-                        if matches!(k, CatType::IRI) {
-                            Some((k, v))
-                        } else {
-                            None
-                        }
-                    })
-                    .filter(|x| x.is_some())
-                    .map(|x| x.unwrap())
-                    .collect();
-                encs
-            }
-            BaseRDFNodeType::BlankNode => {
-                if let Some(enc) = self.cat_map.get_key_value(&CatType::Blank) {
-                    vec![enc]
-                } else {
-                    vec![]
-                }
-            }
-            BaseRDFNodeType::Literal(nn) => {
-                if let Some(enc) = self.cat_map.get_key_value(&CatType::Literal(nn.clone())) {
-                    vec![enc]
-                } else {
-                    vec![]
-                }
-            }
-            BaseRDFNodeType::None => {
-                unreachable!("Should never happen")
-            }
-        };
-        encs
-    }
-
-    pub fn decode(
+    // Does not break apart lang strings, assumes only series of u32 in input, not struct.
+    pub fn decode_of_type(
         &self,
         ser: &Series,
-        t: &BaseRDFNodeType,
+        bt: &BaseRDFNodeType,
         local_cats: Option<LockedCats>,
-    ) -> Series {
-        let local = local_cats.as_ref().map(|x| x.read().unwrap());
-        if ser.dtype() != &DataType::UInt32 {
-            panic!("Series should have datatype UInt32 {:?}", ser);
-        }
-        let u32s = ser.u32().unwrap();
-        let us: Vec<_> = u32s.iter().collect();
+    ) -> PolarsResult<Series> {
+        let ct = CatType::from_base_rdf_node_type(bt);
+        // It is possible in some cases for the global enc not to exist for a datatype.
+        let dummy_enc = CatEncs::new_empty(None, bt);
+        let enc = self.cat_map.get(&ct).unwrap_or(&dummy_enc);
+        enc.decode_series(ser, bt, local_cats)
+    }
 
-        //Very important that we prefer the local encoding over the global encoding.
-        let mut encs = if let Some(local_cats) = &local {
-            local_cats.get_encs(t)
-        } else {
-            vec![]
-        };
-        encs.extend(self.get_encs(t));
-
-        let strings: Vec<_> = us
-            .par_iter()
-            .map(|u| {
-                let s = if let Some(u) = u {
-                    let mut s = None;
-                    for (_, e) in &encs {
-                        if let Some(st) = e.maybe_decode_string(&u) {
-                            s = Some(st);
-                            break;
-                        }
-                    }
-                    Some(s.expect("Expect all cats to resolve"))
-                } else {
-                    None
-                };
-                s
-            })
-            .collect();
-
-        let strs = strings.iter().map(|x| {
-            if let Some(x) = x {
-                Some(x.as_str())
-            } else {
-                None
-            }
-        });
-        Series::from_iter(strs)
+    pub fn get_enc(&self, t: &BaseRDFNodeType) -> Option<&CatEncs> {
+        let ct = CatType::from_base_rdf_node_type(t);
+        self.cat_map.get(&ct)
     }
 }
 
@@ -215,6 +155,41 @@ pub fn decode_column(
     df.drop_in_place(&name).unwrap()
 }
 
+// Also decodes structs (lang strings)
+pub fn maybe_decode_complex_expr(expr: Expr,
+                                 base_type: &BaseRDFNodeType,
+                                 base_state: &BaseCatState,
+                                 global_cats: LockedCats) -> Expr {
+    match base_state {
+        BaseCatState::CategoricalNative(local_cats) => {
+            if base_type.is_lang_string() {
+                let value_decode = decode_expr(
+                    expr.clone().struct_().field_by_name(LANG_STRING_VALUE_FIELD),
+                    base_type.clone(),
+                    local_cats.as_ref().cloned(),
+                    global_cats.clone(),
+                );
+                let lang_decode = decode_expr(
+                    expr.struct_().field_by_name(LANG_STRING_LANG_FIELD),
+                    base_type.clone(),
+                    local_cats.as_ref().cloned(),
+                    global_cats,
+                );
+                as_struct(vec![value_decode.alias(LANG_STRING_VALUE_FIELD), lang_decode.alias(LANG_STRING_LANG_FIELD)])
+            } else {
+                decode_expr(
+                    expr,
+                    base_type.clone(),
+                    local_cats.as_ref().cloned(),
+                    global_cats,
+                )
+            }
+        },
+        BaseCatState::String | BaseCatState::NonString => expr,
+    }
+}
+
+// Does not break apart lang strings, assumes only series of u32 in input, not struct.
 pub fn maybe_decode_expr(
     expr: Expr,
     base_type: &BaseRDFNodeType,
@@ -232,6 +207,7 @@ pub fn maybe_decode_expr(
     }
 }
 
+// Does not break apart lang strings, assumes only series of u32 in input, not struct.
 pub fn optional_maybe_decode_expr(
     expr: Expr,
     base_type: &BaseRDFNodeType,
@@ -249,6 +225,7 @@ pub fn optional_maybe_decode_expr(
     }
 }
 
+// Does not break apart lang strings, assumes only series of u32 in input, not struct.
 pub fn decode_expr(
     expr: Expr,
     base_rdf_node_type: BaseRDFNodeType,
@@ -262,19 +239,19 @@ pub fn decode_expr(
             let len = x.len();
             let mut s = match x {
                 Column::Series(x) => {
-                    let ser = global_cats.decode(
+                    let ser = global_cats.decode_of_type(
                         x.as_series(),
                         &base_rdf_node_type,
                         local_cats.as_ref().map(|x| x.clone()),
-                    );
+                    )?;
                     ser.into_column()
                 }
                 Column::Scalar(s) => {
-                    let s = global_cats.decode(
+                    let s = global_cats.decode_of_type(
                         &s.as_single_value_series(),
                         &base_rdf_node_type,
                         local_cats.as_ref().map(|x| x.clone()),
-                    );
+                    )?;
                     Column::Scalar(ScalarColumn::from_single_value_series(s, len))
                 }
             };

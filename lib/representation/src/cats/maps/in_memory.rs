@@ -354,9 +354,18 @@ impl PrefixCompressedCatMapsInMemory {
     }
 
     pub fn decode_batch(&self, v: &[Option<u32>]) -> Vec<Option<Cow<'_, str>>> {
-        let decoded_vec_iter = v
-            .into_par_iter()
-            .map(|x| x.map(|x| Cow::Owned(self.rev_map.get(&x).unwrap().to_string())));
+        // We must tolerate missing values here, as values may be in global instead of local
+        let decoded_vec_iter = v.into_par_iter().map(|u| {
+            if let Some(u) = u {
+                if let Some(r) = self.rev_map.get(&u) {
+                    Some(Cow::Owned(r.to_string()))
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        });
         decoded_vec_iter.collect()
     }
 
@@ -550,9 +559,18 @@ impl UncompressedCatMapsInMemory {
     }
 
     pub fn decode_batch(&self, v: &[Option<u32>]) -> Vec<Option<Cow<'_, str>>> {
-        let decoded_vec_iter = v
-            .into_par_iter()
-            .map(|x| x.map(|x| Cow::Borrowed(self.rev_map.get(&x).unwrap().as_str())));
+        // We must tolerate missing values here, as values may be in global instead of local
+        let decoded_vec_iter = v.into_par_iter().map(|u| {
+            if let Some(u) = u {
+                if let Some(r) = self.rev_map.get(&u) {
+                    Some(Cow::Borrowed(r.as_str()))
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        });
         decoded_vec_iter.collect()
     }
 

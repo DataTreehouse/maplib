@@ -4,7 +4,6 @@
 use crate::triples_write::serializers::serializer_for;
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::NamedNode;
-use polars::polars_utils::index::Bounded;
 use polars_core::prelude::*;
 use polars_core::POOL;
 use rayon::prelude::*;

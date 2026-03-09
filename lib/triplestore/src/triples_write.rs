@@ -7,6 +7,7 @@ use polars_core::datatypes::DataType;
 use polars_core::frame::DataFrame;
 use polars_core::prelude::IntoColumn;
 use polars_core::POOL;
+use representation::cats::maybe_decode_complex_expr;
 use representation::dataset::NamedGraph;
 use representation::polars_to_rdf::{
     date_column_to_strings, datetime_column_to_strings, global_df_as_triples,
@@ -51,47 +52,38 @@ impl Triplestore {
                             (OBJECT_COL_NAME.to_string(), object_type.clone()),
                         ])
                     };
-                    for (lf, _) in tt.get_lazy_frames(&None, &None)? {
-                        let mut df = lf.collect().unwrap();
-                        if subject_type.stored_cat() {
-                            let cats = self.global_cats.read()?;
-                            let ser = cats.decode_of_type(
-                                &df.column(SUBJECT_COL_NAME)
-                                    .unwrap()
-                                    .as_materialized_series_maintain_scalar(),
+                    for (mut lf, _) in tt.get_lazy_frames(&None, &None)? {
+                        lf = lf.with_columns([
+                            maybe_decode_complex_expr(
+                                col(SUBJECT_COL_NAME),
                                 subject_type,
-                            );
-                            df.with_column(ser.into_column()).unwrap();
-                        }
-                        if object_type.stored_cat() {
-                            let cats = self.global_cats.read()?;
-                            let ser = cats.decode_of_type(
-                                &df.column(OBJECT_COL_NAME)
-                                    .unwrap()
-                                    .as_materialized_series_maintain_scalar(),
-                                &object_type,
-                            );
-                            df.with_column(ser.into_column()).unwrap();
-                        }
+                                &subject_type.default_stored_cat_state(),
+                                self.global_cats.clone(),
+                            )
+                            .alias(SUBJECT_COL_NAME),
+                            maybe_decode_complex_expr(
+                                col(OBJECT_COL_NAME),
+                                object_type,
+                                &object_type.default_stored_cat_state(),
+                                self.global_cats.clone(),
+                            )
+                            .alias(OBJECT_COL_NAME),
+                        ]);
                         if object_type.is_lang_string() {
-                            df = df
-                                .lazy()
+                            lf = lf
                                 .unnest(by_name([OBJECT_COL_NAME], true, false), None)
                                 .select([
                                     col(SUBJECT_COL_NAME),
                                     col(LANG_STRING_VALUE_FIELD),
                                     col(LANG_STRING_LANG_FIELD),
-                                ])
-                                .collect()
-                                .unwrap();
+                                ]);
                         } else {
-                            df = df
-                                .lazy()
-                                .select([col(SUBJECT_COL_NAME), col(OBJECT_COL_NAME)])
-                                .collect()
-                                .unwrap();
-                            convert_datelike_to_string(&mut df, OBJECT_COL_NAME);
+                            lf = lf.select([col(SUBJECT_COL_NAME), col(OBJECT_COL_NAME)]);
                         };
+                        let mut df = lf.collect().unwrap();
+                        if !object_type.is_lang_string() {
+                            convert_datelike_to_string(&mut df, OBJECT_COL_NAME);
+                        }
 
                         fast_ntriples::write_triples_in_df(
                             buf,

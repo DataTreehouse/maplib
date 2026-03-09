@@ -1,6 +1,7 @@
 use file_io::FileIOError;
 use fts::FtsError;
 use oxrdfio::RdfSyntaxError;
+use polars::prelude::PolarsError;
 use std::io;
 use std::sync::PoisonError;
 use thiserror::Error;
@@ -53,6 +54,8 @@ pub enum TriplestoreError {
     InvalidPrefixIRI(String),
     #[error("Please add the document string corresponding to the url to known_contexts: {0}")]
     MissingContext(String),
+    #[error("Error decoding categorical encoding {0}")]
+    DecodeError(PolarsError),
 }
 
 impl<T> From<PoisonError<T>> for TriplestoreError {

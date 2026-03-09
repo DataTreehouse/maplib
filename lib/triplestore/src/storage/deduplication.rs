@@ -37,10 +37,11 @@ impl Triples {
 
         if let Some(new_df) = new_df {
             // Here we decide if segments should be compacted
-            let mut should_compact = self.segments.len() > 10 && self
-                .height
-                .saturating_mul(self.segments.len().saturating_mul(self.segments.len()))
-                > 100_000;
+            let mut should_compact = self.segments.len() > 10
+                && self
+                    .height
+                    .saturating_mul(self.segments.len().saturating_mul(self.segments.len()))
+                    > 100_000;
             let new_segment = TriplesSegment::new(
                 new_df.clone(),
                 storage_folder,

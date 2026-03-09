@@ -331,7 +331,8 @@ impl TriplesSegment {
                 let subject_ser = df.column(SUBJECT_COL_NAME).unwrap();
                 let vs = global_cats
                     .read()?
-                    .decode_of_type(subject_ser.as_materialized_series(), subject_type);
+                    .decode_of_type(subject_ser.as_materialized_series(), subject_type, None)
+                    .map_err(|x| TriplestoreError::DecodeError(x))?;
                 for found_s in vs.str().unwrap() {
                     let found_s = found_s.unwrap();
                     if s < found_s {
@@ -377,30 +378,38 @@ impl TriplesSegment {
         if height > 0 {
             let lf = self.get_subject_sort_lazy_frame()?;
             let lf_subj = lf.clone().select([col(SUBJECT_COL_NAME)]);
-            let subjects_start = global_cats.read()?.decode_of_type(
-                &lf_subj
-                    .clone()
-                    .slice(from_i as i64, (OFFSET_STEP * 2) as u32)
-                    .collect()
-                    .unwrap()
-                    .column(SUBJECT_COL_NAME)
-                    .unwrap()
-                    .as_materialized_series(),
-                subject_type,
-            );
+            let subjects_start = global_cats
+                .read()?
+                .decode_of_type(
+                    &lf_subj
+                        .clone()
+                        .slice(from_i as i64, (OFFSET_STEP * 2) as u32)
+                        .collect()
+                        .unwrap()
+                        .column(SUBJECT_COL_NAME)
+                        .unwrap()
+                        .as_materialized_series(),
+                    subject_type,
+                    None,
+                )
+                .map_err(|x| TriplestoreError::DecodeError(x))?;
 
             to_i = to_i.saturating_sub(OFFSET_STEP * 2);
             // The to_i may be exactly at the sparse index, so without + 1 we may miss it.
-            let subjects_end = global_cats.read()?.decode_of_type(
-                &lf_subj
-                    .slice(to_i as i64, (OFFSET_STEP * 2 + 1) as u32)
-                    .collect()
-                    .unwrap()
-                    .column(SUBJECT_COL_NAME)
-                    .unwrap()
-                    .as_materialized_series(),
-                subject_type,
-            );
+            let subjects_end = global_cats
+                .read()?
+                .decode_of_type(
+                    &lf_subj
+                        .slice(to_i as i64, (OFFSET_STEP * 2 + 1) as u32)
+                        .collect()
+                        .unwrap()
+                        .column(SUBJECT_COL_NAME)
+                        .unwrap()
+                        .as_materialized_series(),
+                    subject_type,
+                    None,
+                )
+                .map_err(|x| TriplestoreError::DecodeError(x))?;
 
             // case exact:
             // from = "c"

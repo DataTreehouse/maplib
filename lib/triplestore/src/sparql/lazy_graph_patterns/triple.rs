@@ -3,6 +3,7 @@ use crate::sparql::errors::SparqlError;
 use representation::query_context::Context;
 use representation::solution_mapping::{BaseCatState, SolutionMappings};
 
+use crate::errors::TriplestoreError;
 use crate::sparql::QuerySettings;
 use oxrdf::{NamedNode, Subject, Term};
 use polars::prelude::{by_name, IntoLazy};
@@ -104,8 +105,9 @@ impl Triplestore {
                             let bs = dt.get_base_state().unwrap();
                             let cats = self.global_cats.read()?;
                             if matches!(bs, BaseCatState::CategoricalNative(..)) {
-                                predicates_series =
-                                    cats.decode(&predicates_series, bt, bs.get_local_cats());
+                                predicates_series = cats
+                                    .decode_of_type(&predicates_series, bt, bs.get_local_cats())
+                                    .map_err(|x| TriplestoreError::DecodeError(x))?;
                             }
 
                             let predicates_iter = predicates_series.iter();

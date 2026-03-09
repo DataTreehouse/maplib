@@ -131,7 +131,7 @@ impl Cats {
             }
         };
 
-        let enc = self.get_encs(t).pop().map(|(_, enc)| enc);
+        let enc = self.get_enc(t);
         // Local cat encs are always in memory
         let mut new_enc = CatEncs::new_empty(None, t);
 
