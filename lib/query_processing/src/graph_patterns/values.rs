@@ -1,12 +1,12 @@
 use oxrdf::{Term, Variable};
-use polars::datatypes::PlSmallStr;
+use polars::datatypes::{DataType, PlSmallStr};
 use polars::frame::DataFrame;
-use polars::prelude::{as_struct, col, IntoColumn, IntoLazy};
+use polars::prelude::{as_struct, col, Column, IntoColumn, IntoLazy};
 use representation::polars_to_rdf::particular_opt_term_vec_to_series;
 use representation::solution_mapping::EagerSolutionMappings;
 use representation::{
-    get_ground_term_datatype_ref, BaseRDFNodeTypeRef, RDFNodeState, LANG_STRING_LANG_FIELD,
-    LANG_STRING_VALUE_FIELD,
+    get_ground_term_datatype_ref, BaseRDFNodeType, BaseRDFNodeTypeRef, RDFNodeState,
+    LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD,
 };
 use spargebra::term::GroundTerm;
 use std::collections::HashMap;
@@ -33,7 +33,6 @@ pub fn values_pattern(
                         map.insert(dt.clone(), std::iter::repeat_n(None, i).collect());
                         map.get_mut(&dt).unwrap()
                     };
-                    //TODO: Stop copying data here!!
                     #[allow(unreachable_patterns)]
                     let term = match gt {
                         GroundTerm::NamedNode(nn) => Term::NamedNode(nn.clone()),
@@ -120,10 +119,19 @@ pub fn values_pattern(
                 .drop_in_place(variables.get(i).unwrap().as_str())
                 .unwrap();
             (t, column)
-        } else {
+        } else if types_columns.len() == 1 {
             let (t, mut column) = types_columns.pop().unwrap();
             column.rename(PlSmallStr::from_str(variables.get(i).unwrap().as_str()));
             (t.into_default_input_rdf_node_state(), column)
+        } else {
+            let column = Column::new_empty(
+                PlSmallStr::from_str(variables.get(i).unwrap().as_str()),
+                &BaseRDFNodeType::None.default_input_polars_data_type(),
+            );
+            (
+                BaseRDFNodeType::None.into_default_input_rdf_node_state(),
+                column,
+            )
         };
         height = column.len();
         all_columns.push(column);
