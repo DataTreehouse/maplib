@@ -1,6 +1,6 @@
 [package]
 name = "py_maplib"
-version = "0.19.20"
+version = "0.19.21"
 edition.workspace = true
 
 [features]
