@@ -58,9 +58,9 @@ impl PyValidationReport {
                 .inner
                 .concatenated_results()
                 .map_err(|x| PyMaplibError::from(MaplibError::from(x)))?;
-            let cats = self.inner.cats.as_ref().unwrap().clone();
             match sm {
                 Some(sm) => {
+                    let cats = self.inner.cats.as_ref().unwrap().clone();
                     let EagerSolutionMappings {
                         mut mappings,
                         mut rdf_node_types,
