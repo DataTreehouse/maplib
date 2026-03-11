@@ -62,3 +62,26 @@ def test_read_jelly():
     print(expected)
 
     assert_frame_equal(df, expected)
+
+def test_jelly_correct_graph():
+    m = Model()
+    m.read(TESTDATA_PATH / "sunspots.ttl")
+    filename = TESTDATA_PATH / "output.jelly"
+    m.write(filename, format="jelly")
+
+    m2 = Model()
+    m2.read(filename, format="jelly", graph="http://example.net/mygraph")
+
+    df = m2.query("""
+    SELECT * WHERE {
+        GRAPH <http://example.net/mygraph> {
+            ?a ?b ?c .
+        }
+    }
+    """)
+    assert df.height > 0
+
+    df2 = m2.query("""
+        SELECT ?s ?p ?o WHERE { ?s ?p ?o . } ORDER BY ?s ?p ?o
+    """)
+    assert df2.height == 0

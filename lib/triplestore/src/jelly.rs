@@ -507,7 +507,7 @@ impl Triplestore {
                         subject_type: subject_type.clone(),
                         object_type,
                         predicate: Some(predicate.clone()),
-                        graph: Default::default(),
+                        graph: graph.clone(),
                         subject_cat_state: BaseCatState::CategoricalNative(false, None),
                         object_cat_state,
                         predicate_cat_state: None,
