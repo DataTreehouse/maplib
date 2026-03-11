@@ -156,15 +156,19 @@ pub fn decode_column(
 }
 
 // Also decodes structs (lang strings)
-pub fn maybe_decode_complex_expr(expr: Expr,
-                                 base_type: &BaseRDFNodeType,
-                                 base_state: &BaseCatState,
-                                 global_cats: LockedCats) -> Expr {
+pub fn maybe_decode_complex_expr(
+    expr: Expr,
+    base_type: &BaseRDFNodeType,
+    base_state: &BaseCatState,
+    global_cats: LockedCats,
+) -> Expr {
     match base_state {
         BaseCatState::CategoricalNative(local_cats) => {
             if base_type.is_lang_string() {
                 let value_decode = decode_expr(
-                    expr.clone().struct_().field_by_name(LANG_STRING_VALUE_FIELD),
+                    expr.clone()
+                        .struct_()
+                        .field_by_name(LANG_STRING_VALUE_FIELD),
                     base_type.clone(),
                     local_cats.as_ref().cloned(),
                     global_cats.clone(),
@@ -175,7 +179,10 @@ pub fn maybe_decode_complex_expr(expr: Expr,
                     local_cats.as_ref().cloned(),
                     global_cats,
                 );
-                as_struct(vec![value_decode.alias(LANG_STRING_VALUE_FIELD), lang_decode.alias(LANG_STRING_LANG_FIELD)])
+                as_struct(vec![
+                    value_decode.alias(LANG_STRING_VALUE_FIELD),
+                    lang_decode.alias(LANG_STRING_LANG_FIELD),
+                ])
             } else {
                 decode_expr(
                     expr,
@@ -184,7 +191,7 @@ pub fn maybe_decode_complex_expr(expr: Expr,
                     global_cats,
                 )
             }
-        },
+        }
         BaseCatState::String | BaseCatState::NonString => expr,
     }
 }

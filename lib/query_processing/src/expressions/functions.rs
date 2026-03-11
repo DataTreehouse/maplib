@@ -1588,11 +1588,10 @@ pub fn func_expression(
                             bs,
                             global_cats.clone(),
                         );
-                        exprs.push(str_starts_ends_contains(
-                            decoded,
-                            second_decoded.clone(),
-                            func,
-                        ))
+                        exprs.push(
+                            str_starts_ends_contains(decoded, second_decoded.clone(), func)
+                                .alias(outer_context.as_str()),
+                        );
                     }
                 }
                 if exprs.is_empty() {

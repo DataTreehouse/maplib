@@ -224,7 +224,7 @@ impl Triplestore {
                         return Err(SparqlError::InterruptSignal)
                     }
                     Err(e) => {
-                        panic!("Error {e}");
+                        return Err(SparqlError::QueryExecutionError(e.to_string()));
                     }
                 }
             }
@@ -277,7 +277,7 @@ impl Triplestore {
                         return Err(SparqlError::InterruptSignal)
                     }
                     Err(e) => {
-                        panic!("Error {e}");
+                        return Err(SparqlError::QueryExecutionError(e.to_string()));
                     }
                 }
             }
@@ -303,7 +303,8 @@ impl Triplestore {
         transient: bool,
         streaming: bool,
         query_settings: &QuerySettings,
-        graph: &NamedGraph,
+        source_graph: &NamedGraph,
+        target_graph: &NamedGraph,
         prefixes: Option<&HashMap<String, NamedNode>>,
         debug_no_results: bool,
     ) -> Result<Vec<NewTriples>, SparqlError> {
@@ -314,15 +315,17 @@ impl Triplestore {
                 parameters,
                 streaming,
                 query_settings,
-                Some(graph),
+                Some(source_graph),
                 debug_no_results,
             )?;
             let r = match res.kind {
                 QueryResultKind::Select(_) => {
-                    panic!("Should never happen")
+                    return Err(SparqlError::QueryExecutionError(
+                        "Got SELECT query when CONSTRUCT was expected".to_string(),
+                    ))
                 }
                 QueryResultKind::Construct(dfs) => {
-                    self.insert_construct_result(dfs, transient, graph)
+                    self.insert_construct_result(dfs, transient, target_graph)
                 }
             };
             r

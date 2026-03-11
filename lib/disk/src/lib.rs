@@ -1,9 +1,9 @@
+use arrow::array::RecordBatch;
+use nohash_hasher::NoHashHasher;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::hash::BuildHasherDefault;
 use std::path::Path;
-use arrow::array::RecordBatch;
-use nohash_hasher::NoHashHasher;
 
 #[derive(Clone, Debug)]
 pub struct CatMapsOnDisk {}

@@ -27,6 +27,7 @@ impl Triplestore {
             false,
             &qs,
             graph,
+            graph,
             None,
             false,
         )

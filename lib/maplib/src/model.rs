@@ -311,6 +311,39 @@ impl Model {
             .map_err(|x| x.into())
     }
 
+    #[instrument(skip_all)]
+    pub fn insert(
+        &mut self,
+        query: &str,
+        parameters: &Option<HashMap<String, EagerSolutionMappings>>,
+        source_graph: &NamedGraph,
+        include_source_transient: bool,
+        target_graph: &NamedGraph,
+        insert_target_transient: bool,
+        streaming: bool,
+        max_rows: Option<usize>,
+        debug_no_results: bool,
+    ) -> Result<Vec<NewTriples>, MaplibError> {
+        let query_settings = QuerySettings {
+            include_transient: include_source_transient,
+            max_rows,
+            strict_project: false,
+        };
+        self.triplestore
+            .insert(
+                query,
+                parameters,
+                insert_target_transient,
+                streaming,
+                &query_settings,
+                source_graph,
+                target_graph,
+                Some(&self.prefixes),
+                debug_no_results,
+            )
+            .map_err(|x| x.into())
+    }
+
     pub fn update(
         &mut self,
         update: &str,

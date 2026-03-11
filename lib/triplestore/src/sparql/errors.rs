@@ -34,6 +34,8 @@ pub enum SparqlError {
     GroupByWithUndefinedVariable(Variable, GraphPattern),
     #[error("Functionality not supported: {0}")]
     NotSupportedYet(String),
+    #[error("SPARQL execution error: {0}")]
+    QueryExecutionError(String),
 }
 
 impl<T> From<PoisonError<T>> for SparqlError {
