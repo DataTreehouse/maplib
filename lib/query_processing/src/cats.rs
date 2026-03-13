@@ -7,6 +7,7 @@ use std::hash::BuildHasherDefault;
 use std::ops::Deref;
 use std::sync::Arc;
 use dashmap::DashMap;
+use rayon::iter::{IntoParallelRefIterator, ParallelExtend, ParallelIterator};
 
 pub fn create_compatible_cats(
     expressions: Vec<Option<Expr>>,
@@ -62,7 +63,7 @@ pub fn create_compatible_cats(
                             let mut renc_map =
                                 DashMap::with_capacity_and_hasher(2, BuildHasherDefault::default());
                             for renc in iri_renc {
-                                renc_map.extend(renc.cat_map.iter().map(|x| (*x.key(), *x.value())))
+                                renc_map.par_extend(renc.cat_map.par_iter().map(|x| (*x.key(), *x.value())))
                             }
                             Some(CatReEnc {
                                 cat_map: Arc::new(renc_map),

@@ -1,11 +1,4 @@
 mod eu;
-use quick_protobuf::{serialize_into_vec, BytesReader, Writer};
-use std::borrow::Cow;
-use std::cmp;
-use std::collections::{HashMap, HashSet};
-use std::io::Write;
-use std::sync::Arc;
-use std::time::Instant;
 use super::{TriplesToAdd, Triplestore};
 use crate::errors::TriplestoreError;
 use crate::jelly::eu::ostrzyciel::jelly::core::proto::v1::mod_RdfLiteral::OneOfliteralKind;
@@ -17,6 +10,7 @@ use crate::jelly::eu::ostrzyciel::jelly::core::proto::v1::{
     LogicalStreamType, PhysicalStreamType, RdfDatatypeEntry, RdfIri, RdfLiteral, RdfNameEntry,
     RdfPrefixEntry, RdfStreamFrame, RdfStreamOptions, RdfStreamRow, RdfTriple,
 };
+use fastbloom::BloomFilter;
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::NamedNode;
 use polars::prelude::{as_struct, col, IntoLazy, LiteralValue, PlSmallStr};
@@ -24,8 +18,8 @@ use polars_core::datatypes::UInt32Chunked;
 use polars_core::frame::DataFrame;
 use polars_core::prelude::{Column, IntoColumn, Scalar};
 use polars_core::POOL;
+use quick_protobuf::{serialize_into_vec, BytesReader, Writer};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
-use tracing::trace;
 use representation::cats::maps::in_memory::{
     CatMapsInMemory, PrefixCompressedCatMapsInMemory, PrefixCompressedString,
     UncompressedCatMapsInMemory,
@@ -43,13 +37,19 @@ use representation::{
     BaseRDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD, OBJECT_COL_NAME,
     SUBJECT_COL_NAME,
 };
+use std::borrow::Cow;
+use std::cmp;
+use std::collections::{HashMap, HashSet};
+use std::io::Write;
+use std::sync::Arc;
+use std::time::Instant;
+use tracing::trace;
 
 const JELLY_FRAME_SIZE: usize = 1024;
 const IRI_U32: u32 = u32::MAX;
-const BLANK_U32: u32 = u32::MAX -1 ;
+const BLANK_U32: u32 = u32::MAX - 1;
 const STRING_U32: u32 = u32::MAX - 2;
 const LANG_STRING_U32: u32 = u32::MAX - 3;
-
 
 impl Triplestore {
     pub fn parse_jelly(
@@ -65,6 +65,7 @@ impl Triplestore {
         })?;
         let mut prefix_map: HashMap<u32, Arc<String>> = Default::default();
         let mut name_map: HashMap<u32, Arc<String>> = Default::default();
+        let mut b_filter = BloomFilter::with_false_pos(0.001).expected_items(1000000);
         let mut iri_map: HashMap<(u32, u32), u32> = HashMap::new();
         let mut iri_rev_map: HashMap<u32, (u32, u32)> = HashMap::new();
         let mut blank_map: HashMap<String, u32> = HashMap::new();
@@ -73,6 +74,7 @@ impl Triplestore {
             u32,
             HashMap<bool, HashMap<u32, (Vec<LiteralValue>, Vec<LiteralValue>, Vec<LiteralValue>)>>,
         > = Default::default();
+        let mut filter_total = std::time::Duration::ZERO;
         while !reader.is_eof() {
             let frame: RdfStreamFrame = reader.read_message(slice).map_err(|x| {
                 TriplestoreError::ReadJellyError(format!("Error reading row: {}", x))
@@ -158,13 +160,23 @@ impl Triplestore {
                                     object_map.get_mut(&IRI_U32).expect("Just inserted")
                                 };
                                 let k = (i.prefix_id, i.name_id);
-                                let iri_id = if let Some(iri_id) = iri_map.get(&k) {
-                                    *iri_id
+                                let filer_now = Instant::now();
+                                let iri_id = if b_filter.contains(&k) {
+                                    if let Some(iri_id) = iri_map.get(&k) {
+                                        *iri_id
+                                    } else {
+                                        let v = iri_map.len() as u32;
+                                        iri_map.insert(k, v);
+                                        b_filter.insert(&k);
+                                        v
+                                    }
                                 } else {
                                     let v = iri_map.len() as u32;
                                     iri_map.insert(k, v);
+                                    b_filter.insert(&k);
                                     v
                                 };
+                                filter_total += filer_now.elapsed();
                                 (LiteralValue::Scalar(Scalar::from(iri_id)), None, vecs)
                             }
                             OneOfobject::o_bnode(b) => {
@@ -315,6 +327,7 @@ impl Triplestore {
                 );
             }
         }
+        println!("filter total: {}", filter_total.as_secs_f32());
         let iri_cat_enc = CatEncs {
             maps: CatMaps::InMemory(CatMapsInMemory::Compressed(iri_cat_enc)),
         };
@@ -471,8 +484,7 @@ impl Triplestore {
                     };
                     let mut lf = df.lazy();
                     if let Some(reenc) = sub_reenc {
-                        lf = reenc.clone()
-                            .re_encode(lf, SUBJECT_COL_NAME, false);
+                        lf = reenc.clone().re_encode(lf, SUBJECT_COL_NAME, false);
                     }
 
                     let obj_reenc = if object_type.is_iri() || object_type.is_blank_node() {
@@ -489,13 +501,9 @@ impl Triplestore {
                         lf = reenc.clone().re_encode(lf, OBJECT_COL_NAME, false);
                     }
 
-                    df = lf.collect()
-                        .map_err(|e| {
-                            TriplestoreError::ReadJellyError(format!(
-                                "Error remapping: {}",
-                                e
-                            ))
-                        })?;
+                    df = lf.collect().map_err(|e| {
+                        TriplestoreError::ReadJellyError(format!("Error remapping: {}", e))
+                    })?;
 
                     let object_cat_state = if object_type.is_iri() || object_type.is_blank_node() {
                         BaseCatState::CategoricalNative(false, None)
@@ -518,7 +526,10 @@ impl Triplestore {
         }
         let start_add_triples_vec = Instant::now();
         self.add_triples_vec(triples_to_add, false)?;
-        trace!("Adding triples vec took {}", start_add_triples_vec.elapsed().as_secs_f32());
+        trace!(
+            "Adding triples vec took {}",
+            start_add_triples_vec.elapsed().as_secs_f32()
+        );
 
         Ok(())
     }

@@ -70,6 +70,7 @@ tracing-log = "0.2"
 itoa = "1.0.15"
 ryu = "1.0.20"
 dashmap = { version = "7.0.0-rc2", features = ["rayon"] }
+fastbloom = "0.17.0"
 
 #dev-dependencies
 nohash-hasher = "0.2.0"
