@@ -74,7 +74,6 @@ impl Triplestore {
             u32,
             HashMap<bool, HashMap<u32, (Vec<LiteralValue>, Vec<LiteralValue>, Vec<LiteralValue>)>>,
         > = Default::default();
-        let mut filter_total = std::time::Duration::ZERO;
         while !reader.is_eof() {
             let frame: RdfStreamFrame = reader.read_message(slice).map_err(|x| {
                 TriplestoreError::ReadJellyError(format!("Error reading row: {}", x))
@@ -160,7 +159,6 @@ impl Triplestore {
                                     object_map.get_mut(&IRI_U32).expect("Just inserted")
                                 };
                                 let k = (i.prefix_id, i.name_id);
-                                let filer_now = Instant::now();
                                 let iri_id = if b_filter.contains(&k) {
                                     if let Some(iri_id) = iri_map.get(&k) {
                                         *iri_id
@@ -176,7 +174,6 @@ impl Triplestore {
                                     b_filter.insert(&k);
                                     v
                                 };
-                                filter_total += filer_now.elapsed();
                                 (LiteralValue::Scalar(Scalar::from(iri_id)), None, vecs)
                             }
                             OneOfobject::o_bnode(b) => {
@@ -327,7 +324,6 @@ impl Triplestore {
                 );
             }
         }
-        println!("filter total: {}", filter_total.as_secs_f32());
         let iri_cat_enc = CatEncs {
             maps: CatMaps::InMemory(CatMapsInMemory::Compressed(iri_cat_enc)),
         };
