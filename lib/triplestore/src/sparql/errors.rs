@@ -36,6 +36,8 @@ pub enum SparqlError {
     NotSupportedYet(String),
     #[error("SPARQL execution error: {0}")]
     QueryExecutionError(String),
+    #[error("PValues error: {0}")]
+    PValuesError(String),
 }
 
 impl<T> From<PoisonError<T>> for SparqlError {
