@@ -57,7 +57,7 @@ impl CatMapsOnDisk {
         unimplemented!("Contact Data Treehouse to try!")
     }
 
-    pub fn rank_map(&self, _us: HashSet<u32>) -> HashMap<u32, u32> {
+    pub fn rank_map(&self, _us: &HashSet<u32>) -> HashMap<u32, u32> {
         unimplemented!("Contact Data Treehouse to try!")
     }
 
