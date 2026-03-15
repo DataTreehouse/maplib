@@ -1,12 +1,12 @@
 use crate::errors::TriplestoreError;
 use crate::sparql::errors::SparqlError;
 use crate::storage::Triples;
-use crate::Triplestore;
+use crate::{add_rank_sort_triples, Triplestore};
 use oxrdf::NamedNode;
 use polars::prelude::{col, concat, IntoLazy, JoinArgs, JoinType, MaintainOrderJoin, UnionArgs};
 use polars_core::datatypes::AnyValue;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
-use representation::cats::{cat_encode_triples, CatTriples, Cats, EncodedTriples};
+use representation::cats::{cat_encode_triples, CatTriples, EncodedTriples, LockedCats};
 use representation::dataset::NamedGraph;
 use representation::multitype::{set_struct_all_null_to_null_row, split_df_multicols};
 use representation::solution_mapping::EagerSolutionMappings;
@@ -21,14 +21,18 @@ impl Triplestore {
         sms: Vec<(EagerSolutionMappings, Option<NamedNode>)>,
         graph: &NamedGraph,
     ) -> Result<(), SparqlError> {
-        let cats = self.global_cats.read().unwrap();
         let sms: Vec<_> = sms
             .into_par_iter()
-            .map(|(x, y)| partition_by_global_predicate_col(x, y, &cats))
+            .map(|(x, y)| {
+                partition_by_global_predicate_col(x, y, self.global_cats.clone())
+            })
             .flatten()
             .collect();
-        let global_cat_triples = triples_solution_mappings_to_global_cat_triples(sms, &cats, graph);
-        drop(cats);
+        let global_cat_triples = triples_solution_mappings_to_global_cat_triples(
+            sms,
+            self.global_cats.clone(),
+            graph,
+        )?;
         if !global_cat_triples.is_empty() {
             self.delete_triples_vec(global_cat_triples, graph)
                 .map_err(SparqlError::TriplestoreError)?;
@@ -63,6 +67,12 @@ impl Triplestore {
 
                 if let Some(mut gct) = remaining_gct {
                     self.delete_if_exists(&gct, false, graph)?;
+                    gct.encoded_triples = add_rank_sort_triples(
+                                gct.encoded_triples,
+                                &gct.subject_type,
+                                &gct.object_type,
+                                self.global_cats.clone(),
+                            )?;
                     self.add_global_cat_triples(vec![gct], false)?;
                 } else {
                     self.delete_if_exists(&gct, false, graph)?;
@@ -76,6 +86,12 @@ impl Triplestore {
                 )?;
                 if let Some(mut gct) = remaining_gct {
                     self.delete_if_exists(&gct, true, graph)?;
+                    gct.encoded_triples = add_rank_sort_triples(
+                        gct.encoded_triples,
+                        &gct.subject_type,
+                        &gct.object_type,
+                        self.global_cats.clone(),
+                    )?;
                     self.add_global_cat_triples(vec![gct], true)?;
                 } else {
                     self.delete_if_exists(&gct, true, graph)?;
@@ -114,7 +130,7 @@ impl Triplestore {
 fn partition_by_global_predicate_col(
     mut sm: EagerSolutionMappings,
     predicate: Option<NamedNode>,
-    global_cats: &Cats,
+    global_cats: LockedCats,
 ) -> Vec<(EagerSolutionMappings, NamedNode)> {
     if let Some(predicate) = predicate {
         vec![(sm, predicate)]
@@ -138,16 +154,16 @@ fn partition_by_global_predicate_col(
             part = part.select([SUBJECT_COL_NAME, OBJECT_COL_NAME]).unwrap();
             sms.push(EagerSolutionMappings::new(part, sm.rdf_node_types.clone()));
         }
-        let predicates = global_cats.decode_iri_u32s(&predicates_u32, None);
+        let predicates = global_cats.read().unwrap().decode_iri_u32s(&predicates_u32, None);
         sms.into_iter().zip(predicates.into_iter()).collect()
     }
 }
 
 fn triples_solution_mappings_to_global_cat_triples(
     sm_preds: Vec<(EagerSolutionMappings, NamedNode)>,
-    global_cats: &Cats,
+    global_cats: LockedCats,
     graph: &NamedGraph,
-) -> Vec<CatTriples> {
+) -> Result<Vec<CatTriples>, TriplestoreError> {
     let mappings_maps_preds: Vec<_> = sm_preds
         .into_par_iter()
         .map(|(sm, predicate)| {
@@ -174,7 +190,7 @@ fn triples_solution_mappings_to_global_cat_triples(
         })
         .flatten()
         .collect();
-    mappings_maps_preds
+    let cat_triples: Vec<_> = mappings_maps_preds
         .into_par_iter()
         .map(|(mappings, mut rdf_node_types, predicate)| {
             let (subject_type, subject_state) = rdf_node_types
@@ -199,11 +215,12 @@ fn triples_solution_mappings_to_global_cat_triples(
                 graph.clone(),
                 subject_state,
                 object_state,
-                global_cats,
+                &global_cats.read().unwrap(),
             );
             e
         })
-        .collect()
+        .collect();
+    Ok(cat_triples)
 }
 
 fn get_triples_after_deletion(

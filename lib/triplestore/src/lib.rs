@@ -26,7 +26,7 @@ use polars_core::prelude::{IntoColumn, Series, SortMultipleOptions};
 use rayon::iter::ParallelDrainRange;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use representation::cats::{
-    cat_encode_triples, maybe_decode_complex_expr, CatTriples, Cats, EncodedTriples, LockedCats,
+    cat_encode_triples, CatTriples, Cats, EncodedTriples, LockedCats,
     OBJECT_RANK_COL_NAME, SUBJECT_RANK_COL_NAME,
 };
 use representation::multitype::set_struct_all_null_to_null_row;
@@ -426,7 +426,7 @@ impl Triplestore {
         transient: bool,
     ) -> Result<Vec<NewTriples>, TriplestoreError> {
         let start_globalize = Instant::now();
-        let mut cat_triples = self.globalize(local_cat_triples);
+        let cat_triples = self.globalize(local_cat_triples);
         trace!(
             "Globalizing took: {} seconds",
             start_globalize.elapsed().as_secs_f32()
@@ -780,7 +780,7 @@ fn create_rank_expr(
     global_cats: LockedCats,
 ) -> Result<Expr, TriplestoreError> {
     let rank_expr = if t.stored_cat() {
-        let mut u32_set: HashSet<u32> = if t.is_lang_string() {
+        let u32_set: HashSet<u32> = if t.is_lang_string() {
             let mut u32_set: HashSet<_> = df
                 .column(c)
                 .unwrap()
