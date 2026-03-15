@@ -112,28 +112,6 @@ impl<'a> TripleTableBuilder<'a> {
             unreachable!("Should never happen")
         }
     }
-
-    pub fn push_iri_iri(&mut self, subj: &str, v: &str) {
-        if let Some(values) = self.map.get_mut(&(IRI, IRI)) {
-            values.subjects.push(subj.to_string());
-            values
-                .objects
-                .push(AnyValue::StringOwned(PlSmallStr::from_str(v)));
-        } else {
-            unreachable!("Should never happen")
-        }
-    }
-
-    pub fn push_iri_string(&mut self, subj: &str, v: &str) {
-        if let Some(values) = self.map.get_mut(&(IRI, STRING)) {
-            values.subjects.push(subj.to_string());
-            values
-                .objects
-                .push(AnyValue::StringOwned(PlSmallStr::from_str(v)));
-        } else {
-            unreachable!("Should never happen")
-        }
-    }
 }
 
 struct TypedSubjectObjectBuilder<'a> {

@@ -10,7 +10,6 @@ use polars::prelude::{
     as_struct, col, Column, Expr, IntoColumn, IntoLazy, NamedFrom, PolarsResult, SeriesSealed,
 };
 use polars::series::Series;
-use rayon::iter::ParallelIterator;
 use std::borrow::Cow;
 
 impl CatEncs {

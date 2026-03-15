@@ -1,5 +1,32 @@
 # Change log
 
+## v0.19.23
+### Improvements
+- General improvements in read / map performance (around 10%)
+- Improvements in error handling for PValues
+
+### Bug fixes
+- Fix bug in recursive constraints in SHACL
+- Issue when using Datalog with SPARQL construct syntax
+
+## v0.19.22
+### Improvements
+- Graceful error handling for SPARQL queries that crash in Polars.
+
+### Bug fixes
+- Contains function in SPARQL crashed with lang strings under certain circumstances
+
+## v0.19.20
+### Improvements
+- All types with string types are now internally represented as u32 (previously it was only xsd:string, blanks and iris)
+
+### Bug fixes 
+- Result path missing in SPARQL constraints
+
+## v0.19.19
+### Bug fixes
+- Bug fix for issue affecting SPARQL constraints with lang string messages with unbound vars of multiple types.
+
 ## v0.19.18
 ### Features
 - CIM XML import removes superfluous "#_" from iris. 

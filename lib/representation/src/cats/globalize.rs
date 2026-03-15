@@ -5,7 +5,6 @@ use crate::BaseRDFNodeType;
 use oxrdf::NamedNode;
 use polars::frame::DataFrame;
 use std::collections::HashSet;
-use std::time::Instant;
 use tracing::instrument;
 
 impl Cats {
@@ -16,7 +15,12 @@ impl Cats {
             .flatten()
             .collect();
         let re_enc_map = self.merge(local_cats);
-        let global_cat_triples = re_encode(cat_triples, re_enc_map);
+        let mut global_cat_triples = re_encode(cat_triples, re_enc_map);
+        for c in &mut global_cat_triples {
+            c.local_cats.truncate(0);
+            c.encoded_triples.subject_local_cat_uuid = None;
+            c.encoded_triples.object_local_cat_uuid = None;
+        }
         global_cat_triples
     }
 

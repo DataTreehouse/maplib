@@ -100,7 +100,6 @@ impl Cats {
     pub fn merge_solution_mappings_locals(
         &mut self,
         sms: &Vec<&EagerSolutionMappings>,
-        path: Option<&Path>,
     ) -> HashMap<String, HashMap<BaseRDFNodeType, CatReEnc>> {
         let mut local_cats = vec![];
 
@@ -192,11 +191,10 @@ impl CatEncs {
 pub fn new_solution_mapping_cats(
     sms: Vec<EagerSolutionMappings>,
     global_cats: &Cats,
-    path: Option<&Path>,
 ) -> (Vec<EagerSolutionMappings>, Cats) {
     let smsref: Vec<_> = sms.iter().collect();
     let mut cats = global_cats.mappings_cat_image(&smsref, None);
-    let reenc = cats.merge_solution_mappings_locals(&smsref, path);
+    let reenc = cats.merge_solution_mappings_locals(&smsref);
     let new_sms: Vec<_> = sms
         .into_iter()
         .map(|sm| reencode_solution_mappings(sm, &reenc))

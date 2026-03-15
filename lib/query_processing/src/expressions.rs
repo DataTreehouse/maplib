@@ -94,7 +94,7 @@ pub fn literal_enc(l: &Literal, global_cats: &Cats) -> (Expr, BaseRDFNodeType, B
             } else {
                 let dt = l.datatype().into_owned();
                 let offset_value = global_cats.get_literal_counter(&dt);
-                let (value_enc, lang_enc, mut local) =
+                let (value_enc, lang_enc, local) =
                     Cats::new_local_lang_string(l.value(), l.language().unwrap(), offset_value);
                 (value_enc, lang_enc, Some(local))
             };

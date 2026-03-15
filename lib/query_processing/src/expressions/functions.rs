@@ -1824,12 +1824,12 @@ fn create_regex_replace_expr(
 }
 
 fn create_regex_literal(regex_literal: &Literal, flags_expr: Option<&Expression>) -> String {
-    if !regex_literal.is_plain() {
+    if regex_literal.datatype() != xsd::STRING {
         todo!("Non plain literal regex lit")
     }
     let flags = if let Some(third_expr) = flags_expr {
         if let Expression::Literal(l) = third_expr {
-            if !l.is_plain() {
+            if regex_literal.datatype() != xsd::STRING {
                 todo!("Non plain literal flags for regex")
             }
             Some(l.value())

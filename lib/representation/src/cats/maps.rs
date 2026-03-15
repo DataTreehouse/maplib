@@ -155,7 +155,7 @@ impl CatMaps {
         }
     }
 
-    pub fn rank_map(&self, us: HashSet<u32>) -> HashMap<u32, u32> {
+    pub fn rank_map(&self, us: &HashSet<u32>) -> HashMap<u32, u32> {
         match self {
             CatMaps::InMemory(m) => m.rank_map(us),
             CatMaps::OnDisk(d) => d.rank_map(us),

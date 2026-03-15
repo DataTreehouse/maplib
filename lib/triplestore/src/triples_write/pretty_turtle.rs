@@ -3,7 +3,7 @@ use crate::errors::TriplestoreError;
 use crate::sparql::{QueryResultKind, QuerySettings};
 use crate::storage::Triples;
 use aho_corasick::{AhoCorasick, MatchKind};
-use oxrdf::vocab::rdf;
+use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{BlankNode, NamedNode, NamedNodeRef, Term, TermRef, Variable};
 use polars::prelude::{col, concat, LazyFrame, UnionArgs};
 use polars_core::frame::DataFrame;
@@ -154,7 +154,7 @@ fn write_term_prefixed<W: Write>(
                 write_escaped_char(c, writer)?;
             }
             write!(writer, "\"")?;
-            if !l.is_plain() {
+            if l.datatype() != xsd::STRING {
                 if let Some(language) = l.language() {
                     write!(writer, "@{}", language)?;
                 } else {
@@ -422,7 +422,7 @@ impl Triplestore {
                 };
                 let mut thread_strings = Vec::with_capacity(n_threads);
                 for _ in 0..n_threads {
-                    let mut start_string = if let Some(last_string) = last_string.take() {
+                    let start_string = if let Some(last_string) = last_string.take() {
                         if let Some(next_string) = triples.get_next_different_subject(
                             self.global_cats.clone(),
                             last_string.as_str(),

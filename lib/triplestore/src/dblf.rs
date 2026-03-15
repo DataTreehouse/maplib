@@ -1,7 +1,7 @@
 use super::Triplestore;
 use crate::errors::TriplestoreError;
 use crate::storage::Triples;
-use oxrdf::{NamedNode, Subject, Term};
+use oxrdf::{NamedNode, NamedOrBlankNode, Term};
 use polars::prelude::{as_struct, by_name, col, concat, lit, IntoLazy, LazyFrame, UnionArgs};
 use polars_core::prelude::{Column, DataFrame};
 use query_processing::expressions::{blank_node_enc, literal_enc, named_node_enc};
@@ -92,7 +92,7 @@ impl Triplestore {
         keep_subject: bool,
         keep_predicate: bool,
         keep_object: bool,
-        subjects: &Option<Vec<Subject>>,
+        subjects: &Option<Vec<NamedOrBlankNode>>,
         objects: &Option<Vec<Term>>,
         subject_datatype_ctr: &Option<PossibleTypes>,
         object_datatype_ctr: &Option<PossibleTypes>,
@@ -173,7 +173,7 @@ impl Triplestore {
         subject_keep_rename: &Option<String>,
         predicate_keep_rename: &Option<String>,
         object_keep_rename: &Option<String>,
-        subjects: &Option<Vec<Subject>>,
+        subjects: &Option<Vec<NamedOrBlankNode>>,
         objects: &Option<Vec<Term>>,
         subject_datatype_ctr: &Option<PossibleTypes>,
         object_datatype_ctr: &Option<PossibleTypes>,
@@ -466,7 +466,7 @@ fn partial_check_need_multi(
 
 fn single_triples_to_lf(
     triples: &Triples,
-    subjects: &Option<Vec<&Subject>>,
+    subjects: &Option<Vec<&NamedOrBlankNode>>,
     objects: &Option<Vec<&Term>>,
     global_cats: &Cats,
 ) -> Result<Option<(LazyFrame, usize)>, TriplestoreError> {
@@ -502,8 +502,8 @@ fn single_triples_to_lf(
         if subject_terms.len() == 1 {
             let subj = *subject_terms.first().unwrap();
             let enc = match subj {
-                Subject::NamedNode(nn) => named_node_enc(nn, global_cats),
-                Subject::BlankNode(bl) => blank_node_enc(bl, global_cats),
+                NamedOrBlankNode::NamedNode(nn) => named_node_enc(nn, global_cats),
+                NamedOrBlankNode::BlankNode(bl) => blank_node_enc(bl, global_cats),
             };
             if let Some(enc) = enc {
                 lf = lf.filter(col(SUBJECT_COL_NAME).eq(enc));
@@ -547,7 +547,7 @@ struct HalfBakedSolutionMappings {
 fn multiple_tt_to_lf(
     triples: &HashMap<(BaseRDFNodeType, BaseRDFNodeType), Triples>,
     types: Option<HashSet<(BaseRDFNodeType, BaseRDFNodeType)>>,
-    subjects: &Option<Vec<Subject>>,
+    subjects: &Option<Vec<NamedOrBlankNode>>,
     objects: &Option<Vec<Term>>,
     keep_subject: bool,
     keep_object: bool,
@@ -654,14 +654,14 @@ fn filter_objects<'a>(object_type: &BaseRDFNodeType, objects: &'a Vec<Term>) -> 
 
 fn filter_subjects<'a>(
     subject_type: &BaseRDFNodeType,
-    subjects: &'a Vec<Subject>,
-) -> Vec<&'a Subject> {
+    subjects: &'a Vec<NamedOrBlankNode>,
+) -> Vec<&'a NamedOrBlankNode> {
     let mut filtered = vec![];
     for s in subjects {
         #[allow(unreachable_patterns)]
         let ok = match s {
-            Subject::NamedNode(..) => subject_type.is_iri(),
-            Subject::BlankNode(_) => subject_type.is_blank_node(),
+            NamedOrBlankNode::NamedNode(..) => subject_type.is_iri(),
+            NamedOrBlankNode::BlankNode(_) => subject_type.is_blank_node(),
             _ => unimplemented!("Only blank node and iri subjects"),
         };
         if ok {

@@ -1,5 +1,4 @@
 use crate::errors::TriplestoreError;
-use crate::sort_triples_add_rank;
 use crate::sparql::errors::SparqlError;
 use crate::storage::Triples;
 use crate::Triplestore;
@@ -13,7 +12,6 @@ use representation::multitype::{set_struct_all_null_to_null_row, split_df_multic
 use representation::solution_mapping::EagerSolutionMappings;
 use representation::{BaseRDFNodeType, OBJECT_COL_NAME, PREDICATE_COL_NAME, SUBJECT_COL_NAME};
 use std::collections::HashMap;
-use std::path::Path;
 use std::time::Instant;
 use tracing::trace;
 
@@ -65,17 +63,6 @@ impl Triplestore {
 
                 if let Some(mut gct) = remaining_gct {
                     self.delete_if_exists(&gct, false, graph)?;
-                    let subject_cat_state = gct.subject_type.default_stored_cat_state();
-                    let object_cat_state = gct.object_type.default_stored_cat_state();
-                    gct.encoded_triples.df = sort_triples_add_rank(
-                        gct.encoded_triples.df,
-                        &gct.subject_type,
-                        &subject_cat_state,
-                        &gct.object_type,
-                        &object_cat_state,
-                        self.global_cats.clone(),
-                        false,
-                    );
                     self.add_global_cat_triples(vec![gct], false)?;
                 } else {
                     self.delete_if_exists(&gct, false, graph)?;
@@ -89,17 +76,6 @@ impl Triplestore {
                 )?;
                 if let Some(mut gct) = remaining_gct {
                     self.delete_if_exists(&gct, true, graph)?;
-                    let subject_cat_state = gct.subject_type.default_stored_cat_state();
-                    let object_cat_state = gct.object_type.default_stored_cat_state();
-                    gct.encoded_triples.df = sort_triples_add_rank(
-                        gct.encoded_triples.df,
-                        &gct.subject_type,
-                        &subject_cat_state,
-                        &gct.object_type,
-                        &object_cat_state,
-                        self.global_cats.clone(),
-                        false,
-                    );
                     self.add_global_cat_triples(vec![gct], true)?;
                 } else {
                     self.delete_if_exists(&gct, true, graph)?;

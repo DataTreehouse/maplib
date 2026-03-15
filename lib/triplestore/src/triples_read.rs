@@ -5,8 +5,7 @@ use std::cmp;
 
 use cimxml_import::fix_cim_quad;
 use memmap2::MmapOptions;
-use oxjsonld::JsonLdParser;
-use oxrdf::{BlankNode, GraphName, NamedNode, NamedOrBlankNode, Quad, Subject, Term};
+use oxrdf::{BlankNode, GraphName, NamedNode, NamedOrBlankNode, Quad, Term};
 use oxrdfio::{
     JsonLdProfileSet, LoadedDocument, RdfFormat, RdfParser, RdfSyntaxError, SliceQuadParser,
 };
@@ -35,7 +34,7 @@ use tracing::{debug, instrument};
 
 const UTF8_BOM: [u8; 3] = [0xEF, 0xBB, 0xBF];
 
-type MapType = HashMap<String, HashMap<String, (Vec<Subject>, Vec<Term>)>>;
+type MapType = HashMap<String, HashMap<String, (Vec<NamedOrBlankNode>, Vec<Term>)>>;
 
 #[derive(Eq, PartialEq, Debug, Clone)]
 pub enum ExtendedRdfFormat {
@@ -80,8 +79,7 @@ impl Triplestore {
             todo!("Have not implemented file format {:?}", path);
         };
         let file = File::open(path).map_err(TriplestoreError::ReadTriplesFileError)?;
-        let mut opt = MmapOptions::new();
-        opt.stack();
+        let opt = MmapOptions::new();
         let map = unsafe { opt.map(&file).unwrap() };
         self.read_triples(
             map.as_ref(),
@@ -324,8 +322,8 @@ impl Triplestore {
                         for (object_dt, (subjects, objects)) in obj_map {
                             let object_dt = BaseRDFNodeType::from_string(object_dt);
                             let strings_iter = subjects.into_iter().map(|s| match s {
-                                Subject::NamedNode(nn) => nn.into_string(),
-                                Subject::BlankNode(bl) => bl.into_string(),
+                                NamedOrBlankNode::NamedNode(nn) => nn.into_string(),
+                                NamedOrBlankNode::BlankNode(bl) => bl.into_string(),
                             });
                             let mut subjects_ser = Series::from_iter(strings_iter);
                             subjects_ser.rename(SUBJECT_COL_NAME.into());
@@ -391,9 +389,9 @@ fn term_to_oxrdf_term(t: Term, parser_call: &str) -> Term {
     }
 }
 
-fn subject_to_oxrdf_subject(s: Subject, parser_call: &str) -> Subject {
-    if let Subject::BlankNode(bn) = s {
-        Subject::BlankNode(blank_node_to_oxrdf_blank_node(bn, parser_call))
+fn subject_to_oxrdf_subject(s: NamedOrBlankNode, parser_call: &str) -> NamedOrBlankNode {
+    if let NamedOrBlankNode::BlankNode(bn) = s {
+        NamedOrBlankNode::BlankNode(blank_node_to_oxrdf_blank_node(bn, parser_call))
     } else {
         s
     }
@@ -433,7 +431,7 @@ fn create_predicate_map<'a>(
                     graph_predicate_map.insert(graph_name.clone(), HashMap::new());
                     graph_predicate_map.get_mut(&graph_name).unwrap()
                 };
-            let type_map: &mut HashMap<_, HashMap<_, (Vec<Subject>, Vec<Term>)>> =
+            let type_map: &mut HashMap<_, HashMap<_, (Vec<NamedOrBlankNode>, Vec<Term>)>> =
                 if let Some(type_map) = predicate_map.get_mut(predicate.as_str()) {
                     type_map
                 } else {

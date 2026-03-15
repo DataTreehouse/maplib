@@ -1,4 +1,4 @@
-use polars::prelude::{by_name, col, LazyFrame};
+use polars::prelude::{col, LazyFrame};
 use representation::cats::{
     maybe_decode_expr, optional_maybe_decode_expr, CatReEnc, Cats, LockedCats,
 };

@@ -5,10 +5,10 @@ use crate::errors::TriplestoreError;
 use crate::storage::so_index::SubjectObjectIndex;
 use crate::IndexingOptions;
 use oxrdf::vocab::{rdf, xsd};
-use oxrdf::{NamedNode, Subject, Term};
+use oxrdf::{NamedNode, NamedOrBlankNode, Term};
 use polars::prelude::{
-    as_struct, col, concat, lit, Expr, IdxSize, IntoLazy, JoinArgs, JoinType, LazyFrame,
-    MaintainOrderJoin, PlSmallStr, UnionArgs,
+    as_struct, col, concat, IdxSize, IntoLazy, JoinArgs, JoinType, LazyFrame, MaintainOrderJoin,
+    PlSmallStr, UnionArgs,
 };
 use polars_core::datatypes::AnyValue;
 use polars_core::frame::DataFrame;
@@ -31,7 +31,7 @@ use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Instant;
-use tracing::{instrument, trace};
+use tracing::{debug, instrument, trace};
 
 const OFFSET_STEP: usize = 100;
 const MIN_SIZE_CACHING: usize = 100_000_000; //100MB
@@ -122,7 +122,7 @@ impl Triples {
 
     pub(crate) fn get_lazy_frames(
         &self,
-        subjects: &Option<Vec<&Subject>>,
+        subjects: &Option<Vec<&NamedOrBlankNode>>,
         objects: &Option<Vec<&Term>>,
     ) -> Result<Vec<(LazyFrame, usize)>, TriplestoreError> {
         let mut all_sms = vec![];
@@ -137,9 +137,7 @@ impl Triples {
         Ok(all_sms)
     }
 
-    pub(crate) fn get_lazy_frame_slices(
-        &self,
-    ) -> Result<Option<Vec<(LazyFrame)>>, TriplestoreError> {
+    pub(crate) fn get_lazy_frame_slices(&self) -> Result<Option<Vec<LazyFrame>>, TriplestoreError> {
         let mut all_lfs = vec![];
         for s in &self.segments {
             let lf_is = s.get_lazy_frames(&None, &None, &self.subject_type, &self.object_type)?;
@@ -282,9 +280,10 @@ impl Triples {
         let total_now = Instant::now();
         let global_cats = global_cats.read()?;
         let df = self.deduplicate_and_insert(df, global_cats.deref(), storage_folder)?;
-
-        let total_time = total_now.elapsed().as_secs_f32();
-        trace!(total_time);
+        debug!(
+            "Deduplicate and insert took {}",
+            total_now.elapsed().as_secs_f32()
+        );
         Ok(df)
     }
 
@@ -492,7 +491,7 @@ impl TriplesSegment {
 
     pub(crate) fn get_lazy_frames(
         &self,
-        subjects: &Option<Vec<&Subject>>,
+        subjects: &Option<Vec<&NamedOrBlankNode>>,
         objects: &Option<Vec<&Term>>,
         _subject_type: &BaseRDFNodeType,
         object_type: &BaseRDFNodeType,
@@ -881,12 +880,12 @@ fn get_lookup_interval(
     (from, exclusive_to)
 }
 
-fn get_subject_strings<'a>(subjects: &[&'a Subject]) -> Vec<&'a str> {
+fn get_subject_strings<'a>(subjects: &[&'a NamedOrBlankNode]) -> Vec<&'a str> {
     let mut strings: Vec<_> = subjects
         .iter()
         .map(|x| match *x {
-            Subject::NamedNode(nn) => nn.as_str(),
-            Subject::BlankNode(bl) => bl.as_str(),
+            NamedOrBlankNode::NamedNode(nn) => nn.as_str(),
+            NamedOrBlankNode::BlankNode(bl) => bl.as_str(),
         })
         .collect();
     strings.sort_unstable();
@@ -956,13 +955,6 @@ fn update_string_index_at_offset(
         let e = sparse_map.entry(Arc::new(s.to_string()));
         e.or_insert(offset);
     }
-}
-
-pub(crate) fn repeated_from_last_row_expr(c: &str) -> Expr {
-    col(c)
-        .shift(lit(1))
-        .is_not_null()
-        .and(col(c).shift(lit(1)).eq(col(c)))
 }
 
 fn create_sparse_index(ser: &Series, cat_encs: Option<&CatEncs>) -> SparseIndex {

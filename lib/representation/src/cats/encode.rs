@@ -135,7 +135,7 @@ impl Cats {
         // Local cat encs are always in memory
         let mut new_enc = CatEncs::new_empty(None, t);
 
-        let mut ser = if t.is_lang_string() {
+        let ser = if t.is_lang_string() {
             let value_ser = series
                 .struct_()
                 .unwrap()
@@ -316,7 +316,7 @@ fn encode_single_string_series(
             }
         }
     }
-    let mut ser = Series::from_iter(encoded_global_local);
+    let ser = Series::from_iter(encoded_global_local);
     ser
 }
 

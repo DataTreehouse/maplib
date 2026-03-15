@@ -14,18 +14,20 @@ pub mod triples_read;
 pub mod triples_write;
 
 use crate::errors::TriplestoreError;
-use crate::storage::{repeated_from_last_row_expr, Triples};
+use crate::storage::Triples;
 use file_io::create_folder_if_not_exists;
 use fts::FtsIndex;
 use oxrdf::vocab::{rdf, rdfs};
 use oxrdf::NamedNode;
-use polars::prelude::{col, AnyValue, DataFrame, IntoLazy, RankMethod, RankOptions};
-use polars_core::prelude::SortMultipleOptions;
+use polars::prelude::{
+    as_struct, col, lit, AnyValue, DataFrame, Expr, IntoLazy, PlSmallStr, RankMethod, RankOptions,
+};
+use polars_core::prelude::{IntoColumn, Series, SortMultipleOptions};
 use rayon::iter::ParallelDrainRange;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use representation::cats::{
-    cat_encode_triples, decode_expr, maybe_decode_complex_expr, maybe_decode_expr, CatTriples,
-    Cats, LockedCats, OBJECT_RANK_COL_NAME, SUBJECT_RANK_COL_NAME,
+    cat_encode_triples, maybe_decode_complex_expr, CatTriples, Cats, EncodedTriples, LockedCats,
+    OBJECT_RANK_COL_NAME, SUBJECT_RANK_COL_NAME,
 };
 use representation::multitype::set_struct_all_null_to_null_row;
 use representation::solution_mapping::{BaseCatState, EagerSolutionMappings};
@@ -403,7 +405,7 @@ impl Triplestore {
         transient: bool,
     ) -> Result<Vec<NewTriples>, TriplestoreError> {
         let prepare_triples_now = Instant::now();
-        let dfs_to_add = prepare_add_triples_par(ts, self.global_cats.clone());
+        let dfs_to_add = prepare_add_triples_par(ts, self.global_cats.clone())?;
         trace!(
             "Preparing triples took {} seconds",
             prepare_triples_now.elapsed().as_secs_f32()
@@ -423,8 +425,36 @@ impl Triplestore {
         local_cat_triples: Vec<CatTriples>,
         transient: bool,
     ) -> Result<Vec<NewTriples>, TriplestoreError> {
-        let global_cats = self.globalize(local_cat_triples);
-        let res = self.add_global_cat_triples(global_cats, transient);
+        let start_globalize = Instant::now();
+        let mut cat_triples = self.globalize(local_cat_triples);
+        trace!(
+            "Globalizing took: {} seconds",
+            start_globalize.elapsed().as_secs_f32()
+        );
+        let start_sort_rank = Instant::now();
+        let cat_triples: Result<_, TriplestoreError> = cat_triples
+            .into_par_iter()
+            .map(|mut t| {
+                t.encoded_triples = add_rank_sort_triples(
+                    t.encoded_triples,
+                    &t.subject_type,
+                    &t.object_type,
+                    self.global_cats.clone(),
+                )?;
+                Ok(t)
+            })
+            .collect();
+        let cat_triples = cat_triples?;
+        trace!(
+            "Sorting and adding rank took {} seconds",
+            start_sort_rank.elapsed().as_secs_f32()
+        );
+        let start_add_global = Instant::now();
+        let res = self.add_global_cat_triples(cat_triples, transient);
+        trace!(
+            "Add global took: {} seconds",
+            start_add_global.elapsed().as_secs_f32()
+        );
         res
     }
 
@@ -434,6 +464,7 @@ impl Triplestore {
         global_cat_triples: Vec<CatTriples>,
         transient: bool,
     ) -> Result<Vec<NewTriples>, TriplestoreError> {
+        let start_prep_add = Instant::now();
         let mut add_map: HashMap<_, (_, Vec<_>)> = HashMap::new();
         for CatTriples {
             encoded_triples,
@@ -483,6 +514,10 @@ impl Triplestore {
             let indexing = self.indexing.get(&graph).unwrap().clone();
             add_vec.push((graph, indexing, p, s, o, t1, t2));
         }
+        trace!(
+            "Preparing for add took {}",
+            start_prep_add.elapsed().as_secs_f32()
+        );
         //Why does not par iter work?
         let r: Result<Vec<_>, TriplestoreError> = add_vec
             .into_iter()
@@ -614,8 +649,8 @@ struct TriplesToAddPartitionedPredicate {
 pub fn prepare_add_triples_par(
     mut ts: Vec<TriplesToAdd>,
     global_cats: LockedCats,
-) -> Vec<CatTriples> {
-    let mut all_partitioned: Vec<TriplesToAddPartitionedPredicate> = ts
+) -> Result<Vec<CatTriples>, TriplestoreError> {
+    let all_partitioned: Vec<TriplesToAddPartitionedPredicate> = ts
         .par_drain(..)
         .map(|t| {
             let TriplesToAdd {
@@ -657,22 +692,7 @@ pub fn prepare_add_triples_par(
         })
         .flatten()
         .collect();
-    all_partitioned = all_partitioned
-        .into_par_iter()
-        .map(|mut t| {
-            t.df = sort_triples_add_rank(
-                t.df.clone(),
-                &t.subject_type,
-                &t.subject_cat_state,
-                &t.object_type,
-                &t.object_cat_state,
-                global_cats.clone(),
-                true,
-            );
-            t
-        })
-        .collect();
-    let all_partitioned = all_partitioned
+    let all_partitioned: Vec<_> = all_partitioned
         .into_par_iter()
         .map(
             |TriplesToAddPartitionedPredicate {
@@ -698,52 +718,34 @@ pub fn prepare_add_triples_par(
             },
         )
         .collect();
-    all_partitioned
+    Ok(all_partitioned)
 }
 
-pub fn sort_triples_add_rank(
-    df: DataFrame,
+pub fn add_rank_sort_triples(
+    encoded: EncodedTriples,
     subj_type: &BaseRDFNodeType,
-    subj_cat_state: &BaseCatState,
     obj_type: &BaseRDFNodeType,
-    obj_cat_state: &BaseCatState,
     global_cats: LockedCats,
-    deduplicate: bool,
-) -> DataFrame {
+) -> Result<EncodedTriples, TriplestoreError> {
     // Always sort S,O and deduplicate
+    let EncodedTriples {
+        df,
+        subject,
+        subject_local_cat_uuid,
+        object,
+        object_local_cat_uuid,
+    } = encoded;
+    assert!(subject_local_cat_uuid.is_none());
+    assert!(object_local_cat_uuid.is_none());
+
+    let subj_rank_expr = create_rank_expr(&df, SUBJECT_COL_NAME, subj_type, global_cats.clone())?
+        .alias(SUBJECT_RANK_COL_NAME);
+    let obj_rank_expr = create_rank_expr(&df, OBJECT_COL_NAME, obj_type, global_cats.clone())?
+        .alias(OBJECT_RANK_COL_NAME);
+
     let mut lf = df.lazy();
-    let mut subj_col_expr = col(SUBJECT_COL_NAME);
-    subj_col_expr = maybe_decode_complex_expr(
-        subj_col_expr,
-        subj_type,
-        subj_cat_state,
-        global_cats.clone(),
-    );
-    let mut obj_col_expr = col(OBJECT_COL_NAME);
-    obj_col_expr =
-        maybe_decode_complex_expr(obj_col_expr, obj_type, obj_cat_state, global_cats.clone());
-    lf = lf.with_column(
-        subj_col_expr
-            .rank(
-                RankOptions {
-                    method: RankMethod::Min,
-                    descending: false,
-                },
-                None,
-            )
-            .alias(SUBJECT_RANK_COL_NAME),
-    );
-    lf = lf.with_column(
-        obj_col_expr
-            .rank(
-                RankOptions {
-                    method: RankMethod::Min,
-                    descending: false,
-                },
-                None,
-            )
-            .alias(OBJECT_RANK_COL_NAME),
-    );
+    lf = lf.with_column(subj_rank_expr);
+    lf = lf.with_column(obj_rank_expr);
 
     lf = lf.sort_by_exprs(
         vec![col(SUBJECT_RANK_COL_NAME), col(OBJECT_RANK_COL_NAME)],
@@ -755,15 +757,155 @@ pub fn sort_triples_add_rank(
             limit: None,
         },
     );
-    if deduplicate {
-        lf = lf.filter(
-            repeated_from_last_row_expr(SUBJECT_COL_NAME)
-                .and(repeated_from_last_row_expr(OBJECT_COL_NAME))
-                .not(),
-        );
-    }
+
+    lf = lf.filter(
+        repeated_from_last_row_expr(SUBJECT_COL_NAME)
+            .and(repeated_from_last_row_expr(OBJECT_COL_NAME))
+            .not(),
+    );
     let df = lf.collect().unwrap();
-    df
+    Ok(EncodedTriples {
+        df,
+        subject,
+        subject_local_cat_uuid,
+        object,
+        object_local_cat_uuid,
+    })
+}
+
+fn create_rank_expr(
+    df: &DataFrame,
+    c: &str,
+    t: &BaseRDFNodeType,
+    global_cats: LockedCats,
+) -> Result<Expr, TriplestoreError> {
+    let rank_expr = if t.stored_cat() {
+        let mut u32_set: HashSet<u32> = if t.is_lang_string() {
+            let mut u32_set: HashSet<_> = df
+                .column(c)
+                .unwrap()
+                .struct_()
+                .unwrap()
+                .field_by_name(LANG_STRING_VALUE_FIELD)
+                .unwrap()
+                .u32()
+                .unwrap()
+                .iter()
+                .map(|x| x.unwrap())
+                .collect();
+            u32_set.extend(
+                df.column(c)
+                    .unwrap()
+                    .struct_()
+                    .unwrap()
+                    .field_by_name(LANG_STRING_LANG_FIELD)
+                    .unwrap()
+                    .u32()
+                    .unwrap()
+                    .iter()
+                    .map(|x| x.unwrap()),
+            );
+            u32_set
+        } else {
+            df.column(c)
+                .unwrap()
+                .u32()
+                .unwrap()
+                .iter()
+                .map(|x| x.unwrap())
+                .collect()
+        };
+        let rank_map = global_cats.read()?.rank_map(&u32_set, t);
+        if t.is_lang_string() {
+            let mut e = col(c).map(
+                move |x| {
+                    let mut u32_values = Vec::with_capacity(x.len());
+                    for u in x
+                        .struct_()?
+                        .field_by_name(LANG_STRING_VALUE_FIELD)?
+                        .u32()
+                        .unwrap()
+                    {
+                        if let Some(u) = u {
+                            u32_values.push(rank_map.get(&u).cloned());
+                        } else {
+                            u32_values.push(None)
+                        }
+                    }
+                    let mut u32_langs = Vec::with_capacity(x.len());
+                    for u in x
+                        .struct_()?
+                        .field_by_name(LANG_STRING_LANG_FIELD)?
+                        .u32()
+                        .unwrap()
+                    {
+                        if let Some(u) = u {
+                            u32_langs.push(rank_map.get(&u).cloned());
+                        } else {
+                            u32_langs.push(None)
+                        }
+                    }
+                    let mut c_values = Series::from_iter(u32_values.into_iter());
+                    c_values.rename(PlSmallStr::from_str(LANG_STRING_VALUE_FIELD));
+                    let mut c_langs = Series::from_iter(u32_langs.into_iter());
+                    c_langs.rename(PlSmallStr::from_str(LANG_STRING_LANG_FIELD));
+                    let mut df = DataFrame::new(
+                        x.len(),
+                        vec![c_values.into_column(), c_langs.into_column()],
+                    )?;
+                    df = df
+                        .lazy()
+                        .with_column(
+                            as_struct(vec![
+                                col(LANG_STRING_VALUE_FIELD),
+                                col(LANG_STRING_LANG_FIELD),
+                            ])
+                            .alias(x.name().as_str()),
+                        )
+                        .select([col(x.name().as_str())])
+                        .collect()
+                        .unwrap();
+                    let c = df.drop_in_place(x.name().as_str())?;
+                    Ok(c)
+                },
+                |_, f| Ok(f.clone()),
+            );
+            e = e.rank(
+                RankOptions {
+                    method: RankMethod::Min,
+                    descending: false,
+                },
+                None,
+            );
+            e
+        } else {
+            col(c).map(
+                move |x| {
+                    let mut u32s = Vec::with_capacity(x.len());
+                    for u in x.u32()? {
+                        if let Some(u) = u {
+                            u32s.push(rank_map.get(&u).cloned());
+                        } else {
+                            u32s.push(None)
+                        }
+                    }
+                    let mut c = Series::from_iter(u32s.into_iter());
+                    c.rename(x.name().clone());
+                    Ok(c.into_column())
+                },
+                |_, f| Ok(f.clone()),
+            )
+        }
+    } else {
+        col(c).rank(
+            RankOptions {
+                method: RankMethod::Min,
+                descending: false,
+            },
+            None,
+        )
+    };
+    Ok(rank_expr)
 }
 
 pub fn partition_unpartitioned_predicate(
@@ -836,4 +978,11 @@ fn drop_nulls(mut df: DataFrame) -> Option<DataFrame> {
     } else {
         Some(df)
     }
+}
+
+pub(crate) fn repeated_from_last_row_expr(c: &str) -> Expr {
+    col(c)
+        .shift(lit(1))
+        .is_not_null()
+        .and(col(c).shift(lit(1)).eq(col(c)))
 }

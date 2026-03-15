@@ -28,10 +28,10 @@ pub struct Update {
 
 impl Update {
     /// Parses a SPARQL update with an optional base IRI to resolve relative IRIs in the query.
-    #[deprecated(
-        note = "Use `SparqlParser::new().parse_update` instead",
-        since = "0.4.0"
-    )]
+    // #[deprecated(
+    //     note = "Use `SparqlParser::new().parse_update` instead",
+    //     since = "0.4.0"
+    // )] TODO: Move this custom signature to non-deprecated function
     pub fn parse(
         update: &str,
         base_iri: Option<&str>,

@@ -9,7 +9,6 @@ use query_processing::pushdowns::Pushdowns;
 use representation::query_context::Context;
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use std::collections::{HashMap, HashSet};
-use crate::errors::TriplestoreError;
 
 impl Triplestore {
     pub(crate) fn lazy_pvalues(
@@ -37,29 +36,29 @@ impl Triplestore {
                     .collect();
                 let expected_vars: HashSet<_> = variables.iter().map(|x| x.as_str()).collect();
                 if mapping_vars != expected_vars {
-                    let mapping_vars:Vec<_> = mapping_vars.into_iter().map(|x|x.to_string()).collect();
-                    let expected_vars:Vec<_> = expected_vars.into_iter().map(|x|x.to_string()).collect();
+                    let mapping_vars: Vec<_> =
+                        mapping_vars.into_iter().map(|x| x.to_string()).collect();
+                    let expected_vars: Vec<_> =
+                        expected_vars.into_iter().map(|x| x.to_string()).collect();
 
-                    return Err(SparqlError::PValuesError(
-                        format!("Expected columns: {} but got {}",
-                                expected_vars.join(", "), mapping_vars.join(", "),
-                        )
-                    ));
+                    return Err(SparqlError::PValuesError(format!(
+                        "Expected columns: {} but got {}",
+                        expected_vars.join(", "),
+                        mapping_vars.join(", "),
+                    )));
                 }
                 EagerSolutionMappings::new(mappings, rdf_node_types.clone())
             } else {
-                return Err(SparqlError::PValuesError(
-                    format!("Could not find PValues parameter {}",
-                            bindings_name,
-                    )
-                ));
+                return Err(SparqlError::PValuesError(format!(
+                    "Could not find PValues parameter {}",
+                    bindings_name,
+                )));
             }
         } else {
-            return Err(SparqlError::PValuesError(
-                format!("Could not find PValues parameter {} (none were available)",
-                        bindings_name,
-                )
-            ));
+            return Err(SparqlError::PValuesError(format!(
+                "Could not find PValues parameter {} (none were available)",
+                bindings_name,
+            )));
         };
         let cats = self.global_cats.read().unwrap();
         // No disk based storage of local cats if created

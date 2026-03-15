@@ -18,8 +18,8 @@ use crate::{
     BaseRDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD, OBJECT_COL_NAME,
     SUBJECT_COL_NAME,
 };
-use oxrdf::vocab::{rdf, xsd};
-use oxrdf::{NamedNode, NamedNodeRef};
+use oxrdf::vocab::rdf;
+use oxrdf::NamedNode;
 use polars::prelude::DataFrame;
 use rayon::prelude::{IntoParallelIterator, ParallelIterator};
 use std::collections::{HashMap, HashSet};
@@ -375,14 +375,14 @@ impl Cats {
         let rank_maps: HashMap<_, _> = src_u_map
             .into_par_iter()
             .map(|(k, v)| {
-                let rm = self.rank_map(v, &k);
+                let rm = self.rank_map(&v, &k);
                 (k, rm)
             })
             .collect();
         rank_maps
     }
 
-    pub fn rank_map(&self, us: HashSet<u32>, dt: &BaseRDFNodeType) -> HashMap<u32, u32> {
+    pub fn rank_map(&self, us: &HashSet<u32>, dt: &BaseRDFNodeType) -> HashMap<u32, u32> {
         if let Some(cm) = self.cat_map.get(&CatType::from_base_rdf_node_type(dt)) {
             cm.maps.rank_map(us)
         } else {

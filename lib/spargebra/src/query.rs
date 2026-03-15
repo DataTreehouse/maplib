@@ -65,10 +65,10 @@ pub enum Query {
 
 impl Query {
     /// Parses a SPARQL query with an optional base IRI to resolve relative IRIs in the query.
-    #[deprecated(
-        note = "Use `SparqlParser::new().parse_query` instead",
-        since = "0.4.0"
-    )]
+    //#[deprecated(
+    //    note = "Use `SparqlParser::new().parse_query` instead",
+    //    since = "0.4.0"
+    //)] TODO: Move this custom signature to non deprecated method
     pub fn parse(
         query: &str,
         base_iri: Option<&str>,

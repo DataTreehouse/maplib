@@ -1,5 +1,5 @@
 use oxrdf::{Term, Variable};
-use polars::datatypes::{DataType, PlSmallStr};
+use polars::datatypes::PlSmallStr;
 use polars::frame::DataFrame;
 use polars::prelude::{as_struct, col, Column, IntoColumn, IntoLazy};
 use representation::polars_to_rdf::particular_opt_term_vec_to_series;

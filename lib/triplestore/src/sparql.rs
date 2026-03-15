@@ -12,11 +12,10 @@ use tracing::{instrument, trace, warn};
 use utils::polars::{pl_interruptable_collect, InterruptableCollectError};
 
 use super::{NewTriples, Triplestore};
-use crate::errors::TriplestoreError;
 use crate::sparql::debug::DebugOutputs;
 use crate::sparql::errors::SparqlError;
 use crate::sparql::rewrite::rewrite;
-use oxrdf::{BlankNode, NamedNode, Subject, Term, Triple, Variable};
+use oxrdf::{BlankNode, NamedNode, NamedOrBlankNode, Term, Triple, Variable};
 use oxttl::TurtleSerializer;
 use polars::frame::DataFrame;
 use polars::prelude::{as_struct, col, lit, Expr, IntoLazy, LiteralValue, PlSmallStr};
@@ -42,7 +41,7 @@ use sparesults::QueryResultsSerializer;
 use spargebra::algebra::{GraphPattern, QueryDataset};
 use spargebra::term::{
     GraphNamePattern, GroundQuadPattern, GroundTermPattern, NamedNodePattern, QuadPattern,
-    TermPattern, TriplePattern,
+    TermPattern,
 };
 use spargebra::{GraphUpdateOperation, Query, Update};
 use std::collections::{HashMap, HashSet};
@@ -131,8 +130,8 @@ impl QueryResultKind {
                             let v = variables.get(i).unwrap();
                             if v.as_str() == SUBJECT_COL_NAME {
                                 subject = Some(match t {
-                                    Term::NamedNode(nn) => Subject::NamedNode(nn),
-                                    Term::BlankNode(bl) => Subject::BlankNode(bl),
+                                    Term::NamedNode(nn) => NamedOrBlankNode::NamedNode(nn),
+                                    Term::BlankNode(bl) => NamedOrBlankNode::BlankNode(bl),
                                     _ => todo!(),
                                 });
                             } else if v.as_str() == PREDICATE_COL_NAME {
@@ -523,23 +522,6 @@ fn mint_blank_nodes(
         );
     }
     lf.collect().unwrap()
-}
-
-fn quad_pattern_to_triple_pattern(qp: &QuadPattern) -> TriplePattern {
-    match &qp.graph_name {
-        GraphNamePattern::NamedNode(_) => {
-            todo!()
-        }
-        GraphNamePattern::DefaultGraph => {}
-        GraphNamePattern::Variable(_) => {
-            todo!()
-        }
-    }
-    TriplePattern {
-        subject: qp.subject.clone(),
-        predicate: qp.predicate.clone(),
-        object: qp.object.clone(),
-    }
 }
 
 fn ground_quad_pattern_to_quad_pattern(qp: &GroundQuadPattern) -> QuadPattern {

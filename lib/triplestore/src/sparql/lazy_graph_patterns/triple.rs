@@ -5,7 +5,7 @@ use representation::solution_mapping::{BaseCatState, SolutionMappings};
 
 use crate::errors::TriplestoreError;
 use crate::sparql::QuerySettings;
-use oxrdf::{NamedNode, Subject, Term};
+use oxrdf::{NamedNode, NamedOrBlankNode, Term};
 use polars::prelude::{by_name, IntoLazy};
 use polars::prelude::{lit, AnyValue, JoinType};
 use query_processing::graph_patterns::join;
@@ -235,16 +235,16 @@ fn create_type_constraint(
 pub fn create_subjects(
     term_pattern: &TermPattern,
     variable_pushdowns: &HashMap<String, HashSet<Term>>,
-) -> Option<Vec<Subject>> {
+) -> Option<Vec<NamedOrBlankNode>> {
     if let TermPattern::NamedNode(nn) = term_pattern {
-        Some(vec![Subject::NamedNode(nn.clone())])
+        Some(vec![NamedOrBlankNode::NamedNode(nn.clone())])
     } else if let TermPattern::Variable(v) = term_pattern {
         variable_pushdowns.get(v.as_str()).map(|terms| {
             terms
                 .iter()
                 .filter_map(|x| match x {
-                    Term::NamedNode(nn) => Some(Subject::NamedNode(nn.clone())),
-                    Term::BlankNode(bl) => Some(Subject::BlankNode(bl.clone())),
+                    Term::NamedNode(nn) => Some(NamedOrBlankNode::NamedNode(nn.clone())),
+                    Term::BlankNode(bl) => Some(NamedOrBlankNode::BlankNode(bl.clone())),
                     _ => None,
                 })
                 .collect()

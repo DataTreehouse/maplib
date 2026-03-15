@@ -6,7 +6,6 @@ use arrow::datatypes::{Field, Schema};
 use nohash_hasher::NoHashHasher;
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use std::borrow::Cow;
-use std::cmp;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt::{Display, Formatter};
@@ -123,7 +122,7 @@ impl CatMapsInMemory {
         }
     }
 
-    pub fn rank_map(&self, us: HashSet<u32>) -> HashMap<u32, u32> {
+    pub fn rank_map(&self, us: &HashSet<u32>) -> HashMap<u32, u32> {
         match self {
             CatMapsInMemory::Compressed(c) => c.rank_map(us),
             CatMapsInMemory::Uncompressed(u) => u.rank_map(us),
@@ -486,7 +485,7 @@ impl PrefixCompressedCatMapsInMemory {
         rb
     }
 
-    pub fn rank_map(&self, us: HashSet<u32>) -> HashMap<u32, u32> {
+    pub fn rank_map(&self, us: &HashSet<u32>) -> HashMap<u32, u32> {
         let mut ranked = HashMap::new();
         let mut rank = 0;
         for (_, v) in self.map.range(..) {
@@ -684,7 +683,7 @@ impl UncompressedCatMapsInMemory {
         rb
     }
 
-    pub fn rank_map(&self, us: HashSet<u32>) -> HashMap<u32, u32> {
+    pub fn rank_map(&self, us: &HashSet<u32>) -> HashMap<u32, u32> {
         let mut ranked = HashMap::new();
         let mut rank = 0;
         for (_, v) in self.map.range::<Arc<String>, _>(..) {

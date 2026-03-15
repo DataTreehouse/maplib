@@ -3,10 +3,10 @@ use polars::datatypes::{DataType, Field};
 use polars::error::PolarsResult;
 use polars::frame::DataFrame;
 use polars::prelude::{
-    as_struct, col, Column, Expr, IntoColumn, IntoLazy, PlSmallStr, SortMultipleOptions,
+    as_struct, col, Expr, IntoColumn, IntoLazy, PlSmallStr, SortMultipleOptions,
 };
 use polars::series::Series;
-use representation::cats::{maybe_decode_expr, LockedCats};
+use representation::cats::LockedCats;
 use representation::solution_mapping::{BaseCatState, SolutionMappings};
 use representation::{BaseRDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD};
 use std::cmp::Ordering;
@@ -134,12 +134,12 @@ fn make_ordering_expr(e: Expr, cats: LockedCats, t: BaseRDFNodeType, s: BaseCatS
                 let t = t.clone();
                 let local = local.clone();
                 let local_rank_map = if let Some(local) = local {
-                    let rank = local.read().unwrap().rank_map(u32s.clone(), &t);
+                    let rank = local.read().unwrap().rank_map(&u32s, &t);
                     Some(rank)
                 } else {
                     None
                 };
-                let mut global_rank_map = cats.read().unwrap().rank_map(u32s, &t);
+                let mut global_rank_map = cats.read().unwrap().rank_map(&u32s, &t);
                 if let Some(local_rank_map) = local_rank_map {
                     global_rank_map.extend(local_rank_map);
                 }

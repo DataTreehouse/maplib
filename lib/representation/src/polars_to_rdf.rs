@@ -16,7 +16,7 @@ use crate::{
 use chrono::TimeZone as ChronoTimeZone;
 use chrono::{Datelike, Timelike};
 use oxrdf::vocab::{rdf, xsd};
-use oxrdf::{Literal, NamedNode, Subject, Triple, Variable};
+use oxrdf::{Literal, NamedNode, NamedOrBlankNode, Triple, Variable};
 use polars::prelude::{
     as_struct, col, AnyValue, Column, DataFrame, DataType, IntoColumn, IntoLazy, LiteralValue,
     PlSmallStr, Scalar, Series, TimeZone,
@@ -136,8 +136,8 @@ pub fn global_df_as_triples(
         .zip(objects.into_par_iter())
         .map(|(subject, object)| {
             let subject = match subject.unwrap() {
-                Term::NamedNode(nn) => Subject::NamedNode(nn),
-                Term::BlankNode(bl) => Subject::BlankNode(bl),
+                Term::NamedNode(nn) => NamedOrBlankNode::NamedNode(nn),
+                Term::BlankNode(bl) => NamedOrBlankNode::BlankNode(bl),
                 _ => todo!(),
             };
             Triple::new(subject, predicate.clone(), object.unwrap())

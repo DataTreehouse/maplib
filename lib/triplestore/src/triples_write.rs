@@ -2,10 +2,9 @@ use super::Triplestore;
 use crate::errors::TriplestoreError;
 use oxrdf::NamedNode;
 use oxrdfio::{RdfFormat, RdfSerializer};
-use polars::prelude::{by_name, col, IntoLazy};
+use polars::prelude::{by_name, col};
 use polars_core::datatypes::DataType;
 use polars_core::frame::DataFrame;
-use polars_core::prelude::IntoColumn;
 use polars_core::POOL;
 use representation::cats::maybe_decode_complex_expr;
 use representation::dataset::NamedGraph;
@@ -17,7 +16,6 @@ use representation::{
 };
 use std::collections::HashMap;
 use std::io::Write;
-use tracing::warn;
 
 mod fast_ntriples;
 mod pretty_turtle;

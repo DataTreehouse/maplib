@@ -6,7 +6,7 @@ use crate::{
     RDF_NODE_TYPE_IRI, RDF_NODE_TYPE_NONE,
 };
 use oxrdf::vocab::{rdf, xsd};
-use oxrdf::{NamedNode, NamedNodeRef, Subject, Term};
+use oxrdf::{NamedNode, NamedNodeRef, NamedOrBlankNode, Term};
 use polars::datatypes::{DataType, Field, PlSmallStr, TimeUnit, TimeZone};
 use spargebra::term::GroundTerm;
 use std::fmt::{Display, Formatter};
@@ -328,10 +328,10 @@ impl BaseRDFNodeTypeRef<'_> {
     }
 }
 
-pub fn get_subject_datatype_ref(s: &Subject) -> BaseRDFNodeTypeRef<'_> {
+pub fn get_subject_datatype_ref(s: &NamedOrBlankNode) -> BaseRDFNodeTypeRef<'_> {
     match s {
-        Subject::NamedNode(_) => BaseRDFNodeTypeRef::IRI,
-        Subject::BlankNode(_) => BaseRDFNodeTypeRef::BlankNode,
+        NamedOrBlankNode::NamedNode(_) => BaseRDFNodeTypeRef::IRI,
+        NamedOrBlankNode::BlankNode(_) => BaseRDFNodeTypeRef::BlankNode,
         #[cfg(feature = "rdf-star")]
         _ => unimplemented!(),
     }
