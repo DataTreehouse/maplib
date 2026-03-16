@@ -4,12 +4,13 @@ use crate::constants::{
 };
 use crate::errors::QueryProcessingError;
 use crate::expressions::{cast_lang_string_to_string, drop_inner_contexts};
+use md5::{Digest, Md5};
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{Literal, NamedNodeRef};
-use polars::datatypes::{DataType, Field, PlSmallStr, TimeUnit};
+use polars::datatypes::{AnyValue, DataType, Field, PlSmallStr, TimeUnit};
 use polars::prelude::{
-    as_struct, by_name, coalesce, col, concat_str, lit, when, Expr, IntoColumn, LiteralValue,
-    NamedFrom, RoundMode, Scalar, Series, StrptimeOptions,
+    as_struct, by_name, coalesce, col, concat_str, lit, when, Column, Expr, IntoColumn,
+    LiteralValue, NamedFrom, RoundMode, Scalar, Series, StringChunked, StrptimeOptions,
 };
 use rayon::iter::IntoParallelIterator;
 use rayon::iter::ParallelIterator;
@@ -21,9 +22,12 @@ use representation::solution_mapping::{BaseCatState, SolutionMappings};
 use representation::{
     BaseRDFNodeType, RDFNodeState, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD,
 };
+use sha1::Sha1;
 use spargebra::algebra::{Expression, Function};
 use std::collections::HashMap;
+use std::io::Read;
 use std::ops::{Div, Mul};
+use uri_encode::encode_uri;
 
 pub fn func_expression(
     mut solution_mappings: SolutionMappings,
@@ -1770,8 +1774,93 @@ pub fn func_expression(
                 RDFNodeState::from_bases(iri_type, iri_state),
             );
         }
+        Function::EncodeForUri | Function::Sha1 | Function::Md5 => {
+            if args.len() != 1 {
+                return Err(QueryProcessingError::BadNumberOfFunctionArguments(
+                    func.clone(),
+                    args.len(),
+                    "1".to_string(),
+                ));
+            }
+            let first_context = args_contexts.get(&0).unwrap();
+            let mut expr = str_function(
+                first_context.as_str(),
+                solution_mappings
+                    .rdf_node_types
+                    .get(first_context.as_str())
+                    .unwrap(),
+                global_cats,
+            );
+            if matches!(func, Function::EncodeForUri) {
+                expr = expr.map(
+                    move |x| {
+                        let mut encoded = Vec::with_capacity(x.len());
+                        for s in x.str()? {
+                            if let Some(s) = s {
+                                encoded.push(Some(encode_uri(s)));
+                            } else {
+                                encoded.push(None);
+                            }
+                        }
+                        let column = StringChunked::from_iter(encoded).into_column();
+                        Ok(column)
+                    },
+                    |_, f| Ok(f.clone()),
+                );
+            } else if matches!(func, Function::Sha1) {
+                expr = expr.map(
+                    move |x| {
+                        let mut encoded = Vec::with_capacity(x.len());
+
+                        for s in x.str()? {
+                            if let Some(s) = s {
+                                let mut hasher = Sha1::new();
+                                hasher.update(s.as_bytes());
+                                let out = hasher.finalize();
+                                encoded.push(Some(hex::encode(out.as_slice())));
+                            } else {
+                                encoded.push(None);
+                            }
+                        }
+                        let column = StringChunked::from_iter(encoded).into_column();
+                        Ok(column)
+                    },
+                    |_, f| Ok(f.clone()),
+                );
+            } else {
+                expr = expr.map(
+                    move |x| {
+                        let mut encoded = Vec::with_capacity(x.len());
+
+                        for s in x.str()? {
+                            if let Some(s) = s {
+                                let mut hasher = Md5::new();
+                                hasher.update(s.as_bytes());
+                                let out = hasher.finalize();
+                                encoded.push(Some(hex::encode(out.as_slice())));
+                            } else {
+                                encoded.push(None);
+                            }
+                        }
+                        let column = StringChunked::from_iter(encoded).into_column();
+                        Ok(column)
+                    },
+                    |_, f| Ok(f.clone()),
+                );
+            }
+            solution_mappings.mappings = solution_mappings
+                .mappings
+                .with_column(expr.alias(outer_context.as_str()));
+            solution_mappings.rdf_node_types.insert(
+                outer_context.as_str().to_string(),
+                BaseRDFNodeType::Literal(xsd::STRING.into_owned())
+                    .into_default_input_rdf_node_state(),
+            );
+        }
         _ => {
-            todo!("{}", func)
+            return Err(QueryProcessingError::UnimplementedFunction(
+                func.to_string(),
+            ))
         }
     }
     solution_mappings = drop_inner_contexts(solution_mappings, &args_contexts.values().collect());

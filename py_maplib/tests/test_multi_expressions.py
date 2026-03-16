@@ -916,7 +916,6 @@ def test_case_single_lang(streaming):
         '"bb"@se',
     ]
 
-
 @pytest.mark.parametrize("streaming", [True, False])
 def test_substr_multi_type_with_only_lang(streaming):
     m = Model()
@@ -1415,3 +1414,41 @@ def test_issue_22(streaming):
     }
     assert sm.mappings.height == 3
     assert sm.mappings.get_column("c").to_list() == [2, 1, 2]
+
+
+@pytest.mark.parametrize("streaming", [True, False])
+def test_filtering_error(streaming):
+    m = Model()
+    sm = m.query(
+        """
+    PREFIX : <http://example.net/> 
+    PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+    SELECT ?a WHERE {
+    VALUES (?a) { ("abbb") ("abbb") ("ab") ("a"@no) ("a") }
+    FILTER(CONTAINS(?a, STR(?a)) && ISLITERAL(?a))
+    } 
+    """,
+        include_datatypes=True,
+        streaming=streaming,
+    )
+    assert sm.mappings.height == 5
+
+
+@pytest.mark.parametrize("streaming", [True, False])
+def test_some_hash_functions(streaming):
+    m = Model()
+    sm = m.query(
+        """
+    PREFIX : <http://example.net/> 
+    PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+    SELECT ?a ?amd5 ?asha1 ?aenc WHERE {
+    VALUES (?a) { (2) ("abbb") ("a .b") ("a"@no) ("a") }
+    BIND(MD5(?a) AS ?amd5)
+    BIND(SHA1(?a) AS ?asha1)
+    BIND(ENCODE_FOR_URI(?a) AS ?aenc)
+    } 
+    """,
+        include_datatypes=True,
+        streaming=streaming,
+    )
+    assert sm.mappings.height == 5

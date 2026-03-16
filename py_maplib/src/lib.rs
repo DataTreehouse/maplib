@@ -60,6 +60,8 @@ use representation::python::{
 };
 use representation::solution_mapping::EagerSolutionMappings;
 
+use ::shacl::python::PyShaclInferenceResult;
+use ::shacl::ShaclInferenceResult;
 use datalog::inference::InferenceResult;
 use datalog::python::PyInferenceResult;
 #[cfg(not(target_os = "linux"))]
@@ -463,7 +465,7 @@ impl PyModel {
     }
 
     #[pyo3(signature = (
-        shape_graph,
+        shape_graph=None,
         data_graph=None,
         include_details=None,
         include_conforms=None,
@@ -480,7 +482,7 @@ impl PyModel {
     fn validate(
         &self,
         py: Python<'_>,
-        shape_graph: String,
+        shape_graph: Option<String>,
         data_graph: Option<String>,
         include_details: Option<bool>,
         include_conforms: Option<bool>,
@@ -871,6 +873,35 @@ impl PyModel {
         })?;
         Ok(PyInferenceResult { inner: res })
     }
+
+    #[pyo3(signature = (
+        shape_graph=None,
+        data_graph=None,
+        debug=None,
+    ))]
+    #[instrument(skip_all)]
+    fn infer_shacl(
+        &self,
+        py: Python<'_>,
+        shape_graph: Option<String>,
+        data_graph: Option<String>,
+        debug: Option<bool>,
+    ) -> PyResult<PyShaclInferenceResult> {
+        let shape_graph = parse_optional_named_node(shape_graph)?;
+        let named_shape_graph = NamedGraph::from_maybe_named_node(shape_graph.as_ref());
+        let data_graph = parse_optional_named_node(data_graph)?;
+        let named_data_graph = NamedGraph::from_maybe_named_node(data_graph.as_ref());
+        let (res, ..) = py.allow_threads(|| -> PyResult<(_, LockedCats)> {
+            let mut inner = self.inner.lock().unwrap();
+
+            let cats = inner.triplestore.global_cats.clone();
+
+            let res = infer_shacl_mutex(&mut inner, named_shape_graph, named_data_graph, debug)?;
+
+            Ok((res, cats))
+        })?;
+        Ok(PyShaclInferenceResult { inner: res })
+    }
 }
 
 // pymethods non-critical functions
@@ -1161,7 +1192,7 @@ fn create_index_mutex(
 
 fn validate_mutex(
     inner: &mut MutexGuard<InnerModel>,
-    shape_graph: String,
+    shape_graph: Option<String>,
     data_graph: Option<String>,
     include_details: Option<bool>,
     include_conforms: Option<bool>,
@@ -1176,8 +1207,8 @@ fn validate_mutex(
 ) -> PyResult<PyValidationReport> {
     let data_graph = parse_optional_named_node(data_graph)?;
     let data_graph = NamedGraph::from_maybe_named_node(data_graph.as_ref());
-    let shape_graph = parse_named_node(shape_graph)?;
-    let shape_graph = NamedGraph::NamedGraph(shape_graph);
+    let shape_graph = parse_optional_named_node(shape_graph)?;
+    let shape_graph = NamedGraph::from_maybe_named_node(shape_graph.as_ref());
 
     if only_shapes.is_some() && deactivate_shapes.is_some() {
         return Err(PyMaplibError::FunctionArgumentError(
@@ -1551,6 +1582,26 @@ fn infer_mutex(
             graph,
             include_transient,
             max_rows,
+            debug.unwrap_or(DEFAULT_DEBUG_NO_RESULTS),
+        )
+        .map_err(PyMaplibError::MaplibError)
+}
+
+fn infer_shacl_mutex(
+    inner: &mut MutexGuard<InnerModel>,
+    shape_graph: NamedGraph,
+    data_graph: NamedGraph,
+    debug: Option<bool>,
+) -> Result<ShaclInferenceResult, PyMaplibError> {
+    inner
+        .infer_shacl(
+            &shape_graph,
+            &data_graph,
+            DEFAULT_STREAMING,
+            true,
+            None,
+            None,
+            None,
             debug.unwrap_or(DEFAULT_DEBUG_NO_RESULTS),
         )
         .map_err(PyMaplibError::MaplibError)

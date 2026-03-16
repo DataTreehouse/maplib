@@ -26,8 +26,8 @@ use polars_core::prelude::{IntoColumn, Series, SortMultipleOptions};
 use rayon::iter::ParallelDrainRange;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use representation::cats::{
-    cat_encode_triples, CatTriples, Cats, EncodedTriples, LockedCats,
-    OBJECT_RANK_COL_NAME, SUBJECT_RANK_COL_NAME,
+    cat_encode_triples, CatTriples, Cats, EncodedTriples, LockedCats, OBJECT_RANK_COL_NAME,
+    SUBJECT_RANK_COL_NAME,
 };
 use representation::multitype::set_struct_all_null_to_null_row;
 use representation::solution_mapping::{BaseCatState, EagerSolutionMappings};

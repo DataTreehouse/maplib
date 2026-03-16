@@ -38,3 +38,7 @@ tracing.workspace = true
 uuid.workspace = true
 thiserror.workspace = true
 rayon.workspace = true
+uri_encode.workspace = true
+md-5.workspace = true
+sha1.workspace = true
+hex.workspace = true

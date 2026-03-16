@@ -63,6 +63,10 @@ walkdir = "2.5.0"
 aho-corasick = "1.1.4"
 simd-json = { version = "0.17.0", features = ["serde_json"] }
 serde_json = {version = "1.0.149"}
+uri_encode = "1.0.4"
+md-5 = "0.10.6"
+sha1 = "0.10.6"
+hex = "0.4.3"
 
 tracing = { version = "0.1", features = [ "log" ] }
 tracing-subscriber = { version = "0.3.19", features = [ "env-filter" ] }

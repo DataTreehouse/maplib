@@ -31,7 +31,8 @@ use representation::debug::DebugOutput;
 use representation::polars_to_rdf::{df_as_result, QuerySolutions};
 use representation::query_context::Context;
 use representation::rdf_to_polars::{
-    rdf_literal_to_polars_literal_value, rdf_named_node_to_polars_literal_value,
+    rdf_literal_to_polars_expr, rdf_literal_to_polars_literal_value,
+    rdf_named_node_to_polars_literal_value,
 };
 use representation::solution_mapping::{BaseCatState, EagerSolutionMappings, SolutionMappings};
 use representation::{BaseRDFNodeType, RDFNodeState};
@@ -308,6 +309,29 @@ impl Triplestore {
         debug_no_results: bool,
     ) -> Result<Vec<NewTriples>, SparqlError> {
         let query = Query::parse(query, None, prefixes).map_err(SparqlError::ParseError)?;
+        self.insert_parsed(
+            &query,
+            parameters,
+            transient,
+            streaming,
+            query_settings,
+            source_graph,
+            target_graph,
+            debug_no_results,
+        )
+    }
+
+    pub fn insert_parsed(
+        &mut self,
+        query: &Query,
+        parameters: &Option<HashMap<String, EagerSolutionMappings>>,
+        transient: bool,
+        streaming: bool,
+        query_settings: &QuerySettings,
+        source_graph: &NamedGraph,
+        target_graph: &NamedGraph,
+        debug_no_results: bool,
+    ) -> Result<Vec<NewTriples>, SparqlError> {
         if let Query::Construct { .. } = &query {
             let res = self.query_parsed(
                 &query,
@@ -663,7 +687,7 @@ fn term_pattern_expression(
         TermPattern::NamedNode(nn) => Ok(named_node_u32_lit(nn, name, global_cats)),
         TermPattern::BlankNode(bl) => Ok(blank_node_expresson(rdf_node_types, bl, name)?),
         TermPattern::Literal(thelit) => {
-            let l = lit(rdf_literal_to_polars_literal_value(thelit, None)).alias(name);
+            let l = rdf_literal_to_polars_expr(thelit).alias(name);
             Ok((
                 l,
                 BaseRDFNodeType::Literal(thelit.datatype().into_owned())

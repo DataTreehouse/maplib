@@ -766,7 +766,7 @@ class Model:
 
     def validate(
         self,
-        shape_graph: str,
+        shape_graph: str = None,
         data_graph: str = None,
         include_details: bool = False,
         include_conforms: bool = False,
@@ -783,7 +783,7 @@ class Model:
         Validate the contained knowledge graph using SHACL
         Assumes that the contained knowledge graph also contains SHACL Shapes.
 
-        :param shape_graph: The IRI of the Shape Graph.
+        :param shape_graph: The IRI of the Shape Graph (defaults to the default graph).
         :param data_graph: The IRI of the Data Graph (defaults to the default graph).
         :param include_details: Include details of SHACL evaluation alongside the report. Currently uses a lot of memory.
         :param include_conforms: Include those results that conformed. Also applies to details.
@@ -797,6 +797,21 @@ class Model:
         :param max_rows: Maximum estimated rows in underlying SPARQL results, helps avoid out-of-memory errors.
         :param serial: Turns off most parallell validation of shapes.
         :return: Validation report containing a report (report.df) and whether the graph conforms (report.conforms)
+        """
+
+    def infer_shacl(
+            self,
+            shape_graph: str = None,
+            data_graph: str = None,
+            debug: bool = None
+    ) :
+        """
+        Validate the contained knowledge graph using SHACL
+        Assumes that the contained knowledge graph also contains SHACL Shapes.
+
+        :param shape_graph: The IRI of the Shape Graph (defaults to the default graph).
+        :param data_graph: The IRI of the Data Graph (defaults to the default graph).
+        :param debug: Debug rules with no matches.
         """
 
     def read(

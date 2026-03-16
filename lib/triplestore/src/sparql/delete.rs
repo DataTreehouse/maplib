@@ -23,16 +23,11 @@ impl Triplestore {
     ) -> Result<(), SparqlError> {
         let sms: Vec<_> = sms
             .into_par_iter()
-            .map(|(x, y)| {
-                partition_by_global_predicate_col(x, y, self.global_cats.clone())
-            })
+            .map(|(x, y)| partition_by_global_predicate_col(x, y, self.global_cats.clone()))
             .flatten()
             .collect();
-        let global_cat_triples = triples_solution_mappings_to_global_cat_triples(
-            sms,
-            self.global_cats.clone(),
-            graph,
-        )?;
+        let global_cat_triples =
+            triples_solution_mappings_to_global_cat_triples(sms, self.global_cats.clone(), graph)?;
         if !global_cat_triples.is_empty() {
             self.delete_triples_vec(global_cat_triples, graph)
                 .map_err(SparqlError::TriplestoreError)?;
@@ -68,11 +63,11 @@ impl Triplestore {
                 if let Some(mut gct) = remaining_gct {
                     self.delete_if_exists(&gct, false, graph)?;
                     gct.encoded_triples = add_rank_sort_triples(
-                                gct.encoded_triples,
-                                &gct.subject_type,
-                                &gct.object_type,
-                                self.global_cats.clone(),
-                            )?;
+                        gct.encoded_triples,
+                        &gct.subject_type,
+                        &gct.object_type,
+                        self.global_cats.clone(),
+                    )?;
                     self.add_global_cat_triples(vec![gct], false)?;
                 } else {
                     self.delete_if_exists(&gct, false, graph)?;
@@ -154,7 +149,10 @@ fn partition_by_global_predicate_col(
             part = part.select([SUBJECT_COL_NAME, OBJECT_COL_NAME]).unwrap();
             sms.push(EagerSolutionMappings::new(part, sm.rdf_node_types.clone()));
         }
-        let predicates = global_cats.read().unwrap().decode_iri_u32s(&predicates_u32, None);
+        let predicates = global_cats
+            .read()
+            .unwrap()
+            .decode_iri_u32s(&predicates_u32, None);
         sms.into_iter().zip(predicates.into_iter()).collect()
     }
 }
