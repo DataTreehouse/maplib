@@ -1,13 +1,17 @@
 # Change log
 
 ## v0.19.23
+### Features
+- Implement md5, sha1 and encode_for_uri functions.
+
 ### Improvements
 - General improvements in read / map performance (around 10%)
-- Improvements in error handling for PValues
+- Improvements in error handling for PValues, missing Function implementations
 
 ### Bug fixes
 - Fix bug in recursive constraints in SHACL
 - Issue when using Datalog with SPARQL construct syntax
+- Issue with lang string literal in SPARQL construct template
 
 ## v0.19.22
 ### Improvements
