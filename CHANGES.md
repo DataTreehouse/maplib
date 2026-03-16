@@ -5,7 +5,7 @@
 - Implement md5, sha1 and encode_for_uri functions.
 
 ### Improvements
-- General improvements in read / map performance (around 10%)
+- General improvements in read / map performance
 - Improvements in error handling for PValues, missing Function implementations
 
 ### Bug fixes
