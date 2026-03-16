@@ -1,5 +1,9 @@
 # Change log
 
+## v0.19.24
+### Bug fixes
+- Fix for missing triples in pretty turtle serialization under certain conditions involving orphaned blank nodes.
+
 ## v0.19.23
 ### Features
 - Implement md5, sha1 and encode_for_uri functions.

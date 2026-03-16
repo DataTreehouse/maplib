@@ -111,12 +111,23 @@ impl Triplestore {
                             self.global_cats.clone(),
                         );
                         for t in &triples {
-                            writer.serialize_triple(t).unwrap();
+                            writer.serialize_triple(t).map_err(|x| {
+                                TriplestoreError::WriteTurtleError(format!(
+                                    "Error serializing triple {}: {}",
+                                    t.to_string(),
+                                    x.to_string()
+                                ))
+                            })?;
                         }
                     }
                 }
             }
-            writer.finish().unwrap();
+            writer.finish().map_err(|x| {
+                TriplestoreError::WriteTurtleError(format!(
+                    "Error finishing turtle serialization: {}",
+                    x.to_string()
+                ))
+            })?;
         }
         Ok(())
     }

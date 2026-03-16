@@ -77,6 +77,7 @@ impl Pushdowns {
                             x,
                             eager_sm.rdf_node_types.get(name).unwrap(),
                             global_cats.clone(),
+                            false,
                         );
                         let terms: HashSet<_> = maybe_terms.into_iter().flatten().collect();
                         (name.to_string(), terms)

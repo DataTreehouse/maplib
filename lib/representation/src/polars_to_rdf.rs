@@ -16,7 +16,7 @@ use crate::{
 use chrono::TimeZone as ChronoTimeZone;
 use chrono::{Datelike, Timelike};
 use oxrdf::vocab::{rdf, xsd};
-use oxrdf::{Literal, NamedNode, NamedOrBlankNode, Triple, Variable};
+use oxrdf::{BlankNode, Literal, NamedNode, NamedOrBlankNode, Triple, Variable};
 use polars::prelude::{
     as_struct, col, AnyValue, Column, DataFrame, DataType, IntoColumn, IntoLazy, LiteralValue,
     PlSmallStr, Scalar, Series, TimeZone,
@@ -44,6 +44,7 @@ pub fn column_as_terms(
     column: &Column,
     t: &RDFNodeState,
     global_cats: LockedCats,
+    blanks_from_u32: bool,
 ) -> Vec<Option<Term>> {
     let height = column.len();
     let terms: Vec<_> = if !t.is_multi() {
@@ -52,12 +53,19 @@ pub fn column_as_terms(
             t.get_base_type().unwrap(),
             t.get_base_state().unwrap(),
             global_cats,
+            blanks_from_u32,
         )
     } else {
         let mut iters: Vec<IntoIter<Option<Term>>> = vec![];
         for (t, s) in &t.map {
             let type_column = extract_column_from_multitype(column, &t);
-            let v = basic_rdf_node_type_column_to_term_vec(&type_column, t, s, global_cats.clone());
+            let v = basic_rdf_node_type_column_to_term_vec(
+                &type_column,
+                t,
+                s,
+                global_cats.clone(),
+                blanks_from_u32,
+            );
             iters.push(v.into_iter())
         }
         let mut final_terms = vec![];
@@ -94,7 +102,7 @@ pub fn df_as_result(sm: &EagerSolutionMappings, global_cats: LockedCats) -> Quer
         if let Ok(ser) = sm.mappings.column(k) {
             //TODO: Perhaps correct this upstream?
             variables.push(Variable::new_unchecked(k));
-            let terms = column_as_terms(ser, t, global_cats.clone());
+            let terms = column_as_terms(ser, t, global_cats.clone(), false);
             all_terms.push(terms);
         }
     }
@@ -124,11 +132,13 @@ pub fn global_df_as_triples(
         df.column(SUBJECT_COL_NAME).unwrap(),
         &subject_type.into_default_stored_rdf_node_state(),
         global_cats.clone(),
+        false,
     );
     let objects = column_as_terms(
         df.column(OBJECT_COL_NAME).unwrap(),
         &object_type.into_default_stored_rdf_node_state(),
         global_cats,
+        false,
     );
 
     subjects
@@ -150,6 +160,7 @@ pub fn basic_rdf_node_type_column_to_term_vec(
     base_type: &BaseRDFNodeType,
     base_state: &BaseCatState,
     global_cats: LockedCats,
+    blanks_from_u32: bool,
 ) -> Vec<Option<Term>> {
     match &base_type {
         BaseRDFNodeType::IRI => decode_column(column, base_type, base_state, global_cats)
@@ -158,12 +169,24 @@ pub fn basic_rdf_node_type_column_to_term_vec(
             .par_iter()
             .map(|x| x.map(|x| Term::NamedNode(literal_iri_to_namednode(x))))
             .collect(),
-        BaseRDFNodeType::BlankNode => decode_column(column, base_type, base_state, global_cats)
-            .str()
-            .unwrap()
-            .par_iter()
-            .map(|x| x.map(|x| Term::BlankNode(literal_blanknode_to_blanknode(x))))
-            .collect(),
+        BaseRDFNodeType::BlankNode => {
+            if blanks_from_u32 {
+                let mut blank_terms = Vec::with_capacity(column.len());
+                for c in column.u32().unwrap() {
+                    blank_terms.push(c.map(|x| {
+                        Term::BlankNode(BlankNode::new_unchecked(blank_node_to_normal_string(&x)))
+                    }));
+                }
+                blank_terms
+            } else {
+                decode_column(column, base_type, base_state, global_cats)
+                    .str()
+                    .unwrap()
+                    .par_iter()
+                    .map(|x| x.map(|x| Term::BlankNode(literal_blanknode_to_blanknode(x))))
+                    .collect()
+            }
+        }
         BaseRDFNodeType::Literal(l) => match l.as_ref() {
             rdf::LANG_STRING => {
                 let col_struct = column.struct_().unwrap();
@@ -538,4 +561,8 @@ pub fn particular_opt_term_vec_to_series(
             .collect();
         polars_literal_values_to_series(any_iter, c)
     }
+}
+
+pub fn blank_node_to_normal_string(u: &u32) -> String {
+    format!("b{u}")
 }

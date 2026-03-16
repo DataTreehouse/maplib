@@ -12,7 +12,7 @@ use polars_core::POOL;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use representation::cats::LockedCats;
 use representation::dataset::NamedGraph;
-use representation::polars_to_rdf::column_as_terms;
+use representation::polars_to_rdf::{blank_node_to_normal_string, column_as_terms};
 use representation::{BaseRDFNodeType, RDFNodeState, OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use spargebra::algebra::{Expression, Function, GraphPattern};
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
@@ -111,7 +111,7 @@ impl TermOrList {
             }
             TermOrList::BlankPlaceholder(u) => {
                 let mut outs = vec![*u];
-                let t = in_degree_one_map.get(u).unwrap();
+                let t = in_degree_one_map.get(u).expect("Should never happen");
                 match t {
                     TurtleBlockOrTermOrList::TurtleBlock(t) => {
                         let out = t.write_block(
@@ -370,6 +370,16 @@ impl Triplestore {
                 }
             }
         }
+        for u in &blanks_in_degree_one {
+            if !in_degree_one_blocks_map.contains_key(u) {
+                in_degree_one_blocks_map.insert(
+                    *u,
+                    TurtleBlockOrTermOrList::Term(TermOrList::Elem(Arc::new(Term::BlankNode(
+                        BlankNode::new_unchecked(blank_node_to_normal_string(u)),
+                    )))),
+                );
+            }
+        }
 
         let mut drivers = vec![];
         for (pred, m) in map.iter() {
@@ -384,13 +394,13 @@ impl Triplestore {
         drivers.sort();
         if let Some(m) = map.get(&rdf::TYPE.into_owned()) {
             let k1 = (BaseRDFNodeType::IRI, BaseRDFNodeType::IRI);
-            if m.contains_key(&k1) {
-                drivers.push((rdf::TYPE.into_owned(), k1));
-            }
-
             let k2 = (BaseRDFNodeType::BlankNode, BaseRDFNodeType::IRI);
-            if m.contains_key(&k2) {
-                drivers.push((rdf::TYPE.into_owned(), k2));
+            let k3 = (BaseRDFNodeType::BlankNode, BaseRDFNodeType::BlankNode);
+            let k4 = (BaseRDFNodeType::IRI, BaseRDFNodeType::BlankNode);
+            for k in [k1, k2, k3, k4] {
+                if m.contains_key(&k) {
+                    drivers.push((rdf::TYPE.into_owned(), k));
+                }
             }
         }
         let mut used_drivers: HashMap<_, HashSet<(BaseRDFNodeType, BaseRDFNodeType)>> =
@@ -530,13 +540,7 @@ impl Triplestore {
                 let subject = if blanks_in_degree_zero.contains(&u) {
                     None
                 } else {
-                    let bl = self
-                        .global_cats
-                        .read()?
-                        .maybe_decode_of_type(&u, &BaseRDFNodeType::BlankNode)
-                        .unwrap()
-                        .into_owned();
-                    let bl = BlankNode::new_unchecked(bl);
+                    let bl = BlankNode::new_unchecked(blank_node_to_normal_string(&u));
                     Some(Term::BlankNode(bl))
                 };
                 let first = l.remove_first();
@@ -598,9 +602,6 @@ impl Triplestore {
         if df.columns().is_empty() {
             return Ok((HashMap::new(), Vec::new()));
         }
-        //let r = self.global_cats.read()?.decode_of_type(df.column(SUBJECT_COL_NAME).unwrap().as_materialized_series(), &BaseRDFNodeType::BlankNode);
-        //assert!(string_start <= r.str().unwrap().first().unwrap());
-        //assert!(r.str().unwrap().last().unwrap() <= string_ends);
 
         let new_subj_u32: HashSet<u32> = df
             .column(SUBJECT_COL_NAME)
@@ -721,6 +722,7 @@ impl Triplestore {
                             df.column(OBJECT_COL_NAME).unwrap(),
                             &RDFNodeState::from_bases(o.clone(), os),
                             self.global_cats.clone(),
+                            true,
                         );
                         if let Some(to_replace_terms) = to_replace_terms {
                             for ((s, t), r) in subject_u32s
@@ -959,6 +961,7 @@ fn update_blocks_map(
             subject_type.default_stored_cat_state(),
         ),
         global_cats.clone(),
+        true,
     );
     let mut to_replace = if object_type.is_blank_node() {
         let obj_u32s = df.column(OBJECT_COL_NAME).unwrap().u32().unwrap();
@@ -980,10 +983,11 @@ fn update_blocks_map(
         df.column(OBJECT_COL_NAME).unwrap(),
         &RDFNodeState::from_bases(object_type.clone(), object_type.default_stored_cat_state()),
         global_cats.clone(),
+        true,
     );
     for ((s_u32, s), o) in subj_u32s.iter().zip(subj_terms).zip(obj_terms) {
         let s_u32 = s_u32.unwrap();
-        let s = if in_degree_zero_blanks.contains(&s_u32) {
+        let s = if subject_type.is_blank_node() && in_degree_zero_blanks.contains(&s_u32) {
             None
         } else {
             s

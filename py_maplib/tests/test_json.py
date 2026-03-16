@@ -106,15 +106,16 @@ def test_map_json_string():
     """
     m = Model()
     m.map_json(s)
-    height = m.query("SELECT * WHERE {?a ?b ?c}").height
+    df_before = m.query("SELECT * WHERE {?a ?b ?c}")
     r = m.writes(format="turtle", prefixes={
         "mj":"urn:maplib_json:"
     })
     print(r)
     m2 = Model()
     m2.reads(r, format="turtle")
-    height_after = m2.query("SELECT * WHERE {?a ?b ?c}").height
-    assert height == height_after
+    df_after = m2.query("SELECT * WHERE {?a ?b ?c}")
+
+    assert df_before.height == df_after.height
 
 def test_map_json_list_string():
     s = """

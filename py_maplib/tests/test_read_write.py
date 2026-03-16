@@ -169,3 +169,64 @@ def test_read_write_xml_string():
     expected_df = pl.scan_csv(filename).select(["v", "o"]).sort(["v", "o"]).collect()
     pl.testing.assert_frame_equal(res, expected_df)
 
+
+def test_read_singleton_blanks_turtle_string():
+    m = Model()
+    m.reads("""
+    @prefix ex:<urn:maplib:>.
+    _:b a _:dog .
+    _:c a _:cat .
+    _:cat ex:pred "cat_label" . 
+    _:d ex:pred2 "abc" .
+    ex:cat ex:pred3 _:e .
+    ex:dog a _:f .
+    """,
+    format="turtle")
+    blanks1 = m.query(
+        """
+            PREFIX foaf:<http://xmlns.com/foaf/0.1/>
+
+            SELECT DISTINCT ?blank WHERE {
+                {
+                SELECT ?blank WHERE {
+                    ?blank ?p ?o .
+                    FILTER(ISBLANK(?blank))                
+                } 
+                }
+                UNION
+                {
+                SELECT ?blank WHERE {
+                    ?s ?p ?blank .
+                    FILTER(ISBLANK(?blank))                
+                }
+                } 
+            } 
+            """
+    )
+    out_str = m.writes(format="turtle")
+    print(out_str)
+    m2 = Model()
+    m2.reads(out_str, format="turtle")
+    blanks2 = m2.query(
+        """
+            PREFIX foaf:<http://xmlns.com/foaf/0.1/>
+
+            SELECT DISTINCT ?blank WHERE {
+                {
+                    SELECT ?blank WHERE {
+                        ?blank ?p ?o .
+                        FILTER(ISBLANK(?blank))                
+                    } 
+                }
+                UNION
+                {
+                    SELECT ?blank WHERE {
+                        ?s ?p ?blank .
+                        FILTER(ISBLANK(?blank))                
+                    }
+                } 
+            } 
+            """
+    )
+    assert blanks1.height == blanks2.height
+

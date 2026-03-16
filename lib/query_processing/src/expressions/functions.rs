@@ -7,10 +7,10 @@ use crate::expressions::{cast_lang_string_to_string, drop_inner_contexts};
 use md5::{Digest, Md5};
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{Literal, NamedNodeRef};
-use polars::datatypes::{AnyValue, DataType, Field, PlSmallStr, TimeUnit};
+use polars::datatypes::{DataType, Field, PlSmallStr, TimeUnit};
 use polars::prelude::{
-    as_struct, by_name, coalesce, col, concat_str, lit, when, Column, Expr, IntoColumn,
-    LiteralValue, NamedFrom, RoundMode, Scalar, Series, StringChunked, StrptimeOptions,
+    as_struct, by_name, coalesce, col, concat_str, lit, when, Expr, IntoColumn, LiteralValue,
+    NamedFrom, RoundMode, Scalar, Series, StringChunked, StrptimeOptions,
 };
 use rayon::iter::IntoParallelIterator;
 use rayon::iter::ParallelIterator;
@@ -25,7 +25,6 @@ use representation::{
 use sha1::Sha1;
 use spargebra::algebra::{Expression, Function};
 use std::collections::HashMap;
-use std::io::Read;
 use std::ops::{Div, Mul};
 use uri_encode::encode_uri;
 
