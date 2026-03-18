@@ -927,4 +927,4 @@ def test_bad_query():
             ?a b ?c .
         }
         """, include_datatypes=True)
-    assert "?a b ?c <<AROUND HERE>>" in str(e)
+    assert "?a b ?c <<PARSER COMPLAINS HERE>>" in str(e)
