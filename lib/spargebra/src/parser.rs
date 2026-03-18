@@ -21,7 +21,7 @@ use peg::str::LineCol;
 use rand::random;
 #[cfg(feature = "standard-unicode-escaping")]
 use std::borrow::Cow;
-use std::char;
+use std::{char, cmp};
 use std::collections::{HashMap, HashSet};
 use std::mem::take;
 #[cfg(feature = "standard-unicode-escaping")]
@@ -135,7 +135,8 @@ impl SparqlParser {
         );
         #[cfg(feature = "standard-unicode-escaping")]
         let query = unescape_unicode_codepoints(query);
-        Ok(parser::QueryUnit(&query, &mut state).map_err(SparqlSyntaxErrorKind::Syntax)?)
+        Ok(parser::QueryUnit(&query, &mut state).map_err(|x|
+            SparqlSyntaxError{kind:SparqlSyntaxErrorKind::Syntax(x)}.resolve(query))?)
     }
 
     /// Parse the given update string using the already set options.
@@ -161,7 +162,8 @@ impl SparqlParser {
         #[cfg(feature = "standard-unicode-escaping")]
         let update = unescape_unicode_codepoints(update);
         let operations =
-            parser::UpdateInit(&update, &mut state).map_err(SparqlSyntaxErrorKind::Syntax)?;
+            parser::UpdateInit(&update, &mut state).map_err(|x|
+                SparqlSyntaxError{kind:SparqlSyntaxErrorKind::Syntax(x)}.resolve(update))?;
         check_if_insert_data_are_sharing_blank_nodes(&operations)?;
         Ok(Update {
             operations,
@@ -180,7 +182,7 @@ pub fn parse_construct_ruleset(
     let queries =
         parser::ConstructRulesetUnit(constructs, &mut state).map_err(|e| SparqlSyntaxError {
             kind: SparqlSyntaxErrorKind::from(e),
-        })?;
+        }.resolve(constructs))?;
     Ok(queries)
 }
 
@@ -196,6 +198,21 @@ impl SparqlSyntaxError {
     pub(crate) fn from_bad_base_iri(e: IriParseError) -> Self {
         SparqlSyntaxErrorKind::InvalidBaseIri(e).into()
     }
+
+    fn resolve(self, query:&str) -> Self {
+        let kind = match self.kind {
+            SparqlSyntaxErrorKind::Syntax(l) => {
+                let start = l.location.offset.saturating_sub(10);
+                let start_part = &query[start..l.location.offset];
+                let end  = cmp::min(query.len(), l.location.offset + 10);
+                let end_part = &query[l.location.offset..end];
+                let s = format!("{}<<PARSER COMPLAINS HERE>>{}", start_part, end_part);
+                SparqlSyntaxErrorKind::ResolvedSyntax(s, l.to_string())
+            }
+            k => k
+        };
+        SparqlSyntaxError {kind }
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -204,6 +221,8 @@ enum SparqlSyntaxErrorKind {
     InvalidBaseIri(#[from] IriParseError),
     #[error(transparent)]
     Syntax(#[from] peg::error::ParseError<LineCol>),
+    #[error("SPARQL Syntax error for this part of the query:\n\n {0} \n\nmessage: {1}")]
+    ResolvedSyntax(String, String),
     #[error("The blank node {0} cannot be shared by multiple blocks")]
     SharedBlankNode(BlankNode),
 }

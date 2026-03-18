@@ -17,7 +17,7 @@ mod values;
 
 use super::{QuerySettings, Triplestore};
 use crate::sparql::errors::SparqlError;
-use tracing::{instrument, trace};
+use tracing::{instrument, trace, warn};
 
 use crate::sparql::lazy_graph_patterns::triples_ordering::order_triple_patterns;
 use polars::prelude::{IntoLazy, JoinType};
@@ -49,28 +49,38 @@ impl Triplestore {
         );
         let sm = match graph_pattern {
             GraphPattern::Bgp { patterns } => {
-                let patterns = if let Some(fts_index) =
-                    self.fts_index.get(&NamedGraph::DefaultGraph)
-                {
-                    let (patterns, fts_solution_mappings) = fts_index.lookup_from_triple_patterns(
-                        patterns,
-                        self.global_cats.clone(),
-                        query_settings.max_rows,
-                    )?;
-                    if let Some(fts_solution_mappings) = fts_solution_mappings {
-                        solution_mappings = if let Some(solution_mappings) = solution_mappings {
-                            Some(join(
-                                solution_mappings,
-                                fts_solution_mappings,
-                                JoinType::Inner,
+                // Making sure we use the FTS belonging to the appropriate named graph.
+                let graph = if let QueryGraph::NamedGraph(n) = dataset {
+                    Some(n)
+                } else {
+                    warn!("FTS is only defined when named graphs are provided or for the default graph");
+                    None
+                };
+                let patterns = if let Some(graph) = graph {
+                    if let Some(fts_index) = self.fts_index.get(graph) {
+                        let (patterns, fts_solution_mappings) = fts_index
+                            .lookup_from_triple_patterns(
+                                patterns,
                                 self.global_cats.clone(),
                                 query_settings.max_rows,
-                            )?)
-                        } else {
-                            Some(fts_solution_mappings)
-                        };
+                            )?;
+                        if let Some(fts_solution_mappings) = fts_solution_mappings {
+                            solution_mappings = if let Some(solution_mappings) = solution_mappings {
+                                Some(join(
+                                    solution_mappings,
+                                    fts_solution_mappings,
+                                    JoinType::Inner,
+                                    self.global_cats.clone(),
+                                    query_settings.max_rows,
+                                )?)
+                            } else {
+                                Some(fts_solution_mappings)
+                            };
+                        }
+                        patterns
+                    } else {
+                        patterns.clone()
                     }
-                    patterns
                 } else {
                     patterns.clone()
                 };

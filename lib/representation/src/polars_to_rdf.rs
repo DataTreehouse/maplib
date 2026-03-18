@@ -210,6 +210,7 @@ pub fn basic_rdf_node_type_column_to_term_vec(
                     base_state,
                     global_cats,
                 );
+                
                 let lang_iter = lang_col.str().unwrap().into_iter();
 
                 value_iter

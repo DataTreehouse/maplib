@@ -94,6 +94,7 @@ impl Triplestore {
         };
         let (left_props, _) = self.bad_properties(left, use_vars.as_ref());
         let (right_props, _) = self.bad_properties(right, use_vars.as_ref());
+        
         let output_solution_mappings = if left_props < right_props {
             let mut output_solution_mappings = self.lazy_graph_pattern(
                 left,
