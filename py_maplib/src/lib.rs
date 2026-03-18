@@ -337,6 +337,8 @@ impl PyModel {
     /// :param popup: Pop up the browser window.
     /// :param fts: Enable full text search indexing
     /// :param fts_path: Path to the fts index.
+    /// :param graph: The named graph to query, None is the default graph.
+    /// :param new: Use new graph explorer?
     #[pyo3(signature = (*args, **kwargs), text_signature = "(/)")]
     fn explore(
         self_: PyRef<'_, Self>,

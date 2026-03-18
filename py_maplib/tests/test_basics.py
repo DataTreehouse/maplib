@@ -1,6 +1,7 @@
 import polars as pl
 import pytest
 
+import maplib
 from maplib import (
     Model,
     Template,
@@ -916,3 +917,14 @@ def test_lang_tagged():
     m.map_default(df.select("id", "my_lang_col"), "id")
     sm = m.query("SELECT * WHERE {?a ?b ?c}", include_datatypes=True)
     assert sm.rdf_types["c"] == RDFType.Literal(rdf.langString)
+
+def test_bad_query():
+    m = Model()
+
+    with pytest.raises(maplib.MaplibException) as e:
+        m.query("""
+        SELECT * WHERE {
+            ?a b ?c .
+        }
+        """, include_datatypes=True)
+    assert "?a b ?c <<AROUND HERE>>" in str(e)

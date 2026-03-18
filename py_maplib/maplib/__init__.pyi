@@ -636,6 +636,8 @@ class Model:
                 popup=False,
                 fts=True,
                 fts_path:str="fts",
+                graph: str = None,
+                new: bool = False,
             ) -> "ExploreServer":
                 """Starts a graph explorer session.
                 To run from Jupyter Notebook use:
@@ -647,6 +649,9 @@ class Model:
                 :param port: The port where the graph explorer webserver listens on.
                 :param bind: Bind to the following host / ip.
                 :param fts: Enable full text search indexing
+                :param fts_path: Path to the fts index
+                :param graph: The named graph to explore, defaults to the default graph
+                :param new: Use the new graph explorer
                 """
 
     def query(
