@@ -1,5 +1,13 @@
 # Change log
 
+## v0.19.25
+### Features
+- SPARQL parser returns the bad part of the query
+
+### Bug fixes
+- Fix for FTS issue when enabling for multiple named graphs
+- Fix lang string issue with FTS
+
 ## v0.19.24
 ### Bug fixes
 - Fix for missing triples in pretty turtle serialization under certain conditions involving orphaned blank nodes.
