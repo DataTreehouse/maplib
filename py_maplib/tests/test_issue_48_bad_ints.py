@@ -80,14 +80,12 @@ def test_issue_48_bad_ints():
     combined = Graph(identifier=URIRef("http://example.com/t/1"))
     for row in rows:
         model = Model()
-        print("Thedf", pl.DataFrame(row))
         model.map(template=template, data=pl.DataFrame(row), graph="http://example.com/t/1")
         combined.parse(
             data=model.writes(format="turtle", graph="http://example.com/t/1"),
             format="turtle",
         )
 
-    print("--- combined termYears literals ---")
     objs = list(
         combined.objects(
             URIRef("http://example.com/t/1"),
