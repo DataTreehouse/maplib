@@ -1,12 +1,12 @@
 use crate::error::PyMaplibError;
-use crate::{PyModel};
+use crate::PyModel;
 use maplib::errors::MaplibError;
 use pyo3::{pyclass, pymethods, Py, PyAny, PyResult, Python};
 use report_mapping::report_to_model;
+use representation::df_to_python::{df_to_py_df, fix_cats_and_multicolumns};
 use representation::solution_mapping::EagerSolutionMappings;
 use shacl::ValidationReport as RustValidationReport;
 use std::collections::HashMap;
-use representation::df_to_python::{df_to_py_df, fix_cats_and_multicolumns};
 use triplestore::Triplestore;
 
 #[derive(Clone)]

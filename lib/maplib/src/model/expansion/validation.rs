@@ -4,7 +4,7 @@ use oxrdf::vocab::{rdfs, xsd};
 use oxrdf::NamedNode;
 use polars::datatypes::DataType;
 use polars::frame::DataFrame;
-use polars::prelude::{col, ChunkApply, Column, IntoLazy, Series};
+use polars::prelude::{col, element, ChunkApply, Column, Expr, IntoLazy, Series};
 use rayon::current_num_threads;
 use rayon::iter::IntoParallelIterator;
 use rayon::iter::ParallelIterator;
@@ -41,7 +41,10 @@ pub fn validate(
             }
             if !found_column_type {
                 if let Ok(c) = df.column(name) {
-                    let t = infer_mapping_column_type(p, c)?;
+                    let (t, expr) = infer_cast_mapping_column_type(p, c)?;
+                    if let Some(expr) = expr {
+                        df = df.lazy().with_column(expr).collect().unwrap();
+                    }
                     map.insert(name.to_string(), t);
                 }
             }
@@ -192,18 +195,19 @@ fn validate_column_existence(
     }
 }
 
-fn infer_mapping_column_type(
+fn infer_cast_mapping_column_type(
     p: &Parameter,
     column: &Column,
-) -> Result<MappingColumnType, MappingError> {
+) -> Result<(MappingColumnType, Option<Expr>), MappingError> {
     if let Some(ptype) = &p.ptype {
         Ok(infer_validate_mapping_column_type_from_ptype(
             column.name(),
+            col(column.name().as_str()),
             column.dtype(),
             ptype,
         )?)
     } else {
-        infer_type_from_column(column)
+        infer_type_from_column(column).map(|x| (x, None))
     }
 }
 
@@ -235,24 +239,31 @@ fn is_iri_col(column: &Column) -> bool {
 
 fn infer_validate_mapping_column_type_from_ptype(
     column_name: &str,
+    expr: Expr,
     datatype: &DataType,
     ptype: &PType,
-) -> Result<MappingColumnType, MappingError> {
+) -> Result<(MappingColumnType, Option<Expr>), MappingError> {
     match ptype {
         PType::None => {
             let series_inferred_rdf_node_type = polars_type_to_literal_type(datatype)
                 .map_err(MappingError::DatatypeInferenceError)?;
-            Ok(MappingColumnType::Flat(series_inferred_rdf_node_type))
+            Ok((MappingColumnType::Flat(series_inferred_rdf_node_type), None))
         }
         PType::Basic(nn) => {
             if datatype.is_null() {
-                Ok(MappingColumnType::Flat(
-                    BaseRDFNodeType::None.into_default_input_rdf_node_state(),
+                Ok((
+                    MappingColumnType::Flat(
+                        BaseRDFNodeType::None.into_default_input_rdf_node_state(),
+                    ),
+                    None,
                 ))
             } else if ptype_is_iri(nn.as_ref()) {
                 if datatype.is_string() {
-                    Ok(MappingColumnType::Flat(
-                        BaseRDFNodeType::IRI.into_default_input_rdf_node_state(),
+                    Ok((
+                        MappingColumnType::Flat(
+                            BaseRDFNodeType::IRI.into_default_input_rdf_node_state(),
+                        ),
+                        None,
                     ))
                 } else {
                     Err(MappingError::ColumnDataTypeMismatch(
@@ -264,8 +275,11 @@ fn infer_validate_mapping_column_type_from_ptype(
                 }
             } else if ptype_is_blank(nn.as_ref()) {
                 if datatype.is_string() {
-                    Ok(MappingColumnType::Flat(
-                        BaseRDFNodeType::BlankNode.into_default_input_rdf_node_state(),
+                    Ok((
+                        MappingColumnType::Flat(
+                            BaseRDFNodeType::BlankNode.into_default_input_rdf_node_state(),
+                        ),
+                        None,
                     ))
                 } else {
                     Err(MappingError::ColumnDataTypeMismatch(
@@ -280,13 +294,16 @@ fn infer_validate_mapping_column_type_from_ptype(
                 if matches!(nn.as_ref(), rdfs::LITERAL | rdfs::RESOURCE) {
                     let series_inferred_rdf_node_type = polars_type_to_literal_type(datatype)
                         .map_err(MappingError::DatatypeInferenceError)?;
-                    Ok(MappingColumnType::Flat(series_inferred_rdf_node_type))
+                    Ok((MappingColumnType::Flat(series_inferred_rdf_node_type), None))
                 } else {
                     let ptype_rdf_node_type = BaseRDFNodeType::Literal(nn.clone());
                     let ptype_dt = ptype_rdf_node_type.default_input_polars_data_type();
                     if ptype_dt.is_string() && datatype.is_string() || &ptype_dt == datatype {
-                        Ok(MappingColumnType::Flat(
-                            ptype_rdf_node_type.into_default_input_rdf_node_state(),
+                        Ok((
+                            MappingColumnType::Flat(
+                                ptype_rdf_node_type.into_default_input_rdf_node_state(),
+                            ),
+                            None,
                         ))
                     } else {
                         let series_inferred_rdf_node_type =
@@ -302,7 +319,18 @@ fn infer_validate_mapping_column_type_from_ptype(
                                     unreachable!("Should never happen")
                                 };
                             if is_literal_subtype_ext(inferred_nn.as_ref(), nn.as_ref()) {
-                                Ok(MappingColumnType::Flat(series_inferred_rdf_node_type))
+                                let super_t = BaseRDFNodeType::Literal(nn.clone());
+                                let expr = if inferred_nn != nn {
+                                    Some(expr.cast(super_t.default_input_polars_data_type()))
+                                } else {
+                                    None
+                                };
+                                Ok((
+                                    MappingColumnType::Flat(
+                                        super_t.into_default_input_rdf_node_state(),
+                                    ),
+                                    expr,
+                                ))
                             } else {
                                 Err(MappingError::ColumnDataTypeMismatch(
                                     column_name.to_string(),
@@ -312,7 +340,7 @@ fn infer_validate_mapping_column_type_from_ptype(
                                 ))
                             }
                         } else {
-                            panic!("Should not happen");
+                            unreachable!("Should not happen");
                         }
                     }
                 }
@@ -320,8 +348,18 @@ fn infer_validate_mapping_column_type_from_ptype(
         }
         PType::Lub(inner) | PType::List(inner) | PType::NEList(inner) => {
             if let DataType::List(dt) = datatype {
-                let res = infer_validate_mapping_column_type_from_ptype(column_name, dt, inner)?;
-                Ok(MappingColumnType::Nested(Box::new(res)))
+                let (res, mut new_expr) = infer_validate_mapping_column_type_from_ptype(
+                    column_name,
+                    element(),
+                    dt,
+                    inner,
+                )?;
+                new_expr = if let Some(new_expr) = new_expr {
+                    Some(expr.list().eval(new_expr))
+                } else {
+                    None
+                };
+                Ok((MappingColumnType::Nested(Box::new(res)), new_expr))
             } else {
                 Err(MappingError::ColumnDataTypeMismatch(
                     column_name.to_string(),

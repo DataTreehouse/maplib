@@ -73,6 +73,7 @@ impl Model {
             graph,
             validate_iris,
         } = options;
+
         let (mut df, mut columns) =
             validate(df, mapping_column_types, &target_template, validate_iris)?;
 

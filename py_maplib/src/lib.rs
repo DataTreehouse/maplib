@@ -67,12 +67,14 @@ use mimalloc::MiMalloc;
 use representation::cats::LockedCats;
 use representation::dataset::NamedGraph;
 use representation::debug::DebugOutputs;
+use representation::df_to_python::{df_to_py_df, fix_cats_and_multicolumns};
 use representation::formatting::format_native_columns;
 use representation::polars_to_rdf::XSD_DATETIME_WITH_TZ_FORMAT;
-use representation::rdf_to_polars::rdf_named_node_to_polars_literal_value;
-use representation::{BaseRDFNodeType, RDFNodeState, OBJECT_COL_NAME, PREDICATE_COL_NAME, SUBJECT_COL_NAME};
-use representation::df_to_python::{df_to_py_df, fix_cats_and_multicolumns};
 use representation::python_df_to_rust::polars_df_to_rust_df;
+use representation::rdf_to_polars::rdf_named_node_to_polars_literal_value;
+use representation::{
+    BaseRDFNodeType, RDFNodeState, OBJECT_COL_NAME, PREDICATE_COL_NAME, SUBJECT_COL_NAME,
+};
 use templates::python::owl::PyOWL;
 use templates::python::rdf::PyRDF;
 use templates::python::rdfs::PyRDFS;
@@ -139,7 +141,8 @@ impl PyIndexingOptions {
         let subject_object_index =
             subject_object_index.unwrap_or(IndexingOptions::default_subject_object_index());
         let inner = if object_sort_all.is_none() && object_sort_some.is_none() {
-            let opts = IndexingOptions::new_default_object_sort(fts, fts_path, subject_object_index);
+            let opts =
+                IndexingOptions::new_default_object_sort(fts, fts_path, subject_object_index);
             opts
         } else {
             let object_sort_all = object_sort_all.unwrap_or(false);
@@ -238,12 +241,19 @@ impl PyModel {
         graph: Option<String>,
         validate_iris: Option<bool>,
     ) -> PyResult<Option<Py<PyAny>>> {
-        let mtypes = data.map(|x|data_to_mappings_types(x, py)).transpose()?;
+        let mtypes = data.map(|x| data_to_mappings_types(x, py)).transpose()?;
         let (mappings, types) = mtypes.unzip();
         let template = template.try_into()?;
         py.detach(move || {
             let mut inner = self.inner.lock().unwrap();
-            map_mutex(&mut inner, template, mappings, graph, types.flatten(), validate_iris)
+            map_mutex(
+                &mut inner,
+                template,
+                mappings,
+                graph,
+                types.flatten(),
+                validate_iris,
+            )
         })
     }
 
@@ -550,33 +560,27 @@ impl PyModel {
         let source_graph = NamedGraph::from_maybe_named_node(source_graph.as_ref());
         let target_graph = parse_optional_named_node(target_graph)?;
         let target_graph = NamedGraph::from_maybe_named_node(target_graph.as_ref());
-        let (new_triples, cats) =
-            py.detach(|| -> PyResult<(Vec<NewTriples>, LockedCats)> {
-                let mut inner = self.inner.lock().unwrap();
+        let (new_triples, cats) = py.detach(|| -> PyResult<(Vec<NewTriples>, LockedCats)> {
+            let mut inner = self.inner.lock().unwrap();
 
-                let cats = inner.triplestore.global_cats.clone();
+            let cats = inner.triplestore.global_cats.clone();
 
-                let new_triples = insert_mutex(
-                    &mut inner,
-                    query,
-                    mapped_parameters,
-                    transient,
-                    streaming,
-                    source_graph,
-                    target_graph,
-                    include_transient,
-                    max_rows,
-                    debug,
-                )?;
+            let new_triples = insert_mutex(
+                &mut inner,
+                query,
+                mapped_parameters,
+                transient,
+                streaming,
+                source_graph,
+                target_graph,
+                include_transient,
+                max_rows,
+                debug,
+            )?;
 
-                Ok((new_triples, cats))
-            })?;
-        new_triples_to_dict(
-            new_triples,
-            solution_mappings.unwrap_or(false),
-            cats,
-            py,
-        )
+            Ok((new_triples, cats))
+        })?;
+        new_triples_to_dict(new_triples, solution_mappings.unwrap_or(false), cats, py)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1737,7 +1741,6 @@ fn map_parameters(
     if let Some(parameters) = parameters {
         let mut mapped_parameters = HashMap::new();
         for (k, pysm) in parameters {
-
             mapped_parameters.insert(k, pysm.borrow().to_inner(py)?);
         }
 
@@ -1877,13 +1880,17 @@ fn create_prefix_map(
 }
 
 pub fn data_to_mappings_types(
-    data: &Bound<'_, PyAny>, py:Python<'_>
+    data: &Bound<'_, PyAny>,
+    py: Python<'_>,
 ) -> PyResult<(DataFrame, Option<HashMap<String, RDFNodeState>>)> {
     if let Ok(sm) = data.extract::<PySolutionMappings>() {
-        let EagerSolutionMappings { mappings, rdf_node_types } = sm.to_inner(py)?;
+        let EagerSolutionMappings {
+            mappings,
+            rdf_node_types,
+        } = sm.to_inner(py)?;
         Ok((mappings, Some(rdf_node_types)))
     } else {
         let df = polars_df_to_rust_df(data)?;
-            Ok((df, None))
+        Ok((df, None))
     }
 }

@@ -1,5 +1,6 @@
 import polars as pl
 import pytest
+from maplib.maplib import SolutionMappings
 
 from maplib import (
     Model,
@@ -240,8 +241,7 @@ def test_autoconverted_datetime_list_to_date_list_2():
     assert r.rdf_types["c"] == RDFType.Literal("http://www.w3.org/2001/XMLSchema#date")
 
 
-def test_want_xsd_long_got_xsd_short():
-    
+def test_want_xsd_long_got_xsd_short_no_override():
     df = pl.DataFrame({"MyValue": [1]})
     df = df.with_columns(pl.col("MyValue").cast(pl.Int16))
     model = Model()
@@ -256,6 +256,33 @@ def test_want_xsd_long_got_xsd_short():
         ],
     )
     model.map(template, df)
+    r = model.query(
+        """
+    SELECT ?a ?b ?c WHERE {
+        ?a ?b ?c
+    }
+    """,
+        solution_mappings=True,
+    )
+    assert r.rdf_types["c"] == RDFType.Literal(xsd.long)
+
+def test_want_xsd_long_got_xsd_short():
+
+    df = pl.DataFrame({"MyValue": [1]})
+    df = df.with_columns(pl.col("MyValue").cast(pl.Int16))
+    model = Model()
+    ex = Prefix("http://example.net/ns#")
+    my_value = Variable("MyValue")
+    my_object = ex.suf("MyObject")
+    template = Template(
+        ex.suf("ExampleTemplate"),
+        [Parameter(my_value, rdf_type=RDFType.Literal(xsd.long))],
+        [
+            Triple(my_object, ex.suf("hasValue"), my_value),
+        ],
+    )
+    sm = SolutionMappings(mappings=df, rdf_types={"MyValue":RDFType.Literal(xsd.short)})
+    model.map(template, sm)
     r = model.query(
         """
     SELECT ?a ?b ?c WHERE {
@@ -431,7 +458,8 @@ def test_nested_template_both_are_general_literal_and_compatible_2():
     """
     model = Model()
     model.add_template(templates)
-    model.map("http://example.net/ns#ExampleTemplate", df)
+    sm = SolutionMappings(mappings=df, rdf_types={"MyValue":RDFType.Literal(xsd.long)})
+    model.map("http://example.net/ns#ExampleTemplate", sm)
     r = model.query(
         """
     SELECT ?a ?b ?c WHERE {
@@ -458,7 +486,8 @@ def test_nested_template_both_are_general_literal_and_possibly_but_not_necessari
     """
     model = Model()
     model.add_template(templates)
-    model.map("http://example.net/ns#ExampleTemplate", df)
+    sm = SolutionMappings(mappings=df, rdf_types={"MyValue":RDFType.Literal(xsd.long)})
+    model.map("http://example.net/ns#ExampleTemplate", sm)
     r = model.query(
         """
     SELECT ?a ?b ?c WHERE {

@@ -2,25 +2,25 @@
 #![feature(str_as_str)]
 extern crate core;
 
-pub mod multitype;
-pub mod polars_to_rdf;
-pub mod query_context;
-pub mod rdf_to_polars;
-pub mod solution_mapping;
-pub mod python_df_to_rust;
-pub mod df_to_python;
 mod base_rdf_type;
 pub mod cats;
 pub mod constants;
 pub mod dataset;
 pub mod debug;
+pub mod df_to_python;
 pub mod errors;
 pub mod formatting;
 pub mod literals;
+pub mod multitype;
+pub mod polars_to_rdf;
 pub mod prefixes;
 pub mod python;
+pub mod python_df_to_rust;
+pub mod query_context;
 mod rdf_state;
+pub mod rdf_to_polars;
 mod rdf_type;
+pub mod solution_mapping;
 pub mod subtypes;
 
 pub use base_rdf_type::*;

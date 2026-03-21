@@ -1,6 +1,8 @@
 use crate::debug::DebugOutputs;
+use crate::python_df_to_rust::polars_df_to_rust_df;
 use crate::query_context::Context;
 use crate::rdf_to_polars::rdf_literal_to_polars_literal_value;
+use crate::solution_mapping::EagerSolutionMappings;
 use crate::{BaseRDFNodeType, RDFNodeState};
 use chrono::{DateTime, TimeDelta, TimeZone};
 use chrono_tz::Tz;
@@ -16,15 +18,11 @@ use pyo3::basic::CompareOp;
 use pyo3::exceptions::PyException;
 use pyo3::prelude::PyAnyMethods;
 use pyo3::IntoPyObjectExt;
-use pyo3::{
-    create_exception, pyclass, pymethods, Bound, Py, PyAny, PyErr, PyResult, Python,
-};
+use pyo3::{create_exception, pyclass, pymethods, Bound, Py, PyAny, PyErr, PyResult, Python};
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 use thiserror::*;
-use crate::python_df_to_rust::polars_df_to_rust_df;
-use crate::solution_mapping::EagerSolutionMappings;
 
 #[derive(Error, Debug)]
 pub enum PyRepresentationError {
@@ -514,7 +512,7 @@ pub struct PySolutionMappings {
 impl PySolutionMappings {
     #[new]
     #[pyo3(signature = (mappings, rdf_types))]
-    fn new(mappings:Py<PyAny>, rdf_types:HashMap<String, PyRDFType>) -> Self {
+    fn new(mappings: Py<PyAny>, rdf_types: HashMap<String, PyRDFType>) -> Self {
         let mut rdf_node_types = HashMap::new();
         for (k, v) in rdf_types {
             let t = v.as_rdf_node_state();
@@ -576,7 +574,7 @@ impl PySolutionMappings {
 }
 
 impl PySolutionMappings {
-    pub fn to_inner(&self,  py: Python<'_>) -> PyResult<EagerSolutionMappings> {
+    pub fn to_inner(&self, py: Python<'_>) -> PyResult<EagerSolutionMappings> {
         let mappings = polars_df_to_rust_df(&self.mappings.clone().into_bound(py))?;
 
         let m = EagerSolutionMappings {

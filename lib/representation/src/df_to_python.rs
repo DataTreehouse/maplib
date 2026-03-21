@@ -2,15 +2,6 @@
 // Edited to remove dependencies on py-polars, and added specific functionality for RDF.
 // Original licence in ../licensing/POLARS_LICENSE
 
-use polars::prelude::{col, ArrayRef, ArrowField, CompatLevel, IntoLazy};
-use pyo3::ffi::{Py_uintptr_t};
-use pyo3::prelude::*;
-use pyo3::types::PyList;
-use pyo3::IntoPyObjectExt;
-use std::collections::HashMap;
-use polars_core::frame::DataFrame;
-use polars_core::utils::arrow::ffi;
-use polars_core::utils::arrow::record_batch::RecordBatch;
 use crate::cats::LockedCats;
 use crate::debug::DebugOutputs;
 use crate::formatting::{format_columns, format_native_columns};
@@ -18,6 +9,15 @@ use crate::multitype::compress_actual_multitypes;
 use crate::python::PySolutionMappings;
 use crate::query_context::Context;
 use crate::RDFNodeState;
+use polars::prelude::{col, ArrayRef, ArrowField, CompatLevel, IntoLazy};
+use polars_core::frame::DataFrame;
+use polars_core::utils::arrow::ffi;
+use polars_core::utils::arrow::record_batch::RecordBatch;
+use pyo3::ffi::Py_uintptr_t;
+use pyo3::prelude::*;
+use pyo3::types::PyList;
+use pyo3::IntoPyObjectExt;
+use std::collections::HashMap;
 
 /// Arrow array to Python.
 pub(crate) fn to_py_array(
