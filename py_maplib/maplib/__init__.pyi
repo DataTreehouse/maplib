@@ -557,7 +557,7 @@ class Model:
         If the template has no arguments, the df argument is not necessary.
 
         :param template: Template, IRI, IRI string or prefixed template name.
-        :param df: DataFrame where the columns have the same names as the template arguments
+        :param data: DataFrame where the columns have the same names as the template arguments (when piping the output of queries back in, use SolutionMappings)
         :param graph: The IRI of the graph to add triples to.
         :param validate_iris: Validate any IRI-columns.
         """
@@ -599,7 +599,7 @@ class Model:
 
         If the template has no arguments, the df argument is not necessary.
 
-        :param df: DataFrame where the columns are named subject and object. May also contain a predicate-column.
+        :param data: DataFrame where the columns are named subject and object. May also contain a predicate-column. When piping the output of queries back in, use SolutionMappings.
         :param verb: The uri of the verb.
         :param graph: The IRI of the graph to add triples to.
         :param validate_iris: Validate any IRI-columns.
@@ -620,7 +620,7 @@ class Model:
         >>> template_string = m.map_default(df, "myKeyCol")
         ... print(template_string)
 
-        :param df: DataFrame where the columns have the same names as the template arguments
+        :param data: DataFrame where the columns have the same names as the template arguments (when piping the output of queries back in, use SolutionMappings)
         :param primary_key_column: This column will be the subject of all triples in the generated template.
         :param dry_run: Do not map the template, only return the string.
         :param graph: The IRI of the graph to add triples to.
