@@ -1,5 +1,13 @@
 # Change log
 
+## v.0.20.0
+### Improvements
+- map_triples, map, map_default "df"-arg renamed to "data" as it now takes alternatively a DataFrame or a SolutionMappings object, in which case types can be specified for columns. A query run with solution_mappings=True can thus be piped into these methods.  
+- parameters for query and update for the PVALUES construction now is a dict with SolutionMappings values.
+
+### Bug fixes
+- Fix for #48
+
 ## v0.19.25
 ### Features
 - SPARQL parser returns the bad part of the query
