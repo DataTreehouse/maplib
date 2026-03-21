@@ -80,7 +80,7 @@ def get_properties(m: Model, graph: Optional[str]) -> pl.DataFrame:
             FILTER(ISIRI(?domain) && ISIRI(?range))
         }
         """,
-        native_dataframe=True,
+        solution_mappings=True,
         graph=graph,
     )
     pl.Config.set_fmt_str_lengths(100)
@@ -96,23 +96,23 @@ def get_properties(m: Model, graph: Optional[str]) -> pl.DataFrame:
             #?property a ?property_type .
         }
         """,
-        native_dataframe=True,
+        solution_mappings=True,
         graph=graph,
     )
     properties_by_subclass_restriction = (
-        properties_by_subclass_restriction.with_columns(
+        properties_by_subclass_restriction.mappings.with_columns(
             pl.lit("http://www.w3.org/2000/01/rdf-schema#ObjectType").alias(
                 "property_type"
             ),
             pl.lit(None).cast(pl.String).alias("range"),
         )
     )
-    if properties.height == 0:
+    if properties.mappings.height == 0:
         return properties_by_subclass_restriction
     elif properties_by_subclass_restriction.height == 0:
-        return properties
+        return properties.mappings
     else:
-        return properties.vstack(properties_by_subclass_restriction)
+        return properties.mappings.vstack(properties_by_subclass_restriction)
 
 def get_subclasses(m: Model, graph: Optional[str]) -> pl.DataFrame:
     subclasses = m.query(
@@ -123,10 +123,10 @@ def get_subclasses(m: Model, graph: Optional[str]) -> pl.DataFrame:
             FILTER(ISIRI(?child) && ISIRI(?parent))
         }
         """,
-        native_dataframe=True,
+        solution_mappings=True,
         graph=graph,
     )
-    return subclasses
+    return subclasses.mappings
 
 
 def uri_to_variable(uri: str) -> Variable:

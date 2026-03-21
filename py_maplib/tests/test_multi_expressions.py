@@ -161,12 +161,12 @@ def test_multi_filter_equals_with_datatypes(streaming):
     FILTER(?a = :hello2)
     }
     """,
-        include_datatypes=True,
+        solution_mappings=True,
         streaming=streaming,
     )
     assert sm.rdf_types == {"a": RDFType.IRI}
     assert_frame_equal(
-        sm.mappings, pl.DataFrame({"a": ["<http://example.net/hello2>"]})
+        sm.mappings, pl.DataFrame({"a": ["http://example.net/hello2"]})
     )
 
 
@@ -182,7 +182,7 @@ def test_multi_value_different_types_filter_equals_with_datatypes(streaming):
     FILTER(?a = true)
     }
     """,
-        include_datatypes=True,
+        solution_mappings=True,
         streaming=streaming,
     )
     assert sm.rdf_types == {"a": RDFType.Literal(xsd.boolean)}
@@ -201,22 +201,18 @@ def test_multi_value_different_types_filter_isiri_or_equals_with_datatypes(strea
     FILTER(isIri(?a) || ?a = 1)
     }
     """,
-        include_datatypes=True,
+        solution_mappings=True,
         streaming=streaming,
     )
     assert sm.rdf_types == {
         "a": RDFType.Multi([RDFType.IRI, RDFType.Literal(xsd.integer)])
     }
+    file = "multi_value_different_types.parquet"
+    #sm.mappings.write_parquet(file)
+    expected = pl.read_parquet(file)
     assert_frame_equal(
         sm.mappings,
-        pl.DataFrame(
-            {
-                "a": [
-                    "<http://example.net/hello2>",
-                    '"1"^^<http://www.w3.org/2001/XMLSchema#integer>',
-                ]
-            }
-        ),
+        expected
     )
 
 
@@ -235,7 +231,7 @@ def test_coalesce_both_multi_same_types(streaming):
     }
     }
     """,
-        include_datatypes=True,
+        solution_mappings=True,
         streaming=streaming,
     )
     print(sm.mappings)
@@ -258,7 +254,7 @@ def test_coalesce_both_multi_different_types(streaming):
     }
     }
     """,
-        include_datatypes=True,
+        solution_mappings=True,
         streaming=streaming,
     )
     assert sm.mappings.get_column("c").is_null().sum() == 0
@@ -279,7 +275,7 @@ def test_coalesce_both_multi_different_types_rhs_less(streaming):
     }
     }
     """,
-        include_datatypes=True,
+        solution_mappings=True,
         streaming=streaming,
     )
     assert sm.mappings.get_column("c").is_null().sum() == 0
@@ -300,7 +296,7 @@ def test_coalesce_only_lhs_multi(streaming):
     }
     }
     """,
-        include_datatypes=True,
+        solution_mappings=True,
         streaming=streaming,
     )
     assert sm.mappings.get_column("c").is_null().sum() == 0
@@ -321,7 +317,7 @@ def test_coalesce_only_rhs_multi(streaming):
     }
     }
     """,
-        include_datatypes=True,
+        solution_mappings=True,
         streaming=streaming,
     )
     assert sm.mappings.get_column("c").is_null().sum() == 0
@@ -342,7 +338,7 @@ def test_div_by_unbound_is_unbound(streaming):
     }
     }
     """,
-        include_datatypes=True,
+        solution_mappings=True,
         streaming=streaming,
     )
     assert sm.mappings.height == 3
@@ -364,7 +360,7 @@ def test_coalesce_no_multi(streaming):
     }
     }
     """,
-        include_datatypes=True,
+        solution_mappings=True,
         streaming=streaming,
     )
     assert sm.rdf_types == {"c": RDFType.IRI, "b": RDFType.IRI, "a": RDFType.IRI}
@@ -652,7 +648,7 @@ def test_generate_uuids(streaming):
     BIND(uuid() as ?uuid)
     } ORDER BY ?a
     """,
-        include_datatypes=True,
+        solution_mappings=True,
         streaming=streaming,
     )
     assert sm.rdf_types == {
@@ -661,7 +657,7 @@ def test_generate_uuids(streaming):
     }
     assert sm.mappings.height == 3
     df = sm.mappings.with_columns(
-        pl.col("uuid").str.starts_with("<urn:uuid:").alias("startswithcorrect")
+        pl.col("uuid").str.starts_with("urn:uuid:").alias("startswithcorrect")
     )
     assert df.get_column("startswithcorrect").sum() == 3
     assert df.get_column("uuid").unique().len() == 3
@@ -679,25 +675,16 @@ def test_generate_iri_all_strings(streaming):
     BIND(IRI(?a) as ?iri)
     } ORDER BY ?a
     """,
-        include_datatypes=True,
+        solution_mappings=True,
         streaming=streaming,
     )
     assert sm.rdf_types == {
         "a": RDFType.Literal("http://www.w3.org/2001/XMLSchema#string"),
         "iri": RDFType.IRI,
     }
-    expected = pl.from_repr(
-        """
-┌─────────────────────────────────────────────────┬────────────────────────────────────────────┐
-│ a                                               ┆ iri                                        │
-│ ---                                             ┆ ---                                        │
-│ str                                             ┆ str                                        │
-╞═════════════════════════════════════════════════╪════════════════════════════════════════════╡
-│ http://www.w3.org/2001/XMLSchema#integer        ┆ <http://www.w3.org/2001/XMLSchema#integer> │
-│ urn:abc:123                                     ┆ <urn:abc:123>                              │
-└─────────────────────────────────────────────────┴────────────────────────────────────────────┘
-    """
-    )
+    parquet = TESTDATA_PATH / "generate_iri_all_strings.parquet"
+    #sm.mappings.write_parquet(parquet)
+    expected = pl.read_parquet(parquet)
     assert_frame_equal(expected, sm.mappings)
 
 
@@ -713,7 +700,7 @@ def test_generate_iri(streaming):
     BIND(IRI(?a) as ?iri)
     } ORDER BY ?a
     """,
-        include_datatypes=True,
+        solution_mappings=True,
         streaming=streaming,
     )
     assert sm.rdf_types == {
@@ -726,20 +713,9 @@ def test_generate_iri(streaming):
         ),
         "iri": RDFType.IRI,
     }
-    expected = pl.from_repr(
-        """
-┌─────────────────────────────────────────────────┬────────────────────────────────────────────┐
-│ a                                               ┆ iri                                        │
-│ ---                                             ┆ ---                                        │
-│ str                                             ┆ str                                        │
-╞═════════════════════════════════════════════════╪════════════════════════════════════════════╡
-│ <http://www.w3.org/2001/XMLSchema#abc>          ┆ <http://www.w3.org/2001/XMLSchema#abc>     │
-│ "3"^^<http://www.w3.org/2001/XMLSchema#integer> ┆ null                                       │
-│ "http://www.w3.org/2001/XMLSchema#integer"      ┆ <http://www.w3.org/2001/XMLSchema#integer> │
-│ "urn:abc:123"                                   ┆ <urn:abc:123>                              │
-└─────────────────────────────────────────────────┴────────────────────────────────────────────┘
-    """
-    )
+    parquet = TESTDATA_PATH / "test_generate_iri.parquet"
+    #sm.mappings.write_parquet(parquet)
+    expected = pl.read_parquet(parquet)
     assert_frame_equal(expected, sm.mappings)
 
 
@@ -755,7 +731,7 @@ def test_generate_str_uuids(streaming):
     BIND(struuid() as ?struuid)
     } ORDER BY ?a
     """,
-        include_datatypes=True,
+        solution_mappings=True,
         streaming=streaming,
     )
     assert sm.rdf_types == {
@@ -778,7 +754,7 @@ def test_replace_single(streaming):
     BIND(REPLACE(?a, "ab", "ba") as ?replace)
     } ORDER BY ?a
     """,
-        include_datatypes=True,
+        solution_mappings=True,
         streaming=streaming,
     )
     assert sm.rdf_types == {
@@ -802,7 +778,7 @@ def test_case_single(streaming):
     BIND(LCASE(?a) as ?lcase)
     } ORDER BY ?a
     """,
-        include_datatypes=True,
+        solution_mappings=True,
         streaming=streaming,
     )
     assert sm.rdf_types == {
@@ -836,7 +812,7 @@ def test_mul_types_single(streaming):
     BIND("2"^^xsd:int * "2"^^xsd:int AS ?n10)
     } ORDER BY ?a
     """,
-        include_datatypes=True,
+        solution_mappings=True,
         streaming=streaming,
     )
     assert sm.rdf_types == {
@@ -866,7 +842,7 @@ def test_substr_single(streaming):
     BIND(SUBSTR(?a,0,3) as ?sub2)
     } ORDER BY ?a
     """,
-        include_datatypes=True,
+        solution_mappings=True,
         streaming=streaming,
     )
     assert sm.rdf_types == {
@@ -892,7 +868,7 @@ def test_case_single_lang(streaming):
     BIND(LCASE(?a) as ?lcase)
     } ORDER BY ?a
     """,
-        include_datatypes=True,
+        solution_mappings=True,
         streaming=streaming,
     )
     assert sm.rdf_types == {
@@ -905,16 +881,14 @@ def test_case_single_lang(streaming):
         ),
     }
     assert sm.mappings.height == 3
-    assert sm.mappings.get_column("ucase").to_list() == [
-        '"AB"@no',
-        '"ABCAAC"@en',
-        '"BB"@se',
-    ]
-    assert sm.mappings.get_column("lcase").to_list() == [
-        '"ab"@no',
-        '"abcaac"@en',
-        '"bb"@se',
-    ]
+    assert sm.mappings.get_column("ucase").to_list() == [{'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': 'AB', 'l': 'no'},
+                                                         {'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': 'ABCAAC',
+                                                          'l': 'en'},
+                                                         {'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': 'BB', 'l': 'se'}]
+    assert sm.mappings.get_column("lcase").to_list() == [{'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': 'ab', 'l': 'no'},
+                                                         {'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': 'abcaac',
+                                                          'l': 'en'},
+                                                         {'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': 'bb', 'l': 'se'}]
 
 @pytest.mark.parametrize("streaming", [True, False])
 def test_substr_multi_type_with_only_lang(streaming):
@@ -929,7 +903,7 @@ def test_substr_multi_type_with_only_lang(streaming):
     BIND(SUBSTR(?a, 2, 1) as ?sub2)
     } ORDER BY ?a
     """,
-        include_datatypes=True,
+        solution_mappings=True,
         streaming=streaming,
     )
     assert sm.rdf_types == {
@@ -949,18 +923,14 @@ def test_substr_multi_type_with_only_lang(streaming):
         ),
     }
     assert sm.mappings.height == 4
-    assert sm.mappings.get_column("sub1").to_list() == [
-        '""@no',
-        '"caAc"@en',
-        '""@se',
-        None,
-    ]
-    assert sm.mappings.get_column("sub2").to_list() == [
-        '""@no',
-        '"c"@en',
-        '""@se',
-        None,
-    ]
+    assert sm.mappings.get_column("sub1").to_list() == [{'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': '', 'l': 'no'},
+                                                        {'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': 'caAc', 'l': 'en'},
+                                                        {'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': '', 'l': 'se'},
+                                                        {'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': None, 'l': None}]
+    assert sm.mappings.get_column("sub2").to_list() == [{'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': '', 'l': 'no'},
+                                                        {'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': 'c', 'l': 'en'},
+                                                        {'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': '', 'l': 'se'},
+                                                        {'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': None, 'l': None}]
 
 
 @pytest.mark.parametrize("streaming", [True, False])
@@ -976,7 +946,7 @@ def test_case_multi_type_with_only_lang(streaming):
     BIND(LCASE(?a) as ?lcase)
     } ORDER BY ?a
     """,
-        include_datatypes=True,
+        solution_mappings=True,
         streaming=streaming,
     )
     assert sm.rdf_types == {
@@ -996,18 +966,16 @@ def test_case_multi_type_with_only_lang(streaming):
         ),
     }
     assert sm.mappings.height == 4
-    assert sm.mappings.get_column("ucase").to_list() == [
-        '"AB"@no',
-        '"ABCAAC"@en',
-        '"BB"@se',
-        None,
-    ]
-    assert sm.mappings.get_column("lcase").to_list() == [
-        '"ab"@no',
-        '"abcaac"@en',
-        '"bb"@se',
-        None,
-    ]
+    assert sm.mappings.get_column("ucase").to_list() == [{'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': 'AB', 'l': 'no'},
+                                                         {'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': 'ABCAAC',
+                                                          'l': 'en'},
+                                                         {'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': 'BB', 'l': 'se'},
+                                                         {'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': None, 'l': None}]
+    assert sm.mappings.get_column("lcase").to_list() == [{'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': 'ab', 'l': 'no'},
+                                                         {'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': 'abcaac',
+                                                          'l': 'en'},
+                                                         {'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': 'bb', 'l': 'se'},
+                                                         {'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': None, 'l': None}]
 
 
 @pytest.mark.parametrize("streaming", [True, False])
@@ -1023,7 +991,7 @@ def test_case_multi_type_with_string_and_lang_string_and_other(streaming):
     BIND(LCASE(?a) as ?lcase)
     } ORDER BY ?a
     """,
-        include_datatypes=True,
+        solution_mappings=True,
         streaming=streaming,
     )
     assert sm.rdf_types == {
@@ -1055,20 +1023,36 @@ def test_case_multi_type_with_string_and_lang_string_and_other(streaming):
         ),
     }
     assert sm.mappings.height == 5
-    assert sm.mappings.get_column("ucase").to_list() == [
-        None,
-        '"ABCAAC"@en',
-        '"BB"@se',
-        None,
-        '"AB"',
-    ]
-    assert sm.mappings.get_column("lcase").to_list() == [
-        None,
-        '"abcaac"@en',
-        '"bb"@se',
-        None,
-        '"ab"',
-    ]
+    assert sm.mappings.get_column("ucase").to_list() == [{'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': None,
+                                                          '<http://www.w3.org/2001/XMLSchema#string>': None,
+                                                          'l': None},
+                                                         {'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': 'ABCAAC',
+                                                          '<http://www.w3.org/2001/XMLSchema#string>': None,
+                                                          'l': 'en'},
+                                                         {'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': 'BB',
+                                                          '<http://www.w3.org/2001/XMLSchema#string>': None,
+                                                          'l': 'se'},
+                                                         {'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': None,
+                                                          '<http://www.w3.org/2001/XMLSchema#string>': None,
+                                                          'l': None},
+                                                         {'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': None,
+                                                          '<http://www.w3.org/2001/XMLSchema#string>': 'AB',
+                                                          'l': None}]
+    assert sm.mappings.get_column("lcase").to_list() == [{'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': None,
+                                                          '<http://www.w3.org/2001/XMLSchema#string>': None,
+                                                          'l': None},
+                                                         {'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': 'abcaac',
+                                                          '<http://www.w3.org/2001/XMLSchema#string>': None,
+                                                          'l': 'en'},
+                                                         {'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': 'bb',
+                                                          '<http://www.w3.org/2001/XMLSchema#string>': None,
+                                                          'l': 'se'},
+                                                         {'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': None,
+                                                          '<http://www.w3.org/2001/XMLSchema#string>': None,
+                                                          'l': None},
+                                                         {'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': None,
+                                                          '<http://www.w3.org/2001/XMLSchema#string>': 'ab',
+                                                          'l': None}]
 
 
 @pytest.mark.parametrize("streaming", [True, False])
@@ -1084,7 +1068,7 @@ def test_before_after_multi_type_with_string_and_lang_string_and_other(streaming
     BIND(STRAFTER(?a, "ab") as ?aft)
     } ORDER BY ?a
     """,
-        include_datatypes=True,
+        solution_mappings=True,
         streaming=streaming,
     )
     assert sm.rdf_types == {
@@ -1116,20 +1100,36 @@ def test_before_after_multi_type_with_string_and_lang_string_and_other(streaming
         ),
     }
     assert sm.mappings.height == 5
-    assert sm.mappings.get_column("bef").to_list() == [
-        None,
-        '"abca"@en',
-        '"bb"@se',
-        None,
-        '"abAcAC"',
-    ]
-    assert sm.mappings.get_column("aft").to_list() == [
-        None,
-        '"caAc"@en',
-        '"bb"@se',
-        None,
-        '"AcACAc"',
-    ]
+    assert sm.mappings.get_column("bef").to_list() == [{'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': None,
+                                                        '<http://www.w3.org/2001/XMLSchema#string>': None,
+                                                        'l': None},
+                                                       {'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': 'abca',
+                                                        '<http://www.w3.org/2001/XMLSchema#string>': None,
+                                                        'l': 'en'},
+                                                       {'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': 'bb',
+                                                        '<http://www.w3.org/2001/XMLSchema#string>': None,
+                                                        'l': 'se'},
+                                                       {'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': None,
+                                                        '<http://www.w3.org/2001/XMLSchema#string>': None,
+                                                        'l': None},
+                                                       {'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': None,
+                                                        '<http://www.w3.org/2001/XMLSchema#string>': 'abAcAC',
+                                                        'l': None}]
+    assert sm.mappings.get_column("aft").to_list() == [{'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': None,
+                                                        '<http://www.w3.org/2001/XMLSchema#string>': None,
+                                                        'l': None},
+                                                       {'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': 'caAc',
+                                                        '<http://www.w3.org/2001/XMLSchema#string>': None,
+                                                        'l': 'en'},
+                                                       {'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': 'bb',
+                                                        '<http://www.w3.org/2001/XMLSchema#string>': None,
+                                                        'l': 'se'},
+                                                       {'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': None,
+                                                        '<http://www.w3.org/2001/XMLSchema#string>': None,
+                                                        'l': None},
+                                                       {'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': None,
+                                                        '<http://www.w3.org/2001/XMLSchema#string>': 'AcACAc',
+                                                        'l': None}]
 
 
 @pytest.mark.parametrize("streaming", [True, False])
@@ -1145,7 +1145,7 @@ def test_before_after_only_lang_string_and_other(streaming):
     BIND(STRAFTER(?a, "ab") as ?aft)
     } ORDER BY ?a
     """,
-        include_datatypes=True,
+        solution_mappings=True,
         streaming=streaming,
     )
     assert sm.rdf_types == {
@@ -1189,7 +1189,7 @@ def test_before_after_only_lang_string_and_other(streaming):
     BIND(STRAFTER(?a, "ab") as ?aft)
     } ORDER BY ?a
     """,
-        include_datatypes=True,
+        solution_mappings=True,
         streaming=streaming,
     )
     print(sm.mappings)
@@ -1199,14 +1199,10 @@ def test_before_after_only_lang_string_and_other(streaming):
         "aft": RDFType.Literal("http://www.w3.org/1999/02/22-rdf-syntax-ns#langString"),
     }
     assert sm.mappings.height == 2
-    assert sm.mappings.get_column("bef").to_list() == [
-        '"abca"@en',
-        '"bb"@se',
-    ]
-    assert sm.mappings.get_column("aft").to_list() == [
-        '"caAc"@en',
-        '"bb"@se',
-    ]
+    assert sm.mappings.get_column("bef").to_list() == [{'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': 'abca', 'l': 'en'},
+                                                       {'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': 'bb', 'l': 'se'}]
+    assert sm.mappings.get_column("aft").to_list() == [{'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': 'caAc', 'l': 'en'},
+                                                       {'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': 'bb', 'l': 'se'}]
 
 
 @pytest.mark.parametrize("streaming", [True, False])
@@ -1222,7 +1218,7 @@ def test_before_after_only_string_and_other(streaming):
     BIND(STRAFTER(?a, "ab") as ?aft)
     } ORDER BY ?a
     """,
-        include_datatypes=True,
+        solution_mappings=True,
         streaming=streaming,
     )
     assert sm.rdf_types == {
@@ -1264,7 +1260,7 @@ def test_substr_multi_type_with_string_and_lang_string_and_other(streaming):
     BIND(SUBSTR(?a, 1) as ?sub2)
     } ORDER BY ?a
     """,
-        include_datatypes=True,
+        solution_mappings=True,
         streaming=streaming,
     )
     assert sm.rdf_types == {
@@ -1296,20 +1292,36 @@ def test_substr_multi_type_with_string_and_lang_string_and_other(streaming):
         ),
     }
     assert sm.mappings.height == 5
-    assert sm.mappings.get_column("sub1").to_list() == [
-        None,
-        '"a"@en',
-        '""@se',
-        None,
-        '""',
-    ]
-    assert sm.mappings.get_column("sub2").to_list() == [
-        None,
-        '"bcaAc"@en',
-        '"b"@se',
-        None,
-        '"b"',
-    ]
+    assert sm.mappings.get_column("sub1").to_list() == [{'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': None,
+                                                         '<http://www.w3.org/2001/XMLSchema#string>': None,
+                                                         'l': None},
+                                                        {'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': 'a',
+                                                         '<http://www.w3.org/2001/XMLSchema#string>': None,
+                                                         'l': 'en'},
+                                                        {'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': '',
+                                                         '<http://www.w3.org/2001/XMLSchema#string>': None,
+                                                         'l': 'se'},
+                                                        {'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': None,
+                                                         '<http://www.w3.org/2001/XMLSchema#string>': None,
+                                                         'l': None},
+                                                        {'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': None,
+                                                         '<http://www.w3.org/2001/XMLSchema#string>': '',
+                                                         'l': None}]
+    assert sm.mappings.get_column("sub2").to_list() == [{'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': None,
+                                                         '<http://www.w3.org/2001/XMLSchema#string>': None,
+                                                         'l': None},
+                                                        {'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': 'bcaAc',
+                                                         '<http://www.w3.org/2001/XMLSchema#string>': None,
+                                                         'l': 'en'},
+                                                        {'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': 'b',
+                                                         '<http://www.w3.org/2001/XMLSchema#string>': None,
+                                                         'l': 'se'},
+                                                        {'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': None,
+                                                         '<http://www.w3.org/2001/XMLSchema#string>': None,
+                                                         'l': None},
+                                                        {'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': None,
+                                                         '<http://www.w3.org/2001/XMLSchema#string>': 'b',
+                                                         'l': None}]
 
 
 @pytest.mark.parametrize("streaming", [True, False])
@@ -1324,7 +1336,7 @@ def test_replace_multi(streaming):
     BIND(REPLACE(?a, "ab", "ba") as ?replace)
     } ORDER BY ?a
     """,
-        include_datatypes=True,
+        solution_mappings=True,
         streaming=streaming,
     )
     assert sm.rdf_types == {
@@ -1352,7 +1364,7 @@ def test_regex_multi(streaming):
     BIND(REGEX(?a, "ab") as ?replace)
     } ORDER BY ?a
     """,
-        include_datatypes=True,
+        solution_mappings=True,
         streaming=streaming,
     )
     assert sm.rdf_types == {
@@ -1380,7 +1392,7 @@ def test_regex(streaming):
     BIND(REGEX(?a, "ab") as ?replace)
     } ORDER BY ?a
     """,
-        include_datatypes=True,
+        solution_mappings=True,
         streaming=streaming,
     )
     assert sm.rdf_types == {
@@ -1404,7 +1416,7 @@ def test_issue_22(streaming):
     } GROUP BY ?a 
     ORDER BY ?a 
     """,
-        include_datatypes=True,
+        solution_mappings=True,
         streaming=streaming,
     )
     print(sm.mappings)
@@ -1428,7 +1440,7 @@ def test_filtering_error(streaming):
     FILTER(CONTAINS(?a, STR(?a)) && ISLITERAL(?a))
     } 
     """,
-        include_datatypes=True,
+        solution_mappings=True,
         streaming=streaming,
     )
     assert sm.mappings.height == 5
@@ -1448,7 +1460,7 @@ def test_some_hash_functions(streaming):
     BIND(ENCODE_FOR_URI(?a) AS ?aenc)
     } 
     """,
-        include_datatypes=True,
+        solution_mappings=True,
         streaming=streaming,
     )
     assert sm.mappings.height == 5

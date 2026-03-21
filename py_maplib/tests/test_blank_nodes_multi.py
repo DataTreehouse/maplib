@@ -95,7 +95,7 @@ def test_multi_datatype_query_no_error(blank_person_model, streaming):
         ?s ?v ?o .
         } 
         """,
-        include_datatypes=True,
+        solution_mappings=True,
         streaming=streaming,
     )
     by = ["s", "v", "o"]
@@ -107,9 +107,9 @@ def test_multi_datatype_query_no_error(blank_person_model, streaming):
         "s": RDFType.BlankNode,
         "v": RDFType.IRI,
     }
-    filename = TESTDATA_PATH / "multi_datatype_query.csv"
-    # df.write_csv(filename)
-    expected_df = pl.scan_csv(filename).sort(by).collect()
+    filename = TESTDATA_PATH / "multi_datatype_query.parquet"
+    #df.write_parquet(filename)
+    expected_df = pl.scan_parquet(filename).sort(by).collect()
     assert_frame_equal(df, expected_df)
 
 
@@ -191,11 +191,11 @@ def test_multi_datatype_union_query_native_df(blank_person_model, streaming):
         }
         } 
         """,
-        native_dataframe=True,
+        solution_mappings=True,
         streaming=streaming,
     )
     by = ["s", "o"]
-    df = res.sort(by=by)
+    df = res.mappings.sort(by=by)
     filename = TESTDATA_PATH / "multi_datatype_union_query_native_df.parquet"
     # df.write_parquet(filename)
     expected_df = pl.scan_parquet(filename).sort(by).collect()

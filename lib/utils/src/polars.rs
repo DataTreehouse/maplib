@@ -23,7 +23,7 @@ pub fn pl_interruptable_collect(lf: LazyFrame) -> Result<DataFrame, Interruptabl
 
     #[cfg(feature = "pyo3")]
     {
-        Python::with_gil(move |py| {
+        Python::attach(move |py| {
             // TODO: https://github.com/pola-rs/polars/issues/22513
             //                     min  med  avg  95%   99%   99.9%
             // check_signals takes 20 - 30 - 85 - 261 - 691 - 908

@@ -7,7 +7,6 @@ members = [
     "lib/maplib",
     "lib/triplestore",
     "lib/file_io",
-    "lib/pydf_io",
     "lib/query_processing",
     "lib/spargebra",
     "lib/shacl",
@@ -23,7 +22,7 @@ rust-version = "1.88.0"
 edition = "2021"
 
 [workspace.dependencies]
-pyo3 = {version = "0.25", features = ["py-clone"] }
+pyo3 = {version = "0.28.2", features = ["py-clone"] }
 #Moment is there to work around a feature toggle bug
 polars = { version = "0.53.0", features = [
     "simd",

@@ -3,7 +3,7 @@ use pyo3::{pyclass, pymethods};
 use representation::python::PyIRI;
 
 #[derive(Clone, Debug)]
-#[pyclass(name = "rdfs")]
+#[pyclass(name = "rdfs", from_py_object)]
 pub struct PyRDFS {}
 
 #[pymethods]

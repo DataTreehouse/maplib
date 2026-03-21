@@ -1,5 +1,6 @@
 import polars as pl
 import pytest
+from maplib.maplib import SolutionMappings
 from polars.testing import assert_frame_equal
 
 from maplib import Model, RDFType
@@ -78,7 +79,7 @@ def test_construct_pvalues(pizzas_model):
             ],
         }
     )
-
+    h_param = SolutionMappings(h_df,  {"h1": RDFType.IRI, "h2": RDFType.IRI})
     res = pizzas_model.query(
         """
     PREFIX pizza:<https://github.com/magbak/maplib/pizza#>
@@ -90,7 +91,7 @@ def test_construct_pvalues(pizzas_model):
         PVALUES (?h1 ?h2) h
     }
     """,
-        parameters={"h": (h_df, {"h1": RDFType.IRI, "h2": RDFType.IRI})},
+        parameters={"h": h_param},
     )
     res0 = res[0]
     expected_dtypes = {"object": "IRI", "subject": "IRI"}
@@ -110,6 +111,7 @@ def test_construct_pvalues2(pizzas_model):
             ]
         }
     )
+    h_sm = SolutionMappings(h_df,  {"h1": RDFType.IRI})
     res = pizzas_model.query(
         """
     PREFIX pizza:<https://github.com/magbak/maplib/pizza#>
@@ -122,7 +124,7 @@ def test_construct_pvalues2(pizzas_model):
         PVALUES (?h1) h
     }
     """,
-        parameters={"h": (h_df, {"h1": RDFType.IRI})},
+        parameters={"h": h_sm},
     )
     res0 = res[0]
     res1 = res[1]

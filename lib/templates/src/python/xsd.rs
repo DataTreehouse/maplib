@@ -3,7 +3,7 @@ use pyo3::{pyclass, pymethods};
 use representation::python::PyIRI;
 
 #[derive(Clone, Debug)]
-#[pyclass(name = "xsd")]
+#[pyclass(name = "xsd", from_py_object)]
 pub struct PyXSD {}
 
 #[pymethods]

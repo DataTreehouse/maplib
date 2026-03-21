@@ -114,7 +114,7 @@ def windpower_model(request):
             "ValueNodeIRI": maximum_power_node_iri,
         }
     )
-    model.map("tpl:StaticProperty", df=maximum_power)
+    model.map("tpl:StaticProperty", data=maximum_power)
 
     def add_aspect_labeling_by_source(df: pl.DataFrame, prefix: str) -> pl.DataFrame:
         label_df = df.group_by("SourceIRI", maintain_order=True).map_groups(
@@ -253,7 +253,7 @@ def windpower_model(request):
     )
     wind_turbine_has_wms = add_aspect_labeling_by_source(wind_turbine_has_wms, "LE")
 
-    model.map("tpl:FunctionalAspect", df=wind_turbine_has_wms)
+    model.map("tpl:FunctionalAspect", data=wind_turbine_has_wms)
     print(f"mapping took {str(time.time() - start_time)}")
     return model
 
@@ -485,7 +485,7 @@ SELECT ?site_label ?wtur_label ?ts ?ts_label WHERE {
     ?generator ct:hasTimeseries ?ts .
     ?ts rdfs:label ?ts_label .
 } ORDER BY ?site_label ?wtur_label ?ts ?ts_label"""
-    sm = windpower_model.query(query, streaming=streaming, debug=True, include_datatypes=True)
+    sm = windpower_model.query(query, streaming=streaming, debug=True, solution_mappings=True)
     print(sm.debug)
     assert "hasFeunc" in sm.debug
 
@@ -515,7 +515,7 @@ SELECT ?site_label ?wtur_label ?ts ?ts_label WHERE {
     ?ts rdfs:label ?ts_label .
     FILTER(?ts_label = "HALLO")
 } ORDER BY ?site_label ?wtur_label ?ts ?ts_label"""
-    sm = windpower_model.query(query, streaming=streaming, debug=True, include_datatypes=True)
+    sm = windpower_model.query(query, streaming=streaming, debug=True, solution_mappings=True)
     print(sm.debug)
     assert "HALLO" in sm.debug
 
@@ -543,7 +543,7 @@ SELECT ?site_label ?wtur_label ?ts ?ts_label WHERE {
     ?generator ct:hasTimeseries ?ts .
     ?ts rdfs:label ?ts_label .
 } ORDER BY ?site_label ?wtur_label ?ts ?ts_label"""
-    sm = windpower_model.query(query, streaming=streaming, debug=True, include_datatypes=True)
+    sm = windpower_model.query(query, streaming=streaming, debug=True, solution_mappings=True)
     assert "has at least one" in sm.debug
 
 

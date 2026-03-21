@@ -60,7 +60,7 @@ def test_want_rdfs_literal_got_int64():
         ?a ?b ?c
     }
     """,
-        include_datatypes=True,
+        solution_mappings=True,
     )
     assert r.rdf_types["c"] == RDFType.Literal(xsd.long)
 
@@ -92,7 +92,7 @@ def test_want_rdfs_resource_got_int64():
         ?a ?b ?c
     }
     """,
-        include_datatypes=True,
+        solution_mappings=True,
     )
     assert r.rdf_types["c"] == RDFType.Literal(xsd.long)
 
@@ -136,7 +136,7 @@ def test_autoconverted_datetime_to_date():
         ?a ?b ?c
     }
     """,
-        include_datatypes=True,
+        solution_mappings=True,
     )
     assert r.rdf_types["c"] == RDFType.Literal(xsd.date)
 
@@ -168,7 +168,7 @@ def test_autoconverted_optional_datetime_to_date():
         ?a ?b ?c
     }
     """,
-        include_datatypes=True,
+        solution_mappings=True,
     )
     assert r.rdf_types["c"] == RDFType.Literal(xsd.date)
 
@@ -196,7 +196,7 @@ def test_autoconverted_datetime_list_to_date_list_1():
         ?a ?b ?c
     }
     """,
-        include_datatypes=True,
+        solution_mappings=True,
     )
     assert r.rdf_types["c"] == RDFType.Multi(
         [
@@ -235,7 +235,7 @@ def test_autoconverted_datetime_list_to_date_list_2():
         ?a ?b ?c
     }
     """,
-        include_datatypes=True,
+        solution_mappings=True,
     )
     assert r.rdf_types["c"] == RDFType.Literal("http://www.w3.org/2001/XMLSchema#date")
 
@@ -262,7 +262,7 @@ def test_want_xsd_long_got_xsd_short():
         ?a ?b ?c
     }
     """,
-        include_datatypes=True,
+        solution_mappings=True,
     )
     assert r.rdf_types["c"] == RDFType.Literal(xsd.short)
 
@@ -288,7 +288,7 @@ def test_nested_template_more_general():
         ?a ?b ?c
     }
     """,
-        include_datatypes=True,
+        solution_mappings=True,
     )
     assert r.rdf_types["c"] == RDFType.Literal(xsd.string)
 
@@ -331,7 +331,7 @@ def test_nested_template_more_specific():
         ?a ?b ?c
     }
     """,
-        include_datatypes=True,
+        solution_mappings=True,
     )
     assert r.rdf_types["c"] == RDFType.Literal(xsd.string)
 
@@ -411,7 +411,7 @@ def test_nested_template_both_are_general_literal_and_compatible():
         ?a ?b ?c
     }
     """,
-        include_datatypes=True,
+        solution_mappings=True,
     )
     assert r.rdf_types["c"] == RDFType.Literal(xsd.long)
 
@@ -438,7 +438,7 @@ def test_nested_template_both_are_general_literal_and_compatible_2():
         ?a ?b ?c
     }
     """,
-        include_datatypes=True,
+        solution_mappings=True,
     )
     assert r.rdf_types["c"] == RDFType.Literal(xsd.long)
 
@@ -465,7 +465,7 @@ def test_nested_template_both_are_general_literal_and_possibly_but_not_necessari
         ?a ?b ?c
     }
     """,
-        include_datatypes=True,
+        solution_mappings=True,
     )
     assert r.rdf_types["c"] == RDFType.Literal(xsd.long)
 
@@ -492,7 +492,7 @@ def test_nested_template_both_are_general_and_possibly_but_not_necessarily_incom
         ?a ?b ?c
     }
     """,
-        include_datatypes=True,
+        solution_mappings=True,
     )
     assert r.rdf_types["c"] == RDFType.Literal(xsd.long)
 
@@ -519,7 +519,7 @@ def test_nested_template_both_are_general_and_compatible_2():
         ?a ?b ?c
     }
     """,
-        include_datatypes=True,
+        solution_mappings=True,
     )
     assert r.rdf_types["c"] == RDFType.Literal(xsd.long)
 
@@ -546,7 +546,7 @@ def test_nested_template_both_are_general_and_possibly_but_not_necessarily_incom
         ?a ?b ?c
     }
     """,
-        include_datatypes=True,
+        solution_mappings=True,
     )
     assert r.rdf_types["c"] == RDFType.Literal(xsd.long)
 
@@ -570,7 +570,7 @@ def test_list_arg_to_ottr_triple_should_get_rdf_representation():
         ?a ?b ?c
     }
     """,
-        include_datatypes=True,
+        solution_mappings=True,
     )
     assert r.mappings.height == 3
     assert r.rdf_types["c"] == RDFType.Multi(
@@ -600,7 +600,7 @@ def test_list_arg_to_ottr_triple_should_get_rdf_representation_nested():
         ?a ?b ?c
     }
     """,
-        include_datatypes=True,
+        solution_mappings=True,
     )
     assert r.mappings.height == 5
     assert r.rdf_types["c"] == RDFType.Multi(
@@ -629,7 +629,7 @@ def test_list_arg_to_ottr_triple_should_get_rdf_representation_multiple_executio
         ?a ?b ?c
     }
     """,
-        include_datatypes=True,
+        solution_mappings=True,
     )
     assert r.mappings.height == 10
     assert r.rdf_types["c"] == RDFType.Multi(
@@ -659,7 +659,7 @@ def test_constant_arg_has_valid_subtype():
         ?a ?b ?c
     }
     """,
-        include_datatypes=True,
+        solution_mappings=True,
     )
     assert r.mappings.height == 1
     assert r.rdf_types["c"] == RDFType.IRI
@@ -687,7 +687,7 @@ def test_iri_datatype():
         ?a ?b ?c
     }
     """,
-        include_datatypes=True,
+        solution_mappings=True,
     )
     assert r.mappings.height == 1
     assert r.rdf_types["c"] == RDFType.IRI

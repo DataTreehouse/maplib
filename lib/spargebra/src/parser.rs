@@ -21,12 +21,12 @@ use peg::str::LineCol;
 use rand::random;
 #[cfg(feature = "standard-unicode-escaping")]
 use std::borrow::Cow;
-use std::{char, cmp};
 use std::collections::{HashMap, HashSet};
 use std::mem::take;
 #[cfg(feature = "standard-unicode-escaping")]
 use std::str::Chars;
 use std::str::FromStr;
+use std::{char, cmp};
 
 /// A SPARQL parser
 ///
@@ -135,8 +135,12 @@ impl SparqlParser {
         );
         #[cfg(feature = "standard-unicode-escaping")]
         let query = unescape_unicode_codepoints(query);
-        Ok(parser::QueryUnit(&query, &mut state).map_err(|x|
-            SparqlSyntaxError{kind:SparqlSyntaxErrorKind::Syntax(x)}.resolve(query))?)
+        Ok(parser::QueryUnit(&query, &mut state).map_err(|x| {
+            SparqlSyntaxError {
+                kind: SparqlSyntaxErrorKind::Syntax(x),
+            }
+            .resolve(query)
+        })?)
     }
 
     /// Parse the given update string using the already set options.
@@ -161,9 +165,12 @@ impl SparqlParser {
         );
         #[cfg(feature = "standard-unicode-escaping")]
         let update = unescape_unicode_codepoints(update);
-        let operations =
-            parser::UpdateInit(&update, &mut state).map_err(|x|
-                SparqlSyntaxError{kind:SparqlSyntaxErrorKind::Syntax(x)}.resolve(update))?;
+        let operations = parser::UpdateInit(&update, &mut state).map_err(|x| {
+            SparqlSyntaxError {
+                kind: SparqlSyntaxErrorKind::Syntax(x),
+            }
+            .resolve(update)
+        })?;
         check_if_insert_data_are_sharing_blank_nodes(&operations)?;
         Ok(Update {
             operations,
@@ -179,10 +186,12 @@ pub fn parse_construct_ruleset(
     prefixes: HashMap<String, String>,
 ) -> Result<Vec<Query>, SparqlSyntaxError> {
     let mut state = ParserState::new(base_iri, prefixes, HashSet::new());
-    let queries =
-        parser::ConstructRulesetUnit(constructs, &mut state).map_err(|e| SparqlSyntaxError {
+    let queries = parser::ConstructRulesetUnit(constructs, &mut state).map_err(|e| {
+        SparqlSyntaxError {
             kind: SparqlSyntaxErrorKind::from(e),
-        }.resolve(constructs))?;
+        }
+        .resolve(constructs)
+    })?;
     Ok(queries)
 }
 
@@ -199,19 +208,20 @@ impl SparqlSyntaxError {
         SparqlSyntaxErrorKind::InvalidBaseIri(e).into()
     }
 
-    fn resolve(self, query:&str) -> Self {
+    fn resolve(self, query: &str) -> Self {
         let kind = match self.kind {
             SparqlSyntaxErrorKind::Syntax(l) => {
                 let start = l.location.offset.saturating_sub(10);
-                let start_part = &query[start..l.location.offset];
-                let end  = cmp::min(query.len(), l.location.offset + 10);
-                let end_part = &query[l.location.offset..end];
+                let use_offset = cmp::min(query.len(), l.location.offset);
+                let start_part = &query[start..use_offset];
+                let end = cmp::min(query.len(), l.location.offset + 10);
+                let end_part = &query[use_offset..end];
                 let s = format!("{}<<PARSER COMPLAINS HERE>>{}", start_part, end_part);
                 SparqlSyntaxErrorKind::ResolvedSyntax(s, l.to_string())
             }
-            k => k
+            k => k,
         };
-        SparqlSyntaxError {kind }
+        SparqlSyntaxError { kind }
     }
 }
 

@@ -1526,12 +1526,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "indoc"
-version = "2.0.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f4c7245a08504955605670dbf141fceab975f15ca21570696aebe9d2e71576bd"
-
-[[package]]
 name = "io-uring"
 version = "0.7.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1816,15 +1810,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "843a98750cd611cc2965a8213b53b43e715f13c37a9e096c6408e69990961db7"
 dependencies = [
  "libc",
-]
-
-[[package]]
-name = "memoffset"
-version = "0.9.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "488016bfae457b036d996092f6cb448677611ce4449e970ceaf42695203f218a"
-dependencies = [
- "autocfg",
 ]
 
 [[package]]
@@ -2901,7 +2886,7 @@ dependencies = [
 
 [[package]]
 name = "py_maplib"
-version = "0.19.25"
+version = "0.19.23"
 dependencies = [
  "chrono",
  "cimxml_export",
@@ -2911,7 +2896,6 @@ dependencies = [
  "oxrdf",
  "oxrdfio",
  "polars",
- "pydf_io",
  "pyo3",
  "report_mapping",
  "representation",
@@ -2926,50 +2910,35 @@ dependencies = [
 ]
 
 [[package]]
-name = "pydf_io"
-version = "0.7.6"
-dependencies = [
- "polars",
- "polars-core",
- "pyo3",
- "representation",
- "thiserror",
-]
-
-[[package]]
 name = "pyo3"
-version = "0.25.1"
+version = "0.28.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8970a78afe0628a3e3430376fc5fd76b6b45c4d43360ffd6cdd40bdde72b682a"
+checksum = "cf85e27e86080aafd5a22eae58a162e133a589551542b3e5cee4beb27e54f8e1"
 dependencies = [
  "chrono",
  "chrono-tz",
- "indoc",
  "libc",
- "memoffset",
  "once_cell",
  "portable-atomic",
  "pyo3-build-config",
  "pyo3-ffi",
  "pyo3-macros",
- "unindent",
 ]
 
 [[package]]
 name = "pyo3-build-config"
-version = "0.25.1"
+version = "0.28.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "458eb0c55e7ece017adeba38f2248ff3ac615e53660d7c71a238d7d2a01c7598"
+checksum = "8bf94ee265674bf76c09fa430b0e99c26e319c945d96ca0d5a8215f31bf81cf7"
 dependencies = [
- "once_cell",
  "target-lexicon",
 ]
 
 [[package]]
 name = "pyo3-ffi"
-version = "0.25.1"
+version = "0.28.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7114fe5457c61b276ab77c5055f206295b812608083644a5c5b2640c3102565c"
+checksum = "491aa5fc66d8059dd44a75f4580a2962c1862a1c2945359db36f6c2818b748dc"
 dependencies = [
  "libc",
  "pyo3-build-config",
@@ -2977,9 +2946,9 @@ dependencies = [
 
 [[package]]
 name = "pyo3-macros"
-version = "0.25.1"
+version = "0.28.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a8725c0a622b374d6cb051d11a0983786448f7785336139c3c94f5aa6bef7e50"
+checksum = "f5d671734e9d7a43449f8480f8b38115df67bef8d21f76837fa75ee7aaa5e52e"
 dependencies = [
  "proc-macro2",
  "pyo3-macros-backend",
@@ -2989,9 +2958,9 @@ dependencies = [
 
 [[package]]
 name = "pyo3-macros-backend"
-version = "0.25.1"
+version = "0.28.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4109984c22491085343c05b0dbc54ddc405c3cf7b4374fc533f5c3313a572ccc"
+checksum = "22faaa1ce6c430a1f71658760497291065e6450d7b5dc2bcf254d49f66ee700a"
 dependencies = [
  "heck",
  "proc-macro2",
@@ -3280,6 +3249,7 @@ dependencies = [
  "oxrdf",
  "oxsdatatypes",
  "polars",
+ "polars-core",
  "pyo3",
  "rayon",
  "spargebra",
@@ -4251,12 +4221,6 @@ name = "unicode-width"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b4ac048d71ede7ee76d585517add45da530660ef4390e49b098733c6e897f254"
-
-[[package]]
-name = "unindent"
-version = "0.2.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7264e107f553ccae879d21fbea1d6724ac785e8c3bfc762137959b5802826ef3"
 
 [[package]]
 name = "untrusted"

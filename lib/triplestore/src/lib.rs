@@ -202,6 +202,7 @@ impl Triplestore {
 pub struct IndexingOptions {
     pub object_sort_all: bool,
     pub object_sort_some: Option<HashSet<NamedNode>>,
+    pub fts: bool,
     pub fts_path: Option<PathBuf>,
     pub subject_object_index: bool,
 }
@@ -210,18 +211,22 @@ impl IndexingOptions {
     pub fn new(
         object_sort_all: bool,
         object_sort_some: Option<HashSet<NamedNode>>,
+        mut fts: bool,
         fts_path: Option<PathBuf>,
         subject_object_index: bool,
     ) -> Self {
+        fts = fts || fts_path.is_some();
         Self {
             object_sort_all,
             object_sort_some,
+            fts,
             fts_path,
             subject_object_index,
         }
     }
 
     pub fn new_default_object_sort(
+        fts: bool,
         fts_path: Option<PathBuf>,
         subject_object_index: bool,
     ) -> IndexingOptions {
@@ -231,6 +236,7 @@ impl IndexingOptions {
                 rdfs::LABEL.into_owned(),
                 rdf::TYPE.into_owned(),
             ])),
+            fts,
             fts_path,
             subject_object_index,
         )
@@ -247,7 +253,7 @@ impl IndexingOptions {
 
 impl Default for IndexingOptions {
     fn default() -> Self {
-        IndexingOptions::new_default_object_sort(None, Self::default_subject_object_index())
+        IndexingOptions::new_default_object_sort(false, None, Self::default_subject_object_index())
     }
 }
 
@@ -316,9 +322,9 @@ impl Triplestore {
             None
         };
         let indexing = indexing.unwrap_or_default();
-        let fts_index = if let Some(fts_path) = &indexing.fts_path {
+        let fts_index = if indexing.fts {
             Some(
-                FtsIndex::new(fts_path, &Uuid::new_v4().to_string())
+                FtsIndex::new(indexing.fts_path.as_ref().map(|x| x.as_ref()))
                     .map_err(TriplestoreError::FtsError)?,
             )
         } else {
@@ -357,11 +363,11 @@ impl Triplestore {
         };
         for graph in &graphs {
             if self.graph_triples_map.contains_key(graph) {
-                if let Some(fts_path) = &indexing.fts_path {
+                if indexing.fts {
                     // Only doing anything if the fts index does not already exist.
                     // If it exists, then it should be updated as well.
                     if !self.fts_index.contains_key(graph) {
-                        let index = FtsIndex::new(fts_path, &Uuid::new_v4().to_string())
+                        let index = FtsIndex::new(indexing.fts_path.as_ref().map(|x| x.as_ref()))
                             .map_err(TriplestoreError::FtsError)?;
                         self.fts_index.insert(graph.clone(), index);
                         for (predicate, map) in self.graph_triples_map.get(graph).unwrap() {

@@ -1,16 +1,16 @@
 use crate::error::PyMaplibError;
-use crate::{fix_cats_and_multicolumns, PyModel};
+use crate::{PyModel};
 use maplib::errors::MaplibError;
-use pydf_io::to_python::df_to_py_df;
-use pyo3::{pyclass, pymethods, PyObject, PyResult, Python};
+use pyo3::{pyclass, pymethods, Py, PyAny, PyResult, Python};
 use report_mapping::report_to_model;
 use representation::solution_mapping::EagerSolutionMappings;
 use shacl::ValidationReport as RustValidationReport;
 use std::collections::HashMap;
+use representation::df_to_python::{df_to_py_df, fix_cats_and_multicolumns};
 use triplestore::Triplestore;
 
 #[derive(Clone)]
-#[pyclass(name = "ValidationReport")]
+#[pyclass(name = "ValidationReport", from_py_object)]
 pub struct PyValidationReport {
     shape_graph: Option<Triplestore>,
     inner: RustValidationReport,
@@ -33,14 +33,14 @@ impl PyValidationReport {
     }
 
     #[getter]
-    pub fn shape_targets(&self, py: Python<'_>) -> PyResult<PyObject> {
-        let df = py.allow_threads(|| self.inner.shape_targets_df());
+    pub fn shape_targets(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let df = py.detach(|| self.inner.shape_targets_df());
         df_to_py_df(df, HashMap::new(), None, None, false, py)
     }
 
     #[getter]
-    pub fn performance(&self, py: Python<'_>) -> PyResult<PyObject> {
-        let df = py.allow_threads(|| self.inner.performance_df());
+    pub fn performance(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let df = py.detach(|| self.inner.performance_df());
         df_to_py_df(df, HashMap::new(), None, None, false, py)
     }
 
@@ -51,9 +51,9 @@ impl PyValidationReport {
         include_datatypes: Option<bool>,
         streaming: Option<bool>,
         py: Python<'_>,
-    ) -> PyResult<Option<PyObject>> {
+    ) -> PyResult<Option<Py<PyAny>>> {
         let streaming = streaming.unwrap_or(false);
-        let report = py.allow_threads(|| -> Result<_, PyMaplibError> {
+        let report = py.detach(|| -> Result<_, PyMaplibError> {
             let sm = self
                 .inner
                 .concatenated_results()
@@ -97,11 +97,11 @@ impl PyValidationReport {
         include_datatypes: Option<bool>,
         streaming: Option<bool>,
         py: Python<'_>,
-    ) -> PyResult<Option<PyObject>> {
+    ) -> PyResult<Option<Py<PyAny>>> {
         let streaming = streaming.unwrap_or(false);
         let native_dataframe = native_dataframe.unwrap_or(false);
         let include_datatypes = include_datatypes.unwrap_or(false);
-        let details = py.allow_threads(|| -> Result<_, PyMaplibError> {
+        let details = py.detach(|| -> Result<_, PyMaplibError> {
             let sm = self
                 .inner
                 .concatenated_details()
@@ -134,7 +134,7 @@ impl PyValidationReport {
     }
 
     pub fn graph(&self, py: Python<'_>) -> PyResult<PyModel> {
-        let m = py.allow_threads(|| {
+        let m = py.detach(|| {
             report_to_model(&self.inner, &self.shape_graph)
                 .map_err(|x| PyMaplibError::from(MaplibError::from(x)))
         })?;

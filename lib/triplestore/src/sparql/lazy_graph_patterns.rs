@@ -24,7 +24,7 @@ use polars::prelude::{IntoLazy, JoinType};
 use polars_core::frame::DataFrame;
 use query_processing::graph_patterns::join;
 use query_processing::pushdowns::Pushdowns;
-use representation::dataset::{NamedGraph, QueryGraph};
+use representation::dataset::{QueryGraph};
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use spargebra::algebra::GraphPattern;

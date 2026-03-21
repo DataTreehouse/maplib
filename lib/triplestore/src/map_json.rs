@@ -22,8 +22,6 @@ const BOOLEAN: u8 = 0;
 const INTEGER: u8 = 1;
 const STRING: u8 = 2;
 const FLOAT: u8 = 3;
-
-const BLANK: u8 = 4;
 const IRI: u8 = 5;
 
 const JSON_ROOT: &str = "http://sparql.xyz/facade-x/ns/root";
@@ -31,7 +29,7 @@ const JSON_NULL: &str = "http://sparql.xyz/facade-x/ns/null";
 
 const DEFAULT_JSON_KEYS_PREFIX: &str = "http://sparql.xyz/facade-x/data/";
 
-const ROOT_ELEMENT_PROPERTY: &str = "urn:maplib_json:rootElement";
+const ROOT_ELEMENT_PROPERTY: &str = "urn:maplib:rootElement";
 
 struct TripleTableBuilder<'a> {
     map: HashMap<(u8, u8), TypedSubjectObjectBuilder<'a>>,
@@ -41,20 +39,20 @@ impl<'a> TripleTableBuilder<'a> {
     pub fn new() -> Self {
         TripleTableBuilder {
             map: HashMap::from_iter([
-                ((BLANK, BOOLEAN), TypedSubjectObjectBuilder::new()),
-                ((BLANK, INTEGER), TypedSubjectObjectBuilder::new()),
-                ((BLANK, STRING), TypedSubjectObjectBuilder::new()),
-                ((BLANK, FLOAT), TypedSubjectObjectBuilder::new()),
-                ((BLANK, BLANK), TypedSubjectObjectBuilder::new()),
-                ((BLANK, IRI), TypedSubjectObjectBuilder::new()),
+                ((IRI, BOOLEAN), TypedSubjectObjectBuilder::new()),
+                ((IRI, INTEGER), TypedSubjectObjectBuilder::new()),
+                ((IRI, STRING), TypedSubjectObjectBuilder::new()),
+                ((IRI, FLOAT), TypedSubjectObjectBuilder::new()),
+                ((IRI, IRI), TypedSubjectObjectBuilder::new()),
+                ((IRI, IRI), TypedSubjectObjectBuilder::new()),
                 ((IRI, IRI), TypedSubjectObjectBuilder::new()),
                 ((IRI, STRING), TypedSubjectObjectBuilder::new()),
             ]),
         }
     }
 
-    pub fn push_blank_bool(&mut self, subj: &str, v: bool) {
-        if let Some(values) = self.map.get_mut(&(BLANK, BOOLEAN)) {
+    pub fn push_iri_bool(&mut self, subj: &str, v: bool) {
+        if let Some(values) = self.map.get_mut(&(IRI, BOOLEAN)) {
             values.subjects.push(subj.to_string());
             values.objects.push(AnyValue::Boolean(v));
         } else {
@@ -62,8 +60,8 @@ impl<'a> TripleTableBuilder<'a> {
         }
     }
 
-    pub fn push_blank_int(&mut self, subj: &str, v: i64) {
-        if let Some(values) = self.map.get_mut(&(BLANK, INTEGER)) {
+    pub fn push_iri_int(&mut self, subj: &str, v: i64) {
+        if let Some(values) = self.map.get_mut(&(IRI, INTEGER)) {
             values.subjects.push(subj.to_string());
             values.objects.push(AnyValue::Int64(v));
         } else {
@@ -71,8 +69,8 @@ impl<'a> TripleTableBuilder<'a> {
         }
     }
 
-    pub fn push_blank_float(&mut self, subj: &str, v: f64) {
-        if let Some(values) = self.map.get_mut(&(BLANK, FLOAT)) {
+    pub fn push_iri_float(&mut self, subj: &str, v: f64) {
+        if let Some(values) = self.map.get_mut(&(IRI, FLOAT)) {
             values.subjects.push(subj.to_string());
             values.objects.push(AnyValue::Float64(v));
         } else {
@@ -80,8 +78,8 @@ impl<'a> TripleTableBuilder<'a> {
         }
     }
 
-    pub fn push_blank_string(&mut self, subj: &str, v: String) {
-        if let Some(values) = self.map.get_mut(&(BLANK, STRING)) {
+    pub fn push_iri_string(&mut self, subj: &str, v: String) {
+        if let Some(values) = self.map.get_mut(&(IRI, STRING)) {
             values.subjects.push(subj.to_string());
             values
                 .objects
@@ -91,19 +89,8 @@ impl<'a> TripleTableBuilder<'a> {
         }
     }
 
-    pub fn push_blank_blank(&mut self, subj: &str, v: &str) {
-        if let Some(values) = self.map.get_mut(&(BLANK, BLANK)) {
-            values.subjects.push(subj.to_string());
-            values
-                .objects
-                .push(AnyValue::StringOwned(PlSmallStr::from_str(v)));
-        } else {
-            unreachable!("Should never happen")
-        }
-    }
-
-    pub fn push_blank_iri(&mut self, subj: &str, v: &str) {
-        if let Some(values) = self.map.get_mut(&(BLANK, IRI)) {
+    pub fn push_iri_iri(&mut self, subj: &str, v: &str) {
+        if let Some(values) = self.map.get_mut(&(IRI, IRI)) {
             values.subjects.push(subj.to_string());
             values
                 .objects
@@ -137,8 +124,6 @@ fn type_from_u8(u: u8) -> BaseRDFNodeType {
         BaseRDFNodeType::Literal(xsd::STRING.into_owned())
     } else if u == FLOAT {
         BaseRDFNodeType::Literal(xsd::DOUBLE.into_owned())
-    } else if u == BLANK {
-        BaseRDFNodeType::BlankNode
     } else if u == IRI {
         BaseRDFNodeType::IRI
     } else {
@@ -161,7 +146,7 @@ impl Triplestore {
         let rdf_type = rdf::TYPE.into_owned();
         pred_map.insert(rdf_type.clone(), TripleTableBuilder::new());
 
-        let doc_subject = new_blank_typed_subject(JSON_ROOT, &rdf_type, &mut pred_map);
+        let doc_subject = new_iri_typed_subject(JSON_ROOT, &rdf_type, &mut pred_map);
 
         let root_elem_property = NamedNode::new_unchecked(ROOT_ELEMENT_PROPERTY);
         pred_map.insert(root_elem_property.clone(), TripleTableBuilder::new());
@@ -219,31 +204,31 @@ fn process_value(
     match value {
         Value::Bool(b) => {
             let builder = map.get_mut(property.unwrap_or(root_elem_property)).unwrap();
-            builder.push_blank_bool(subject, b);
+            builder.push_iri_bool(subject, b);
         }
         Value::Number(num) => {
             let builder = map.get_mut(property.unwrap_or(root_elem_property)).unwrap();
             if let Some(i) = num.as_i64() {
-                builder.push_blank_int(subject, i);
+                builder.push_iri_int(subject, i);
             } else if let Some(f) = num.as_f64() {
-                builder.push_blank_float(subject, f);
+                builder.push_iri_float(subject, f);
             } else {
                 unreachable!("Should never happen")
             }
         }
         Value::String(s) => {
             let builder = map.get_mut(property.unwrap_or(root_elem_property)).unwrap();
-            builder.push_blank_string(subject, s);
+            builder.push_iri_string(subject, s);
         }
         Value::Null => {
             let builder = map.get_mut(property.unwrap_or(root_elem_property)).unwrap();
-            builder.push_blank_iri(subject, JSON_NULL);
+            builder.push_iri_iri(subject, JSON_NULL);
         }
         Value::Object(obj) => {
             let new_subject = if let Some(property) = property {
-                let new_subject = new_blank_subject();
+                let new_subject = new_iri_subject();
                 let builder = map.get_mut(property).unwrap();
-                builder.push_blank_blank(subject, &new_subject);
+                builder.push_iri_iri(subject, &new_subject);
                 new_subject
             } else {
                 subject.to_string()
@@ -264,9 +249,9 @@ fn process_value(
         }
         Value::Array(arr) => {
             let array_subject = if let Some(property) = property {
-                let array_subject = new_blank_subject();
+                let array_subject = new_iri_subject();
                 let builder = map.get_mut(property).unwrap();
-                builder.push_blank_blank(subject, &array_subject);
+                builder.push_iri_iri(subject, &array_subject);
                 array_subject
             } else {
                 subject.to_string()
@@ -290,18 +275,18 @@ fn process_value(
     }
 }
 
-fn new_blank_typed_subject(
+fn new_iri_typed_subject(
     t: &str,
     rdf_type: &NamedNode,
     map: &mut HashMap<NamedNode, TripleTableBuilder>,
 ) -> String {
-    let bstr = new_blank_subject();
-    map.get_mut(rdf_type).unwrap().push_blank_iri(&bstr, t);
+    let bstr = new_iri_subject();
+    map.get_mut(rdf_type).unwrap().push_iri_iri(&bstr, t);
     bstr
 }
 
-fn new_blank_subject() -> String {
-    let bstr = format!("b{}", uuid::Uuid::new_v4());
+fn new_iri_subject() -> String {
+    let bstr = format!("urn:maplib:{}", uuid::Uuid::new_v4());
     bstr
 }
 

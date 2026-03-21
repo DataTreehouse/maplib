@@ -23,7 +23,6 @@ def add_triples(
         for sm in sms:
             target.map(
                 template,
-                sm.mappings,
-                types=sm.rdf_types,
+                data=sm,
                 graph=target_graph,
             )

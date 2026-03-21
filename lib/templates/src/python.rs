@@ -17,7 +17,7 @@ use representation::python::{
 use representation::BaseRDFNodeType;
 
 #[derive(Clone)]
-#[pyclass(name = "Parameter")]
+#[pyclass(name = "Parameter", from_py_object)]
 pub struct PyParameter {
     parameter: Parameter,
 }
@@ -199,7 +199,7 @@ impl From<Parameter> for PyParameter {
 }
 
 #[derive(Clone)]
-#[pyclass(name = "Argument")]
+#[pyclass(name = "Argument", from_py_object)]
 pub struct PyArgument {
     argument: Argument,
 }
@@ -242,7 +242,7 @@ impl PyArgument {
 }
 
 #[derive(Clone)]
-#[pyclass(name = "Instance")]
+#[pyclass(name = "Instance", from_py_object)]
 pub struct PyInstance {
     instance: Instance,
 }
@@ -288,7 +288,7 @@ impl From<Instance> for PyInstance {
 }
 
 #[derive(Clone)]
-#[pyclass(name = "Template")]
+#[pyclass(name = "Template", from_py_object)]
 pub struct PyTemplate {
     pub template: Template,
 }

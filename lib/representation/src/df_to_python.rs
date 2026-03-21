@@ -2,30 +2,29 @@
 // Edited to remove dependencies on py-polars, and added specific functionality for RDF.
 // Original licence in ../licensing/POLARS_LICENSE
 
-use polars::prelude::{col, IntoLazy};
-use polars_core::frame::DataFrame;
-use polars_core::prelude::{ArrayRef, ArrowField, CompatLevel};
-use polars_core::utils::arrow::ffi;
-use polars_core::utils::arrow::record_batch::RecordBatch;
-use pyo3::ffi::Py_uintptr_t;
+use polars::prelude::{col, ArrayRef, ArrowField, CompatLevel, IntoLazy};
+use pyo3::ffi::{Py_uintptr_t};
 use pyo3::prelude::*;
 use pyo3::types::PyList;
 use pyo3::IntoPyObjectExt;
-use representation::cats::LockedCats;
-use representation::debug::DebugOutputs;
-use representation::formatting::{format_columns, format_native_columns};
-use representation::multitype::compress_actual_multitypes;
-use representation::python::PySolutionMappings;
-use representation::query_context::Context;
-use representation::RDFNodeState;
 use std::collections::HashMap;
+use polars_core::frame::DataFrame;
+use polars_core::utils::arrow::ffi;
+use polars_core::utils::arrow::record_batch::RecordBatch;
+use crate::cats::LockedCats;
+use crate::debug::DebugOutputs;
+use crate::formatting::{format_columns, format_native_columns};
+use crate::multitype::compress_actual_multitypes;
+use crate::python::PySolutionMappings;
+use crate::query_context::Context;
+use crate::RDFNodeState;
 
 /// Arrow array to Python.
 pub(crate) fn to_py_array(
     array: ArrayRef,
     py: Python,
     pyarrow: &Bound<'_, PyModule>,
-) -> PyResult<PyObject> {
+) -> PyResult<Py<PyAny>> {
     let schema = Box::new(ffi::export_field_to_c(&ArrowField::new(
         "".into(),
         array.dtype().clone(),
@@ -50,7 +49,7 @@ pub(crate) fn to_py_rb(
     names: &[&str],
     py: Python,
     pyarrow: &Bound<'_, PyModule>,
-) -> PyResult<PyObject> {
+) -> PyResult<Py<PyAny>> {
     let mut arrays = Vec::with_capacity(rb.len());
 
     for array in rb.columns() {
@@ -70,7 +69,7 @@ pub fn to_py_df(
     py: Python,
     pyarrow: &Bound<'_, PyModule>,
     polars: &Bound<'_, PyModule>,
-) -> PyResult<PyObject> {
+) -> PyResult<Py<PyAny>> {
     let py_rb = to_py_rb(rb, names, py, pyarrow)?;
     let py_rb_list = PyList::empty(py);
     py_rb_list.append(py_rb)?;
@@ -89,7 +88,7 @@ pub fn df_to_py_df(
     pushdown_paths: Option<Vec<Context>>,
     include_datatypes: bool,
     py: Python,
-) -> PyResult<PyObject> {
+) -> PyResult<Py<PyAny>> {
     let names_vec: Vec<String> = df
         .get_column_names()
         .into_iter()

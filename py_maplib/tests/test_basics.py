@@ -13,6 +13,7 @@ from maplib import (
     Literal,
     xsd,
     RDFType, rdf,
+    SolutionMappings,
 )
 from polars.testing import assert_frame_equal
 
@@ -675,7 +676,7 @@ def test_nested_template_empty_list():
         ?a ?b ?c
     }
     """,
-        include_datatypes=True,
+        solution_mappings=True,
     )
     assert r.rdf_types["c"] == RDFType.Literal(xsd.integer)
 
@@ -695,7 +696,7 @@ def test_bool_func():
     assert_frame_equal(df, pl.DataFrame({"a": ["true"]}))
 
 
-def test_map_triples():
+def test_map_triples_with_types():
     df = pl.DataFrame(
         {
             "subject": [
@@ -711,9 +712,10 @@ def test_map_triples():
         }
     )
     types = {"subject": RDFType.IRI, "object": RDFType.IRI}
+    sm = SolutionMappings(mappings=df, rdf_types=types)
     predicate = "http://example.net/ns#hasRel"
     m = Model()
-    m.map_triples(df, types=types, predicate=predicate)
+    m.map_triples(sm, predicate=predicate)
     df = m.query(
         """
     SELECT ?a ?b ?c WHERE {?a ?b ?c} ORDER BY ?a ?b ?c
@@ -734,6 +736,21 @@ def test_map_triples():
     )
     assert_frame_equal(df, expected)
 
+
+def test_map_triples_roundtrip():
+    model = Model()
+    model.reads(
+        """<http://example.net/ns#myObject> <http://example.net/ns#hasValue> "HELLO!!"@en .
+            <http://example.net/ns#myObject> <http://example.net/ns#hasValue> "HI" .
+            <http://example.net/ns#myObject> <http://example.net/ns#hasValue> <http://example.net/ns#myObject2> .
+        """,
+        format="ntriples",
+    )
+    sm = model.query("""SELECT * WHERE {?subject ?predicate ?object}""", solution_mappings=True)
+    model2 = Model()
+    model2.map_triples(sm)
+    df = model2.query("""SELECT * WHERE {?subject ?predicate ?object}""")
+    assert df.height == 3
 
 def test_map_default_triples():
     df = pl.DataFrame(
@@ -915,7 +932,7 @@ def test_lang_tagged():
     )
     m = Model()
     m.map_default(df.select("id", "my_lang_col"), "id")
-    sm = m.query("SELECT * WHERE {?a ?b ?c}", include_datatypes=True)
+    sm = m.query("SELECT * WHERE {?a ?b ?c}", solution_mappings=True)
     assert sm.rdf_types["c"] == RDFType.Literal(rdf.langString)
 
 def test_bad_query():
@@ -926,5 +943,5 @@ def test_bad_query():
         SELECT * WHERE {
             ?a b ?c .
         }
-        """, include_datatypes=True)
+        """, solution_mappings=True)
     assert "?a b ?c <<PARSER COMPLAINS HERE>>" in str(e)

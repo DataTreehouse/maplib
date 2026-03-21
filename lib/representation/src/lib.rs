@@ -7,7 +7,8 @@ pub mod polars_to_rdf;
 pub mod query_context;
 pub mod rdf_to_polars;
 pub mod solution_mapping;
-
+pub mod python_df_to_rust;
+pub mod df_to_python;
 mod base_rdf_type;
 pub mod cats;
 pub mod constants;

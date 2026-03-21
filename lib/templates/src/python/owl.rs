@@ -4,7 +4,7 @@ use representation::python::PyIRI;
 const OWL_PREFIX: &str = "http://www.w3.org/2002/07/owl#";
 
 #[derive(Clone, Debug)]
-#[pyclass(name = "owl")]
+#[pyclass(name = "owl", from_py_object)]
 pub struct PyOWL {}
 
 #[pymethods]

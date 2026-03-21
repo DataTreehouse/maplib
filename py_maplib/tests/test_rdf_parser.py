@@ -14,7 +14,7 @@ TESTDATA_PATH = PATH_HERE / "testdata" / "rdf_parser"
 def test_issue_8():
     m = Model()
     m.read(TESTDATA_PATH / "date_panic.nt", format="ntriples")
-    df = m.query("""SELECT ?c WHERE {?a ?b ?c}""", native_dataframe=True)
+    df = m.query("""SELECT ?c WHERE {?a ?b ?c}""")
     expected = pl.from_repr(
         """
 ┌────────────┐

@@ -17,12 +17,14 @@ use pyo3::exceptions::PyException;
 use pyo3::prelude::PyAnyMethods;
 use pyo3::IntoPyObjectExt;
 use pyo3::{
-    create_exception, pyclass, pymethods, Bound, Py, PyAny, PyErr, PyObject, PyResult, Python,
+    create_exception, pyclass, pymethods, Bound, Py, PyAny, PyErr, PyResult, Python,
 };
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 use thiserror::*;
+use crate::python_df_to_rust::polars_df_to_rust_df;
+use crate::solution_mapping::EagerSolutionMappings;
 
 #[derive(Error, Debug)]
 pub enum PyRepresentationError {
@@ -61,7 +63,7 @@ create_exception!(exceptions, BadArgumentErrorException, PyException);
 create_exception!(exceptions, VariableNameParseErrorException, PyException);
 
 #[derive(Debug, Clone)]
-#[pyclass(name = "RDFType")]
+#[pyclass(name = "RDFType", from_py_object)]
 pub struct PyRDFType {
     pub flat: Option<RDFNodeState>,
     pub nested: Option<Py<PyRDFType>>,
@@ -230,7 +232,7 @@ impl From<RDFNodeState> for PyRDFType {
 }
 
 #[derive(Clone)]
-#[pyclass(name = "IRI")]
+#[pyclass(name = "IRI", from_py_object)]
 pub struct PyIRI {
     pub iri: NamedNode,
 }
@@ -270,7 +272,7 @@ impl From<NamedNode> for PyIRI {
 }
 
 #[derive(Clone, Debug)]
-#[pyclass(name = "Prefix")]
+#[pyclass(name = "Prefix", from_py_object)]
 pub struct PyPrefix {
     pub prefix_name: Option<String>,
     pub iri: NamedNode,
@@ -290,7 +292,7 @@ impl PyPrefix {
     }
 }
 
-#[pyclass(name = "Variable")]
+#[pyclass(name = "Variable", from_py_object)]
 #[derive(Clone)]
 pub struct PyVariable {
     pub variable: Variable,
@@ -318,7 +320,7 @@ impl PyVariable {
 }
 
 #[derive(Clone)]
-#[pyclass(name = "Literal")]
+#[pyclass(name = "Literal", from_py_object)]
 pub struct PyLiteral {
     pub literal: Literal,
 }
@@ -358,7 +360,7 @@ impl PyLiteral {
         self.literal.language()
     }
 
-    pub fn to_native(&self, py: Python<'_>) -> PyResult<PyObject> {
+    pub fn to_native(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         if self.literal.datatype() == xsd::DURATION {
             let duration = Duration::from_str(self.literal.value()).unwrap();
             return PyXSDDuration { duration }.into_py_any(py);
@@ -478,7 +480,7 @@ impl PyXSDDuration {
 
 #[derive(Clone)]
 #[pyclass]
-#[pyo3(name = "BlankNode")]
+#[pyo3(name = "BlankNode", from_py_object)]
 pub struct PyBlankNode {
     pub inner: BlankNode,
 }
@@ -499,7 +501,8 @@ impl PyBlankNode {
 }
 
 #[pyclass]
-#[pyo3(name = "SolutionMappings")]
+#[pyo3(name = "SolutionMappings", from_py_object)]
+#[derive(Clone)]
 pub struct PySolutionMappings {
     pub mappings: Py<PyAny>,
     pub rdf_node_states: HashMap<String, RDFNodeState>,
@@ -509,6 +512,22 @@ pub struct PySolutionMappings {
 
 #[pymethods]
 impl PySolutionMappings {
+    #[new]
+    #[pyo3(signature = (mappings, rdf_types))]
+    fn new(mappings:Py<PyAny>, rdf_types:HashMap<String, PyRDFType>) -> Self {
+        let mut rdf_node_types = HashMap::new();
+        for (k, v) in rdf_types {
+            let t = v.as_rdf_node_state();
+            rdf_node_types.insert(k, t);
+        }
+        PySolutionMappings {
+            mappings,
+            rdf_node_states: rdf_node_types,
+            pushdown_paths: None,
+            debug: None,
+        }
+    }
+
     #[getter]
     fn mappings(&self) -> &Py<PyAny> {
         &self.mappings
@@ -553,5 +572,17 @@ impl PySolutionMappings {
         } else {
             None
         }
+    }
+}
+
+impl PySolutionMappings {
+    pub fn to_inner(&self,  py: Python<'_>) -> PyResult<EagerSolutionMappings> {
+        let mappings = polars_df_to_rust_df(&self.mappings.clone().into_bound(py))?;
+
+        let m = EagerSolutionMappings {
+            mappings,
+            rdf_node_types: self.rdf_node_states.clone(),
+        };
+        Ok(m)
     }
 }

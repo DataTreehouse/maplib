@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Union, List, Dict, Optional, Callable, Tuple, Literal as LiteralType
+from typing import Union, List, Dict, Optional, Callable, Literal as LiteralType
 from polars import DataFrame
 from datetime import datetime, date
 from maplib.maplib import rdf
@@ -195,6 +195,14 @@ class SolutionMappings:
     mappings: DataFrame
     rdf_types: Dict[str, RDFType]
     debug: Optional[str]
+
+    def __init__(self, mappings:DataFrame, rdf_types: Dict[str, RDFType]):
+        """
+        Create new SolutionMappings object corresponding to solution mappings for variables in e.g. a query.
+        :param mappings: A DataFrame
+        :param rdf_types: For each column (variable), the RDFType of the variable.
+        """
+        ...
 
 class Variable:
     """
@@ -421,6 +429,7 @@ class IndexingOptions:
         self,
         object_sort_all: bool = None,
         object_sort_some: List["IRI"] = None,
+        fts: str = None,
         fts_path: str = None,
         subject_object_index: bool = None,
     ):
@@ -429,11 +438,12 @@ class IndexingOptions:
 
         :param object_sort_all: Enable object-indexing for all suitable predicates (doubles memory requirement).
         :param object_sort_some: Enable object-indexing for a selected list of predicates.
+        :param fts: Enable full text search, in memory if a path is not given.
         :param fts_path: Enable full text search, stored at the path
         :param subject_object_index: An index used to deduplicate before insertion, speeds up mapping at a moderate memory cost
         """
 
-ParametersType = Dict[str, Tuple[DataFrame, Dict[str, RDFType]]]
+ParametersType = Dict[str, "SolutionMappings"]
 
 class ValidationReport:
     """
@@ -452,31 +462,27 @@ class ValidationReport:
 
     def results(
         self,
-        native_dataframe: bool = False,
-        include_datatypes: bool = False,
+        solution_mappings: bool = False,
         streaming: bool = False,
     ) -> Optional[Union[DataFrame, "SolutionMappings"]]:
         """
         Return the results of the validation report, if they exist.
 
-        :param native_dataframe: Return columns with maplib-native formatting. Useful for round-trips.
-        :param include_datatypes: Return datatypes of the results DataFrame (returns SolutionMappings instead of DataFrame).
+        :param solution_mappings: Returns SolutionMappings with maplib-native formatting and with RDF typing. Useful for round-trips.
         :param streaming: Use the Polars streaming functionality.
         :return: The SHACL validation report, as a DataFrame
         """
 
     def details(
         self,
-        native_dataframe: bool = False,
-        include_datatypes: bool = False,
+        solution_mappings: bool = False,
         streaming: bool = False,
     ) -> Optional[DataFrame]:
         """
         Returns the details of the validation report.
         Only available if validation was called with include_details=True.
 
-        :param native_dataframe: Return columns with maplib-native formatting. Useful for round-trips.
-        :param include_datatypes: Return datatypes of the results DataFrame (returns SolutionMappings instead of DataFrame).
+        :param solution_mappings: Returns SolutionMappings with maplib-native formatting and with RDF typing. Useful for round-trips.
         :param streaming: Use the Polars streaming functionality.
         :return: Details of the SHACL validation report, as a DataFrame
         """
@@ -538,9 +544,8 @@ class Model:
     def map(
         self,
         template: Union[str, "Template", IRI],
-        df: DataFrame = None,
+        data: Union[DataFrame, "SolutionMappings"] = None,
         graph: str = None,
-        types: Dict[str, RDFType] = None,
         validate_iris: bool = True,
     ) -> None:
         """
@@ -554,7 +559,6 @@ class Model:
         :param template: Template, IRI, IRI string or prefixed template name.
         :param df: DataFrame where the columns have the same names as the template arguments
         :param graph: The IRI of the graph to add triples to.
-        :param types: The types of the columns.
         :param validate_iris: Validate any IRI-columns.
         """
 
@@ -581,10 +585,9 @@ class Model:
 
     def map_triples(
         self,
-        df: DataFrame = None,
+        data: Union[DataFrame, "SolutionMappings"] = None,
         predicate: str = None,
         graph: str = None,
-        types: Dict[str, RDFType] = None,
         validate_iris: bool = True,
     ) -> None:
         """
@@ -596,20 +599,18 @@ class Model:
 
         If the template has no arguments, the df argument is not necessary.
 
-        :param df: DataFrame where the columns are named subject and object. May also contain a verb-column.
+        :param df: DataFrame where the columns are named subject and object. May also contain a predicate-column.
         :param verb: The uri of the verb.
         :param graph: The IRI of the graph to add triples to.
-        :param types: The types of the columns.
         :param validate_iris: Validate any IRI-columns.
         """
 
     def map_default(
         self,
-        df: DataFrame,
+        data: Union[DataFrame, "SolutionMappings"],
         primary_key_column: str,
         dry_run: bool = False,
         graph: str = None,
-        types: Dict[str, RDFType] = None,
         validate_iris: bool = True,
     ) -> str:
         """
@@ -623,7 +624,6 @@ class Model:
         :param primary_key_column: This column will be the subject of all triples in the generated template.
         :param dry_run: Do not map the template, only return the string.
         :param graph: The IRI of the graph to add triples to.
-        :param types: The types of the columns.
         :param validate_iris: Validate any IRI-columns.
         :return: The generated template
         """
@@ -658,8 +658,7 @@ class Model:
         self,
         query: str,
         parameters: ParametersType = None,
-        include_datatypes: bool = False,
-        native_dataframe: bool = False,
+        solution_mappings: bool = False,
         graph: str = None,
         streaming: bool = False,
         return_json: bool = False,
@@ -682,16 +681,15 @@ class Model:
         ... print(df)
 
         :param query: The SPARQL query string
-        :param parameters: PVALUES Parameters, a DataFrame containing the value bindings in the custom PVALUES construction.
-        :param native_dataframe: Return columns with maplib-native formatting. Useful for round-trips.
-        :param include_datatypes: Datatypes are not returned by default, set to true to return a dict with the solution mappings and the datatypes.
+        :param parameters: PVALUES Parameters, for each parameter, the SolutionMappings containing corresponding mappings and types.
+        :param solution_mappings: Returns SolutionMappings with maplib-native formatting and with RDF typing. Useful for round-trips.
         :param graph: The IRI of the graph to query.
         :param streaming: Use Polars streaming
         :param return_json: Return JSON string.
         :param include_transient: Include transient triples when querying.
         :param max_rows: Maximum estimated rows in result, helps avoid out-of-memory errors.
         :param debug: Why does my query have no results?
-        :return: DataFrame (Select), list of DataFrames (Construct) containing results, None for Insert-queries, or SolutionMappings when include_datatypes is set.
+        :return: DataFrame (Select), list of DataFrames (Construct) containing results, None for Insert-queries, or SolutionMappings when solution_mappings is set.
 
         """
 
@@ -716,7 +714,7 @@ class Model:
         ... m.update(update_pizzas)
 
         :param update: The SPARQL Update string
-        :param parameters: PVALUES Parameters, a DataFrame containing the value bindings in the custom PVALUES construction.
+        :param parameters: PVALUES Parameters, for each parameter, the SolutionMappings containing corresponding mappings and types.
         :param streaming: Use Polars streaming
         :param include_transient: Include transient triples when querying (but see "transient" above).
         :param max_rows: Maximum estimated rows in result, helps avoid out-of-memory errors.
@@ -728,8 +726,7 @@ class Model:
         self,
         query: str,
         parameters: ParametersType = None,
-        include_datatypes: bool = False,
-        native_dataframe: bool = False,
+        solution_mappings: bool = False,
         transient: bool = False,
         streaming: bool = False,
         source_graph: str = None,
@@ -756,9 +753,8 @@ class Model:
         ... m.insert(hpizzas)
 
         :param query: The SPARQL Insert query string
-        :param parameters: PVALUES Parameters, a DataFrame containing the value bindings in the custom PVALUES construction.
-        :param native_dataframe: Return columns with maplib-native formatting. Useful for round-trips.
-        :param include_datatypes: Datatypes are not returned by default, set to true to return a dict with the solution mappings and the datatypes.
+        :param parameters: PVALUES Parameters, for each parameter, the SolutionMappings containing corresponding mappings and types.
+        :param solution_mappings: Returns SolutionMappings with maplib-native formatting and with RDF typing. Useful for round-trips.
         :param transient: Should the inserted triples be transient?
         :param source_graph: The IRI of the source graph to execute the construct query.
         :param target_graph: The IRI of the target graph to insert into.
@@ -793,7 +789,7 @@ class Model:
         :param include_details: Include details of SHACL evaluation alongside the report. Currently uses a lot of memory.
         :param include_conforms: Include those results that conformed. Also applies to details.
         :param include_shape_graph: Include the shape graph in the report, useful when creating the graph from the report.
-        :param include_datatypes: Return the datatypes of the validation report (and details).
+        :param solution_mappings: Returns SolutionMappings instead of DataFrame (includes types for columns).
         :param streaming: Use Polars streaming
         :param max_shape_constraint_results: Maximum number of results per shape and constraint. Reduces the size of the result set.
         :param only_shapes: Validate only these shapes, None means all shapes are validated (must be IRI, cannot be used with deactivate_shapes).
@@ -1037,8 +1033,7 @@ class Model:
         self,
         ruleset: Union[str, List[str]],
         graph: str = None,
-        include_datatypes: bool = False,
-        native_dataframe: bool = False,
+        solution_mappings: bool = False,
         max_iterations: int = 100_000,
         max_results: int = 10_000_000,
         include_transient: bool = True,
@@ -1049,8 +1044,7 @@ class Model:
         Run the inference rules that are provided
         :param ruleset: The Datalog ruleset (a string).
         :param graph: Apply the ruleset to this graph, defaults to the default graph, or the graph specified in the rules.
-        :param native_dataframe: Return columns with maplib-native formatting. Useful for round-trips.
-        :param include_datatypes: Datatypes are not returned by default, set to true to return a dict with the solution mappings and the datatypes.
+        :param solution_mappings: Returns SolutionMappings with maplib-native formatting and with RDF typing. Useful for round-trips.
         :param max_iterations: Maximum number of iterations.
         :param max_results: Maximum number of results.
         :param include_transient: Include transient triples when reasoning.
