@@ -1,6 +1,6 @@
-use oxrdf::{GraphName, Quad, Subject, Term};
+use oxrdf::{GraphName, NamedOrBlankNode, Quad, Term};
 use std::collections::HashMap;
-type MapType = HashMap<String, HashMap<String, (Vec<Subject>, Vec<Term>)>>;
+type MapType = HashMap<String, HashMap<String, (Vec<NamedOrBlankNode>, Vec<Term>)>>;
 
 pub fn remap_predicate_datatype(
     _predicate_map: HashMap<GraphName, HashMap<String, MapType>>,

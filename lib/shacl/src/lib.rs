@@ -73,6 +73,7 @@ pub fn validate(
     _data_triplestore: &mut Triplestore,
     _data_graph: &NamedGraph,
     _shapes_graph: &NamedGraph,
+    _inferences_graph: Option<&NamedGraph>,
     _include_details: bool,
     _include_conforms: bool,
     _streaming: bool,

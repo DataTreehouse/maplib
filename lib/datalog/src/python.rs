@@ -2,7 +2,7 @@ use crate::inference::InferenceResult;
 use pyo3::{pyclass, pymethods, PyResult};
 
 #[derive(Clone)]
-#[pyclass(name = "InferenceResult")]
+#[pyclass(name = "InferenceResult", from_py_object)]
 pub struct PyInferenceResult {
     pub inner: InferenceResult,
 }
