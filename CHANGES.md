@@ -1,9 +1,13 @@
 # Change log
 
-## v.0.20.0
-### Improvements
+## v0.20.0
+### Breaking changes
 - map_triples, map, map_default "df"-arg renamed to "data" as it now takes alternatively a DataFrame or a SolutionMappings object, in which case types can be specified for columns. A query run with solution_mappings=True can thus be piped into these methods.  
 - parameters for query and update for the PVALUES construction now is a dict with SolutionMappings values.
+- ValidationReport no longer has method graph(), instead, use the report_graph argument of validate to specify a named graph for the report. This also means that validate() argument include_shapes_graph is gone.
+
+### Features
+- Rudimentary shacl rules support (only SPARQL construct), no recursion yet. Use the inferences_graph-argument to validate to persist inferred triples to a named graph.  
 
 ### Bug fixes
 - Fix for #48
