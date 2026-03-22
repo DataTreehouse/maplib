@@ -14,7 +14,7 @@ use oxrdfio::RdfFormat;
 use polars::prelude::DataFrame;
 use representation::solution_mapping::EagerSolutionMappings;
 use representation::RDFNodeState;
-use shacl::{infer_shacl, validate, ShaclInferenceResult, ValidationReport};
+use shacl::{validate, ValidationReport};
 use std::collections::HashMap;
 use std::fs;
 use std::io::Write;
@@ -479,6 +479,7 @@ impl Model {
             &mut self.triplestore,
             data_graph,
             shape_graph,
+            inferences_graph,
             include_details,
             include_conforms,
             streaming,
@@ -574,31 +575,6 @@ impl Model {
             debug_no_results,
         );
         Ok(res.map_err(|x| MaplibError::DatalogError(x))?)
-    }
-
-    pub fn infer_shacl(
-        &mut self,
-        data_graph: &NamedGraph,
-        shape_graph: &NamedGraph,
-        streaming: bool,
-        include_transient: bool,
-        max_iterations: Option<usize>,
-        max_results: Option<usize>,
-        max_rows: Option<usize>,
-        debug_no_results: bool,
-    ) -> Result<ShaclInferenceResult, MaplibError> {
-        let res = infer_shacl(
-            &mut self.triplestore,
-            data_graph,
-            shape_graph,
-            streaming,
-            max_iterations,
-            max_results,
-            include_transient,
-            max_rows,
-            debug_no_results,
-        );
-        Ok(res.map_err(|x| MaplibError::ShaclError(x))?)
     }
 
     pub fn detach_graph(

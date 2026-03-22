@@ -56,8 +56,6 @@ use representation::python::{
 };
 use representation::solution_mapping::EagerSolutionMappings;
 
-use ::shacl::python::PyShaclInferenceResult;
-use ::shacl::ShaclInferenceResult;
 use datalog::inference::InferenceResult;
 use datalog::python::PyInferenceResult;
 #[cfg(not(target_os = "linux"))]
@@ -918,35 +916,6 @@ impl PyModel {
         })?;
         Ok(PyInferenceResult { inner: res })
     }
-
-    #[pyo3(signature = (
-        shape_graph=None,
-        data_graph=None,
-        debug=None,
-    ))]
-    #[instrument(skip_all)]
-    fn infer_shacl(
-        &self,
-        py: Python<'_>,
-        shape_graph: Option<String>,
-        data_graph: Option<String>,
-        debug: Option<bool>,
-    ) -> PyResult<PyShaclInferenceResult> {
-        let shape_graph = parse_optional_named_node(shape_graph)?;
-        let named_shape_graph = NamedGraph::from_maybe_named_node(shape_graph.as_ref());
-        let data_graph = parse_optional_named_node(data_graph)?;
-        let named_data_graph = NamedGraph::from_maybe_named_node(data_graph.as_ref());
-        let (res, ..) = py.detach(|| -> PyResult<(_, LockedCats)> {
-            let mut inner = self.inner.lock().unwrap();
-
-            let cats = inner.triplestore.global_cats.clone();
-
-            let res = infer_shacl_mutex(&mut inner, named_shape_graph, named_data_graph, debug)?;
-
-            Ok((res, cats))
-        })?;
-        Ok(PyShaclInferenceResult { inner: res })
-    }
 }
 
 // pymethods non-critical functions
@@ -1263,7 +1232,11 @@ fn validate_mutex(
     };
 
     let inferences_graph = parse_optional_named_node(inferences_graph)?;
-
+    let inferences_graph = if let Some(inferences_graph) = inferences_graph {
+        Some(NamedGraph::NamedGraph(inferences_graph))
+    } else {
+        None
+    };
     if only_shapes.is_some() && deactivate_shapes.is_some() {
         return Err(PyMaplibError::FunctionArgumentError(
             "only_shapes and deactivate_shapes cannot both be set".to_string(),
@@ -1295,7 +1268,7 @@ fn validate_mutex(
             &data_graph,
             &shape_graph,
             report_graph.as_ref(),
-            None,
+            inferences_graph.as_ref(),
             include_details.unwrap_or(false),
             include_conforms.unwrap_or(false),
             streaming.unwrap_or(false),
@@ -1592,26 +1565,6 @@ fn infer_mutex(
             graph,
             include_transient,
             max_rows,
-            debug.unwrap_or(DEFAULT_DEBUG_NO_RESULTS),
-        )
-        .map_err(PyMaplibError::MaplibError)
-}
-
-fn infer_shacl_mutex(
-    inner: &mut MutexGuard<InnerModel>,
-    shape_graph: NamedGraph,
-    data_graph: NamedGraph,
-    debug: Option<bool>,
-) -> Result<ShaclInferenceResult, PyMaplibError> {
-    inner
-        .infer_shacl(
-            &shape_graph,
-            &data_graph,
-            DEFAULT_STREAMING,
-            true,
-            None,
-            None,
-            None,
             debug.unwrap_or(DEFAULT_DEBUG_NO_RESULTS),
         )
         .map_err(PyMaplibError::MaplibError)

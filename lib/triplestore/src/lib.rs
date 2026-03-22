@@ -269,7 +269,7 @@ pub struct TriplesToAdd {
     pub predicate_cat_state: Option<BaseCatState>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct NewTriples {
     pub df: Option<DataFrame>,
     pub graph: NamedGraph,

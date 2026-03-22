@@ -794,34 +794,6 @@ class Model:
         :return: Validation report containing shape performance details and target counts and whether the graph conforms (report.conforms)
         """
 
-    def shacl_report(
-        self,
-        graph: str = None,
-        streaming: bool = None
-    ) -> DataFrame:
-        """
-        Runs a predefined query to extract the latest validation report from the validation graph.
-
-        :param graph: It is also possible to give another validation graph, e.g. in case it is not the latest one.
-        :param streaming: Use polars streaming engine to run the query.
-        :return:
-        """
-
-    def infer_shacl(
-            self,
-            shape_graph: str = None,
-            data_graph: str = None,
-            debug: bool = None
-    ) :
-        """
-        Validate the contained knowledge graph using SHACL
-        Assumes that the contained knowledge graph also contains SHACL Shapes.
-
-        :param shape_graph: The IRI of the Shape Graph (defaults to the default graph).
-        :param data_graph: The IRI of the Data Graph (defaults to the default graph).
-        :param debug: Debug rules with no matches.
-        """
-
     def read(
         self,
         file_path: Union[str, Path],
