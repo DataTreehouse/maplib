@@ -460,39 +460,30 @@ class ValidationReport:
     performance: DataFrame
     "Performance statistics for the validation process"
 
+    report_graph: str
+    "The named graph where the validation report is stored"
+
     def results(
-        self,
-        solution_mappings: bool = False,
-        streaming: bool = False,
+            self,
+            streaming: bool = False,
     ) -> Optional[Union[DataFrame, "SolutionMappings"]]:
         """
         Return the results of the validation report, if they exist.
 
-        :param solution_mappings: Returns SolutionMappings with maplib-native formatting and with RDF typing. Useful for round-trips.
         :param streaming: Use the Polars streaming functionality.
         :return: The SHACL validation report, as a DataFrame
         """
 
     def details(
-        self,
-        solution_mappings: bool = False,
-        streaming: bool = False,
+            self,
+            streaming: bool = False,
     ) -> Optional[DataFrame]:
         """
         Returns the details of the validation report.
         Only available if validation was called with include_details=True.
 
-        :param solution_mappings: Returns SolutionMappings with maplib-native formatting and with RDF typing. Useful for round-trips.
         :param streaming: Use the Polars streaming functionality.
         :return: Details of the SHACL validation report, as a DataFrame
-        """
-
-    def graph(self) -> "Mapping":
-        """
-        Creates a new model object where the base graph is the validation report with results.
-        Includes the details of the validation report in the new graph if they exist.
-
-        :return:
         """
 
 class Model:
@@ -769,6 +760,8 @@ class Model:
         self,
         shape_graph: str = None,
         data_graph: str = None,
+        report_graph: str = None,
+        inferences_graph: str = None,
         include_details: bool = False,
         include_conforms: bool = False,
         include_shape_graph: bool = True,
@@ -786,9 +779,10 @@ class Model:
 
         :param shape_graph: The IRI of the Shape Graph (defaults to the default graph).
         :param data_graph: The IRI of the Data Graph (defaults to the default graph).
+        :param report_graph: If this IRI is supplied, the validation report (if any) is found in this named graph.
+        :param inferences_graph: If this IRI is supplied, any inference results from sh:rule can be found in this named graph.
         :param include_details: Include details of SHACL evaluation alongside the report. Currently uses a lot of memory.
         :param include_conforms: Include those results that conformed. Also applies to details.
-        :param include_shape_graph: Include the shape graph in the report, useful when creating the graph from the report.
         :param solution_mappings: Returns SolutionMappings instead of DataFrame (includes types for columns).
         :param streaming: Use Polars streaming
         :param max_shape_constraint_results: Maximum number of results per shape and constraint. Reduces the size of the result set.
@@ -797,7 +791,20 @@ class Model:
         :param dry_run: Only find targets of shapes, but do not validate them.
         :param max_rows: Maximum estimated rows in underlying SPARQL results, helps avoid out-of-memory errors.
         :param serial: Turns off most parallell validation of shapes.
-        :return: Validation report containing a report (report.df) and whether the graph conforms (report.conforms)
+        :return: Validation report containing shape performance details and target counts and whether the graph conforms (report.conforms)
+        """
+
+    def shacl_report(
+        self,
+        graph: str = None,
+        streaming: bool = None
+    ) -> DataFrame:
+        """
+        Runs a predefined query to extract the latest validation report from the validation graph.
+
+        :param graph: It is also possible to give another validation graph, e.g. in case it is not the latest one.
+        :param streaming: Use polars streaming engine to run the query.
+        :return:
         """
 
     def infer_shacl(

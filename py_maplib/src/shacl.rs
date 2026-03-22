@@ -1,27 +1,63 @@
 use crate::error::PyMaplibError;
-use crate::PyModel;
 use maplib::errors::MaplibError;
 use pyo3::{pyclass, pymethods, Py, PyAny, PyResult, Python};
-use report_mapping::report_to_model;
+use representation::cats::LockedCats;
+use representation::dataset::NamedGraph;
 use representation::df_to_python::{df_to_py_df, fix_cats_and_multicolumns};
 use representation::solution_mapping::EagerSolutionMappings;
 use shacl::ValidationReport as RustValidationReport;
 use std::collections::HashMap;
-use triplestore::Triplestore;
+
+pub const SHACL_RESULTS_QUERY: &str = r#"
+PREFIX sh: <http://www.w3.org/ns/shacl#>
+SELECT 
+    ?focus_node 
+    ?result_path 
+    ?result_severity 
+    ?source_constraint_component 
+    ?source_shape 
+    ?message 
+    ?value 
+WHERE {
+    ?report a sh:ValidationReport .
+    ?report sh:conforms ?conforms .
+    ?report sh:result ?result .
+    ?result a sh:ValidationResult .
+    ?result sh:focusNode ?focus_node .
+    ?result sh:resultSeverity ?result_severity .
+    ?result sh:sourceConstraintComponent ?source_constraint_component .
+    ?result sh:sourceShape ?source_shape .
+    OPTIONAL {
+        ?result sh:resultPath ?result_path .
+        }
+    OPTIONAL {
+        ?result sh:resultMessage ?message .
+    }
+    OPTIONAL {
+        ?result sh:value ?value.
+    }
+}
+"#;
 
 #[derive(Clone)]
 #[pyclass(name = "ValidationReport", from_py_object)]
 pub struct PyValidationReport {
-    shape_graph: Option<Triplestore>,
     inner: RustValidationReport,
+    cats: LockedCats,
+    pub report_graph: Option<NamedGraph>,
 }
 
 impl PyValidationReport {
     pub fn new(
         inner: RustValidationReport,
-        shape_graph: Option<Triplestore>,
+        cats: LockedCats,
+        report_graph: Option<NamedGraph>,
     ) -> PyValidationReport {
-        PyValidationReport { shape_graph, inner }
+        PyValidationReport {
+            inner,
+            cats,
+            report_graph,
+        }
     }
 }
 
@@ -44,23 +80,25 @@ impl PyValidationReport {
         df_to_py_df(df, HashMap::new(), None, None, false, py)
     }
 
-    #[pyo3(signature = (native_dataframe=None, include_datatypes=None, streaming=None))]
-    pub fn results(
-        &self,
-        native_dataframe: Option<bool>,
-        include_datatypes: Option<bool>,
-        streaming: Option<bool>,
-        py: Python<'_>,
-    ) -> PyResult<Option<Py<PyAny>>> {
+    #[getter]
+    pub fn report_graph(&self) -> PyResult<Option<String>> {
+        if let Some(NamedGraph::NamedGraph(graph)) = &self.report_graph {
+            Ok(Some(graph.as_str().to_string()))
+        } else {
+            Ok(None)
+        }
+    }
+
+    #[pyo3(signature = (streaming=None))]
+    pub fn results(&self, streaming: Option<bool>, py: Python<'_>) -> PyResult<Option<Py<PyAny>>> {
         let streaming = streaming.unwrap_or(false);
         let report = py.detach(|| -> Result<_, PyMaplibError> {
             let sm = self
                 .inner
-                .concatenated_results()
+                .concatenated_results(self.cats.clone())
                 .map_err(|x| PyMaplibError::from(MaplibError::from(x)))?;
             match sm {
                 Some(sm) => {
-                    let cats = self.inner.cats.as_ref().unwrap().clone();
                     let EagerSolutionMappings {
                         mut mappings,
                         mut rdf_node_types,
@@ -68,8 +106,8 @@ impl PyValidationReport {
                     (mappings, rdf_node_types) = fix_cats_and_multicolumns(
                         mappings,
                         rdf_node_types,
-                        native_dataframe.unwrap_or(false),
-                        cats,
+                        false,
+                        self.cats.clone(),
                     );
                     Ok(Some((mappings, rdf_node_types)))
                 }
@@ -82,7 +120,7 @@ impl PyValidationReport {
                 rdf_node_types,
                 None,
                 None,
-                include_datatypes.unwrap_or(false),
+                false,
                 py,
             )?)),
             None => Ok(None),
@@ -90,54 +128,43 @@ impl PyValidationReport {
         res
     }
 
-    #[pyo3(signature = (native_dataframe=None, include_datatypes=None, streaming=None))]
-    pub fn details(
-        &self,
-        native_dataframe: Option<bool>,
-        include_datatypes: Option<bool>,
-        streaming: Option<bool>,
-        py: Python<'_>,
-    ) -> PyResult<Option<Py<PyAny>>> {
+    #[pyo3(signature = (streaming=None))]
+    pub fn details(&self, streaming: Option<bool>, py: Python<'_>) -> PyResult<Option<Py<PyAny>>> {
         let streaming = streaming.unwrap_or(false);
-        let native_dataframe = native_dataframe.unwrap_or(false);
-        let include_datatypes = include_datatypes.unwrap_or(false);
+
         let details = py.detach(|| -> Result<_, PyMaplibError> {
             let sm = self
                 .inner
-                .concatenated_details()
+                .concatenated_details(self.cats.clone())
                 .map_err(|x| PyMaplibError::from(MaplibError::from(x)))?;
-            let cats = self.inner.cats.as_ref().unwrap().clone();
             match sm {
                 Some(sm) => {
                     let EagerSolutionMappings {
                         mut mappings,
                         mut rdf_node_types,
                     } = sm.as_eager(streaming);
-                    (mappings, rdf_node_types) =
-                        fix_cats_and_multicolumns(mappings, rdf_node_types, native_dataframe, cats);
+                    (mappings, rdf_node_types) = fix_cats_and_multicolumns(
+                        mappings,
+                        rdf_node_types,
+                        false,
+                        self.cats.clone(),
+                    );
                     Ok(Some((mappings, rdf_node_types)))
                 }
                 None => Ok(None),
             }
         })?;
+
         match details {
             Some((mappings, rdf_node_types)) => Ok(Some(df_to_py_df(
                 mappings,
                 rdf_node_types,
                 None,
                 None,
-                include_datatypes,
+                false,
                 py,
             )?)),
             None => Ok(None),
         }
-    }
-
-    pub fn graph(&self, py: Python<'_>) -> PyResult<PyModel> {
-        let m = py.detach(|| {
-            report_to_model(&self.inner, &self.shape_graph)
-                .map_err(|x| PyMaplibError::from(MaplibError::from(x)))
-        })?;
-        Ok(PyModel::from_inner_mapping(m))
     }
 }

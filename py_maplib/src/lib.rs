@@ -8,7 +8,7 @@ use tracing::{info, instrument, warn};
 use tracing_subscriber::EnvFilter;
 use tracing_subscriber::{filter, prelude::*};
 
-use crate::shacl::PyValidationReport;
+use crate::shacl::{PyValidationReport, SHACL_RESULTS_QUERY};
 use maplib::errors::MaplibError;
 use maplib::model::{MapOptions, Model as InnerModel};
 
@@ -19,9 +19,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard};
-use triplestore::sparql::{
-    QueryResult, QueryResultKind as SparqlQueryResult, QueryResultKind, QuerySettings, UpdateResult,
-};
+use triplestore::sparql::{QueryResult, QueryResultKind as SparqlQueryResult, UpdateResult};
 
 //The below snippet controlling alloc-library is from https://github.com/pola-rs/polars/blob/main/py-polars/src/lib.rs
 //And has a MIT license:
@@ -68,7 +66,6 @@ use representation::cats::LockedCats;
 use representation::dataset::NamedGraph;
 use representation::debug::DebugOutputs;
 use representation::df_to_python::{df_to_py_df, fix_cats_and_multicolumns};
-use representation::formatting::format_native_columns;
 use representation::polars_to_rdf::XSD_DATETIME_WITH_TZ_FORMAT;
 use representation::python_df_to_rust::polars_df_to_rust_df;
 use representation::rdf_to_polars::rdf_named_node_to_polars_literal_value;
@@ -82,7 +79,7 @@ use templates::python::xsd::PyXSD;
 use templates::python::{py_triple, PyArgument, PyInstance, PyParameter, PyTemplate};
 use templates::MappingColumnType;
 use triplestore::triples_read::ExtendedRdfFormat;
-use triplestore::{IndexingOptions, NewTriples, Triplestore};
+use triplestore::{IndexingOptions, NewTriples};
 
 #[cfg(target_os = "linux")]
 #[global_allocator]
@@ -480,9 +477,10 @@ impl PyModel {
     #[pyo3(signature = (
         shape_graph=None,
         data_graph=None,
+        report_graph=None,
+        inferences_graph=None,
         include_details=None,
         include_conforms=None,
-        include_shape_graph=None,
         streaming=None,
         max_shape_constraint_results=None,
         only_shapes=None,
@@ -497,9 +495,10 @@ impl PyModel {
         py: Python<'_>,
         shape_graph: Option<String>,
         data_graph: Option<String>,
+        report_graph: Option<String>,
+        inferences_graph: Option<String>,
         include_details: Option<bool>,
         include_conforms: Option<bool>,
-        include_shape_graph: Option<bool>,
         streaming: Option<bool>,
         max_shape_constraint_results: Option<usize>,
         only_shapes: Option<Vec<String>>,
@@ -508,15 +507,16 @@ impl PyModel {
         max_rows: Option<usize>,
         serial: Option<bool>,
     ) -> PyResult<PyValidationReport> {
-        py.detach(move || {
+        let res = py.detach(move || {
             let mut inner = self.inner.lock().unwrap();
             validate_mutex(
                 &mut inner,
                 shape_graph,
                 data_graph,
+                report_graph,
+                inferences_graph,
                 include_details,
                 include_conforms,
-                include_shape_graph,
                 streaming,
                 max_shape_constraint_results,
                 only_shapes,
@@ -525,7 +525,50 @@ impl PyModel {
                 max_rows,
                 serial,
             )
-        })
+        })?;
+        Ok(res)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    #[pyo3(signature = (graph=None, streaming=None))]
+    #[instrument(skip_all)]
+    fn shacl_report(
+        &self,
+        py: Python<'_>,
+        graph: Option<String>,
+        streaming: Option<bool>,
+    ) -> PyResult<Py<PyAny>> {
+        let graph = if let Some(graph) = graph {
+            NamedGraph::NamedGraph(parse_named_node(graph)?)
+        } else {
+            let inner = self.inner.lock().unwrap();
+            if let Some(latest_report_graph) = &inner.latest_report_graph {
+                latest_report_graph.clone()
+            } else {
+                return Err(PyMaplibError::FunctionArgumentError(
+                    "Either run the validation first or supply a graph".to_string(),
+                )
+                .into());
+            }
+        };
+
+        let (res, cats) = py.detach(|| -> PyResult<(_, LockedCats)> {
+            let mut inner = self.inner.lock().unwrap();
+            let cats = inner.triplestore.global_cats.clone();
+            let res = query_mutex(
+                &mut inner,
+                SHACL_RESULTS_QUERY.to_string(),
+                None,
+                Some(graph),
+                streaming,
+                Some(false),
+                None,
+                None,
+            )?;
+            Ok((res, cats))
+        })?;
+        print_debug_if_exists(res.debug.as_ref());
+        query_to_result(res, false, false, false, cats, py)
     }
 
     #[pyo3(signature = (
@@ -1196,9 +1239,10 @@ fn validate_mutex(
     inner: &mut MutexGuard<InnerModel>,
     shape_graph: Option<String>,
     data_graph: Option<String>,
+    report_graph: Option<String>,
+    inferences_graph: Option<String>,
     include_details: Option<bool>,
     include_conforms: Option<bool>,
-    include_shape_graph: Option<bool>,
     streaming: Option<bool>,
     max_shape_constraint_results: Option<usize>,
     only_shapes: Option<Vec<String>>,
@@ -1211,6 +1255,14 @@ fn validate_mutex(
     let data_graph = NamedGraph::from_maybe_named_node(data_graph.as_ref());
     let shape_graph = parse_optional_named_node(shape_graph)?;
     let shape_graph = NamedGraph::from_maybe_named_node(shape_graph.as_ref());
+    let report_graph = parse_optional_named_node(report_graph)?;
+    let report_graph = if let Some(report_graph) = report_graph {
+        Some(NamedGraph::NamedGraph(report_graph))
+    } else {
+        None
+    };
+
+    let inferences_graph = parse_optional_named_node(inferences_graph)?;
 
     if only_shapes.is_some() && deactivate_shapes.is_some() {
         return Err(PyMaplibError::FunctionArgumentError(
@@ -1242,6 +1294,8 @@ fn validate_mutex(
         .validate(
             &data_graph,
             &shape_graph,
+            report_graph.as_ref(),
+            None,
             include_details.unwrap_or(false),
             include_conforms.unwrap_or(false),
             streaming.unwrap_or(false),
@@ -1254,56 +1308,10 @@ fn validate_mutex(
             serial.unwrap_or(false),
         )
         .map_err(PyMaplibError::from)?;
-
-    let ts = if include_shape_graph.unwrap_or(true) {
-        let mut ts = Triplestore::new(None, None)
-            .map_err(|x| PyMaplibError::MaplibError(MaplibError::TriplestoreError(x)))?;
-        let qs = QuerySettings {
-            include_transient: false,
-            max_rows: None,
-            strict_project: false,
-        };
-        let res = inner
-            .triplestore
-            .query(
-                "CONSTRUCT { ?subject ?predicate ?object } WHERE {?subject ?predicate ?object}",
-                &None,
-                false,
-                &qs,
-                Some(&shape_graph),
-                None,
-                false,
-            )
-            .map_err(|x| PyMaplibError::MaplibError(MaplibError::SparqlError(x)))?;
-        if let QueryResultKind::Construct(sms) = res.kind {
-            let mut new_sms = Vec::with_capacity(sms.len());
-            for (
-                EagerSolutionMappings {
-                    mut mappings,
-                    mut rdf_node_types,
-                },
-                pred,
-            ) in sms
-            {
-                mappings = format_native_columns(
-                    mappings.lazy(),
-                    &mut rdf_node_types,
-                    inner.triplestore.global_cats.clone(),
-                )
-                .collect()
-                .unwrap();
-                new_sms.push((EagerSolutionMappings::new(mappings, rdf_node_types), pred));
-            }
-            ts.insert_construct_result(new_sms, false, &NamedGraph::DefaultGraph)
-                .map_err(|x| PyMaplibError::from(MaplibError::from(x)))?;
-        } else {
-            todo!("Handle this error..")
-        };
-        Some(ts)
-    } else {
-        None
-    };
-    Ok(PyValidationReport::new(report, ts))
+    inner.latest_report_graph = report_graph.clone();
+    let py_report =
+        PyValidationReport::new(report, inner.triplestore.global_cats.clone(), report_graph);
+    Ok(py_report)
 }
 
 fn insert_mutex(

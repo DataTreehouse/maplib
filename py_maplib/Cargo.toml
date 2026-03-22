@@ -1,6 +1,6 @@
 [package]
 name = "py_maplib"
-version = "0.19.23"
+version = "0.20.0"
 edition.workspace = true
 
 [features]
@@ -11,7 +11,6 @@ maplib = { path = "../lib/maplib", features = [ "pyo3" ] }
 triplestore = { path = "../lib/triplestore", features = [ "pyo3" ] }
 representation = { path = "../lib/representation" }
 shacl = { path = "../lib/shacl", features = [ "pyo3" ] }
-report_mapping = {path = "../lib/report_mapping"}
 templates = {path= "../lib/templates"}
 cimxml_export = {path = "../lib/cimxml_export", features = [ "pyo3" ]}
 datalog = {path = "../lib/datalog"}

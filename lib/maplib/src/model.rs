@@ -2,6 +2,7 @@ mod constant_terms;
 pub mod default;
 pub mod errors;
 pub mod expansion;
+mod shacl_report_mapping;
 
 use crate::errors::MaplibError;
 use crate::model::errors::MappingError;
@@ -41,6 +42,7 @@ pub struct Model {
     pub default_template_counter: usize,
     pub indexing: IndexingOptions,
     pub prefixes: HashMap<String, NamedNode>,
+    pub latest_report_graph: Option<NamedGraph>,
 }
 
 #[derive(Clone, Default)]
@@ -105,6 +107,7 @@ impl Model {
             default_template_counter: 0,
             indexing,
             prefixes: use_prefixes,
+            latest_report_graph: None,
         })
     }
 
@@ -459,6 +462,8 @@ impl Model {
         &mut self,
         data_graph: &NamedGraph,
         shape_graph: &NamedGraph,
+        report_graph: Option<&NamedGraph>,
+        inferences_graph: Option<&NamedGraph>,
         include_details: bool,
         include_conforms: bool,
         streaming: bool,
@@ -470,7 +475,7 @@ impl Model {
         dry_run: bool,
         serial: bool,
     ) -> Result<ValidationReport, MaplibError> {
-        let res = validate(
+        let mut res = validate(
             &mut self.triplestore,
             data_graph,
             shape_graph,
@@ -485,8 +490,12 @@ impl Model {
             dry_run,
             Some(self.prefixes.clone()),
             serial,
-        );
-        res.map_err(|x| x.into())
+        )
+        .map_err(|x| MaplibError::ShaclError(x))?;
+        if let Some(report_graph) = report_graph {
+            self.map_validation_result_to_report_graph(&mut res, report_graph)?;
+        }
+        Ok(res)
     }
 
     fn truncate_graph(&mut self, graph: &NamedGraph) {
@@ -605,6 +614,7 @@ impl Model {
             default_template_counter: self.default_template_counter,
             indexing: self.indexing.clone(),
             prefixes: self.prefixes.clone(),
+            latest_report_graph: None,
         })
     }
 

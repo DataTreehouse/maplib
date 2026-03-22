@@ -1,8 +1,7 @@
 use super::{reencode_solution_mappings, CatEncs, CatType};
 use super::{CatReEnc, Cats};
-use crate::cats::LockedCats;
 use crate::solution_mapping::{BaseCatState, EagerSolutionMappings};
-use crate::{BaseRDFNodeType, RDFNodeState, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD};
+use crate::{BaseRDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD};
 use nohash_hasher::NoHashHasher;
 use std::collections::{HashMap, HashSet};
 use std::hash::BuildHasherDefault;
@@ -200,19 +199,4 @@ pub fn new_solution_mapping_cats(
         .map(|sm| reencode_solution_mappings(sm, &reenc))
         .collect();
     (new_sms, cats)
-}
-
-pub fn set_global_cats_as_local(
-    rdf_node_types: &mut HashMap<String, RDFNodeState>,
-    cats: LockedCats,
-) {
-    for (_, s) in rdf_node_types {
-        for v in s.map.values_mut() {
-            if matches!(v, BaseCatState::CategoricalNative(None)) {
-                *v = BaseCatState::CategoricalNative(Some(cats.clone()));
-            } else if matches!(v, BaseCatState::CategoricalNative(Some(..))) {
-                panic!("Should never be called when locals exist")
-            }
-        }
-    }
 }

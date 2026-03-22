@@ -1,19 +1,18 @@
 pub mod errors;
-pub mod storage;
 pub mod python;
+pub mod storage;
 
 use crate::storage::StoredResults;
 use errors::ShaclError;
 use oxrdf::{NamedNode, NamedOrBlankNode};
 use polars::prelude::DataFrame;
+use representation::cats::LockedCats;
+use representation::dataset::NamedGraph;
 use representation::solution_mapping::SolutionMappings;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::time::Duration;
 use triplestore::Triplestore;
-
-use representation::cats::LockedCats;
-use representation::dataset::NamedGraph;
 
 #[derive(Clone)]
 pub struct ShaclInferenceResult {}
@@ -45,15 +44,20 @@ pub struct ValidationReport {
     pub validation_performance: Vec<Performance>,
     pub targets_performance: Vec<Performance>,
     pub shape_targets: Vec<ShapeTargets>,
-    pub cats: Option<LockedCats>,
 }
 
 impl ValidationReport {
-    pub fn concatenated_results(&self) -> Result<Option<SolutionMappings>, ShaclError> {
+    pub fn concatenated_results(
+        &self,
+        _global_cats: LockedCats,
+    ) -> Result<Option<SolutionMappings>, ShaclError> {
         unimplemented!("Contact Data Treehouse to try")
     }
 
-    pub fn concatenated_details(&self) -> Result<Option<SolutionMappings>, ShaclError> {
+    pub fn concatenated_details(
+        &self,
+        _global_cats: LockedCats,
+    ) -> Result<Option<SolutionMappings>, ShaclError> {
         unimplemented!("Contact Data Treehouse to try")
     }
     pub fn performance_df(&self) -> DataFrame {

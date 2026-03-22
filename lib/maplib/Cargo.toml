@@ -16,6 +16,7 @@ datalog = {path = "../datalog"}
 cimxml_export = {path = "../cimxml_export"}
 query_processing = {path ="../query_processing"}
 
+uuid = {workspace = true}
 rayon = { workspace = true }
 oxrdf = { workspace = true }
 oxiri = { workspace = true }

@@ -1,5 +1,5 @@
-use pyo3::{pyclass, pymethods, PyResult};
 use crate::ShaclInferenceResult;
+use pyo3::{pyclass, pymethods, PyResult};
 
 #[derive(Clone)]
 #[pyclass(name = "InferenceResult")]

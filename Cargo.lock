@@ -1766,6 +1766,7 @@ dependencies = [
  "thiserror",
  "tracing",
  "triplestore",
+ "uuid",
 ]
 
 [[package]]
@@ -2897,7 +2898,6 @@ dependencies = [
  "oxrdfio",
  "polars",
  "pyo3",
- "report_mapping",
  "representation",
  "shacl",
  "templates",
@@ -3227,15 +3227,6 @@ name = "regex-syntax"
 version = "0.8.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c3160422bbd54dd5ecfdca71e5fd59b7b8fe2b1697ab2baf64f6d05dcc66d298"
-
-[[package]]
-name = "report_mapping"
-version = "0.1.0"
-dependencies = [
- "maplib",
- "shacl",
- "triplestore",
-]
 
 [[package]]
 name = "representation"
