@@ -1,9 +1,0 @@
-[package]
-name = "report_mapping"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-maplib = {path="../maplib"}
-shacl = {path = "../shacl"}
-triplestore = {path = "../triplestore"}
