@@ -42,7 +42,7 @@ maplib:ShaclResultTemplate [
     ? ottr:IRI ?details,
     ?result_severity,
     ? ?result_path,
-    ?conforms,
+    ? ?conforms,
     ? List<ottr:IRI> ?details,
     ] :: {
 ottr:Triple(?result, a, sh:ValidationResult),
@@ -63,6 +63,7 @@ impl Model {
         &mut self,
         report: &mut ValidationReport,
         report_graph: &NamedGraph,
+        include_details: bool,
     ) -> Result<(), MaplibError> {
         self.add_templates_from_string(SHACL_DOC)
             .expect("Template should be correct");
@@ -80,8 +81,13 @@ impl Model {
         }) = report.concatenated_results(self.triplestore.global_cats.clone())?
         {
             debug!("Started creating results input");
-            let (df, column_types) =
-                create_results_input(mappings.clone().lazy(), &rdf_node_types, offset, &uuid);
+            let (df, column_types) = create_results_input(
+                mappings.clone().lazy(),
+                &rdf_node_types,
+                offset,
+                &uuid,
+                include_details,
+            );
             debug!("Finished creating results input");
             offset += df.height();
             let result_col = df.column("result").unwrap().clone();
@@ -155,8 +161,13 @@ impl Model {
         }) = report.concatenated_details(self.triplestore.global_cats.clone())?
         {
             debug!("Started creating details input");
-            let (details_df, details_types) =
-                create_results_input(mappings.clone().lazy(), &rdf_node_types, offset, &uuid);
+            let (details_df, details_types) = create_results_input(
+                mappings.clone().lazy(),
+                &rdf_node_types,
+                offset,
+                &uuid,
+                include_details,
+            );
             debug!("Finished creating details input");
 
             self.expand(
@@ -176,8 +187,13 @@ fn create_results_input(
     types: &HashMap<String, RDFNodeState>,
     offset: usize,
     uuid: &str,
+    include_details: bool,
 ) -> (DataFrame, HashMap<String, MappingColumnType>) {
     let mut rdf_node_types = types.clone();
+    if !include_details {
+        rdf_node_types.remove("conforms");
+        mappings = mappings.drop(by_name(["conforms"], false, false));
+    }
     if rdf_node_types.contains_key("id") {
         mappings = mappings
             .with_column(

@@ -494,7 +494,7 @@ impl Model {
         )
         .map_err(|x| MaplibError::ShaclError(x))?;
         if let Some(report_graph) = report_graph {
-            self.map_validation_result_to_report_graph(&mut res, report_graph)?;
+            self.map_validation_result_to_report_graph(&mut res, report_graph, include_details)?;
         }
         Ok(res)
     }
