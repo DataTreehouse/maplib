@@ -1,5 +1,10 @@
 # Change log
 
+## v0.20.1
+### Bug fixes
+- Fix nondeterminism that could sometimes cause duplicate SHACL results
+- SHACL could sometimes contain extra results for deeply nested shape graphs
+
 ## v0.20.0
 ### Breaking changes
 - map_triples, map, map_default "df"-arg renamed to "data" as it now takes alternatively a DataFrame or a SolutionMappings object, in which case types can be specified for columns. A query run with solution_mappings=True can thus be piped into these methods.  
