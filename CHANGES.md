@@ -4,6 +4,7 @@
 ### Bug fixes
 - Fix nondeterminism that could sometimes cause duplicate SHACL results
 - SHACL could sometimes contain extra results for deeply nested shape graphs
+- SHACL graph no longer includes conforms bool for results, this one is just needed when include_details=True
 
 ## v0.20.0
 ### Breaking changes

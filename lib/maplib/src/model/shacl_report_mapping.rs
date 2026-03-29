@@ -63,7 +63,7 @@ impl Model {
         &mut self,
         report: &mut ValidationReport,
         report_graph: &NamedGraph,
-        include_details: bool,
+        conforms_col: bool,
     ) -> Result<(), MaplibError> {
         self.add_templates_from_string(SHACL_DOC)
             .expect("Template should be correct");
@@ -86,7 +86,7 @@ impl Model {
                 &rdf_node_types,
                 offset,
                 &uuid,
-                include_details,
+                conforms_col,
             );
             debug!("Finished creating results input");
             offset += df.height();
@@ -166,7 +166,7 @@ impl Model {
                 &rdf_node_types,
                 offset,
                 &uuid,
-                include_details,
+                conforms_col,
             );
             debug!("Finished creating details input");
 
@@ -187,10 +187,10 @@ fn create_results_input(
     types: &HashMap<String, RDFNodeState>,
     offset: usize,
     uuid: &str,
-    include_details: bool,
+    conforms_col: bool,
 ) -> (DataFrame, HashMap<String, MappingColumnType>) {
     let mut rdf_node_types = types.clone();
-    if !include_details {
+    if !conforms_col {
         rdf_node_types.remove("conforms");
         mappings = mappings.drop(by_name(["conforms"], false, false));
     }
