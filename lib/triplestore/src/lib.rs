@@ -9,7 +9,7 @@ pub mod native_parquet_write;
 pub mod query_solutions;
 pub mod rdfs_inferencing;
 pub mod sparql;
-mod storage;
+pub mod storage;
 pub mod triples_read;
 pub mod triples_write;
 

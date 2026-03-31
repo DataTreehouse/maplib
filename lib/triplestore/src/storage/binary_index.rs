@@ -14,8 +14,8 @@ use representation::{
 };
 use std::collections::HashSet;
 
-#[derive(Clone)]
-pub enum SubjectObjectIndex {
+#[derive(Clone, Debug)]
+pub enum BinaryIndex {
     NormalIndex(HashSet<(u32, u32)>),
     LangStringIndex(HashSet<(u32, u32, u32)>),
     Int32Index(HashSet<(u32, i32)>),
@@ -25,47 +25,47 @@ pub enum SubjectObjectIndex {
     Float64Index(HashSet<(u32, OrderedFloat<f64>)>),
 }
 
-impl SubjectObjectIndex {
+impl BinaryIndex {
     pub fn insert_normal(&mut self, s: u32, o: u32) -> bool {
         match self {
-            SubjectObjectIndex::NormalIndex(set) => set.insert((s, o)),
+            BinaryIndex::NormalIndex(set) => set.insert((s, o)),
             _ => unreachable!(),
         }
     }
     pub fn insert_i32(&mut self, s: u32, o: i32) -> bool {
         match self {
-            SubjectObjectIndex::Int32Index(set) => set.insert((s, o)),
+            BinaryIndex::Int32Index(set) => set.insert((s, o)),
             _ => unreachable!(),
         }
     }
     pub fn insert_i64(&mut self, s: u32, o: i64) -> bool {
         match self {
-            SubjectObjectIndex::Int64Index(set) => set.insert((s, o)),
+            BinaryIndex::Int64Index(set) => set.insert((s, o)),
             _ => unreachable!(),
         }
     }
     pub fn insert_f32(&mut self, s: u32, o: f32) -> bool {
         match self {
-            SubjectObjectIndex::Float32Index(set) => set.insert((s, OrderedFloat(o))),
+            BinaryIndex::Float32Index(set) => set.insert((s, OrderedFloat(o))),
             _ => unreachable!(),
         }
     }
     pub fn insert_f64(&mut self, s: u32, o: f64) -> bool {
         match self {
-            SubjectObjectIndex::Float64Index(set) => set.insert((s, OrderedFloat(o))),
+            BinaryIndex::Float64Index(set) => set.insert((s, OrderedFloat(o))),
             _ => unreachable!(),
         }
     }
     pub fn insert_bool(&mut self, s: u32, o: bool) -> bool {
         match self {
-            SubjectObjectIndex::BoolIndex(set) => set.insert((s, o)),
+            BinaryIndex::BoolIndex(set) => set.insert((s, o)),
             _ => unreachable!(),
         }
     }
 
     pub fn insert_lang_string(&mut self, s: u32, v: u32, l: u32) -> bool {
         match self {
-            SubjectObjectIndex::LangStringIndex(set) => set.insert((s, v, l)),
+            BinaryIndex::LangStringIndex(set) => set.insert((s, v, l)),
             _ => unreachable!(),
         }
     }
@@ -85,12 +85,12 @@ pub fn is_so_indexed(object_type: &BaseRDFNodeType, subject_object_indexing: boo
     ind
 }
 
-impl SubjectObjectIndex {
+impl BinaryIndex {
     pub fn maybe_create(
         df: &DataFrame,
         object_type: &BaseRDFNodeType,
         subject_object_indexing: bool,
-    ) -> Option<SubjectObjectIndex> {
+    ) -> Option<BinaryIndex> {
         if is_so_indexed(object_type, subject_object_indexing) {
             if object_type.is_lang_string() {
                 let s = df.column(SUBJECT_COL_NAME).unwrap();
@@ -118,7 +118,7 @@ impl SubjectObjectIndex {
                 {
                     set.insert((s.unwrap(), o.unwrap(), l.unwrap()));
                 }
-                let so = SubjectObjectIndex::LangStringIndex(set);
+                let so = BinaryIndex::LangStringIndex(set);
                 Some(so)
             } else if object_type.is_lit_type(xsd::BOOLEAN) {
                 let s = df.column(SUBJECT_COL_NAME).unwrap();
@@ -127,7 +127,7 @@ impl SubjectObjectIndex {
                 for (s, o) in s.u32().unwrap().iter().zip(o.bool().unwrap().iter()) {
                     set.insert((s.unwrap(), o.unwrap()));
                 }
-                let so = SubjectObjectIndex::BoolIndex(set);
+                let so = BinaryIndex::BoolIndex(set);
                 Some(so)
             } else if object_type.is_lit_type(xsd::DATE) {
                 let s = df.column(SUBJECT_COL_NAME).unwrap();
@@ -141,7 +141,7 @@ impl SubjectObjectIndex {
                 {
                     set.insert((s.unwrap(), o.unwrap()));
                 }
-                let so = SubjectObjectIndex::Int32Index(set);
+                let so = BinaryIndex::Int32Index(set);
                 Some(so)
             } else if object_type.is_lit_type(xsd::INT) {
                 let s = df.column(SUBJECT_COL_NAME).unwrap();
@@ -150,7 +150,7 @@ impl SubjectObjectIndex {
                 for (s, o) in s.u32().unwrap().iter().zip(o.i32().unwrap().iter()) {
                     set.insert((s.unwrap(), o.unwrap()));
                 }
-                let so = SubjectObjectIndex::Int32Index(set);
+                let so = BinaryIndex::Int32Index(set);
                 Some(so)
             } else if object_type.is_lit_type(xsd::INTEGER) || object_type.is_lit_type(xsd::LONG) {
                 let s = df.column(SUBJECT_COL_NAME).unwrap();
@@ -159,7 +159,7 @@ impl SubjectObjectIndex {
                 for (s, o) in s.u32().unwrap().iter().zip(o.i64().unwrap().iter()) {
                     set.insert((s.unwrap(), o.unwrap()));
                 }
-                let so = SubjectObjectIndex::Int64Index(set);
+                let so = BinaryIndex::Int64Index(set);
                 Some(so)
             } else if object_type.is_lit_type(xsd::DOUBLE) || object_type.is_lit_type(xsd::DECIMAL)
             {
@@ -169,7 +169,7 @@ impl SubjectObjectIndex {
                 for (s, o) in s.u32().unwrap().iter().zip(o.f64().unwrap().iter()) {
                     set.insert((s.unwrap(), OrderedFloat(o.unwrap())));
                 }
-                let so = SubjectObjectIndex::Float64Index(set);
+                let so = BinaryIndex::Float64Index(set);
                 Some(so)
             } else if object_type.is_lit_type(xsd::FLOAT) {
                 let s = df.column(SUBJECT_COL_NAME).unwrap();
@@ -178,7 +178,7 @@ impl SubjectObjectIndex {
                 for (s, o) in s.u32().unwrap().iter().zip(o.f32().unwrap().iter()) {
                     set.insert((s.unwrap(), OrderedFloat(o.unwrap())));
                 }
-                let so = SubjectObjectIndex::Float32Index(set);
+                let so = BinaryIndex::Float32Index(set);
                 Some(so)
             } else {
                 let s = df.column(SUBJECT_COL_NAME).unwrap();
@@ -187,7 +187,7 @@ impl SubjectObjectIndex {
                 for (s, o) in s.u32().unwrap().iter().zip(o.u32().unwrap().iter()) {
                     set.insert((s.unwrap(), o.unwrap()));
                 }
-                let so = SubjectObjectIndex::NormalIndex(set);
+                let so = BinaryIndex::NormalIndex(set);
                 Some(so)
             }
         } else {
