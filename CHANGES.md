@@ -1,5 +1,12 @@
 # Change log
 
+## v0.20.2
+### Bug fixes
+- Fix caching issue in Datalog engine
+
+### Features
+- SHACL rules now support recursion, and has multiple optimizations. 
+
 ## v0.20.1
 ### Bug fixes
 - Fix nondeterminism that could sometimes cause duplicate SHACL results

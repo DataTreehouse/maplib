@@ -38,12 +38,12 @@ polars = { version = "0.53.0", features = [
 polars-core = { version = "0.53.0" }
 rayon = "1.10.0"
 regex = "1.11.1"
-oxrdf = { version = "0.3.2" }
-oxrdfio = { version = "0.2.2" }
-oxttl = { version= "0.2.2" }
-oxjsonld = {version = "0.2.2"}
+oxrdf = { version = "0.3.3" }
+oxrdfio = { version = "0.2.4" }
+oxttl = { version= "0.2.3" }
+oxjsonld = {version = "0.2.4"}
 oxiri = "0.2.11"
-sparesults = "0.3.2"
+sparesults = "0.3.3"
 oxsdatatypes = "0.2.2"
 chrono = "0.4.41"
 chrono-tz = "0.10.3"

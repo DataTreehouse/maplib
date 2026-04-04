@@ -5,6 +5,7 @@ use polars::prelude::{
     IntoLazy, LazyFrame, LiteralValue,
 };
 
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use std::collections::HashMap;
 
 pub const MULTI_IRI_DT: &str = "I";
@@ -166,16 +167,27 @@ pub fn split_df_multicols(
     df: DataFrame,
     types: &HashMap<String, RDFNodeState>,
 ) -> Vec<(DataFrame, HashMap<String, RDFNodeState>)> {
-    let mut dfs_dtypes = vec![(df, types.clone())];
+    let split = split_df_multicols_to_lf(df, types);
+    split
+        .into_par_iter()
+        .map(|(lf, types)| (lf.collect().unwrap(), types))
+        .collect()
+}
+
+pub fn split_df_multicols_to_lf(
+    df: DataFrame,
+    types: &HashMap<String, RDFNodeState>,
+) -> Vec<(LazyFrame, HashMap<String, RDFNodeState>)> {
+    let mut dfs_dtypes = vec![(df.lazy(), types.clone())];
     for (c, t) in types {
         dfs_dtypes = if t.is_multi() {
             let mut new_dfs_dtypes = vec![];
-            for (df, types) in dfs_dtypes {
+            for (lf, types) in dfs_dtypes {
                 for (t, s) in &t.map {
                     let mut new_types = types.clone();
-                    let lf = force_convert_multicol_to_single_col(df.clone().lazy(), c, t);
+                    let lf = force_convert_multicol_to_single_col(lf.clone(), c, t);
                     new_types.insert(c.clone(), RDFNodeState::from_bases(t.clone(), s.clone()));
-                    new_dfs_dtypes.push((lf.collect().unwrap(), new_types));
+                    new_dfs_dtypes.push((lf, new_types));
                 }
             }
             new_dfs_dtypes

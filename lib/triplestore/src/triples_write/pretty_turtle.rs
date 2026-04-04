@@ -790,6 +790,17 @@ impl Triplestore {
             if sm.mappings.height() == 0 {
                 return Ok(None);
             }
+            if sm
+                .rdf_node_types
+                .get(SUBJECT_COL_NAME)
+                .unwrap()
+                .map
+                .contains_key(&BaseRDFNodeType::IRI)
+            {
+                return Err(TriplestoreError::WriteTurtleError(
+                    "No support for pretty turtle when IRI is subject of rdf:rest".to_string(),
+                ));
+            }
             let su32 = sm.mappings.column(SUBJECT_COL_NAME).unwrap().u32().unwrap();
             for u in su32 {
                 if let Some(first) = first_blank_term_map.get(&u.unwrap()) {

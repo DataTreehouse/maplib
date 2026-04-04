@@ -1,8 +1,8 @@
-pub mod binary_index;
 mod deduplication;
+pub mod so_index;
 
 use crate::errors::TriplestoreError;
-use crate::storage::binary_index::BinaryIndex;
+use crate::storage::so_index::SubjectObjectIndex;
 use crate::IndexingOptions;
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{NamedNode, NamedOrBlankNode, Term};
@@ -78,12 +78,12 @@ pub(crate) struct Triples {
     pub(crate) subject_type: BaseRDFNodeType,
     pub object_type: BaseRDFNodeType,
     object_indexing_enabled: bool,
-    subject_object_index: Option<BinaryIndex>,
+    subject_object_index: Option<SubjectObjectIndex>,
 }
 
 impl Triples {
     pub fn new(
-        df: DataFrame,
+        mut df: DataFrame,
         storage_folder: Option<&PathBuf>,
         subject_type: BaseRDFNodeType,
         object_type: BaseRDFNodeType,
@@ -95,9 +95,14 @@ impl Triples {
             can_and_should_index_object(&object_type, predicate_iri, indexing);
         let height = df.height();
         let mut segments = vec![];
-        let subject_object_index =
-            BinaryIndex::maybe_create(&df, &object_type, indexing.subject_object_index);
-
+        let subject_object_index = if indexing.subject_object_index {
+            let mut subject_object_index = SubjectObjectIndex::new(&subject_type, &object_type);
+            let maybe_df = subject_object_index.update(&df);
+            df = maybe_df.unwrap();
+            Some(subject_object_index)
+        } else {
+            None
+        };
         let cats = cats.read().unwrap();
 
         let segment = TriplesSegment::new(
