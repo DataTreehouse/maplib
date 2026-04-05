@@ -3,9 +3,11 @@
 ## v0.20.2
 ### Bug fixes
 - Fix caching issue in Datalog engine
+- Work around issue with timestamped dates, these are now read without the timestamp, but should be fixed properly at some point.
 
 ### Features
 - SHACL rules now support recursion, and has multiple optimizations. 
+- Still missing conditions, other rule types than sparql construct, and taking ordering into account. 
 
 ## v0.20.1
 ### Bug fixes
