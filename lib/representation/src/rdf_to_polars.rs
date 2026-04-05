@@ -9,6 +9,7 @@ use polars::prelude::{
 };
 use std::ops::Deref;
 use std::str::FromStr;
+use memchr::memchr;
 use tracing::warn;
 
 pub fn rdf_term_to_polars_expr(term: &Term) -> Expr {
@@ -222,9 +223,16 @@ pub fn rdf_literal_to_polars_literal_value_impl(
             )))
         }
     } else if datatype == xsd::DATE {
-        if let Ok(parsed) = NaiveDate::parse_from_str(value, "%Y-%m-%d") {
+        if value.contains("+") {
+            warn!("Did not parse xsd:date timezone: {value}");
+        }
+        let use_value = if let Some(spot) = memchr(b'+', value.as_bytes()) {
+            &value[0..spot]
+        } else {
+            value
+        };
+        if let Ok(parsed) = NaiveDate::parse_from_str(use_value, "%Y-%m-%d") {
             let dur = parsed.signed_duration_since(NaiveDate::from_ymd_opt(1970, 1, 1).unwrap());
-
             LiteralValue::Scalar(Scalar::new_date(dur.num_days() as i32))
         } else {
             warn!("Could not parse xsd:date {value}");

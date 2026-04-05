@@ -2,7 +2,7 @@ use spargebra::algebra::{Expression, GraphPattern, PropertyPathExpression};
 use spargebra::term::TriplePattern;
 use std::fmt::Display;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum DebugOutput {
     NoResultsTriplePattern(TriplePattern),
     NoResultsJoiningTriplePattern(Vec<TriplePattern>, TriplePattern),
@@ -67,7 +67,7 @@ impl Display for DebugOutput {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct DebugOutputs {
     pub debug_outputs: Vec<DebugOutput>,
 }

@@ -19,7 +19,9 @@ use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard};
-use triplestore::sparql::{QueryResult, QueryResultKind as SparqlQueryResult, UpdateResult};
+use triplestore::sparql::{
+    InsertResult, QueryResult, QueryResultKind as SparqlQueryResult, UpdateResult,
+};
 
 //The below snippet controlling alloc-library is from https://github.com/pola-rs/polars/blob/main/py-polars/src/lib.rs
 //And has a MIT license:
@@ -486,6 +488,7 @@ impl PyModel {
         dry_run=None,
         max_rows=None,
         serial=None,
+        debug_rules=None,
     ))]
     #[instrument(skip_all)]
     fn validate(
@@ -504,6 +507,7 @@ impl PyModel {
         dry_run: Option<bool>,
         max_rows: Option<usize>,
         serial: Option<bool>,
+        debug_rules: Option<bool>,
     ) -> PyResult<PyValidationReport> {
         let res = py.detach(move || {
             let mut inner = self.inner.lock().unwrap();
@@ -522,6 +526,7 @@ impl PyModel {
                 dry_run,
                 max_rows,
                 serial,
+                debug_rules,
             )
         })?;
         Ok(res)
@@ -601,12 +606,12 @@ impl PyModel {
         let source_graph = NamedGraph::from_maybe_named_node(source_graph.as_ref());
         let target_graph = parse_optional_named_node(target_graph)?;
         let target_graph = NamedGraph::from_maybe_named_node(target_graph.as_ref());
-        let (new_triples, cats) = py.detach(|| -> PyResult<(Vec<NewTriples>, LockedCats)> {
+        let (insert_result, cats) = py.detach(|| -> PyResult<(InsertResult, LockedCats)> {
             let mut inner = self.inner.lock().unwrap();
 
             let cats = inner.triplestore.global_cats.clone();
 
-            let new_triples = insert_mutex(
+            let insert_result = insert_mutex(
                 &mut inner,
                 query,
                 mapped_parameters,
@@ -618,10 +623,16 @@ impl PyModel {
                 max_rows,
                 debug,
             )?;
-
-            Ok((new_triples, cats))
+            Ok((insert_result, cats))
         })?;
-        new_triples_to_dict(new_triples, solution_mappings.unwrap_or(false), cats, py)
+        print_debug_if_exists(insert_result.debug.as_ref());
+
+        new_triples_to_dict(
+            insert_result.new_triples,
+            solution_mappings.unwrap_or(false),
+            cats,
+            py,
+        )
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1219,6 +1230,7 @@ fn validate_mutex(
     dry_run: Option<bool>,
     max_rows: Option<usize>,
     serial: Option<bool>,
+    debug_rules: Option<bool>,
 ) -> PyResult<PyValidationReport> {
     let data_graph = parse_optional_named_node(data_graph)?;
     let data_graph = NamedGraph::from_maybe_named_node(data_graph.as_ref());
@@ -1279,6 +1291,7 @@ fn validate_mutex(
             deactivate_shapes,
             dry_run.unwrap_or(false),
             serial.unwrap_or(false),
+            debug_rules.unwrap_or(false),
         )
         .map_err(PyMaplibError::from)?;
     inner.latest_report_graph = report_graph.clone();
@@ -1298,8 +1311,8 @@ fn insert_mutex(
     include_transient: Option<bool>,
     max_rows: Option<usize>,
     debug: Option<bool>,
-) -> PyResult<Vec<NewTriples>> {
-    let new_triples = inner
+) -> PyResult<InsertResult> {
+    let insert_result = inner
         .insert(
             &query,
             &mapped_parameters,
@@ -1312,7 +1325,8 @@ fn insert_mutex(
             debug.unwrap_or(DEFAULT_DEBUG_NO_RESULTS),
         )
         .map_err(PyMaplibError::from)?;
-    Ok(new_triples)
+
+    Ok(insert_result)
 }
 
 fn read_mutex(

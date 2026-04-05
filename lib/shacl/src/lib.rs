@@ -14,7 +14,7 @@ use std::fmt::Display;
 use std::time::Duration;
 use triplestore::Triplestore;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ShaclInferenceResult {}
 
 impl Display for ShaclInferenceResult {
@@ -44,6 +44,7 @@ pub struct ValidationReport {
     pub validation_performance: Vec<Performance>,
     pub targets_performance: Vec<Performance>,
     pub shape_targets: Vec<ShapeTargets>,
+    pub rules_result: ShaclInferenceResult
 }
 
 impl ValidationReport {
@@ -85,6 +86,7 @@ pub fn validate(
     _dry_run: bool,
     _prefixes: Option<HashMap<String, NamedNode>>,
     _serial: bool,
+    _debug_rules: bool,
 ) -> Result<ValidationReport, ShaclError> {
     unimplemented!("Contact Data Treehouse to try")
 }

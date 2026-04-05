@@ -24,7 +24,7 @@ use templates::dataset::TemplateDataset;
 use templates::document::document_from_str;
 use templates::MappingColumnType;
 use triplestore::sparql::errors::SparqlError;
-use triplestore::sparql::{QueryResult, QuerySettings, UpdateResult};
+use triplestore::sparql::{InsertResult, QueryResult, QuerySettings, UpdateResult};
 use triplestore::{IndexingOptions, NewTriples, Triplestore};
 
 use datalog::ast::DatalogRuleset;
@@ -326,7 +326,7 @@ impl Model {
         streaming: bool,
         max_rows: Option<usize>,
         debug_no_results: bool,
-    ) -> Result<Vec<NewTriples>, MaplibError> {
+    ) -> Result<InsertResult, MaplibError> {
         let query_settings = QuerySettings {
             include_transient: include_source_transient,
             max_rows,
@@ -474,6 +474,7 @@ impl Model {
         deactivate_shapes: Vec<NamedNode>,
         dry_run: bool,
         serial: bool,
+        debug_rules: bool,
     ) -> Result<ValidationReport, MaplibError> {
         let mut res = validate(
             &mut self.triplestore,
@@ -491,6 +492,7 @@ impl Model {
             dry_run,
             Some(self.prefixes.clone()),
             serial,
+            debug_rules,
         )
         .map_err(|x| MaplibError::ShaclError(x))?;
         if let Some(report_graph) = report_graph {

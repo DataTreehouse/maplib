@@ -46,6 +46,11 @@ use spargebra::term::{
 use spargebra::{GraphUpdateOperation, Query, Update};
 use std::collections::{HashMap, HashSet};
 
+pub struct InsertResult {
+    pub new_triples: Vec<NewTriples>,
+    pub debug: Option<DebugOutputs>,
+}
+
 pub struct QueryResult {
     pub kind: QueryResultKind,
     pub debug: Option<DebugOutputs>,
@@ -61,7 +66,7 @@ pub enum QueryResultKind {
     Construct(Vec<(EagerSolutionMappings, Option<NamedNode>)>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct QuerySettings {
     pub include_transient: bool,
     pub max_rows: Option<usize>,
@@ -306,7 +311,7 @@ impl Triplestore {
         target_graph: &NamedGraph,
         prefixes: Option<&HashMap<String, NamedNode>>,
         debug_no_results: bool,
-    ) -> Result<Vec<NewTriples>, SparqlError> {
+    ) -> Result<InsertResult, SparqlError> {
         let query = Query::parse(query, None, prefixes).map_err(SparqlError::ParseError)?;
         self.insert_parsed(
             &query,
@@ -330,7 +335,7 @@ impl Triplestore {
         source_graph: &NamedGraph,
         target_graph: &NamedGraph,
         debug_no_results: bool,
-    ) -> Result<Vec<NewTriples>, SparqlError> {
+    ) -> Result<InsertResult, SparqlError> {
         if let Query::Construct { .. } = &query {
             let res = self.query_parsed(
                 &query,
@@ -340,7 +345,7 @@ impl Triplestore {
                 Some(source_graph),
                 debug_no_results,
             )?;
-            let r = match res.kind {
+            let new_triples = match res.kind {
                 QueryResultKind::Select(_) => {
                     return Err(SparqlError::QueryExecutionError(
                         "Got SELECT query when CONSTRUCT was expected".to_string(),
@@ -350,7 +355,10 @@ impl Triplestore {
                     self.insert_construct_result(dfs, transient, target_graph)
                 }
             };
-            r
+            Ok(InsertResult {
+                new_triples: new_triples?,
+                debug: res.debug,
+            })
         } else {
             Err(SparqlError::QueryTypeNotSupported)
         }

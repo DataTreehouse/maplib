@@ -89,6 +89,11 @@ impl PyValidationReport {
         }
     }
 
+    #[getter]
+    pub fn rule_log(&self) -> PyResult<String> {
+        Ok(self.inner.rules_result.to_string())
+    }
+
     #[pyo3(signature = (streaming=None))]
     pub fn results(&self, streaming: Option<bool>, py: Python<'_>) -> PyResult<Option<Py<PyAny>>> {
         let streaming = streaming.unwrap_or(false);

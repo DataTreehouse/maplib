@@ -21,4 +21,4 @@ def test_csvw_example():
     m = Model()
     m.read(TESTDATA_PATH / "grit_bins.json", known_contexts={"http://www.w3.org/ns/csvw":csvw})
     df = m.query("SELECT * WHERE {?a ?b ?c}")
-    assert df.height == 17
+    assert df.height == 21

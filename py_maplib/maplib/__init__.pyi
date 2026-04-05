@@ -463,6 +463,9 @@ class ValidationReport:
     report_graph: str
     "The named graph where the validation report is stored"
 
+    rule_log: str
+    "The log of SHACL rules execution"
+
     def results(
             self,
             streaming: bool = False,
@@ -688,6 +691,7 @@ class Model:
             self,
             update: str,
             parameters: ParametersType = None,
+            graph: str = None,
             streaming: bool = False,
             include_transient: bool = True,
             max_rows: int = None,
@@ -772,6 +776,7 @@ class Model:
         dry_run: bool = False,
         max_rows: int = None,
         serial: bool = False,
+        debug_rules: bool = False,
     ) -> ValidationReport:
         """
         Validate the contained knowledge graph using SHACL
@@ -791,6 +796,7 @@ class Model:
         :param dry_run: Only find targets of shapes, but do not validate them.
         :param max_rows: Maximum estimated rows in underlying SPARQL results, helps avoid out-of-memory errors.
         :param serial: Turns off most parallell validation of shapes.
+        :param debug_rules: Debug why rules returning no results do so. Included in rule log.
         :return: Validation report containing shape performance details and target counts and whether the graph conforms (report.conforms)
         """
 

@@ -66,6 +66,7 @@ uri_encode = "1.0.4"
 md-5 = "0.10.6"
 sha1 = "0.10.6"
 hex = "0.4.3"
+memchr = "2.8.0"
 
 tracing = { version = "0.1", features = [ "log" ] }
 tracing-subscriber = { version = "0.3.19", features = [ "env-filter" ] }

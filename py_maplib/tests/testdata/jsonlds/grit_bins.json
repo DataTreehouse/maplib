@@ -1,5 +1,5 @@
 {
-  "@context": ["http://www.w3.org/ns/csvw", {"@language": "en"}],
+  "@context": ["http://www.w3.org/ns/csvw"],
   "tables": [{
     "url": "http://opendata.leeds.gov.uk/downloads/gritting/grit_bins.csv",
     "tableSchema": {
