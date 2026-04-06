@@ -860,6 +860,7 @@ name = "disk"
 version = "0.1.0"
 dependencies = [
  "arrow",
+ "in_memory",
  "nohash-hasher",
 ]
 

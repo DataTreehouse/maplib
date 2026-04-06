@@ -132,16 +132,7 @@ impl CatMaps {
                 if let Some(path) = path {
                     d.image_disk(path, s).map(CatMaps::OnDisk)
                 } else {
-                    let im = d.image_memory(s);
-                    if let Some(im) = im {
-                        let mut inmem = CatMapsInMemory::new_empty(dt.is_iri());
-                        for (s, u) in im {
-                            inmem.encode_new_in_memory_string(s, u)
-                        }
-                        Some(CatMaps::InMemory(inmem))
-                    } else {
-                        None
-                    }
+                    d.image_memory(s, dt.is_iri()).map(CatMaps::InMemory)
                 }
             }
         }

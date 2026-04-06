@@ -1,4 +1,5 @@
 use arrow::array::RecordBatch;
+use in_memory::CatMapsInMemory;
 use nohash_hasher::NoHashHasher;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
@@ -64,7 +65,7 @@ impl CatMapsOnDisk {
     pub fn image_disk(&self, _path: &Path, _us: &HashSet<u32>) -> Option<CatMapsOnDisk> {
         unimplemented!("Contact Data Treehouse to try!")
     }
-    pub fn image_memory(&self, _us: &HashSet<u32>) -> Option<HashMap<String, u32>> {
+    pub fn image_memory(&self, _us: &HashSet<u32>) -> Option<CatMapsInMemory> {
         unimplemented!("Contact Data Treehouse to try!")
     }
 

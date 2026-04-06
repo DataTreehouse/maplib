@@ -44,7 +44,7 @@ pub struct ValidationReport {
     pub validation_performance: Vec<Performance>,
     pub targets_performance: Vec<Performance>,
     pub shape_targets: Vec<ShapeTargets>,
-    pub rules_result: ShaclInferenceResult
+    pub rules_result: ShaclInferenceResult,
 }
 
 impl ValidationReport {
