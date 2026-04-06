@@ -1,5 +1,14 @@
 # Change log
 
+## v0.20.3
+### Bug fixes
+- Fix issue with regex and replace where pattern was of form str(iri).
+- Fix issue where debug_rules could sometimes panic in validate()
+
+## Features
+- Add support for STRDT
+- Add missing support for SPARQL targets in SHACL Rules
+
 ## v0.20.2
 ### Bug fixes
 - Fix caching issue in Datalog engine
