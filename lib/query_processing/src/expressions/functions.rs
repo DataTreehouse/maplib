@@ -6,12 +6,11 @@ use crate::errors::QueryProcessingError;
 use crate::expressions::{cast_lang_string_to_string, drop_inner_contexts};
 use md5::{Digest, Md5};
 use oxrdf::vocab::{rdf, xsd};
-use oxrdf::{Literal, NamedNodeRef, Term};
+use oxrdf::NamedNodeRef;
 use polars::datatypes::{DataType, Field, PlSmallStr, TimeUnit};
-use polars::frame::DataFrame;
 use polars::prelude::{
-    as_struct, by_name, coalesce, col, concat_str, first, lit, when, Expr, IntoColumn, IntoLazy,
-    LiteralValue, NamedFrom, RoundMode, Scalar, Series, StringChunked, StrptimeOptions,
+    as_struct, by_name, coalesce, col, concat_str, lit, when, Expr, IntoColumn, LiteralValue,
+    NamedFrom, RoundMode, Scalar, Series, StringChunked, StrptimeOptions,
 };
 use rayon::iter::IntoParallelIterator;
 use rayon::iter::ParallelIterator;
@@ -1057,7 +1056,7 @@ pub fn func_expression(
                         );
                         Ok(series.into_column())
                     },
-                    move |x, f| {
+                    move |_, f| {
                         let mut field = f.clone();
                         field.dtype = out_polars_type.clone();
                         Ok(field)

@@ -1523,6 +1523,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "in_memory"
+version = "0.1.0"
+dependencies = [
+ "arrow",
+ "nohash-hasher",
+ "rayon",
+ "uuid",
+]
+
+[[package]]
 name = "indexmap"
 version = "2.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2886,7 +2896,7 @@ dependencies = [
 
 [[package]]
 name = "py_maplib"
-version = "0.20.2"
+version = "0.20.3"
 dependencies = [
  "chrono",
  "cimxml_export",
@@ -3258,6 +3268,7 @@ dependencies = [
  "chrono",
  "chrono-tz",
  "disk",
+ "in_memory",
  "memchr",
  "nohash-hasher",
  "oxrdf",
