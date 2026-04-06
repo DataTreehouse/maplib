@@ -1,5 +1,10 @@
 # Change log
 
+## v0.20.4
+### Bug fixes
+- Fix rounding issue
+- Improve error messages from SHACL rules
+
 ## v0.20.3
 ### Bug fixes
 - Fix issue with regex and replace where pattern was of form str(iri).
