@@ -6,19 +6,24 @@ use crate::errors::QueryProcessingError;
 use crate::expressions::{cast_lang_string_to_string, drop_inner_contexts};
 use md5::{Digest, Md5};
 use oxrdf::vocab::{rdf, xsd};
-use oxrdf::{Literal, NamedNodeRef};
+use oxrdf::{Literal, NamedNodeRef, Term};
 use polars::datatypes::{DataType, Field, PlSmallStr, TimeUnit};
+use polars::frame::DataFrame;
 use polars::prelude::{
-    as_struct, by_name, coalesce, col, concat_str, lit, when, Expr, IntoColumn, LiteralValue,
-    NamedFrom, RoundMode, Scalar, Series, StringChunked, StrptimeOptions,
+    as_struct, by_name, coalesce, col, concat_str, first, lit, when, Expr, IntoColumn, IntoLazy,
+    LiteralValue, NamedFrom, RoundMode, Scalar, Series, StringChunked, StrptimeOptions,
 };
 use rayon::iter::IntoParallelIterator;
 use rayon::iter::ParallelIterator;
 use representation::cats::{maybe_decode_expr, LockedCats};
 use representation::multitype::{MULTI_BLANK_DT, MULTI_IRI_DT};
+use representation::polars_to_rdf::df_as_result;
 use representation::query_context::Context;
-use representation::rdf_to_polars::rdf_named_node_to_polars_literal_value;
-use representation::solution_mapping::{BaseCatState, SolutionMappings};
+use representation::rdf_to_polars::{
+    polars_literal_values_to_series, rdf_literal_to_polars_literal_value,
+    rdf_literal_to_polars_literal_value_impl, rdf_named_node_to_polars_literal_value,
+};
+use representation::solution_mapping::{BaseCatState, EagerSolutionMappings, SolutionMappings};
 use representation::{
     BaseRDFNodeType, RDFNodeState, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD,
 };
@@ -480,47 +485,59 @@ pub fn func_expression(
                 .rdf_node_types
                 .get(text_context.as_str())
                 .unwrap();
-            if let Expression::Literal(regex_lit) = args.get(1).unwrap() {
-                let pattern = create_regex_literal(regex_lit, args.get(2));
-                let expr = if t.is_multi() {
-                    let mut exprs = vec![];
-                    for (t, s) in &t.map {
-                        let replace_expr = create_regex_expr(
-                            col(text_context.as_str())
-                                .struct_()
-                                .field_by_name(&t.field_col_name()),
-                            t,
-                            s,
-                            &pattern,
-                            global_cats.clone(),
-                        );
-                        exprs.push(replace_expr);
-                    }
-                    coalesce(&exprs)
-                } else {
-                    let b = t.get_base_type().unwrap();
-                    let s = t.get_base_state().unwrap();
-                    let use_col = if b.is_lang_string() {
+            let pattern_context = args_contexts.get(&1).unwrap();
+            let pattern_sparql_expr = args.get(1).unwrap();
+
+            let pattern_type = solution_mappings
+                .rdf_node_types
+                .get(pattern_context.as_str())
+                .unwrap();
+            let flags = if let Some(flags_context) = args_contexts.get(&2) {
+                let flags_sparql_expr = args.get(2).unwrap();
+                let flags_type = solution_mappings
+                    .rdf_node_types
+                    .get(flags_context.as_str())
+                    .unwrap();
+                Some((flags_sparql_expr, flags_type))
+            } else {
+                None
+            };
+            let pattern = create_regex_string(pattern_sparql_expr, pattern_type, flags)?;
+            let expr = if t.is_multi() {
+                let mut exprs = vec![];
+                for (t, s) in &t.map {
+                    let replace_expr = create_regex_expr(
                         col(text_context.as_str())
                             .struct_()
-                            .field_by_name(LANG_STRING_VALUE_FIELD)
-                    } else {
-                        col(text_context.as_str())
-                    };
-
-                    create_regex_expr(use_col, b, s, &pattern, global_cats)
-                };
-                solution_mappings.mappings = solution_mappings
-                    .mappings
-                    .with_column(expr.alias(outer_context.as_str()));
-                solution_mappings.rdf_node_types.insert(
-                    outer_context.as_str().to_string(),
-                    BaseRDFNodeType::Literal(xsd::BOOLEAN.into_owned())
-                        .into_default_input_rdf_node_state(),
-                );
+                            .field_by_name(&t.field_col_name()),
+                        t,
+                        s,
+                        &pattern,
+                        global_cats.clone(),
+                    );
+                    exprs.push(replace_expr);
+                }
+                coalesce(&exprs)
             } else {
-                unimplemented!("Non literal regex")
-            }
+                let b = t.get_base_type().unwrap();
+                let s = t.get_base_state().unwrap();
+                let use_col = if b.is_lang_string() {
+                    col(text_context.as_str())
+                        .struct_()
+                        .field_by_name(LANG_STRING_VALUE_FIELD)
+                } else {
+                    col(text_context.as_str())
+                };
+                create_regex_expr(use_col, b, s, &pattern, global_cats.clone())
+            };
+            solution_mappings.mappings = solution_mappings
+                .mappings
+                .with_column(expr.alias(outer_context.as_str()));
+            solution_mappings.rdf_node_types.insert(
+                outer_context.as_str().to_string(),
+                BaseRDFNodeType::Literal(xsd::BOOLEAN.into_owned())
+                    .into_default_input_rdf_node_state(),
+            );
         }
         Function::Uuid => {
             if !args.is_empty() {
@@ -727,61 +744,66 @@ pub fn func_expression(
             let replacement_bt = replacement_state.get_base_type().unwrap();
             let replacement_bs = replacement_state.get_base_state().unwrap();
 
-            if let Expression::Literal(regex_lit) = args.get(1).unwrap() {
-                let pattern = create_regex_literal(regex_lit, args.get(3));
-                let replacement_expr = maybe_decode_expr(
-                    col(replacement_context.as_str()),
-                    replacement_bt,
-                    replacement_bs,
-                    global_cats.clone(),
-                );
-                let expr = if arg_type.is_multi() {
-                    let mut exprs = vec![];
-                    for (t, s) in &arg_type.map {
-                        let replace_expr = create_regex_replace_expr(
-                            col(arg_context.as_str())
-                                .struct_()
-                                .field_by_name(&t.field_col_name()),
-                            t,
-                            s,
-                            &pattern,
-                            &replacement_expr,
-                            global_cats.clone(),
-                        );
-                        exprs.push(replace_expr);
-                    }
-                    coalesce(&exprs)
-                } else {
-                    let t = arg_type.get_base_type().unwrap();
-                    let s = arg_type.get_base_state().unwrap();
-                    let use_col = if t.is_lang_string() {
+            let pattern_context = args_contexts.get(&1).unwrap();
+            let pattern_sparql_expr = args.get(1).unwrap();
+            let pattern_type = solution_mappings
+                .rdf_node_types
+                .get(pattern_context.as_str())
+                .unwrap();
+            let flags = if let Some(flags_context) = args_contexts.get(&3) {
+                let flags_sparql_expr = args.get(3).unwrap();
+                let flags_type = solution_mappings
+                    .rdf_node_types
+                    .get(flags_context.as_str())
+                    .unwrap();
+                Some((flags_sparql_expr, flags_type))
+            } else {
+                None
+            };
+            let pattern = create_regex_string(pattern_sparql_expr, pattern_type, flags)?;
+            let replacement_expr = maybe_decode_expr(
+                col(replacement_context.as_str()),
+                replacement_bt,
+                replacement_bs,
+                global_cats.clone(),
+            );
+            let expr = if arg_type.is_multi() {
+                let mut exprs = vec![];
+                for (t, s) in &arg_type.map {
+                    let replace_expr = create_regex_replace_expr(
                         col(arg_context.as_str())
                             .struct_()
-                            .field_by_name(LANG_STRING_VALUE_FIELD)
-                    } else {
-                        col(arg_context.as_str())
-                    };
-
-                    create_regex_replace_expr(
-                        use_col,
+                            .field_by_name(&t.field_col_name()),
                         t,
                         s,
                         &pattern,
                         &replacement_expr,
-                        global_cats,
-                    )
-                };
-                solution_mappings.mappings = solution_mappings
-                    .mappings
-                    .with_column(expr.alias(outer_context.as_str()));
-                solution_mappings.rdf_node_types.insert(
-                    outer_context.as_str().to_string(),
-                    BaseRDFNodeType::Literal(xsd::STRING.into_owned())
-                        .into_default_input_rdf_node_state(),
-                );
+                        global_cats.clone(),
+                    );
+                    exprs.push(replace_expr);
+                }
+                coalesce(&exprs)
             } else {
-                todo!("Non literal pattern")
-            }
+                let t = arg_type.get_base_type().unwrap();
+                let s = arg_type.get_base_state().unwrap();
+                let use_col = if t.is_lang_string() {
+                    col(arg_context.as_str())
+                        .struct_()
+                        .field_by_name(LANG_STRING_VALUE_FIELD)
+                } else {
+                    col(arg_context.as_str())
+                };
+
+                create_regex_replace_expr(use_col, t, s, &pattern, &replacement_expr, global_cats)
+            };
+            solution_mappings.mappings = solution_mappings
+                .mappings
+                .with_column(expr.alias(outer_context.as_str()));
+            solution_mappings.rdf_node_types.insert(
+                outer_context.as_str().to_string(),
+                BaseRDFNodeType::Literal(xsd::STRING.into_owned())
+                    .into_default_input_rdf_node_state(),
+            );
         }
         Function::Custom(nn) => {
             let iri = nn.as_str();
@@ -964,6 +986,104 @@ pub fn func_expression(
                     .insert(outer_context.as_str().to_string(), t_new);
             } else {
                 return Err(QueryProcessingError::UnimplementedFunction(nn.to_string()));
+            }
+        }
+        Function::StrDt => {
+            if args.len() != 2 {
+                return Err(QueryProcessingError::BadNumberOfFunctionArguments(
+                    func.clone(),
+                    args.len(),
+                    "2".to_string(),
+                ));
+            }
+            let first_context = args_contexts.get(&0).unwrap();
+            let first_type = solution_mappings
+                .rdf_node_types
+                .get(first_context.as_str())
+                .unwrap();
+            let base_string = BaseRDFNodeType::Literal(xsd::STRING.into_owned());
+            let use_base = if first_type.is_lit_type(xsd::STRING) {
+                Some((
+                    first_type.get_base_state().unwrap(),
+                    col(first_context.as_str()),
+                ))
+            } else if first_type.is_multi() {
+                if let Some(base_state) = first_type.map.get(&base_string) {
+                    Some((
+                        base_state,
+                        col(first_context.as_str())
+                            .struct_()
+                            .field_by_name(&base_string.field_col_name()),
+                    ))
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+            if let Some((use_base_state, use_base_col)) = use_base {
+                let dt_arg = args.get(1).unwrap();
+                let dt_iri = if let Expression::NamedNode(nn) = &dt_arg {
+                    nn.clone()
+                } else {
+                    return Err(QueryProcessingError::BadArgument(format!(
+                        "STRDT second argument should be IRI"
+                    )));
+                };
+                let out_dt = BaseRDFNodeType::Literal(dt_iri.clone());
+                let out_polars_type = out_dt.default_input_polars_data_type();
+                let outer_context_cloned = outer_context.clone();
+                let decoded_col =
+                    maybe_decode_expr(use_base_col, &base_string, use_base_state, global_cats);
+                let expr = decoded_col.map(
+                    move |x| {
+                        let litval: Vec<_> = x
+                            .str()?
+                            .iter()
+                            .map(|x| {
+                                if let Some(s) = x {
+                                    rdf_literal_to_polars_literal_value_impl(
+                                        s,
+                                        dt_iri.clone().as_ref(),
+                                    )
+                                } else {
+                                    LiteralValue::untyped_null()
+                                }
+                            })
+                            .collect();
+                        let series = polars_literal_values_to_series(
+                            litval,
+                            outer_context_cloned.clone().as_str(),
+                        );
+                        Ok(series.into_column())
+                    },
+                    move |x, f| {
+                        let mut field = f.clone();
+                        field.dtype = out_polars_type.clone();
+                        Ok(field)
+                    },
+                );
+                solution_mappings.mappings = solution_mappings
+                    .mappings
+                    .with_column(expr.alias(outer_context.as_str()));
+                solution_mappings.rdf_node_types.insert(
+                    outer_context.as_str().to_string(),
+                    out_dt.into_default_input_rdf_node_state(),
+                );
+            } else {
+                solution_mappings.mappings = solution_mappings.mappings.with_column(
+                    lit(LiteralValue::untyped_null())
+                        .cast(
+                            BaseRDFNodeType::None
+                                .into_default_input_rdf_node_state()
+                                .polars_data_type(),
+                        )
+                        .alias(outer_context.as_str()),
+                );
+                solution_mappings.rdf_node_types.insert(
+                    outer_context.as_str().to_string(),
+                    BaseRDFNodeType::None.into_default_input_rdf_node_state(),
+                );
             }
         }
         Function::StrBefore | Function::StrAfter => {
@@ -1911,25 +2031,65 @@ fn create_regex_replace_expr(
     }
 }
 
-fn create_regex_literal(regex_literal: &Literal, flags_expr: Option<&Expression>) -> String {
-    if regex_literal.datatype() != xsd::STRING {
-        todo!("Non plain literal regex lit")
+fn create_regex_string(
+    regex_sparql_expression: &Expression,
+    regex_literal_type: &RDFNodeState,
+    flags_expr: Option<(&Expression, &RDFNodeState)>,
+) -> Result<String, QueryProcessingError> {
+    if !regex_literal_type.is_lit_type(xsd::STRING) {
+        return Err(QueryProcessingError::BadArgument(
+            "Replace pattern was not a xsd:string".to_string(),
+        ));
     }
-    let flags = if let Some(third_expr) = flags_expr {
-        if let Expression::Literal(l) = third_expr {
-            if regex_literal.datatype() != xsd::STRING {
-                todo!("Non plain literal flags for regex")
-            }
-            Some(l.value())
+    let flags = if let Some((flags_regex_expr, flags_type)) = flags_expr {
+        if !flags_type.is_lit_type(xsd::STRING) {
+            return Err(QueryProcessingError::BadArgument(format!(
+                "Replace flags is was not a xsd:string"
+            )));
         } else {
-            todo!("Non literal flag for regex")
+            Some(eval_expression_to_string(flags_regex_expr, true)?)
         }
     } else {
         None
     };
+    let regex_str = eval_expression_to_string(regex_sparql_expression, true)?;
+    let flags_str = if let Some(flags) = &flags {
+        Some(flags.as_str())
+    } else {
+        None
+    };
+    let pattern = maybe_add_regex_feature_flags(&regex_str, flags_str);
+    Ok(pattern)
+}
 
-    let pattern = add_regex_feature_flags(regex_literal.value(), flags);
-    pattern
+fn eval_expression_to_string(
+    sparql_expression: &Expression,
+    expect_string: bool,
+) -> Result<String, QueryProcessingError> {
+    if let Expression::Literal(l) = sparql_expression {
+        if expect_string && l.datatype() != xsd::STRING {
+            Err(QueryProcessingError::ExpectedConstantLiteralStringArgument(
+                sparql_expression.clone(),
+            ))
+        } else {
+            Ok(l.value().to_string())
+        }
+    } else if let Expression::NamedNode(nn) = sparql_expression {
+        Ok(nn.as_str().to_string())
+    } else if let Expression::FunctionCall(f, args) = sparql_expression {
+        match f {
+            Function::Str => eval_expression_to_string(args.get(0).unwrap(), false),
+            _ => {
+                return Err(QueryProcessingError::ExpectedConstantLiteralArgument(
+                    sparql_expression.clone(),
+                ))
+            }
+        }
+    } else {
+        return Err(QueryProcessingError::ExpectedConstantLiteralArgument(
+            sparql_expression.clone(),
+        ));
+    }
 }
 
 pub fn str_function(c: &str, t: &RDFNodeState, global_cats: LockedCats) -> Expr {
@@ -2121,10 +2281,10 @@ fn cast_literal(
     }
 }
 
-pub fn add_regex_feature_flags(pattern: &str, flags: Option<&str>) -> String {
+pub fn maybe_add_regex_feature_flags(pattern: &str, flags: Option<&str>) -> String {
     if let Some(flags) = flags {
         //TODO: Validate flags..
-        format!("(?{flags}){pattern}")
+        format!("(?{}){}", flags, pattern)
     } else {
         pattern.to_string()
     }

@@ -256,7 +256,7 @@ impl Triplestore {
                             },
                             None,
                             &Context::new(),
-                            &None,
+                            parameters,
                             Pushdowns::new(),
                             qs,
                             qg,

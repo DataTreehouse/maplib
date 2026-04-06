@@ -1,5 +1,3 @@
-#![feature(pattern)]
-#![feature(str_as_str)]
 extern crate core;
 
 mod base_rdf_type;

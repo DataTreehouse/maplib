@@ -1,9 +1,7 @@
-pub mod in_memory;
-
-use crate::cats::maps::in_memory::CatMapsInMemory;
 use crate::cats::CatReEnc;
 use crate::BaseRDFNodeType;
 use disk::CatMapsOnDisk;
+use in_memory::CatMapsInMemory;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
@@ -31,7 +29,7 @@ impl CatMaps {
         }
     }
     pub fn merge(&mut self, other: &Self, c: &mut u32) -> CatReEnc {
-        match self {
+        let map = match self {
             CatMaps::InMemory(m) => match other {
                 CatMaps::InMemory(other) => m.merge(other, c),
                 CatMaps::OnDisk(..) => {
@@ -41,15 +39,15 @@ impl CatMaps {
             CatMaps::OnDisk(d) => match other {
                 CatMaps::InMemory(m) => {
                     let cat_map = d.merge_other_in_memory(m.to_record_batch(), c);
-                    let cat_reenc = CatReEnc {
-                        cat_map: Arc::new(cat_map),
-                    };
-                    cat_reenc
+                    cat_map
                 }
                 CatMaps::OnDisk(..) => {
                     unreachable!()
                 }
             },
+        };
+        CatReEnc {
+            cat_map: Arc::new(map),
         }
     }
     pub fn contains_u32(&self, u: &u32) -> bool {
@@ -129,14 +127,14 @@ impl CatMaps {
         dt: &BaseRDFNodeType,
     ) -> Option<Self> {
         match self {
-            CatMaps::InMemory(m) => m.image(s),
+            CatMaps::InMemory(m) => m.image(s).map(CatMaps::InMemory),
             CatMaps::OnDisk(d) => {
                 if let Some(path) = path {
                     d.image_disk(path, s).map(CatMaps::OnDisk)
                 } else {
                     let im = d.image_memory(s);
                     if let Some(im) = im {
-                        let mut inmem = CatMapsInMemory::new_empty(dt);
+                        let mut inmem = CatMapsInMemory::new_empty(dt.is_iri());
                         for (s, u) in im {
                             inmem.encode_new_in_memory_string(s, u)
                         }
@@ -150,7 +148,7 @@ impl CatMaps {
     }
     pub fn new_empty(path: Option<&Path>, bt: &BaseRDFNodeType) -> Self {
         match path {
-            None => CatMaps::InMemory(CatMapsInMemory::new_empty(bt)),
+            None => CatMaps::InMemory(CatMapsInMemory::new_empty(bt.is_iri())),
             Some(p) => CatMaps::OnDisk(CatMapsOnDisk::new_empty(p)),
         }
     }

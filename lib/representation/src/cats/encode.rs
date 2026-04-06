@@ -1,5 +1,4 @@
 use super::{CatEncs, CatType, Cats, EncodedTriples};
-use crate::cats::maps::in_memory::CatMapsInMemory;
 use crate::cats::maps::CatMaps;
 use crate::cats::LockedCats;
 use crate::solution_mapping::{BaseCatState, EagerSolutionMappings};
@@ -7,6 +6,7 @@ use crate::{
     BaseRDFNodeType, RDFNodeState, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD,
     OBJECT_COL_NAME, SUBJECT_COL_NAME,
 };
+use in_memory::CatMapsInMemory;
 use oxrdf::NamedNode;
 use polars::frame::DataFrame;
 use polars::prelude::{
@@ -23,7 +23,7 @@ impl CatEncs {
     }
 
     pub fn new_local_singular(value: &str, u: u32, bt: &BaseRDFNodeType) -> CatEncs {
-        let maps = CatMapsInMemory::new_singular(value, u, bt);
+        let maps = CatMapsInMemory::new_singular(value, u, bt.is_iri());
         CatEncs {
             maps: CatMaps::InMemory(maps),
         }

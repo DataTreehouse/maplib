@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
+    "lib/in_memory",
     "lib/disk",
     "lib/utils",
     "lib/representation",

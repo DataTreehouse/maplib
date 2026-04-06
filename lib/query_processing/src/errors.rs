@@ -1,5 +1,5 @@
 use representation::{BaseRDFNodeType, RDFNodeState};
-use spargebra::algebra::Function;
+use spargebra::algebra::{Expression, Function};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -20,4 +20,10 @@ pub enum QueryProcessingError {
     UnimplementedFunction(String),
     #[error("A filter must be of the type xsd:boolean, but was: {}", .0)]
     FilterMustBeBoolean(BaseRDFNodeType),
+    #[error("A function received a bad argument: {}", .0)]
+    BadArgument(String),
+    #[error("The following expression should resolve to a constant literal: {}", .0)]
+    ExpectedConstantLiteralArgument(Expression),
+    #[error("The following expression should resolve to an xsd:string : {}", .0)]
+    ExpectedConstantLiteralStringArgument(Expression),
 }
