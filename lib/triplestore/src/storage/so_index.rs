@@ -16,6 +16,7 @@ use representation::{
     SUBJECT_COL_NAME,
 };
 use std::collections::HashSet;
+use representation::rdf_to_polars::{default_time_unit, default_time_zone};
 
 pub fn bool_chunked(c: &Column) -> &BooleanChunked {
     c.bool().unwrap()
@@ -60,6 +61,11 @@ pub fn f64_chunked(c: &Column) -> &Float64Chunked {
 pub fn date_chunked(c: &Column) -> &Int32Chunked {
     c.date().unwrap().physical()
 }
+
+pub fn datetime_chunked(c: &Column) -> &Int64Chunked {
+    c.datetime().unwrap().physical()
+}
+
 
 pub fn bool_vec_to_column(col_name: &str, vec: Vec<bool>) -> Column {
     let mut c = Series::from_iter(vec).into_column();
@@ -106,6 +112,11 @@ pub fn date_vec_to_column(col_name: &str, vec: Vec<i32>) -> Column {
     o_series.into_column()
 }
 
+pub fn datetime_vec_to_column(col_name: &str, vec: Vec<i64>) -> Column {
+    let o_series = Int64Chunked::from_vec(PlSmallStr::from_str(col_name), vec).into_datetime(default_time_unit(), Some(default_time_zone()));
+    o_series.into_column()
+}
+
 pub fn unwrap_ordered_float<T>(o: Option<T>) -> OrderedFloat<T> {
     OrderedFloat(o.unwrap())
 }
@@ -133,7 +144,7 @@ macro_rules! binary_nonlang_nonlang_index_impl {
                 }
             }
 
-            pub fn update(&mut self, df: &DataFrame) -> Option<DataFrame> {
+            pub fn insert(&mut self, df: &DataFrame) -> Option<DataFrame> {
                 let subj_col = df.column(SUBJECT_COL_NAME).unwrap();
                 let obj_col = df.column(OBJECT_COL_NAME).unwrap();
                 let subj_ch = $subj_chunked_func(&subj_col);
@@ -189,6 +200,25 @@ macro_rules! binary_nonlang_nonlang_index_impl {
                     Some(new_df)
                 }
             }
+            
+            pub fn delete(&mut self, df: &DataFrame) {
+                let subj_col = df.column(SUBJECT_COL_NAME).unwrap();
+                let obj_col = df.column(OBJECT_COL_NAME).unwrap();
+                let subj_ch = $subj_chunked_func(&subj_col);
+                let obj_ch = $obj_chunked_func(&obj_col);
+
+                for (subj, obj) in subj_ch
+                    .iter()
+                    .zip(obj_ch.iter())
+                {
+                    let subj = $maybe_unwrap(subj);
+                    let obj = $maybe_unwrap(obj);
+
+                    self
+                        .index
+                        .remove(&($prep_index_subj(subj), $prep_index_obj(obj)));
+                }
+            }
         }
     };
 }
@@ -208,7 +238,7 @@ macro_rules! binary_nonlang_lang_index_impl {
                 }
             }
 
-            pub fn update(&mut self, df: &DataFrame) -> Option<DataFrame> {
+            pub fn insert(&mut self, df: &DataFrame) -> Option<DataFrame> {
                 let subj_col = df.column(SUBJECT_COL_NAME).unwrap();
                 let obj_col = df.column(OBJECT_COL_NAME).unwrap();
                 let subj_ch = $subj_chunked_func(&subj_col);
@@ -300,6 +330,36 @@ macro_rules! binary_nonlang_lang_index_impl {
                         .collect()
                         .unwrap();
                     Some(new_df)
+                }
+            }
+            
+            pub fn delete(&mut self, df: &DataFrame) {
+                let subj_col = df.column(SUBJECT_COL_NAME).unwrap();
+                let obj_col = df.column(OBJECT_COL_NAME).unwrap();
+                let subj_ch = $subj_chunked_func(&subj_col);
+                let obj_v = obj_col
+                    .struct_()
+                    .unwrap()
+                    .field_by_name(LANG_STRING_VALUE_FIELD)
+                    .unwrap();
+                let obj_l = obj_col
+                    .struct_()
+                    .unwrap()
+                    .field_by_name(LANG_STRING_LANG_FIELD)
+                    .unwrap();
+                let obj_v_iter = obj_v.u32().unwrap().iter();
+                let obj_l_iter = obj_l.u32().unwrap().iter();
+
+                for ((subj, obj_v), obj_l) in subj_ch
+                    .iter()
+                    .zip(obj_v_iter)
+                    .zip(obj_l_iter)
+                {
+                    let subj = $maybe_unwrap(subj);
+                    let obj_v = $maybe_unwrap(obj_v);
+                    let obj_l = $maybe_unwrap(obj_l);
+
+                    self.index.remove(&($prep_index_a(subj), obj_v, obj_l));
                 }
             }
         }
@@ -438,6 +498,17 @@ binary_nonlang_nonlang_index_impl!(
     u32_vec_to_column,
     date_vec_to_column
 );
+binary_nonlang_nonlang_index_impl!(
+    U32DateTimeIndex,
+    (u32, i64),
+    u32_chunked,
+    datetime_chunked,
+    unwrap_t,
+    noop_t,
+    noop_t,
+    u32_vec_to_column,
+    datetime_vec_to_column
+);
 
 binary_nonlang_lang_index_impl!(
     U32LangIndex,
@@ -463,6 +534,7 @@ pub enum SubjectObjectIndex {
     U32F32Index(U32F32Index),
     U32F64Index(U32F64Index),
     U32DateIndex(U32DateIndex),
+    U32DateTimeIndex(U32DateTimeIndex),
 }
 
 impl SubjectObjectIndex {
@@ -498,6 +570,8 @@ impl SubjectObjectIndex {
                 SubjectObjectIndex::U32I64Index(U32I64Index::new())
             } else if object_type.is_lit_type(xsd::UNSIGNED_LONG) {
                 SubjectObjectIndex::U32U64Index(U32U64Index::new())
+            } else if object_type.is_lit_type(xsd::DATE_TIME) || object_type.is_lit_type(xsd::DATE_TIME_STAMP) {
+                SubjectObjectIndex::U32DateTimeIndex(U32DateTimeIndex::new())
             } else {
                 todo!("B type {:?}", object_type);
             }
@@ -506,21 +580,41 @@ impl SubjectObjectIndex {
         }
     }
 
-    pub fn update(&mut self, df: &DataFrame) -> Option<DataFrame> {
+    pub fn insert(&mut self, df: &DataFrame) -> Option<DataFrame> {
         match self {
-            SubjectObjectIndex::U32LangIndex(i) => i.update(df),
-            SubjectObjectIndex::U32U8Index(i) => i.update(df),
-            SubjectObjectIndex::U32I8Index(i) => i.update(df),
-            SubjectObjectIndex::U32U16Index(i) => i.update(df),
-            SubjectObjectIndex::U32I16Index(i) => i.update(df),
-            SubjectObjectIndex::U32I32Index(i) => i.update(df),
-            SubjectObjectIndex::U32U64Index(i) => i.update(df),
-            SubjectObjectIndex::U32I64Index(i) => i.update(df),
-            SubjectObjectIndex::U32F32Index(i) => i.update(df),
-            SubjectObjectIndex::U32F64Index(i) => i.update(df),
-            SubjectObjectIndex::U32DateIndex(i) => i.update(df),
-            SubjectObjectIndex::U32BoolIndex(i) => i.update(df),
-            SubjectObjectIndex::U32U32Index(i) => i.update(df),
+            SubjectObjectIndex::U32LangIndex(i) => i.insert(df),
+            SubjectObjectIndex::U32U8Index(i) => i.insert(df),
+            SubjectObjectIndex::U32I8Index(i) => i.insert(df),
+            SubjectObjectIndex::U32U16Index(i) => i.insert(df),
+            SubjectObjectIndex::U32I16Index(i) => i.insert(df),
+            SubjectObjectIndex::U32I32Index(i) => i.insert(df),
+            SubjectObjectIndex::U32U64Index(i) => i.insert(df),
+            SubjectObjectIndex::U32I64Index(i) => i.insert(df),
+            SubjectObjectIndex::U32F32Index(i) => i.insert(df),
+            SubjectObjectIndex::U32F64Index(i) => i.insert(df),
+            SubjectObjectIndex::U32DateIndex(i) => i.insert(df),
+            SubjectObjectIndex::U32DateTimeIndex(i) => i.insert(df),
+            SubjectObjectIndex::U32BoolIndex(i) => i.insert(df),
+            SubjectObjectIndex::U32U32Index(i) => i.insert(df),
+        }
+    }
+
+    pub fn delete(&mut self, df: &DataFrame) {
+        match self {
+            SubjectObjectIndex::U32LangIndex(i) => i.delete(df),
+            SubjectObjectIndex::U32U8Index(i) => i.delete(df),
+            SubjectObjectIndex::U32I8Index(i) => i.delete(df),
+            SubjectObjectIndex::U32U16Index(i) => i.delete(df),
+            SubjectObjectIndex::U32I16Index(i) => i.delete(df),
+            SubjectObjectIndex::U32I32Index(i) => i.delete(df),
+            SubjectObjectIndex::U32U64Index(i) => i.delete(df),
+            SubjectObjectIndex::U32I64Index(i) => i.delete(df),
+            SubjectObjectIndex::U32F32Index(i) => i.delete(df),
+            SubjectObjectIndex::U32F64Index(i) => i.delete(df),
+            SubjectObjectIndex::U32DateIndex(i) => i.delete(df),
+            SubjectObjectIndex::U32DateTimeIndex(i) => i.delete(df),
+            SubjectObjectIndex::U32BoolIndex(i) => i.delete(df),
+            SubjectObjectIndex::U32U32Index(i) => i.delete(df),
         }
     }
 }

@@ -7,9 +7,10 @@ use crate::{
 };
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{NamedNode, NamedNodeRef, NamedOrBlankNode, Term};
-use polars::datatypes::{DataType, Field, PlSmallStr, TimeUnit, TimeZone};
+use polars::datatypes::{DataType, Field, PlSmallStr};
 use spargebra::term::GroundTerm;
 use std::fmt::{Display, Formatter};
+use crate::rdf_to_polars::{default_time_unit, default_time_zone};
 
 #[derive(Debug, Clone, Ord, PartialOrd, PartialEq, Eq, Hash)]
 pub enum BaseRDFNodeType {
@@ -227,8 +228,8 @@ fn literal_type(
                 }
             }
         }
-        xsd::DATE_TIME => DataType::Datetime(TimeUnit::Microseconds, Some(TimeZone::UTC)),
-        xsd::DATE_TIME_STAMP => DataType::Datetime(TimeUnit::Microseconds, Some(TimeZone::UTC)),
+        xsd::DATE_TIME => DataType::Datetime(default_time_unit(), Some(default_time_zone())),
+        xsd::DATE_TIME_STAMP => DataType::Datetime(default_time_unit(), Some(default_time_zone())),
         xsd::DATE => DataType::Date,
         //TODO: Fix when adding proper list support
         rdf::LIST => DataType::List(Box::new(DataType::Boolean)),

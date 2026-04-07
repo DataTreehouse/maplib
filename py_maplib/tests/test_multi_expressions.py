@@ -1353,6 +1353,35 @@ def test_replace_multi(streaming):
 
 
 @pytest.mark.parametrize("streaming", [True, False])
+def test_replace_multi_str_of_iri(streaming):
+    m = Model()
+    sm = m.query(
+        """
+    PREFIX : <http://example.net/> 
+    PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+    SELECT ?a ?replace WHERE {
+    VALUES (?a) { ("http://example.net/abcd/123") ("http://example.net/abc") (3) }
+    BIND(REPLACE(?a, str(:), "ba") as ?replace)
+    } ORDER BY ?a
+    """,
+        solution_mappings=True,
+        streaming=streaming,
+    )
+    assert sm.rdf_types == {
+        "a": RDFType.Multi(
+            [
+                RDFType.Literal("http://www.w3.org/2001/XMLSchema#integer"),
+                RDFType.Literal("http://www.w3.org/2001/XMLSchema#string"),
+            ]
+        ),
+        "replace": RDFType.Literal("http://www.w3.org/2001/XMLSchema#string"),
+    }
+    assert sm.mappings.height == 3
+    assert sm.mappings.get_column("replace").to_list() == [None, "baabc", "baabcd/123"]
+
+
+
+@pytest.mark.parametrize("streaming", [True, False])
 def test_regex_multi(streaming):
     m = Model()
     sm = m.query(
@@ -1378,6 +1407,60 @@ def test_regex_multi(streaming):
     }
     assert sm.mappings.height == 3
     assert sm.mappings.get_column("replace").to_list() == [None, True, True]
+
+
+
+@pytest.mark.parametrize("streaming", [True, False])
+def test_regex_multi_str_iri(streaming):
+    m = Model()
+    sm = m.query(
+        """
+    PREFIX : <http://example.net/> 
+    PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+    SELECT ?a ?replace WHERE {
+    VALUES (?a) { ("http://example.net/abc") ("a_http://example.net/abc1234") (3) }
+    BIND(REGEX(?a, STR(:)) as ?replace)
+    } ORDER BY ?a
+    """,
+        solution_mappings=True,
+        streaming=streaming,
+    )
+    assert sm.rdf_types == {
+        "a": RDFType.Multi(
+            [
+                RDFType.Literal("http://www.w3.org/2001/XMLSchema#integer"),
+                RDFType.Literal("http://www.w3.org/2001/XMLSchema#string"),
+            ]
+        ),
+        "replace": RDFType.Literal("http://www.w3.org/2001/XMLSchema#boolean"),
+    }
+    assert sm.mappings.height == 3
+    assert sm.mappings.get_column("replace").to_list() == [None, True, True]
+
+
+
+@pytest.mark.parametrize("streaming", [True, False])
+def test_strdt_double(streaming):
+    m = Model()
+    sm = m.query(
+        """
+    PREFIX : <http://example.net/> 
+    PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+    SELECT ?a ?replace WHERE {
+    VALUES (?a) { ("0.1") ("0.4") ("0.0") }
+    BIND(STRDT(?a, xsd:double) as ?replace)
+    } ORDER BY ?a
+    """,
+        solution_mappings=True,
+        streaming=streaming,
+    )
+    assert sm.rdf_types == {
+        "a": RDFType.Literal("http://www.w3.org/2001/XMLSchema#string"),
+        "replace": RDFType.Literal("http://www.w3.org/2001/XMLSchema#double"),
+    }
+    assert sm.mappings.height == 3
+    assert sm.mappings.get_column("replace").to_list() == [0.0, 0.1, 0.4]
+
 
 
 @pytest.mark.parametrize("streaming", [True, False])

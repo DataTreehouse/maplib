@@ -186,7 +186,7 @@ pub fn rdf_literal_to_polars_literal_value_impl(
                 .unwrap_or_else(|_| panic!("Can parse timezone {dt}"));
             LiteralValue::Scalar(Scalar::new_datetime(
                 dt.naive_utc().and_utc().timestamp_micros(),
-                TimeUnit::Microseconds,
+                default_time_unit(),
                 Some(TimeZone::from_chrono(&tz)),
             ))
         } else {
@@ -194,13 +194,13 @@ pub fn rdf_literal_to_polars_literal_value_impl(
             if let Ok(dt) = dt_without_tz {
                 LiteralValue::Scalar(Scalar::new_datetime(
                     dt.and_utc().timestamp_micros(),
-                    TimeUnit::Microseconds,
+                    default_time_unit(),
                     Some(TimeZone::from_chrono(&Tz::UTC)),
                 ))
             } else {
                 warn!("Could not parse xsd:dateTime {value}");
                 LiteralValue::Scalar(Scalar::null(DataType::Datetime(
-                    TimeUnit::Microseconds,
+                    default_time_unit(),
                     Some(TimeZone::from_chrono(&Tz::UTC)),
                 )))
             }
@@ -219,7 +219,7 @@ pub fn rdf_literal_to_polars_literal_value_impl(
             warn!("Could not parse xsd:dateTimeStamp {value} note that timezone is required");
             LiteralValue::Scalar(Scalar::null(DataType::Datetime(
                 TimeUnit::Microseconds,
-                Some(TimeZone::UTC),
+                Some(default_time_zone()),
             )))
         }
     } else if datatype == xsd::DATE {
@@ -447,7 +447,7 @@ pub fn polars_literal_values_to_series(literal_values: Vec<LiteralValue>, name: 
                 )
                 .cast(&DataType::Datetime(
                     *t,
-                    Some(tz.unwrap_or(&TimeZone::UTC).clone()),
+                    Some(tz.unwrap_or(&default_time_zone()).clone()),
                 ))
                 .unwrap(),
                 AnyValue::DatetimeOwned(_, t, tz) => {
@@ -468,7 +468,7 @@ pub fn polars_literal_values_to_series(literal_values: Vec<LiteralValue>, name: 
                     )
                     .cast(&DataType::Datetime(
                         *t,
-                        Some(tz.unwrap_or(TimeZone::UTC).clone()),
+                        Some(tz.unwrap_or(default_time_zone()).clone()),
                     ))
                     .unwrap()
                 }
@@ -506,4 +506,12 @@ pub fn polars_literal_values_to_series(literal_values: Vec<LiteralValue>, name: 
                 .collect::<Vec<Option<bool>>>(),
         )
     }
+}
+
+pub fn default_time_unit() -> TimeUnit {
+    TimeUnit::Microseconds
+}
+
+pub fn default_time_zone() -> TimeZone {
+    TimeZone::UTC
 }

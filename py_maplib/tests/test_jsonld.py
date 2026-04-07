@@ -14,6 +14,7 @@ def test_read_jsonld():
     with pytest.raises(MaplibException) as e:
         m.read(TESTDATA_PATH / "test.jsonld")
 
+#@pytest.mark.skip("Likely bug in oxigraph")
 def test_csvw_example():
     CSVW_PATH = TESTDATA_PATH / "csvw.jsonld"
     with open(CSVW_PATH) as f:

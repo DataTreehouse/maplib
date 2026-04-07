@@ -97,7 +97,7 @@ impl Triples {
         let mut segments = vec![];
         let subject_object_index = if indexing.subject_object_index {
             let mut subject_object_index = SubjectObjectIndex::new(&subject_type, &object_type);
-            let maybe_df = subject_object_index.update(&df);
+            let maybe_df = subject_object_index.insert(&df);
             df = maybe_df.unwrap();
             Some(subject_object_index)
         } else {

@@ -1019,10 +1019,10 @@ class Model:
         ruleset: Union[str, List[str]],
         graph: str = None,
         solution_mappings: bool = False,
-        max_iterations: int = 100_000,
-        max_results: int = 10_000_000,
+        max_iterations: Optional[int] = 100_000,
+        max_results: Optional[int] = 10_000_000,
         include_transient: bool = True,
-        max_rows: int = 100_000_000,
+        max_rows: Optional[int] = 100_000_000,
         debug: bool = False,
     ) -> Optional[Dict[str, DataFrame]]:
         """

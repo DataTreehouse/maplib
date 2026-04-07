@@ -19,7 +19,7 @@ impl Triples {
     ) -> Result<Option<DataFrame>, TriplestoreError> {
         let start_deduplication = Instant::now();
         let new_df = if let Some(so_index) = &mut self.subject_object_index {
-            let new_df = so_index.update(&df);
+            let new_df = so_index.insert(&df);
             trace!(
                 "Deduplication using subject object index took: {}",
                 start_deduplication.elapsed().as_secs_f32()
