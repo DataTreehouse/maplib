@@ -449,27 +449,22 @@ pub fn if_expression(
     global_cats: LockedCats,
 ) -> Result<SolutionMappings, QueryProcessingError> {
     //
+    let mid_state = solution_mappings
+        .rdf_node_types
+        .get(middle_context.as_str())
+        .unwrap();
+
+    let right_state = solution_mappings
+        .rdf_node_types
+        .get(right_context.as_str())
+        .unwrap();
+
     let mut exploded: Vec<_> = create_compatible_cats(
         vec![
             Some(col(middle_context.as_str())),
             Some(col(right_context.as_str())),
         ],
-        vec![
-            Some(
-                solution_mappings
-                    .rdf_node_types
-                    .get(middle_context.as_str())
-                    .unwrap()
-                    .clone(),
-            ),
-            Some(
-                solution_mappings
-                    .rdf_node_types
-                    .get(right_context.as_str())
-                    .unwrap()
-                    .clone(),
-            ),
-        ],
+        vec![Some(mid_state.clone()), Some(right_state.clone())],
         global_cats,
     )
     .into_iter()
@@ -480,15 +475,40 @@ pub fn if_expression(
     let right_exploded = exploded.pop().unwrap();
     let mid_exploded = exploded.pop().unwrap();
 
+    let mut right_exploded_types: HashSet<_> = right_exploded.iter().map(|(t,..)|t.clone()).collect();
+    let mut mid_exploded_types: HashSet<_> = mid_exploded.iter().map(|(t,..)|t.clone()).collect();
+
+
     let mut mid_exprs = vec![];
     let mut right_exprs = vec![];
 
     let mut base_type_map = HashMap::new();
     for (t, (exprs, base_state)) in right_exploded {
+        if !mid_exploded_types.contains(&t) {
+            let polars_type = t.polars_data_type(&base_state, true);
+            for m in t.multi_columns() {
+                mid_exprs.push(
+                    lit(LiteralValue::untyped_null())
+                        .cast(polars_type.clone())
+                        .alias(m),
+                );
+            }
+        }
         base_type_map.insert(t, base_state);
         right_exprs.extend(exprs);
     }
-    for (_, (exprs, _)) in mid_exploded {
+    for (t, (exprs, base_state)) in mid_exploded {
+        if !right_exploded_types.contains(&t) {
+            let polars_type = t.polars_data_type(&base_state, true);
+            for m in t.multi_columns() {
+                right_exprs.push(
+                    lit(LiteralValue::untyped_null())
+                        .cast(polars_type.clone())
+                        .alias(m),
+                );
+            }
+            base_type_map.insert(t.clone(), base_state.clone());
+        }
         mid_exprs.extend(exprs);
     }
     let mid_expr = if mid_exprs.len() > 1 {
