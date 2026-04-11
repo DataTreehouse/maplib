@@ -217,7 +217,7 @@ impl Model {
         checked: bool,
         graph: &NamedGraph,
         replace_graph: bool,
-        triples_batch_size: Option<usize>,
+        triples_batch_size: usize,
         known_contexts: HashMap<String, String>,
     ) -> Result<(), MaplibError> {
         if replace_graph {
@@ -263,7 +263,7 @@ impl Model {
         checked: bool,
         graph: &NamedGraph,
         replace_graph: bool,
-        triples_batch_size: Option<usize>,
+        triples_batch_size: usize,
         known_contexts: HashMap<String, String>,
     ) -> Result<(), MaplibError> {
         if replace_graph {

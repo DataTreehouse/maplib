@@ -55,7 +55,7 @@ impl Triplestore {
         checked: bool,
         graph: &NamedGraph,
         prefixes: &HashMap<String, NamedNode>,
-        triples_batch_size: Option<usize>,
+        triples_batch_size: usize,
         known_contexts: HashMap<String, String>,
     ) -> Result<(), TriplestoreError> {
         let now = Instant::now();
@@ -113,7 +113,7 @@ impl Triplestore {
         checked: bool,
         graph: &NamedGraph,
         prefixes: &HashMap<String, NamedNode>,
-        triples_batch_size: Option<usize>,
+        triples_batch_size: usize,
         known_contexts: HashMap<String, String>,
     ) -> Result<(), TriplestoreError> {
         self.read_triples(
@@ -142,7 +142,7 @@ impl Triplestore {
         checked: bool,
         graph: &NamedGraph,
         prefixes: &HashMap<String, NamedNode>,
-        triples_batch_size: Option<usize>,
+        triples_batch_size: usize,
         known_contexts: HashMap<String, String>,
     ) -> Result<(), TriplestoreError> {
         let use_slice = if slice.starts_with(&UTF8_BOM) {
@@ -238,11 +238,7 @@ impl Triplestore {
 
         let parser_call = self.parser_call.to_string();
         while !readers.is_empty() {
-            let reader_batch_size = if let Some(triples_batch_size) = &triples_batch_size {
-                Some(triples_batch_size / cmp::max(1, readers.len()))
-            } else {
-                None
-            };
+            let reader_batch_size = triples_batch_size / cmp::max(1, readers.len());
             let readers_predicate_maps: Vec<_> = readers
                 .into_par_iter()
                 .map(|r| create_predicate_map(r, &parser_call, reader_batch_size))
@@ -404,7 +400,7 @@ fn blank_node_to_oxrdf_blank_node(bn: BlankNode, parser_call: &str) -> BlankNode
 fn create_predicate_map<'a>(
     mut r: MyFromSliceQuadReader<'a>,
     parser_call: &str,
-    max_iterations: Option<usize>,
+    max_iterations: usize,
 ) -> Result<
     (
         Option<MyFromSliceQuadReader<'a>>,
@@ -466,10 +462,8 @@ fn create_predicate_map<'a>(
         } else {
             empty_iter = true;
         }
-        if let Some(max_iterations) = &max_iterations {
-            if &i >= max_iterations {
-                reached_max = true;
-            }
+        if i >= max_iterations {
+            reached_max = true;
         }
         i += 1;
     }

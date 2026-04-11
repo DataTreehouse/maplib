@@ -92,10 +92,11 @@ static GLOBAL: MiMalloc = MiMalloc;
 const DEFAULT_STREAMING: bool = false;
 const DEFAULT_FTS: bool = false;
 const DEFAULT_INCLUDE_TRANSIENT: bool = true;
-
 const DEFAULT_MAP_TO_TRANSIENT: bool = false;
-
 const DEFAULT_DEBUG_NO_RESULTS: bool = false;
+const DEFAULT_TRIPLES_BATCH_SIZE: usize = 10_000_000;
+
+
 #[pyclass(name = "Model", frozen)]
 pub struct PyModel {
     inner: Mutex<InnerModel>,
@@ -1360,7 +1361,7 @@ fn read_mutex(
             checked.unwrap_or(true),
             &named_graph,
             replace_graph.unwrap_or(false),
-            triples_batch_size,
+            triples_batch_size.unwrap_or(DEFAULT_TRIPLES_BATCH_SIZE),
             known_contexts,
         )
         .map_err(PyMaplibError::from)?;
@@ -1399,7 +1400,7 @@ fn reads_mutex(
             checked.unwrap_or(true),
             &named_graph,
             replace_graph.unwrap_or(false),
-            triples_batch_size,
+            triples_batch_size.unwrap_or(DEFAULT_TRIPLES_BATCH_SIZE),
             known_contexts,
         )
         .map_err(PyMaplibError::from)?;

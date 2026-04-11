@@ -440,7 +440,7 @@ class IndexingOptions:
         :param object_sort_some: Enable object-indexing for a selected list of predicates.
         :param fts: Enable full text search, in memory if a path is not given.
         :param fts_path: Enable full text search, stored at the path
-        :param subject_object_index: An index used to deduplicate before insertion, speeds up mapping at a moderate memory cost
+        :param subject_object_index: An index used to deduplicate before insertion, speeds up mapping at a moderate memory cost. On by default.
         """
 
 ParametersType = Dict[str, "SolutionMappings"]
@@ -810,6 +810,7 @@ class Model:
         checked: bool = True,
         graph: str = None,
         replace_graph: bool = False,
+        triples_batch_size: int = 10_000_000,
         known_contexts: Dict[str, str] = None,
     ) -> None:
         """
@@ -830,6 +831,7 @@ class Model:
         :param checked: Check IRIs etc.
         :param graph: The IRI of the graph to read the triples into, if None, it will be the default graph.
         :param replace_graph: Replace the graph with these triples? Will replace the default graph if no graph is specified.
+        :param triples_batch_size: Read this many triples in each batch.
         :param known_contexts: Contexts in JSON-LD documents are resolved towards this dict.
         """
 
@@ -857,6 +859,7 @@ class Model:
         checked: bool = True,
         graph: str = None,
         replace_graph: bool = False,
+        triples_batch_size: int = 10_000_000,
         known_contexts: Dict[str, str] = None,
     ) -> None:
         """
@@ -876,6 +879,7 @@ class Model:
         :param checked: Check IRIs etc.
         :param graph: The IRI of the graph to read the triples into.
         :param replace_graph: Replace the graph with these triples? Will replace the default graph if no graph is specified.
+        :param triples_batch_size: Number of triples to read in each batch.
         :param known_contexts: Contexts in JSON-LD documents are resolved towards this dict.
         """
 
