@@ -1,5 +1,18 @@
 # Change log
 
+## v0.20.6
+### Performance
+- Subject object indexing for deduplication now default on, improves load speeds for many small files
+- Batch size for triples read now defaults to 10_000_000, reducing memory consumption.
+
+## v0.20.5
+### Bug fixes
+- Fix issues with IF where having multiple types for "then" and "otherwise" could cause an exception
+- Fix issue where THIS was not injected into SHACL SPARQL
+
+### Features
+- rules_debug in validate now prints every step so it is easier to debug recursive issues
+
 ## v0.20.4
 ### Bug fixes
 - Fix rounding issue
