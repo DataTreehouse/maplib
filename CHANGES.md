@@ -1,5 +1,9 @@
 # Change log
 
+## v0.20.7
+### Bug fixes
+- Fix bug where comparison expressions involving multiple types could fail. 
+
 ## v0.20.6
 ### Performance
 - Subject object indexing for deduplication now default on, improves load speeds for many small files

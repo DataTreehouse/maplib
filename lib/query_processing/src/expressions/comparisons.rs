@@ -98,7 +98,7 @@ pub fn typed_comparison_expr(
         }
     } else if right_type.is_multi() {
         if !left_type.is_multi() && left_type.is_literal() {
-            let lt = right_type.get_base_type().unwrap();
+            let lt = left_type.get_base_type().unwrap();
             let lt_nn = if let BaseRDFNodeType::Literal(lt_nn) = lt {
                 lt_nn
             } else {
