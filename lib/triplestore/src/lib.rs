@@ -247,7 +247,7 @@ impl IndexingOptions {
     }
 
     pub fn default_subject_object_index() -> bool {
-        false
+        true
     }
 }
 
