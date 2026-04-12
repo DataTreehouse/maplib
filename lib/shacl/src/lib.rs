@@ -86,6 +86,7 @@ pub fn validate(
     _dry_run: bool,
     _prefixes: Option<HashMap<String, NamedNode>>,
     _serial: bool,
+    _max_iterations: Option<usize>,
     _debug_rules: bool,
 ) -> Result<ValidationReport, ShaclError> {
     unimplemented!("Contact Data Treehouse to try")
