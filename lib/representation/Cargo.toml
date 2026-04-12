@@ -27,6 +27,7 @@ nohash-hasher.workspace = true
 uuid.workspace = true
 arrow.workspace = true
 memchr.workspace = true
+rust_decimal.workspace = true
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("gil-refs", "rdf-star"))'] }

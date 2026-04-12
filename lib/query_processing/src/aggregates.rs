@@ -97,7 +97,6 @@ pub fn min(solution_mappings: &SolutionMappings, column_context: &Context) -> (E
     } else {
         expr_rdf_node_type.clone()
     };
-
     let out_expr = col(column_context.as_str()).min();
 
     (out_expr, out_rdf_node_type)

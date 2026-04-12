@@ -7,6 +7,9 @@ use polars_core::utils::arrow::array::{Array, BooleanArray, PrimitiveArray, Utf8
 use polars_core::utils::arrow::types::NativeType;
 use representation::BaseRDFNodeType;
 use std::io::Write;
+use polars::polars_compute;
+use polars_core::utils::arrow;
+use representation::rdf_to_polars::default_decimal_scale;
 
 const TOO_MANY_MSG: &str = "too many items requested from CSV serializer";
 const ARRAY_MISMATCH_MSG: &str = "wrong array type";
@@ -94,6 +97,25 @@ fn float_serializer_no_precision_autoformat<I: NativeType + ryu::Float>(
         array
             .as_any()
             .downcast_ref::<PrimitiveArray<I>>()
+            .expect(ARRAY_MISMATCH_MSG)
+            .iter()
+    })
+}
+
+fn decimal_serializer(array: &PrimitiveArray<i128>, scale: usize) -> impl Serializer<'_> {
+    let mut fmt_buf = polars_compute::decimal::DecimalFmtBuffer::new();
+    let f = move |&item, buf: &mut Vec<u8> | {
+        buf.extend_from_slice(
+            fmt_buf
+                .format_dec128(item, scale, true, false)
+                .as_bytes(),
+        );
+    };
+
+    make_serializer::<_, _,>(f, array.iter(), |array| {
+        array
+            .as_any()
+            .downcast_ref::<PrimitiveArray<i128>>()
             .expect(ARRAY_MISMATCH_MSG)
             .iter()
     })
@@ -397,6 +419,9 @@ pub(super) fn serializer_for<'a>(
             },
             array,
         ),
+        (DataType::Decimal(..), _) => {
+            with_quoted_serializer!(decimal_serializer, default_decimal_scale())
+        }
         _ => {
             panic!("datatype {dtype} cannot be written to triples")
         }

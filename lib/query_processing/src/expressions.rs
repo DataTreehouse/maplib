@@ -475,8 +475,8 @@ pub fn if_expression(
     let right_exploded = exploded.pop().unwrap();
     let mid_exploded = exploded.pop().unwrap();
 
-    let mut right_exploded_types: HashSet<_> = right_exploded.iter().map(|(t,..)|t.clone()).collect();
-    let mut mid_exploded_types: HashSet<_> = mid_exploded.iter().map(|(t,..)|t.clone()).collect();
+    let right_exploded_types: HashSet<_> = right_exploded.iter().map(|(t,..)|t.clone()).collect();
+    let mid_exploded_types: HashSet<_> = mid_exploded.iter().map(|(t,..)|t.clone()).collect();
 
 
     let mut mid_exprs = vec![];

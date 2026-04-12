@@ -10,7 +10,7 @@ use oxrdf::{NamedNode, NamedNodeRef, NamedOrBlankNode, Term};
 use polars::datatypes::{DataType, Field, PlSmallStr};
 use spargebra::term::GroundTerm;
 use std::fmt::{Display, Formatter};
-use crate::rdf_to_polars::{default_time_unit, default_time_zone};
+use crate::rdf_to_polars::{default_decimal_type, default_time_unit, default_time_zone};
 
 #[derive(Debug, Clone, Ord, PartialOrd, PartialEq, Eq, Hash)]
 pub enum BaseRDFNodeType {
@@ -215,7 +215,8 @@ fn literal_type(
         xsd::INT => DataType::Int32,
         xsd::SHORT => DataType::Int16,
         xsd::BYTE => DataType::Int8,
-        xsd::DOUBLE | xsd::DECIMAL => DataType::Float64,
+        xsd::DOUBLE => DataType::Float64,
+        xsd::DECIMAL => default_decimal_type(),
         xsd::FLOAT => DataType::Float32,
         xsd::BOOLEAN => DataType::Boolean,
         rdf::LANG_STRING => {

@@ -8,6 +8,8 @@ use polars::prelude::{
     as_struct, lit, AnyValue, DataType, Expr, LiteralValue, NamedFrom, PlSmallStr, Scalar, Series,
     TimeUnit, TimeZone,
 };
+use polars_core::prelude::{Int128Chunked, IntoSeries, NewChunkedArray};
+use rust_decimal::Decimal;
 use std::ops::Deref;
 use std::str::FromStr;
 use tracing::warn;
@@ -239,11 +241,16 @@ pub fn rdf_literal_to_polars_literal_value_impl(
             LiteralValue::Scalar(Scalar::null(DataType::Date))
         }
     } else if datatype == xsd::DECIMAL {
-        if let Ok(d) = f64::from_str(value) {
-            LiteralValue::Scalar(Scalar::from(d))
+        if let Ok(mut d) = Decimal::from_str(value) {
+            d.rescale(default_decimal_scale() as u32);
+            LiteralValue::Scalar(Scalar::new_decimal(
+                d.mantissa(),
+                default_decimal_precision(),
+                default_decimal_scale(),
+            ))
         } else {
             warn!("Could not parse xsd:decimal {value}");
-            LiteralValue::Scalar(Scalar::null(DataType::Float64))
+            LiteralValue::Scalar(Scalar::null(default_decimal_type()))
         }
     } else {
         LiteralValue::Scalar(Scalar::from(PlSmallStr::from_string(value.to_string())))
@@ -431,6 +438,24 @@ pub fn polars_literal_values_to_series(literal_values: Vec<LiteralValue>, name: 
                         })
                         .collect::<Vec<Option<f64>>>(),
                 ),
+                AnyValue::Decimal(_, ..) => {
+                    let i128ch = Int128Chunked::from_iter_options(
+                        name.into(),
+                        values.into_iter().map(|x| {
+                            if let AnyValue::Decimal(v, ..) = x {
+                                Some(v)
+                            } else {
+                                None
+                            }
+                        }),
+                    );
+                    let dec = i128ch
+                        .into_decimal(default_decimal_precision(), default_decimal_scale())
+                        .unwrap();
+                    let mut ser = dec.into_series();
+                    ser.rename(PlSmallStr::from_str(name));
+                    ser
+                }
                 AnyValue::Datetime(_, t, tz) => Series::new(
                     name.into(),
                     values
@@ -514,4 +539,16 @@ pub fn default_time_unit() -> TimeUnit {
 
 pub fn default_time_zone() -> TimeZone {
     TimeZone::UTC
+}
+
+pub fn default_decimal_type() -> DataType {
+    DataType::Decimal(default_decimal_precision(), default_decimal_scale())
+}
+
+pub fn default_decimal_precision() -> usize {
+    38
+}
+
+pub fn default_decimal_scale() -> usize {
+    12
 }

@@ -474,6 +474,7 @@ impl Model {
         deactivate_shapes: Vec<NamedNode>,
         dry_run: bool,
         serial: bool,
+        max_iterations: Option<usize>,
         debug_rules: bool,
     ) -> Result<ValidationReport, MaplibError> {
         let mut res = validate(
@@ -492,6 +493,7 @@ impl Model {
             dry_run,
             Some(self.prefixes.clone()),
             serial,
+            max_iterations,
             debug_rules,
         )
         .map_err(|x| MaplibError::ShaclError(x))?;

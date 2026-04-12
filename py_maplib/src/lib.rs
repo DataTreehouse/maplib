@@ -489,6 +489,7 @@ impl PyModel {
         dry_run=None,
         max_rows=None,
         serial=None,
+        max_iterations=100_000,
         debug_rules=None,
     ))]
     #[instrument(skip_all)]
@@ -508,6 +509,7 @@ impl PyModel {
         dry_run: Option<bool>,
         max_rows: Option<usize>,
         serial: Option<bool>,
+        max_iterations: Option<usize>,
         debug_rules: Option<bool>,
     ) -> PyResult<PyValidationReport> {
         let res = py.detach(move || {
@@ -527,6 +529,7 @@ impl PyModel {
                 dry_run,
                 max_rows,
                 serial,
+                max_iterations,
                 debug_rules,
             )
         })?;
@@ -1231,6 +1234,7 @@ fn validate_mutex(
     dry_run: Option<bool>,
     max_rows: Option<usize>,
     serial: Option<bool>,
+    max_iterations: Option<usize>,
     debug_rules: Option<bool>,
 ) -> PyResult<PyValidationReport> {
     let data_graph = parse_optional_named_node(data_graph)?;
@@ -1292,6 +1296,7 @@ fn validate_mutex(
             deactivate_shapes,
             dry_run.unwrap_or(false),
             serial.unwrap_or(false),
+            max_iterations,
             debug_rules.unwrap_or(false),
         )
         .map_err(PyMaplibError::from)?;

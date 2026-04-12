@@ -79,6 +79,7 @@ ryu = "1.0.20"
 nohash-hasher = "0.2.0"
 arrow = "56"
 ordered-float = "5.1.0"
+rust_decimal = "1.41.0"
 
 [patch.crates-io]
 #polars = { git = 'https://github.com/pola-rs/polars', rev="665722ac3f3664c589c4827208d173cc16f0ec68" }

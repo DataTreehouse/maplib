@@ -776,6 +776,7 @@ class Model:
         dry_run: bool = False,
         max_rows: int = None,
         serial: bool = False,
+        max_iterations: Optional[int] = 100_000,
         debug_rules: bool = False,
     ) -> ValidationReport:
         """
@@ -796,6 +797,7 @@ class Model:
         :param dry_run: Only find targets of shapes, but do not validate them.
         :param max_rows: Maximum estimated rows in underlying SPARQL results, helps avoid out-of-memory errors.
         :param serial: Turns off most parallell validation of shapes.
+        :param max_iterations: Maximum number of iterations for SHACL rules.
         :param debug_rules: Debug why rules returning no results do so. Included in rule log.
         :return: Validation report containing shape performance details and target counts and whether the graph conforms (report.conforms)
         """

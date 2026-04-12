@@ -6,17 +6,14 @@ use polars_core::datatypes::{
     BooleanChunked, Int16Chunked, Int8Chunked, UInt16Chunked, UInt8Chunked,
 };
 use polars_core::frame::DataFrame;
-use polars_core::prelude::{
-    Column, Float32Chunked, Float64Chunked, Int32Chunked, Int64Chunked, IntoColumn, UInt32Chunked,
-    UInt64Chunked,
-};
+use polars_core::prelude::{Column, DecimalChunked, Float32Chunked, Float64Chunked, Int128Chunked, Int32Chunked, Int64Chunked, IntoColumn, NewChunkedArray, UInt32Chunked, UInt64Chunked};
 use polars_core::series::Series;
 use representation::{
     BaseRDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD, OBJECT_COL_NAME,
     SUBJECT_COL_NAME,
 };
 use std::collections::HashSet;
-use representation::rdf_to_polars::{default_time_unit, default_time_zone};
+use representation::rdf_to_polars::{default_decimal_precision, default_decimal_scale, default_time_unit, default_time_zone};
 
 pub fn bool_chunked(c: &Column) -> &BooleanChunked {
     c.bool().unwrap()
@@ -64,6 +61,10 @@ pub fn date_chunked(c: &Column) -> &Int32Chunked {
 
 pub fn datetime_chunked(c: &Column) -> &Int64Chunked {
     c.datetime().unwrap().physical()
+}
+
+pub fn decimal_chunked(c: &Column) -> &Int128Chunked {
+    c.decimal().unwrap().physical()
 }
 
 
@@ -114,6 +115,11 @@ pub fn date_vec_to_column(col_name: &str, vec: Vec<i32>) -> Column {
 
 pub fn datetime_vec_to_column(col_name: &str, vec: Vec<i64>) -> Column {
     let o_series = Int64Chunked::from_vec(PlSmallStr::from_str(col_name), vec).into_datetime(default_time_unit(), Some(default_time_zone()));
+    o_series.into_column()
+}
+
+pub fn decimal_vec_to_column(col_name: &str, vec: Vec<i128>) -> Column {
+    let o_series = Int128Chunked::from_vec(PlSmallStr::from_str(col_name), vec).into_decimal(default_decimal_precision(), default_decimal_scale()).unwrap();
     o_series.into_column()
 }
 
@@ -510,6 +516,18 @@ binary_nonlang_nonlang_index_impl!(
     datetime_vec_to_column
 );
 
+binary_nonlang_nonlang_index_impl!(
+    U32DecimalIndex,
+    (u32, i128),
+    u32_chunked,
+    decimal_chunked,
+    unwrap_t,
+    noop_t,
+    noop_t,
+    u32_vec_to_column,
+    decimal_vec_to_column
+);
+
 binary_nonlang_lang_index_impl!(
     U32LangIndex,
     (u32, u32, u32),
@@ -533,6 +551,7 @@ pub enum SubjectObjectIndex {
     U32I64Index(U32I64Index),
     U32F32Index(U32F32Index),
     U32F64Index(U32F64Index),
+    U32DecimalIndex(U32DecimalIndex),
     U32DateIndex(U32DateIndex),
     U32DateTimeIndex(U32DateTimeIndex),
 }
@@ -553,9 +572,11 @@ impl SubjectObjectIndex {
                 SubjectObjectIndex::U32BoolIndex(U32BoolIndex::new())
             } else if object_type.is_lit_type(xsd::FLOAT) {
                 SubjectObjectIndex::U32F32Index(U32F32Index::new())
-            } else if object_type.is_lit_type(xsd::DOUBLE) || object_type.is_lit_type(xsd::DECIMAL)
+            } else if object_type.is_lit_type(xsd::DOUBLE)
             {
                 SubjectObjectIndex::U32F64Index(U32F64Index::new())
+            } else if object_type.is_lit_type(xsd::DECIMAL) {
+                SubjectObjectIndex::U32DecimalIndex(U32DecimalIndex::new())
             } else if object_type.is_lit_type(xsd::BYTE) {
                 SubjectObjectIndex::U32I8Index(U32I8Index::new())
             } else if object_type.is_lit_type(xsd::UNSIGNED_BYTE) {
@@ -592,6 +613,7 @@ impl SubjectObjectIndex {
             SubjectObjectIndex::U32I64Index(i) => i.insert(df),
             SubjectObjectIndex::U32F32Index(i) => i.insert(df),
             SubjectObjectIndex::U32F64Index(i) => i.insert(df),
+            SubjectObjectIndex::U32DecimalIndex(i) => i.insert(df),
             SubjectObjectIndex::U32DateIndex(i) => i.insert(df),
             SubjectObjectIndex::U32DateTimeIndex(i) => i.insert(df),
             SubjectObjectIndex::U32BoolIndex(i) => i.insert(df),
@@ -611,6 +633,7 @@ impl SubjectObjectIndex {
             SubjectObjectIndex::U32I64Index(i) => i.delete(df),
             SubjectObjectIndex::U32F32Index(i) => i.delete(df),
             SubjectObjectIndex::U32F64Index(i) => i.delete(df),
+            SubjectObjectIndex::U32DecimalIndex(i) => i.delete(df),
             SubjectObjectIndex::U32DateIndex(i) => i.delete(df),
             SubjectObjectIndex::U32DateTimeIndex(i) => i.delete(df),
             SubjectObjectIndex::U32BoolIndex(i) => i.delete(df),
