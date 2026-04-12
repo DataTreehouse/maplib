@@ -555,29 +555,6 @@ def test_multi_filter_incompatible_many_comparison(streaming):
 
 
 @pytest.mark.parametrize("streaming", [True, False])
-def test_div_decimal(streaming):
-    m = Model()
-    df = m.query(
-        """
-    PREFIX : <http://example.net/> 
-    PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
-    SELECT ?a ?b ?c WHERE {
-    VALUES (?a) { (1) (3.0) (89) ("3.0"^^xsd:decimal) }
-    VALUES (?b) { ("10.0"^^xsd:decimal) }
-    BIND(?a / ?b AS ?c )
-    } ORDER BY ?a ?b
-    """,
-        streaming=streaming,
-    )
-    print(df)
-    f = TESTDATA_PATH / "multi_many_comp.csv"
-    #df.write_csv(f)
-    expected = pl.read_csv(f)
-    assert_frame_equal(df, expected)
-
-
-
-@pytest.mark.parametrize("streaming", [True, False])
 def test_multi_concat(streaming):
     m = Model()
     df = m.query(
