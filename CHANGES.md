@@ -1,5 +1,13 @@
 # Change log
 
+## v0.20.8
+### Bug fixes
+- xsd:decimal is now represented internally as Decimal(precision=38,scale=12)
+- Fix another instance of missing query parameters in debug
+
+### Features
+- max_iterations parameter for shacl rules (validate())
+
 ## v0.20.7
 ### Bug fixes
 - Fix bug where comparison expressions involving multiple types could fail. 
