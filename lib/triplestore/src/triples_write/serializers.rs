@@ -2,14 +2,14 @@
 // https://github.com/pola-rs/polars/blob/dc94be767d26943be11a40d6171ccc1c41a86c4f/crates/polars-io/src/csv/write/write_impl/serializer.rs
 // The Polars license can be found in the licensing folder.
 
+use polars::polars_compute;
 use polars_core::prelude::*;
+use polars_core::utils::arrow;
 use polars_core::utils::arrow::array::{Array, BooleanArray, PrimitiveArray, Utf8ViewArray};
 use polars_core::utils::arrow::types::NativeType;
+use representation::rdf_to_polars::default_decimal_scale;
 use representation::BaseRDFNodeType;
 use std::io::Write;
-use polars::polars_compute;
-use polars_core::utils::arrow;
-use representation::rdf_to_polars::default_decimal_scale;
 
 const TOO_MANY_MSG: &str = "too many items requested from CSV serializer";
 const ARRAY_MISMATCH_MSG: &str = "wrong array type";
@@ -104,15 +104,11 @@ fn float_serializer_no_precision_autoformat<I: NativeType + ryu::Float>(
 
 fn decimal_serializer(array: &PrimitiveArray<i128>, scale: usize) -> impl Serializer<'_> {
     let mut fmt_buf = polars_compute::decimal::DecimalFmtBuffer::new();
-    let f = move |&item, buf: &mut Vec<u8> | {
-        buf.extend_from_slice(
-            fmt_buf
-                .format_dec128(item, scale, true, false)
-                .as_bytes(),
-        );
+    let f = move |&item, buf: &mut Vec<u8>| {
+        buf.extend_from_slice(fmt_buf.format_dec128(item, scale, true, false).as_bytes());
     };
 
-    make_serializer::<_, _,>(f, array.iter(), |array| {
+    make_serializer::<_, _>(f, array.iter(), |array| {
         array
             .as_any()
             .downcast_ref::<PrimitiveArray<i128>>()

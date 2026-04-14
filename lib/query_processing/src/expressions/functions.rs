@@ -18,7 +18,7 @@ use representation::cats::{maybe_decode_expr, LockedCats};
 use representation::multitype::{MULTI_BLANK_DT, MULTI_IRI_DT};
 use representation::query_context::Context;
 use representation::rdf_to_polars::{
-    polars_literal_values_to_series,
+    default_time_unit, default_time_zone, polars_literal_values_to_series,
     rdf_literal_to_polars_literal_value_impl, rdf_named_node_to_polars_literal_value,
 };
 use representation::solution_mapping::{BaseCatState, SolutionMappings};
@@ -29,6 +29,7 @@ use sha1::Sha1;
 use spargebra::algebra::{Expression, Function};
 use std::collections::HashMap;
 use std::ops::{Div, Mul};
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use uri_encode::encode_uri;
 
 pub fn func_expression(
@@ -277,6 +278,24 @@ pub fn func_expression(
                     .into_default_input_rdf_node_state(),
             );
         }
+        Function::Now => {
+            let now = SystemTime::now();
+            let since_epoch = now.duration_since(UNIX_EPOCH).unwrap();
+            assert_eq!(TimeUnit::Microseconds, default_time_unit());
+            solution_mappings.mappings = solution_mappings.mappings.with_column(
+                lit(LiteralValue::Scalar(Scalar::new_datetime(
+                    since_epoch.as_micros() as i64,
+                    default_time_unit(),
+                    Some(default_time_zone()),
+                )))
+                .alias(outer_context.as_str()),
+            );
+            solution_mappings.rdf_node_types.insert(
+                outer_context.as_str().to_string(),
+                BaseRDFNodeType::Literal(xsd::DATE_TIME.into_owned())
+                    .into_default_input_rdf_node_state(),
+            );
+        }
         Function::Round => {
             if args.len() != 1 {
                 return Err(QueryProcessingError::BadNumberOfFunctionArguments(
@@ -300,14 +319,19 @@ pub fn func_expression(
             if existing_type.is_multi() {
                 for t in existing_type.map.keys() {
                     if t.is_numeric() {
-                        rounded_exprs.push(col(first_context.as_str()).struct_().field_by_name(&t.field_col_name())
-                            .round(0, RoundMode::HalfAwayFromZero).alias(&t.field_col_name()));
+                        rounded_exprs.push(
+                            col(first_context.as_str())
+                                .struct_()
+                                .field_by_name(&t.field_col_name())
+                                .round(0, RoundMode::HalfAwayFromZero)
+                                .alias(&t.field_col_name()),
+                        );
                         rounded_types.push(t.clone());
                     }
                 }
             } else if existing_type.is_numeric() {
-                rounded_exprs.push(col(first_context.as_str())
-                    .round(0, RoundMode::HalfAwayFromZero));
+                rounded_exprs
+                    .push(col(first_context.as_str()).round(0, RoundMode::HalfAwayFromZero));
                 rounded_types.push(existing_type.get_base_type().unwrap().clone());
             }
             if rounded_exprs.is_empty() {
@@ -321,17 +345,20 @@ pub fn func_expression(
                     BaseRDFNodeType::None.into_default_input_rdf_node_state(),
                 );
             } else if rounded_exprs.len() == 1 {
-                solution_mappings.mappings = solution_mappings.mappings.with_column(
-                    rounded_exprs.pop().unwrap().alias(outer_context.as_str()),
-                );
+                solution_mappings.mappings = solution_mappings
+                    .mappings
+                    .with_column(rounded_exprs.pop().unwrap().alias(outer_context.as_str()));
                 solution_mappings.rdf_node_types.insert(
                     outer_context.as_str().to_string(),
-                    rounded_types.pop().unwrap().into_default_stored_rdf_node_state()
+                    rounded_types
+                        .pop()
+                        .unwrap()
+                        .into_default_stored_rdf_node_state(),
                 );
             } else {
-                solution_mappings.mappings = solution_mappings.mappings.with_column(
-                    as_struct(rounded_exprs).alias(outer_context.as_str()),
-                );
+                solution_mappings.mappings = solution_mappings
+                    .mappings
+                    .with_column(as_struct(rounded_exprs).alias(outer_context.as_str()));
                 let mut types_map = HashMap::new();
                 for t in rounded_types {
                     let s = t.default_input_cat_state();
@@ -339,7 +366,7 @@ pub fn func_expression(
                 }
                 solution_mappings.rdf_node_types.insert(
                     outer_context.as_str().to_string(),
-                    RDFNodeState::from_map(types_map)
+                    RDFNodeState::from_map(types_map),
                 );
             }
         }

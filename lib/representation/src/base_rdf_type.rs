@@ -1,5 +1,6 @@
 use crate::multitype::{MULTI_BLANK_DT, MULTI_IRI_DT, MULTI_NONE_DT};
 use crate::rdf_state::RDFNodeState;
+use crate::rdf_to_polars::{default_decimal_type, default_time_unit, default_time_zone};
 use crate::solution_mapping::BaseCatState;
 use crate::{
     literal_is_numeric, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD, RDF_NODE_TYPE_BLANK_NODE,
@@ -10,7 +11,6 @@ use oxrdf::{NamedNode, NamedNodeRef, NamedOrBlankNode, Term};
 use polars::datatypes::{DataType, Field, PlSmallStr};
 use spargebra::term::GroundTerm;
 use std::fmt::{Display, Formatter};
-use crate::rdf_to_polars::{default_decimal_type, default_time_unit, default_time_zone};
 
 #[derive(Debug, Clone, Ord, PartialOrd, PartialEq, Eq, Hash)]
 pub enum BaseRDFNodeType {

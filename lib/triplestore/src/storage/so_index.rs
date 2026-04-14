@@ -6,14 +6,19 @@ use polars_core::datatypes::{
     BooleanChunked, Int16Chunked, Int8Chunked, UInt16Chunked, UInt8Chunked,
 };
 use polars_core::frame::DataFrame;
-use polars_core::prelude::{Column, DecimalChunked, Float32Chunked, Float64Chunked, Int128Chunked, Int32Chunked, Int64Chunked, IntoColumn, NewChunkedArray, UInt32Chunked, UInt64Chunked};
+use polars_core::prelude::{
+    Column, DecimalChunked, Float32Chunked, Float64Chunked, Int128Chunked, Int32Chunked,
+    Int64Chunked, IntoColumn, NewChunkedArray, UInt32Chunked, UInt64Chunked,
+};
 use polars_core::series::Series;
+use representation::rdf_to_polars::{
+    default_decimal_precision, default_decimal_scale, default_time_unit, default_time_zone,
+};
 use representation::{
     BaseRDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD, OBJECT_COL_NAME,
     SUBJECT_COL_NAME,
 };
 use std::collections::HashSet;
-use representation::rdf_to_polars::{default_decimal_precision, default_decimal_scale, default_time_unit, default_time_zone};
 
 pub fn bool_chunked(c: &Column) -> &BooleanChunked {
     c.bool().unwrap()
@@ -67,7 +72,6 @@ pub fn decimal_chunked(c: &Column) -> &Int128Chunked {
     c.decimal().unwrap().physical()
 }
 
-
 pub fn bool_vec_to_column(col_name: &str, vec: Vec<bool>) -> Column {
     let mut c = Series::from_iter(vec).into_column();
     c.rename(PlSmallStr::from_str(col_name));
@@ -114,12 +118,15 @@ pub fn date_vec_to_column(col_name: &str, vec: Vec<i32>) -> Column {
 }
 
 pub fn datetime_vec_to_column(col_name: &str, vec: Vec<i64>) -> Column {
-    let o_series = Int64Chunked::from_vec(PlSmallStr::from_str(col_name), vec).into_datetime(default_time_unit(), Some(default_time_zone()));
+    let o_series = Int64Chunked::from_vec(PlSmallStr::from_str(col_name), vec)
+        .into_datetime(default_time_unit(), Some(default_time_zone()));
     o_series.into_column()
 }
 
 pub fn decimal_vec_to_column(col_name: &str, vec: Vec<i128>) -> Column {
-    let o_series = Int128Chunked::from_vec(PlSmallStr::from_str(col_name), vec).into_decimal(default_decimal_precision(), default_decimal_scale()).unwrap();
+    let o_series = Int128Chunked::from_vec(PlSmallStr::from_str(col_name), vec)
+        .into_decimal(default_decimal_precision(), default_decimal_scale())
+        .unwrap();
     o_series.into_column()
 }
 
@@ -206,22 +213,18 @@ macro_rules! binary_nonlang_nonlang_index_impl {
                     Some(new_df)
                 }
             }
-            
+
             pub fn delete(&mut self, df: &DataFrame) {
                 let subj_col = df.column(SUBJECT_COL_NAME).unwrap();
                 let obj_col = df.column(OBJECT_COL_NAME).unwrap();
                 let subj_ch = $subj_chunked_func(&subj_col);
                 let obj_ch = $obj_chunked_func(&obj_col);
 
-                for (subj, obj) in subj_ch
-                    .iter()
-                    .zip(obj_ch.iter())
-                {
+                for (subj, obj) in subj_ch.iter().zip(obj_ch.iter()) {
                     let subj = $maybe_unwrap(subj);
                     let obj = $maybe_unwrap(obj);
 
-                    self
-                        .index
+                    self.index
                         .remove(&($prep_index_subj(subj), $prep_index_obj(obj)));
                 }
             }
@@ -338,7 +341,7 @@ macro_rules! binary_nonlang_lang_index_impl {
                     Some(new_df)
                 }
             }
-            
+
             pub fn delete(&mut self, df: &DataFrame) {
                 let subj_col = df.column(SUBJECT_COL_NAME).unwrap();
                 let obj_col = df.column(OBJECT_COL_NAME).unwrap();
@@ -356,11 +359,7 @@ macro_rules! binary_nonlang_lang_index_impl {
                 let obj_v_iter = obj_v.u32().unwrap().iter();
                 let obj_l_iter = obj_l.u32().unwrap().iter();
 
-                for ((subj, obj_v), obj_l) in subj_ch
-                    .iter()
-                    .zip(obj_v_iter)
-                    .zip(obj_l_iter)
-                {
+                for ((subj, obj_v), obj_l) in subj_ch.iter().zip(obj_v_iter).zip(obj_l_iter) {
                     let subj = $maybe_unwrap(subj);
                     let obj_v = $maybe_unwrap(obj_v);
                     let obj_l = $maybe_unwrap(obj_l);
@@ -572,8 +571,7 @@ impl SubjectObjectIndex {
                 SubjectObjectIndex::U32BoolIndex(U32BoolIndex::new())
             } else if object_type.is_lit_type(xsd::FLOAT) {
                 SubjectObjectIndex::U32F32Index(U32F32Index::new())
-            } else if object_type.is_lit_type(xsd::DOUBLE)
-            {
+            } else if object_type.is_lit_type(xsd::DOUBLE) {
                 SubjectObjectIndex::U32F64Index(U32F64Index::new())
             } else if object_type.is_lit_type(xsd::DECIMAL) {
                 SubjectObjectIndex::U32DecimalIndex(U32DecimalIndex::new())
@@ -591,7 +589,9 @@ impl SubjectObjectIndex {
                 SubjectObjectIndex::U32I64Index(U32I64Index::new())
             } else if object_type.is_lit_type(xsd::UNSIGNED_LONG) {
                 SubjectObjectIndex::U32U64Index(U32U64Index::new())
-            } else if object_type.is_lit_type(xsd::DATE_TIME) || object_type.is_lit_type(xsd::DATE_TIME_STAMP) {
+            } else if object_type.is_lit_type(xsd::DATE_TIME)
+                || object_type.is_lit_type(xsd::DATE_TIME_STAMP)
+            {
                 SubjectObjectIndex::U32DateTimeIndex(U32DateTimeIndex::new())
             } else {
                 todo!("B type {:?}", object_type);
