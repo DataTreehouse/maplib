@@ -29,7 +29,7 @@ use sha1::Sha1;
 use spargebra::algebra::{Expression, Function};
 use std::collections::HashMap;
 use std::ops::{Div, Mul};
-use std::time::{Instant, SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH};
 use uri_encode::encode_uri;
 
 pub fn func_expression(

@@ -7,8 +7,8 @@ use polars_core::datatypes::{
 };
 use polars_core::frame::DataFrame;
 use polars_core::prelude::{
-    Column, DecimalChunked, Float32Chunked, Float64Chunked, Int128Chunked, Int32Chunked,
-    Int64Chunked, IntoColumn, NewChunkedArray, UInt32Chunked, UInt64Chunked,
+    Column, Float32Chunked, Float64Chunked, Int128Chunked, Int32Chunked, Int64Chunked, IntoColumn,
+    UInt32Chunked, UInt64Chunked,
 };
 use polars_core::series::Series;
 use representation::rdf_to_polars::{

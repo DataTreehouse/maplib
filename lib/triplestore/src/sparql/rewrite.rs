@@ -1,11 +1,14 @@
 use crate::sparql::rewrite::rewrite_cse::rewrite_gp_cse;
 use crate::sparql::rewrite::rewrite_pushdown::rewrite_gp_pushdown;
+use crate::sparql::rewrite::rewrite_lift_extend::terminating_lift_extend;
+
 use spargebra::algebra::GraphPattern;
 use spargebra::Query;
 use std::collections::HashSet;
 
 mod rewrite_cse;
 mod rewrite_pushdown;
+mod rewrite_lift_extend;
 
 pub fn rewrite(q: Query) -> Query {
     let q = match q {
@@ -54,5 +57,6 @@ pub fn rewrite(q: Query) -> Query {
 pub fn rewrite_gp(pattern: GraphPattern) -> GraphPattern {
     let mut gp = rewrite_gp_pushdown(pattern, vec![], HashSet::new());
     gp = rewrite_gp_cse(gp);
+    gp = terminating_lift_extend(gp);
     gp
 }
