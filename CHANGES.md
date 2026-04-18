@@ -1,5 +1,13 @@
 # Change log
 
+## v0.20.10
+### Bugfixes
+- SHACL rules: incrementally build targets not always updated
+- SPARQL adding now() and a few bugfixes having to do with multiple datatypes in expressions
+
+### Performance
+- Improvements to query plannnig for large queries
+
 ## v0.20.8
 ### Bug fixes
 - xsd:decimal is now represented internally as Decimal(precision=38,scale=12)
