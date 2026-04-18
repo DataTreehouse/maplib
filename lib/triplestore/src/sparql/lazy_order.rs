@@ -13,7 +13,7 @@ impl Triplestore {
         oexpr: &OrderExpression,
         solution_mappings: SolutionMappings,
         context: &Context,
-        parameters: &Option<HashMap<String, EagerSolutionMappings>>,
+        parameters: Option<&HashMap<String, EagerSolutionMappings>>,
         query_settings: &QuerySettings,
         dataset: &QueryGraph,
     ) -> Result<(SolutionMappings, bool, Context), SparqlError> {

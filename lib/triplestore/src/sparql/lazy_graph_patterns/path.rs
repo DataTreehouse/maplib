@@ -83,7 +83,7 @@ impl Triplestore {
                 &gp,
                 None,
                 &context.extension_with(PathEntry::PathRewrite),
-                &None,
+                None,
                 pushdowns,
                 query_settings,
                 dataset,

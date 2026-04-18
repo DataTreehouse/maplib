@@ -21,7 +21,7 @@ pub fn query_select(
 ) -> Result<QuerySolutions, SparqlError> {
     let qres = triplestore.query(
         query,
-        &None,
+        None,
         streaming,
         &query_settings,
         graph,

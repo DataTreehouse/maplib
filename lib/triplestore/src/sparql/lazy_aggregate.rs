@@ -20,7 +20,7 @@ impl Triplestore {
         aggregate_expression: &AggregateExpression,
         solution_mappings: SolutionMappings,
         context: &Context,
-        parameters: &Option<HashMap<String, EagerSolutionMappings>>,
+        parameters: Option<&HashMap<String, EagerSolutionMappings>>,
         query_settings: &QuerySettings,
         dataset: &QueryGraph,
     ) -> Result<AggregateReturn, SparqlError> {

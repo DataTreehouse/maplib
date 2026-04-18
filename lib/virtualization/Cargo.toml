@@ -1,0 +1,18 @@
+[package]
+name = "virtualization"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+virtualized_query = { path="../virtualized_query" }
+representation = {path ="../representation"}
+templates = {path = "../templates"}
+spargebra = {path = "../spargebra"}
+
+polars = {workspace=true, features=[
+    "lazy",
+    "dtype-full",
+    "nightly",
+    "performant"] }
+thiserror.workspace = true
+pyo3.workspace = true

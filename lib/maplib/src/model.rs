@@ -289,7 +289,7 @@ impl Model {
     pub fn query(
         &mut self,
         query: &str,
-        parameters: &Option<HashMap<String, EagerSolutionMappings>>,
+        parameters: Option<&HashMap<String, EagerSolutionMappings>>,
         graph: Option<&NamedGraph>,
         streaming: bool,
         include_transient: bool,
@@ -318,7 +318,7 @@ impl Model {
     pub fn insert(
         &mut self,
         query: &str,
-        parameters: &Option<HashMap<String, EagerSolutionMappings>>,
+        parameters: Option<&HashMap<String, EagerSolutionMappings>>,
         source_graph: &NamedGraph,
         include_source_transient: bool,
         target_graph: &NamedGraph,
@@ -350,7 +350,7 @@ impl Model {
     pub fn update(
         &mut self,
         update: &str,
-        parameters: &Option<HashMap<String, EagerSolutionMappings>>,
+        parameters: Option<&HashMap<String, EagerSolutionMappings>>,
         graph: Option<&NamedGraph>,
         streaming: bool,
         include_transient: bool,

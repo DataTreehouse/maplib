@@ -24,7 +24,7 @@ impl Triplestore {
         expr: &Expression,
         solution_mappings: SolutionMappings,
         context: &Context,
-        parameters: &Option<HashMap<String, EagerSolutionMappings>>,
+        parameters: Option<&HashMap<String, EagerSolutionMappings>>,
         pushdowns: Option<&Pushdowns>,
         query_settings: &QuerySettings,
         dataset: &QueryGraph,

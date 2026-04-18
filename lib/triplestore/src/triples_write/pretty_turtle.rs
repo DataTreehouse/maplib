@@ -775,7 +775,7 @@ impl Triplestore {
                     dataset: None,
                     base_iri: None,
                 },
-                &None,
+                None,
                 false,
                 &QuerySettings {
                     include_transient: false,

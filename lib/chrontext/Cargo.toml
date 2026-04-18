@@ -1,0 +1,28 @@
+[package]
+name = "chrontext"
+version = "0.4.0"
+edition = "2021"
+
+[dependencies]
+virtualization = {path = "../virtualization"}
+virtualized_query = { path = "../virtualized_query" }
+spargebra = {path = "../spargebra"}
+representation = {path = "../representation"}
+query_processing = {path = "../query_processing"}
+triplestore = {path = "../triplestore"}
+
+polars = { workspace = true, features = [
+    "lazy",
+    "concat_str",
+    "unique_counts",
+    "list_eval",
+    "abs",
+    "round_series",
+    "is_in",
+    "cum_agg",
+    "dtype-full",
+    "cse",
+    "nightly",
+    "performant"] }
+tracing = { workspace = true }
+

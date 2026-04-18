@@ -1,0 +1,17 @@
+[package]
+name = "virtualized_query"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+representation = {path ="../representation"}
+query_processing = {path = "../query_processing"}
+templates = {path = "../templates"}
+spargebra = {path = "../spargebra"}
+
+polars = {workspace=true, features=[
+    "lazy",
+    "dtype-full",
+    "nightly",
+    "performant"] }
+pyo3 = {workspace = true }

@@ -96,7 +96,6 @@ const DEFAULT_MAP_TO_TRANSIENT: bool = false;
 const DEFAULT_DEBUG_NO_RESULTS: bool = false;
 const DEFAULT_TRIPLES_BATCH_SIZE: usize = 10_000_000;
 
-
 #[pyclass(name = "Model", frozen)]
 pub struct PyModel {
     inner: Mutex<InnerModel>,
@@ -1154,7 +1153,7 @@ fn query_mutex(
     let res = inner
         .query(
             &query,
-            &mapped_parameters,
+            mapped_parameters.as_ref(),
             graph.as_ref(),
             streaming.unwrap_or(DEFAULT_STREAMING),
             include_transient.unwrap_or(DEFAULT_INCLUDE_TRANSIENT),
@@ -1184,7 +1183,7 @@ fn update_mutex(
     let res = inner
         .update(
             &update,
-            &mapped_parameters,
+            mapped_parameters.as_ref(),
             named_graph.as_ref(),
             streaming.unwrap_or(DEFAULT_STREAMING),
             include_transient.unwrap_or(DEFAULT_INCLUDE_TRANSIENT),
@@ -1321,7 +1320,7 @@ fn insert_mutex(
     let insert_result = inner
         .insert(
             &query,
-            &mapped_parameters,
+            mapped_parameters.as_ref(),
             &source_graph,
             include_transient.unwrap_or(DEFAULT_INCLUDE_TRANSIENT),
             &target_graph,

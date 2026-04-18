@@ -21,7 +21,7 @@ impl Triplestore {
     pub fn debug(
         &self,
         q: &Query,
-        parameters: &Option<HashMap<String, EagerSolutionMappings>>,
+        parameters: Option<&HashMap<String, EagerSolutionMappings>>,
         qs: &QuerySettings,
         graph: Option<&NamedGraph>,
     ) -> Result<DebugOutputs, SparqlError> {
@@ -47,7 +47,7 @@ impl Triplestore {
     fn debug_gp(
         &self,
         gp: &GraphPattern,
-        parameters: &Option<HashMap<String, EagerSolutionMappings>>,
+        parameters: Option<&HashMap<String, EagerSolutionMappings>>,
         qs: &QuerySettings,
         qg: &QueryGraph,
     ) -> Result<PartialDebugOutput, SparqlError> {
@@ -120,7 +120,7 @@ impl Triplestore {
                 },
                 None,
                 &Context::new(),
-                &None,
+                None,
                 Pushdowns::new(),
                 qs,
                 qg,
@@ -144,7 +144,7 @@ impl Triplestore {
                     },
                     None,
                     &Context::new(),
-                    &None,
+                    None,
                     Pushdowns::new(),
                     qs,
                     qg,
@@ -179,7 +179,7 @@ impl Triplestore {
                 },
                 None,
                 &Context::new(),
-                &None,
+                None,
                 Pushdowns::new(),
                 qs,
                 qg,
@@ -195,7 +195,7 @@ impl Triplestore {
         } else {
             let mut intermediaries = vec![];
             let gp = create_graph_pattern(ppe, subject, object, &mut intermediaries);
-            self.debug_gp(&gp, &None, qs, qg)
+            self.debug_gp(&gp, None, qs, qg)
         }
     }
 
@@ -203,7 +203,7 @@ impl Triplestore {
         &self,
         expression: &Expression,
         inner: &GraphPattern,
-        parameters: &Option<HashMap<String, EagerSolutionMappings>>,
+        parameters: Option<&HashMap<String, EagerSolutionMappings>>,
         qs: &QuerySettings,
         qg: &QueryGraph,
     ) -> Result<PartialDebugOutput, SparqlError> {
@@ -217,7 +217,7 @@ impl Triplestore {
                     },
                     None,
                     &Context::new(),
-                    &parameters,
+                    parameters,
                     Pushdowns::new(),
                     qs,
                     qg,
@@ -239,7 +239,7 @@ impl Triplestore {
         &self,
         left: &GraphPattern,
         right: &GraphPattern,
-        parameters: &Option<HashMap<String, EagerSolutionMappings>>,
+        parameters: Option<&HashMap<String, EagerSolutionMappings>>,
         qs: &QuerySettings,
         qg: &QueryGraph,
     ) -> Result<PartialDebugOutput, SparqlError> {
@@ -281,7 +281,7 @@ impl Triplestore {
         &self,
         left: &GraphPattern,
         right: &GraphPattern,
-        parameters: &Option<HashMap<String, EagerSolutionMappings>>,
+        parameters: Option<&HashMap<String, EagerSolutionMappings>>,
         qs: &QuerySettings,
         qg: &QueryGraph,
     ) -> Result<PartialDebugOutput, SparqlError> {
@@ -295,7 +295,7 @@ impl Triplestore {
                     },
                     None,
                     &Context::new(),
-                    &None,
+                    parameters,
                     Pushdowns::new(),
                     qs,
                     qg,
@@ -317,7 +317,7 @@ impl Triplestore {
         &self,
         left: &GraphPattern,
         right: &GraphPattern,
-        parameters: &Option<HashMap<String, EagerSolutionMappings>>,
+        parameters: Option<&HashMap<String, EagerSolutionMappings>>,
         qs: &QuerySettings,
         qg: &QueryGraph,
     ) -> Result<PartialDebugOutput, SparqlError> {

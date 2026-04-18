@@ -22,7 +22,7 @@ impl Triplestore {
         };
         self.insert(
             SUBCLASS_INFERENCING,
-            &None,
+            None,
             true,
             false,
             &qs,

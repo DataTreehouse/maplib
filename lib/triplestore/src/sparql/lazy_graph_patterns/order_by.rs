@@ -20,7 +20,7 @@ impl Triplestore {
         expression: &[OrderExpression],
         solution_mappings: Option<SolutionMappings>,
         context: &Context,
-        parameters: &Option<HashMap<String, EagerSolutionMappings>>,
+        parameters: Option<&HashMap<String, EagerSolutionMappings>>,
         pushdowns: Pushdowns,
         query_settings: &QuerySettings,
         dataset: &QueryGraph,

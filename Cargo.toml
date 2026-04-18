@@ -15,6 +15,9 @@ members = [
     "lib/datalog",
     "lib/cimxml_export",
     "lib/cimxml_import",
+    "lib/chrontext",
+    "lib/virtualized_query",
+    "lib/virtualization",
     "py_maplib",
 ]
 
@@ -54,7 +57,7 @@ uuid = { version = "1.16.0", features = [
 ] }
 thiserror = "2.0.12"
 peg = "0.8"
-rand = "0.9.1"
+rand = "0.10.1"
 oxilangtag = "0.1.5"
 fundu = "2.0.1"
 memmap2 = "0.9.5"
@@ -64,8 +67,8 @@ aho-corasick = "1.1.4"
 simd-json = { version = "0.17.0", features = ["serde_json"] }
 serde_json = {version = "1.0.149"}
 uri_encode = "1.0.4"
-md-5 = "0.10.6"
-sha1 = "0.10.6"
+md-5 = "0.11.0"
+sha1 = "0.11.0"
 hex = "0.4.3"
 memchr = "2.8.0"
 

@@ -166,7 +166,7 @@ impl Triplestore {
     pub fn query(
         &self,
         query: &str,
-        parameters: &Option<HashMap<String, EagerSolutionMappings>>,
+        parameters: Option<&HashMap<String, EagerSolutionMappings>>,
         streaming: bool,
         query_settings: &QuerySettings,
         graph: Option<&NamedGraph>,
@@ -188,7 +188,7 @@ impl Triplestore {
     pub fn query_parsed(
         &self,
         query: &Query,
-        parameters: &Option<HashMap<String, EagerSolutionMappings>>,
+        parameters: Option<&HashMap<String, EagerSolutionMappings>>,
         streaming: bool,
         query_settings: &QuerySettings,
         graph: Option<&NamedGraph>,
@@ -303,7 +303,7 @@ impl Triplestore {
     pub fn insert(
         &mut self,
         query: &str,
-        parameters: &Option<HashMap<String, EagerSolutionMappings>>,
+        parameters: Option<&HashMap<String, EagerSolutionMappings>>,
         transient: bool,
         streaming: bool,
         query_settings: &QuerySettings,
@@ -328,7 +328,7 @@ impl Triplestore {
     pub fn insert_parsed(
         &mut self,
         query: &Query,
-        parameters: &Option<HashMap<String, EagerSolutionMappings>>,
+        parameters: Option<&HashMap<String, EagerSolutionMappings>>,
         transient: bool,
         streaming: bool,
         query_settings: &QuerySettings,
@@ -367,7 +367,7 @@ impl Triplestore {
     pub fn update(
         &mut self,
         update: &str,
-        parameters: &Option<HashMap<String, EagerSolutionMappings>>,
+        parameters: Option<&HashMap<String, EagerSolutionMappings>>,
         streaming: bool,
         query_settings: &QuerySettings,
         graph: Option<&NamedGraph>,
@@ -389,7 +389,7 @@ impl Triplestore {
     pub fn update_parsed(
         &mut self,
         update: &Update,
-        parameters: &Option<HashMap<String, EagerSolutionMappings>>,
+        parameters: Option<&HashMap<String, EagerSolutionMappings>>,
         streaming: bool,
         query_settings: &QuerySettings,
         graph: Option<&NamedGraph>,

@@ -17,7 +17,7 @@ impl Triplestore {
         variables: &[Variable],
         bindings_name: &String,
         _context: &Context,
-        parameters: &Option<HashMap<String, EagerSolutionMappings>>,
+        parameters: Option<&HashMap<String, EagerSolutionMappings>>,
         _pushdowns: Pushdowns,
         query_settings: &QuerySettings,
     ) -> Result<SolutionMappings, SparqlError> {

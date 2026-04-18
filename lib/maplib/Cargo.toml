@@ -15,6 +15,7 @@ representation = { path = "../representation" }
 datalog = {path = "../datalog"}
 cimxml_export = {path = "../cimxml_export"}
 query_processing = {path ="../query_processing"}
+chrontext = {path = "../chrontext"}
 
 uuid = {workspace = true}
 rayon = { workspace = true }
