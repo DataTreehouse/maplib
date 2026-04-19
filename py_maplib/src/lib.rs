@@ -55,6 +55,7 @@ use pyo3::types::{PyList, PyString};
 use pyo3::IntoPyObjectExt;
 use representation::python::{
     PyBlankNode, PyIRI, PyLiteral, PyPrefix, PyRDFType, PySolutionMappings, PyVariable,
+    PyXSDDuration,
 };
 use representation::solution_mapping::EagerSolutionMappings;
 
@@ -80,6 +81,11 @@ use templates::python::{py_triple, PyArgument, PyInstance, PyParameter, PyTempla
 use templates::MappingColumnType;
 use triplestore::triples_read::ExtendedRdfFormat;
 use triplestore::{IndexingOptions, NewTriples};
+
+use virtualization::python::VirtualizedPythonDatabase;
+use virtualized_query::python::{
+    PyAggregateExpression, PyExpression, PyOrderExpression, PyVirtualizedQuery,
+};
 
 #[cfg(target_os = "linux")]
 #[global_allocator]
@@ -369,9 +375,32 @@ impl PyModel {
         Ok(res.into())
     }
 
+    #[pyo3(signature = (virtualized_database, resources))]
+    #[instrument(skip_all)]
+    fn add_virtualization(
+        &self,
+        py: Python<'_>,
+        virtualized_database: VirtualizedPythonDatabase,
+        resources: HashMap<String, PyTemplate>,
+    ) -> PyResult<()> {
+        py.detach(|| {
+            let mut inner = self.inner.lock().unwrap();
+            add_virtualization_mutex(&mut inner, virtualized_database, resources)
+        })?;
+        Ok(())
+    }
+
     #[allow(clippy::too_many_arguments)]
-    #[pyo3(signature = (query, parameters=None, solution_mappings=None,
-    graph=None, streaming=None, return_json=None, include_transient=None, max_rows=None, debug=None))]
+    #[pyo3(signature = (
+        query,
+        parameters=None,
+        solution_mappings=None,
+        graph=None,
+        streaming=None,
+        return_json=None,
+        include_transient=None,
+        max_rows=None,
+        debug=None))]
     #[instrument(skip_all)]
     fn query(
         &self,
@@ -978,6 +1007,21 @@ fn add_template_mutex(inner: &mut MutexGuard<InnerModel>, template: TemplateType
             .into())
         }
     }
+    Ok(())
+}
+
+fn add_virtualization_mutex(
+    inner: &mut MutexGuard<InnerModel>,
+    virtualized_database: VirtualizedPythonDatabase,
+    resources: HashMap<String, PyTemplate>,
+) -> PyResult<()> {
+    let mut mapped_resources = HashMap::new();
+    for (r, t) in resources {
+        mapped_resources.insert(r, t.template);
+    }
+    inner
+        .add_virtualization(virtualized_database, mapped_resources)
+        .map_err(PyMaplibError::from)?;
     Ok(())
 }
 
@@ -1636,6 +1680,20 @@ fn _maplib(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
         "FunctionArgumentException",
         py.get_type::<FunctionArgumentException>(),
     )?;
+    m.add_class::<VirtualizedPythonDatabase>()?;
+    //m.add_class::<PyFlightClient>()?;
+
+    let child = PyModule::new(m.py(), "vq")?;
+    child.add_class::<PyVirtualizedQuery>()?;
+    child.add_class::<PyExpression>()?;
+    child.add_class::<PyOrderExpression>()?;
+    child.add_class::<PyAggregateExpression>()?;
+    child.add_class::<PyXSDDuration>()?;
+    m.add_submodule(&child)?;
+
+    py.import("sys")?
+        .getattr("modules")?
+        .set_item("chrontext.vq", child)?;
     Ok(())
 }
 
@@ -1651,7 +1709,11 @@ fn query_to_result(
         let json = res.kind.json(global_cats.clone());
         return Ok(PyString::new(py, &json).into());
     }
-    let QueryResult { kind, debug } = res;
+    let QueryResult {
+        kind,
+        debug,
+        pushdown_paths,
+    } = res;
     match kind {
         SparqlQueryResult::Select(EagerSolutionMappings {
             mut mappings,
@@ -1659,7 +1721,14 @@ fn query_to_result(
         }) => {
             (mappings, rdf_node_types) =
                 fix_cats_and_multicolumns(mappings, rdf_node_types, native_dataframe, global_cats);
-            let pydf = df_to_py_df(mappings, rdf_node_types, debug, None, include_details, py)?;
+            let pydf = df_to_py_df(
+                mappings,
+                rdf_node_types,
+                debug,
+                Some(pushdown_paths),
+                include_details,
+                py,
+            )?;
             Ok(pydf)
         }
         SparqlQueryResult::Construct(dfs) => {
@@ -1701,7 +1770,7 @@ fn query_to_result(
                     mappings,
                     rdf_node_types,
                     debug.clone(),
-                    None,
+                    Some(pushdown_paths.clone()),
                     include_details,
                     py,
                 )?;

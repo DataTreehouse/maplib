@@ -1,4 +1,5 @@
 use crate::model::errors::MappingError;
+use chrontext::errors::ChrontextError;
 use cimxml_export::export::CIMXMLError;
 use datalog::inference::DatalogError;
 use oxiri::IriParseError;
@@ -44,4 +45,6 @@ pub enum MaplibError {
     IRIParseError(#[from] IriParseError),
     #[error("Datalog ruleset missing")]
     MissingDatalogRuleset,
+    #[error(transparent)]
+    ChrontextError(#[from] ChrontextError),
 }

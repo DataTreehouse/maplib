@@ -1,14 +1,14 @@
 use crate::sparql::rewrite::rewrite_cse::rewrite_gp_cse;
-use crate::sparql::rewrite::rewrite_pushdown::rewrite_gp_pushdown;
 use crate::sparql::rewrite::rewrite_lift_extend::terminating_lift_extend;
+use crate::sparql::rewrite::rewrite_pushdown::rewrite_gp_pushdown;
 
 use spargebra::algebra::GraphPattern;
 use spargebra::Query;
 use std::collections::HashSet;
 
 mod rewrite_cse;
-mod rewrite_pushdown;
 mod rewrite_lift_extend;
+mod rewrite_pushdown;
 
 pub fn rewrite(q: Query) -> Query {
     let q = match q {

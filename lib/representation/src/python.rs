@@ -504,7 +504,7 @@ impl PyBlankNode {
 pub struct PySolutionMappings {
     pub mappings: Py<PyAny>,
     pub rdf_node_states: HashMap<String, RDFNodeState>,
-    pub pushdown_paths: Option<Vec<Context>>,
+    pub pushdown_paths: Vec<Context>,
     pub debug: Option<DebugOutputs>,
 }
 
@@ -521,7 +521,7 @@ impl PySolutionMappings {
         PySolutionMappings {
             mappings,
             rdf_node_states: rdf_node_types,
-            pushdown_paths: None,
+            pushdown_paths: Default::default(),
             debug: None,
         }
     }
@@ -547,20 +547,16 @@ impl PySolutionMappings {
     }
 
     #[getter]
-    fn pushdown_paths(&self) -> Option<Vec<Vec<String>>> {
-        if let Some(paths) = &self.pushdown_paths {
-            let mut all_paths = vec![];
-            for p in paths {
-                let mut paths = vec![];
-                for pe in &p.path {
-                    paths.push(pe.to_string());
-                }
-                all_paths.push(paths);
+    fn pushdown_paths(&self) -> Vec<Vec<String>> {
+        let mut all_paths = vec![];
+        for p in &self.pushdown_paths {
+            let mut paths = vec![];
+            for pe in &p.path {
+                paths.push(pe.to_string());
             }
-            Some(all_paths)
-        } else {
-            None
+            all_paths.push(paths);
         }
+        all_paths
     }
 
     #[getter]

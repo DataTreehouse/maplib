@@ -19,6 +19,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::io::Write;
 use std::path::Path;
+use std::sync::Arc;
 use templates::ast::{ConstantTermOrList, PType, Template};
 use templates::dataset::TemplateDataset;
 use templates::document::document_from_str;
@@ -27,6 +28,7 @@ use triplestore::sparql::errors::SparqlError;
 use triplestore::sparql::{InsertResult, QueryResult, QuerySettings, UpdateResult};
 use triplestore::{IndexingOptions, NewTriples, Triplestore};
 
+use chrontext::engine::{ChrontextSettings, Engine};
 use datalog::ast::DatalogRuleset;
 use representation::constants::{FX_PREFIX, FX_PREFIX_IRI, XYZ_PREFIX, XYZ_PREFIX_IRI};
 use representation::dataset::NamedGraph;
@@ -34,6 +36,8 @@ use representation::prefixes::get_default_prefixes;
 use tracing::instrument;
 use triplestore::errors::TriplestoreError;
 use triplestore::triples_read::ExtendedRdfFormat;
+use virtualization::python::VirtualizedPythonDatabase;
+use virtualization::{Virtualization, VirtualizedDatabase};
 
 pub struct Model {
     pub template_dataset: TemplateDataset,
@@ -43,6 +47,7 @@ pub struct Model {
     pub indexing: IndexingOptions,
     pub prefixes: HashMap<String, NamedNode>,
     pub latest_report_graph: Option<NamedGraph>,
+    pub chrontext_settings: Option<ChrontextSettings>,
 }
 
 #[derive(Clone, Default)]
@@ -108,6 +113,7 @@ impl Model {
             indexing,
             prefixes: use_prefixes,
             latest_report_graph: None,
+            chrontext_settings: None,
         })
     }
 
@@ -172,6 +178,20 @@ impl Model {
         }
 
         Ok(return_template_iri)
+    }
+
+    #[instrument(skip_all)]
+    pub fn add_virtualization(
+        &mut self,
+        db: VirtualizedPythonDatabase,
+        resources: HashMap<String, Template>,
+    ) -> Result<(), MaplibError> {
+        let virtualization = Virtualization { resources };
+        self.chrontext_settings = Some(ChrontextSettings {
+            virtualized_database: Arc::new(VirtualizedDatabase::VirtualizedPythonDatabase(db)),
+            virtualization,
+        });
+        Ok(())
     }
 
     #[instrument(skip_all)]
@@ -301,17 +321,33 @@ impl Model {
             max_rows,
             strict_project: false,
         };
-        self.triplestore
-            .query(
-                query,
-                parameters,
+        if let Some(chrontext_settings) = &self.chrontext_settings {
+            let engine = Engine::new(
+                chrontext_settings,
+                &self.triplestore,
                 streaming,
-                &query_settings,
-                graph,
-                Some(&self.prefixes),
+                parameters,
+                query_settings,
+                graph.cloned(),
                 debug_no_results,
-            )
-            .map_err(|x| x.into())
+            );
+            let qr = engine
+                .query_blocking(query, Some(&self.prefixes))
+                .map_err(MaplibError::ChrontextError)?;
+            Ok(qr)
+        } else {
+            self.triplestore
+                .query(
+                    query,
+                    parameters,
+                    streaming,
+                    &query_settings,
+                    graph,
+                    Some(&self.prefixes),
+                    debug_no_results,
+                )
+                .map_err(|x| x.into())
+        }
     }
 
     #[instrument(skip_all)]
@@ -599,6 +635,7 @@ impl Model {
             indexing: self.indexing.clone(),
             prefixes: self.prefixes.clone(),
             latest_report_graph: None,
+            chrontext_settings: self.chrontext_settings.clone(),
         })
     }
 

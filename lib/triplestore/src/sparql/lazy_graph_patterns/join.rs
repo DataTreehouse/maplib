@@ -8,7 +8,7 @@ use query_processing::pushdowns::Pushdowns;
 use representation::dataset::QueryGraph;
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
-use spargebra::algebra::{GraphPattern};
+use spargebra::algebra::GraphPattern;
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 use std::collections::{HashMap, HashSet};
 
@@ -92,7 +92,7 @@ impl Triplestore {
         flat_gps.extend(flatten_join_gps(right, right_context));
         let ordered_flat_gps = order_graph_patterns(flat_gps, &solution_mappings);
         let mut output_solution_mappings = solution_mappings;
-        for (gp,ctx) in ordered_flat_gps {
+        for (gp, ctx) in ordered_flat_gps {
             output_solution_mappings = Some(self.lazy_graph_pattern(
                 gp,
                 output_solution_mappings,
@@ -108,19 +108,29 @@ impl Triplestore {
     }
 }
 
-fn flatten_join_gps<'a>(gp: &'a GraphPattern, context: Context) -> Vec<(&'a GraphPattern, Context)> {
+fn flatten_join_gps<'a>(
+    gp: &'a GraphPattern,
+    context: Context,
+) -> Vec<(&'a GraphPattern, Context)> {
     let mut gps = Vec::new();
     flatten_join_gps_inner(gp, &mut gps, context);
     gps
 }
 
-fn flatten_join_gps_inner<'a>(gp: &'a GraphPattern, flat:&mut Vec<(&'a GraphPattern, Context)>, context: Context) {
-    if let GraphPattern::Join {left, right} = gp {
+fn flatten_join_gps_inner<'a>(
+    gp: &'a GraphPattern,
+    flat: &mut Vec<(&'a GraphPattern, Context)>,
+    context: Context,
+) {
+    if let GraphPattern::Join { left, right } = gp {
         flatten_join_gps_inner(left, flat, context.extension_with(PathEntry::JoinLeftSide));
-        flatten_join_gps_inner(right, flat, context.extension_with(PathEntry::JoinRightSide));
-    }
-    else {
-        flat.push((gp,context));
+        flatten_join_gps_inner(
+            right,
+            flat,
+            context.extension_with(PathEntry::JoinRightSide),
+        );
+    } else {
+        flat.push((gp, context));
     }
 }
 
@@ -142,13 +152,16 @@ fn find_used_variables_and_blanks(tp: &TriplePattern) -> HashSet<String> {
     tp_variables
 }
 
-
 pub fn order_graph_patterns<'a>(
     gps: Vec<(&'a GraphPattern, Context)>,
     sm: &Option<SolutionMappings>,
 ) -> Vec<(&'a GraphPattern, Context)> {
-    let mut candidates:HashSet<_> = (0..gps.len()).collect();
-    let candidate_gps:HashMap<_,_> = gps.iter().enumerate().map(|(x, (gp,_))|(x,*gp)).collect();
+    let mut candidates: HashSet<_> = (0..gps.len()).collect();
+    let candidate_gps: HashMap<_, _> = gps
+        .iter()
+        .enumerate()
+        .map(|(x, (gp, _))| (x, *gp))
+        .collect();
 
     let use_vars: Option<HashSet<_>> = if let Some(sm) = &sm {
         Some(sm.rdf_node_types.keys().cloned().collect())
@@ -156,12 +169,15 @@ pub fn order_graph_patterns<'a>(
         None
     };
     let mut candidate_bad_properties = HashMap::new();
-    for (i,gp) in gps.iter().map(|(x,_)|*x).enumerate() {
-        let (bad_props,_) = bad_properties(gp, use_vars.as_ref());
+    for (i, gp) in gps.iter().map(|(x, _)| *x).enumerate() {
+        let (bad_props, _) = bad_properties(gp, use_vars.as_ref());
         candidate_bad_properties.insert(i, bad_props);
     }
-    let mut candidate_contexts:HashMap<_,_> = gps.into_iter().enumerate().map(|(x, (_,ctx))|(x,ctx)).collect();
-
+    let mut candidate_contexts: HashMap<_, _> = gps
+        .into_iter()
+        .enumerate()
+        .map(|(x, (_, ctx))| (x, ctx))
+        .collect();
 
     let mut ordering = vec![];
     let mut visited: HashSet<_> = if let Some(sm) = sm {
@@ -183,7 +199,7 @@ pub fn order_graph_patterns<'a>(
         candidates.remove(&c);
         let gp = *candidate_gps.get(&c).unwrap();
         visited.extend(variables(gp));
-        let ctx  = candidate_contexts.remove(&c).unwrap();
+        let ctx = candidate_contexts.remove(&c).unwrap();
         ordering.push((gp, ctx));
     }
     ordering
@@ -222,7 +238,9 @@ fn is_connected(gp: &GraphPattern, visited: &HashSet<String>) -> bool {
 
 fn variables(gp: &GraphPattern) -> HashSet<String> {
     let mut vs = HashSet::new();
-    gp.on_in_scope_variable(|x|{vs.insert(x.as_str().to_string());});
+    gp.on_in_scope_variable(|x| {
+        vs.insert(x.as_str().to_string());
+    });
     vs
 }
 
@@ -397,17 +415,16 @@ fn bad_properties(
         }
         GraphPattern::Project { inner, variables } => {
             let (bp, _) = bad_properties(inner, None);
-            let variables: HashSet<_> =
-                variables.iter().map(|x| x.as_str().to_string()).collect();
+            let variables: HashSet<_> = variables.iter().map(|x| x.as_str().to_string()).collect();
             (bp, variables)
         }
         GraphPattern::OrderBy { inner, .. }
         | GraphPattern::Slice { inner, .. }
         | GraphPattern::Reduced { inner, .. }
-        | GraphPattern::Distinct { inner, .. }
-        => bad_properties(inner, incoming_cols),
-        GraphPattern::Extend { inner, variable, .. }
-        => {
+        | GraphPattern::Distinct { inner, .. } => bad_properties(inner, incoming_cols),
+        GraphPattern::Extend {
+            inner, variable, ..
+        } => {
             let (bad, mut vs) = bad_properties(inner, incoming_cols);
             vs.insert(variable.as_str().to_string());
             (bad, vs)

@@ -1044,6 +1044,15 @@ class Model:
         :return: The inferred N-Tuples.
         """
 
+    def add_virtualization(self,
+                           virtualized_database: "VirtualizedDatabase",
+                           resources: Dict[str, Template],
+                           ):
+        """
+        :param virtualized_database: We call the query-function of this object.
+        :param resources: The templates associated with each resource
+        """
+
 class MaplibException(Exception): ...
 
 def explore(
@@ -1079,3 +1088,23 @@ def generate_templates(m: Model, graph: Optional[str]) -> Dict[str, Template]:
     :return A dictionary of templates for instantiating the classes in the ontology, where the keys are the class URIs.
 
     Usage example - note that it is important to add the templates to the Model you want to populate."""
+
+
+class VirtualizedDatabase:
+    """
+    A virtualized database implemented in Python.
+    """
+    def __init__(self,
+                 database: Any,
+                 resource_sql_map: Optional[Dict[str, Any]],
+                 sql_dialect: Optional[LiteralType["postgres", "bigquery", "databricks"]]):
+        """
+        See the tutorial in README.md for guidance on how to use this class.
+        This API is subject to change, it will be possible to specify what parts of the SPARQL query may be pushed down into the database.
+        For advanced use, the resource_sql_map may be omitted, in which case the VirtualizedQuery will be provided to the query method.
+        The user must then translate this VirtualizedQuery (built on SPARQL Algebra) to the target query language.
+
+        :param:database: An instance of a class containing a query method.
+        :param:resource_sql_map: A dict providing a sqlalchemy Select for each resource.
+        :param:sql_dialect: The SQL dialect accepted by the query method.
+        """

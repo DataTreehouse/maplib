@@ -688,6 +688,7 @@ dependencies = [
  "query_processing",
  "representation",
  "spargebra",
+ "thiserror",
  "tracing",
  "triplestore",
  "virtualization",
@@ -1918,6 +1919,8 @@ dependencies = [
  "tracing",
  "triplestore",
  "uuid",
+ "virtualization",
+ "virtualized_query",
 ]
 
 [[package]]
@@ -3069,7 +3072,7 @@ dependencies = [
 
 [[package]]
 name = "py_maplib"
-version = "0.20.10"
+version = "0.20.11"
 dependencies = [
  "chrono",
  "cimxml_export",
@@ -3089,6 +3092,8 @@ dependencies = [
  "tracing-subscriber",
  "triplestore",
  "uuid",
+ "virtualization",
+ "virtualized_query",
 ]
 
 [[package]]

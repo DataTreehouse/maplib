@@ -1,6 +1,6 @@
 [package]
 name = "py_maplib"
-version = "0.20.10"
+version = "0.20.11"
 edition.workspace = true
 
 [features]
@@ -14,6 +14,8 @@ shacl = { path = "../lib/shacl", features = [ "pyo3" ] }
 templates = {path= "../lib/templates"}
 cimxml_export = {path = "../lib/cimxml_export", features = [ "pyo3" ]}
 datalog = {path = "../lib/datalog"}
+virtualized_query = {path="../lib/virtualized_query"}
+virtualization = {path="../lib/virtualization"}
 
 pyo3.workspace = true
 oxrdf.workspace = true

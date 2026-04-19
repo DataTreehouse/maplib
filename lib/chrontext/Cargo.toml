@@ -25,4 +25,5 @@ polars = { workspace = true, features = [
     "nightly",
     "performant"] }
 tracing = { workspace = true }
+thiserror.workspace = true
 

@@ -54,6 +54,7 @@ pub struct InsertResult {
 pub struct QueryResult {
     pub kind: QueryResultKind,
     pub debug: Option<DebugOutputs>,
+    pub pushdown_paths: Vec<Context>,
 }
 
 pub struct UpdateResult {
@@ -297,6 +298,7 @@ impl Triplestore {
         Ok(QueryResult {
             kind: res,
             debug: debug_output,
+            pushdown_paths: Vec::new(),
         })
     }
 
@@ -447,7 +449,7 @@ impl Triplestore {
                         pattern: p,
                         base_iri: None,
                     };
-                    let QueryResult { kind, debug } = self.query_parsed(
+                    let QueryResult { kind, debug, .. } = self.query_parsed(
                         &q,
                         parameters,
                         streaming,
