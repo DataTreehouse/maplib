@@ -5,7 +5,6 @@ use crate::sparql::errors::SparqlError;
 use oxrdf::vocab::xsd;
 use polars::prelude::{col, lit, LiteralValue};
 use polars_core::prelude::Scalar;
-use query_processing::exists_helper::rewrite_exists_graph_pattern;
 use query_processing::expressions::functions::func_expression;
 use query_processing::expressions::{
     binary_expression, bound, coalesce_contexts, exists, if_expression, in_expression, literal,
@@ -456,15 +455,15 @@ impl Triplestore {
                     .with_column(col(exists_context.as_str()).cum_sum(false));
                 output_solution_mappings.rdf_node_types.insert(
                     exists_context.as_str().to_string(),
-                    BaseRDFNodeType::Literal(xsd::BOOLEAN.into_owned())
+                    BaseRDFNodeType::Literal(xsd::UNSIGNED_INT.into_owned())
                         .into_default_input_rdf_node_state(),
                 );
-                let new_inner = rewrite_exists_graph_pattern(inner, exists_context.as_str());
                 let SolutionMappings {
                     mappings: exists_lf,
+                    rdf_node_types,
                     ..
                 } = self.lazy_graph_pattern(
-                    &new_inner,
+                    inner,
                     Some(output_solution_mappings.clone()),
                     &exists_context,
                     parameters,
@@ -475,6 +474,7 @@ impl Triplestore {
                 exists(
                     output_solution_mappings,
                     exists_lf,
+                    rdf_node_types,
                     &exists_context,
                     context,
                 )?

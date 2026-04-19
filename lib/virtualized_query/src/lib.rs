@@ -116,7 +116,6 @@ impl BasicVirtualizedQuery {
             if !visited_query_vars.contains(&current_query_var) {
                 visited_query_vars.insert(current_query_var);
                 for p in patterns {
-                    println!("current {} p {}", current_query_var,  p);
                     match &p.predicate {
                         NamedNodePattern::NamedNode(nn) => {
                             if let TermPattern::Variable(v) = &p.subject {

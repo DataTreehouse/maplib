@@ -649,6 +649,7 @@ pub fn coalesce_expressions(
 pub fn exists(
     solution_mappings: SolutionMappings,
     exists_lf: LazyFrame,
+    exists_types: HashMap<String, RDFNodeState>,
     inner_context: &Context,
     outer_context: &Context,
 ) -> Result<SolutionMappings, QueryProcessingError> {
@@ -657,10 +658,17 @@ pub fn exists(
         mut rdf_node_types,
         height_estimate: height_upper_bound,
     } = solution_mappings;
-    let exists_lf = exists_lf
+    let mut exists_lf = exists_lf
         .select([col(inner_context.as_str())])
         .unique(None, UniqueKeepStrategy::Any)
         .with_column(lit(true).alias(outer_context.as_str()));
+    if exists_types.get(inner_context.as_str()).unwrap().is_none() {
+        exists_lf = exists_lf.with_column(
+            lit(LiteralValue::untyped_null())
+                .cast(DataType::UInt32)
+                .alias(inner_context.as_str()),
+        );
+    }
     mappings = mappings
         .join(
             exists_lf,

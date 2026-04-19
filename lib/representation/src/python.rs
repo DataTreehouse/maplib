@@ -19,10 +19,10 @@ use pyo3::exceptions::PyException;
 use pyo3::prelude::PyAnyMethods;
 use pyo3::IntoPyObjectExt;
 use pyo3::{create_exception, pyclass, pymethods, Bound, Py, PyAny, PyErr, PyResult, Python};
+use rust_decimal::Decimal;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
-use rust_decimal::Decimal;
 use thiserror::*;
 
 #[derive(Error, Debug)]
