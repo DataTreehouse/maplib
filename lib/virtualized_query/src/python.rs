@@ -17,7 +17,7 @@ pub enum PyVirtualizedQuery {
         resource: String,
         ids: Vec<String>,
         grouping_column_name: Option<String>,
-        id_grouping_tuples: Option<Vec<(String, i64)>>,
+        id_grouping_tuples: Option<Vec<(String, u32)>>,
     },
     Filtered {
         filter: Py<PyExpression>,
@@ -100,7 +100,7 @@ impl PyVirtualizedQuery {
         }
     }
     #[getter]
-    fn id_grouping_tuples(&self) -> Option<Vec<(String, i64)>> {
+    fn id_grouping_tuples(&self) -> Option<Vec<(String, u32)>> {
         match self {
             PyVirtualizedQuery::Basic {
                 id_grouping_tuples, ..
@@ -218,7 +218,7 @@ impl PyVirtualizedQuery {
                         .as_materialized_series()
                         .iter();
                     for (id, group) in id_iter.zip(group_iter) {
-                        if let (AnyValue::String(id), AnyValue::Int64(group)) = (id, group) {
+                        if let (AnyValue::String(id), AnyValue::UInt32(group)) = (id, group) {
                             id_grouping_tuples.push((id.to_string(), group));
                         } else {
                             panic!("Should never happen")

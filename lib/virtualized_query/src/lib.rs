@@ -82,6 +82,7 @@ pub struct GroupedVirtualizedQuery {
 pub struct BasicVirtualizedQuery {
     pub identifier_variable: Variable,
     pub column_mapping: HashMap<Variable, TermPattern>,
+    pub expected_unknown_cols: HashSet<Variable>,
     pub resource_variable: Variable,
     pub query_source_context: Context,
     pub query_source_variable: Variable,
@@ -92,65 +93,83 @@ pub struct BasicVirtualizedQuery {
 }
 
 impl BasicVirtualizedQuery {
-    pub fn finish_column_mapping(&mut self, patterns: &Vec<TriplePattern>, template: &Template) {
-        let param_vars: HashSet<_> = template
-            .signature
-            .parameter_list
-            .iter()
-            .map(|x| &x.variable)
-            .collect();
-        let mut new_mappings = vec![];
-        let mut visited_query_vars = HashSet::new();
+    pub fn finish_column_mapping(
+        &mut self,
+        patterns: &Vec<TriplePattern>,
+        template: Option<&Template>,
+    ) {
         let id_var = Variable::new_unchecked(ID_VARIABLE_NAME);
         let mut queue = vec![(&self.query_source_variable, &id_var)];
+        let param_vars: HashSet<_> = if let Some(template) = template {
+            template
+                .signature
+                .parameter_list
+                .iter()
+                .map(|x| &x.variable)
+                .collect()
+        } else {
+            HashSet::new()
+        };
+        let mut new_mappings = vec![];
+        let mut visited_query_vars = HashSet::new();
         while let Some((current_query_var, current_template_var)) = queue.pop() {
             if !visited_query_vars.contains(&current_query_var) {
                 visited_query_vars.insert(current_query_var);
                 for p in patterns {
+                    println!("current {} p {}", current_query_var,  p);
                     match &p.predicate {
                         NamedNodePattern::NamedNode(nn) => {
                             if let TermPattern::Variable(v) = &p.subject {
                                 if current_query_var == v {
-                                    for tp in &template.pattern_list {
-                                        if let StottrTerm::ConstantTerm(
-                                            ConstantTermOrList::ConstantTerm(ConstantTerm::Iri(
-                                                template_nn,
-                                            )),
-                                        ) = &tp.argument_list.get(1).unwrap().term
-                                        {
-                                            if nn == template_nn {
-                                                match &tp.argument_list.first().unwrap().term {
-                                                    StottrTerm::Variable(tv) => {
-                                                        if tv == current_template_var {
-                                                            match &tp
-                                                                .argument_list
-                                                                .get(2)
-                                                                .unwrap()
-                                                                .term
-                                                            {
-                                                                StottrTerm::Variable(tobj) => {
-                                                                    if param_vars.contains(tobj) {
-                                                                        new_mappings.push((
-                                                                            tobj.clone(),
-                                                                            p.object.clone(),
-                                                                        ));
+                                    if let Some(template) = template {
+                                        for tp in &template.pattern_list {
+                                            if let StottrTerm::ConstantTerm(
+                                                ConstantTermOrList::ConstantTerm(
+                                                    ConstantTerm::Iri(template_nn),
+                                                ),
+                                            ) = &tp.argument_list.get(1).unwrap().term
+                                            {
+                                                if nn == template_nn {
+                                                    match &tp.argument_list.first().unwrap().term {
+                                                        StottrTerm::Variable(tv) => {
+                                                            if tv == current_template_var {
+                                                                match &tp
+                                                                    .argument_list
+                                                                    .get(2)
+                                                                    .unwrap()
+                                                                    .term
+                                                                {
+                                                                    StottrTerm::Variable(tobj) => {
+                                                                        if param_vars.contains(tobj)
+                                                                        {
+                                                                            new_mappings.push((
+                                                                                tobj.clone(),
+                                                                                p.object.clone(),
+                                                                            ));
+                                                                        }
+                                                                        if let TermPattern::Variable(
+                                                                            obj,
+                                                                        ) = &p.object
+                                                                        {
+                                                                            queue.push((obj, tobj));
+                                                                        }
                                                                     }
-                                                                    if let TermPattern::Variable(
-                                                                        obj,
-                                                                    ) = &p.object
-                                                                    {
-                                                                        queue.push((obj, tobj));
+                                                                    StottrTerm::ConstantTerm(_) => {
                                                                     }
+                                                                    StottrTerm::List(_) => {}
                                                                 }
-                                                                StottrTerm::ConstantTerm(_) => {}
-                                                                StottrTerm::List(_) => {}
                                                             }
                                                         }
+                                                        StottrTerm::ConstantTerm(_) => {}
+                                                        StottrTerm::List(_) => {}
                                                     }
-                                                    StottrTerm::ConstantTerm(_) => {}
-                                                    StottrTerm::List(_) => {}
                                                 }
                                             }
+                                        }
+                                    } else {
+                                        if let TermPattern::Variable(v) = &p.object {
+                                            self.expected_unknown_cols.insert(v.clone());
+                                            queue.push((v, v));
                                         }
                                     }
                                 }
@@ -188,6 +207,7 @@ impl BasicVirtualizedQuery {
         } else {
             s.insert(self.identifier_variable.as_str());
         }
+        s.extend(self.expected_unknown_cols.iter().map(|x| x.as_str()));
         s
     }
 
@@ -445,6 +465,7 @@ impl BasicVirtualizedQuery {
             ids: None,
             grouping_mapping: None,
             grouping_col: None,
+            expected_unknown_cols: Default::default(),
         }
     }
 }

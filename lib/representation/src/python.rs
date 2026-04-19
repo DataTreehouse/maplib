@@ -1,7 +1,7 @@
 use crate::debug::DebugOutputs;
 use crate::python_df_to_rust::polars_df_to_rust_df;
 use crate::query_context::Context;
-use crate::rdf_to_polars::rdf_literal_to_polars_literal_value;
+use crate::rdf_to_polars::{default_decimal_scale, rdf_literal_to_polars_literal_value};
 use crate::solution_mapping::EagerSolutionMappings;
 use crate::{BaseRDFNodeType, RDFNodeState};
 use chrono::{DateTime, TimeDelta, TimeZone};
@@ -22,6 +22,7 @@ use pyo3::{create_exception, pyclass, pymethods, Bound, Py, PyAny, PyErr, PyResu
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
+use rust_decimal::Decimal;
 use thiserror::*;
 
 #[derive(Error, Debug)]
@@ -380,6 +381,9 @@ impl PyLiteral {
                     AnyValue::Int64(i) => i.into_py_any(py),
                     AnyValue::Float32(f) => f.into_py_any(py),
                     AnyValue::Float64(f) => f.into_py_any(py),
+                    AnyValue::Decimal(d, ..) => {
+                        Decimal::new(d as i64, default_decimal_scale() as u32).into_py_any(py)
+                    }
                     AnyValue::Date(_d) => {
                         todo!()
                     }
@@ -415,7 +419,7 @@ impl PyLiteral {
                             dt.into_py_any(py)
                         }
                     }
-                    _ => todo!(),
+                    s => todo!("To python: {:?}", s),
                 }
             }
             _ => todo!(),
