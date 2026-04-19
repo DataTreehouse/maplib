@@ -254,11 +254,7 @@ fn bad_properties(
             let mut triples_cols = HashSet::new();
             let mut patterns_to_process = Vec::from_iter(patterns.iter());
             let mut n_cross_joins = 0usize;
-            let has_non_empty_incoming = if let Some(inc) = incoming_cols {
-                !inc.is_empty()
-            } else {
-                false
-            };
+
             for tp in patterns {
                 if let NamedNodePattern::Variable(..) = tp.predicate {
                     n_variable_predicates += 1;
@@ -282,7 +278,7 @@ fn bad_properties(
 
                     if i == patterns_to_process.len() - 1 {
                         connected = Some(i);
-                        if has_non_empty_incoming && !triples_cols.is_empty() {
+                        if incoming_cols.is_some() || !triples_cols.is_empty() {
                             n_cross_joins += 1;
                         }
                         triples_cols.extend(variables);
