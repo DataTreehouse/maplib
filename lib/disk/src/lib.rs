@@ -10,6 +10,10 @@ use std::path::Path;
 pub struct CatMapsOnDisk {}
 
 impl CatMapsOnDisk {
+    pub fn add_encs_to_cache(&mut self, _us: &HashSet<u32>, _is_iri: bool) {
+        unimplemented!("Contact Data Treehouse to try!")
+    }
+
     pub fn inner_join_re_enc_on_disk(&self, _other: &CatMapsOnDisk) -> Vec<(u32, u32)> {
         unimplemented!("Contact Data Treehouse to try!")
     }
