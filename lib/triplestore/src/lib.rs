@@ -35,7 +35,6 @@ use representation::{
     literal_iri_to_namednode, BaseRDFNodeType, RDFNodeState, LANG_STRING_LANG_FIELD,
     LANG_STRING_VALUE_FIELD, OBJECT_COL_NAME, PREDICATE_COL_NAME, SUBJECT_COL_NAME,
 };
-use simd_json::prelude::ObjectTrait;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
@@ -80,7 +79,7 @@ impl Triplestore {
                         .map(|(_, type_map)| {
                             let out_vec: Result<Vec<Vec<_>>, TriplestoreError> = type_map
                                 .iter()
-                                .map(|((subject_type, object_type), triples)| triples.get_u32s())
+                                .map(|(_, triples)| triples.get_u32s())
                                 .collect();
                             let out_vec: Vec<_> = out_vec?.into_iter().flatten().collect();
                             Ok(out_vec)
