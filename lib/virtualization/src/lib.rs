@@ -1,6 +1,6 @@
+use crate::python::VirtualizedPythonDatabase;
 use std::collections::HashMap;
 use templates::ast::Template;
-use crate::python::VirtualizedPythonDatabase;
 
 pub mod python;
 

@@ -65,7 +65,7 @@ impl CatMapsOnDisk {
     pub fn image_disk(&self, _path: &Path, _us: &HashSet<u32>) -> Option<CatMapsOnDisk> {
         unimplemented!("Contact Data Treehouse to try!")
     }
-    pub fn image_memory(&self, _us: &HashSet<u32>, _is_iri:bool) -> Option<CatMapsInMemory> {
+    pub fn image_memory(&self, _us: &HashSet<u32>, _is_iri: bool) -> Option<CatMapsInMemory> {
         unimplemented!("Contact Data Treehouse to try!")
     }
 

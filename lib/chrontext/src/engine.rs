@@ -1,9 +1,9 @@
-use std::collections::HashMap;
-use std::sync::Arc;
+use crate::errors::ChrontextError;
 use representation::dataset::NamedGraph;
 use representation::solution_mapping::EagerSolutionMappings;
 use spargebra::term::NamedNode;
-use crate::errors::ChrontextError;
+use std::collections::HashMap;
+use std::sync::Arc;
 use triplestore::sparql::{QueryResult, QuerySettings};
 use triplestore::Triplestore;
 use virtualization::{Virtualization, VirtualizedDatabase};
@@ -14,8 +14,7 @@ pub struct ChrontextSettings {
     pub virtualization: Virtualization,
 }
 
-pub struct Engine {
-}
+pub struct Engine {}
 
 impl Engine {
     pub fn new(

@@ -26,7 +26,7 @@ use representation::{
 use std::borrow::Cow;
 use std::cmp;
 use std::cmp::{Ordering, Reverse};
-use std::collections::{BTreeMap, BinaryHeap, HashMap};
+use std::collections::{BTreeMap, BinaryHeap, HashMap, HashSet};
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -79,6 +79,67 @@ pub(crate) struct Triples {
     pub object_type: BaseRDFNodeType,
     object_indexing_enabled: bool,
     subject_object_index: Option<SubjectObjectIndex>,
+}
+
+impl Triples {
+    pub fn get_u32s(&self) -> Result<Vec<(BaseRDFNodeType, HashSet<u32>)>, TriplestoreError> {
+        let mut select_cols = Vec::new();
+        if self.subject_type.stored_cat() {
+            select_cols.push(col(SUBJECT_COL_NAME));
+        }
+        if self.object_type.stored_cat() {
+            select_cols.push(col(OBJECT_COL_NAME));
+        }
+        if select_cols.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let maybe_lfs = self.get_lazy_frame_slices()?;
+        if let Some(lfs) = maybe_lfs {
+            let mut type_u32s: HashMap<BaseRDFNodeType, HashSet<u32>> = HashMap::new();
+
+            for mut lf in lfs {
+                lf = lf.select(select_cols.as_slice());
+                let df = lf.collect().map_err(TriplestoreError::LazyLoadError)?;
+
+                if self.subject_type.stored_cat() {
+                    if !type_u32s.contains_key(&self.subject_type) {
+                        type_u32s.insert(self.subject_type.clone(), HashSet::new());
+                    }
+                    let u32s_set = type_u32s.get_mut(&self.subject_type).unwrap();
+                    let s_u32s = df.column(SUBJECT_COL_NAME).unwrap().u32().unwrap();
+                    u32s_set.extend(s_u32s.iter().map(|x| x.unwrap()));
+                }
+                if self.object_type.stored_cat() {
+                    if !type_u32s.contains_key(&self.object_type) {
+                        type_u32s.insert(self.object_type.clone(), HashSet::new());
+                    }
+                    let u32s_set = type_u32s.get_mut(&self.object_type).unwrap();
+                    if self.object_type.is_lang_string() {
+                        let o_struct = df.column(OBJECT_COL_NAME).unwrap().struct_().unwrap();
+                        let o_u32_value_field =
+                            o_struct.field_by_name(LANG_STRING_VALUE_FIELD).unwrap();
+                        let o_u32_value_u32s = o_u32_value_field.u32().unwrap();
+                        let o_u32_langs_field =
+                            o_struct.field_by_name(LANG_STRING_LANG_FIELD).unwrap();
+                        let o_u32_langs_u32s = o_u32_langs_field.u32().unwrap();
+                        u32s_set.extend(
+                            o_u32_value_u32s
+                                .iter()
+                                .chain(o_u32_langs_u32s.iter())
+                                .map(|x| x.unwrap()),
+                        );
+                    } else {
+                        let s_u32s = df.column(OBJECT_COL_NAME).unwrap().u32().unwrap();
+                        u32s_set.extend(s_u32s.iter().map(|x| x.unwrap()));
+                    }
+                }
+            }
+            Ok(type_u32s.into_iter().collect())
+        } else {
+            Ok(Vec::new())
+        }
+    }
 }
 
 impl Triples {
@@ -741,16 +802,16 @@ impl StoredTriples {
         storage_folder: Option<&PathBuf>,
     ) -> Result<Self, TriplestoreError> {
         let df = df.select([SUBJECT_COL_NAME, OBJECT_COL_NAME]).unwrap();
-        if let Some(storage_folder) = &storage_folder {
-            if MIN_SIZE_CACHING < df.estimated_size() {
-                return Ok(StoredTriples::TriplesOnDisk(TriplesOnDisk::new(
-                    df,
-                    subj_type,
-                    obj_type,
-                    storage_folder,
-                )?));
-            }
-        }
+        // if let Some(storage_folder) = &storage_folder {
+        //     if MIN_SIZE_CACHING < df.estimated_size() {
+        //         return Ok(StoredTriples::TriplesOnDisk(TriplesOnDisk::new(
+        //             df,
+        //             subj_type,
+        //             obj_type,
+        //             storage_folder,
+        //         )?));
+        //     }
+        // }
         Ok(StoredTriples::TriplesInMemory(Box::new(
             TriplesInMemory::new(df),
         )))

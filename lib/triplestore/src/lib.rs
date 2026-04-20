@@ -23,11 +23,11 @@ use polars::prelude::{
     as_struct, col, lit, AnyValue, DataFrame, Expr, IntoLazy, PlSmallStr, RankMethod, RankOptions,
 };
 use polars_core::prelude::{IntoColumn, Series, SortMultipleOptions};
-use rayon::iter::ParallelDrainRange;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use rayon::iter::{IntoParallelRefIterator, ParallelDrainRange};
 use representation::cats::{
-    cat_encode_triples, CatTriples, Cats, EncodedTriples, LockedCats, OBJECT_RANK_COL_NAME,
-    SUBJECT_RANK_COL_NAME,
+    cat_encode_triples, CatTriples, CatType, Cats, EncodedTriples, LockedCats,
+    OBJECT_RANK_COL_NAME, SUBJECT_RANK_COL_NAME,
 };
 use representation::multitype::set_struct_all_null_to_null_row;
 use representation::solution_mapping::{BaseCatState, EagerSolutionMappings};
@@ -35,11 +35,13 @@ use representation::{
     literal_iri_to_namednode, BaseRDFNodeType, RDFNodeState, LANG_STRING_LANG_FIELD,
     LANG_STRING_VALUE_FIELD, OBJECT_COL_NAME, PREDICATE_COL_NAME, SUBJECT_COL_NAME,
 };
+use simd_json::prelude::ObjectTrait;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 use uuid::Uuid;
 
+use representation::cats::maps::CatMaps;
 use representation::dataset::NamedGraph;
 use tracing::{instrument, trace};
 
@@ -63,6 +65,49 @@ pub struct Triplestore {
 impl Triplestore {
     pub fn contains_graph(&self, graph: &NamedGraph) -> bool {
         self.graph_triples_map.contains_key(graph)
+    }
+
+    pub fn add_cat_cache(&self, graphs: &[&NamedGraph]) -> Result<(), TriplestoreError> {
+        if self.storage_folder.is_some() {
+            let mut type_u32s_map: HashMap<BaseRDFNodeType, HashSet<u32>> = HashMap::new();
+            for gr in graphs {
+                if let Some(m) = self.graph_triples_map.get(*gr) {
+                    let type_u32s: Result<
+                        Vec<Vec<(BaseRDFNodeType, HashSet<u32>)>>,
+                        TriplestoreError,
+                    > = m
+                        .par_iter()
+                        .map(|(_, type_map)| {
+                            let out_vec: Result<Vec<Vec<_>>, TriplestoreError> = type_map
+                                .iter()
+                                .map(|((subject_type, object_type), triples)| triples.get_u32s())
+                                .collect();
+                            let out_vec: Vec<_> = out_vec?.into_iter().flatten().collect();
+                            Ok(out_vec)
+                        })
+                        .collect();
+                    let type_u32s: Vec<_> = type_u32s?.into_iter().flatten().collect();
+                    for (t, v) in type_u32s {
+                        if let Some(u32_set) = type_u32s_map.get_mut(&t) {
+                            u32_set.extend(v);
+                        } else {
+                            type_u32s_map.insert(t, v);
+                        }
+                    }
+                }
+            }
+            let mut global_cats = self.global_cats.write()?;
+            for (t, u32s) in type_u32s_map {
+                let cat_enc = global_cats
+                    .cat_map
+                    .get_mut(&CatType::from_base_rdf_node_type(&t))
+                    .unwrap();
+                if let CatMaps::OnDisk(d) = &mut cat_enc.maps {
+                    d.add_encs_to_cache(&u32s, t.is_iri());
+                }
+            }
+        }
+        Ok(())
     }
 
     pub fn detach_graph(

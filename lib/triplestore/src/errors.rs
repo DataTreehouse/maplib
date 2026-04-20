@@ -56,6 +56,8 @@ pub enum TriplestoreError {
     MissingContext(String),
     #[error("Error decoding categorical encoding {0}")]
     DecodeError(PolarsError),
+    #[error("Error collecting lazy triples {0}")]
+    LazyLoadError(PolarsError),
 }
 
 impl<T> From<PoisonError<T>> for TriplestoreError {
