@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Union, List, Dict, Optional, Callable, Literal as LiteralType
+from typing import Any, Union, List, Dict, Optional, Callable, Literal as LiteralType
 from polars import DataFrame
 from datetime import datetime, date
 from maplib.maplib import rdf
