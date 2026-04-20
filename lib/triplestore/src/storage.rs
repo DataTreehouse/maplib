@@ -28,13 +28,13 @@ use std::cmp;
 use std::cmp::{Ordering, Reverse};
 use std::collections::{BTreeMap, BinaryHeap, HashMap, HashSet};
 use std::ops::Deref;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
 use tracing::{debug, instrument, trace};
 
 const OFFSET_STEP: usize = 100;
-const MIN_SIZE_CACHING: usize = 100_000_000; //100MB
+// const MIN_SIZE_CACHING: usize = 100_000_000; //100MB
 
 #[derive(Clone, Debug)]
 struct SparseIndex {
@@ -353,9 +353,9 @@ impl Triples {
         Ok(df)
     }
 
-    pub fn height(&self) -> usize {
-        self.height
-    }
+    // pub fn height(&self) -> usize {
+    //     self.height
+    // }
 }
 
 #[derive(Clone)]
@@ -781,25 +781,25 @@ fn can_index(t: &BaseRDFNodeType) -> bool {
 
 #[derive(Clone)]
 enum StoredTriples {
-    TriplesOnDisk(TriplesOnDisk),
+    // TriplesOnDisk(TriplesOnDisk),
     TriplesInMemory(Box<TriplesInMemory>),
 }
 
 impl StoredTriples {
     pub fn get_lazy_frame(&self) -> Result<LazyFrame, TriplestoreError> {
         match self {
-            StoredTriples::TriplesOnDisk(_) => {
-                todo!()
-            }
+            // StoredTriples::TriplesOnDisk(_) => {
+            //     todo!()
+            // }
             StoredTriples::TriplesInMemory(mem) => mem.get_lazy_frame().map(|(lf, _)| lf),
         }
     }
 
     fn new(
         df: DataFrame,
-        subj_type: &BaseRDFNodeType,
-        obj_type: &BaseRDFNodeType,
-        storage_folder: Option<&PathBuf>,
+        _subj_type: &BaseRDFNodeType,
+        _obj_type: &BaseRDFNodeType,
+        _storage_folder: Option<&PathBuf>,
     ) -> Result<Self, TriplestoreError> {
         let df = df.select([SUBJECT_COL_NAME, OBJECT_COL_NAME]).unwrap();
         // if let Some(storage_folder) = &storage_folder {
@@ -822,7 +822,7 @@ impl StoredTriples {
         offsets: Option<Vec<(usize, usize)>>,
     ) -> Result<Vec<(LazyFrame, usize)>, TriplestoreError> {
         let (lf, height) = match self {
-            StoredTriples::TriplesOnDisk(t) => t.get_lazy_frame()?,
+            // StoredTriples::TriplesOnDisk(t) => t.get_lazy_frame()?,
             StoredTriples::TriplesInMemory(t) => t.get_lazy_frame()?,
         };
         let out = if let Some(offsets) = offsets {
@@ -843,58 +843,58 @@ impl StoredTriples {
         Ok(out)
     }
 
-    pub(crate) fn wipe(&mut self) -> Result<(), TriplestoreError> {
-        if let Self::TriplesOnDisk(t) = self {
-            t.wipe()?
-        };
-        Ok(())
-    }
+    // pub(crate) fn wipe(&mut self) -> Result<(), TriplestoreError> {
+    //     if let Self::TriplesOnDisk(t) = self {
+    //         t.wipe()?
+    //     };
+    //     Ok(())
+    // }
 }
 
-#[derive(Clone)]
-struct TriplesOnDisk {
-    height: usize,
-    df_path: String,
-    subj_type: BaseRDFNodeType,
-    obj_type: BaseRDFNodeType,
-}
-
-impl TriplesOnDisk {
-    fn new(
-        _df: DataFrame,
-        _subj_type: &BaseRDFNodeType,
-        _obj_type: &BaseRDFNodeType,
-        _storage_folder: &Path,
-    ) -> Result<Self, TriplestoreError> {
-        todo!()
-        // let height = df.height();
-        // let file_name = format!("tmp_{}.ipc", Uuid::new_v4());
-        // let mut file_path_buf = storage_folder.to_owned();
-        // file_path_buf.push(file_name);
-        // let file_path = file_path_buf.as_path();
-        //
-        // write_ipc(&mut df, file_path, subj_type, obj_type)?;
-        // Ok(Self {
-        //     height,
-        //     df_path: file_path.to_str().unwrap().to_string(),
-        //     subj_type: subj_type.clone(),
-        //     obj_type: obj_type.clone(),
-        // })
-    }
-
-    pub(crate) fn get_lazy_frame(&self) -> Result<(LazyFrame, usize), TriplestoreError> {
-        todo!()
-        // let p = Path::new(&self.df_path);
-        // Ok((scan_ipc(p, &self.subj_type, &self.obj_type)?, self.height))
-    }
-
-    pub(crate) fn wipe(&mut self) -> Result<(), TriplestoreError> {
-        todo!()
-        // let p = Path::new(&self.df_path);
-        // remove_file(p).map_err(TriplestoreError::RemoveFileError)?;
-        // Ok(())
-    }
-}
+// #[derive(Clone)]
+// struct TriplesOnDisk {
+//     _height: usize,
+//     _df_path: String,
+//     _subj_type: BaseRDFNodeType,
+//     _obj_type: BaseRDFNodeType,
+// }
+//
+// impl TriplesOnDisk {
+//     fn new(
+//         _df: DataFrame,
+//         _subj_type: &BaseRDFNodeType,
+//         _obj_type: &BaseRDFNodeType,
+//         _storage_folder: &Path,
+//     ) -> Result<Self, TriplestoreError> {
+//         todo!()
+//         let height = df.height();
+//         let file_name = format!("tmp_{}.ipc", Uuid::new_v4());
+//         let mut file_path_buf = storage_folder.to_owned();
+//         file_path_buf.push(file_name);
+//         let file_path = file_path_buf.as_path();
+//
+//         write_ipc(&mut df, file_path, subj_type, obj_type)?;
+//         Ok(Self {
+//             height,
+//             df_path: file_path.to_str().unwrap().to_string(),
+//             subj_type: subj_type.clone(),
+//             obj_type: obj_type.clone(),
+//         })
+//     }
+//
+//     pub(crate) fn get_lazy_frame(&self) -> Result<(LazyFrame, usize), TriplestoreError> {
+//         todo!()
+//         let p = Path::new(&self.df_path);
+//         Ok((scan_ipc(p, &self.subj_type, &self.obj_type)?, self.height))
+//     }
+//
+//     pub(crate) fn wipe(&mut self) -> Result<(), TriplestoreError> {
+//         todo!()
+//         let p = Path::new(&self.df_path);
+//         remove_file(p).map_err(TriplestoreError::RemoveFileError)?;
+//         Ok(())
+//     }
+// }
 
 #[derive(Clone)]
 struct TriplesInMemory {
