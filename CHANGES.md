@@ -1,5 +1,13 @@
 # Change log
 
+## v0.20.12
+### Bug fixes
+- Disk based cats panicked with duplicate string (large strings)
+- Sometimes tried to write triples to disk (disabled functionality for the time being)
+
+### Performance
+- Caching for SHACL rules with disk based storage improves validation performance
+
 ## v0.20.11
 ### Bug fixes
 - Exists queries with nested subqueries could be true when they should be false
