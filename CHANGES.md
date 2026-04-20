@@ -1,12 +1,22 @@
 # Change log
 
+## v0.20.11
+### Bug fixes
+- Exists queries with nested subqueries could be true when they should be false
+
+### Performance
+- Improve detection of cross joins, avoiding them better
+
+### Features
+- Integrate chrontext into maplib, enabled when m.add_virtualization() has been run.
+
 ## v0.20.10
 ### Bugfixes
 - SHACL rules: incrementally build targets not always updated
 - SPARQL adding now() and a few bugfixes having to do with multiple datatypes in expressions
 
 ### Performance
-- Improvements to query plannnig for large queries
+- Improvements to query planning for large queries
 
 ## v0.20.8
 ### Bug fixes
