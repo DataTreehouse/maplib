@@ -904,7 +904,7 @@ impl PyModel {
     #[pyo3(signature = (
         rulesets,
         graph=None,
-        solution_mappings=None,
+        _solution_mappings=None,
         max_iterations=100_000,
         max_results=10_000_000,
         include_transient=None,
@@ -916,7 +916,7 @@ impl PyModel {
         py: Python<'_>,
         rulesets: Py<PyAny>,
         graph: Option<String>,
-        solution_mappings: Option<bool>,
+        _solution_mappings: Option<bool>,
         max_iterations: Option<usize>,
         max_results: Option<usize>,
         include_transient: Option<bool>,
