@@ -218,35 +218,18 @@ pub fn find_all_used_variables_in_expression(
         Expression::Variable(v) => {
             used_vars.insert(v.clone());
         }
-        Expression::Or(left, right) => {
-            find_all_used_variables_in_expression(left, used_vars, include_exists, include_bound);
-            find_all_used_variables_in_expression(right, used_vars, include_exists, include_bound);
-        }
-        Expression::And(left, right) => {
-            find_all_used_variables_in_expression(left, used_vars, include_exists, include_bound);
-            find_all_used_variables_in_expression(right, used_vars, include_exists, include_bound);
-        }
-        Expression::Equal(left, right) => {
-            find_all_used_variables_in_expression(left, used_vars, include_exists, include_bound);
-            find_all_used_variables_in_expression(right, used_vars, include_exists, include_bound);
-        }
-        Expression::SameTerm(left, right) => {
-            find_all_used_variables_in_expression(left, used_vars, include_exists, include_bound);
-            find_all_used_variables_in_expression(right, used_vars, include_exists, include_bound);
-        }
-        Expression::Greater(left, right) => {
-            find_all_used_variables_in_expression(left, used_vars, include_exists, include_bound);
-            find_all_used_variables_in_expression(right, used_vars, include_exists, include_bound);
-        }
-        Expression::GreaterOrEqual(left, right) => {
-            find_all_used_variables_in_expression(left, used_vars, include_exists, include_bound);
-            find_all_used_variables_in_expression(right, used_vars, include_exists, include_bound);
-        }
-        Expression::Less(left, right) => {
-            find_all_used_variables_in_expression(left, used_vars, include_exists, include_bound);
-            find_all_used_variables_in_expression(right, used_vars, include_exists, include_bound);
-        }
-        Expression::LessOrEqual(left, right) => {
+        Expression::Or(left, right) |
+        Expression::And(left, right) |
+        Expression::Equal(left, right) |
+        Expression::SameTerm(left, right) |
+        Expression::Greater(left, right) |
+        Expression::GreaterOrEqual(left, right) |
+        Expression::Less(left, right) |
+        Expression::LessOrEqual(left, right) |
+        Expression::Add(left, right) |
+        Expression::Subtract(left, right) |
+        Expression::Multiply(left, right) |
+        Expression::Divide(left, right) => {
             find_all_used_variables_in_expression(left, used_vars, include_exists, include_bound);
             find_all_used_variables_in_expression(right, used_vars, include_exists, include_bound);
         }
@@ -255,22 +238,6 @@ pub fn find_all_used_variables_in_expression(
             for e in rights {
                 find_all_used_variables_in_expression(e, used_vars, include_exists, include_bound);
             }
-        }
-        Expression::Add(left, right) => {
-            find_all_used_variables_in_expression(left, used_vars, include_exists, include_bound);
-            find_all_used_variables_in_expression(right, used_vars, include_exists, include_bound);
-        }
-        Expression::Subtract(left, right) => {
-            find_all_used_variables_in_expression(left, used_vars, include_exists, include_bound);
-            find_all_used_variables_in_expression(right, used_vars, include_exists, include_bound);
-        }
-        Expression::Multiply(left, right) => {
-            find_all_used_variables_in_expression(left, used_vars, include_exists, include_bound);
-            find_all_used_variables_in_expression(right, used_vars, include_exists, include_bound);
-        }
-        Expression::Divide(left, right) => {
-            find_all_used_variables_in_expression(left, used_vars, include_exists, include_bound);
-            find_all_used_variables_in_expression(right, used_vars, include_exists, include_bound);
         }
         Expression::UnaryPlus(inner) => {
             find_all_used_variables_in_expression(inner, used_vars, include_exists, include_bound);
@@ -311,7 +278,8 @@ pub fn find_all_used_variables_in_expression(
                 find_all_used_variables_in_expression(e, used_vars, include_exists, include_bound);
             }
         }
-        _ => {}
+        Expression::NamedNode(_) => {}
+        Expression::Literal(_) => {}
     }
 }
 

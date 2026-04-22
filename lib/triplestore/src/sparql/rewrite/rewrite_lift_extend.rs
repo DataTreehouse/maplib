@@ -47,9 +47,8 @@ pub fn rewrite_lift_extend(gp: GraphPattern) -> (GraphPattern, Vec<(Expression, 
             right,
             expression,
         } => {
-            let (left, mut left_extends) = rewrite_lift_extend(*left);
-            let (right, right_extends) = rewrite_lift_extend(*right);
-            left_extends.extend(right_extends);
+            let (left, left_extends) = rewrite_lift_extend(*left);
+            let right= terminating_lift_extend(*right);
             (
                 GraphPattern::LeftJoin {
                     left: Box::new(left),
@@ -70,7 +69,7 @@ pub fn rewrite_lift_extend(gp: GraphPattern) -> (GraphPattern, Vec<(Expression, 
                         inner: Box::new(inner),
                         expression,
                         variable,
-                    }
+                    };
                 } else {
                     keep_extends.push((expression, variable));
                 }
@@ -105,9 +104,13 @@ pub fn rewrite_lift_extend(gp: GraphPattern) -> (GraphPattern, Vec<(Expression, 
             expression,
             variable,
         } => {
-            let (inner, mut extends) = rewrite_lift_extend(*inner);
-            extends.push((expression, variable));
-            (inner, extends)
+            let mut inner = terminating_lift_extend(*inner);
+            inner = GraphPattern::Extend {
+                inner:Box::new(inner),
+                expression,
+                variable
+            };
+            (inner, Vec::new())
         }
         GraphPattern::Minus { left, right } => (
             GraphPattern::Minus {

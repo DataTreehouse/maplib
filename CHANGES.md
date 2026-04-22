@@ -1,5 +1,10 @@
 # Change log
 
+## v0.20.13
+### Bug fixes
+- Bug fix for optimization for certain types of large queries with OPTIONAL and BIND.
+- Improve error message when UNBOUND(?v) does not find ?v. 
+
 ## v0.20.12
 ### Bug fixes
 - Disk based cats panicked with duplicate string (large strings)

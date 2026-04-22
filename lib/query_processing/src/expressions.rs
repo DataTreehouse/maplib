@@ -401,9 +401,14 @@ pub fn bound(
     v: &Variable,
     outer_context: &Context,
 ) -> Result<SolutionMappings, QueryProcessingError> {
+    if !solution_mappings.rdf_node_types.contains_key(v.as_str()) {
+        return Err(QueryProcessingError::VariableNotFound(
+            v.as_str().to_string(),
+            outer_context.as_str().to_string()))
+    }
     let expr = expr_is_null_workaround(
         col(v.as_str()),
-        solution_mappings.rdf_node_types.get(v.as_str()).unwrap(),
+        solution_mappings.rdf_node_types.get(v.as_str()).expect(&format!("Finds {}", v.as_str())),
     )
     .not();
     solution_mappings.mappings = solution_mappings
