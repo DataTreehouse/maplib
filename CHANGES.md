@@ -1,5 +1,9 @@
 # Change log
 
+## v0.20.14
+### Bug fixes
+- Fix issue in cross join detection / query planning.
+
 ## v0.20.13
 ### Bug fixes
 - Bug fix for optimization for certain types of large queries with OPTIONAL and BIND.
