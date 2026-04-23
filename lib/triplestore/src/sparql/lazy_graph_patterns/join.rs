@@ -163,16 +163,12 @@ pub fn order_graph_patterns<'a>(
         .map(|(x, (gp, _))| (x, *gp))
         .collect();
 
-    let use_vars: Option<HashSet<_>> = if let Some(sm) = &sm {
+    let mut use_vars: Option<HashSet<_>> = if let Some(sm) = &sm {
         Some(sm.rdf_node_types.keys().cloned().collect())
     } else {
         None
     };
-    let mut candidate_bad_properties = HashMap::new();
-    for (i, gp) in gps.iter().map(|(x, _)| *x).enumerate() {
-        let (bad_props, _) = bad_properties(gp, use_vars.as_ref());
-        candidate_bad_properties.insert(i, bad_props);
-    }
+
     let mut candidate_contexts: HashMap<_, _> = gps
         .into_iter()
         .enumerate()
@@ -189,6 +185,14 @@ pub fn order_graph_patterns<'a>(
         HashSet::new()
     };
     while !candidates.is_empty() {
+        let mut candidate_bad_properties = HashMap::new();
+        for (i, gp) in candidates.iter().map(|i| {
+            (*i, candidate_gps.get(i).unwrap())
+        }) {
+            let (bad_props, _) = bad_properties(gp, use_vars.as_ref());
+            candidate_bad_properties.insert(i, bad_props);
+        }
+
         let c = *candidates
             .iter()
             .min_by(|t1, t2| {
@@ -198,7 +202,13 @@ pub fn order_graph_patterns<'a>(
 
         candidates.remove(&c);
         let gp = *candidate_gps.get(&c).unwrap();
+        let gpvars = variables(gp);
         visited.extend(variables(gp));
+        if let Some(use_vars) = &mut use_vars {
+            use_vars.extend(gpvars)
+        } else {
+            use_vars = Some(gpvars);
+        }
         let ctx = candidate_contexts.remove(&c).unwrap();
         ordering.push((gp, ctx));
     }
@@ -366,7 +376,7 @@ fn bad_properties(
         }
         GraphPattern::LeftJoin { left, right, .. } => {
             let (mut left_bp, mut left_vs) = bad_properties(left, incoming_cols);
-            let (right_bp, right_vs) = bad_properties(right, incoming_cols);
+            let (right_bp, right_vs) = bad_properties(right, None);
             left_bp.with_additional(right_bp);
             left_vs.extend(right_vs);
             (left_bp, left_vs)
