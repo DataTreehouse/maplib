@@ -1,6 +1,6 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
-use std::cmp::Ordering;
+use std::cmp::{Ordering, Reverse};
 use tracing::{instrument, trace};
 
 use crate::sparql::QuerySettings;
@@ -10,9 +10,9 @@ use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use spargebra::algebra::GraphPattern;
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BinaryHeap, HashMap, HashSet};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct BadGraphPatternProperties {
     n_cross_joins: usize,
     n_variable_predicates: usize,
@@ -25,34 +25,16 @@ impl BadGraphPatternProperties {
     }
 }
 
-impl PartialEq for BadGraphPatternProperties {
-    fn eq(&self, other: &Self) -> bool {
-        other.n_cross_joins == self.n_cross_joins
-            && other.n_variable_predicates == self.n_variable_predicates
-    }
-
-    fn ne(&self, other: &Self) -> bool {
-        !self.eq(other)
-    }
-}
-
 impl PartialOrd for BadGraphPatternProperties {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        if self.lt(other) {
-            Some(Ordering::Less)
-        } else if self.gt(other) {
-            Some(Ordering::Greater)
-        } else if self.eq(other) {
-            Some(Ordering::Equal)
-        } else {
-            None
-        }
+        Some(self.cmp(other))
     }
+
 
     fn lt(&self, other: &Self) -> bool {
         self.n_cross_joins < other.n_cross_joins
             || (self.n_cross_joins == other.n_cross_joins
-                && self.n_variable_predicates < other.n_variable_predicates)
+            && self.n_variable_predicates < other.n_variable_predicates)
     }
 
     fn le(&self, other: &Self) -> bool {
@@ -62,12 +44,33 @@ impl PartialOrd for BadGraphPatternProperties {
     fn gt(&self, other: &Self) -> bool {
         self.n_cross_joins > other.n_cross_joins
             || (self.n_cross_joins == other.n_cross_joins
-                && self.n_variable_predicates > other.n_variable_predicates)
+            && self.n_variable_predicates > other.n_variable_predicates)
     }
 
     fn ge(&self, other: &Self) -> bool {
         self.gt(other) || self.eq(other)
     }
+}
+
+impl Eq for BadGraphPatternProperties {}
+
+impl PartialEq<Self> for BadGraphPatternProperties {
+    fn eq(&self, other: &Self) -> bool {
+        self.n_cross_joins == other.n_cross_joins && self.n_variable_predicates == other.n_variable_predicates
+    }
+}
+
+impl Ord for BadGraphPatternProperties {
+    fn cmp(&self, other: &Self) -> Ordering {
+        if self.lt(other) {
+            Ordering::Less
+        } else if self.gt(other) {
+            Ordering::Greater
+        } else {
+            Ordering::Equal
+        }
+    }
+
 }
 
 impl Triplestore {
@@ -152,18 +155,84 @@ fn find_used_variables_and_blanks(tp: &TriplePattern) -> HashSet<String> {
     tp_variables
 }
 
+#[derive(Clone)]
+struct JoinOrdering {
+    variables: Option<HashSet<String>>,
+    set: HashSet<usize>,
+    ordering: Vec<usize>,
+    bad_properties: BadGraphPatternProperties,
+}
+
+impl JoinOrdering {
+    pub fn new(
+        variables: Option<HashSet<String>>,
+        ordering: Vec<usize>,
+        bad_properties: BadGraphPatternProperties,
+    ) -> Self {
+        JoinOrdering {
+            variables,
+            set: ordering.iter().cloned().collect(),
+            ordering,
+            bad_properties,
+        }
+    }
+
+    pub fn extend_all(
+        &self,
+        candidates: &Vec<usize>,
+        candidates_gp_map: &HashMap<usize, &GraphPattern>,
+    ) -> Vec<Self> {
+        let mut extensions = Vec::new();
+        for c in candidates {
+            if !self.set.contains(c) {
+                let gp = candidates_gp_map.get(c).unwrap();
+                let (mut bp, mut vars) = bad_properties(gp, self.variables.as_ref());
+                if let Some(self_vars) = &self.variables {
+                    vars.extend(self_vars.iter().cloned());
+                }
+                bp.with_additional(self.bad_properties.clone());
+                let mut ordering = self.ordering.clone();
+                ordering.push(*c);
+                let jo = JoinOrdering::new(Some(vars), ordering, bp);
+                extensions.push(jo);
+            }
+        }
+        extensions
+    }
+}
+
+impl PartialOrd<Self> for JoinOrdering {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for JoinOrdering {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.bad_properties.cmp(&other.bad_properties)
+    }
+}
+
+impl Eq for JoinOrdering {}
+
+impl PartialEq for JoinOrdering {
+    fn eq(&self, other: &Self) -> bool {
+        self.ordering == other.ordering
+    }
+}
+
 pub fn order_graph_patterns<'a>(
     gps: Vec<(&'a GraphPattern, Context)>,
     sm: &Option<SolutionMappings>,
 ) -> Vec<(&'a GraphPattern, Context)> {
-    let mut candidates: HashSet<_> = (0..gps.len()).collect();
+    let candidates: Vec<_> = (0..gps.len()).collect();
     let candidate_gps: HashMap<_, _> = gps
         .iter()
         .enumerate()
         .map(|(x, (gp, _))| (x, *gp))
         .collect();
 
-    let mut use_vars: Option<HashSet<_>> = if let Some(sm) = &sm {
+    let use_vars: Option<HashSet<_>> = if let Some(sm) = &sm {
         Some(sm.rdf_node_types.keys().cloned().collect())
     } else {
         None
@@ -176,41 +245,33 @@ pub fn order_graph_patterns<'a>(
         .collect();
 
     let mut ordering = vec![];
-    let mut visited: HashSet<_> = if let Some(sm) = sm {
-        sm.rdf_node_types
-            .keys()
-            .map(|x| x.as_str().to_string())
-            .collect()
-    } else {
-        HashSet::new()
-    };
-    while !candidates.is_empty() {
-        let mut candidate_bad_properties = HashMap::new();
-        for (i, gp) in candidates.iter().map(|i| {
-            (*i, candidate_gps.get(i).unwrap())
-        }) {
-            let (bad_props, _) = bad_properties(gp, use_vars.as_ref());
-            candidate_bad_properties.insert(i, bad_props);
-        }
 
-        let c = *candidates
-            .iter()
-            .min_by(|t1, t2| {
-                strictly_before(t1, t2, &visited, &candidate_gps, &candidate_bad_properties)
-            })
-            .unwrap();
-
-        candidates.remove(&c);
-        let gp = *candidate_gps.get(&c).unwrap();
-        let gpvars = variables(gp);
-        visited.extend(variables(gp));
-        if let Some(use_vars) = &mut use_vars {
-            use_vars.extend(gpvars)
+    let mut heap = BinaryHeap::new();
+    let jo = JoinOrdering::new(
+        use_vars,
+        Vec::new(),
+        BadGraphPatternProperties {
+            n_cross_joins: 0,
+            n_variable_predicates: 0,
+        },
+    );
+    heap.push(Reverse(jo));
+    let mut found_order = None;
+    while found_order.is_none() {
+        let next = heap.pop().unwrap().0;
+        if next.ordering.len() == candidates.len() {
+            found_order = Some(next);
         } else {
-            use_vars = Some(gpvars);
+            let new = next.extend_all(&candidates, &candidate_gps);
+            heap.extend(new.into_iter().map(Reverse));
         }
-        let ctx = candidate_contexts.remove(&c).unwrap();
-        ordering.push((gp, ctx));
+    }
+    let found_order = found_order.unwrap();
+    for c in found_order.ordering {
+        ordering.push((
+            *candidate_gps.get(&c).unwrap(),
+            candidate_contexts.remove(&c).unwrap(),
+        ));
     }
     ordering
 }
