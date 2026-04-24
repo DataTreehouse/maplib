@@ -1,7 +1,7 @@
 # Change log
 
 ## v0.20.15
-- Move to breadth first search for optimal join sequencing - we do unfortunately not take into account nesting here yet.
+- Move to A* search for optimal join sequencing - we do unfortunately not take into account nesting here yet.
 
 ## v0.20.14
 ### Bug fixes
