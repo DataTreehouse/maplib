@@ -218,18 +218,18 @@ pub fn find_all_used_variables_in_expression(
         Expression::Variable(v) => {
             used_vars.insert(v.clone());
         }
-        Expression::Or(left, right) |
-        Expression::And(left, right) |
-        Expression::Equal(left, right) |
-        Expression::SameTerm(left, right) |
-        Expression::Greater(left, right) |
-        Expression::GreaterOrEqual(left, right) |
-        Expression::Less(left, right) |
-        Expression::LessOrEqual(left, right) |
-        Expression::Add(left, right) |
-        Expression::Subtract(left, right) |
-        Expression::Multiply(left, right) |
-        Expression::Divide(left, right) => {
+        Expression::Or(left, right)
+        | Expression::And(left, right)
+        | Expression::Equal(left, right)
+        | Expression::SameTerm(left, right)
+        | Expression::Greater(left, right)
+        | Expression::GreaterOrEqual(left, right)
+        | Expression::Less(left, right)
+        | Expression::LessOrEqual(left, right)
+        | Expression::Add(left, right)
+        | Expression::Subtract(left, right)
+        | Expression::Multiply(left, right)
+        | Expression::Divide(left, right) => {
             find_all_used_variables_in_expression(left, used_vars, include_exists, include_bound);
             find_all_used_variables_in_expression(right, used_vars, include_exists, include_bound);
         }

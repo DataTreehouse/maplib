@@ -30,11 +30,10 @@ impl PartialOrd for BadGraphPatternProperties {
         Some(self.cmp(other))
     }
 
-
     fn lt(&self, other: &Self) -> bool {
         self.n_cross_joins < other.n_cross_joins
             || (self.n_cross_joins == other.n_cross_joins
-            && self.n_variable_predicates < other.n_variable_predicates)
+                && self.n_variable_predicates < other.n_variable_predicates)
     }
 
     fn le(&self, other: &Self) -> bool {
@@ -44,7 +43,7 @@ impl PartialOrd for BadGraphPatternProperties {
     fn gt(&self, other: &Self) -> bool {
         self.n_cross_joins > other.n_cross_joins
             || (self.n_cross_joins == other.n_cross_joins
-            && self.n_variable_predicates > other.n_variable_predicates)
+                && self.n_variable_predicates > other.n_variable_predicates)
     }
 
     fn ge(&self, other: &Self) -> bool {
@@ -56,7 +55,8 @@ impl Eq for BadGraphPatternProperties {}
 
 impl PartialEq<Self> for BadGraphPatternProperties {
     fn eq(&self, other: &Self) -> bool {
-        self.n_cross_joins == other.n_cross_joins && self.n_variable_predicates == other.n_variable_predicates
+        self.n_cross_joins == other.n_cross_joins
+            && self.n_variable_predicates == other.n_variable_predicates
     }
 }
 
@@ -70,7 +70,6 @@ impl Ord for BadGraphPatternProperties {
             Ordering::Equal
         }
     }
-
 }
 
 impl Triplestore {

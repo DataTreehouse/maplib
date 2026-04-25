@@ -1097,10 +1097,38 @@ impl PrefixReplacer {
             let rest = &nn.as_str()[find.end()..];
             write!(
                 writer,
-                "{}:{}",
+                "{}:",
                 self.replacements.get(find.pattern().as_usize()).unwrap(),
-                rest
-            )
+            )?;
+            for c in rest.chars() {
+                if matches!(
+                    c,
+                    '~' | '.'
+                        | '-'
+                        | '!'
+                        | '$'
+                        | '&'
+                        | '\''
+                        | '('
+                        | ')'
+                        | '*'
+                        | '+'
+                        | ','
+                        | ';'
+                        | '='
+                        | '/'
+                        | '?'
+                        | '#'
+                        | '@'
+                        | '%'
+                        | '_'
+                ) {
+                    write!(writer, "\\{}", c)?;
+                } else {
+                    write!(writer, "{}", c)?;
+                }
+            }
+            Ok(())
         } else {
             write!(writer, "{}", nn)
         }

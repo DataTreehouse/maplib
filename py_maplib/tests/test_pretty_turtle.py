@@ -18,6 +18,15 @@ def test_write_turtle_default_prefixes():
     m2 = Model()
     m2.reads(out, format="turtle")
 
+def test_write_turtle_should_escape_suffix():
+    m = Model()
+    m.read(str(TESTDATA_PATH / "read_ntriples_prefix_escaped.nt"))
+    m.add_prefixes({"foaf":"http://xmlns.com/foaf/0.1/"})
+    out = m.writes(format="turtle")
+    m2 = Model()
+    m2.reads(out, format="turtle")
+
+
 def test_write_turtle_newline_bug():
     m = Model()
     m.read(str(TESTDATA_PATH / "write_turtle_newlines_bug.nt"))

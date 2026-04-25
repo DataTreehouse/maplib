@@ -631,7 +631,7 @@ class Model:
                 fts=True,
                 fts_path:str="fts",
                 graph: str = None,
-                new: bool = False,
+                page: str = None,
             ) -> "ExploreServer":
                 """Starts a graph explorer session.
                 To run from Jupyter Notebook use:
@@ -645,7 +645,7 @@ class Model:
                 :param fts: Enable full text search indexing
                 :param fts_path: Path to the fts index
                 :param graph: The named graph to explore, defaults to the default graph
-                :param new: Use the new graph explorer
+                :param page: We use this feature flag to test new frontends (try "new" or "yasgui")
                 """
 
     def query(

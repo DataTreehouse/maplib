@@ -48,7 +48,7 @@ pub fn rewrite_lift_extend(gp: GraphPattern) -> (GraphPattern, Vec<(Expression, 
             expression,
         } => {
             let (left, left_extends) = rewrite_lift_extend(*left);
-            let right= terminating_lift_extend(*right);
+            let right = terminating_lift_extend(*right);
             (
                 GraphPattern::LeftJoin {
                     left: Box::new(left),
@@ -106,9 +106,9 @@ pub fn rewrite_lift_extend(gp: GraphPattern) -> (GraphPattern, Vec<(Expression, 
         } => {
             let mut inner = terminating_lift_extend(*inner);
             inner = GraphPattern::Extend {
-                inner:Box::new(inner),
+                inner: Box::new(inner),
                 expression,
-                variable
+                variable,
             };
             (inner, Vec::new())
         }
