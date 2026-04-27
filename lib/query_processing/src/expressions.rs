@@ -10,8 +10,8 @@ use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{BlankNode, Literal, NamedNode, Variable};
 use polars::frame::UniqueKeepStrategy;
 use polars::prelude::{
-    as_struct, by_name, coalesce, col, lit, DataType, Expr, JoinArgs, JoinType, LazyFrame,
-    LiteralValue, Operator, Scalar,
+    as_struct, by_name, coalesce, col, lit, DataType, Expr, IntoLazy, JoinArgs, JoinType,
+    LazyFrame, LiteralValue, Operator, Scalar,
 };
 use representation::cats::{maybe_decode_expr, Cats, LockedCats};
 use representation::multitype::all_multi_main_cols;
@@ -694,7 +694,7 @@ pub fn exists(
                 build_side: None,
             },
         )
-        .with_column(col(outer_context.as_str()).fill_null(lit(false)));
+        .with_column(col(outer_context.as_str()).is_null().not());
 
     rdf_node_types.insert(
         outer_context.as_str().to_string(),

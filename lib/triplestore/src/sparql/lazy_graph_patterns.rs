@@ -20,13 +20,14 @@ use crate::sparql::errors::SparqlError;
 use tracing::{instrument, trace, warn};
 
 use crate::sparql::lazy_graph_patterns::triples_ordering::order_triple_patterns;
-use polars::prelude::{IntoLazy, JoinType};
+use polars::prelude::{lit, IntoLazy, JoinType};
 use polars_core::frame::DataFrame;
 use query_processing::graph_patterns::join;
 use query_processing::pushdowns::Pushdowns;
 use representation::dataset::QueryGraph;
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
+use representation::BaseRDFNodeType;
 use spargebra::algebra::GraphPattern;
 use std::collections::HashMap;
 

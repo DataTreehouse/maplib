@@ -55,7 +55,6 @@ impl Triplestore {
             query_settings,
             dataset,
         )?;
-
         Ok(extend(
             output_solution_mappings,
             &expression_context,

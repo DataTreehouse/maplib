@@ -541,6 +541,7 @@ fn create_list_triples(
                 .cum_count(false)
                 .sub(lit(1))
                 .over([col(LIST_COL)])
+                .unwrap()
                 .alias(FIRST_COL),
         )
         .with_column(
@@ -555,6 +556,7 @@ fn create_list_triples(
             col(FIRST_COL)
                 .shift(lit(-1))
                 .over([col(LIST_COL)])
+                .unwrap()
                 .alias(REST_COL),
         )
         .collect()

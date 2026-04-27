@@ -1103,9 +1103,7 @@ impl PrefixReplacer {
             for c in rest.chars() {
                 if matches!(
                     c,
-                    '~' | '.'
-                        | '-'
-                        | '!'
+                    '~' | '!'
                         | '$'
                         | '&'
                         | '\''
@@ -1121,7 +1119,6 @@ impl PrefixReplacer {
                         | '#'
                         | '@'
                         | '%'
-                        | '_'
                 ) {
                     write!(writer, "\\{}", c)?;
                 } else {

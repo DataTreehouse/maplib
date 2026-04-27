@@ -96,13 +96,13 @@ impl Triplestore {
                 }
             }
             let mut global_cats = self.global_cats.write()?;
-            for (t, _u32s) in type_u32s_map {
+            for (t, u32s) in type_u32s_map {
                 let cat_enc = global_cats
                     .cat_map
                     .get_mut(&CatType::from_base_rdf_node_type(&t))
                     .unwrap();
-                if let CatMaps::OnDisk(_d) = &mut cat_enc.maps {
-                    // d.add_encs_to_cache(&u32s, t.is_iri());
+                if let CatMaps::OnDisk(d) = &mut cat_enc.maps {
+                    d.add_encs_to_cache(&u32s, t.is_iri());
                 }
             }
         }

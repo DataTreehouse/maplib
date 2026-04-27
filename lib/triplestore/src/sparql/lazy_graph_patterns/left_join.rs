@@ -41,7 +41,6 @@ impl Triplestore {
             query_settings,
             dataset,
         )?;
-
         pushdowns.add_graph_pattern_pushdowns(right);
 
         let expression_pushdowns = if let Some(expr) = expression {
