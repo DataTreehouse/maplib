@@ -1,6 +1,17 @@
 # Change log
 
+## v0.20.16
+### Bug fixes
+- Work around Polars issue where double not exists can return erroneous results
+- Turn caching mechanism for on disk SHACL back on :-)
+- Fix SHACL SPARQL issue with OPTIONAL {} that could return too few results. 
+- Escape certain characters after the prefix in prefixed IRIS.
+
+### Performance
+- Move to latest Polars
+
 ## v0.20.15
+### Performance
 - Move to A* search for optimal join sequencing - we do unfortunately not take into account nesting here yet.
 
 ## v0.20.14
