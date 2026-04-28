@@ -20,6 +20,8 @@ pub mod rdf_to_polars;
 mod rdf_type;
 pub mod solution_mapping;
 pub mod subtypes;
+mod series_builder;
+pub use series_builder::SeriesBuilder;
 
 pub use base_rdf_type::*;
 pub use rdf_state::*;

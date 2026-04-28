@@ -4525,6 +4525,7 @@ dependencies = [
  "polars-core",
  "pyo3",
  "query_processing",
+ "quick-xml 0.39.2",
  "rayon",
  "representation",
  "ryu",
