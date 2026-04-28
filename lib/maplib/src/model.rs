@@ -225,6 +225,35 @@ impl Model {
             .map_err(MaplibError::TriplestoreError)
     }
 
+    #[instrument(skip_all)]
+    pub fn map_xml_path(
+        &mut self,
+        path: &Path,
+        graph: &NamedGraph,
+        transient: bool,
+    ) -> Result<(), MaplibError> {
+        self.add_json_prefixes();
+        let mut u8s = fs::read(path).map_err(|x| TriplestoreError::XMLError(x.to_string()))?;
+        self.triplestore
+            .map_xml(&mut u8s, graph, transient)
+            .map_err(MaplibError::TriplestoreError)
+    }
+
+    #[instrument(skip_all)]
+    pub fn map_xml_string(
+        &mut self,
+        mut p: String,
+        graph: &NamedGraph,
+        transient: bool,
+    ) -> Result<(), MaplibError> {
+        self.add_json_prefixes();
+        //Safety: we are never reading this vec back to a string
+        let u8s = unsafe { p.as_mut_vec() };
+        self.triplestore
+            .map_xml(u8s, graph, transient)
+            .map_err(MaplibError::TriplestoreError)
+    }
+
     #[allow(clippy::too_many_arguments)]
     #[instrument(skip_all)]
     pub fn read_triples(

@@ -50,6 +50,8 @@ pub enum TriplestoreError {
     BadListError(String),
     #[error("Error reading JSON file: {0}")]
     ReadJSONFileError(String),
+    #[error("XML error: {0}")]
+    XMLError(String),
     #[error("Prefix IRI is invalid: {0}")]
     InvalidPrefixIRI(String),
     #[error("Please add the document string corresponding to the url to known_contexts: {0}")]

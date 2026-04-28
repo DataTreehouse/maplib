@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<root>
+    <menu>
+        <header>SVG Viewer</header>
+        <items>
+            <id>Open</id>
+        </items>
+        <items>
+            <id>OpenNew</id>
+            <label>Open New</label>
+        </items>
+        <items></items>
+        <items>
+            <id>ZoomIn</id>
+            <label>Zoom In</label>
+        </items>
+        <items>
+            <id>ZoomOut</id>
+            <label>Zoom Out</label>
+        </items>
+        <items>
+            <id>OriginalView</id>
+            <label>Original View</label>
+        </items>
+        <items></items>
+        <items>
+            <id>Quality</id>
+        </items>
+        <items>
+            <id>Pause</id>
+        </items>
+        <items>
+            <id>Mute</id>
+        </items>
+        <items></items>
+        <items>
+            <id>Find</id>
+            <label>Find...</label>
+        </items>
+        <items>
+            <id>FindAgain</id>
+            <label>Find Again</label>
+        </items>
+        <items>
+            <id>Copy</id>
+        </items>
+        <items>
+            <id>CopyAgain</id>
+            <label>Copy Again</label>
+        </items>
+        <items>
+            <id>CopySVG</id>
+            <label>Copy SVG</label>
+        </items>
+        <items>
+            <id>ViewSVG</id>
+            <label>View SVG</label>
+        </items>
+        <items>
+            <id>ViewSource</id>
+            <label>View Source</label>
+        </items>
+        <items>
+            <id>SaveAs</id>
+            <label>Save As</label>
+        </items>
+        <items></items>
+        <items>
+            <id>Help</id>
+        </items>
+        <items>
+            <id>About</id>
+            <label>About Adobe CVG Viewer...</label>
+        </items>
+    </menu>
+</root>

@@ -3,6 +3,7 @@ from typing import Any, Union, List, Dict, Optional, Callable, Literal as Litera
 from polars import DataFrame
 from datetime import datetime, date
 from maplib.maplib import rdf
+from rdflib.plugins.sparql.results import graph
 
 a = rdf.type
 
@@ -577,6 +578,27 @@ class Model:
         :param transient: Should the triples be included when serializing the graph?
         """
 
+    def map_xml(
+            self,
+            path_or_string: str,
+            graph: str = None,
+            transient: bool = True,
+    ) -> None:
+        """
+        Map an XML file or string to triples.
+        Usage:
+
+        >>> m.map_xml("my_doc.xml")
+
+        or:
+
+        >>> m.map_xml('<root><child>value</child></root>')
+
+        :param path_or_string: Path to an XML document or an XML string.
+        :param graph: The IRI of the graph to add triples to. None is the default graph.
+        :param transient: Should the triples be included when serializing the graph?
+        """
+
     def map_triples(
         self,
         data: Union[DataFrame, "SolutionMappings"] = None,
@@ -979,6 +1001,14 @@ class Model:
 
         :param folder_path: The path of the folder to write triples in the native format.
         :param graph: The IRI of the graph to write.
+        """
+
+    def truncate_graph(self, graph: str = None) -> None:
+        """
+        Removes all triples associated with the given graph from the triplestore,
+        includes transient triples and full-text search entries.
+
+        :param graph: The IRI of the graph to truncate.
         """
 
     def detach_graph(self, graph:str=None, preserve_name:bool=False) -> "Model":
