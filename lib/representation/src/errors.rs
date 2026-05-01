@@ -6,4 +6,6 @@ pub enum RepresentationError {
     DatatypeError(String),
     #[error("Invalid literal `{0}`")]
     InvalidLiteralError(String),
+    #[error("Literal parse error `{0}`")]
+    LiteralParseError(String),
 }
