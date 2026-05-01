@@ -14,7 +14,6 @@ def test_map_xml_1(disk):
     xml_1 = TESTDATA_PATH / "1.xml"
     m = Model(storage_folder=disk)
     m.map_xml(str(xml_1))
-
     df = m.query("""SELECT * WHERE {?s ?p ?o}""")
     assert df.height > 0
 
@@ -62,6 +61,8 @@ def test_map_xml_2_repeated_children(disk):
 
 
 def test_map_xml_3_inline_string():
+#From https://github.com/SPARQL-Anything/sparql.anything/tree/v1.2-DEV/sparql-anything-xml/src/test/java/io/github/sparqlanything/xml
+#Apache licensed, see licensing folder.
     xml = """<?xml version="1.0"?>
 <root xmlns="http://example.org/ns/">
     <name>abc</name>
@@ -91,6 +92,8 @@ def test_map_xml_3_inline_string():
 
 
 def test_map_xml_attributes():
+    # From https://github.com/SPARQL-Anything/sparql.anything/tree/v1.2-DEV/sparql-anything-xml/src/test/java/io/github/sparqlanything/xml
+    # Apache licensed, see licensing folder
     xml = (
         '<?xml version="1.0"?>'
         '<root xmlns:ex="http://example.org/">'
@@ -99,7 +102,6 @@ def test_map_xml_attributes():
     )
     m = Model()
     m.map_xml(xml)
-
     df = m.query(
         """
         PREFIX fx: <http://sparql.xyz/facade-x/ns/>

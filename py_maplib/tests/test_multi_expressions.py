@@ -663,6 +663,27 @@ def test_generate_uuids(streaming):
     assert df.get_column("uuid").unique().len() == 3
 
 
+
+@pytest.mark.parametrize("streaming", [True, False])
+def test_now(streaming):
+    m = Model()
+    sm = m.query(
+        """
+    PREFIX : <http://example.net/> 
+    PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+    SELECT ?now WHERE {
+    BIND(now() as ?now)
+    }
+    """,
+        solution_mappings=True,
+        streaming=streaming,
+    )
+    assert sm.rdf_types == {
+        "now": RDFType.Literal("http://www.w3.org/2001/XMLSchema#dateTime"),
+    }
+    assert sm.mappings.height == 1
+
+
 @pytest.mark.parametrize("streaming", [True, False])
 def test_generate_iri_all_strings(streaming):
     m = Model()
