@@ -5,6 +5,7 @@ pub mod cats;
 mod dblf;
 pub mod errors;
 mod map_json;
+mod map_xml;
 pub mod native_parquet_write;
 pub mod query_solutions;
 pub mod rdfs_inferencing;

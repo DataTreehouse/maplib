@@ -36,6 +36,7 @@ aho-corasick.workspace = true
 simd-json.workspace = true
 serde_json.workspace = true
 ordered-float.workspace = true
+quick-xml.workspace = true
 
 pyo3 = { workspace = true, optional = true }
 

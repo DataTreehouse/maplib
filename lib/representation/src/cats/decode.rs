@@ -24,6 +24,7 @@ impl CatEncs {
         let mut uch: Vec<_> = ser.u32()?.iter().collect();
         let mut need_global = true;
         //Just a trick for the unlocked local to live long enough
+        #[allow(unused_assignments)]
         let mut unlocked_local = None;
         let decoded_local_vec = if let Some(local_cats) = &local_cats {
             unlocked_local = Some(local_cats.read().unwrap());

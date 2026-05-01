@@ -1,5 +1,4 @@
 #![feature(pattern)]
-#![feature(str_as_str)]
 
 use arrow::array::{Array, RecordBatch, StringArray, UInt32Array};
 use arrow::datatypes::{Field, Schema};

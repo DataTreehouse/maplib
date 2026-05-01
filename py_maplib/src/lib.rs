@@ -275,6 +275,21 @@ impl PyModel {
         })
     }
 
+    #[pyo3(signature = (path_or_string, graph=None, transient=None))]
+    #[instrument(skip_all)]
+    fn map_xml(
+        &self,
+        py: Python<'_>,
+        path_or_string: String,
+        graph: Option<String>,
+        transient: Option<bool>,
+    ) -> PyResult<()> {
+        py.detach(move || {
+            let mut inner = self.inner.lock().unwrap();
+            map_xml_mutex(&mut inner, path_or_string, graph, transient)
+        })
+    }
+
     #[pyo3(signature = (data, predicate=None, graph=None, validate_iris=None))]
     #[instrument(skip_all)]
     fn map_triples(
@@ -1140,6 +1155,37 @@ fn map_json_mutex(
     Ok(())
 }
 
+fn map_xml_mutex(
+    inner: &mut MutexGuard<InnerModel>,
+    string_or_path: String,
+    graph: Option<String>,
+    transient: Option<bool>,
+) -> PyResult<()> {
+    let graph = parse_optional_named_node(graph)?;
+    let named_graph = NamedGraph::from_maybe_named_node(graph.as_ref());
+
+    let is_xml_string = string_or_path.trim_start().starts_with('<');
+    if is_xml_string {
+        inner
+            .map_xml_string(
+                string_or_path,
+                &named_graph,
+                transient.unwrap_or(DEFAULT_MAP_TO_TRANSIENT),
+            )
+            .map_err(PyMaplibError::from)?;
+    } else {
+        let p = PathBuf::from(string_or_path);
+        inner
+            .map_xml_path(
+                p.as_ref(),
+                &named_graph,
+                transient.unwrap_or(DEFAULT_MAP_TO_TRANSIENT),
+            )
+            .map_err(PyMaplibError::from)?;
+    }
+    Ok(())
+}
+
 fn map_triples_mutex(
     inner: &mut MutexGuard<InnerModel>,
     df: DataFrame,
@@ -1942,4 +1988,8 @@ pub fn data_to_mappings_types(
         let df = polars_df_to_rust_df(data)?;
         Ok((df, None))
     }
+}
+
+fn truncate_graph(graph: &NamedNode) {
+
 }
