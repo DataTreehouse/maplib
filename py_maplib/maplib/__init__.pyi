@@ -3,7 +3,6 @@ from typing import Any, Union, List, Dict, Optional, Callable, Literal as Litera
 from polars import DataFrame
 from datetime import datetime, date
 from maplib.maplib import rdf
-from rdflib.plugins.sparql.results import graph
 
 a = rdf.type
 
