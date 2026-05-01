@@ -3,27 +3,24 @@ use crate::errors::TriplestoreError;
 use crate::TriplesToAdd;
 use std::cmp;
 
-use cimxml_import::fix_cim_quad;
+use cimxml_import::{fix_cim_quad, Remapper};
 use memmap2::MmapOptions;
-use oxrdf::{BlankNode, GraphName, NamedNode, NamedOrBlankNode, Quad, Term};
+use oxrdf::{BlankNode, GraphName, NamedNode, NamedOrBlankNode, Quad, Term, Triple};
 use oxrdfio::{
     JsonLdProfileSet, LoadedDocument, RdfFormat, RdfParser, RdfSyntaxError, SliceQuadParser,
 };
 use oxttl::ntriples::SliceNTriplesParser;
 use oxttl::turtle::SliceTurtleParser;
 use oxttl::{NTriplesParser, TurtleParser};
-use polars::prelude::{as_struct, col, DataFrame, IntoLazy, LiteralValue, PlSmallStr, Series};
-use polars_core::prelude::{IntoColumn, Scalar};
+use polars::prelude::{concat, DataFrame, IntoLazy, UnionArgs};
+use polars_core::prelude::{IntoColumn};
 use rayon::iter::ParallelIterator;
-use rayon::prelude::{IntoParallelIterator, IntoParallelRefIterator};
+use rayon::prelude::{IntoParallelIterator};
 use representation::dataset::NamedGraph;
-use representation::rdf_to_polars::{
-    polars_literal_values_to_series, rdf_literal_to_polars_literal_value,
-    rdf_owned_blank_node_to_polars_literal_value, rdf_owned_named_node_to_polars_literal_value,
-};
+use representation::series_builder::{BySubjectType, PredMap};
 use representation::{
-    get_subject_datatype_ref, get_term_datatype_ref, BaseRDFNodeType, LANG_STRING_LANG_FIELD,
-    LANG_STRING_VALUE_FIELD,
+    get_subject_datatype_ref, get_term_datatype_ref, BaseRDFNodeType, BaseRDFNodeTypeRef,
+    SeriesBuilder
 };
 use representation::{OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use std::collections::HashMap;
@@ -33,8 +30,6 @@ use std::time::Instant;
 use tracing::{debug, instrument};
 
 const UTF8_BOM: [u8; 3] = [0xEF, 0xBB, 0xBF];
-
-type MapType = HashMap<String, HashMap<String, (Vec<NamedOrBlankNode>, Vec<Term>)>>;
 
 #[derive(Eq, PartialEq, Debug, Clone)]
 pub enum ExtendedRdfFormat {
@@ -155,11 +150,16 @@ impl Triplestore {
         let parallel = if let Some(parallel) = parallel {
             parallel
         } else {
-            rdf_format == ExtendedRdfFormat::Normal(RdfFormat::NTriples)
+            matches!(
+                rdf_format,
+                ExtendedRdfFormat::Normal(RdfFormat::NTriples)
+            )
         };
-        let mut readers = if (rdf_format == ExtendedRdfFormat::Normal(RdfFormat::Turtle)
-            || rdf_format == ExtendedRdfFormat::Normal(RdfFormat::NTriples))
-            && parallel
+        let mut readers = if matches!(
+            rdf_format,
+            ExtendedRdfFormat::Normal(RdfFormat::NTriples)
+                | ExtendedRdfFormat::Normal(RdfFormat::Turtle)
+        ) && parallel
         {
             let threads = if let Ok(threads) = std::thread::available_parallelism() {
                 threads.get()
@@ -241,7 +241,7 @@ impl Triplestore {
             let reader_batch_size = triples_batch_size / cmp::max(1, readers.len());
             let readers_predicate_maps: Vec<_> = readers
                 .into_par_iter()
-                .map(|r| create_predicate_map(r, &parser_call, reader_batch_size))
+                .map(|r| create_predicate_map(r, &rdf_format, &parser_call, reader_batch_size))
                 .collect();
 
             let mut updated_readers = vec![];
@@ -254,120 +254,122 @@ impl Triplestore {
                 predicate_maps.push(predicate_map);
             }
             readers = updated_readers;
-            // We are remapping the datatypes here
-            if rdf_format == ExtendedRdfFormat::CIMXML {
-                predicate_maps = predicate_maps
-                    .into_iter()
-                    .map(|x| cimxml_import::remap_predicate_datatype(x))
-                    .collect();
-            }
 
-            let mut par_graph_predicate_map: HashMap<(GraphName, String), Vec<MapType>> =
-                HashMap::new();
-            for m in predicate_maps {
-                for (graph_name, map) in m {
-                    for (predicate, map) in map {
-                        let key = (graph_name.clone(), predicate);
-                        if let Some(v) = par_graph_predicate_map.get_mut(&key) {
-                            v.push(map);
-                        } else {
-                            par_graph_predicate_map.insert(key, vec![map]);
+            let mut all_builders: Vec<(
+                NamedGraph,
+                NamedNode,
+                BaseRDFNodeType,
+                BaseRDFNodeType,
+                SeriesBuilder,
+                SeriesBuilder,
+            )> = Vec::new();
+
+            for map in predicate_maps.into_iter() {
+                for (gr, pred_map) in map {
+                    let use_graph = if matches!(graph, NamedGraph::DefaultGraph) {
+                        NamedGraph::from(&gr)
+                    } else {
+                        graph.clone()
+                    };
+                    for (pred, bst) in pred_map.into_iter() {
+                        let pred_nn = NamedNode::new_unchecked(pred);
+                        for (subj, bot) in bst {
+                            for (obj, (subjects, objects)) in bot {
+                                all_builders.push((
+                                    use_graph.clone(),
+                                    pred_nn.clone(),
+                                    subj.clone(),
+                                    obj.clone(),
+                                    subjects,
+                                    objects,
+                                ));
+                            }
                         }
                     }
                 }
             }
-
-            let predicate_map: HashMap<(GraphName, String), MapType> = par_graph_predicate_map
-                .into_par_iter()
-                .map(|((graph_name, predicate), maps)| {
-                    let mut subject_map: MapType = HashMap::new();
-                    for new_subject_map in maps {
-                        for (subject_dt, new_object_map) in new_subject_map {
-                            if let Some(object_map) = subject_map.get_mut(&subject_dt) {
-                                for (object_dt, (new_subjects, new_objects)) in new_object_map {
-                                    if let Some((subjects, objects)) =
-                                        object_map.get_mut(&object_dt)
-                                    {
-                                        subjects.extend(new_subjects);
-                                        objects.extend(new_objects);
-                                    } else {
-                                        object_map.insert(object_dt, (new_subjects, new_objects));
-                                    }
-                                }
-                            } else {
-                                subject_map.insert(subject_dt, new_object_map);
-                            }
-                        }
-                    }
-                    ((graph_name, predicate), subject_map)
-                })
-                .collect();
-
             debug!(
                 "Processing quads took {} seconds",
                 start_quadproc_now.elapsed().as_secs_f64()
             );
 
             let start_tripleproc_now = Instant::now();
-            let triples_to_add: Vec<_> = predicate_map
+            let triples_to_add: Vec<_> = all_builders
                 .into_par_iter()
-                .map(|((graph_name, predicate), map)| {
-                    let mut triples_to_add = vec![];
-                    for (subject_dt, obj_map) in map {
-                        let subject_dt = BaseRDFNodeType::from_string(subject_dt);
-                        for (object_dt, (subjects, objects)) in obj_map {
-                            let object_dt = BaseRDFNodeType::from_string(object_dt);
-                            let strings_iter = subjects.into_iter().map(|s| match s {
-                                NamedOrBlankNode::NamedNode(nn) => nn.into_string(),
-                                NamedOrBlankNode::BlankNode(bl) => bl.into_string(),
-                            });
-                            let mut subjects_ser = Series::from_iter(strings_iter);
-                            subjects_ser.rename(SUBJECT_COL_NAME.into());
-                            let len = subjects_ser.len();
-
-                            let objects_ser =
-                                particular_term_vec_to_series(objects, object_dt.clone());
-
-                            let all_series =
-                                vec![subjects_ser.into_column(), objects_ser.into_column()];
-                            let mut df = DataFrame::new(len, all_series).unwrap();
-                            // TODO: Include bad data also
-                            df = df
-                                .drop_nulls(Some(&[
-                                    SUBJECT_COL_NAME.to_string(),
-                                    OBJECT_COL_NAME.to_string(),
-                                ]))
-                                .unwrap();
-                            // Are we overriding the default graph?
-                            let use_graph = if matches!(graph, NamedGraph::DefaultGraph) {
-                                NamedGraph::from(&graph_name)
-                            } else {
-                                graph.clone()
-                            };
-
-                            triples_to_add.push(TriplesToAdd {
-                                df,
-                                subject_type: subject_dt.clone(),
-                                object_type: object_dt.clone(),
-                                predicate: Some(NamedNode::new_unchecked(predicate.clone())),
-                                graph: use_graph,
-                                subject_cat_state: subject_dt.default_input_cat_state(),
-                                predicate_cat_state: None,
-                                object_cat_state: object_dt.default_input_cat_state(),
-                            });
+                .map(
+                    |(graph, predicate, subject_type, object_type, subjects, objects)| {
+                        let l = subjects.len();
+                        let df = DataFrame::new(
+                            l,
+                            vec![
+                                subjects.into_series(SUBJECT_COL_NAME).into_column(),
+                                objects.into_series(OBJECT_COL_NAME).into_column(),
+                            ],
+                        )
+                        .unwrap();
+                        TriplesToAdd {
+                            df,
+                            subject_type: subject_type.clone(),
+                            object_type: object_type.clone(),
+                            predicate: Some(predicate),
+                            graph,
+                            subject_cat_state: subject_type.default_input_cat_state(),
+                            predicate_cat_state: None,
+                            object_cat_state: subject_type.default_input_cat_state(),
                         }
-                    }
-                    triples_to_add
-                })
+                    },
+                )
                 .collect();
-            let triples_to_add: Vec<_> = triples_to_add.into_iter().flatten().collect();
+
+            let mut tta_map = HashMap::new();
+            for triple in triples_to_add.into_iter() {
+                let k = (triple.graph.clone(), triple.predicate.clone(), triple.subject_type.clone(), triple.object_type.clone());
+                if !tta_map.contains_key(&k) {
+                    tta_map.insert(k.clone(), Vec::new());
+                }
+                tta_map.get_mut(&k).unwrap().push(triple);
+            }
+
+            let ttas:Vec<_> = tta_map.into_par_iter().map(|(k,mut ttas)| {
+                if ttas.len() == 1 {
+                    ttas.pop().unwrap()
+                } else {
+                    let (graph, predicate, subject_type, object_type) = k;
+                    let mut lfs = Vec::with_capacity(ttas.len());
+                    for tta in ttas {
+                        lfs.push(tta.df.lazy());
+                    }
+                    let df = concat(lfs, UnionArgs {
+                        parallel: true,
+                        rechunk: false,
+                        to_supertypes: false,
+                        diagonal: false,
+                        strict: false,
+                        from_partitioned_ds: false,
+                        maintain_order: false,
+                    }).unwrap().collect().unwrap();
+                    let subject_cat_state = subject_type.default_input_cat_state();
+                    let object_cat_state = object_type.default_input_cat_state();
+                    TriplesToAdd {
+                        df,
+                        subject_type,
+                        object_type,
+                        predicate,
+                        graph,
+                        subject_cat_state,
+                        object_cat_state,
+                        predicate_cat_state: None,
+                    }
+                }
+            }).collect();
+
             debug!(
                 "Creating the triples to add as DFs took {} seconds",
                 start_tripleproc_now.elapsed().as_secs_f64()
             );
             let start_add_triples_vec = Instant::now();
             self.parser_call += 1;
-            self.add_triples_vec(triples_to_add, transient)?;
+            self.add_triples_vec(ttas, transient)?;
             debug!(
                 "Adding triples vec took {} seconds",
                 start_add_triples_vec.elapsed().as_secs_f64()
@@ -399,16 +401,25 @@ fn blank_node_to_oxrdf_blank_node(bn: BlankNode, parser_call: &str) -> BlankNode
 
 fn create_predicate_map<'a>(
     mut r: MyFromSliceQuadReader<'a>,
+    rdf_format: &ExtendedRdfFormat,
     parser_call: &str,
     max_iterations: usize,
 ) -> Result<
     (
         Option<MyFromSliceQuadReader<'a>>,
-        HashMap<GraphName, HashMap<String, MapType>>,
+        HashMap<GraphName, PredMap>,
     ),
     TriplestoreError,
 > {
+    let cim_remapper = if matches!(rdf_format, ExtendedRdfFormat::CIMXML) {
+        Some(Remapper::new())
+    } else {
+        None
+    };
     let mut graph_predicate_map = HashMap::new();
+    let mut subj_type_map: HashMap<String, BaseRDFNodeType> = HashMap::new();
+    let mut obj_type_map: HashMap<String, BaseRDFNodeType> = HashMap::new();
+    let mut unparseable = Vec::new();
     let mut empty_iter = false;
     let mut reached_max = false;
     let mut i = 0usize;
@@ -427,37 +438,49 @@ fn create_predicate_map<'a>(
                     graph_predicate_map.insert(graph_name.clone(), HashMap::new());
                     graph_predicate_map.get_mut(&graph_name).unwrap()
                 };
-            let type_map: &mut HashMap<_, HashMap<_, (Vec<NamedOrBlankNode>, Vec<Term>)>> =
+            let type_map: &mut BySubjectType =
                 if let Some(type_map) = predicate_map.get_mut(predicate.as_str()) {
                     type_map
                 } else {
-                    let predicate_key = predicate.into_string();
+                    let predicate_key = predicate.as_str().to_string();
                     predicate_map.insert(predicate_key.clone(), HashMap::new());
                     predicate_map.get_mut(&predicate_key).unwrap()
                 };
 
             let subject_to_insert = subject_to_oxrdf_subject(subject, parser_call);
             let object_to_insert = term_to_oxrdf_term(object, parser_call);
-            let subject_datatype = get_subject_datatype_ref(&subject_to_insert);
-            let object_datatype = get_term_datatype_ref(&object_to_insert);
-            if let Some(obj_type_map) = type_map.get_mut(subject_datatype.as_str()) {
-                if let Some((subjects, objects)) = obj_type_map.get_mut(object_datatype.as_str()) {
-                    subjects.push(subject_to_insert);
-                    objects.push(object_to_insert);
-                } else {
-                    obj_type_map.insert(
-                        object_datatype.as_str().to_string(),
-                        (vec![subject_to_insert], vec![object_to_insert]),
-                    );
-                }
+            let subject_ref_datatype = get_subject_datatype_ref(&subject_to_insert);
+            let object_ref_datatype = get_term_datatype_ref(&object_to_insert);
+            //Remap cim here
+            let object_ref_datatype = if let Some(remapper) = &cim_remapper {
+                remapper.remap_predicate_datatype(&predicate, &object_ref_datatype)
             } else {
-                let mut obj_type_map = HashMap::new();
-                let subject_datatype_string = subject_datatype.as_str().to_string();
+                object_ref_datatype
+            };
+            let subject_type = get_or_insert_dt(subject_ref_datatype, &mut subj_type_map);
+            let object_type = get_or_insert_dt(object_ref_datatype, &mut obj_type_map);
+            if !type_map.contains_key(&subject_type) {
+                type_map.insert(subject_type.clone(), HashMap::new());
+            }
+
+            let obj_type_map = type_map.get_mut(&subject_type).unwrap();
+            if !obj_type_map.contains_key(&object_type) {
                 obj_type_map.insert(
-                    object_datatype.as_str().to_string(),
-                    (vec![subject_to_insert], vec![object_to_insert]),
+                    object_type.clone(),
+                    (
+                        SeriesBuilder::new(&subject_type),
+                        SeriesBuilder::new(&object_type),
+                    ),
                 );
-                type_map.insert(subject_datatype_string, obj_type_map);
+            }
+            let (subjects, objects) = obj_type_map.get_mut(&object_type).unwrap();
+            match objects.parse_term(&object_to_insert) {
+                Ok(()) => {
+                    subjects.push_named_or_blank(&subject_to_insert);
+                }
+                Err(e) => {
+                    unparseable.push((Triple::new(subject_to_insert, predicate, object_to_insert), e));
+                }
             }
         } else {
             empty_iter = true;
@@ -512,60 +535,15 @@ impl Iterator for MyFromSliceQuadReader<'_> {
     }
 }
 
-// These terms must be of the given dt
-fn particular_term_vec_to_series(term_vec: Vec<Term>, dt: BaseRDFNodeType) -> Series {
-    if dt.is_lang_string() {
-        let langs = term_vec
-            .par_iter()
-            .map(|t| match t {
-                Term::Literal(l) => LiteralValue::Scalar(Scalar::from(PlSmallStr::from_string(
-                    l.language().unwrap().to_string(),
-                ))),
-                _ => panic!("Should never happen"),
-            })
-            .collect();
-        let vals = term_vec
-            .into_par_iter()
-            .map(|t| match t {
-                Term::Literal(l) => {
-                    let (s, _, _) = l.destruct();
-                    LiteralValue::Scalar(Scalar::from(PlSmallStr::from_string(s)))
-                }
-                _ => panic!("Should never happen"),
-            })
-            .collect();
-
-        let val_ser = polars_literal_values_to_series(vals, LANG_STRING_VALUE_FIELD);
-        let lang_ser = polars_literal_values_to_series(langs, LANG_STRING_LANG_FIELD);
-        let mut df = DataFrame::new(val_ser.len(), vec![val_ser.into(), lang_ser.into()])
-            .unwrap()
-            .lazy()
-            .with_column(
-                as_struct(vec![
-                    col(LANG_STRING_VALUE_FIELD),
-                    col(LANG_STRING_LANG_FIELD),
-                ])
-                .alias(OBJECT_COL_NAME),
-            )
-            .collect()
-            .unwrap();
-        df.drop_in_place(OBJECT_COL_NAME)
-            .unwrap()
-            .take_materialized_series()
+fn get_or_insert_dt(
+    base_rdfnode_type_ref: BaseRDFNodeTypeRef,
+    type_map: &mut HashMap<String, BaseRDFNodeType>,
+) -> BaseRDFNodeType {
+    if let Some(t) = type_map.get(base_rdfnode_type_ref.as_str()) {
+        t.clone()
     } else {
-        let use_dt = if let BaseRDFNodeType::Literal(l) = &dt {
-            Some(l.as_ref())
-        } else {
-            None
-        };
-        let any_iter: Vec<_> = term_vec
-            .into_par_iter()
-            .map(|t| match t {
-                Term::NamedNode(nn) => rdf_owned_named_node_to_polars_literal_value(nn),
-                Term::BlankNode(bb) => rdf_owned_blank_node_to_polars_literal_value(bb),
-                Term::Literal(l) => rdf_literal_to_polars_literal_value(&l, use_dt.clone()),
-            })
-            .collect();
-        polars_literal_values_to_series(any_iter, OBJECT_COL_NAME)
+        let owned = base_rdfnode_type_ref.clone().to_owned();
+        type_map.insert(base_rdfnode_type_ref.as_str().to_string(), owned.into_owned());
+        type_map.get(base_rdfnode_type_ref.as_str()).unwrap().clone()
     }
 }

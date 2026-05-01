@@ -10,7 +10,7 @@ use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{BlankNode, Literal, NamedNode, Variable};
 use polars::frame::UniqueKeepStrategy;
 use polars::prelude::{
-    as_struct, by_name, coalesce, col, lit, DataType, Expr, IntoLazy, JoinArgs, JoinType,
+    as_struct, by_name, coalesce, col, lit, DataType, Expr, JoinArgs, JoinType,
     LazyFrame, LiteralValue, Operator, Scalar,
 };
 use representation::cats::{maybe_decode_expr, Cats, LockedCats};

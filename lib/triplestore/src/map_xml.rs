@@ -9,20 +9,14 @@ use quick_xml::events::Event;
 use quick_xml::Reader;
 use representation::constants::RDF_PREFIX_IRI;
 use representation::dataset::NamedGraph;
-use representation::{BaseRDFNodeType, SeriesBuilder, OBJECT_COL_NAME, SUBJECT_COL_NAME};
-use simd_json::prelude::ObjectMut;
+use representation::{BaseRDFNodeType, OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use std::collections::HashMap;
 use std::io::Cursor;
 use std::sync::Arc;
-use polars::polars_utils::itertools::Itertools;
+use representation::series_builder::{ensure_pair, PredMap};
 
 const XML_ROOT: &str = "http://sparql.xyz/facade-x/ns/root";
 const DEFAULT_XML_DATA_PREFIX: &str = "http://sparql.xyz/facade-x/data/";
-
-type SubjectObjectBuilders = (SeriesBuilder, SeriesBuilder);
-type ByObjectType = HashMap<BaseRDFNodeType, SubjectObjectBuilders>;
-type BySubjectType = HashMap<BaseRDFNodeType, ByObjectType>;
-type PredMap = HashMap<String, BySubjectType>;
 
 struct Frame {
     subject: String,
@@ -108,7 +102,7 @@ impl Triplestore {
                                 prefix_map.remove(&pre);
                             }
                         }
-                        if let Some((old)) = previous_base_prefix {
+                        if let Some(old) = previous_base_prefix {
                             base_prefix = old;
                         }
                     }
@@ -294,46 +288,6 @@ fn push_typed_text(
     }
 }
 
-fn push_iri_object(pred_map: &mut PredMap, predicate: &str, subject: &str, object: &str) {
-    let pair = ensure_pair(
-        pred_map,
-        predicate,
-        &BaseRDFNodeType::IRI,
-        &BaseRDFNodeType::IRI,
-    );
-    pair.0.push_str(subject);
-    pair.1.push_str(object);
-}
-
-fn ensure_pair<'a>(
-    pred_map: &'a mut PredMap,
-    predicate: &str,
-    subject_dt: &BaseRDFNodeType,
-    object_dt: &BaseRDFNodeType,
-) -> &'a mut SubjectObjectBuilders {
-    if !pred_map.contains_key(predicate) {
-        pred_map.insert(predicate.to_string(), BySubjectType::new());
-    };
-    let bst = pred_map.get_mut(predicate).unwrap();
-
-    if !bst.contains_key(subject_dt) {
-        bst.insert(subject_dt.clone(), ByObjectType::new());
-    }
-
-    let bot = bst.get_mut(subject_dt).unwrap();
-
-    if !bot.contains_key(object_dt) {
-        bot.insert(
-            object_dt.clone(),
-            (
-                SeriesBuilder::new(subject_dt),
-                SeriesBuilder::new(object_dt),
-            ),
-        );
-    }
-    let pair = bot.get_mut(object_dt).unwrap();
-    pair
-}
 
 fn flush_pred_map(
     triples: &mut Triplestore,
@@ -358,7 +312,7 @@ fn flush_pred_map(
                     len,
                     vec![subject_ser.into_column(), object_ser.into_column()],
                 )
-                .unwrap();
+                    .unwrap();
                 let subject_state = subject_type.default_input_cat_state();
                 let object_state = object_type.default_input_cat_state();
                 tta_vec.push(TriplesToAdd {
@@ -376,6 +330,18 @@ fn flush_pred_map(
     }
     triples.add_triples_vec(tta_vec, transient)?;
     Ok(())
+}
+
+
+fn push_iri_object(pred_map: &mut PredMap, predicate: &str, subject: &str, object: &str) {
+    let pair = ensure_pair(
+        pred_map,
+        predicate,
+        &BaseRDFNodeType::IRI,
+        &BaseRDFNodeType::IRI,
+    );
+    pair.0.push_str(subject);
+    pair.1.push_str(object);
 }
 
 fn new_iri_subject() -> String {

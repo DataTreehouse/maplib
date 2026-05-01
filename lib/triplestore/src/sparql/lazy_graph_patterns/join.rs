@@ -275,45 +275,6 @@ pub fn order_graph_patterns<'a>(
     ordering
 }
 
-// Metaphor here is that quantity is cost to include, so less is better.
-fn strictly_before(
-    gp1: &usize,
-    gp2: &usize,
-    visited: &HashSet<String>,
-    candidate_gps: &HashMap<usize, &GraphPattern>,
-    candidate_bad_properties: &HashMap<usize, BadGraphPatternProperties>,
-) -> Ordering {
-    let t1_connected = is_connected(candidate_gps.get(gp1).unwrap(), visited);
-    let t2_connected = is_connected(candidate_gps.get(gp2).unwrap(), visited);
-    if t1_connected && !t2_connected {
-        return Ordering::Less;
-    }
-    if !t1_connected && t2_connected {
-        return Ordering::Greater;
-    }
-    let bp1 = candidate_bad_properties.get(gp1).unwrap();
-    let bp2 = candidate_bad_properties.get(gp2).unwrap();
-    bp1.partial_cmp(bp2).unwrap_or(Ordering::Equal)
-}
-
-fn is_connected(gp: &GraphPattern, visited: &HashSet<String>) -> bool {
-    let gp_vars = variables(gp);
-    for v in &gp_vars {
-        if visited.contains(v.as_str()) {
-            return true;
-        }
-    }
-    false
-}
-
-fn variables(gp: &GraphPattern) -> HashSet<String> {
-    let mut vs = HashSet::new();
-    gp.on_in_scope_variable(|x| {
-        vs.insert(x.as_str().to_string());
-    });
-    vs
-}
-
 fn bad_properties(
     gp: &GraphPattern,
     incoming_cols: Option<&HashSet<String>>,

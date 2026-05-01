@@ -1,20 +1,25 @@
+use crate::errors::RepresentationError;
 use crate::rdf_to_polars::{
     default_decimal_precision, default_decimal_scale, default_time_unit, default_time_zone,
 };
-use crate::{BaseRDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD, OBJECT_COL_NAME};
+use crate::{
+    BaseRDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD, OBJECT_COL_NAME,
+};
 use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
 use memchr::memchr;
 use oxrdf::vocab::{rdf, xsd};
-use oxrdf::{BlankNode, NamedNode, NamedOrBlankNode, Term};
-use polars::prelude::{
-    as_struct, col, DataType, IntoLazy, NamedFrom, PlSmallStr, Series,
-};
+use oxrdf::{NamedOrBlankNode, Term};
+use polars::prelude::{as_struct, col, DataType, IntoLazy, NamedFrom, PlSmallStr, Series};
 use polars_core::frame::DataFrame;
 use polars_core::prelude::{Int128Chunked, IntoSeries, NamedFromOwned, StringChunkedBuilder};
 use rust_decimal::Decimal;
+use std::collections::HashMap;
 use std::str::FromStr;
-use polars::polars_utils::parma::raw::Key;
-use crate::errors::RepresentationError;
+
+pub type SubjectObjectBuilders = (SeriesBuilder, SeriesBuilder);
+pub type ByObjectType = HashMap<BaseRDFNodeType, SubjectObjectBuilders>;
+pub type BySubjectType = HashMap<BaseRDFNodeType, ByObjectType>;
+pub type PredMap = HashMap<String, BySubjectType>;
 
 pub enum SeriesBuilder {
     String(StringChunkedBuilder, usize),
@@ -72,13 +77,15 @@ impl SeriesBuilder {
                 },
                 _ => SeriesBuilder::String(StringChunkedBuilder::new("s".into(), cap), 0),
             },
-            BaseRDFNodeType::None => {unreachable!("Should never happen")}
+            BaseRDFNodeType::None => {
+                unreachable!("Should never happen")
+            }
         }
     }
 
     pub fn len(&self) -> usize {
         match self {
-            SeriesBuilder::String(v, l) => *l,
+            SeriesBuilder::String(_, l) => *l,
             SeriesBuilder::Bool(v) => v.len(),
             SeriesBuilder::U8(v) => v.len(),
             SeriesBuilder::U16(v) => v.len(),
@@ -93,7 +100,7 @@ impl SeriesBuilder {
             SeriesBuilder::Date(v) => v.len(),
             SeriesBuilder::Datetime(v) => v.len(),
             SeriesBuilder::Decimal(v) => v.len(),
-            SeriesBuilder::LangString {  len, .. } => *len,
+            SeriesBuilder::LangString { len, .. } => *len,
         }
     }
 
@@ -110,76 +117,96 @@ impl SeriesBuilder {
         }
     }
 
-    pub fn parse_literal(&mut self, lex:&str, lang:Option<&str>)  -> Result<(), RepresentationError>  {
+    pub fn push_named_or_blank(&mut self, named_or_blank_node: &NamedOrBlankNode) {
+        match named_or_blank_node {
+            NamedOrBlankNode::NamedNode(v) => {
+                self.push_str(v.as_str());
+            }
+            NamedOrBlankNode::BlankNode(v) => {
+                self.push_str(v.as_str())
+            }
+        }
+    }
+
+    pub fn parse_term(&mut self, term: &Term) -> Result<(), RepresentationError> {
+        match term {
+            Term::NamedNode(nn) => {
+                self.push_str(nn.as_str());
+                Ok(())
+            }
+            Term::BlankNode(bl) => {
+                self.push_str(bl.as_str());
+                Ok(())
+            }
+            Term::Literal(l) => {
+                self.parse_literal(l.value(), l.language())
+            }
+        }
+    }
+
+    pub fn parse_literal(
+        &mut self,
+        lex: &str,
+        lang: Option<&str>,
+    ) -> Result<(), RepresentationError> {
         match self {
             SeriesBuilder::String(v, l) => {
                 *l = *l + 1;
                 v.append_value(lex);
             }
             SeriesBuilder::Bool(v) => {
-                let b = bool::from_str(&lex).map_err(|x|
-                    RepresentationError::LiteralParseError(x.to_string())
-                )?;
+                let b = bool::from_str(&lex)
+                    .map_err(|x| RepresentationError::LiteralParseError(x.to_string()))?;
                 v.push(b);
             }
             SeriesBuilder::U8(v) => {
-                let u = u8::from_str(&lex).map_err(|x|
-                    RepresentationError::LiteralParseError(x.to_string())
-                )?;
+                let u = u8::from_str(&lex)
+                    .map_err(|x| RepresentationError::LiteralParseError(x.to_string()))?;
                 v.push(u);
             }
             SeriesBuilder::U16(v) => {
-                let u = u16::from_str(&lex).map_err(|x|
-                    RepresentationError::LiteralParseError(x.to_string())
-                )?;
+                let u = u16::from_str(&lex)
+                    .map_err(|x| RepresentationError::LiteralParseError(x.to_string()))?;
                 v.push(u);
             }
             SeriesBuilder::U32(v) => {
-                let u = u32::from_str(&lex).map_err(|x|
-                    RepresentationError::LiteralParseError(x.to_string())
-                )?;
+                let u = u32::from_str(&lex)
+                    .map_err(|x| RepresentationError::LiteralParseError(x.to_string()))?;
                 v.push(u);
             }
             SeriesBuilder::U64(v) => {
-                let u = u64::from_str(&lex).map_err(|x|
-                    RepresentationError::LiteralParseError(x.to_string())
-                )?;
+                let u = u64::from_str(&lex)
+                    .map_err(|x| RepresentationError::LiteralParseError(x.to_string()))?;
                 v.push(u);
             }
             SeriesBuilder::I8(v) => {
-                let i = i8::from_str(&lex).map_err(|x|
-                    RepresentationError::LiteralParseError(x.to_string())
-                )?;
+                let i = i8::from_str(&lex)
+                    .map_err(|x| RepresentationError::LiteralParseError(x.to_string()))?;
                 v.push(i);
             }
             SeriesBuilder::I16(v) => {
-                let i = i16::from_str(&lex).map_err(|x|
-                    RepresentationError::LiteralParseError(x.to_string())
-                )?;
+                let i = i16::from_str(&lex)
+                    .map_err(|x| RepresentationError::LiteralParseError(x.to_string()))?;
                 v.push(i);
             }
             SeriesBuilder::I32(v) => {
-                let i = i32::from_str(&lex).map_err(|x|
-                    RepresentationError::LiteralParseError(x.to_string())
-                )?;
+                let i = i32::from_str(&lex)
+                    .map_err(|x| RepresentationError::LiteralParseError(x.to_string()))?;
                 v.push(i);
             }
             SeriesBuilder::I64(v) => {
-                let i = i64::from_str(&lex).map_err(|x|
-                    RepresentationError::LiteralParseError(x.to_string())
-                )?;
+                let i = i64::from_str(&lex)
+                    .map_err(|x| RepresentationError::LiteralParseError(x.to_string()))?;
                 v.push(i);
             }
             SeriesBuilder::F32(v) => {
-                let f = f32::from_str(&lex).map_err(|x|
-                    RepresentationError::LiteralParseError(x.to_string())
-                )?;
+                let f = f32::from_str(&lex)
+                    .map_err(|x| RepresentationError::LiteralParseError(x.to_string()))?;
                 v.push(f);
             }
             SeriesBuilder::F64(v) => {
-                let f = f64::from_str(&lex).map_err(|x|
-                    RepresentationError::LiteralParseError(x.to_string())
-                )?;
+                let f = f64::from_str(&lex)
+                    .map_err(|x| RepresentationError::LiteralParseError(x.to_string()))?;
                 v.push(f);
             }
             SeriesBuilder::Date(v) => {
@@ -200,7 +227,9 @@ impl SeriesBuilder {
                     langs.append_value(lang.to_string());
                     *len = *len + 1;
                 } else {
-                    return Err(RepresentationError::LiteralParseError("Lang string missing language tag".to_string()))
+                    return Err(RepresentationError::LiteralParseError(
+                        "Lang string missing language tag".to_string(),
+                    ));
                 }
             }
         }
@@ -211,13 +240,11 @@ impl SeriesBuilder {
         match self {
             SeriesBuilder::String(v, ..) => {
                 let s = v.finish();
-                let mut s= s.into_series();
+                let mut s = s.into_series();
                 s.rename(name.into());
                 s
-            },
-            SeriesBuilder::Bool(v) => {
-                Series::new(name.into(), v)
-            },
+            }
+            SeriesBuilder::Bool(v) => Series::new(name.into(), v),
             SeriesBuilder::U8(v) => Series::from_vec(name.into(), v),
             SeriesBuilder::U16(v) => Series::from_vec(name.into(), v),
             SeriesBuilder::U32(v) => Series::from_vec(name.into(), v),
@@ -228,7 +255,9 @@ impl SeriesBuilder {
             SeriesBuilder::I64(v) => Series::from_vec(name.into(), v),
             SeriesBuilder::F32(v) => Series::from_vec(name.into(), v),
             SeriesBuilder::F64(v) => Series::from_vec(name.into(), v),
-            SeriesBuilder::Date(v) => Series::from_vec(name.into(), v).cast(&DataType::Date).unwrap(),
+            SeriesBuilder::Date(v) => Series::from_vec(name.into(), v)
+                .cast(&DataType::Date)
+                .unwrap(),
             SeriesBuilder::Datetime(v) => Series::from_vec(name.into(), v)
                 .cast(&DataType::Datetime(
                     default_time_unit(),
@@ -237,7 +266,9 @@ impl SeriesBuilder {
                 .unwrap(),
             SeriesBuilder::Decimal(v) => {
                 let i128ch = Int128Chunked::from_vec(name.into(), v);
-                let dec = i128ch.into_decimal(default_decimal_precision(), default_decimal_scale()).unwrap();
+                let dec = i128ch
+                    .into_decimal(default_decimal_precision(), default_decimal_scale())
+                    .unwrap();
                 let mut ser = dec.into_series();
                 ser.rename(PlSmallStr::from_str(name));
                 ser
@@ -255,7 +286,7 @@ impl SeriesBuilder {
                             col(LANG_STRING_VALUE_FIELD),
                             col(LANG_STRING_LANG_FIELD),
                         ])
-                            .alias(OBJECT_COL_NAME),
+                        .alias(OBJECT_COL_NAME),
                     )
                     .collect()
                     .unwrap();
@@ -291,7 +322,10 @@ fn parse_xsd_datetime_micros(value: &str) -> Result<i64, RepresentationError> {
     } else if let Ok(dt) = value.parse::<NaiveDateTime>() {
         Ok(dt.and_utc().timestamp_micros())
     } else {
-        Err(RepresentationError::LiteralParseError(format!("Could not parse datetime: {}", value)))
+        Err(RepresentationError::LiteralParseError(format!(
+            "Could not parse datetime: {}",
+            value
+        )))
     }
 }
 
@@ -303,4 +337,34 @@ fn parse_xsd_decimal(value: &str) -> Result<i128, RepresentationError> {
         }
         Err(x) => Err(RepresentationError::LiteralParseError(x.to_string())),
     }
+}
+
+pub fn ensure_pair<'a>(
+    pred_map: &'a mut PredMap,
+    predicate: &str,
+    subject_dt: &BaseRDFNodeType,
+    object_dt: &BaseRDFNodeType,
+) -> &'a mut SubjectObjectBuilders {
+    if !pred_map.contains_key(predicate) {
+        pred_map.insert(predicate.to_string(), BySubjectType::new());
+    };
+    let bst = pred_map.get_mut(predicate).unwrap();
+
+    if !bst.contains_key(subject_dt) {
+        bst.insert(subject_dt.clone(), ByObjectType::new());
+    }
+
+    let bot = bst.get_mut(subject_dt).unwrap();
+
+    if !bot.contains_key(object_dt) {
+        bot.insert(
+            object_dt.clone(),
+            (
+                SeriesBuilder::new(subject_dt),
+                SeriesBuilder::new(object_dt),
+            ),
+        );
+    }
+    let pair = bot.get_mut(object_dt).unwrap();
+    pair
 }
