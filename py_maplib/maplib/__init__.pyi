@@ -1053,7 +1053,6 @@ class Model:
         self,
         ruleset: Union[str, List[str]],
         graph: str = None,
-        solution_mappings: bool = False,
         max_iterations: Optional[int] = 100_000,
         max_results: Optional[int] = 10_000_000,
         include_transient: bool = True,
@@ -1064,12 +1063,19 @@ class Model:
         Run the inference rules that are provided
         :param ruleset: The Datalog ruleset (a string).
         :param graph: Apply the ruleset to this graph, defaults to the default graph, or the graph specified in the rules.
-        :param solution_mappings: Returns SolutionMappings with maplib-native formatting and with RDF typing. Useful for round-trips.
         :param max_iterations: Maximum number of iterations.
         :param max_results: Maximum number of results.
         :param include_transient: Include transient triples when reasoning.
         :param max_rows: Maximum estimated rows in result, helps avoid out-of-memory errors.
         :param debug: Debugs rule bodies for executions that give no triples.
+        :return: The inferred N-Tuples.
+        """
+
+    def size(self, graph:str=None) -> int:
+        """
+        Get the number of triples in a graph. 
+        
+        :param graph: The named graph we are returning the size for
         :return: The inferred N-Tuples.
         """
 

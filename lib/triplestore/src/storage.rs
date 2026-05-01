@@ -82,6 +82,14 @@ pub(crate) struct Triples {
 }
 
 impl Triples {
+    pub fn get_height(&self) -> usize {
+        let mut h = 0;
+        for s in &self.segments {
+            h = h + s.height;
+        }
+        h
+    }
+    
     pub fn get_u32s(&self) -> Result<Vec<(BaseRDFNodeType, HashSet<u32>)>, TriplestoreError> {
         let mut select_cols = Vec::new();
         if self.subject_type.stored_cat() {

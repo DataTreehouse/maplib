@@ -63,6 +63,18 @@ pub struct Triplestore {
 }
 
 impl Triplestore {
+    pub fn graph_size(&self, named_graph: &NamedGraph) -> usize {
+        let mut s = 0;
+        if let Some(gr) = self.graph_triples_map.get(named_graph) {
+            for v in gr.values() {
+                for t in v.values() {
+                    s = s + t.get_height();
+                }
+            }
+        }
+        s
+    }
+    
     pub fn contains_graph(&self, graph: &NamedGraph) -> bool {
         self.graph_triples_map.contains_key(graph)
     }

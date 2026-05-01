@@ -159,6 +159,10 @@ impl Model {
             .map_err(MaplibError::TemplateError)?;
         Ok(())
     }
+    
+    pub fn graph_size(&self, named_graph: &NamedGraph) -> usize {
+        self.triplestore.graph_size(named_graph)
+    }
 
     #[instrument(skip_all)]
     pub fn add_templates_from_string(&mut self, s: &str) -> Result<Option<NamedNode>, MaplibError> {

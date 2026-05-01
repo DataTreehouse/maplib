@@ -260,6 +260,23 @@ impl PyModel {
         })
     }
 
+
+    #[pyo3(signature = (graph=None))]
+    #[instrument(skip_all)]
+    fn size(
+        &self,
+        py: Python<'_>,
+        graph: Option<String>,
+    ) -> PyResult<usize> {
+        py.detach(move || {
+            let mut inner = self.inner.lock().unwrap();
+            size_mutex(
+                &mut inner,
+                graph,
+            )
+        })
+    }
+
     #[pyo3(signature = (path_or_string, graph=None, transient=None))]
     #[instrument(skip_all)]
     fn map_json(
@@ -919,7 +936,6 @@ impl PyModel {
     #[pyo3(signature = (
         rulesets,
         graph=None,
-        _solution_mappings=None,
         max_iterations=100_000,
         max_results=10_000_000,
         include_transient=None,
@@ -931,7 +947,6 @@ impl PyModel {
         py: Python<'_>,
         rulesets: Py<PyAny>,
         graph: Option<String>,
-        _solution_mappings: Option<bool>,
         max_iterations: Option<usize>,
         max_results: Option<usize>,
         include_transient: Option<bool>,
@@ -1023,6 +1038,12 @@ fn add_template_mutex(inner: &mut MutexGuard<InnerModel>, template: TemplateType
         }
     }
     Ok(())
+}
+
+fn size_mutex(inner: &mut MutexGuard<InnerModel>, graph: Option<String>) -> PyResult<usize> {
+    let graph = parse_optional_named_node(graph)?;
+    let graph = NamedGraph::from_maybe_named_node(graph.as_ref());
+    Ok(inner.graph_size(&graph))
 }
 
 fn add_virtualization_mutex(
@@ -1988,8 +2009,4 @@ pub fn data_to_mappings_types(
         let df = polars_df_to_rust_df(data)?;
         Ok((df, None))
     }
-}
-
-fn truncate_graph(graph: &NamedNode) {
-
 }
