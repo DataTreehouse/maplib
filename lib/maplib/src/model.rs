@@ -159,7 +159,7 @@ impl Model {
             .map_err(MaplibError::TemplateError)?;
         Ok(())
     }
-    
+
     pub fn graph_size(&self, named_graph: &NamedGraph) -> usize {
         self.triplestore.graph_size(named_graph)
     }
@@ -205,7 +205,7 @@ impl Model {
         graph: &NamedGraph,
         transient: bool,
     ) -> Result<(), MaplibError> {
-        self.add_json_prefixes();
+        self.add_fx_prefixes();
         let mut u8s =
             fs::read(path).map_err(|x| TriplestoreError::ReadJSONFileError(x.to_string()))?;
 
@@ -221,7 +221,7 @@ impl Model {
         graph: &NamedGraph,
         transient: bool,
     ) -> Result<(), MaplibError> {
-        self.add_json_prefixes();
+        self.add_fx_prefixes();
         //Safety: we are never reading this vec back to a string
         let u8s = unsafe { p.as_mut_vec() };
         self.triplestore
@@ -236,7 +236,7 @@ impl Model {
         graph: &NamedGraph,
         transient: bool,
     ) -> Result<(), MaplibError> {
-        self.add_json_prefixes();
+        self.add_fx_prefixes();
         let mut u8s = fs::read(path).map_err(|x| TriplestoreError::XMLError(x.to_string()))?;
         self.triplestore
             .map_xml(&mut u8s, graph, transient)
@@ -250,7 +250,7 @@ impl Model {
         graph: &NamedGraph,
         transient: bool,
     ) -> Result<(), MaplibError> {
-        self.add_json_prefixes();
+        self.add_fx_prefixes();
         //Safety: we are never reading this vec back to a string
         let u8s = unsafe { p.as_mut_vec() };
         self.triplestore
@@ -672,7 +672,7 @@ impl Model {
         })
     }
 
-    fn add_json_prefixes(&mut self) {
+    fn add_fx_prefixes(&mut self) {
         self.prefixes.insert(
             XYZ_PREFIX.to_string(),
             NamedNode::new_unchecked(XYZ_PREFIX_IRI),

@@ -2,9 +2,7 @@ use crate::errors::RepresentationError;
 use crate::rdf_to_polars::{
     default_decimal_precision, default_decimal_scale, default_time_unit, default_time_zone,
 };
-use crate::{
-    BaseRDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD, OBJECT_COL_NAME,
-};
+use crate::{BaseRDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD, OBJECT_COL_NAME};
 use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
 use memchr::memchr;
 use oxrdf::vocab::{rdf, xsd};
@@ -117,14 +115,20 @@ impl SeriesBuilder {
         }
     }
 
+    pub fn push_u32(&mut self, u: u32) {
+        if let SeriesBuilder::U32(v) = self {
+            v.push(u);
+        } else {
+            panic!("Should never be used for non string builder")
+        }
+    }
+
     pub fn push_named_or_blank(&mut self, named_or_blank_node: &NamedOrBlankNode) {
         match named_or_blank_node {
             NamedOrBlankNode::NamedNode(v) => {
                 self.push_str(v.as_str());
             }
-            NamedOrBlankNode::BlankNode(v) => {
-                self.push_str(v.as_str())
-            }
+            NamedOrBlankNode::BlankNode(v) => self.push_str(v.as_str()),
         }
     }
 
@@ -138,9 +142,7 @@ impl SeriesBuilder {
                 self.push_str(bl.as_str());
                 Ok(())
             }
-            Term::Literal(l) => {
-                self.parse_literal(l.value(), l.language())
-            }
+            Term::Literal(l) => self.parse_literal(l.value(), l.language()),
         }
     }
 

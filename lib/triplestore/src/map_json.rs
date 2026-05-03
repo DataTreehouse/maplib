@@ -12,7 +12,6 @@ use oxrdf::vocab::{rdf, xsd};
 use oxrdf::NamedNode;
 use polars::prelude::PlSmallStr;
 use polars_core::prelude::{AnyValue, Column, DataFrame};
-use representation::constants::RDF_PREFIX_IRI;
 use representation::dataset::NamedGraph;
 use representation::{BaseRDFNodeType, OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use serde_json::Value;
@@ -25,6 +24,8 @@ const FLOAT: u8 = 3;
 const IRI: u8 = 5;
 
 const JSON_ROOT: &str = "http://sparql.xyz/facade-x/ns/root";
+const JSON_CHILD: &str = "http://sparql.xyz/facade-x/ns/child";
+
 const JSON_NULL: &str = "http://sparql.xyz/facade-x/ns/null";
 
 const DEFAULT_JSON_KEYS_PREFIX: &str = "http://sparql.xyz/facade-x/data/";
@@ -256,16 +257,14 @@ fn process_value(
             } else {
                 subject.to_string()
             };
-
-            for (i, value) in arr.into_iter().enumerate() {
-                let rdfi_property =
-                    NamedNode::new(format!("{}_{}", RDF_PREFIX_IRI, i + 1)).unwrap();
-                add_new_property(&rdfi_property, map);
+            let ch = NamedNode::new_unchecked(JSON_CHILD);
+            for v in arr.into_iter() {
+                add_new_property(&ch, map);
                 process_value(
                     &array_subject,
-                    Some(&rdfi_property),
+                    Some(&ch),
                     prefix,
-                    value,
+                    v,
                     rdf_type,
                     root_elem_property,
                     map,

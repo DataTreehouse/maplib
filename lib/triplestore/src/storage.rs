@@ -89,7 +89,7 @@ impl Triples {
         }
         h
     }
-    
+
     pub fn get_u32s(&self) -> Result<Vec<(BaseRDFNodeType, HashSet<u32>)>, TriplestoreError> {
         let mut select_cols = Vec::new();
         if self.subject_type.stored_cat() {

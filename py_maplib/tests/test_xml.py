@@ -25,11 +25,13 @@ def test_map_xml_1(disk):
 
         SELECT ?title WHERE {
             ?root a fx:root .
-            ?root rdf:_1 ?glossary .
+            ?root fx:child ?glossary .
             ?glossary a xyz:glossary .
-            ?glossary rdf:_1 ?title_node .
+            ?glossary fx:childNumber "1"^^xsd:unsignedInt .
+            ?glossary fx:child ?title_node .
             ?title_node a xyz:title .
-            ?title_node rdf:_1 ?title .
+            ?title_node fx:childNumber "1"^^xsd:unsignedInt .
+            ?title_node fx:child ?title .
         }
         """
     )
@@ -81,7 +83,7 @@ def test_map_xml_3_inline_string():
             ?root a fx:root .
             ?root ?p ?name .
             ?name a ex:name .
-            ?name rdf:_1 ?val .
+            ?name fx:child ?val .
         }
         ORDER BY ?val
         """

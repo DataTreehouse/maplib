@@ -74,7 +74,7 @@ impl Triplestore {
         }
         s
     }
-    
+
     pub fn contains_graph(&self, graph: &NamedGraph) -> bool {
         self.graph_triples_map.contains_key(graph)
     }

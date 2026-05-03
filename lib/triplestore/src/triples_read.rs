@@ -13,14 +13,14 @@ use oxttl::ntriples::SliceNTriplesParser;
 use oxttl::turtle::SliceTurtleParser;
 use oxttl::{NTriplesParser, TurtleParser};
 use polars::prelude::{concat, DataFrame, IntoLazy, UnionArgs};
-use polars_core::prelude::{IntoColumn};
+use polars_core::prelude::IntoColumn;
 use rayon::iter::ParallelIterator;
-use rayon::prelude::{IntoParallelIterator};
+use rayon::prelude::IntoParallelIterator;
 use representation::dataset::NamedGraph;
 use representation::series_builder::{BySubjectType, PredMap};
 use representation::{
     get_subject_datatype_ref, get_term_datatype_ref, BaseRDFNodeType, BaseRDFNodeTypeRef,
-    SeriesBuilder
+    SeriesBuilder,
 };
 use representation::{OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use std::collections::HashMap;
@@ -150,10 +150,7 @@ impl Triplestore {
         let parallel = if let Some(parallel) = parallel {
             parallel
         } else {
-            matches!(
-                rdf_format,
-                ExtendedRdfFormat::Normal(RdfFormat::NTriples)
-            )
+            matches!(rdf_format, ExtendedRdfFormat::Normal(RdfFormat::NTriples))
         };
         let mut readers = if matches!(
             rdf_format,
@@ -323,45 +320,59 @@ impl Triplestore {
 
             let mut tta_map = HashMap::new();
             for triple in triples_to_add.into_iter() {
-                let k = (triple.graph.clone(), triple.predicate.clone(), triple.subject_type.clone(), triple.object_type.clone());
+                let k = (
+                    triple.graph.clone(),
+                    triple.predicate.clone(),
+                    triple.subject_type.clone(),
+                    triple.object_type.clone(),
+                );
                 if !tta_map.contains_key(&k) {
                     tta_map.insert(k.clone(), Vec::new());
                 }
                 tta_map.get_mut(&k).unwrap().push(triple);
             }
 
-            let ttas:Vec<_> = tta_map.into_par_iter().map(|(k,mut ttas)| {
-                if ttas.len() == 1 {
-                    ttas.pop().unwrap()
-                } else {
-                    let (graph, predicate, subject_type, object_type) = k;
-                    let mut lfs = Vec::with_capacity(ttas.len());
-                    for tta in ttas {
-                        lfs.push(tta.df.lazy());
+            let ttas: Vec<_> = tta_map
+                .into_par_iter()
+                .map(|(k, mut ttas)| {
+                    if ttas.len() == 1 {
+                        ttas.pop().unwrap()
+                    } else {
+                        let (graph, predicate, subject_type, object_type) = k;
+                        let mut lfs = Vec::with_capacity(ttas.len());
+                        for tta in ttas {
+                            lfs.push(tta.df.lazy());
+                        }
+                        let df = concat(
+                            lfs,
+                            UnionArgs {
+                                parallel: true,
+                                rechunk: false,
+                                to_supertypes: false,
+                                diagonal: false,
+                                strict: false,
+                                from_partitioned_ds: false,
+                                maintain_order: false,
+                            },
+                        )
+                        .unwrap()
+                        .collect()
+                        .unwrap();
+                        let subject_cat_state = subject_type.default_input_cat_state();
+                        let object_cat_state = object_type.default_input_cat_state();
+                        TriplesToAdd {
+                            df,
+                            subject_type,
+                            object_type,
+                            predicate,
+                            graph,
+                            subject_cat_state,
+                            object_cat_state,
+                            predicate_cat_state: None,
+                        }
                     }
-                    let df = concat(lfs, UnionArgs {
-                        parallel: true,
-                        rechunk: false,
-                        to_supertypes: false,
-                        diagonal: false,
-                        strict: false,
-                        from_partitioned_ds: false,
-                        maintain_order: false,
-                    }).unwrap().collect().unwrap();
-                    let subject_cat_state = subject_type.default_input_cat_state();
-                    let object_cat_state = object_type.default_input_cat_state();
-                    TriplesToAdd {
-                        df,
-                        subject_type,
-                        object_type,
-                        predicate,
-                        graph,
-                        subject_cat_state,
-                        object_cat_state,
-                        predicate_cat_state: None,
-                    }
-                }
-            }).collect();
+                })
+                .collect();
 
             debug!(
                 "Creating the triples to add as DFs took {} seconds",
@@ -479,7 +490,10 @@ fn create_predicate_map<'a>(
                     subjects.push_named_or_blank(&subject_to_insert);
                 }
                 Err(e) => {
-                    unparseable.push((Triple::new(subject_to_insert, predicate, object_to_insert), e));
+                    unparseable.push((
+                        Triple::new(subject_to_insert, predicate, object_to_insert),
+                        e,
+                    ));
                 }
             }
         } else {
@@ -543,7 +557,13 @@ fn get_or_insert_dt(
         t.clone()
     } else {
         let owned = base_rdfnode_type_ref.clone().to_owned();
-        type_map.insert(base_rdfnode_type_ref.as_str().to_string(), owned.into_owned());
-        type_map.get(base_rdfnode_type_ref.as_str()).unwrap().clone()
+        type_map.insert(
+            base_rdfnode_type_ref.as_str().to_string(),
+            owned.into_owned(),
+        );
+        type_map
+            .get(base_rdfnode_type_ref.as_str())
+            .unwrap()
+            .clone()
     }
 }

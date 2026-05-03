@@ -18,9 +18,9 @@ pub mod query_context;
 mod rdf_state;
 pub mod rdf_to_polars;
 mod rdf_type;
+pub mod series_builder;
 pub mod solution_mapping;
 pub mod subtypes;
-pub mod series_builder;
 pub use series_builder::SeriesBuilder;
 
 pub use base_rdf_type::*;

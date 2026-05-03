@@ -9,13 +9,17 @@ use quick_xml::events::Event;
 use quick_xml::Reader;
 use representation::constants::RDF_PREFIX_IRI;
 use representation::dataset::NamedGraph;
+use representation::series_builder::{ensure_pair, PredMap};
 use representation::{BaseRDFNodeType, OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use std::collections::HashMap;
 use std::io::Cursor;
 use std::sync::Arc;
-use representation::series_builder::{ensure_pair, PredMap};
 
 const XML_ROOT: &str = "http://sparql.xyz/facade-x/ns/root";
+const XML_CHILD: &str = "http://sparql.xyz/facade-x/ns/child";
+const XML_CHILD_NUMBER: &str = "http://sparql.xyz/facade-x/ns/childNumber";
+
+
 const DEFAULT_XML_DATA_PREFIX: &str = "http://sparql.xyz/facade-x/data/";
 
 struct Frame {
@@ -51,17 +55,16 @@ impl Triplestore {
             {
                 Event::Eof => break,
                 Event::Start(e) => {
-                    let (subj, text_dt,
-                        new_base_prefix,
-                        introduced_prefixed_namespaces) = open_element(
-                        e.name().as_ref(),
-                        e.attributes(),
-                        &mut stack,
-                        &mut pred_map,
-                        &mut prefix_map,
-                        &mut datatypes_map,
-                        &base_prefix
-                    )?;
+                    let (subj, text_dt, new_base_prefix, introduced_prefixed_namespaces) =
+                        open_element(
+                            e.name().as_ref(),
+                            e.attributes(),
+                            &mut stack,
+                            &mut pred_map,
+                            &mut prefix_map,
+                            &mut datatypes_map,
+                            &base_prefix,
+                        )?;
                     let previous_base_prefix = if let Some(new_base_prefix) = new_base_prefix {
                         let previous_base_prefix = base_prefix;
                         base_prefix = new_base_prefix;
@@ -85,7 +88,7 @@ impl Triplestore {
                         &mut pred_map,
                         &mut prefix_map,
                         &mut datatypes_map,
-                        &base_prefix
+                        &base_prefix,
                     )?;
                 }
                 Event::End(_) => {
@@ -158,8 +161,8 @@ fn open_element(
         let parent_subject = parent.subject.clone();
         let n = parent.next_child;
         parent.next_child += 1;
-        let rdfi = rdf_n_property(n);
-        push_iri_object(pred_map, rdfi.as_str(), &parent_subject, &subject);
+        push_iri_object(pred_map, XML_CHILD, &parent_subject, &subject);
+        push_iri_u32(pred_map, XML_CHILD_NUMBER, &subject, n as u32);
     } else {
         push_iri_object(pred_map, rdf::TYPE.as_str(), &subject, XML_ROOT);
     }
@@ -198,7 +201,7 @@ fn open_element(
             non_xmlns_attrs.push(attr);
         }
     }
-    let use_base_prefix= new_base_prefix.as_ref().unwrap_or(base_prefix);
+    let use_base_prefix = new_base_prefix.as_ref().unwrap_or(base_prefix);
 
     for attr in non_xmlns_attrs {
         let key = attr.key.as_ref();
@@ -231,11 +234,7 @@ fn open_element(
             )?;
         }
     }
-    let type_iri = qname_to_iri(
-        name,
-        prefix_map,
-        use_base_prefix,
-    )?;
+    let type_iri = qname_to_iri(name, prefix_map, use_base_prefix)?;
     push_iri_object(pred_map, rdf::TYPE.as_str(), &subject, type_iri.as_str());
 
     Ok((
@@ -261,13 +260,13 @@ fn push_text_child(
     let n = frame.next_child;
     frame.next_child += 1;
     let subject = frame.subject.clone();
-    let rdfi = rdf_n_property(n);
     let t = frame
         .data_type
         .as_ref()
         .map(|x| x.as_ref())
         .unwrap_or(string_type);
-    push_typed_text(pred_map, rdfi.as_str(), &subject, text, t)?;
+    push_typed_text(pred_map, XML_CHILD, &subject, text, t)?;
+    push_iri_u32(pred_map, XML_CHILD_NUMBER, &subject, n as u32);
     Ok(())
 }
 
@@ -287,7 +286,6 @@ fn push_typed_text(
         Err(e) => Err(TriplestoreError::XMLError(e.to_string())),
     }
 }
-
 
 fn flush_pred_map(
     triples: &mut Triplestore,
@@ -312,9 +310,10 @@ fn flush_pred_map(
                     len,
                     vec![subject_ser.into_column(), object_ser.into_column()],
                 )
-                    .unwrap();
+                .unwrap();
                 let subject_state = subject_type.default_input_cat_state();
                 let object_state = object_type.default_input_cat_state();
+
                 tta_vec.push(TriplesToAdd {
                     df,
                     subject_type: subject_type.clone(),
@@ -332,7 +331,6 @@ fn flush_pred_map(
     Ok(())
 }
 
-
 fn push_iri_object(pred_map: &mut PredMap, predicate: &str, subject: &str, object: &str) {
     let pair = ensure_pair(
         pred_map,
@@ -342,6 +340,17 @@ fn push_iri_object(pred_map: &mut PredMap, predicate: &str, subject: &str, objec
     );
     pair.0.push_str(subject);
     pair.1.push_str(object);
+}
+
+fn push_iri_u32(pred_map: &mut PredMap, predicate: &str, subject: &str, object: u32) {
+    let pair = ensure_pair(
+        pred_map,
+        predicate,
+        &BaseRDFNodeType::IRI,
+        &BaseRDFNodeType::Literal(xsd::UNSIGNED_INT.into_owned()),
+    );
+    pair.0.push_str(subject);
+    pair.1.push_u32(object);
 }
 
 fn new_iri_subject() -> String {

@@ -260,20 +260,12 @@ impl PyModel {
         })
     }
 
-
     #[pyo3(signature = (graph=None))]
     #[instrument(skip_all)]
-    fn size(
-        &self,
-        py: Python<'_>,
-        graph: Option<String>,
-    ) -> PyResult<usize> {
+    fn size(&self, py: Python<'_>, graph: Option<String>) -> PyResult<usize> {
         py.detach(move || {
             let mut inner = self.inner.lock().unwrap();
-            size_mutex(
-                &mut inner,
-                graph,
-            )
+            size_mutex(&mut inner, graph)
         })
     }
 

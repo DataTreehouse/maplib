@@ -55,8 +55,8 @@ def test_map_json_2(disk):
     m = Model(storage_folder=disk)
     m.map_json(str(json_2))
     df = m.query("""SELECT * WHERE {?a ?b ?c}""")
-    assert df.height == 56
-    # We expect this number to increase when we start caring about array ordering
+    assert df.height == 53
+    # We do not care about array ordering unfortunately as the way this is handled with rdf:_{i} is not nice for maplib.
     df2 = m.query("""
     PREFIX fx:  <http://sparql.xyz/facade-x/ns/> 
     PREFIX xyz: <http://sparql.xyz/facade-x/data/>
@@ -67,7 +67,7 @@ def test_map_json_2(disk):
     ?n2 xyz:items ?arr .
     ?arr ?ref ?item .
     } """)
-    assert df2.height == 22
+    assert df2.height == 19
 
 def test_map_json_3():
     json_3 = TESTDATA_PATH / "3.json"
@@ -86,7 +86,7 @@ def test_map_json_3():
     ?n1 a fx:root .
     ?n1 xyz:web-app ?n2 .
     ?n2 xyz:servlet ?arr .
-    ?arr rdf:_5 ?n3 .
+    ?arr fx:child ?n3 .
     ?n3 xyz:init-param ?n4 . 
     ?n4 xyz:log ?log .
     ?n4 xyz:betaServer ?betaserver .
