@@ -1,16 +1,14 @@
 use oxrdf::{GraphName, NamedNode, NamedOrBlankNode, Quad, Term};
-use std::collections::HashMap;
 use representation::BaseRDFNodeTypeRef;
+use std::collections::HashMap;
 
 type MapType = HashMap<String, HashMap<String, (Vec<NamedOrBlankNode>, Vec<Term>)>>;
 
-pub struct Remapper {
-}
+pub struct Remapper {}
 
 impl Remapper {
     pub fn new() -> Self {
-        Remapper {
-        }
+        Remapper {}
     }
 
     pub fn remap_predicate_datatype<'a>(

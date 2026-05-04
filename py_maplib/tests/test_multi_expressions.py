@@ -1134,7 +1134,7 @@ def test_before_after_multi_type_with_string_and_lang_string_and_other(streaming
                                                         '<http://www.w3.org/2001/XMLSchema#string>': None,
                                                         'l': None},
                                                        {'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': None,
-                                                        '<http://www.w3.org/2001/XMLSchema#string>': 'abAcAC',
+                                                        '<http://www.w3.org/2001/XMLSchema#string>': 'ab',
                                                         'l': None}]
     assert sm.mappings.get_column("aft").to_list() == [{'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': None,
                                                         '<http://www.w3.org/2001/XMLSchema#string>': None,
@@ -1195,6 +1195,32 @@ def test_before_after_only_lang_string_and_other(streaming):
         '"bb"@se',
         None,
     ]
+
+
+@pytest.mark.parametrize("streaming", [True, False])
+def test_before_after_only_string(streaming):
+    m = Model()
+    sm = m.query(
+        """
+    PREFIX : <http://example.net/> 
+    PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+    SELECT ?a ?bef ?aft WHERE {
+        VALUES (?a) { ("0:http://example.net") }
+        BIND(STRBEFORE(?a, ":") as ?bef)
+        BIND(STRAFTER(?a, ":") as ?aft)
+    } ORDER BY ?a
+    """,
+        solution_mappings=True,
+        streaming=streaming,
+    )
+    assert sm.mappings.height == 1
+    assert sm.mappings.get_column("bef").to_list() == [
+        "0"
+    ]
+    assert sm.mappings.get_column("aft").to_list() == [
+        "http://example.net"
+    ]
+
 
 
 @pytest.mark.parametrize("streaming", [True, False])

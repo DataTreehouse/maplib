@@ -8,9 +8,10 @@ use md5::{Digest, Md5};
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::NamedNodeRef;
 use polars::datatypes::{DataType, Field, PlSmallStr, TimeUnit};
+use polars::error::PolarsError;
 use polars::prelude::{
-    as_struct, by_name, coalesce, col, concat_str, lit, when, Expr, IntoColumn, LiteralValue,
-    NamedFrom, RoundMode, Scalar, Series, StringChunked, StrptimeOptions,
+    as_struct, by_name, coalesce, col, concat_str, lit, when, Column, Expr, IntoColumn,
+    LiteralValue, NamedFrom, RoundMode, Scalar, Schema, Series, StringChunked, StrptimeOptions,
 };
 use rayon::iter::IntoParallelIterator;
 use rayon::iter::ParallelIterator;
@@ -1158,26 +1159,12 @@ pub fn func_expression(
         Function::StrBefore | Function::StrAfter => {
             assert_eq!(args.len(), 2);
             let first_context = args_contexts.get(&0).unwrap();
-            let second_context = args_contexts.get(&1).unwrap();
+            let second_string = eval_expression_to_string(args.get(1).unwrap(), true)?;
 
             let t = solution_mappings
                 .rdf_node_types
                 .get(first_context.as_str())
                 .unwrap();
-
-            let second_t = solution_mappings
-                .rdf_node_types
-                .get(second_context.as_str())
-                .unwrap();
-            assert!(second_t.is_lit_type(xsd::STRING));
-            let second_bt = second_t.get_base_type().unwrap();
-            let second_bs = second_t.get_base_state().unwrap();
-            let second_decoded = maybe_decode_expr(
-                col(second_context.as_str()),
-                second_bt,
-                second_bs,
-                global_cats.clone(),
-            );
 
             if t.is_lit_type(xsd::STRING) {
                 let bt = t.get_base_type().unwrap();
@@ -1188,16 +1175,14 @@ pub fn func_expression(
                     Function::StrBefore => {
                         solution_mappings.mappings = solution_mappings.mappings.with_column(
                             decoded
-                                .str()
-                                .strip_suffix(second_decoded)
+                                .apply(move |x| str_before(x, second_string.clone()), keep_field)
                                 .alias(outer_context.as_str()),
                         );
                     }
                     Function::StrAfter => {
                         solution_mappings.mappings = solution_mappings.mappings.with_column(
                             decoded
-                                .str()
-                                .strip_prefix(second_decoded)
+                                .apply(move |x| str_after(x, second_string.clone()), keep_field)
                                 .alias(outer_context.as_str()),
                         );
                     }
@@ -1223,16 +1208,14 @@ pub fn func_expression(
                     Function::StrBefore => {
                         exprs.push(
                             str_expr
-                                .str()
-                                .strip_suffix(second_decoded)
+                                .apply(move |x| str_before(x, second_string.clone()), keep_field)
                                 .alias(LANG_STRING_VALUE_FIELD),
                         );
                     }
                     Function::StrAfter => {
                         exprs.push(
                             str_expr
-                                .str()
-                                .strip_prefix(second_decoded)
+                                .apply(move |x| str_after(x, second_string.clone()), keep_field)
                                 .alias(LANG_STRING_VALUE_FIELD),
                         );
                     }
@@ -1269,18 +1252,18 @@ pub fn func_expression(
                     if bt.is_lit_type(xsd::STRING) || bt.is_lang_string() {
                         match func {
                             Function::StrBefore => {
+                                let use_ss = second_string.clone();
                                 exprs.push(
                                     decoded
-                                        .str()
-                                        .strip_suffix(second_decoded.clone())
+                                        .apply(move |x| str_before(x, use_ss.clone()), keep_field)
                                         .alias(&bt.field_col_name()),
                                 );
                             }
                             Function::StrAfter => {
+                                let use_ss = second_string.clone();
                                 exprs.push(
                                     decoded
-                                        .str()
-                                        .strip_prefix(second_decoded.clone())
+                                        .apply(move |x| str_after(x, use_ss.clone()), keep_field)
                                         .alias(&bt.field_col_name()),
                                 );
                             }
@@ -1314,6 +1297,10 @@ pub fn func_expression(
                         BaseRDFNodeType::None.into_default_input_rdf_node_state(),
                     );
                 } else if keep_types.len() == 1 {
+                    println!(
+                        "Soln {}",
+                        solution_mappings.mappings.clone().collect().unwrap()
+                    );
                     if exprs.len() > 1 {
                         solution_mappings.mappings = solution_mappings
                             .mappings
@@ -1332,6 +1319,11 @@ pub fn func_expression(
                             .into_default_input_rdf_node_state(),
                     );
                 } else {
+                    println!(
+                        "Soln more {}",
+                        solution_mappings.mappings.clone().collect().unwrap()
+                    );
+
                     let type_map: HashMap<_, _> = keep_types
                         .into_iter()
                         .map(|bt| (bt.clone(), bt.default_input_cat_state()))
@@ -2366,4 +2358,44 @@ pub fn str_starts_ends_contains(expr_decoded: Expr, second_decoded: Expr, f: &Fu
         Function::Contains => expr_decoded.str().contains_literal(second_decoded),
         _ => unreachable!("Should never happen"),
     }
+}
+
+fn str_before(c: Column, s: String) -> Result<Column, PolarsError> {
+    let bef = c.str()?.iter().map(|x: Option<&str>| {
+        if let Some(x) = x {
+            let range_to = x.find(&s);
+            if let Some(range_to) = range_to {
+                Some(&x[0..range_to])
+            } else {
+                Some(x)
+            }
+        } else {
+            None
+        }
+    });
+    let mut ser = Series::from_iter(bef);
+    ser.rename(c.name().clone());
+    Ok(ser.into_column())
+}
+
+fn str_after(c: Column, s: String) -> Result<Column, PolarsError> {
+    let bef = c.str()?.iter().map(|x: Option<&str>| {
+        if let Some(x) = x {
+            let range_to = x.find(&s);
+            if let Some(range_to) = range_to {
+                Some(&x[range_to + s.len()..])
+            } else {
+                Some(x)
+            }
+        } else {
+            None
+        }
+    });
+    let mut ser = Series::from_iter(bef);
+    ser.rename(c.name().clone());
+    Ok(ser.into_column())
+}
+
+fn keep_field(_s: &Schema, f: &Field) -> Result<Field, PolarsError> {
+    Ok(f.clone())
 }

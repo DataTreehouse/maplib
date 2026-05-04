@@ -7,7 +7,6 @@ use polars_core::prelude::IntoColumn;
 use quick_xml::escape::unescape;
 use quick_xml::events::Event;
 use quick_xml::Reader;
-use representation::constants::RDF_PREFIX_IRI;
 use representation::dataset::NamedGraph;
 use representation::series_builder::{ensure_pair, PredMap};
 use representation::{BaseRDFNodeType, OBJECT_COL_NAME, SUBJECT_COL_NAME};
@@ -18,7 +17,6 @@ use std::sync::Arc;
 const XML_ROOT: &str = "http://sparql.xyz/facade-x/ns/root";
 const XML_CHILD: &str = "http://sparql.xyz/facade-x/ns/child";
 const XML_CHILD_NUMBER: &str = "http://sparql.xyz/facade-x/ns/childNumber";
-
 
 const DEFAULT_XML_DATA_PREFIX: &str = "http://sparql.xyz/facade-x/data/";
 
@@ -355,10 +353,6 @@ fn push_iri_u32(pred_map: &mut PredMap, predicate: &str, subject: &str, object: 
 
 fn new_iri_subject() -> String {
     format!("urn:maplib:{}", uuid::Uuid::new_v4())
-}
-
-fn rdf_n_property(n: usize) -> NamedNode {
-    NamedNode::new_unchecked(format!("{}_{}", RDF_PREFIX_IRI, n))
 }
 
 fn qname_to_iri(
