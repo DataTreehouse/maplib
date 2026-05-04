@@ -1297,10 +1297,6 @@ pub fn func_expression(
                         BaseRDFNodeType::None.into_default_input_rdf_node_state(),
                     );
                 } else if keep_types.len() == 1 {
-                    println!(
-                        "Soln {}",
-                        solution_mappings.mappings.clone().collect().unwrap()
-                    );
                     if exprs.len() > 1 {
                         solution_mappings.mappings = solution_mappings
                             .mappings
@@ -1319,11 +1315,6 @@ pub fn func_expression(
                             .into_default_input_rdf_node_state(),
                     );
                 } else {
-                    println!(
-                        "Soln more {}",
-                        solution_mappings.mappings.clone().collect().unwrap()
-                    );
-
                     let type_map: HashMap<_, _> = keep_types
                         .into_iter()
                         .map(|bt| (bt.clone(), bt.default_input_cat_state()))
