@@ -945,3 +945,37 @@ def test_bad_query():
         }
         """, solution_mappings=True)
     assert "?a b ?c <<PARSER COMPLAINS HERE>>" in str(e)
+
+def test_truncate_graph():
+    m = Model()
+    g1 = "http://example.net/g1"
+    g2 = "http://example.net/g2"
+    ttl = """
+        @prefix : <http://example.org/> .
+        :alice :knows :bob .
+        :alice :age 30 .
+        """
+
+    m.reads(
+        ttl,
+        format="turtle",
+        graph=g1,
+    )
+    m.reads(
+        ttl,
+        format="turtle",
+        graph=g2,
+    )
+
+    def count(graph):
+        df = m.query(f"SELECT (COUNT(*) AS ?c) WHERE {{ GRAPH <{graph}> {{ ?s ?p ?o }} }}")
+        if df.height == 0:
+            return 0
+        return df["c"][0]
+
+    assert count(g1) == 2
+    assert count(g2) == 2
+
+    m.truncate_graph(g1)
+    assert count(g1) == 0
+    assert count(g2) == 2
