@@ -214,6 +214,24 @@ impl PyModel {
         })
     }
 
+    #[instrument(skip_all)]
+    fn truncate_graph(
+        &self,
+        py: Python<'_>,
+        graph: Option<String>,
+    ) -> PyResult<()> {
+        let graph = parse_optional_named_node(graph)?;
+        let graph = if let Some(graph) = graph {
+            NamedGraph::NamedGraph(graph)
+        } else {
+            NamedGraph::DefaultGraph
+        };
+        py.detach(move || {
+            let mut inner = self.inner.lock().unwrap();
+            truncate_graph_mutex(&mut inner, &graph)
+        })
+    }
+
     #[pyo3(signature=(graph=None, preserve_name=None))]
     #[instrument(skip_all)]
     fn detach_graph(
@@ -1058,6 +1076,14 @@ fn add_prefixes_mutex(
     prefixes: HashMap<String, NamedNode>,
 ) -> PyResult<()> {
     inner.prefixes.extend(prefixes.into_iter());
+    Ok(())
+}
+
+fn truncate_graph_mutex(
+    inner: &mut MutexGuard<InnerModel>,
+    graph: &NamedGraph,
+) -> PyResult<()> {
+    inner.triplestore.truncate(graph);
     Ok(())
 }
 
