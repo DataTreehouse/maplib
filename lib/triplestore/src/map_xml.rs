@@ -16,6 +16,15 @@ use std::sync::Arc;
 
 const XML_ROOT: &str = "http://sparql.xyz/facade-x/ns/root";
 const XML_CHILD: &str = "http://sparql.xyz/facade-x/ns/child";
+const XML_XMLNS: &str = "http://sparql.xyz/facade-x/ns/xmlns";
+const XML_XMLNS_SEP: &str = "http://sparql.xyz/facade-x/ns/xmlnsSeparator";
+
+const XML_PREFIX: &str = "http://sparql.xyz/facade-x/ns/prefix";
+const XML_PREFIX_NAME: &str = "http://sparql.xyz/facade-x/ns/prefixName";
+const XML_PREFIX_SEP: &str = "http://sparql.xyz/facade-x/ns/prefixSeparator";
+
+const XML_PREFIX_IRI: &str = "http://sparql.xyz/facade-x/ns/prefixIRI";
+
 const XML_CHILD_NUMBER: &str = "http://sparql.xyz/facade-x/ns/childNumber";
 
 const DEFAULT_XML_DATA_PREFIX: &str = "http://sparql.xyz/facade-x/data/";
@@ -186,15 +195,32 @@ fn open_element(
             let nn = NamedNode::new(value.clone()).map_err(|e| {
                 TriplestoreError::XMLError(format!("Error parsing {}: {}", value, e.to_string()))
             })?;
+            let use_sep = use_sep(nn.as_str());
+            push_iri_object(pred_map, XML_XMLNS, &subject, nn.as_str());
+            push_typed_text(
+                pred_map,
+                XML_XMLNS_SEP,
+                &subject,
+                use_sep,
+                &BaseRDFNodeType::Literal(xsd::STRING.into_owned()),
+            )?;
             new_base_prefix = Some(nn);
         } else if key.starts_with("xmlns:") {
+            let string = BaseRDFNodeType::Literal(xsd::STRING.into_owned());
             let pre = key.strip_prefix("xmlns:").unwrap();
             let nn = NamedNode::new(value.clone()).map_err(|e| {
                 TriplestoreError::XMLError(format!("Error parsing {}: {}", value, e.to_string()))
             })?;
 
+            let prefix_subject = new_iri_subject();
+            push_iri_object(pred_map, XML_PREFIX, &subject, &prefix_subject);
+            push_iri_object(pred_map, XML_PREFIX_IRI, &prefix_subject, nn.as_str());
+            let use_sep = use_sep(nn.as_str());
+            push_typed_text(pred_map, XML_PREFIX_SEP, &prefix_subject, use_sep, &string)?;
+            push_typed_text(pred_map, XML_PREFIX_NAME, &prefix_subject, pre, &string)?;
             let previous = prefix_map.insert(pre.to_string(), nn);
             introduced_prefixed_namespaces.push((pre.to_string(), previous));
+        } else if key == "xml:lang" {
         } else {
             non_xmlns_attrs.push(attr);
         }
@@ -210,27 +236,16 @@ fn open_element(
         let value = unescape(raw)
             .map_err(|e| TriplestoreError::XMLError(e.to_string()))?
             .into_owned();
-        if key == "type" {
-            let pred = qname_to_iri(&value, prefix_map, use_base_prefix)?;
 
-            if let Some(dt) = datatypes_map.get(value.as_str()) {
-                datatype = Some(dt.clone());
-            } else {
-                let dt = Arc::new(BaseRDFNodeType::Literal(pred.clone()));
-                datatypes_map.insert(value.as_str().to_string(), dt.clone());
-                datatype = Some(dt);
-            }
-        } else {
-            let pred = qname_to_iri(key, prefix_map, use_base_prefix)?;
+        let pred = qname_to_iri(key, prefix_map, use_base_prefix)?;
 
-            push_typed_text(
-                pred_map,
-                pred.as_str(),
-                &subject,
-                &value,
-                datatypes_map.get(xsd::STRING.as_str()).unwrap(),
-            )?;
-        }
+        push_typed_text(
+            pred_map,
+            pred.as_str(),
+            &subject,
+            &value,
+            datatypes_map.get(xsd::STRING.as_str()).unwrap(),
+        )?;
     }
     let type_iri = qname_to_iri(name, prefix_map, use_base_prefix)?;
     push_iri_object(pred_map, rdf::TYPE.as_str(), &subject, type_iri.as_str());
@@ -362,15 +377,30 @@ fn qname_to_iri(
 ) -> Result<NamedNode, TriplestoreError> {
     let nn = if let Some((pre, suf)) = name.split_once(':') {
         if let Some(pre_nn) = prefix_map.get(pre) {
-            format!("{}{}", pre_nn.as_str(), suf)
+            let use_sep = use_sep(pre_nn.as_str());
+            format!("{}{use_sep}{suf}", pre_nn.as_str())
         } else {
             return Err(TriplestoreError::XMLError(format!(
                 "Could not find prefix {pre}"
             )));
         }
     } else {
-        format!("{}{name}", base_prefix.as_str())
+        let pre = base_prefix.as_str();
+        let use_sep = use_sep(pre);
+        format!("{pre}{use_sep}{name}")
     };
     NamedNode::new(&nn)
         .map_err(|e| TriplestoreError::XMLError(format!("Error parsing IRI {}: {}", nn, e)))
+}
+
+fn use_sep(pre: &str) -> &str {
+    if !pre.ends_with(":") && !pre.ends_with("#") && !pre.ends_with("/") {
+        if pre.starts_with("urn:") {
+            ":"
+        } else {
+            "#"
+        }
+    } else {
+        ""
+    }
 }
