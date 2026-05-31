@@ -524,6 +524,38 @@ class Model:
         :return:
         """
 
+    def get_templates(self) -> List["Template"]:
+        """
+        Return the OTTR templates currently held by the model (whether added as stOTTR or
+        programmatically). The built-in ``ottr:Triple`` primitive is not included.
+
+        Usage:
+        >>> for t in m.get_templates():
+        ...     print(t)
+
+        :return: A list of Template objects.
+        """
+
+    def templates_to_graph(self, graph: str = None) -> None:
+        """
+        Materialize the model's OTTR templates into a named graph as RDF, using the flattened
+        maplib template vocabulary (prefix ``mtpl``, base
+        ``https://datatreehouse.github.io/maplib/vocab#``). This lets template structure and
+        the interconnectedness of IRIs across templates be inspected with ordinary SPARQL, and
+        used to derive SHACL shapes. The triples are added alongside any existing content of
+        the target graph (the graph is not replaced).
+
+        Usage:
+        >>> m.templates_to_graph("https://example.org/templates")
+        >>> m.query('''
+        ... PREFIX mtpl: <https://datatreehouse.github.io/maplib/vocab#>
+        ... SELECT ?template ?iri WHERE {
+        ...     GRAPH <https://example.org/templates> { ?template mtpl:referencesIri ?iri }
+        ... }''')
+
+        :param graph: The IRI of the graph to add the template triples to. Defaults to the default graph.
+        """
+
     def add_prefixes(self, prefixes: Dict[str, str]):
         """
         Add prefixes that will be used in parsing of SPARQL, Datalog and OTTR.
