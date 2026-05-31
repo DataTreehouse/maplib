@@ -5,7 +5,7 @@ use crate::triples_write::serializers::serializer_for;
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::NamedNode;
 use polars_core::prelude::*;
-use polars_core::POOL;
+use polars_core::runtime::THREAD_POOL;
 use rayon::prelude::*;
 use representation::{
     BaseRDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD, OBJECT_COL_NAME,
@@ -117,7 +117,7 @@ pub(crate) fn write_triples_in_df<W: Write>(
         };
 
         if n_threads > 1 {
-            POOL.install(|| {
+            THREAD_POOL.install(|| {
                 buffers
                     .par_iter_mut()
                     .enumerate()

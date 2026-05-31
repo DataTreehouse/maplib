@@ -32,7 +32,6 @@ const DEFAULT_XML_DATA_PREFIX: &str = "http://sparql.xyz/facade-x/data/";
 struct Frame {
     subject: String,
     next_child: usize,
-    data_type: Option<Arc<BaseRDFNodeType>>,
     previous_base_prefix: Option<NamedNode>,
     introduced_prefixed_namespaces: Vec<(String, Option<NamedNode>)>,
 }
@@ -62,7 +61,7 @@ impl Triplestore {
             {
                 Event::Eof => break,
                 Event::Start(e) => {
-                    let (subj, text_dt, new_base_prefix, introduced_prefixed_namespaces) =
+                    let (subj, new_base_prefix, introduced_prefixed_namespaces) =
                         open_element(
                             e.name().as_ref(),
                             e.attributes(),
@@ -82,7 +81,6 @@ impl Triplestore {
                     stack.push(Frame {
                         subject: subj,
                         next_child: 1,
-                        data_type: text_dt,
                         previous_base_prefix,
                         introduced_prefixed_namespaces,
                     });
@@ -156,7 +154,6 @@ fn open_element(
 ) -> Result<
     (
         String,
-        Option<Arc<BaseRDFNodeType>>,
         Option<NamedNode>,
         Vec<(String, Option<NamedNode>)>,
     ),
@@ -174,7 +171,6 @@ fn open_element(
         push_iri_object(pred_map, rdf::TYPE.as_str(), &subject, XML_ROOT);
     }
     let mut new_base_prefix = None;
-    let mut datatype = None;
     let mut introduced_prefixed_namespaces = Vec::new();
     let mut attrs_vec = Vec::new();
     for attr in attrs {
@@ -252,7 +248,6 @@ fn open_element(
 
     Ok((
         subject,
-        datatype,
         new_base_prefix,
         introduced_prefixed_namespaces,
     ))
@@ -270,16 +265,8 @@ fn push_text_child(
     let Some(frame) = stack.last_mut() else {
         return Ok(());
     };
-    let n = frame.next_child;
-    frame.next_child += 1;
     let subject = frame.subject.clone();
-    let t = frame
-        .data_type
-        .as_ref()
-        .map(|x| x.as_ref())
-        .unwrap_or(string_type);
-    push_typed_text(pred_map, XML_CHILD, &subject, text, t)?;
-    push_iri_u32(pred_map, XML_CHILD_NUMBER, &subject, n as u32);
+    push_typed_text(pred_map, XML_CHILD, &subject, text, string_type)?;
     Ok(())
 }
 

@@ -8,7 +8,7 @@ use oxrdf::{BlankNode, NamedNode, NamedNodeRef, Term, TermRef, Variable};
 use polars::prelude::{col, concat, LazyFrame, UnionArgs};
 use polars_core::frame::DataFrame;
 use polars_core::prelude::BooleanChunked;
-use polars_core::POOL;
+use polars_core::runtime::THREAD_POOL;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use representation::cats::LockedCats;
 use representation::dataset::NamedGraph;
@@ -420,7 +420,7 @@ impl Triplestore {
             }
             let triples = map.get(&driver_predicate).unwrap().get(&(k)).unwrap();
             let (subject_type, _) = &k;
-            let n_threads = POOL.current_num_threads();
+            let n_threads = THREAD_POOL.current_num_threads();
             let mut exhausted_driver = false;
             let mut found_first = false;
             let mut last_string: Option<String> = None;
@@ -469,7 +469,7 @@ impl Triplestore {
                     };
                     thread_strings.push((start_string, end_string));
                 }
-                let r: Result<Vec<_>, TriplestoreError> = POOL
+                let r: Result<Vec<_>, TriplestoreError> = THREAD_POOL
                     .install(|| {
                         thread_strings
                             .into_par_iter()
@@ -505,7 +505,7 @@ impl Triplestore {
                     new_r.push((new_map, subjects_ordering));
                 }
 
-                let written: Result<(Vec<_>, Vec<_>), TriplestoreError> = POOL
+                let written: Result<(Vec<_>, Vec<_>), TriplestoreError> = THREAD_POOL
                     .install(|| {
                         new_r.into_par_iter().map(|(new_map, subjects_ordering)| {
                             let mut writer: Vec<u8> = Vec::new();
@@ -594,7 +594,7 @@ impl Triplestore {
         };
         df.rechunk_mut();
         let mut keep = vec![];
-        for s in df.column(SUBJECT_COL_NAME).unwrap().u32().unwrap() {
+        for s in df.column(SUBJECT_COL_NAME).unwrap().u32().unwrap().iter() {
             let s = s.unwrap();
             keep.push(!used_subjects.contains(&s));
         }
@@ -802,7 +802,7 @@ impl Triplestore {
                 ));
             }
             let su32 = sm.mappings.column(SUBJECT_COL_NAME).unwrap().u32().unwrap();
-            for u in su32 {
+            for u in su32.iter() {
                 if let Some(first) = first_blank_term_map.get(&u.unwrap()) {
                     blank_lists_map.insert(u.unwrap(), TermOrList::List(vec![first.clone()]));
                 } else {
@@ -907,7 +907,7 @@ impl Triplestore {
                             let df = lf.select([col(OBJECT_COL_NAME)]).collect().unwrap();
                             let objects_u32_iter =
                                 df.column(OBJECT_COL_NAME).unwrap().u32().unwrap();
-                            for u in objects_u32_iter {
+                            for u in objects_u32_iter.iter() {
                                 let u = u.unwrap();
                                 if let Some(in_deg) = out_map.get_mut(&u) {
                                     *in_deg = in_deg.saturating_add(1);
@@ -930,7 +930,7 @@ impl Triplestore {
                             let df = lf.select([col(SUBJECT_COL_NAME)]).collect().unwrap();
                             let subjects_u32_iter =
                                 df.column(SUBJECT_COL_NAME).unwrap().u32().unwrap();
-                            for u in subjects_u32_iter {
+                            for u in subjects_u32_iter.iter() {
                                 let u = u.unwrap();
                                 if !out_map.contains_key(&u) {
                                     zero_out_set.insert(u);
@@ -977,7 +977,7 @@ fn update_blocks_map(
     let mut to_replace = if object_type.is_blank_node() {
         let obj_u32s = df.column(OBJECT_COL_NAME).unwrap().u32().unwrap();
         let mut obj_deferred = Vec::with_capacity(obj_u32s.len());
-        for u in obj_u32s {
+        for u in obj_u32s.iter() {
             let u = u.unwrap();
             if in_degree_one_blanks.contains(&u) {
                 obj_deferred.push(Some(TermOrList::BlankPlaceholder(u)));

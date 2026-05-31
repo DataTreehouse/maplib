@@ -79,7 +79,7 @@ impl Cats {
                             let new_ss = ser
                                 .u32()
                                 .unwrap()
-                                .into_iter()
+                                .iter()
                                 .filter(|x| x.is_some())
                                 .map(|x| x.unwrap());
                             if let Some(local_rev_map) = local_rev_map {

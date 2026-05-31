@@ -172,7 +172,7 @@ pub fn basic_rdf_node_type_column_to_term_vec(
         BaseRDFNodeType::BlankNode => {
             if blanks_from_u32 {
                 let mut blank_terms = Vec::with_capacity(column.len());
-                for c in column.u32().unwrap() {
+                for c in column.u32().unwrap().iter() {
                     blank_terms.push(c.map(|x| {
                         Term::BlankNode(BlankNode::new_unchecked(blank_node_to_normal_string(&x)))
                     }));
@@ -199,7 +199,7 @@ pub fn basic_rdf_node_type_column_to_term_vec(
                     base_state,
                     global_cats.clone(),
                 );
-                let value_iter = value_col.str().unwrap().into_iter();
+                let value_iter = value_col.str().unwrap().iter();
 
                 let lang_col = decode_column(
                     &col_struct
@@ -211,7 +211,7 @@ pub fn basic_rdf_node_type_column_to_term_vec(
                     global_cats,
                 );
 
-                let lang_iter = lang_col.str().unwrap().into_iter();
+                let lang_iter = lang_col.str().unwrap().iter();
 
                 value_iter
                     .zip(lang_iter)

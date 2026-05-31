@@ -148,7 +148,7 @@ impl CatReEnc {
             Column::Series(c) => {
                 let uch = c.u32().unwrap();
                 let mut v = Vec::with_capacity(uch.len());
-                for u in uch {
+                for u in uch.iter() {
                     let u = if let Some(u) = u {
                         if let Some(remap_u) = self.cat_map.get(&u) {
                             Some(*remap_u)

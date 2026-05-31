@@ -5,7 +5,7 @@ use oxrdfio::{RdfFormat, RdfSerializer};
 use polars::prelude::{by_name, col};
 use polars_core::datatypes::DataType;
 use polars_core::frame::DataFrame;
-use polars_core::POOL;
+use polars_core::runtime::THREAD_POOL;
 use representation::cats::maybe_decode_complex_expr;
 use representation::dataset::NamedGraph;
 use representation::polars_to_rdf::{
@@ -33,7 +33,7 @@ impl Triplestore {
     ) -> Result<(), TriplestoreError> {
         self.check_graph_exists(graph)?;
         if RdfFormat::NTriples == format {
-            let n_threads = POOL.current_num_threads();
+            let n_threads = THREAD_POOL.current_num_threads();
             for (predicate, df_map) in self.graph_triples_map.get(graph).unwrap() {
                 let predicate_string = predicate.to_string();
                 let predicate_bytes = predicate_string.as_bytes();

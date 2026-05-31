@@ -75,7 +75,7 @@ impl Ord for LastIterResult {
 pub(crate) struct Triples {
     segments: Vec<TriplesSegment>,
     height: usize,
-    pub(crate) subject_type: BaseRDFNodeType,
+    pub subject_type: BaseRDFNodeType,
     pub object_type: BaseRDFNodeType,
     object_indexing_enabled: bool,
     subject_object_index: Option<SubjectObjectIndex>,
@@ -406,7 +406,7 @@ impl TriplesSegment {
                     .read()?
                     .decode_of_type(subject_ser.as_materialized_series(), subject_type, None)
                     .map_err(|x| TriplestoreError::DecodeError(x))?;
-                for found_s in vs.str().unwrap() {
+                for found_s in vs.str().unwrap().iter() {
                     let found_s = found_s.unwrap();
                     if s < found_s {
                         return Ok(Some(found_s.to_string()));
@@ -495,7 +495,7 @@ impl TriplesSegment {
             // ["a", "b", "d"]
             // then if starting at 0
             // we should stop when from_i == 2 and "c" < "d", i.e. from < s
-            for s in subjects_start.str().unwrap() {
+            for s in subjects_start.str().unwrap().iter() {
                 let s = s.unwrap();
                 if from <= s {
                     break;
@@ -508,7 +508,7 @@ impl TriplesSegment {
             // we should stop when i == 3 and "c" < "d" i.e. to < s
             // to_i is exclusive and should be set to 3
 
-            for s in subjects_end.str().unwrap() {
+            for s in subjects_end.str().unwrap().iter() {
                 let s = s.unwrap();
                 if to < s {
                     break;

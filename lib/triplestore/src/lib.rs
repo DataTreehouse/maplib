@@ -142,7 +142,7 @@ impl Triplestore {
                         for (lf, _) in lfs {
                             let subjects_df = lf.select([col(SUBJECT_COL_NAME)]).collect().unwrap();
                             let subjects_ser = subjects_df.column(SUBJECT_COL_NAME).unwrap();
-                            for u in subjects_ser.u32().unwrap() {
+                            for u in subjects_ser.u32().unwrap().iter() {
                                 uset.insert(u.unwrap());
                             }
                         }
@@ -162,7 +162,7 @@ impl Triplestore {
                                     .unwrap()
                                     .field_by_name(LANG_STRING_LANG_FIELD)
                                     .unwrap();
-                                for u in langs_ser.u32().unwrap() {
+                                for u in langs_ser.u32().unwrap().iter() {
                                     uset.insert(u.unwrap());
                                 }
                                 let vals_ser = objects_ser
@@ -170,12 +170,12 @@ impl Triplestore {
                                     .unwrap()
                                     .field_by_name(LANG_STRING_VALUE_FIELD)
                                     .unwrap();
-                                for u in vals_ser.u32().unwrap() {
+                                for u in vals_ser.u32().unwrap().iter() {
                                     uset.insert(u.unwrap());
                                 }
                             } else {
                                 let objects_ser = objects_df.column(OBJECT_COL_NAME).unwrap();
-                                for u in objects_ser.u32().unwrap() {
+                                for u in objects_ser.u32().unwrap().iter() {
                                     uset.insert(u.unwrap());
                                 }
                             }
@@ -886,6 +886,7 @@ fn create_rank_expr(
                         .field_by_name(LANG_STRING_VALUE_FIELD)?
                         .u32()
                         .unwrap()
+                        .iter()
                     {
                         if let Some(u) = u {
                             u32_values.push(rank_map.get(&u).cloned());
@@ -899,6 +900,7 @@ fn create_rank_expr(
                         .field_by_name(LANG_STRING_LANG_FIELD)?
                         .u32()
                         .unwrap()
+                        .iter()
                     {
                         if let Some(u) = u {
                             u32_langs.push(rank_map.get(&u).cloned());
@@ -943,7 +945,7 @@ fn create_rank_expr(
             col(c).map(
                 move |x| {
                     let mut u32s = Vec::with_capacity(x.len());
-                    for u in x.u32()? {
+                    for u in x.u32()?.iter() {
                         if let Some(u) = u {
                             u32s.push(rank_map.get(&u).cloned());
                         } else {

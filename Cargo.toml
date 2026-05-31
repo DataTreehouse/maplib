@@ -31,7 +31,6 @@ pyo3 = {version = "0.28.2", features = ["py-clone", "rust_decimal"] }
 polars = { version = "0.53.0", features = [
     "simd",
     "nightly",
-    "new_streaming",
     "performant",
     "cse",
     "fmt",
@@ -86,5 +85,5 @@ ordered-float = "5.1.0"
 rust_decimal = "1.41.0"
 
 [patch.crates-io]
-polars = { git = 'https://github.com/pola-rs/polars', rev="344a0ea39753771f893144939f2b70c3144f8ebf" }
-polars-core = { git = 'https://github.com/pola-rs/polars', rev="344a0ea39753771f893144939f2b70c3144f8ebf" }
+polars = { git = 'https://github.com/pola-rs/polars', rev="599a503a0997188a74750926a5cdaa47585cf8aa" }
+polars-core = { git = 'https://github.com/pola-rs/polars', rev="599a503a0997188a74750926a5cdaa47585cf8aa" }

@@ -1966,7 +1966,7 @@ pub fn func_expression(
                 expr = expr.map(
                     move |x| {
                         let mut encoded = Vec::with_capacity(x.len());
-                        for s in x.str()? {
+                        for s in x.str()?.iter() {
                             if let Some(s) = s {
                                 encoded.push(Some(encode_uri(s)));
                             } else {
@@ -1983,7 +1983,7 @@ pub fn func_expression(
                     move |x| {
                         let mut encoded = Vec::with_capacity(x.len());
 
-                        for s in x.str()? {
+                        for s in x.str()?.iter() {
                             if let Some(s) = s {
                                 let mut hasher = Sha1::new();
                                 hasher.update(s.as_bytes());
@@ -2003,7 +2003,7 @@ pub fn func_expression(
                     move |x| {
                         let mut encoded = Vec::with_capacity(x.len());
 
-                        for s in x.str()? {
+                        for s in x.str()?.iter() {
                             if let Some(s) = s {
                                 let mut hasher = Md5::new();
                                 hasher.update(s.as_bytes());

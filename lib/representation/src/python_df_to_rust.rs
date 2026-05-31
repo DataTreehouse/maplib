@@ -5,12 +5,12 @@
 use polars::prelude::PlSmallStr;
 use polars_core::error::PolarsError;
 use polars_core::prelude::{ArrayRef, ArrowDataType, DataFrame, IntoColumn, Series};
+use polars_core::runtime::THREAD_POOL;
 use polars_core::utils::accumulate_dataframes_vertical;
 use polars_core::utils::arrow::ffi;
 use polars_core::utils::rayon::iter::{
     IndexedParallelIterator, IntoParallelIterator, ParallelIterator,
 };
-use polars_core::POOL;
 use pyo3::create_exception;
 use pyo3::exceptions::PyException;
 use pyo3::exceptions::PyRuntimeError;
@@ -87,7 +87,7 @@ pub fn array_to_rust_df(rb: &[Bound<'_, PyAny>]) -> PyResult<DataFrame> {
             // for instance String -> large-String
             // dict encoded to categorical
             let columns = if run_parallel {
-                POOL.install(|| {
+                THREAD_POOL.install(|| {
                     columns
                         .into_par_iter()
                         .enumerate()

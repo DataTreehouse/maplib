@@ -218,7 +218,7 @@ impl Triplestore {
                     &dataset_or_named_graph(dataset, graph),
                 )?;
 
-                match pl_interruptable_collect(mappings.with_new_streaming(streaming)) {
+                match pl_interruptable_collect(mappings.with_streaming(streaming)) {
                     Ok(df) => {
                         if df.height() == 0 {
                             no_results = true;
@@ -252,7 +252,7 @@ impl Triplestore {
                     query_settings,
                     &dataset_or_named_graph(dataset, graph),
                 )?;
-                match pl_interruptable_collect(mappings.with_new_streaming(streaming)) {
+                match pl_interruptable_collect(mappings.with_streaming(streaming)) {
                     Ok(df) => {
                         if df.height() == 0 {
                             no_results = true;
