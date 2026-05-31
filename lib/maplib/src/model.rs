@@ -20,6 +20,7 @@ use std::fs;
 use std::io::Write;
 use std::path::Path;
 use std::sync::Arc;
+use templates::as_rdf::templates_to_triples;
 use templates::ast::{ConstantTermOrList, PType, Template};
 use templates::dataset::TemplateDataset;
 use templates::document::document_from_str;
@@ -30,7 +31,7 @@ use triplestore::{IndexingOptions, NewTriples, Triplestore};
 
 use chrontext::engine::{ChrontextSettings, Engine};
 use datalog::ast::DatalogRuleset;
-use representation::constants::{FX_PREFIX, FX_PREFIX_IRI, XYZ_PREFIX, XYZ_PREFIX_IRI};
+use representation::constants::{FX_PREFIX, FX_PREFIX_IRI, OTTR_TRIPLE, XYZ_PREFIX, XYZ_PREFIX_IRI};
 use representation::dataset::NamedGraph;
 use representation::prefixes::get_default_prefixes;
 use tracing::instrument;
@@ -336,6 +337,28 @@ impl Model {
                 known_contexts,
             )
             .map_err(MaplibError::TriplestoreError)
+    }
+
+    /// The templates held by this model, excluding the built-in `ottr:Triple` primitive that
+    /// `TemplateDataset` injects as the base case every template expands to.
+    pub fn get_templates(&self) -> Vec<&Template> {
+        self.template_dataset
+            .templates
+            .iter()
+            .filter(|t| t.signature.iri.as_str() != OTTR_TRIPLE)
+            .collect()
+    }
+
+    /// Materialize the model's OTTR templates into `graph` as RDF using the flattened maplib
+    /// template vocabulary (prefix `mtpl`). Triples are added alongside any existing content of
+    /// the graph.
+    #[instrument(skip_all)]
+    pub fn templates_to_graph(&mut self, graph: &NamedGraph) -> Result<(), MaplibError> {
+        let triples = templates_to_triples(&self.template_dataset.templates);
+        self.triplestore
+            .add_triples(triples, graph, false)
+            .map_err(MaplibError::TriplestoreError)?;
+        Ok(())
     }
 
     #[instrument(skip_all)]

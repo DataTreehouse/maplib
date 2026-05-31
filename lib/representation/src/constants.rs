@@ -20,6 +20,10 @@ pub const DEFAULT_PREFIX_IRI: &str = "urn:maplib_default:";
 pub const OTTR_IRI: &str = "http://ns.ottr.xyz/0.4/IRI";
 pub const OTTR_BLANK_NODE: &str = "http://ns.ottr.xyz/0.4/BlankNode";
 
+// Flattened maplib vocabulary used to expose OTTR templates as a queryable named graph.
+pub const MAPLIB_TEMPLATE_PREFIX: &str = "mtpl";
+pub const MAPLIB_TEMPLATE_PREFIX_IRI: &str = "https://datatreehouse.github.io/maplib/vocab#";
+
 pub const OWL_PREFIX: &str = "owl";
 pub const OWL_PREFIX_IRI: &str = "http://www.w3.org/2002/07/owl#";
 
