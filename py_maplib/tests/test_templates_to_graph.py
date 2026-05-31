@@ -1,4 +1,5 @@
 import polars as pl
+from polars.testing import assert_frame_equal
 from maplib import Model
 
 MTPL = "https://datatreehouse.github.io/maplib/vocab#"
@@ -20,10 +21,16 @@ WIDGET = """
 @prefix ottr: <http://ns.ottr.xyz/0.4/> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 
-ex:Widget [ ottr:IRI ?w, xsd:string ?label, ? xsd:integer ?weight, List<xsd:string> ?tags ] :: {
+ex:Person [ ottr:IRI ?p ] :: {
+    ottr:Triple(?p, rdf:type, ex:Person)
+} .
+
+ex:Widget [ ottr:IRI ?w, xsd:string ?label, ? xsd:integer ?weight, List<xsd:string> ?tags, ottr:IRI ?owner ] :: {
     ottr:Triple(?w, rdf:type, ex:Widget) ,
     ottr:Triple(?w, ex:label, ?label) ,
     ottr:Triple(?w, ex:weight, ?weight) ,
+    ottr:Triple(?w, ex:ownedBy, ?owner) ,
+    ex:Person(?owner) ,
     cross | ottr:Triple(?w, ex:tag, ++ ?tags)
 } .
 """
@@ -136,12 +143,15 @@ def test_infer_nodeshape_from_template_graph():
         PREFIX mtpl: <{MTPL}>
         PREFIX sh: <http://www.w3.org/ns/shacl#>
         PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX ottr: <http://ns.ottr.xyz/0.4/>
         CONSTRUCT {{
             ?template a sh:NodeShape ;
                 sh:targetClass ?class ;
                 sh:property _:prop .
             _:prop sh:path ?p ;
                 sh:datatype ?datatype ;
+                sh:nodeKind ?nodeKind ;
+                sh:class ?objectClass ;
                 sh:minCount ?minCount ;
                 sh:maxCount ?maxCount .
         }} WHERE {{
@@ -152,18 +162,38 @@ def test_infer_nodeshape_from_template_graph():
                 ?typeInst mtpl:hasArgument ?tpArg , ?tcArg .
                 ?tpArg mtpl:index 1 ; mtpl:constantValue rdf:type .
                 ?tcArg mtpl:index 2 ; mtpl:constantValue ?class .
-                ?inst mtpl:hasArgument ?predArg , ?objArg .
+                ?inst mtpl:callsTemplate ottr:Triple ;
+                      mtpl:hasArgument ?predArg , ?objArg .
                 ?predArg mtpl:index 1 ; mtpl:constantValue ?p .
                 FILTER(?p != rdf:type)
                 ?objArg mtpl:index 2 ; mtpl:variableName ?var .
                 ?param mtpl:variableName ?var ;
-                       mtpl:type ?datatype ;
+                       mtpl:type ?ptype ;
                        mtpl:cardinality ?card ;
                        mtpl:optional ?optional .
                 BIND(IF(?optional || ?card = "list", 0, 1) AS ?minCount)
                 OPTIONAL {{
                     FILTER(?card = "single")
                     BIND(1 AS ?maxCount)
+                }}
+                OPTIONAL {{
+                    FILTER(?ptype != ottr:IRI)
+                    BIND(?ptype AS ?datatype)
+                }}
+                OPTIONAL {{
+                    FILTER(?ptype = ottr:IRI)
+                    BIND(sh:IRI AS ?nodeKind)
+                }}
+                OPTIONAL {{
+                    ?template mtpl:hasInstance ?callInst .
+                    ?callInst mtpl:callsTemplate ?callee ;
+                              mtpl:hasArgument ?callArg .
+                    FILTER(?callee != ottr:Triple)
+                    ?callArg mtpl:variableName ?var .
+                    ?callee mtpl:hasInstance ?calleeType .
+                    ?calleeType mtpl:hasArgument ?ctPredArg , ?ctClassArg .
+                    ?ctPredArg mtpl:index 1 ; mtpl:constantValue rdf:type .
+                    ?ctClassArg mtpl:index 2 ; mtpl:constantValue ?objectClass .
                 }}
             }}
         }}
@@ -174,38 +204,45 @@ def test_infer_nodeshape_from_template_graph():
     shapes = m.query(
         f"""
         PREFIX sh: <http://www.w3.org/ns/shacl#>
-        SELECT ?target ?path ?datatype ?minCount ?maxCount WHERE {{
+        SELECT ?target ?path ?datatype ?nodeKind ?objectClass ?minCount ?maxCount WHERE {{
             GRAPH <{shapes_graph}> {{
                 ?shape a sh:NodeShape ;
                        sh:targetClass ?target ;
                        sh:property ?prop .
                 ?prop sh:path ?path ;
-                      sh:datatype ?datatype ;
                       sh:minCount ?minCount .
+                OPTIONAL {{ ?prop sh:datatype ?datatype }}
+                OPTIONAL {{ ?prop sh:nodeKind ?nodeKind }}
+                OPTIONAL {{ ?prop sh:class ?objectClass }}
                 OPTIONAL {{ ?prop sh:maxCount ?maxCount }}
             }}
         }}
         ORDER BY ?path
         """
     )
-    assert shapes.height == 3
-    assert shapes["target"].to_list() == ["<http://example.net/ns#Widget>"] * 3
-
     xsd_string = "<http://www.w3.org/2001/XMLSchema#string>"
     xsd_integer = "<http://www.w3.org/2001/XMLSchema#integer>"
-    rows = {r["path"]: r for r in shapes.iter_rows(named=True)}
+    sh_iri = "<http://www.w3.org/ns/shacl#IRI>"
+    ex = lambda local: f"<http://example.net/ns#{local}>"
 
-    label = rows["<http://example.net/ns#label>"]
-    assert label["datatype"] == xsd_string
-    assert label["minCount"] == 1
-    assert label["maxCount"] == 1
-
-    weight = rows["<http://example.net/ns#weight>"]
-    assert weight["datatype"] == xsd_integer
-    assert weight["minCount"] == 0
-    assert weight["maxCount"] == 1
-
-    tag = rows["<http://example.net/ns#tag>"]
-    assert tag["datatype"] == xsd_string
-    assert tag["minCount"] == 0
-    assert tag["maxCount"] is None
+    expected = pl.DataFrame(
+        {
+            "target": [ex("Widget")] * 4,
+            "path": [ex("label"), ex("ownedBy"), ex("tag"), ex("weight")],
+            "datatype": [xsd_string, None, xsd_string, xsd_integer],
+            "nodeKind": [None, sh_iri, None, None],
+            "objectClass": [None, ex("Person"), None, None],
+            "minCount": [1, 1, 0, 0],
+            "maxCount": [1, 1, None, 1],
+        },
+        schema={
+            "target": pl.String,
+            "path": pl.String,
+            "datatype": pl.String,
+            "nodeKind": pl.String,
+            "objectClass": pl.String,
+            "minCount": pl.Int64,
+            "maxCount": pl.Int64,
+        },
+    )
+    assert_frame_equal(shapes, expected)
