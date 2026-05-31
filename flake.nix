@@ -5,7 +5,7 @@
 
     crane.url = "github:ipetkov/crane";
 
-    fenix.url = "github:nix-community/fenix/80b1a19a713e2558c411f3259fecb1edd4b5b327";
+    fenix.url = "github:nix-community/fenix/380f1969f440e683333af5746caac76811b4a1a8";
     fenix.inputs.nixpkgs.follows = "nixpkgs";
   };
 
