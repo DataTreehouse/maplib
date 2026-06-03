@@ -215,11 +215,7 @@ impl PyModel {
     }
 
     #[instrument(skip_all)]
-    fn truncate_graph(
-        &self,
-        py: Python<'_>,
-        graph: Option<String>,
-    ) -> PyResult<()> {
+    fn truncate_graph(&self, py: Python<'_>, graph: Option<String>) -> PyResult<()> {
         let graph = parse_optional_named_node(graph)?;
         let graph = if let Some(graph) = graph {
             NamedGraph::NamedGraph(graph)
@@ -292,7 +288,7 @@ impl PyModel {
     fn map_json(
         &self,
         py: Python<'_>,
-        path_or_string: String,
+        path_or_string: StringOrPathBuf,
         graph: Option<String>,
         transient: Option<bool>,
     ) -> PyResult<()> {
@@ -307,7 +303,7 @@ impl PyModel {
     fn map_xml(
         &self,
         py: Python<'_>,
-        path_or_string: String,
+        path_or_string: StringOrPathBuf,
         graph: Option<String>,
         transient: Option<bool>,
     ) -> PyResult<()> {
@@ -1008,6 +1004,12 @@ enum TemplateType {
     TemplateString(String),
     TemplatePyTemplate(PyTemplate),
 }
+#[derive(Clone)]
+#[pyclass(from_py_object)]
+enum StringOrPathBuf {
+    String(String),
+    PathBuf(PathBuf),
+}
 
 impl TryFrom<Bound<'_, PyAny>> for TemplateType {
     type Error = PyMaplibError;
@@ -1079,10 +1081,7 @@ fn add_prefixes_mutex(
     Ok(())
 }
 
-fn truncate_graph_mutex(
-    inner: &mut MutexGuard<InnerModel>,
-    graph: &NamedGraph,
-) -> PyResult<()> {
+fn truncate_graph_mutex(inner: &mut MutexGuard<InnerModel>, graph: &NamedGraph) -> PyResult<()> {
     inner.triplestore.truncate(graph);
     Ok(())
 }
@@ -1164,64 +1163,67 @@ fn map_mutex(
 
 fn map_json_mutex(
     inner: &mut MutexGuard<InnerModel>,
-    string_or_path: String,
+    string_or_path: StringOrPathBuf,
     graph: Option<String>,
     transient: Option<bool>,
 ) -> PyResult<()> {
     let graph = parse_optional_named_node(graph)?;
     let named_graph = NamedGraph::from_maybe_named_node(graph.as_ref());
 
-    let is_json_string =
-        string_or_path.is_empty() || string_or_path.contains("{") || string_or_path.contains("[");
-    if is_json_string {
-        inner
-            .map_json_string(
-                string_or_path,
-                &named_graph,
-                transient.unwrap_or(DEFAULT_MAP_TO_TRANSIENT),
-            )
-            .map_err(PyMaplibError::from)?;
-    } else {
-        let p = PathBuf::from(string_or_path);
-        inner
-            .map_json_path(
-                p.as_ref(),
-                &named_graph,
-                transient.unwrap_or(DEFAULT_MAP_TO_TRANSIENT),
-            )
-            .map_err(PyMaplibError::from)?;
+    match string_or_path {
+        StringOrPathBuf::PathBuf(path) => {
+            inner
+                .map_json_path(
+                    path.as_ref(),
+                    &named_graph,
+                    transient.unwrap_or(DEFAULT_MAP_TO_TRANSIENT),
+                )
+                .map_err(PyMaplibError::from)?;
+        }
+
+        StringOrPathBuf::String(string) => {
+            inner
+                .map_json_string(
+                    string,
+                    &named_graph,
+                    transient.unwrap_or(DEFAULT_MAP_TO_TRANSIENT),
+                )
+                .map_err(PyMaplibError::from)?;
+        }
     }
     Ok(())
 }
 
 fn map_xml_mutex(
     inner: &mut MutexGuard<InnerModel>,
-    string_or_path: String,
+    string_or_path: StringOrPathBuf,
     graph: Option<String>,
     transient: Option<bool>,
 ) -> PyResult<()> {
     let graph = parse_optional_named_node(graph)?;
     let named_graph = NamedGraph::from_maybe_named_node(graph.as_ref());
 
-    let is_xml_string = string_or_path.trim_start().starts_with('<');
-    if is_xml_string {
-        inner
-            .map_xml_string(
-                string_or_path,
-                &named_graph,
-                transient.unwrap_or(DEFAULT_MAP_TO_TRANSIENT),
-            )
-            .map_err(PyMaplibError::from)?;
-    } else {
-        let p = PathBuf::from(string_or_path);
-        inner
-            .map_xml_path(
-                p.as_ref(),
-                &named_graph,
-                transient.unwrap_or(DEFAULT_MAP_TO_TRANSIENT),
-            )
-            .map_err(PyMaplibError::from)?;
+    match string_or_path {
+        StringOrPathBuf::String(string) => {
+            inner
+                .map_xml_string(
+                    string,
+                    &named_graph,
+                    transient.unwrap_or(DEFAULT_MAP_TO_TRANSIENT),
+                )
+                .map_err(PyMaplibError::from)?;
+        }
+        StringOrPathBuf::PathBuf(path) => {
+            inner
+                .map_xml_path(
+                    path.as_ref(),
+                    &named_graph,
+                    transient.unwrap_or(DEFAULT_MAP_TO_TRANSIENT),
+                )
+                .map_err(PyMaplibError::from)?;
+        }
     }
+
     Ok(())
 }
 

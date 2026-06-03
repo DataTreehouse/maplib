@@ -61,16 +61,15 @@ impl Triplestore {
             {
                 Event::Eof => break,
                 Event::Start(e) => {
-                    let (subj, new_base_prefix, introduced_prefixed_namespaces) =
-                        open_element(
-                            e.name().as_ref(),
-                            e.attributes(),
-                            &mut stack,
-                            &mut pred_map,
-                            &mut prefix_map,
-                            &mut datatypes_map,
-                            &base_prefix,
-                        )?;
+                    let (subj, new_base_prefix, introduced_prefixed_namespaces) = open_element(
+                        e.name().as_ref(),
+                        e.attributes(),
+                        &mut stack,
+                        &mut pred_map,
+                        &mut prefix_map,
+                        &mut datatypes_map,
+                        &base_prefix,
+                    )?;
                     let previous_base_prefix = if let Some(new_base_prefix) = new_base_prefix {
                         let previous_base_prefix = base_prefix;
                         base_prefix = new_base_prefix;
@@ -151,14 +150,7 @@ fn open_element(
     prefix_map: &mut HashMap<String, NamedNode>,
     datatypes_map: &mut HashMap<String, Arc<BaseRDFNodeType>>,
     base_prefix: &NamedNode,
-) -> Result<
-    (
-        String,
-        Option<NamedNode>,
-        Vec<(String, Option<NamedNode>)>,
-    ),
-    TriplestoreError,
-> {
+) -> Result<(String, Option<NamedNode>, Vec<(String, Option<NamedNode>)>), TriplestoreError> {
     let name = std::str::from_utf8(name).map_err(|e| TriplestoreError::XMLError(e.to_string()))?;
     let subject = new_iri_subject();
     if let Some(parent) = stack.last_mut() {
@@ -246,11 +238,7 @@ fn open_element(
     let type_iri = qname_to_iri(name, prefix_map, use_base_prefix)?;
     push_iri_object(pred_map, rdf::TYPE.as_str(), &subject, type_iri.as_str());
 
-    Ok((
-        subject,
-        new_base_prefix,
-        introduced_prefixed_namespaces,
-    ))
+    Ok((subject, new_base_prefix, introduced_prefixed_namespaces))
 }
 
 fn push_text_child(
