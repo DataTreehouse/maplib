@@ -25,3 +25,34 @@ def test_query_filter_exception():
                 FILTER("a")
             }
         """)
+
+def test_query_contains_function_invalid_args_exception():
+    m = Model()
+    with pytest.raises(MaplibException) as e:
+        m.query("""
+            SELECT * WHERE {
+                BIND(contains("foobar", 12) AS ?b)
+            }
+        """)
+    assert "should resolve to an xsd:string" in str(e)
+
+def test_query_invalid_replace_arg_exception():
+    m = Model()
+    with pytest.raises(MaplibException) as e:
+        m.query("""
+            SELECT * WHERE {
+                BIND(replace("abcd", "b", 12) AS ?b)
+            }
+        """)
+    assert "should resolve to an xsd:string" in str(e)
+
+def test_query_invalid_substr_arg_exception():
+    m = Model()
+    with pytest.raises(MaplibException) as e:
+        m.query("""
+            SELECT * WHERE {
+                BIND(substr("foobar", "s") AS ?b)
+            }
+        """)
+    assert "SUBSTR expected" in str(e)
+
