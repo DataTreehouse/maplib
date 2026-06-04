@@ -1004,8 +1004,7 @@ enum TemplateType {
     TemplateString(String),
     TemplatePyTemplate(PyTemplate),
 }
-#[derive(Clone)]
-#[pyclass(from_py_object)]
+#[derive(Clone, FromPyObject)]
 enum StringOrPathBuf {
     String(String),
     PathBuf(PathBuf),
@@ -1171,20 +1170,32 @@ fn map_json_mutex(
     let named_graph = NamedGraph::from_maybe_named_node(graph.as_ref());
 
     match string_or_path {
+        StringOrPathBuf::String(string) => {
+            let is_json_string = string.is_empty() || string.contains("{") || string.contains("[");
+
+            if is_json_string {
+                inner
+                    .map_json_string(
+                        string,
+                        &named_graph,
+                        transient.unwrap_or(DEFAULT_MAP_TO_TRANSIENT),
+                    )
+                    .map_err(PyMaplibError::from)?;
+            } else {
+                let p = PathBuf::from(string.as_str());
+                inner
+                    .map_json_path(
+                        p.as_ref(),
+                        &named_graph,
+                        transient.unwrap_or(DEFAULT_MAP_TO_TRANSIENT),
+                    )
+                    .map_err(PyMaplibError::from)?;
+            }
+        }
         StringOrPathBuf::PathBuf(path) => {
             inner
                 .map_json_path(
                     path.as_ref(),
-                    &named_graph,
-                    transient.unwrap_or(DEFAULT_MAP_TO_TRANSIENT),
-                )
-                .map_err(PyMaplibError::from)?;
-        }
-
-        StringOrPathBuf::String(string) => {
-            inner
-                .map_json_string(
-                    string,
                     &named_graph,
                     transient.unwrap_or(DEFAULT_MAP_TO_TRANSIENT),
                 )
@@ -1205,13 +1216,26 @@ fn map_xml_mutex(
 
     match string_or_path {
         StringOrPathBuf::String(string) => {
-            inner
-                .map_xml_string(
-                    string,
-                    &named_graph,
-                    transient.unwrap_or(DEFAULT_MAP_TO_TRANSIENT),
-                )
-                .map_err(PyMaplibError::from)?;
+            let is_xml_string = string.trim_start().starts_with('<');
+
+            if is_xml_string {
+                inner
+                    .map_xml_string(
+                        string,
+                        &named_graph,
+                        transient.unwrap_or(DEFAULT_MAP_TO_TRANSIENT),
+                    )
+                    .map_err(PyMaplibError::from)?;
+            } else {
+                let p = PathBuf::from(string);
+                inner
+                    .map_xml_path(
+                        p.as_ref(),
+                        &named_graph,
+                        transient.unwrap_or(DEFAULT_MAP_TO_TRANSIENT),
+                    )
+                    .map_err(PyMaplibError::from)?;
+            }
         }
         StringOrPathBuf::PathBuf(path) => {
             inner

@@ -10,13 +10,12 @@ TESTDATA_PATH = PATH_HERE / "testdata" / "xmls"
 
 
 @pytest.mark.parametrize("disk", disk_params())
-def test_map_xml_1(disk):
+def test_map_xml_path_as_str_1(disk):
     xml_1 = TESTDATA_PATH / "1.xml"
     m = Model(storage_folder=disk)
     m.map_xml(str(xml_1))
     df = m.query("""SELECT * WHERE {?s ?p ?o}""")
     assert df.height > 0
-
     df2 = m.query(
         """
         PREFIX fx:  <http://sparql.xyz/facade-x/ns/>
@@ -40,7 +39,7 @@ def test_map_xml_1(disk):
 
 
 @pytest.mark.parametrize("disk", disk_params())
-def test_map_xml_2_repeated_children(disk):
+def test_map_xml_path_as_str_2_repeated_children(disk):
     xml_2 = TESTDATA_PATH / "2.xml"
     m = Model(storage_folder=disk)
     m.map_xml(str(xml_2))
@@ -61,6 +60,56 @@ def test_map_xml_2_repeated_children(disk):
     )
     assert df_items.height == 22
 
+@pytest.mark.parametrize("disk", disk_params())
+def test_map_xml_path_as_path_1(disk):
+    xml_1 = TESTDATA_PATH / "1.xml"
+    m = Model(storage_folder=disk)
+    m.map_xml(xml_1)
+    df = m.query("""SELECT * WHERE {?s ?p ?o}""")
+    assert df.height > 0
+    df2 = m.query(
+        """
+        PREFIX fx:  <http://sparql.xyz/facade-x/ns/>
+        PREFIX xyz: <http://sparql.xyz/facade-x/data/>
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+
+        SELECT ?title WHERE {
+            ?root a fx:root .
+            ?root fx:child ?glossary .
+            ?glossary a xyz:glossary .
+            ?glossary fx:childNumber "1"^^xsd:unsignedInt .
+            ?glossary fx:child ?title_node .
+            ?title_node a xyz:title .
+            ?title_node fx:childNumber "1"^^xsd:unsignedInt .
+            ?title_node fx:child ?title .
+        }
+        """
+    )
+    assert df2.height == 1
+    assert df2.get_column("title")[0] == "example glossary"
+
+
+@pytest.mark.parametrize("disk", disk_params())
+def test_map_xml_path_as_path_2_repeated_children(disk):
+    xml_2 = TESTDATA_PATH / "2.xml"
+    m = Model(storage_folder=disk)
+    m.map_xml(xml_2)
+
+    df_items = m.query(
+        """
+        PREFIX fx:  <http://sparql.xyz/facade-x/ns/>
+        PREFIX xyz: <http://sparql.xyz/facade-x/data/>
+
+        SELECT ?items WHERE {
+            ?root a fx:root .
+            ?root ?p1 ?menu .
+            ?menu a xyz:menu .
+            ?menu ?p2 ?items .
+            ?items a xyz:items .
+        }
+        """
+    )
+    assert df_items.height == 22
 
 def test_map_xml_3_inline_string():
 #From https://github.com/SPARQL-Anything/sparql.anything/tree/v1.2-DEV/sparql-anything-xml/src/test/java/io/github/sparqlanything/xml
