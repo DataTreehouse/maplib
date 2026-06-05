@@ -4,6 +4,7 @@ mod lang_matches;
 mod replace;
 mod sparql_regex;
 mod sparql_uuid;
+mod str_;
 mod struuid;
 
 use crate::constants::{
@@ -17,6 +18,7 @@ use crate::expressions::functions::lang_matches::lang_matches;
 use crate::expressions::functions::replace::sparql_replace;
 use crate::expressions::functions::sparql_regex::sparql_regex;
 use crate::expressions::functions::sparql_uuid::uuid;
+use crate::expressions::functions::str_::str_;
 use crate::expressions::functions::struuid::struuid;
 use crate::expressions::{cast_lang_string_to_string, drop_inner_contexts};
 use md5::{Digest, Md5};
@@ -44,7 +46,6 @@ use representation::{
 use sha1::Sha1;
 use spargebra::algebra::{Expression, Function};
 use std::collections::HashMap;
-use std::mem::replace;
 use std::ops::{Div, Mul};
 use std::time::{SystemTime, UNIX_EPOCH};
 use uri_encode::encode_uri;
@@ -392,30 +393,14 @@ pub fn func_expression(
             }
         }
         Function::Str => {
-            if args.len() != 1 {
-                return Err(QueryProcessingError::BadNumberOfFunctionArguments(
-                    func.clone(),
-                    args.len(),
-                    "1".to_string(),
-                ));
-            }
-            let first_context = args_contexts.get(&0).unwrap();
-            solution_mappings.mappings = solution_mappings.mappings.with_column(
-                str_function(
-                    first_context.as_str(),
-                    solution_mappings
-                        .rdf_node_types
-                        .get(first_context.as_str())
-                        .unwrap(),
-                    global_cats,
-                )
-                .alias(outer_context.as_str()),
-            );
-            solution_mappings.rdf_node_types.insert(
-                outer_context.as_str().to_string(),
-                BaseRDFNodeType::Literal(xsd::STRING.into_owned())
-                    .into_default_input_rdf_node_state(),
-            );
+            solution_mappings = str_(
+                solution_mappings,
+                func,
+                args,
+                &args_contexts,
+                outer_context,
+                global_cats,
+            )?;
         }
         Function::Lang => {
             solution_mappings = lang_(
