@@ -1,6 +1,7 @@
 mod iri;
 mod lang_;
 mod lang_matches;
+mod now_;
 mod replace;
 mod round_;
 mod sparql_regex;
@@ -16,6 +17,7 @@ use crate::errors::QueryProcessingError;
 use crate::expressions::functions::iri::iri;
 use crate::expressions::functions::lang_::lang_;
 use crate::expressions::functions::lang_matches::lang_matches;
+use crate::expressions::functions::now_::now_;
 use crate::expressions::functions::replace::sparql_replace;
 use crate::expressions::functions::round_::round_;
 use crate::expressions::functions::sparql_regex::sparql_regex;
@@ -297,26 +299,7 @@ pub fn func_expression(
             );
         }
         Function::Now => {
-            let now = SystemTime::now();
-            let since_epoch = now.duration_since(UNIX_EPOCH).unwrap();
-            assert_eq!(
-                TimeUnit::Microseconds,
-                default_time_unit(),
-                "Should never happen"
-            );
-            solution_mappings.mappings = solution_mappings.mappings.with_column(
-                lit(LiteralValue::Scalar(Scalar::new_datetime(
-                    since_epoch.as_micros() as i64,
-                    default_time_unit(),
-                    Some(default_time_zone()),
-                )))
-                .alias(outer_context.as_str()),
-            );
-            solution_mappings.rdf_node_types.insert(
-                outer_context.as_str().to_string(),
-                BaseRDFNodeType::Literal(xsd::DATE_TIME.into_owned())
-                    .into_default_input_rdf_node_state(),
-            );
+            solution_mappings = now_(solution_mappings, outer_context)?;
         }
         Function::Round => {
             solution_mappings =
