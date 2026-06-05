@@ -1,3 +1,4 @@
+mod concat_;
 mod iri;
 mod lang_;
 mod lang_matches;
@@ -14,6 +15,7 @@ use crate::constants::{
     MICROS_AS_DATETIME, MODULUS, SECONDS_AS_DATETIME,
 };
 use crate::errors::QueryProcessingError;
+use crate::expressions::functions::concat_::concat_;
 use crate::expressions::functions::iri::iri;
 use crate::expressions::functions::lang_::lang_;
 use crate::expressions::functions::lang_matches::lang_matches;
@@ -31,15 +33,15 @@ use oxrdf::NamedNodeRef;
 use polars::datatypes::{DataType, Field, TimeUnit};
 use polars::error::PolarsError;
 use polars::prelude::{
-    as_struct, coalesce, col, concat_str, lit, when, Column, Expr, IntoColumn, LiteralValue,
-    Scalar, Schema, Series, StringChunked, StrptimeOptions,
+    as_struct, coalesce, col, lit, when, Column, Expr, IntoColumn, LiteralValue, Scalar, Schema,
+    Series, StringChunked, StrptimeOptions,
 };
 use representation::cats::{maybe_decode_expr, LockedCats};
 use representation::multitype::{MULTI_BLANK_DT, MULTI_IRI_DT};
 use representation::query_context::Context;
 use representation::rdf_to_polars::{
-    default_time_unit, default_time_zone, polars_literal_values_to_series,
-    rdf_literal_to_polars_literal_value_impl, rdf_named_node_to_polars_literal_value,
+    polars_literal_values_to_series, rdf_literal_to_polars_literal_value_impl,
+    rdf_named_node_to_polars_literal_value,
 };
 use representation::solution_mapping::{BaseCatState, SolutionMappings};
 use representation::{
@@ -49,7 +51,6 @@ use sha1::Sha1;
 use spargebra::algebra::{Expression, Function};
 use std::collections::HashMap;
 use std::ops::{Div, Mul};
-use std::time::{SystemTime, UNIX_EPOCH};
 use uri_encode::encode_uri;
 
 pub fn func_expression(
@@ -250,53 +251,14 @@ pub fn func_expression(
             );
         }
         Function::Concat => {
-            if args.len() < 2 {
-                return Err(QueryProcessingError::BadNumberOfFunctionArguments(
-                    func.clone(),
-                    args.len(),
-                    ">1".to_string(),
-                ));
-            }
-            let SolutionMappings {
-                mappings,
-                rdf_node_types: datatypes,
-                height_estimate: height_upper_bound,
-            } = solution_mappings;
-            let mut cols = Vec::with_capacity(args.len());
-            let base_string = BaseRDFNodeType::Literal(xsd::STRING.into_owned());
-            for i in 0..args.len() {
-                let c = args_contexts.get(&i).unwrap().as_str();
-                let t = datatypes.get(c).unwrap();
-                if let Some(s) = t.map.get(&base_string) {
-                    if t.is_multi() {
-                        cols.push(maybe_decode_expr(
-                            col(c)
-                                .struct_()
-                                .field_by_name(&base_string.field_col_name()),
-                            &base_string,
-                            s,
-                            global_cats.clone(),
-                        ))
-                    } else {
-                        cols.push(maybe_decode_expr(
-                            col(c),
-                            &base_string,
-                            s,
-                            global_cats.clone(),
-                        ))
-                    }
-                } else {
-                    cols.push(lit(LiteralValue::untyped_null()).cast(DataType::String))
-                }
-            }
-            let new_mappings =
-                mappings.with_column(concat_str(cols, "", true).alias(outer_context.as_str()));
-            solution_mappings = SolutionMappings::new(new_mappings, datatypes, height_upper_bound);
-            solution_mappings.rdf_node_types.insert(
-                outer_context.as_str().to_string(),
-                BaseRDFNodeType::Literal(xsd::STRING.into_owned())
-                    .into_default_input_rdf_node_state(),
-            );
+            solution_mappings = concat_(
+                solution_mappings,
+                func,
+                args,
+                &args_contexts,
+                outer_context,
+                global_cats,
+            )?;
         }
         Function::Now => {
             solution_mappings = now_(solution_mappings, outer_context)?;
