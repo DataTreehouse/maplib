@@ -1,6 +1,7 @@
 mod abs_;
 mod ceil_;
 mod concat_;
+mod datatype_;
 mod day_;
 mod floor_;
 mod hours_;
@@ -33,6 +34,7 @@ use crate::errors::QueryProcessingError;
 use crate::expressions::functions::abs_::abs_;
 use crate::expressions::functions::ceil_::ceil_;
 use crate::expressions::functions::concat_::concat_;
+use crate::expressions::functions::datatype_::datatype_;
 use crate::expressions::functions::day_::day_;
 use crate::expressions::functions::floor_::floor_;
 use crate::expressions::functions::hours_::hours_;
@@ -63,13 +65,12 @@ use oxrdf::NamedNodeRef;
 use polars::datatypes::{DataType, Field, TimeUnit};
 use polars::error::PolarsError;
 use polars::prelude::{
-    as_struct, coalesce, col, lit, when, Column, Expr, IntoColumn, LiteralValue, Scalar, Schema,
-    Series, StringChunked, StrptimeOptions,
+    as_struct, coalesce, col, lit, Column, Expr, IntoColumn, LiteralValue, Scalar, Schema, Series,
+    StringChunked, StrptimeOptions,
 };
 use representation::cats::{maybe_decode_expr, LockedCats};
 use representation::multitype::{MULTI_BLANK_DT, MULTI_IRI_DT};
 use representation::query_context::Context;
-use representation::rdf_to_polars::rdf_named_node_to_polars_literal_value;
 use representation::solution_mapping::{BaseCatState, SolutionMappings};
 use representation::{
     BaseRDFNodeType, RDFNodeState, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD,
@@ -1098,50 +1099,7 @@ pub fn func_expression(
             solution_mappings = is_literal(solution_mappings, &args_contexts, outer_context)?;
         }
         Function::Datatype => {
-            let first_context = args_contexts.get(&0).unwrap();
-            let t = solution_mappings
-                .rdf_node_types
-                .get(first_context.as_str())
-                .unwrap();
-            let iri_type = BaseRDFNodeType::IRI;
-            let iri_state = BaseCatState::String;
-            let iri_dtype = iri_type.polars_data_type(&iri_state, true);
-            let expr = if t.is_multi() {
-                let mut exprs = vec![];
-                for t in t.map.keys() {
-                    if let BaseRDFNodeType::Literal(l) = t {
-                        exprs.push(
-                            when(
-                                col(first_context.as_str())
-                                    .struct_()
-                                    .field_by_name(&t.field_col_name())
-                                    .is_null()
-                                    .not(),
-                            )
-                            .then(lit(rdf_named_node_to_polars_literal_value(l)))
-                            .otherwise(lit(LiteralValue::untyped_null()).cast(iri_dtype.clone())),
-                        );
-                    }
-                }
-                if !exprs.is_empty() {
-                    coalesce(exprs.as_slice())
-                } else {
-                    lit(LiteralValue::untyped_null()).cast(iri_dtype)
-                }
-            } else {
-                let b = t.get_base_type().unwrap();
-                match b {
-                    BaseRDFNodeType::Literal(l) => lit(rdf_named_node_to_polars_literal_value(l)),
-                    _ => lit(LiteralValue::untyped_null()).cast(iri_dtype),
-                }
-            };
-            solution_mappings.mappings = solution_mappings
-                .mappings
-                .with_column(expr.alias(outer_context.as_str()));
-            solution_mappings.rdf_node_types.insert(
-                outer_context.as_str().to_string(),
-                RDFNodeState::from_bases(iri_type, iri_state),
-            );
+            solution_mappings = datatype_(solution_mappings, &args_contexts, outer_context)?;
         }
         Function::EncodeForUri | Function::Sha1 | Function::Md5 => {
             if args.len() != 1 {
