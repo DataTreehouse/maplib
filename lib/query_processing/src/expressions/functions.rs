@@ -17,6 +17,7 @@ mod sparql_regex;
 mod sparql_uuid;
 mod str_;
 mod str_dt;
+mod str_lang;
 mod struuid;
 mod year_;
 
@@ -44,6 +45,7 @@ use crate::expressions::functions::sparql_regex::sparql_regex;
 use crate::expressions::functions::sparql_uuid::uuid;
 use crate::expressions::functions::str_::str_;
 use crate::expressions::functions::str_dt::str_dt;
+use crate::expressions::functions::str_lang::str_lang;
 use crate::expressions::functions::struuid::struuid;
 use crate::expressions::functions::year_::year_;
 use crate::expressions::{cast_lang_string_to_string, drop_inner_contexts};
@@ -631,49 +633,14 @@ pub fn func_expression(
             }
         }
         Function::StrLang => {
-            if (args.len() != 2) {
-                return Err(QueryProcessingError::BadNumberOfFunctionArguments(
-                    func.clone(),
-                    args.len(),
-                    "2".to_string(),
-                ));
-            }
-            let first_context = args_contexts.get(&0).unwrap();
-            let first_t = solution_mappings
-                .rdf_node_types
-                .get(first_context.as_str())
-                .unwrap();
-            let first_expr = if first_t.is_lit_type(xsd::STRING) {
-                let f_bt = first_t.get_base_type().unwrap();
-                let f_bs = first_t.get_base_state().unwrap();
-                maybe_decode_expr(col(first_context.as_str()), f_bt, f_bs, global_cats.clone())
-            } else {
-                todo!();
-            };
-            let second_context = args_contexts.get(&1).unwrap();
-            let second_t = solution_mappings
-                .rdf_node_types
-                .get(second_context.as_str())
-                .unwrap();
-            let second_expr = if second_t.is_lit_type(xsd::STRING) {
-                let f_bt = second_t.get_base_type().unwrap();
-                let f_bs = second_t.get_base_state().unwrap();
-                maybe_decode_expr(col(second_context.as_str()), f_bt, f_bs, global_cats)
-            } else {
-                todo!();
-            };
-            solution_mappings.mappings = solution_mappings.mappings.with_column(
-                as_struct(vec![
-                    first_expr.alias(LANG_STRING_VALUE_FIELD),
-                    second_expr.alias(LANG_STRING_LANG_FIELD),
-                ])
-                .alias(outer_context.as_str()),
-            );
-            solution_mappings.rdf_node_types.insert(
-                outer_context.as_str().to_string(),
-                BaseRDFNodeType::Literal(rdf::LANG_STRING.into_owned())
-                    .into_default_input_rdf_node_state(),
-            );
+            solution_mappings = str_lang(
+                solution_mappings,
+                func,
+                args,
+                &args_contexts,
+                outer_context,
+                global_cats,
+            )?;
         }
         Function::StrLen => {
             if (args.len() != 1) {
