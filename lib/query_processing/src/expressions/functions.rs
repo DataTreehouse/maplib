@@ -18,6 +18,7 @@ mod sparql_uuid;
 mod str_;
 mod str_dt;
 mod str_lang;
+mod str_len;
 mod struuid;
 mod year_;
 
@@ -46,6 +47,7 @@ use crate::expressions::functions::sparql_uuid::uuid;
 use crate::expressions::functions::str_::str_;
 use crate::expressions::functions::str_dt::str_dt;
 use crate::expressions::functions::str_lang::str_lang;
+use crate::expressions::functions::str_len::str_len;
 use crate::expressions::functions::struuid::struuid;
 use crate::expressions::functions::year_::year_;
 use crate::expressions::{cast_lang_string_to_string, drop_inner_contexts};
@@ -643,27 +645,14 @@ pub fn func_expression(
             )?;
         }
         Function::StrLen => {
-            if (args.len() != 1) {
-                return Err(QueryProcessingError::BadNumberOfFunctionArguments(
-                    func.clone(),
-                    args.len(),
-                    "1".to_string(),
-                ));
-            }
-            let first_context = args_contexts.get(&0).unwrap();
-            let t = solution_mappings
-                .rdf_node_types
-                .get(first_context.as_str())
-                .unwrap();
-            let mut expr = str_function(first_context.as_str(), t, global_cats);
-            expr = expr.str().len_chars().cast(DataType::Int64);
-            expr = expr.alias(outer_context.as_str());
-            solution_mappings.mappings = solution_mappings.mappings.with_column(expr);
-            solution_mappings.rdf_node_types.insert(
-                outer_context.as_str().to_string(),
-                BaseRDFNodeType::Literal(xsd::INTEGER.into_owned())
-                    .into_default_input_rdf_node_state(),
-            );
+            solution_mappings = str_len(
+                solution_mappings,
+                func,
+                args,
+                &args_contexts,
+                outer_context,
+                global_cats,
+            )?;
         }
         Function::LCase | Function::UCase | Function::SubStr => {
             if matches!(func, Function::LCase | Function::UCase) {
