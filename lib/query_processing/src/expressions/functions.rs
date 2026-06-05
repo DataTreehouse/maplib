@@ -1,4 +1,5 @@
 mod concat_;
+mod floor_;
 mod iri;
 mod lang_;
 mod lang_matches;
@@ -8,8 +9,8 @@ mod round_;
 mod sparql_regex;
 mod sparql_uuid;
 mod str_;
-mod struuid;
 mod str_dt;
+mod struuid;
 
 use crate::constants::{
     DATETIME_AS_MICROS, DATETIME_AS_SECONDS, DECODE, FLOOR_DATETIME_TO_SECONDS_INTERVAL,
@@ -17,6 +18,7 @@ use crate::constants::{
 };
 use crate::errors::QueryProcessingError;
 use crate::expressions::functions::concat_::concat_;
+use crate::expressions::functions::floor_::floor_;
 use crate::expressions::functions::iri::iri;
 use crate::expressions::functions::lang_::lang_;
 use crate::expressions::functions::lang_matches::lang_matches;
@@ -26,6 +28,7 @@ use crate::expressions::functions::round_::round_;
 use crate::expressions::functions::sparql_regex::sparql_regex;
 use crate::expressions::functions::sparql_uuid::uuid;
 use crate::expressions::functions::str_::str_;
+use crate::expressions::functions::str_dt::str_dt;
 use crate::expressions::functions::struuid::struuid;
 use crate::expressions::{cast_lang_string_to_string, drop_inner_contexts};
 use md5::{Digest, Md5};
@@ -50,7 +53,6 @@ use spargebra::algebra::{Expression, Function};
 use std::collections::HashMap;
 use std::ops::{Div, Mul};
 use uri_encode::encode_uri;
-use crate::expressions::functions::str_dt::str_dt;
 
 pub fn func_expression(
     mut solution_mappings: SolutionMappings,
@@ -230,24 +232,8 @@ pub fn func_expression(
             );
         }
         Function::Floor => {
-            if args.len() != 1 {
-                return Err(QueryProcessingError::BadNumberOfFunctionArguments(
-                    func.clone(),
-                    args.len(),
-                    "1".to_string(),
-                ));
-            }
-            let first_context = args_contexts.get(&0).unwrap();
-            solution_mappings.mappings = solution_mappings.mappings.with_column(
-                col(first_context.as_str())
-                    .floor()
-                    .alias(outer_context.as_str()),
-            );
-            solution_mappings.rdf_node_types.insert(
-                outer_context.as_str().to_string(),
-                BaseRDFNodeType::Literal(xsd::INTEGER.into_owned())
-                    .into_default_input_rdf_node_state(),
-            );
+            solution_mappings =
+                floor_(solution_mappings, func, args, &args_contexts, outer_context)?;
         }
         Function::Concat => {
             solution_mappings = concat_(
@@ -564,7 +550,14 @@ pub fn func_expression(
             }
         }
         Function::StrDt => {
-            solution_mappings = str_dt(solution_mappings, func, args, &args_contexts, outer_context, global_cats)?;
+            solution_mappings = str_dt(
+                solution_mappings,
+                func,
+                args,
+                &args_contexts,
+                outer_context,
+                global_cats,
+            )?;
         }
         Function::StrBefore | Function::StrAfter => {
             if (args.len() != 2) {
