@@ -18,6 +18,7 @@ mod sparql_uuid;
 mod str_;
 mod str_dt;
 mod struuid;
+mod year_;
 
 use crate::constants::{
     DATETIME_AS_MICROS, DATETIME_AS_SECONDS, DECODE, FLOOR_DATETIME_TO_SECONDS_INTERVAL,
@@ -44,6 +45,7 @@ use crate::expressions::functions::sparql_uuid::uuid;
 use crate::expressions::functions::str_::str_;
 use crate::expressions::functions::str_dt::str_dt;
 use crate::expressions::functions::struuid::struuid;
+use crate::expressions::functions::year_::year_;
 use crate::expressions::{cast_lang_string_to_string, drop_inner_contexts};
 use md5::{Digest, Md5};
 use oxrdf::vocab::{rdf, xsd};
@@ -78,25 +80,8 @@ pub fn func_expression(
 ) -> Result<SolutionMappings, QueryProcessingError> {
     match func {
         Function::Year => {
-            if args.len() != 1 {
-                return Err(QueryProcessingError::BadNumberOfFunctionArguments(
-                    func.clone(),
-                    args.len(),
-                    "1".to_string(),
-                ));
-            }
-            let first_context = args_contexts.get(&0).unwrap();
-            solution_mappings.mappings = solution_mappings.mappings.with_column(
-                col(first_context.as_str())
-                    .dt()
-                    .year()
-                    .alias(outer_context.as_str()),
-            );
-            solution_mappings.rdf_node_types.insert(
-                outer_context.as_str().to_string(),
-                BaseRDFNodeType::Literal(xsd::UNSIGNED_INT.into_owned())
-                    .into_default_input_rdf_node_state(),
-            );
+            solution_mappings =
+                year_(solution_mappings, func, args, &args_contexts, outer_context)?;
         }
         Function::Month => {
             solution_mappings =
