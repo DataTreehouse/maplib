@@ -5,6 +5,7 @@ mod floor_;
 mod iri;
 mod lang_;
 mod lang_matches;
+mod minutes_;
 mod now_;
 mod replace;
 mod round_;
@@ -27,6 +28,7 @@ use crate::expressions::functions::floor_::floor_;
 use crate::expressions::functions::iri::iri;
 use crate::expressions::functions::lang_::lang_;
 use crate::expressions::functions::lang_matches::lang_matches;
+use crate::expressions::functions::minutes_::minutes_;
 use crate::expressions::functions::now_::now_;
 use crate::expressions::functions::replace::sparql_replace;
 use crate::expressions::functions::round_::round_;
@@ -154,25 +156,8 @@ pub fn func_expression(
             );
         }
         Function::Minutes => {
-            if args.len() != 1 {
-                return Err(QueryProcessingError::BadNumberOfFunctionArguments(
-                    func.clone(),
-                    args.len(),
-                    "1".to_string(),
-                ));
-            }
-            let first_context = args_contexts.get(&0).unwrap();
-            solution_mappings.mappings = solution_mappings.mappings.with_column(
-                col(first_context.as_str())
-                    .dt()
-                    .minute()
-                    .alias(outer_context.as_str()),
-            );
-            solution_mappings.rdf_node_types.insert(
-                outer_context.as_str().to_string(),
-                BaseRDFNodeType::Literal(xsd::UNSIGNED_INT.into_owned())
-                    .into_default_input_rdf_node_state(),
-            );
+            solution_mappings =
+                minutes_(solution_mappings, func, args, &args_contexts, outer_context)?;
         }
         Function::Seconds => {
             solution_mappings =
