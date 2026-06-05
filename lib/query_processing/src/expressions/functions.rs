@@ -1,4 +1,5 @@
 mod iri;
+mod lang_matches;
 mod replace;
 mod sparql_regex;
 mod sparql_uuid;
@@ -10,6 +11,7 @@ use crate::constants::{
 };
 use crate::errors::QueryProcessingError;
 use crate::expressions::functions::iri::iri;
+use crate::expressions::functions::lang_matches::lang_matches;
 use crate::expressions::functions::replace::sparql_replace;
 use crate::expressions::functions::sparql_regex::sparql_regex;
 use crate::expressions::functions::sparql_uuid::uuid;
@@ -501,61 +503,14 @@ pub fn func_expression(
             );
         }
         Function::LangMatches => {
-            if args.len() != 2 {
-                return Err(QueryProcessingError::BadNumberOfFunctionArguments(
-                    func.clone(),
-                    args.len(),
-                    "2".to_string(),
-                ));
-            }
-            let first_context = args_contexts.get(&0).unwrap();
-            let t = solution_mappings
-                .rdf_node_types
-                .get(first_context.as_str())
-                .unwrap();
-            let b = BaseRDFNodeType::Literal(xsd::STRING.into_owned());
-            if let Some(s) = t.map.get(&b) {
-                let lang_expr =
-                    maybe_decode_expr(col(first_context.as_str()), &b, s, global_cats.clone());
-                if let Expression::Literal(l) = args.get(1).unwrap() {
-                    if l.value() == "*" {
-                        solution_mappings.mappings = solution_mappings
-                            .mappings
-                            .with_column(lang_expr.is_null().not().alias(outer_context.as_str()));
-                    } else {
-                        solution_mappings.mappings = solution_mappings.mappings.with_column(
-                            lang_expr
-                                .clone()
-                                .str()
-                                .to_lowercase()
-                                .eq(lit(l.value().to_lowercase()))
-                                .or(lang_expr
-                                    .str()
-                                    .to_lowercase()
-                                    .str()
-                                    .starts_with(lit(format!("{}-", l.value().to_lowercase()))))
-                                .alias(outer_context.as_str()),
-                        );
-                    }
-                    solution_mappings.rdf_node_types.insert(
-                        outer_context.as_str().to_string(),
-                        BaseRDFNodeType::Literal(xsd::BOOLEAN.into_owned())
-                            .into_default_input_rdf_node_state(),
-                    );
-                } else {
-                    todo!("Handle this error.. ")
-                }
-            } else {
-                solution_mappings.mappings = solution_mappings.mappings.with_column(
-                    lit(LiteralValue::untyped_null())
-                        .cast(BaseRDFNodeType::None.default_input_polars_data_type())
-                        .alias(outer_context.as_str()),
-                );
-                solution_mappings.rdf_node_types.insert(
-                    outer_context.as_str().to_string(),
-                    BaseRDFNodeType::None.into_default_input_rdf_node_state(),
-                );
-            }
+            solution_mappings = lang_matches(
+                solution_mappings,
+                func,
+                args,
+                &args_contexts,
+                outer_context,
+                global_cats,
+            )?;
         }
         Function::Regex => {
             solution_mappings = sparql_regex(
