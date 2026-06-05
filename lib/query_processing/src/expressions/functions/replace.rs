@@ -1,14 +1,14 @@
 use crate::errors::QueryProcessingError;
-use crate::expressions::functions::{create_regex_string, create_regex_replace_expr};
+use crate::expressions::functions::{create_regex_replace_expr, create_regex_string};
 
 use oxrdf::vocab::xsd;
-use std::collections::HashMap;
+use polars::prelude::{coalesce, col};
 use representation::cats::{maybe_decode_expr, LockedCats};
 use representation::query_context::Context;
 use representation::solution_mapping::SolutionMappings;
-use spargebra::algebra::{Expression, Function};
-use polars::prelude::{coalesce, col};
 use representation::{BaseRDFNodeType, LANG_STRING_VALUE_FIELD};
+use spargebra::algebra::{Expression, Function};
+use std::collections::HashMap;
 
 pub fn sparql_replace(
     mut solution_mappings: SolutionMappings,
