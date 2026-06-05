@@ -3,6 +3,7 @@ mod ceil_;
 mod concat_;
 mod datatype_;
 mod day_;
+mod encode_for_uri;
 mod floor_;
 mod hours_;
 mod iri;
@@ -36,6 +37,7 @@ use crate::expressions::functions::ceil_::ceil_;
 use crate::expressions::functions::concat_::concat_;
 use crate::expressions::functions::datatype_::datatype_;
 use crate::expressions::functions::day_::day_;
+use crate::expressions::functions::encode_for_uri::encode_for_uri;
 use crate::expressions::functions::floor_::floor_;
 use crate::expressions::functions::hours_::hours_;
 use crate::expressions::functions::iri::iri;
@@ -1101,7 +1103,17 @@ pub fn func_expression(
         Function::Datatype => {
             solution_mappings = datatype_(solution_mappings, &args_contexts, outer_context)?;
         }
-        Function::EncodeForUri | Function::Sha1 | Function::Md5 => {
+        Function::EncodeForUri => {
+            solution_mappings = encode_for_uri(
+                solution_mappings,
+                func,
+                args,
+                &args_contexts,
+                outer_context,
+                global_cats,
+            )?;
+        }
+        Function::Sha1 | Function::Md5 => {
             if args.len() != 1 {
                 return Err(QueryProcessingError::BadNumberOfFunctionArguments(
                     func.clone(),
