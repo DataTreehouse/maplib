@@ -11,6 +11,7 @@ mod sparql_uuid;
 mod str_;
 mod str_dt;
 mod struuid;
+mod ceil_;
 
 use crate::constants::{
     DATETIME_AS_MICROS, DATETIME_AS_SECONDS, DECODE, FLOOR_DATETIME_TO_SECONDS_INTERVAL,
@@ -53,6 +54,7 @@ use spargebra::algebra::{Expression, Function};
 use std::collections::HashMap;
 use std::ops::{Div, Mul};
 use uri_encode::encode_uri;
+use crate::expressions::functions::ceil_::ceil_;
 
 pub fn func_expression(
     mut solution_mappings: SolutionMappings,
@@ -212,24 +214,7 @@ pub fn func_expression(
                 .insert(outer_context.as_str().to_string(), existing_type.clone());
         }
         Function::Ceil => {
-            if args.len() != 1 {
-                return Err(QueryProcessingError::BadNumberOfFunctionArguments(
-                    func.clone(),
-                    args.len(),
-                    "1".to_string(),
-                ));
-            }
-            let first_context = args_contexts.get(&0).unwrap();
-            solution_mappings.mappings = solution_mappings.mappings.with_column(
-                col(first_context.as_str())
-                    .ceil()
-                    .alias(outer_context.as_str()),
-            );
-            solution_mappings.rdf_node_types.insert(
-                outer_context.as_str().to_string(),
-                BaseRDFNodeType::Literal(xsd::INTEGER.into_owned())
-                    .into_default_input_rdf_node_state(),
-            );
+            solution_mappings = ceil_(solution_mappings, func, args, &args_contexts, outer_context)?;
         }
         Function::Floor => {
             solution_mappings =
