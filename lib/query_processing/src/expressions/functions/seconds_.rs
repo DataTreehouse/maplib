@@ -7,7 +7,7 @@ use representation::BaseRDFNodeType;
 use spargebra::algebra::{Expression, Function};
 use std::collections::HashMap;
 
-pub fn floor_(
+pub fn seconds_(
     mut solution_mappings: SolutionMappings,
     func: &Function,
     args: &[Expression],
@@ -24,12 +24,14 @@ pub fn floor_(
     let first_context = args_contexts.get(&0).unwrap();
     solution_mappings.mappings = solution_mappings.mappings.with_column(
         col(first_context.as_str())
-            .floor()
+            .dt()
+            .second()
             .alias(outer_context.as_str()),
     );
     solution_mappings.rdf_node_types.insert(
         outer_context.as_str().to_string(),
-        BaseRDFNodeType::Literal(xsd::INTEGER.into_owned()).into_default_input_rdf_node_state(),
+        BaseRDFNodeType::Literal(xsd::UNSIGNED_INT.into_owned())
+            .into_default_input_rdf_node_state(),
     );
     Ok(solution_mappings)
 }
