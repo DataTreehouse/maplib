@@ -230,6 +230,57 @@ impl Triplestore {
                 object_state,
             } in sms
             {
+                // Handle when column names are identical but types are different
+                if let Some(s) = &subject_keep_rename {
+                    if let Some(o) = &object_keep_rename {
+                        if s == o {
+                            // Case: Columns with same names have differing types
+                            // Unwrap is safe because subject and object columns should be kept
+                            if subject_type.as_ref().unwrap() != object_type.as_ref().unwrap() {
+                                continue;
+                            }
+                            mappings =
+                                mappings.filter(col(SUBJECT_COL_NAME).eq(col(OBJECT_COL_NAME)));
+                        }
+                    }
+                    if let Some(p) = &predicate_keep_rename {
+                        if s == p {
+                            if subject_type.as_ref().unwrap() != &BaseRDFNodeType::IRI {
+                                continue;
+                            }
+                            let expr = named_node_enc(
+                                predicate.as_ref().unwrap(),
+                                &self
+                                    .global_cats
+                                    .read()
+                                    .expect("Cats should not be in write"),
+                            );
+                            //Safety for unwrap: All predicates stored in triplestore are also in catmap
+                            let expr = expr.unwrap();
+                            mappings = mappings.filter(col(SUBJECT_COL_NAME).eq(expr));
+                        }
+                    }
+                }
+                if let Some(o) = &object_keep_rename {
+                    if let Some(p) = &predicate_keep_rename {
+                        if o == p {
+                            if object_type.as_ref().unwrap() != &BaseRDFNodeType::IRI {
+                                continue;
+                            }
+                            let expr = named_node_enc(
+                                predicate.as_ref().unwrap(),
+                                &self
+                                    .global_cats
+                                    .read()
+                                    .expect("Cats should not be in write"),
+                            );
+                            //Safety for unwrap: All predicates stored in triplestore are also in catmap
+                            let expr = expr.unwrap();
+                            mappings = mappings.filter(col(OBJECT_COL_NAME).eq(expr));
+                        }
+                    }
+                }
+
                 if let Some(subject_type) = &subject_type {
                     if subject_need_multi {
                         mappings = unnest_non_multi_col(mappings, SUBJECT_COL_NAME, subject_type);
@@ -306,17 +357,21 @@ impl Triplestore {
                 }
             }
             if let Some(v) = predicate_keep_rename {
-                keep.push(PREDICATE_COL_NAME);
-                if v != PREDICATE_COL_NAME {
-                    rename_src.push(PREDICATE_COL_NAME);
-                    rename_trg.push(v);
+                if !rename_trg.contains(&v) {
+                    keep.push(PREDICATE_COL_NAME);
+                    if v != PREDICATE_COL_NAME {
+                        rename_src.push(PREDICATE_COL_NAME);
+                        rename_trg.push(v);
+                    }
                 }
             }
             if let Some(o) = object_keep_rename {
-                keep.push(OBJECT_COL_NAME);
-                if o != OBJECT_COL_NAME {
-                    rename_src.push(OBJECT_COL_NAME);
-                    rename_trg.push(o);
+                if !rename_trg.contains(&o) {
+                    keep.push(OBJECT_COL_NAME);
+                    if o != OBJECT_COL_NAME {
+                        rename_src.push(OBJECT_COL_NAME);
+                        rename_trg.push(o);
+                    }
                 }
             }
             let keep_exprs: Vec<_> = keep.iter().map(|x| col(*x)).collect();
@@ -334,20 +389,24 @@ impl Triplestore {
                 );
             }
             if let Some(predicate_col_name) = predicate_keep_rename {
-                types.insert(
-                    predicate_col_name.clone(),
-                    RDFNodeState::from_bases(
-                        BaseRDFNodeType::IRI,
-                        BaseCatState::CategoricalNative(None),
-                    ),
-                );
+                if !types.contains_key(predicate_col_name) {
+                    types.insert(
+                        predicate_col_name.clone(),
+                        RDFNodeState::from_bases(
+                            BaseRDFNodeType::IRI,
+                            BaseCatState::CategoricalNative(None),
+                        ),
+                    );
+                }
             }
             if let Some(object_col_name) = object_keep_rename {
-                let object_type_map: HashMap<_, _> = sorted_object_types.into_iter().collect();
-                types.insert(
-                    object_col_name.clone(),
-                    RDFNodeState::from_map(object_type_map),
-                );
+                if !types.contains_key(object_col_name) {
+                    let object_type_map: HashMap<_, _> = sorted_object_types.into_iter().collect();
+                    types.insert(
+                        object_col_name.clone(),
+                        RDFNodeState::from_map(object_type_map),
+                    );
+                }
             };
             let sm = SolutionMappings::new(mappings, types, accumulated_heights);
             Ok(sm)
