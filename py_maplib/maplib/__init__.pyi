@@ -1,3 +1,5 @@
+import pathlib
+import string
 from pathlib import Path
 from typing import Any, Union, List, Dict, Optional, Callable, Literal as LiteralType
 from polars import DataFrame
@@ -558,7 +560,7 @@ class Model:
 
     def map_json(
             self,
-            path_or_string: str,
+            path_or_string: Path | str,
             graph: str = None,
             transient: bool = True,
     ) -> None:
@@ -579,7 +581,7 @@ class Model:
 
     def map_xml(
             self,
-            path_or_string: str,
+            path_or_string: Path | str,
             graph: str = None,
             transient: bool = True,
     ) -> None:

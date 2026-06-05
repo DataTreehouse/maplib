@@ -29,6 +29,7 @@ use representation::{
 use sha1::Sha1;
 use spargebra::algebra::{Expression, Function};
 use std::collections::HashMap;
+use std::mem::replace;
 use std::ops::{Div, Mul};
 use std::time::{SystemTime, UNIX_EPOCH};
 use uri_encode::encode_uri;
@@ -282,7 +283,11 @@ pub fn func_expression(
         Function::Now => {
             let now = SystemTime::now();
             let since_epoch = now.duration_since(UNIX_EPOCH).unwrap();
-            assert_eq!(TimeUnit::Microseconds, default_time_unit());
+            assert_eq!(
+                TimeUnit::Microseconds,
+                default_time_unit(),
+                "Should never happen"
+            );
             solution_mappings.mappings = solution_mappings.mappings.with_column(
                 lit(LiteralValue::Scalar(Scalar::new_datetime(
                     since_epoch.as_micros() as i64,
@@ -810,7 +815,12 @@ pub fn func_expression(
                 .rdf_node_types
                 .get(replacement_context.as_str())
                 .unwrap();
-            assert!(replacement_state.is_lit_type(xsd::STRING));
+            let replacement_expr = &args[2];
+            if !replacement_state.is_lit_type(xsd::STRING) {
+                return Err(QueryProcessingError::ExpectedConstantLiteralStringArgument(
+                    replacement_expr.clone(),
+                ));
+            }
             let replacement_bt = replacement_state.get_base_type().unwrap();
             let replacement_bs = replacement_state.get_base_state().unwrap();
 
@@ -896,7 +906,13 @@ pub fn func_expression(
                     | xsd::DURATION
                     | xsd::TIME
             ) {
-                assert_eq!(args.len(), 1);
+                if (args.len() != 1) {
+                    return Err(QueryProcessingError::BadNumberOfFunctionArguments(
+                        func.clone(),
+                        args.len(),
+                        "1".to_string(),
+                    ));
+                }
                 let first_context = args_contexts.get(&0).unwrap();
                 let src_type = solution_mappings
                     .rdf_node_types
@@ -916,7 +932,13 @@ pub fn func_expression(
                     BaseRDFNodeType::Literal(nn.to_owned()).into_default_input_rdf_node_state(),
                 );
             } else if iri == DATETIME_AS_MICROS {
-                assert_eq!(args.len(), 1);
+                if (args.len() != 1) {
+                    return Err(QueryProcessingError::BadNumberOfFunctionArguments(
+                        func.clone(),
+                        args.len(),
+                        "1".to_string(),
+                    ));
+                }
                 let first_context = args_contexts.get(&0).unwrap();
                 solution_mappings.mappings = solution_mappings.mappings.with_column(
                     col(first_context.as_str())
@@ -930,7 +952,13 @@ pub fn func_expression(
                         .into_default_input_rdf_node_state(),
                 );
             } else if iri == DATETIME_AS_SECONDS {
-                assert_eq!(args.len(), 1);
+                if (args.len() != 1) {
+                    return Err(QueryProcessingError::BadNumberOfFunctionArguments(
+                        func.clone(),
+                        args.len(),
+                        "1".to_string(),
+                    ));
+                }
                 let first_context = args_contexts.get(&0).unwrap();
                 solution_mappings.mappings = solution_mappings.mappings.with_column(
                     col(first_context.as_str())
@@ -945,7 +973,13 @@ pub fn func_expression(
                         .into_default_input_rdf_node_state(),
                 );
             } else if iri == MICROS_AS_DATETIME {
-                assert_eq!(args.len(), 1);
+                if (args.len() != 1) {
+                    return Err(QueryProcessingError::BadNumberOfFunctionArguments(
+                        func.clone(),
+                        args.len(),
+                        "1".to_string(),
+                    ));
+                }
                 let first_context = args_contexts.get(&0).unwrap();
                 solution_mappings.mappings = solution_mappings.mappings.with_column(
                     col(first_context.as_str())
@@ -958,7 +992,13 @@ pub fn func_expression(
                         .into_default_input_rdf_node_state(),
                 );
             } else if iri == SECONDS_AS_DATETIME {
-                assert_eq!(args.len(), 1);
+                if (args.len() != 1) {
+                    return Err(QueryProcessingError::BadNumberOfFunctionArguments(
+                        func.clone(),
+                        args.len(),
+                        "1".to_string(),
+                    ));
+                }
                 let first_context = args_contexts.get(&0).unwrap();
                 solution_mappings.mappings = solution_mappings.mappings.with_column(
                     col(first_context.as_str())
@@ -972,7 +1012,13 @@ pub fn func_expression(
                         .into_default_input_rdf_node_state(),
                 );
             } else if iri == MODULUS {
-                assert_eq!(args.len(), 2);
+                if (args.len() != 2) {
+                    return Err(QueryProcessingError::BadNumberOfFunctionArguments(
+                        func.clone(),
+                        args.len(),
+                        "2".to_string(),
+                    ));
+                }
                 let first_context = args_contexts.get(&0).unwrap();
                 let second_context = args_contexts.get(&1).unwrap();
 
@@ -986,7 +1032,13 @@ pub fn func_expression(
                         .into_default_input_rdf_node_state(),
                 );
             } else if iri == FLOOR_DATETIME_TO_SECONDS_INTERVAL {
-                assert_eq!(args.len(), 2);
+                if (args.len() != 2) {
+                    return Err(QueryProcessingError::BadNumberOfFunctionArguments(
+                        func.clone(),
+                        args.len(),
+                        "2".to_string(),
+                    ));
+                }
                 let first_context = args_contexts.get(&0).unwrap();
                 let second_context = args_contexts.get(&1).unwrap();
 
@@ -1008,7 +1060,13 @@ pub fn func_expression(
                         .into_default_input_rdf_node_state(),
                 );
             } else if iri == DECODE {
-                assert_eq!(args.len(), 1);
+                if (args.len() != 1) {
+                    return Err(QueryProcessingError::BadNumberOfFunctionArguments(
+                        func.clone(),
+                        args.len(),
+                        "1".to_string(),
+                    ));
+                }
                 let first_context = args_contexts.get(&0).unwrap();
                 let mut t_new = solution_mappings
                     .rdf_node_types
@@ -1157,7 +1215,13 @@ pub fn func_expression(
             }
         }
         Function::StrBefore | Function::StrAfter => {
-            assert_eq!(args.len(), 2);
+            if (args.len() != 2) {
+                return Err(QueryProcessingError::BadNumberOfFunctionArguments(
+                    func.clone(),
+                    args.len(),
+                    "2".to_string(),
+                ));
+            }
             let first_context = args_contexts.get(&0).unwrap();
             let second_string = eval_expression_to_string(args.get(1).unwrap(), true)?;
 
@@ -1344,7 +1408,13 @@ pub fn func_expression(
             }
         }
         Function::StrLang => {
-            assert_eq!(args.len(), 2);
+            if (args.len() != 2) {
+                return Err(QueryProcessingError::BadNumberOfFunctionArguments(
+                    func.clone(),
+                    args.len(),
+                    "2".to_string(),
+                ));
+            }
             let first_context = args_contexts.get(&0).unwrap();
             let first_t = solution_mappings
                 .rdf_node_types
@@ -1383,7 +1453,13 @@ pub fn func_expression(
             );
         }
         Function::StrLen => {
-            assert_eq!(args.len(), 1);
+            if (args.len() != 1) {
+                return Err(QueryProcessingError::BadNumberOfFunctionArguments(
+                    func.clone(),
+                    args.len(),
+                    "1".to_string(),
+                ));
+            }
             let first_context = args_contexts.get(&0).unwrap();
             let t = solution_mappings
                 .rdf_node_types
@@ -1401,13 +1477,28 @@ pub fn func_expression(
         }
         Function::LCase | Function::UCase | Function::SubStr => {
             if matches!(func, Function::LCase | Function::UCase) {
-                assert_eq!(args.len(), 1);
+                if (args.len() != 1) {
+                    return Err(QueryProcessingError::BadNumberOfFunctionArguments(
+                        func.clone(),
+                        args.len(),
+                        "1".to_string(),
+                    ));
+                }
             } else {
-                assert!(args.len() == 2 || args.len() == 3)
+                if args.len() != 2 && args.len() != 3 {
+                    return Err(QueryProcessingError::BadNumberOfFunctionArguments(
+                        func.clone(),
+                        args.len(),
+                        "2 or 3".to_string(),
+                    ));
+                }
             }
             let first_context = args_contexts.get(&0).unwrap();
             let starting_loc = if let Some(Expression::Literal(starting_loc_lit)) = args.get(1) {
-                let starting_loc: i64 = starting_loc_lit.value().parse().unwrap();
+                let starting_loc: i64 = starting_loc_lit
+                    .value()
+                    .parse()
+                    .map_err(|_x| QueryProcessingError::ExpectedIntegerArgument(func.clone()))?;
                 Some(lit(starting_loc))
             } else {
                 None
@@ -1664,7 +1755,13 @@ pub fn func_expression(
                             .mappings
                             .with_column(as_struct(exprs).alias(outer_context.as_str()));
                     } else {
-                        assert_eq!(exprs.len(), 1);
+                        if args.len() != 1 {
+                            return Err(QueryProcessingError::BadNumberOfFunctionArguments(
+                                func.clone(),
+                                args.len(),
+                                "1".to_string(),
+                            ));
+                        }
                         solution_mappings.mappings = solution_mappings
                             .mappings
                             .with_column(exprs.pop().unwrap().alias(outer_context.as_str()));
@@ -1694,7 +1791,13 @@ pub fn func_expression(
         }
 
         Function::StrStarts | Function::StrEnds | Function::Contains => {
-            assert_eq!(args.len(), 2);
+            if args.len() != 2 {
+                return Err(QueryProcessingError::BadNumberOfFunctionArguments(
+                    func.clone(),
+                    args.len(),
+                    "2".to_string(),
+                ));
+            }
             let first_context = args_contexts.get(&0).unwrap();
             let second_context = args_contexts.get(&1).unwrap();
 
@@ -1706,7 +1809,12 @@ pub fn func_expression(
                 .rdf_node_types
                 .get(second_context.as_str())
                 .unwrap();
-            assert!(second_t.is_lit_type(xsd::STRING));
+            let second_expr = &args[1];
+            if !second_t.is_lit_type(xsd::STRING) {
+                return Err(QueryProcessingError::ExpectedConstantLiteralStringArgument(
+                    second_expr.clone(),
+                ));
+            }
             let second_bt = second_t.get_base_type().unwrap();
             let second_bs = second_t.get_base_state().unwrap();
             let second_decoded = maybe_decode_expr(

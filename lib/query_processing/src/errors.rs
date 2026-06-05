@@ -26,4 +26,6 @@ pub enum QueryProcessingError {
     ExpectedConstantLiteralArgument(Expression),
     #[error("The following expression should resolve to an xsd:string : {}", .0)]
     ExpectedConstantLiteralStringArgument(Expression),
+    #[error("Function {} expected Integer argument", .0)]
+    ExpectedIntegerArgument(Function),
 }
