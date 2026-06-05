@@ -12,6 +12,7 @@ mod str_;
 mod str_dt;
 mod struuid;
 mod ceil_;
+mod abs_;
 
 use crate::constants::{
     DATETIME_AS_MICROS, DATETIME_AS_SECONDS, DECODE, FLOOR_DATETIME_TO_SECONDS_INTERVAL,
@@ -54,6 +55,7 @@ use spargebra::algebra::{Expression, Function};
 use std::collections::HashMap;
 use std::ops::{Div, Mul};
 use uri_encode::encode_uri;
+use crate::expressions::functions::abs_::abs_;
 use crate::expressions::functions::ceil_::ceil_;
 
 pub fn func_expression(
@@ -192,26 +194,7 @@ pub fn func_expression(
             );
         }
         Function::Abs => {
-            if args.len() != 1 {
-                return Err(QueryProcessingError::BadNumberOfFunctionArguments(
-                    func.clone(),
-                    args.len(),
-                    "1".to_string(),
-                ));
-            }
-            let first_context = args_contexts.get(&0).unwrap();
-            solution_mappings.mappings = solution_mappings.mappings.with_column(
-                col(first_context.as_str())
-                    .abs()
-                    .alias(outer_context.as_str()),
-            );
-            let existing_type = solution_mappings
-                .rdf_node_types
-                .get(first_context.as_str())
-                .unwrap();
-            solution_mappings
-                .rdf_node_types
-                .insert(outer_context.as_str().to_string(), existing_type.clone());
+            solution_mappings = abs_(solution_mappings, func, args, &args_contexts, outer_context)?;
         }
         Function::Ceil => {
             solution_mappings = ceil_(solution_mappings, func, args, &args_contexts, outer_context)?;
