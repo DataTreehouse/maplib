@@ -6,6 +6,7 @@ mod floor_;
 mod hours_;
 mod iri;
 mod is_blank_;
+mod is_iri;
 mod lang_;
 mod lang_matches;
 mod minutes_;
@@ -36,6 +37,7 @@ use crate::expressions::functions::floor_::floor_;
 use crate::expressions::functions::hours_::hours_;
 use crate::expressions::functions::iri::iri;
 use crate::expressions::functions::is_blank_::is_blank_;
+use crate::expressions::functions::is_iri::is_iri;
 use crate::expressions::functions::lang_::lang_;
 use crate::expressions::functions::lang_matches::lang_matches;
 use crate::expressions::functions::minutes_::minutes_;
@@ -1088,37 +1090,7 @@ pub fn func_expression(
             solution_mappings = is_blank_(solution_mappings, &args_contexts, outer_context)?;
         }
         Function::IsIri => {
-            let first_context = args_contexts.get(&0).unwrap();
-            let t = solution_mappings
-                .rdf_node_types
-                .get(first_context.as_str())
-                .unwrap();
-            let expr = if t.is_multi() {
-                let contains_iri = t.map.contains_key(&BaseRDFNodeType::IRI);
-                if contains_iri {
-                    col(first_context.as_str())
-                        .struct_()
-                        .field_by_name(&BaseRDFNodeType::IRI.field_col_name())
-                        .is_not_null()
-                } else {
-                    lit(false)
-                }
-            } else {
-                if t.is_iri() {
-                    col(first_context.as_str()).is_not_null()
-                } else {
-                    lit(false)
-                }
-            };
-            solution_mappings.mappings = solution_mappings
-                .mappings
-                .with_column(expr.alias(outer_context.as_str()));
-
-            solution_mappings.rdf_node_types.insert(
-                outer_context.as_str().to_string(),
-                BaseRDFNodeType::Literal(xsd::BOOLEAN.into_owned())
-                    .into_default_input_rdf_node_state(),
-            );
+            solution_mappings = is_iri(solution_mappings, &args_contexts, outer_context)?;
         }
         Function::IsLiteral => {
             let first_context = args_contexts.get(&0).unwrap();
