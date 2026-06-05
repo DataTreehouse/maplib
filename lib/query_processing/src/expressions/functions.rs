@@ -1,4 +1,5 @@
 mod iri;
+mod lang_;
 mod lang_matches;
 mod replace;
 mod sparql_regex;
@@ -11,6 +12,7 @@ use crate::constants::{
 };
 use crate::errors::QueryProcessingError;
 use crate::expressions::functions::iri::iri;
+use crate::expressions::functions::lang_::lang_;
 use crate::expressions::functions::lang_matches::lang_matches;
 use crate::expressions::functions::replace::sparql_replace;
 use crate::expressions::functions::sparql_regex::sparql_regex;
@@ -20,11 +22,11 @@ use crate::expressions::{cast_lang_string_to_string, drop_inner_contexts};
 use md5::{Digest, Md5};
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::NamedNodeRef;
-use polars::datatypes::{DataType, Field, PlSmallStr, TimeUnit};
+use polars::datatypes::{DataType, Field, TimeUnit};
 use polars::error::PolarsError;
 use polars::prelude::{
-    as_struct, by_name, coalesce, col, concat_str, lit, when, Column, Expr, IntoColumn,
-    LiteralValue, NamedFrom, RoundMode, Scalar, Schema, Series, StringChunked, StrptimeOptions,
+    as_struct, coalesce, col, concat_str, lit, when, Column, Expr, IntoColumn, LiteralValue,
+    NamedFrom, RoundMode, Scalar, Schema, Series, StringChunked, StrptimeOptions,
 };
 use rayon::iter::IntoParallelIterator;
 use rayon::iter::ParallelIterator;
@@ -416,91 +418,14 @@ pub fn func_expression(
             );
         }
         Function::Lang => {
-            if args.len() != 1 {
-                return Err(QueryProcessingError::BadNumberOfFunctionArguments(
-                    func.clone(),
-                    args.len(),
-                    "1".to_string(),
-                ));
-            }
-            let first_context = args_contexts.get(&0).unwrap();
-            let dt = solution_mappings
-                .rdf_node_types
-                .get(first_context.as_str())
-                .unwrap();
-            if !dt.is_multi() {
-                let b = dt.get_base_type().unwrap();
-                let s = dt.get_base_state().unwrap();
-                match b {
-                    BaseRDFNodeType::Literal(l) => {
-                        if l.as_ref() == rdf::LANG_STRING {
-                            solution_mappings.mappings = solution_mappings.mappings.with_column(
-                                maybe_decode_expr(
-                                    col(first_context.as_str())
-                                        .struct_()
-                                        .field_by_name(LANG_STRING_LANG_FIELD),
-                                    b,
-                                    s,
-                                    global_cats,
-                                )
-                                .alias(outer_context.as_str()),
-                            )
-                        } else {
-                            solution_mappings.mappings = solution_mappings
-                                .mappings
-                                .with_column(lit("").alias(outer_context.as_str()));
-                        }
-                    }
-                    _ => {
-                        solution_mappings.mappings = solution_mappings.mappings.with_column(
-                            lit(LiteralValue::untyped_null())
-                                .cast(DataType::String)
-                                .alias(outer_context.as_str()),
-                        );
-                    }
-                }
-            } else {
-                let mut exprs = vec![];
-                //Prioritize column that is lang string
-                for (t, s) in &dt.map {
-                    if t.is_lang_string() {
-                        exprs.push(maybe_decode_expr(
-                            col(first_context.as_str())
-                                .struct_()
-                                .field_by_name(LANG_STRING_LANG_FIELD),
-                            t,
-                            s,
-                            global_cats.clone(),
-                        ))
-                    }
-                }
-                //Then the rest..
-                for (t, _) in &dt.map {
-                    if !t.is_lang_string() && matches!(t, BaseRDFNodeType::Literal(_)) {
-                        exprs.push(
-                            when(
-                                col(first_context.as_str())
-                                    .struct_()
-                                    .field_by_name(&t.field_col_name())
-                                    .is_null()
-                                    .not(),
-                            )
-                            .then(lit(""))
-                            .otherwise(lit(LiteralValue::untyped_null()).cast(DataType::String)),
-                        )
-                    } else {
-                        exprs.push(lit(LiteralValue::untyped_null()).cast(DataType::String))
-                    }
-                }
-                solution_mappings.mappings = solution_mappings
-                    .mappings
-                    .with_column(coalesce(exprs.as_slice()).alias(outer_context.as_str()));
-            }
-            solution_mappings.rdf_node_types.insert(
-                outer_context.as_str().to_string(),
-                BaseRDFNodeType::Literal(xsd::STRING.into_owned())
-                    .into_default_input_rdf_node_state(),
-            );
+            solution_mappings = lang_(
+                solution_mappings,
+                func,
+                args,
+                &args_contexts,
+                outer_context,
+                global_cats,
+            )?;
         }
         Function::LangMatches => {
             solution_mappings = lang_matches(
