@@ -2,6 +2,7 @@ mod abs_;
 mod ceil_;
 mod concat_;
 mod floor_;
+mod hours_;
 mod iri;
 mod lang_;
 mod lang_matches;
@@ -25,6 +26,7 @@ use crate::expressions::functions::abs_::abs_;
 use crate::expressions::functions::ceil_::ceil_;
 use crate::expressions::functions::concat_::concat_;
 use crate::expressions::functions::floor_::floor_;
+use crate::expressions::functions::hours_::hours_;
 use crate::expressions::functions::iri::iri;
 use crate::expressions::functions::lang_::lang_;
 use crate::expressions::functions::lang_matches::lang_matches;
@@ -135,25 +137,8 @@ pub fn func_expression(
             );
         }
         Function::Hours => {
-            if args.len() != 1 {
-                return Err(QueryProcessingError::BadNumberOfFunctionArguments(
-                    func.clone(),
-                    args.len(),
-                    "1".to_string(),
-                ));
-            }
-            let first_context = args_contexts.get(&0).unwrap();
-            solution_mappings.mappings = solution_mappings.mappings.with_column(
-                col(first_context.as_str())
-                    .dt()
-                    .hour()
-                    .alias(outer_context.as_str()),
-            );
-            solution_mappings.rdf_node_types.insert(
-                outer_context.as_str().to_string(),
-                BaseRDFNodeType::Literal(xsd::UNSIGNED_INT.into_owned())
-                    .into_default_input_rdf_node_state(),
-            );
+            solution_mappings =
+                hours_(solution_mappings, func, args, &args_contexts, outer_context)?;
         }
         Function::Minutes => {
             solution_mappings =
