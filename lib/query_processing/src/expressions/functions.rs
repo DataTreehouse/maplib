@@ -18,6 +18,7 @@ mod now_;
 mod replace;
 mod round_;
 mod seconds_;
+mod sha1_;
 mod sparql_regex;
 mod sparql_uuid;
 mod str_;
@@ -52,6 +53,7 @@ use crate::expressions::functions::now_::now_;
 use crate::expressions::functions::replace::sparql_replace;
 use crate::expressions::functions::round_::round_;
 use crate::expressions::functions::seconds_::seconds_;
+use crate::expressions::functions::sha1_::sha1_;
 use crate::expressions::functions::sparql_regex::sparql_regex;
 use crate::expressions::functions::sparql_uuid::uuid;
 use crate::expressions::functions::str_::str_;
@@ -1113,7 +1115,17 @@ pub fn func_expression(
                 global_cats,
             )?;
         }
-        Function::Sha1 | Function::Md5 => {
+        Function::Sha1 => {
+            solution_mappings = sha1_(
+                solution_mappings,
+                func,
+                args,
+                &args_contexts,
+                outer_context,
+                global_cats,
+            )?;
+        }
+        Function::Md5 => {
             if args.len() != 1 {
                 return Err(QueryProcessingError::BadNumberOfFunctionArguments(
                     func.clone(),
