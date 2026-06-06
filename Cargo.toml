@@ -28,7 +28,7 @@ edition = "2021"
 [workspace.dependencies]
 pyo3 = {version = "0.28.2", features = ["py-clone", "rust_decimal"] }
 #Moment is there to work around a feature toggle bug
-polars = { version = "0.53.0", features = [
+polars = { version = "0.54.4", features = [
     "simd",
     "nightly",
     "performant",
@@ -38,7 +38,7 @@ polars = { version = "0.53.0", features = [
     "moment",
     "timezones"
 ] }
-polars-core = { version = "0.53.0" }
+polars-core = { version = "0.54.4" }
 rayon = "1.10.0"
 regex = "1.11.1"
 oxrdf = { version = "0.3.3" }
@@ -85,5 +85,5 @@ ordered-float = "5.1.0"
 rust_decimal = "1.41.0"
 
 [patch.crates-io]
-polars = { git = 'https://github.com/pola-rs/polars', rev="599a503a0997188a74750926a5cdaa47585cf8aa" }
-polars-core = { git = 'https://github.com/pola-rs/polars', rev="599a503a0997188a74750926a5cdaa47585cf8aa" }
+#polars = { git = 'https://github.com/pola-rs/polars', rev="599a503a0997188a74750926a5cdaa47585cf8aa" }
+#polars-core = { git = 'https://github.com/pola-rs/polars', rev="599a503a0997188a74750926a5cdaa47585cf8aa" }
