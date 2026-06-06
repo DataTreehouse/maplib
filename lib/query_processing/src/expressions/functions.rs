@@ -12,6 +12,7 @@ mod is_iri;
 mod is_literal;
 mod lang_;
 mod lang_matches;
+mod md5_;
 mod minutes_;
 mod month_;
 mod now_;
@@ -47,6 +48,7 @@ use crate::expressions::functions::is_iri::is_iri;
 use crate::expressions::functions::is_literal::is_literal;
 use crate::expressions::functions::lang_::lang_;
 use crate::expressions::functions::lang_matches::lang_matches;
+use crate::expressions::functions::md5_::md5_;
 use crate::expressions::functions::minutes_::minutes_;
 use crate::expressions::functions::month_::month_;
 use crate::expressions::functions::now_::now_;
@@ -63,14 +65,13 @@ use crate::expressions::functions::str_len::str_len;
 use crate::expressions::functions::struuid::struuid;
 use crate::expressions::functions::year_::year_;
 use crate::expressions::{cast_lang_string_to_string, drop_inner_contexts};
-use md5::{Digest, Md5};
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::NamedNodeRef;
 use polars::datatypes::{DataType, Field, TimeUnit};
 use polars::error::PolarsError;
 use polars::prelude::{
     as_struct, coalesce, col, lit, Column, Expr, IntoColumn, LiteralValue, Scalar, Schema, Series,
-    StringChunked, StrptimeOptions,
+    StrptimeOptions,
 };
 use representation::cats::{maybe_decode_expr, LockedCats};
 use representation::multitype::{MULTI_BLANK_DT, MULTI_IRI_DT};
@@ -79,11 +80,9 @@ use representation::solution_mapping::{BaseCatState, SolutionMappings};
 use representation::{
     BaseRDFNodeType, RDFNodeState, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD,
 };
-use sha1::Sha1;
 use spargebra::algebra::{Expression, Function};
 use std::collections::HashMap;
 use std::ops::{Div, Mul};
-use uri_encode::encode_uri;
 
 pub fn func_expression(
     mut solution_mappings: SolutionMappings,
@@ -1126,87 +1125,14 @@ pub fn func_expression(
             )?;
         }
         Function::Md5 => {
-            if args.len() != 1 {
-                return Err(QueryProcessingError::BadNumberOfFunctionArguments(
-                    func.clone(),
-                    args.len(),
-                    "1".to_string(),
-                ));
-            }
-            let first_context = args_contexts.get(&0).unwrap();
-            let mut expr = str_function(
-                first_context.as_str(),
-                solution_mappings
-                    .rdf_node_types
-                    .get(first_context.as_str())
-                    .unwrap(),
+            solution_mappings = md5_(
+                solution_mappings,
+                func,
+                args,
+                &args_contexts,
+                outer_context,
                 global_cats,
-            );
-            if matches!(func, Function::EncodeForUri) {
-                expr = expr.map(
-                    move |x| {
-                        let mut encoded = Vec::with_capacity(x.len());
-                        for s in x.str()?.iter() {
-                            if let Some(s) = s {
-                                encoded.push(Some(encode_uri(s)));
-                            } else {
-                                encoded.push(None);
-                            }
-                        }
-                        let column = StringChunked::from_iter(encoded).into_column();
-                        Ok(column)
-                    },
-                    |_, f| Ok(f.clone()),
-                );
-            } else if matches!(func, Function::Sha1) {
-                expr = expr.map(
-                    move |x| {
-                        let mut encoded = Vec::with_capacity(x.len());
-
-                        for s in x.str()?.iter() {
-                            if let Some(s) = s {
-                                let mut hasher = Sha1::new();
-                                hasher.update(s.as_bytes());
-                                let out = hasher.finalize();
-                                encoded.push(Some(hex::encode(out.as_slice())));
-                            } else {
-                                encoded.push(None);
-                            }
-                        }
-                        let column = StringChunked::from_iter(encoded).into_column();
-                        Ok(column)
-                    },
-                    |_, f| Ok(f.clone()),
-                );
-            } else {
-                expr = expr.map(
-                    move |x| {
-                        let mut encoded = Vec::with_capacity(x.len());
-
-                        for s in x.str()?.iter() {
-                            if let Some(s) = s {
-                                let mut hasher = Md5::new();
-                                hasher.update(s.as_bytes());
-                                let out = hasher.finalize();
-                                encoded.push(Some(hex::encode(out.as_slice())));
-                            } else {
-                                encoded.push(None);
-                            }
-                        }
-                        let column = StringChunked::from_iter(encoded).into_column();
-                        Ok(column)
-                    },
-                    |_, f| Ok(f.clone()),
-                );
-            }
-            solution_mappings.mappings = solution_mappings
-                .mappings
-                .with_column(expr.alias(outer_context.as_str()));
-            solution_mappings.rdf_node_types.insert(
-                outer_context.as_str().to_string(),
-                BaseRDFNodeType::Literal(xsd::STRING.into_owned())
-                    .into_default_input_rdf_node_state(),
-            );
+            )?;
         }
         _ => {
             return Err(QueryProcessingError::UnimplementedFunction(
