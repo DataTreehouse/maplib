@@ -23,6 +23,7 @@ mod seconds_;
 mod sha1_;
 mod sparql_regex;
 mod sparql_uuid;
+mod starts_ends_contains;
 mod str_;
 mod str_dt;
 mod str_lang;
@@ -60,6 +61,7 @@ use crate::expressions::functions::seconds_::seconds_;
 use crate::expressions::functions::sha1_::sha1_;
 use crate::expressions::functions::sparql_regex::sparql_regex;
 use crate::expressions::functions::sparql_uuid::uuid;
+use crate::expressions::functions::starts_ends_contains::starts_ends_contains;
 use crate::expressions::functions::str_::str_;
 use crate::expressions::functions::str_dt::str_dt;
 use crate::expressions::functions::str_lang::str_lang;
@@ -677,117 +679,14 @@ pub fn func_expression(
             )?;
         }
         Function::StrStarts | Function::StrEnds | Function::Contains => {
-            if args.len() != 2 {
-                return Err(QueryProcessingError::BadNumberOfFunctionArguments(
-                    func.clone(),
-                    args.len(),
-                    "2".to_string(),
-                ));
-            }
-            let first_context = args_contexts.get(&0).unwrap();
-            let second_context = args_contexts.get(&1).unwrap();
-
-            let t = solution_mappings
-                .rdf_node_types
-                .get(first_context.as_str())
-                .unwrap();
-            let second_t = solution_mappings
-                .rdf_node_types
-                .get(second_context.as_str())
-                .unwrap();
-            let second_expr = &args[1];
-            if !second_t.is_lit_type(xsd::STRING) {
-                return Err(QueryProcessingError::ExpectedConstantLiteralStringArgument(
-                    second_expr.clone(),
-                ));
-            }
-            let second_bt = second_t.get_base_type().unwrap();
-            let second_bs = second_t.get_base_state().unwrap();
-            let second_decoded = maybe_decode_expr(
-                col(second_context.as_str()),
-                second_bt,
-                second_bs,
-                global_cats.clone(),
-            );
-
-            if t.is_lit_type(xsd::STRING) {
-                let bt = t.get_base_type().unwrap();
-                let bs = t.get_base_state().unwrap();
-                let decoded =
-                    maybe_decode_expr(col(first_context.as_str()), bt, bs, global_cats.clone());
-                let expr = str_starts_ends_contains(decoded, second_decoded, func)
-                    .alias(outer_context.as_str());
-                solution_mappings.mappings = solution_mappings.mappings.with_column(expr);
-            } else if t.is_lang_string() {
-                let bt = t.get_base_type().unwrap();
-                let bs = t.get_base_state().unwrap();
-                let decoded = maybe_decode_expr(
-                    col(first_context.as_str())
-                        .struct_()
-                        .field_by_name(LANG_STRING_VALUE_FIELD),
-                    bt,
-                    bs,
-                    global_cats.clone(),
-                );
-                let expr = str_starts_ends_contains(decoded, second_decoded, func)
-                    .alias(outer_context.as_str());
-                solution_mappings.mappings = solution_mappings.mappings.with_column(expr);
-            } else if t.is_multi() {
-                let mut exprs = vec![];
-                for (bt, bs) in &t.map {
-                    if bt.is_lit_type(xsd::STRING) {
-                        let decoded = maybe_decode_expr(
-                            col(first_context.as_str())
-                                .struct_()
-                                .field_by_name(&bt.field_col_name()),
-                            bt,
-                            bs,
-                            global_cats.clone(),
-                        );
-                        exprs.push(
-                            str_starts_ends_contains(decoded, second_decoded.clone(), func)
-                                .alias(outer_context.as_str()),
-                        );
-                    } else if bt.is_lang_string() {
-                        let decoded = maybe_decode_expr(
-                            col(first_context.as_str())
-                                .struct_()
-                                .field_by_name(LANG_STRING_VALUE_FIELD),
-                            bt,
-                            bs,
-                            global_cats.clone(),
-                        );
-                        exprs.push(
-                            str_starts_ends_contains(decoded, second_decoded.clone(), func)
-                                .alias(outer_context.as_str()),
-                        );
-                    }
-                }
-                if exprs.is_empty() {
-                    solution_mappings.mappings = solution_mappings.mappings.with_column(
-                        lit(LiteralValue::untyped_null())
-                            .cast(DataType::Boolean)
-                            .alias(outer_context.as_str()),
-                    );
-                } else if exprs.len() == 1 {
-                    solution_mappings.mappings =
-                        solution_mappings.mappings.with_column(exprs.pop().unwrap());
-                } else {
-                    solution_mappings.mappings =
-                        solution_mappings.mappings.with_column(coalesce(&exprs));
-                }
-            } else {
-                solution_mappings.mappings = solution_mappings.mappings.with_column(
-                    lit(LiteralValue::untyped_null())
-                        .cast(DataType::Boolean)
-                        .alias(outer_context.as_str()),
-                );
-            }
-            solution_mappings.rdf_node_types.insert(
-                outer_context.as_str().to_string(),
-                BaseRDFNodeType::Literal(xsd::BOOLEAN.into_owned())
-                    .into_default_input_rdf_node_state(),
-            );
+            solution_mappings = starts_ends_contains(
+                solution_mappings,
+                func,
+                args,
+                &args_contexts,
+                outer_context,
+                global_cats,
+            )?;
         }
         Function::IsBlank => {
             solution_mappings = is_blank_(solution_mappings, &args_contexts, outer_context)?;
