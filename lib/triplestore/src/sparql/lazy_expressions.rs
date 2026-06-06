@@ -3,7 +3,7 @@ use std::collections::HashMap;
 
 use crate::sparql::errors::SparqlError;
 use oxrdf::vocab::xsd;
-use polars::prelude::{col, lit, LiteralValue};
+use polars::prelude::{col, lit, IntoLazy, LiteralValue};
 use polars_core::prelude::Scalar;
 use query_processing::expressions::functions::func_expression;
 use query_processing::expressions::{
@@ -448,16 +448,17 @@ impl Triplestore {
                 let mut output_solution_mappings = solution_mappings;
                 output_solution_mappings.mappings = output_solution_mappings
                     .mappings
-                    .with_column(
-                        lit(LiteralValue::Scalar(Scalar::from(1u32)))
-                            .alias(exists_context.as_str()),
-                    )
-                    .with_column(col(exists_context.as_str()).cum_sum(false));
+                    .with_row_index(exists_context.as_str(), None);
                 output_solution_mappings.rdf_node_types.insert(
                     exists_context.as_str().to_string(),
                     BaseRDFNodeType::Literal(xsd::UNSIGNED_INT.into_owned())
                         .into_default_input_rdf_node_state(),
                 );
+
+                //Workaround for issue in Polars
+                output_solution_mappings.mappings =
+                    output_solution_mappings.mappings.collect().unwrap().lazy();
+
                 let SolutionMappings {
                     mappings: exists_lf,
                     rdf_node_types,
