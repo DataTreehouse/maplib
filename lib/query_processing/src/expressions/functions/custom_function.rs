@@ -45,7 +45,7 @@ pub fn custom_(
             | xsd::DURATION
             | xsd::TIME
     ) {
-        if (args.len() != 1) {
+        if args.len() != 1 {
             return Err(QueryProcessingError::BadNumberOfFunctionArguments(
                 func.clone(),
                 args.len(),
@@ -71,7 +71,7 @@ pub fn custom_(
             BaseRDFNodeType::Literal(nn.to_owned()).into_default_input_rdf_node_state(),
         );
     } else if iri == DATETIME_AS_MICROS {
-        if (args.len() != 1) {
+        if args.len() != 1 {
             return Err(QueryProcessingError::BadNumberOfFunctionArguments(
                 func.clone(),
                 args.len(),
@@ -90,7 +90,7 @@ pub fn custom_(
             BaseRDFNodeType::Literal(xsd::INTEGER.into_owned()).into_default_input_rdf_node_state(),
         );
     } else if iri == DATETIME_AS_SECONDS {
-        if (args.len() != 1) {
+        if args.len() != 1 {
             return Err(QueryProcessingError::BadNumberOfFunctionArguments(
                 func.clone(),
                 args.len(),
@@ -110,7 +110,7 @@ pub fn custom_(
             BaseRDFNodeType::Literal(xsd::INTEGER.into_owned()).into_default_input_rdf_node_state(),
         );
     } else if iri == MICROS_AS_DATETIME {
-        if (args.len() != 1) {
+        if args.len() != 1 {
             return Err(QueryProcessingError::BadNumberOfFunctionArguments(
                 func.clone(),
                 args.len(),
@@ -129,7 +129,7 @@ pub fn custom_(
                 .into_default_input_rdf_node_state(),
         );
     } else if iri == SECONDS_AS_DATETIME {
-        if (args.len() != 1) {
+        if args.len() != 1 {
             return Err(QueryProcessingError::BadNumberOfFunctionArguments(
                 func.clone(),
                 args.len(),
@@ -149,7 +149,7 @@ pub fn custom_(
                 .into_default_input_rdf_node_state(),
         );
     } else if iri == MODULUS {
-        if (args.len() != 2) {
+        if args.len() != 2 {
             return Err(QueryProcessingError::BadNumberOfFunctionArguments(
                 func.clone(),
                 args.len(),
@@ -168,7 +168,7 @@ pub fn custom_(
             BaseRDFNodeType::Literal(xsd::INTEGER.into_owned()).into_default_input_rdf_node_state(),
         );
     } else if iri == FLOOR_DATETIME_TO_SECONDS_INTERVAL {
-        if (args.len() != 2) {
+        if args.len() != 2 {
             return Err(QueryProcessingError::BadNumberOfFunctionArguments(
                 func.clone(),
                 args.len(),
@@ -195,7 +195,7 @@ pub fn custom_(
                 .into_default_input_rdf_node_state(),
         );
     } else if iri == DECODE {
-        if (args.len() != 1) {
+        if args.len() != 1 {
             return Err(QueryProcessingError::BadNumberOfFunctionArguments(
                 func.clone(),
                 args.len(),

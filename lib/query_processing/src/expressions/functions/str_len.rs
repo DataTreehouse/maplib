@@ -17,7 +17,7 @@ pub fn str_len(
     outer_context: &Context,
     global_cats: LockedCats,
 ) -> Result<SolutionMappings, QueryProcessingError> {
-    if (args.len() != 1) {
+    if args.len() != 1 {
         return Err(QueryProcessingError::BadNumberOfFunctionArguments(
             func.clone(),
             args.len(),

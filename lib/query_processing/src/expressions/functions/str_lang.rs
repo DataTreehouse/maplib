@@ -16,7 +16,7 @@ pub fn str_lang(
     outer_context: &Context,
     global_cats: LockedCats,
 ) -> Result<SolutionMappings, QueryProcessingError> {
-    if (args.len() != 2) {
+    if args.len() != 2 {
         return Err(QueryProcessingError::BadNumberOfFunctionArguments(
             func.clone(),
             args.len(),
