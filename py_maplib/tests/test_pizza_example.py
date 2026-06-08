@@ -79,7 +79,7 @@ def test_construct_pvalues(pizzas_model):
             ],
         }
     )
-    h_param = SolutionMappings(h_df,  {"h1": RDFType.IRI, "h2": RDFType.IRI})
+    h_param = SolutionMappings(h_df, {"h1": RDFType.IRI, "h2": RDFType.IRI})
     res = pizzas_model.query(
         """
     PREFIX pizza:<https://github.com/magbak/maplib/pizza#>
@@ -111,7 +111,7 @@ def test_construct_pvalues2(pizzas_model):
             ]
         }
     )
-    h_sm = SolutionMappings(h_df,  {"h1": RDFType.IRI})
+    h_sm = SolutionMappings(h_df, {"h1": RDFType.IRI})
     res = pizzas_model.query(
         """
     PREFIX pizza:<https://github.com/magbak/maplib/pizza#>
@@ -261,12 +261,12 @@ def test_update_insert_delete_multiple(pizzas_model):
 
 
 def test_count_star(pizzas_model):
-    count= pizzas_model.query( "SELECT (COUNT(*) as ?count) WHERE { ?s ?p ?o . }" )
+    count = pizzas_model.query("SELECT (COUNT(*) as ?count) WHERE { ?s ?p ?o . }")
     assert count.height == 1
     assert count.get_column("count")[0] == 9
 
 
-def test_update_insert_delete_non_existant(pizzas_model):
+def test_update_insert_delete_non_existent(pizzas_model):
     pizzas_model.update(
         """
     PREFIX pizza:<https://github.com/magbak/maplib/pizza#>
@@ -288,3 +288,117 @@ def test_update_insert_delete_non_existant(pizzas_model):
     """
     )
     assert df.height == 0
+
+
+def test_select_same_subject_object(pizzas_model):
+    df = pizzas_model.query(
+        """
+        PREFIX pizza:<https://github.com/magbak/maplib/pizza#>
+        SELECT ?a ?b WHERE {
+            ?a ?b ?a
+        }
+    """
+    )
+    assert df.height == 0
+
+
+def test_select_same_subject_predicate_object(pizzas_model):
+    df = pizzas_model.query(
+        """
+        SELECT ?a WHERE {
+            ?a ?a ?a 
+        }
+        """
+    )
+
+    assert df.height == 0
+
+
+def test_select_same_predicate_object(pizzas_model):
+    df = pizzas_model.query(
+        """
+        SELECT ?a ?b WHERE {
+            ?b ?a ?a 
+        }
+        """
+    )
+
+    assert df.height == 0
+
+
+def test_select_same_subject_predicate(pizzas_model):
+    df = pizzas_model.query(
+        """
+        SELECT ?a ?b WHERE {
+            ?a ?a ?b 
+        }
+        """
+    )
+
+    assert df.height == 0
+
+
+# -----------
+
+def test_select_same_subject_object_has_results(pizzas_model):
+    pizzas_model.reads("""
+    <https://github.com/magbak/maplib/pizza#a> <https://github.com/magbak/maplib/pizza#predicate> <https://github.com/magbak/maplib/pizza#a> .
+    """, format="turtle")
+
+    df = pizzas_model.query(
+        """
+        PREFIX pizza:<https://github.com/magbak/maplib/pizza#>
+        SELECT ?a ?b WHERE {
+            ?a ?b ?a
+        }
+    """
+    )
+    assert df.height == 1
+
+
+def test_select_same_subject_predicate_object_has_results(pizzas_model):
+    pizzas_model.reads("""
+    <https://github.com/magbak/maplib/pizza#a> <https://github.com/magbak/maplib/pizza#a> <https://github.com/magbak/maplib/pizza#a> .
+    """, format="turtle")
+
+    df = pizzas_model.query(
+        """
+        SELECT ?a WHERE {
+            ?a ?a ?a 
+        }
+        """
+    )
+
+    assert df.height == 1
+
+
+def test_select_same_predicate_object_has_results(pizzas_model):
+    pizzas_model.reads("""
+    <https://github.com/magbak/maplib/pizza#subject> <https://github.com/magbak/maplib/pizza#a> <https://github.com/magbak/maplib/pizza#a> .
+    """, format="turtle")
+
+    df = pizzas_model.query(
+        """
+        SELECT ?a ?b WHERE {
+            ?b ?a ?a 
+        }
+        """
+    )
+
+    assert df.height == 1
+
+
+def test_select_same_subject_predicate_has_results(pizzas_model):
+    pizzas_model.reads("""
+    <https://github.com/magbak/maplib/pizza#a> <https://github.com/magbak/maplib/pizza#a> <https://github.com/magbak/maplib/pizza#object> .
+    """, format="turtle")
+
+    df = pizzas_model.query(
+        """
+        SELECT ?a ?b WHERE {
+            ?a ?a ?b 
+        }
+        """
+    )
+
+    assert df.height == 1
