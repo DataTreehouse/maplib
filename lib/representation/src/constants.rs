@@ -31,3 +31,6 @@ pub const XSD_ANY_URI: &str = "http://www.w3.org/2001/XMLSchema#anyURI";
 
 pub const FOAF_PREFIX: &str = "foaf";
 pub const FOAF_PREFIX_IRI: &str = "http://xmlns.com/foaf/0.1/";
+
+pub const MAPLIB_PREFIX: &str = "maplib";
+pub const MAPLIB_PREFIX_IRI: &str = "https://github.com/DataTreehouse/maplib#";
