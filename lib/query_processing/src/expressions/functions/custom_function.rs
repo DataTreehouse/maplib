@@ -38,6 +38,8 @@ pub fn custom_(
             | xsd::UNSIGNED_INT
             | xsd::UNSIGNED_SHORT
             | xsd::UNSIGNED_BYTE
+            | xsd::BYTE
+            | xsd::SHORT
             | xsd::DECIMAL
             | xsd::DOUBLE
             | xsd::FLOAT
