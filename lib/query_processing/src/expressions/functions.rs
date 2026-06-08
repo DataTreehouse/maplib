@@ -5,6 +5,7 @@ mod custom_function;
 mod datatype_;
 mod day_;
 mod encode_for_uri;
+mod eval_uuid_namespace;
 mod floor_;
 mod hours_;
 mod iri;
@@ -31,6 +32,8 @@ mod str_dt;
 mod str_lang;
 mod str_len;
 mod struuid;
+mod struuid_v5;
+mod uuid_v5;
 mod year_;
 
 use crate::errors::QueryProcessingError;

@@ -1,8 +1,10 @@
 use crate::constants::{
     DATETIME_AS_MICROS, DATETIME_AS_SECONDS, DECODE, FLOOR_DATETIME_TO_SECONDS_INTERVAL,
-    MICROS_AS_DATETIME, MODULUS, SECONDS_AS_DATETIME,
+    MICROS_AS_DATETIME, MODULUS, SECONDS_AS_DATETIME, STRUUID_V5, UUID_V5,
 };
 use crate::errors::QueryProcessingError;
+use crate::expressions::functions::struuid_v5::struuid_v5;
+use crate::expressions::functions::uuid_v5::uuid_v5;
 use crate::expressions::functions::xsd_cast_literal;
 use oxrdf::vocab::xsd;
 use oxrdf::NamedNode;
@@ -247,6 +249,24 @@ pub fn custom_(
         solution_mappings
             .rdf_node_types
             .insert(outer_context.as_str().to_string(), t_new);
+    } else if iri == STRUUID_V5 {
+        solution_mappings = struuid_v5(
+            solution_mappings,
+            func,
+            args,
+            &args_contexts,
+            outer_context,
+            global_cats,
+        )?;
+    } else if iri == UUID_V5 {
+        solution_mappings = uuid_v5(
+            solution_mappings,
+            func,
+            args,
+            &args_contexts,
+            outer_context,
+            global_cats,
+        )?;
     } else {
         return Err(QueryProcessingError::UnimplementedFunction(nn.to_string()));
     }
