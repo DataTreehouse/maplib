@@ -1,7 +1,7 @@
 use crate::errors::QueryProcessingError;
+use crate::expressions::functions::eval_uuid_namespace::eval_uuid_namespace;
 use crate::expressions::functions::str_function;
 use polars::datatypes::{DataType, Field, PlSmallStr};
-use polars::error::PolarsError;
 use polars::prelude::{as_struct, by_name, IntoColumn, StringChunkedBuilder};
 use representation::cats::LockedCats;
 use representation::query_context::Context;
@@ -9,7 +9,6 @@ use representation::solution_mapping::SolutionMappings;
 use representation::BaseRDFNodeType;
 use spargebra::algebra::{Expression, Function};
 use std::collections::HashMap;
-use std::str::FromStr;
 
 pub fn uuid_v5(
     mut solution_mappings: SolutionMappings,
@@ -51,21 +50,7 @@ pub fn uuid_v5(
 
                 for (arg1, arg2) in arg1_iter.zip(arg2_iter) {
                     if let (Some(arg1), Some(arg2)) = (arg1, arg2) {
-                        let use_uuid = if arg1 == "dns" {
-                            uuid::Uuid::NAMESPACE_DNS
-                        } else if arg1 == "oid" {
-                            uuid::Uuid::NAMESPACE_OID
-                        } else if arg1 == "url" {
-                            uuid::Uuid::NAMESPACE_URL
-                        } else if arg1 == "x500" {
-                            uuid::Uuid::NAMESPACE_X500
-                        } else {
-                            uuid::Uuid::from_str(arg1).map_err(|_| {
-                                PolarsError::InvalidOperation(
-                                    "Non UUID arg as namespace argument to struuid".into(),
-                                )
-                            })?
-                        };
+                        let use_uuid = eval_uuid_namespace(arg1)?;
                         uuids_builder.append_value(format!(
                             "urn:uuid:{}",
                             uuid::Uuid::new_v5(&use_uuid, arg2.as_bytes())
