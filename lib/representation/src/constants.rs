@@ -34,3 +34,5 @@ pub const FOAF_PREFIX_IRI: &str = "http://xmlns.com/foaf/0.1/";
 
 pub const MAPLIB_PREFIX: &str = "maplib";
 pub const MAPLIB_PREFIX_IRI: &str = "https://github.com/DataTreehouse/maplib#";
+
+pub const GEO_WKT_LITERAL: &str = "http://www.opengis.net/ont/geosparql#wktLiteral";

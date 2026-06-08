@@ -1,9 +1,11 @@
+use crate::constants::GEO_WKT_LITERAL;
 use crate::errors::RepresentationError;
 use crate::rdf_to_polars::{
     default_decimal_precision, default_decimal_scale, default_time_unit, default_time_zone,
 };
 use crate::{BaseRDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD, OBJECT_COL_NAME};
 use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
+use geo::GeoBuilder;
 use memchr::memchr;
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{NamedOrBlankNode, Term};
@@ -40,6 +42,7 @@ pub enum SeriesBuilder {
         langs: StringChunkedBuilder,
         len: usize,
     },
+    Geo(GeoBuilder, usize),
 }
 
 impl SeriesBuilder {
@@ -73,6 +76,7 @@ impl SeriesBuilder {
                     langs: StringChunkedBuilder::new(LANG_STRING_LANG_FIELD.into(), cap),
                     len: 0,
                 },
+                x if false && x.as_str() == GEO_WKT_LITERAL => SeriesBuilder::Geo(GeoBuilder::new(), 0),
                 _ => SeriesBuilder::String(StringChunkedBuilder::new("s".into(), cap), 0),
             },
             BaseRDFNodeType::None => {
@@ -99,6 +103,7 @@ impl SeriesBuilder {
             SeriesBuilder::Datetime(v) => v.len(),
             SeriesBuilder::Decimal(v) => v.len(),
             SeriesBuilder::LangString { len, .. } => *len,
+            SeriesBuilder::Geo(_, l) => *l,
         }
     }
 
@@ -234,6 +239,12 @@ impl SeriesBuilder {
                     ));
                 }
             }
+            SeriesBuilder::Geo(builder, l) => {
+                builder
+                    .append(lex)
+                    .map_err(|x| RepresentationError::LiteralParseError(x.to_string()))?;
+                *l = *l + 1;
+            }
         }
         Ok(())
     }
@@ -297,6 +308,10 @@ impl SeriesBuilder {
                     .unwrap()
                     .take_materialized_series();
                 ser.rename(PlSmallStr::from_str(name));
+                ser
+            }
+            SeriesBuilder::Geo(v, ..) => {
+                let ser = v.finish(name);
                 ser
             }
         }

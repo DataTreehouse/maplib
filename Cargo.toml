@@ -18,6 +18,7 @@ members = [
     "lib/chrontext",
     "lib/virtualized_query",
     "lib/virtualization",
+    "lib/geo",
     "py_maplib",
 ]
 
@@ -38,6 +39,7 @@ polars = { version = "0.54.4", features = [
     "moment",
     "timezones"
 ] }
+polars-arrow = { version = "0.54.4" }
 polars-core = { version = "0.54.4" }
 rayon = "1.10.0"
 regex = "1.11.1"
@@ -71,7 +73,7 @@ md-5 = "0.11.0"
 sha1 = "0.11.0"
 hex = "0.4.3"
 memchr = "2.8.0"
-quick-xml = "0.39.2"
+quick-xml = { version = "0.40.1", features = ["arbitrary"] }
 
 tracing = { version = "0.1", features = [ "log" ] }
 tracing-subscriber = { version = "0.3.19", features = [ "env-filter" ] }

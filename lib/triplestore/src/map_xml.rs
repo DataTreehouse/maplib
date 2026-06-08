@@ -6,7 +6,7 @@ use polars::prelude::{DataFrame, PlSmallStr};
 use polars_core::prelude::IntoColumn;
 use quick_xml::escape::unescape;
 use quick_xml::events::Event;
-use quick_xml::Reader;
+use quick_xml::{Reader, XmlVersion};
 use representation::dataset::NamedGraph;
 use representation::series_builder::{ensure_pair, PredMap};
 use representation::{BaseRDFNodeType, OBJECT_COL_NAME, SUBJECT_COL_NAME};
@@ -121,6 +121,10 @@ impl Triplestore {
                     let s = unescape(&raw)
                         .map_err(|e| TriplestoreError::XMLError(e.to_string()))?
                         .into_owned();
+                    if s.contains("VendorCapability") {
+                        let cont = t.xml_content(XmlVersion::Explicit1_0).unwrap();
+                        println!("xml {} bytes {:?} Raw {} S {}", cont, t, raw, s);
+                    }
                     if !s.is_empty() {
                         push_text_child(&s, &mut stack, &mut pred_map, string_type.as_ref())?;
                     }

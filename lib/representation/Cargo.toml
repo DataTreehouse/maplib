@@ -12,6 +12,7 @@ utils = { path = "../utils" }
 spargebra = {path = "../spargebra"}
 disk = {path = "../disk"}
 in_memory = {path = "../in_memory"}
+geo = {path = "../geo"}
 
 tracing.workspace = true
 oxrdf = {workspace = true, features = ["oxsdatatypes"]}
