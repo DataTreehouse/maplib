@@ -93,11 +93,13 @@ impl Triplestore {
                     NamedNodePattern::NamedNode(nn) => {
                         QueryGraph::NamedGraph(NamedGraph::NamedGraph(nn.clone()))
                     }
-                    NamedNodePattern::Variable(_) => {todo!()}
+                    NamedNodePattern::Variable(_) => {
+                        todo!()
+                    }
                 };
                 self.debug_gp(inner, parameters, qs, &qg)
-            },
-                GraphPattern::Extend { inner, .. }
+            }
+            GraphPattern::Extend { inner, .. }
             | GraphPattern::LeftJoin { left: inner, .. }
             | GraphPattern::OrderBy { inner, .. }
             | GraphPattern::Project { inner, .. }
