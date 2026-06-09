@@ -1,5 +1,6 @@
 use crate::errors::QueryProcessingError;
-use crate::expressions::functions::{create_regex_replace_expr, create_regex_string};
+use crate::expressions::functions::create_regex_replace_expr::create_regex_replace_expr;
+use crate::expressions::functions::create_regex_string;
 
 use oxrdf::vocab::xsd;
 use polars::prelude::{coalesce, col};

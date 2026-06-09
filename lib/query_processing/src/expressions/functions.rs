@@ -2,6 +2,7 @@ mod abs_;
 mod ceil_;
 mod concat_;
 mod create_regex_expr;
+mod create_regex_replace_expr;
 mod custom_function;
 mod datatype_;
 mod day_;
@@ -73,7 +74,7 @@ use crate::expressions::functions::str_len::str_len;
 use crate::expressions::functions::struuid::struuid;
 use crate::expressions::functions::year_::year_;
 use crate::expressions::{cast_lang_string_to_string, drop_inner_contexts};
-use oxrdf::vocab::{rdf, xsd};
+use oxrdf::vocab::xsd;
 use oxrdf::NamedNodeRef;
 use polars::datatypes::{DataType, Field};
 use polars::error::PolarsError;
@@ -335,29 +336,6 @@ pub fn func_expression(
     }
     solution_mappings = drop_inner_contexts(solution_mappings, &args_contexts.values().collect());
     Ok(solution_mappings)
-}
-
-fn create_regex_replace_expr(
-    expr: Expr,
-    t: &BaseRDFNodeType,
-    s: &BaseCatState,
-    pattern: &str,
-    replacement: &Expr,
-    global_cats: LockedCats,
-) -> Expr {
-    let do_regex_replace = match t {
-        BaseRDFNodeType::BlankNode | BaseRDFNodeType::None | BaseRDFNodeType::IRI => false,
-        BaseRDFNodeType::Literal(l) => {
-            matches!(l.as_ref(), xsd::STRING | rdf::LANG_STRING)
-        }
-    };
-    if do_regex_replace {
-        maybe_decode_expr(expr, t, s, global_cats)
-            .str()
-            .replace_all(lit(pattern), replacement.clone(), false)
-    } else {
-        lit(LiteralValue::untyped_null()).cast(DataType::String)
-    }
 }
 
 fn create_regex_string(
