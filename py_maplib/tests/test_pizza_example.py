@@ -1,6 +1,6 @@
 import polars as pl
 import pytest
-from maplib.maplib import SolutionMappings
+from maplib.maplib import SolutionMappings, MaplibException
 from polars.testing import assert_frame_equal
 
 from maplib import Model, RDFType
@@ -402,3 +402,46 @@ def test_select_same_subject_predicate_has_results(pizzas_model):
     )
 
     assert df.height == 1
+
+
+def test_update_with_undefined_variable(pizzas_model):
+    with pytest.raises(MaplibException) as e:
+        pizzas_model.update(
+            """
+        PREFIX pizza:<https://github.com/magbak/maplib/pizza#>
+        PREFIX fromContry:<https://github.com/magbak/maplib/pizza#fromCountry>
+        
+        INSERT {
+            ?s pizza:NewPred ?o  . 
+        }WHERE {
+            ?s fromContry: ?b .
+        }
+        """
+        )
+
+        df = pizzas_model.query(
+            """
+            PREFIX pizza:<https://github.com/magbak/maplib/pizza#>
+            SELECT ?s ?o WHERE {
+                ?s pizza:NewPred ?o
+            }
+        """
+        )
+
+    assert "Variable ?o not found" in str(e)
+
+
+def test_simple_insert_construct_query(pizzas_model):
+    with pytest.raises(MaplibException) as e:
+        pizzas_model.insert(
+
+            """
+        PREFIX pizza:<https://github.com/magbak/maplib/pizza#>
+        PREFIX ct:<https://github.com/magbak/maplib/pizza#fromCountry>
+            
+        CONSTRUCT {
+        ?a a ct:somethingTestit.
+        ?b a ct:nothingTestit. 
+        } WHERE {?a a ?c}"""
+        )
+    assert "Construct query with undefined variable" in str(e)

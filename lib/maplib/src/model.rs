@@ -399,7 +399,7 @@ impl Model {
         let query_settings = QuerySettings {
             include_transient: include_source_transient,
             max_rows,
-            strict_project: false,
+            strict_project: true,
         };
         self.triplestore
             .insert(
@@ -429,7 +429,7 @@ impl Model {
         let query_settings = QuerySettings {
             include_transient,
             max_rows,
-            strict_project: false,
+            strict_project: true,
         };
         self.triplestore
             .update(
