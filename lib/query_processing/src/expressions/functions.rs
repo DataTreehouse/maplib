@@ -1,6 +1,9 @@
 mod abs_;
 mod ceil_;
 mod concat_;
+mod create_regex_expr;
+mod create_regex_replace_expr;
+mod create_regex_string;
 mod custom_function;
 mod datatype_;
 mod day_;
@@ -72,7 +75,7 @@ use crate::expressions::functions::str_len::str_len;
 use crate::expressions::functions::struuid::struuid;
 use crate::expressions::functions::year_::year_;
 use crate::expressions::{cast_lang_string_to_string, drop_inner_contexts};
-use oxrdf::vocab::{rdf, xsd};
+use oxrdf::vocab::xsd;
 use oxrdf::NamedNodeRef;
 use polars::datatypes::{DataType, Field};
 use polars::error::PolarsError;
@@ -334,82 +337,6 @@ pub fn func_expression(
     }
     solution_mappings = drop_inner_contexts(solution_mappings, &args_contexts.values().collect());
     Ok(solution_mappings)
-}
-
-fn create_regex_expr(
-    expr: Expr,
-    t: &BaseRDFNodeType,
-    s: &BaseCatState,
-    pattern: &str,
-    global_cats: LockedCats,
-) -> Expr {
-    let do_regex = match t {
-        BaseRDFNodeType::BlankNode | BaseRDFNodeType::None | BaseRDFNodeType::IRI => false,
-        BaseRDFNodeType::Literal(l) => {
-            matches!(l.as_ref(), xsd::STRING | rdf::LANG_STRING)
-        }
-    };
-    if do_regex {
-        maybe_decode_expr(expr, t, s, global_cats)
-            .str()
-            .contains(lit(pattern), true)
-    } else {
-        lit(LiteralValue::untyped_null()).cast(DataType::Boolean)
-    }
-}
-
-fn create_regex_replace_expr(
-    expr: Expr,
-    t: &BaseRDFNodeType,
-    s: &BaseCatState,
-    pattern: &str,
-    replacement: &Expr,
-    global_cats: LockedCats,
-) -> Expr {
-    let do_regex_replace = match t {
-        BaseRDFNodeType::BlankNode | BaseRDFNodeType::None | BaseRDFNodeType::IRI => false,
-        BaseRDFNodeType::Literal(l) => {
-            matches!(l.as_ref(), xsd::STRING | rdf::LANG_STRING)
-        }
-    };
-    if do_regex_replace {
-        maybe_decode_expr(expr, t, s, global_cats)
-            .str()
-            .replace_all(lit(pattern), replacement.clone(), false)
-    } else {
-        lit(LiteralValue::untyped_null()).cast(DataType::String)
-    }
-}
-
-fn create_regex_string(
-    regex_sparql_expression: &Expression,
-    regex_literal_type: &RDFNodeState,
-    flags_expr: Option<(&Expression, &RDFNodeState)>,
-) -> Result<String, QueryProcessingError> {
-    if !regex_literal_type.is_lit_type(xsd::STRING) {
-        return Err(QueryProcessingError::BadArgument(
-            "Replace pattern was not a xsd:string".to_string(),
-        ));
-    }
-    let flags = if let Some((flags_regex_expr, flags_type)) = flags_expr {
-        if !flags_type.is_lit_type(xsd::STRING) {
-            return Err(QueryProcessingError::BadArgument(format!(
-                "Replace flags is was not a xsd:string"
-            )));
-        } else {
-            Some(eval_expression_to_string(flags_regex_expr, true)?)
-        }
-    } else {
-        None
-    };
-    let regex_str = eval_expression_to_string(regex_sparql_expression, true)?;
-    let flags_str = if let Some(flags) = &flags {
-        Some(flags.as_str())
-    } else {
-        None
-    };
-    let pattern = maybe_add_regex_feature_flags(&regex_str, flags_str);
-    Ok(pattern)
 }
 
 fn eval_expression_to_string(
