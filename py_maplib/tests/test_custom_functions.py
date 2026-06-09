@@ -64,5 +64,16 @@ def test_struuidv5_invalid():
             BIND(maplib:uuidv5("abc", ?name) AS ?v5)
         }
         """)
-    assert "Non UUID arg" in str(e)
+    assert "Namespace argument must either be a uuid string" in str(e)
+
+def test_struuidv5_valid():
+    m = Model()
+    df = m.query("""
+    SELECT * WHERE {
+        VALUES ?name {"a" "b" UNDEF}
+        BIND(maplib:struuidv5("8be4df61-93ca-11d2-aa0d-00e098032b8c", ?name) AS ?sv5)
+        BIND(maplib:uuidv5("8be4df61-93ca-11d2-aa0d-00e098032b8e", ?name) AS ?v5)
+    }
+    """)
+    assert df.height == 3
 
