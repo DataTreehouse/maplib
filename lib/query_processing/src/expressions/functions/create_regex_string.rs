@@ -1,5 +1,6 @@
 use crate::errors::QueryProcessingError;
-use crate::expressions::functions::{eval_expression_to_string, maybe_add_regex_feature_flags};
+use crate::expressions::functions::eval_expression_to_string::eval_expression_to_string;
+use crate::expressions::functions::maybe_add_regex_feature_flags;
 use oxrdf::vocab::xsd;
 use representation::RDFNodeState;
 use spargebra::algebra::Expression;

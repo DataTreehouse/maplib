@@ -1,5 +1,6 @@
 use crate::errors::QueryProcessingError;
-use crate::expressions::functions::{eval_expression_to_string, keep_field, str_after, str_before};
+use crate::expressions::functions::eval_expression_to_string::eval_expression_to_string;
+use crate::expressions::functions::{keep_field, str_after, str_before};
 use oxrdf::vocab::{rdf, xsd};
 use polars::prelude::{as_struct, col, lit, LiteralValue};
 use representation::cats::{maybe_decode_expr, LockedCats};

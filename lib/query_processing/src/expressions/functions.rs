@@ -8,6 +8,7 @@ mod custom_function;
 mod datatype_;
 mod day_;
 mod encode_for_uri;
+mod eval_expression_to_string;
 mod eval_uuid_namespace;
 mod floor_;
 mod hours_;
@@ -337,36 +338,6 @@ pub fn func_expression(
     }
     solution_mappings = drop_inner_contexts(solution_mappings, &args_contexts.values().collect());
     Ok(solution_mappings)
-}
-
-fn eval_expression_to_string(
-    sparql_expression: &Expression,
-    expect_string: bool,
-) -> Result<String, QueryProcessingError> {
-    if let Expression::Literal(l) = sparql_expression {
-        if expect_string && l.datatype() != xsd::STRING {
-            Err(QueryProcessingError::ExpectedConstantLiteralStringArgument(
-                sparql_expression.clone(),
-            ))
-        } else {
-            Ok(l.value().to_string())
-        }
-    } else if let Expression::NamedNode(nn) = sparql_expression {
-        Ok(nn.as_str().to_string())
-    } else if let Expression::FunctionCall(f, args) = sparql_expression {
-        match f {
-            Function::Str => eval_expression_to_string(args.get(0).unwrap(), false),
-            _ => {
-                return Err(QueryProcessingError::ExpectedConstantLiteralArgument(
-                    sparql_expression.clone(),
-                ))
-            }
-        }
-    } else {
-        return Err(QueryProcessingError::ExpectedConstantLiteralArgument(
-            sparql_expression.clone(),
-        ));
-    }
 }
 
 pub fn str_function(c: &str, t: &RDFNodeState, global_cats: LockedCats) -> Expr {
