@@ -32,12 +32,14 @@ pub enum SparqlError {
     PoisonedLockError,
     #[error("Tried grouping on a variable `{0}` that is not defined in the inner query: `{1}`")]
     GroupByWithUndefinedVariable(Variable, GraphPattern),
-    #[error("Functionality not supported: {0}")]
+    #[error("Functionality not supported: `{0}`")]
     NotSupportedYet(String),
-    #[error("SPARQL execution error: {0}")]
+    #[error("SPARQL execution error: `{0}`")]
     QueryExecutionError(String),
-    #[error("PValues error: {0}")]
+    #[error("PValues error: `{0}`")]
     PValuesError(String),
+    #[error("Error processing Values pattern `{0}`")]
+    ValuesError(String),
 }
 
 impl<T> From<PoisonError<T>> for SparqlError {

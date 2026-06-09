@@ -19,7 +19,8 @@ impl Triplestore {
         _pushdowns: Pushdowns,
         query_settings: &QuerySettings,
     ) -> Result<SolutionMappings, SparqlError> {
-        let sm = values_pattern(variables, bindings);
+        let sm = values_pattern(variables, bindings)
+            .map_err(|x| SparqlError::ValuesError(x.to_string()))?;
         // No disk based storage of local cats if they are created
         let sm = {
             let cats = self.global_cats.read()?;

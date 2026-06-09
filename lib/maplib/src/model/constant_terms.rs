@@ -10,8 +10,7 @@ use rayon::iter::ParallelIterator;
 use rayon::prelude::IntoParallelIterator;
 use representation::constants::{OTTR_BLANK_NODE, OTTR_IRI};
 use representation::rdf_to_polars::{
-    polars_literal_values_to_series, rdf_named_node_to_polars_literal_value,
-    rdf_term_to_polars_expr,
+    rdf_named_node_to_polars_literal_value, rdf_term_to_polars_expr,
 };
 use representation::BaseRDFNodeType;
 use std::ops::Deref;
@@ -93,10 +92,14 @@ pub fn constant_to_expr(
                         if let LiteralValue::Series(series) = inner {
                             all_series.push(series.deref().clone())
                         } else {
-                            all_series.push(polars_literal_values_to_series(
-                                vec![inner.clone()],
-                                "dummy",
-                            ))
+                            all_series.push(
+                                Series::from_any_values(
+                                    "dummy".into(),
+                                    &[inner.to_any_value().unwrap()],
+                                    true,
+                                )
+                                .unwrap(),
+                            )
                         }
                     } else {
                         panic!("Should also never happen");

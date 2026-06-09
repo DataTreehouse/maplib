@@ -2,10 +2,10 @@ use oxrdf::{Term, Variable};
 use polars::datatypes::PlSmallStr;
 use polars::frame::DataFrame;
 use polars::prelude::{as_struct, col, Column, IntoColumn, IntoLazy};
-use representation::polars_to_rdf::particular_opt_term_vec_to_series;
+use representation::errors::RepresentationError;
 use representation::solution_mapping::EagerSolutionMappings;
 use representation::{
-    get_ground_term_datatype_ref, BaseRDFNodeType, BaseRDFNodeTypeRef, RDFNodeState,
+    get_ground_term_datatype_ref, BaseRDFNodeType, BaseRDFNodeTypeRef, RDFNodeState, SeriesBuilder,
     LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD,
 };
 use spargebra::term::GroundTerm;
@@ -14,9 +14,11 @@ use std::collections::HashMap;
 pub fn values_pattern(
     variables: &[Variable],
     bindings: &[Vec<Option<GroundTerm>>],
-) -> EagerSolutionMappings {
-    let mut variable_datatype_opt_term_vecs: HashMap<usize, HashMap<BaseRDFNodeTypeRef, Vec<_>>> =
-        HashMap::new();
+) -> Result<EagerSolutionMappings, RepresentationError> {
+    let mut variable_datatype_opt_term_vecs: HashMap<
+        usize,
+        HashMap<BaseRDFNodeTypeRef, SeriesBuilder>,
+    > = HashMap::new();
     // Todo: this could be parallel.. but we have very small data here..
     for i in 0..variables.len() {
         variable_datatype_opt_term_vecs.insert(i, HashMap::new());
@@ -27,10 +29,15 @@ pub fn values_pattern(
             if let Some(gt) = col {
                 let dt = get_ground_term_datatype_ref(gt);
                 {
-                    let vector = if let Some(vector) = map.get_mut(&dt) {
-                        vector
+                    let builder = if let Some(builder) = map.get_mut(&dt) {
+                        builder
                     } else {
-                        map.insert(dt.clone(), std::iter::repeat_n(None, i).collect());
+                        let dt_nonref = dt.clone().into_owned();
+                        let mut builder = SeriesBuilder::new(&dt_nonref);
+                        for _ in 0..i {
+                            builder.push_none();
+                        }
+                        map.insert(dt.clone(), builder);
                         map.get_mut(&dt).unwrap()
                     };
                     #[allow(unreachable_patterns)]
@@ -39,16 +46,16 @@ pub fn values_pattern(
                         GroundTerm::Literal(l) => Term::Literal(l.clone()),
                         _ => unimplemented!(),
                     };
-                    vector.push(Some(term));
+                    builder.parse_term(&term)?;
                 }
-                for (k, v) in &mut *map {
+                for (k, b) in &mut *map {
                     if k != &dt {
-                        v.push(None);
+                        b.push_none();
                     }
                 }
             } else {
-                for v in (*map).values_mut() {
-                    v.push(None);
+                for b in (*map).values_mut() {
+                    b.push_none();
                 }
             }
         }
@@ -59,11 +66,8 @@ pub fn values_pattern(
     let mut height = 0;
     for (i, m) in variable_datatype_opt_term_vecs {
         let mut types_columns = vec![];
-        for (t, v) in m {
-            types_columns.push((
-                t.clone().into_owned(),
-                particular_opt_term_vec_to_series(v, t, "c").into_column(),
-            ));
+        for (t, b) in m {
+            types_columns.push((t.clone().into_owned(), b.into_series("c").into_column()));
         }
         types_columns.sort_unstable_by(|(x, _), (y, _)| x.cmp(y));
 
@@ -144,5 +148,5 @@ pub fn values_pattern(
         .select(varexpr)
         .collect()
         .unwrap();
-    EagerSolutionMappings::new(df, all_datatypes)
+    Ok(EagerSolutionMappings::new(df, all_datatypes))
 }

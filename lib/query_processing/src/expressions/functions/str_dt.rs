@@ -1,15 +1,14 @@
 use crate::errors::QueryProcessingError;
 use oxrdf::vocab::xsd;
+use polars::error::PolarsError;
 use polars::prelude::{col, lit, IntoColumn, LiteralValue};
 use representation::cats::{maybe_decode_expr, LockedCats};
 use representation::query_context::Context;
-use representation::rdf_to_polars::{
-    polars_literal_values_to_series, rdf_literal_to_polars_literal_value_impl,
-};
 use representation::solution_mapping::SolutionMappings;
-use representation::BaseRDFNodeType;
+use representation::{BaseRDFNodeType, SeriesBuilder};
 use spargebra::algebra::{Expression, Function};
 use std::collections::HashMap;
+use tracing::warn;
 
 pub fn str_dt(
     mut solution_mappings: SolutionMappings,
@@ -61,25 +60,30 @@ pub fn str_dt(
             )));
         };
         let out_dt = BaseRDFNodeType::Literal(dt_iri.clone());
+        let out_dt_cloned = out_dt.clone();
         let out_polars_type = out_dt.default_input_polars_data_type();
         let outer_context_cloned = outer_context.clone();
         let decoded_col =
             maybe_decode_expr(use_base_col, &base_string, use_base_state, global_cats);
         let expr = decoded_col.map(
             move |x| {
-                let litval: Vec<_> = x
-                    .str()?
-                    .iter()
-                    .map(|x| {
-                        if let Some(s) = x {
-                            rdf_literal_to_polars_literal_value_impl(s, dt_iri.clone().as_ref())
-                        } else {
-                            LiteralValue::untyped_null()
+                let mut builder = SeriesBuilder::new(&out_dt_cloned.clone());
+                for v in x.str()?.iter() {
+                    if let Some(v) = v {
+                        match builder.parse_literal(v, None) {
+                            Ok(_) => {}
+                            Err(e) => {
+                                warn!("Could not parse literal {}", e);
+                                return Err(PolarsError::InvalidOperation(
+                                    "Error parsing literal to target type in STRDT function".into(),
+                                ));
+                            }
                         }
-                    })
-                    .collect();
-                let series =
-                    polars_literal_values_to_series(litval, outer_context_cloned.clone().as_str());
+                    } else {
+                        builder.push_none();
+                    }
+                }
+                let series = builder.into_series(outer_context_cloned.clone().as_str());
                 Ok(series.into_column())
             },
             move |_, f| {

@@ -11,7 +11,7 @@ use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{NamedOrBlankNode, Term};
 use polars::prelude::{as_struct, col, DataType, IntoLazy, NamedFrom, PlSmallStr, Series};
 use polars_core::frame::DataFrame;
-use polars_core::prelude::{Int128Chunked, IntoSeries, NamedFromOwned, StringChunkedBuilder};
+use polars_core::prelude::{Int128Chunked, IntoSeries, NewChunkedArray, StringChunkedBuilder};
 use rust_decimal::Decimal;
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -23,20 +23,20 @@ pub type PredMap = HashMap<String, BySubjectType>;
 
 pub enum SeriesBuilder {
     String(StringChunkedBuilder, usize),
-    Bool(Vec<bool>),
-    U8(Vec<u8>),
-    U16(Vec<u16>),
-    U32(Vec<u32>),
-    U64(Vec<u64>),
-    I8(Vec<i8>),
-    I16(Vec<i16>),
-    I32(Vec<i32>),
-    I64(Vec<i64>),
-    F32(Vec<f32>),
-    F64(Vec<f64>),
-    Date(Vec<i32>),
-    Datetime(Vec<i64>),
-    Decimal(Vec<i128>),
+    Bool(Vec<Option<bool>>),
+    U8(Vec<Option<u8>>),
+    U16(Vec<Option<u16>>),
+    U32(Vec<Option<u32>>),
+    U64(Vec<Option<u64>>),
+    I8(Vec<Option<i8>>),
+    I16(Vec<Option<i16>>),
+    I32(Vec<Option<i32>>),
+    I64(Vec<Option<i64>>),
+    F32(Vec<Option<f32>>),
+    F64(Vec<Option<f64>>),
+    Date(Vec<Option<i32>>),
+    Datetime(Vec<Option<i64>>),
+    Decimal(Vec<Option<i128>>),
     LangString {
         values: StringChunkedBuilder,
         langs: StringChunkedBuilder,
@@ -76,7 +76,9 @@ impl SeriesBuilder {
                     langs: StringChunkedBuilder::new(LANG_STRING_LANG_FIELD.into(), cap),
                     len: 0,
                 },
-                x if false && x.as_str() == GEO_WKT_LITERAL => SeriesBuilder::Geo(GeoBuilder::new(), 0),
+                x if false && x.as_str() == GEO_WKT_LITERAL => {
+                    SeriesBuilder::Geo(GeoBuilder::new(), 0)
+                }
                 _ => SeriesBuilder::String(StringChunkedBuilder::new("s".into(), cap), 0),
             },
             BaseRDFNodeType::None => {
@@ -122,7 +124,7 @@ impl SeriesBuilder {
 
     pub fn push_u32(&mut self, u: u32) {
         if let SeriesBuilder::U32(v) = self {
-            v.push(u);
+            v.push(Some(u));
         } else {
             panic!("Should never be used for non string builder")
         }
@@ -134,6 +136,66 @@ impl SeriesBuilder {
                 self.push_str(v.as_str());
             }
             NamedOrBlankNode::BlankNode(v) => self.push_str(v.as_str()),
+        }
+    }
+
+    pub fn push_none(&mut self) {
+        match self {
+            SeriesBuilder::String(b, len) => {
+                b.append_null();
+                *len += 1;
+            }
+            SeriesBuilder::Bool(v) => {
+                v.push(None);
+            }
+            SeriesBuilder::U8(v) => {
+                v.push(None);
+            }
+            SeriesBuilder::U16(v) => {
+                v.push(None);
+            }
+            SeriesBuilder::U32(v) => {
+                v.push(None);
+            }
+            SeriesBuilder::U64(v) => {
+                v.push(None);
+            }
+            SeriesBuilder::I8(v) => {
+                v.push(None);
+            }
+            SeriesBuilder::I16(v) => {
+                v.push(None);
+            }
+            SeriesBuilder::I32(v) => {
+                v.push(None);
+            }
+            SeriesBuilder::I64(v) => {
+                v.push(None);
+            }
+            SeriesBuilder::F32(v) => {
+                v.push(None);
+            }
+            SeriesBuilder::F64(v) => {
+                v.push(None);
+            }
+            SeriesBuilder::Date(v) => {
+                v.push(None);
+            }
+            SeriesBuilder::Datetime(v) => {
+                v.push(None);
+            }
+            SeriesBuilder::Decimal(v) => {
+                v.push(None);
+            }
+            SeriesBuilder::LangString { values, langs, len } => {
+                *len += 1;
+                values.append_null();
+                langs.append_null();
+            }
+            SeriesBuilder::Geo(_, l) => {
+                *l += 1;
+                todo!();
+            }
         }
     }
 
@@ -151,6 +213,14 @@ impl SeriesBuilder {
         }
     }
 
+    pub fn push_f32(&mut self, value: f32) {
+        if let SeriesBuilder::F32(v) = self {
+            v.push(Some(value));
+        } else {
+            unreachable!("Should never be used for non f32 string builder")
+        }
+    }
+
     pub fn parse_literal(
         &mut self,
         lex: &str,
@@ -164,69 +234,69 @@ impl SeriesBuilder {
             SeriesBuilder::Bool(v) => {
                 let b = bool::from_str(&lex)
                     .map_err(|x| RepresentationError::LiteralParseError(x.to_string()))?;
-                v.push(b);
+                v.push(Some(b));
             }
             SeriesBuilder::U8(v) => {
                 let u = u8::from_str(&lex)
                     .map_err(|x| RepresentationError::LiteralParseError(x.to_string()))?;
-                v.push(u);
+                v.push(Some(u));
             }
             SeriesBuilder::U16(v) => {
                 let u = u16::from_str(&lex)
                     .map_err(|x| RepresentationError::LiteralParseError(x.to_string()))?;
-                v.push(u);
+                v.push(Some(u));
             }
             SeriesBuilder::U32(v) => {
                 let u = u32::from_str(&lex)
                     .map_err(|x| RepresentationError::LiteralParseError(x.to_string()))?;
-                v.push(u);
+                v.push(Some(u));
             }
             SeriesBuilder::U64(v) => {
                 let u = u64::from_str(&lex)
                     .map_err(|x| RepresentationError::LiteralParseError(x.to_string()))?;
-                v.push(u);
+                v.push(Some(u));
             }
             SeriesBuilder::I8(v) => {
                 let i = i8::from_str(&lex)
                     .map_err(|x| RepresentationError::LiteralParseError(x.to_string()))?;
-                v.push(i);
+                v.push(Some(i));
             }
             SeriesBuilder::I16(v) => {
                 let i = i16::from_str(&lex)
                     .map_err(|x| RepresentationError::LiteralParseError(x.to_string()))?;
-                v.push(i);
+                v.push(Some(i));
             }
             SeriesBuilder::I32(v) => {
                 let i = i32::from_str(&lex)
                     .map_err(|x| RepresentationError::LiteralParseError(x.to_string()))?;
-                v.push(i);
+                v.push(Some(i));
             }
             SeriesBuilder::I64(v) => {
                 let i = i64::from_str(&lex)
                     .map_err(|x| RepresentationError::LiteralParseError(x.to_string()))?;
-                v.push(i);
+                v.push(Some(i));
             }
             SeriesBuilder::F32(v) => {
                 let f = f32::from_str(&lex)
                     .map_err(|x| RepresentationError::LiteralParseError(x.to_string()))?;
-                v.push(f);
+                v.push(Some(f));
             }
             SeriesBuilder::F64(v) => {
                 let f = f64::from_str(&lex)
                     .map_err(|x| RepresentationError::LiteralParseError(x.to_string()))?;
-                v.push(f);
+                v.push(Some(f));
             }
             SeriesBuilder::Date(v) => {
                 let d = parse_xsd_date(&lex)?;
-                v.push(d);
+                v.push(Some(d));
             }
             SeriesBuilder::Datetime(v) => {
                 let i = parse_xsd_datetime_micros(&lex)?;
-                v.push(i);
+                v.push(Some(i));
             }
             SeriesBuilder::Decimal(v) => {
                 let i = parse_xsd_decimal(&lex)?;
-                v.push(i);
+                v.push(Some(i));
             }
             SeriesBuilder::LangString { values, langs, len } => {
                 if let Some(lang) = lang {
@@ -258,27 +328,25 @@ impl SeriesBuilder {
                 s
             }
             SeriesBuilder::Bool(v) => Series::new(name.into(), v),
-            SeriesBuilder::U8(v) => Series::from_vec(name.into(), v),
-            SeriesBuilder::U16(v) => Series::from_vec(name.into(), v),
-            SeriesBuilder::U32(v) => Series::from_vec(name.into(), v),
-            SeriesBuilder::U64(v) => Series::from_vec(name.into(), v),
-            SeriesBuilder::I8(v) => Series::from_vec(name.into(), v),
-            SeriesBuilder::I16(v) => Series::from_vec(name.into(), v),
-            SeriesBuilder::I32(v) => Series::from_vec(name.into(), v),
-            SeriesBuilder::I64(v) => Series::from_vec(name.into(), v),
-            SeriesBuilder::F32(v) => Series::from_vec(name.into(), v),
-            SeriesBuilder::F64(v) => Series::from_vec(name.into(), v),
-            SeriesBuilder::Date(v) => Series::from_vec(name.into(), v)
-                .cast(&DataType::Date)
-                .unwrap(),
-            SeriesBuilder::Datetime(v) => Series::from_vec(name.into(), v)
+            SeriesBuilder::U8(v) => Series::new(name.into(), v),
+            SeriesBuilder::U16(v) => Series::new(name.into(), v),
+            SeriesBuilder::U32(v) => Series::new(name.into(), v),
+            SeriesBuilder::U64(v) => Series::new(name.into(), v),
+            SeriesBuilder::I8(v) => Series::new(name.into(), v),
+            SeriesBuilder::I16(v) => Series::new(name.into(), v),
+            SeriesBuilder::I32(v) => Series::new(name.into(), v),
+            SeriesBuilder::I64(v) => Series::new(name.into(), v),
+            SeriesBuilder::F32(v) => Series::new(name.into(), v),
+            SeriesBuilder::F64(v) => Series::new(name.into(), v),
+            SeriesBuilder::Date(v) => Series::new(name.into(), v).cast(&DataType::Date).unwrap(),
+            SeriesBuilder::Datetime(v) => Series::new(name.into(), v)
                 .cast(&DataType::Datetime(
                     default_time_unit(),
                     Some(default_time_zone()),
                 ))
                 .unwrap(),
             SeriesBuilder::Decimal(v) => {
-                let i128ch = Int128Chunked::from_vec(name.into(), v);
+                let i128ch = Int128Chunked::from_iter_options(name.into(), v.into_iter());
                 let dec = i128ch
                     .into_decimal(default_decimal_precision(), default_decimal_scale())
                     .unwrap();
