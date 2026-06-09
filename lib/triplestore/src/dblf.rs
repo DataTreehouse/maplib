@@ -579,7 +579,8 @@ fn single_triples_to_lf(
                 Term::NamedNode(nn) => named_node_enc(nn, global_cats),
                 Term::BlankNode(bl) => blank_node_enc(bl, global_cats),
                 Term::Literal(l) => {
-                    let (e, _, _) = literal_enc(l, global_cats);
+                    let (e, _, _) = literal_enc(l, global_cats)
+                        .map_err(|x| TriplestoreError::SparqlQueryError(x.to_string()))?;
                     Some(e)
                 }
             };

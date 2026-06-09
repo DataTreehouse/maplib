@@ -1,4 +1,5 @@
 use crate::debug::DebugOutputs;
+use crate::errors::RepresentationError;
 use crate::python_df_to_rust::polars_df_to_rust_df;
 use crate::query_context::Context;
 use crate::rdf_to_polars::{default_decimal_scale, rdf_literal_to_polars_literal_value};
@@ -35,6 +36,8 @@ pub enum PyRepresentationError {
     VariableNameParseError(#[from] VariableNameParseError),
     #[error("Bad arguments: `{0}`")]
     BadArgumentError(String),
+    #[error(transparent)]
+    RepresentationError(RepresentationError),
 }
 
 impl From<PyRepresentationError> for PyErr {
@@ -52,6 +55,9 @@ impl From<PyRepresentationError> for PyErr {
             PyRepresentationError::VariableNameParseError(err) => {
                 VariableNameParseErrorException::new_err(format!("{err}"))
             }
+            PyRepresentationError::RepresentationError(err) => {
+                RepresentationErrorException::new_err(format!("{err}"))
+            }
         }
     }
 }
@@ -60,6 +66,7 @@ create_exception!(exceptions, IriParseErrorException, PyException);
 create_exception!(exceptions, BlankNodeIdParseErrorException, PyException);
 create_exception!(exceptions, BadArgumentErrorException, PyException);
 create_exception!(exceptions, VariableNameParseErrorException, PyException);
+create_exception!(exceptions, RepresentationErrorException, PyException);
 
 #[derive(Debug, Clone)]
 #[pyclass(name = "RDFType", from_py_object)]
@@ -365,7 +372,9 @@ impl PyLiteral {
             return PyXSDDuration { duration }.into_py_any(py);
         }
 
-        match rdf_literal_to_polars_literal_value(&self.literal, None) {
+        let to_polars = rdf_literal_to_polars_literal_value(&self.literal, None)
+            .map_err(|x| PyRepresentationError::RepresentationError(x))?;
+        match to_polars {
             LiteralValue::Scalar(s) => {
                 match s.into_value() {
                     AnyValue::Boolean(b) => b.into_py_any(py),

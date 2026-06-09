@@ -38,7 +38,8 @@ pub fn constant_to_expr(
             }
             ConstantTerm::Literal(lit) => {
                 let the_dt = lit.datatype().into_owned();
-                let expr = rdf_term_to_polars_expr(&Term::Literal(lit.clone()));
+                let expr = rdf_term_to_polars_expr(&Term::Literal(lit.clone()))
+                    .map_err(|x| MappingError::LiteralParseError(x.to_string()))?;
                 (
                     expr,
                     PType::Basic(the_dt.clone()),

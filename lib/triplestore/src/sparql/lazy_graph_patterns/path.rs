@@ -259,7 +259,7 @@ impl Triplestore {
                 rename_trg.push(bname);
             }
             TermPattern::Literal(l) => {
-                let (l, ..) = literal_enc(l, &cats);
+                let (l, ..) = literal_enc(l, &cats)?;
                 out_df = out_df
                     .lazy()
                     .filter(col(SUBJECT_COL_NAME).eq(l))
@@ -294,7 +294,7 @@ impl Triplestore {
                 rename_trg.push(bname);
             }
             TermPattern::Literal(l) => {
-                let (l, ..) = literal_enc(l, &cats);
+                let (l, ..) = literal_enc(l, &cats)?;
                 out_df = out_df
                     .lazy()
                     .filter(col(OBJECT_COL_NAME).eq(l))

@@ -33,6 +33,7 @@ pub enum MappingError {
     TriplestoreError(#[from] TriplestoreError),
     IriParseError(IriParseError),
     MaximumRecursionLimit(usize, String),
+    LiteralParseError(String),
 }
 
 impl Display for MappingError {
@@ -140,6 +141,9 @@ impl Display for MappingError {
             }
             MappingError::MaximumRecursionLimit(x, s) => {
                 write!(f, "Reached maximum templates recursion limit {x} ({s})")
+            }
+            MappingError::LiteralParseError(x) => {
+                write!(f, "Literal parse error: {x}")
             }
         }
     }

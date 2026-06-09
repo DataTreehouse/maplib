@@ -68,7 +68,10 @@ pub fn blank_node_local_enc(bl: &BlankNode, global_cats: &Cats) -> (Expr, Option
     }
 }
 
-pub fn literal_enc(l: &Literal, global_cats: &Cats) -> (Expr, BaseRDFNodeType, BaseCatState) {
+pub fn literal_enc(
+    l: &Literal,
+    global_cats: &Cats,
+) -> Result<(Expr, BaseRDFNodeType, BaseCatState), QueryProcessingError> {
     let bt = BaseRDFNodeType::Literal(l.datatype().into_owned());
     let encoded_res = if bt.stored_cat() {
         if bt.is_lang_string() {
@@ -134,9 +137,14 @@ pub fn literal_enc(l: &Literal, global_cats: &Cats) -> (Expr, BaseRDFNodeType, B
         }
     } else {
         let bs = bt.default_input_cat_state().clone();
-        (rdf_literal_to_polars_expr(l), bt, bs)
+        (
+            rdf_literal_to_polars_expr(l)
+                .map_err(|x| QueryProcessingError::ParseLiteralError(x))?,
+            bt,
+            bs,
+        )
     };
-    encoded_res
+    Ok(encoded_res)
 }
 
 pub fn named_node(
@@ -165,7 +173,7 @@ pub fn literal(
     context: &Context,
     global_cats: &Cats,
 ) -> Result<SolutionMappings, QueryProcessingError> {
-    let (e, bt, bs) = literal_enc(lit, global_cats);
+    let (e, bt, bs) = literal_enc(lit, global_cats)?;
     solution_mappings.mappings = solution_mappings
         .mappings
         .with_column(e.alias(context.as_str()));

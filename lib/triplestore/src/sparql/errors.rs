@@ -2,6 +2,7 @@ use crate::errors::TriplestoreError;
 use fts::FtsError;
 use oxrdf::Variable;
 use query_processing::errors::QueryProcessingError;
+use representation::errors::RepresentationError;
 use representation::RDFNodeState;
 use spargebra::algebra::GraphPattern;
 use spargebra::SparqlSyntaxError;
@@ -40,6 +41,8 @@ pub enum SparqlError {
     PValuesError(String),
     #[error("Error processing Values pattern `{0}`")]
     ValuesError(String),
+    #[error("Error parsing literal {0}")]
+    ParseLiteralError(RepresentationError),
 }
 
 impl<T> From<PoisonError<T>> for SparqlError {
