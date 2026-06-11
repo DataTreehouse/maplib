@@ -76,9 +76,7 @@ impl SeriesBuilder {
                     langs: StringChunkedBuilder::new(LANG_STRING_LANG_FIELD.into(), cap),
                     len: 0,
                 },
-                x if false && x.as_str() == GEO_WKT_LITERAL => {
-                    SeriesBuilder::Geo(GeoBuilder::new(), 0)
-                }
+                x if x.as_str() == GEO_WKT_LITERAL => SeriesBuilder::Geo(GeoBuilder::new(), 0),
                 _ => SeriesBuilder::String(StringChunkedBuilder::new("s".into(), cap), 0),
             },
             BaseRDFNodeType::None => {
