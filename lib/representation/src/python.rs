@@ -38,6 +38,16 @@ pub enum PyRepresentationError {
     BadArgumentError(String),
     #[error(transparent)]
     RepresentationError(RepresentationError),
+    #[error("Import field error: `{0}`")]
+    ImportFieldError(String),
+    #[error("Import array error: `{0}`")]
+    ImportArrayError(String),
+    #[error("Invalid top-level schema: `{0}`")]
+    InvalidTopLevelSchemaError(String),
+    #[error("Duplicate column error: `{0}`")]
+    DuplicateColumnError(String),
+    #[error("New arrow series error: `{0}`")]
+    NewArrowSeriesError(String),
 }
 
 impl From<PyRepresentationError> for PyErr {
@@ -58,6 +68,21 @@ impl From<PyRepresentationError> for PyErr {
             PyRepresentationError::RepresentationError(err) => {
                 RepresentationErrorException::new_err(format!("{err}"))
             }
+            PyRepresentationError::ImportFieldError(_) => {
+                ImportFieldErrorException::new_err(format!("{err}"))
+            }
+            PyRepresentationError::ImportArrayError(_) => {
+                ImportArrayErrorException::new_err(format!("{err}"))
+            }
+            PyRepresentationError::InvalidTopLevelSchemaError(_) => {
+                InvalidTopLevelSchemaErrorException::new_err(format!("{err}"))
+            }
+            PyRepresentationError::DuplicateColumnError(_) => {
+                DuplicateColumnErrorException::new_err(format!("{err}"))
+            }
+            PyRepresentationError::NewArrowSeriesError(_) => {
+                NewArrowSeriesErrorException::new_err(format!("{err}"))
+            }
         }
     }
 }
@@ -67,6 +92,11 @@ create_exception!(exceptions, BlankNodeIdParseErrorException, PyException);
 create_exception!(exceptions, BadArgumentErrorException, PyException);
 create_exception!(exceptions, VariableNameParseErrorException, PyException);
 create_exception!(exceptions, RepresentationErrorException, PyException);
+create_exception!(exceptions, ImportFieldErrorException, PyException);
+create_exception!(exceptions, ImportArrayErrorException, PyException);
+create_exception!(exceptions, InvalidTopLevelSchemaErrorException, PyException);
+create_exception!(exceptions, DuplicateColumnErrorException, PyException);
+create_exception!(exceptions, NewArrowSeriesErrorException, PyException);
 
 #[derive(Debug, Clone)]
 #[pyclass(name = "RDFType", from_py_object)]
@@ -373,7 +403,7 @@ impl PyLiteral {
         }
 
         let to_polars = rdf_literal_to_polars_literal_value(&self.literal, None)
-            .map_err(|x| PyRepresentationError::RepresentationError(x))?;
+            .map_err(PyRepresentationError::RepresentationError)?;
         match to_polars {
             LiteralValue::Scalar(s) => {
                 match s.into_value() {
