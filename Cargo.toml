@@ -38,7 +38,6 @@ polars = { version = "0.54.4", features = [
     "moment",
     "timezones"
 ] }
-polars-arrow = { version = "0.54.4" }
 polars-core = { version = "0.54.4" }
 rayon = "1.10.0"
 regex = "1.11.1"
