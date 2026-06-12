@@ -1,6 +1,5 @@
 use super::Triplestore;
 use crate::errors::TriplestoreError;
-use hdt::Hdt;
 use oxrdf::NamedNode;
 use oxrdfio::{RdfFormat, RdfSerializer};
 use polars::prelude::{by_name, col};
@@ -16,11 +15,10 @@ use representation::{
     LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD, OBJECT_COL_NAME, SUBJECT_COL_NAME,
 };
 use std::collections::HashMap;
-use std::fs::File;
-use std::io::{BufWriter, Write};
-use std::path::Path;
+use std::io::Write;
 
 mod fast_ntriples;
+mod hdt_write;
 mod pretty_turtle;
 mod serializers;
 
@@ -141,30 +139,24 @@ impl Triplestore {
         graph: &NamedGraph,
     ) -> Result<(), TriplestoreError> {
         self.check_graph_exists(graph)?;
-        // The hdt crate can only build an HDT dataset from an N-Triples file,
-        // so serialize to a temporary file first and convert it.
-        let tmp_path = std::env::temp_dir().join(format!("maplib_hdt_{}.nt", uuid::Uuid::new_v4()));
-        let _cleanup = RemoveFileOnDrop(tmp_path.clone());
-        self.write_hdt_via_ntriples(buf, graph, &tmp_path)
-    }
-
-    fn write_hdt_via_ntriples<W: Write>(
-        &mut self,
-        buf: &mut W,
-        graph: &NamedGraph,
-        tmp_path: &Path,
-    ) -> Result<(), TriplestoreError> {
-        let file = File::create(tmp_path).map_err(|e| TriplestoreError::HDTError(e.to_string()))?;
-        let mut writer = BufWriter::new(file);
-        self.write_triples(&mut writer, RdfFormat::NTriples, graph, &HashMap::new())?;
-        writer
-            .into_inner()
-            .map_err(|e| TriplestoreError::HDTError(e.to_string()))?;
-        let hdt = Hdt::read_nt(tmp_path).map_err(|e| TriplestoreError::HDTError(e.to_string()))?;
-        let mut buf = BufWriter::new(buf);
-        hdt.write(&mut buf)
-            .map_err(|e| TriplestoreError::HDTError(e.to_string()))?;
-        Ok(())
+        let mut builder = hdt_write::HdtBuilder::new();
+        for (predicate, df_map) in self.graph_triples_map.get(graph).unwrap() {
+            for ((subject_type, object_type), tt) in df_map {
+                for (lf, _) in tt.get_lazy_frames(&None, &None)? {
+                    let triples = global_df_as_triples(
+                        lf.collect().unwrap(),
+                        subject_type.clone(),
+                        object_type.clone(),
+                        predicate,
+                        self.global_cats.clone(),
+                    );
+                    for t in &triples {
+                        builder.add_triple(t);
+                    }
+                }
+            }
+        }
+        builder.finish(buf)
     }
 
     pub(crate) fn check_graph_exists(&self, graph: &NamedGraph) -> Result<(), TriplestoreError> {
@@ -173,14 +165,6 @@ impl Triplestore {
         } else {
             Ok(())
         }
-    }
-}
-
-struct RemoveFileOnDrop(std::path::PathBuf);
-
-impl Drop for RemoveFileOnDrop {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_file(&self.0);
     }
 }
 

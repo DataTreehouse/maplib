@@ -967,7 +967,7 @@ class Model:
 
         :param file_path: The path of the file containing triples
         :param format: One of "ntriples", "turtle", "rdf/xml", "hdt".
-            HDT is written via a temporary N-Triples file; literals with special characters are stored N-Triples-escaped, following the Rust hdt crate.
+            HDT is built in memory; literals with special characters are stored N-Triples-escaped, following the Rust hdt crate.
         :param graph: The IRI of the graph to write.
         :param prefixes: The prefixes that will be used in turtle serialization.
         """
