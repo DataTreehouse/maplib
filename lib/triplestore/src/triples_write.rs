@@ -1,5 +1,6 @@
 use super::Triplestore;
 use crate::errors::TriplestoreError;
+use hdt::Hdt;
 use oxrdf::NamedNode;
 use oxrdfio::{RdfFormat, RdfSerializer};
 use polars::prelude::{by_name, col};
@@ -15,7 +16,9 @@ use representation::{
     LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD, OBJECT_COL_NAME, SUBJECT_COL_NAME,
 };
 use std::collections::HashMap;
-use std::io::Write;
+use std::fs::File;
+use std::io::{BufWriter, Write};
+use std::path::Path;
 
 mod fast_ntriples;
 mod pretty_turtle;
@@ -132,12 +135,52 @@ impl Triplestore {
         Ok(())
     }
 
+    pub fn write_hdt<W: Write>(
+        &mut self,
+        buf: &mut W,
+        graph: &NamedGraph,
+    ) -> Result<(), TriplestoreError> {
+        self.check_graph_exists(graph)?;
+        // The hdt crate can only build an HDT dataset from an N-Triples file,
+        // so serialize to a temporary file first and convert it.
+        let tmp_path = std::env::temp_dir().join(format!("maplib_hdt_{}.nt", uuid::Uuid::new_v4()));
+        let _cleanup = RemoveFileOnDrop(tmp_path.clone());
+        self.write_hdt_via_ntriples(buf, graph, &tmp_path)
+    }
+
+    fn write_hdt_via_ntriples<W: Write>(
+        &mut self,
+        buf: &mut W,
+        graph: &NamedGraph,
+        tmp_path: &Path,
+    ) -> Result<(), TriplestoreError> {
+        let file = File::create(tmp_path).map_err(|e| TriplestoreError::HDTError(e.to_string()))?;
+        let mut writer = BufWriter::new(file);
+        self.write_triples(&mut writer, RdfFormat::NTriples, graph, &HashMap::new())?;
+        writer
+            .into_inner()
+            .map_err(|e| TriplestoreError::HDTError(e.to_string()))?;
+        let hdt = Hdt::read_nt(tmp_path).map_err(|e| TriplestoreError::HDTError(e.to_string()))?;
+        let mut buf = BufWriter::new(buf);
+        hdt.write(&mut buf)
+            .map_err(|e| TriplestoreError::HDTError(e.to_string()))?;
+        Ok(())
+    }
+
     pub(crate) fn check_graph_exists(&self, graph: &NamedGraph) -> Result<(), TriplestoreError> {
         if !self.graph_triples_map.contains_key(graph) {
             Err(TriplestoreError::GraphDoesNotExist(graph.to_string()))
         } else {
             Ok(())
         }
+    }
+}
+
+struct RemoveFileOnDrop(std::path::PathBuf);
+
+impl Drop for RemoveFileOnDrop {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.0);
     }
 }
 

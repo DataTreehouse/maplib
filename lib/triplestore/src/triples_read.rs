@@ -4,8 +4,9 @@ use crate::TriplesToAdd;
 use std::cmp;
 
 use cimxml_import::{fix_cim_quad, Remapper};
+use hdt::Hdt;
 use memmap2::MmapOptions;
-use oxrdf::{BlankNode, GraphName, NamedNode, NamedOrBlankNode, Quad, Term, Triple};
+use oxrdf::{BlankNode, GraphName, Literal, NamedNode, NamedOrBlankNode, Quad, Term, Triple};
 use oxrdfio::{
     JsonLdProfileSet, LoadedDocument, RdfFormat, RdfParser, RdfSyntaxError, SliceQuadParser,
 };
@@ -25,7 +26,10 @@ use representation::{
 use representation::{OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use std::collections::HashMap;
 use std::fs::File;
+use std::io::Cursor;
 use std::path::Path;
+use std::str::FromStr;
+use std::sync::Arc;
 use std::time::Instant;
 use tracing::{debug, instrument};
 
@@ -35,6 +39,7 @@ const UTF8_BOM: [u8; 3] = [0xEF, 0xBB, 0xBF];
 pub enum ExtendedRdfFormat {
     Normal(RdfFormat),
     CIMXML,
+    HDT,
 }
 
 impl Triplestore {
@@ -70,6 +75,8 @@ impl Triplestore {
             ExtendedRdfFormat::Normal(RdfFormat::JsonLd {
                 profile: JsonLdProfileSet::empty(),
             })
+        } else if path.extension() == Some("hdt".as_ref()) {
+            ExtendedRdfFormat::HDT
         } else {
             todo!("Have not implemented file format {:?}", path);
         };
@@ -152,84 +159,23 @@ impl Triplestore {
         } else {
             matches!(rdf_format, ExtendedRdfFormat::Normal(RdfFormat::NTriples))
         };
-        let mut readers = if matches!(
-            rdf_format,
-            ExtendedRdfFormat::Normal(RdfFormat::NTriples)
-                | ExtendedRdfFormat::Normal(RdfFormat::Turtle)
-        ) && parallel
-        {
-            let threads = if let Ok(threads) = std::thread::available_parallelism() {
-                threads.get()
-            } else {
-                1
-            };
-
-            let mut readers = vec![];
-            if rdf_format == ExtendedRdfFormat::Normal(RdfFormat::Turtle) {
-                let mut parser = TurtleParser::new();
-                for (k, v) in prefixes {
-                    parser = parser.with_prefix(k, v.as_str()).unwrap();
-                }
-                if !checked {
-                    parser = parser.lenient();
-                }
-                if let Some(base_iri) = base_iri {
-                    parser = parser.with_base_iri(base_iri).unwrap();
-                }
-                for r in parser.split_slice_for_parallel_parsing(use_slice, threads) {
-                    readers.push(MyFromSliceQuadReader {
-                        parser: MyFromSliceQuadReaderKind::TurtlePar(r),
-                    });
-                }
-            } else if rdf_format == ExtendedRdfFormat::Normal(RdfFormat::NTriples) {
-                let mut parser = NTriplesParser::new();
-                if !checked {
-                    parser = parser.lenient();
-                }
-                for r in parser.split_slice_for_parallel_parsing(use_slice, threads) {
-                    readers.push(MyFromSliceQuadReader {
-                        parser: MyFromSliceQuadReaderKind::NTriplesPar(r),
-                    });
-                }
-            }
-            readers
+        let hdt;
+        let mut readers = if rdf_format == ExtendedRdfFormat::HDT {
+            hdt = Hdt::read(Cursor::new(use_slice))
+                .map_err(|e| TriplestoreError::HDTError(e.to_string()))?;
+            vec![hdt_reader(&hdt)]
+        } else if parallel && rdf_format == ExtendedRdfFormat::Normal(RdfFormat::Turtle) {
+            parallel_turtle_readers(use_slice, prefixes, checked, base_iri)
+        } else if parallel && rdf_format == ExtendedRdfFormat::Normal(RdfFormat::NTriples) {
+            parallel_ntriples_readers(use_slice, checked)
         } else {
-            let use_format = match rdf_format {
-                ExtendedRdfFormat::Normal(n) => n,
-                ExtendedRdfFormat::CIMXML => RdfFormat::RdfXml,
-            };
-            let mut parser = RdfParser::from(use_format.clone());
-            if !checked {
-                parser = parser.lenient();
-            }
-            if let Some(base_iri) = &base_iri {
-                parser = parser.with_base_iri(base_iri).unwrap();
-            }
-            let mut for_slice = parser.for_slice(use_slice);
-            if matches!(use_format, RdfFormat::JsonLd { .. }) {
-                for_slice = for_slice.with_document_loader(move |url| {
-                    if let Some(doc) = known_contexts.get(url) {
-                        Ok(LoadedDocument {
-                            url: url.to_string(),
-                            content: doc.clone().into_bytes(),
-                            format: RdfFormat::JsonLd {
-                                profile: JsonLdProfileSet::empty(),
-                            },
-                        })
-                    } else {
-                        Err(Box::new(TriplestoreError::MissingContext(url.to_string())))
-                    }
-                });
-            }
-            if matches!(rdf_format, ExtendedRdfFormat::CIMXML) {
-                vec![MyFromSliceQuadReader {
-                    parser: MyFromSliceQuadReaderKind::CIMXML(for_slice, base_iri.clone()),
-                }]
-            } else {
-                vec![MyFromSliceQuadReader {
-                    parser: MyFromSliceQuadReaderKind::Other(for_slice),
-                }]
-            }
+            vec![rdf_parser_reader(
+                use_slice,
+                &rdf_format,
+                checked,
+                base_iri,
+                known_contexts,
+            )]
         };
         debug!("Effective parallelization for reading is {}", readers.len());
 
@@ -508,6 +454,101 @@ fn create_predicate_map<'a>(
     Ok((out_r, graph_predicate_map))
 }
 
+fn hdt_reader(hdt: &Hdt) -> MyFromSliceQuadReader<'_> {
+    MyFromSliceQuadReader {
+        parser: MyFromSliceQuadReaderKind::HDT(Box::new(
+            hdt.triples_all().map(hdt_string_triple_to_quad),
+        )),
+    }
+}
+
+fn parallel_turtle_readers<'a>(
+    slice: &'a [u8],
+    prefixes: &HashMap<String, NamedNode>,
+    checked: bool,
+    base_iri: Option<String>,
+) -> Vec<MyFromSliceQuadReader<'a>> {
+    let threads = std::thread::available_parallelism()
+        .map(|t| t.get())
+        .unwrap_or(1);
+    let mut parser = TurtleParser::new();
+    for (k, v) in prefixes {
+        parser = parser.with_prefix(k, v.as_str()).unwrap();
+    }
+    if !checked {
+        parser = parser.lenient();
+    }
+    if let Some(base_iri) = base_iri {
+        parser = parser.with_base_iri(base_iri).unwrap();
+    }
+    parser
+        .split_slice_for_parallel_parsing(slice, threads)
+        .into_iter()
+        .map(|r| MyFromSliceQuadReader {
+            parser: MyFromSliceQuadReaderKind::TurtlePar(r),
+        })
+        .collect()
+}
+
+fn parallel_ntriples_readers(slice: &[u8], checked: bool) -> Vec<MyFromSliceQuadReader<'_>> {
+    let threads = std::thread::available_parallelism()
+        .map(|t| t.get())
+        .unwrap_or(1);
+    let mut parser = NTriplesParser::new();
+    if !checked {
+        parser = parser.lenient();
+    }
+    parser
+        .split_slice_for_parallel_parsing(slice, threads)
+        .into_iter()
+        .map(|r| MyFromSliceQuadReader {
+            parser: MyFromSliceQuadReaderKind::NTriplesPar(r),
+        })
+        .collect()
+}
+
+fn rdf_parser_reader<'a>(
+    slice: &'a [u8],
+    rdf_format: &ExtendedRdfFormat,
+    checked: bool,
+    base_iri: Option<String>,
+    known_contexts: HashMap<String, String>,
+) -> MyFromSliceQuadReader<'a> {
+    let use_format = match rdf_format {
+        ExtendedRdfFormat::Normal(n) => *n,
+        ExtendedRdfFormat::CIMXML => RdfFormat::RdfXml,
+        ExtendedRdfFormat::HDT => unreachable!("HDT is handled in read_triples"),
+    };
+    let mut parser = RdfParser::from(use_format);
+    if !checked {
+        parser = parser.lenient();
+    }
+    if let Some(base_iri) = &base_iri {
+        parser = parser.with_base_iri(base_iri).unwrap();
+    }
+    let mut for_slice = parser.for_slice(slice);
+    if matches!(use_format, RdfFormat::JsonLd { .. }) {
+        for_slice = for_slice.with_document_loader(move |url| {
+            let Some(doc) = known_contexts.get(url) else {
+                return Err(Box::new(TriplestoreError::MissingContext(url.to_string())));
+            };
+            Ok(LoadedDocument {
+                url: url.to_string(),
+                content: doc.clone().into_bytes(),
+                format: RdfFormat::JsonLd {
+                    profile: JsonLdProfileSet::empty(),
+                },
+            })
+        });
+    }
+    let parser = if matches!(rdf_format, ExtendedRdfFormat::CIMXML) {
+        MyFromSliceQuadReaderKind::CIMXML(for_slice, base_iri)
+    } else {
+        MyFromSliceQuadReaderKind::Other(for_slice)
+    };
+    MyFromSliceQuadReader { parser }
+}
+
 //Adapted from proposed change to https://github.com/oxigraph/
 #[must_use]
 pub struct MyFromSliceQuadReader<'a> {
@@ -519,6 +560,7 @@ pub enum MyFromSliceQuadReaderKind<'a> {
     CIMXML(SliceQuadParser<'a>, Option<String>),
     TurtlePar(SliceTurtleParser<'a>),
     NTriplesPar(SliceNTriplesParser<'a>),
+    HDT(Box<dyn Iterator<Item = Quad> + Send + 'a>),
 }
 
 impl Iterator for MyFromSliceQuadReader<'_> {
@@ -545,8 +587,37 @@ impl Iterator for MyFromSliceQuadReader<'_> {
                 Ok(triple) => Ok(triple.in_graph(GraphName::default())),
                 Err(e) => Err(e.into()),
             },
+            MyFromSliceQuadReaderKind::HDT(iter) => Ok(iter.next()?),
         })
     }
+}
+
+fn hdt_string_triple_to_quad(t: [Arc<str>; 3]) -> Quad {
+    let [s, p, o] = t;
+    let subject = if let Some(label) = s.strip_prefix("_:") {
+        NamedOrBlankNode::BlankNode(BlankNode::new_unchecked(label))
+    } else {
+        NamedOrBlankNode::NamedNode(NamedNode::new_unchecked(s.as_ref()))
+    };
+    let predicate = NamedNode::new_unchecked(p.as_ref());
+    Quad::new(
+        subject,
+        predicate,
+        hdt_object_string_to_term(&o),
+        GraphName::DefaultGraph,
+    )
+}
+
+fn hdt_object_string_to_term(o: &str) -> Term {
+    if o.starts_with('"') {
+        return Literal::from_str(o)
+            .unwrap_or_else(|_| Literal::new_simple_literal(o))
+            .into();
+    }
+    if let Some(label) = o.strip_prefix("_:") {
+        return BlankNode::new_unchecked(label).into();
+    }
+    NamedNode::new_unchecked(o).into()
 }
 
 fn get_or_insert_dt(

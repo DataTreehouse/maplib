@@ -60,6 +60,8 @@ pub enum TriplestoreError {
     DecodeError(PolarsError),
     #[error("Error collecting lazy triples {0}")]
     LazyLoadError(PolarsError),
+    #[error("HDT error: {0}")]
+    HDTError(String),
 }
 
 impl<T> From<PoisonError<T>> for TriplestoreError {
