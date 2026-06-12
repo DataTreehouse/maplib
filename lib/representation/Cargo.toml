@@ -12,7 +12,6 @@ utils = { path = "../utils" }
 spargebra = {path = "../spargebra"}
 disk = {path = "../disk"}
 in_memory = {path = "../in_memory"}
-geo = {path = "../geo"}
 
 tracing.workspace = true
 oxrdf = {workspace = true, features = ["oxsdatatypes"]}
@@ -26,7 +25,6 @@ oxsdatatypes.workspace = true
 rayon.workspace = true
 nohash-hasher.workspace = true
 uuid.workspace = true
-arrow.workspace = true
 memchr.workspace = true
 rust_decimal.workspace = true
 

@@ -18,7 +18,6 @@ members = [
     "lib/chrontext",
     "lib/virtualized_query",
     "lib/virtualization",
-    "lib/geo",
     "py_maplib",
 ]
 
