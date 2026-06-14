@@ -1,4 +1,5 @@
 mod abs_;
+mod cast_iri_to_xsd_literal;
 mod ceil_;
 mod concat_;
 mod create_regex_expr;
@@ -82,9 +83,7 @@ use oxrdf::vocab::xsd;
 use oxrdf::NamedNodeRef;
 use polars::datatypes::{DataType, Field};
 use polars::error::PolarsError;
-use polars::prelude::{
-    lit, Column, Expr, IntoColumn, LiteralValue, Schema, Series, StrptimeOptions,
-};
+use polars::prelude::{lit, Column, Expr, IntoColumn, Schema, Series, StrptimeOptions};
 use representation::cats::{maybe_decode_expr, LockedCats};
 use representation::query_context::Context;
 use representation::solution_mapping::{BaseCatState, SolutionMappings};
@@ -339,21 +338,6 @@ pub fn func_expression(
     }
     solution_mappings = drop_inner_contexts(solution_mappings, &args_contexts.values().collect());
     Ok(solution_mappings)
-}
-
-fn cast_iri_to_xsd_literal(
-    e: Expr,
-    t: &BaseRDFNodeType,
-    s: &BaseCatState,
-    trg_nn: NamedNodeRef,
-    trg_type: DataType,
-    global_cats: LockedCats,
-) -> Result<Expr, QueryProcessingError> {
-    if trg_nn == xsd::STRING {
-        Ok(maybe_decode_expr(e, t, s, global_cats))
-    } else {
-        Ok(lit(LiteralValue::untyped_null()).cast(trg_type.clone()))
-    }
 }
 
 fn cast_literal(
