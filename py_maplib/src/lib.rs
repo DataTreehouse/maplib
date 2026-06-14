@@ -809,6 +809,35 @@ impl PyModel {
         })
     }
 
+    #[instrument(skip_all)]
+    fn get_templates(&self, py: Python<'_>) -> PyResult<Vec<PyTemplate>> {
+        py.detach(|| {
+            let inner = self.inner.lock().unwrap();
+            let templates = inner
+                .get_templates()
+                .into_iter()
+                .map(|t| PyTemplate {
+                    template: t.clone(),
+                })
+                .collect();
+            Ok(templates)
+        })
+    }
+
+    #[pyo3(signature = (graph=None))]
+    #[instrument(skip_all)]
+    fn templates_to_graph(&self, py: Python<'_>, graph: Option<String>) -> PyResult<()> {
+        py.detach(move || {
+            let mut inner = self.inner.lock().unwrap();
+            let graph = parse_optional_named_node(graph)?;
+            let named_graph = NamedGraph::from_maybe_named_node(graph.as_ref());
+            inner
+                .templates_to_graph(&named_graph)
+                .map_err(PyMaplibError::from)?;
+            Ok(())
+        })
+    }
+
     #[pyo3(signature = (file_path, format=None, graph=None, prefixes=None))]
     #[instrument(skip_all)]
     fn write(

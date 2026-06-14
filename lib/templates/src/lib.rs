@@ -1,6 +1,7 @@
 use crate::ast::PType;
 use representation::RDFNodeState;
 
+pub mod as_rdf;
 pub mod ast;
 mod compatible;
 pub mod dataset;
