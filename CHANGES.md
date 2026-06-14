@@ -1,5 +1,16 @@
 # Change log
 
+## v.20.19
+### Bug fixes
+- Workaround for Polars issue that could sometimes produce errors in filter not exists
+- Move away from rdf:_{n} predicate to represent lists in Facade-X as it is does not play nice with our partitioning
+
+### Features
+- Prefix maplib:<https://datatreehouse.github.io/maplib/vocab#>
+- maplib:uuidv5 and maplib:struuidv5 functions
+- m.templates_to_graph() materializes templates as triples in graph so they can be queried (Thank you @thenonameguy !)
+- m.read(), m.reads() now eats hdt and m.write() spits it out. (Thank you @sihingkk !)
+
 ## v0.20.16
 ### Bug fixes
 - Work around Polars issue where double not exists can return erroneous results
