@@ -860,7 +860,7 @@ class Model:
     def read(
         self,
         file_path: Union[str, Path],
-        format: LiteralType["ntriples", "turtle", "rdf/xml", "cim/xml", "json-ld"] = None,
+        format: LiteralType["ntriples", "turtle", "rdf/xml", "cim/xml", "json-ld", "hdt"] = None,
         base_iri: str = None,
         transient: bool = False,
         parallel: bool = None,
@@ -881,7 +881,7 @@ class Model:
         >>> m.read("my_triples.ttl")
 
         :param file_path: The path of the file containing triples
-        :param format: One of "ntriples", "turtle", "rdf/xml", "json-ld" or "cim/xml", otherwise it is inferred from the file extension.
+        :param format: One of "ntriples", "turtle", "rdf/xml", "json-ld", "cim/xml" or "hdt", otherwise it is inferred from the file extension.
         :param base_iri: Base iri
         :param transient: Should these triples be included when writing the graph to the file system?
         :param parallel: Parse triples in parallel, currently only NTRiples and Turtle. Assumes all prefixes are in the beginning of the document. Defaults to true only for NTriples.
@@ -986,7 +986,7 @@ class Model:
     def write(
         self,
         file_path: Union[str, Path],
-        format=LiteralType["ntriples", "turtle", "rdf/xml"],
+        format=LiteralType["ntriples", "turtle", "rdf/xml", "hdt"],
         graph: str = None,
         prefixes: Dict[str, str] = None,
     ) -> None:
@@ -998,7 +998,8 @@ class Model:
         >>> m.write("my_triples.nt", format="ntriples")
 
         :param file_path: The path of the file containing triples
-        :param format: One of "ntriples", "turtle", "rdf/xml".
+        :param format: One of "ntriples", "turtle", "rdf/xml", "hdt".
+            HDT is built in memory; literals with special characters are stored N-Triples-escaped, following the Rust hdt crate.
         :param graph: The IRI of the graph to write.
         :param prefixes: The prefixes that will be used in turtle serialization.
         """
@@ -1107,8 +1108,8 @@ class Model:
 
     def size(self, graph:str=None) -> int:
         """
-        Get the number of triples in a graph. 
-        
+        Get the number of triples in a graph.
+
         :param graph: The named graph we are returning the size for
         :return: The inferred N-Tuples.
         """

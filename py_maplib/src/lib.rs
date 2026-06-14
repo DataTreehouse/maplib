@@ -1578,6 +1578,12 @@ fn reads_mutex(
     let graph = parse_optional_named_node(graph)?;
     let named_graph = NamedGraph::from_maybe_named_node(graph.as_ref());
     let format = resolve_format(format).map_err(PyMaplibError::from)?;
+    if format == ExtendedRdfFormat::HDT {
+        return Err(PyMaplibError::FunctionArgumentError(
+            "HDT is a binary format, use read() instead of reads()".to_string(),
+        )
+        .into());
+    }
     inner
         .reads(
             s,
@@ -1603,18 +1609,34 @@ fn write_triples_mutex(
     prefixes: Option<HashMap<String, NamedNode>>,
 ) -> PyResult<()> {
     let format = if let Some(format) = format {
-        resolve_normal_format(&format).map_err(PyMaplibError::from)?
+        resolve_format(&format).map_err(PyMaplibError::from)?
     } else {
-        RdfFormat::NTriples
+        ExtendedRdfFormat::Normal(RdfFormat::NTriples)
     };
+    if format == ExtendedRdfFormat::CIMXML {
+        return Err(PyMaplibError::FunctionArgumentError(
+            "Use write_cim_xml to write CIM XML".to_string(),
+        )
+        .into());
+    }
     let path_buf = PathBuf::from(file_path);
     let mut actual_file = File::create(path_buf.as_path())
         .map_err(|x| PyMaplibError::from(MaplibError::FileCreateIOError(x)))?;
     let graph = parse_optional_named_node(graph)?;
     let named_graph = NamedGraph::from_maybe_named_node(graph.as_ref());
-    inner
-        .write_triples(&mut actual_file, &named_graph, format, prefixes.as_ref())
-        .unwrap();
+    match format {
+        ExtendedRdfFormat::Normal(format) => {
+            inner
+                .write_triples(&mut actual_file, &named_graph, format, prefixes.as_ref())
+                .unwrap();
+        }
+        ExtendedRdfFormat::HDT => {
+            inner
+                .write_hdt(&mut actual_file, &named_graph)
+                .map_err(PyMaplibError::from)?;
+        }
+        ExtendedRdfFormat::CIMXML => unreachable!("rejected above"),
+    }
     Ok(())
 }
 
@@ -1686,6 +1708,12 @@ fn writes_mutex(
     prefixes: Option<HashMap<String, NamedNode>>,
 ) -> PyResult<String> {
     let format = if let Some(format) = format {
+        if format.eq_ignore_ascii_case("hdt") {
+            return Err(PyMaplibError::FunctionArgumentError(
+                "HDT is a binary format, use write() instead of writes()".to_string(),
+            )
+            .into());
+        }
         resolve_normal_format(&format).map_err(PyMaplibError::from)?
     } else {
         RdfFormat::NTriples
@@ -1957,6 +1985,7 @@ fn resolve_normal_format(format: &str) -> Result<RdfFormat, PyMaplibError> {
 fn resolve_format(format: &str) -> Result<ExtendedRdfFormat, PyMaplibError> {
     match format.to_lowercase().as_str() {
         "cim" | "cim/xml" | "cimxml" => Ok(ExtendedRdfFormat::CIMXML),
+        "hdt" => Ok(ExtendedRdfFormat::HDT),
         _ => match resolve_normal_format(format) {
             Ok(o) => Ok(ExtendedRdfFormat::Normal(o)),
             Err(e) => Err(e),

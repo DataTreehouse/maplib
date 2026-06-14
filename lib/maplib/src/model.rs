@@ -492,6 +492,16 @@ impl Model {
         Ok(())
     }
 
+    pub fn write_hdt<W: Write>(
+        &mut self,
+        buffer: &mut W,
+        graph: &NamedGraph,
+    ) -> Result<(), MaplibError> {
+        self.triplestore
+            .write_hdt(buffer, graph)
+            .map_err(MaplibError::TriplestoreError)
+    }
+
     pub fn write_cim_xml<W: Write>(
         &mut self,
         buffer: &mut W,

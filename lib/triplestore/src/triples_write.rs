@@ -18,6 +18,7 @@ use std::collections::HashMap;
 use std::io::Write;
 
 mod fast_ntriples;
+mod hdt_write;
 mod pretty_turtle;
 mod serializers;
 
@@ -130,6 +131,32 @@ impl Triplestore {
             })?;
         }
         Ok(())
+    }
+
+    pub fn write_hdt<W: Write>(
+        &mut self,
+        buf: &mut W,
+        graph: &NamedGraph,
+    ) -> Result<(), TriplestoreError> {
+        self.check_graph_exists(graph)?;
+        let mut builder = hdt_write::HdtBuilder::new();
+        for (predicate, df_map) in self.graph_triples_map.get(graph).unwrap() {
+            for ((subject_type, object_type), tt) in df_map {
+                for (lf, _) in tt.get_lazy_frames(&None, &None)? {
+                    let triples = global_df_as_triples(
+                        lf.collect().unwrap(),
+                        subject_type.clone(),
+                        object_type.clone(),
+                        predicate,
+                        self.global_cats.clone(),
+                    );
+                    for t in &triples {
+                        builder.add_triple(t);
+                    }
+                }
+            }
+        }
+        builder.finish(buf)
     }
 
     pub(crate) fn check_graph_exists(&self, graph: &NamedGraph) -> Result<(), TriplestoreError> {
