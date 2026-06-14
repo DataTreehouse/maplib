@@ -40,6 +40,7 @@ mod str_dt;
 mod str_function;
 mod str_lang;
 mod str_len;
+mod str_starts_ends_contains_;
 mod struuid;
 mod struuid_v5;
 mod uuid_v5;
@@ -84,7 +85,7 @@ use crate::expressions::functions::struuid::struuid;
 use crate::expressions::functions::year_::year_;
 use polars::datatypes::Field;
 use polars::error::PolarsError;
-use polars::prelude::{Column, Expr, IntoColumn, Schema, Series};
+use polars::prelude::{Column, IntoColumn, Schema, Series};
 use representation::cats::LockedCats;
 use representation::query_context::Context;
 use representation::solution_mapping::SolutionMappings;
@@ -338,15 +339,6 @@ pub fn func_expression(
     }
     solution_mappings = drop_inner_contexts(solution_mappings, &args_contexts.values().collect());
     Ok(solution_mappings)
-}
-
-pub fn str_starts_ends_contains(expr_decoded: Expr, second_decoded: Expr, f: &Function) -> Expr {
-    match f {
-        Function::StrStarts => expr_decoded.str().starts_with(second_decoded),
-        Function::StrEnds => expr_decoded.str().ends_with(second_decoded),
-        Function::Contains => expr_decoded.str().contains_literal(second_decoded),
-        _ => unreachable!("Should never happen"),
-    }
 }
 
 fn str_after(c: Column, s: String) -> Result<Column, PolarsError> {
