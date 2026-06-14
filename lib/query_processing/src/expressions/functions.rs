@@ -34,6 +34,7 @@ mod sparql_regex;
 mod sparql_uuid;
 mod starts_ends_contains;
 mod str_;
+mod str_before;
 mod str_before_or_after;
 mod str_dt;
 mod str_function;
@@ -346,24 +347,6 @@ pub fn str_starts_ends_contains(expr_decoded: Expr, second_decoded: Expr, f: &Fu
         Function::Contains => expr_decoded.str().contains_literal(second_decoded),
         _ => unreachable!("Should never happen"),
     }
-}
-
-fn str_before(c: Column, s: String) -> Result<Column, PolarsError> {
-    let bef = c.str()?.iter().map(|x: Option<&str>| {
-        if let Some(x) = x {
-            let range_to = x.find(&s);
-            if let Some(range_to) = range_to {
-                Some(&x[0..range_to])
-            } else {
-                Some(x)
-            }
-        } else {
-            None
-        }
-    });
-    let mut ser = Series::from_iter(bef);
-    ser.rename(c.name().clone());
-    Ok(ser.into_column())
 }
 
 fn str_after(c: Column, s: String) -> Result<Column, PolarsError> {
