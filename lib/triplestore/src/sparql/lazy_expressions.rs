@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use crate::sparql::errors::SparqlError;
 use oxrdf::vocab::xsd;
 use polars::prelude::IntoLazy;
-use query_processing::expressions::functions::func_expression;
+use query_processing::expressions::functions::func_expression::func_expression;
 use query_processing::expressions::{
     binary_expression, bound, coalesce_contexts, exists, if_expression, in_expression, literal,
     named_node, not_expression, unary_minus, unary_plus, variable,
