@@ -1,6 +1,6 @@
 use super::Triplestore;
 use crate::errors::TriplestoreError;
-use crate::TriplesToAdd;
+use crate::{NewTriples, TriplesToAdd};
 use std::cmp;
 
 use cimxml_import::{fix_cim_quad, Remapper};
@@ -333,6 +333,76 @@ impl Triplestore {
             );
         }
         Ok(())
+    }
+
+    // Insert already-parsed in-memory triples into a graph, grouping them by predicate and
+    // subject/object type into the same column representation the RDF readers produce. This
+    // avoids serializing to an RDF string and parsing it back when the triples are already
+    // available as oxrdf Triples (e.g. when materializing templates).
+    #[instrument(skip_all)]
+    pub fn add_triples(
+        &mut self,
+        triples: Vec<Triple>,
+        graph: &NamedGraph,
+        transient: bool,
+    ) -> Result<Vec<NewTriples>, TriplestoreError> {
+        let mut subj_type_map: HashMap<String, BaseRDFNodeType> = HashMap::new();
+        let mut obj_type_map: HashMap<String, BaseRDFNodeType> = HashMap::new();
+        let mut predicate_map: PredMap = HashMap::new();
+        for Triple {
+            subject,
+            predicate,
+            object,
+        } in triples
+        {
+            let subject_type =
+                get_or_insert_dt(get_subject_datatype_ref(&subject), &mut subj_type_map);
+            let object_type = get_or_insert_dt(get_term_datatype_ref(&object), &mut obj_type_map);
+            let (subjects, objects) = predicate_map
+                .entry(predicate.as_str().to_string())
+                .or_default()
+                .entry(subject_type.clone())
+                .or_default()
+                .entry(object_type.clone())
+                .or_insert_with(|| {
+                    (
+                        SeriesBuilder::new(&subject_type),
+                        SeriesBuilder::new(&object_type),
+                    )
+                });
+            if objects.parse_term(&object).is_ok() {
+                subjects.push_named_or_blank(&subject);
+            }
+        }
+
+        let mut ttas = vec![];
+        for (predicate, by_subject) in predicate_map {
+            let predicate = NamedNode::new_unchecked(predicate);
+            for (subject_type, by_object) in by_subject {
+                for (object_type, (subjects, objects)) in by_object {
+                    let l = subjects.len();
+                    let df = DataFrame::new(
+                        l,
+                        vec![
+                            subjects.into_series(SUBJECT_COL_NAME).into_column(),
+                            objects.into_series(OBJECT_COL_NAME).into_column(),
+                        ],
+                    )
+                    .unwrap();
+                    ttas.push(TriplesToAdd {
+                        df,
+                        subject_cat_state: subject_type.default_input_cat_state(),
+                        object_cat_state: object_type.default_input_cat_state(),
+                        subject_type: subject_type.clone(),
+                        object_type,
+                        predicate: Some(predicate.clone()),
+                        graph: graph.clone(),
+                        predicate_cat_state: None,
+                    });
+                }
+            }
+        }
+        self.add_triples_vec(ttas, transient)
     }
 }
 

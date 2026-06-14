@@ -11,10 +11,10 @@ pub const MODULUS: &str = "https://github.com/DataTreehouse/chrontext#modulus";
 
 pub const TIME_BUCKET: &str = "https://github.com/DataTreehouse/chrontext#time_bucket";
 
-pub const LIST_AGGREGATION: &str = "https://github.com/DataTreehouse/maplib#ListAggregation";
+pub const LIST_AGGREGATION: &str = "https://datatreehouse.github.io/maplib/vocab#ListAggregation";
 
-pub const DECODE: &str = "https://github.com/DataTreehouse/maplib#decodeString";
+pub const DECODE: &str = "https://datatreehouse.github.io/maplib/vocab#decodeString";
 
-pub const STRUUID_V5: &str = "https://github.com/DataTreehouse/maplib#struuidv5";
+pub const STRUUID_V5: &str = "https://datatreehouse.github.io/maplib/vocab#struuidv5";
 
-pub const UUID_V5: &str = "https://github.com/DataTreehouse/maplib#uuidv5";
+pub const UUID_V5: &str = "https://datatreehouse.github.io/maplib/vocab#uuidv5";

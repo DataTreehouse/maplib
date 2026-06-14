@@ -20,6 +20,7 @@ use std::fs;
 use std::io::Write;
 use std::path::Path;
 use std::sync::Arc;
+use templates::as_rdf::templates_to_triples;
 use templates::ast::{ConstantTermOrList, PType, Template};
 use templates::dataset::TemplateDataset;
 use templates::document::document_from_str;
@@ -30,7 +31,7 @@ use triplestore::{IndexingOptions, NewTriples, Triplestore};
 
 use chrontext::engine::{ChrontextSettings, Engine};
 use datalog::ast::DatalogRuleset;
-use representation::constants::{FX_PREFIX, FX_PREFIX_IRI, XYZ_PREFIX, XYZ_PREFIX_IRI};
+use representation::constants::OTTR_TRIPLE;
 use representation::dataset::NamedGraph;
 use representation::prefixes::get_default_prefixes;
 use tracing::instrument;
@@ -205,7 +206,6 @@ impl Model {
         graph: &NamedGraph,
         transient: bool,
     ) -> Result<(), MaplibError> {
-        self.add_fx_prefixes();
         let mut u8s =
             fs::read(path).map_err(|x| TriplestoreError::ReadJSONFileError(x.to_string()))?;
 
@@ -221,7 +221,6 @@ impl Model {
         graph: &NamedGraph,
         transient: bool,
     ) -> Result<(), MaplibError> {
-        self.add_fx_prefixes();
         //Safety: we are never reading this vec back to a string
         let u8s = unsafe { p.as_mut_vec() };
         self.triplestore
@@ -236,7 +235,6 @@ impl Model {
         graph: &NamedGraph,
         transient: bool,
     ) -> Result<(), MaplibError> {
-        self.add_fx_prefixes();
         let mut u8s = fs::read(path).map_err(|x| TriplestoreError::XMLError(x.to_string()))?;
         self.triplestore
             .map_xml(&mut u8s, graph, transient)
@@ -250,7 +248,6 @@ impl Model {
         graph: &NamedGraph,
         transient: bool,
     ) -> Result<(), MaplibError> {
-        self.add_fx_prefixes();
         //Safety: we are never reading this vec back to a string
         let u8s = unsafe { p.as_mut_vec() };
         self.triplestore
@@ -336,6 +333,28 @@ impl Model {
                 known_contexts,
             )
             .map_err(MaplibError::TriplestoreError)
+    }
+
+    /// The templates held by this model, excluding the built-in `ottr:Triple` primitive that
+    /// `TemplateDataset` injects as the base case every template expands to.
+    pub fn get_templates(&self) -> Vec<&Template> {
+        self.template_dataset
+            .templates
+            .iter()
+            .filter(|t| t.signature.iri.as_str() != OTTR_TRIPLE)
+            .collect()
+    }
+
+    /// Materialize the model's OTTR templates into `graph` as RDF using the flattened maplib
+    /// template vocabulary (prefix `mtpl`). Triples are added alongside any existing content of
+    /// the graph.
+    #[instrument(skip_all)]
+    pub fn templates_to_graph(&mut self, graph: &NamedGraph) -> Result<(), MaplibError> {
+        let triples = templates_to_triples(&self.template_dataset.templates);
+        self.triplestore
+            .add_triples(triples, graph, false)
+            .map_err(MaplibError::TriplestoreError)?;
+        Ok(())
     }
 
     #[instrument(skip_all)]
@@ -680,16 +699,5 @@ impl Model {
             latest_report_graph: None,
             chrontext_settings: self.chrontext_settings.clone(),
         })
-    }
-
-    fn add_fx_prefixes(&mut self) {
-        self.prefixes.insert(
-            XYZ_PREFIX.to_string(),
-            NamedNode::new_unchecked(XYZ_PREFIX_IRI),
-        );
-        self.prefixes.insert(
-            FX_PREFIX.to_string(),
-            NamedNode::new_unchecked(FX_PREFIX_IRI),
-        );
     }
 }

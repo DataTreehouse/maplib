@@ -15,10 +15,12 @@ use templates::MappingColumnType;
 use tracing::debug;
 use uuid::Uuid;
 
-const SHACL_RESULT_TEMPLATE: &str = "https://github.com/DataTreehouse/maplib#ShaclResultTemplate";
-const SHACL_REPORT_TEMPLATE: &str = "https://github.com/DataTreehouse/maplib#ShaclReportTemplate";
+const SHACL_RESULT_TEMPLATE: &str =
+    "https://datatreehouse.github.io/maplib/vocab#ShaclResultTemplate";
+const SHACL_REPORT_TEMPLATE: &str =
+    "https://datatreehouse.github.io/maplib/vocab#ShaclReportTemplate";
 const SHACL_DOC: &str = r#"
-@prefix maplib: <https://github.com/DataTreehouse/maplib#>.
+@prefix maplib: <https://datatreehouse.github.io/maplib/vocab#>.
 @prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 @prefix sh:    <http://www.w3.org/ns/shacl#> .
 
