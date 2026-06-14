@@ -1,5 +1,6 @@
 mod abs_;
 mod cast_iri_to_xsd_literal;
+mod cast_literal_;
 mod ceil_;
 mod concat_;
 mod create_regex_expr;
@@ -79,15 +80,12 @@ use crate::expressions::functions::str_lang::str_lang;
 use crate::expressions::functions::str_len::str_len;
 use crate::expressions::functions::struuid::struuid;
 use crate::expressions::functions::year_::year_;
-use oxrdf::vocab::xsd;
-use oxrdf::NamedNodeRef;
-use polars::datatypes::{DataType, Field};
+use polars::datatypes::Field;
 use polars::error::PolarsError;
-use polars::prelude::{lit, Column, Expr, IntoColumn, Schema, Series, StrptimeOptions};
-use representation::cats::{maybe_decode_expr, LockedCats};
+use polars::prelude::{Column, Expr, IntoColumn, Schema, Series};
+use representation::cats::LockedCats;
 use representation::query_context::Context;
-use representation::solution_mapping::{BaseCatState, SolutionMappings};
-use representation::BaseRDFNodeType;
+use representation::solution_mapping::SolutionMappings;
 use spargebra::algebra::{Expression, Function};
 use std::collections::HashMap;
 
@@ -338,57 +336,6 @@ pub fn func_expression(
     }
     solution_mappings = drop_inner_contexts(solution_mappings, &args_contexts.values().collect());
     Ok(solution_mappings)
-}
-
-fn cast_literal(
-    mut c: Expr,
-    src_bt: &BaseRDFNodeType,
-    src_bs: &BaseCatState,
-    global_cats: LockedCats,
-    src: NamedNodeRef,
-    trg: NamedNodeRef,
-    trg_type: DataType,
-) -> Expr {
-    if src == xsd::STRING && trg != xsd::STRING {
-        c = maybe_decode_expr(c, src_bt, src_bs, global_cats);
-    }
-    if src == xsd::STRING && trg == xsd::BOOLEAN {
-        c.cast(DataType::String)
-            .str()
-            .to_lowercase()
-            .eq(lit("true"))
-    } else if src == xsd::STRING && trg == xsd::DATE_TIME {
-        c.cast(DataType::String).str().to_datetime(
-            None,
-            None,
-            StrptimeOptions {
-                format: None,
-                strict: true,
-                exact: false,
-                cache: false,
-            },
-            lit("raise"),
-        )
-    } else if src == xsd::STRING && trg == xsd::DATE {
-        c.cast(DataType::String).str().to_date(StrptimeOptions {
-            format: None,
-            strict: true,
-            exact: false,
-            cache: false,
-        })
-    } else if src == xsd::STRING && trg == xsd::TIME {
-        c.cast(DataType::String).str().to_time(StrptimeOptions {
-            format: None,
-            strict: true,
-            exact: false,
-            cache: false,
-        })
-    } else if src == xsd::STRING && trg == xsd::DURATION {
-        //Todo handle durations
-        c
-    } else {
-        c.cast(trg_type)
-    }
 }
 
 pub fn maybe_add_regex_feature_flags(pattern: &str, flags: Option<&str>) -> String {

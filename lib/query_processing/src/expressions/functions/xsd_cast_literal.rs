@@ -1,6 +1,6 @@
 use crate::errors::QueryProcessingError;
 use crate::expressions::functions::cast_iri_to_xsd_literal::cast_iri_to_xsd_literal;
-use crate::expressions::functions::cast_literal;
+use crate::expressions::functions::cast_literal_::cast_literal;
 use polars::prelude::{coalesce, col, lit, Expr, LiteralValue};
 use representation::cats::LockedCats;
 use representation::{BaseRDFNodeType, RDFNodeState};
