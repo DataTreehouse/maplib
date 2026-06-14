@@ -21,6 +21,7 @@ mod is_literal;
 mod lang_;
 mod lang_matches;
 mod lower_upper_substr;
+mod maybe_add_regex_feature_flags;
 mod md5_;
 mod minutes_;
 mod month_;
@@ -336,15 +337,6 @@ pub fn func_expression(
     }
     solution_mappings = drop_inner_contexts(solution_mappings, &args_contexts.values().collect());
     Ok(solution_mappings)
-}
-
-pub fn maybe_add_regex_feature_flags(pattern: &str, flags: Option<&str>) -> String {
-    if let Some(flags) = flags {
-        //TODO: Validate flags..
-        format!("(?{}){}", flags, pattern)
-    } else {
-        pattern.to_string()
-    }
 }
 
 pub fn str_starts_ends_contains(expr_decoded: Expr, second_decoded: Expr, f: &Function) -> Expr {
