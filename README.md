@@ -149,7 +149,7 @@ The [API](https://datatreehouse.github.io/maplib/maplib.html) is simple, and con
 - querying with SPARQL
 - validating with SHACL
 - reading JSON to triples using Façade-X
-- importing triples (Turtle, RDF/XML, NTriples, JSON-LD)
+- importing triples (Turtle, RDF/XML, NTriples, JSON-LD, HDT)
 - writing triples (Turtle, RDF/XML, NTriples)
 - creating a new Model from a named graph
 
@@ -160,7 +160,6 @@ Spring 2026
 - SHACL Rules
 - Disk based storage and internal serialization format
 - Jelly
-- Graph virtualization using chrontext
 
 Roadmap is subject to changes,particularly user and customer requests. 
 
@@ -171,6 +170,9 @@ There is an associated paper [1] with associated benchmarks showing superior per
 
 [2] M. G. Skjæveland, D. P. Lupp, L. H. Karlsen, and J. W. Klüwer, “Ottr: Formal templates for pattern-based ontology engineering.” in WOP (Book),
 2021, pp. 349–377.
+
+## Contributing
+Any contributions will fall under the Apache 2.0 license of maplib. 
 
 ## Licensing
 All code produced since August 1st. 2023 is copyrighted to [Data Treehouse AS](https://www.data-treehouse.com/) with an Apache 2.0 license unless otherwise noted. 
