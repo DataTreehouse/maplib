@@ -34,6 +34,7 @@ mod sparql_regex;
 mod sparql_uuid;
 mod starts_ends_contains;
 mod str_;
+mod str_after;
 mod str_before;
 mod str_before_or_after;
 mod str_dt;
@@ -85,7 +86,7 @@ use crate::expressions::functions::struuid::struuid;
 use crate::expressions::functions::year_::year_;
 use polars::datatypes::Field;
 use polars::error::PolarsError;
-use polars::prelude::{Column, IntoColumn, Schema, Series};
+use polars::prelude::Schema;
 use representation::cats::LockedCats;
 use representation::query_context::Context;
 use representation::solution_mapping::SolutionMappings;
@@ -339,24 +340,6 @@ pub fn func_expression(
     }
     solution_mappings = drop_inner_contexts(solution_mappings, &args_contexts.values().collect());
     Ok(solution_mappings)
-}
-
-fn str_after(c: Column, s: String) -> Result<Column, PolarsError> {
-    let bef = c.str()?.iter().map(|x: Option<&str>| {
-        if let Some(x) = x {
-            let range_to = x.find(&s);
-            if let Some(range_to) = range_to {
-                Some(&x[range_to + s.len()..])
-            } else {
-                Some(x)
-            }
-        } else {
-            None
-        }
-    });
-    let mut ser = Series::from_iter(bef);
-    ser.rename(c.name().clone());
-    Ok(ser.into_column())
 }
 
 fn keep_field(_s: &Schema, f: &Field) -> Result<Field, PolarsError> {
