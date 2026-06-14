@@ -16,7 +16,7 @@ PATH_HERE = pathlib.Path(__file__).parent
 TESTDATA_PATH = PATH_HERE / "testdata" / "jsons"
 
 @pytest.mark.parametrize("disk", disk_params())
-def test_map_json_1(disk):
+def test_map_json_path_as_str_1(disk):
     json_1 = TESTDATA_PATH / "1.json"
     m = Model(storage_folder=disk)
     start_map = time.time()
@@ -50,7 +50,7 @@ def test_map_json_1(disk):
     assert_frame_equal(df2, expect2)
 
 @pytest.mark.parametrize("disk", disk_params())
-def test_map_json_2(disk):
+def test_map_json_path_as_str_2(disk):
     json_2 = TESTDATA_PATH / "2.json"
     m = Model(storage_folder=disk)
     m.map_json(str(json_2))
@@ -69,10 +69,92 @@ def test_map_json_2(disk):
     } """)
     assert df2.height == 19
 
-def test_map_json_3():
+def test_map_json_path_as_str_3():
     json_3 = TESTDATA_PATH / "3.json"
     m = Model()
     m.map_json(str(json_3))
+    df = m.query("""SELECT * WHERE {?a ?b ?c}""")
+    assert df.height == 88
+    # We expect this number to increase when we start caring about array ordering
+
+    df2 = m.query("""
+    PREFIX fx:  <http://sparql.xyz/facade-x/ns/> 
+    PREFIX xyz: <http://sparql.xyz/facade-x/data/>
+    PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> 
+    PREFIX mj:  <urn:maplib_json:> 
+    SELECT ?log ?betaserver ?myfloat WHERE {
+    ?n1 a fx:root .
+    ?n1 xyz:web-app ?n2 .
+    ?n2 xyz:servlet ?arr .
+    ?arr fx:child ?n3 .
+    ?n3 xyz:init-param ?n4 . 
+    ?n4 xyz:log ?log .
+    ?n4 xyz:betaServer ?betaserver .
+    ?n5 xyz:myFloat ?myfloat .
+    }""")
+    assert df2.height == 1
+    assert df2.get_column("log").dtype == pl.Int64
+    assert df2.get_column("betaserver").dtype == pl.Boolean
+    assert df2.get_column("myfloat").dtype == pl.Float64
+
+@pytest.mark.parametrize("disk", disk_params())
+def test_map_json_path_as_path_1(disk):
+    json_1 = TESTDATA_PATH / "1.json"
+    m = Model(storage_folder=disk)
+    start_map = time.time()
+    m.map_json(json_1)
+    map_took = time.time() - start_map
+    print(f"Map took {round(map_took, 5)}")
+    start_query = time.time()
+    df = m.query("""SELECT * WHERE {?a ?b ?c}""")
+    assert df.height == 18
+    query_took = time.time() - start_query
+    print(f"Query took {round(query_took, 5)}")
+
+    print(m.writes("turtle"))
+    df2 = m.query("""
+    PREFIX fx:  <http://sparql.xyz/facade-x/ns/> 
+    PREFIX xyz: <http://sparql.xyz/facade-x/data/>
+    SELECT ?title WHERE {
+    ?n1 a fx:root .
+    ?n1 xyz:glossary ?n2 .
+    ?n2 xyz:title ?title . 
+    }""")
+    expect2 = pl.from_repr("""
+┌──────────────────┐
+│ title            │
+│ ---              │
+│ str              │
+╞══════════════════╡
+│ example glossary │
+└──────────────────┘
+""")
+    assert_frame_equal(df2, expect2)
+
+@pytest.mark.parametrize("disk", disk_params())
+def test_map_json_path_as_path_2(disk):
+    json_2 = TESTDATA_PATH / "2.json"
+    m = Model(storage_folder=disk)
+    m.map_json(json_2)
+    df = m.query("""SELECT * WHERE {?a ?b ?c}""")
+    assert df.height == 53
+    # We do not care about array ordering unfortunately as the way this is handled with rdf:_{i} is not nice for maplib.
+    df2 = m.query("""
+    PREFIX fx:  <http://sparql.xyz/facade-x/ns/> 
+    PREFIX xyz: <http://sparql.xyz/facade-x/data/>
+    PREFIX mj:  <urn:maplib_json:> 
+    SELECT ?item WHERE {
+    ?n1 a fx:root .
+    ?n1 xyz:menu ?n2 .
+    ?n2 xyz:items ?arr .
+    ?arr ?ref ?item .
+    } """)
+    assert df2.height == 19
+
+def test_map_json_path_as_path_3():
+    json_3 = TESTDATA_PATH / "3.json"
+    m = Model()
+    m.map_json(json_3)
     df = m.query("""SELECT * WHERE {?a ?b ?c}""")
     assert df.height == 88
     # We expect this number to increase when we start caring about array ordering

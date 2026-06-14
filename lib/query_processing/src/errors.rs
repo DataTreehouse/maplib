@@ -1,3 +1,4 @@
+use representation::errors::RepresentationError;
 use representation::{BaseRDFNodeType, RDFNodeState};
 use spargebra::algebra::{Expression, Function};
 use thiserror::Error;
@@ -26,4 +27,8 @@ pub enum QueryProcessingError {
     ExpectedConstantLiteralArgument(Expression),
     #[error("The following expression should resolve to an xsd:string : {}", .0)]
     ExpectedConstantLiteralStringArgument(Expression),
+    #[error("Function {} expected Integer argument", .0)]
+    ExpectedIntegerArgument(Function),
+    #[error("Error parsing literal {0}")]
+    ParseLiteralError(RepresentationError),
 }

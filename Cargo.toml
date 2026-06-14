@@ -26,9 +26,9 @@ rust-version = "1.88.0"
 edition = "2021"
 
 [workspace.dependencies]
-pyo3 = {version = "0.28.2", features = ["py-clone", "rust_decimal"] }
+pyo3 = {version = "0.29.0", features = ["py-clone", "rust_decimal"] }
 #Moment is there to work around a feature toggle bug
-polars = { version = "0.53.0", features = [
+polars = { version = "0.54.4", features = [
     "simd",
     "nightly",
     "performant",
@@ -38,7 +38,7 @@ polars = { version = "0.53.0", features = [
     "moment",
     "timezones"
 ] }
-polars-core = { version = "0.53.0" }
+polars-core = { version = "0.54.4" }
 rayon = "1.10.0"
 regex = "1.11.1"
 oxrdf = { version = "0.3.3" }
@@ -52,6 +52,7 @@ chrono = "0.4.41"
 chrono-tz = "0.10.3"
 uuid = { version = "1.16.0", features = [
     "v4", # Lets you generate random UUIDs
+    "v5",
     "fast-rng", # Use a faster (but still sufficiently random) RNG
 ] }
 thiserror = "2.0.12"
@@ -70,20 +71,18 @@ md-5 = "0.11.0"
 sha1 = "0.11.0"
 hex = "0.4.3"
 memchr = "2.8.0"
-quick-xml = "0.39.2"
-
+quick-xml = { version = "0.40.1", features = ["arbitrary"] }
 tracing = { version = "0.1", features = [ "log" ] }
 tracing-subscriber = { version = "0.3.19", features = [ "env-filter" ] }
 tracing-log = "0.2"
-
 itoa = "1.0.15"
 ryu = "1.0.20"
 #dev-dependencies
 nohash-hasher = "0.2.0"
-arrow = "56"
+arrow = "58"
 ordered-float = "5.1.0"
 rust_decimal = "1.41.0"
 
 [patch.crates-io]
-polars = { git = 'https://github.com/pola-rs/polars', rev="599a503a0997188a74750926a5cdaa47585cf8aa" }
-polars-core = { git = 'https://github.com/pola-rs/polars', rev="599a503a0997188a74750926a5cdaa47585cf8aa" }
+#polars = { git = 'https://github.com/pola-rs/polars', rev="599a503a0997188a74750926a5cdaa47585cf8aa" }
+#polars-core = { git = 'https://github.com/pola-rs/polars', rev="599a503a0997188a74750926a5cdaa47585cf8aa" }

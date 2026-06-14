@@ -1,8 +1,5 @@
-use oxrdf::{GraphName, NamedNode, NamedOrBlankNode, Quad, Term};
+use oxrdf::{NamedNode, Quad};
 use representation::BaseRDFNodeTypeRef;
-use std::collections::HashMap;
-
-type MapType = HashMap<String, HashMap<String, (Vec<NamedOrBlankNode>, Vec<Term>)>>;
 
 pub struct Remapper {}
 

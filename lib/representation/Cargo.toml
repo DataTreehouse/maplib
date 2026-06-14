@@ -25,7 +25,6 @@ oxsdatatypes.workspace = true
 rayon.workspace = true
 nohash-hasher.workspace = true
 uuid.workspace = true
-arrow.workspace = true
 memchr.workspace = true
 rust_decimal.workspace = true
 

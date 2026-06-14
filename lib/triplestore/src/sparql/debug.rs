@@ -8,7 +8,7 @@ pub(crate) use representation::debug::{DebugOutput, DebugOutputs};
 use representation::query_context::Context;
 use representation::solution_mapping::EagerSolutionMappings;
 use spargebra::algebra::{Expression, GraphPattern, PropertyPathExpression};
-use spargebra::term::{TermPattern, TriplePattern};
+use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 use spargebra::Query;
 use std::collections::HashMap;
 
@@ -88,6 +88,17 @@ impl Triplestore {
                     Ok(PartialDebugOutput::PartialResults)
                 }
             }
+            GraphPattern::Graph { name, inner } => {
+                let qg = match name {
+                    NamedNodePattern::NamedNode(nn) => {
+                        QueryGraph::NamedGraph(NamedGraph::NamedGraph(nn.clone()))
+                    }
+                    NamedNodePattern::Variable(_) => {
+                        todo!()
+                    }
+                };
+                self.debug_gp(inner, parameters, qs, &qg)
+            }
             GraphPattern::Extend { inner, .. }
             | GraphPattern::LeftJoin { left: inner, .. }
             | GraphPattern::OrderBy { inner, .. }
@@ -96,7 +107,7 @@ impl Triplestore {
             | GraphPattern::Reduced { inner, .. }
             | GraphPattern::Slice { inner, .. }
             | GraphPattern::Group { inner, .. } => self.debug_gp(inner, parameters, qs, qg),
-            GraphPattern::Service { .. } | GraphPattern::Graph { .. } => {
+            GraphPattern::Service { .. } => {
                 todo!()
             }
         }

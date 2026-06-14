@@ -696,7 +696,9 @@ fn term_pattern_expression(
         TermPattern::NamedNode(nn) => Ok(named_node_u32_lit(nn, name, global_cats)),
         TermPattern::BlankNode(bl) => Ok(blank_node_expresson(rdf_node_types, bl, name)?),
         TermPattern::Literal(thelit) => {
-            let l = rdf_literal_to_polars_expr(thelit).alias(name);
+            let l = rdf_literal_to_polars_expr(thelit)
+                .map_err(|x| SparqlError::ParseLiteralError(x))?
+                .alias(name);
             Ok((
                 l,
                 BaseRDFNodeType::Literal(thelit.datatype().into_owned())

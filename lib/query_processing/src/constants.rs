@@ -14,3 +14,7 @@ pub const TIME_BUCKET: &str = "https://github.com/DataTreehouse/chrontext#time_b
 pub const LIST_AGGREGATION: &str = "https://github.com/DataTreehouse/maplib#ListAggregation";
 
 pub const DECODE: &str = "https://github.com/DataTreehouse/maplib#decodeString";
+
+pub const STRUUID_V5: &str = "https://github.com/DataTreehouse/maplib#struuidv5";
+
+pub const UUID_V5: &str = "https://github.com/DataTreehouse/maplib#uuidv5";

@@ -3,28 +3,19 @@ use crate::errors::RepresentationError;
 use crate::multitype::{
     extract_column_from_multitype, MULTI_BLANK_DT, MULTI_IRI_DT, MULTI_NONE_DT,
 };
-use crate::rdf_to_polars::{
-    polars_literal_values_to_series, rdf_literal_to_polars_literal_value,
-    rdf_owned_blank_node_to_polars_literal_value, rdf_owned_named_node_to_polars_literal_value,
-};
 use crate::solution_mapping::{BaseCatState, EagerSolutionMappings};
 use crate::{
-    literal_blanknode_to_blanknode, literal_iri_to_namednode, BaseRDFNodeType, BaseRDFNodeTypeRef,
-    RDFNodeState, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD, OBJECT_COL_NAME,
-    SUBJECT_COL_NAME,
+    literal_blanknode_to_blanknode, literal_iri_to_namednode, BaseRDFNodeType, RDFNodeState,
+    LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD, OBJECT_COL_NAME, SUBJECT_COL_NAME,
 };
 use chrono::TimeZone as ChronoTimeZone;
 use chrono::{Datelike, Timelike};
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{BlankNode, Literal, NamedNode, NamedOrBlankNode, Triple, Variable};
-use polars::prelude::{
-    as_struct, col, AnyValue, Column, DataFrame, DataType, IntoColumn, IntoLazy, LiteralValue,
-    PlSmallStr, Scalar, Series, TimeZone,
-};
+use polars::prelude::{AnyValue, Column, DataFrame, DataType, IntoColumn, Series, TimeZone};
 use rayon::iter::IndexedParallelIterator;
 use rayon::iter::IntoParallelIterator;
 use rayon::iter::ParallelIterator;
-use rayon::prelude::IntoParallelRefIterator;
 use spargebra::term::Term;
 use std::collections::HashSet;
 use std::vec::IntoIter;
@@ -486,81 +477,6 @@ pub fn hack_format_timestamp_with_timezone(column: &Column, tz: &mut TimeZone) -
         .into_column()
     } else {
         panic!("Unknown timezone{tz}");
-    }
-}
-
-// These terms must all be of the same data type
-pub fn particular_opt_term_vec_to_series(
-    term_vec: Vec<Option<Term>>,
-    dt: BaseRDFNodeTypeRef,
-    c: &str,
-) -> Series {
-    if dt.is_lang_string() {
-        let langs = term_vec
-            .par_iter()
-            .map(|t| {
-                if let Some(t) = t {
-                    match t {
-                        Term::Literal(l) => LiteralValue::Scalar(Scalar::from(
-                            PlSmallStr::from_string(l.language().unwrap().to_string()),
-                        )),
-                        _ => panic!("Should never happen"),
-                    }
-                } else {
-                    LiteralValue::untyped_null()
-                }
-            })
-            .collect();
-        let vals = term_vec
-            .into_par_iter()
-            .map(|t| {
-                if let Some(t) = t {
-                    match t {
-                        Term::Literal(l) => {
-                            let (s, _, _) = l.destruct();
-                            LiteralValue::Scalar(Scalar::from(PlSmallStr::from_string(s)))
-                        }
-                        _ => panic!("Should never happen"),
-                    }
-                } else {
-                    LiteralValue::untyped_null()
-                }
-            })
-            .collect();
-
-        let val_ser = polars_literal_values_to_series(vals, LANG_STRING_VALUE_FIELD);
-        let lang_ser = polars_literal_values_to_series(langs, LANG_STRING_LANG_FIELD);
-        let mut df = DataFrame::new(val_ser.len(), vec![val_ser.into(), lang_ser.into()])
-            .unwrap()
-            .lazy()
-            .with_column(
-                as_struct(vec![
-                    col(LANG_STRING_VALUE_FIELD),
-                    col(LANG_STRING_LANG_FIELD),
-                ])
-                .alias(c),
-            )
-            .collect()
-            .unwrap();
-        df.drop_in_place(c).unwrap().take_materialized_series()
-    } else {
-        let any_iter: Vec<_> = term_vec
-            .into_par_iter()
-            .map(|t| {
-                if let Some(t) = t {
-                    match t {
-                        Term::NamedNode(nn) => rdf_owned_named_node_to_polars_literal_value(nn),
-                        Term::BlankNode(bb) => rdf_owned_blank_node_to_polars_literal_value(bb),
-                        Term::Literal(l) => rdf_literal_to_polars_literal_value(&l, None),
-                        #[cfg(feature = "rdf-star")]
-                        _ => unimplemented!(),
-                    }
-                } else {
-                    LiteralValue::untyped_null()
-                }
-            })
-            .collect();
-        polars_literal_values_to_series(any_iter, c)
     }
 }
 
