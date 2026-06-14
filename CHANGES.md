@@ -1,6 +1,6 @@
 # Change log
 
-## v.20.19
+## v0.20.19
 ### Bug fixes
 - Workaround for Polars issue that could sometimes produce errors in filter not exists
 - Move away from rdf:_{n} predicate to represent lists in Facade-X as it is does not play nice with our partitioning
