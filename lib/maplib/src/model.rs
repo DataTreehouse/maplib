@@ -31,7 +31,7 @@ use triplestore::{IndexingOptions, NewTriples, Triplestore};
 
 use chrontext::engine::{ChrontextSettings, Engine};
 use datalog::ast::DatalogRuleset;
-use representation::constants::{FX_PREFIX, FX_PREFIX_IRI, OTTR_TRIPLE, XYZ_PREFIX, XYZ_PREFIX_IRI};
+use representation::constants::OTTR_TRIPLE;
 use representation::dataset::NamedGraph;
 use representation::prefixes::get_default_prefixes;
 use tracing::instrument;
@@ -206,7 +206,6 @@ impl Model {
         graph: &NamedGraph,
         transient: bool,
     ) -> Result<(), MaplibError> {
-        self.add_fx_prefixes();
         let mut u8s =
             fs::read(path).map_err(|x| TriplestoreError::ReadJSONFileError(x.to_string()))?;
 
@@ -222,7 +221,6 @@ impl Model {
         graph: &NamedGraph,
         transient: bool,
     ) -> Result<(), MaplibError> {
-        self.add_fx_prefixes();
         //Safety: we are never reading this vec back to a string
         let u8s = unsafe { p.as_mut_vec() };
         self.triplestore
@@ -237,7 +235,6 @@ impl Model {
         graph: &NamedGraph,
         transient: bool,
     ) -> Result<(), MaplibError> {
-        self.add_fx_prefixes();
         let mut u8s = fs::read(path).map_err(|x| TriplestoreError::XMLError(x.to_string()))?;
         self.triplestore
             .map_xml(&mut u8s, graph, transient)
@@ -251,7 +248,6 @@ impl Model {
         graph: &NamedGraph,
         transient: bool,
     ) -> Result<(), MaplibError> {
-        self.add_fx_prefixes();
         //Safety: we are never reading this vec back to a string
         let u8s = unsafe { p.as_mut_vec() };
         self.triplestore
@@ -693,16 +689,5 @@ impl Model {
             latest_report_graph: None,
             chrontext_settings: self.chrontext_settings.clone(),
         })
-    }
-
-    fn add_fx_prefixes(&mut self) {
-        self.prefixes.insert(
-            XYZ_PREFIX.to_string(),
-            NamedNode::new_unchecked(XYZ_PREFIX_IRI),
-        );
-        self.prefixes.insert(
-            FX_PREFIX.to_string(),
-            NamedNode::new_unchecked(FX_PREFIX_IRI),
-        );
     }
 }

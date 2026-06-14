@@ -10,12 +10,12 @@ use crate::ast::{
 };
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{BlankNode, Literal, NamedNode, NamedOrBlankNode, Term, Triple};
-use representation::constants::{MAPLIB_TEMPLATE_PREFIX_IRI, OTTR_TRIPLE};
+use representation::constants::{MAPLIB_PREFIX_IRI, OTTR_TRIPLE};
 use std::collections::HashSet;
 
 /// Build a `NamedNode` in the maplib template vocabulary.
 fn vocab(local: &str) -> NamedNode {
-    NamedNode::new_unchecked(format!("{MAPLIB_TEMPLATE_PREFIX_IRI}{local}"))
+    NamedNode::new_unchecked(format!("{MAPLIB_PREFIX_IRI}{local}"))
 }
 
 fn bool_lit(b: bool) -> Literal {
@@ -125,19 +125,35 @@ fn template_to_triples(t: &Template, triples: &mut Vec<Triple>, counter: &mut us
 
 fn parameter_to_triples(p: &Parameter, idx: usize, pb: &BlankNode, triples: &mut Vec<Triple>) {
     let s = NamedOrBlankNode::BlankNode(pb.clone());
-    triples.push(Triple::new(s.clone(), rdf::TYPE.into_owned(), vocab("Parameter")));
+    triples.push(Triple::new(
+        s.clone(),
+        rdf::TYPE.into_owned(),
+        vocab("Parameter"),
+    ));
     triples.push(Triple::new(s.clone(), vocab("index"), int_lit(idx)));
     triples.push(Triple::new(
         s.clone(),
         vocab("variableName"),
         string_lit(p.variable.as_str()),
     ));
-    triples.push(Triple::new(s.clone(), vocab("optional"), bool_lit(p.optional)));
-    triples.push(Triple::new(s.clone(), vocab("nonBlank"), bool_lit(p.non_blank)));
+    triples.push(Triple::new(
+        s.clone(),
+        vocab("optional"),
+        bool_lit(p.optional),
+    ));
+    triples.push(Triple::new(
+        s.clone(),
+        vocab("nonBlank"),
+        bool_lit(p.non_blank),
+    ));
     if let Some(pt) = &p.ptype {
         if let Some((base, card, lub)) = decompose_ptype(pt) {
             triples.push(Triple::new(s.clone(), vocab("type"), base));
-            triples.push(Triple::new(s.clone(), vocab("cardinality"), string_lit(card)));
+            triples.push(Triple::new(
+                s.clone(),
+                vocab("cardinality"),
+                string_lit(card),
+            ));
             triples.push(Triple::new(s.clone(), vocab("lub"), bool_lit(lub)));
         }
     }
@@ -156,7 +172,11 @@ fn instance_to_triples(
     counter: &mut usize,
 ) {
     let s = NamedOrBlankNode::BlankNode(ib.clone());
-    triples.push(Triple::new(s.clone(), rdf::TYPE.into_owned(), vocab("Instance")));
+    triples.push(Triple::new(
+        s.clone(),
+        rdf::TYPE.into_owned(),
+        vocab("Instance"),
+    ));
     triples.push(Triple::new(s.clone(), vocab("index"), int_lit(idx)));
     triples.push(Triple::new(
         s.clone(),
@@ -238,7 +258,7 @@ mod tests {
     }
 
     fn pred(local: &str) -> String {
-        format!("{MAPLIB_TEMPLATE_PREFIX_IRI}{local}")
+        format!("{MAPLIB_PREFIX_IRI}{local}")
     }
 
     /// Objects of (subject, mtpl:local) triples.
@@ -294,7 +314,10 @@ ex:Person [ ottr:IRI ?p, xsd:string ?name ] :: {
             objs(&ts, name_param, "type"),
             vec!["http://www.w3.org/2001/XMLSchema#string".to_string()]
         );
-        assert_eq!(objs(&ts, name_param, "cardinality"), vec!["single".to_string()]);
+        assert_eq!(
+            objs(&ts, name_param, "cardinality"),
+            vec!["single".to_string()]
+        );
         assert_eq!(objs(&ts, name_param, "optional"), vec!["false".to_string()]);
 
         let p_param = params
@@ -369,7 +392,10 @@ ex:Tagged [ ? ! ottr:IRI ?c = ex:Default , NEList<xsd:string> ?xs ] :: {
 
         // instance carries the list expander, and the ++ argument is flagged
         let instance = &child_bnodes(&ts, "http://example.org/Tagged", "hasInstance")[0];
-        assert_eq!(objs(&ts, instance, "listExpander"), vec!["cross".to_string()]);
+        assert_eq!(
+            objs(&ts, instance, "listExpander"),
+            vec!["cross".to_string()]
+        );
         let args = child_bnodes(&ts, instance, "hasArgument");
         let expanded: Vec<_> = args
             .iter()
