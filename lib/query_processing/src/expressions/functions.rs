@@ -19,6 +19,7 @@ mod iri;
 mod is_blank_;
 mod is_iri;
 mod is_literal;
+mod keep_field_;
 mod lang_;
 mod lang_matches;
 mod lower_upper_substr;
@@ -48,11 +49,3 @@ mod struuid_v5;
 mod uuid_v5;
 mod xsd_cast_literal;
 mod year_;
-
-use polars::datatypes::Field;
-use polars::error::PolarsError;
-use polars::prelude::Schema;
-
-fn keep_field(_s: &Schema, f: &Field) -> Result<Field, PolarsError> {
-    Ok(f.clone())
-}

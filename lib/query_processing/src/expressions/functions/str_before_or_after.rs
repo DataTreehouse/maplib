@@ -1,6 +1,6 @@
 use crate::errors::QueryProcessingError;
 use crate::expressions::functions::eval_expression_to_string::eval_expression_to_string;
-use crate::expressions::functions::keep_field;
+use crate::expressions::functions::keep_field_::keep_field;
 use crate::expressions::functions::str_after::str_after;
 use crate::expressions::functions::str_before::str_before;
 use oxrdf::vocab::{rdf, xsd};
