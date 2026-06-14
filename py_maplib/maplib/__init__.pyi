@@ -541,7 +541,7 @@ class Model:
     def templates_to_graph(self, graph: str = None) -> None:
         """
         Materialize the model's OTTR templates into a named graph as RDF, using the flattened
-        maplib template vocabulary (prefix ``mtpl``, base
+        maplib template vocabulary (prefix ``maplib``, base
         ``https://datatreehouse.github.io/maplib/vocab#``). This lets template structure and
         the interconnectedness of IRIs across templates be inspected with ordinary SPARQL, and
         used to derive SHACL shapes. The triples are added alongside any existing content of
@@ -550,9 +550,9 @@ class Model:
         Usage:
         >>> m.templates_to_graph("https://example.org/templates")
         >>> m.query('''
-        ... PREFIX mtpl: <https://datatreehouse.github.io/maplib/vocab#>
+        ... PREFIX maplib: <https://datatreehouse.github.io/maplib/vocab#>
         ... SELECT ?template ?iri WHERE {
-        ...     GRAPH <https://example.org/templates> { ?template mtpl:referencesIri ?iri }
+        ...     GRAPH <https://example.org/templates> { ?template maplib:referencesIri ?iri }
         ... }''')
 
         :param graph: The IRI of the graph to add the template triples to. Defaults to the default graph.
