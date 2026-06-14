@@ -4584,6 +4584,7 @@ dependencies = [
  "sprs",
  "thiserror",
  "tracing",
+ "uri_encode",
  "utils",
  "uuid",
 ]

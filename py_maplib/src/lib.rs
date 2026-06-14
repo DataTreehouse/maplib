@@ -372,6 +372,18 @@ impl PyModel {
         })
     }
 
+    #[pyo3(signature = (df, graph=None))]
+    #[instrument(skip_all)]
+    fn map_df(&self, py: Python<'_>, df: &Bound<'_, PyAny>, graph: Option<String>) -> PyResult<()> {
+        let (df, _) = data_to_mappings_types(df, py)?;
+        py.detach(move || -> PyResult<()> {
+            let mut inner = self.inner.lock().unwrap();
+            let graph = parse_optional_named_node(graph)?;
+            let named_graph = NamedGraph::from_maybe_named_node(graph.as_ref());
+            map_df_mutex(&mut inner, df, named_graph)
+        })
+    }
+
     /// Starts a graph explorer session.
     ///
     /// To run from Jupyter Notebook use:
@@ -1293,6 +1305,15 @@ fn map_default_mutex(
         info!("Produced template:\n\n {tmpl}");
     }
     Ok(format!("{tmpl}"))
+}
+
+fn map_df_mutex(
+    inner: &mut MutexGuard<InnerModel>,
+    df: DataFrame,
+    graph: NamedGraph,
+) -> PyResult<()> {
+    inner.map_df(&df, &graph).map_err(PyMaplibError::from)?;
+    Ok(())
 }
 
 fn query_mutex(
