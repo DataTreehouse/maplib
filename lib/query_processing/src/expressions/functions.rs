@@ -39,6 +39,7 @@ mod str_len;
 mod struuid;
 mod struuid_v5;
 mod uuid_v5;
+mod xsd_cast_literal;
 mod year_;
 
 use crate::errors::QueryProcessingError;
@@ -82,12 +83,12 @@ use oxrdf::NamedNodeRef;
 use polars::datatypes::{DataType, Field};
 use polars::error::PolarsError;
 use polars::prelude::{
-    coalesce, col, lit, Column, Expr, IntoColumn, LiteralValue, Schema, Series, StrptimeOptions,
+    lit, Column, Expr, IntoColumn, LiteralValue, Schema, Series, StrptimeOptions,
 };
 use representation::cats::{maybe_decode_expr, LockedCats};
 use representation::query_context::Context;
 use representation::solution_mapping::{BaseCatState, SolutionMappings};
-use representation::{BaseRDFNodeType, RDFNodeState};
+use representation::BaseRDFNodeType;
 use spargebra::algebra::{Expression, Function};
 use std::collections::HashMap;
 
@@ -338,76 +339,6 @@ pub fn func_expression(
     }
     solution_mappings = drop_inner_contexts(solution_mappings, &args_contexts.values().collect());
     Ok(solution_mappings)
-}
-
-pub fn xsd_cast_literal(
-    c: &str,
-    src: &RDFNodeState,
-    trg: &BaseRDFNodeType,
-    global_cats: LockedCats,
-) -> Result<Expr, QueryProcessingError> {
-    let trg_type = trg.default_input_polars_data_type();
-    let trg_nn = if let BaseRDFNodeType::Literal(nn) = trg {
-        nn.as_ref()
-    } else {
-        panic!("Invalid state")
-    };
-    if src.is_multi() {
-        let mut to_coalesce = vec![];
-        for (t, s) in &src.map {
-            to_coalesce.push(match t {
-                BaseRDFNodeType::IRI => cast_iri_to_xsd_literal(
-                    col(c).struct_().field_by_name(&t.field_col_name()),
-                    t,
-                    s,
-                    trg_nn,
-                    trg_type.clone(),
-                    global_cats.clone(),
-                )?,
-                BaseRDFNodeType::BlankNode => {
-                    return Err(QueryProcessingError::BadCastDatatype(
-                        c.to_string(),
-                        trg.clone(),
-                        t.clone(),
-                    ))
-                }
-                BaseRDFNodeType::Literal(src_nn) => cast_literal(
-                    col(c).struct_().field_by_name(&t.field_col_name()),
-                    t,
-                    s,
-                    global_cats.clone(),
-                    src_nn.as_ref(),
-                    trg_nn,
-                    trg_type.clone(),
-                ),
-                BaseRDFNodeType::None => lit(LiteralValue::untyped_null()).cast(trg_type.clone()),
-            });
-        }
-        Ok(coalesce(to_coalesce.as_slice()).alias(c))
-    } else {
-        let t = src.get_base_type().unwrap();
-        let s = src.get_base_state().unwrap();
-        match &t {
-            BaseRDFNodeType::IRI => {
-                cast_iri_to_xsd_literal(col(c), t, s, trg_nn, trg_type.clone(), global_cats.clone())
-            }
-            BaseRDFNodeType::BlankNode => Err(QueryProcessingError::BadCastDatatype(
-                c.to_string(),
-                trg.clone(),
-                t.clone(),
-            )),
-            BaseRDFNodeType::Literal(src_nn) => Ok(cast_literal(
-                col(c),
-                t,
-                s,
-                global_cats.clone(),
-                src_nn.as_ref(),
-                trg_nn,
-                trg_type.clone(),
-            )),
-            BaseRDFNodeType::None => Ok(lit(LiteralValue::untyped_null()).cast(trg_type)),
-        }
-    }
 }
 
 fn cast_iri_to_xsd_literal(
