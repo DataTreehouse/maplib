@@ -1,14 +1,16 @@
 use super::{MapOptions, Model};
 use crate::errors::MaplibError;
 use oxrdf::vocab::xsd;
+use oxrdf::{NamedNode, NamedOrBlankNode};
 use polars::datatypes::{AnyValue, DataType, PlSmallStr};
 use polars::frame::DataFrame;
 use polars::prelude::{
-    by_name, col, lit, IdxSize, IntoColumn, IntoLazy, LazyFrame, LiteralValue, NamedFrom, Series,
+    as_struct, by_name, col, lit, IdxSize, IntoColumn, IntoLazy, LazyFrame, LiteralValue,
+    NamedFrom, Series,
 };
 use representation::dataset::NamedGraph;
 use representation::solution_mapping::SolutionMappings;
-use representation::{BaseRDFNodeType, RDFNodeState};
+use representation::{BaseRDFNodeType, RDFNodeState, SeriesBuilder};
 use shacl::ValidationReport;
 use std::collections::HashMap;
 use templates::MappingColumnType;
@@ -19,6 +21,9 @@ const SHACL_RESULT_TEMPLATE: &str =
     "https://datatreehouse.github.io/maplib/vocab#ShaclResultTemplate";
 const SHACL_REPORT_TEMPLATE: &str =
     "https://datatreehouse.github.io/maplib/vocab#ShaclReportTemplate";
+
+const SHACL_COUNTS_TEMPLATE: &str =
+    "https://datatreehouse.github.io/maplib/vocab#ShaclCountsTemplate";
 const SHACL_DOC: &str = r#"
 @prefix maplib: <https://datatreehouse.github.io/maplib/vocab#>.
 @prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
@@ -58,6 +63,17 @@ ottr:Triple(?result, sh:resultPath, ?result_path),
 ottr:Triple(?result, maplib:resultConforms, ?conforms),
 cross | ottr:Triple(?result, maplib:details, ++?details),
 } .
+
+maplib:ShaclCountsTemplate [
+    ottr:IRI ?report,
+    ottr:IRI ?target_count_iri,
+    ?shape,
+    xsd:unsignedInt ?target_count,
+    ] :: {
+ottr:Triple(?report, maplib:targetShapeCount, ?target_count_iri),
+ottr:Triple(?target_count_iri, maplib:targetShape, ?shape),
+ottr:Triple(?target_count_iri, maplib:targetCount, ?target_count),
+} .
 "#;
 
 impl Model {
@@ -75,7 +91,7 @@ impl Model {
         };
         let mut result_cols = vec![];
         let mut offset = 0;
-        let uuid = Uuid::new_v4().to_string();
+        let report_uri = create_report_uri();
         if let Some(SolutionMappings {
             mappings,
             rdf_node_types,
@@ -87,7 +103,7 @@ impl Model {
                 mappings.clone().lazy(),
                 &rdf_node_types,
                 offset,
-                &uuid,
+                &report_uri,
                 conforms_col,
             );
             debug!("Finished creating results input");
@@ -101,6 +117,18 @@ impl Model {
                 map_options.clone(),
             )?;
         }
+
+        if !report.shape_targets.is_empty() {
+            let (targets_df, targets_types) = create_targets_input(report, &report_uri);
+
+            self.expand(
+                SHACL_COUNTS_TEMPLATE,
+                Some(targets_df),
+                Some(targets_types),
+                map_options.clone(),
+            )?;
+        }
+
         if result_cols.is_empty() {
             result_cols.push(
                 Series::new_empty(PlSmallStr::from_str("result"), &DataType::String).into_column(),
@@ -113,7 +141,7 @@ impl Model {
                 vec![
                     Series::from_any_values_and_dtype(
                         PlSmallStr::from_str("report"),
-                        &[AnyValue::StringOwned("urn:maplib:report".into())],
+                        &[AnyValue::StringOwned(report_uri.as_str().into())],
                         &DataType::String,
                         true,
                     )
@@ -167,7 +195,7 @@ impl Model {
                 mappings.clone().lazy(),
                 &rdf_node_types,
                 offset,
-                &uuid,
+                &report_uri,
                 conforms_col,
             );
             debug!("Finished creating details input");
@@ -188,7 +216,7 @@ fn create_results_input(
     mut mappings: LazyFrame,
     types: &HashMap<String, RDFNodeState>,
     offset: usize,
-    uuid: &str,
+    report_uri: &NamedNode,
     conforms_col: bool,
 ) -> (DataFrame, HashMap<String, MappingColumnType>) {
     let mut rdf_node_types = types.clone();
@@ -199,7 +227,7 @@ fn create_results_input(
     if rdf_node_types.contains_key("id") {
         mappings = mappings
             .with_column(
-                (lit(format!("urn:maplib:r{}_", uuid)) + col("id").cast(DataType::String))
+                (lit(create_id_uri_prefix(report_uri).as_str()) + col("id").cast(DataType::String))
                     .alias("result"),
             )
             .drop(by_name(["id"], true, false));
@@ -207,7 +235,7 @@ fn create_results_input(
     } else {
         mappings = mappings.with_row_index("result", Some(offset as IdxSize));
         mappings = mappings.with_column(
-            (lit(format!("urn:maplib:tr{}_", uuid)) + col("result").cast(DataType::String))
+            (lit(create_tr_uri_prefix(report_uri).as_str()) + col("result").cast(DataType::String))
                 .alias("result"),
         );
     }
@@ -234,11 +262,10 @@ fn create_results_input(
     }
 
     if column_types.contains_key("details") {
-        mappings = mappings.with_column(
-            col("details")
-                .list()
-                .eval(lit(format!("urn:maplib:r{}_", uuid)) + col("").cast(DataType::String)),
-        );
+        mappings =
+            mappings.with_column(col("details").list().eval(
+                lit(create_id_uri_prefix(report_uri).as_str()) + col("").cast(DataType::String),
+            ));
     } else {
         mappings = mappings.with_column(
             lit(LiteralValue::untyped_null())
@@ -254,4 +281,107 @@ fn create_results_input(
     );
 
     (mappings.collect().unwrap(), column_types)
+}
+
+fn create_targets_input(
+    report: &ValidationReport,
+    report_uri: &NamedNode,
+) -> (DataFrame, HashMap<String, MappingColumnType>) {
+    let mut shape_blanks_builder = SeriesBuilder::new(&BaseRDFNodeType::BlankNode);
+    let mut shape_iris_builder = SeriesBuilder::new(&BaseRDFNodeType::IRI);
+
+    let counts_dt = BaseRDFNodeType::Literal(xsd::UNSIGNED_INT.into_owned());
+    let mut counts_builder = SeriesBuilder::new(&counts_dt);
+
+    for p in &report.shape_targets {
+        match &p.shape_node {
+            NamedOrBlankNode::NamedNode(nn) => {
+                shape_iris_builder.push_str(nn.as_str());
+                shape_blanks_builder.push_none();
+            }
+            NamedOrBlankNode::BlankNode(bl) => {
+                shape_blanks_builder.push_str(bl.as_str());
+                shape_iris_builder.push_none();
+            }
+        }
+        counts_builder.push_u32(p.count as u32);
+    }
+    let mut targets_df = DataFrame::new(
+        report.shape_targets.len(),
+        vec![
+            shape_blanks_builder
+                .into_series("blank_shapes")
+                .into_column(),
+            shape_iris_builder.into_series("iri_shapes").into_column(),
+            counts_builder.into_series("target_count").into_column(),
+        ],
+    )
+    .unwrap();
+    targets_df = targets_df
+        .lazy()
+        .group_by([col("blank_shapes"), col("iri_shapes")])
+        .agg([col("target_count").sum()])
+        .with_column(lit(report_uri.as_str()).alias("report"))
+        .with_column(
+            as_struct(vec![
+                col("blank_shapes").alias(BaseRDFNodeType::BlankNode.field_col_name()),
+                col("iri_shapes").alias(BaseRDFNodeType::IRI.field_col_name()),
+            ])
+            .alias("shape"),
+        )
+        .select([col("report"), col("shape"), col("target_count")])
+        .collect()
+        .unwrap();
+
+    let mut target_count_iri_builder = SeriesBuilder::new(&BaseRDFNodeType::IRI);
+    for _ in 0..targets_df.height() {
+        target_count_iri_builder.push_str(&format!("urn:maplib:tc_{}", Uuid::new_v4()));
+    }
+    targets_df
+        .with_column(
+            target_count_iri_builder
+                .into_series("target_count_iri")
+                .into_column(),
+        )
+        .unwrap();
+
+    let shapes_dt = RDFNodeState::from_map(HashMap::from_iter([
+        (
+            BaseRDFNodeType::IRI,
+            BaseRDFNodeType::IRI.default_input_cat_state(),
+        ),
+        (
+            BaseRDFNodeType::BlankNode,
+            BaseRDFNodeType::BlankNode.default_input_cat_state(),
+        ),
+    ]));
+    let types = HashMap::from_iter([
+        (
+            "report".to_string(),
+            MappingColumnType::Flat(BaseRDFNodeType::IRI.into_default_input_rdf_node_state()),
+        ),
+        (
+            "target_count_iri".to_string(),
+            MappingColumnType::Flat(BaseRDFNodeType::IRI.into_default_input_rdf_node_state()),
+        ),
+        (
+            "target_count".to_string(),
+            MappingColumnType::Flat(counts_dt.into_default_input_rdf_node_state()),
+        ),
+        ("shape".to_string(), MappingColumnType::Flat(shapes_dt)),
+    ]);
+
+    (targets_df, types)
+}
+
+fn create_report_uri() -> NamedNode {
+    NamedNode::new_unchecked(format!("urn:maplib:report_{}", Uuid::new_v4()))
+}
+
+fn create_id_uri_prefix(report_uri: &NamedNode) -> NamedNode {
+    NamedNode::new_unchecked(format!("{}_r_", report_uri.as_str()))
+}
+
+fn create_tr_uri_prefix(report_uri: &NamedNode) -> NamedNode {
+    NamedNode::new_unchecked(format!("{}_tr_", report_uri.as_str()))
 }

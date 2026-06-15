@@ -159,7 +159,12 @@ fn statistics_header(dict: &FourSectDict, num_triples: usize) -> Header {
     insert_literal(&mut body, &base, RDF_TYPE, HDT_CONTAINER);
     insert_literal(&mut body, &base, RDF_TYPE, VOID_DATASET);
     insert_literal(&mut body, &base, VOID_TRIPLES, num_triples);
-    insert_literal(&mut body, &base, VOID_PROPERTIES, dict.predicates.num_strings());
+    insert_literal(
+        &mut body,
+        &base,
+        VOID_PROPERTIES,
+        dict.predicates.num_strings(),
+    );
     insert_literal(&mut body, &base, VOID_DISTINCT_SUBJECTS, distinct_subjects);
     insert_literal(&mut body, &base, VOID_DISTINCT_OBJECTS, distinct_objects);
 
@@ -169,9 +174,19 @@ fn statistics_header(dict: &FourSectDict, num_triples: usize) -> Header {
     insert_id(&mut body, &format_id, HDT_DICTIONARY, &dict_id);
     insert_id(&mut body, &format_id, HDT_TRIPLES, &triples_id);
 
-    insert_literal(&mut body, &dict_id, HDT_DICT_SHARED_SO, dict.shared.num_strings());
+    insert_literal(
+        &mut body,
+        &dict_id,
+        HDT_DICT_SHARED_SO,
+        dict.shared.num_strings(),
+    );
     insert_literal(&mut body, &dict_id, HDT_DICT_MAPPING, "1");
-    insert_literal(&mut body, &dict_id, HDT_DICT_SIZE_STRINGS, dict.size_in_bytes());
+    insert_literal(
+        &mut body,
+        &dict_id,
+        HDT_DICT_SIZE_STRINGS,
+        dict.size_in_bytes(),
+    );
     insert_literal(&mut body, &dict_id, HDT_DICT_BLOCK_SIZE, BLOCK_SIZE);
 
     insert_literal(&mut body, &triples_id, DC_TERMS_FORMAT, HDT_TYPE_BITMAP);
@@ -198,7 +213,11 @@ fn insert_literal(body: &mut BTreeSet<HdtTriple>, s: &Id, p: &str, o: impl ToStr
 }
 
 fn insert_id(body: &mut BTreeSet<HdtTriple>, s: &Id, p: &str, o: &Id) {
-    body.insert(HdtTriple::new(s.clone(), p.to_owned(), HdtTerm::Id(o.clone())));
+    body.insert(HdtTriple::new(
+        s.clone(),
+        p.to_owned(),
+        HdtTerm::Id(o.clone()),
+    ));
 }
 
 fn hdt_error(e: impl std::fmt::Display) -> TriplestoreError {
