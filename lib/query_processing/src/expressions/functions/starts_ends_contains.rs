@@ -1,5 +1,5 @@
 use crate::errors::QueryProcessingError;
-use crate::expressions::functions::str_starts_ends_contains;
+use crate::expressions::functions::str_starts_ends_contains_::str_starts_ends_contains;
 use oxrdf::vocab::xsd;
 use polars::datatypes::DataType;
 use polars::prelude::{coalesce, col, lit, LiteralValue};
