@@ -22,6 +22,7 @@ use tracing::{instrument, trace, warn};
 use crate::sparql::lazy_graph_patterns::triples_ordering::order_triple_patterns;
 use polars::prelude::{IntoLazy, JoinType};
 use polars_core::frame::DataFrame;
+use query_processing::expressions::functions::custom_function::UdfRegistry;
 use query_processing::graph_patterns::join;
 use query_processing::pushdowns::Pushdowns;
 use representation::dataset::QueryGraph;
@@ -41,6 +42,7 @@ impl Triplestore {
         mut pushdowns: Pushdowns,
         query_settings: &QuerySettings,
         dataset: &QueryGraph,
+        udf_registry: Option<&dyn UdfRegistry>,
     ) -> Result<SolutionMappings, SparqlError> {
         trace!(
             "Start processing graph pattern {:?} at context: {}",
@@ -125,6 +127,7 @@ impl Triplestore {
                 pushdowns,
                 query_settings,
                 dataset,
+                udf_registry,
             ),
             GraphPattern::Join { left, right } => self.lazy_join(
                 left,
@@ -135,6 +138,7 @@ impl Triplestore {
                 pushdowns,
                 query_settings,
                 dataset,
+                udf_registry,
             ),
             GraphPattern::LeftJoin {
                 left,
@@ -150,6 +154,7 @@ impl Triplestore {
                 pushdowns,
                 query_settings,
                 dataset,
+                udf_registry,
             ),
             GraphPattern::Filter { expr, inner } => self.lazy_filter(
                 inner,
@@ -160,6 +165,7 @@ impl Triplestore {
                 pushdowns,
                 query_settings,
                 dataset,
+                udf_registry,
             ),
             GraphPattern::Union { left, right } => self.lazy_union(
                 left,
@@ -170,6 +176,7 @@ impl Triplestore {
                 pushdowns,
                 query_settings,
                 dataset,
+                udf_registry,
             ),
             GraphPattern::Graph { name, inner } => self.lazy_graph(
                 name,
@@ -179,6 +186,7 @@ impl Triplestore {
                 parameters,
                 pushdowns,
                 query_settings,
+                udf_registry,
             ),
             GraphPattern::Extend {
                 inner,
@@ -194,6 +202,7 @@ impl Triplestore {
                 pushdowns,
                 query_settings,
                 dataset,
+                udf_registry,
             ),
             GraphPattern::Minus { left, right } => self.lazy_minus(
                 left,
@@ -204,6 +213,7 @@ impl Triplestore {
                 pushdowns,
                 query_settings,
                 dataset,
+                udf_registry,
             ),
             GraphPattern::Values {
                 variables,
@@ -225,6 +235,7 @@ impl Triplestore {
                 pushdowns,
                 query_settings,
                 dataset,
+                udf_registry,
             ),
             GraphPattern::Project { inner, variables } => self.lazy_project(
                 inner,
@@ -235,6 +246,7 @@ impl Triplestore {
                 pushdowns,
                 query_settings,
                 dataset,
+                udf_registry,
             ),
             GraphPattern::Distinct { inner } => self.lazy_distinct(
                 inner,
@@ -244,6 +256,7 @@ impl Triplestore {
                 pushdowns,
                 query_settings,
                 dataset,
+                udf_registry,
             ),
             GraphPattern::Reduced { inner } => {
                 let mut sm = self.lazy_graph_pattern(
@@ -254,6 +267,7 @@ impl Triplestore {
                     pushdowns,
                     query_settings,
                     dataset,
+                    udf_registry,
                 )?;
                 sm.mappings = sm.mappings.first();
                 Ok(sm)
@@ -271,6 +285,7 @@ impl Triplestore {
                     pushdowns,
                     query_settings,
                     dataset,
+                    udf_registry,
                 )?;
                 if let Some(length) = length {
                     newsols.mappings = newsols.mappings.slice(*start as i64, *length as u32);
@@ -293,6 +308,7 @@ impl Triplestore {
                 pushdowns,
                 query_settings,
                 dataset,
+                udf_registry,
             ),
             GraphPattern::Service { .. } => {
                 unimplemented!("Services are not implemented")

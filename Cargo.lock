@@ -3491,6 +3491,7 @@ dependencies = [
  "oxrdfio",
  "polars",
  "pyo3",
+ "query_processing",
  "representation",
  "shacl",
  "templates",

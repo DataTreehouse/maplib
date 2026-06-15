@@ -1,6 +1,7 @@
 use super::{QuerySettings, Triplestore};
 use crate::sparql::errors::SparqlError;
 
+use query_processing::expressions::functions::custom_function::UdfRegistry;
 use representation::dataset::QueryGraph;
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
@@ -16,6 +17,7 @@ impl Triplestore {
         parameters: Option<&HashMap<String, EagerSolutionMappings>>,
         query_settings: &QuerySettings,
         dataset: &QueryGraph,
+        udf_registry: Option<&dyn UdfRegistry>,
     ) -> Result<(SolutionMappings, bool, Context), SparqlError> {
         match oexpr {
             OrderExpression::Asc(expr) => {
@@ -29,6 +31,7 @@ impl Triplestore {
                         None,
                         query_settings,
                         dataset,
+                        udf_registry,
                     )?,
                     true,
                     inner_context,
@@ -45,6 +48,7 @@ impl Triplestore {
                         None,
                         query_settings,
                         dataset,
+                        udf_registry,
                     )?,
                     false,
                     inner_context,

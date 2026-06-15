@@ -1,6 +1,7 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
 use crate::sparql::QuerySettings;
+use query_processing::expressions::functions::custom_function::UdfRegistry;
 use query_processing::graph_patterns::distinct;
 use query_processing::pushdowns::Pushdowns;
 use representation::dataset::QueryGraph;
@@ -21,6 +22,7 @@ impl Triplestore {
         pushdowns: Pushdowns,
         query_settings: &QuerySettings,
         dataset: &QueryGraph,
+        udf_registry: Option<&dyn UdfRegistry>,
     ) -> Result<SolutionMappings, SparqlError> {
         trace!("Processing distinct graph pattern");
         let solution_mappings = self.lazy_graph_pattern(
@@ -31,6 +33,7 @@ impl Triplestore {
             pushdowns,
             query_settings,
             dataset,
+            udf_registry,
         )?;
         let sm = distinct(solution_mappings)?;
         Ok(sm)

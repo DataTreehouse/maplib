@@ -4,6 +4,7 @@ use tracing::{instrument, trace};
 
 use crate::sparql::QuerySettings;
 use query_processing::expressions::contains_graph_pattern;
+use query_processing::expressions::functions::custom_function::UdfRegistry;
 use query_processing::graph_patterns::filter;
 use query_processing::pushdowns::Pushdowns;
 use representation::dataset::QueryGraph;
@@ -24,6 +25,7 @@ impl Triplestore {
         pushdowns: Pushdowns,
         query_settings: &QuerySettings,
         dataset: &QueryGraph,
+        udf_registry: Option<&dyn UdfRegistry>,
     ) -> Result<SolutionMappings, SparqlError> {
         trace!("Processing filter graph pattern");
         let inner_context = context.extension_with(PathEntry::FilterInner);
@@ -41,6 +43,7 @@ impl Triplestore {
             pushdowns,
             query_settings,
             dataset,
+            udf_registry,
         )?;
         output_solution_mappings = self.lazy_expression(
             expression,
@@ -50,6 +53,7 @@ impl Triplestore {
             expression_pushdowns.as_ref(),
             query_settings,
             dataset,
+            udf_registry,
         )?;
         output_solution_mappings = filter(output_solution_mappings, &expression_context)?;
         Ok(output_solution_mappings)

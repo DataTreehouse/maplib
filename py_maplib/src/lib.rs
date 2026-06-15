@@ -15,8 +15,10 @@ use maplib::model::{MapOptions, Model as InnerModel};
 use chrono::Utc;
 use cimxml_export::export::FullModelDetails;
 use pyo3::prelude::*;
+use query_processing::expressions::functions::custom_function::UdfRegistry;
 use std::collections::{HashMap, HashSet};
 use std::fs::File;
+use std::io::Cursor;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard};
 use triplestore::sparql::{
@@ -50,8 +52,8 @@ use tikv_jemallocator::Jemalloc;
 use oxrdf::vocab::xsd;
 use oxrdf::NamedNode;
 use oxrdfio::RdfFormat;
-use polars::prelude::{col, lit, IntoLazy};
-use pyo3::types::{PyList, PyString};
+use polars::prelude::{col, lit, IntoLazy, IpcReader, IpcWriter, SerWriter};
+use pyo3::types::{PyBytes, PyList, PyString};
 use pyo3::IntoPyObjectExt;
 use representation::python::{
     PyBlankNode, PyIRI, PyLiteral, PyPrefix, PyRDFType, PySolutionMappings, PyVariable,
@@ -63,6 +65,8 @@ use datalog::inference::InferenceResult;
 use datalog::python::PyInferenceResult;
 #[cfg(not(target_os = "linux"))]
 use mimalloc::MiMalloc;
+use polars::io::SerReader;
+use query_processing::errors::QueryProcessingError;
 use representation::cats::LockedCats;
 use representation::dataset::NamedGraph;
 use representation::debug::DebugOutputs;
@@ -102,15 +106,86 @@ const DEFAULT_MAP_TO_TRANSIENT: bool = false;
 const DEFAULT_DEBUG_NO_RESULTS: bool = false;
 const DEFAULT_TRIPLES_BATCH_SIZE: usize = 10_000_000;
 
+struct UdfEntry {
+    func: Py<PyAny>,
+}
+
+struct PyUdfRegistry<'a> {
+    udfs: &'a HashMap<String, UdfEntry>,
+    py: Python<'a>,
+}
+
+impl UdfRegistry for PyUdfRegistry<'_> {
+    fn has(&self, name: &str) -> bool {
+        self.udfs.contains_key(name)
+    }
+    fn call(&self, name: &str, args: DataFrame) -> Result<DataFrame, QueryProcessingError> {
+        let entry = self.udfs.get(name).ok_or_else(|| {
+            QueryProcessingError::UnimplementedFunction(format!("UDF {} not found", name))
+        })?;
+        let err = |e: String| QueryProcessingError::UnimplementedFunction(e);
+        let mut buf = Vec::new();
+        let mut args_clone = args.clone();
+        IpcWriter::new(&mut buf)
+            .finish(&mut args_clone)
+            .map_err(|e| err(e.to_string()))?;
+        let py_bytes = PyBytes::new(self.py, &buf);
+        let io = self.py.import("io").map_err(|e| err(e.to_string()))?;
+        let reader = io
+            .call_method1("BytesIO", (py_bytes,))
+            .map_err(|e| err(e.to_string()))?;
+        let pl = self.py.import("polars").map_err(|e| err(e.to_string()))?;
+        let py_df = pl
+            .call_method1("read_ipc", (reader,))
+            .map_err(|e| err(e.to_string()))?;
+        let result = entry
+            .func
+            .call1(self.py, (py_df,))
+            .map_err(|e| err(e.to_string()))?;
+        let result_bound = result.bind(self.py);
+        let result_df = if result_bound
+            .is_instance(&pl.getattr("DataFrame").map_err(|e| err(e.to_string()))?)
+            .unwrap_or(false)
+        {
+            result_bound.clone()
+        } else {
+            result_bound
+                .call_method0("to_frame")
+                .map_err(|e| err(e.to_string()))?
+                .clone()
+        };
+        let write_buf = io
+            .call_method1("BytesIO", ())
+            .map_err(|e| err(e.to_string()))?;
+        result_df
+            .call_method1("write_ipc", (&write_buf,))
+            .map_err(|e| err(e.to_string()))?;
+        write_buf
+            .call_method1("seek", (0i64,))
+            .map_err(|e| err(e.to_string()))?;
+        let bytes: Vec<u8> = write_buf
+            .call_method0("getvalue")
+            .map_err(|e| err(e.to_string()))?
+            .extract()
+            .map_err(|e: PyErr| err(e.to_string()))?;
+        let cursor = Cursor::new(bytes);
+        IpcReader::new(cursor)
+            .finish()
+            .map_err(|e| err(e.to_string()))
+    }
+}
+
 #[pyclass(name = "Model", frozen)]
 pub struct PyModel {
     inner: Mutex<InnerModel>,
+    udfs: Mutex<HashMap<String, UdfEntry>>,
 }
 
 impl PyModel {
     pub fn from_inner_mapping(inner: InnerModel) -> PyModel {
         PyModel {
             inner: Mutex::new(inner),
+            udfs: Mutex::new(HashMap::new()),
         }
     }
 }
@@ -193,6 +268,7 @@ impl PyModel {
                 InnerModel::new(None, storage_folder, indexing, None)
                     .map_err(PyMaplibError::from)?,
             ),
+            udfs: Mutex::new(HashMap::new()),
         })
     }
 
@@ -455,26 +531,27 @@ impl PyModel {
     ) -> PyResult<Py<PyAny>> {
         let mapped_parameters = map_parameters(parameters, py)?;
         let graph = parse_optional_named_node(graph)?;
-        let graph = if let Some(graph) = graph {
-            Some(NamedGraph::NamedGraph(graph))
-        } else {
-            None
-        };
-        let (res, cats) = py.detach(|| -> PyResult<(_, LockedCats)> {
-            let mut inner = self.inner.lock().unwrap();
-            let cats = inner.triplestore.global_cats.clone();
-            let res = query_mutex(
-                &mut inner,
-                query,
-                mapped_parameters,
-                graph,
-                streaming,
-                include_transient,
-                max_rows,
-                debug,
-            )?;
-            Ok((res, cats))
-        })?;
+        let graph = graph.map(NamedGraph::NamedGraph);
+        let udfs = self.udfs.lock().unwrap();
+        let mut inner = self.inner.lock().unwrap();
+        let cats = inner.triplestore.global_cats.clone();
+        let udf_reg = PyUdfRegistry { udfs: &udfs, py };
+
+        let res = query_mutex(
+            &mut inner,
+            query,
+            mapped_parameters,
+            graph,
+            streaming,
+            include_transient,
+            max_rows,
+            debug,
+            Some(&udf_reg),
+        )?;
+
+        drop(udf_reg);
+        drop(udfs);
+        drop(inner);
         print_debug_if_exists(res.debug.as_ref());
         query_to_result(
             res,
@@ -509,19 +586,23 @@ impl PyModel {
         debug: Option<bool>,
     ) -> PyResult<()> {
         let mapped_parameters = map_parameters(parameters, py)?;
-        let res = py.detach(|| {
-            let mut inner = self.inner.lock().unwrap();
-            update_mutex(
-                &mut inner,
-                update,
-                mapped_parameters,
-                graph,
-                streaming,
-                include_transient,
-                max_rows,
-                debug,
-            )
-        })?;
+        let udfs = self.udfs.lock().unwrap();
+        let mut inner = self.inner.lock().unwrap();
+        let udf_reg = PyUdfRegistry { udfs: &udfs, py };
+        let res = update_mutex(
+            &mut inner,
+            update,
+            mapped_parameters,
+            graph,
+            streaming,
+            include_transient,
+            max_rows,
+            debug,
+            Some(&udf_reg),
+        )?;
+        drop(udf_reg);
+        drop(udfs);
+        drop(inner);
         print_debug_if_exists(res.debug.as_ref());
         Ok(())
     }
@@ -637,6 +718,7 @@ impl PyModel {
                 Some(false),
                 None,
                 None,
+                None,
             )?;
             Ok((res, cats))
         })?;
@@ -676,25 +758,29 @@ impl PyModel {
         let source_graph = NamedGraph::from_maybe_named_node(source_graph.as_ref());
         let target_graph = parse_optional_named_node(target_graph)?;
         let target_graph = NamedGraph::from_maybe_named_node(target_graph.as_ref());
-        let (insert_result, cats) = py.detach(|| -> PyResult<(InsertResult, LockedCats)> {
-            let mut inner = self.inner.lock().unwrap();
+        let udfs = self.udfs.lock().unwrap();
+        let mut inner = self.inner.lock().unwrap();
 
-            let cats = inner.triplestore.global_cats.clone();
+        let cats = inner.triplestore.global_cats.clone();
+        let udf_reg = PyUdfRegistry { udfs: &udfs, py };
 
-            let insert_result = insert_mutex(
-                &mut inner,
-                query,
-                mapped_parameters,
-                transient,
-                streaming,
-                source_graph,
-                target_graph,
-                include_transient,
-                max_rows,
-                debug,
-            )?;
-            Ok((insert_result, cats))
-        })?;
+        let insert_result = insert_mutex(
+            &mut inner,
+            query,
+            mapped_parameters,
+            transient,
+            streaming,
+            source_graph,
+            target_graph,
+            include_transient,
+            max_rows,
+            debug,
+            Some(&udf_reg),
+        )?;
+
+        drop(udf_reg);
+        drop(udfs);
+        drop(inner);
         print_debug_if_exists(insert_result.debug.as_ref());
 
         new_triples_to_dict(
@@ -1024,6 +1110,30 @@ impl PyModel {
         })?;
         Ok(PyInferenceResult { inner: res })
     }
+
+    #[pyo3(signature = (name, func))]
+    fn add_udf(&self, py: Python<'_>, name: String, func: Py<PyAny>) -> PyResult<()> {
+        if !func.bind(py).is_callable() {
+            return Err(PyMaplibError::UDFError(format!("UDF {} is not callable", name)).into());
+        }
+        let mut udfs = self.udfs.lock().unwrap();
+        udfs.insert(name, UdfEntry { func });
+        Ok(())
+    }
+
+    fn list_udfs(&self) -> Vec<String> {
+        let udfs = self.udfs.lock().unwrap();
+        udfs.keys().cloned().collect()
+    }
+
+    #[pyo3(signature = (name, df))]
+    fn run_udf(&self, py: Python<'_>, name: String, df: Py<PyAny>) -> PyResult<Py<PyAny>> {
+        let binding = self.udfs.lock().unwrap();
+        let entry = binding
+            .get(&name)
+            .ok_or_else(|| PyMaplibError::UDFError(format!("UDF {} not found", name)))?;
+        entry.func.call1(py, (df,))
+    }
 }
 
 // pymethods non-critical functions
@@ -1124,6 +1234,7 @@ fn detach_graph_mutex(
         .map_err(PyMaplibError::from)?;
     let m = PyModel {
         inner: Mutex::new(sprout),
+        udfs: Mutex::new(HashMap::new()),
     };
     Ok(m)
 }
@@ -1333,6 +1444,7 @@ fn query_mutex(
     include_transient: Option<bool>,
     max_rows: Option<usize>,
     debug: Option<bool>,
+    udf_registry: Option<&dyn UdfRegistry>,
 ) -> PyResult<QueryResult> {
     let res = inner
         .query(
@@ -1343,6 +1455,7 @@ fn query_mutex(
             include_transient.unwrap_or(DEFAULT_INCLUDE_TRANSIENT),
             max_rows,
             debug.unwrap_or(DEFAULT_DEBUG_NO_RESULTS),
+            udf_registry,
         )
         .map_err(PyMaplibError::from)?;
     Ok(res)
@@ -1357,6 +1470,7 @@ fn update_mutex(
     include_transient: Option<bool>,
     max_rows: Option<usize>,
     debug: Option<bool>,
+    udf_registry: Option<&dyn UdfRegistry>,
 ) -> PyResult<UpdateResult> {
     let graph = parse_optional_named_node(graph)?;
     let named_graph = if let Some(graph) = graph {
@@ -1373,6 +1487,7 @@ fn update_mutex(
             include_transient.unwrap_or(DEFAULT_INCLUDE_TRANSIENT),
             max_rows,
             debug.unwrap_or(DEFAULT_DEBUG_NO_RESULTS),
+            udf_registry,
         )
         .map_err(PyMaplibError::from)?;
     Ok(res)
@@ -1500,6 +1615,7 @@ fn insert_mutex(
     include_transient: Option<bool>,
     max_rows: Option<usize>,
     debug: Option<bool>,
+    udf_registry: Option<&dyn UdfRegistry>,
 ) -> PyResult<InsertResult> {
     let insert_result = inner
         .insert(
@@ -1512,6 +1628,7 @@ fn insert_mutex(
             streaming.unwrap_or(DEFAULT_STREAMING),
             max_rows,
             debug.unwrap_or(DEFAULT_DEBUG_NO_RESULTS),
+            udf_registry,
         )
         .map_err(PyMaplibError::from)?;
 

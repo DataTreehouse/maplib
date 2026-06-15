@@ -9,7 +9,9 @@ use crate::expressions::functions::xsd_cast_literal;
 use oxrdf::vocab::xsd;
 use oxrdf::NamedNode;
 use polars::datatypes::{DataType, TimeUnit};
-use polars::prelude::{col, lit, Expr, LiteralValue, Scalar};
+use polars::frame::DataFrame;
+use polars::prelude::{col, lit, Column, Expr, LiteralValue, Scalar};
+use polars::prelude::{IntoColumn, IntoLazy};
 use representation::cats::{maybe_decode_expr, LockedCats};
 use representation::query_context::Context;
 use representation::solution_mapping::{BaseCatState, SolutionMappings};
@@ -17,6 +19,11 @@ use representation::BaseRDFNodeType;
 use spargebra::algebra::{Expression, Function};
 use std::collections::HashMap;
 use std::ops::{Div, Mul};
+
+pub trait UdfRegistry {
+    fn has(&self, name: &str) -> bool;
+    fn call(&self, name: &str, args: DataFrame) -> Result<DataFrame, QueryProcessingError>;
+}
 
 pub fn custom_(
     nn: &NamedNode,
@@ -26,6 +33,7 @@ pub fn custom_(
     args_contexts: &HashMap<usize, Context>,
     outer_context: &Context,
     global_cats: LockedCats,
+    udf_registry: Option<&dyn UdfRegistry>,
 ) -> Result<SolutionMappings, QueryProcessingError> {
     let iri = nn.as_str();
     if matches!(
@@ -269,6 +277,66 @@ pub fn custom_(
             outer_context,
             global_cats,
         )?;
+    } else if let Some(registry) = udf_registry {
+        if registry.has(iri) {
+            let mut collected = solution_mappings
+                .mappings
+                .collect()
+                .map_err(|e| QueryProcessingError::BadArgument(e.to_string()))?;
+
+            let arg_columns: Result<Vec<_>, QueryProcessingError> = (0..args.len())
+                .map(|i| {
+                    let ctx = args_contexts.get(&i).ok_or_else(|| {
+                        QueryProcessingError::BadArgument(format!("Missing arg context {}", i))
+                    })?;
+                    let col = collected.column(ctx.as_str()).map_err(|e| {
+                        QueryProcessingError::BadArgument(format!(
+                            "UDF '{}': column '{}' not found: {}",
+                            iri,
+                            ctx.as_str(),
+                            e
+                        ))
+                    })?;
+                    let series = col.as_materialized_series();
+                    Ok(series.clone().with_name(format!("{}", i).into()))
+                })
+                .collect();
+            let arg_columns = arg_columns?;
+
+            let height = arg_columns.first().map(|s| s.len()).unwrap_or(0);
+            let arg_columns: Vec<Column> =
+                arg_columns.into_iter().map(|s| s.into_column()).collect();
+            let input_df = DataFrame::new(height, arg_columns)
+                .map_err(|e| QueryProcessingError::BadArgument(e.to_string()))?;
+
+            let result_df = registry.call(iri, input_df)?;
+
+            let result_col = result_df
+                .columns()
+                .first()
+                .ok_or_else(|| {
+                    QueryProcessingError::BadArgument(format!(
+                        "UDF '{}' returned empty DataFrame",
+                        iri
+                    ))
+                })?
+                .as_materialized_series()
+                .clone()
+                .with_name(outer_context.as_str().into());
+
+            collected
+                .with_column(result_col.into_column())
+                .map_err(|e| QueryProcessingError::BadArgument(e.to_string()))?;
+
+            solution_mappings.mappings = collected.lazy();
+            solution_mappings.rdf_node_types.insert(
+                outer_context.as_str().to_string(),
+                BaseRDFNodeType::Literal(xsd::INTEGER.into_owned())
+                    .into_default_input_rdf_node_state(),
+            );
+        } else {
+            return Err(QueryProcessingError::UnimplementedFunction(nn.to_string()));
+        }
     } else {
         return Err(QueryProcessingError::UnimplementedFunction(nn.to_string()));
     }

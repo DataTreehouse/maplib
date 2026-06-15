@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use crate::sparql::errors::SparqlError;
 use oxrdf::vocab::xsd;
 use polars::prelude::IntoLazy;
+use query_processing::expressions::functions::custom_function::UdfRegistry;
 use query_processing::expressions::functions::func_expression;
 use query_processing::expressions::{
     binary_expression, bound, coalesce_contexts, exists, if_expression, in_expression, literal,
@@ -26,6 +27,7 @@ impl Triplestore {
         pushdowns: Option<&Pushdowns>,
         query_settings: &QuerySettings,
         dataset: &QueryGraph,
+        udf_registry: Option<&dyn UdfRegistry>,
     ) -> Result<SolutionMappings, SparqlError> {
         let cats = self.global_cats.read().unwrap();
         let output_solution_mappings = match expr {
@@ -42,6 +44,7 @@ impl Triplestore {
                     pushdowns,
                     query_settings,
                     dataset,
+                    udf_registry,
                 )?;
                 let right_context = context.extension_with(PathEntry::OrRight);
                 output_solution_mappings = self.lazy_expression(
@@ -52,6 +55,7 @@ impl Triplestore {
                     pushdowns,
                     query_settings,
                     dataset,
+                    udf_registry,
                 )?;
                 binary_expression(
                     output_solution_mappings,
@@ -72,6 +76,7 @@ impl Triplestore {
                     pushdowns,
                     query_settings,
                     dataset,
+                    udf_registry,
                 )?;
                 let right_context = context.extension_with(PathEntry::AndRight);
                 output_solution_mappings = self.lazy_expression(
@@ -82,6 +87,7 @@ impl Triplestore {
                     pushdowns,
                     query_settings,
                     dataset,
+                    udf_registry,
                 )?;
                 binary_expression(
                     output_solution_mappings,
@@ -102,6 +108,7 @@ impl Triplestore {
                     pushdowns,
                     query_settings,
                     dataset,
+                    udf_registry,
                 )?;
                 let right_context = context.extension_with(PathEntry::EqualRight);
                 output_solution_mappings = self.lazy_expression(
@@ -112,6 +119,7 @@ impl Triplestore {
                     pushdowns,
                     query_settings,
                     dataset,
+                    udf_registry,
                 )?;
                 binary_expression(
                     output_solution_mappings,
@@ -135,6 +143,7 @@ impl Triplestore {
                     pushdowns,
                     query_settings,
                     dataset,
+                    udf_registry,
                 )?;
                 let right_context = context.extension_with(PathEntry::GreaterRight);
                 output_solution_mappings = self.lazy_expression(
@@ -145,6 +154,7 @@ impl Triplestore {
                     pushdowns,
                     query_settings,
                     dataset,
+                    udf_registry,
                 )?;
                 binary_expression(
                     output_solution_mappings,
@@ -165,6 +175,7 @@ impl Triplestore {
                     pushdowns,
                     query_settings,
                     dataset,
+                    udf_registry,
                 )?;
                 let right_context = context.extension_with(PathEntry::GreaterOrEqualRight);
                 output_solution_mappings = self.lazy_expression(
@@ -175,6 +186,7 @@ impl Triplestore {
                     pushdowns,
                     query_settings,
                     dataset,
+                    udf_registry,
                 )?;
 
                 binary_expression(
@@ -196,6 +208,7 @@ impl Triplestore {
                     pushdowns,
                     query_settings,
                     dataset,
+                    udf_registry,
                 )?;
                 let right_context = context.extension_with(PathEntry::LessRight);
                 output_solution_mappings = self.lazy_expression(
@@ -206,6 +219,7 @@ impl Triplestore {
                     pushdowns,
                     query_settings,
                     dataset,
+                    udf_registry,
                 )?;
                 binary_expression(
                     output_solution_mappings,
@@ -226,6 +240,7 @@ impl Triplestore {
                     pushdowns,
                     query_settings,
                     dataset,
+                    udf_registry,
                 )?;
                 let right_context = context.extension_with(PathEntry::LessOrEqualRight);
                 output_solution_mappings = self.lazy_expression(
@@ -236,6 +251,7 @@ impl Triplestore {
                     pushdowns,
                     query_settings,
                     dataset,
+                    udf_registry,
                 )?;
                 binary_expression(
                     output_solution_mappings,
@@ -259,6 +275,7 @@ impl Triplestore {
                     pushdowns,
                     query_settings,
                     dataset,
+                    udf_registry,
                 )?;
                 for i in 0..right.len() {
                     let expr = right.get(i).unwrap();
@@ -271,6 +288,7 @@ impl Triplestore {
                         pushdowns,
                         query_settings,
                         dataset,
+                        udf_registry,
                     )?;
                 }
                 in_expression(
@@ -291,6 +309,7 @@ impl Triplestore {
                     pushdowns,
                     query_settings,
                     dataset,
+                    udf_registry,
                 )?;
                 let right_context = context.extension_with(PathEntry::AddRight);
                 output_solution_mappings = self.lazy_expression(
@@ -301,6 +320,7 @@ impl Triplestore {
                     pushdowns,
                     query_settings,
                     dataset,
+                    udf_registry,
                 )?;
                 binary_expression(
                     output_solution_mappings,
@@ -321,6 +341,7 @@ impl Triplestore {
                     pushdowns,
                     query_settings,
                     dataset,
+                    udf_registry,
                 )?;
                 let right_context = context.extension_with(PathEntry::SubtractRight);
                 output_solution_mappings = self.lazy_expression(
@@ -331,6 +352,7 @@ impl Triplestore {
                     pushdowns,
                     query_settings,
                     dataset,
+                    udf_registry,
                 )?;
                 binary_expression(
                     output_solution_mappings,
@@ -351,6 +373,7 @@ impl Triplestore {
                     pushdowns,
                     query_settings,
                     dataset,
+                    udf_registry,
                 )?;
                 let right_context = context.extension_with(PathEntry::MultiplyRight);
                 output_solution_mappings = self.lazy_expression(
@@ -361,6 +384,7 @@ impl Triplestore {
                     pushdowns,
                     query_settings,
                     dataset,
+                    udf_registry,
                 )?;
                 binary_expression(
                     output_solution_mappings,
@@ -381,6 +405,7 @@ impl Triplestore {
                     pushdowns,
                     query_settings,
                     dataset,
+                    udf_registry,
                 )?;
                 let right_context = context.extension_with(PathEntry::DivideRight);
                 output_solution_mappings = self.lazy_expression(
@@ -391,6 +416,7 @@ impl Triplestore {
                     pushdowns,
                     query_settings,
                     dataset,
+                    udf_registry,
                 )?;
 
                 binary_expression(
@@ -413,6 +439,7 @@ impl Triplestore {
                     pushdowns,
                     query_settings,
                     dataset,
+                    udf_registry,
                 )?;
                 unary_plus(output_solution_mappings, &plus_context, context)?
             }
@@ -426,6 +453,7 @@ impl Triplestore {
                     pushdowns,
                     query_settings,
                     dataset,
+                    udf_registry,
                 )?;
                 unary_minus(output_solution_mappings, &minus_context, context)?
             }
@@ -439,6 +467,7 @@ impl Triplestore {
                     pushdowns,
                     query_settings,
                     dataset,
+                    udf_registry,
                 )?;
                 not_expression(output_solution_mappings, &not_context, context)?
             }
@@ -470,6 +499,7 @@ impl Triplestore {
                     pushdowns.cloned().unwrap_or(Pushdowns::new()),
                     query_settings,
                     dataset,
+                    udf_registry,
                 )?;
                 exists(
                     output_solution_mappings,
@@ -490,6 +520,7 @@ impl Triplestore {
                     pushdowns,
                     query_settings,
                     dataset,
+                    udf_registry,
                 )?;
                 let middle_context = context.extension_with(PathEntry::IfMiddle);
                 output_solution_mappings = self.lazy_expression(
@@ -500,6 +531,7 @@ impl Triplestore {
                     pushdowns,
                     query_settings,
                     dataset,
+                    udf_registry,
                 )?;
                 let right_context = context.extension_with(PathEntry::IfRight);
                 output_solution_mappings = self.lazy_expression(
@@ -510,6 +542,7 @@ impl Triplestore {
                     pushdowns,
                     query_settings,
                     dataset,
+                    udf_registry,
                 )?;
                 if_expression(
                     output_solution_mappings,
@@ -535,6 +568,7 @@ impl Triplestore {
                         pushdowns,
                         query_settings,
                         dataset,
+                        udf_registry,
                     )?;
                 }
                 coalesce_contexts(
@@ -557,6 +591,7 @@ impl Triplestore {
                         pushdowns,
                         query_settings,
                         dataset,
+                        udf_registry,
                     )?;
                     args_contexts.insert(i, arg_context);
                 }
@@ -567,6 +602,7 @@ impl Triplestore {
                     args_contexts,
                     context,
                     self.global_cats.clone(),
+                    udf_registry,
                 )?
             }
         };

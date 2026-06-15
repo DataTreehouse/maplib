@@ -16,6 +16,7 @@ cimxml_export = {path = "../lib/cimxml_export", features = [ "pyo3" ]}
 datalog = {path = "../lib/datalog"}
 virtualized_query = {path="../lib/virtualized_query"}
 virtualization = {path="../lib/virtualization"}
+query_processing = {path="../lib/query_processing"}
 
 pyo3.workspace = true
 oxrdf.workspace = true

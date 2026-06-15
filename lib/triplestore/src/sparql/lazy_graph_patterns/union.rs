@@ -3,6 +3,7 @@ use crate::sparql::errors::SparqlError;
 use tracing::{instrument, trace};
 
 use crate::sparql::QuerySettings;
+use query_processing::expressions::functions::custom_function::UdfRegistry;
 use query_processing::graph_patterns::union;
 use query_processing::pushdowns::Pushdowns;
 use representation::dataset::QueryGraph;
@@ -23,6 +24,7 @@ impl Triplestore {
         mut pushdowns: Pushdowns,
         query_settings: &QuerySettings,
         dataset: &QueryGraph,
+        udf_registry: Option<&dyn UdfRegistry>,
     ) -> Result<SolutionMappings, SparqlError> {
         trace!("Processing union graph pattern");
         let left_context = context.extension_with(PathEntry::UnionLeftSide);
@@ -37,6 +39,7 @@ impl Triplestore {
             left_pushdowns,
             query_settings,
             dataset,
+            udf_registry,
         )?;
         pushdowns.add_graph_pattern_pushdowns(right);
         let right_solution_mappings = self.lazy_graph_pattern(
@@ -47,6 +50,7 @@ impl Triplestore {
             pushdowns,
             query_settings,
             dataset,
+            udf_registry,
         )?;
 
         let u = union(

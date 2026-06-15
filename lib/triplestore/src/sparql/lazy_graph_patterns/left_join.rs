@@ -5,6 +5,7 @@ use tracing::{instrument, trace};
 use crate::sparql::QuerySettings;
 use polars::prelude::{col, JoinType};
 use query_processing::expressions::contains_graph_pattern;
+use query_processing::expressions::functions::custom_function::UdfRegistry;
 use query_processing::graph_patterns::{filter, join};
 use query_processing::pushdowns::Pushdowns;
 use representation::dataset::QueryGraph;
@@ -27,6 +28,7 @@ impl Triplestore {
         mut pushdowns: Pushdowns,
         query_settings: &QuerySettings,
         dataset: &QueryGraph,
+        udf_registry: Option<&dyn UdfRegistry>,
     ) -> Result<SolutionMappings, SparqlError> {
         trace!("Processing left join graph pattern");
         let left_context = context.extension_with(PathEntry::LeftJoinLeftSide);
@@ -40,6 +42,7 @@ impl Triplestore {
             pushdowns.clone(),
             query_settings,
             dataset,
+            udf_registry,
         )?;
         pushdowns.add_graph_pattern_pushdowns(right);
 
@@ -62,6 +65,7 @@ impl Triplestore {
             pushdowns,
             query_settings,
             dataset,
+            udf_registry,
         )?;
 
         if let Some(expr) = expression {
@@ -73,6 +77,7 @@ impl Triplestore {
                 expression_pushdowns.as_ref(),
                 query_settings,
                 dataset,
+                udf_registry,
             )?;
             right_solution_mappings = filter(right_solution_mappings, &expression_context)?;
             //The following is a workaround:

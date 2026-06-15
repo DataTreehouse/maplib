@@ -1123,6 +1123,25 @@ class Model:
         :param resources: The templates associated with each resource
         """
 
+    def add_udf(self, name, func):
+        """
+        :param name: Name of the UDF
+        :param func: The function to call
+        """
+
+    def list_udfs(self) -> list[str]:
+        """
+        :return: The list of UDFs
+        """
+
+    def run_udf(self, name, df) -> Optional[DataFrame]:
+        """
+        :param name: Name of the UDF
+        :param df: The dataframe to pass to the UDF
+        :return: The result of the function
+        """
+
+
 class MaplibException(Exception): ...
 
 def explore(

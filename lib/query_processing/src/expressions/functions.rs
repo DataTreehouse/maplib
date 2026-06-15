@@ -4,7 +4,7 @@ mod concat_;
 mod create_regex_expr;
 mod create_regex_replace_expr;
 mod create_regex_string;
-mod custom_function;
+pub mod custom_function;
 mod datatype_;
 mod day_;
 mod encode_for_uri;
@@ -76,6 +76,7 @@ use crate::expressions::functions::str_len::str_len;
 use crate::expressions::functions::struuid::struuid;
 use crate::expressions::functions::year_::year_;
 use crate::expressions::{cast_lang_string_to_string, drop_inner_contexts};
+use custom_function::UdfRegistry;
 use oxrdf::vocab::xsd;
 use oxrdf::NamedNodeRef;
 use polars::datatypes::{DataType, Field};
@@ -98,6 +99,7 @@ pub fn func_expression(
     args_contexts: HashMap<usize, Context>,
     outer_context: &Context,
     global_cats: LockedCats,
+    udf_registry: Option<&dyn UdfRegistry>,
 ) -> Result<SolutionMappings, QueryProcessingError> {
     match func {
         Function::Year => {
@@ -226,6 +228,7 @@ pub fn func_expression(
                 &args_contexts,
                 outer_context,
                 global_cats,
+                udf_registry,
             )?;
         }
         Function::StrDt => {

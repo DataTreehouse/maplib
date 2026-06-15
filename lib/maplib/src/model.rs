@@ -32,6 +32,7 @@ use triplestore::{IndexingOptions, NewTriples, Triplestore};
 use chrontext::engine::{ChrontextSettings, Engine};
 use datalog::ast::DatalogRuleset;
 use representation::constants::OTTR_TRIPLE;
+use query_processing::expressions::functions::custom_function::UdfRegistry;
 use representation::dataset::NamedGraph;
 use representation::prefixes::get_default_prefixes;
 use tracing::instrument;
@@ -367,6 +368,7 @@ impl Model {
         include_transient: bool,
         max_rows: Option<usize>,
         debug_no_results: bool,
+        udf_registry: Option<&dyn UdfRegistry>,
     ) -> Result<QueryResult, MaplibError> {
         let query_settings = QuerySettings {
             include_transient,
@@ -397,6 +399,7 @@ impl Model {
                     graph,
                     Some(&self.prefixes),
                     debug_no_results,
+                    udf_registry,
                 )
                 .map_err(|x| x.into())
         }
@@ -414,6 +417,7 @@ impl Model {
         streaming: bool,
         max_rows: Option<usize>,
         debug_no_results: bool,
+        udf_registry: Option<&dyn UdfRegistry>,
     ) -> Result<InsertResult, MaplibError> {
         let query_settings = QuerySettings {
             include_transient: include_source_transient,
@@ -431,6 +435,7 @@ impl Model {
                 target_graph,
                 Some(&self.prefixes),
                 debug_no_results,
+                udf_registry,
             )
             .map_err(|x| x.into())
     }
@@ -444,6 +449,7 @@ impl Model {
         include_transient: bool,
         max_rows: Option<usize>,
         debug_no_results: bool,
+        udf_registry: Option<&dyn UdfRegistry>,
     ) -> Result<UpdateResult, MaplibError> {
         let query_settings = QuerySettings {
             include_transient,
@@ -459,6 +465,7 @@ impl Model {
                 graph,
                 Some(&self.prefixes),
                 debug_no_results,
+                udf_registry,
             )
             .map_err(|x| x.into())
     }

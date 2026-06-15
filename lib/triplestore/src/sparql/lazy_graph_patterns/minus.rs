@@ -3,6 +3,7 @@ use crate::sparql::errors::SparqlError;
 use tracing::{instrument, trace};
 
 use crate::sparql::QuerySettings;
+use query_processing::expressions::functions::custom_function::UdfRegistry;
 use query_processing::graph_patterns::minus;
 use query_processing::pushdowns::Pushdowns;
 use representation::dataset::QueryGraph;
@@ -23,6 +24,7 @@ impl Triplestore {
         pushdowns: Pushdowns,
         query_settings: &QuerySettings,
         dataset: &QueryGraph,
+        udf_registry: Option<&dyn UdfRegistry>,
     ) -> Result<SolutionMappings, SparqlError> {
         trace!("Processing minus graph pattern");
         let left_context = context.extension_with(PathEntry::MinusLeftSide);
@@ -35,6 +37,7 @@ impl Triplestore {
             pushdowns,
             query_settings,
             dataset,
+            udf_registry,
         )?;
 
         let right_solution_mappings = self.lazy_graph_pattern(
@@ -45,6 +48,7 @@ impl Triplestore {
             Pushdowns::new(),
             query_settings,
             dataset,
+            udf_registry,
         )?;
 
         Ok(minus(left_solution_mappings, right_solution_mappings)?)

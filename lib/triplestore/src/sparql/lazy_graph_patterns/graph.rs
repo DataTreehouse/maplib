@@ -3,6 +3,7 @@ use crate::sparql::errors::SparqlError;
 use tracing::{instrument, trace};
 
 use crate::sparql::QuerySettings;
+use query_processing::expressions::functions::custom_function::UdfRegistry;
 use query_processing::pushdowns::Pushdowns;
 use representation::dataset::{NamedGraph, QueryGraph};
 use representation::query_context::{Context, PathEntry};
@@ -23,6 +24,7 @@ impl Triplestore {
         parameters: Option<&HashMap<String, EagerSolutionMappings>>,
         pushdowns: Pushdowns,
         query_settings: &QuerySettings,
+        udf_registry: Option<&dyn UdfRegistry>,
     ) -> Result<SolutionMappings, SparqlError> {
         trace!("Processing group graph pattern");
         let inner_context = context.extension_with(PathEntry::GraphInner);
@@ -35,6 +37,7 @@ impl Triplestore {
                 pushdowns,
                 query_settings,
                 &QueryGraph::NamedGraph(NamedGraph::NamedGraph(nn.clone())),
+                udf_registry,
             )?,
             NamedNodePattern::Variable(..) => {
                 todo!()
