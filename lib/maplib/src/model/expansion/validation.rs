@@ -361,11 +361,10 @@ fn infer_validate_mapping_column_type_from_ptype(
                 };
                 Ok((MappingColumnType::Nested(Box::new(res)), new_expr))
             } else {
-                Err(MappingError::ColumnDataTypeMismatch(
+                Err(MappingError::IncompatibleColumnDataType(
                     column_name.to_string(),
                     datatype.clone(),
                     ptype.clone(),
-                    None,
                 ))
             }
         }

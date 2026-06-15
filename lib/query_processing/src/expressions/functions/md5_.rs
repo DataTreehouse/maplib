@@ -1,5 +1,5 @@
 use crate::errors::QueryProcessingError;
-use crate::expressions::functions::str_function;
+use crate::expressions::functions::str_function::str_function;
 use md5::{Digest, Md5};
 use oxrdf::vocab::xsd;
 use polars::prelude::{IntoColumn, StringChunked};

@@ -5,7 +5,7 @@ use crate::constants::{
 use crate::errors::QueryProcessingError;
 use crate::expressions::functions::struuid_v5::struuid_v5;
 use crate::expressions::functions::uuid_v5::uuid_v5;
-use crate::expressions::functions::xsd_cast_literal;
+use crate::expressions::functions::xsd_cast_literal::xsd_cast_literal;
 use oxrdf::vocab::xsd;
 use oxrdf::NamedNode;
 use polars::datatypes::{DataType, TimeUnit};
