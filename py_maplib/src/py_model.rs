@@ -5,7 +5,7 @@ use crate::mutexes::{
     map_default_mutex, map_json_mutex, map_mutex, map_triples_mutex, map_xml_mutex, query_mutex,
     read_mutex, read_template_mutex, reads_mutex, size_mutex, truncate_graph_mutex, update_mutex,
     validate_mutex, write_cim_xml_mutex, write_native_parquet_mutex, write_triples_mutex,
-    writes_mutex,
+    writes_mutex, map_df_mutex
 };
 use crate::shacl::{PyValidationReport, SHACL_RESULTS_QUERY};
 use crate::{
@@ -240,6 +240,19 @@ impl PyModel {
             )
         })
     }
+
+    #[pyo3(signature = (df, graph=None))]
+    #[instrument(skip_all)]
+    fn map_df(&self, py: Python<'_>, df: &Bound<'_, PyAny>, graph: Option<String>) -> PyResult<()> {
+        let (df, _) = data_to_mappings_types(df, py)?;
+        py.detach(move || -> PyResult<()> {
+            let mut inner = self.inner.lock().unwrap();
+            let graph = parse_optional_named_node(graph)?;
+            let named_graph = NamedGraph::from_maybe_named_node(graph.as_ref());
+            map_df_mutex(&mut inner, df, named_graph)
+        })
+    }
+
 
     /// Starts a graph explorer session.
     ///

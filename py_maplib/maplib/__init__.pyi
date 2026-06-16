@@ -677,6 +677,24 @@ class Model:
         :return: The generated template
         """
 
+
+    def map_df(
+            self,
+            df: DataFrame,
+            graph: str = None,
+    ):
+        """
+        Create a default template and map it based on a dataframe.
+        Usage:
+
+        >>> df = pl.read_csv("my_csv.csv")
+        >>> m.map_df(df)
+
+        :param df: DataFrame to map using Facade-X (using approximately the CSV-mapping)
+        :param graph: The IRI of the graph to add triples to.
+        :return: None
+        """
+
     def explore(
         self,
                 host: str = "localhost",
