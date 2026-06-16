@@ -8,7 +8,6 @@ import os
 # use default memory pool to prevent segmentation fault
 os.environ['ARROW_DEFAULT_MEMORY_POOL'] = 'system'
 import pyarrow as pa
-
 import logging
 
 logger = logging.getLogger(__name__)
@@ -69,7 +68,7 @@ else:
 if (pathlib.Path(__file__).parent.resolve() / "opc_ua").exists():
     from .opc_ua import map_opc_ua as _map_opc_ua
 else:
-
+    from typing import Union
     def _map_opc_ua(
             m:"Model",
             folder:Union[Path, str],
