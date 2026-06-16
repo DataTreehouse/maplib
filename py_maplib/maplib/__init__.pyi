@@ -695,6 +695,23 @@ class Model:
         :return: None
         """
 
+    def map_opc_ua(
+            self,
+            folder: Union[str, Path],
+            graph: str = None,
+    ):
+        """
+        Map a folder of OPC UA NodeSet2XMLs to RDF.
+        This folder MUST contain the Namespace 0 XML to work properly.
+
+        Usage:
+        >>> m.map_opc_ua("my_opc_ua_nodeset2_xmls", graph="urn:maplib:uagraphs")
+
+        :param folder: OPC UA NodeSet2 XMLs are found in this folder
+        :param graph: The IRI of the graph to add triples to.
+        :return: None
+        """
+
     def explore(
         self,
                 host: str = "localhost",

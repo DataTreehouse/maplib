@@ -295,6 +295,27 @@ impl PyModel {
         Ok(res.into())
     }
 
+    #[pyo3(signature = (*args, **kwargs), text_signature = "(/)")]
+    fn map_opc_ua(
+        self_: PyRef<'_, Self>,
+        py: Python<'_>,
+        args: &Bound<'_, pyo3::types::PyTuple>,
+        kwargs: Option<&Bound<'_, pyo3::types::PyDict>>,
+    ) -> PyResult<Py<PyAny>> {
+        let module = py.import("maplib")?;
+        let func = module.getattr("_map_opc_ua")?;
+
+        let mut old_args: Vec<_> = args.iter().collect();
+        let mut new_args = Vec::new();
+        new_args.push(self_.into_pyobject(py)?.into_any());
+        new_args.append(&mut old_args);
+
+        let new_args = pyo3::types::PyTuple::new(py, new_args)?;
+
+        let res = func.call(new_args, kwargs)?;
+        Ok(res.into())
+    }
+
     #[pyo3(signature = (virtualized_database, resources))]
     #[instrument(skip_all)]
     fn add_virtualization(
