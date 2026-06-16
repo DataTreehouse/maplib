@@ -1486,6 +1486,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "gen_ops"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "304de19db7028420975a296ab0fcbbc8e69438c4ed254a1e41e2a7f37d5f0e0a"
+
+[[package]]
 name = "generic-array"
 version = "0.14.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1953,6 +1959,7 @@ version = "0.1.0"
 dependencies = [
  "arrow",
  "nohash-hasher",
+ "range-set-blaze",
  "rayon",
  "uuid",
 ]
@@ -3804,6 +3811,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "range-set-blaze"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4dbaaf29990efce7efbdb301794fbacf9fcdbfb871e77f67c00b0ae3c08b665e"
+dependencies = [
+ "gen_ops",
+ "itertools",
+ "num-integer",
+ "num-traits",
+]
+
+[[package]]
 name = "raw-cpuid"
 version = "11.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3940,6 +3959,7 @@ dependencies = [
  "polars",
  "polars-core",
  "pyo3",
+ "range-set-blaze",
  "rayon",
  "rust_decimal",
  "spargebra",
@@ -4948,6 +4968,7 @@ dependencies = [
  "pyo3",
  "query_processing",
  "quick-xml 0.40.1",
+ "range-set-blaze",
  "rayon",
  "representation",
  "ryu",

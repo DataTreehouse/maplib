@@ -24,6 +24,7 @@ use polars::prelude::{
     as_struct, col, lit, AnyValue, DataFrame, Expr, IntoLazy, PlSmallStr, RankMethod, RankOptions,
 };
 use polars_core::prelude::{IntoColumn, Series, SortMultipleOptions};
+use range_set_blaze::RangeSetBlaze;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use rayon::iter::{IntoParallelRefIterator, ParallelDrainRange};
 use representation::cats::{
@@ -63,6 +64,45 @@ pub struct Triplestore {
 }
 
 impl Triplestore {
+    pub fn garbage_collect(&mut self) -> Result<u32, TriplestoreError> {
+        let mut garbage_collected = 0;
+        for (ct, ce) in &self.global_cats.read()?.cat_map {
+            let t = ct.as_base_rdf_node_type();
+            let mut rs = ce.maps.range_set();
+            let init_len = rs.len() as u32;
+            for g in self.graph_triples_map.values() {
+                for v in g.values() {
+                    for ((st, ot), triples) in v {
+                        if st == &t {
+                            let lfs = triples.get_lazy_frames(&None, &None)?;
+                            for (lf, _) in lfs {
+                                let df = lf.select([col(SUBJECT_COL_NAME)]).collect().unwrap();
+                                let s_col = df.column(SUBJECT_COL_NAME).unwrap();
+                                let s_rs = RangeSetBlaze::from_iter(
+                                    s_col.u32().unwrap().iter().map(|x| x.unwrap()),
+                                );
+                                rs = rs - s_rs;
+                            }
+                        }
+                        if ot == &t {
+                            let lfs = triples.get_lazy_frames(&None, &None)?;
+                            for (lf, _) in lfs {
+                                let df = lf.select([col(OBJECT_COL_NAME)]).collect().unwrap();
+                                let s_col = df.column(OBJECT_COL_NAME).unwrap();
+                                let s_rs = RangeSetBlaze::from_iter(
+                                    s_col.u32().unwrap().iter().map(|x| x.unwrap()),
+                                );
+                                rs = rs - s_rs;
+                            }
+                        }
+                    }
+                }
+            }
+            garbage_collected = garbage_collected + (init_len-(rs.len() as u32));
+        }
+        Ok(garbage_collected)
+    }
+
     pub fn graph_size(&self, named_graph: &NamedGraph) -> usize {
         let mut s = 0;
         if let Some(gr) = self.graph_triples_map.get(named_graph) {

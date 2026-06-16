@@ -3,6 +3,7 @@
 use arrow::array::{Array, RecordBatch, StringArray, UInt32Array};
 use arrow::datatypes::{Field, Schema};
 use nohash_hasher::NoHashHasher;
+use range_set_blaze::RangeSetBlaze;
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use std::borrow::Cow;
 use std::cmp::Ordering;
@@ -225,6 +226,13 @@ impl CatMapsInMemory {
             CatMapsInMemory::Compressed(PrefixCompressedCatMapsInMemory::new_empty())
         } else {
             CatMapsInMemory::Uncompressed(UncompressedCatMapsInMemory::new_empty())
+        }
+    }
+
+    pub fn range_set(&self) -> RangeSetBlaze<u32> {
+        match self {
+            CatMapsInMemory::Compressed(c) => c.range_set(),
+            CatMapsInMemory::Uncompressed(u) => u.range_set(),
         }
     }
 }
@@ -500,6 +508,10 @@ impl PrefixCompressedCatMapsInMemory {
         }
         ranked
     }
+
+    pub fn range_set(&self) -> RangeSetBlaze<u32> {
+        RangeSetBlaze::from_iter(self.rev_map.keys())
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -698,6 +710,10 @@ impl UncompressedCatMapsInMemory {
             }
         }
         ranked
+    }
+
+    pub fn range_set(&self) -> RangeSetBlaze<u32> {
+        RangeSetBlaze::from_iter(self.rev_map.keys())
     }
 }
 
