@@ -310,6 +310,15 @@ pub(crate) fn map_default_mutex(
     Ok(format!("{tmpl}"))
 }
 
+pub fn map_df_mutex(
+    inner: &mut MutexGuard<InnerModel>,
+    df: DataFrame,
+    graph: NamedGraph,
+) -> PyResult<()> {
+    inner.map_df(&df, &graph).map_err(PyMaplibError::from)?;
+    Ok(())
+}
+
 pub(crate) fn query_mutex(
     inner: &mut MutexGuard<InnerModel>,
     query: String,
