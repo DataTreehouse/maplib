@@ -2,10 +2,10 @@ use crate::error::PyMaplibError;
 use crate::mutexes::{
     add_prefixes_mutex, add_template_mutex, add_virtualization_mutex, create_index_mutex,
     detach_graph_mutex, get_predicate_iris_mutex, get_predicate_mutex, infer_mutex, insert_mutex,
-    map_default_mutex, map_json_mutex, map_mutex, map_triples_mutex, map_xml_mutex, query_mutex,
-    read_mutex, read_template_mutex, reads_mutex, size_mutex, truncate_graph_mutex, update_mutex,
-    validate_mutex, write_cim_xml_mutex, write_native_parquet_mutex, write_triples_mutex,
-    writes_mutex, map_df_mutex
+    map_default_mutex, map_df_mutex, map_json_mutex, map_mutex, map_triples_mutex, map_xml_mutex,
+    query_mutex, read_mutex, read_template_mutex, reads_mutex, size_mutex, truncate_graph_mutex,
+    update_mutex, validate_mutex, write_cim_xml_mutex, write_native_parquet_mutex,
+    write_triples_mutex, writes_mutex,
 };
 use crate::shacl::{PyValidationReport, SHACL_RESULTS_QUERY};
 use crate::{
@@ -252,7 +252,6 @@ impl PyModel {
             map_df_mutex(&mut inner, df, named_graph)
         })
     }
-
 
     /// Starts a graph explorer session.
     ///
