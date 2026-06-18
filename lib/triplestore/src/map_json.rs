@@ -12,6 +12,7 @@ use oxrdf::vocab::{rdf, xsd};
 use oxrdf::NamedNode;
 use polars::prelude::PlSmallStr;
 use polars_core::prelude::{AnyValue, Column, DataFrame};
+use representation::constants::{FX_CHILD, FX_NULL, FX_ROOT, XYZ_PREFIX_IRI};
 use representation::dataset::NamedGraph;
 use representation::{BaseRDFNodeType, OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use serde_json::Value;
@@ -22,13 +23,6 @@ const INTEGER: u8 = 1;
 const STRING: u8 = 2;
 const FLOAT: u8 = 3;
 const IRI: u8 = 5;
-
-const JSON_ROOT: &str = "http://sparql.xyz/facade-x/ns/root";
-const JSON_CHILD: &str = "http://sparql.xyz/facade-x/ns/child";
-
-const JSON_NULL: &str = "http://sparql.xyz/facade-x/ns/null";
-
-const DEFAULT_JSON_KEYS_PREFIX: &str = "http://sparql.xyz/facade-x/data/";
 
 const ROOT_ELEMENT_PROPERTY: &str = "urn:maplib:rootElement";
 
@@ -140,14 +134,14 @@ impl Triplestore {
         named_graph: &NamedGraph,
         transient: bool,
     ) -> Result<(), TriplestoreError> {
-        let prefix = NamedNode::new_unchecked(DEFAULT_JSON_KEYS_PREFIX);
+        let prefix = NamedNode::new_unchecked(XYZ_PREFIX_IRI);
         let v: Value = simd_json::serde::from_slice(u8s).unwrap();
 
         let mut pred_map = HashMap::new();
         let rdf_type = rdf::TYPE.into_owned();
         pred_map.insert(rdf_type.clone(), TripleTableBuilder::new());
 
-        let doc_subject = new_iri_typed_subject(JSON_ROOT, &rdf_type, &mut pred_map);
+        let doc_subject = new_iri_typed_subject(FX_ROOT, &rdf_type, &mut pred_map);
 
         let root_elem_property = NamedNode::new_unchecked(ROOT_ELEMENT_PROPERTY);
         pred_map.insert(root_elem_property.clone(), TripleTableBuilder::new());
@@ -223,7 +217,7 @@ fn process_value(
         }
         Value::Null => {
             let builder = map.get_mut(property.unwrap_or(root_elem_property)).unwrap();
-            builder.push_iri_iri(subject, JSON_NULL);
+            builder.push_iri_iri(subject, FX_NULL);
         }
         Value::Object(obj) => {
             let new_subject = if let Some(property) = property {
@@ -257,7 +251,7 @@ fn process_value(
             } else {
                 subject.to_string()
             };
-            let ch = NamedNode::new_unchecked(JSON_CHILD);
+            let ch = NamedNode::new_unchecked(FX_CHILD);
             for v in arr.into_iter() {
                 add_new_property(&ch, map);
                 process_value(

@@ -5,16 +5,13 @@ use oxrdf::NamedNode;
 use polars::prelude::{col, lit, DataFrame, IntoLazy};
 use polars_core::prelude::{Column, IntoColumn, NamedFrom, Series};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
-use representation::constants::MAPLIB_PREFIX_IRI;
+use representation::constants::{
+    FX_CHILD, FX_CHILD_NUMBER, FX_ROOT, MAPLIB_PREFIX_IRI, XYZ_PREFIX_IRI,
+};
 use representation::dataset::NamedGraph;
 use representation::polars_to_rdf::polars_type_to_literal_type;
 use representation::{BaseRDFNodeType, OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use std::collections::HashMap;
-
-const FACADE_X_ROOT: &str = "http://sparql.xyz/facade-x/ns/root";
-const FACADE_X_CHILD: &str = "http://sparql.xyz/facade-x/ns/child";
-const FACADE_X_CHILD_NUMBER: &str = "http://sparql.xyz/facade-x/ns/childNumber";
-const DEFAULT_FACADE_X_DATA_PREFIX: &str = "http://sparql.xyz/facade-x/data/";
 
 impl Triplestore {
     pub fn map_df(
@@ -63,7 +60,7 @@ impl Triplestore {
                     object_type: base_obj_type.clone(),
                     predicate: Some(NamedNode::new_unchecked(format!(
                         "{}{}",
-                        DEFAULT_FACADE_X_DATA_PREFIX,
+                        XYZ_PREFIX_IRI,
                         uri_encode::encode_uri(c)
                     ))),
                     graph: named_graph.clone(),
@@ -86,7 +83,7 @@ impl Triplestore {
                 .unwrap(),
             subject_type: BaseRDFNodeType::IRI,
             object_type: BaseRDFNodeType::IRI,
-            predicate: Some(NamedNode::new_unchecked(FACADE_X_CHILD.to_string())),
+            predicate: Some(NamedNode::new_unchecked(FX_CHILD.to_string())),
             graph: named_graph.clone(),
             subject_cat_state: BaseRDFNodeType::IRI.default_input_cat_state(),
             object_cat_state: BaseRDFNodeType::IRI.default_input_cat_state(),
@@ -103,7 +100,7 @@ impl Triplestore {
                 .unwrap(),
             subject_type: BaseRDFNodeType::IRI,
             object_type: num_dt.clone(),
-            predicate: Some(NamedNode::new_unchecked(FACADE_X_CHILD_NUMBER.to_string())),
+            predicate: Some(NamedNode::new_unchecked(FX_CHILD_NUMBER.to_string())),
             graph: named_graph.clone(),
             subject_cat_state: BaseRDFNodeType::IRI.default_input_cat_state(),
             object_cat_state: num_dt.default_input_cat_state(),
@@ -112,7 +109,7 @@ impl Triplestore {
 
         let mut root_cols = Vec::new();
         root_cols.push(Column::new(SUBJECT_COL_NAME.into(), vec![root_node_uuri]));
-        root_cols.push(Column::new(OBJECT_COL_NAME.into(), vec![FACADE_X_ROOT]));
+        root_cols.push(Column::new(OBJECT_COL_NAME.into(), vec![FX_ROOT]));
         let root = TriplesToAdd {
             df: DataFrame::new(1, root_cols).unwrap(),
             subject_type: BaseRDFNodeType::IRI,

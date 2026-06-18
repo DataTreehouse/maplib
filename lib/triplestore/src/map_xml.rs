@@ -7,27 +7,16 @@ use polars_core::prelude::IntoColumn;
 use quick_xml::escape::unescape;
 use quick_xml::events::Event;
 use quick_xml::Reader;
+use representation::constants::{
+    FX_CHILD, FX_CHILD_NUMBER, FX_PREFIX_NAME, FX_PREFIX_SEP, FX_ROOT, FX_XMLNS, FX_XMLNS_SEP,
+    FX_XYZ_PREFIX_IRI, XYZ_PREFIX_IRI,
+};
 use representation::dataset::NamedGraph;
 use representation::series_builder::{ensure_pair, PredMap};
 use representation::{BaseRDFNodeType, OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use std::collections::HashMap;
 use std::io::Cursor;
 use std::sync::Arc;
-
-const XML_ROOT: &str = "http://sparql.xyz/facade-x/ns/root";
-const XML_CHILD: &str = "http://sparql.xyz/facade-x/ns/child";
-const XML_XMLNS: &str = "http://sparql.xyz/facade-x/ns/xmlns";
-const XML_XMLNS_SEP: &str = "http://sparql.xyz/facade-x/ns/xmlnsSeparator";
-
-const XML_PREFIX: &str = "http://sparql.xyz/facade-x/ns/prefix";
-const XML_PREFIX_NAME: &str = "http://sparql.xyz/facade-x/ns/prefixName";
-const XML_PREFIX_SEP: &str = "http://sparql.xyz/facade-x/ns/prefixSeparator";
-
-const XML_PREFIX_IRI: &str = "http://sparql.xyz/facade-x/ns/prefixIRI";
-
-const XML_CHILD_NUMBER: &str = "http://sparql.xyz/facade-x/ns/childNumber";
-
-const DEFAULT_XML_DATA_PREFIX: &str = "http://sparql.xyz/facade-x/data/";
 
 struct Frame {
     subject: String,
@@ -51,7 +40,7 @@ impl Triplestore {
         let string_type = Arc::new(BaseRDFNodeType::Literal(xsd::STRING.into_owned()));
         datatypes_map.insert(xsd::STRING.as_str().to_string(), string_type.clone());
         let mut prefix_map: HashMap<String, NamedNode> = HashMap::new();
-        let mut base_prefix = NamedNode::new_unchecked(DEFAULT_XML_DATA_PREFIX);
+        let mut base_prefix = NamedNode::new_unchecked(XYZ_PREFIX_IRI);
         let mut stack: Vec<Frame> = Vec::new();
         let mut buf = Vec::new();
         loop {
@@ -157,10 +146,10 @@ fn open_element(
         let parent_subject = parent.subject.clone();
         let n = parent.next_child;
         parent.next_child += 1;
-        push_iri_object(pred_map, XML_CHILD, &parent_subject, &subject);
-        push_iri_u32(pred_map, XML_CHILD_NUMBER, &subject, n as u32);
+        push_iri_object(pred_map, FX_CHILD, &parent_subject, &subject);
+        push_iri_u32(pred_map, FX_CHILD_NUMBER, &subject, n as u32);
     } else {
-        push_iri_object(pred_map, rdf::TYPE.as_str(), &subject, XML_ROOT);
+        push_iri_object(pred_map, rdf::TYPE.as_str(), &subject, FX_ROOT);
     }
     let mut new_base_prefix = None;
     let mut introduced_prefixed_namespaces = Vec::new();
@@ -184,10 +173,10 @@ fn open_element(
                 TriplestoreError::XMLError(format!("Error parsing {}: {}", value, e.to_string()))
             })?;
             let use_sep = use_sep(nn.as_str());
-            push_iri_object(pred_map, XML_XMLNS, &subject, nn.as_str());
+            push_iri_object(pred_map, FX_XMLNS, &subject, nn.as_str());
             push_typed_text(
                 pred_map,
-                XML_XMLNS_SEP,
+                FX_XMLNS_SEP,
                 &subject,
                 use_sep,
                 &BaseRDFNodeType::Literal(xsd::STRING.into_owned()),
@@ -201,11 +190,11 @@ fn open_element(
             })?;
 
             let prefix_subject = new_iri_subject();
-            push_iri_object(pred_map, XML_PREFIX, &subject, &prefix_subject);
-            push_iri_object(pred_map, XML_PREFIX_IRI, &prefix_subject, nn.as_str());
+            push_iri_object(pred_map, XYZ_PREFIX_IRI, &subject, &prefix_subject);
+            push_iri_object(pred_map, FX_XYZ_PREFIX_IRI, &prefix_subject, nn.as_str());
             let use_sep = use_sep(nn.as_str());
-            push_typed_text(pred_map, XML_PREFIX_SEP, &prefix_subject, use_sep, &string)?;
-            push_typed_text(pred_map, XML_PREFIX_NAME, &prefix_subject, pre, &string)?;
+            push_typed_text(pred_map, FX_PREFIX_SEP, &prefix_subject, use_sep, &string)?;
+            push_typed_text(pred_map, FX_PREFIX_NAME, &prefix_subject, pre, &string)?;
             let previous = prefix_map.insert(pre.to_string(), nn);
             introduced_prefixed_namespaces.push((pre.to_string(), previous));
         } else if key == "xml:lang" {
@@ -254,7 +243,7 @@ fn push_text_child(
         return Ok(());
     };
     let subject = frame.subject.clone();
-    push_typed_text(pred_map, XML_CHILD, &subject, text, string_type)?;
+    push_typed_text(pred_map, FX_CHILD, &subject, text, string_type)?;
     Ok(())
 }
 
