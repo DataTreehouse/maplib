@@ -69,10 +69,9 @@ if (pathlib.Path(__file__).parent.resolve() / "opc_ua").exists():
     from .opc_ua import map_opc_ua as _map_opc_ua
 else:
     from typing import Union
-    import pathlib as Path
     def _map_opc_ua(
             m:"Model",
-            folder:Union[Path, str],
+            folder:Union[pathlib.Path, str],
             graph:str
     ):
         print("Contact Data Treehouse to try!")
