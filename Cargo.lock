@@ -1170,6 +1170,7 @@ dependencies = [
  "arrow",
  "in_memory",
  "nohash-hasher",
+ "range-set-blaze",
 ]
 
 [[package]]

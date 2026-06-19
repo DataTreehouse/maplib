@@ -70,6 +70,17 @@ impl CatMaps {
         }
     }
 
+    pub fn garbage_collect_cats(&mut self, range_set:RangeSetBlaze<u32>){
+        match self {
+            CatMaps::InMemory(m) => {
+                m.garbage_collect_cats(range_set);
+            }
+            CatMaps::OnDisk(d) => {
+                d.garbage_collect_cats(range_set);
+            }
+    }
+}
+
     //
     pub fn encode_all_new_non_duplicated_strings(
         &mut self,

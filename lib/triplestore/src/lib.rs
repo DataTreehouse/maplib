@@ -25,7 +25,7 @@ use polars::prelude::{
 };
 use polars_core::prelude::{IntoColumn, Series, SortMultipleOptions};
 use range_set_blaze::RangeSetBlaze;
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use rayon::iter::{IntoParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
 use rayon::iter::{IntoParallelRefIterator, ParallelDrainRange};
 use representation::cats::{
     cat_encode_triples, CatTriples, CatType, Cats, EncodedTriples, LockedCats,
@@ -44,7 +44,7 @@ use uuid::Uuid;
 
 use representation::cats::maps::CatMaps;
 use representation::dataset::NamedGraph;
-use tracing::{instrument, trace};
+use tracing::{debug, instrument, trace};
 
 #[derive(Clone)]
 pub struct Triplestore {
@@ -61,46 +61,66 @@ pub struct Triplestore {
     indexing: HashMap<NamedGraph, IndexingOptions>,
     fts_index: HashMap<NamedGraph, FtsIndex>,
     pub global_cats: LockedCats,
+    n_triples_deleted: usize,
 }
 
+const GC_LIMIT: &usize = &1_000_000;
+
 impl Triplestore {
-    pub fn garbage_collect(&mut self) -> Result<u32, TriplestoreError> {
-        let mut garbage_collected = 0;
-        for (ct, ce) in &self.global_cats.read()?.cat_map {
-            let t = ct.as_base_rdf_node_type();
-            let mut rs = ce.maps.range_set();
-            let init_len = rs.len() as u32;
-            for g in self.graph_triples_map.values() {
-                for v in g.values() {
-                    for ((st, ot), triples) in v {
-                        if st == &t {
-                            let lfs = triples.get_lazy_frames(&None, &None)?;
-                            for (lf, _) in lfs {
-                                let df = lf.select([col(SUBJECT_COL_NAME)]).collect().unwrap();
-                                let s_col = df.column(SUBJECT_COL_NAME).unwrap();
-                                let s_rs = RangeSetBlaze::from_iter(
-                                    s_col.u32().unwrap().iter().map(|x| x.unwrap()),
-                                );
-                                rs = rs - s_rs;
-                            }
-                        }
-                        if ot == &t {
-                            let lfs = triples.get_lazy_frames(&None, &None)?;
-                            for (lf, _) in lfs {
-                                let df = lf.select([col(OBJECT_COL_NAME)]).collect().unwrap();
-                                let s_col = df.column(OBJECT_COL_NAME).unwrap();
-                                let s_rs = RangeSetBlaze::from_iter(
-                                    s_col.u32().unwrap().iter().map(|x| x.unwrap()),
-                                );
-                                rs = rs - s_rs;
+    pub fn maybe_garbage_collect(&mut self) -> Result<u32, TriplestoreError> {
+        if &self.n_triples_deleted >= GC_LIMIT {
+            let garbage_collected: Result<Vec<_>, TriplestoreError> = self
+                .global_cats
+                .write()?
+                .cat_map
+                .par_iter_mut()
+                .map(|(ct, ce)| {
+                    let t = ct.as_base_rdf_node_type();
+                    let mut rs = ce.maps.range_set();
+                    let init_len = rs.len() as u32;
+                    for g in self.graph_triples_map.values() {
+                        for v in g.values() {
+                            for ((st, ot), triples) in v {
+                                if st == &t {
+                                    let lfs = triples.get_lazy_frames(&None, &None)?;
+                                    for (lf, _) in lfs {
+                                        let df = lf.select([col(SUBJECT_COL_NAME)]).collect().unwrap();
+                                        let s_col = df.column(SUBJECT_COL_NAME).unwrap();
+                                        let s_rs = RangeSetBlaze::from_iter(
+                                            s_col.u32().unwrap().iter().map(|x| x.unwrap()),
+                                        );
+                                        rs = rs - s_rs;
+                                    }
+                                }
+                                if ot == &t {
+                                    let lfs = triples.get_lazy_frames(&None, &None)?;
+                                    for (lf, _) in lfs {
+                                        let df = lf.select([col(OBJECT_COL_NAME)]).collect().unwrap();
+                                        let s_col = df.column(OBJECT_COL_NAME).unwrap();
+                                        let s_rs = RangeSetBlaze::from_iter(
+                                            s_col.u32().unwrap().iter().map(|x| x.unwrap()),
+                                        );
+                                        rs = rs - s_rs;
+                                    }
+                                }
                             }
                         }
                     }
-                }
-            }
-            garbage_collected = garbage_collected + (init_len-(rs.len() as u32));
+                    let n_collected = init_len - (rs.len() as u32);
+                    if !rs.is_empty() {
+                        ce.maps.garbage_collect_cats(rs)
+                    }
+                    Ok(n_collected)
+                })
+                .collect();
+            let garbage_collected = garbage_collected?;
+            self.n_triples_deleted = 0;
+            let gced = garbage_collected.iter().sum();
+            debug!("Garbage collected {} cats", gced);
+            Ok(gced)
+        } else {
+            Ok(0)
         }
-        Ok(garbage_collected)
     }
 
     pub fn graph_size(&self, named_graph: &NamedGraph) -> usize {
@@ -277,6 +297,7 @@ impl Triplestore {
                 indexing: HashMap::from_iter([(new_graph_name.clone(), new_indexing)]),
                 fts_index: new_fts_index_map,
                 global_cats: LockedCats::new(cats_image),
+                n_triples_deleted: 0,
             })
         } else {
             Err(TriplestoreError::GraphDoesNotExist(graph.to_string()))
@@ -444,6 +465,7 @@ impl Triplestore {
             indexing: HashMap::from([(NamedGraph::DefaultGraph, indexing)]),
             fts_index: fts_index_map,
             global_cats: locked_cats,
+            n_triples_deleted: 0,
         })
     }
 

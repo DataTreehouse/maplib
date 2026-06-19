@@ -41,6 +41,10 @@ impl Triplestore {
         graph: &NamedGraph,
     ) -> Result<(), TriplestoreError> {
         let add_triples_now = Instant::now();
+        //TODO: more precise estimate..
+        for t in &ts {
+            self.n_triples_deleted += t.encoded_triples.df.height();
+        }
         self.delete_global_cat_triples(ts, graph)?;
         trace!(
             "Deleting triples df took {} seconds",

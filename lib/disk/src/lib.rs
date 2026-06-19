@@ -5,9 +5,16 @@ use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::hash::BuildHasherDefault;
 use std::path::Path;
+use range_set_blaze::RangeSetBlaze;
 
 #[derive(Clone, Debug)]
 pub struct CatMapsOnDisk {}
+
+impl CatMapsOnDisk {
+    pub fn garbage_collect_cats(&self, _: RangeSetBlaze<u32>) {
+        unimplemented!("Contact Data Treehouse to try!")
+    }
+}
 
 impl CatMapsOnDisk {
     pub fn add_encs_to_cache(&mut self, _us: &HashSet<u32>, _is_iri: bool) {
