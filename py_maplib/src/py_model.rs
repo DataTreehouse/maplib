@@ -446,7 +446,7 @@ impl PyModel {
     #[pyo3(signature = (
         shape_graph=None,
         data_graph=None,
-        report_graph=None,
+        report_graph="".to_string(),
         inferences_graph=None,
         include_details=None,
         include_conforms=None,

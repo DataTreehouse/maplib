@@ -189,25 +189,6 @@ unsafe extern "C" fn release(iter: *mut ArrowArrayStream) {
     // private drops automatically
 }
 
-fn export_iterator(
-    iter: Box<dyn Iterator<Item = Result<Box<dyn Array>, RepresentationError>>>,
-    field: Field,
-) -> ArrowArrayStream {
-    let private_data = Box::new(PrivateData {
-        iter,
-        field,
-        error: None,
-    });
-
-    ArrowArrayStream {
-        get_schema: Some(get_schema),
-        get_next: Some(get_next),
-        get_last_error: Some(get_last_error),
-        release: Some(release),
-        private_data: Box::into_raw(private_data) as *mut ::std::os::raw::c_void,
-    }
-}
-
 struct PrivateData {
     iter: Box<dyn Iterator<Item = Result<Box<dyn Array>, RepresentationError>>>,
     field: Field,

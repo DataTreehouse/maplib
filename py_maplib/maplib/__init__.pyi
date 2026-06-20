@@ -420,8 +420,6 @@ class XSD:
         Create the xsd namespace helper.
         """
 
-# END COMMON WITH CHRONTEXT
-
 class IndexingOptions:
     """
     Options for indexing
@@ -854,11 +852,10 @@ class Model:
         self,
         shape_graph: str = None,
         data_graph: str = None,
-        report_graph: str = None,
+        report_graph: Union[str, None] = "",
         inferences_graph: str = None,
         include_details: bool = False,
         include_conforms: bool = False,
-        include_shape_graph: bool = True,
         streaming: bool = False,
         max_shape_constraint_results: int = None,
         only_shapes: List[str] = None,
@@ -875,7 +872,7 @@ class Model:
 
         :param shape_graph: The IRI of the Shape Graph (defaults to the default graph).
         :param data_graph: The IRI of the Data Graph (defaults to the default graph).
-        :param report_graph: If this IRI is supplied, the validation report (if any) is found in this named graph.
+        :param report_graph: When this IRI (or None for default graph) is supplied, the validation report (if any) is found in this named graph.
         :param inferences_graph: If this IRI is supplied, any inference results from sh:rule can be found in this named graph.
         :param include_details: Include details of SHACL evaluation alongside the report. Currently uses a lot of memory.
         :param include_conforms: Include those results that conformed. Also applies to details.
