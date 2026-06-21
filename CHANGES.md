@@ -1,5 +1,14 @@
 # Change log
 
+## v0.20.20
+### Bug fixes
+- Avoid panic when using pyarrow >= 24.0.0
+- rep = m.validate() always produces rep.results() even when report_graph is specified.
+
+### Features
+- Facade X like mapping of dataframes to graph in m.map_df()
+- Target counts for shapes are now part of the SHACL report graph
+
 ## v0.20.19
 ### Bug fixes
 - Workaround for Polars issue that could sometimes produce errors in filter not exists
