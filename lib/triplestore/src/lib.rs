@@ -69,6 +69,29 @@ const GC_LIMIT: &usize = &1_000_000;
 impl Triplestore {
     pub fn maybe_garbage_collect(&mut self) -> Result<u32, TriplestoreError> {
         if &self.n_triples_deleted >= GC_LIMIT {
+            let mut predicate_and_graph_iris = Vec::new();
+            for (g, m) in self
+                .graph_triples_map
+                .iter()
+                .chain(self.graph_transient_triples_map.iter())
+            {
+                if let NamedGraph::NamedGraph(nn) = &g {
+                    predicate_and_graph_iris.push(nn);
+                }
+                for p in m.keys() {
+                    predicate_and_graph_iris.push(p);
+                }
+            }
+
+            let pred_graph_series =
+                Series::from_iter(predicate_and_graph_iris.iter().map(|x| x.as_str()));
+
+            let (pred_graph_u32_series, locals) = self
+                .global_cats
+                .read()?
+                .encode_series(&pred_graph_series, &BaseRDFNodeType::IRI);
+            assert!(locals.is_none());
+
             let garbage_collected: Result<Vec<_>, TriplestoreError> = self
                 .global_cats
                 .write()?
@@ -77,14 +100,29 @@ impl Triplestore {
                 .map(|(ct, ce)| {
                     let t = ct.as_base_rdf_node_type();
                     let mut rs = ce.maps.range_set();
-                    let init_len = rs.len() as u32;
-                    for g in self.graph_triples_map.values() {
+                    if ct.as_base_rdf_node_type().is_iri() {
+                        println!("Series {}", pred_graph_series);
+                        let pred_graph_rs = RangeSetBlaze::from_iter(
+                            pred_graph_u32_series
+                                .u32()
+                                .unwrap()
+                                .iter()
+                                .map(|x| x.unwrap()),
+                        );
+                        rs = rs - pred_graph_rs;
+                    }
+                    for g in self
+                        .graph_triples_map
+                        .values()
+                        .chain(self.graph_transient_triples_map.values())
+                    {
                         for v in g.values() {
                             for ((st, ot), triples) in v {
                                 if st == &t {
                                     let lfs = triples.get_lazy_frames(&None, &None)?;
                                     for (lf, _) in lfs {
-                                        let df = lf.select([col(SUBJECT_COL_NAME)]).collect().unwrap();
+                                        let df =
+                                            lf.select([col(SUBJECT_COL_NAME)]).collect().unwrap();
                                         let s_col = df.column(SUBJECT_COL_NAME).unwrap();
                                         let s_rs = RangeSetBlaze::from_iter(
                                             s_col.u32().unwrap().iter().map(|x| x.unwrap()),
@@ -95,7 +133,8 @@ impl Triplestore {
                                 if ot == &t {
                                     let lfs = triples.get_lazy_frames(&None, &None)?;
                                     for (lf, _) in lfs {
-                                        let df = lf.select([col(OBJECT_COL_NAME)]).collect().unwrap();
+                                        let df =
+                                            lf.select([col(OBJECT_COL_NAME)]).collect().unwrap();
                                         let s_col = df.column(OBJECT_COL_NAME).unwrap();
                                         let s_rs = RangeSetBlaze::from_iter(
                                             s_col.u32().unwrap().iter().map(|x| x.unwrap()),
@@ -106,7 +145,7 @@ impl Triplestore {
                             }
                         }
                     }
-                    let n_collected = init_len - (rs.len() as u32);
+                    let n_collected = rs.len() as u32;
                     if !rs.is_empty() {
                         ce.maps.garbage_collect_cats(rs)
                     }

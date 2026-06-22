@@ -6,7 +6,7 @@ impl Triplestore {
         let mut mutcat = self.global_cats.write().unwrap();
         let cat_triples = {
             let cat_triples = mutcat.globalize(cat_triples);
-            mutcat.encode_predicates(&cat_triples);
+            mutcat.encode_predicates_and_named_graphs(&cat_triples);
             cat_triples
         };
         cat_triples

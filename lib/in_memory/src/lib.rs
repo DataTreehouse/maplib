@@ -741,7 +741,7 @@ impl UncompressedCatMapsInMemory {
         RangeSetBlaze::from_iter(self.rev_map.keys())
     }
 
-    pub fn garbage_collect_cats(&mut self, range_set:RangeSetBlaze<u32>) {
+    pub fn garbage_collect_cats(&mut self, range_set: RangeSetBlaze<u32>) {
         // Får inn et range set med U32-er. Disse skal fjernes fra catmapet, og så brukes til å fjerne strenger fra revmapet
         let mut to_delete = Vec::new();
         for r in range_set {
