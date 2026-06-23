@@ -2,6 +2,7 @@ use crate::cats::CatReEnc;
 use crate::BaseRDFNodeType;
 use disk::CatMapsOnDisk;
 use in_memory::CatMapsInMemory;
+use range_set_blaze::RangeSetBlaze;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
@@ -66,6 +67,17 @@ impl CatMaps {
         match self {
             CatMaps::InMemory(m) => m.maybe_encode_strs(s),
             CatMaps::OnDisk(d) => d.maybe_encode_strs(s),
+        }
+    }
+
+    pub fn garbage_collect_cats(&mut self, range_set: RangeSetBlaze<u32>) {
+        match self {
+            CatMaps::InMemory(m) => {
+                m.garbage_collect_cats(range_set);
+            }
+            CatMaps::OnDisk(d) => {
+                d.garbage_collect_cats(range_set);
+            }
         }
     }
 
@@ -148,6 +160,13 @@ impl CatMaps {
         match self {
             CatMaps::InMemory(m) => m.rank_map(us),
             CatMaps::OnDisk(d) => d.rank_map(us),
+        }
+    }
+
+    pub fn range_set(&self) -> RangeSetBlaze<u32> {
+        match self {
+            CatMaps::InMemory(in_memory) => in_memory.range_set(),
+            CatMaps::OnDisk(on_disk) => on_disk.range_set(),
         }
     }
 }

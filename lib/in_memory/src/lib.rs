@@ -3,6 +3,7 @@
 use arrow::array::{Array, RecordBatch, StringArray, UInt32Array};
 use arrow::datatypes::{Field, Schema};
 use nohash_hasher::NoHashHasher;
+use range_set_blaze::RangeSetBlaze;
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use std::borrow::Cow;
 use std::cmp::Ordering;
@@ -80,6 +81,19 @@ impl PrefixCompressedString {
 pub enum CatMapsInMemory {
     Compressed(PrefixCompressedCatMapsInMemory),
     Uncompressed(UncompressedCatMapsInMemory),
+}
+
+impl CatMapsInMemory {
+    pub fn garbage_collect_cats(&mut self, p0: RangeSetBlaze<u32>) {
+        match self {
+            CatMapsInMemory::Compressed(c) => {
+                c.garbage_collect_cats(p0);
+            }
+            CatMapsInMemory::Uncompressed(u) => {
+                u.garbage_collect_cats(p0);
+            }
+        }
+    }
 }
 
 impl CatMapsInMemory {
@@ -227,6 +241,13 @@ impl CatMapsInMemory {
             CatMapsInMemory::Uncompressed(UncompressedCatMapsInMemory::new_empty())
         }
     }
+
+    pub fn range_set(&self) -> RangeSetBlaze<u32> {
+        match self {
+            CatMapsInMemory::Compressed(c) => c.range_set(),
+            CatMapsInMemory::Uncompressed(u) => u.range_set(),
+        }
+    }
 }
 
 impl CatMapsInMemory {
@@ -251,6 +272,18 @@ pub struct PrefixCompressedCatMapsInMemory {
     map: BTreeMap<PrefixCompressedString, u32>,
     rev_map: HashMap<u32, PrefixCompressedString, BuildHasherDefault<NoHashHasher<u32>>>,
     prefix_map: HashMap<String, Arc<String>>,
+}
+
+impl PrefixCompressedCatMapsInMemory {
+    pub(crate) fn garbage_collect_cats(&mut self, p0: RangeSetBlaze<u32>) {
+        let mut to_delete = Vec::new();
+        for r in p0 {
+            to_delete.push(self.rev_map.remove(&r).unwrap());
+        }
+        for r in to_delete {
+            self.map.remove(&r).unwrap();
+        }
+    }
 }
 
 impl PrefixCompressedCatMapsInMemory {
@@ -500,6 +533,10 @@ impl PrefixCompressedCatMapsInMemory {
         }
         ranked
     }
+
+    pub fn range_set(&self) -> RangeSetBlaze<u32> {
+        RangeSetBlaze::from_iter(self.rev_map.keys())
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -698,6 +735,21 @@ impl UncompressedCatMapsInMemory {
             }
         }
         ranked
+    }
+
+    pub fn range_set(&self) -> RangeSetBlaze<u32> {
+        RangeSetBlaze::from_iter(self.rev_map.keys())
+    }
+
+    pub fn garbage_collect_cats(&mut self, range_set: RangeSetBlaze<u32>) {
+        // Får inn et range set med U32-er. Disse skal fjernes fra catmapet, og så brukes til å fjerne strenger fra revmapet
+        let mut to_delete = Vec::new();
+        for r in range_set {
+            to_delete.push(self.rev_map.remove(&r).unwrap());
+        }
+        for t in to_delete {
+            self.map.remove(&t);
+        }
     }
 }
 

@@ -24,14 +24,17 @@ impl Cats {
         global_cat_triples
     }
 
-    pub fn encode_predicates(&mut self, cat_triples: &Vec<CatTriples>) {
+    pub fn encode_predicates_and_named_graphs(&mut self, cat_triples: &Vec<CatTriples>) {
         if cat_triples.is_empty() {
             return;
         }
-        let mut predicates = HashSet::new();
+        let mut predicates_and_named_graphs = HashSet::new();
         for ct in cat_triples {
             let pred = ct.predicate.as_str().to_string();
-            predicates.insert(pred);
+            predicates_and_named_graphs.insert(pred);
+            if let NamedGraph::NamedGraph(nn) = &ct.graph {
+                predicates_and_named_graphs.insert(nn.as_str().to_string());
+            }
         }
         let t = CatType::IRI;
         if !self.cat_map.contains_key(&t) {
@@ -45,9 +48,9 @@ impl Cats {
         }
         let mut iri_counter = self.iri_counter;
         let enc = self.cat_map.get_mut(&t).unwrap();
-        let predicates: Vec<_> = predicates.into_iter().collect();
+        let predicates_and_graph_names: Vec<_> = predicates_and_named_graphs.into_iter().collect();
         enc.maps
-            .encode_all_new_non_duplicated_strings(predicates, &mut iri_counter);
+            .encode_all_new_non_duplicated_strings(predicates_and_graph_names, &mut iri_counter);
         self.iri_counter = iri_counter;
     }
 }
