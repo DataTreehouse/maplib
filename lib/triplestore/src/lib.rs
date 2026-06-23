@@ -68,7 +68,7 @@ const GC_LIMIT: &usize = &1_000_000;
 
 impl Triplestore {
     pub fn maybe_garbage_collect(&mut self) -> Result<u32, TriplestoreError> {
-        if &self.n_triples_deleted >= GC_LIMIT {
+        if self.storage_folder.is_none() && &self.n_triples_deleted >= GC_LIMIT {
             let mut predicate_and_graph_iris = Vec::new();
             for (g, m) in self
                 .graph_triples_map

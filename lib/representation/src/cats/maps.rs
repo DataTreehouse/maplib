@@ -166,9 +166,7 @@ impl CatMaps {
     pub fn range_set(&self) -> RangeSetBlaze<u32> {
         match self {
             CatMaps::InMemory(in_memory) => in_memory.range_set(),
-            CatMaps::OnDisk(_) => {
-                todo!("OnDisk")
-            }
+            CatMaps::OnDisk(on_disk) => on_disk.range_set(),
         }
     }
 }
