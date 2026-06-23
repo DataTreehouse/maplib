@@ -3948,7 +3948,6 @@ dependencies = [
 name = "representation"
 version = "0.6.10"
 dependencies = [
- "arrow",
  "chrono",
  "chrono-tz",
  "disk",
