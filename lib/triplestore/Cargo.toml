@@ -39,6 +39,7 @@ serde_json.workspace = true
 ordered-float.workspace = true
 quick-xml.workspace = true
 range-set-blaze.workspace = true
+uri_encode.workspace = true
 
 pyo3 = { workspace = true, optional = true }
 

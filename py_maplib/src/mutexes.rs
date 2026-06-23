@@ -310,6 +310,15 @@ pub(crate) fn map_default_mutex(
     Ok(format!("{tmpl}"))
 }
 
+pub fn map_df_mutex(
+    inner: &mut MutexGuard<InnerModel>,
+    df: DataFrame,
+    graph: NamedGraph,
+) -> PyResult<()> {
+    inner.map_df(&df, &graph).map_err(PyMaplibError::from)?;
+    Ok(())
+}
+
 pub(crate) fn query_mutex(
     inner: &mut MutexGuard<InnerModel>,
     query: String,
@@ -410,11 +419,11 @@ pub(crate) fn validate_mutex(
     let data_graph = NamedGraph::from_maybe_named_node(data_graph.as_ref());
     let shape_graph = parse_optional_named_node(shape_graph)?;
     let shape_graph = NamedGraph::from_maybe_named_node(shape_graph.as_ref());
-    let report_graph = parse_optional_named_node(report_graph)?;
-    let report_graph = if let Some(report_graph) = report_graph {
-        Some(NamedGraph::NamedGraph(report_graph))
-    } else {
+    let report_graph = if report_graph.is_some() && report_graph.as_ref().unwrap() == "" {
         None
+    } else {
+        let m = parse_optional_named_node(report_graph)?;
+        Some(NamedGraph::from_maybe_named_node(m.as_ref()))
     };
 
     let inferences_graph = parse_optional_named_node(inferences_graph)?;

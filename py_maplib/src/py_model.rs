@@ -2,10 +2,10 @@ use crate::error::PyMaplibError;
 use crate::mutexes::{
     add_prefixes_mutex, add_template_mutex, add_virtualization_mutex, create_index_mutex,
     detach_graph_mutex, get_predicate_iris_mutex, get_predicate_mutex, infer_mutex, insert_mutex,
-    map_default_mutex, map_json_mutex, map_mutex, map_triples_mutex, map_xml_mutex, query_mutex,
-    read_mutex, read_template_mutex, reads_mutex, size_mutex, truncate_graph_mutex, update_mutex,
-    validate_mutex, write_cim_xml_mutex, write_native_parquet_mutex, write_triples_mutex,
-    writes_mutex,
+    map_default_mutex, map_df_mutex, map_json_mutex, map_mutex, map_triples_mutex, map_xml_mutex,
+    query_mutex, read_mutex, read_template_mutex, reads_mutex, size_mutex, truncate_graph_mutex,
+    update_mutex, validate_mutex, write_cim_xml_mutex, write_native_parquet_mutex,
+    write_triples_mutex, writes_mutex,
 };
 use crate::shacl::{PyValidationReport, SHACL_RESULTS_QUERY};
 use crate::{
@@ -241,6 +241,18 @@ impl PyModel {
         })
     }
 
+    #[pyo3(signature = (df, graph=None))]
+    #[instrument(skip_all)]
+    fn map_df(&self, py: Python<'_>, df: &Bound<'_, PyAny>, graph: Option<String>) -> PyResult<()> {
+        let (df, _) = data_to_mappings_types(df, py)?;
+        py.detach(move || -> PyResult<()> {
+            let mut inner = self.inner.lock().unwrap();
+            let graph = parse_optional_named_node(graph)?;
+            let named_graph = NamedGraph::from_maybe_named_node(graph.as_ref());
+            map_df_mutex(&mut inner, df, named_graph)
+        })
+    }
+
     /// Starts a graph explorer session.
     ///
     /// To run from Jupyter Notebook use:
@@ -270,6 +282,27 @@ impl PyModel {
     ) -> PyResult<Py<PyAny>> {
         let module = py.import("maplib")?;
         let func = module.getattr("_explore")?;
+
+        let mut old_args: Vec<_> = args.iter().collect();
+        let mut new_args = Vec::new();
+        new_args.push(self_.into_pyobject(py)?.into_any());
+        new_args.append(&mut old_args);
+
+        let new_args = pyo3::types::PyTuple::new(py, new_args)?;
+
+        let res = func.call(new_args, kwargs)?;
+        Ok(res.into())
+    }
+
+    #[pyo3(signature = (*args, **kwargs), text_signature = "(/)")]
+    fn map_opc_ua(
+        self_: PyRef<'_, Self>,
+        py: Python<'_>,
+        args: &Bound<'_, pyo3::types::PyTuple>,
+        kwargs: Option<&Bound<'_, pyo3::types::PyDict>>,
+    ) -> PyResult<Py<PyAny>> {
+        let module = py.import("maplib")?;
+        let func = module.getattr("_map_opc_ua")?;
 
         let mut old_args: Vec<_> = args.iter().collect();
         let mut new_args = Vec::new();
@@ -413,7 +446,7 @@ impl PyModel {
     #[pyo3(signature = (
         shape_graph=None,
         data_graph=None,
-        report_graph=None,
+        report_graph="".to_string(),
         inferences_graph=None,
         include_details=None,
         include_conforms=None,

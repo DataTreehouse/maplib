@@ -207,7 +207,6 @@ impl Model {
                 map_options,
             )?;
         }
-        report.results = None;
         Ok(())
     }
 }

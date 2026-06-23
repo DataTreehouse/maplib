@@ -229,6 +229,13 @@ impl Model {
     }
 
     #[instrument(skip_all)]
+    pub fn map_df(&mut self, df: &DataFrame, graph: &NamedGraph) -> Result<(), MaplibError> {
+        self.triplestore
+            .map_df(df, graph)
+            .map_err(MaplibError::TriplestoreError)
+    }
+
+    #[instrument(skip_all)]
     pub fn map_xml_path(
         &mut self,
         path: &Path,

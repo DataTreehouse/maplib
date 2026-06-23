@@ -1655,9 +1655,9 @@ checksum = "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a"
 
 [[package]]
 name = "hdt"
-version = "0.7.1"
+version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f26041919fb614f107ef56f434f9d1c1c2542324a3c09d923855ead97a8d9133"
+checksum = "aec01f829494e9a6f2022091c6e6cb5d7151ce7909f7885246ef0cf3ec5e0ba1"
 dependencies = [
  "bitset-core",
  "bytesize",
@@ -3487,7 +3487,7 @@ dependencies = [
 
 [[package]]
 name = "py_maplib"
-version = "0.20.19"
+version = "0.20.20"
 dependencies = [
  "chrono",
  "cimxml_export",
@@ -3690,9 +3690,9 @@ dependencies = [
 
 [[package]]
 name = "qwt"
-version = "0.3.5"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "df98ceb3b1c39a3dbf618ed8e797193cbee44a720751f9b76adbfdd9e0f4b975"
+checksum = "927ddd802b01109b4d7ad56dc6c8ebd2336ba1a267b0598b86af96109e4e791e"
 dependencies = [
  "bincode 1.3.3",
  "clap",
@@ -3948,6 +3948,7 @@ dependencies = [
 name = "representation"
 version = "0.6.10"
 dependencies = [
+ "arrow",
  "chrono",
  "chrono-tz",
  "disk",
@@ -3957,6 +3958,7 @@ dependencies = [
  "oxrdf",
  "oxsdatatypes",
  "polars",
+ "polars-arrow",
  "polars-core",
  "pyo3",
  "range-set-blaze",
@@ -4979,6 +4981,7 @@ dependencies = [
  "sprs",
  "thiserror",
  "tracing",
+ "uri_encode",
  "utils",
  "uuid",
 ]
