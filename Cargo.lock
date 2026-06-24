@@ -1101,20 +1101,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "dashmap"
-version = "6.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e6361d5c062261c78a176addb82d4c821ae42bed6089de0e12603cd25de2059c"
-dependencies = [
- "cfg-if",
- "crossbeam-utils",
- "hashbrown 0.14.5",
- "lock_api",
- "once_cell",
- "parking_lot_core",
-]
-
-[[package]]
 name = "datalog"
 version = "0.1.0"
 dependencies = [
@@ -1648,10 +1634,11 @@ checksum = "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a"
 
 [[package]]
 name = "hdt"
-version = "0.6.0"
+version = "0.7.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7b2b1ea7cbd25071f796251a1081ded2a164dd24e034d5f75342da35c157cf4e"
+checksum = "9e7931695342dcb32a86fea5ba379939eeae25f08fc8fc5225bcc32c7b47d7ef"
 dependencies = [
+ "ahash 0.8.12",
  "bitset-core",
  "bytesize",
  "console_error_panic_hook",
@@ -1659,9 +1646,8 @@ dependencies = [
  "env_logger",
  "getrandom 0.2.17",
  "getrandom 0.3.4",
- "lasso",
+ "hashbrown 0.14.5",
  "log",
- "mem_dbg",
  "mownstr",
  "ntriple",
  "oxttl",
@@ -2022,16 +2008,6 @@ name = "json-event-parser"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "574b0cd5e90ee2ba03a66d0611fc9a09c9a0c28b2ecc2dc8a181dd31a53ca5d7"
-
-[[package]]
-name = "lasso"
-version = "0.7.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6e14eda50a3494b3bf7b9ce51c52434a761e383d7238ce1dd5dcec2fbc13e9fb"
-dependencies = [
- "dashmap",
- "hashbrown 0.14.5",
-]
 
 [[package]]
 name = "lazy_static"
@@ -3684,9 +3660,9 @@ dependencies = [
 
 [[package]]
 name = "qwt"
-version = "0.3.4"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b1518389953b62e3b4bac17d8edc67e8291ec040523ab682479d8c706efc0b7b"
+checksum = "927ddd802b01109b4d7ad56dc6c8ebd2336ba1a267b0598b86af96109e4e791e"
 dependencies = [
  "bincode 1.3.3",
  "clap",

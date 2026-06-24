@@ -121,59 +121,108 @@ impl UdfRegistry for PyUdfRegistry {
         self.udfs.contains_key(name)
     }
     fn call(&self, name: &str, args: DataFrame) -> Result<DataFrame, QueryProcessingError> {
-        let entry = self.udfs.get(name).ok_or_else(|| {
-            QueryProcessingError::UnimplementedFunction(format!("UDF {} not found", name))
-        })?;
-        let err = |e: String| QueryProcessingError::UnimplementedFunction(e);
+        let entry = self
+            .udfs
+            .get(name)
+            .ok_or_else(|| QueryProcessingError::UDFError(format!("UDF {} not found", name)))?;
         let py = unsafe { Python::assume_attached() };
         let mut buf = Vec::new();
         let mut args_clone = args.clone();
         IpcWriter::new(&mut buf)
             .finish(&mut args_clone)
-            .map_err(|e| err(e.to_string()))?;
+            .map_err(|e| {
+                QueryProcessingError::UDFError(format!(
+                    "UDF '{}': failed to serialize input: {}",
+                    name, e
+                ))
+            })?;
         let py_bytes = PyBytes::new(py, &buf);
-        let io = py.import("io").map_err(|e| err(e.to_string()))?;
-        let reader = io
-            .call_method1("BytesIO", (py_bytes,))
-            .map_err(|e| err(e.to_string()))?;
-        let pl = py.import("polars").map_err(|e| err(e.to_string()))?;
-        let py_df = pl
-            .call_method1("read_ipc", (reader,))
-            .map_err(|e| err(e.to_string()))?;
-        let result = entry
-            .func
-            .call1(py, (py_df,))
-            .map_err(|e| err(e.to_string()))?;
+        let io = py.import("io").map_err(|e| {
+            QueryProcessingError::UDFError(format!("UDF '{}': failed to import io: {}", name, e))
+        })?;
+        let reader = io.call_method1("BytesIO", (py_bytes,)).map_err(|e| {
+            QueryProcessingError::UDFError(format!(
+                "UDF '{}': failed to create reader: {}",
+                name, e
+            ))
+        })?;
+        let pl = py.import("polars").map_err(|e| {
+            QueryProcessingError::UDFError(format!(
+                "UDF '{}': failed to import polars: {}",
+                name, e
+            ))
+        })?;
+        let py_df = pl.call_method1("read_ipc", (reader,)).map_err(|e| {
+            QueryProcessingError::UDFError(format!(
+                "UDF '{}': failed to deserialize input: {}",
+                name, e
+            ))
+        })?;
+        let result = entry.func.call1(py, (py_df,)).map_err(|e| {
+            QueryProcessingError::UDFError(format!("UDF '{}': failed to call UDF: {}", name, e))
+        })?;
         let result_bound = result.bind(py);
         let result_df = if result_bound
-            .is_instance(&pl.getattr("DataFrame").map_err(|e| err(e.to_string()))?)
+            .is_instance(
+                &pl.getattr("DataFrame")
+                    .map_err(|e| QueryProcessingError::UDFError(e.to_string()))?,
+            )
             .unwrap_or(false)
         {
             result_bound.clone()
         } else {
             result_bound
                 .call_method0("to_frame")
-                .map_err(|e| err(e.to_string()))?
+                .map_err(|e| {
+                    QueryProcessingError::UDFError(format!(
+                        "UDF '{}': failed to convert result to DataFrame: {}",
+                        name, e
+                    ))
+                })?
                 .clone()
         };
-        let write_buf = io
-            .call_method1("BytesIO", ())
-            .map_err(|e| err(e.to_string()))?;
+        let write_buf = io.call_method1("BytesIO", ()).map_err(|e| {
+            QueryProcessingError::UDFError(format!(
+                "UDF '{}': failed to create writer: {}",
+                name, e
+            ))
+        })?;
         result_df
             .call_method1("write_ipc", (&write_buf,))
-            .map_err(|e| err(e.to_string()))?;
-        write_buf
-            .call_method1("seek", (0i64,))
-            .map_err(|e| err(e.to_string()))?;
+            .map_err(|e| {
+                QueryProcessingError::UDFError(format!(
+                    "UDF '{}': failed to serialize result: {}",
+                    name, e
+                ))
+            })?;
+        write_buf.call_method1("seek", (0i64,)).map_err(|e| {
+            QueryProcessingError::UDFError(format!(
+                "UDF '{}': failed to seek in writer: {}",
+                name, e
+            ))
+        })?;
         let bytes: Vec<u8> = write_buf
             .call_method0("getvalue")
-            .map_err(|e| err(e.to_string()))?
+            .map_err(|e| {
+                QueryProcessingError::UDFError(format!(
+                    "UDF '{}': failed to get value from writer: {}",
+                    name, e
+                ))
+            })?
             .extract()
-            .map_err(|e: PyErr| err(e.to_string()))?;
+            .map_err(|e: PyErr| {
+                QueryProcessingError::UDFError(format!(
+                    "UDF '{}': failed to extract value from writer: {}",
+                    name, e
+                ))
+            })?;
         let cursor = Cursor::new(bytes);
-        IpcReader::new(cursor)
-            .finish()
-            .map_err(|e| err(e.to_string()))
+        IpcReader::new(cursor).finish().map_err(|e| {
+            QueryProcessingError::UDFError(format!(
+                "UDF '{}': failed to deserialize result: {}",
+                name, e
+            ))
+        })
     }
 }
 
