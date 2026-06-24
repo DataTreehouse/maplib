@@ -5,7 +5,6 @@ use tracing::{instrument, trace};
 
 use crate::sparql::QuerySettings;
 use polars::prelude::JoinType;
-use query_processing::expressions::functions::custom_function::UdfRegistry;
 use query_processing::graph_patterns::{join, project};
 use query_processing::pushdowns::Pushdowns;
 use representation::dataset::QueryGraph;
@@ -26,7 +25,6 @@ impl Triplestore {
         mut pushdowns: Pushdowns,
         query_settings: &QuerySettings,
         dataset: &QueryGraph,
-        udf_registry: Option<&dyn UdfRegistry>,
     ) -> Result<SolutionMappings, SparqlError> {
         trace!("Processing project graph pattern");
         let inner_context = context.extension_with(PathEntry::ProjectInner);
@@ -40,7 +38,6 @@ impl Triplestore {
             pushdowns,
             query_settings,
             dataset,
-            udf_registry,
         )?;
         project_solution_mappings = project(
             project_solution_mappings,

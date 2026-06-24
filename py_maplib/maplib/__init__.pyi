@@ -5,6 +5,7 @@ from typing import Any, Union, List, Dict, Optional, Callable, Literal as Litera
 from polars import DataFrame
 from datetime import datetime, date
 from maplib.maplib import rdf
+import polars as pl
 
 a = rdf.type
 
@@ -1123,22 +1124,22 @@ class Model:
         :param resources: The templates associated with each resource
         """
 
-    def add_udf(self, name, func):
+    def add_udf(self, name, func: Callable[[pl.DataFrame], pl.DataFrame]):
         """
-        :param name: Name of the UDF
-        :param func: The function to call
+        :param name: IRI of the UDF, e.g. "urn:maplib:myfunc"
+        :param func: A callable (DataFrame) -> DataFrame
         """
 
     def list_udfs(self) -> list[str]:
         """
-        :return: The list of UDFs
+        :return: The list of registered UDFs
         """
 
-    def run_udf(self, name, df) -> Optional[DataFrame]:
+    def run_udf(self, name: str, df: pl.DataFrame) -> pl.DataFrame:
         """
-        :param name: Name of the UDF
-        :param df: The dataframe to pass to the UDF
-        :return: The result of the function
+        :param name: IRI of the UDF
+        :param df: Input DataFrame with columns "0", "1", ...
+        :return: The result DataFrame
         """
 
 

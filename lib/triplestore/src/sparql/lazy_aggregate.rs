@@ -7,7 +7,6 @@ use query_processing::aggregates::{
     sample, sum, AggregateReturn,
 };
 use query_processing::constants::LIST_AGGREGATION;
-use query_processing::expressions::functions::custom_function::UdfRegistry;
 use representation::dataset::QueryGraph;
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
@@ -24,7 +23,6 @@ impl Triplestore {
         parameters: Option<&HashMap<String, EagerSolutionMappings>>,
         query_settings: &QuerySettings,
         dataset: &QueryGraph,
-        udf_registry: Option<&dyn UdfRegistry>,
     ) -> Result<AggregateReturn, SparqlError> {
         let output_solution_mappings;
         let mut out_expr;
@@ -51,7 +49,6 @@ impl Triplestore {
                     None,
                     query_settings,
                     dataset,
-                    udf_registry,
                 )?;
                 match name {
                     AggregateFunction::Count => {

@@ -38,9 +38,11 @@ use representation::{
 };
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::Instant;
 use uuid::Uuid;
 
+use query_processing::expressions::functions::custom_function::UdfRegistry;
 use representation::cats::maps::CatMaps;
 use representation::dataset::NamedGraph;
 use tracing::{instrument, trace};
@@ -60,6 +62,7 @@ pub struct Triplestore {
     indexing: HashMap<NamedGraph, IndexingOptions>,
     fts_index: HashMap<NamedGraph, FtsIndex>,
     pub global_cats: LockedCats,
+    pub udf_registry: Option<Arc<dyn UdfRegistry>>,
 }
 
 impl Triplestore {
@@ -237,6 +240,7 @@ impl Triplestore {
                 indexing: HashMap::from_iter([(new_graph_name.clone(), new_indexing)]),
                 fts_index: new_fts_index_map,
                 global_cats: LockedCats::new(cats_image),
+                udf_registry: None,
             })
         } else {
             Err(TriplestoreError::GraphDoesNotExist(graph.to_string()))
@@ -404,6 +408,7 @@ impl Triplestore {
             indexing: HashMap::from([(NamedGraph::DefaultGraph, indexing)]),
             fts_index: fts_index_map,
             global_cats: locked_cats,
+            udf_registry: None,
         })
     }
 

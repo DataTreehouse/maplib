@@ -30,7 +30,6 @@ impl Triplestore {
             graph,
             None,
             false,
-            None,
         )
         .map_err(|x| TriplestoreError::RDFSClassInheritanceError(x.to_string()))?;
         Ok(())

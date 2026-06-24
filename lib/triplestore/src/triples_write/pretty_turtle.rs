@@ -784,7 +784,6 @@ impl Triplestore {
                 },
                 Some(graph),
                 false,
-                None,
             )
             .map_err(|x| TriplestoreError::SparqlQueryError(x.to_string()))?;
         if let QueryResultKind::Select(sm) = res.kind {

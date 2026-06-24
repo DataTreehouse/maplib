@@ -4,7 +4,6 @@ use tracing::{instrument, trace};
 
 use crate::sparql::QuerySettings;
 use polars::prelude::by_name;
-use query_processing::expressions::functions::custom_function::UdfRegistry;
 use query_processing::graph_patterns::order_by;
 use query_processing::pushdowns::Pushdowns;
 use representation::dataset::QueryGraph;
@@ -25,7 +24,6 @@ impl Triplestore {
         pushdowns: Pushdowns,
         query_settings: &QuerySettings,
         dataset: &QueryGraph,
-        udf_registry: Option<&dyn UdfRegistry>,
     ) -> Result<SolutionMappings, SparqlError> {
         trace!("Processing order by graph pattern");
         let mut output_solution_mappings = self.lazy_graph_pattern(
@@ -36,7 +34,6 @@ impl Triplestore {
             pushdowns,
             query_settings,
             dataset,
-            udf_registry,
         )?;
 
         let order_expression_contexts: Vec<Context> = (0..expression.len())
@@ -52,7 +49,6 @@ impl Triplestore {
                 parameters,
                 query_settings,
                 dataset,
-                udf_registry,
             )?;
             output_solution_mappings = ordering_solution_mappings;
             inner_contexts.push(inner_context);

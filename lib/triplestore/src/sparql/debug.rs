@@ -78,7 +78,6 @@ impl Triplestore {
                     Pushdowns::new(),
                     qs,
                     qg,
-                    None,
                 )?;
                 let df = sm.mappings.first().collect().unwrap();
                 if df.height() == 0 {
@@ -136,7 +135,6 @@ impl Triplestore {
                 Pushdowns::new(),
                 qs,
                 qg,
-                None,
             )?;
             let f = sm.mappings.first().collect().unwrap();
             if f.height() == 0 {
@@ -161,7 +159,6 @@ impl Triplestore {
                     Pushdowns::new(),
                     qs,
                     qg,
-                    None,
                 )?;
                 let df = sm.mappings.first().collect().unwrap();
                 if df.height() == 0 {
@@ -197,7 +194,6 @@ impl Triplestore {
                 Pushdowns::new(),
                 qs,
                 qg,
-                None,
             )?;
             let df = sm.mappings.first().collect().unwrap();
             if df.height() == 0 {
@@ -236,7 +232,6 @@ impl Triplestore {
                     Pushdowns::new(),
                     qs,
                     qg,
-                    None,
                 )?;
                 let df = sm.mappings.first().collect().unwrap();
                 if df.height() == 0 {
@@ -276,7 +271,6 @@ impl Triplestore {
                             Pushdowns::new(),
                             qs,
                             qg,
-                            None,
                         )?;
                         let df = sm.mappings.first().collect().unwrap();
                         if df.height() == 0 {
@@ -316,7 +310,6 @@ impl Triplestore {
                     Pushdowns::new(),
                     qs,
                     qg,
-                    None,
                 )?;
                 let df = sm.mappings.first().collect().unwrap();
                 if df.height() == 0 {

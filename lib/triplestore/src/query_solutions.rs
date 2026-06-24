@@ -27,7 +27,6 @@ pub fn query_select(
         graph,
         prefixes,
         false,
-        None,
     )?;
 
     let sm = if let QueryResultKind::Select(EagerSolutionMappings {

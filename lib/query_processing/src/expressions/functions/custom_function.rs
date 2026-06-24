@@ -20,7 +20,7 @@ use spargebra::algebra::{Expression, Function};
 use std::collections::HashMap;
 use std::ops::{Div, Mul};
 
-pub trait UdfRegistry {
+pub trait UdfRegistry: Send + Sync {
     fn has(&self, name: &str) -> bool;
     fn call(&self, name: &str, args: DataFrame) -> Result<DataFrame, QueryProcessingError>;
 }

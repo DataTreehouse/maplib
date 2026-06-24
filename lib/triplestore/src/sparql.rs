@@ -22,7 +22,6 @@ use polars::prelude::{as_struct, col, lit, Expr, IntoLazy, LiteralValue, PlSmall
 use polars_core::frame::UniqueKeepStrategy;
 use polars_core::prelude::{DataType, ExplodeOptions, Series};
 use query_processing::expressions::expr_is_null_workaround;
-use query_processing::expressions::functions::custom_function::UdfRegistry;
 use query_processing::graph_patterns::unique_workaround;
 use query_processing::pushdowns::Pushdowns;
 use rayon::prelude::{IntoParallelIterator, ParallelIterator};
@@ -174,7 +173,6 @@ impl Triplestore {
         graph: Option<&NamedGraph>,
         prefixes: Option<&HashMap<String, NamedNode>>,
         debug_no_results: bool,
-        udf_registry: Option<&dyn UdfRegistry>,
     ) -> Result<QueryResult, SparqlError> {
         let query = Query::parse(query, None, prefixes).map_err(SparqlError::ParseError)?;
         trace!(?query);
@@ -185,7 +183,6 @@ impl Triplestore {
             query_settings,
             graph,
             debug_no_results,
-            udf_registry,
         )
     }
 
@@ -197,7 +194,6 @@ impl Triplestore {
         query_settings: &QuerySettings,
         graph: Option<&NamedGraph>,
         debug_no_results: bool,
-        udf_registry: Option<&dyn UdfRegistry>,
     ) -> Result<QueryResult, SparqlError> {
         let query = rewrite(query.clone());
         let context = Context::new();
@@ -220,7 +216,6 @@ impl Triplestore {
                     Pushdowns::new(),
                     query_settings,
                     &dataset_or_named_graph(dataset, graph),
-                    udf_registry,
                 )?;
 
                 match pl_interruptable_collect(mappings.with_streaming(streaming)) {
@@ -256,7 +251,6 @@ impl Triplestore {
                     Pushdowns::new(),
                     query_settings,
                     &dataset_or_named_graph(dataset, graph),
-                    udf_registry,
                 )?;
                 match pl_interruptable_collect(mappings.with_streaming(streaming)) {
                     Ok(df) => {
@@ -319,7 +313,6 @@ impl Triplestore {
         target_graph: &NamedGraph,
         prefixes: Option<&HashMap<String, NamedNode>>,
         debug_no_results: bool,
-        udf_registry: Option<&dyn UdfRegistry>,
     ) -> Result<InsertResult, SparqlError> {
         let query = Query::parse(query, None, prefixes).map_err(SparqlError::ParseError)?;
         self.insert_parsed(
@@ -331,7 +324,6 @@ impl Triplestore {
             source_graph,
             target_graph,
             debug_no_results,
-            udf_registry,
         )
     }
 
@@ -345,7 +337,6 @@ impl Triplestore {
         source_graph: &NamedGraph,
         target_graph: &NamedGraph,
         debug_no_results: bool,
-        udf_registry: Option<&dyn UdfRegistry>,
     ) -> Result<InsertResult, SparqlError> {
         if let Query::Construct { .. } = &query {
             let res = self.query_parsed(
@@ -355,7 +346,6 @@ impl Triplestore {
                 query_settings,
                 Some(source_graph),
                 debug_no_results,
-                udf_registry,
             )?;
             let new_triples = match res.kind {
                 QueryResultKind::Select(_) => {
@@ -385,7 +375,6 @@ impl Triplestore {
         graph: Option<&NamedGraph>,
         prefixes: Option<&HashMap<String, NamedNode>>,
         debug_no_results: bool,
-        udf_registry: Option<&dyn UdfRegistry>,
     ) -> Result<UpdateResult, SparqlError> {
         let update = Update::parse(update, None, prefixes).map_err(SparqlError::ParseError)?;
         let res = self.update_parsed(
@@ -395,7 +384,6 @@ impl Triplestore {
             query_settings,
             graph,
             debug_no_results,
-            udf_registry,
         )?;
         Ok(res)
     }
@@ -408,7 +396,6 @@ impl Triplestore {
         query_settings: &QuerySettings,
         graph: Option<&NamedGraph>,
         debug_no_results: bool,
-        udf_registry: Option<&dyn UdfRegistry>,
     ) -> Result<UpdateResult, SparqlError> {
         let mut debug_output = if debug_no_results { Some(vec![]) } else { None };
         for u in &update.operations {
@@ -469,7 +456,6 @@ impl Triplestore {
                         query_settings,
                         graph,
                         debug_no_results,
-                        udf_registry,
                     )?;
                     if debug_no_results {
                         if let Some(debug) = debug {

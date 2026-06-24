@@ -10,7 +10,6 @@ use polars::prelude::{
 use polars_core::prelude::{DataType, ExplodeOptions, SortMultipleOptions};
 use polars_core::utils::Container;
 use query_processing::errors::QueryProcessingError;
-use query_processing::expressions::functions::custom_function::UdfRegistry;
 use query_processing::expressions::{literal_enc, named_node_enc};
 use query_processing::graph_patterns::{group_by_workaround, join, union};
 use query_processing::pushdowns::Pushdowns;
@@ -50,7 +49,6 @@ impl Triplestore {
         pushdowns: Pushdowns,
         query_settings: &QuerySettings,
         dataset: &QueryGraph,
-        udf_registry: Option<&dyn UdfRegistry>,
     ) -> Result<SolutionMappings, SparqlError> {
         let create_sparse = need_sparse_matrix(ppe);
 
@@ -89,7 +87,6 @@ impl Triplestore {
                 pushdowns,
                 query_settings,
                 dataset,
-                udf_registry,
             )?;
             for i in &intermediaries {
                 sms.rdf_node_types.remove(i).unwrap();

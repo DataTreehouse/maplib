@@ -6,7 +6,6 @@ use tracing::{instrument, trace};
 use crate::sparql::QuerySettings;
 use polars::prelude::JoinType;
 use query_processing::aggregates::AggregateReturn;
-use query_processing::expressions::functions::custom_function::UdfRegistry;
 use query_processing::graph_patterns::{group_by, join, prepare_group_by};
 use query_processing::pushdowns::Pushdowns;
 use representation::dataset::QueryGraph;
@@ -29,7 +28,6 @@ impl Triplestore {
         mut pushdowns: Pushdowns,
         query_settings: &QuerySettings,
         dataset: &QueryGraph,
-        udf_registry: Option<&dyn UdfRegistry>,
     ) -> Result<SolutionMappings, SparqlError> {
         trace!("Processing group graph pattern");
         let inner_context = context.extension_with(PathEntry::GroupInner);
@@ -43,7 +41,6 @@ impl Triplestore {
             pushdowns,
             query_settings,
             dataset,
-            udf_registry,
         )?;
         let (mut output_solution_mappings, by, dummy_varname) =
             prepare_group_by(output_solution_mappings, variables);
@@ -77,7 +74,6 @@ impl Triplestore {
                 parameters,
                 query_settings,
                 dataset,
-                udf_registry,
             )?;
             output_solution_mappings = aggregate_solution_mappings;
             new_rdf_node_types.insert(v.as_str().to_string(), rdf_node_type);

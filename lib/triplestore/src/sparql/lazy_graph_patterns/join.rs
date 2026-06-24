@@ -4,7 +4,6 @@ use std::cmp::{Ordering, Reverse};
 use tracing::{instrument, trace};
 
 use crate::sparql::QuerySettings;
-use query_processing::expressions::functions::custom_function::UdfRegistry;
 use query_processing::pushdowns::Pushdowns;
 use representation::dataset::QueryGraph;
 use representation::query_context::{Context, PathEntry};
@@ -85,7 +84,6 @@ impl Triplestore {
         pushdowns: Pushdowns,
         query_settings: &QuerySettings,
         dataset: &QueryGraph,
-        udf_registry: Option<&dyn UdfRegistry>,
     ) -> Result<SolutionMappings, SparqlError> {
         trace!("Processing join graph pattern");
         let left_context = context.extension_with(PathEntry::JoinLeftSide);
@@ -105,7 +103,6 @@ impl Triplestore {
                 pushdowns.clone(),
                 query_settings,
                 dataset,
-                udf_registry,
             )?);
         }
 

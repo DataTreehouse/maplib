@@ -20,7 +20,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, MutexGuard};
+use std::sync::{Arc, Mutex, MutexGuard};
 use triplestore::sparql::{
     InsertResult, QueryResult, QueryResultKind as SparqlQueryResult, UpdateResult,
 };
@@ -106,16 +106,17 @@ const DEFAULT_MAP_TO_TRANSIENT: bool = false;
 const DEFAULT_DEBUG_NO_RESULTS: bool = false;
 const DEFAULT_TRIPLES_BATCH_SIZE: usize = 10_000_000;
 
+#[derive(Clone)]
 struct UdfEntry {
     func: Py<PyAny>,
 }
 
-struct PyUdfRegistry<'a> {
-    udfs: &'a HashMap<String, UdfEntry>,
-    py: Python<'a>,
+#[derive(Clone)]
+struct PyUdfRegistry {
+    udfs: HashMap<String, UdfEntry>,
 }
 
-impl UdfRegistry for PyUdfRegistry<'_> {
+impl UdfRegistry for PyUdfRegistry {
     fn has(&self, name: &str) -> bool {
         self.udfs.contains_key(name)
     }
@@ -124,25 +125,26 @@ impl UdfRegistry for PyUdfRegistry<'_> {
             QueryProcessingError::UnimplementedFunction(format!("UDF {} not found", name))
         })?;
         let err = |e: String| QueryProcessingError::UnimplementedFunction(e);
+        let py = unsafe { Python::assume_attached() };
         let mut buf = Vec::new();
         let mut args_clone = args.clone();
         IpcWriter::new(&mut buf)
             .finish(&mut args_clone)
             .map_err(|e| err(e.to_string()))?;
-        let py_bytes = PyBytes::new(self.py, &buf);
-        let io = self.py.import("io").map_err(|e| err(e.to_string()))?;
+        let py_bytes = PyBytes::new(py, &buf);
+        let io = py.import("io").map_err(|e| err(e.to_string()))?;
         let reader = io
             .call_method1("BytesIO", (py_bytes,))
             .map_err(|e| err(e.to_string()))?;
-        let pl = self.py.import("polars").map_err(|e| err(e.to_string()))?;
+        let pl = py.import("polars").map_err(|e| err(e.to_string()))?;
         let py_df = pl
             .call_method1("read_ipc", (reader,))
             .map_err(|e| err(e.to_string()))?;
         let result = entry
             .func
-            .call1(self.py, (py_df,))
+            .call1(py, (py_df,))
             .map_err(|e| err(e.to_string()))?;
-        let result_bound = result.bind(self.py);
+        let result_bound = result.bind(py);
         let result_df = if result_bound
             .is_instance(&pl.getattr("DataFrame").map_err(|e| err(e.to_string()))?)
             .unwrap_or(false)
@@ -532,11 +534,13 @@ impl PyModel {
         let mapped_parameters = map_parameters(parameters, py)?;
         let graph = parse_optional_named_node(graph)?;
         let graph = graph.map(NamedGraph::NamedGraph);
-        let udfs = self.udfs.lock().unwrap();
         let mut inner = self.inner.lock().unwrap();
         let cats = inner.triplestore.global_cats.clone();
-        let udf_reg = PyUdfRegistry { udfs: &udfs, py };
-
+        let udfs = self.udfs.lock().unwrap();
+        if !udfs.is_empty() {
+            let udf_reg = PyUdfRegistry { udfs: udfs.clone() };
+            inner.triplestore.udf_registry = Some(Arc::new(udf_reg));
+        }
         let res = query_mutex(
             &mut inner,
             query,
@@ -546,10 +550,8 @@ impl PyModel {
             include_transient,
             max_rows,
             debug,
-            Some(&udf_reg),
         )?;
 
-        drop(udf_reg);
         drop(udfs);
         drop(inner);
         print_debug_if_exists(res.debug.as_ref());
@@ -588,7 +590,9 @@ impl PyModel {
         let mapped_parameters = map_parameters(parameters, py)?;
         let udfs = self.udfs.lock().unwrap();
         let mut inner = self.inner.lock().unwrap();
-        let udf_reg = PyUdfRegistry { udfs: &udfs, py };
+        if !udfs.is_empty() {
+            inner.triplestore.udf_registry = Some(Arc::new(PyUdfRegistry { udfs: udfs.clone() }));
+        }
         let res = update_mutex(
             &mut inner,
             update,
@@ -598,9 +602,7 @@ impl PyModel {
             include_transient,
             max_rows,
             debug,
-            Some(&udf_reg),
         )?;
-        drop(udf_reg);
         drop(udfs);
         drop(inner);
         print_debug_if_exists(res.debug.as_ref());
@@ -718,7 +720,6 @@ impl PyModel {
                 Some(false),
                 None,
                 None,
-                None,
             )?;
             Ok((res, cats))
         })?;
@@ -762,7 +763,9 @@ impl PyModel {
         let mut inner = self.inner.lock().unwrap();
 
         let cats = inner.triplestore.global_cats.clone();
-        let udf_reg = PyUdfRegistry { udfs: &udfs, py };
+        if !udfs.is_empty() {
+            inner.triplestore.udf_registry = Some(Arc::new(PyUdfRegistry { udfs: udfs.clone() }));
+        }
 
         let insert_result = insert_mutex(
             &mut inner,
@@ -775,10 +778,8 @@ impl PyModel {
             include_transient,
             max_rows,
             debug,
-            Some(&udf_reg),
         )?;
 
-        drop(udf_reg);
         drop(udfs);
         drop(inner);
         print_debug_if_exists(insert_result.debug.as_ref());
@@ -1444,7 +1445,6 @@ fn query_mutex(
     include_transient: Option<bool>,
     max_rows: Option<usize>,
     debug: Option<bool>,
-    udf_registry: Option<&dyn UdfRegistry>,
 ) -> PyResult<QueryResult> {
     let res = inner
         .query(
@@ -1455,7 +1455,6 @@ fn query_mutex(
             include_transient.unwrap_or(DEFAULT_INCLUDE_TRANSIENT),
             max_rows,
             debug.unwrap_or(DEFAULT_DEBUG_NO_RESULTS),
-            udf_registry,
         )
         .map_err(PyMaplibError::from)?;
     Ok(res)
@@ -1470,7 +1469,6 @@ fn update_mutex(
     include_transient: Option<bool>,
     max_rows: Option<usize>,
     debug: Option<bool>,
-    udf_registry: Option<&dyn UdfRegistry>,
 ) -> PyResult<UpdateResult> {
     let graph = parse_optional_named_node(graph)?;
     let named_graph = if let Some(graph) = graph {
@@ -1487,7 +1485,6 @@ fn update_mutex(
             include_transient.unwrap_or(DEFAULT_INCLUDE_TRANSIENT),
             max_rows,
             debug.unwrap_or(DEFAULT_DEBUG_NO_RESULTS),
-            udf_registry,
         )
         .map_err(PyMaplibError::from)?;
     Ok(res)
@@ -1615,7 +1612,6 @@ fn insert_mutex(
     include_transient: Option<bool>,
     max_rows: Option<usize>,
     debug: Option<bool>,
-    udf_registry: Option<&dyn UdfRegistry>,
 ) -> PyResult<InsertResult> {
     let insert_result = inner
         .insert(
@@ -1628,7 +1624,6 @@ fn insert_mutex(
             streaming.unwrap_or(DEFAULT_STREAMING),
             max_rows,
             debug.unwrap_or(DEFAULT_DEBUG_NO_RESULTS),
-            udf_registry,
         )
         .map_err(PyMaplibError::from)?;
 
