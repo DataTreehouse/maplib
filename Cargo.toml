@@ -36,7 +36,8 @@ polars = { version = "0.54.4", features = [
     "fmt",
     "parquet",
     "moment",
-    "timezones"
+    "timezones",
+    "lazy",
 ] }
 polars-arrow = { version = "0.54.4" }
 polars-core = { version = "0.54.4" }
@@ -68,6 +69,7 @@ walkdir = "2.5.0"
 aho-corasick = "1.1.4"
 simd-json = { version = "0.17.0", features = ["serde_json"] }
 serde_json = { version = "1.0.149" }
+serde = {version = "1.0.228"}
 uri_encode = "1.0.4"
 md-5 = "0.11.0"
 sha1 = "0.11.0"

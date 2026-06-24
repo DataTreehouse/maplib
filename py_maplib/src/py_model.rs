@@ -1,11 +1,11 @@
 use crate::error::PyMaplibError;
 use crate::mutexes::{
-    add_prefixes_mutex, add_template_mutex, add_virtualization_mutex, create_index_mutex,
-    detach_graph_mutex, get_predicate_iris_mutex, get_predicate_mutex, infer_mutex, insert_mutex,
-    map_default_mutex, map_df_mutex, map_json_mutex, map_mutex, map_triples_mutex, map_xml_mutex,
-    query_mutex, read_mutex, read_template_mutex, reads_mutex, size_mutex, truncate_graph_mutex,
-    update_mutex, validate_mutex, write_cim_xml_mutex, write_native_parquet_mutex,
-    write_triples_mutex, writes_mutex,
+    add_prefixes_mutex, add_template_mutex, add_virtualization_mutex, compact_mutex,
+    create_index_mutex, detach_graph_mutex, get_predicate_iris_mutex, get_predicate_mutex,
+    infer_mutex, insert_mutex, map_default_mutex, map_df_mutex, map_json_mutex, map_mutex,
+    map_triples_mutex, map_xml_mutex, query_mutex, read_mutex, read_template_mutex, reads_mutex,
+    serialize_triples_mutex, size_mutex, truncate_graph_mutex, update_mutex, validate_mutex,
+    write_cim_xml_mutex, write_native_parquet_mutex, write_triples_mutex, writes_mutex,
 };
 use crate::shacl::{PyValidationReport, SHACL_RESULTS_QUERY};
 use crate::{
@@ -24,6 +24,7 @@ use representation::df_to_python::df_to_py_df;
 use representation::python::PyIRI;
 use representation::solution_mapping::EagerSolutionMappings;
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Mutex;
 use templates::python::PyTemplate;
 use tracing::instrument;
@@ -925,5 +926,43 @@ impl PyModel {
             Ok((res, cats))
         })?;
         Ok(PyInferenceResult { inner: res })
+    }
+
+    #[pyo3(signature = ())]
+    fn compact(&self, py: Python<'_>) -> PyResult<()> {
+        py.detach(move || {
+            let mut inner = self.inner.lock().unwrap();
+            compact_mutex(&mut inner)
+        })
+    }
+
+    #[pyo3(signature = (path = "./serialized_triples".to_string()))]
+    fn serialize(&self, py: Python<'_>, path: Option<String>) -> PyResult<()> {
+        let path: PathBuf = path.unwrap().into();
+
+        py.detach(move || {
+            let mut inner = self.inner.lock().unwrap();
+            serialize_triples_mutex(&mut inner, path.as_ref())
+        })
+    }
+
+    #[instrument(skip_all)]
+    #[staticmethod]
+    #[pyo3(signature = (path = "./serialized_triples".to_string(), storage_folder=None))]
+    fn deserialize(
+        py: Python<'_>,
+        path: Option<String>,
+        storage_folder: Option<String>,
+    ) -> PyResult<Self> {
+        let path: PathBuf = path.unwrap().into();
+
+        let inner: Result<InnerModel, PyMaplibError> = py.detach(move || {
+            let inner = InnerModel::deserialize_triples(&path, storage_folder)
+                .map_err(PyMaplibError::from)?;
+            Ok(inner)
+        });
+        Ok(Self {
+            inner: Mutex::new(inner?),
+        })
     }
 }

@@ -798,3 +798,11 @@ pub(crate) fn infer_mutex(
         )
         .map_err(PyMaplibError::MaplibError)
 }
+
+pub fn serialize_triples_mutex(inner: &mut MutexGuard<InnerModel>, path: &Path) -> PyResult<()> {
+    Ok(inner.serialize_triples(path).map_err(PyMaplibError::from)?)
+}
+
+pub fn compact_mutex(inner: &mut MutexGuard<InnerModel>) -> PyResult<()> {
+    Ok(inner.compact().map_err(PyMaplibError::from)?)
+}

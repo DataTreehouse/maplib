@@ -14,8 +14,18 @@ pl.Config.set_fmt_str_lengths(300)
 PATH_HERE = pathlib.Path(__file__).parent
 TESTDATA_PATH = PATH_HERE / "testdata"
 
+def all_params():
+    params = []
+    for p in disk_params():
+        for c in [True, False]:
+            ps = {}
+            ps["disk"] = p
+            ps["compact"] = c
+            params.append(ps)
+    return params
 
-@pytest.fixture(scope="function", params=disk_params())
+
+@pytest.fixture(scope="function", params=all_params())
 def windpower_model(request):
     instance_mapping = """
     @prefix tpl:<https://github.com/magbak/chrontext/templates#>.
@@ -55,9 +65,9 @@ def windpower_model(request):
     """
 
     n = 40
-    disk=request.param
+    disk=request.param["disk"]
     start_time = time.time()
-    model = Model(IndexingOptions(subject_object_index=True), storage_folder=disk)
+    model = Model(storage_folder=disk)
     model.add_template(instance_mapping)
     # Used as a prefix
     wpex = "https://github.com/magbak/chrontext/windpower_example#"
@@ -254,6 +264,9 @@ def windpower_model(request):
     wind_turbine_has_wms = add_aspect_labeling_by_source(wind_turbine_has_wms, "LE")
 
     model.map("tpl:FunctionalAspect", data=wind_turbine_has_wms)
+    if request.param["compact"]:
+        model.compact()
+    print(f"params {request.param}")
     print(f"mapping took {str(time.time() - start_time)}")
     return model
 

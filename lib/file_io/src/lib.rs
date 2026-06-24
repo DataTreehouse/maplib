@@ -55,6 +55,7 @@ pub fn write_parquet(
     let mut writer = ParquetWriter::new(file);
     writer = writer.with_row_group_size(Some(1_000));
     writer = writer.with_compression(compression);
+    writer = writer.set_parallel(true);
     writer.finish(df).map_err(FileIOError::WriteParquetError)?;
     Ok(())
 }

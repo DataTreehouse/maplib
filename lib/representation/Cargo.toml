@@ -14,7 +14,7 @@ disk = {path = "../disk"}
 in_memory = {path = "../in_memory"}
 
 tracing.workspace = true
-oxrdf = { workspace = true, features = ["oxsdatatypes"] }
+oxrdf = { workspace = true, features = ["oxsdatatypes", "serde"] }
 polars = { workspace = true, features = ["cum_agg", "diagonal_concat", "merge_sorted", "performant", "lazy", "dtype-full", "timezones", "polars-time", "partition_by", "strings"] }
 polars-core = { workspace = true, features = ["performant", "simd", "nightly"] }
 chrono.workspace = true
@@ -29,6 +29,8 @@ polars-arrow.workspace = true
 memchr.workspace = true
 rust_decimal.workspace = true
 range-set-blaze.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("gil-refs", "rdf-star"))'] }

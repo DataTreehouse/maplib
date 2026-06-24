@@ -15,6 +15,17 @@ pub enum CatMaps {
 }
 
 impl CatMaps {
+    pub fn compact(&mut self) {
+        match self {
+            CatMaps::InMemory(cat_maps) => {
+                cat_maps.compact();
+            }
+            CatMaps::OnDisk(cat_maps) => {
+                cat_maps.compact();
+            }
+        }
+    }
+
     pub fn inner_join_re_enc(&self, other: &Self) -> Vec<(u32, u32)> {
         match self {
             CatMaps::InMemory(m) => match other {

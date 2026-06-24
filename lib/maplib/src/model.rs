@@ -707,4 +707,23 @@ impl Model {
             chrontext_settings: self.chrontext_settings.clone(),
         })
     }
+
+    pub fn serialize_triples(&mut self, path: &Path) -> Result<(), MaplibError> {
+        self.triplestore.serialize_triples(&path)?;
+        Ok(())
+    }
+
+    pub fn compact(&mut self) -> Result<(), MaplibError> {
+        self.triplestore.compact()?;
+        Ok(())
+    }
+
+    pub fn deserialize_triples(
+        path: &Path,
+        storage_folder: Option<String>,
+    ) -> Result<Self, MaplibError> {
+        let mut s = Self::new(None, storage_folder.clone(), None, None)?;
+        s.triplestore = Triplestore::deserialize_triples(&path, storage_folder)?;
+        Ok(s)
+    }
 }

@@ -45,3 +45,4 @@ pyo3 = { workspace = true, optional = true }
 
 itoa.workspace = true
 ryu.workspace = true
+serde.workspace = true

@@ -431,7 +431,6 @@ class IndexingOptions:
         object_sort_some: List["IRI"] = None,
         fts: str = None,
         fts_path: str = None,
-        subject_object_index: bool = None,
     ):
         """
         Defaults to indexing on subjects and objects for select types (e.g. rdf:type and rdfs:label)
@@ -440,7 +439,6 @@ class IndexingOptions:
         :param object_sort_some: Enable object-indexing for a selected list of predicates.
         :param fts: Enable full text search, in memory if a path is not given.
         :param fts_path: Enable full text search, stored at the path
-        :param subject_object_index: An index used to deduplicate before insertion, speeds up mapping at a moderate memory cost. On by default.
         """
 
 ParametersType = Dict[str, "SolutionMappings"]
@@ -515,7 +513,16 @@ class Model:
     def __init__(
         self,
         indexing_options: "IndexingOptions" = None,
+        storage_folder: Union[Path, str] = None,
     ) -> "Model": ...
+
+
+    def serialize(self, path: Union[Path, str]):
+        ...
+
+    def deserialize(path: Union[Path, str]="./serialized_triples") -> "Model":
+        ...
+
 
     def add_template(self, template: Union["Template", str]):
         """

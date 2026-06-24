@@ -2584,6 +2584,7 @@ dependencies = [
  "oxiri",
  "oxsdatatypes",
  "rand 0.9.4",
+ "serde",
  "thiserror",
 ]
 
@@ -3963,6 +3964,8 @@ dependencies = [
  "range-set-blaze",
  "rayon",
  "rust_decimal",
+ "serde",
+ "serde_json",
  "spargebra",
  "thiserror",
  "tracing",
@@ -4973,6 +4976,7 @@ dependencies = [
  "rayon",
  "representation",
  "ryu",
+ "serde",
  "serde_json",
  "simd-json",
  "sparesults",

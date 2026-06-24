@@ -84,6 +84,13 @@ pub enum CatMapsInMemory {
 }
 
 impl CatMapsInMemory {
+    pub fn compact(&mut self) {
+        match self {
+            CatMapsInMemory::Compressed(c) => c.compact(),
+            CatMapsInMemory::Uncompressed(u) => u.compact(),
+        }
+    }
+
     pub fn garbage_collect_cats(&mut self, p0: RangeSetBlaze<u32>) {
         match self {
             CatMapsInMemory::Compressed(c) => {
@@ -275,6 +282,17 @@ pub struct PrefixCompressedCatMapsInMemory {
 }
 
 impl PrefixCompressedCatMapsInMemory {
+    pub(crate) fn compact(&mut self) {
+        for (i, (_, v)) in self
+            .map
+            .range_mut::<PrefixCompressedString, _>(..)
+            .enumerate()
+        {
+            *v = i as u32;
+        }
+        self.rev_map = self.map.iter().map(|(x, y)| (*y, x.clone())).collect();
+    }
+
     pub(crate) fn garbage_collect_cats(&mut self, p0: RangeSetBlaze<u32>) {
         let mut to_delete = Vec::new();
         for r in p0 {
@@ -284,9 +302,7 @@ impl PrefixCompressedCatMapsInMemory {
             self.map.remove(&r).unwrap();
         }
     }
-}
 
-impl PrefixCompressedCatMapsInMemory {
     pub fn new_empty() -> PrefixCompressedCatMapsInMemory {
         PrefixCompressedCatMapsInMemory {
             map: Default::default(),
@@ -524,11 +540,9 @@ impl PrefixCompressedCatMapsInMemory {
 
     pub fn rank_map(&self, us: &HashSet<u32>) -> HashMap<u32, u32> {
         let mut ranked = HashMap::new();
-        let mut rank = 0;
-        for (_, v) in self.map.range(..) {
+        for (i, (_,v)) in self.map.range(..).enumerate() {
             if us.contains(v) {
-                ranked.insert(*v, rank);
-                rank += 1;
+                ranked.insert(*v, i as u32);
             }
         }
         ranked
@@ -546,6 +560,13 @@ pub struct UncompressedCatMapsInMemory {
 }
 
 impl UncompressedCatMapsInMemory {
+    pub(crate) fn compact(&mut self) {
+        for (i, (_, v)) in self.map.range_mut::<Arc<String>, _>(..).enumerate() {
+            *v = i as u32;
+        }
+        self.rev_map = self.map.iter().map(|(x, y)| (*y, x.clone())).collect();
+    }
+
     pub fn new_empty() -> UncompressedCatMapsInMemory {
         UncompressedCatMapsInMemory {
             map: Default::default(),
@@ -576,7 +597,7 @@ impl UncompressedCatMapsInMemory {
     }
 
     pub fn encode_new_string(&mut self, s: String, u: u32) {
-        let s = Arc::new(s.clone());
+        let s = Arc::new(s);
         self.map.insert(s.clone(), u);
         self.rev_map.insert(u, s);
     }
@@ -727,11 +748,9 @@ impl UncompressedCatMapsInMemory {
 
     pub fn rank_map(&self, us: &HashSet<u32>) -> HashMap<u32, u32> {
         let mut ranked = HashMap::new();
-        let mut rank = 0;
-        for (_, v) in self.map.range::<Arc<String>, _>(..) {
+        for (i, (_, v)) in self.map.range::<Arc<String>, _>(..).enumerate() {
             if us.contains(v) {
-                ranked.insert(*v, rank);
-                rank += 1;
+                ranked.insert(*v, i as u32);
             }
         }
         ranked
