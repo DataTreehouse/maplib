@@ -1124,10 +1124,18 @@ class Model:
         :param resources: The templates associated with each resource
         """
 
-    def add_udf(self, name, func: Callable[[pl.DataFrame], pl.DataFrame]):
+    def add_udf(
+            self,
+            name,
+            func: Callable[[pl.DataFrame], pl.DataFrame],
+            output_type: RDFType,
+            input_types: list[RDFType] = []
+    ):
         """
         :param name: IRI of the UDF, e.g. "urn:maplib:myfunc"
         :param func: A callable (DataFrame) -> DataFrame
+        :param output_type: The RDF datatype of the result column
+        :param input_types: Optional list of RDF datatypes of the input columns
         """
 
     def list_udfs(self) -> list[str]:

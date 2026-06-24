@@ -66,6 +66,7 @@ use datalog::python::PyInferenceResult;
 #[cfg(not(target_os = "linux"))]
 use mimalloc::MiMalloc;
 use polars::io::SerReader;
+use pyo3::exceptions::PyTypeError;
 use query_processing::errors::QueryProcessingError;
 use representation::cats::LockedCats;
 use representation::dataset::NamedGraph;
@@ -109,6 +110,8 @@ const DEFAULT_TRIPLES_BATCH_SIZE: usize = 10_000_000;
 #[derive(Clone)]
 struct UdfEntry {
     func: Py<PyAny>,
+    input_types: Vec<BaseRDFNodeType>,
+    output_type: BaseRDFNodeType,
 }
 
 #[derive(Clone)]
@@ -119,6 +122,12 @@ struct PyUdfRegistry {
 impl UdfRegistry for PyUdfRegistry {
     fn has(&self, name: &str) -> bool {
         self.udfs.contains_key(name)
+    }
+    fn input_types(&self, name: &str) -> Option<&[BaseRDFNodeType]> {
+        self.udfs.get(name).map(|e| e.input_types.as_slice())
+    }
+    fn output_type(&self, name: &str) -> Option<&BaseRDFNodeType> {
+        self.udfs.get(name).map(|e| &e.output_type)
     }
     fn call(&self, name: &str, args: DataFrame) -> Result<DataFrame, QueryProcessingError> {
         let entry = self
@@ -1161,13 +1170,32 @@ impl PyModel {
         Ok(PyInferenceResult { inner: res })
     }
 
-    #[pyo3(signature = (name, func))]
-    fn add_udf(&self, py: Python<'_>, name: String, func: Py<PyAny>) -> PyResult<()> {
+    #[pyo3(signature = (name, func, output_type, input_types=vec![]))]
+    fn add_udf(
+        &self,
+        py: Python<'_>,
+        name: String,
+        func: Py<PyAny>,
+        output_type: Bound<'_, PyAny>,
+        input_types: Vec<Bound<'_, PyAny>>,
+    ) -> PyResult<()> {
         if !func.bind(py).is_callable() {
             return Err(PyMaplibError::UDFError(format!("UDF {} is not callable", name)).into());
         }
+        let output = extract_base_type_from_any(&output_type)?;
+        let inputs: Vec<BaseRDFNodeType> = input_types
+            .iter()
+            .map(|t| extract_base_type_from_any(t))
+            .collect::<PyResult<Vec<_>>>()?;
         let mut udfs = self.udfs.lock().unwrap();
-        udfs.insert(name, UdfEntry { func });
+        udfs.insert(
+            name,
+            UdfEntry {
+                func,
+                input_types: inputs,
+                output_type: output,
+            },
+        );
         Ok(())
     }
 
@@ -2272,4 +2300,26 @@ pub fn data_to_mappings_types(
         let df = polars_df_to_rust_df(data)?;
         Ok((df, None))
     }
+}
+
+fn extract_base_type(t: &PyRDFType) -> PyResult<BaseRDFNodeType> {
+    let state = t.flat.as_ref().ok_or_else(|| {
+        PyMaplibError::FunctionArgumentError("RDFType is not a flat type".to_string())
+    })?;
+    if state.map.len() != 1 {
+        return Err(PyTypeError::new_err(
+            "`RDFType` should only contain one mapping",
+        ));
+    }
+    Ok(state.map.keys().next().unwrap().clone())
+}
+
+fn extract_base_type_from_any(obj: &Bound<'_, PyAny>) -> PyResult<BaseRDFNodeType> {
+    if let Ok(rdf_type) = obj.extract::<PyRDFType>() {
+        return extract_base_type(&rdf_type);
+    }
+    if let Ok(iri) = obj.extract::<PyIRI>() {
+        return Ok(BaseRDFNodeType::Literal(iri.into_inner()));
+    }
+    Err(PyTypeError::new_err("Expected RDFType or IRI"))
 }
