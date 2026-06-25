@@ -24,6 +24,7 @@ use representation::{
     BaseRDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD, OBJECT_COL_NAME,
     SUBJECT_COL_NAME,
 };
+use simd_json::prelude::ArrayTrait;
 use std::cmp;
 use std::cmp::{Ordering, Reverse};
 use std::collections::{BTreeMap, BinaryHeap, HashMap, HashSet};
@@ -182,41 +183,64 @@ impl Triples {
         } else {
             subject_sorts.pop().unwrap()
         };
+
         for (t, u32s) in t_u32s {
-            let use_col = if &self.subject_type == &t {
-                SUBJECT_COL_NAME
-            } else {
-                OBJECT_COL_NAME
+            let mut use_cols = vec![];
+            if &self.subject_type == &t {
+                use_cols.push(SUBJECT_COL_NAME);
+            }
+            if &self.object_type == &t {
+                use_cols.push(OBJECT_COL_NAME);
             };
             let rank_map = Arc::new(cats.rank_map(&u32s, &t));
 
-            if t.is_lang_string() {
-                let rank_map_cloned1 = rank_map.clone();
-                let rank_map_cloned2 = rank_map.clone();
-                lf = lf
-                    .with_column(
-                        as_struct(vec![col(use_col)
-                            .struct_()
-                            .field_by_name(LANG_STRING_VALUE_FIELD)
-                            .map(
-                                move |x| {
-                                    let rank_map = rank_map_cloned1.clone();
-                                    let u32s = UInt32Chunked::from_iter(
-                                        x.u32()?
-                                            .iter()
-                                            .map(|x| rank_map.get(&x.unwrap()).map(|x| *x)),
-                                    );
-                                    Ok(u32s.into_column())
-                                },
-                                |_, y| Ok(y.clone()),
-                            )
-                            .alias(LANG_STRING_VALUE_FIELD),
+            for use_col in use_cols {
+                if t.is_lang_string() {
+                    let rank_map_cloned1 = rank_map.clone();
+                    let rank_map_cloned2 = rank_map.clone();
+                    lf =
+                        lf.with_column(
+                            as_struct(vec![
+                                col(use_col)
+                                    .struct_()
+                                    .field_by_name(LANG_STRING_VALUE_FIELD)
+                                    .map(
+                                        move |x| {
+                                            let rank_map = rank_map_cloned1.clone();
+                                            let u32s =
+                                                UInt32Chunked::from_iter(x.u32()?.iter().map(
+                                                    |x| rank_map.get(&x.unwrap()).map(|x| *x),
+                                                ));
+                                            Ok(u32s.into_column())
+                                        },
+                                        |_, y| Ok(y.clone()),
+                                    )
+                                    .alias(LANG_STRING_VALUE_FIELD),
+                                col(use_col)
+                                    .struct_()
+                                    .field_by_name(LANG_STRING_LANG_FIELD)
+                                    .map(
+                                        move |x| {
+                                            let rank_map = rank_map_cloned2.clone();
+                                            let u32s =
+                                                UInt32Chunked::from_iter(x.u32()?.iter().map(
+                                                    |x| rank_map.get(&x.unwrap()).map(|x| *x),
+                                                ));
+                                            Ok(u32s.into_column())
+                                        },
+                                        |_, y| Ok(y.clone()),
+                                    )
+                                    .alias(LANG_STRING_LANG_FIELD),
+                            ])
+                            .alias(OBJECT_COL_NAME),
+                        );
+                } else {
+                    let rank_map_cloned = rank_map.clone();
+                    lf = lf.with_column(
                         col(use_col)
-                            .struct_()
-                            .field_by_name(LANG_STRING_LANG_FIELD)
                             .map(
                                 move |x| {
-                                    let rank_map = rank_map_cloned2.clone();
+                                    let rank_map = rank_map_cloned.clone();
                                     let u32s = UInt32Chunked::from_iter(
                                         x.u32()?
                                             .iter()
@@ -226,26 +250,9 @@ impl Triples {
                                 },
                                 |_, y| Ok(y.clone()),
                             )
-                            .alias(LANG_STRING_LANG_FIELD)]).alias(OBJECT_COL_NAME),
+                            .alias(use_col),
                     );
-            } else {
-                let rank_map_cloned = rank_map.clone();
-                lf = lf.with_column(
-                    col(use_col)
-                        .map(
-                            move |x| {
-                                let rank_map = rank_map_cloned.clone();
-                                let u32s = UInt32Chunked::from_iter(
-                                    x.u32()?
-                                        .iter()
-                                        .map(|x| rank_map.get(&x.unwrap()).map(|x| *x)),
-                                );
-                                Ok(u32s.into_column())
-                            },
-                            |_, y| Ok(y.clone()),
-                        )
-                        .alias(use_col),
-                );
+                }
             }
         }
         let sort_options = SortMultipleOptions {
@@ -257,15 +264,18 @@ impl Triples {
         };
         if need_sort {
             if self.object_type.is_lang_string() {
-                lf = lf
-                    .sort_by_exprs(
-                        vec![
-                            col(SUBJECT_COL_NAME),
-                            col(OBJECT_COL_NAME).struct_().field_by_name(LANG_STRING_VALUE_FIELD),
-                            col(OBJECT_COL_NAME).struct_().field_by_name(LANG_STRING_LANG_FIELD),
-                        ],
-                        sort_options,
-                    );
+                lf = lf.sort_by_exprs(
+                    vec![
+                        col(SUBJECT_COL_NAME),
+                        col(OBJECT_COL_NAME)
+                            .struct_()
+                            .field_by_name(LANG_STRING_VALUE_FIELD),
+                        col(OBJECT_COL_NAME)
+                            .struct_()
+                            .field_by_name(LANG_STRING_LANG_FIELD),
+                    ],
+                    sort_options,
+                );
             } else {
                 lf = lf.sort(
                     vec![
@@ -1079,7 +1089,6 @@ impl StoredTriples {
         Ok(out)
     }
 }
-
 
 #[derive(Clone)]
 pub struct TriplesInMemory {

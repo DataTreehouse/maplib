@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use super::{CatEncs, CatType, Cats, EncodedTriples};
 use crate::cats::maps::CatMaps;
 use crate::cats::LockedCats;
@@ -292,7 +293,7 @@ fn encode_single_string_series(
                     } else {
                         *use_height += 1;
                         let su = *use_height;
-                        new_enc.maps.encode_new_in_memory_string(s.to_string(), su);
+                        new_enc.maps.encode_new_in_memory_string(Cow::Borrowed(s), su);
                         encoded_global_local.push(Some(su))
                     }
                 } else {
@@ -308,7 +309,7 @@ fn encode_single_string_series(
                 } else {
                     *use_height += 1;
                     let su = *use_height;
-                    new_enc.maps.encode_new_in_memory_string(s.to_string(), su);
+                    new_enc.maps.encode_new_in_memory_string(Cow::Borrowed(s), su);
                     encoded_global_local.push(Some(su))
                 }
             } else {

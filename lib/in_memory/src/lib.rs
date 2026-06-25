@@ -1,4 +1,5 @@
 #![feature(pattern)]
+#![feature(str_as_str)]
 
 use arrow::array::{Array, RecordBatch, StringArray, UInt32Array};
 use arrow::datatypes::{Field, Schema};
@@ -188,20 +189,28 @@ impl CatMapsInMemory {
         let maybe_encoded = self.maybe_encode_strs(&maybes);
         for (s, u) in maybe_new_strings.into_iter().zip(maybe_encoded) {
             if u.is_none() {
-                self.encode_new_in_memory_string(s, *c);
+                self.encode_new_in_memory_string(Cow::Owned(s), *c);
                 *c += 1;
             }
         }
     }
 
-    pub fn encode_new_in_memory_string(&mut self, s: String, u: u32) {
+    pub fn encode_new_in_memory_string(&mut self, s: Cow<'_, str>, u: u32) {
         match self {
             CatMapsInMemory::Compressed(m) => {
-                m.encode_new_string(s, u);
+                m.encode_new_string(&*s, u);
             }
             CatMapsInMemory::Uncompressed(m) => {
-                m.encode_new_string(s, u);
+                m.encode_new_string(s.into_owned(), u);
             }
+        }
+    }
+
+    pub fn from_ordered_vec(ss:Vec<(Cow<'_, str>, u32)>, is_iri:bool) -> Self {
+        if is_iri {
+            CatMapsInMemory::Compressed(PrefixCompressedCatMapsInMemory::from_ordered_vec(ss))
+        } else {
+            CatMapsInMemory::Uncompressed(UncompressedCatMapsInMemory::from_ordered_vec(ss))
         }
     }
 
@@ -282,6 +291,35 @@ pub struct PrefixCompressedCatMapsInMemory {
 }
 
 impl PrefixCompressedCatMapsInMemory {
+    fn from_ordered_vec(ss: Vec<(Cow<str>, u32)>) -> PrefixCompressedCatMapsInMemory {
+        let split_vec = ss.par_iter().map(|(s,u)|{
+            let (pre,suf) =  split_iri(s.as_str());
+            (pre,Arc::new(suf.to_string()), *u)
+        }).collect::<Vec<_>>();
+        let mut prefix_map: HashMap<String, Arc<String>> = HashMap::new();
+        let mut prefix_compressed_vec = Vec::with_capacity(split_vec.len());
+        for (pre, suf, u) in split_vec {
+            let pre_arc = if let Some(pre_arc) = prefix_map.get(pre) {
+                pre_arc.clone()
+            } else {
+                let pre_arc = Arc::new(pre.to_string());
+                prefix_map.insert(pre.to_string(), pre_arc.clone());
+                pre_arc
+            };
+            let pc_string = PrefixCompressedString{ prefix: pre_arc, suffix: suf };
+            prefix_compressed_vec.push((pc_string, u))
+        }
+        let map = BTreeMap::from_iter(prefix_compressed_vec.into_iter());
+        let rev_map = HashMap::from_iter(map.iter().map(|(x,y)|{(*y,x.clone())}).into_iter());
+        PrefixCompressedCatMapsInMemory{
+            map,
+            rev_map,
+            prefix_map,
+        }
+    }
+}
+
+impl PrefixCompressedCatMapsInMemory {
     pub(crate) fn compact(&mut self) {
         for (i, (_, v)) in self
             .map
@@ -342,12 +380,12 @@ impl PrefixCompressedCatMapsInMemory {
         self.map.len() as u32
     }
 
-    pub fn encode_new_string(&mut self, s: String, u: u32) {
-        self.encode_new_str(&s, u)
+    pub fn encode_new_string(&mut self, s: &str, u: u32) {
+        self.encode_new_str(s, u)
     }
 
     fn encode_new_str(&mut self, s: &str, u: u32) {
-        let (pre, suf) = split_iri(&s);
+        let (pre, suf) = split_iri(s);
         let arc_pre = self.encode_or_add_new_prefix_str(pre);
         let compr = PrefixCompressedString {
             prefix: arc_pre,
@@ -557,6 +595,15 @@ impl PrefixCompressedCatMapsInMemory {
 pub struct UncompressedCatMapsInMemory {
     map: BTreeMap<Arc<String>, u32>,
     rev_map: HashMap<u32, Arc<String>, BuildHasherDefault<NoHashHasher<u32>>>,
+}
+
+impl UncompressedCatMapsInMemory {
+    fn from_ordered_vec(ss: Vec<(Cow<str>, u32)>) -> UncompressedCatMapsInMemory {
+        let ss_arced = ss.into_par_iter().map(|(s, u)| (Arc::new(s.into_owned()), u)).collect::<Vec<_>>();
+        let map = BTreeMap::from_iter(ss_arced.into_iter());
+        let rev_map = HashMap::from_iter(map.iter().map(|(s, u)| (*u,s.clone())));
+        UncompressedCatMapsInMemory{ map, rev_map }
+    }
 }
 
 impl UncompressedCatMapsInMemory {

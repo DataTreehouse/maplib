@@ -6,6 +6,7 @@ pub mod maps;
 mod re_encode;
 pub mod serialization;
 
+use std::borrow::Cow;
 pub use decode::*;
 pub use encode::*;
 pub use globalize::*;
@@ -187,7 +188,7 @@ impl Cats {
         let lang_u = u + 1;
         catenc
             .maps
-            .encode_new_in_memory_string(lang.to_string(), lang_u);
+            .encode_new_in_memory_string(Cow::Borrowed(lang), lang_u);
         let t = if let BaseRDFNodeType::Literal(dt) = dt {
             CatType::Literal(dt)
         } else {

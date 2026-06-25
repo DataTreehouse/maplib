@@ -1115,6 +1115,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "dashmap"
+version = "7.0.0-rc2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e4a1e35a65fe0538a60167f0ada6e195ad5d477f6ddae273943596d4a1a5730b"
+dependencies = [
+ "cfg-if",
+ "crossbeam-utils",
+ "equivalent",
+ "hashbrown 0.15.5",
+ "lock_api",
+ "parking_lot_core",
+]
+
+[[package]]
 name = "datalog"
 version = "0.1.0"
 dependencies = [
@@ -1958,6 +1972,7 @@ name = "in_memory"
 version = "0.1.0"
 dependencies = [
  "arrow",
+ "dashmap 7.0.0-rc2",
  "nohash-hasher",
  "range-set-blaze",
  "rayon",
@@ -2036,7 +2051,7 @@ version = "0.7.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6e14eda50a3494b3bf7b9ce51c52434a761e383d7238ce1dd5dcec2fbc13e9fb"
 dependencies = [
- "dashmap",
+ "dashmap 6.2.1",
  "hashbrown 0.14.5",
 ]
 

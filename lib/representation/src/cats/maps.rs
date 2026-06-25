@@ -107,7 +107,7 @@ impl CatMaps {
             }
         }
     }
-    pub fn encode_new_in_memory_string(&mut self, s: String, u: u32) {
+    pub fn encode_new_in_memory_string(&mut self, s: Cow<'_, str>, u: u32) {
         match self {
             CatMaps::InMemory(m) => {
                 m.encode_new_in_memory_string(s, u);

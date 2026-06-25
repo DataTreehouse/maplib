@@ -10,3 +10,4 @@ nohash-hasher.workspace = true
 rayon.workspace = true
 arrow.workspace = true
 range-set-blaze.workspace = true
+dashmap.workspace = true

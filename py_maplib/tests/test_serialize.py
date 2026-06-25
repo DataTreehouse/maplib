@@ -6,7 +6,9 @@ TESTDATA_PATH = PATH_HERE / "testdata"
 
 def test_easy_serialize():
     m = Model()
-    m.read(TESTDATA_PATH / "expected_easy_case.ttl")
+    m.read(TESTDATA_PATH / "serialization1.ttl")
+    m.read(TESTDATA_PATH / "serialization2.ttl")
+
     m.serialize("serialized")
 
     m2 = Model.deserialize("serialized")

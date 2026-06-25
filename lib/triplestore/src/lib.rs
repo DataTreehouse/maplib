@@ -188,8 +188,7 @@ impl Triplestore {
                 }
             }
         }
-        let compacted: Result<Vec<_>, TriplestoreError> = to_compact
-            .drain(..)
+        let compacted: Result<Vec<_>, TriplestoreError> = to_compact.into_iter()
             .map(|(data, triples)| {
                 let object_indexing_enabled = triples.object_indexing_enabled;
                 let stored_triples =
