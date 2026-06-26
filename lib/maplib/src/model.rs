@@ -236,6 +236,13 @@ impl Model {
     }
 
     #[instrument(skip_all)]
+    pub fn map_df(&mut self, df: &DataFrame, graph: &NamedGraph) -> Result<(), MaplibError> {
+        self.triplestore
+            .map_df(df, graph)
+            .map_err(MaplibError::TriplestoreError)
+    }
+
+    #[instrument(skip_all)]
     pub fn map_xml_path(
         &mut self,
         path: &Path,
@@ -706,6 +713,25 @@ impl Model {
             latest_report_graph: None,
             chrontext_settings: self.chrontext_settings.clone(),
         })
+    }
+
+    pub fn serialize_triples(&mut self, path: &Path) -> Result<(), MaplibError> {
+        self.triplestore.serialize_triples(&path)?;
+        Ok(())
+    }
+
+    pub fn compact(&mut self) -> Result<(), MaplibError> {
+        self.triplestore.compact()?;
+        Ok(())
+    }
+
+    pub fn deserialize_triples(
+        path: &Path,
+        storage_folder: Option<String>,
+    ) -> Result<Self, MaplibError> {
+        let mut s = Self::new(None, storage_folder.clone(), None, None)?;
+        s.triplestore = Triplestore::deserialize_triples(&path, storage_folder)?;
+        Ok(s)
     }
 
     pub fn add_udf(

@@ -119,7 +119,15 @@ impl SeriesBuilder {
         if let SeriesBuilder::U32(v) = self {
             v.push(Some(u));
         } else {
-            panic!("Should never be used for non string builder")
+            panic!("Should never be used for non u32 builder")
+        }
+    }
+
+    pub fn push_u64(&mut self, u: u64) {
+        if let SeriesBuilder::U64(v) = self {
+            v.push(Some(u));
+        } else {
+            panic!("Should never be used for non u64 builder")
         }
     }
 

@@ -3,7 +3,13 @@
 #
 # '''
 
+import os
+
+# use default memory pool to prevent segmentation fault
+os.environ['ARROW_DEFAULT_MEMORY_POOL'] = 'system'
+import pyarrow as pa
 import logging
+
 logger = logging.getLogger(__name__)
 
 __all__ = [
@@ -49,13 +55,13 @@ if (pathlib.Path(__file__).parent.resolve() / "graph_explorer").exists():
 else:
 
     def _explore(
-        m: "Model",
-        host: str = "localhost",
-        port: int = 8000,
-        bind: str = "localhost",
-        popup=True,
-        fts=True,
-        fts_path:str="fts",
+            m: "Model",
+            host: str = "localhost",
+            port: int = 8000,
+            bind: str = "localhost",
+            popup=True,
+            fts=True,
+            fts_path: str = "fts",
     ):
         print("Contact Data Treehouse to try!")
 
@@ -84,7 +90,7 @@ webbrowser.open(s.url, new=2)
     elif kwargs.get("popup") == False:
         logger.warn("The new explore function on a Model, no longer defaults to popping up the browser ")
 
-
     return _explore(*args, **kwargs)
+
 
 __version__ = version("maplib")

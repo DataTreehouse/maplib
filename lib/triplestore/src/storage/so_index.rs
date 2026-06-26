@@ -157,7 +157,7 @@ macro_rules! binary_nonlang_nonlang_index_impl {
                 }
             }
 
-            pub fn insert(&mut self, df: &DataFrame) -> Option<DataFrame> {
+            pub fn insert_deduplicate(&mut self, df: &DataFrame) -> Option<DataFrame> {
                 let subj_col = df.column(SUBJECT_COL_NAME).unwrap();
                 let obj_col = df.column(OBJECT_COL_NAME).unwrap();
                 let subj_ch = $subj_chunked_func(&subj_col);
@@ -214,6 +214,21 @@ macro_rules! binary_nonlang_nonlang_index_impl {
                 }
             }
 
+            pub fn insert(&mut self, df: &DataFrame) {
+                let subj_col = df.column(SUBJECT_COL_NAME).unwrap();
+                let obj_col = df.column(OBJECT_COL_NAME).unwrap();
+                let subj_ch = $subj_chunked_func(&subj_col);
+                let obj_ch = $obj_chunked_func(&obj_col);
+
+                for (subj, obj) in subj_ch.iter().zip(obj_ch.iter()) {
+                    let subj = $maybe_unwrap(subj);
+                    let obj = $maybe_unwrap(obj);
+
+                    self.index
+                        .insert(($prep_index_subj(subj), $prep_index_obj(obj)));
+                }
+            }
+
             pub fn delete(&mut self, df: &DataFrame) {
                 let subj_col = df.column(SUBJECT_COL_NAME).unwrap();
                 let obj_col = df.column(OBJECT_COL_NAME).unwrap();
@@ -247,7 +262,7 @@ macro_rules! binary_nonlang_lang_index_impl {
                 }
             }
 
-            pub fn insert(&mut self, df: &DataFrame) -> Option<DataFrame> {
+            pub fn insert_deduplicate(&mut self, df: &DataFrame) -> Option<DataFrame> {
                 let subj_col = df.column(SUBJECT_COL_NAME).unwrap();
                 let obj_col = df.column(OBJECT_COL_NAME).unwrap();
                 let subj_ch = $subj_chunked_func(&subj_col);
@@ -339,6 +354,32 @@ macro_rules! binary_nonlang_lang_index_impl {
                         .collect()
                         .unwrap();
                     Some(new_df)
+                }
+            }
+
+            pub fn insert(&mut self, df: &DataFrame) {
+                let subj_col = df.column(SUBJECT_COL_NAME).unwrap();
+                let obj_col = df.column(OBJECT_COL_NAME).unwrap();
+                let subj_ch = $subj_chunked_func(&subj_col);
+                let obj_v = obj_col
+                    .struct_()
+                    .unwrap()
+                    .field_by_name(LANG_STRING_VALUE_FIELD)
+                    .unwrap();
+                let obj_l = obj_col
+                    .struct_()
+                    .unwrap()
+                    .field_by_name(LANG_STRING_LANG_FIELD)
+                    .unwrap();
+                let obj_v_iter = obj_v.u32().unwrap().iter();
+                let obj_l_iter = obj_l.u32().unwrap().iter();
+
+                for ((subj, obj_v), obj_l) in subj_ch.iter().zip(obj_v_iter).zip(obj_l_iter) {
+                    let subj = $maybe_unwrap(subj);
+                    let obj_v = $maybe_unwrap(obj_v);
+                    let obj_l = $maybe_unwrap(obj_l);
+
+                    self.index.insert(($prep_index_a(subj), obj_v, obj_l));
                 }
             }
 
@@ -601,7 +642,7 @@ impl SubjectObjectIndex {
         }
     }
 
-    pub fn insert(&mut self, df: &DataFrame) -> Option<DataFrame> {
+    pub fn insert(&mut self, df: &DataFrame) {
         match self {
             SubjectObjectIndex::U32LangIndex(i) => i.insert(df),
             SubjectObjectIndex::U32U8Index(i) => i.insert(df),
@@ -618,6 +659,26 @@ impl SubjectObjectIndex {
             SubjectObjectIndex::U32DateTimeIndex(i) => i.insert(df),
             SubjectObjectIndex::U32BoolIndex(i) => i.insert(df),
             SubjectObjectIndex::U32U32Index(i) => i.insert(df),
+        }
+    }
+
+    pub fn insert_deduplicate(&mut self, df: &DataFrame) -> Option<DataFrame> {
+        match self {
+            SubjectObjectIndex::U32LangIndex(i) => i.insert_deduplicate(df),
+            SubjectObjectIndex::U32U8Index(i) => i.insert_deduplicate(df),
+            SubjectObjectIndex::U32I8Index(i) => i.insert_deduplicate(df),
+            SubjectObjectIndex::U32U16Index(i) => i.insert_deduplicate(df),
+            SubjectObjectIndex::U32I16Index(i) => i.insert_deduplicate(df),
+            SubjectObjectIndex::U32I32Index(i) => i.insert_deduplicate(df),
+            SubjectObjectIndex::U32U64Index(i) => i.insert_deduplicate(df),
+            SubjectObjectIndex::U32I64Index(i) => i.insert_deduplicate(df),
+            SubjectObjectIndex::U32F32Index(i) => i.insert_deduplicate(df),
+            SubjectObjectIndex::U32F64Index(i) => i.insert_deduplicate(df),
+            SubjectObjectIndex::U32DecimalIndex(i) => i.insert_deduplicate(df),
+            SubjectObjectIndex::U32DateIndex(i) => i.insert_deduplicate(df),
+            SubjectObjectIndex::U32DateTimeIndex(i) => i.insert_deduplicate(df),
+            SubjectObjectIndex::U32BoolIndex(i) => i.insert_deduplicate(df),
+            SubjectObjectIndex::U32U32Index(i) => i.insert_deduplicate(df),
         }
     }
 

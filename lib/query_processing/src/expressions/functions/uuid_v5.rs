@@ -1,6 +1,6 @@
 use crate::errors::QueryProcessingError;
 use crate::expressions::functions::eval_uuid_namespace::eval_uuid_namespace;
-use crate::expressions::functions::str_function;
+use crate::expressions::functions::str_function::str_function;
 use polars::datatypes::{DataType, Field, PlSmallStr};
 use polars::prelude::{as_struct, by_name, IntoColumn, StringChunkedBuilder};
 use representation::cats::LockedCats;

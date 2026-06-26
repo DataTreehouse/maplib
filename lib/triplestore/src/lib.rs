@@ -1,14 +1,15 @@
-#![feature(str_as_str)]
 extern crate core;
 
 pub mod cats;
 mod dblf;
 pub mod errors;
+mod map_df;
 mod map_json;
 mod map_xml;
 pub mod native_parquet_write;
 pub mod query_solutions;
 pub mod rdfs_inferencing;
+pub mod serialization;
 pub mod sparql;
 pub mod storage;
 pub mod triples_read;
@@ -25,7 +26,8 @@ use polars::prelude::{
 };
 use polars_core::prelude::{IntoColumn, Series, SortMultipleOptions};
 use pyo3::{Py, PyAny};
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use range_set_blaze::RangeSetBlaze;
+use rayon::iter::{IntoParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
 use rayon::iter::{IntoParallelRefIterator, ParallelDrainRange};
 use representation::cats::{
     cat_encode_triples, CatTriples, CatType, Cats, EncodedTriples, LockedCats,
@@ -37,6 +39,7 @@ use representation::{
     literal_iri_to_namednode, BaseRDFNodeType, RDFNodeState, LANG_STRING_LANG_FIELD,
     LANG_STRING_VALUE_FIELD, OBJECT_COL_NAME, PREDICATE_COL_NAME, SUBJECT_COL_NAME,
 };
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -46,7 +49,7 @@ use uuid::Uuid;
 use query_processing::udf::UdfRegistry;
 use representation::cats::maps::CatMaps;
 use representation::dataset::NamedGraph;
-use tracing::{instrument, trace};
+use tracing::{debug, instrument, trace};
 
 #[derive(Clone)]
 pub struct Triplestore {
@@ -63,8 +66,11 @@ pub struct Triplestore {
     indexing: HashMap<NamedGraph, IndexingOptions>,
     fts_index: HashMap<NamedGraph, FtsIndex>,
     pub global_cats: LockedCats,
+    n_triples_deleted: usize,
     pub udf_registry: Arc<UdfRegistry>,
 }
+
+const GC_LIMIT: &usize = &1_000_000;
 
 impl Triplestore {
     pub fn add_udf(
@@ -76,6 +82,179 @@ impl Triplestore {
     ) {
         let reg = Arc::get_mut(&mut self.udf_registry).expect("UDF registry is not borrowed");
         reg.add_udf(iri, f, output_type, input_types)
+    }
+
+    pub fn maybe_garbage_collect(&mut self) -> Result<u32, TriplestoreError> {
+        if self.storage_folder.is_none() && &self.n_triples_deleted >= GC_LIMIT {
+            self.garbage_collect()
+        } else {
+            Ok(0)
+        }
+    }
+
+    pub fn garbage_collect(&mut self) -> Result<u32, TriplestoreError> {
+        let mut predicate_and_graph_iris = Vec::new();
+        for (g, m) in self
+            .graph_triples_map
+            .iter()
+            .chain(self.graph_transient_triples_map.iter())
+        {
+            if let NamedGraph::NamedGraph(nn) = &g {
+                predicate_and_graph_iris.push(nn);
+            }
+            for p in m.keys() {
+                predicate_and_graph_iris.push(p);
+            }
+        }
+
+        let pred_graph_series =
+            Series::from_iter(predicate_and_graph_iris.iter().map(|x| x.as_str()));
+
+        let (pred_graph_u32_series, locals) = self
+            .global_cats
+            .read()?
+            .encode_series(&pred_graph_series, &BaseRDFNodeType::IRI);
+        assert!(locals.is_none());
+
+        let garbage_collected: Result<Vec<_>, TriplestoreError> = self
+            .global_cats
+            .write()?
+            .cat_map
+            .par_iter_mut()
+            .map(|(ct, ce)| {
+                let t = ct.as_base_rdf_node_type();
+                let mut rs = ce.maps.range_set();
+                if ct.as_base_rdf_node_type().is_iri() {
+                    let pred_graph_rs = RangeSetBlaze::from_iter(
+                        pred_graph_u32_series
+                            .u32()
+                            .unwrap()
+                            .iter()
+                            .map(|x| x.unwrap()),
+                    );
+                    rs = rs - pred_graph_rs;
+                }
+                for g in self
+                    .graph_triples_map
+                    .values()
+                    .chain(self.graph_transient_triples_map.values())
+                {
+                    for v in g.values() {
+                        for ((st, ot), triples) in v {
+                            if st == &t {
+                                let lfs = triples.get_lazy_frames(&None, &None)?;
+                                for (lf, _) in lfs {
+                                    let df = lf.select([col(SUBJECT_COL_NAME)]).collect().unwrap();
+                                    let s_col = df.column(SUBJECT_COL_NAME).unwrap();
+                                    let s_rs = RangeSetBlaze::from_iter(
+                                        s_col.u32().unwrap().iter().map(|x| x.unwrap()),
+                                    );
+                                    rs = rs - s_rs;
+                                }
+                            }
+                            if ot == &t {
+                                let lfs = triples.get_lazy_frames(&None, &None)?;
+                                for (lf, _) in lfs {
+                                    let df = lf.select([col(OBJECT_COL_NAME)]).collect().unwrap();
+                                    let s_col = df.column(OBJECT_COL_NAME).unwrap();
+                                    let s_rs = RangeSetBlaze::from_iter(
+                                        s_col.u32().unwrap().iter().map(|x| x.unwrap()),
+                                    );
+                                    rs = rs - s_rs;
+                                }
+                            }
+                        }
+                    }
+                }
+                let n_collected = rs.len() as u32;
+                if !rs.is_empty() {
+                    ce.maps.garbage_collect_cats(rs)
+                }
+                Ok(n_collected)
+            })
+            .collect();
+        let garbage_collected = garbage_collected?;
+        self.n_triples_deleted = 0;
+        let gced = garbage_collected.iter().sum();
+        debug!("Garbage collected {} cats", gced);
+        Ok(gced)
+    }
+
+    pub fn compact(&mut self) -> Result<(), TriplestoreError> {
+        let mut to_compact = Vec::new();
+        for ((graph, map), transient) in self
+            .graph_triples_map
+            .drain()
+            .map(|x| (x, false))
+            .chain(self.graph_transient_triples_map.drain().map(|x| (x, true)))
+        {
+            for (pred, map) in map {
+                for ((subject_type, object_type), triples) in map {
+                    to_compact.push((
+                        (
+                            transient,
+                            graph.clone(),
+                            pred.clone(),
+                            subject_type.clone(),
+                            object_type.clone(),
+                        ),
+                        triples,
+                    ));
+                }
+            }
+        }
+        let compacted: Result<Vec<_>, TriplestoreError> = to_compact
+            .into_iter()
+            .map(|(data, triples)| {
+                let object_indexing_enabled = triples.object_indexing_enabled;
+                let stored_triples =
+                    triples.compact(&self.global_cats.read().expect("Should be readable"))?;
+                Ok((data, object_indexing_enabled, stored_triples))
+            })
+            .collect();
+        let compacted = compacted?;
+        self.global_cats
+            .write()
+            .expect("Should be writable")
+            .compact();
+        let data_and_triples: Result<Vec<_>, TriplestoreError> = compacted
+            .into_par_iter()
+            .map(
+                |(
+                    (transient, graph, pred, subject_type, object_type),
+                    object_indexing_enabled,
+                    st,
+                )| {
+                    let triples = Triples::new_compacted(
+                        st.get_lazy_frame()?.collect().unwrap(),
+                        subject_type.clone(),
+                        object_type.clone(),
+                        object_indexing_enabled,
+                        self.global_cats.clone(),
+                    )?;
+                    Ok((transient, graph, pred, subject_type, object_type, triples))
+                },
+            )
+            .collect();
+
+        for (transient, graph, pred, subject_type, object_type, triples) in data_and_triples? {
+            let use_graph_map = if transient {
+                &mut self.graph_transient_triples_map
+            } else {
+                &mut self.graph_triples_map
+            };
+            if !use_graph_map.contains_key(&graph) {
+                use_graph_map.insert(graph.clone(), HashMap::new());
+            }
+            let pred_map = use_graph_map.get_mut(&graph).unwrap();
+            if !pred_map.contains_key(&pred) {
+                pred_map.insert(pred.clone(), HashMap::new());
+            }
+            let triples_map = pred_map.get_mut(&pred).unwrap();
+            triples_map.insert((subject_type, object_type), triples);
+        }
+
+        Ok(())
     }
 
     pub fn graph_size(&self, named_graph: &NamedGraph) -> usize {
@@ -252,6 +431,7 @@ impl Triplestore {
                 indexing: HashMap::from_iter([(new_graph_name.clone(), new_indexing)]),
                 fts_index: new_fts_index_map,
                 global_cats: LockedCats::new(cats_image),
+                n_triples_deleted: 0,
                 udf_registry: Arc::new(UdfRegistry::new()),
             })
         } else {
@@ -271,13 +451,14 @@ impl Triplestore {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct IndexingOptions {
     pub object_sort_all: bool,
     pub object_sort_some: Option<HashSet<NamedNode>>,
+    #[serde(skip)]
     pub fts: bool,
+    #[serde(skip)]
     pub fts_path: Option<PathBuf>,
-    pub subject_object_index: bool,
 }
 
 impl IndexingOptions {
@@ -286,7 +467,6 @@ impl IndexingOptions {
         object_sort_some: Option<HashSet<NamedNode>>,
         mut fts: bool,
         fts_path: Option<PathBuf>,
-        subject_object_index: bool,
     ) -> Self {
         fts = fts || fts_path.is_some();
         Self {
@@ -294,15 +474,10 @@ impl IndexingOptions {
             object_sort_some,
             fts,
             fts_path,
-            subject_object_index,
         }
     }
 
-    pub fn new_default_object_sort(
-        fts: bool,
-        fts_path: Option<PathBuf>,
-        subject_object_index: bool,
-    ) -> IndexingOptions {
+    pub fn new_default_object_sort(fts: bool, fts_path: Option<PathBuf>) -> IndexingOptions {
         IndexingOptions::new(
             false,
             Some(HashSet::from([
@@ -311,7 +486,6 @@ impl IndexingOptions {
             ])),
             fts,
             fts_path,
-            subject_object_index,
         )
     }
 
@@ -326,7 +500,7 @@ impl IndexingOptions {
 
 impl Default for IndexingOptions {
     fn default() -> Self {
-        IndexingOptions::new_default_object_sort(false, None, Self::default_subject_object_index())
+        IndexingOptions::new_default_object_sort(false, None)
     }
 }
 
@@ -420,6 +594,7 @@ impl Triplestore {
             indexing: HashMap::from([(NamedGraph::DefaultGraph, indexing)]),
             fts_index: fts_index_map,
             global_cats: locked_cats,
+            n_triples_deleted: 0,
             udf_registry: Arc::new(UdfRegistry::new()),
         })
     }
@@ -585,7 +760,6 @@ impl Triplestore {
             let (_, v) = add_map.get_mut(&k2).unwrap();
             v.push(encoded_triples);
         }
-        let storage_folder = self.storage_folder.clone();
         let cats = self.global_cats.clone();
         let mut add_vec = vec![];
         for ((graph, p, s, o), (t1, t2)) in add_map.into_iter() {
@@ -619,23 +793,12 @@ impl Triplestore {
                         object_type: o.clone(),
                     };
                     new_triples_vec.push(new_triples);
-                    let triples = Triples::new(
-                        et.df,
-                        storage_folder.as_ref(),
-                        s.clone(),
-                        o.clone(),
-                        &p,
-                        &indexing,
-                        cats.clone(),
-                    )?;
+                    let triples =
+                        Triples::new(et.df, s.clone(), o.clone(), &p, &indexing, cats.clone())?;
                     triples
                 };
                 for enc in v_iter {
-                    let new_triples_opt = triples.add_triples(
-                        enc.df.clone(),
-                        storage_folder.as_ref(),
-                        cats.clone(),
-                    )?;
+                    let new_triples_opt = triples.add_triples(enc.df.clone(), cats.clone())?;
                     let new_triples = NewTriples {
                         df: new_triples_opt
                             .map(|x| x.select([SUBJECT_COL_NAME, OBJECT_COL_NAME]).unwrap()),

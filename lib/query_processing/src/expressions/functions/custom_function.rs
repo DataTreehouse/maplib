@@ -5,7 +5,7 @@ use crate::constants::{
 use crate::errors::QueryProcessingError;
 use crate::expressions::functions::struuid_v5::struuid_v5;
 use crate::expressions::functions::uuid_v5::uuid_v5;
-use crate::expressions::functions::xsd_cast_literal;
+use crate::expressions::functions::xsd_cast_literal::xsd_cast_literal;
 use crate::udf::UdfRegistry;
 use oxrdf::vocab::xsd;
 use oxrdf::NamedNode;
@@ -331,10 +331,7 @@ pub fn custom_(
                 .columns()
                 .first()
                 .ok_or_else(|| {
-                    QueryProcessingError::UDFError(format!(
-                        "UDF '{}' returned empty DataFrame",
-                        nn
-                    ))
+                    QueryProcessingError::UDFError(format!("UDF '{}' returned empty DataFrame", nn))
                 })?
                 .as_materialized_series()
                 .clone();

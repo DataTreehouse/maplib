@@ -1156,6 +1156,7 @@ dependencies = [
  "arrow",
  "in_memory",
  "nohash-hasher",
+ "range-set-blaze",
 ]
 
 [[package]]
@@ -1470,6 +1471,12 @@ dependencies = [
  "pin-project-lite",
  "slab",
 ]
+
+[[package]]
+name = "gen_ops"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "304de19db7028420975a296ab0fcbbc8e69438c4ed254a1e41e2a7f37d5f0e0a"
 
 [[package]]
 name = "generic-array"
@@ -1939,6 +1946,7 @@ version = "0.1.0"
 dependencies = [
  "arrow",
  "nohash-hasher",
+ "range-set-blaze",
  "rayon",
 ]
 
@@ -2500,6 +2508,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
+name = "opc_ua"
+version = "0.1.0"
+dependencies = [
+ "maplib",
+ "representation",
+]
+
+[[package]]
 name = "openssl-probe"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2552,6 +2568,7 @@ dependencies = [
  "oxiri",
  "oxsdatatypes",
  "rand 0.9.4",
+ "serde",
  "thiserror",
 ]
 
@@ -3455,13 +3472,14 @@ dependencies = [
 
 [[package]]
 name = "py_maplib"
-version = "0.20.19"
+version = "0.20.21"
 dependencies = [
  "chrono",
  "cimxml_export",
  "datalog",
  "maplib",
  "mimalloc",
+ "opc_ua",
  "oxrdf",
  "oxrdfio",
  "polars",
@@ -3781,6 +3799,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "range-set-blaze"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4dbaaf29990efce7efbdb301794fbacf9fcdbfb871e77f67c00b0ae3c08b665e"
+dependencies = [
+ "gen_ops",
+ "itertools",
+ "num-integer",
+ "num-traits",
+]
+
+[[package]]
 name = "raw-cpuid"
 version = "11.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3915,10 +3945,14 @@ dependencies = [
  "oxrdf",
  "oxsdatatypes",
  "polars",
+ "polars-arrow",
  "polars-core",
  "pyo3",
+ "range-set-blaze",
  "rayon",
  "rust_decimal",
+ "serde",
+ "serde_json",
  "spargebra",
  "thiserror",
  "tracing",
@@ -4925,9 +4959,11 @@ dependencies = [
  "pyo3",
  "query_processing",
  "quick-xml 0.40.1",
+ "range-set-blaze",
  "rayon",
  "representation",
  "ryu",
+ "serde",
  "serde_json",
  "simd-json",
  "sparesults",
@@ -4935,6 +4971,7 @@ dependencies = [
  "sprs",
  "thiserror",
  "tracing",
+ "uri_encode",
  "utils",
  "uuid",
 ]

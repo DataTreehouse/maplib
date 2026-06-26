@@ -22,7 +22,6 @@ pub struct UdfRegistry {
     udfs: HashMap<NamedNode, UdfEntry>,
 }
 
-
 impl UdfRegistry {
     pub fn new() -> UdfRegistry {
         UdfRegistry {
@@ -169,9 +168,7 @@ impl UdfRegistry {
         );
     }
 
-    pub fn list_udfs(
-        &self,
-    ) -> Vec<NamedNode>{
-        self.udfs.keys().map(|x|x.clone()).collect()
+    pub fn list_udfs(&self) -> Vec<NamedNode> {
+        self.udfs.keys().map(|x| x.clone()).collect()
     }
 }

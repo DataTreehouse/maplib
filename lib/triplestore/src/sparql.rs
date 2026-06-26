@@ -502,6 +502,7 @@ impl Triplestore {
                     for (g, s) in insert_solutions {
                         self.insert_construct_result(s, false, &g)?;
                     }
+                    self.maybe_garbage_collect()?;
                 }
                 GraphUpdateOperation::Load { .. } => {}
                 GraphUpdateOperation::Clear { .. } => {}

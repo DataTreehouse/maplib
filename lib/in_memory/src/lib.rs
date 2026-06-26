@@ -1,8 +1,10 @@
 #![feature(pattern)]
+#![feature(str_as_str)]
 
 use arrow::array::{Array, RecordBatch, StringArray, UInt32Array};
 use arrow::datatypes::{Field, Schema};
 use nohash_hasher::NoHashHasher;
+use range_set_blaze::RangeSetBlaze;
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use std::borrow::Cow;
 use std::cmp::Ordering;
@@ -80,6 +82,26 @@ impl PrefixCompressedString {
 pub enum CatMapsInMemory {
     Compressed(PrefixCompressedCatMapsInMemory),
     Uncompressed(UncompressedCatMapsInMemory),
+}
+
+impl CatMapsInMemory {
+    pub fn compact(&mut self) {
+        match self {
+            CatMapsInMemory::Compressed(c) => c.compact(),
+            CatMapsInMemory::Uncompressed(u) => u.compact(),
+        }
+    }
+
+    pub fn garbage_collect_cats(&mut self, p0: RangeSetBlaze<u32>) {
+        match self {
+            CatMapsInMemory::Compressed(c) => {
+                c.garbage_collect_cats(p0);
+            }
+            CatMapsInMemory::Uncompressed(u) => {
+                u.garbage_collect_cats(p0);
+            }
+        }
+    }
 }
 
 impl CatMapsInMemory {
@@ -167,20 +189,28 @@ impl CatMapsInMemory {
         let maybe_encoded = self.maybe_encode_strs(&maybes);
         for (s, u) in maybe_new_strings.into_iter().zip(maybe_encoded) {
             if u.is_none() {
-                self.encode_new_in_memory_string(s, *c);
+                self.encode_new_in_memory_string(Cow::Owned(s), *c);
                 *c += 1;
             }
         }
     }
 
-    pub fn encode_new_in_memory_string(&mut self, s: String, u: u32) {
+    pub fn encode_new_in_memory_string(&mut self, s: Cow<'_, str>, u: u32) {
         match self {
             CatMapsInMemory::Compressed(m) => {
-                m.encode_new_string(s, u);
+                m.encode_new_string(&*s, u);
             }
             CatMapsInMemory::Uncompressed(m) => {
-                m.encode_new_string(s, u);
+                m.encode_new_string(s.into_owned(), u);
             }
+        }
+    }
+
+    pub fn from_ordered_vec(ss: Vec<(Cow<'_, str>, u32)>, is_iri: bool) -> Self {
+        if is_iri {
+            CatMapsInMemory::Compressed(PrefixCompressedCatMapsInMemory::from_ordered_vec(ss))
+        } else {
+            CatMapsInMemory::Uncompressed(UncompressedCatMapsInMemory::from_ordered_vec(ss))
         }
     }
 
@@ -227,6 +257,13 @@ impl CatMapsInMemory {
             CatMapsInMemory::Uncompressed(UncompressedCatMapsInMemory::new_empty())
         }
     }
+
+    pub fn range_set(&self) -> RangeSetBlaze<u32> {
+        match self {
+            CatMapsInMemory::Compressed(c) => c.range_set(),
+            CatMapsInMemory::Uncompressed(u) => u.range_set(),
+        }
+    }
 }
 
 impl CatMapsInMemory {
@@ -254,6 +291,62 @@ pub struct PrefixCompressedCatMapsInMemory {
 }
 
 impl PrefixCompressedCatMapsInMemory {
+    fn from_ordered_vec(ss: Vec<(Cow<str>, u32)>) -> PrefixCompressedCatMapsInMemory {
+        let split_vec = ss
+            .par_iter()
+            .map(|(s, u)| {
+                let (pre, suf) = split_iri(s.as_str());
+                (pre, Arc::new(suf.to_string()), *u)
+            })
+            .collect::<Vec<_>>();
+        let mut prefix_map: HashMap<String, Arc<String>> = HashMap::new();
+        let mut prefix_compressed_vec = Vec::with_capacity(split_vec.len());
+        for (pre, suf, u) in split_vec {
+            let pre_arc = if let Some(pre_arc) = prefix_map.get(pre) {
+                pre_arc.clone()
+            } else {
+                let pre_arc = Arc::new(pre.to_string());
+                prefix_map.insert(pre.to_string(), pre_arc.clone());
+                pre_arc
+            };
+            let pc_string = PrefixCompressedString {
+                prefix: pre_arc,
+                suffix: suf,
+            };
+            prefix_compressed_vec.push((pc_string, u))
+        }
+        let map = BTreeMap::from_iter(prefix_compressed_vec.into_iter());
+        let rev_map = HashMap::from_iter(map.iter().map(|(x, y)| (*y, x.clone())).into_iter());
+        PrefixCompressedCatMapsInMemory {
+            map,
+            rev_map,
+            prefix_map,
+        }
+    }
+}
+
+impl PrefixCompressedCatMapsInMemory {
+    pub(crate) fn compact(&mut self) {
+        for (i, (_, v)) in self
+            .map
+            .range_mut::<PrefixCompressedString, _>(..)
+            .enumerate()
+        {
+            *v = i as u32;
+        }
+        self.rev_map = self.map.iter().map(|(x, y)| (*y, x.clone())).collect();
+    }
+
+    pub(crate) fn garbage_collect_cats(&mut self, p0: RangeSetBlaze<u32>) {
+        let mut to_delete = Vec::new();
+        for r in p0 {
+            to_delete.push(self.rev_map.remove(&r).unwrap());
+        }
+        for r in to_delete {
+            self.map.remove(&r).unwrap();
+        }
+    }
+
     pub fn new_empty() -> PrefixCompressedCatMapsInMemory {
         PrefixCompressedCatMapsInMemory {
             map: Default::default(),
@@ -293,12 +386,12 @@ impl PrefixCompressedCatMapsInMemory {
         self.map.len() as u32
     }
 
-    pub fn encode_new_string(&mut self, s: String, u: u32) {
-        self.encode_new_str(&s, u)
+    pub fn encode_new_string(&mut self, s: &str, u: u32) {
+        self.encode_new_str(s, u)
     }
 
     fn encode_new_str(&mut self, s: &str, u: u32) {
-        let (pre, suf) = split_iri(&s);
+        let (pre, suf) = split_iri(s);
         let arc_pre = self.encode_or_add_new_prefix_str(pre);
         let compr = PrefixCompressedString {
             prefix: arc_pre,
@@ -491,14 +584,16 @@ impl PrefixCompressedCatMapsInMemory {
 
     pub fn rank_map(&self, us: &HashSet<u32>) -> HashMap<u32, u32> {
         let mut ranked = HashMap::new();
-        let mut rank = 0;
-        for (_, v) in self.map.range(..) {
+        for (i, (_, v)) in self.map.range(..).enumerate() {
             if us.contains(v) {
-                ranked.insert(*v, rank);
-                rank += 1;
+                ranked.insert(*v, i as u32);
             }
         }
         ranked
+    }
+
+    pub fn range_set(&self) -> RangeSetBlaze<u32> {
+        RangeSetBlaze::from_iter(self.rev_map.keys())
     }
 }
 
@@ -509,6 +604,25 @@ pub struct UncompressedCatMapsInMemory {
 }
 
 impl UncompressedCatMapsInMemory {
+    fn from_ordered_vec(ss: Vec<(Cow<str>, u32)>) -> UncompressedCatMapsInMemory {
+        let ss_arced = ss
+            .into_par_iter()
+            .map(|(s, u)| (Arc::new(s.into_owned()), u))
+            .collect::<Vec<_>>();
+        let map = BTreeMap::from_iter(ss_arced.into_iter());
+        let rev_map = HashMap::from_iter(map.iter().map(|(s, u)| (*u, s.clone())));
+        UncompressedCatMapsInMemory { map, rev_map }
+    }
+}
+
+impl UncompressedCatMapsInMemory {
+    pub(crate) fn compact(&mut self) {
+        for (i, (_, v)) in self.map.range_mut::<Arc<String>, _>(..).enumerate() {
+            *v = i as u32;
+        }
+        self.rev_map = self.map.iter().map(|(x, y)| (*y, x.clone())).collect();
+    }
+
     pub fn new_empty() -> UncompressedCatMapsInMemory {
         UncompressedCatMapsInMemory {
             map: Default::default(),
@@ -539,7 +653,7 @@ impl UncompressedCatMapsInMemory {
     }
 
     pub fn encode_new_string(&mut self, s: String, u: u32) {
-        let s = Arc::new(s.clone());
+        let s = Arc::new(s);
         self.map.insert(s.clone(), u);
         self.rev_map.insert(u, s);
     }
@@ -690,14 +804,27 @@ impl UncompressedCatMapsInMemory {
 
     pub fn rank_map(&self, us: &HashSet<u32>) -> HashMap<u32, u32> {
         let mut ranked = HashMap::new();
-        let mut rank = 0;
-        for (_, v) in self.map.range::<Arc<String>, _>(..) {
+        for (i, (_, v)) in self.map.range::<Arc<String>, _>(..).enumerate() {
             if us.contains(v) {
-                ranked.insert(*v, rank);
-                rank += 1;
+                ranked.insert(*v, i as u32);
             }
         }
         ranked
+    }
+
+    pub fn range_set(&self) -> RangeSetBlaze<u32> {
+        RangeSetBlaze::from_iter(self.rev_map.keys())
+    }
+
+    pub fn garbage_collect_cats(&mut self, range_set: RangeSetBlaze<u32>) {
+        // Får inn et range set med U32-er. Disse skal fjernes fra catmapet, og så brukes til å fjerne strenger fra revmapet
+        let mut to_delete = Vec::new();
+        for r in range_set {
+            to_delete.push(self.rev_map.remove(&r).unwrap());
+        }
+        for t in to_delete {
+            self.map.remove(&t);
+        }
     }
 }
 

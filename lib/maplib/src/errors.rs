@@ -9,6 +9,7 @@ use std::io;
 use templates::dataset::errors::TemplateError;
 use thiserror::Error;
 use triplestore::errors::TriplestoreError;
+use triplestore::serialization::TripleSerializationError;
 use triplestore::sparql::errors::SparqlError;
 
 #[derive(Error, Debug)]
@@ -47,4 +48,6 @@ pub enum MaplibError {
     MissingDatalogRuleset,
     #[error(transparent)]
     ChrontextError(#[from] ChrontextError),
+    #[error(transparent)]
+    TripleSerializationError(#[from] TripleSerializationError),
 }

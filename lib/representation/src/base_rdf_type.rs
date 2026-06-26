@@ -9,10 +9,11 @@ use crate::{
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{NamedNode, NamedNodeRef, NamedOrBlankNode, Term};
 use polars::datatypes::{DataType, Field, PlSmallStr};
+use serde::{Deserialize, Serialize};
 use spargebra::term::GroundTerm;
 use std::fmt::{Display, Formatter};
 
-#[derive(Debug, Clone, Ord, PartialOrd, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Ord, PartialOrd, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum BaseRDFNodeType {
     IRI,
     BlankNode,

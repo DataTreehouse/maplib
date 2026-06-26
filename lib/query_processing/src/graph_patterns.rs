@@ -76,14 +76,14 @@ pub fn extend(
             [variable.as_str()],
             true,
         );
+        let existing_rdf_node_type = solution_mappings
+            .rdf_node_types
+            .remove(expression_context.as_str())
+            .unwrap();
+        solution_mappings
+            .rdf_node_types
+            .insert(variable.as_str().to_string(), existing_rdf_node_type);
     }
-    let existing_rdf_node_type = solution_mappings
-        .rdf_node_types
-        .remove(expression_context.as_str())
-        .unwrap();
-    solution_mappings
-        .rdf_node_types
-        .insert(variable.as_str().to_string(), existing_rdf_node_type);
     let mut cols: Vec<_> = solution_mappings.rdf_node_types.keys().cloned().collect();
     cols.sort();
     solution_mappings.mappings = solution_mappings

@@ -1,8 +1,9 @@
 use oxrdf::{BlankNode, GraphName, NamedNode};
+use serde::{Deserialize, Serialize};
 use spargebra::algebra::QueryDataset;
 use std::fmt::{Display, Formatter};
 
-#[derive(Debug, Clone, Hash, Eq, PartialEq)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
 pub enum NamedGraph {
     DefaultGraph,
     NamedGraph(NamedNode),

@@ -4,12 +4,14 @@ mod globalize;
 mod image;
 pub mod maps;
 mod re_encode;
+pub mod serialization;
 
 pub use decode::*;
 pub use encode::*;
 pub use globalize::*;
 pub use image::*;
 pub use re_encode::*;
+use std::borrow::Cow;
 use std::cmp;
 
 use crate::cats::maps::CatMaps;
@@ -22,6 +24,7 @@ use oxrdf::vocab::rdf;
 use oxrdf::NamedNode;
 use polars::prelude::DataFrame;
 use rayon::prelude::{IntoParallelIterator, ParallelIterator};
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
@@ -42,7 +45,7 @@ pub struct CatTriples {
     pub local_cats: Vec<LockedCats>,
 }
 
-#[derive(Hash, Eq, PartialEq, Clone, Debug, PartialOrd, Ord)]
+#[derive(Hash, Eq, PartialEq, Clone, Debug, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum CatType {
     IRI,
     Blank,
@@ -159,6 +162,15 @@ pub struct Cats {
 }
 
 impl Cats {
+    pub fn compact(&mut self) {
+        let _: Vec<_> = self
+            .cat_map
+            .iter_mut()
+            .map(|(_, e)| e.maps.compact())
+            .collect();
+        self.recompute_counters();
+    }
+
     pub fn new_local_singular_literal(l: &str, dt: NamedNode, u: u32) -> (u32, Cats) {
         let dt = BaseRDFNodeType::Literal(dt);
         let catenc = CatEncs::new_local_singular(l, u, &dt);
@@ -176,7 +188,7 @@ impl Cats {
         let lang_u = u + 1;
         catenc
             .maps
-            .encode_new_in_memory_string(lang.to_string(), lang_u);
+            .encode_new_in_memory_string(Cow::Borrowed(lang), lang_u);
         let t = if let BaseRDFNodeType::Literal(dt) = dt {
             CatType::Literal(dt)
         } else {
@@ -218,11 +230,14 @@ impl Cats {
             uuid: Uuid::new_v4().to_string(),
             path: path_buf,
         };
-
-        cats.iri_counter = cats.calc_new_iri_counter();
-        cats.blank_counter = cats.calc_new_blank_counter();
-        cats.literal_counter_map = cats.calc_new_literal_counter();
+        cats.recompute_counters();
         cats
+    }
+
+    fn recompute_counters(&mut self) {
+        self.iri_counter = self.calc_new_iri_counter();
+        self.blank_counter = self.calc_new_blank_counter();
+        self.literal_counter_map = self.calc_new_literal_counter();
     }
 
     pub fn new_empty(counts_from: Option<&Cats>, path: Option<&Path>) -> Cats {
