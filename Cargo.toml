@@ -87,7 +87,6 @@ arrow = "58"
 ordered-float = "5.1.0"
 rust_decimal = "1.41.0"
 range-set-blaze = "0.5.0"
-dashmap = "7.0.0-rc2"
 
 [patch.crates-io]
 #polars = { git = 'https://github.com/pola-rs/polars', rev="599a503a0997188a74750926a5cdaa47585cf8aa" }
