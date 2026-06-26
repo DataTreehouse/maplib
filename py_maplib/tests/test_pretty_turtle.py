@@ -1,7 +1,5 @@
 import polars as pl
 import pytest
-import rdflib
-from maplib.maplib import IndexingOptions
 from polars.testing import assert_frame_equal
 import pathlib
 from maplib import Model
@@ -89,7 +87,7 @@ def test_write_multi_turtle_provided_prefixes():
 
 @pytest.mark.skip("This test works but takes too long")
 def test_write_multi_turtle_provided_prefixes_stress():
-    m = Model(IndexingOptions(subject_object_index=True))
+    m = Model()
     for i in range(3000):
         m.read(str(TESTDATA_PATH / "read_ntriples.nt"))
     df = m.query("""SELECT * WHERE {?a ?b ?c}""")
@@ -103,7 +101,7 @@ def test_write_multi_turtle_provided_prefixes_stress():
 
 
 def test_write_multi_turtle_provided_prefixes_some_stress():
-    m = Model(IndexingOptions(subject_object_index=True))
+    m = Model()
     for i in range(100):
         m.read(str(TESTDATA_PATH / "read_ntriples.nt"))
     df = m.query("""SELECT * WHERE {?a ?b ?c}""")
