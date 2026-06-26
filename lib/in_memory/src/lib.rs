@@ -206,7 +206,7 @@ impl CatMapsInMemory {
         }
     }
 
-    pub fn from_ordered_vec(ss:Vec<(Cow<'_, str>, u32)>, is_iri:bool) -> Self {
+    pub fn from_ordered_vec(ss: Vec<(Cow<'_, str>, u32)>, is_iri: bool) -> Self {
         if is_iri {
             CatMapsInMemory::Compressed(PrefixCompressedCatMapsInMemory::from_ordered_vec(ss))
         } else {
@@ -292,10 +292,13 @@ pub struct PrefixCompressedCatMapsInMemory {
 
 impl PrefixCompressedCatMapsInMemory {
     fn from_ordered_vec(ss: Vec<(Cow<str>, u32)>) -> PrefixCompressedCatMapsInMemory {
-        let split_vec = ss.par_iter().map(|(s,u)|{
-            let (pre,suf) =  split_iri(s.as_str());
-            (pre,Arc::new(suf.to_string()), *u)
-        }).collect::<Vec<_>>();
+        let split_vec = ss
+            .par_iter()
+            .map(|(s, u)| {
+                let (pre, suf) = split_iri(s.as_str());
+                (pre, Arc::new(suf.to_string()), *u)
+            })
+            .collect::<Vec<_>>();
         let mut prefix_map: HashMap<String, Arc<String>> = HashMap::new();
         let mut prefix_compressed_vec = Vec::with_capacity(split_vec.len());
         for (pre, suf, u) in split_vec {
@@ -306,12 +309,15 @@ impl PrefixCompressedCatMapsInMemory {
                 prefix_map.insert(pre.to_string(), pre_arc.clone());
                 pre_arc
             };
-            let pc_string = PrefixCompressedString{ prefix: pre_arc, suffix: suf };
+            let pc_string = PrefixCompressedString {
+                prefix: pre_arc,
+                suffix: suf,
+            };
             prefix_compressed_vec.push((pc_string, u))
         }
         let map = BTreeMap::from_iter(prefix_compressed_vec.into_iter());
-        let rev_map = HashMap::from_iter(map.iter().map(|(x,y)|{(*y,x.clone())}).into_iter());
-        PrefixCompressedCatMapsInMemory{
+        let rev_map = HashMap::from_iter(map.iter().map(|(x, y)| (*y, x.clone())).into_iter());
+        PrefixCompressedCatMapsInMemory {
             map,
             rev_map,
             prefix_map,
@@ -578,7 +584,7 @@ impl PrefixCompressedCatMapsInMemory {
 
     pub fn rank_map(&self, us: &HashSet<u32>) -> HashMap<u32, u32> {
         let mut ranked = HashMap::new();
-        for (i, (_,v)) in self.map.range(..).enumerate() {
+        for (i, (_, v)) in self.map.range(..).enumerate() {
             if us.contains(v) {
                 ranked.insert(*v, i as u32);
             }
@@ -599,10 +605,13 @@ pub struct UncompressedCatMapsInMemory {
 
 impl UncompressedCatMapsInMemory {
     fn from_ordered_vec(ss: Vec<(Cow<str>, u32)>) -> UncompressedCatMapsInMemory {
-        let ss_arced = ss.into_par_iter().map(|(s, u)| (Arc::new(s.into_owned()), u)).collect::<Vec<_>>();
+        let ss_arced = ss
+            .into_par_iter()
+            .map(|(s, u)| (Arc::new(s.into_owned()), u))
+            .collect::<Vec<_>>();
         let map = BTreeMap::from_iter(ss_arced.into_iter());
-        let rev_map = HashMap::from_iter(map.iter().map(|(s, u)| (*u,s.clone())));
-        UncompressedCatMapsInMemory{ map, rev_map }
+        let rev_map = HashMap::from_iter(map.iter().map(|(s, u)| (*u, s.clone())));
+        UncompressedCatMapsInMemory { map, rev_map }
     }
 }
 

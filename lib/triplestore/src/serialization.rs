@@ -5,7 +5,7 @@ use file_io::{scan_parquet, write_parquet, FileIOError};
 use oxrdf::NamedNode;
 use polars::prelude::{IntoLazy, LazyFrame, ParquetCompression, PolarsError};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
-use representation::cats::serialization::CatSerializationError;
+use representation::cats::serialization::{CatSerializationError, CATS_FOLDER};
 use representation::cats::{Cats, LockedCats};
 use representation::dataset::NamedGraph;
 use representation::BaseRDFNodeType;
@@ -58,6 +58,17 @@ impl Triplestore {
     pub fn serialize_triples(&mut self, path: &Path) -> Result<(), TripleSerializationError> {
         self.garbage_collect()?;
         self.compact()?;
+        if path.exists() {
+            for f in std::fs::read_dir(path)? {
+                let f = f?;
+                let p = f.path();
+                if p.is_dir()
+                    && matches!(f.file_name().to_str().unwrap(), TRIPLES_PATH | CATS_FOLDER)
+                {
+                    std::fs::remove_dir_all(f.path())?
+                }
+            }
+        }
 
         let mut to_serialize = vec![];
         let triples_path = create_path(path, TRIPLES_PATH);

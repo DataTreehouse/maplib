@@ -20,7 +20,7 @@ pub enum CatSerializationError {
 }
 
 const CATS_METADATA_FILE: &str = "metadata.json";
-const CATS_FOLDER: &str = "cats";
+pub const CATS_FOLDER: &str = "cats";
 
 fn create_path(path: &Path, s: &str) -> PathBuf {
     let mut pb = path.to_owned();

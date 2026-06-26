@@ -6,12 +6,12 @@ pub mod maps;
 mod re_encode;
 pub mod serialization;
 
-use std::borrow::Cow;
 pub use decode::*;
 pub use encode::*;
 pub use globalize::*;
 pub use image::*;
 pub use re_encode::*;
+use std::borrow::Cow;
 use std::cmp;
 
 use crate::cats::maps::CatMaps;
