@@ -1134,7 +1134,7 @@ class Model:
         """
         :param name: IRI of the UDF, e.g. "urn:maplib:myfunc"
         :param func: A callable (DataFrame) -> DataFrame
-        :param output_type: The RDF datatype of the result column
+        :param output_type: The RDF type of the output. Either an RDFType (e.g. RDFType.IRI, RDFType.Literal(xsd.string)) or an IRI (e.g. xsd.integer)
         :param input_types: Optional list of RDF datatypes of the input columns
         """
 

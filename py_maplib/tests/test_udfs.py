@@ -2,18 +2,18 @@ import polars as pl
 import polars.testing as pl_testing
 from polars import DataFrame, Series
 
-from maplib import Model, xsd
+from maplib import Model, xsd, RDFType
 
 
 def test_add_udf():
     m = Model()
-    m.add_udf("myudf", lambda x: x + 1, xsd.integer)
+    m.add_udf("myudf", lambda x: x + 1, RDFType.Literal(xsd.integer))
     assert m.list_udfs() == ["myudf"]
 
 
 def test_udf_run1():
     m = Model()
-    m.add_udf("myudf", lambda x: x + 1, xsd.integer)
+    m.add_udf("myudf", lambda x: x + 1, RDFType.Literal(xsd.integer))
     df = pl.DataFrame({"x": [1, 2, 3]})
     result = m.run_udf("myudf", df)
     expected = pl.DataFrame({"x": [2, 3, 4]})

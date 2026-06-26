@@ -1186,10 +1186,10 @@ impl PyModel {
         if !func.bind(py).is_callable() {
             return Err(PyMaplibError::UDFError(format!("UDF {} is not callable", name)).into());
         }
-        let output = extract_base_type_from_any(&output_type)?;
+        let output = resolve_rdf_node_type(&output_type)?;
         let inputs: Vec<BaseRDFNodeType> = input_types
             .iter()
-            .map(|t| extract_base_type_from_any(t))
+            .map(|t| resolve_rdf_node_type(t))
             .collect::<PyResult<Vec<_>>>()?;
         let mut udfs = self.udfs.lock().unwrap();
         udfs.insert(
@@ -2306,24 +2306,33 @@ pub fn data_to_mappings_types(
     }
 }
 
-fn extract_base_type(t: &PyRDFType) -> PyResult<BaseRDFNodeType> {
-    let state = t.flat.as_ref().ok_or_else(|| {
-        PyMaplibError::FunctionArgumentError("RDFType is not a flat type".to_string())
-    })?;
-    if state.map.len() != 1 {
-        return Err(PyTypeError::new_err(
-            "`RDFType` should only contain one mapping",
-        ));
-    }
-    Ok(state.map.keys().next().unwrap().clone())
-}
-
-fn extract_base_type_from_any(obj: &Bound<'_, PyAny>) -> PyResult<BaseRDFNodeType> {
+fn resolve_rdf_node_type(obj: &Bound<'_, PyAny>) -> PyResult<BaseRDFNodeType> {
     if let Ok(rdf_type) = obj.extract::<PyRDFType>() {
-        return extract_base_type(&rdf_type);
+        let state = rdf_type
+            .flat
+            .as_ref()
+            .ok_or_else(|| PyMaplibError::UDFError("RDFType is not flat".to_string()))?;
+        if state.map.len() != 1 {
+            return Err(PyTypeError::new_err(
+                "`RDFType` should only contain one mapping",
+            ));
+        }
+        return Ok(state.map.keys().next().unwrap().clone());
     }
     if let Ok(iri) = obj.extract::<PyIRI>() {
         return Ok(BaseRDFNodeType::Literal(iri.into_inner()));
+    }
+    if let Ok(s) = obj.extract::<String>() {
+        if s == "IRI" || s == "iri" {
+            return Ok(BaseRDFNodeType::IRI);
+        }
+        if s == "BlankNode" || s == "blanknode" {
+            return Ok(BaseRDFNodeType::BlankNode);
+        }
+        let nn = NamedNode::new(&s).map_err(|e| {
+            PyMaplibError::FunctionArgumentError(format!("Invalid IRI '{}': {}", s, e))
+        })?;
+        return Ok(BaseRDFNodeType::Literal(nn));
     }
     Err(PyTypeError::new_err("Expected RDFType or IRI"))
 }
