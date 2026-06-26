@@ -4,25 +4,26 @@ version = "0.20.21"
 edition.workspace = true
 
 [features]
-abi3 = [ "pyo3/abi3-py310" ]
+abi3 = ["pyo3/abi3-py310"]
 
 [dependencies]
-maplib = { path = "../lib/maplib", features = [ "pyo3" ] }
-triplestore = { path = "../lib/triplestore", features = [ "pyo3" ] }
+maplib = { path = "../lib/maplib", features = ["pyo3"] }
+triplestore = { path = "../lib/triplestore", features = ["pyo3"] }
 representation = { path = "../lib/representation" }
-shacl = { path = "../lib/shacl", features = [ "pyo3" ] }
-templates = {path= "../lib/templates"}
-cimxml_export = {path = "../lib/cimxml_export", features = [ "pyo3" ]}
-datalog = {path = "../lib/datalog"}
-virtualized_query = {path="../lib/virtualized_query"}
-virtualization = {path="../lib/virtualization"}
+shacl = { path = "../lib/shacl", features = ["pyo3"] }
+templates = { path = "../lib/templates" }
+cimxml_export = { path = "../lib/cimxml_export", features = ["pyo3"] }
+datalog = { path = "../lib/datalog" }
+virtualized_query = { path = "../lib/virtualized_query" }
+virtualization = { path = "../lib/virtualization" }
+opc_ua = { path = "../lib/opc_ua" }
 
 pyo3.workspace = true
 oxrdf.workspace = true
 oxrdfio.workspace = true
 thiserror.workspace = true
 polars = { workspace = true, features = [
-    "simd","nightly", "performant", "cse",
+    "simd", "nightly", "performant", "cse",
     "dtype-array", "dtype-date",
     "dtype-datetime", "dtype-decimal", "dtype-duration",
     "dtype-i8", "dtype-i16", "dtype-struct",

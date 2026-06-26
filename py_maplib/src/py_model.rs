@@ -16,6 +16,7 @@ use crate::{
 
 use datalog::python::PyInferenceResult;
 use maplib::model::Model as InnerModel;
+use opc_ua::mappings::map_opc_ua;
 use pyo3::prelude::*;
 use pyo3::{pyclass, pymethods, Bound, Py, PyAny, PyRef, PyResult, Python};
 use representation::cats::LockedCats;
@@ -295,25 +296,17 @@ impl PyModel {
         Ok(res.into())
     }
 
-    #[pyo3(signature = (*args, **kwargs), text_signature = "(/)")]
-    fn map_opc_ua(
-        self_: PyRef<'_, Self>,
-        py: Python<'_>,
-        args: &Bound<'_, pyo3::types::PyTuple>,
-        kwargs: Option<&Bound<'_, pyo3::types::PyDict>>,
-    ) -> PyResult<Py<PyAny>> {
-        let module = py.import("maplib")?;
-        let func = module.getattr("_map_opc_ua")?;
+    #[pyo3(signature = (folder, graph=None))]
+    #[instrument(skip_all)]
+    fn map_opc_ua(&self, py: Python<'_>, folder: PathBuf, graph: Option<String>) -> PyResult<()> {
+        let graph = parse_optional_named_node(graph)?;
+        let graph = NamedGraph::from_maybe_named_node(graph.as_ref());
+        py.detach(|| {
+            let mut inner = self.inner.lock().unwrap();
+            map_opc_ua(&mut inner, &folder, &graph);
+        });
 
-        let mut old_args: Vec<_> = args.iter().collect();
-        let mut new_args = Vec::new();
-        new_args.push(self_.into_pyobject(py)?.into_any());
-        new_args.append(&mut old_args);
-
-        let new_args = pyo3::types::PyTuple::new(py, new_args)?;
-
-        let res = func.call(new_args, kwargs)?;
-        Ok(res.into())
+        Ok(())
     }
 
     #[pyo3(signature = (virtualized_database, resources))]

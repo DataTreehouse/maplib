@@ -51,7 +51,7 @@ const METADATA_FILE: &str = "metadata.json";
 #[derive(Serialize, Deserialize)]
 struct TriplestoreMetadata {
     triples_uuid_map: HashMap<String, (NamedGraph, NamedNode, BaseRDFNodeType, BaseRDFNodeType)>,
-    indexing: HashMap<NamedGraph, IndexingOptions>,
+    indexing: Vec<(NamedGraph, IndexingOptions)>,
 }
 
 impl Triplestore {
@@ -128,7 +128,7 @@ impl Triplestore {
 
         let triplestore_metadata = TriplestoreMetadata {
             triples_uuid_map,
-            indexing: self.indexing.clone(),
+            indexing: self.indexing.iter().map(|(graph, map)| (graph.clone(), map.clone())).collect(),
         };
 
         //Serializing metadata
@@ -226,7 +226,7 @@ impl Triplestore {
             start_deserialize_cats.elapsed().as_secs_f32()
         );
         triplestore.global_cats = LockedCats::new(cats);
-        triplestore.indexing = triplestore_metadata.indexing;
+        triplestore.indexing = triplestore_metadata.indexing.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
         Ok(triplestore)
     }
 }

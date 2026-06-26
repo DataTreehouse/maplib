@@ -8,6 +8,7 @@ from maplib.maplib import rdf
 
 a = rdf.type
 
+
 class xsd:
     """
     The xsd namespace: http://www.w3.org/2001/XMLSchema#
@@ -189,6 +190,7 @@ class RDFType:
     Nested: Callable[["RDFType"], "RDFType"]
     Unknown: "RDFType"
 
+
 class SolutionMappings:
     """
     Detailed information about the solution mappings, the types of the variables and debugging for queries.
@@ -198,13 +200,14 @@ class SolutionMappings:
     rdf_types: Dict[str, RDFType]
     debug: Optional[str]
 
-    def __init__(self, mappings:DataFrame, rdf_types: Dict[str, RDFType]):
+    def __init__(self, mappings: DataFrame, rdf_types: Dict[str, RDFType]):
         """
         Create new SolutionMappings object corresponding to solution mappings for variables in e.g. a query.
         :param mappings: A DataFrame
         :param rdf_types: For each column (variable), the RDFType of the variable.
         """
         ...
+
 
 class Variable:
     """
@@ -220,6 +223,7 @@ class Variable:
         """
         ...
 
+
 class IRI:
     iri: str
     """
@@ -231,6 +235,7 @@ class IRI:
         Create a new IRI
         :param iri: IRI (without < and >).
         """
+
 
 class BlankNode:
     """
@@ -245,12 +250,13 @@ class BlankNode:
         :param name: Name of blank node (without _:).
         """
 
+
 class Prefix:
     """
     A prefix that can be used to ergonomically build iris.
     """
 
-    def __init__(self, iri,  prefix_name=None):
+    def __init__(self, iri, prefix_name=None):
         """
         Create a new prefix.
         :param iri: The prefix IRI.
@@ -263,6 +269,7 @@ class Prefix:
         :param suffix: The suffix to append.
         :return:
         """
+
 
 class Literal:
     """
@@ -287,6 +294,7 @@ class Literal:
         :return:
         """
 
+
 class Parameter:
     variable: Variable
     optional: bool
@@ -298,12 +306,12 @@ class Parameter:
     """
 
     def __init__(
-        self,
-        variable: Variable,
-        optional: Optional[bool] = False,
-        allow_blank: Optional[bool] = True,
-        rdf_type: Optional[RDFType] = None,
-        default_value: Optional[Union[Literal, IRI, BlankNode]] = None,
+            self,
+            variable: Variable,
+            optional: Optional[bool] = False,
+            allow_blank: Optional[bool] = True,
+            rdf_type: Optional[RDFType] = None,
+            default_value: Optional[Union[Literal, IRI, BlankNode]] = None,
     ):
         """
         Create a new parameter for a Template.
@@ -314,9 +322,10 @@ class Parameter:
         :param default_value: Default value when no value provided.
         """
 
+
 class Argument:
     def __init__(
-        self, term: Union[Variable, IRI, Literal], list_expand: Optional[bool] = False
+            self, term: Union[Variable, IRI, Literal], list_expand: Optional[bool] = False
     ):
         """
         An argument for a template instance.
@@ -324,12 +333,13 @@ class Argument:
         :param list_expand: Should the argument be expanded? Used with the list_expander argument of instance.
         """
 
+
 class Instance:
     def __init__(
-        self,
-        iri: "IRI",
-        arguments: List[Union[Argument, Variable, IRI, Literal, BlankNode, None]],
-        list_expander: Optional[LiteralType["cross", "zipMin", "zipMax"]] = None,
+            self,
+            iri: "IRI",
+            arguments: List[Union[Argument, Variable, IRI, Literal, BlankNode, None]],
+            list_expander: Optional[LiteralType["cross", "zipMin", "zipMax"]] = None,
     ):
         """
         A template instance.
@@ -337,6 +347,7 @@ class Instance:
         :param arguments: The arguments for template instantiation.
         :param list_expander: (How) should we do list expansion?
         """
+
 
 class Template:
     iri: str
@@ -349,10 +360,10 @@ class Template:
     """
 
     def __init__(
-        self,
-        iri: "IRI",
-        parameters: List[Union[Parameter, Variable]],
-        instances: List[Instance],
+            self,
+            iri: "IRI",
+            parameters: List[Union[Parameter, Variable]],
+            instances: List[Instance],
     ):
         """
         Create a new OTTR Template
@@ -362,9 +373,9 @@ class Template:
         """
 
     def instance(
-        self,
-        arguments: List[Union[Argument, Variable, IRI, Literal, None]],
-        list_expander: LiteralType["cross", "zipMin", "zipMax"] = None,
+            self,
+            arguments: List[Union[Argument, Variable, IRI, Literal, None]],
+            list_expander: LiteralType["cross", "zipMin", "zipMax"] = None,
     ) -> Instance:
         """
 
@@ -373,11 +384,12 @@ class Template:
         :return:
         """
 
+
 def Triple(
-    subject: Union["Argument", IRI, Variable, BlankNode],
-    predicate: Union["Argument", IRI, Variable, BlankNode],
-    object: Union["Argument", IRI, Variable, Literal, BlankNode],
-    list_expander: Optional[LiteralType["cross", "zipMin", "zipMax"]] = None,
+        subject: Union["Argument", IRI, Variable, BlankNode],
+        predicate: Union["Argument", IRI, Variable, BlankNode],
+        object: Union["Argument", IRI, Variable, Literal, BlankNode],
+        list_expander: Optional[LiteralType["cross", "zipMin", "zipMax"]] = None,
 ):
     """
     An OTTR Triple Pattern used for creating templates.
@@ -393,6 +405,7 @@ def Triple(
     :param list_expander:
     :return:
     """
+
 
 class XSD:
     """
@@ -420,17 +433,20 @@ class XSD:
         Create the xsd namespace helper.
         """
 
+
+# END COMMON WITH CHRONTEXT
+
 class IndexingOptions:
     """
     Options for indexing
     """
 
     def __init__(
-        self,
-        object_sort_all: bool = None,
-        object_sort_some: List["IRI"] = None,
-        fts: str = None,
-        fts_path: str = None,
+            self,
+            object_sort_all: bool = None,
+            object_sort_some: List["IRI"] = None,
+            fts: str = None,
+            fts_path: str = None,
     ):
         """
         Defaults to indexing on subjects and objects for select types (e.g. rdf:type and rdfs:label)
@@ -441,7 +457,9 @@ class IndexingOptions:
         :param fts_path: Enable full text search, stored at the path
         """
 
+
 ParametersType = Dict[str, "SolutionMappings"]
+
 
 class ValidationReport:
     """
@@ -486,6 +504,7 @@ class ValidationReport:
         :param streaming: Use the Polars streaming functionality.
         :return: Details of the SHACL validation report, as a DataFrame
         """
+
 
 class Model:
     """
@@ -575,11 +594,11 @@ class Model:
         """
 
     def map(
-        self,
-        template: Union[str, "Template", IRI],
-        data: Union[DataFrame, "SolutionMappings"] = None,
-        graph: str = None,
-        validate_iris: bool = True,
+            self,
+            template: Union[str, "Template", IRI],
+            data: Union[DataFrame, "SolutionMappings"] = None,
+            graph: str = None,
+            validate_iris: bool = True,
     ) -> None:
         """
         Map a template using a DataFrame
@@ -638,11 +657,11 @@ class Model:
         """
 
     def map_triples(
-        self,
-        data: Union[DataFrame, "SolutionMappings"] = None,
-        predicate: str = None,
-        graph: str = None,
-        validate_iris: bool = True,
+            self,
+            data: Union[DataFrame, "SolutionMappings"] = None,
+            predicate: str = None,
+            graph: str = None,
+            validate_iris: bool = True,
     ) -> None:
         """
         Map a template using a DataFrame with columns subject, object and predicate
@@ -660,12 +679,12 @@ class Model:
         """
 
     def map_default(
-        self,
-        data: Union[DataFrame, "SolutionMappings"],
-        primary_key_column: str,
-        dry_run: bool = False,
-        graph: str = None,
-        validate_iris: bool = True,
+            self,
+            data: Union[DataFrame, "SolutionMappings"],
+            primary_key_column: str,
+            dry_run: bool = False,
+            graph: str = None,
+            validate_iris: bool = True,
     ) -> str:
         """
         Create a default template and map it based on a dataframe.
@@ -681,7 +700,6 @@ class Model:
         :param validate_iris: Validate any IRI-columns.
         :return: The generated template
         """
-
 
     def map_df(
             self,
@@ -718,42 +736,42 @@ class Model:
         """
 
     def explore(
-        self,
-                host: str = "localhost",
-                port: int = 8000,
-                bind: str = "localhost",
-                popup=False,
-                fts=True,
-                fts_path:str="fts",
-                graph: str = None,
-                page: str = None,
-            ) -> "ExploreServer":
-                """Starts a graph explorer session.
-                To run from Jupyter Notebook use:
-                >>> server = m.explore()
-                You can later stop the server with
-                >>> server.stop()
+            self,
+            host: str = "localhost",
+            port: int = 8000,
+            bind: str = "localhost",
+            popup=False,
+            fts=True,
+            fts_path: str = "fts",
+            graph: str = None,
+            page: str = None,
+    ) -> "ExploreServer":
+        """Starts a graph explorer session.
+        To run from Jupyter Notebook use:
+        >>> server = m.explore()
+        You can later stop the server with
+        >>> server.stop()
 
-                :param host: The hostname that we will point the browser to.
-                :param port: The port where the graph explorer webserver listens on.
-                :param bind: Bind to the following host / ip.
-                :param fts: Enable full text search indexing
-                :param fts_path: Path to the fts index
-                :param graph: The named graph to explore, defaults to the default graph
-                :param page: We use this feature flag to test new frontends (try "new" or "yasgui")
-                """
+        :param host: The hostname that we will point the browser to.
+        :param port: The port where the graph explorer webserver listens on.
+        :param bind: Bind to the following host / ip.
+        :param fts: Enable full text search indexing
+        :param fts_path: Path to the fts index
+        :param graph: The named graph to explore, defaults to the default graph
+        :param page: We use this feature flag to test new frontends (try "new" or "yasgui")
+        """
 
     def query(
-        self,
-        query: str,
-        parameters: ParametersType = None,
-        solution_mappings: bool = False,
-        graph: str = None,
-        streaming: bool = False,
-        return_json: bool = False,
-        include_transient: bool = True,
-        max_rows: int = None,
-        debug: bool = False,
+            self,
+            query: str,
+            parameters: ParametersType = None,
+            solution_mappings: bool = False,
+            graph: str = None,
+            streaming: bool = False,
+            return_json: bool = False,
+            include_transient: bool = True,
+            max_rows: int = None,
+            debug: bool = False,
     ) -> Union[
         DataFrame, SolutionMappings, List[Union[DataFrame, SolutionMappings, str]], None
     ]:
@@ -813,17 +831,17 @@ class Model:
         """
 
     def insert(
-        self,
-        query: str,
-        parameters: ParametersType = None,
-        solution_mappings: bool = False,
-        transient: bool = False,
-        streaming: bool = False,
-        source_graph: str = None,
-        target_graph: str = None,
-        include_transient: bool = True,
-        max_rows: int = None,
-        debug: bool = False,
+            self,
+            query: str,
+            parameters: ParametersType = None,
+            solution_mappings: bool = False,
+            transient: bool = False,
+            streaming: bool = False,
+            source_graph: str = None,
+            target_graph: str = None,
+            include_transient: bool = True,
+            max_rows: int = None,
+            debug: bool = False,
     ):
         """
         Insert the results of a Construct query in the graph.
@@ -856,22 +874,23 @@ class Model:
         """
 
     def validate(
-        self,
-        shape_graph: str = None,
-        data_graph: str = None,
-        report_graph: Union[str, None] = "",
-        inferences_graph: str = None,
-        include_details: bool = False,
-        include_conforms: bool = False,
-        streaming: bool = False,
-        max_shape_constraint_results: int = None,
-        only_shapes: List[str] = None,
-        deactivate_shapes: List[str] = None,
-        dry_run: bool = False,
-        max_rows: int = None,
-        serial: bool = False,
-        max_iterations: Optional[int] = 100_000,
-        debug_rules: bool = False,
+            self,
+            shape_graph: str = None,
+            data_graph: str = None,
+            report_graph: Union[str, None] = "",
+            inferences_graph: str = None,
+            include_details: bool = False,
+            include_conforms: bool = False,
+
+            streaming: bool = False,
+            max_shape_constraint_results: int = None,
+            only_shapes: List[str] = None,
+            deactivate_shapes: List[str] = None,
+            dry_run: bool = False,
+            max_rows: int = None,
+            serial: bool = False,
+            max_iterations: Optional[int] = 100_000,
+            debug_rules: bool = False,
     ) -> ValidationReport:
         """
         Validate the contained knowledge graph using SHACL
@@ -897,17 +916,17 @@ class Model:
         """
 
     def read(
-        self,
-        file_path: Union[str, Path],
-        format: LiteralType["ntriples", "turtle", "rdf/xml", "cim/xml", "json-ld", "hdt"] = None,
-        base_iri: str = None,
-        transient: bool = False,
-        parallel: bool = None,
-        checked: bool = True,
-        graph: str = None,
-        replace_graph: bool = False,
-        triples_batch_size: int = 10_000_000,
-        known_contexts: Dict[str, str] = None,
+            self,
+            file_path: Union[str, Path],
+            format: LiteralType["ntriples", "turtle", "rdf/xml", "cim/xml", "json-ld", "hdt"] = None,
+            base_iri: str = None,
+            transient: bool = False,
+            parallel: bool = None,
+            checked: bool = True,
+            graph: str = None,
+            replace_graph: bool = False,
+            triples_batch_size: int = 10_000_000,
+            known_contexts: Dict[str, str] = None,
     ) -> None:
         """
         Reads triples from a file path.
@@ -946,17 +965,17 @@ class Model:
         """
 
     def reads(
-        self,
-        s: str,
-        format: LiteralType["ntriples", "turtle", "rdf/xml", "cim/xml", "json-ld"],
-        base_iri: str = None,
-        transient: bool = False,
-        parallel: bool = None,
-        checked: bool = True,
-        graph: str = None,
-        replace_graph: bool = False,
-        triples_batch_size: int = 10_000_000,
-        known_contexts: Dict[str, str] = None,
+            self,
+            s: str,
+            format: LiteralType["ntriples", "turtle", "rdf/xml", "cim/xml", "json-ld"],
+            base_iri: str = None,
+            transient: bool = False,
+            parallel: bool = None,
+            checked: bool = True,
+            graph: str = None,
+            replace_graph: bool = False,
+            triples_batch_size: int = 10_000_000,
+            known_contexts: Dict[str, str] = None,
     ) -> None:
         """
         Reads triples from a string.
@@ -980,17 +999,17 @@ class Model:
         """
 
     def write_cim_xml(
-        self,
-        file_path: Union[str, Path],
-        profile_graph: str,
-        model_iri: str = None,
-        version: str = None,
-        description: str = None,
-        created: str = None,
-        scenario_time: str = None,
-        modeling_authority_set: str = None,
-        prefixes: Dict[str, str] = None,
-        graph: str = None,
+            self,
+            file_path: Union[str, Path],
+            profile_graph: str,
+            model_iri: str = None,
+            version: str = None,
+            description: str = None,
+            created: str = None,
+            scenario_time: str = None,
+            modeling_authority_set: str = None,
+            prefixes: Dict[str, str] = None,
+            graph: str = None,
     ) -> None:
         """
         Write the legacy CIM XML format.
@@ -1023,11 +1042,11 @@ class Model:
         """
 
     def write(
-        self,
-        file_path: Union[str, Path],
-        format=LiteralType["ntriples", "turtle", "rdf/xml", "hdt"],
-        graph: str = None,
-        prefixes: Dict[str, str] = None,
+            self,
+            file_path: Union[str, Path],
+            format=LiteralType["ntriples", "turtle", "rdf/xml", "hdt"],
+            graph: str = None,
+            prefixes: Dict[str, str] = None,
     ) -> None:
         """
         Write the non-transient triples to the file path specified in the NTriples format.
@@ -1044,10 +1063,10 @@ class Model:
         """
 
     def writes(
-        self,
-        format=LiteralType["ntriples", "turtle", "rdf/xml"],
-        graph: str = None,
-        prefixes: Dict[str, str] = None,
+            self,
+            format=LiteralType["ntriples", "turtle", "rdf/xml"],
+            graph: str = None,
+            prefixes: Dict[str, str] = None,
     ) -> str:
         """
         Write the non-transient triples to a string in memory.
@@ -1063,7 +1082,7 @@ class Model:
         """
 
     def write_native_parquet(
-        self, folder_path: Union[str, Path], graph: str = None
+            self, folder_path: Union[str, Path], graph: str = None
     ) -> None:
         """
         Write non-transient triples using the internal native Parquet format.
@@ -1084,7 +1103,7 @@ class Model:
         :param graph: The IRI of the graph to truncate.
         """
 
-    def detach_graph(self, graph:str=None, preserve_name:bool=False) -> "Model":
+    def detach_graph(self, graph: str = None, preserve_name: bool = False) -> "Model":
         """
         Detaches and returns a named graph as their own Model object.
         The named graph is removed from the original Model.
@@ -1095,7 +1114,7 @@ class Model:
         """
 
     def get_predicate_iris(
-        self, graph: str = None, include_transient: bool = False
+            self, graph: str = None, include_transient: bool = False
     ) -> List["IRI"]:
         """
         :param graph: The graph to get the predicate iris from.
@@ -1104,7 +1123,7 @@ class Model:
         """
 
     def get_predicate(
-        self, iri: "IRI", graph: str = None, include_transient: bool = False
+            self, iri: "IRI", graph: str = None, include_transient: bool = False
     ) -> List["SolutionMappings"]:
         """
         :param iri: The predicate IRI
@@ -1114,7 +1133,7 @@ class Model:
         """
 
     def create_index(
-        self, options: "IndexingOptions" = None, all: bool = True, graph: str = None
+            self, options: "IndexingOptions" = None, all: bool = True, graph: str = None
     ):
         """
         :param options: Indexing options
@@ -1124,14 +1143,14 @@ class Model:
         """
 
     def infer(
-        self,
-        ruleset: Union[str, List[str]],
-        graph: str = None,
-        max_iterations: Optional[int] = 100_000,
-        max_results: Optional[int] = 10_000_000,
-        include_transient: bool = True,
-        max_rows: Optional[int] = 100_000_000,
-        debug: bool = False,
+            self,
+            ruleset: Union[str, List[str]],
+            graph: str = None,
+            max_iterations: Optional[int] = 100_000,
+            max_results: Optional[int] = 10_000_000,
+            include_transient: bool = True,
+            max_rows: Optional[int] = 100_000_000,
+            debug: bool = False,
     ) -> Optional[Dict[str, DataFrame]]:
         """
         Run the inference rules that are provided
@@ -1145,7 +1164,7 @@ class Model:
         :return: The inferred N-Tuples.
         """
 
-    def size(self, graph:str=None) -> int:
+    def size(self, graph: str = None) -> int:
         """
         Get the number of triples in a graph.
 
@@ -1162,7 +1181,9 @@ class Model:
         :param resources: The templates associated with each resource
         """
 
+
 class MaplibException(Exception): ...
+
 
 def explore(
         m: "Model",
@@ -1188,6 +1209,7 @@ def explore(
     :param fts: Enable full text search indexing
     """
 
+
 def generate_templates(m: Model, graph: Optional[str]) -> Dict[str, Template]:
     """Generate templates for instantiating the classes in an ontology
 
@@ -1203,6 +1225,7 @@ class VirtualizedDatabase:
     """
     A virtualized database implemented in Python.
     """
+
     def __init__(self,
                  database: Any,
                  resource_sql_map: Optional[Dict[str, Any]],

@@ -1,0 +1,9 @@
+[package]
+name = "opc_ua"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+maplib = { path = "../maplib" }
+representation = { path = "../representation" }
