@@ -31,6 +31,10 @@ pub enum QueryProcessingError {
     ExpectedIntegerArgument(Function),
     #[error("Error parsing literal {0}")]
     ParseLiteralError(RepresentationError),
-    #[error("UDF error")]
+    #[error("UDF function error {0}")]
     UDFError(String),
+    #[error(
+        "Custom function not found: {0}, it is possible to define a function using m.add_udf()"
+    )]
+    CustomFunctionNotFound(String),
 }

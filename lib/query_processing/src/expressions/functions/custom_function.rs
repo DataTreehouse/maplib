@@ -6,6 +6,7 @@ use crate::errors::QueryProcessingError;
 use crate::expressions::functions::struuid_v5::struuid_v5;
 use crate::expressions::functions::uuid_v5::uuid_v5;
 use crate::expressions::functions::xsd_cast_literal;
+use crate::udf::UdfRegistry;
 use oxrdf::vocab::xsd;
 use oxrdf::NamedNode;
 use polars::datatypes::{DataType, TimeUnit};
@@ -20,13 +21,6 @@ use spargebra::algebra::{Expression, Function};
 use std::collections::HashMap;
 use std::ops::{Div, Mul};
 
-pub trait UdfRegistry: Send + Sync {
-    fn has(&self, name: &str) -> bool;
-    fn call(&self, name: &str, args: DataFrame) -> Result<DataFrame, QueryProcessingError>;
-    fn input_types(&self, name: &str) -> Option<&[BaseRDFNodeType]>;
-    fn output_type(&self, name: &str) -> Option<&BaseRDFNodeType>;
-}
-
 pub fn custom_(
     nn: &NamedNode,
     mut solution_mappings: SolutionMappings,
@@ -35,9 +29,8 @@ pub fn custom_(
     args_contexts: &HashMap<usize, Context>,
     outer_context: &Context,
     global_cats: LockedCats,
-    udf_registry: Option<&dyn UdfRegistry>,
+    udf_registry: Option<&UdfRegistry>,
 ) -> Result<SolutionMappings, QueryProcessingError> {
-    let iri = nn.as_str();
     if matches!(
         nn.as_ref(),
         xsd::INT
@@ -84,7 +77,7 @@ pub fn custom_(
             outer_context.as_str().to_string(),
             BaseRDFNodeType::Literal(nn.to_owned()).into_default_input_rdf_node_state(),
         );
-    } else if iri == DATETIME_AS_MICROS {
+    } else if nn.as_str() == DATETIME_AS_MICROS {
         if args.len() != 1 {
             return Err(QueryProcessingError::BadNumberOfFunctionArguments(
                 func.clone(),
@@ -103,7 +96,7 @@ pub fn custom_(
             outer_context.as_str().to_string(),
             BaseRDFNodeType::Literal(xsd::INTEGER.into_owned()).into_default_input_rdf_node_state(),
         );
-    } else if iri == DATETIME_AS_SECONDS {
+    } else if nn.as_str() == DATETIME_AS_SECONDS {
         if args.len() != 1 {
             return Err(QueryProcessingError::BadNumberOfFunctionArguments(
                 func.clone(),
@@ -123,7 +116,7 @@ pub fn custom_(
             outer_context.as_str().to_string(),
             BaseRDFNodeType::Literal(xsd::INTEGER.into_owned()).into_default_input_rdf_node_state(),
         );
-    } else if iri == MICROS_AS_DATETIME {
+    } else if nn.as_str() == MICROS_AS_DATETIME {
         if args.len() != 1 {
             return Err(QueryProcessingError::BadNumberOfFunctionArguments(
                 func.clone(),
@@ -142,7 +135,7 @@ pub fn custom_(
             BaseRDFNodeType::Literal(xsd::DATE_TIME.into_owned())
                 .into_default_input_rdf_node_state(),
         );
-    } else if iri == SECONDS_AS_DATETIME {
+    } else if nn.as_str() == SECONDS_AS_DATETIME {
         if args.len() != 1 {
             return Err(QueryProcessingError::BadNumberOfFunctionArguments(
                 func.clone(),
@@ -162,7 +155,7 @@ pub fn custom_(
             BaseRDFNodeType::Literal(xsd::DATE_TIME.into_owned())
                 .into_default_input_rdf_node_state(),
         );
-    } else if iri == MODULUS {
+    } else if nn.as_str() == MODULUS {
         if args.len() != 2 {
             return Err(QueryProcessingError::BadNumberOfFunctionArguments(
                 func.clone(),
@@ -181,7 +174,7 @@ pub fn custom_(
             outer_context.as_str().to_string(),
             BaseRDFNodeType::Literal(xsd::INTEGER.into_owned()).into_default_input_rdf_node_state(),
         );
-    } else if iri == FLOOR_DATETIME_TO_SECONDS_INTERVAL {
+    } else if nn.as_str() == FLOOR_DATETIME_TO_SECONDS_INTERVAL {
         if args.len() != 2 {
             return Err(QueryProcessingError::BadNumberOfFunctionArguments(
                 func.clone(),
@@ -208,7 +201,7 @@ pub fn custom_(
             BaseRDFNodeType::Literal(xsd::DATE_TIME.into_owned())
                 .into_default_input_rdf_node_state(),
         );
-    } else if iri == DECODE {
+    } else if nn.as_str() == DECODE {
         if args.len() != 1 {
             return Err(QueryProcessingError::BadNumberOfFunctionArguments(
                 func.clone(),
@@ -261,7 +254,7 @@ pub fn custom_(
         solution_mappings
             .rdf_node_types
             .insert(outer_context.as_str().to_string(), t_new);
-    } else if iri == STRUUID_V5 {
+    } else if nn.as_str() == STRUUID_V5 {
         solution_mappings = struuid_v5(
             solution_mappings,
             func,
@@ -270,7 +263,7 @@ pub fn custom_(
             outer_context,
             global_cats,
         )?;
-    } else if iri == UUID_V5 {
+    } else if nn.as_str() == UUID_V5 {
         solution_mappings = uuid_v5(
             solution_mappings,
             func,
@@ -280,15 +273,15 @@ pub fn custom_(
             global_cats,
         )?;
     } else if let Some(registry) = udf_registry {
-        if registry.has(iri) {
-            let input_types = registry.input_types(iri).unwrap_or(&[]);
-            let output_type = registry.output_type(iri).ok_or_else(|| {
-                QueryProcessingError::UDFError(format!("UDF '{}' has no output type", iri))
+        if registry.has(nn) {
+            let input_types = registry.input_types(nn).unwrap_or(&[]);
+            let output_type = registry.output_type(nn).ok_or_else(|| {
+                QueryProcessingError::UDFError(format!("UDF '{}' has no output type", nn))
             })?;
             if !input_types.is_empty() && input_types.len() != args.len() {
                 return Err(QueryProcessingError::UDFError(format!(
                     "UDF '{}' expects {} args, got {}",
-                    iri,
+                    nn,
                     input_types.len(),
                     args.len()
                 )));
@@ -306,7 +299,7 @@ pub fn custom_(
                     let col = collected.column(ctx.as_str()).map_err(|e| {
                         QueryProcessingError::UDFError(format!(
                             "UDF '{}': column '{}' not found: {}",
-                            iri,
+                            nn,
                             ctx.as_str(),
                             e
                         ))
@@ -317,7 +310,7 @@ pub fn custom_(
                         series = series.cast(&target_dtype).map_err(|e| {
                             QueryProcessingError::UDFError(format!(
                                 "UDF '{}': failed to cast argument {} to {:?}: {}",
-                                iri, i, expected_type, e
+                                nn, i, expected_type, e
                             ))
                         })?;
                     }
@@ -332,7 +325,7 @@ pub fn custom_(
             let input_df = DataFrame::new(height, arg_columns)
                 .map_err(|e| QueryProcessingError::UDFError(e.to_string()))?;
 
-            let result_df = registry.call(iri, input_df)?;
+            let result_df = registry.call(nn, input_df)?;
 
             let result_col = result_df
                 .columns()
@@ -340,7 +333,7 @@ pub fn custom_(
                 .ok_or_else(|| {
                     QueryProcessingError::UDFError(format!(
                         "UDF '{}' returned empty DataFrame",
-                        iri
+                        nn
                     ))
                 })?
                 .as_materialized_series()
@@ -350,7 +343,7 @@ pub fn custom_(
             if result_col.dtype() != &expected_output_dtype {
                 return Err(QueryProcessingError::UDFError(format!(
                     "UDF '{}' expected output dtype {:?}, got {:?}",
-                    iri,
+                    nn,
                     expected_output_dtype,
                     result_col.dtype()
                 )));
@@ -369,7 +362,7 @@ pub fn custom_(
                     .into_default_input_rdf_node_state(),
             );
         } else {
-            return Err(QueryProcessingError::UDFError(nn.to_string()));
+            return Err(QueryProcessingError::CustomFunctionNotFound(nn.to_string()));
         }
     } else {
         return Err(QueryProcessingError::UDFError(nn.to_string()));

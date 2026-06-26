@@ -24,6 +24,7 @@ use polars::prelude::{
     as_struct, col, lit, AnyValue, DataFrame, Expr, IntoLazy, PlSmallStr, RankMethod, RankOptions,
 };
 use polars_core::prelude::{IntoColumn, Series, SortMultipleOptions};
+use pyo3::{Py, PyAny};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use rayon::iter::{IntoParallelRefIterator, ParallelDrainRange};
 use representation::cats::{
@@ -42,7 +43,7 @@ use std::sync::Arc;
 use std::time::Instant;
 use uuid::Uuid;
 
-use query_processing::expressions::functions::custom_function::UdfRegistry;
+use query_processing::udf::UdfRegistry;
 use representation::cats::maps::CatMaps;
 use representation::dataset::NamedGraph;
 use tracing::{instrument, trace};
@@ -62,10 +63,21 @@ pub struct Triplestore {
     indexing: HashMap<NamedGraph, IndexingOptions>,
     fts_index: HashMap<NamedGraph, FtsIndex>,
     pub global_cats: LockedCats,
-    pub udf_registry: Option<Arc<dyn UdfRegistry>>,
+    pub udf_registry: Arc<UdfRegistry>,
 }
 
 impl Triplestore {
+    pub fn add_udf(
+        &mut self,
+        iri: NamedNode,
+        f: Py<PyAny>,
+        output_type: BaseRDFNodeType,
+        input_types: Option<Vec<BaseRDFNodeType>>,
+    ) {
+        let reg = Arc::get_mut(&mut self.udf_registry).expect("UDF registry is not borrowed");
+        reg.add_udf(iri, f, output_type, input_types)
+    }
+
     pub fn graph_size(&self, named_graph: &NamedGraph) -> usize {
         let mut s = 0;
         if let Some(gr) = self.graph_triples_map.get(named_graph) {
@@ -240,7 +252,7 @@ impl Triplestore {
                 indexing: HashMap::from_iter([(new_graph_name.clone(), new_indexing)]),
                 fts_index: new_fts_index_map,
                 global_cats: LockedCats::new(cats_image),
-                udf_registry: None,
+                udf_registry: Arc::new(UdfRegistry::new()),
             })
         } else {
             Err(TriplestoreError::GraphDoesNotExist(graph.to_string()))
@@ -408,7 +420,7 @@ impl Triplestore {
             indexing: HashMap::from([(NamedGraph::DefaultGraph, indexing)]),
             fts_index: fts_index_map,
             global_cats: locked_cats,
-            udf_registry: None,
+            udf_registry: Arc::new(UdfRegistry::new()),
         })
     }
 

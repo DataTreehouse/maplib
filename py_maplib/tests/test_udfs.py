@@ -11,24 +11,6 @@ def test_add_udf():
     assert m.list_udfs() == ["myudf"]
 
 
-def test_udf_run1():
-    m = Model()
-    m.add_udf("myudf", lambda x: x + 1, RDFType.Literal(xsd.integer))
-    df = pl.DataFrame({"x": [1, 2, 3]})
-    result = m.run_udf("myudf", df)
-    expected = pl.DataFrame({"x": [2, 3, 4]})
-    pl.testing.assert_frame_equal(result, expected)
-    print(df, result)
-
-
-def udf_add_one(x):
-    return x + 1
-
-
-def udf_mul_two(x):
-    return x * 2
-
-
 def f(df: DataFrame) -> pl.DataFrame:
     df = df.with_columns(
         (pl.col("0") + pl.col("1")).alias("out")

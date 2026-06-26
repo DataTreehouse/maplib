@@ -15,12 +15,10 @@ use maplib::model::{MapOptions, Model as InnerModel};
 use chrono::Utc;
 use cimxml_export::export::FullModelDetails;
 use pyo3::prelude::*;
-use query_processing::expressions::functions::custom_function::UdfRegistry;
 use std::collections::{HashMap, HashSet};
 use std::fs::File;
-use std::io::Cursor;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{ Mutex, MutexGuard};
 use triplestore::sparql::{
     InsertResult, QueryResult, QueryResultKind as SparqlQueryResult, UpdateResult,
 };
@@ -52,8 +50,8 @@ use tikv_jemallocator::Jemalloc;
 use oxrdf::vocab::xsd;
 use oxrdf::NamedNode;
 use oxrdfio::RdfFormat;
-use polars::prelude::{col, lit, IntoLazy, IpcReader, IpcWriter, SerWriter};
-use pyo3::types::{PyBytes, PyList, PyString};
+use polars::prelude::{col, lit, IntoLazy};
+use pyo3::types::{PyList, PyString};
 use pyo3::IntoPyObjectExt;
 use representation::python::{
     PyBlankNode, PyIRI, PyLiteral, PyPrefix, PyRDFType, PySolutionMappings, PyVariable,
@@ -65,9 +63,7 @@ use datalog::inference::InferenceResult;
 use datalog::python::PyInferenceResult;
 #[cfg(not(target_os = "linux"))]
 use mimalloc::MiMalloc;
-use polars::io::SerReader;
 use pyo3::exceptions::PyTypeError;
-use query_processing::errors::QueryProcessingError;
 use representation::cats::LockedCats;
 use representation::dataset::NamedGraph;
 use representation::debug::DebugOutputs;
@@ -107,149 +103,15 @@ const DEFAULT_MAP_TO_TRANSIENT: bool = false;
 const DEFAULT_DEBUG_NO_RESULTS: bool = false;
 const DEFAULT_TRIPLES_BATCH_SIZE: usize = 10_000_000;
 
-#[derive(Clone)]
-struct UdfEntry {
-    func: Py<PyAny>,
-    input_types: Vec<BaseRDFNodeType>,
-    output_type: BaseRDFNodeType,
-}
-
-#[derive(Clone)]
-struct PyUdfRegistry {
-    udfs: HashMap<String, UdfEntry>,
-}
-
-impl UdfRegistry for PyUdfRegistry {
-    fn has(&self, name: &str) -> bool {
-        self.udfs.contains_key(name)
-    }
-    fn input_types(&self, name: &str) -> Option<&[BaseRDFNodeType]> {
-        self.udfs.get(name).map(|e| e.input_types.as_slice())
-    }
-    fn output_type(&self, name: &str) -> Option<&BaseRDFNodeType> {
-        self.udfs.get(name).map(|e| &e.output_type)
-    }
-    fn call(&self, name: &str, args: DataFrame) -> Result<DataFrame, QueryProcessingError> {
-        let entry = self
-            .udfs
-            .get(name)
-            .ok_or_else(|| QueryProcessingError::UDFError(format!("UDF {} not found", name)))?;
-        Python::attach(|py| {
-            let mut buf = Vec::new();
-            let mut args_clone = args.clone();
-            IpcWriter::new(&mut buf)
-                .finish(&mut args_clone)
-                .map_err(|e| {
-                    QueryProcessingError::UDFError(format!(
-                        "UDF '{}': failed to serialize input: {}",
-                        name, e
-                    ))
-                })?;
-            let py_bytes = PyBytes::new(py, &buf);
-            let io = py.import("io").map_err(|e| {
-                QueryProcessingError::UDFError(format!(
-                    "UDF '{}': failed to import io: {}",
-                    name, e
-                ))
-            })?;
-            let reader = io.call_method1("BytesIO", (py_bytes,)).map_err(|e| {
-                QueryProcessingError::UDFError(format!(
-                    "UDF '{}': failed to create reader: {}",
-                    name, e
-                ))
-            })?;
-            let pl = py.import("polars").map_err(|e| {
-                QueryProcessingError::UDFError(format!(
-                    "UDF '{}': failed to import polars: {}",
-                    name, e
-                ))
-            })?;
-            let py_df = pl.call_method1("read_ipc", (reader,)).map_err(|e| {
-                QueryProcessingError::UDFError(format!(
-                    "UDF '{}': failed to deserialize input: {}",
-                    name, e
-                ))
-            })?;
-            let result = entry.func.call1(py, (py_df,)).map_err(|e| {
-                QueryProcessingError::UDFError(format!("UDF '{}': failed to call UDF: {}", name, e))
-            })?;
-            let result_bound = result.bind(py);
-            let result_df = if result_bound
-                .is_instance(
-                    &pl.getattr("DataFrame")
-                        .map_err(|e| QueryProcessingError::UDFError(e.to_string()))?,
-                )
-                .unwrap_or(false)
-            {
-                result_bound.clone()
-            } else {
-                result_bound
-                    .call_method0("to_frame")
-                    .map_err(|e| {
-                        QueryProcessingError::UDFError(format!(
-                            "UDF '{}': failed to convert result to DataFrame: {}",
-                            name, e
-                        ))
-                    })?
-                    .clone()
-            };
-            let write_buf = io.call_method1("BytesIO", ()).map_err(|e| {
-                QueryProcessingError::UDFError(format!(
-                    "UDF '{}': failed to create writer: {}",
-                    name, e
-                ))
-            })?;
-            result_df
-                .call_method1("write_ipc", (&write_buf,))
-                .map_err(|e| {
-                    QueryProcessingError::UDFError(format!(
-                        "UDF '{}': failed to serialize result: {}",
-                        name, e
-                    ))
-                })?;
-            write_buf.call_method1("seek", (0i64,)).map_err(|e| {
-                QueryProcessingError::UDFError(format!(
-                    "UDF '{}': failed to seek in writer: {}",
-                    name, e
-                ))
-            })?;
-            let bytes: Vec<u8> = write_buf
-                .call_method0("getvalue")
-                .map_err(|e| {
-                    QueryProcessingError::UDFError(format!(
-                        "UDF '{}': failed to get value from writer: {}",
-                        name, e
-                    ))
-                })?
-                .extract()
-                .map_err(|e: PyErr| {
-                    QueryProcessingError::UDFError(format!(
-                        "UDF '{}': failed to extract value from writer: {}",
-                        name, e
-                    ))
-                })?;
-            let cursor = Cursor::new(bytes);
-            IpcReader::new(cursor).finish().map_err(|e| {
-                QueryProcessingError::UDFError(format!(
-                    "UDF '{}': failed to deserialize result: {}",
-                    name, e
-                ))
-            })
-        })
-    }
-}
-
 #[pyclass(name = "Model", frozen)]
 pub struct PyModel {
     inner: Mutex<InnerModel>,
-    udfs: Mutex<HashMap<String, UdfEntry>>,
 }
 
 impl PyModel {
     pub fn from_inner_mapping(inner: InnerModel) -> PyModel {
         PyModel {
             inner: Mutex::new(inner),
-            udfs: Mutex::new(HashMap::new()),
         }
     }
 }
@@ -332,7 +194,6 @@ impl PyModel {
                 InnerModel::new(None, storage_folder, indexing, None)
                     .map_err(PyMaplibError::from)?,
             ),
-            udfs: Mutex::new(HashMap::new()),
         })
     }
 
@@ -598,11 +459,6 @@ impl PyModel {
         let graph = graph.map(NamedGraph::NamedGraph);
         let mut inner = self.inner.lock().unwrap();
         let cats = inner.triplestore.global_cats.clone();
-        let udfs = self.udfs.lock().unwrap();
-        if !udfs.is_empty() {
-            let udf_reg = PyUdfRegistry { udfs: udfs.clone() };
-            inner.triplestore.udf_registry = Some(Arc::new(udf_reg));
-        }
         let res = query_mutex(
             &mut inner,
             query,
@@ -614,7 +470,6 @@ impl PyModel {
             debug,
         )?;
 
-        drop(udfs);
         drop(inner);
         print_debug_if_exists(res.debug.as_ref());
         query_to_result(
@@ -650,11 +505,8 @@ impl PyModel {
         debug: Option<bool>,
     ) -> PyResult<()> {
         let mapped_parameters = map_parameters(parameters, py)?;
-        let udfs = self.udfs.lock().unwrap();
         let mut inner = self.inner.lock().unwrap();
-        if !udfs.is_empty() {
-            inner.triplestore.udf_registry = Some(Arc::new(PyUdfRegistry { udfs: udfs.clone() }));
-        }
+
         let res = update_mutex(
             &mut inner,
             update,
@@ -665,7 +517,6 @@ impl PyModel {
             max_rows,
             debug,
         )?;
-        drop(udfs);
         drop(inner);
         print_debug_if_exists(res.debug.as_ref());
         Ok(())
@@ -821,13 +672,9 @@ impl PyModel {
         let source_graph = NamedGraph::from_maybe_named_node(source_graph.as_ref());
         let target_graph = parse_optional_named_node(target_graph)?;
         let target_graph = NamedGraph::from_maybe_named_node(target_graph.as_ref());
-        let udfs = self.udfs.lock().unwrap();
         let mut inner = self.inner.lock().unwrap();
 
         let cats = inner.triplestore.global_cats.clone();
-        if !udfs.is_empty() {
-            inner.triplestore.udf_registry = Some(Arc::new(PyUdfRegistry { udfs: udfs.clone() }));
-        }
 
         let insert_result = insert_mutex(
             &mut inner,
@@ -842,7 +689,6 @@ impl PyModel {
             debug,
         )?;
 
-        drop(udfs);
         drop(inner);
         print_debug_if_exists(insert_result.debug.as_ref());
 
@@ -1174,47 +1020,44 @@ impl PyModel {
         Ok(PyInferenceResult { inner: res })
     }
 
-    #[pyo3(signature = (name, func, output_type, input_types=vec![]))]
+    #[pyo3(signature = (iri, func, output_type, input_types=None))]
     fn add_udf(
         &self,
         py: Python<'_>,
-        name: String,
+        iri: String,
         func: Py<PyAny>,
         output_type: Bound<'_, PyAny>,
-        input_types: Vec<Bound<'_, PyAny>>,
+        input_types: Option<Vec<Bound<'_, PyAny>>>,
     ) -> PyResult<()> {
         if !func.bind(py).is_callable() {
-            return Err(PyMaplibError::UDFError(format!("UDF {} is not callable", name)).into());
+            return Err(PyMaplibError::UDFError(format!("UDF {} is not callable", iri)).into());
         }
+        let iri = parse_named_node(iri)?;
         let output = resolve_rdf_node_type(&output_type)?;
-        let inputs: Vec<BaseRDFNodeType> = input_types
-            .iter()
-            .map(|t| resolve_rdf_node_type(t))
-            .collect::<PyResult<Vec<_>>>()?;
-        let mut udfs = self.udfs.lock().unwrap();
-        udfs.insert(
-            name,
-            UdfEntry {
-                func,
-                input_types: inputs,
-                output_type: output,
-            },
-        );
+        let inputs = if let Some(input_types) = input_types {
+            let inputs: Vec<BaseRDFNodeType> = input_types
+                .iter()
+                .map(|t| resolve_rdf_node_type(t))
+                .collect::<PyResult<Vec<_>>>()?;
+            Some(inputs)
+        } else {
+            None
+        };
+        let _ = py.detach(|| -> PyResult<()> {
+            let mut inner = self.inner.lock().unwrap();
+            add_udf_mutex(&mut inner, iri, func, output, inputs)?;
+            Ok(())
+        });
         Ok(())
     }
 
-    fn list_udfs(&self) -> Vec<String> {
-        let udfs = self.udfs.lock().unwrap();
-        udfs.keys().cloned().collect()
-    }
-
-    #[pyo3(signature = (name, df))]
-    fn run_udf(&self, py: Python<'_>, name: String, df: Py<PyAny>) -> PyResult<Py<PyAny>> {
-        let binding = self.udfs.lock().unwrap();
-        let entry = binding
-            .get(&name)
-            .ok_or_else(|| PyMaplibError::UDFError(format!("UDF {} not found", name)))?;
-        entry.func.call1(py, (df,))
+    fn list_udfs(&self, py: Python<'_>) -> PyResult<Vec<String>> {
+        let udfs = py.detach(|| -> PyResult<Vec<String>> {
+            let mut inner = self.inner.lock().unwrap();
+            let udfs = list_udfs_mutex(&mut inner)?;
+            Ok(udfs)
+        });
+        udfs
     }
 }
 
@@ -1316,7 +1159,6 @@ fn detach_graph_mutex(
         .map_err(PyMaplibError::from)?;
     let m = PyModel {
         inner: Mutex::new(sprout),
-        udfs: Mutex::new(HashMap::new()),
     };
     Ok(m)
 }
@@ -1993,6 +1835,25 @@ fn infer_mutex(
         )
         .map_err(PyMaplibError::MaplibError)
 }
+
+fn add_udf_mutex(
+    inner: &mut InnerModel,
+    iri: NamedNode,
+    func: Py<PyAny>,
+    output: BaseRDFNodeType,
+    inputs: Option<Vec<BaseRDFNodeType>>,
+) -> Result<(), PyMaplibError> {
+    inner
+        .add_udf(iri, func, output, inputs);
+    Ok(())
+}
+
+fn list_udfs_mutex(
+    inner: &mut InnerModel,
+) -> Result<Vec<String>, PyMaplibError> {
+    Ok(inner.list_udfs().into_iter().map(|x|x.as_str().to_string()).collect())
+}
+
 
 #[pymodule]
 #[pyo3(name = "maplib")]

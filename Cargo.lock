@@ -1940,7 +1940,6 @@ dependencies = [
  "arrow",
  "nohash-hasher",
  "rayon",
- "uuid",
 ]
 
 [[package]]
@@ -3549,6 +3548,7 @@ dependencies = [
  "md-5",
  "oxrdf",
  "polars",
+ "pyo3",
  "rayon",
  "representation",
  "sha1",

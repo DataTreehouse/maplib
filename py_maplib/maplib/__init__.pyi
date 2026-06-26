@@ -1129,7 +1129,7 @@ class Model:
             name,
             func: Callable[[pl.DataFrame], pl.DataFrame],
             output_type: RDFType,
-            input_types: list[RDFType] = []
+            input_types: list[RDFType] = None
     ):
         """
         :param name: IRI of the UDF, e.g. "urn:maplib:myfunc"
@@ -1141,13 +1141,6 @@ class Model:
     def list_udfs(self) -> list[str]:
         """
         :return: The list of registered UDFs
-        """
-
-    def run_udf(self, name: str, df: pl.DataFrame) -> pl.DataFrame:
-        """
-        :param name: IRI of the UDF
-        :param df: Input DataFrame with columns "0", "1", ...
-        :return: The result DataFrame
         """
 
 

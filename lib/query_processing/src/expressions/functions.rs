@@ -76,7 +76,7 @@ use crate::expressions::functions::str_len::str_len;
 use crate::expressions::functions::struuid::struuid;
 use crate::expressions::functions::year_::year_;
 use crate::expressions::{cast_lang_string_to_string, drop_inner_contexts};
-use custom_function::UdfRegistry;
+use crate::udf::UdfRegistry;
 use oxrdf::vocab::xsd;
 use oxrdf::NamedNodeRef;
 use polars::datatypes::{DataType, Field};
@@ -99,7 +99,7 @@ pub fn func_expression(
     args_contexts: HashMap<usize, Context>,
     outer_context: &Context,
     global_cats: LockedCats,
-    udf_registry: Option<&dyn UdfRegistry>,
+    udf_registry: Option<&UdfRegistry>,
 ) -> Result<SolutionMappings, QueryProcessingError> {
     match func {
         Function::Year => {
