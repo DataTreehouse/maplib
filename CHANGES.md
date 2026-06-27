@@ -1,5 +1,14 @@
 # Change log
 
+## v0.20.21
+### Features
+- Support for OPC UA mapping to RDF using m.map_opc_ua() providing the folder with NodeSet2 XMLs as an argument
+- m.add_udf() allows the user to create a UDF working on Polars DataFrames where arguments form the columns. The function is callable from SPARQL.
+- m.serialize("folder") and Model.deserialize("folder") serializes and deserializes the triples in a Model object super quickly (20x faster than ntriples in our bench).
+
+### Breaking (but not worthy of major release IMO)
+- IndexingOptions no longer has subject_object_index argument as this is now default.
+
 ## v0.20.20
 ### Bug fixes
 - Avoid panic when using pyarrow >= 24.0.0
