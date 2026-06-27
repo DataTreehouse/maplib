@@ -5,6 +5,7 @@ from typing import Any, Union, List, Dict, Optional, Callable, Literal as Litera
 from polars import DataFrame
 from datetime import datetime, date
 from maplib.maplib import rdf
+import polars as pl
 
 a = rdf.type
 
@@ -1179,6 +1180,25 @@ class Model:
         """
         :param virtualized_database: We call the query-function of this object.
         :param resources: The templates associated with each resource
+        """
+
+    def add_udf(
+            self,
+            iri,
+            func: Union[Callable[[pl.DataFrame], pl.Series], Callable[[pl.DataFrame], pl.DataFrame],],
+            output_type: Union[RDFType, str, IRI],
+            input_types: list[Union[RDFType,str, IRI]] = None
+    ):
+        """
+        :param iri: IRI of the UDF, e.g. "urn:maplib:myfunc"
+        :param func: A callable (DataFrame) -> DataFrame
+        :param output_type: The RDF type of the output. Either an RDFType (e.g. RDFType.IRI, RDFType.Literal(xsd.string)) or an IRI (e.g. xsd.integer)
+        :param input_types: Optional list of RDF datatypes of the input columns
+        """
+
+    def list_udfs(self) -> list[str]:
+        """
+        :return: The list of registered UDFs
         """
 
 

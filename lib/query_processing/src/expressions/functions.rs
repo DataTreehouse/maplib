@@ -46,6 +46,7 @@ mod str_len;
 mod str_starts_ends_contains_;
 mod struuid;
 mod struuid_v5;
+mod udf;
 mod uuid_v5;
 mod xsd_cast_literal;
 mod year_;

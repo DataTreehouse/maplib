@@ -128,7 +128,11 @@ impl Triplestore {
 
         let triplestore_metadata = TriplestoreMetadata {
             triples_uuid_map,
-            indexing: self.indexing.iter().map(|(graph, map)| (graph.clone(), map.clone())).collect(),
+            indexing: self
+                .indexing
+                .iter()
+                .map(|(graph, map)| (graph.clone(), map.clone()))
+                .collect(),
         };
 
         //Serializing metadata
@@ -226,7 +230,11 @@ impl Triplestore {
             start_deserialize_cats.elapsed().as_secs_f32()
         );
         triplestore.global_cats = LockedCats::new(cats);
-        triplestore.indexing = triplestore_metadata.indexing.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+        triplestore.indexing = triplestore_metadata
+            .indexing
+            .iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
         Ok(triplestore)
     }
 }

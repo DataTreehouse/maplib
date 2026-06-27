@@ -1,17 +1,19 @@
 use crate::error::PyMaplibError;
 use crate::mutexes::{
-    add_prefixes_mutex, add_template_mutex, add_virtualization_mutex, compact_mutex,
+    add_prefixes_mutex, add_template_mutex, add_udf_mutex, add_virtualization_mutex, compact_mutex,
     create_index_mutex, detach_graph_mutex, get_predicate_iris_mutex, get_predicate_mutex,
-    infer_mutex, insert_mutex, map_default_mutex, map_df_mutex, map_json_mutex, map_mutex,
-    map_triples_mutex, map_xml_mutex, query_mutex, read_mutex, read_template_mutex, reads_mutex,
-    serialize_triples_mutex, size_mutex, truncate_graph_mutex, update_mutex, validate_mutex,
-    write_cim_xml_mutex, write_native_parquet_mutex, write_triples_mutex, writes_mutex,
+    infer_mutex, insert_mutex, list_udfs_mutex, map_default_mutex, map_df_mutex, map_json_mutex,
+    map_mutex, map_triples_mutex, map_xml_mutex, query_mutex, read_mutex, read_template_mutex,
+    reads_mutex, serialize_triples_mutex, size_mutex, truncate_graph_mutex, update_mutex,
+    validate_mutex, write_cim_xml_mutex, write_native_parquet_mutex, write_triples_mutex,
+    writes_mutex,
 };
 use crate::shacl::{PyValidationReport, SHACL_RESULTS_QUERY};
 use crate::{
     create_prefix_map, data_to_mappings_types, map_parameters, new_triples_to_dict,
     parse_named_node, parse_optional_named_node, print_debug_if_exists, query_to_result,
-    ParametersType, PyIndexingOptions, StringOrPathBuf, DEFAULT_INCLUDE_TRANSIENT,
+    resolve_rdf_node_type, ParametersType, PyIndexingOptions, StringOrPathBuf,
+    DEFAULT_INCLUDE_TRANSIENT,
 };
 
 use datalog::python::PyInferenceResult;
@@ -24,6 +26,7 @@ use representation::dataset::NamedGraph;
 use representation::df_to_python::df_to_py_df;
 use representation::python::PyIRI;
 use representation::solution_mapping::EagerSolutionMappings;
+use representation::BaseRDFNodeType;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -957,5 +960,45 @@ impl PyModel {
         Ok(Self {
             inner: Mutex::new(inner?),
         })
+    }
+
+    #[pyo3(signature = (iri, func, output_type, input_types=None))]
+    fn add_udf(
+        &self,
+        py: Python<'_>,
+        iri: String,
+        func: Py<PyAny>,
+        output_type: Bound<'_, PyAny>,
+        input_types: Option<Vec<Bound<'_, PyAny>>>,
+    ) -> PyResult<()> {
+        if !func.bind(py).is_callable() {
+            return Err(PyMaplibError::UDFError(format!("UDF {} is not callable", iri)).into());
+        }
+        let iri = parse_named_node(iri)?;
+        let output = resolve_rdf_node_type(&output_type)?;
+        let inputs = if let Some(input_types) = input_types {
+            let inputs: Vec<BaseRDFNodeType> = input_types
+                .iter()
+                .map(|t| resolve_rdf_node_type(t))
+                .collect::<PyResult<Vec<_>>>()?;
+            Some(inputs)
+        } else {
+            None
+        };
+        let _ = py.detach(|| -> PyResult<()> {
+            let mut inner = self.inner.lock().unwrap();
+            add_udf_mutex(&mut inner, iri, func, output, inputs)?;
+            Ok(())
+        });
+        Ok(())
+    }
+
+    fn list_udfs(&self, py: Python<'_>) -> PyResult<Vec<String>> {
+        let udfs = py.detach(|| -> PyResult<Vec<String>> {
+            let mut inner = self.inner.lock().unwrap();
+            let udfs = list_udfs_mutex(&mut inner)?;
+            Ok(udfs)
+        });
+        udfs
     }
 }

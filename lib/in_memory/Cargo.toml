@@ -5,7 +5,6 @@ rust-version.workspace = true
 edition.workspace = true
 
 [dependencies]
-uuid.workspace = true
 nohash-hasher.workspace = true
 rayon.workspace = true
 arrow.workspace = true

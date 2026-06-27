@@ -35,6 +35,8 @@ pub enum PyMaplibError {
     FunctionArgumentError(String),
     #[error("Runtime error `{0}`")]
     RuntimeError(String),
+    #[error("UDF error `{0}`")]
+    UDFError(String),
 }
 
 impl std::convert::From<PyMaplibError> for PyErr {
@@ -45,6 +47,7 @@ impl std::convert::From<PyMaplibError> for PyErr {
                 FunctionArgumentException::new_err(s.clone())
             }
             PyMaplibError::RuntimeError(s) => MaplibRuntimeError::new_err(s.clone()),
+            PyMaplibError::UDFError(s) => MaplibUDFError::new_err(format!("{s}")),
         }
     }
 }
@@ -52,3 +55,4 @@ impl std::convert::From<PyMaplibError> for PyErr {
 create_exception!(exceptions, MaplibException, PyException);
 create_exception!(exceptions, MaplibRuntimeError, PyException);
 create_exception!(exceptions, FunctionArgumentException, PyException);
+create_exception!(exceptions, MaplibUDFError, PyException);

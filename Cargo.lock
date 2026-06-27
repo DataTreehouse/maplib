@@ -1101,20 +1101,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "dashmap"
-version = "6.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e6361d5c062261c78a176addb82d4c821ae42bed6089de0e12603cd25de2059c"
-dependencies = [
- "cfg-if",
- "crossbeam-utils",
- "hashbrown 0.14.5",
- "lock_api",
- "once_cell",
- "parking_lot_core",
-]
-
-[[package]]
 name = "datalog"
 version = "0.1.0"
 dependencies = [
@@ -1655,10 +1641,11 @@ checksum = "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a"
 
 [[package]]
 name = "hdt"
-version = "0.7.2"
+version = "0.7.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aec01f829494e9a6f2022091c6e6cb5d7151ce7909f7885246ef0cf3ec5e0ba1"
+checksum = "9e7931695342dcb32a86fea5ba379939eeae25f08fc8fc5225bcc32c7b47d7ef"
 dependencies = [
+ "ahash 0.8.12",
  "bitset-core",
  "bytesize",
  "console_error_panic_hook",
@@ -1666,7 +1653,7 @@ dependencies = [
  "env_logger",
  "getrandom 0.2.17",
  "getrandom 0.3.4",
- "lasso",
+ "hashbrown 0.14.5",
  "log",
  "mownstr",
  "ntriple",
@@ -1961,7 +1948,6 @@ dependencies = [
  "nohash-hasher",
  "range-set-blaze",
  "rayon",
- "uuid",
 ]
 
 [[package]]
@@ -2029,16 +2015,6 @@ name = "json-event-parser"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "574b0cd5e90ee2ba03a66d0611fc9a09c9a0c28b2ecc2dc8a181dd31a53ca5d7"
-
-[[package]]
-name = "lasso"
-version = "0.7.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6e14eda50a3494b3bf7b9ce51c52434a761e383d7238ce1dd5dcec2fbc13e9fb"
-dependencies = [
- "dashmap",
- "hashbrown 0.14.5",
-]
 
 [[package]]
 name = "lazy_static"
@@ -3508,6 +3484,7 @@ dependencies = [
  "oxrdfio",
  "polars",
  "pyo3",
+ "query_processing",
  "representation",
  "shacl",
  "templates",
@@ -3589,6 +3566,7 @@ dependencies = [
  "md-5",
  "oxrdf",
  "polars",
+ "pyo3",
  "rayon",
  "representation",
  "sha1",

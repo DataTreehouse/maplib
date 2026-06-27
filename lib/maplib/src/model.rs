@@ -12,8 +12,9 @@ use datalog::parser::parse_datalog_ruleset;
 use oxrdf::NamedNode;
 use oxrdfio::RdfFormat;
 use polars::prelude::DataFrame;
+use pyo3::{Py, PyAny};
 use representation::solution_mapping::EagerSolutionMappings;
-use representation::RDFNodeState;
+use representation::{BaseRDFNodeType, RDFNodeState};
 use shacl::{validate, ValidationReport};
 use std::collections::HashMap;
 use std::fs;
@@ -49,6 +50,12 @@ pub struct Model {
     pub prefixes: HashMap<String, NamedNode>,
     pub latest_report_graph: Option<NamedGraph>,
     pub chrontext_settings: Option<ChrontextSettings>,
+}
+
+impl Model {
+    pub fn list_udfs(&self) -> Vec<NamedNode> {
+        self.triplestore.udf_registry.list_udfs()
+    }
 }
 
 #[derive(Clone, Default)]
@@ -725,5 +732,15 @@ impl Model {
         let mut s = Self::new(None, storage_folder.clone(), None, None)?;
         s.triplestore = Triplestore::deserialize_triples(&path, storage_folder)?;
         Ok(s)
+    }
+
+    pub fn add_udf(
+        &mut self,
+        iri: NamedNode,
+        f: Py<PyAny>,
+        output_type: BaseRDFNodeType,
+        input_types: Option<Vec<BaseRDFNodeType>>,
+    ) {
+        self.triplestore.add_udf(iri, f, output_type, input_types);
     }
 }

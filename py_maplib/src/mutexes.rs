@@ -25,7 +25,7 @@ use representation::df_to_python::fix_cats_and_multicolumns;
 use representation::polars_to_rdf::XSD_DATETIME_WITH_TZ_FORMAT;
 use representation::python::PyIRI;
 use representation::solution_mapping::EagerSolutionMappings;
-use representation::RDFNodeState;
+use representation::{BaseRDFNodeType, RDFNodeState};
 use std::collections::HashMap;
 use std::fs::File;
 use std::path::{Path, PathBuf};
@@ -805,4 +805,23 @@ pub fn serialize_triples_mutex(inner: &mut MutexGuard<InnerModel>, path: &Path) 
 
 pub fn compact_mutex(inner: &mut MutexGuard<InnerModel>) -> PyResult<()> {
     Ok(inner.compact().map_err(PyMaplibError::from)?)
+}
+
+pub fn add_udf_mutex(
+    inner: &mut InnerModel,
+    iri: NamedNode,
+    func: Py<PyAny>,
+    output: BaseRDFNodeType,
+    inputs: Option<Vec<BaseRDFNodeType>>,
+) -> Result<(), PyMaplibError> {
+    inner.add_udf(iri, func, output, inputs);
+    Ok(())
+}
+
+pub fn list_udfs_mutex(inner: &mut InnerModel) -> Result<Vec<String>, PyMaplibError> {
+    Ok(inner
+        .list_udfs()
+        .into_iter()
+        .map(|x| x.as_str().to_string())
+        .collect())
 }

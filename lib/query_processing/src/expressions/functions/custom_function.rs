@@ -4,8 +4,10 @@ use crate::constants::{
 };
 use crate::errors::QueryProcessingError;
 use crate::expressions::functions::struuid_v5::struuid_v5;
+use crate::expressions::functions::udf::udf;
 use crate::expressions::functions::uuid_v5::uuid_v5;
 use crate::expressions::functions::xsd_cast_literal::xsd_cast_literal;
+use crate::udf::UdfRegistry;
 use oxrdf::vocab::xsd;
 use oxrdf::NamedNode;
 use polars::datatypes::{DataType, TimeUnit};
@@ -26,8 +28,8 @@ pub fn custom_(
     args_contexts: &HashMap<usize, Context>,
     outer_context: &Context,
     global_cats: LockedCats,
+    udf_registry: Option<&UdfRegistry>,
 ) -> Result<SolutionMappings, QueryProcessingError> {
-    let iri = nn.as_str();
     if matches!(
         nn.as_ref(),
         xsd::INT
@@ -74,7 +76,7 @@ pub fn custom_(
             outer_context.as_str().to_string(),
             BaseRDFNodeType::Literal(nn.to_owned()).into_default_input_rdf_node_state(),
         );
-    } else if iri == DATETIME_AS_MICROS {
+    } else if nn.as_str() == DATETIME_AS_MICROS {
         if args.len() != 1 {
             return Err(QueryProcessingError::BadNumberOfFunctionArguments(
                 func.clone(),
@@ -93,7 +95,7 @@ pub fn custom_(
             outer_context.as_str().to_string(),
             BaseRDFNodeType::Literal(xsd::INTEGER.into_owned()).into_default_input_rdf_node_state(),
         );
-    } else if iri == DATETIME_AS_SECONDS {
+    } else if nn.as_str() == DATETIME_AS_SECONDS {
         if args.len() != 1 {
             return Err(QueryProcessingError::BadNumberOfFunctionArguments(
                 func.clone(),
@@ -113,7 +115,7 @@ pub fn custom_(
             outer_context.as_str().to_string(),
             BaseRDFNodeType::Literal(xsd::INTEGER.into_owned()).into_default_input_rdf_node_state(),
         );
-    } else if iri == MICROS_AS_DATETIME {
+    } else if nn.as_str() == MICROS_AS_DATETIME {
         if args.len() != 1 {
             return Err(QueryProcessingError::BadNumberOfFunctionArguments(
                 func.clone(),
@@ -132,7 +134,7 @@ pub fn custom_(
             BaseRDFNodeType::Literal(xsd::DATE_TIME.into_owned())
                 .into_default_input_rdf_node_state(),
         );
-    } else if iri == SECONDS_AS_DATETIME {
+    } else if nn.as_str() == SECONDS_AS_DATETIME {
         if args.len() != 1 {
             return Err(QueryProcessingError::BadNumberOfFunctionArguments(
                 func.clone(),
@@ -152,7 +154,7 @@ pub fn custom_(
             BaseRDFNodeType::Literal(xsd::DATE_TIME.into_owned())
                 .into_default_input_rdf_node_state(),
         );
-    } else if iri == MODULUS {
+    } else if nn.as_str() == MODULUS {
         if args.len() != 2 {
             return Err(QueryProcessingError::BadNumberOfFunctionArguments(
                 func.clone(),
@@ -171,7 +173,7 @@ pub fn custom_(
             outer_context.as_str().to_string(),
             BaseRDFNodeType::Literal(xsd::INTEGER.into_owned()).into_default_input_rdf_node_state(),
         );
-    } else if iri == FLOOR_DATETIME_TO_SECONDS_INTERVAL {
+    } else if nn.as_str() == FLOOR_DATETIME_TO_SECONDS_INTERVAL {
         if args.len() != 2 {
             return Err(QueryProcessingError::BadNumberOfFunctionArguments(
                 func.clone(),
@@ -198,7 +200,7 @@ pub fn custom_(
             BaseRDFNodeType::Literal(xsd::DATE_TIME.into_owned())
                 .into_default_input_rdf_node_state(),
         );
-    } else if iri == DECODE {
+    } else if nn.as_str() == DECODE {
         if args.len() != 1 {
             return Err(QueryProcessingError::BadNumberOfFunctionArguments(
                 func.clone(),
@@ -251,7 +253,7 @@ pub fn custom_(
         solution_mappings
             .rdf_node_types
             .insert(outer_context.as_str().to_string(), t_new);
-    } else if iri == STRUUID_V5 {
+    } else if nn.as_str() == STRUUID_V5 {
         solution_mappings = struuid_v5(
             solution_mappings,
             func,
@@ -260,7 +262,7 @@ pub fn custom_(
             outer_context,
             global_cats,
         )?;
-    } else if iri == UUID_V5 {
+    } else if nn.as_str() == UUID_V5 {
         solution_mappings = uuid_v5(
             solution_mappings,
             func,
@@ -269,8 +271,18 @@ pub fn custom_(
             outer_context,
             global_cats,
         )?;
+    } else if let Some(registry) = udf_registry {
+        solution_mappings = udf(
+            nn,
+            solution_mappings,
+            args,
+            args_contexts,
+            outer_context,
+            global_cats,
+            registry,
+        )?;
     } else {
-        return Err(QueryProcessingError::UnimplementedFunction(nn.to_string()));
+        return Err(QueryProcessingError::UDFError(nn.to_string()));
     }
     Ok(solution_mappings)
 }

@@ -34,6 +34,7 @@ use crate::expressions::functions::str_lang::str_lang;
 use crate::expressions::functions::str_len::str_len;
 use crate::expressions::functions::struuid::struuid;
 use crate::expressions::functions::year_::year_;
+use crate::udf::UdfRegistry;
 use representation::cats::LockedCats;
 use representation::query_context::Context;
 use representation::solution_mapping::SolutionMappings;
@@ -47,6 +48,7 @@ pub fn func_expression(
     args_contexts: HashMap<usize, Context>,
     outer_context: &Context,
     global_cats: LockedCats,
+    udf_registry: Option<&UdfRegistry>,
 ) -> Result<SolutionMappings, QueryProcessingError> {
     match func {
         Function::Year => {
@@ -175,6 +177,7 @@ pub fn func_expression(
                 &args_contexts,
                 outer_context,
                 global_cats,
+                udf_registry,
             )?;
         }
         Function::StrDt => {

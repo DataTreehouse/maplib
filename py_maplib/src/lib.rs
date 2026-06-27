@@ -60,6 +60,7 @@ use representation::solution_mapping::EagerSolutionMappings;
 use datalog::python::PyInferenceResult;
 #[cfg(not(target_os = "linux"))]
 use mimalloc::MiMalloc;
+use pyo3::exceptions::PyTypeError;
 use representation::cats::LockedCats;
 use representation::dataset::NamedGraph;
 use representation::debug::DebugOutputs;
@@ -443,4 +444,35 @@ pub fn data_to_mappings_types(
         let df = polars_df_to_rust_df(data)?;
         Ok((df, None))
     }
+}
+
+fn resolve_rdf_node_type(obj: &Bound<'_, PyAny>) -> PyResult<BaseRDFNodeType> {
+    if let Ok(rdf_type) = obj.extract::<PyRDFType>() {
+        let state = rdf_type
+            .flat
+            .as_ref()
+            .ok_or_else(|| PyMaplibError::UDFError("RDFType is not flat".to_string()))?;
+        if state.map.len() != 1 {
+            return Err(PyTypeError::new_err(
+                "`RDFType` should only contain one mapping",
+            ));
+        }
+        return Ok(state.map.keys().next().unwrap().clone());
+    }
+    if let Ok(iri) = obj.extract::<PyIRI>() {
+        return Ok(BaseRDFNodeType::Literal(iri.into_inner()));
+    }
+    if let Ok(s) = obj.extract::<String>() {
+        if s == "IRI" || s == "iri" {
+            return Ok(BaseRDFNodeType::IRI);
+        }
+        if s == "BlankNode" || s == "blanknode" {
+            return Ok(BaseRDFNodeType::BlankNode);
+        }
+        let nn = NamedNode::new(&s).map_err(|e| {
+            PyMaplibError::FunctionArgumentError(format!("Invalid IRI '{}': {}", s, e))
+        })?;
+        return Ok(BaseRDFNodeType::Literal(nn));
+    }
+    Err(PyTypeError::new_err("Expected RDFType or IRI"))
 }

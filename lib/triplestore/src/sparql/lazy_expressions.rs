@@ -567,6 +567,7 @@ impl Triplestore {
                     args_contexts,
                     context,
                     self.global_cats.clone(),
+                    Some(&self.udf_registry),
                 )?
             }
         };

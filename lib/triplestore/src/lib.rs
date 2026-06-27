@@ -25,6 +25,7 @@ use polars::prelude::{
     as_struct, col, lit, AnyValue, DataFrame, Expr, IntoLazy, PlSmallStr, RankMethod, RankOptions,
 };
 use polars_core::prelude::{IntoColumn, Series, SortMultipleOptions};
+use pyo3::{Py, PyAny};
 use range_set_blaze::RangeSetBlaze;
 use rayon::iter::{IntoParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
 use rayon::iter::{IntoParallelRefIterator, ParallelDrainRange};
@@ -41,9 +42,11 @@ use representation::{
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::Instant;
 use uuid::Uuid;
 
+use query_processing::udf::UdfRegistry;
 use representation::cats::maps::CatMaps;
 use representation::dataset::NamedGraph;
 use tracing::{debug, instrument, trace};
@@ -64,11 +67,23 @@ pub struct Triplestore {
     fts_index: HashMap<NamedGraph, FtsIndex>,
     pub global_cats: LockedCats,
     n_triples_deleted: usize,
+    pub udf_registry: Arc<UdfRegistry>,
 }
 
 const GC_LIMIT: &usize = &1_000_000;
 
 impl Triplestore {
+    pub fn add_udf(
+        &mut self,
+        iri: NamedNode,
+        f: Py<PyAny>,
+        output_type: BaseRDFNodeType,
+        input_types: Option<Vec<BaseRDFNodeType>>,
+    ) {
+        let reg = Arc::get_mut(&mut self.udf_registry).expect("UDF registry is not borrowed");
+        reg.add_udf(iri, f, output_type, input_types)
+    }
+
     pub fn maybe_garbage_collect(&mut self) -> Result<u32, TriplestoreError> {
         if self.storage_folder.is_none() && &self.n_triples_deleted >= GC_LIMIT {
             self.garbage_collect()
@@ -417,6 +432,7 @@ impl Triplestore {
                 fts_index: new_fts_index_map,
                 global_cats: LockedCats::new(cats_image),
                 n_triples_deleted: 0,
+                udf_registry: Arc::new(UdfRegistry::new()),
             })
         } else {
             Err(TriplestoreError::GraphDoesNotExist(graph.to_string()))
@@ -579,6 +595,7 @@ impl Triplestore {
             fts_index: fts_index_map,
             global_cats: locked_cats,
             n_triples_deleted: 0,
+            udf_registry: Arc::new(UdfRegistry::new()),
         })
     }
 
