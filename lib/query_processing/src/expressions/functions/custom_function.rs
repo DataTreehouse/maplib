@@ -4,15 +4,14 @@ use crate::constants::{
 };
 use crate::errors::QueryProcessingError;
 use crate::expressions::functions::struuid_v5::struuid_v5;
+use crate::expressions::functions::udf::udf;
 use crate::expressions::functions::uuid_v5::uuid_v5;
 use crate::expressions::functions::xsd_cast_literal::xsd_cast_literal;
 use crate::udf::UdfRegistry;
 use oxrdf::vocab::xsd;
 use oxrdf::NamedNode;
 use polars::datatypes::{DataType, TimeUnit};
-use polars::frame::DataFrame;
-use polars::prelude::{col, lit, Column, Expr, LiteralValue, Scalar};
-use polars::prelude::{IntoColumn, IntoLazy};
+use polars::prelude::{col, lit, Expr, LiteralValue, Scalar};
 use representation::cats::{maybe_decode_expr, LockedCats};
 use representation::query_context::Context;
 use representation::solution_mapping::{BaseCatState, SolutionMappings};
@@ -273,94 +272,15 @@ pub fn custom_(
             global_cats,
         )?;
     } else if let Some(registry) = udf_registry {
-        if registry.has(nn) {
-            let input_types = registry.input_types(nn).unwrap_or(&[]);
-            let output_type = registry.output_type(nn).ok_or_else(|| {
-                QueryProcessingError::UDFError(format!("UDF '{}' has no output type", nn))
-            })?;
-            if !input_types.is_empty() && input_types.len() != args.len() {
-                return Err(QueryProcessingError::UDFError(format!(
-                    "UDF '{}' expects {} args, got {}",
-                    nn,
-                    input_types.len(),
-                    args.len()
-                )));
-            }
-            let mut collected = solution_mappings
-                .mappings
-                .collect()
-                .map_err(|e| QueryProcessingError::UDFError(e.to_string()))?;
-
-            let arg_columns: Result<Vec<_>, QueryProcessingError> = (0..args.len())
-                .map(|i| {
-                    let ctx = args_contexts.get(&i).ok_or_else(|| {
-                        QueryProcessingError::UDFError(format!("Missing arg context {}", i))
-                    })?;
-                    let col = collected.column(ctx.as_str()).map_err(|e| {
-                        QueryProcessingError::UDFError(format!(
-                            "UDF '{}': column '{}' not found: {}",
-                            nn,
-                            ctx.as_str(),
-                            e
-                        ))
-                    })?;
-                    let mut series = col.as_materialized_series().clone();
-                    if let Some(expected_type) = input_types.get(i) {
-                        let target_dtype = expected_type.default_input_polars_data_type();
-                        series = series.cast(&target_dtype).map_err(|e| {
-                            QueryProcessingError::UDFError(format!(
-                                "UDF '{}': failed to cast argument {} to {:?}: {}",
-                                nn, i, expected_type, e
-                            ))
-                        })?;
-                    }
-                    Ok(series.clone().with_name(format!("{}", i).into()))
-                })
-                .collect();
-            let arg_columns = arg_columns?;
-
-            let height = arg_columns.first().map(|s| s.len()).unwrap_or(0);
-            let arg_columns: Vec<Column> =
-                arg_columns.into_iter().map(|s| s.into_column()).collect();
-            let input_df = DataFrame::new(height, arg_columns)
-                .map_err(|e| QueryProcessingError::UDFError(e.to_string()))?;
-
-            let result_df = registry.call(nn, input_df)?;
-
-            let result_col = result_df
-                .columns()
-                .first()
-                .ok_or_else(|| {
-                    QueryProcessingError::UDFError(format!("UDF '{}' returned empty DataFrame", nn))
-                })?
-                .as_materialized_series()
-                .clone();
-
-            let expected_output_dtype = output_type.default_input_polars_data_type();
-            if result_col.dtype() != &expected_output_dtype {
-                return Err(QueryProcessingError::UDFError(format!(
-                    "UDF '{}' expected output dtype {:?}, got {:?}",
-                    nn,
-                    expected_output_dtype,
-                    result_col.dtype()
-                )));
-            }
-
-            let result_col = result_col.with_name(outer_context.as_str().into());
-
-            collected
-                .with_column(result_col.into_column())
-                .map_err(|e| QueryProcessingError::UDFError(e.to_string()))?;
-
-            solution_mappings.mappings = collected.lazy();
-            solution_mappings.rdf_node_types.insert(
-                outer_context.as_str().to_string(),
-                BaseRDFNodeType::Literal(xsd::INTEGER.into_owned())
-                    .into_default_input_rdf_node_state(),
-            );
-        } else {
-            return Err(QueryProcessingError::CustomFunctionNotFound(nn.to_string()));
-        }
+        solution_mappings = udf(
+            nn,
+            solution_mappings,
+            args,
+            args_contexts,
+            outer_context,
+            global_cats,
+            registry,
+        )?;
     } else {
         return Err(QueryProcessingError::UDFError(nn.to_string()));
     }

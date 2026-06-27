@@ -9,6 +9,7 @@ use pyo3::{Py, PyAny, PyErr, Python};
 use representation::BaseRDFNodeType;
 use std::collections::HashMap;
 use std::io::Cursor;
+use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct UdfEntry {
@@ -17,39 +18,19 @@ pub struct UdfEntry {
     output_type: BaseRDFNodeType,
 }
 
-#[derive(Clone)]
-pub struct UdfRegistry {
-    udfs: HashMap<NamedNode, UdfEntry>,
-}
+impl UdfEntry {
+    pub fn input_types(&self) -> Option<&Vec<BaseRDFNodeType>> {
+        self.input_types.as_ref()
+    }
+    pub fn output_type(&self) -> &BaseRDFNodeType {
+        &self.output_type
+    }
 
-impl UdfRegistry {
-    pub fn new() -> UdfRegistry {
-        UdfRegistry {
-            udfs: Default::default(),
-        }
-    }
-    pub fn has(&self, iri: &NamedNode) -> bool {
-        self.udfs.contains_key(iri)
-    }
-    pub fn input_types(&self, iri: &NamedNode) -> Option<&[BaseRDFNodeType]> {
-        if let Some(udf) = self.udfs.get(iri) {
-            udf.input_types.as_ref().map(|x| x.as_slice())
-        } else {
-            None
-        }
-    }
-    pub fn output_type(&self, iri: &NamedNode) -> Option<&BaseRDFNodeType> {
-        self.udfs.get(iri).map(|e| &e.output_type)
-    }
     pub fn call(
         &self,
         iri: &NamedNode,
         args: DataFrame,
     ) -> Result<DataFrame, QueryProcessingError> {
-        let entry = self
-            .udfs
-            .get(iri)
-            .ok_or_else(|| QueryProcessingError::UDFError(format!("UDF {} not found", iri)))?;
         Python::attach(|py| {
             let mut buf = Vec::new();
             let mut args_clone = args.clone();
@@ -83,7 +64,7 @@ impl UdfRegistry {
                     iri, e
                 ))
             })?;
-            let result = entry.func.call1(py, (py_df,)).map_err(|e| {
+            let result = self.func.call1(py, (py_df,)).map_err(|e| {
                 QueryProcessingError::UDFError(format!("UDF '{}': failed to call UDF: {}", iri, e))
             })?;
             let result_bound = result.bind(py);
@@ -150,6 +131,22 @@ impl UdfRegistry {
             })
         })
     }
+}
+
+#[derive(Clone)]
+pub struct UdfRegistry {
+    udfs: HashMap<NamedNode, Arc<UdfEntry>>,
+}
+
+impl UdfRegistry {
+    pub fn new() -> UdfRegistry {
+        UdfRegistry {
+            udfs: Default::default(),
+        }
+    }
+    pub fn get_function(&self, iri: &NamedNode) -> Option<Arc<UdfEntry>> {
+        self.udfs.get(iri).cloned()
+    }
 
     pub fn add_udf(
         &mut self,
@@ -160,11 +157,11 @@ impl UdfRegistry {
     ) {
         self.udfs.insert(
             iri,
-            UdfEntry {
+            Arc::new(UdfEntry {
                 func: f,
                 input_types,
                 output_type,
-            },
+            }),
         );
     }
 

@@ -1185,7 +1185,7 @@ class Model:
     def add_udf(
             self,
             iri,
-            func: Callable[[pl.DataFrame], pl.Series],
+            func: Union[Callable[[pl.DataFrame], pl.Series], Callable[[pl.DataFrame], pl.DataFrame],],
             output_type: Union[RDFType, str, IRI],
             input_types: list[Union[RDFType,str, IRI]] = None
     ):
