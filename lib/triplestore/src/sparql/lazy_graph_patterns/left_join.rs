@@ -53,10 +53,9 @@ impl Triplestore {
         } else {
             None
         };
-
         let mut right_solution_mappings = self.lazy_graph_pattern(
             right,
-            Some(left_solution_mappings.clone()),
+            None,
             &right_context,
             parameters,
             pushdowns,

@@ -1056,7 +1056,7 @@ fn create_rank_expr(
                 .map(|x| x.unwrap())
                 .collect()
         };
-        let rank_map = global_cats.read()?.rank_map(&u32_set, t);
+        let rank_map = global_cats.read()?.local_rank_map(&u32_set, t);
         if t.is_lang_string() {
             let mut e = col(c).map(
                 move |x| {

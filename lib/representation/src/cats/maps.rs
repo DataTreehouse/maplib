@@ -167,10 +167,17 @@ impl CatMaps {
         }
     }
 
-    pub fn rank_map(&self, us: &HashSet<u32>) -> HashMap<u32, u32> {
+    pub fn global_rank_map(&self, us: &HashSet<u32>) -> HashMap<u32, u32> {
         match self {
-            CatMaps::InMemory(m) => m.rank_map(us),
-            CatMaps::OnDisk(d) => d.rank_map(us),
+            CatMaps::InMemory(m) => m.global_rank_map(us),
+            CatMaps::OnDisk(d) => d.global_rank_map(us),
+        }
+    }
+
+    pub fn local_rank_map(&self, us: &HashSet<u32>) -> HashMap<u32, u32> {
+        match self {
+            CatMaps::InMemory(m) => m.global_rank_map(us),
+            CatMaps::OnDisk(d) => d.local_rank_map(us),
         }
     }
 

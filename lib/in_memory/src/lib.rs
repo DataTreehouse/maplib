@@ -147,10 +147,10 @@ impl CatMapsInMemory {
         }
     }
 
-    pub fn rank_map(&self, us: &HashSet<u32>) -> HashMap<u32, u32> {
+    pub fn global_rank_map(&self, us: &HashSet<u32>) -> HashMap<u32, u32> {
         match self {
-            CatMapsInMemory::Compressed(c) => c.rank_map(us),
-            CatMapsInMemory::Uncompressed(u) => u.rank_map(us),
+            CatMapsInMemory::Compressed(c) => c.global_rank_map(us),
+            CatMapsInMemory::Uncompressed(u) => u.global_rank_map(us),
         }
     }
 
@@ -582,7 +582,7 @@ impl PrefixCompressedCatMapsInMemory {
         rb
     }
 
-    pub fn rank_map(&self, us: &HashSet<u32>) -> HashMap<u32, u32> {
+    pub fn global_rank_map(&self, us: &HashSet<u32>) -> HashMap<u32, u32> {
         let mut ranked = HashMap::new();
         for (i, (_, v)) in self.map.range(..).enumerate() {
             if us.contains(v) {
@@ -802,7 +802,7 @@ impl UncompressedCatMapsInMemory {
         rb
     }
 
-    pub fn rank_map(&self, us: &HashSet<u32>) -> HashMap<u32, u32> {
+    pub fn global_rank_map(&self, us: &HashSet<u32>) -> HashMap<u32, u32> {
         let mut ranked = HashMap::new();
         for (i, (_, v)) in self.map.range::<Arc<String>, _>(..).enumerate() {
             if us.contains(v) {

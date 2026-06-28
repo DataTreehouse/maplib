@@ -1310,7 +1310,7 @@ fn compact_segments(
         None
     };
     let dfs: Vec<_> = subject_segments.iter().map(|(df, _)| df).collect();
-    let rank_maps = cats.rank_maps(dfs, subj_type, obj_type);
+    let rank_maps = cats.local_rank_maps(dfs, subj_type, obj_type);
     let (compact_subjects, new_df) = compact_dataframe_segments(
         subject_segments,
         SUBJECT_COL_NAME,

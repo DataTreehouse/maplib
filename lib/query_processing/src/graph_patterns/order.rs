@@ -133,23 +133,23 @@ fn make_ordering_expr(e: Expr, cats: LockedCats, t: BaseRDFNodeType, s: BaseCatS
 
                 let t = t.clone();
                 let local = local.clone();
-                let local_rank_map = if let Some(local) = local {
-                    let rank = local.read().unwrap().rank_map(&u32s, &t);
+                let local_cats_local_rank_map = if let Some(local) = local {
+                    let rank = local.read().unwrap().local_rank_map(&u32s, &t);
                     Some(rank)
                 } else {
                     None
                 };
-                let mut global_rank_map = cats.read().unwrap().rank_map(&u32s, &t);
-                if let Some(local_rank_map) = local_rank_map {
-                    global_rank_map.extend(local_rank_map);
+                let mut global_cats_local_rank_map = cats.read().unwrap().local_rank_map(&u32s, &t);
+                if let Some(local_rank_map) = local_cats_local_rank_map {
+                    global_cats_local_rank_map.extend(local_rank_map);
                 }
                 let mut ser = if t.is_lang_string() {
                     let value_ser = x.struct_()?.field_by_name(LANG_STRING_VALUE_FIELD)?;
                     let lang_ser = x.struct_()?.field_by_name(LANG_STRING_LANG_FIELD)?;
 
-                    let mut value_ser_rank = map_to_rank(&value_ser, &global_rank_map)?;
+                    let mut value_ser_rank = map_to_rank(&value_ser, &global_cats_local_rank_map)?;
                     value_ser_rank.rename(PlSmallStr::from_str(LANG_STRING_VALUE_FIELD));
-                    let mut lang_ser_rank = map_to_rank(&lang_ser, &global_rank_map)?;
+                    let mut lang_ser_rank = map_to_rank(&lang_ser, &global_cats_local_rank_map)?;
                     lang_ser_rank.rename(PlSmallStr::from_str(LANG_STRING_LANG_FIELD));
                     let mut df = DataFrame::new(
                         x.len(),
@@ -169,7 +169,7 @@ fn make_ordering_expr(e: Expr, cats: LockedCats, t: BaseRDFNodeType, s: BaseCatS
                     let column = df.drop_in_place(original_name.as_str())?;
                     column.as_materialized_series().clone()
                 } else {
-                    map_to_rank(x.as_materialized_series(), &global_rank_map)?
+                    map_to_rank(x.as_materialized_series(), &global_cats_local_rank_map)?
                 };
                 ser.rename(original_name);
                 Ok(ser.into_column())

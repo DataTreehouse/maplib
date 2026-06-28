@@ -321,7 +321,7 @@ impl Cats {
         self.literal_counter_map.get(nn).map(|x| *x).unwrap_or(0)
     }
 
-    pub fn rank_maps(
+    pub fn local_rank_maps(
         &self,
         dfs: Vec<&DataFrame>,
         subject_type: &BaseRDFNodeType,
@@ -390,7 +390,7 @@ impl Cats {
         let rank_maps: HashMap<_, _> = src_u_map
             .into_par_iter()
             .map(|(k, v)| {
-                let rm = self.rank_map(&v, &k);
+                let rm = self.local_rank_map(&v, &k);
                 (k, rm)
             })
             .collect();
@@ -399,7 +399,15 @@ impl Cats {
 
     pub fn rank_map(&self, us: &HashSet<u32>, dt: &BaseRDFNodeType) -> HashMap<u32, u32> {
         if let Some(cm) = self.cat_map.get(&CatType::from_base_rdf_node_type(dt)) {
-            cm.maps.rank_map(us)
+            cm.maps.global_rank_map(us)
+        } else {
+            HashMap::new()
+        }
+    }
+
+    pub fn local_rank_map(&self, us: &HashSet<u32>, dt: &BaseRDFNodeType) -> HashMap<u32, u32> {
+        if let Some(cm) = self.cat_map.get(&CatType::from_base_rdf_node_type(dt)) {
+            cm.maps.local_rank_map(us)
         } else {
             HashMap::new()
         }
