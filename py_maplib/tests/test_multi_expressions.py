@@ -226,6 +226,7 @@ def test_coalesce_both_multi_same_types(streaming):
     SELECT ?a ?b (COALESCE(?b, ?a) AS ?c) WHERE {
     {VALUES (?a) { (:hello1) ("string1") (1) (true) }}
     OPTIONAL {
+        VALUES (?a) { (:hello1) ("string1") (1) (true) }
         VALUES (?b) { (:hello2) ("string2") (1) (false) }
         FILTER(isIri(?a))
     }
@@ -249,6 +250,7 @@ def test_coalesce_both_multi_different_types(streaming):
     SELECT ?a ?b (COALESCE(?b, ?a) AS ?c) WHERE {
     {VALUES (?a) { (:hello1) ("string1") }}
     OPTIONAL {
+        VALUES (?a) { (:hello1) ("string1") }
         VALUES (?b) { (:hello2) ("string2"@en) (1) (false) }
         FILTER(isIri(?a))
     }
@@ -270,6 +272,7 @@ def test_coalesce_both_multi_different_types_rhs_less(streaming):
     SELECT ?a ?b (COALESCE(?b, ?a) AS ?c) WHERE {
     VALUES (?a) { (:hello1) ("string1") (1)}
     OPTIONAL {
+        VALUES (?a) { (:hello1) ("string1") (1)}
         VALUES (?b) { (:hello2) ("string2") }
         FILTER(isIri(?a))
     }
@@ -291,6 +294,7 @@ def test_coalesce_only_lhs_multi(streaming):
     SELECT ?a ?b (COALESCE(?b, ?a) AS ?c) WHERE {
     VALUES (?a) { (:hello1) ("string1") (1)}
     OPTIONAL {
+        VALUES (?a) { (:hello1) ("string1") (1)}
         VALUES (?b) { (:hello2) (:hello3) }
         FILTER(isIri(?a))
     }
@@ -312,6 +316,7 @@ def test_coalesce_only_rhs_multi(streaming):
     SELECT ?a ?b (COALESCE(?b, ?a) AS ?c) WHERE {
     VALUES (?a) { (:hello1) (:hello3) (:hello4)}
     OPTIONAL {
+        VALUES (?a) { (:hello1) (:hello3) (:hello4)}
         VALUES (?b) { (:hello2) ("string2"@no) ("string3") }
         FILTER(?a = :hello1)
     }
@@ -333,6 +338,7 @@ def test_div_by_unbound_is_unbound(streaming):
     SELECT ?a ?b (?a / ?b AS ?c) WHERE {
     VALUES (?a) { (1) (2) }
     OPTIONAL {
+        VALUES (?a) { (1) (2) }
         VALUES (?b) { (1.5) (4.5) }
         FILTER(?a = 1)
     }
@@ -355,6 +361,7 @@ def test_coalesce_no_multi(streaming):
     SELECT ?a ?b (COALESCE(?b, ?a) AS ?c) WHERE {
     VALUES (?a) { (:hello1) (:hello2) (:hello3)}
     OPTIONAL {
+        VALUES (?a) { (:hello1) (:hello2) (:hello3)}
         VALUES (?b) { (:hello5) (:hello6) }
         FILTER(?a = :hello1)
     }

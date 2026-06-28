@@ -173,14 +173,17 @@ def test_infer_nodeshape_from_template_graph():
                        mtpl:optional ?optional .
                 BIND(IF(?optional || ?card = "list", 0, 1) AS ?minCount)
                 OPTIONAL {{
+                    ?param mtpl:cardinality ?card .
                     FILTER(?card = "single")
                     BIND(1 AS ?maxCount)
                 }}
                 OPTIONAL {{
+                    ?param mtpl:type ?ptype .
                     FILTER(?ptype != ottr:IRI)
                     BIND(?ptype AS ?datatype)
                 }}
                 OPTIONAL {{
+                    ?param mtpl:type ?ptype .
                     FILTER(?ptype = ottr:IRI)
                     BIND(sh:IRI AS ?nodeKind)
                 }}
