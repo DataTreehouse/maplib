@@ -1,5 +1,13 @@
 # Change log
 
+## v0.20.22
+### Performance
+- Fix performance issue for ORDER BY when cats are on disk
+- Fix performance issue in queries with a lot of OPTIONAL clauses (see bugfix below)
+
+### Bug fixes
+- Fix issue where OPTIONAL clauses sometimes introduces duplicates
+
 ## v0.20.21
 ### Features
 - Support for OPC UA mapping to RDF using m.map_opc_ua() providing the folder with NodeSet2 XMLs as an argument
