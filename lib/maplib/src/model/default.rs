@@ -137,9 +137,9 @@ impl Model {
 
         let template_name = format!(
             "{}default_template_{}",
-            DEFAULT_PREFIX_IRI, &self.default_template_counter
+            DEFAULT_PREFIX_IRI,
+            uuid::Uuid::new_v4().to_string().replace("-", "_")
         );
-        self.default_template_counter += 1;
         let template = Template {
             signature: Signature {
                 iri: NamedNode::new(template_name.clone()).unwrap(),

@@ -376,24 +376,13 @@ pub(crate) fn update_mutex(
 pub(crate) fn create_index_mutex(
     inner: &mut MutexGuard<InnerModel>,
     options: Option<PyIndexingOptions>,
-    all: Option<bool>,
-    graph: Option<String>,
 ) -> PyResult<()> {
-    let named_graph = if all.unwrap_or(true) {
-        None
-    } else {
-        let graph = parse_optional_named_node(graph)?;
-        let named_graph = NamedGraph::from_maybe_named_node(graph.as_ref());
-        Some(named_graph)
-    };
     let options = if let Some(options) = options {
         options.inner
     } else {
         IndexingOptions::default()
     };
-    inner
-        .create_index(options, named_graph.as_ref())
-        .map_err(PyMaplibError::from)?;
+    inner.create_index(options).map_err(PyMaplibError::from)?;
     Ok(())
 }
 
@@ -478,7 +467,6 @@ pub(crate) fn validate_mutex(
             debug_rules.unwrap_or(false),
         )
         .map_err(PyMaplibError::from)?;
-    inner.latest_report_graph = report_graph.clone();
     let py_report =
         PyValidationReport::new(report, inner.triplestore.global_cats.clone(), report_graph);
     Ok(py_report)

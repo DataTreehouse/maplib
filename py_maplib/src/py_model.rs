@@ -8,7 +8,7 @@ use crate::mutexes::{
     validate_mutex, write_cim_xml_mutex, write_native_parquet_mutex, write_triples_mutex,
     writes_mutex,
 };
-use crate::shacl::{PyValidationReport, SHACL_RESULTS_QUERY};
+use crate::shacl::PyValidationReport;
 use crate::{
     create_prefix_map, data_to_mappings_types, map_parameters, new_triples_to_dict,
     parse_named_node, parse_optional_named_node, print_debug_if_exists, query_to_result,
@@ -425,18 +425,12 @@ impl PyModel {
         Ok(())
     }
 
-    #[pyo3(signature = (options=None, all=None, graph=None))]
+    #[pyo3(signature = (options=None))]
     #[instrument(skip_all)]
-    fn create_index(
-        &self,
-        py: Python<'_>,
-        options: Option<PyIndexingOptions>,
-        all: Option<bool>,
-        graph: Option<String>,
-    ) -> PyResult<()> {
+    fn create_index(&self, py: Python<'_>, options: Option<PyIndexingOptions>) -> PyResult<()> {
         py.detach(move || {
             let mut inner = self.inner.lock().unwrap();
-            create_index_mutex(&mut inner, options, all, graph)
+            create_index_mutex(&mut inner, options)
         })
     }
 
@@ -499,48 +493,6 @@ impl PyModel {
             )
         })?;
         Ok(res)
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    #[pyo3(signature = (graph=None, streaming=None))]
-    #[instrument(skip_all)]
-    fn shacl_report(
-        &self,
-        py: Python<'_>,
-        graph: Option<String>,
-        streaming: Option<bool>,
-    ) -> PyResult<Py<PyAny>> {
-        let graph = if let Some(graph) = graph {
-            NamedGraph::NamedGraph(parse_named_node(graph)?)
-        } else {
-            let inner = self.inner.lock().unwrap();
-            if let Some(latest_report_graph) = &inner.latest_report_graph {
-                latest_report_graph.clone()
-            } else {
-                return Err(PyMaplibError::FunctionArgumentError(
-                    "Either run the validation first or supply a graph".to_string(),
-                )
-                .into());
-            }
-        };
-
-        let (res, cats) = py.detach(|| -> PyResult<(_, LockedCats)> {
-            let mut inner = self.inner.lock().unwrap();
-            let cats = inner.triplestore.global_cats.clone();
-            let res = query_mutex(
-                &mut inner,
-                SHACL_RESULTS_QUERY.to_string(),
-                None,
-                Some(graph),
-                streaming,
-                Some(false),
-                None,
-                None,
-            )?;
-            Ok((res, cats))
-        })?;
-        print_debug_if_exists(res.debug.as_ref());
-        query_to_result(res, false, false, false, cats, py)
     }
 
     #[pyo3(signature = (

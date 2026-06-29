@@ -8,37 +8,6 @@ use representation::solution_mapping::EagerSolutionMappings;
 use shacl::ValidationReport as RustValidationReport;
 use std::collections::HashMap;
 
-pub const SHACL_RESULTS_QUERY: &str = r#"
-PREFIX sh: <http://www.w3.org/ns/shacl#>
-SELECT 
-    ?focus_node 
-    ?result_path 
-    ?result_severity 
-    ?source_constraint_component 
-    ?source_shape 
-    ?message 
-    ?value 
-WHERE {
-    ?report a sh:ValidationReport .
-    ?report sh:conforms ?conforms .
-    ?report sh:result ?result .
-    ?result a sh:ValidationResult .
-    ?result sh:focusNode ?focus_node .
-    ?result sh:resultSeverity ?result_severity .
-    ?result sh:sourceConstraintComponent ?source_constraint_component .
-    ?result sh:sourceShape ?source_shape .
-    OPTIONAL {
-        ?result sh:resultPath ?result_path .
-        }
-    OPTIONAL {
-        ?result sh:resultMessage ?message .
-    }
-    OPTIONAL {
-        ?result sh:value ?value.
-    }
-}
-"#;
-
 #[derive(Clone)]
 #[pyclass(name = "ValidationReport", from_py_object)]
 pub struct PyValidationReport {

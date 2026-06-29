@@ -42,13 +42,11 @@ use virtualization::python::VirtualizedPythonDatabase;
 use virtualization::{Virtualization, VirtualizedDatabase};
 
 pub struct Model {
+    pub blank_node_counter: usize,
     pub template_dataset: TemplateDataset,
     pub triplestore: Triplestore,
-    pub blank_node_counter: usize,
-    pub default_template_counter: usize,
     pub indexing: IndexingOptions,
     pub prefixes: HashMap<String, NamedNode>,
-    pub latest_report_graph: Option<NamedGraph>,
     pub chrontext_settings: Option<ChrontextSettings>,
 }
 
@@ -106,21 +104,19 @@ impl Model {
         let template_dataset = if let Some(template_dataset) = template_dataset {
             template_dataset.clone()
         } else {
-            TemplateDataset::new_empty()?
+            TemplateDataset::new_empty()
         };
         let mut use_prefixes = get_default_prefixes();
         if let Some(prefixes) = prefixes {
             use_prefixes.extend(prefixes)
         };
         Ok(Model {
+            blank_node_counter: 0,
             template_dataset,
             triplestore: Triplestore::new(storage_folder, Some(indexing.clone()))
                 .map_err(MaplibError::TriplestoreError)?,
-            blank_node_counter: 0,
-            default_template_counter: 0,
             indexing,
             prefixes: use_prefixes,
-            latest_report_graph: None,
             chrontext_settings: None,
         })
     }
@@ -649,13 +645,9 @@ impl Model {
     }
 
     #[instrument(skip_all)]
-    pub fn create_index(
-        &mut self,
-        indexing: IndexingOptions,
-        graph: Option<&NamedGraph>,
-    ) -> Result<(), MaplibError> {
+    pub fn create_index(&mut self, indexing: IndexingOptions) -> Result<(), MaplibError> {
         self.triplestore
-            .create_index(indexing.clone(), graph)
+            .create_index(indexing.clone())
             .map_err(MaplibError::TriplestoreError)?;
         Ok(())
     }
@@ -704,13 +696,11 @@ impl Model {
     ) -> Result<Model, MaplibError> {
         let triplestore = self.triplestore.detach_graph(graph, preserve_name)?;
         Ok(Model {
+            blank_node_counter: self.blank_node_counter,
             template_dataset: self.template_dataset.clone(),
             triplestore,
-            blank_node_counter: self.blank_node_counter,
-            default_template_counter: self.default_template_counter,
             indexing: self.indexing.clone(),
             prefixes: self.prefixes.clone(),
-            latest_report_graph: None,
             chrontext_settings: self.chrontext_settings.clone(),
         })
     }
@@ -729,9 +719,15 @@ impl Model {
         path: &Path,
         storage_folder: Option<String>,
     ) -> Result<Self, MaplibError> {
-        let mut s = Self::new(None, storage_folder.clone(), None, None)?;
-        s.triplestore = Triplestore::deserialize_triples(&path, storage_folder)?;
-        Ok(s)
+        let triplestore = Triplestore::deserialize_triples(&path, storage_folder)?;
+        Ok(Model {
+            blank_node_counter: 0,
+            template_dataset: Default::default(),
+            triplestore,
+            indexing: Default::default(),
+            prefixes: Default::default(),
+            chrontext_settings: None,
+        })
     }
 
     pub fn add_udf(

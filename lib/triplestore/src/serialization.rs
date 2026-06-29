@@ -1,9 +1,13 @@
-use super::{IndexingOptions, Triplestore};
+use super::{
+    maybe_create_fts_index_map, maybe_delete_and_recreate_storage_folder, IndexingOptions,
+    Triplestore,
+};
 use crate::errors::TriplestoreError;
 use crate::storage::Triples;
 use file_io::{scan_parquet, write_parquet, FileIOError};
 use oxrdf::NamedNode;
 use polars::prelude::{IntoLazy, LazyFrame, ParquetCompression, PolarsError};
+use query_processing::udf::UdfRegistry;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use representation::cats::serialization::{CatSerializationError, CATS_FOLDER};
 use representation::cats::{Cats, LockedCats};
@@ -14,6 +18,7 @@ use std::collections::HashMap;
 use std::fs::{create_dir_all, File};
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::Instant;
 use thiserror::Error;
 use tracing::debug;
@@ -51,7 +56,7 @@ const METADATA_FILE: &str = "metadata.json";
 #[derive(Serialize, Deserialize)]
 struct TriplestoreMetadata {
     triples_uuid_map: HashMap<String, (NamedGraph, NamedNode, BaseRDFNodeType, BaseRDFNodeType)>,
-    indexing: Vec<(NamedGraph, IndexingOptions)>,
+    indexing: IndexingOptions,
 }
 
 impl Triplestore {
@@ -128,11 +133,7 @@ impl Triplestore {
 
         let triplestore_metadata = TriplestoreMetadata {
             triples_uuid_map,
-            indexing: self
-                .indexing
-                .iter()
-                .map(|(graph, map)| (graph.clone(), map.clone()))
-                .collect(),
+            indexing: self.indexing.clone(),
         };
 
         //Serializing metadata
@@ -163,7 +164,8 @@ impl Triplestore {
         path: &Path,
         storage_folder: Option<String>,
     ) -> Result<Triplestore, TripleSerializationError> {
-        let mut triplestore = Triplestore::new(storage_folder, None)?;
+        let storage_pathbuf = maybe_delete_and_recreate_storage_folder(storage_folder.as_ref())?;
+
         let triples_path = create_path(path, TRIPLES_PATH);
         let metadata_file_path = create_path(&triples_path, METADATA_FILE);
         assert!(metadata_file_path.exists());
@@ -206,13 +208,12 @@ impl Triplestore {
                 Ok((graph, predicate, subject_type, object_type, triples))
             })
             .collect();
+        let mut graph_triples_map = HashMap::new();
         for (graph, pred, subject_type, object_type, triples) in triples_vec? {
-            if !triplestore.graph_triples_map.contains_key(&graph) {
-                triplestore
-                    .graph_triples_map
-                    .insert(graph.clone(), HashMap::new());
+            if !graph_triples_map.contains_key(&graph) {
+                graph_triples_map.insert(graph.clone(), HashMap::new());
             }
-            let pred_map = triplestore.graph_triples_map.get_mut(&graph).unwrap();
+            let pred_map = graph_triples_map.get_mut(&graph).unwrap();
             if !pred_map.contains_key(&pred) {
                 pred_map.insert(pred.clone(), HashMap::new());
             }
@@ -223,19 +224,29 @@ impl Triplestore {
             "Deserialized triples in {} seconds",
             start_deserialize_triples.elapsed().as_secs_f32()
         );
+
         let start_deserialize_cats = Instant::now();
-        let cats = Cats::deserialize_cats_to_in_memory(path);
+        let cats = Cats::deserialize_cats(path, storage_pathbuf.as_ref().map(|x| x.as_path()))?;
         debug!(
             "Deserialized cats in {} seconds",
             start_deserialize_cats.elapsed().as_secs_f32()
         );
-        triplestore.global_cats = LockedCats::new(cats);
-        triplestore.indexing = triplestore_metadata
-            .indexing
-            .iter()
-            .map(|(k, v)| (k.clone(), v.clone()))
-            .collect();
-        Ok(triplestore)
+
+        let fts_index = maybe_create_fts_index_map(&triplestore_metadata.indexing)?;
+        Ok(Triplestore {
+            graph_triples_map,
+            graph_transient_triples_map: HashMap::from([(
+                NamedGraph::DefaultGraph,
+                Default::default(),
+            )]),
+            storage_folder: storage_pathbuf,
+            parser_call: 0,
+            indexing: triplestore_metadata.indexing,
+            fts_index,
+            global_cats: LockedCats::new(cats),
+            n_triples_deleted: 0,
+            udf_registry: Arc::new(UdfRegistry::new()),
+        })
     }
 }
 

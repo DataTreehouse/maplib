@@ -26,9 +26,15 @@ pub struct TemplateDataset {
     pub inferred_types: bool,
 }
 
+impl Default for TemplateDataset {
+    fn default() -> Self {
+        Self::new_empty()
+    }
+}
+
 impl TemplateDataset {
-    pub fn new_empty() -> Result<TemplateDataset, TemplateError> {
-        Self::from_documents(vec![])
+    pub fn new_empty() -> TemplateDataset {
+        Self::from_documents(vec![]).unwrap()
     }
 
     pub fn from_documents(

@@ -67,7 +67,7 @@ impl Template {
 
 impl Display for Template {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let mut dataset = TemplateDataset::new_empty().unwrap();
+        let mut dataset = TemplateDataset::new_empty();
         dataset.templates.push(self.clone());
         dataset.prefix_map = get_default_prefixes();
         write!(f, "{}", dataset)

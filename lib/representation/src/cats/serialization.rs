@@ -5,6 +5,7 @@ use oxrdf::NamedNode;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::fs;
 use std::fs::{create_dir_all, File};
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -64,26 +65,61 @@ impl CatMapOnDiskMetadata {
 }
 
 impl Cats {
-    pub fn deserialize_cats_to_in_memory(path: &Path) -> Self {
+    pub fn deserialize_cats(
+        path: &Path,
+        storage_folder: Option<&Path>,
+    ) -> Result<Self, CatSerializationError> {
         let cat_path = create_path(path, CATS_FOLDER);
         let metadata_file_path = create_path(&cat_path, CATS_METADATA_FILE);
 
         let cats_metadata: CatsMetadata =
             serde_json::from_slice(&std::fs::read(metadata_file_path).unwrap()).unwrap();
-        let map: HashMap<CatType, CatEncs> = cats_metadata
-            .uuid_cat_type_map
-            .par_iter()
-            .map(|(id, t)| {
-                let cat_enc_path = create_path(&cat_path, id);
-                let cmod = CatMapsOnDisk::new(&cat_enc_path, t.name.clone());
-                let cmim = cmod.to_memory(t.cat_type.as_base_rdf_node_type().is_iri());
-                let cm = CatMaps::InMemory(cmim);
-                let ce = CatEncs { maps: cm };
-                (t.cat_type.clone(), ce)
-            })
-            .collect();
-        let cats = Cats::from_map(map, None);
-        cats
+
+        let map = if let Some(storage_folder) = storage_folder {
+            let r: Result<Vec<_>, CatSerializationError> = cats_metadata
+                .uuid_cat_type_map
+                .par_iter()
+                .map(|(id, ..)| {
+                    // Remove the source base path to maintain directory structure
+                    let src_path = create_path(&cat_path, id);
+                    let dest_path = create_path(storage_folder, id);
+
+                    // Perform the copy
+                    fs::copy(&src_path, &dest_path)
+                        .map_err(|x| CatSerializationError::IOError(x))?;
+                    Ok(())
+                })
+                .collect();
+            r?;
+            let map: HashMap<CatType, CatEncs> = cats_metadata
+                .uuid_cat_type_map
+                .par_iter()
+                .map(|(id, t)| {
+                    let cat_enc_path = create_path(storage_folder, id);
+                    let cmod = CatMapsOnDisk::new(&cat_enc_path, t.name.clone());
+                    let cm = CatMaps::OnDisk(cmod);
+                    let ce = CatEncs { maps: cm };
+                    (t.cat_type.clone(), ce)
+                })
+                .collect();
+            map
+        } else {
+            let map: HashMap<CatType, CatEncs> = cats_metadata
+                .uuid_cat_type_map
+                .par_iter()
+                .map(|(id, t)| {
+                    let cat_enc_path = create_path(&cat_path, id);
+                    let cmod = CatMapsOnDisk::new(&cat_enc_path, t.name.clone());
+                    let cmim = cmod.to_memory(t.cat_type.as_base_rdf_node_type().is_iri());
+                    let cm = CatMaps::InMemory(cmim);
+                    let ce = CatEncs { maps: cm };
+                    (t.cat_type.clone(), ce)
+                })
+                .collect();
+            map
+        };
+        let cats = Cats::from_map(map, storage_folder);
+        Ok(cats)
     }
 
     pub fn serialize_cats(&self, path: &Path) -> Result<(), CatSerializationError> {

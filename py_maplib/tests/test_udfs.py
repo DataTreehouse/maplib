@@ -1,16 +1,13 @@
 import polars as pl
-from polars import DataFrame
+from maplib import Model, xsd
 
-from maplib import Model, xsd, RDFType
-
-
-def f(df: DataFrame) -> pl.Series:
+def f(df: pl.DataFrame) -> pl.Series:
     df = df.with_columns(
         (pl.col("0") + pl.col("1")).alias("out")
     )
     return df.get_column("out")
 
-def g(df: DataFrame) -> pl.DataFrame:
+def g(df: pl.DataFrame) -> pl.DataFrame:
     df = df.with_columns(
         (pl.col("0").str.contains("abc")).alias("out")
     )
@@ -49,6 +46,7 @@ def test_udf_query_strings():
             BIND(<urn:maplib:findabc>(?s1) AS ?found)
         }
         """)
+    print(result)
     assert result.get_column("found").sort().to_list() == [None, False, False, True]
 
 def test_list_udfs():

@@ -62,6 +62,8 @@ pub enum TriplestoreError {
     LazyLoadError(PolarsError),
     #[error("HDT error: {0}")]
     HDTError(String),
+    #[error("Storage folder error {0}")]
+    StorageFolderError(String),
 }
 
 impl<T> From<PoisonError<T>> for TriplestoreError {

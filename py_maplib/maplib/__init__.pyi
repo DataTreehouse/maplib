@@ -540,7 +540,7 @@ class Model:
     def serialize(self, path: Union[Path, str]):
         ...
 
-    def deserialize(path: Union[Path, str]="./serialized_triples") -> "Model":
+    def deserialize(path: Union[Path, str]="./serialized_triples", storage_folder: Union[Path, str] = None) -> "Model":
         ...
 
 
