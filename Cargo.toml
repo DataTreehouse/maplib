@@ -90,5 +90,5 @@ rust_decimal = "1.41.0"
 range-set-blaze = "0.5.0"
 
 [patch.crates-io]
-#polars = { git = 'https://github.com/pola-rs/polars', rev="599a503a0997188a74750926a5cdaa47585cf8aa" }
-#polars-core = { git = 'https://github.com/pola-rs/polars', rev="599a503a0997188a74750926a5cdaa47585cf8aa" }
+#polars = { git = 'https://github.com/pola-rs/polars', rev="0df0c25d4db895ec8cad773bedc4e98400e3135e" }
+#polars-core = { git = 'https://github.com/pola-rs/polars', rev="0df0c25d4db895ec8cad773bedc4e98400e3135e" }

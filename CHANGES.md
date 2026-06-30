@@ -1,5 +1,14 @@
 # Change log
 
+## v0.20.24
+### Bug fixes
+- Bug fix for serialization of lang strings
+- (Attempted?) Bug fix for disk based storage of categoricals on windows
+
+## v0.20.23
+### Features
+- Serialization with disk based storage of categoricals - about 40x faster than ntriples read
+
 ## v0.20.22
 ### Performance
 - Fix performance issue for ORDER BY when cats are on disk
