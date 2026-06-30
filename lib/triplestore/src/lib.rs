@@ -156,11 +156,37 @@ impl Triplestore {
                                 let lfs = triples.get_lazy_frames(&None, &None)?;
                                 for (lf, _) in lfs {
                                     let df = lf.select([col(OBJECT_COL_NAME)]).collect().unwrap();
-                                    let s_col = df.column(OBJECT_COL_NAME).unwrap();
-                                    let s_rs = RangeSetBlaze::from_iter(
-                                        s_col.u32().unwrap().iter().map(|x| x.unwrap()),
-                                    );
-                                    rs = rs - s_rs;
+                                    let o_col = df.column(OBJECT_COL_NAME).unwrap();
+                                    if t.is_lang_string() {
+                                        let o_rs = RangeSetBlaze::from_iter(
+                                            o_col
+                                                .struct_()
+                                                .unwrap()
+                                                .field_by_name(LANG_STRING_LANG_FIELD)
+                                                .unwrap()
+                                                .u32()
+                                                .unwrap()
+                                                .iter()
+                                                .map(|x| x.unwrap())
+                                                .chain(
+                                                    o_col
+                                                        .struct_()
+                                                        .unwrap()
+                                                        .field_by_name(LANG_STRING_VALUE_FIELD)
+                                                        .unwrap()
+                                                        .u32()
+                                                        .unwrap()
+                                                        .iter()
+                                                        .map(|x| x.unwrap()),
+                                                ),
+                                        );
+                                        rs = rs - o_rs;
+                                    } else {
+                                        let o_rs = RangeSetBlaze::from_iter(
+                                            o_col.u32().unwrap().iter().map(|x| x.unwrap()),
+                                        );
+                                        rs = rs - o_rs;
+                                    }
                                 }
                             }
                         }
