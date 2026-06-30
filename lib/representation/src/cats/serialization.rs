@@ -85,8 +85,10 @@ impl Cats {
                     let dest_path = create_path(storage_folder, id);
 
                     // Perform the copy
-                    fs::copy(&src_path, &dest_path)
-                        .map_err(|x| CatSerializationError::IOError(x))?;
+                    fs::copy(&src_path, &dest_path)?;
+                    let mut perms = fs::metadata(dest_path)?.permissions();
+                    perms.set_readonly(false);
+                    fs::set_permissions(&src_path, perms)?;
                     Ok(())
                 })
                 .collect();
