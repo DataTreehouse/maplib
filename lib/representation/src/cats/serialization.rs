@@ -76,29 +76,13 @@ impl Cats {
             serde_json::from_slice(&std::fs::read(metadata_file_path).unwrap()).unwrap();
 
         let map = if let Some(storage_folder) = storage_folder {
-            let r: Result<Vec<_>, CatSerializationError> = cats_metadata
-                .uuid_cat_type_map
-                .par_iter()
-                .map(|(id, ..)| {
-                    // Remove the source base path to maintain directory structure
-                    let src_path = create_path(&cat_path, id);
-                    let dest_path = create_path(storage_folder, id);
-
-                    // Perform the copy
-                    fs::copy(&src_path, &dest_path)?;
-                    let mut perms = fs::metadata(dest_path)?.permissions();
-                    perms.set_readonly(false);
-                    fs::set_permissions(&src_path, perms)?;
-                    Ok(())
-                })
-                .collect();
-            r?;
             let map: HashMap<CatType, CatEncs> = cats_metadata
                 .uuid_cat_type_map
                 .par_iter()
                 .map(|(id, t)| {
-                    let cat_enc_path = create_path(storage_folder, id);
-                    let cmod = CatMapsOnDisk::new(&cat_enc_path, t.name.clone());
+                    let src_path = create_path(&cat_path, id);
+                    let dest_path = create_path(storage_folder, id);
+                    let cmod = CatMapsOnDisk::new(&src_path, t.name.clone(), Some(&dest_path));
                     let cm = CatMaps::OnDisk(cmod);
                     let ce = CatEncs { maps: cm };
                     (t.cat_type.clone(), ce)
@@ -111,7 +95,7 @@ impl Cats {
                 .par_iter()
                 .map(|(id, t)| {
                     let cat_enc_path = create_path(&cat_path, id);
-                    let cmod = CatMapsOnDisk::new(&cat_enc_path, t.name.clone());
+                    let cmod = CatMapsOnDisk::new(&cat_enc_path, t.name.clone(), None);
                     let cmim = cmod.to_memory(t.cat_type.as_base_rdf_node_type().is_iri());
                     let cm = CatMaps::InMemory(cmim);
                     let ce = CatEncs { maps: cm };

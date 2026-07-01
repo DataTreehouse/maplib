@@ -11,7 +11,7 @@ use std::path::Path;
 pub struct CatMapsOnDisk {}
 
 impl CatMapsOnDisk {
-    pub fn new(_: &Path, _: String) -> Self {
+    pub fn new(_: &Path, _: String, _:Option<&Path>) -> Self {
         unimplemented!("Contact Data Treehouse to try!")
     }
 
