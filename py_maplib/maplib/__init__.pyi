@@ -1,5 +1,3 @@
-import pathlib
-import string
 from pathlib import Path
 from typing import Any, Union, List, Dict, Optional, Callable, Literal as LiteralType
 from polars import DataFrame
@@ -538,10 +536,27 @@ class Model:
 
 
     def serialize(self, path: Union[Path, str]):
-        ...
+        """
+        Serialization of named graphs in the Model object
+
+        Usage:
+        >>> m.read("triples.nt")
+        >>> m.serialize("serialized")
+
+        :param path: The path to where the folder containing the triples should be created
+        """
 
     def deserialize(path: Union[Path, str]="./serialized_triples", storage_folder: Union[Path, str] = None) -> "Model":
-        ...
+        """
+        Deserialization of serialized graphs
+
+        Usage:
+        >>> m.deserialize("serialized", storage_folder="disk")
+
+        :param path: The path to the folder where the serialized triples and cat map is stored
+        :param storage_folder: The target path and folder name where the deserialized triples should be stored
+        :return: A model.
+        """
 
 
     def add_template(self, template: Union["Template", str]):
@@ -1190,6 +1205,26 @@ class Model:
             input_types: list[Union[RDFType,str, IRI]] = None
     ):
         """
+        Add a user-defined function
+        Usage:
+        The user defined function that is provided should take in a Polars DataFrame as an argument.
+        This dataframe will have one column for each argument ("0", "1" and so on).
+        The function should add a column (e.g. "out") to the DataFrame, and return it.
+        >>> def g(df: pl.DataFrame) -> pl.DataFrame:
+        >>>     df = df.with_columns(
+        >>>         (pl.col("0").str.contains("abc")).alias("out")
+        >>>     )
+        >>>     return df
+
+        >>> m.add_udf("urn:maplib:findabc", g, xsd.boolean, [xsd.string])
+        >>> result = m.query('''
+        ... SELECT * {
+        ... ?a <urn:maplib:hasstr> ?s1 .
+        ... BIND(<urn:maplib:findabc>(?s1) AS ?found)
+        ... }
+        ... ''')
+    ... print(result)
+
         :param iri: IRI of the UDF, e.g. "urn:maplib:myfunc"
         :param func: A callable (DataFrame) -> DataFrame
         :param output_type: The RDF type of the output. Either an RDFType (e.g. RDFType.IRI, RDFType.Literal(xsd.string)) or an IRI (e.g. xsd.integer)
