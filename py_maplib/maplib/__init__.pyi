@@ -1207,6 +1207,11 @@ class Model:
             input_types: list[Union[RDFType,str, IRI]] = None
     ):
         """
+        Add a user-defined function
+
+        Usage:
+        >>> m.add_udf("urn:maplib:findabc", g, xsd.boolean, [xsd.string])
+
         :param iri: IRI of the UDF, e.g. "urn:maplib:myfunc"
         :param func: A callable (DataFrame) -> DataFrame
         :param output_type: The RDF type of the output. Either an RDFType (e.g. RDFType.IRI, RDFType.Literal(xsd.string)) or an IRI (e.g. xsd.integer)
