@@ -538,10 +538,27 @@ class Model:
 
 
     def serialize(self, path: Union[Path, str]):
-        ...
+        """
+        Serialization of triples and cat map
+
+        Usage:
+        >>> m.read("triples.nt")
+        >>> m.serialize("serialized")
+
+        :param path: The path to where the folder containing the triples should be created
+        """
 
     def deserialize(path: Union[Path, str]="./serialized_triples", storage_folder: Union[Path, str] = None) -> "Model":
-        ...
+        """
+        Deserialization of serialized triples and cat map
+
+        Usage:
+        >>> m.deserialize("serialized", storage_folder="disk")
+
+        :param path: The path to the folder where the serialized triples and cat map is stored
+        :param storage_folder: The target path and folder name where the deserialized triples should be stored
+        :return: A model.
+        """
 
 
     def add_template(self, template: Union["Template", str]):
