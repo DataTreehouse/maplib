@@ -4,15 +4,17 @@ use oxrdf::Variable;
 use tracing::{instrument, trace};
 
 use crate::sparql::QuerySettings;
-use polars::prelude::JoinType;
+use polars::prelude::{coalesce, col, cols, lit, DataFrameJoinOps, IntoLazy, JoinType};
+use polars_core::df;
 use query_processing::aggregates::AggregateReturn;
 use query_processing::graph_patterns::{group_by, join, prepare_group_by};
 use query_processing::pushdowns::Pushdowns;
 use representation::dataset::QueryGraph;
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
-use spargebra::algebra::{AggregateExpression, GraphPattern};
+use spargebra::algebra::{AggregateExpression, AggregateFunction, GraphPattern};
 use std::collections::HashMap;
+use uuid::Uuid;
 
 impl Triplestore {
     #[allow(clippy::too_many_arguments)]
@@ -89,6 +91,35 @@ impl Triplestore {
             by,
             dummy_varname,
         )?;
+
+        let dummy_col_name = Uuid::new_v4().to_string();
+
+        let count_cols: Vec<_> = aggregates
+            .iter()
+            .filter(|(_, agg)| match agg {
+                AggregateExpression::CountSolutions { .. } => true,
+                AggregateExpression::FunctionCall { name, .. } => {
+                    matches!(name, AggregateFunction::Count)
+                }
+            })
+            .map(|(v, _)| v.as_str().to_string())
+            .collect();
+
+        if count_cols.len() > 0 {
+            let lf_lhs = grouped
+                .mappings
+                .with_column(lit(0u32).alias(&dummy_col_name));
+
+            let lf_rhs = df!(&dummy_col_name => [0u32]).unwrap().lazy();
+
+            let mut lf = lf_rhs.left_join(lf_lhs, &*dummy_col_name, &*dummy_col_name);
+            for c in count_cols {
+                lf = lf.with_column(coalesce(&[col(c), col(&*dummy_col_name)]));
+            }
+            lf = lf.drop(cols([&dummy_col_name]));
+            grouped.mappings = lf;
+        }
+
         for a in aggregate_contexts {
             grouped.rdf_node_types.remove(a.as_str());
         }
