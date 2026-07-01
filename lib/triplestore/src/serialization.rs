@@ -181,18 +181,20 @@ impl Triplestore {
                 let this_triple_path = create_path(&triples_path, &uuid);
                 let subject_object_file = create_path(&this_triple_path, SO_TRIPLES_FILE);
                 let object_subject_file = create_path(&this_triple_path, OS_TRIPLES_FILE);
-                let subject_object_index_file =
+                let subject_object_sparse_index_file =
                     create_path(&this_triple_path, SO_SPARSE_INDEX_FILE);
-                let object_subject_index_file =
+                let object_subject_sparse_index_file =
                     create_path(&this_triple_path, OS_SPARSE_INDEX_FILE);
 
                 let subject_object_df = scan_parquet(&subject_object_file)?.collect().unwrap();
-                let subject_object_index_df =
-                    scan_parquet(&subject_object_index_file)?.collect().unwrap();
+                let subject_object_index_df = scan_parquet(&subject_object_sparse_index_file)?
+                    .collect()
+                    .unwrap();
                 let (object_subject_df, object_subject_index_df) = if object_subject_file.exists() {
                     let object_subject_df = scan_parquet(&object_subject_file)?.collect().unwrap();
-                    let object_subject_index_df =
-                        scan_parquet(&object_subject_index_file)?.collect().unwrap();
+                    let object_subject_index_df = scan_parquet(&object_subject_sparse_index_file)?
+                        .collect()
+                        .unwrap();
                     (Some(object_subject_df), Some(object_subject_index_df))
                 } else {
                     (None, None)

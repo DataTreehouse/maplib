@@ -116,20 +116,18 @@ pub struct Triples {
     pub subject_type: BaseRDFNodeType,
     pub object_type: BaseRDFNodeType,
     pub object_indexing_enabled: bool,
-    subject_object_index: SubjectObjectIndex,
+    subject_object_index: Option<SubjectObjectIndex>,
 }
 
 impl Triples {
     pub fn in_memory_from_serialization(
-        mut subject_object_df: DataFrame,
+        subject_object_df: DataFrame,
         subject_object_index_df: DataFrame,
         object_subject_df: Option<DataFrame>,
         object_subject_index_df: Option<DataFrame>,
         subject_type: BaseRDFNodeType,
         object_type: BaseRDFNodeType,
     ) -> Self {
-        let mut subject_object_index = SubjectObjectIndex::new(&subject_type, &object_type);
-        subject_object_index.insert(&mut subject_object_df);
         let object_indexing_enabled = object_subject_df.is_some();
         let segment = TriplesSegment::in_memory_from_serialization(
             subject_object_df,
@@ -144,7 +142,7 @@ impl Triples {
             subject_type,
             object_type,
             object_indexing_enabled,
-            subject_object_index,
+            subject_object_index: None,
         }
     }
 
@@ -393,7 +391,7 @@ impl Triples {
             subject_type,
             object_type,
             object_indexing_enabled,
-            subject_object_index,
+            subject_object_index: Some(subject_object_index),
         })
     }
 
@@ -426,7 +424,7 @@ impl Triples {
             subject_type,
             object_type,
             object_indexing_enabled,
-            subject_object_index,
+            subject_object_index: Some(subject_object_index),
         })
     }
 
