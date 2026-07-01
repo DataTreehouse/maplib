@@ -1,5 +1,9 @@
 # Change log
 
+## v0.20.25
+### Performance
+- Improve deserialization performance to hybrid storage and to in memory storage
+
 ## v0.20.24
 ### Bug fixes
 - Bug fix for serialization of lang strings
