@@ -537,7 +537,7 @@ class Model:
 
     def serialize(self, path: Union[Path, str]):
         """
-        Serialization of triples and cat map
+        Serialization of named graphs in the Model object
 
         Usage:
         >>> m.read("triples.nt")
@@ -548,7 +548,7 @@ class Model:
 
     def deserialize(path: Union[Path, str]="./serialized_triples", storage_folder: Union[Path, str] = None) -> "Model":
         """
-        Deserialization of serialized triples and cat map
+        Deserialization of serialized graphs
 
         Usage:
         >>> m.deserialize("serialized", storage_folder="disk")
@@ -1206,9 +1206,24 @@ class Model:
     ):
         """
         Add a user-defined function
-
         Usage:
+        The user defined function that is provided should take in a Polars DataFrame as an argument.
+        This dataframe will have one column for each argument ("0", "1" and so on).
+        The function should add a column (e.g. "out") to the DataFrame, and return it.
+        >>> def g(df: pl.DataFrame) -> pl.DataFrame:
+        >>>     df = df.with_columns(
+        >>>         (pl.col("0").str.contains("abc")).alias("out")
+        >>>     )
+        >>>     return df
+
         >>> m.add_udf("urn:maplib:findabc", g, xsd.boolean, [xsd.string])
+        >>> result = m.query('''
+        ... SELECT * {
+        ... ?a <urn:maplib:hasstr> ?s1 .
+        ... BIND(<urn:maplib:findabc>(?s1) AS ?found)
+        ... }
+        ... ''')
+    ... print(result)
 
         :param iri: IRI of the UDF, e.g. "urn:maplib:myfunc"
         :param func: A callable (DataFrame) -> DataFrame
