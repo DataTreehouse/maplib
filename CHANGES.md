@@ -1,6 +1,9 @@
 # Change log
 
 ## v0.20.25
+### Bug fixes
+- Fix issue where count over zero solution mappings returned no rows (should return one row with zero as the count)
+
 ### Performance
 - Improve deserialization performance to hybrid storage and to in memory storage
 
