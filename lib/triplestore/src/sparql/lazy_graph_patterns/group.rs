@@ -4,7 +4,7 @@ use oxrdf::Variable;
 use tracing::{instrument, trace};
 
 use crate::sparql::QuerySettings;
-use polars::prelude::{coalesce, col, cols, lit, DataFrameJoinOps, IntoLazy, JoinType};
+use polars::prelude::{coalesce, col, cols, lit, IntoLazy, JoinType};
 use polars_core::df;
 use query_processing::aggregates::AggregateReturn;
 use query_processing::graph_patterns::{group_by, join, prepare_group_by};

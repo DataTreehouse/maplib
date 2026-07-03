@@ -119,9 +119,8 @@ pub fn rewrite_gp_pushdown(
                     outer_filters.push(f);
                 }
             }
-            let all_seen_vars: HashSet<_> = seen_vars.union(&left_vars).cloned().collect();
             let left = rewrite_gp_pushdown(*left, left_filters, seen_vars);
-            let right = rewrite_gp_pushdown(*right, vec![], all_seen_vars);
+            let right = rewrite_gp_pushdown(*right, vec![], HashSet::new());
             let mut outer = GraphPattern::LeftJoin {
                 left: Box::new(left),
                 right: Box::new(right),
@@ -219,7 +218,7 @@ pub fn rewrite_gp_pushdown(
             aggregates,
         } => {
             let mut inner = *inner;
-            inner = rewrite_gp_pushdown(inner, vec![], seen_vars);
+            inner = rewrite_gp_pushdown(inner, vec![], HashSet::new());
             let mut outer = GraphPattern::Group {
                 inner: Box::new(inner),
                 variables,
