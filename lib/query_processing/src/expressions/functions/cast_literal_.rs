@@ -15,7 +15,9 @@ pub fn cast_literal(
     trg: NamedNodeRef,
     trg_type: DataType,
 ) -> Expr {
-    if src == xsd::STRING && trg != xsd::STRING {
+    // Works around issue where src is string and trg is string.
+    // TODO: Handle state comprehensively
+    if src == xsd::STRING {
         c = maybe_decode_expr(c, src_bt, src_bs, global_cats);
     }
     if src == xsd::STRING && trg == xsd::BOOLEAN {
