@@ -32,6 +32,40 @@ def test_basic_named_graph():
     assert m.size(ng2) == 1
     assert m.size() == 1
 
+def test_basic_named_graph_named_default():
+    ng2 = "urn:graph:gr2"
+    m = Model()
+    m.reads(gr1, format="ntriples", graph=ng2)
+    m.reads(gr2, format="ntriples")
+
+    df = m.query("""
+    SELECT * WHERE {
+        GRAPH maplib:DefaultGraph {
+            ?a ?b ?c .
+        }
+    }    
+    """)
+    assert df.height == 1
+    assert df.get_column("c")[0] == "B"
+    assert m.size(ng2) == 1
+    assert m.size() == 1
+
+def test_basic_named_graph_named_default_as_arg():
+    ng2 = "urn:graph:gr2"
+    m = Model()
+    m.reads(gr1, format="ntriples", graph=ng2)
+    m.reads(gr2, format="ntriples", graph="https://datatreehouse.github.io/maplib/vocab#DefaultGraph")
+
+    df = m.query("""
+    SELECT * WHERE {
+        ?a ?b ?c .
+    }    
+    """)
+    assert df.height == 1
+    assert df.get_column("c")[0] == "B"
+    assert m.size(ng2) == 1
+    assert m.size() == 1
+
 def test_basic_named_graph_more_triples():
     ng2 = "urn:graph:gr2"
     ng3 = "urn:graph:gr3"

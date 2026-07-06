@@ -2,9 +2,12 @@ use crate::cats::LockedCats;
 use crate::RDFNodeState;
 use oxrdf::vocab::xsd;
 use polars::prelude::{DataFrame, IntoLazy, LazyFrame};
+use sparesults::QuerySolution;
 use std::collections::HashMap;
 use utils::polars::InterruptableCollectError;
 
+use crate::errors::RepresentationError;
+use crate::solution_mappings_builder::SolutionMappingsBuilder;
 use utils::polars::pl_interruptable_collect;
 
 #[derive(Clone, Debug)]
@@ -52,6 +55,15 @@ impl EagerSolutionMappings {
             rdf_node_types,
         }
     }
+
+    pub fn from_query_solutions(
+        solutions: &[QuerySolution],
+    ) -> Result<EagerSolutionMappings, RepresentationError> {
+        let mut builder = SolutionMappingsBuilder::new_with_capacity(solutions.len());
+        builder.extend_query_solutions(solutions)?;
+        builder.finish()
+    }
+
     pub fn as_lazy(self) -> SolutionMappings {
         let EagerSolutionMappings {
             mappings,

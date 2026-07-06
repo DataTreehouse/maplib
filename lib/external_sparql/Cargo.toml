@@ -1,0 +1,14 @@
+[package]
+name = "external_sparql"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+representation = {path = "../representation"}
+spargebra = {path = "../spargebra"}
+
+thiserror.workspace = true
+reqwest.workspace = true
+sparesults.workspace = true
+polars.workspace = true
+tokio = "1.52.1"

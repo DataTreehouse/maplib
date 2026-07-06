@@ -26,12 +26,13 @@ use representation::polars_to_rdf::XSD_DATETIME_WITH_TZ_FORMAT;
 use representation::python::PyIRI;
 use representation::solution_mapping::EagerSolutionMappings;
 use representation::{BaseRDFNodeType, RDFNodeState};
+use representation::result::QueryResult;
 use std::collections::HashMap;
 use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard};
 use tracing::{info, warn};
-use triplestore::sparql::{InsertResult, QueryResult, UpdateResult};
+use triplestore::sparql::{InsertResult, UpdateResult};
 use triplestore::triples_read::ExtendedRdfFormat;
 use triplestore::IndexingOptions;
 
@@ -355,10 +356,11 @@ pub(crate) fn update_mutex(
 ) -> PyResult<UpdateResult> {
     let graph = parse_optional_named_node(graph)?;
     let named_graph = if let Some(graph) = graph {
-        Some(NamedGraph::NamedGraph(graph))
+        Some(NamedGraph::from_maybe_named_node(Some(&graph)))
     } else {
         None
     };
+
     let res = inner
         .update(
             &update,
@@ -417,7 +419,7 @@ pub(crate) fn validate_mutex(
 
     let inferences_graph = parse_optional_named_node(inferences_graph)?;
     let inferences_graph = if let Some(inferences_graph) = inferences_graph {
-        Some(NamedGraph::NamedGraph(inferences_graph))
+        Some(NamedGraph::from_maybe_named_node(Some(&inferences_graph)))
     } else {
         None
     };
@@ -651,7 +653,7 @@ pub(crate) fn write_cim_xml_mutex(
     let version = version.map(oxrdf::Literal::new_simple_literal);
     let description = description.map(oxrdf::Literal::new_simple_literal);
     let profile_graph = parse_named_node(profile_graph)?;
-    let profile_graph = NamedGraph::NamedGraph(profile_graph);
+    let profile_graph = NamedGraph::from_maybe_named_node(Some(&profile_graph));
     let created = oxrdf::Literal::new_typed_literal(
         created.unwrap_or(Utc::now().format(XSD_DATETIME_WITH_TZ_FORMAT).to_string()),
         xsd::DATE_TIME,

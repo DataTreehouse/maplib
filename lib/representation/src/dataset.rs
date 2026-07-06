@@ -1,3 +1,4 @@
+use crate::constants::DEFAULT_GRAPH_IRI;
 use oxrdf::{BlankNode, GraphName, NamedNode};
 use serde::{Deserialize, Serialize};
 use spargebra::algebra::QueryDataset;
@@ -13,7 +14,11 @@ pub enum NamedGraph {
 impl NamedGraph {
     pub fn from_maybe_named_node(nn: Option<&NamedNode>) -> NamedGraph {
         if let Some(nn) = nn {
-            NamedGraph::NamedGraph(nn.clone())
+            if nn.as_str() == DEFAULT_GRAPH_IRI {
+                NamedGraph::DefaultGraph
+            } else {
+                NamedGraph::NamedGraph(nn.clone())
+            }
         } else {
             NamedGraph::DefaultGraph
         }
@@ -23,7 +28,7 @@ impl NamedGraph {
 impl From<&GraphName> for NamedGraph {
     fn from(graph: &GraphName) -> Self {
         match graph {
-            GraphName::NamedNode(nn) => NamedGraph::NamedGraph(nn.clone()),
+            GraphName::NamedNode(nn) => NamedGraph::from_maybe_named_node(Some(&nn)),
             GraphName::BlankNode(bn) => NamedGraph::BlankNode(bn.clone()),
             GraphName::DefaultGraph => NamedGraph::DefaultGraph,
         }

@@ -2,6 +2,7 @@ use crate::model::errors::MappingError;
 use chrontext::errors::ChrontextError;
 use cimxml_export::export::CIMXMLError;
 use datalog::inference::DatalogError;
+use external_sparql::SparqlEndpointQueryError;
 use oxiri::IriParseError;
 use polars::error::PolarsError;
 use shacl::errors::ShaclError;
@@ -50,4 +51,6 @@ pub enum MaplibError {
     ChrontextError(#[from] ChrontextError),
     #[error(transparent)]
     TripleSerializationError(#[from] TripleSerializationError),
+    #[error(transparent)]
+    SparqlEndpointQueryError(#[from] SparqlEndpointQueryError),
 }

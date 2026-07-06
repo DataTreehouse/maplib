@@ -44,10 +44,10 @@ pub enum SeriesBuilder {
 
 impl SeriesBuilder {
     pub fn new(dt: &BaseRDFNodeType) -> Self {
-        Self::with_capacity(dt, 0)
+        Self::new_with_capacity(dt, 0)
     }
 
-    pub fn with_capacity(dt: &BaseRDFNodeType, cap: usize) -> Self {
+    pub fn new_with_capacity(dt: &BaseRDFNodeType, cap: usize) -> Self {
         match dt {
             BaseRDFNodeType::IRI | BaseRDFNodeType::BlankNode => {
                 SeriesBuilder::String(StringChunkedBuilder::new("s".into(), cap), 0)

@@ -19,7 +19,7 @@ use maplib::errors::MaplibError;
 use pyo3::prelude::*;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use triplestore::sparql::{QueryResult, QueryResultKind as SparqlQueryResult};
+use representation::result::{QueryResult, QueryResultKind as SparqlQueryResult};
 
 //The below snippet controlling alloc-library is from https://github.com/pola-rs/polars/blob/main/py-polars/src/lib.rs
 //And has a MIT license:

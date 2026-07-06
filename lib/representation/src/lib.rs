@@ -2,6 +2,7 @@ extern crate core;
 
 mod base_rdf_type;
 pub mod cats;
+pub mod column_builder;
 pub mod constants;
 pub mod dataset;
 pub mod debug;
@@ -18,9 +19,12 @@ pub mod query_context;
 mod rdf_state;
 pub mod rdf_to_polars;
 mod rdf_type;
+pub mod result;
 pub mod series_builder;
 pub mod solution_mapping;
+pub mod solution_mappings_builder;
 pub mod subtypes;
+
 pub use series_builder::SeriesBuilder;
 
 pub use base_rdf_type::*;

@@ -91,11 +91,7 @@ impl PyModel {
     #[instrument(skip_all)]
     fn truncate_graph(&self, py: Python<'_>, graph: Option<String>) -> PyResult<()> {
         let graph = parse_optional_named_node(graph)?;
-        let graph = if let Some(graph) = graph {
-            NamedGraph::NamedGraph(graph)
-        } else {
-            NamedGraph::DefaultGraph
-        };
+        let graph = NamedGraph::from_maybe_named_node(graph.as_ref());
         py.detach(move || {
             let mut inner = self.inner.lock().unwrap();
             truncate_graph_mutex(&mut inner, &graph)
@@ -111,11 +107,7 @@ impl PyModel {
         preserve_name: Option<bool>,
     ) -> PyResult<PyModel> {
         let graph = parse_optional_named_node(graph)?;
-        let graph = if let Some(graph) = graph {
-            NamedGraph::NamedGraph(graph)
-        } else {
-            NamedGraph::DefaultGraph
-        };
+        let graph = NamedGraph::from_maybe_named_node(graph.as_ref());
         py.detach(move || {
             let mut inner = self.inner.lock().unwrap();
             detach_graph_mutex(&mut inner, &graph, preserve_name.unwrap_or(false))
@@ -270,13 +262,13 @@ impl PyModel {
     /// You can later stop the server with
     /// `server.stop()`
 
-    /// :param host: The hostname that we will point the browser to.
-    /// :param port: The port where the graph explorer webserver listens on.
-    /// :param bind: Bind to the following host / ip.
-    /// :param popup: Pop up the browser window.
+    /// :param host: The hostname that we will point the browser to
+    /// :param port: The port where the graph explorer webserver listens on
+    /// :param bind: Bind to the following host / ip
+    /// :param popup: Pop up the browser window
     /// :param fts: Enable full text search indexing
-    /// :param fts_path: Path to the fts index.
-    /// :param graph: The named graph to query, None is the default graph.
+    /// :param fts_path: Path to the fts index
+    /// :param graph: The named graph to query, None is the default graph
     /// :param new: Use new graph explorer?
     #[pyo3(signature = (*args, **kwargs), text_signature = "(/)")]
     fn explore(
@@ -355,7 +347,7 @@ impl PyModel {
         let mapped_parameters = map_parameters(parameters, py)?;
         let graph = parse_optional_named_node(graph)?;
         let graph = if let Some(graph) = graph {
-            Some(NamedGraph::NamedGraph(graph))
+            Some(NamedGraph::from_maybe_named_node(Some(&graph)))
         } else {
             None
         };
@@ -851,7 +843,7 @@ impl PyModel {
         };
         let graph = parse_optional_named_node(graph)?;
         let named_graph = if let Some(graph) = graph {
-            Some(NamedGraph::NamedGraph(graph))
+            Some(NamedGraph::from_maybe_named_node(Some(&graph)))
         } else {
             None
         };

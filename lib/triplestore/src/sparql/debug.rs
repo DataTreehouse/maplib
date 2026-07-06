@@ -91,7 +91,7 @@ impl Triplestore {
             GraphPattern::Graph { name, inner } => {
                 let qg = match name {
                     NamedNodePattern::NamedNode(nn) => {
-                        QueryGraph::NamedGraph(NamedGraph::NamedGraph(nn.clone()))
+                        QueryGraph::NamedGraph(NamedGraph::from_maybe_named_node(Some(nn)))
                     }
                     NamedNodePattern::Variable(_) => {
                         todo!()

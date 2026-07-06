@@ -1,5 +1,9 @@
 # Change log
 
+## v0.20.26
+### Features
+- The IRI maplib:DefaultGraph is the default graph
+
 ## v0.20.25
 ### Bug fixes
 - Fix issue where count over zero solution mappings returned no rows (should return one row with zero as the count)

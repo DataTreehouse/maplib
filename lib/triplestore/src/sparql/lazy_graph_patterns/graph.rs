@@ -34,7 +34,7 @@ impl Triplestore {
                 parameters,
                 pushdowns,
                 query_settings,
-                &QueryGraph::NamedGraph(NamedGraph::NamedGraph(nn.clone())),
+                &QueryGraph::NamedGraph(NamedGraph::from_maybe_named_node(Some(nn))),
             )?,
             NamedNodePattern::Variable(..) => {
                 todo!()

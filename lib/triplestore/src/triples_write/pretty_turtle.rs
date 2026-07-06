@@ -1,6 +1,6 @@
 use super::Triplestore;
 use crate::errors::TriplestoreError;
-use crate::sparql::{QueryResultKind, QuerySettings};
+use crate::sparql::{QuerySettings};
 use crate::storage::Triples;
 use aho_corasick::{AhoCorasick, MatchKind};
 use oxrdf::vocab::{rdf, xsd};
@@ -20,6 +20,7 @@ use spargebra::Query;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::io::Write;
 use std::sync::Arc;
+use representation::result::QueryResultKind;
 
 const STRIDE: usize = 20_000;
 

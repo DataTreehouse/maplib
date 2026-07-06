@@ -31,6 +31,8 @@ rust_decimal.workspace = true
 range-set-blaze.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+sparesults.workspace = true
+oxttl.workspace = true
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("gil-refs", "rdf-star"))'] }

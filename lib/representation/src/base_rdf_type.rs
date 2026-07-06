@@ -312,6 +312,14 @@ impl BaseRDFNodeTypeRef<'_> {
         }
     }
 
+    pub fn from_term<'a>(term: &'a Term) -> BaseRDFNodeTypeRef<'a> {
+        match term {
+            Term::NamedNode(_) => BaseRDFNodeTypeRef::IRI,
+            Term::BlankNode(_) => BaseRDFNodeTypeRef::BlankNode,
+            Term::Literal(l) => BaseRDFNodeTypeRef::Literal(l.datatype()),
+        }
+    }
+
     pub fn into_owned(self) -> BaseRDFNodeType {
         match self {
             BaseRDFNodeTypeRef::IRI => BaseRDFNodeType::IRI,

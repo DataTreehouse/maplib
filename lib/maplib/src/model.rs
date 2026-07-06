@@ -27,15 +27,17 @@ use templates::dataset::TemplateDataset;
 use templates::document::document_from_str;
 use templates::MappingColumnType;
 use triplestore::sparql::errors::SparqlError;
-use triplestore::sparql::{InsertResult, QueryResult, QuerySettings, UpdateResult};
+use triplestore::sparql::{InsertResult, QuerySettings, UpdateResult};
 use triplestore::{IndexingOptions, NewTriples, Triplestore};
 
 use chrontext::engine::{ChrontextSettings, Engine};
 use datalog::ast::DatalogRuleset;
+use external_sparql::{SparqlEndpoint, SparqlMethod};
 use representation::constants::OTTR_TRIPLE;
 use representation::dataset::NamedGraph;
 use representation::prefixes::get_default_prefixes;
 use tracing::instrument;
+use representation::result::QueryResult;
 use triplestore::errors::TriplestoreError;
 use triplestore::triples_read::ExtendedRdfFormat;
 use virtualization::python::VirtualizedPythonDatabase;
@@ -410,6 +412,18 @@ impl Model {
                 )
                 .map_err(|x| x.into())
         }
+    }
+
+    #[instrument(skip_all)]
+    pub fn query_external(
+        &mut self,
+        query: &str,
+        endpoint: &str,
+        method: SparqlMethod,
+    ) -> Result<QueryResult, MaplibError> {
+        let endpoint = SparqlEndpoint::new(endpoint, method);
+        let r = endpoint.query_blocking(query, Some(&self.prefixes))?;
+        Ok(r)
     }
 
     #[instrument(skip_all)]

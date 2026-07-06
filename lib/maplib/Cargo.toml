@@ -17,7 +17,7 @@ cimxml_export = {path = "../cimxml_export"}
 query_processing = {path ="../query_processing"}
 chrontext = {path = "../chrontext"}
 virtualization = {path = "../virtualization"}
-virtualized_query = {path = "../virtualized_query"}
+external_sparql = {path = "../external_sparql"}
 
 uuid = {workspace = true}
 rayon = { workspace = true }
