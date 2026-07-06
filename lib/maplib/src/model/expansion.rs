@@ -319,8 +319,8 @@ impl Model {
                 };
                 all_triples_to_add.push(TriplesToAdd {
                     df,
-                    subject_type: subject_type,
-                    object_type: object_type,
+                    subject_type,
+                    object_type,
                     predicate: predicate.clone(),
                     graph: graph.clone(),
                     subject_cat_state: subject_state,
@@ -357,7 +357,7 @@ fn fill_nulls_with_defaults(
             return Ok(df.lazy());
         }
     }
-    let (expr, _, mct) = constant_to_expr(&default, &None)?;
+    let (expr, _, mct) = constant_to_expr(default, &None)?;
     let is_none = if let MappingColumnType::Flat(inner) = current_types.get(c).unwrap() {
         inner.is_none()
     } else {
@@ -797,7 +797,7 @@ fn create_remapped(
     for s in columns_vec {
         column_vec.push(s.into_column());
     }
-    let l = if let Some(c) = column_vec.get(0) {
+    let l = if let Some(c) = column_vec.first() {
         c.len()
     } else {
         0
@@ -836,7 +836,7 @@ fn create_remapped(
             }
             ListExpanderType::ZipMin => {
                 lf = lf.explode(
-                    by_name(to_expand.iter().map(|x| *x), true, false),
+                    by_name(to_expand.iter().copied(), true, false),
                     ExplodeOptions {
                         empty_as_null: false,
                         keep_nulls: true,

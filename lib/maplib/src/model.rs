@@ -93,16 +93,7 @@ impl Model {
         indexing: Option<IndexingOptions>,
         prefixes: Option<HashMap<String, NamedNode>>,
     ) -> Result<Model, MaplibError> {
-        let use_disk = storage_folder.is_some();
-        let indexing = if use_disk {
-            if let Some(indexing) = indexing {
-                indexing
-            } else {
-                IndexingOptions::default()
-            }
-        } else {
-            indexing.unwrap_or_default()
-        };
+        let indexing = indexing.unwrap_or_default();
         let template_dataset = if let Some(template_dataset) = template_dataset {
             template_dataset.clone()
         } else {
@@ -283,7 +274,7 @@ impl Model {
         known_contexts: HashMap<String, String>,
     ) -> Result<(), MaplibError> {
         if replace_graph {
-            self.truncate_graph(&graph)
+            self.truncate_graph(graph)
         }
         self.triplestore
             .read_triples_from_path(
@@ -329,7 +320,7 @@ impl Model {
         known_contexts: HashMap<String, String>,
     ) -> Result<(), MaplibError> {
         if replace_graph {
-            self.truncate_graph(&graph)
+            self.truncate_graph(graph)
         }
         self.triplestore
             .read_triples_from_string(
@@ -493,9 +484,9 @@ impl Model {
         transient: bool,
         target_graph: &NamedGraph,
     ) -> Result<Vec<NewTriples>, SparqlError> {
-        let new_triples =
-            self.triplestore
-                .insert_construct_result(sms, transient, &target_graph)?;
+        let new_triples = self
+            .triplestore
+            .insert_construct_result(sms, transient, target_graph)?;
         Ok(new_triples)
     }
 
@@ -534,7 +525,7 @@ impl Model {
         graph: &NamedGraph,
         profile_graph: &NamedGraph,
     ) -> Result<(), MaplibError> {
-        let res = cim_xml_write(
+        cim_xml_write(
             buffer,
             &mut self.triplestore,
             graph,
@@ -542,8 +533,7 @@ impl Model {
             prefixes,
             fullmodel_details,
         )
-        .map_err(MaplibError::CIMXMLError);
-        res
+        .map_err(MaplibError::CIMXMLError)
     }
 
     fn resolve_template(&self, s: &str) -> Result<&Template, MaplibError> {
@@ -608,7 +598,7 @@ impl Model {
             max_iterations,
             debug_rules,
         )
-        .map_err(|x| MaplibError::ShaclError(x))?;
+        .map_err(MaplibError::ShaclError)?;
         if let Some(report_graph) = report_graph {
             self.map_validation_result_to_report_graph(
                 &mut res,
@@ -628,10 +618,9 @@ impl Model {
         graph: &NamedGraph,
         include_transient: bool,
     ) -> Result<Vec<NamedNode>, MaplibError> {
-        Ok(self
-            .triplestore
+        self.triplestore
             .get_predicate_iris(include_transient, graph)
-            .map_err(|x| MaplibError::TriplestoreError(x))?)
+            .map_err(MaplibError::TriplestoreError)
     }
 
     #[instrument(skip_all)]
@@ -644,7 +633,7 @@ impl Model {
         let sms = self
             .triplestore
             .get_predicate_eager_solution_mappings(predicate, include_transient, graph)
-            .map_err(|x| MaplibError::TriplestoreError(x))?;
+            .map_err(MaplibError::TriplestoreError)?;
         Ok(sms)
     }
 
@@ -690,7 +679,7 @@ impl Model {
             max_rows,
             debug_no_results,
         );
-        Ok(res.map_err(|x| MaplibError::DatalogError(x))?)
+        res.map_err(MaplibError::DatalogError)
     }
 
     pub fn infer_rdfs(&mut self, graph: &NamedGraph) -> Result<usize, MaplibError> {
@@ -715,7 +704,7 @@ impl Model {
     }
 
     pub fn serialize_triples(&mut self, path: &Path) -> Result<(), MaplibError> {
-        self.triplestore.serialize_triples(&path)?;
+        self.triplestore.serialize_triples(path)?;
         Ok(())
     }
 
@@ -728,7 +717,7 @@ impl Model {
         path: &Path,
         storage_folder: Option<String>,
     ) -> Result<Self, MaplibError> {
-        let triplestore = Triplestore::deserialize_triples(&path, storage_folder)?;
+        let triplestore = Triplestore::deserialize_triples(path, storage_folder)?;
         Ok(Model {
             blank_node_counter: 0,
             template_dataset: Default::default(),

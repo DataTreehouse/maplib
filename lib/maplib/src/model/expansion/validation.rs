@@ -189,7 +189,7 @@ fn validate_column_existence(
         Ok(())
     } else if !template.signature.parameter_list.is_empty() {
         // TODO: Handle case all default or optional
-        return Err(MappingError::MissingDataFrameForNonEmptySignature);
+        Err(MappingError::MissingDataFrameForNonEmptySignature)
     } else {
         Ok(())
     }
@@ -354,11 +354,7 @@ fn infer_validate_mapping_column_type_from_ptype(
                     dt,
                     inner,
                 )?;
-                new_expr = if let Some(new_expr) = new_expr {
-                    Some(expr.list().eval(new_expr))
-                } else {
-                    None
-                };
+                new_expr = new_expr.map(|new_expr| expr.list().eval(new_expr));
                 Ok((MappingColumnType::Nested(Box::new(res)), new_expr))
             } else {
                 Err(MappingError::IncompatibleColumnDataType(
