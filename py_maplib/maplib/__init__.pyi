@@ -789,11 +789,11 @@ class Model:
             max_rows: int = None,
             debug: bool = False,
     ) -> Union[
-        DataFrame, SolutionMappings, List[Union[DataFrame, SolutionMappings, str]], None
+        DataFrame, SolutionMappings, List[Union[DataFrame, SolutionMappings, str]]
     ]:
         """
         Query the contained knowledge graph using SPARQL
-        Currently, SELECT, CONSTRUCT and INSERT are supported.
+        Currently, SELECT and CONSTRUCT are supported.
         Usage:
 
         >>> df = model.query('''
@@ -812,9 +812,40 @@ class Model:
         :param include_transient: Include transient triples when querying.
         :param max_rows: Maximum estimated rows in result, helps avoid out-of-memory errors.
         :param debug: Why does my query have no results?
-        :return: DataFrame (Select), list of DataFrames (Construct) containing results, None for Insert-queries, or SolutionMappings when solution_mappings is set.
+        :return: DataFrame (Select), list of DataFrames (Construct) containing results or SolutionMappings when solution_mappings is set.
 
         """
+
+    def query_external(
+            self,
+            query: str,
+            endpoint: str,
+            solution_mappings: bool = False,
+            return_json: bool = False,
+    ) -> Union[
+        DataFrame, SolutionMappings, List[Union[DataFrame, SolutionMappings, str]]
+    ]:
+        """
+        Query an external endpoint using SPARQL
+        Currently SELECT is supported and GET querying is hardcoded with JSON results.
+        Usage:
+
+        >>> df = model.query_external('''
+        ... PREFIX ex:<http://example.net/ns#>
+        ... SELECT ?obj1 ?obj2 WHERE {
+        ...    ?obj1 ex:hasObj ?obj2
+        ... }''',
+        ... "http://localhost:8000/query",
+        ... )
+        ... print(df)
+
+        :param query: The SPARQL query string
+        :param endpoint: The external HTTP SPARQL Endpoint
+        :param solution_mappings: Returns SolutionMappings with maplib-native formatting and with RDF typing. Useful for round-trips.
+        :param return_json: Return JSON string.
+        :return: DataFrame (Select), list of DataFrames (Construct) containing results or SolutionMappings when solution_mappings is set.
+        """
+
 
     def update(
             self,

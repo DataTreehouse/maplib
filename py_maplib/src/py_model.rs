@@ -1,13 +1,5 @@
 use crate::error::PyMaplibError;
-use crate::mutexes::{
-    add_prefixes_mutex, add_template_mutex, add_udf_mutex, add_virtualization_mutex, compact_mutex,
-    create_index_mutex, detach_graph_mutex, get_predicate_iris_mutex, get_predicate_mutex,
-    infer_mutex, insert_mutex, list_udfs_mutex, map_default_mutex, map_df_mutex, map_json_mutex,
-    map_mutex, map_triples_mutex, map_xml_mutex, query_mutex, read_mutex, read_template_mutex,
-    reads_mutex, serialize_triples_mutex, size_mutex, truncate_graph_mutex, update_mutex,
-    validate_mutex, write_cim_xml_mutex, write_native_parquet_mutex, write_triples_mutex,
-    writes_mutex,
-};
+use crate::mutexes::{add_prefixes_mutex, add_template_mutex, add_udf_mutex, add_virtualization_mutex, compact_mutex, create_index_mutex, detach_graph_mutex, get_predicate_iris_mutex, get_predicate_mutex, infer_mutex, insert_mutex, list_udfs_mutex, map_default_mutex, map_df_mutex, map_json_mutex, map_mutex, map_triples_mutex, map_xml_mutex, query_external_mutex, query_mutex, read_mutex, read_template_mutex, reads_mutex, serialize_triples_mutex, size_mutex, truncate_graph_mutex, update_mutex, validate_mutex, write_cim_xml_mutex, write_native_parquet_mutex, write_triples_mutex, writes_mutex};
 use crate::shacl::PyValidationReport;
 use crate::{
     create_prefix_map, data_to_mappings_types, map_parameters, new_triples_to_dict,
@@ -32,6 +24,7 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 use templates::python::PyTemplate;
 use tracing::instrument;
+use external_sparql::SparqlMethod;
 use triplestore::sparql::InsertResult;
 use virtualization::python::VirtualizedPythonDatabase;
 
@@ -363,6 +356,44 @@ impl PyModel {
                 include_transient,
                 max_rows,
                 debug,
+            )?;
+            Ok((res, cats))
+        })?;
+        print_debug_if_exists(res.debug.as_ref());
+        query_to_result(
+            res,
+            solution_mappings.unwrap_or(false),
+            solution_mappings.unwrap_or(false),
+            return_json.unwrap_or(false),
+            cats,
+            py,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    #[pyo3(signature = (
+        query,
+        endpoint,
+        solution_mappings=None,
+        return_json=None,
+        ))]
+    #[instrument(skip_all)]
+    fn query_external(
+        &self,
+        py: Python<'_>,
+        query: String,
+        endpoint: String,
+        solution_mappings: Option<bool>,
+        return_json: Option<bool>,
+    ) -> PyResult<Py<PyAny>> {
+        let (res, cats) = py.detach(|| -> PyResult<(_, LockedCats)> {
+            let mut inner = self.inner.lock().unwrap();
+            let cats = inner.triplestore.global_cats.clone();
+            let res = query_external_mutex(
+                &mut inner,
+                query,
+                endpoint,
+                SparqlMethod::GET,
             )?;
             Ok((res, cats))
         })?;

@@ -3615,11 +3615,12 @@ dependencies = [
 
 [[package]]
 name = "py_maplib"
-version = "0.20.25"
+version = "0.20.26"
 dependencies = [
  "chrono",
  "cimxml_export",
  "datalog",
+ "external_sparql",
  "maplib",
  "mimalloc",
  "opc_ua",
@@ -3627,7 +3628,6 @@ dependencies = [
  "oxrdfio",
  "polars",
  "pyo3",
- "query_processing",
  "representation",
  "shacl",
  "templates",

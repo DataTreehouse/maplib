@@ -32,6 +32,7 @@ use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard};
 use tracing::{info, warn};
+use external_sparql::SparqlMethod;
 use triplestore::sparql::{InsertResult, UpdateResult};
 use triplestore::triples_read::ExtendedRdfFormat;
 use triplestore::IndexingOptions;
@@ -339,6 +340,22 @@ pub(crate) fn query_mutex(
             include_transient.unwrap_or(DEFAULT_INCLUDE_TRANSIENT),
             max_rows,
             debug.unwrap_or(DEFAULT_DEBUG_NO_RESULTS),
+        )
+        .map_err(PyMaplibError::from)?;
+    Ok(res)
+}
+
+pub(crate) fn query_external_mutex(
+    inner: &mut MutexGuard<InnerModel>,
+    query: String,
+    endpoint: String,
+    method: SparqlMethod,
+) -> PyResult<QueryResult> {
+    let res = inner
+        .query_external(
+            &query,
+            &endpoint,
+            method,
         )
         .map_err(PyMaplibError::from)?;
     Ok(res)

@@ -1,6 +1,6 @@
 [package]
 name = "py_maplib"
-version = "0.20.25"
+version = "0.20.26"
 edition.workspace = true
 
 [features]
@@ -16,7 +16,7 @@ cimxml_export = {path = "../lib/cimxml_export", features = [ "pyo3" ]}
 datalog = {path = "../lib/datalog"}
 virtualized_query = {path="../lib/virtualized_query"}
 virtualization = {path="../lib/virtualization"}
-query_processing = {path="../lib/query_processing"}
+external_sparql = {path="../lib/external_sparql"}
 opc_ua = { path = "../lib/opc_ua" }
 
 pyo3.workspace = true
