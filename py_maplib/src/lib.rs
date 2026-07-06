@@ -114,16 +114,15 @@ impl TryFrom<Bound<'_, PyAny>> for TemplateType {
 
     fn try_from(value: Bound<'_, PyAny>) -> Result<Self, Self::Error> {
         if let Ok(i) = value.extract::<PyIRI>() {
-            return Ok(Self::TemplateIRI(i));
+            Ok(Self::TemplateIRI(i))
         } else if let Ok(s) = value.extract::<String>() {
-            return Ok(Self::TemplateString(s));
+            Ok(Self::TemplateString(s))
         } else if let Ok(t) = value.extract::<PyTemplate>() {
-            return Ok(Self::TemplatePyTemplate(t));
+            Ok(Self::TemplatePyTemplate(t))
         } else {
-            return Err(PyMaplibError::FunctionArgumentError(
+            Err(PyMaplibError::FunctionArgumentError(
                 "Expected template to be Template or stOTTR document string".to_string(),
-            )
-            .into());
+            ))
         }
     }
 }
@@ -404,8 +403,7 @@ fn create_prefix_map(
                 let nn = NamedNode::new(v).map_err(|x| {
                     PyMaplibError::FunctionArgumentError(format!(
                         "Error parsing prefix {}:{}",
-                        k,
-                        x.to_string()
+                        k, x
                     ))
                 })?;
                 use_prefixes.insert(k, nn);
@@ -419,9 +417,9 @@ fn create_prefix_map(
                 use_prefixes.insert(k, v.iri.clone());
             }
         } else {
-            return Err(PyMaplibError::FunctionArgumentError(format!(
-                "Prefixes should be Dict[str,str]"
-            ))
+            return Err(PyMaplibError::FunctionArgumentError(
+                "Prefixes should be Dict[str,str]".to_string(),
+            )
             .into());
         };
         Ok(Some(use_prefixes))

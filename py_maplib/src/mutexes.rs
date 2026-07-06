@@ -90,7 +90,7 @@ pub(crate) fn add_prefixes_mutex(
     inner: &mut MutexGuard<InnerModel>,
     prefixes: HashMap<String, NamedNode>,
 ) -> PyResult<()> {
-    inner.prefixes.extend(prefixes.into_iter());
+    inner.prefixes.extend(prefixes);
     Ok(())
 }
 
@@ -162,14 +162,14 @@ pub(crate) fn map_mutex(
 
     if let Some(df) = df {
         if df.height().gt(&0) {
-            let _report = inner
+            inner
                 .expand(&template, Some(df), types, options)
                 .map_err(PyMaplibError::from)?;
         } else {
             warn!("Template expansion of {template} with empty DataFrame");
         }
     } else {
-        let _report = inner
+        inner
             .expand(&template, None, None, options)
             .map_err(PyMaplibError::from)?;
     }
@@ -368,11 +368,7 @@ pub(crate) fn update_mutex(
     debug: Option<bool>,
 ) -> PyResult<UpdateResult> {
     let graph = parse_optional_named_node(graph)?;
-    let named_graph = if let Some(graph) = graph {
-        Some(NamedGraph::from_maybe_named_node(Some(&graph)))
-    } else {
-        None
-    };
+    let named_graph = graph.map(|graph| NamedGraph::from_maybe_named_node(Some(&graph)));
 
     let res = inner
         .update(
@@ -431,11 +427,8 @@ pub(crate) fn validate_mutex(
     };
 
     let inferences_graph = parse_optional_named_node(inferences_graph)?;
-    let inferences_graph = if let Some(inferences_graph) = inferences_graph {
-        Some(NamedGraph::from_maybe_named_node(Some(&inferences_graph)))
-    } else {
-        None
-    };
+    let inferences_graph = inferences_graph
+        .map(|inferences_graph| NamedGraph::from_maybe_named_node(Some(&inferences_graph)));
     if only_shapes.is_some() && deactivate_shapes.is_some() {
         return Err(PyMaplibError::FunctionArgumentError(
             "only_shapes and deactivate_shapes cannot both be set".to_string(),
@@ -533,7 +526,7 @@ pub(crate) fn read_mutex(
     let named_graph = NamedGraph::from_maybe_named_node(graph.as_ref());
     let path = Path::new(&file_path);
     let format = if let Some(format) = format {
-        Some(resolve_format(&format).map_err(PyMaplibError::from)?)
+        Some(resolve_format(&format)?)
     } else {
         None
     };
@@ -578,7 +571,7 @@ pub(crate) fn reads_mutex(
 ) -> PyResult<()> {
     let graph = parse_optional_named_node(graph)?;
     let named_graph = NamedGraph::from_maybe_named_node(graph.as_ref());
-    let format = resolve_format(format).map_err(PyMaplibError::from)?;
+    let format = resolve_format(format)?;
     if format == ExtendedRdfFormat::HDT {
         return Err(PyMaplibError::FunctionArgumentError(
             "HDT is a binary format, use read() instead of reads()".to_string(),
@@ -610,7 +603,7 @@ pub(crate) fn write_triples_mutex(
     prefixes: Option<HashMap<String, NamedNode>>,
 ) -> PyResult<()> {
     let format = if let Some(format) = format {
-        resolve_format(&format).map_err(PyMaplibError::from)?
+        resolve_format(&format)?
     } else {
         ExtendedRdfFormat::Normal(RdfFormat::NTriples)
     };
@@ -715,7 +708,7 @@ pub(crate) fn writes_mutex(
             )
             .into());
         }
-        resolve_normal_format(&format).map_err(PyMaplibError::from)?
+        resolve_normal_format(&format)?
     } else {
         RdfFormat::NTriples
     };

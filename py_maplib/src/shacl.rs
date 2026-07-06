@@ -88,7 +88,8 @@ impl PyValidationReport {
                 None => Ok(None),
             }
         })?;
-        let res = match report {
+
+        match report {
             Some((mappings, rdf_node_types)) => Ok(Some(df_to_py_df(
                 mappings,
                 rdf_node_types,
@@ -98,8 +99,7 @@ impl PyValidationReport {
                 py,
             )?)),
             None => Ok(None),
-        };
-        res
+        }
     }
 
     #[pyo3(signature = (streaming=None))]

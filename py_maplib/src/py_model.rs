@@ -3,10 +3,14 @@ use crate::mutexes::{
     add_prefixes_mutex, add_template_mutex, add_udf_mutex, add_virtualization_mutex, compact_mutex,
     create_index_mutex, detach_graph_mutex, get_predicate_iris_mutex, get_predicate_mutex,
     infer_mutex, infer_rdfs_mutex, insert_mutex, list_udfs_mutex, map_default_mutex, map_df_mutex,
-    map_json_mutex, map_mutex, map_triples_mutex, map_xml_mutex, query_external_mutex, query_mutex,
-    read_mutex, read_template_mutex, reads_mutex, serialize_triples_mutex, size_mutex,
-    truncate_graph_mutex, update_mutex, validate_mutex, write_cim_xml_mutex, write_triples_mutex,
-    writes_mutex,
+    map_json_mutex,
+    map_mutex, map_triples_mutex, map_xml_mutex, query_external_mutex, query_mutex,
+    read_mutex,
+    read_template_mutex, reads_mutex, serialize_triples_mutex, size_mutex,
+    truncate_graph_mutex,
+    update_mutex, validate_mutex, write_cim_xml_mutex,
+
+    write_triples_mutex, writes_mutex,
 };
 use crate::shacl::PyValidationReport;
 use crate::{
@@ -262,7 +266,6 @@ impl PyModel {
     /// ```
     /// You can later stop the server with
     /// `server.stop()`
-
     /// :param host: The hostname that we will point the browser to
     /// :param port: The port where the graph explorer webserver listens on
     /// :param bind: Bind to the following host / ip
@@ -347,11 +350,7 @@ impl PyModel {
     ) -> PyResult<Py<PyAny>> {
         let mapped_parameters = map_parameters(parameters, py)?;
         let graph = parse_optional_named_node(graph)?;
-        let graph = if let Some(graph) = graph {
-            Some(NamedGraph::from_maybe_named_node(Some(&graph)))
-        } else {
-            None
-        };
+        let graph = graph.map(|graph| NamedGraph::from_maybe_named_node(Some(&graph)));
         let (res, cats) = py.detach(|| -> PyResult<(_, LockedCats)> {
             let mut inner = self.inner.lock().unwrap();
             let cats = inner.triplestore.global_cats.clone();
@@ -861,11 +860,7 @@ impl PyModel {
             .into());
         };
         let graph = parse_optional_named_node(graph)?;
-        let named_graph = if let Some(graph) = graph {
-            Some(NamedGraph::from_maybe_named_node(Some(&graph)))
-        } else {
-            None
-        };
+        let named_graph = graph.map(|graph| NamedGraph::from_maybe_named_node(Some(&graph)));
         let (res, ..) = py.detach(|| -> PyResult<(_, LockedCats)> {
             let mut inner = self.inner.lock().unwrap();
 

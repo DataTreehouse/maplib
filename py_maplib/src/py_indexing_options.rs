@@ -31,8 +31,7 @@ impl PyIndexingOptions {
         let fts = fts.unwrap_or(DEFAULT_FTS) || fts_path.is_some();
         let fts_path = fts_path.map(|fts_path| Path::new(&fts_path).to_owned());
         let inner = if object_sort_all.is_none() && object_sort_some.is_none() {
-            let opts = IndexingOptions::new_default_object_sort(fts, fts_path);
-            opts
+            IndexingOptions::new_default_object_sort(fts, fts_path)
         } else {
             let object_sort_all = object_sort_all.unwrap_or(false);
             if object_sort_all && object_sort_some.is_none() {

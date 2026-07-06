@@ -47,7 +47,7 @@ impl std::convert::From<PyMaplibError> for PyErr {
                 FunctionArgumentException::new_err(s.clone())
             }
             PyMaplibError::RuntimeError(s) => MaplibRuntimeError::new_err(s.clone()),
-            PyMaplibError::UDFError(s) => MaplibUDFError::new_err(format!("{s}")),
+            PyMaplibError::UDFError(s) => MaplibUDFError::new_err(s.to_string()),
         }
     }
 }
