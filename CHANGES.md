@@ -3,6 +3,7 @@
 ## v0.20.26
 ### Features
 - The IRI maplib:DefaultGraph is the default graph
+- m.query_external(query, endpoint) lets you query an external SPARQL endpoint (currently only select and HTTP GET).
 
 ## v0.20.25
 ### Bug fixes
