@@ -4,7 +4,8 @@ use representation::solution_mapping::EagerSolutionMappings;
 use spargebra::term::NamedNode;
 use std::collections::HashMap;
 use std::sync::Arc;
-use triplestore::sparql::{QueryResult, QuerySettings};
+use representation::result::QueryResult;
+use triplestore::sparql::{QuerySettings};
 use triplestore::Triplestore;
 use virtualization::{Virtualization, VirtualizedDatabase};
 
