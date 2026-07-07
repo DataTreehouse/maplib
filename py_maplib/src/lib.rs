@@ -17,9 +17,9 @@ use tracing_subscriber::{filter, prelude::*};
 use maplib::errors::MaplibError;
 
 use pyo3::prelude::*;
+use representation::result::{QueryResult, QueryResultKind as SparqlQueryResult};
 use std::collections::HashMap;
 use std::path::PathBuf;
-use representation::result::{QueryResult, QueryResultKind as SparqlQueryResult};
 
 //The below snippet controlling alloc-library is from https://github.com/pola-rs/polars/blob/main/py-polars/src/lib.rs
 //And has a MIT license:

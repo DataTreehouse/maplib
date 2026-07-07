@@ -1211,6 +1211,18 @@ class Model:
         :return: The inferred N-Tuples.
         """
 
+    def infer_rdfs(
+            self,
+            graph: str = None,
+    ) -> int:
+        """
+        RDFS Inference with rules: 2, 3, 5, 6, 8, 9, 10, 11.
+        The inferred triples are transient, and will not be serialized.
+        :param graph: Apply rdfs inferencing to this graph, defaults to the default graph, or the graph specified in the rules.
+        :return number of inferred triples
+        """
+
+
     def size(self, graph: str = None) -> int:
         """
         Get the number of triples in a graph.

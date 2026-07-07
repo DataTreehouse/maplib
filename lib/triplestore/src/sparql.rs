@@ -28,9 +28,7 @@ use representation::cats::{Cats, LockedCats};
 use representation::dataset::{NamedGraph, QueryGraph};
 use representation::debug::DebugOutput;
 use representation::query_context::Context;
-use representation::rdf_to_polars::{
-    rdf_literal_to_polars_expr,
-};
+use representation::rdf_to_polars::rdf_literal_to_polars_expr;
 use representation::result::{QueryResult, QueryResultKind};
 use representation::solution_mapping::{BaseCatState, EagerSolutionMappings, SolutionMappings};
 use representation::{BaseRDFNodeType, RDFNodeState};

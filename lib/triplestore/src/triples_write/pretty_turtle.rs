@@ -1,6 +1,6 @@
 use super::Triplestore;
 use crate::errors::TriplestoreError;
-use crate::sparql::{QuerySettings};
+use crate::sparql::QuerySettings;
 use crate::storage::Triples;
 use aho_corasick::{AhoCorasick, MatchKind};
 use oxrdf::vocab::{rdf, xsd};
@@ -13,6 +13,7 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use representation::cats::LockedCats;
 use representation::dataset::NamedGraph;
 use representation::polars_to_rdf::{blank_node_to_normal_string, column_as_terms};
+use representation::result::QueryResultKind;
 use representation::{BaseRDFNodeType, RDFNodeState, OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use spargebra::algebra::{Expression, Function, GraphPattern};
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
@@ -20,7 +21,6 @@ use spargebra::Query;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::io::Write;
 use std::sync::Arc;
-use representation::result::QueryResultKind;
 
 const STRIDE: usize = 20_000;
 

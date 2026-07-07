@@ -1,5 +1,13 @@
 use crate::error::PyMaplibError;
-use crate::mutexes::{add_prefixes_mutex, add_template_mutex, add_udf_mutex, add_virtualization_mutex, compact_mutex, create_index_mutex, detach_graph_mutex, get_predicate_iris_mutex, get_predicate_mutex, infer_mutex, insert_mutex, list_udfs_mutex, map_default_mutex, map_df_mutex, map_json_mutex, map_mutex, map_triples_mutex, map_xml_mutex, query_external_mutex, query_mutex, read_mutex, read_template_mutex, reads_mutex, serialize_triples_mutex, size_mutex, truncate_graph_mutex, update_mutex, validate_mutex, write_cim_xml_mutex, write_native_parquet_mutex, write_triples_mutex, writes_mutex};
+use crate::mutexes::{
+    add_prefixes_mutex, add_template_mutex, add_udf_mutex, add_virtualization_mutex, compact_mutex,
+    create_index_mutex, detach_graph_mutex, get_predicate_iris_mutex, get_predicate_mutex,
+    infer_mutex, infer_rdfs_mutex, insert_mutex, list_udfs_mutex, map_default_mutex, map_df_mutex,
+    map_json_mutex, map_mutex, map_triples_mutex, map_xml_mutex, query_external_mutex, query_mutex,
+    read_mutex, read_template_mutex, reads_mutex, serialize_triples_mutex, size_mutex,
+    truncate_graph_mutex, update_mutex, validate_mutex, write_cim_xml_mutex,
+    write_native_parquet_mutex, write_triples_mutex, writes_mutex,
+};
 use crate::shacl::PyValidationReport;
 use crate::{
     create_prefix_map, data_to_mappings_types, map_parameters, new_triples_to_dict,
@@ -9,6 +17,7 @@ use crate::{
 };
 
 use datalog::python::PyInferenceResult;
+use external_sparql::SparqlMethod;
 use maplib::model::Model as InnerModel;
 use opc_ua::mappings::map_opc_ua;
 use pyo3::prelude::*;
@@ -24,7 +33,6 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 use templates::python::PyTemplate;
 use tracing::instrument;
-use external_sparql::SparqlMethod;
 use triplestore::sparql::InsertResult;
 use virtualization::python::VirtualizedPythonDatabase;
 
@@ -389,12 +397,7 @@ impl PyModel {
         let (res, cats) = py.detach(|| -> PyResult<(_, LockedCats)> {
             let mut inner = self.inner.lock().unwrap();
             let cats = inner.triplestore.global_cats.clone();
-            let res = query_external_mutex(
-                &mut inner,
-                query,
-                endpoint,
-                SparqlMethod::GET,
-            )?;
+            let res = query_external_mutex(&mut inner, query, endpoint, SparqlMethod::GET)?;
             Ok((res, cats))
         })?;
         print_debug_if_exists(res.debug.as_ref());
@@ -897,6 +900,21 @@ impl PyModel {
             Ok((res, cats))
         })?;
         Ok(PyInferenceResult { inner: res })
+    }
+
+    #[pyo3(signature = (graph=None))]
+    #[instrument(skip_all)]
+    fn infer_rdfs(&self, py: Python<'_>, graph: Option<String>) -> PyResult<usize> {
+        let graph = parse_optional_named_node(graph)?;
+        let named_graph = NamedGraph::from_maybe_named_node(graph.as_ref());
+        let res = py.detach(|| -> PyResult<usize> {
+            let mut inner = self.inner.lock().unwrap();
+
+            let res = infer_rdfs_mutex(&mut inner, &named_graph)?;
+
+            Ok(res)
+        })?;
+        Ok(res)
     }
 
     #[pyo3(signature = ())]

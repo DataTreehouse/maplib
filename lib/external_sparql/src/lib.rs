@@ -66,8 +66,8 @@ impl SparqlEndpoint {
         query: &str,
         prefixes: Option<&HashMap<String, NamedNode>>,
     ) -> Result<QueryResult, SparqlEndpointQueryError> {
-        let query =
-            Query::parse(query, None, prefixes).map_err(SparqlEndpointQueryError::SPARQLSyntaxError)?;
+        let query = Query::parse(query, None, prefixes)
+            .map_err(SparqlEndpointQueryError::SPARQLSyntaxError)?;
         self.async_query_parsed(&query).await
     }
 

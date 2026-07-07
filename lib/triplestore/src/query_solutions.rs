@@ -1,5 +1,5 @@
 use crate::sparql::errors::SparqlError;
-use crate::sparql::{QuerySettings};
+use crate::sparql::QuerySettings;
 use crate::Triplestore;
 use oxrdf::{NamedNode, Term, Variable};
 use polars::frame::UniqueKeepStrategy;
@@ -7,9 +7,9 @@ use polars::prelude::IntoLazy;
 use query_processing::graph_patterns::unique_workaround;
 use representation::dataset::NamedGraph;
 use representation::polars_to_rdf::{df_as_result, QuerySolutions};
+use representation::result::QueryResultKind;
 use representation::solution_mapping::EagerSolutionMappings;
 use std::collections::HashMap;
-use representation::result::QueryResultKind;
 
 pub fn query_select(
     query: &str,

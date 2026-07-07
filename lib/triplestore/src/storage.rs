@@ -146,6 +146,19 @@ impl Triples {
         }
     }
 
+    pub fn remove_overlapping_triples_from_dataframe(
+        &mut self,
+        df: &DataFrame,
+    ) -> Result<Option<DataFrame>, TriplestoreError> {
+        self.ensure_subject_object_index()?;
+        let maybe_df = self
+            .subject_object_index
+            .as_mut()
+            .unwrap()
+            .maybe_insert_deduplicate(df, false);
+        Ok(maybe_df)
+    }
+
     pub fn get_sparse_indices_as_data_frames(&self, subject_object_sort: bool) -> Vec<DataFrame> {
         let mut sparse_indices = Vec::new();
         for seg in &self.segments {
@@ -371,7 +384,7 @@ impl Triples {
         let height = df.height();
         let mut segments = vec![];
         let mut subject_object_index = SubjectObjectIndex::new(&subject_type, &object_type);
-        let maybe_df = subject_object_index.insert_deduplicate(&df);
+        let maybe_df = subject_object_index.maybe_insert_deduplicate(&df, true);
         df = maybe_df.unwrap();
         let cats = cats.read().unwrap();
 

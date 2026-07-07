@@ -22,15 +22,17 @@ impl Triplestore {
         graph: &NamedGraph,
     ) -> Result<Vec<NamedNode>, TriplestoreError> {
         self.check_graph_exists(graph)?;
-        let mut iris = vec![];
+        let mut iris = HashSet::new();
         for nn in self.graph_triples_map.get(graph).unwrap().keys() {
-            iris.push(nn.clone());
+            iris.insert(nn);
         }
         if include_transient {
             for nn in self.graph_transient_triples_map.get(graph).unwrap().keys() {
-                iris.push(nn.clone());
+                iris.insert(nn);
             }
         }
+        let mut iris: Vec<_> = iris.into_iter().cloned().collect();
+        iris.sort();
         Ok(iris)
     }
 
@@ -41,10 +43,10 @@ impl Triplestore {
         graph: &NamedGraph,
     ) -> Result<Vec<EagerSolutionMappings>, TriplestoreError> {
         self.check_graph_exists(graph)?;
-        let mut types = vec![];
+        let mut types = HashSet::new();
         if let Some(map) = self.graph_triples_map.get(graph).unwrap().get(predicate) {
             for (s, o) in map.keys() {
-                types.push((
+                types.insert((
                     PossibleTypes::singular(bt_as_constrained(s)),
                     PossibleTypes::singular(bt_as_constrained(o)),
                 ));
@@ -58,7 +60,7 @@ impl Triplestore {
                 .get(predicate)
             {
                 for (s, o) in map.keys() {
-                    types.push((
+                    types.insert((
                         PossibleTypes::singular(bt_as_constrained(s)),
                         PossibleTypes::singular(bt_as_constrained(o)),
                     ));
@@ -456,17 +458,18 @@ impl Triplestore {
     }
 
     fn all_predicates(&self, graph: &NamedGraph) -> Vec<NamedNode> {
-        let mut predicates = vec![];
+        let mut predicates = HashSet::new();
         if let Some(g) = self.graph_triples_map.get(graph) {
             for nn in g.keys() {
-                predicates.push(nn.clone());
+                predicates.insert(nn);
             }
         }
         if let Some(g) = self.graph_transient_triples_map.get(graph) {
             for nn in g.keys() {
-                predicates.push(nn.clone());
+                predicates.insert(nn);
             }
         }
+        let predicates: Vec<_> = predicates.into_iter().cloned().collect();
         predicates
     }
 }

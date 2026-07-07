@@ -14,6 +14,7 @@ use crate::{
 use chrono::Utc;
 use cimxml_export::export::FullModelDetails;
 use datalog::inference::InferenceResult;
+use external_sparql::SparqlMethod;
 use maplib::errors::MaplibError;
 use maplib::model::{MapOptions, Model as InnerModel};
 use oxrdf::vocab::xsd;
@@ -24,15 +25,14 @@ use pyo3::prelude::*;
 use representation::df_to_python::fix_cats_and_multicolumns;
 use representation::polars_to_rdf::XSD_DATETIME_WITH_TZ_FORMAT;
 use representation::python::PyIRI;
+use representation::result::QueryResult;
 use representation::solution_mapping::EagerSolutionMappings;
 use representation::{BaseRDFNodeType, RDFNodeState};
-use representation::result::QueryResult;
 use std::collections::HashMap;
 use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard};
 use tracing::{info, warn};
-use external_sparql::SparqlMethod;
 use triplestore::sparql::{InsertResult, UpdateResult};
 use triplestore::triples_read::ExtendedRdfFormat;
 use triplestore::IndexingOptions;
@@ -352,11 +352,7 @@ pub(crate) fn query_external_mutex(
     method: SparqlMethod,
 ) -> PyResult<QueryResult> {
     let res = inner
-        .query_external(
-            &query,
-            &endpoint,
-            method,
-        )
+        .query_external(&query, &endpoint, method)
         .map_err(PyMaplibError::from)?;
     Ok(res)
 }
@@ -804,6 +800,13 @@ pub(crate) fn infer_mutex(
             debug.unwrap_or(DEFAULT_DEBUG_NO_RESULTS),
         )
         .map_err(PyMaplibError::MaplibError)
+}
+
+pub(crate) fn infer_rdfs_mutex(
+    inner: &mut MutexGuard<InnerModel>,
+    graph: &NamedGraph,
+) -> Result<usize, PyMaplibError> {
+    inner.infer_rdfs(graph).map_err(PyMaplibError::MaplibError)
 }
 
 pub fn serialize_triples_mutex(inner: &mut MutexGuard<InnerModel>, path: &Path) -> PyResult<()> {

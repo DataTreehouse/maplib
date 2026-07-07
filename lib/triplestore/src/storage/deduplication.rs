@@ -12,24 +12,13 @@ impl Triples {
         df: DataFrame,
         global_cats: &Cats,
     ) -> Result<Option<DataFrame>, TriplestoreError> {
-        if self.subject_object_index.is_none() {
-            let mut subject_object_index =
-                SubjectObjectIndex::new(&self.subject_type, &self.object_type);
-            let mut lfs = self.get_all_triples_lazy_frames(true)?;
-            assert_eq!(lfs.len(), 1);
-            let mut df = lfs
-                .pop()
-                .unwrap()
-                .collect()
-                .map_err(|x| TriplestoreError::LazyLoadError(x))?;
-            subject_object_index.insert(&mut df);
-            self.subject_object_index = Some(subject_object_index);
-        }
+        self.ensure_subject_object_index()?;
+
         let new_df = self
             .subject_object_index
             .as_mut()
             .unwrap()
-            .insert_deduplicate(&df);
+            .maybe_insert_deduplicate(&df, true);
         if let Some(new_df) = new_df {
             // Here we decide if segments should be compacted
             let should_compact = self.segments.len() > 10
@@ -67,5 +56,22 @@ impl Triples {
         } else {
             Ok(None)
         }
+    }
+
+    pub(crate) fn ensure_subject_object_index(&mut self) -> Result<(), TriplestoreError> {
+        if self.subject_object_index.is_none() {
+            let mut subject_object_index =
+                SubjectObjectIndex::new(&self.subject_type, &self.object_type);
+            let mut lfs = self.get_all_triples_lazy_frames(true)?;
+            assert_eq!(lfs.len(), 1);
+            let mut df = lfs
+                .pop()
+                .unwrap()
+                .collect()
+                .map_err(|x| TriplestoreError::LazyLoadError(x))?;
+            subject_object_index.insert(&mut df);
+            self.subject_object_index = Some(subject_object_index);
+        }
+        Ok(())
     }
 }

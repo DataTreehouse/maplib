@@ -36,8 +36,8 @@ use external_sparql::{SparqlEndpoint, SparqlMethod};
 use representation::constants::OTTR_TRIPLE;
 use representation::dataset::NamedGraph;
 use representation::prefixes::get_default_prefixes;
-use tracing::instrument;
 use representation::result::QueryResult;
+use tracing::instrument;
 use triplestore::errors::TriplestoreError;
 use triplestore::triples_read::ExtendedRdfFormat;
 use virtualization::python::VirtualizedPythonDatabase;
@@ -701,6 +701,11 @@ impl Model {
             debug_no_results,
         );
         Ok(res.map_err(|x| MaplibError::DatalogError(x))?)
+    }
+
+    pub fn infer_rdfs(&mut self, graph: &NamedGraph) -> Result<usize, MaplibError> {
+        let res = self.triplestore.interesting_rdfs_rules(graph)?;
+        Ok(res)
     }
 
     pub fn detach_graph(

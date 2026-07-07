@@ -6,7 +6,7 @@ use spargebra::algebra::{Expression, Function};
 use std::cmp::PartialEq;
 use std::collections::HashMap;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub enum ConstraintBaseRDFNodeType {
     IRI,
     BlankNode,
@@ -25,7 +25,7 @@ impl ConstraintBaseRDFNodeType {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq)]
 #[allow(dead_code)]
 pub enum ConstraintExpr {
     Bottom,
@@ -61,7 +61,7 @@ impl ConstraintExpr {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub struct PossibleTypes {
     e: Option<ConstraintExpr>,
 }
