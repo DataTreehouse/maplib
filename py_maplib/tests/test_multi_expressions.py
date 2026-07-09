@@ -866,8 +866,8 @@ def test_substr_single(streaming):
     PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
     SELECT ?a ?sub1 ?sub2 WHERE {
     VALUES (?a) { ("abcaAc") ("ab") ("bb") }
-    BIND(SUBSTR(?a,3) as ?sub1)
-    BIND(SUBSTR(?a,0,3) as ?sub2)
+    BIND(SUBSTR(?a,4) as ?sub1)
+    BIND(SUBSTR(?a,1,3) as ?sub2)
     } ORDER BY ?a
     """,
         solution_mappings=True,
@@ -927,8 +927,8 @@ def test_substr_multi_type_with_only_lang(streaming):
     PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
     SELECT ?a ?sub1 ?sub2 WHERE {
     VALUES (?a) { ("abcaAc"@en) ("ab"@no) ("bb"@se) (1) }
-    BIND(SUBSTR(?a, 2) as ?sub1)
-    BIND(SUBSTR(?a, 2, 1) as ?sub2)
+    BIND(SUBSTR(?a, 3) as ?sub1)
+    BIND(SUBSTR(?a, 3, 1) as ?sub2)
     } ORDER BY ?a
     """,
         solution_mappings=True,
@@ -1310,8 +1310,8 @@ def test_substr_multi_type_with_string_and_lang_string_and_other(streaming):
     PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
     SELECT ?a ?sub1 ?sub2 WHERE {
     VALUES (?a) { ("abcaAc"@en) ("ab") ("bb"@se) (1) (xsd:abc) }
-    BIND(SUBSTR(?a, 3,1) as ?sub1)
-    BIND(SUBSTR(?a, 1) as ?sub2)
+    BIND(SUBSTR(?a, 4,1) as ?sub1)
+    BIND(SUBSTR(?a, 2) as ?sub2)
     } ORDER BY ?a
     """,
         solution_mappings=True,

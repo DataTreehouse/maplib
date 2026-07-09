@@ -3716,7 +3716,7 @@ dependencies = [
  "spargebra",
  "thiserror",
  "tracing",
- "uri_encode",
+ "urlencoding",
  "uuid",
 ]
 
@@ -5217,7 +5217,7 @@ dependencies = [
  "sprs",
  "thiserror",
  "tracing",
- "uri_encode",
+ "urlencoding",
  "utils",
  "uuid",
 ]
@@ -5289,12 +5289,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6d49784317cd0d1ee7ec5c716dd598ec5b4483ea832a2dced265471cc0f690ae"
 
 [[package]]
-name = "uri_encode"
-version = "1.0.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9666edb2c10ee91354ec062e9e2d84896c2437378484c566d3523f9b8daf0129"
-
-[[package]]
 name = "url"
 version = "2.5.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5305,6 +5299,12 @@ dependencies = [
  "percent-encoding",
  "serde",
 ]
+
+[[package]]
+name = "urlencoding"
+version = "2.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "daf8dba3b7eb870caf1ddeed7bc9d2a049f3cfdfae7cb521b087cc33ae4c49da"
 
 [[package]]
 name = "utf8_iter"

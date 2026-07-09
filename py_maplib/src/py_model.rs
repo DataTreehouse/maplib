@@ -5,8 +5,8 @@ use crate::mutexes::{
     infer_mutex, infer_rdfs_mutex, insert_mutex, list_udfs_mutex, map_default_mutex, map_df_mutex,
     map_json_mutex, map_mutex, map_triples_mutex, map_xml_mutex, query_external_mutex, query_mutex,
     read_mutex, read_template_mutex, reads_mutex, serialize_triples_mutex, size_mutex,
-    truncate_graph_mutex, update_mutex, validate_mutex, write_cim_xml_mutex,
-    write_native_parquet_mutex, write_triples_mutex, writes_mutex,
+    truncate_graph_mutex, update_mutex, validate_mutex, write_cim_xml_mutex, write_triples_mutex,
+    writes_mutex,
 };
 use crate::shacl::PyValidationReport;
 use crate::{
@@ -787,21 +787,6 @@ impl PyModel {
         py.detach(|| {
             let mut inner = self.inner.lock().unwrap();
             writes_mutex(&mut inner, format, graph, use_prefixes)
-        })
-    }
-
-    #[pyo3(signature = (folder_path, graph=None))]
-    #[instrument(skip_all)]
-    fn write_native_parquet(
-        &self,
-        py: Python<'_>,
-        folder_path: &Bound<'_, PyAny>,
-        graph: Option<String>,
-    ) -> PyResult<()> {
-        let folder_path = folder_path.str()?.to_string();
-        py.detach(move || {
-            let mut inner = self.inner.lock().unwrap();
-            write_native_parquet_mutex(&mut inner, folder_path, graph)
         })
     }
 

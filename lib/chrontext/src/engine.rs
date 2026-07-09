@@ -1,11 +1,11 @@
 use crate::errors::ChrontextError;
 use representation::dataset::NamedGraph;
+use representation::result::QueryResult;
 use representation::solution_mapping::EagerSolutionMappings;
 use spargebra::term::NamedNode;
 use std::collections::HashMap;
 use std::sync::Arc;
-use representation::result::QueryResult;
-use triplestore::sparql::{QuerySettings};
+use triplestore::sparql::QuerySettings;
 use triplestore::Triplestore;
 use virtualization::{Virtualization, VirtualizedDatabase};
 

@@ -61,7 +61,7 @@ impl Triplestore {
                     predicate: Some(NamedNode::new_unchecked(format!(
                         "{}{}",
                         XYZ_PREFIX_IRI,
-                        uri_encode::encode_uri(c)
+                        urlencoding::encode(c)
                     ))),
                     graph: named_graph.clone(),
                     subject_cat_state: subj_state,

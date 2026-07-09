@@ -629,7 +629,7 @@ pub(crate) fn write_triples_mutex(
         ExtendedRdfFormat::Normal(format) => {
             inner
                 .write_triples(&mut actual_file, &named_graph, format, prefixes.as_ref())
-                .unwrap();
+                .map_err(PyMaplibError::from)?;
         }
         ExtendedRdfFormat::HDT => {
             inner
@@ -726,19 +726,6 @@ pub(crate) fn writes_mutex(
         .write_triples(&mut out, &named_graph, format, prefixes.as_ref())
         .unwrap();
     Ok(String::from_utf8(out).unwrap())
-}
-
-pub(crate) fn write_native_parquet_mutex(
-    inner: &mut MutexGuard<InnerModel>,
-    folder_path: String,
-    graph: Option<String>,
-) -> PyResult<()> {
-    let graph = parse_optional_named_node(graph)?;
-    let named_graph = NamedGraph::from_maybe_named_node(graph.as_ref());
-    inner
-        .write_native_parquet(&folder_path, &named_graph)
-        .map_err(PyMaplibError::from)?;
-    Ok(())
 }
 
 pub(crate) fn get_predicate_iris_mutex(

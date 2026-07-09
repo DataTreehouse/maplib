@@ -42,7 +42,8 @@ pub fn lower_upper_substr(
             .value()
             .parse()
             .map_err(|_x| QueryProcessingError::ExpectedIntegerArgument(func.clone()))?;
-        Some(lit(starting_loc))
+        //Indexing starts at 1!
+        Some(lit(starting_loc - 1))
     } else {
         None
     };
@@ -138,7 +139,6 @@ pub fn lower_upper_substr(
                                 col(first_context.as_str())
                                     .struct_()
                                     .with_fields(vec![str_expr
-                                        .cast(DataType::String)
                                         .str()
                                         .slice(starting_loc.unwrap(), length)
                                         .alias(LANG_STRING_VALUE_FIELD)])

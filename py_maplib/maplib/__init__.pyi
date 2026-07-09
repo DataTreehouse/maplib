@@ -1128,20 +1128,6 @@ class Model:
         :return Triples in model in the NTriples format (potentially a large string)
         """
 
-    def write_native_parquet(
-            self, folder_path: Union[str, Path], graph: str = None
-    ) -> None:
-        """
-        Write non-transient triples using the internal native Parquet format.
-
-        Usage:
-
-        >>> m.write_native_parquet("output_folder")
-
-        :param folder_path: The path of the folder to write triples in the native format.
-        :param graph: The IRI of the graph to write.
-        """
-
     def truncate_graph(self, graph: str = None) -> None:
         """
         Removes all triples associated with the given graph from the triplestore,

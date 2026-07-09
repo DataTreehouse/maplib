@@ -546,16 +546,6 @@ impl Model {
         res
     }
 
-    pub fn write_native_parquet(
-        &mut self,
-        path: &str,
-        graph: &NamedGraph,
-    ) -> Result<(), MaplibError> {
-        self.triplestore
-            .write_native_parquet(Path::new(path), graph)
-            .map_err(MaplibError::TriplestoreError)
-    }
-
     fn resolve_template(&self, s: &str) -> Result<&Template, MaplibError> {
         if let Some(t) = self.template_dataset.get(s) {
             return Ok(t);

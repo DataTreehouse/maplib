@@ -8,7 +8,6 @@ use representation::solution_mapping::SolutionMappings;
 use representation::BaseRDFNodeType;
 use spargebra::algebra::{Expression, Function};
 use std::collections::HashMap;
-use uri_encode::encode_uri;
 
 pub fn encode_for_uri(
     mut solution_mappings: SolutionMappings,
@@ -39,7 +38,7 @@ pub fn encode_for_uri(
             let mut encoded = Vec::with_capacity(x.len());
             for s in x.str()?.iter() {
                 if let Some(s) = s {
-                    encoded.push(Some(encode_uri(s)));
+                    encoded.push(Some(urlencoding::encode(s)));
                 } else {
                     encoded.push(None);
                 }

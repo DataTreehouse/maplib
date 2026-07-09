@@ -117,7 +117,8 @@ impl Triplestore {
                 if let Some(map) = self.graph_triples_map.get_mut(&graph) {
                     if let Some(m) = map.get_mut(&predicate) {
                         if let Some(non_transient_triples) = m.get_mut(&k) {
-                            let nondup_df = non_transient_triples.remove_overlapping_triples_from_dataframe(&encoded_triples.df)?;
+                            let nondup_df = non_transient_triples
+                                .remove_overlapping_triples_from_dataframe(&encoded_triples.df)?;
                             if let Some(nondup_df) = nondup_df {
                                 encoded_triples.df = nondup_df;
                             } else {

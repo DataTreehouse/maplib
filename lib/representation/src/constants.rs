@@ -43,4 +43,7 @@ pub const FOAF_PREFIX_IRI: &str = "http://xmlns.com/foaf/0.1/";
 pub const MAPLIB_PREFIX: &str = "maplib";
 pub const MAPLIB_PREFIX_IRI: &str = "https://datatreehouse.github.io/maplib/vocab#";
 
+pub const SKOS_PREFIX: &str = "skos";
+pub const SKOS_PREFIX_IRI: &str = "http://www.w3.org/2004/02/skos/core#";
+
 pub const DEFAULT_GRAPH_IRI: &str = "https://datatreehouse.github.io/maplib/vocab#DefaultGraph";

@@ -157,7 +157,11 @@ macro_rules! binary_nonlang_nonlang_index_impl {
                 }
             }
 
-            pub fn maybe_insert_deduplicate(&mut self, df: &DataFrame, insert:bool) -> Option<DataFrame> {
+            pub fn maybe_insert_deduplicate(
+                &mut self,
+                df: &DataFrame,
+                insert: bool,
+            ) -> Option<DataFrame> {
                 let subj_col = df.column(SUBJECT_COL_NAME).unwrap();
                 let obj_col = df.column(OBJECT_COL_NAME).unwrap();
                 let subj_ch = $subj_chunked_func(&subj_col);
@@ -179,13 +183,13 @@ macro_rules! binary_nonlang_nonlang_index_impl {
                     let subj = $maybe_unwrap(subj);
                     let obj = $maybe_unwrap(obj);
 
-                    let new = if insert {self
-                        .index
-                        .insert(($prep_index_subj(subj), $prep_index_obj(obj)))}
-                    else {
+                    let new = if insert {
+                        self.index
+                            .insert(($prep_index_subj(subj), $prep_index_obj(obj)))
+                    } else {
                         !self
-                        .index
-                        .contains(&($prep_index_subj(subj), $prep_index_obj(obj)))
+                            .index
+                            .contains(&($prep_index_subj(subj), $prep_index_obj(obj)))
                     };
                     if new {
                         new_ss.push(subj);
