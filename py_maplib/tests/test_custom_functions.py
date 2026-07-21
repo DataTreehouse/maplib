@@ -113,7 +113,7 @@ def test_concat_lang_string_diff_lang():
     df = m.query("""
     SELECT * WHERE {
         VALUES ?name {"bar"@en}
-        BIND(concat(?name, "noe"@no) AS ?concatstr)
+    BIND(concat(?name, "noe"@no) AS ?concatstr)
     }
     """)
     expected_df = pl.from_repr("""
@@ -127,6 +127,16 @@ def test_concat_lang_string_diff_lang():
     """
     )
     assert_frame_equal(df, expected_df)
+
+def test_concat_string_and_lang_string():
+    m = Model()
+    sm = m.query("""
+    SELECT * WHERE {
+        VALUES ?name {"foo"@en}
+    BIND(concat(?name, "bar") AS ?concatstr)
+    }
+    """, solution_mappings=True)
+    assert sm.rdf_types["concatstr"] == RDFType.Literal("http://www.w3.org/2001/XMLSchema#string")
 
 def test_encoding_of_parenthesis():
     m = Model()
