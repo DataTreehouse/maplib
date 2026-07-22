@@ -57,7 +57,7 @@ impl SparqlEndpoint {
         let qr = builder
             .build()
             .unwrap()
-            .block_on(self.async_query(&query, prefixes));
+            .block_on(self.async_query(query, prefixes));
         qr
     }
 
@@ -99,7 +99,7 @@ impl SparqlEndpoint {
             Err(error) => return Err(SparqlEndpointQueryError::RequestError(error)),
         };
         let sm = EagerSolutionMappings::from_query_solutions(solutions.as_slice())
-            .map_err(|x| SparqlEndpointQueryError::InvalidResults(x))?;
+            .map_err(SparqlEndpointQueryError::InvalidResults)?;
         Ok(QueryResult {
             kind: QueryResultKind::Select(sm),
             debug: None,
