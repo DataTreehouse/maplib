@@ -235,7 +235,7 @@ impl Triplestore {
     ) -> Result<InsertResult, SparqlError> {
         if let Query::Construct { .. } = &query {
             let res = self.query_parsed(
-                &query,
+                query,
                 parameters,
                 streaming,
                 query_settings,
@@ -593,7 +593,7 @@ fn term_pattern_expression(
         TermPattern::BlankNode(bl) => Ok(blank_node_expresson(rdf_node_types, bl, name)?),
         TermPattern::Literal(thelit) => {
             let l = rdf_literal_to_polars_expr(thelit)
-                .map_err(|x| SparqlError::ParseLiteralError(x))?
+                .map_err(SparqlError::ParseLiteralError)?
                 .alias(name);
             Ok((
                 l,

@@ -79,7 +79,7 @@ impl Triplestore {
                 .rdf_node_types
                 .keys()
                 .filter(|x| x.as_str() != expression_context.as_str())
-                .map(|x| col(x))
+                .map(col)
                 .collect();
             right_solution_mappings.mappings = right_solution_mappings.mappings.select(keep_cols);
             right_solution_mappings

@@ -333,18 +333,14 @@ impl Triplestore {
         qg: &QueryGraph,
     ) -> Result<PartialDebugOutput, SparqlError> {
         let dbg_left = self.debug_gp(left, parameters, qs, qg)?;
-        match dbg_left {
-            PartialDebugOutput::DebugOutputs(mut left_dbg) => {
-                let dbg_right = self.debug_gp(right, parameters, qs, qg)?;
-                match dbg_right {
-                    PartialDebugOutput::DebugOutputs(right_dbg) => {
-                        left_dbg.extend(right_dbg);
-                        return Ok(PartialDebugOutput::DebugOutputs(left_dbg));
-                    }
-                    _ => {}
-                }
+
+        if let PartialDebugOutput::DebugOutputs(mut left_dbg) = dbg_left {
+            let dbg_right = self.debug_gp(right, parameters, qs, qg)?;
+
+            if let PartialDebugOutput::DebugOutputs(right_dbg) = dbg_right {
+                left_dbg.extend(right_dbg);
+                return Ok(PartialDebugOutput::DebugOutputs(left_dbg));
             }
-            _ => {}
         }
         Ok(PartialDebugOutput::PartialResults)
     }

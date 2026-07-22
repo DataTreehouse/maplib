@@ -172,9 +172,7 @@ impl Triplestore {
                         object_type: o.clone(),
                     };
                     new_triples_vec.push(new_triples);
-                    let triples =
-                        Triples::new(et.df, s.clone(), o.clone(), &p, &indexing, cats.clone())?;
-                    triples
+                    Triples::new(et.df, s.clone(), o.clone(), &p, &indexing, cats.clone())?
                 };
                 for enc in v_iter {
                     let new_triples_opt = triples.add_triples(enc.df.clone(), cats.clone())?;

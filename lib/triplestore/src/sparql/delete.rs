@@ -157,7 +157,7 @@ fn partition_by_global_predicate_col(
             .read()
             .unwrap()
             .decode_iri_u32s(&predicates_u32, None);
-        sms.into_iter().zip(predicates.into_iter()).collect()
+        sms.into_iter().zip(predicates).collect()
     }
 }
 

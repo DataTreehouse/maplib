@@ -224,7 +224,7 @@ fn rewrite_expr_cse(mut e: Expression) -> (Expression, HashMap<String, String>) 
             renames.insert(s, uuid::Uuid::new_v4().to_string());
         }
     }
-    if renames.len() > 0 {
+    if !renames.is_empty() {
         e = rename_vars(e, &renames);
     }
     (e, renames)

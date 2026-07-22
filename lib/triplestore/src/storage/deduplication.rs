@@ -31,10 +31,10 @@ impl Triples {
                 &self.subject_type,
                 &self.object_type,
                 self.object_indexing_enabled,
-                &global_cats,
+                global_cats,
                 false,
             )?;
-            self.height = self.height + new_segment.height;
+            self.height += new_segment.height;
 
             if should_compact {
                 trace!("Creating compacted segment");
@@ -43,7 +43,7 @@ impl Triples {
 
                 ts.push((new_segment, true));
                 let (segment, _) =
-                    compact_segments(ts, &global_cats, &self.subject_type, &self.object_type)?;
+                    compact_segments(ts, global_cats, &self.subject_type, &self.object_type)?;
                 self.segments.push(segment);
                 trace!(
                     "Compacting took: {}",
@@ -64,12 +64,12 @@ impl Triples {
                 SubjectObjectIndex::new(&self.subject_type, &self.object_type);
             let mut lfs = self.get_all_triples_lazy_frames(true)?;
             assert_eq!(lfs.len(), 1);
-            let mut df = lfs
+            let df = lfs
                 .pop()
                 .unwrap()
                 .collect()
-                .map_err(|x| TriplestoreError::LazyLoadError(x))?;
-            subject_object_index.insert(&mut df);
+                .map_err(TriplestoreError::LazyLoadError)?;
+            subject_object_index.insert(&df);
             self.subject_object_index = Some(subject_object_index);
         }
         Ok(())

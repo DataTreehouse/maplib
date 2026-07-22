@@ -105,8 +105,6 @@ impl Triplestore {
         }
 
         let mut out_df;
-        let out_dt_subj;
-        let out_dt_obj;
 
         let mut df_creator = U32DataFrameCreator::new(query_settings, dataset.clone());
         df_creator.gather_namednode_dfs(ppe, self)?;
@@ -233,8 +231,8 @@ impl Triplestore {
             }
         }
         (out_df, dtypes) = compress_actual_multitypes(out_df, dtypes);
-        out_dt_subj = dtypes.remove(SUBJECT_COL_NAME).unwrap();
-        out_dt_obj = dtypes.remove(OBJECT_COL_NAME).unwrap();
+        let out_dt_subj = dtypes.remove(SUBJECT_COL_NAME).unwrap();
+        let out_dt_obj = dtypes.remove(OBJECT_COL_NAME).unwrap();
 
         let mut var_cols = vec![];
         let mut rename_src = vec![];

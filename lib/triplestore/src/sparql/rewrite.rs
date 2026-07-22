@@ -11,7 +11,7 @@ mod rewrite_lift_extend;
 mod rewrite_pushdown;
 
 pub fn rewrite(q: Query) -> Query {
-    let q = match q {
+    match q {
         Query::Select {
             dataset,
             pattern,
@@ -50,8 +50,7 @@ pub fn rewrite(q: Query) -> Query {
             pattern: rewrite_gp(pattern),
             base_iri,
         },
-    };
-    q
+    }
 }
 
 pub fn rewrite_gp(pattern: GraphPattern) -> GraphPattern {

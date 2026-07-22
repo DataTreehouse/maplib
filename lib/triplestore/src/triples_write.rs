@@ -115,8 +115,7 @@ impl Triplestore {
                             writer.serialize_triple(t).map_err(|x| {
                                 TriplestoreError::WriteTurtleError(format!(
                                     "Error serializing triple {}: {}",
-                                    t.to_string(),
-                                    x.to_string()
+                                    t, x
                                 ))
                             })?;
                         }
@@ -126,7 +125,7 @@ impl Triplestore {
             writer.finish().map_err(|x| {
                 TriplestoreError::WriteTurtleError(format!(
                     "Error finishing turtle serialization: {}",
-                    x.to_string()
+                    x
                 ))
             })?;
         }

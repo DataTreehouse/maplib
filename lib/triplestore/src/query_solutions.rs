@@ -24,7 +24,7 @@ pub fn query_select(
         query,
         None,
         streaming,
-        &query_settings,
+        query_settings,
         graph,
         prefixes,
         false,
@@ -75,7 +75,7 @@ pub fn get_seven_query_solutions(
     let mut s5 = None;
     let mut s6 = None;
     let mut s7 = None;
-    for (var, val) in variables.iter().zip(query_solution.into_iter()) {
+    for (var, val) in variables.iter().zip(query_solution) {
         if var.as_str() == first {
             s1 = val;
         } else if var.as_str() == second {
@@ -122,7 +122,7 @@ pub fn get_six_query_solutions(
     let mut s4 = None;
     let mut s5 = None;
     let mut s6 = None;
-    for (var, val) in variables.iter().zip(query_solution.into_iter()) {
+    for (var, val) in variables.iter().zip(query_solution) {
         if var.as_str() == first {
             s1 = val;
         } else if var.as_str() == second {
@@ -163,7 +163,7 @@ pub fn get_five_query_solutions(
     let mut s3 = None;
     let mut s4 = None;
     let mut s5 = None;
-    for (var, val) in variables.iter().zip(query_solution.into_iter()) {
+    for (var, val) in variables.iter().zip(query_solution) {
         if var.as_str() == first {
             s1 = val;
         } else if var.as_str() == second {
@@ -192,7 +192,7 @@ pub fn get_four_query_solutions(
     let mut s2 = None;
     let mut s3 = None;
     let mut s4 = None;
-    for (var, val) in variables.iter().zip(query_solution.into_iter()) {
+    for (var, val) in variables.iter().zip(query_solution) {
         if var.as_str() == first {
             s1 = val;
         } else if var.as_str() == second {
@@ -218,7 +218,7 @@ pub fn get_three_query_solutions(
     let mut s1 = None;
     let mut s2 = None;
     let mut s3 = None;
-    for (var, val) in variables.iter().zip(query_solution.into_iter()) {
+    for (var, val) in variables.iter().zip(query_solution) {
         if var.as_str() == first {
             s1 = val;
         } else if var.as_str() == second {
@@ -240,7 +240,7 @@ pub fn get_two_query_solutions(
 ) -> (Option<Term>, Option<Term>) {
     let mut s1 = None;
     let mut s2 = None;
-    for (var, val) in variables.iter().zip(query_solution.into_iter()) {
+    for (var, val) in variables.iter().zip(query_solution) {
         if var.as_str() == first {
             s1 = val;
         } else if var.as_str() == second {

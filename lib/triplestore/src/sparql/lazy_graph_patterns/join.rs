@@ -110,10 +110,7 @@ impl Triplestore {
     }
 }
 
-fn flatten_join_gps<'a>(
-    gp: &'a GraphPattern,
-    context: Context,
-) -> Vec<(&'a GraphPattern, Context)> {
+fn flatten_join_gps(gp: &GraphPattern, context: Context) -> Vec<(&GraphPattern, Context)> {
     let mut gps = Vec::new();
     flatten_join_gps_inner(gp, &mut gps, context);
     gps
@@ -231,11 +228,9 @@ pub fn order_graph_patterns<'a>(
         .map(|(x, (gp, _))| (x, *gp))
         .collect();
 
-    let use_vars: Option<HashSet<_>> = if let Some(sm) = &sm {
-        Some(sm.rdf_node_types.keys().cloned().collect())
-    } else {
-        None
-    };
+    let use_vars: Option<HashSet<_>> = sm
+        .as_ref()
+        .map(|sm| sm.rdf_node_types.keys().cloned().collect());
 
     let mut candidate_contexts: HashMap<_, _> = gps
         .into_iter()
@@ -294,7 +289,7 @@ fn bad_properties(
             while !patterns_to_process.is_empty() {
                 let mut connected = None;
                 for (i, tp) in patterns_to_process.iter().enumerate() {
-                    let variables = find_used_variables_and_blanks(*tp);
+                    let variables = find_used_variables_and_blanks(tp);
                     if !triples_cols.is_disjoint(&variables) {
                         connected = Some(i);
                         triples_cols.extend(variables);

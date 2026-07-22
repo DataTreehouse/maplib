@@ -134,7 +134,7 @@ impl Triplestore {
 fn open_element(
     name: &[u8],
     attrs: quick_xml::events::attributes::Attributes,
-    stack: &mut Vec<Frame>,
+    stack: &mut [Frame],
     pred_map: &mut PredMap,
     prefix_map: &mut HashMap<String, NamedNode>,
     datatypes_map: &mut HashMap<String, Arc<BaseRDFNodeType>>,
@@ -170,7 +170,7 @@ fn open_element(
             .into_owned();
         if key == "xmlns" {
             let nn = NamedNode::new(value.clone()).map_err(|e| {
-                TriplestoreError::XMLError(format!("Error parsing {}: {}", value, e.to_string()))
+                TriplestoreError::XMLError(format!("Error parsing {}: {}", value, e))
             })?;
             let use_sep = use_sep(nn.as_str());
             push_iri_object(pred_map, FX_XMLNS, &subject, nn.as_str());
@@ -186,7 +186,7 @@ fn open_element(
             let string = BaseRDFNodeType::Literal(xsd::STRING.into_owned());
             let pre = key.strip_prefix("xmlns:").unwrap();
             let nn = NamedNode::new(value.clone()).map_err(|e| {
-                TriplestoreError::XMLError(format!("Error parsing {}: {}", value, e.to_string()))
+                TriplestoreError::XMLError(format!("Error parsing {}: {}", value, e))
             })?;
 
             let prefix_subject = new_iri_subject();
@@ -232,7 +232,7 @@ fn open_element(
 
 fn push_text_child(
     text: &str,
-    stack: &mut Vec<Frame>,
+    stack: &mut [Frame],
     pred_map: &mut PredMap,
     string_type: &BaseRDFNodeType,
 ) -> Result<(), TriplestoreError> {
@@ -254,7 +254,7 @@ fn push_typed_text(
     text: &str,
     data_type: &BaseRDFNodeType,
 ) -> Result<(), TriplestoreError> {
-    let pair = ensure_pair(pred_map, predicate, &BaseRDFNodeType::IRI, &data_type);
+    let pair = ensure_pair(pred_map, predicate, &BaseRDFNodeType::IRI, data_type);
     match pair.1.parse_literal(text.trim(), None) {
         Ok(()) => {
             pair.0.push_str(subject);

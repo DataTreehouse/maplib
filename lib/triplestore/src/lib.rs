@@ -287,7 +287,7 @@ impl Triplestore {
         if let Some(gr) = self.graph_triples_map.get(named_graph) {
             for v in gr.values() {
                 for t in v.values() {
-                    s = s + t.get_height();
+                    s += t.get_height();
                 }
             }
         }
@@ -310,8 +310,8 @@ impl Triplestore {
                         .par_iter()
                         .map(|(_, type_map)| {
                             let out_vec: Result<Vec<Vec<_>>, TriplestoreError> = type_map
-                                .iter()
-                                .map(|(_, triples)| triples.get_u32s())
+                                .values()
+                                .map(|triples| triples.get_u32s())
                                 .collect();
                             let out_vec: Vec<_> = out_vec?.into_iter().flatten().collect();
                             Ok(out_vec)
@@ -356,7 +356,7 @@ impl Triplestore {
                         if !us.contains_key(st) {
                             us.insert(st.clone(), HashSet::new());
                         }
-                        let uset = us.get_mut(&st).unwrap();
+                        let uset = us.get_mut(st).unwrap();
                         let lfs = triples.get_lazy_frames(&None, &None)?;
                         for (lf, _) in lfs {
                             let subjects_df = lf.select([col(SUBJECT_COL_NAME)]).collect().unwrap();
@@ -367,10 +367,10 @@ impl Triplestore {
                         }
                     }
                     if ot.stored_cat() {
-                        if !us.contains_key(&ot) {
+                        if !us.contains_key(ot) {
                             us.insert(ot.clone(), HashSet::new());
                         }
-                        let uset = us.get_mut(&ot).unwrap();
+                        let uset = us.get_mut(ot).unwrap();
                         let lfs = triples.get_lazy_frames(&None, &None)?;
                         for (lf, _) in lfs {
                             let objects_df = lf.select([col(OBJECT_COL_NAME)]).collect().unwrap();
@@ -404,14 +404,13 @@ impl Triplestore {
             }
             // Adding the predicates
             let pred_us = self.global_cats.read()?.maybe_encode_iri_slice(&predicates);
-            if !us.contains_key(&BaseRDFNodeType::IRI) {
-                us.insert(BaseRDFNodeType::IRI, HashSet::new());
-            }
+            us.entry(BaseRDFNodeType::IRI).or_insert_with(HashSet::new);
+            // if !us.contains_key(&BaseRDFNodeType::IRI) {
+            //     us.insert(BaseRDFNodeType::IRI, HashSet::new());
+            // }
             let us_iris = us.get_mut(&BaseRDFNodeType::IRI).unwrap();
-            for up in pred_us {
-                if let Some(up) = up {
-                    us_iris.insert(up);
-                }
+            for up in pred_us.into_iter().flatten() {
+                us_iris.insert(up);
             }
             // Creating the cats image
             let c = self.global_cats.read()?;
@@ -618,9 +617,9 @@ impl Triplestore {
                                     .add_literal_string(
                                         &lf.collect().unwrap(),
                                         predicate,
-                                        &subject_type,
+                                        subject_type,
                                         &subject_type.default_stored_cat_state(),
-                                        &object_type,
+                                        object_type,
                                         &object_type.default_stored_cat_state(),
                                         self.global_cats.clone(),
                                     )
@@ -924,9 +923,9 @@ fn create_rank_expr(
                             u32_langs.push(None)
                         }
                     }
-                    let mut c_values = Series::from_iter(u32_values.into_iter());
+                    let mut c_values = Series::from_iter(u32_values);
                     c_values.rename(PlSmallStr::from_str(LANG_STRING_VALUE_FIELD));
-                    let mut c_langs = Series::from_iter(u32_langs.into_iter());
+                    let mut c_langs = Series::from_iter(u32_langs);
                     c_langs.rename(PlSmallStr::from_str(LANG_STRING_LANG_FIELD));
                     let mut df = DataFrame::new(
                         x.len(),
@@ -968,7 +967,7 @@ fn create_rank_expr(
                             u32s.push(None)
                         }
                     }
-                    let mut c = Series::from_iter(u32s.into_iter());
+                    let mut c = Series::from_iter(u32s);
                     c.rename(x.name().clone());
                     Ok(c.into_column())
                 },

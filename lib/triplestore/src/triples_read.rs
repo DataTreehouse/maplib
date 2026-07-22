@@ -646,7 +646,7 @@ impl Iterator for MyFromSliceQuadReader<'_> {
                         quad = fix_cim_quad(quad, base_iri.as_ref());
                         Ok(quad)
                     }
-                    Err(e) => Err(e.into()),
+                    Err(e) => Err(e),
                 }
             }
             MyFromSliceQuadReaderKind::TurtlePar(parser) => match parser.next()? {

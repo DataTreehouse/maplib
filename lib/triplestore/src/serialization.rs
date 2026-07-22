@@ -150,7 +150,7 @@ impl Triplestore {
                 Ok(())
             })
             .collect();
-        let _ = res?;
+        res?;
 
         self.global_cats
             .read()
@@ -228,7 +228,7 @@ impl Triplestore {
         );
 
         let start_deserialize_cats = Instant::now();
-        let cats = Cats::deserialize_cats(path, storage_pathbuf.as_ref().map(|x| x.as_path()))?;
+        let cats = Cats::deserialize_cats(path, storage_pathbuf.as_deref())?;
         debug!(
             "Deserialized cats in {} seconds",
             start_deserialize_cats.elapsed().as_secs_f32()

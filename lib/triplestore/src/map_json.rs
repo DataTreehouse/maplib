@@ -130,7 +130,7 @@ fn type_from_u8(u: u8) -> BaseRDFNodeType {
 impl Triplestore {
     pub fn map_json(
         &mut self,
-        u8s: &mut Vec<u8>,
+        u8s: &mut [u8],
         named_graph: &NamedGraph,
         transient: bool,
     ) -> Result<(), TriplestoreError> {
@@ -170,8 +170,8 @@ impl Triplestore {
                     let tta = TriplesToAdd {
                         df: DataFrame::new(subjects_col.len(), vec![subjects_col, objects_col])
                             .unwrap(),
-                        subject_type: subject_type,
-                        object_type: object_type,
+                        subject_type,
+                        object_type,
                         predicate: Some(pred.clone()),
                         graph: named_graph.clone(),
                         subject_cat_state: subject_state,
@@ -290,10 +290,8 @@ fn new_key_property(
 ) -> NamedNode {
     let mut keep_chars = Vec::with_capacity(key.len());
     for (i, c) in key.chars().enumerate() {
-        if i == 0 {
-            if c.is_numeric() || c == '_' || c == '-' || c == '.' {
-                keep_chars.push('_');
-            }
+        if i == 0 && (c.is_numeric() || c == '_' || c == '-' || c == '.') {
+            keep_chars.push('_');
         }
         if c.is_alphanumeric() || c == '_' || c == '-' || c == '.' {
             keep_chars.push(c);
@@ -308,7 +306,7 @@ fn new_key_property(
 }
 
 fn add_new_property(property: &NamedNode, map: &mut HashMap<NamedNode, TripleTableBuilder>) {
-    if !map.contains_key(&property) {
+    if !map.contains_key(property) {
         map.insert(property.clone(), TripleTableBuilder::new());
     }
 }

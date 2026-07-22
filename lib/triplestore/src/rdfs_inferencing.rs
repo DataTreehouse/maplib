@@ -204,13 +204,12 @@ impl Triplestore {
         let r = r?;
         let r_unpacked: Vec<_> = r
             .into_iter()
-            .map(|x| match x.kind {
+            .flat_map(|x| match x.kind {
                 QueryResultKind::Select(_) => {
                     unreachable!()
                 }
                 QueryResultKind::Construct(r) => r,
             })
-            .flatten()
             .collect();
         let nt = self
             .insert_construct_result(r_unpacked, true, graph)

@@ -257,7 +257,7 @@ impl TurtleBlock {
             }
         }
         if !use_write_subject {
-            write!(writer, "\n")?;
+            writeln!(writer)?;
             if nesting > 1 {
                 for _ in 0..nesting - 1 {
                     write!(writer, "    ")?;
@@ -279,7 +279,7 @@ fn write_term_objects<W: Write>(
 ) -> std::io::Result<Vec<u32>> {
     let mut outs = Vec::new();
     if terms.len() == 1 {
-        let out = terms.get(0).unwrap().write_prefixed(
+        let out = terms.first().unwrap().write_prefixed(
             writer,
             type_nn,
             prefix_replacer,
@@ -312,7 +312,7 @@ impl Triplestore {
                 .map_err(|x| TriplestoreError::WriteTurtleError(x.to_string()))?;
         }
         if !prefixes.is_empty() {
-            writeln!(writer, "").map_err(|x| TriplestoreError::WriteTurtleError(x.to_string()))?;
+            writeln!(writer).map_err(|x| TriplestoreError::WriteTurtleError(x.to_string()))?;
         }
 
         let prefix_replacer = PrefixReplacer::new(prefixes);
@@ -528,9 +528,9 @@ impl Triplestore {
                         in_degree_one_blocks_map.remove(&u).unwrap();
                     }
                 }
-                for mut w in written {
+                for w in written {
                     writer
-                        .write_all(&mut w)
+                        .write_all(&w)
                         .map_err(|x| TriplestoreError::WriteTurtleError(x.to_string()))?;
                 }
             }
@@ -559,7 +559,7 @@ impl Triplestore {
                         &type_nn,
                         &prefix_replacer,
                         has_subject,
-                        &mut in_degree_one_blocks_map,
+                        &in_degree_one_blocks_map,
                         1,
                     )
                     .map_err(|x| TriplestoreError::WriteTurtleError(x.to_string()))?;
@@ -627,14 +627,14 @@ impl Triplestore {
         update_blocks_map(
             &mut blocks_map,
             &df,
-            &driver_predicate,
+            driver_predicate,
             &triples.subject_type,
             &triples.object_type,
             self.global_cats.clone(),
             &new_subj_u32,
-            &used_subjects,
-            &blanks_in_degree_zero,
-            &blanks_in_degree_one,
+            used_subjects,
+            blanks_in_degree_zero,
+            blanks_in_degree_one,
         )?;
 
         // Stride through and do the "left join"
@@ -670,9 +670,9 @@ impl Triplestore {
                         o,
                         self.global_cats.clone(),
                         &new_subj_u32,
-                        &used_subjects,
-                        &blanks_in_degree_zero,
-                        &blanks_in_degree_one,
+                        used_subjects,
+                        blanks_in_degree_zero,
+                        blanks_in_degree_one,
                     )?;
                 }
             }
@@ -726,10 +726,7 @@ impl Triplestore {
                             true,
                         );
                         if let Some(to_replace_terms) = to_replace_terms {
-                            for ((s, t), r) in subject_u32s
-                                .iter()
-                                .zip(terms.into_iter())
-                                .zip(to_replace_terms.into_iter())
+                            for ((s, t), r) in subject_u32s.iter().zip(terms).zip(to_replace_terms)
                             {
                                 if let Some(r) = r {
                                     first_blank_term_map.insert(s.unwrap(), r);
@@ -739,7 +736,7 @@ impl Triplestore {
                                 }
                             }
                         } else {
-                            for (s, t) in subject_u32s.iter().zip(terms.into_iter()) {
+                            for (s, t) in subject_u32s.iter().zip(terms) {
                                 first_blank_term_map
                                     .insert(s.unwrap(), TermOrList::Elem(Arc::new(t.unwrap())));
                             }
@@ -844,7 +841,7 @@ impl Triplestore {
                 for (blank, mut list) in blank_lists_map {
                     if let Some(blanks) = inv_rest_blank_blank_map.get(&blank) {
                         for blank in blanks {
-                            if let Some(first) = first_blank_term_map.get(&blank) {
+                            if let Some(first) = first_blank_term_map.get(blank) {
                                 list.push(first.clone());
                                 new_blank_lists_map.insert(*blank, list.clone());
                             } else {
@@ -1044,7 +1041,7 @@ fn write_blocks<W: Write>(
     blocks_map: HashMap<u32, TurtleBlock>,
     type_nn: &NamedNode,
     prefix_replacer: &PrefixReplacer,
-    subjects_ordering: &Vec<u32>,
+    subjects_ordering: &[u32],
     in_degree_one_map: &HashMap<u32, TurtleBlockOrTermOrList>,
 ) -> Result<Vec<u32>, TriplestoreError> {
     let out: Result<Vec<Vec<_>>, TriplestoreError> = subjects_ordering
@@ -1138,7 +1135,8 @@ fn concat_lfs_subject_object(lfs: Vec<LazyFrame>) -> LazyFrame {
         .into_iter()
         .map(|lf| lf.select([col(SUBJECT_COL_NAME), col(OBJECT_COL_NAME)]))
         .collect();
-    let lf = concat(
+
+    concat(
         sel_lfs,
         UnionArgs {
             parallel: true,
@@ -1150,8 +1148,7 @@ fn concat_lfs_subject_object(lfs: Vec<LazyFrame>) -> LazyFrame {
             strict: false,
         },
     )
-    .unwrap();
-    lf
+    .unwrap()
 }
 
 fn is_list_pred_and_subject_type(nn: &NamedNode, subject_type: &BaseRDFNodeType) -> bool {

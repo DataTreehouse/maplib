@@ -29,8 +29,7 @@ pub fn rewrite_gp_pushdown(
                     };
                     let left_vars = get_gp_vars(&left_gp);
                     let all_seen_vars: HashSet<_> = left_vars.union(&seen_vars).cloned().collect();
-                    while !filters.is_empty() {
-                        let candidate = filters.pop().unwrap();
+                    while let Some(candidate) = filters.pop() {
                         let candidate_vars = get_expr_vars(&candidate);
                         if candidate_vars.is_subset(&all_seen_vars) {
                             left_gp = GraphPattern::Filter {
@@ -165,11 +164,10 @@ pub fn rewrite_gp_pushdown(
         }
         GraphPattern::OrderBy { inner, expression } => {
             let inner = rewrite_gp_pushdown(*inner, filters, seen_vars);
-            let outer = GraphPattern::OrderBy {
+            GraphPattern::OrderBy {
                 inner: Box::new(inner),
                 expression,
-            };
-            outer
+            }
         }
         GraphPattern::Project { inner, variables } => {
             let mut inner = *inner;
@@ -183,10 +181,9 @@ pub fn rewrite_gp_pushdown(
         }
         GraphPattern::Distinct { inner } => {
             let inner = rewrite_gp_pushdown(*inner, filters, seen_vars);
-            let outer = GraphPattern::Distinct {
+            GraphPattern::Distinct {
                 inner: Box::new(inner),
-            };
-            outer
+            }
         }
         GraphPattern::Reduced { inner } => {
             let mut inner = *inner;
@@ -270,7 +267,7 @@ fn get_gp_vars(graph_pattern: &GraphPattern) -> HashSet<Variable> {
 
 fn get_expr_vars(expression: &Expression) -> HashSet<Variable> {
     let mut vars = HashSet::new();
-    find_all_used_variables_in_expression(&expression, &mut vars, false, true);
+    find_all_used_variables_in_expression(expression, &mut vars, false, true);
     vars
 }
 

@@ -107,7 +107,7 @@ impl Triplestore {
                             if matches!(bs, BaseCatState::CategoricalNative(..)) {
                                 predicates_series = cats
                                     .decode_of_type(&predicates_series, bt, bs.get_local_cats())
-                                    .map_err(|x| TriplestoreError::DecodeError(x))?;
+                                    .map_err(TriplestoreError::DecodeError)?;
                             }
 
                             let predicates_iter = predicates_series.iter();

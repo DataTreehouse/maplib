@@ -105,7 +105,7 @@ impl Triplestore {
             .map(|(v, _)| v.as_str().to_string())
             .collect();
 
-        if count_cols.len() > 0 {
+        if !count_cols.is_empty() {
             let lf_lhs = grouped
                 .mappings
                 .with_column(lit(0u32).alias(&dummy_col_name));

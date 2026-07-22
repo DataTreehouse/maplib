@@ -197,10 +197,10 @@ impl Triples {
 
         for (t, u32s) in t_u32s {
             let mut use_cols = vec![];
-            if &self.subject_type == &t {
+            if self.subject_type == t {
                 use_cols.push(SUBJECT_COL_NAME);
             }
-            if &self.object_type == &t {
+            if self.object_type == t {
                 use_cols.push(OBJECT_COL_NAME);
             };
             let rank_map = Arc::new(cats.rank_map(&u32s, &t));
@@ -209,42 +209,43 @@ impl Triples {
                 if t.is_lang_string() {
                     let rank_map_cloned1 = rank_map.clone();
                     let rank_map_cloned2 = rank_map.clone();
-                    lf =
-                        lf.with_column(
-                            as_struct(vec![
-                                col(use_col)
-                                    .struct_()
-                                    .field_by_name(LANG_STRING_VALUE_FIELD)
-                                    .map(
-                                        move |x| {
-                                            let rank_map = rank_map_cloned1.clone();
-                                            let u32s =
-                                                UInt32Chunked::from_iter(x.u32()?.iter().map(
-                                                    |x| rank_map.get(&x.unwrap()).map(|x| *x),
-                                                ));
-                                            Ok(u32s.into_column())
-                                        },
-                                        |_, y| Ok(y.clone()),
-                                    )
-                                    .alias(LANG_STRING_VALUE_FIELD),
-                                col(use_col)
-                                    .struct_()
-                                    .field_by_name(LANG_STRING_LANG_FIELD)
-                                    .map(
-                                        move |x| {
-                                            let rank_map = rank_map_cloned2.clone();
-                                            let u32s =
-                                                UInt32Chunked::from_iter(x.u32()?.iter().map(
-                                                    |x| rank_map.get(&x.unwrap()).map(|x| *x),
-                                                ));
-                                            Ok(u32s.into_column())
-                                        },
-                                        |_, y| Ok(y.clone()),
-                                    )
-                                    .alias(LANG_STRING_LANG_FIELD),
-                            ])
-                            .alias(OBJECT_COL_NAME),
-                        );
+                    lf = lf.with_column(
+                        as_struct(vec![
+                            col(use_col)
+                                .struct_()
+                                .field_by_name(LANG_STRING_VALUE_FIELD)
+                                .map(
+                                    move |x| {
+                                        let rank_map = rank_map_cloned1.clone();
+                                        let u32s = UInt32Chunked::from_iter(
+                                            x.u32()?
+                                                .iter()
+                                                .map(|x| rank_map.get(&x.unwrap()).copied()),
+                                        );
+                                        Ok(u32s.into_column())
+                                    },
+                                    |_, y| Ok(y.clone()),
+                                )
+                                .alias(LANG_STRING_VALUE_FIELD),
+                            col(use_col)
+                                .struct_()
+                                .field_by_name(LANG_STRING_LANG_FIELD)
+                                .map(
+                                    move |x| {
+                                        let rank_map = rank_map_cloned2.clone();
+                                        let u32s = UInt32Chunked::from_iter(
+                                            x.u32()?
+                                                .iter()
+                                                .map(|x| rank_map.get(&x.unwrap()).copied()),
+                                        );
+                                        Ok(u32s.into_column())
+                                    },
+                                    |_, y| Ok(y.clone()),
+                                )
+                                .alias(LANG_STRING_LANG_FIELD),
+                        ])
+                        .alias(OBJECT_COL_NAME),
+                    );
                 } else {
                     let rank_map_cloned = rank_map.clone();
                     lf = lf.with_column(
@@ -253,9 +254,7 @@ impl Triples {
                                 move |x| {
                                     let rank_map = rank_map_cloned.clone();
                                     let u32s = UInt32Chunked::from_iter(
-                                        x.u32()?
-                                            .iter()
-                                            .map(|x| rank_map.get(&x.unwrap()).map(|x| *x)),
+                                        x.u32()?.iter().map(|x| rank_map.get(&x.unwrap()).copied()),
                                     );
                                     Ok(u32s.into_column())
                                 },
@@ -305,7 +304,7 @@ impl Triples {
     pub fn get_height(&self) -> usize {
         let mut h = 0;
         for s in &self.segments {
-            h = h + s.height;
+            h += s.height;
         }
         h
     }
@@ -552,7 +551,7 @@ impl Triples {
         while let Some(last) = last_res.pop() {
             let LastIterResult { res, iter } = last.0;
             approx_cumulative += OFFSET_STEP;
-            if approx_cumulative >= n && &arcs < &res {
+            if approx_cumulative >= n && arcs < res {
                 next = Some(res);
                 break;
             } else {
@@ -648,18 +647,10 @@ impl TriplesSegment {
                 TriplesInMemory::new(subject_object_df),
             ))),
             subject_sparse_index: Some(SparseIndex::from_data_frame(subject_object_index_df)),
-            object_sort: if let Some(object_subject_df) = object_subject_df {
-                Some(StoredTriples::TriplesInMemory(Box::new(
-                    TriplesInMemory::new(object_subject_df),
-                )))
-            } else {
-                None
-            },
-            object_sparse_index: if let Some(object_subject_index_df) = object_subject_index_df {
-                Some(SparseIndex::from_data_frame(object_subject_index_df))
-            } else {
-                None
-            },
+            object_sort: object_subject_df.map(|object_subject_df| {
+                StoredTriples::TriplesInMemory(Box::new(TriplesInMemory::new(object_subject_df)))
+            }),
+            object_sparse_index: object_subject_index_df.map(SparseIndex::from_data_frame),
         }
     }
 
@@ -707,7 +698,7 @@ impl TriplesSegment {
                 let vs = global_cats
                     .read()?
                     .decode_of_type(subject_ser.as_materialized_series(), subject_type, None)
-                    .map_err(|x| TriplestoreError::DecodeError(x))?;
+                    .map_err(TriplestoreError::DecodeError)?;
                 for found_s in vs.str().unwrap().iter() {
                     let found_s = found_s.unwrap();
                     if s < found_s {
@@ -739,9 +730,9 @@ impl TriplesSegment {
             0
         };
         // The range of this iteration is inclusive, therefore we must keep going until s is bigger than to.
-        let mut range_forwards = subject_index.map.range(to.to_string()..);
+        let range_forwards = subject_index.map.range(to.to_string()..);
         let mut to_i = None;
-        while let Some((s, next)) = range_forwards.next() {
+        for (s, next) in range_forwards {
             if to < s.as_str() {
                 to_i = Some(*next);
                 break;
@@ -756,7 +747,7 @@ impl TriplesSegment {
             let subjects_start = global_cats
                 .read()?
                 .decode_of_type(
-                    &lf_subj
+                    lf_subj
                         .clone()
                         .slice(from_i as i64, (OFFSET_STEP * 2) as u32)
                         .collect()
@@ -767,14 +758,14 @@ impl TriplesSegment {
                     subject_type,
                     None,
                 )
-                .map_err(|x| TriplestoreError::DecodeError(x))?;
+                .map_err(TriplestoreError::DecodeError)?;
 
             to_i = to_i.saturating_sub(OFFSET_STEP * 2);
             // The to_i may be exactly at the sparse index, so without + 1 we may miss it.
             let subjects_end = global_cats
                 .read()?
                 .decode_of_type(
-                    &lf_subj
+                    lf_subj
                         .slice(to_i as i64, (OFFSET_STEP * 2 + 1) as u32)
                         .collect()
                         .unwrap()
@@ -784,7 +775,7 @@ impl TriplesSegment {
                     subject_type,
                     None,
                 )
-                .map_err(|x| TriplestoreError::DecodeError(x))?;
+                .map_err(TriplestoreError::DecodeError)?;
 
             // case exact:
             // from = "c"
@@ -850,8 +841,8 @@ impl TriplesSegment {
         } = create_indices(
             df,
             object_indexing_enabled,
-            &subject_type,
-            &object_type,
+            subject_type,
+            object_type,
             cats,
             compacted,
         )?;
@@ -1522,9 +1513,9 @@ fn create_df_from_vecs(
         Series::from_any_values(PlSmallStr::from_str(col_a), a_vec.as_slice(), false).unwrap();
     let (b_1_ser, b_2_ser) = if let Some((f1, f2)) = fields {
         let b_1_ser =
-            Series::from_any_values(PlSmallStr::from_str(*f1), b_1_vec.as_slice(), false).unwrap();
+            Series::from_any_values(PlSmallStr::from_str(f1), b_1_vec.as_slice(), false).unwrap();
         let b_2_ser =
-            Series::from_any_values(PlSmallStr::from_str(*f2), b_2_vec.as_slice(), false).unwrap();
+            Series::from_any_values(PlSmallStr::from_str(f2), b_2_vec.as_slice(), false).unwrap();
         (b_1_ser, Some(b_2_ser))
     } else {
         let b_1_ser =
@@ -1533,7 +1524,7 @@ fn create_df_from_vecs(
         (b_1_ser, None)
     };
 
-    let df = if let Some((f1, f2)) = fields {
+    if let Some((f1, f2)) = fields {
         let mut lf = DataFrame::new(
             a_ser.len(),
             vec![
@@ -1554,8 +1545,7 @@ fn create_df_from_vecs(
             vec![a_ser.into_column(), b_1_ser.into_column()],
         )
         .unwrap()
-    };
-    df
+    }
 }
 
 struct TripleIterator<'a> {
@@ -1660,7 +1650,7 @@ fn decode_elem<'a>(
 ) -> Option<AnyValue<'a>> {
     if let Some(rank_map) = rank_map {
         if let AnyValue::UInt32(u) = any_value {
-            Some(AnyValue::UInt32(rank_map.get(u).unwrap().clone()))
+            Some(AnyValue::UInt32(*rank_map.get(u).unwrap()))
         } else {
             unreachable!("Should never happen")
         }

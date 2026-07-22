@@ -81,7 +81,7 @@ fn construct_result_as_triples_to_add(
 
                             // Separate dataframes for multicolumns introduces nulls that must be dropped
                             let mut lf = df.lazy();
-                            for (c, _) in &multicols {
+                            for c in multicols.keys() {
                                 let t = if c == SUBJECT_COL_NAME {
                                     &new_subj_dt
                                 } else {

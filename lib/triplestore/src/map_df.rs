@@ -28,10 +28,10 @@ impl Triplestore {
         }
         let id_col = uuid::Uuid::new_v4().to_string();
         let mut df = df.clone();
-        let root_node_uuri = format!("{}{}", MAPLIB_PREFIX_IRI, uuid::Uuid::new_v4().to_string());
+        let root_node_uuri = format!("{}{}", MAPLIB_PREFIX_IRI, uuid::Uuid::new_v4());
         let uuids: Vec<_> = (0..df.height())
             .into_par_iter()
-            .map(|_| format!("{}{}", MAPLIB_PREFIX_IRI, uuid::Uuid::new_v4().to_string()))
+            .map(|_| format!("{}{}", MAPLIB_PREFIX_IRI, uuid::Uuid::new_v4()))
             .collect();
         df.with_column(Series::new(id_col.as_str().into(), uuids).into_column())
             .unwrap();
@@ -107,9 +107,11 @@ impl Triplestore {
             predicate_cat_state: None,
         };
 
-        let mut root_cols = Vec::new();
-        root_cols.push(Column::new(SUBJECT_COL_NAME.into(), vec![root_node_uuri]));
-        root_cols.push(Column::new(OBJECT_COL_NAME.into(), vec![FX_ROOT]));
+        let root_cols = vec![
+            Column::new(SUBJECT_COL_NAME.into(), vec![root_node_uuri]),
+            Column::new(OBJECT_COL_NAME.into(), vec![FX_ROOT]),
+        ];
+
         let root = TriplesToAdd {
             df: DataFrame::new(1, root_cols).unwrap(),
             subject_type: BaseRDFNodeType::IRI,
