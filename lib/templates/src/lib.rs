@@ -44,8 +44,4 @@ impl PartialEq for MappingColumnType {
             }
         }
     }
-
-    fn ne(&self, other: &Self) -> bool {
-        !self.eq(other)
-    }
 }
