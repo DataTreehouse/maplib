@@ -122,8 +122,35 @@ impl Triplestore {
                     self.global_cats.clone(),
                 )?
             }
-            Expression::SameTerm(_, _) => {
-                todo!("Not implemented")
+            Expression::SameTerm(left, right) => {
+                let left_context = context.extension_with(PathEntry::SameTermLeft);
+                let mut output_solution_mappings = self.lazy_expression(
+                    left,
+                    solution_mappings,
+                    &left_context,
+                    parameters,
+                    pushdowns,
+                    query_settings,
+                    dataset,
+                )?;
+                let right_context = context.extension_with(PathEntry::SameTermRight);
+                output_solution_mappings = self.lazy_expression(
+                    right,
+                    output_solution_mappings,
+                    &right_context,
+                    parameters,
+                    pushdowns,
+                    query_settings,
+                    dataset,
+                )?;
+                binary_expression(
+                    output_solution_mappings,
+                    expr,
+                    &left_context,
+                    &right_context,
+                    context,
+                    self.global_cats.clone(),
+                )?
             }
             Expression::Greater(left, right) => {
                 let left_context = context.extension_with(PathEntry::GreaterLeft);

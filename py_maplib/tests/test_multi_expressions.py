@@ -46,6 +46,23 @@ def test_multi_filter_numerical_equals(streaming):
 
 
 @pytest.mark.parametrize("streaming", [True, False])
+def test_multi_filter_numerical_same_term(streaming):
+    m = Model()
+    df = m.query(
+        """
+    PREFIX : <http://example.net/> 
+    PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+    SELECT ?a ?b WHERE {
+    {VALUES (?a) { ("1"^^xsd:int) }}
+    {VALUES (?b) { ("1"^^xsd:integer) }}
+    FILTER(SAMETERM(?a, ?b))
+    }
+    """,
+        streaming=streaming,
+    )
+    assert df.shape == (0, 2)
+
+@pytest.mark.parametrize("streaming", [True, False])
 def test_multi_filter_numerical_cast_real_equals(streaming):
     m = Model()
     df = m.query(

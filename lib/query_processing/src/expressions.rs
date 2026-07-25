@@ -231,6 +231,7 @@ pub fn binary_expression(
                 | Expression::LessOrEqual(..)
                 | Expression::And(..)
                 | Expression::Or(..)
+                | Expression::SameTerm(..)
         ) {
             let bool = BaseRDFNodeType::Literal(xsd::BOOLEAN.into_owned());
             solution_mappings.mappings = solution_mappings.mappings.with_column(
@@ -258,6 +259,22 @@ pub fn binary_expression(
         return Ok(solution_mappings);
     }
     if matches!(expression, Expression::Equal(..)) {
+        let e = typed_equals_expr(
+            left_context.as_str(),
+            right_context.as_str(),
+            left_type,
+            right_type,
+            global_cats,
+        );
+        solution_mappings.mappings = solution_mappings
+            .mappings
+            .with_column(e.alias(outer_context.as_str()));
+        let t =
+            BaseRDFNodeType::Literal(xsd::BOOLEAN.into_owned()).into_default_input_rdf_node_state();
+        solution_mappings
+            .rdf_node_types
+            .insert(outer_context.as_str().to_string(), t);
+    } else if matches!(expression, Expression::SameTerm(..)) {
         let e = typed_equals_expr(
             left_context.as_str(),
             right_context.as_str(),
