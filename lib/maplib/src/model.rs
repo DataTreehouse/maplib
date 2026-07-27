@@ -201,12 +201,17 @@ impl Model {
         path: &Path,
         graph: &NamedGraph,
         transient: bool,
+        uuid_namespace: Option<String>,
     ) -> Result<(), MaplibError> {
         let mut u8s =
             fs::read(path).map_err(|x| TriplestoreError::ReadJSONFileError(x.to_string()))?;
-
+        let use_uuid_namespace = if let Some(uuid_namespace) = uuid_namespace {
+            uuid_namespace
+        } else {
+            String::from(path.to_string_lossy())
+        };
         self.triplestore
-            .map_json(&mut u8s, graph, transient)
+            .map_json(&mut u8s, Some(use_uuid_namespace), graph, transient)
             .map_err(MaplibError::TriplestoreError)
     }
 
@@ -216,11 +221,12 @@ impl Model {
         mut p: String,
         graph: &NamedGraph,
         transient: bool,
+        uuid_namespace: Option<String>,
     ) -> Result<(), MaplibError> {
         //Safety: we are never reading this vec back to a string
         let u8s = unsafe { p.as_mut_vec() };
         self.triplestore
-            .map_json(u8s, graph, transient)
+            .map_json(u8s, uuid_namespace, graph, transient)
             .map_err(MaplibError::TriplestoreError)
     }
 
