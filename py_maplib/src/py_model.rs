@@ -1,17 +1,5 @@
 use crate::error::PyMaplibError;
-use crate::mutexes::{
-    add_prefixes_mutex, add_template_mutex, add_udf_mutex, add_virtualization_mutex, compact_mutex,
-    create_index_mutex, detach_graph_mutex, get_predicate_iris_mutex, get_predicate_mutex,
-    infer_mutex, infer_rdfs_mutex, insert_mutex, list_udfs_mutex, map_default_mutex, map_df_mutex,
-    map_json_mutex,
-    map_mutex, map_triples_mutex, map_xml_mutex, query_external_mutex, query_mutex,
-    read_mutex,
-    read_template_mutex, reads_mutex, serialize_triples_mutex, size_mutex,
-    truncate_graph_mutex,
-    update_mutex, validate_mutex, write_cim_xml_mutex,
-
-    write_triples_mutex, writes_mutex,
-};
+use crate::mutexes::{add_graph_mutex, add_prefixes_mutex, add_template_mutex, add_udf_mutex, add_virtualization_mutex, compact_mutex, create_index_mutex, detach_graph_mutex, get_predicate_iris_mutex, get_predicate_mutex, infer_mutex, infer_rdfs_mutex, insert_mutex, list_udfs_mutex, map_default_mutex, map_df_mutex, map_json_mutex, map_mutex, map_triples_mutex, map_xml_mutex, query_external_mutex, query_mutex, read_mutex, read_template_mutex, reads_mutex, serialize_triples_mutex, size_mutex, truncate_graph_mutex, update_mutex, validate_mutex, write_cim_xml_mutex, write_triples_mutex, writes_mutex};
 use crate::shacl::PyValidationReport;
 use crate::{
     create_prefix_map, data_to_mappings_types, map_parameters, new_triples_to_dict,
@@ -34,7 +22,7 @@ use representation::solution_mapping::EagerSolutionMappings;
 use representation::BaseRDFNodeType;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{Mutex};
 use templates::python::PyTemplate;
 use tracing::instrument;
 use triplestore::sparql::InsertResult;
@@ -962,7 +950,7 @@ impl PyModel {
             let mut inner = self.inner.lock().unwrap();
             add_udf_mutex(&mut inner, iri, func, output, inputs)?;
             Ok(())
-        });
+        })?;
         Ok(())
     }
 
@@ -973,5 +961,28 @@ impl PyModel {
             Ok(udfs)
         });
         udfs
+    }
+
+    #[pyo3(signature = (other, source_graph=None, target_graph=None))]
+    fn add_graph(
+        &self,
+        py: Python<'_>,
+        other: &Bound<'_, PyModel>,
+        source_graph: Option<String>,
+        target_graph: Option<String>,
+    ) -> PyResult<()> {
+        let source_graph = parse_optional_named_node(source_graph)?;
+        let target_graph = parse_optional_named_node(target_graph)?;
+        let source_graph = NamedGraph::from_maybe_named_node(source_graph.as_ref());
+        let target_graph = NamedGraph::from_maybe_named_node(target_graph.as_ref());
+        let other_borrow = other.borrow();
+        let other_inner = other_borrow.inner.lock().unwrap();
+        let borrow_other_triplestore = &other_inner.triplestore;
+        let _ = py.detach(move || -> PyResult<()> {
+            let mut inner = self.inner.lock().unwrap();
+            add_graph_mutex(&mut inner, borrow_other_triplestore, source_graph, target_graph)?;
+            Ok(())
+        })?;
+        Ok(())
     }
 }

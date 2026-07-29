@@ -35,7 +35,7 @@ use std::sync::{Mutex, MutexGuard};
 use tracing::{info, warn};
 use triplestore::sparql::{InsertResult, UpdateResult};
 use triplestore::triples_read::ExtendedRdfFormat;
-use triplestore::IndexingOptions;
+use triplestore::{IndexingOptions, Triplestore};
 
 pub(crate) fn add_template_mutex(
     inner: &mut MutexGuard<InnerModel>,
@@ -717,7 +717,7 @@ pub(crate) fn writes_mutex(
     let named_graph = NamedGraph::from_maybe_named_node(graph.as_ref());
     inner
         .write_triples(&mut out, &named_graph, format, prefixes.as_ref())
-        .unwrap();
+        .map_err(PyMaplibError::from)?;
     Ok(String::from_utf8(out).unwrap())
 }
 
@@ -798,13 +798,23 @@ pub fn compact_mutex(inner: &mut MutexGuard<InnerModel>) -> PyResult<()> {
 }
 
 pub fn add_udf_mutex(
-    inner: &mut InnerModel,
+    inner: &mut MutexGuard<InnerModel>,
     iri: NamedNode,
     func: Py<PyAny>,
     output: BaseRDFNodeType,
     inputs: Option<Vec<BaseRDFNodeType>>,
 ) -> Result<(), PyMaplibError> {
     inner.add_udf(iri, func, output, inputs);
+    Ok(())
+}
+
+pub fn add_graph_mutex(
+    inner: &mut MutexGuard<InnerModel>,
+    other_triplestore: &Triplestore,
+    source_graph: NamedGraph,
+    target_graph: NamedGraph,
+) -> Result<(), PyMaplibError> {
+    inner.add_graph(other_triplestore, source_graph, target_graph)?;
     Ok(())
 }
 

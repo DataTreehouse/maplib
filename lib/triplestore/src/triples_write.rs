@@ -32,7 +32,9 @@ impl Triplestore {
         graph: &NamedGraph,
         prefixes: &HashMap<String, NamedNode>,
     ) -> Result<(), TriplestoreError> {
-        self.check_graph_exists(graph)?;
+        if !self.does_graph_exist(graph) {
+            return Ok(())
+        }
         if RdfFormat::NTriples == format {
             let n_threads = THREAD_POOL.current_num_threads();
             for (predicate, df_map) in self.graph_triples_map.get(graph).unwrap() {
@@ -137,20 +139,21 @@ impl Triplestore {
         buf: &mut W,
         graph: &NamedGraph,
     ) -> Result<(), TriplestoreError> {
-        self.check_graph_exists(graph)?;
         let mut builder = hdt_write::HdtBuilder::new();
-        for (predicate, df_map) in self.graph_triples_map.get(graph).unwrap() {
-            for ((subject_type, object_type), tt) in df_map {
-                for (lf, _) in tt.get_lazy_frames(&None, &None)? {
-                    let triples = global_df_as_triples(
-                        lf.collect().unwrap(),
-                        subject_type.clone(),
-                        object_type.clone(),
-                        predicate,
-                        self.global_cats.clone(),
-                    );
-                    for t in &triples {
-                        builder.add_triple(t);
+        if self.does_graph_exist(graph) {
+            for (predicate, df_map) in self.graph_triples_map.get(graph).unwrap() {
+                for ((subject_type, object_type), tt) in df_map {
+                    for (lf, _) in tt.get_lazy_frames(&None, &None)? {
+                        let triples = global_df_as_triples(
+                            lf.collect().unwrap(),
+                            subject_type.clone(),
+                            object_type.clone(),
+                            predicate,
+                            self.global_cats.clone(),
+                        );
+                        for t in &triples {
+                            builder.add_triple(t);
+                        }
                     }
                 }
             }
@@ -164,6 +167,10 @@ impl Triplestore {
         } else {
             Ok(())
         }
+    }
+
+    pub(crate) fn does_graph_exist(&self, graph: &NamedGraph) -> bool {
+        self.graph_triples_map.contains_key(graph)
     }
 }
 

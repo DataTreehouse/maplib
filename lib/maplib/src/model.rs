@@ -20,7 +20,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::io::Write;
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{Arc};
 use templates::as_rdf::templates_to_triples;
 use templates::ast::{ConstantTermOrList, PType, Template};
 use templates::dataset::TemplateDataset;
@@ -56,6 +56,11 @@ impl Model {
     pub fn list_udfs(&self) -> Vec<NamedNode> {
         self.triplestore.udf_registry.list_udfs()
     }
+
+    pub fn add_graph(&mut self, other_triplestore: &Triplestore, source_graph: NamedGraph, target_graph: NamedGraph) -> Result<(), MaplibError> {
+        self.triplestore.add_graph(other_triplestore, source_graph, target_graph).map_err(MaplibError::TriplestoreError)
+    }
+
 }
 
 #[derive(Clone, Default)]

@@ -21,9 +21,7 @@ use file_io::create_folder_if_not_exists;
 use fts::FtsIndex;
 use oxrdf::vocab::{rdf, rdfs};
 use oxrdf::NamedNode;
-use polars::prelude::{
-    as_struct, col, lit, AnyValue, DataFrame, Expr, IntoLazy, PlSmallStr, RankMethod, RankOptions,
-};
+use polars::prelude::{as_struct, col, concat, lit, AnyValue, DataFrame, Expr, IntoLazy, PlSmallStr, RankMethod, RankOptions, UnionArgs};
 use polars_core::prelude::{IntoColumn, Series, SortMultipleOptions};
 use pyo3::{Py, PyAny};
 use range_set_blaze::RangeSetBlaze;
@@ -66,6 +64,51 @@ pub struct Triplestore {
     pub global_cats: LockedCats,
     n_triples_deleted: usize,
     pub udf_registry: Arc<UdfRegistry>,
+}
+
+impl Triplestore {
+    pub fn add_graph(&mut self, other: &Triplestore, source_graph: NamedGraph, target_graph: NamedGraph) -> Result<(), TriplestoreError> {
+        if let Some(graph) = other.graph_triples_map.get(&source_graph) {
+            let mut triples_to_add = vec![];
+            for (nn, map) in graph {
+                for ((subject_type, object_type), triples) in map {
+                    let lfs = triples.get_all_triples_lazy_frames(true)?;
+                    let df = concat(lfs, UnionArgs{
+                        parallel: true,
+                        rechunk: false,
+                        to_supertypes: false,
+                        diagonal: false,
+                        strict: false,
+                        from_partitioned_ds: false,
+                        maintain_order: true,
+                    }).unwrap().collect().unwrap();
+                    let subject_cat_state = if subject_type.stored_cat() {
+                        BaseCatState::CategoricalNative(Some(other.global_cats.clone()))
+                    } else {
+                        subject_type.default_stored_cat_state()
+                    };
+                    let object_cat_state = if object_type.stored_cat() {
+                        BaseCatState::CategoricalNative(Some(other.global_cats.clone()))
+                    } else {
+                        object_type.default_stored_cat_state()
+                    };
+                    let tta = TriplesToAdd {
+                        df,
+                        subject_type: subject_type.clone(),
+                        object_type: object_type.clone(),
+                        predicate: Some(nn.clone()),
+                        graph: target_graph.clone(),
+                        subject_cat_state,
+                        object_cat_state,
+                        predicate_cat_state: None,
+                    };
+                    triples_to_add.push(tta);
+                }
+            }
+            self.add_triples_vec(triples_to_add, false)?;
+        }
+        Ok(())
+    }
 }
 
 const MAPLIB_STORAGE_FOLDER: &str = "maplib_storage";
