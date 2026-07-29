@@ -231,6 +231,7 @@ pub(crate) fn map_xml_mutex(
     string_or_path: StringOrPathBuf,
     graph: Option<String>,
     transient: Option<bool>,
+    uuid_namespace: Option<String>,
 ) -> PyResult<()> {
     let graph = parse_optional_named_node(graph)?;
     let named_graph = NamedGraph::from_maybe_named_node(graph.as_ref());
@@ -245,6 +246,7 @@ pub(crate) fn map_xml_mutex(
                         string,
                         &named_graph,
                         transient.unwrap_or(DEFAULT_MAP_TO_TRANSIENT),
+                        uuid_namespace,
                     )
                     .map_err(PyMaplibError::from)?;
             } else {
@@ -254,6 +256,7 @@ pub(crate) fn map_xml_mutex(
                         p.as_ref(),
                         &named_graph,
                         transient.unwrap_or(DEFAULT_MAP_TO_TRANSIENT),
+                        uuid_namespace,
                     )
                     .map_err(PyMaplibError::from)?;
             }
@@ -264,6 +267,7 @@ pub(crate) fn map_xml_mutex(
                     path.as_ref(),
                     &named_graph,
                     transient.unwrap_or(DEFAULT_MAP_TO_TRANSIENT),
+                    uuid_namespace,
                 )
                 .map_err(PyMaplibError::from)?;
         }

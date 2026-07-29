@@ -166,7 +166,7 @@ impl PyModel {
         })
     }
 
-    #[pyo3(signature = (path_or_string, graph=None, transient=None))]
+    #[pyo3(signature = (path_or_string, graph=None, transient=None, uuid_namespace=None))]
     #[instrument(skip_all)]
     fn map_xml(
         &self,
@@ -174,10 +174,11 @@ impl PyModel {
         path_or_string: StringOrPathBuf,
         graph: Option<String>,
         transient: Option<bool>,
+        uuid_namespace: Option<String>,
     ) -> PyResult<()> {
         py.detach(move || {
             let mut inner = self.inner.lock().unwrap();
-            map_xml_mutex(&mut inner, path_or_string, graph, transient)
+            map_xml_mutex(&mut inner, path_or_string, graph, transient, uuid_namespace)
         })
     }
 

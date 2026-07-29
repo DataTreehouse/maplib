@@ -658,6 +658,7 @@ class Model:
             path_or_string: Path | str,
             graph: str = None,
             transient: bool = True,
+            uuid_namespace: str = None,
     ) -> None:
         """
         Map an XML file or string to triples.
@@ -672,6 +673,7 @@ class Model:
         :param path_or_string: Path to an XML document or an XML string.
         :param graph: The IRI of the graph to add triples to. None is the default graph.
         :param transient: Should the triples be included when serializing the graph?
+        :param uuid_namespace: Generates uuid v5 uris based on this namespace.
         """
 
     def map_triples(
