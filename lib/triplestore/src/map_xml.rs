@@ -50,7 +50,7 @@ impl Triplestore {
         let mut counter_stack: Vec<usize> = Vec::new();
         let use_uuid_namespace = if let Some(uuid_namespace) = uuid_namespace {
             Uuid::new_v5(&Uuid::NAMESPACE_DNS, uuid_namespace.as_bytes())
-        } else{
+        } else {
             Uuid::new_v4()
         };
         loop {
@@ -61,8 +61,9 @@ impl Triplestore {
                 Event::Eof => break,
                 Event::Start(e) => {
                     let name = e.name();
-                    let name_bytes= name.as_ref();
-                    let name_path = std::str::from_utf8(name_bytes).map_err(|e| TriplestoreError::XMLError(e.to_string()))?;
+                    let name_bytes = name.as_ref();
+                    let name_path = std::str::from_utf8(name_bytes)
+                        .map_err(|e| TriplestoreError::XMLError(e.to_string()))?;
                     path.push(format!("{}_{}", &name_path, &current_counter));
                     current_counter += 1;
                     counter_stack.push(current_counter);

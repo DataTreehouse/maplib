@@ -241,15 +241,21 @@ impl PyModel {
         })
     }
 
-    #[pyo3(signature = (df, graph=None))]
+    #[pyo3(signature = (df, graph=None, uuid_namespace=None))]
     #[instrument(skip_all)]
-    fn map_df(&self, py: Python<'_>, df: &Bound<'_, PyAny>, graph: Option<String>) -> PyResult<()> {
+    fn map_df(
+        &self,
+        py: Python<'_>,
+        df: &Bound<'_, PyAny>,
+        graph: Option<String>,
+        uuid_namespace: Option<String>,
+    ) -> PyResult<()> {
         let (df, _) = data_to_mappings_types(df, py)?;
         py.detach(move || -> PyResult<()> {
             let mut inner = self.inner.lock().unwrap();
             let graph = parse_optional_named_node(graph)?;
             let named_graph = NamedGraph::from_maybe_named_node(graph.as_ref());
-            map_df_mutex(&mut inner, df, named_graph)
+            map_df_mutex(&mut inner, df, named_graph, uuid_namespace)
         })
     }
 

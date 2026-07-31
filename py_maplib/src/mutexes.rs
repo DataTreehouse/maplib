@@ -324,8 +324,11 @@ pub fn map_df_mutex(
     inner: &mut MutexGuard<InnerModel>,
     df: DataFrame,
     graph: NamedGraph,
+    uuid_namespace: Option<String>,
 ) -> PyResult<()> {
-    inner.map_df(&df, &graph).map_err(PyMaplibError::from)?;
+    inner
+        .map_df(&df, &graph, uuid_namespace)
+        .map_err(PyMaplibError::from)?;
     Ok(())
 }
 

@@ -231,9 +231,14 @@ impl Model {
     }
 
     #[instrument(skip_all)]
-    pub fn map_df(&mut self, df: &DataFrame, graph: &NamedGraph) -> Result<(), MaplibError> {
+    pub fn map_df(
+        &mut self,
+        df: &DataFrame,
+        graph: &NamedGraph,
+        uuid_namespace: Option<String>,
+    ) -> Result<(), MaplibError> {
         self.triplestore
-            .map_df(df, graph)
+            .map_df(df, graph, uuid_namespace)
             .map_err(MaplibError::TriplestoreError)
     }
 
@@ -248,7 +253,7 @@ impl Model {
         let mut u8s = fs::read(path).map_err(|x| TriplestoreError::XMLError(x.to_string()))?;
         let use_uuid_namespace = if let Some(uuid_namespace) = uuid_namespace {
             uuid_namespace
-        } else{
+        } else {
             String::from(path.to_string_lossy())
         };
         self.triplestore

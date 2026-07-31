@@ -100,3 +100,53 @@ def test_map_df_datetime():
     """, solution_mappings=True
     )
     assert res.rdf_types["c"] == RDFType.Literal(xsd.dateTime)
+
+def test_map_df_uuid_v5_same_args():
+    df = pl.DataFrame(
+        {
+            "a": [
+                "abc",
+                "def",
+                "ghi",
+            ],
+            "b": [
+                1.4,
+                4.2,
+                7.8,
+            ],
+        }
+    )
+    m = Model()
+    m.map_df(df, uuid_namespace = "abc")
+    df1 = m.query("""SELECT * WHERE {?a ?b ?c} ORDER BY ?a ?c""")
+
+    m2 = Model()
+    m2.map_df(df, uuid_namespace = "abc")
+    df2 = m.query("""SELECT * WHERE {?a ?b ?c} ORDER BY ?a ?c""")
+    assert df1.height == 13 and df2.height == 13
+    assert df1.get_column("a").sort().to_list() == df2.get_column("a").sort().to_list()
+
+def test_map_df_uuid_v5_diff_args():
+    df = pl.DataFrame(
+        {
+            "a": [
+                "abc",
+                "def",
+                "ghi",
+            ],
+            "b": [
+                1.4,
+                4.2,
+                7.8,
+            ],
+        }
+    )
+    m = Model()
+    m.map_df(df, uuid_namespace = "abc")
+    df1 = m.query("""SELECT * WHERE {?a ?b ?c}""")
+
+    m2 = Model()
+    m2.map_df(df, uuid_namespace = "def")
+    df2 = m2.query("""SELECT * WHERE {?a ?b ?c}""")
+    assert df1.height == 13 and df2.height == 13
+    assert df1.get_column("a").sort().to_list() != df2.get_column("a").sort().to_list()

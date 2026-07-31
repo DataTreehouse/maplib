@@ -725,6 +725,7 @@ class Model:
             self,
             df: DataFrame,
             graph: str = None,
+            uuid_namespace: str = None,
     ):
         """
         Create a default template and map it based on a dataframe.
@@ -735,6 +736,7 @@ class Model:
 
         :param df: DataFrame to map using Facade-X (using approximately the CSV-mapping)
         :param graph: The IRI of the graph to add triples to.
+        :param uuid_namespace: Generates uuid v5 uris based on this namespace.
         :return: None
         """
 
