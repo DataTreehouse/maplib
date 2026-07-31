@@ -240,3 +240,39 @@ def test_insert(disk):
     #print(m.writes(format="turtle", prefixes={"":"https://github.com/DataTreehouse/maplib/users#"}))
     df = m.query("SELECT * WHERE {?a ?b ?c}")
     assert df.height == 4
+
+def test_map_json_uuid_v5():
+    json_2 = TESTDATA_PATH / "2.json"
+    m = Model()
+    m.map_json(str(json_2))
+
+    m2 = Model()
+    m2.map_json(str(json_2))
+    df1 = m.query("""SELECT * WHERE {?a ?b ?c}""")
+    df2 = m2.query("""SELECT * WHERE {?a ?b ?c}""")
+
+    assert df1.get_column("a").sort().to_list() == df2.get_column("a").sort().to_list()
+
+def test_map_json_uuid_v5_different_uuids():
+    json_2 = TESTDATA_PATH / "2.json"
+    m = Model()
+    m.map_json(str(json_2), uuid_namespace="abc")
+
+    m2 = Model()
+    m2.map_json(str(json_2))
+    df1 = m.query("""SELECT * WHERE {?a ?b ?c}""")
+    df2 = m2.query("""SELECT * WHERE {?a ?b ?c}""")
+
+    assert df1.get_column("a").sort().to_list() != df2.get_column("a").sort().to_list()
+
+def test_map_json_uuid_v5_same_uuid_args():
+    json_2 = TESTDATA_PATH / "2.json"
+    m = Model()
+    m.map_json(str(json_2), uuid_namespace="abc")
+
+    m2 = Model()
+    m2.map_json(str(json_2), uuid_namespace="abc")
+    df1 = m.query("""SELECT * WHERE {?a ?b ?c}""")
+    df2 = m2.query("""SELECT * WHERE {?a ?b ?c}""")
+
+    assert df1.get_column("a").sort().to_list() == df2.get_column("a").sort().to_list()

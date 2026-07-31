@@ -5,20 +5,26 @@ use oxrdf::NamedNode;
 use polars::prelude::{col, lit, DataFrame, IntoLazy};
 use polars_core::prelude::{Column, IntoColumn, NamedFrom, Series};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
-use representation::constants::{
-    FX_CHILD, FX_CHILD_NUMBER, FX_ROOT, MAPLIB_PREFIX_IRI, XYZ_PREFIX_IRI,
-};
+use representation::constants::{FX_CHILD, FX_CHILD_NUMBER, FX_ROOT, XYZ_PREFIX_IRI};
 use representation::dataset::NamedGraph;
 use representation::polars_to_rdf::polars_type_to_literal_type;
 use representation::{BaseRDFNodeType, OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use std::collections::HashMap;
+use uuid::Uuid;
 
 impl Triplestore {
     pub fn map_df(
         &mut self,
         df: &DataFrame,
         named_graph: &NamedGraph,
+        uuid_namespace: Option<String>,
     ) -> Result<(), TriplestoreError> {
+        let use_uuid_namespace = if let Some(uuid_namespace) = uuid_namespace {
+            Uuid::new_v5(&Uuid::NAMESPACE_DNS, uuid_namespace.as_bytes())
+        } else {
+            Uuid::new_v4()
+        };
+        let root_node_uuri = new_iri_subject(&use_uuid_namespace, "".as_bytes());
         let mut column_types = HashMap::new();
         let col_names: Vec<_> = df.columns().iter().map(|x| x.name().to_string()).collect();
         for c in df.columns() {
@@ -26,12 +32,11 @@ impl Triplestore {
             let dt = polars_type_to_literal_type(c.dtype()).unwrap();
             column_types.insert(c.name().to_string(), dt);
         }
-        let id_col = uuid::Uuid::new_v4().to_string();
+        let id_col = Uuid::new_v5(&use_uuid_namespace, "id".as_bytes()).to_string();
         let mut df = df.clone();
-        let root_node_uuri = format!("{}{}", MAPLIB_PREFIX_IRI, uuid::Uuid::new_v4());
         let uuids: Vec<_> = (0..df.height())
             .into_par_iter()
-            .map(|_| format!("{}{}", MAPLIB_PREFIX_IRI, uuid::Uuid::new_v4()))
+            .map(|i| new_iri_subject(&use_uuid_namespace, &i.to_string().into_bytes()))
             .collect();
         df.with_column(Series::new(id_col.as_str().into(), uuids).into_column())
             .unwrap();
@@ -128,4 +133,7 @@ impl Triplestore {
         self.add_triples_vec(triples_to_add, false)?;
         Ok(())
     }
+}
+fn new_iri_subject(namespace: &Uuid, name: &[u8]) -> String {
+    format!("urn:maplib:{}", Uuid::new_v5(namespace, name))
 }

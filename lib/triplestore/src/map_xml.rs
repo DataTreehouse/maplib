@@ -17,6 +17,7 @@ use representation::{BaseRDFNodeType, OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use std::collections::HashMap;
 use std::io::Cursor;
 use std::sync::Arc;
+use uuid::Uuid;
 
 struct Frame {
     subject: String,
@@ -31,6 +32,7 @@ impl Triplestore {
         u8s: &mut Vec<u8>,
         named_graph: &NamedGraph,
         transient: bool,
+        uuid_namespace: Option<String>,
     ) -> Result<(), TriplestoreError> {
         let mut reader = Reader::from_reader(Cursor::new(u8s.as_slice()));
         reader.config_mut().trim_text(true);
@@ -43,6 +45,14 @@ impl Triplestore {
         let mut base_prefix = NamedNode::new_unchecked(XYZ_PREFIX_IRI);
         let mut stack: Vec<Frame> = Vec::new();
         let mut buf = Vec::new();
+        let mut path = Vec::new();
+        let mut current_counter = 0; // keep track of how many elements that are on the same level for uuid v5
+        let mut counter_stack: Vec<usize> = Vec::new();
+        let use_uuid_namespace = if let Some(uuid_namespace) = uuid_namespace {
+            Uuid::new_v5(&Uuid::NAMESPACE_DNS, uuid_namespace.as_bytes())
+        } else {
+            Uuid::new_v4()
+        };
         loop {
             match reader
                 .read_event_into(&mut buf)
@@ -50,6 +60,14 @@ impl Triplestore {
             {
                 Event::Eof => break,
                 Event::Start(e) => {
+                    let name = e.name();
+                    let name_bytes = name.as_ref();
+                    let name_path = std::str::from_utf8(name_bytes)
+                        .map_err(|e| TriplestoreError::XMLError(e.to_string()))?;
+                    path.push(format!("{}_{}", &name_path, &current_counter));
+                    current_counter += 1;
+                    counter_stack.push(current_counter);
+                    current_counter = 0;
                     let (subj, new_base_prefix, introduced_prefixed_namespaces) = open_element(
                         e.name().as_ref(),
                         e.attributes(),
@@ -58,6 +76,8 @@ impl Triplestore {
                         &mut prefix_map,
                         &mut datatypes_map,
                         &base_prefix,
+                        &use_uuid_namespace,
+                        &mut path,
                     )?;
                     let previous_base_prefix = if let Some(new_base_prefix) = new_base_prefix {
                         let previous_base_prefix = base_prefix;
@@ -74,6 +94,8 @@ impl Triplestore {
                     });
                 }
                 Event::Empty(e) => {
+                    current_counter += 1;
+                    path.push(current_counter.to_string());
                     let _ = open_element(
                         e.name().as_ref(),
                         e.attributes(),
@@ -82,7 +104,10 @@ impl Triplestore {
                         &mut prefix_map,
                         &mut datatypes_map,
                         &base_prefix,
+                        &use_uuid_namespace,
+                        &mut path,
                     )?;
+                    path.pop();
                 }
                 Event::End(_) => {
                     if let Some(Frame {
@@ -102,6 +127,8 @@ impl Triplestore {
                             base_prefix = old;
                         }
                     }
+                    current_counter = counter_stack.pop().unwrap_or(0);
+                    path.pop();
                 }
                 Event::Text(t) => {
                     let raw = t
@@ -139,9 +166,11 @@ fn open_element(
     prefix_map: &mut HashMap<String, NamedNode>,
     datatypes_map: &mut HashMap<String, Arc<BaseRDFNodeType>>,
     base_prefix: &NamedNode,
+    uuid_namespace: &Uuid,
+    path: &mut Vec<String>,
 ) -> Result<(String, Option<NamedNode>, Vec<(String, Option<NamedNode>)>), TriplestoreError> {
     let name = std::str::from_utf8(name).map_err(|e| TriplestoreError::XMLError(e.to_string()))?;
-    let subject = new_iri_subject();
+    let subject = new_iri_subject(uuid_namespace, path.join(".").as_bytes());
     if let Some(parent) = stack.last_mut() {
         let parent_subject = parent.subject.clone();
         let n = parent.next_child;
@@ -188,8 +217,9 @@ fn open_element(
             let nn = NamedNode::new(value.clone()).map_err(|e| {
                 TriplestoreError::XMLError(format!("Error parsing {}: {}", value, e))
             })?;
-
-            let prefix_subject = new_iri_subject();
+            path.push(key.to_string());
+            let prefix_subject = new_iri_subject(uuid_namespace, path.join(".").as_bytes());
+            path.pop();
             push_iri_object(pred_map, XYZ_PREFIX_IRI, &subject, &prefix_subject);
             push_iri_object(pred_map, FX_XYZ_PREFIX_IRI, &prefix_subject, nn.as_str());
             let use_sep = use_sep(nn.as_str());
@@ -330,8 +360,8 @@ fn push_iri_u32(pred_map: &mut PredMap, predicate: &str, subject: &str, object: 
     pair.1.push_u32(object);
 }
 
-fn new_iri_subject() -> String {
-    format!("urn:maplib:{}", uuid::Uuid::new_v4())
+fn new_iri_subject(namespace: &Uuid, name: &[u8]) -> String {
+    format!("urn:maplib:{}", Uuid::new_v5(namespace, name))
 }
 
 fn qname_to_iri(
