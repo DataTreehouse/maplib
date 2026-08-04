@@ -37,4 +37,6 @@ pub enum QueryProcessingError {
         "Custom function not found: {0}, it is possible to define a function using m.add_udf()"
     )]
     CustomFunctionNotFound(String),
+    #[error("Expected string arguments. Arg number {} is not string. Consider using STR() function to convert to string", .0)]
+    UnexpectedDataTypeForConcat(String),
 }
