@@ -79,36 +79,6 @@ impl SparseIndex {
     }
 }
 
-struct LastIterResult {
-    pub res: Arc<String>,
-    pub iter: usize,
-}
-
-impl Eq for LastIterResult {}
-
-impl PartialEq<Self> for LastIterResult {
-    fn eq(&self, other: &Self) -> bool {
-        self.cmp(other) == Ordering::Equal
-    }
-}
-
-impl PartialOrd<Self> for LastIterResult {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for LastIterResult {
-    fn cmp(&self, other: &Self) -> Ordering {
-        let r = self.res.cmp(&other.res);
-        if r.is_eq() {
-            self.iter.cmp(&other.iter)
-        } else {
-            r
-        }
-    }
-}
-
 #[derive(Clone)]
 pub struct Triples {
     segments: Vec<TriplesSegment>,
@@ -489,85 +459,6 @@ impl Triples {
         }
     }
 
-    pub fn get_next_different_subject(
-        &self,
-        global_cats: LockedCats,
-        s: &str,
-    ) -> Result<Option<String>, TriplestoreError> {
-        let mut min_next = None;
-        for seg in &self.segments {
-            if let Some(next) =
-                seg.get_next_different_subject(global_cats.clone(), s, &self.subject_type)?
-            {
-                min_next = if let Some(min_next) = min_next {
-                    Some(cmp::min(min_next, next))
-                } else {
-                    Some(next)
-                };
-            }
-        }
-        Ok(min_next)
-    }
-
-    pub fn get_first_subject_string(&self) -> Result<Option<String>, TriplestoreError> {
-        let mut min_next = None;
-        for seg in &self.segments {
-            if let Some(subject_index) = &seg.subject_sparse_index {
-                if let Some((s, i)) = subject_index.map.range::<Arc<String>, _>(..).next() {
-                    assert_eq!(i, &0, "{}:{} {:?}", s, i, subject_index.map);
-                    min_next = if let Some(min_next) = min_next {
-                        Some(cmp::min(min_next, s.clone()))
-                    } else {
-                        Some(s.clone())
-                    }
-                }
-            }
-        }
-        Ok(min_next.map(|n| n.as_ref().to_string()))
-    }
-
-    pub fn get_next_different_approximately_n_distance_away(
-        &self,
-        s: &str,
-        n: usize,
-    ) -> Result<Option<String>, TriplestoreError> {
-        let arcs = Arc::new(s.to_string());
-        let mut iters_map = HashMap::new();
-        let mut last_res = BinaryHeap::new();
-        for (i, seg) in self.segments.iter().enumerate() {
-            if let Some(subject_sparse) = &seg.subject_sparse_index {
-                let mut iter = subject_sparse.map.range(arcs.clone()..);
-                if let Some((nexts, _)) = iter.next() {
-                    last_res.push(Reverse(LastIterResult {
-                        res: nexts.clone(),
-                        iter: i,
-                    }));
-                    iters_map.insert(i, iter);
-                }
-            }
-        }
-        let mut approx_cumulative = 0usize;
-        let mut next = None;
-        while let Some(last) = last_res.pop() {
-            let LastIterResult { res, iter } = last.0;
-            approx_cumulative += OFFSET_STEP;
-            if approx_cumulative >= n && arcs < res {
-                next = Some(res);
-                break;
-            } else {
-                next = Some(res);
-            }
-            if let Some((nexts, _)) = iters_map.get_mut(&iter).unwrap().next() {
-                last_res.push(Reverse(LastIterResult {
-                    res: nexts.clone(),
-                    iter,
-                }));
-            }
-        }
-
-        Ok(next.map(|x| x.as_ref().to_string()))
-    }
-
     pub fn get_lazy_frame_between_subject_strings(
         &self,
         from: &str,
@@ -668,48 +559,6 @@ impl TriplesSegment {
             }
         };
         Some(use_index.as_data_frame())
-    }
-
-    pub fn get_next_different_subject(
-        &self,
-        global_cats: LockedCats,
-        s: &str,
-        subject_type: &BaseRDFNodeType,
-    ) -> Result<Option<String>, TriplestoreError> {
-        if let Some(subject_sparse_index) = &self.subject_sparse_index {
-            let mut upper_bound = None;
-            let arcs = Arc::new(s.to_string());
-            for (sn, i) in subject_sparse_index.map.range(arcs.clone()..) {
-                if &arcs < sn {
-                    upper_bound = Some(*i);
-                    break;
-                }
-            }
-            if let Some(upper_bound) = upper_bound {
-                let offset = upper_bound.saturating_sub(OFFSET_STEP);
-                // + 1 is important since if we are exactly at the upper bound we miss it.
-                let df = self
-                    .get_subject_sort_lazy_frame()?
-                    .slice(offset as i64, (OFFSET_STEP + 1) as u32)
-                    .select([col(SUBJECT_COL_NAME)])
-                    .collect()
-                    .unwrap();
-                let subject_ser = df.column(SUBJECT_COL_NAME).unwrap();
-                let vs = global_cats
-                    .read()?
-                    .decode_of_type(subject_ser.as_materialized_series(), subject_type, None)
-                    .map_err(TriplestoreError::DecodeError)?;
-                for found_s in vs.str().unwrap().iter() {
-                    let found_s = found_s.unwrap();
-                    if s < found_s {
-                        return Ok(Some(found_s.to_string()));
-                    }
-                }
-            }
-            Ok(None)
-        } else {
-            unreachable!("Should never happen")
-        }
     }
 }
 

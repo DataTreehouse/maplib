@@ -162,6 +162,14 @@ pub struct Cats {
 }
 
 impl Cats {
+    pub fn get_spaced_strings(&self, stride: usize, t: &BaseRDFNodeType) -> Vec<(String, String)> {
+        if let Some(cat) = self.cat_map.get(&CatType::from_base_rdf_node_type(t)) {
+            cat.maps.get_spaced_strings(stride)
+        } else {
+            vec![]
+        }
+    }
+
     pub fn compact(&mut self) {
         let _: Vec<_> = self
             .cat_map

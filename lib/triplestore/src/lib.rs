@@ -21,7 +21,10 @@ use file_io::create_folder_if_not_exists;
 use fts::FtsIndex;
 use oxrdf::vocab::{rdf, rdfs};
 use oxrdf::NamedNode;
-use polars::prelude::{as_struct, col, concat, lit, AnyValue, DataFrame, Expr, IntoLazy, PlSmallStr, RankMethod, RankOptions, UnionArgs};
+use polars::prelude::{
+    as_struct, col, concat, lit, AnyValue, DataFrame, Expr, IntoLazy, PlSmallStr, RankMethod,
+    RankOptions, UnionArgs,
+};
 use polars_core::prelude::{IntoColumn, Series, SortMultipleOptions};
 use pyo3::{Py, PyAny};
 use range_set_blaze::RangeSetBlaze;
@@ -67,21 +70,32 @@ pub struct Triplestore {
 }
 
 impl Triplestore {
-    pub fn add_graph(&mut self, other: &Triplestore, source_graph: NamedGraph, target_graph: NamedGraph) -> Result<(), TriplestoreError> {
+    pub fn add_graph(
+        &mut self,
+        other: &Triplestore,
+        source_graph: NamedGraph,
+        target_graph: NamedGraph,
+    ) -> Result<(), TriplestoreError> {
         if let Some(graph) = other.graph_triples_map.get(&source_graph) {
             let mut triples_to_add = vec![];
             for (nn, map) in graph {
                 for ((subject_type, object_type), triples) in map {
                     let lfs = triples.get_all_triples_lazy_frames(true)?;
-                    let df = concat(lfs, UnionArgs{
-                        parallel: true,
-                        rechunk: false,
-                        to_supertypes: false,
-                        diagonal: false,
-                        strict: false,
-                        from_partitioned_ds: false,
-                        maintain_order: true,
-                    }).unwrap().collect().unwrap();
+                    let df = concat(
+                        lfs,
+                        UnionArgs {
+                            parallel: true,
+                            rechunk: false,
+                            to_supertypes: false,
+                            diagonal: false,
+                            strict: false,
+                            from_partitioned_ds: false,
+                            maintain_order: true,
+                        },
+                    )
+                    .unwrap()
+                    .collect()
+                    .unwrap();
                     let subject_cat_state = if subject_type.stored_cat() {
                         BaseCatState::CategoricalNative(Some(other.global_cats.clone()))
                     } else {

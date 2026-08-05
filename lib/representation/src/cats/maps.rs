@@ -15,6 +15,13 @@ pub enum CatMaps {
 }
 
 impl CatMaps {
+    pub fn get_spaced_strings(&self, stride: usize) -> Vec<(String, String)> {
+        match self {
+            CatMaps::InMemory(cat_maps) => cat_maps.get_spaced_strings(stride),
+            CatMaps::OnDisk(cat_maps) => cat_maps.get_spaced_strings(stride),
+        }
+    }
+
     pub fn compact(&mut self) {
         match self {
             CatMaps::InMemory(cat_maps) => {

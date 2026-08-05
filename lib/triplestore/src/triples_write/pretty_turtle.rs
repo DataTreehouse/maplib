@@ -7,7 +7,6 @@ use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{BlankNode, NamedNode, NamedNodeRef, Term, TermRef, Variable};
 use polars::prelude::{col, concat, LazyFrame, UnionArgs};
 use polars_core::frame::DataFrame;
-use polars_core::prelude::BooleanChunked;
 use polars_core::runtime::THREAD_POOL;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use representation::cats::LockedCats;
@@ -348,7 +347,7 @@ impl Triplestore {
                             s,
                             o,
                             self.global_cats.clone(),
-                            &blanks_in_degree_one,
+                            Some(&blanks_in_degree_one),
                             &HashSet::new(),
                             &blanks_in_degree_zero,
                             &blanks_in_degree_one,
@@ -382,93 +381,35 @@ impl Triplestore {
             }
         }
 
-        let mut drivers = vec![];
-        for (pred, m) in map.iter() {
-            for k in m.keys() {
-                if pred.as_ref() != rdf::TYPE
-                    && !(lists_map.is_some() && is_list_pred_and_subject_type(pred, &k.0))
-                {
-                    drivers.push((pred.clone(), k.clone()));
-                }
-            }
-        }
-        drivers.sort();
-        if let Some(m) = map.get(&rdf::TYPE.into_owned()) {
-            let k1 = (BaseRDFNodeType::IRI, BaseRDFNodeType::IRI);
-            let k2 = (BaseRDFNodeType::BlankNode, BaseRDFNodeType::IRI);
-            let k3 = (BaseRDFNodeType::BlankNode, BaseRDFNodeType::BlankNode);
-            let k4 = (BaseRDFNodeType::IRI, BaseRDFNodeType::BlankNode);
-            for k in [k1, k2, k3, k4] {
-                if m.contains_key(&k) {
-                    drivers.push((rdf::TYPE.into_owned(), k));
-                }
-            }
-        }
-        let mut used_drivers: HashMap<_, HashSet<(BaseRDFNodeType, BaseRDFNodeType)>> =
-            HashMap::new();
-        let mut used_iri_subjects = HashSet::new();
-        let mut used_blank_subjects = in_degree_one_blocks_map.keys().cloned().collect();
+        let used_iri_subjects = HashSet::new();
+        let used_blank_subjects = in_degree_one_blocks_map.keys().cloned().collect();
         let type_nn = rdf::TYPE.into_owned();
 
-        for (driver_predicate, k) in drivers.into_iter().rev() {
-            if let Some(ks) = used_drivers.get_mut(&driver_predicate) {
-                ks.insert(k.clone());
+        // Max 2 iterations, iri and blank
+        for is_iri in [true, false] {
+            // Safe because this was how we found the driver and k
+            let subject_type = if is_iri {
+                BaseRDFNodeType::IRI
             } else {
-                used_drivers.insert(
-                    driver_predicate.clone(),
-                    HashSet::from_iter(vec![k.clone()]),
-                );
-            }
-            let triples = map.get(&driver_predicate).unwrap().get(&(k)).unwrap();
-            let (subject_type, _) = &k;
+                BaseRDFNodeType::BlankNode
+            };
             let n_threads = THREAD_POOL.current_num_threads();
-            let mut exhausted_driver = false;
-            let mut found_first = false;
-            let mut last_string: Option<String> = None;
-            while !exhausted_driver {
-                let use_used_subjects = if subject_type.is_iri() {
+            let mut spaced_strings = self
+                .global_cats
+                .read()?
+                .get_spaced_strings(STRIDE, &subject_type);
+            spaced_strings.reverse();
+            while !spaced_strings.is_empty() {
+                let use_used_subjects = if is_iri {
                     &used_iri_subjects
                 } else {
                     &used_blank_subjects
                 };
                 let mut thread_strings = Vec::with_capacity(n_threads);
                 for _ in 0..n_threads {
-                    let start_string = if let Some(last_string) = last_string.take() {
-                        if let Some(next_string) = triples.get_next_different_subject(
-                            self.global_cats.clone(),
-                            last_string.as_str(),
-                        )? {
-                            assert!(next_string > last_string);
-                            next_string
-                        } else {
-                            exhausted_driver = true;
-                            break;
-                        }
-                    } else {
-                        assert!(!found_first);
-                        if let Some(start_string) = triples.get_first_subject_string()? {
-                            found_first = true;
-                            start_string
-                        } else {
-                            exhausted_driver = true;
-                            break;
-                        }
-                    };
-                    let end_string = triples.get_next_different_approximately_n_distance_away(
-                        &start_string,
-                        STRIDE / n_threads,
-                    )?;
-                    let end_string = if let Some(end_string) = end_string {
-                        if start_string == end_string {
-                            exhausted_driver = true;
-                        }
-                        last_string = Some(end_string.clone());
-                        end_string
-                    } else {
-                        exhausted_driver = true;
-                        start_string.clone()
-                    };
-                    thread_strings.push((start_string, end_string));
+                    if !spaced_strings.is_empty() {
+                        thread_strings.push(spaced_strings.pop().unwrap());
+                    }
                 }
                 let r: Result<Vec<_>, TriplestoreError> = THREAD_POOL
                     .install(|| {
@@ -476,12 +417,10 @@ impl Triplestore {
                             .into_par_iter()
                             .map(|(from_string, to_string)| {
                                 let r = self.create_block_segment(
-                                    &driver_predicate,
+                                    subject_type.is_iri(),
                                     map,
-                                    triples,
                                     from_string.as_str(),
                                     to_string.as_str(),
-                                    &used_drivers,
                                     use_used_subjects,
                                     &blanks_in_degree_zero,
                                     &blanks_in_degree_one,
@@ -494,29 +433,18 @@ impl Triplestore {
 
                 let r = r?;
 
-                let mut new_r = Vec::with_capacity(n_threads);
-                for (new_map, subjects_ordering) in r {
-                    if subject_type.is_iri() {
-                        used_iri_subjects.extend(new_map.keys().cloned());
-                    } else if subject_type.is_blank_node() {
-                        used_blank_subjects.extend(new_map.keys().cloned());
-                    };
-                    let mut mapkeys: Vec<_> = new_map.keys().collect();
-                    mapkeys.sort();
-                    new_r.push((new_map, subjects_ordering));
-                }
-
                 let written: Result<(Vec<_>, Vec<_>), TriplestoreError> = THREAD_POOL
                     .install(|| {
-                        new_r.into_par_iter().map(|(new_map, subjects_ordering)| {
+                        r.into_par_iter().map(|new_map| {
                             let mut writer: Vec<u8> = Vec::new();
                             let replaced = write_blocks(
                                 &mut writer,
                                 new_map,
                                 &type_nn,
                                 &prefix_replacer,
-                                &subjects_ordering,
                                 &in_degree_one_blocks_map,
+                                self.global_cats.clone(),
+                                &subject_type,
                             )?;
                             Ok((writer, replaced))
                         })
@@ -572,80 +500,23 @@ impl Triplestore {
 
     fn create_block_segment(
         &self,
-        driver_predicate: &NamedNode,
+        is_iri: bool,
         map: &HashMap<NamedNode, HashMap<(BaseRDFNodeType, BaseRDFNodeType), Triples>>,
-        triples: &Triples,
         string_start: &str,
         string_ends: &str,
-        used_drivers: &HashMap<NamedNode, HashSet<(BaseRDFNodeType, BaseRDFNodeType)>>,
         used_subjects: &HashSet<u32>,
         blanks_in_degree_zero: &HashSet<u32>,
         blanks_in_degree_one: &HashSet<u32>,
         has_lists: bool,
-    ) -> Result<(HashMap<u32, TurtleBlock>, Vec<u32>), TriplestoreError> {
-        let lf = triples.get_lazy_frame_between_subject_strings(
-            string_start,
-            string_ends,
-            self.global_cats.clone(),
-        )?;
-        let mut df = if let Some(lf) = lf {
-            lf.collect().unwrap()
-        } else {
-            return Ok((HashMap::new(), Vec::new()));
-        };
-        df.rechunk_mut();
-        let mut keep = vec![];
-        for s in df.column(SUBJECT_COL_NAME).unwrap().u32().unwrap().iter() {
-            let s = s.unwrap();
-            keep.push(!used_subjects.contains(&s));
-        }
-        df = df.filter(&BooleanChunked::from_iter(keep)).unwrap();
-        if df.columns().is_empty() {
-            return Ok((HashMap::new(), Vec::new()));
-        }
-
-        let new_subj_u32: HashSet<u32> = df
-            .column(SUBJECT_COL_NAME)
-            .unwrap()
-            .u32()
-            .unwrap()
-            .iter()
-            .map(|x| x.unwrap())
-            .collect();
-        let subjects_ordering: Vec<_> = df
-            .column(SUBJECT_COL_NAME)
-            .unwrap()
-            .unique_stable()
-            .unwrap()
-            .u32()
-            .unwrap()
-            .iter()
-            .map(|x| x.unwrap())
-            .collect();
+    ) -> Result<HashMap<u32, TurtleBlock>, TriplestoreError> {
         let mut blocks_map = HashMap::new();
-
-        update_blocks_map(
-            &mut blocks_map,
-            &df,
-            driver_predicate,
-            &triples.subject_type,
-            &triples.object_type,
-            self.global_cats.clone(),
-            &new_subj_u32,
-            used_subjects,
-            blanks_in_degree_zero,
-            blanks_in_degree_one,
-        )?;
 
         // Stride through and do the "left join"
         for (p, m) in map.iter() {
             for (k, t) in m.iter() {
-                if let Some(ks) = used_drivers.get(p) {
-                    if ks.contains(k) {
-                        continue;
-                    }
+                if k.0.is_iri() != is_iri {
+                    continue;
                 }
-
                 if has_lists && is_list_pred_and_subject_type(p, &k.0) {
                     continue;
                 }
@@ -669,7 +540,7 @@ impl Triplestore {
                         s,
                         o,
                         self.global_cats.clone(),
-                        &new_subj_u32,
+                        None,
                         used_subjects,
                         blanks_in_degree_zero,
                         blanks_in_degree_one,
@@ -677,7 +548,7 @@ impl Triplestore {
                 }
             }
         }
-        Ok((blocks_map, subjects_ordering))
+        Ok(blocks_map)
     }
 
     fn create_lists_map(
@@ -957,7 +828,7 @@ fn update_blocks_map(
     subject_type: &BaseRDFNodeType,
     object_type: &BaseRDFNodeType,
     global_cats: LockedCats,
-    current_subjects: &HashSet<u32>,
+    maybe_current_subjects: Option<&HashSet<u32>>,
     used_subjects: &HashSet<u32>,
     in_degree_zero_blanks: &HashSet<u32>,
     in_degree_one_blanks: &HashSet<u32>,
@@ -1011,8 +882,13 @@ fn update_blocks_map(
             TermOrList::Elem(Arc::new(o.unwrap()))
         };
         // Very important that this happens after the replace iterator has been popped
-        if used_subjects.contains(&s_u32) || !current_subjects.contains(&s_u32) {
+        if used_subjects.contains(&s_u32) {
             continue;
+        }
+        if let Some(current_subjects) = maybe_current_subjects {
+            if !current_subjects.contains(&s_u32) {
+                continue;
+            }
         }
 
         let block = if let Some(block) = map.get_mut(&s_u32) {
@@ -1041,24 +917,28 @@ fn write_blocks<W: Write>(
     blocks_map: HashMap<u32, TurtleBlock>,
     type_nn: &NamedNode,
     prefix_replacer: &PrefixReplacer,
-    subjects_ordering: &[u32],
     in_degree_one_map: &HashMap<u32, TurtleBlockOrTermOrList>,
+    global_cats: LockedCats,
+    subject_dt: &BaseRDFNodeType,
 ) -> Result<Vec<u32>, TriplestoreError> {
-    let out: Result<Vec<Vec<_>>, TriplestoreError> = subjects_ordering
-        .iter()
-        .map(|k| {
-            let r = if let Some(block) = blocks_map.get(k) {
+    let keys: HashSet<_> = blocks_map.keys().cloned().collect();
+    let rank_map = global_cats.read()?.local_rank_map(&keys, subject_dt);
+    let inv_rank_map: BTreeMap<_, _> = rank_map.into_iter().map(|(x, y)| (y, x)).collect();
+
+    let out: Result<Vec<Vec<_>>, TriplestoreError> = inv_rank_map
+        .range(..)
+        .map(|(_, k)| {
+            if let Some(block) = blocks_map.get(k) {
                 let r = block
                     .write_block(writer, type_nn, prefix_replacer, true, in_degree_one_map, 1)
                     .map_err(|x| TriplestoreError::WriteTurtleError(x.to_string()));
                 let replaced = r?;
                 writeln!(writer, " .\n")
                     .map_err(|x| TriplestoreError::WriteTurtleError(x.to_string()))?;
-                replaced
+                Ok(replaced)
             } else {
-                vec![]
-            };
-            Ok(r)
+                Ok(vec![])
+            }
         })
         .collect();
     let outs = out?.into_iter().flatten().collect();

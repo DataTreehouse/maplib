@@ -85,6 +85,13 @@ pub enum CatMapsInMemory {
 }
 
 impl CatMapsInMemory {
+    pub fn get_spaced_strings(&self, stride: usize) -> Vec<(String, String)> {
+        match self {
+            CatMapsInMemory::Compressed(c) => c.get_spaced_strings(stride),
+            CatMapsInMemory::Uncompressed(u) => u.get_spaced_strings(stride),
+        }
+    }
+
     pub fn compact(&mut self) {
         match self {
             CatMapsInMemory::Compressed(c) => c.compact(),
@@ -291,6 +298,25 @@ pub struct PrefixCompressedCatMapsInMemory {
 }
 
 impl PrefixCompressedCatMapsInMemory {
+    pub fn get_spaced_strings(&self, stride: usize) -> Vec<(String, String)> {
+        let mut spaced = vec![];
+        let mut i = 0;
+        let mut start_string = None;
+        for (k, _) in self.map.range(..) {
+            if start_string.is_none() {
+                start_string = Some(k.clone());
+            }
+            if i != 0 && i % stride == 0 || i == self.map.len() - 1 {
+                spaced.push((
+                    start_string.take().unwrap().to_string(),
+                    k.clone().to_string(),
+                ));
+            }
+            i = i + 1;
+        }
+        spaced
+    }
+
     fn from_ordered_vec(ss: Vec<(Cow<str>, u32)>) -> PrefixCompressedCatMapsInMemory {
         let split_vec = ss
             .par_iter()
@@ -604,6 +630,25 @@ pub struct UncompressedCatMapsInMemory {
 }
 
 impl UncompressedCatMapsInMemory {
+    pub fn get_spaced_strings(&self, stride: usize) -> Vec<(String, String)> {
+        let mut spaced = vec![];
+        let mut i = 0;
+        let mut start_string = None;
+        for (k, _) in self.map.range::<Arc<String>, _>(..) {
+            if start_string.is_none() {
+                start_string = Some(k.clone());
+            }
+            if i != 0 && i % stride == 0 || i == self.map.len() - 1 {
+                spaced.push((
+                    start_string.take().unwrap().to_string(),
+                    k.clone().to_string(),
+                ));
+            }
+            i = i + 1;
+        }
+        spaced
+    }
+
     fn from_ordered_vec(ss: Vec<(Cow<str>, u32)>) -> UncompressedCatMapsInMemory {
         let ss_arced = ss
             .into_par_iter()

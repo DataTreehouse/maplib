@@ -33,7 +33,7 @@ impl Triplestore {
         prefixes: &HashMap<String, NamedNode>,
     ) -> Result<(), TriplestoreError> {
         if !self.does_graph_exist(graph) {
-            return Ok(())
+            return Ok(());
         }
         if RdfFormat::NTriples == format {
             let n_threads = THREAD_POOL.current_num_threads();
