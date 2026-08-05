@@ -1,3 +1,0 @@
-@prefix ex: <http://example/> .
-
-ex:s ex:p ex:o .
