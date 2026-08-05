@@ -150,7 +150,7 @@ impl PyModel {
         })
     }
 
-    #[pyo3(signature = (path_or_string, graph=None, transient=None))]
+    #[pyo3(signature = (path_or_string, graph=None, transient=None, uuid_namespace=None))]
     #[instrument(skip_all)]
     fn map_json(
         &self,
@@ -158,14 +158,15 @@ impl PyModel {
         path_or_string: StringOrPathBuf,
         graph: Option<String>,
         transient: Option<bool>,
+        uuid_namespace: Option<String>,
     ) -> PyResult<()> {
         py.detach(move || {
             let mut inner = self.inner.lock().unwrap();
-            map_json_mutex(&mut inner, path_or_string, graph, transient)
+            map_json_mutex(&mut inner, path_or_string, graph, transient, uuid_namespace)
         })
     }
 
-    #[pyo3(signature = (path_or_string, graph=None, transient=None))]
+    #[pyo3(signature = (path_or_string, graph=None, transient=None, uuid_namespace=None))]
     #[instrument(skip_all)]
     fn map_xml(
         &self,
@@ -173,10 +174,11 @@ impl PyModel {
         path_or_string: StringOrPathBuf,
         graph: Option<String>,
         transient: Option<bool>,
+        uuid_namespace: Option<String>,
     ) -> PyResult<()> {
         py.detach(move || {
             let mut inner = self.inner.lock().unwrap();
-            map_xml_mutex(&mut inner, path_or_string, graph, transient)
+            map_xml_mutex(&mut inner, path_or_string, graph, transient, uuid_namespace)
         })
     }
 
@@ -239,15 +241,21 @@ impl PyModel {
         })
     }
 
-    #[pyo3(signature = (df, graph=None))]
+    #[pyo3(signature = (df, graph=None, uuid_namespace=None))]
     #[instrument(skip_all)]
-    fn map_df(&self, py: Python<'_>, df: &Bound<'_, PyAny>, graph: Option<String>) -> PyResult<()> {
+    fn map_df(
+        &self,
+        py: Python<'_>,
+        df: &Bound<'_, PyAny>,
+        graph: Option<String>,
+        uuid_namespace: Option<String>,
+    ) -> PyResult<()> {
         let (df, _) = data_to_mappings_types(df, py)?;
         py.detach(move || -> PyResult<()> {
             let mut inner = self.inner.lock().unwrap();
             let graph = parse_optional_named_node(graph)?;
             let named_graph = NamedGraph::from_maybe_named_node(graph.as_ref());
-            map_df_mutex(&mut inner, df, named_graph)
+            map_df_mutex(&mut inner, df, named_graph, uuid_namespace)
         })
     }
 

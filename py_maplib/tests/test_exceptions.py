@@ -56,3 +56,14 @@ def test_query_invalid_substr_arg_exception():
         """)
     assert "SUBSTR expected" in str(e)
 
+
+def test_concat_function_invalid_args():
+    m = Model()
+    with pytest.raises(MaplibException) as e:
+        m.query("""
+        SELECT * WHERE {
+        BIND(concat("fo", "ob", "bar", 4) AS ?concatstr)
+        }
+        """)
+    assert "Expected string arguments" in str(e)
+

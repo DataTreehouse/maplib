@@ -23,6 +23,22 @@ pub fn concat_(
             ">1".to_string(),
         ));
     }
+    for i in 0..args.len() {
+        let curr_arg = solution_mappings
+            .rdf_node_types
+            .get(args_contexts.get(&i).unwrap().as_str())
+            .unwrap();
+        match curr_arg.get_base_type().unwrap() {
+            BaseRDFNodeType::Literal(_) => {
+                if !curr_arg.is_lit_type(xsd::STRING) && !curr_arg.is_lit_type(rdf::LANG_STRING) {
+                    return Err(QueryProcessingError::UnexpectedDataTypeForConcat(
+                        (i + 1).to_string(),
+                    ));
+                };
+            }
+            &BaseRDFNodeType::IRI | &BaseRDFNodeType::BlankNode | &BaseRDFNodeType::None => todo!(),
+        }
+    }
     let SolutionMappings {
         mappings,
         rdf_node_types: datatypes,

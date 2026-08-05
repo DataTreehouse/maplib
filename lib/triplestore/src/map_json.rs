@@ -17,6 +17,7 @@ use representation::dataset::NamedGraph;
 use representation::{BaseRDFNodeType, OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use serde_json::Value;
 use std::collections::HashMap;
+use uuid::Uuid;
 
 const BOOLEAN: u8 = 0;
 const INTEGER: u8 = 1;
@@ -131,6 +132,7 @@ impl Triplestore {
     pub fn map_json(
         &mut self,
         u8s: &mut [u8],
+        uuid_namespace: Option<String>,
         named_graph: &NamedGraph,
         transient: bool,
     ) -> Result<(), TriplestoreError> {
@@ -140,8 +142,21 @@ impl Triplestore {
         let mut pred_map = HashMap::new();
         let rdf_type = rdf::TYPE.into_owned();
         pred_map.insert(rdf_type.clone(), TripleTableBuilder::new());
+        let mut path: Vec<String> = Vec::new();
 
-        let doc_subject = new_iri_typed_subject(FX_ROOT, &rdf_type, &mut pred_map);
+        let use_uuid_namespace = if let Some(uuid_namespace) = uuid_namespace {
+            Uuid::new_v5(&Uuid::NAMESPACE_DNS, uuid_namespace.as_bytes())
+        } else {
+            Uuid::new_v4()
+        };
+
+        let doc_subject = new_iri_typed_subject(
+            FX_ROOT,
+            &rdf_type,
+            &use_uuid_namespace,
+            "".as_bytes(),
+            &mut pred_map,
+        );
 
         let root_elem_property = NamedNode::new_unchecked(ROOT_ELEMENT_PROPERTY);
         pred_map.insert(root_elem_property.clone(), TripleTableBuilder::new());
@@ -153,6 +168,8 @@ impl Triplestore {
             v,
             &rdf_type,
             &root_elem_property,
+            &mut path,
+            &use_uuid_namespace,
             &mut pred_map,
         );
         let mut triples_to_add = Vec::new();
@@ -194,6 +211,8 @@ fn process_value(
     value: Value,
     rdf_type: &NamedNode,
     root_elem_property: &NamedNode,
+    path: &mut Vec<String>,
+    uuid_namespace: &Uuid,
     map: &mut HashMap<NamedNode, TripleTableBuilder>,
 ) {
     match value {
@@ -220,8 +239,9 @@ fn process_value(
             builder.push_iri_iri(subject, FX_NULL);
         }
         Value::Object(obj) => {
+            let name: String = path.join(".");
             let new_subject = if let Some(property) = property {
-                let new_subject = new_iri_subject();
+                let new_subject = new_iri_subject(uuid_namespace, name.as_bytes());
                 let builder = map.get_mut(property).unwrap();
                 builder.push_iri_iri(subject, &new_subject);
                 new_subject
@@ -230,7 +250,8 @@ fn process_value(
             };
 
             for (key, val) in obj {
-                let property = new_key_property(key, prefix, map);
+                let property = new_key_property(key.clone(), prefix, map);
+                path.push(key.to_string());
                 process_value(
                     &new_subject,
                     Some(&property),
@@ -238,13 +259,17 @@ fn process_value(
                     val,
                     rdf_type,
                     root_elem_property,
+                    path,
+                    uuid_namespace,
                     map,
                 );
+                path.pop();
             }
         }
         Value::Array(arr) => {
+            let name: String = path.join(".");
             let array_subject = if let Some(property) = property {
-                let array_subject = new_iri_subject();
+                let array_subject = new_iri_subject(uuid_namespace, name.as_bytes());
                 let builder = map.get_mut(property).unwrap();
                 builder.push_iri_iri(subject, &array_subject);
                 array_subject
@@ -252,8 +277,9 @@ fn process_value(
                 subject.to_string()
             };
             let ch = NamedNode::new_unchecked(FX_CHILD);
-            for v in arr.into_iter() {
+            for (i, v) in arr.into_iter().enumerate() {
                 add_new_property(&ch, map);
+                path.push(i.to_string());
                 process_value(
                     &array_subject,
                     Some(&ch),
@@ -261,8 +287,11 @@ fn process_value(
                     v,
                     rdf_type,
                     root_elem_property,
+                    path,
+                    uuid_namespace,
                     map,
                 );
+                path.pop();
             }
         }
     }
@@ -271,15 +300,17 @@ fn process_value(
 fn new_iri_typed_subject(
     t: &str,
     rdf_type: &NamedNode,
+    namespace: &Uuid,
+    name: &[u8],
     map: &mut HashMap<NamedNode, TripleTableBuilder>,
 ) -> String {
-    let bstr = new_iri_subject();
+    let bstr = new_iri_subject(namespace, name);
     map.get_mut(rdf_type).unwrap().push_iri_iri(&bstr, t);
     bstr
 }
 
-fn new_iri_subject() -> String {
-    let bstr = format!("urn:maplib:{}", uuid::Uuid::new_v4());
+fn new_iri_subject(namespace: &Uuid, name: &[u8]) -> String {
+    let bstr = format!("urn:maplib:{}", Uuid::new_v5(namespace, name));
     bstr
 }
 

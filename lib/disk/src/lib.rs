@@ -102,4 +102,8 @@ impl CatMapsOnDisk {
     pub fn to_memory(&self, _: bool) -> CatMapsInMemory {
         unimplemented!("Contact Data Treehouse to try!")
     }
+
+    pub fn get_spaced_strings(&self, _: usize) -> Vec<(String, String)> {
+        unimplemented!("Contact Data Treehouse to try!")
+    }
 }

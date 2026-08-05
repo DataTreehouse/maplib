@@ -2,6 +2,7 @@ import pathlib
 
 import pytest
 
+import polars as pl
 from .disk import disk_params
 from maplib import Model
 
@@ -171,3 +172,38 @@ def test_map_xml_attributes():
     assert df.height == 1
     assert df.get_column("id")[0] == "42"
     assert df.get_column("name")[0] == "hello"
+
+def test_map_xml_uuid_v5_no_args():
+    xml_1 = TESTDATA_PATH / "1.xml"
+    m = Model()
+    m.map_xml(str(xml_1))
+    df = m.query("""SELECT * WHERE {?s ?p ?o}""")
+
+    m2 = Model()
+    m2.map_xml(str(xml_1))
+    df2 = m2.query("""SELECT * WHERE {?s ?p ?o}""")
+    assert df.height == 61
+    assert df.get_column("s").sort().to_list() == df2.get_column("s").sort().to_list()
+
+def test_map_xml_uuid_v5_different_uuids():
+    xml_2 = TESTDATA_PATH / "1.xml"
+    m = Model()
+    m.map_xml(str(xml_2), uuid_namespace="abc")
+
+    m2 = Model()
+    m2.map_xml(str(xml_2))
+    df = m.query("""SELECT * WHERE {?s ?p ?o}""")
+    df2 = m2.query("""SELECT * WHERE {?s ?p ?o}""")
+    assert df.get_column("s").sort().to_list() != df2.get_column("s").sort().to_list()
+
+def test_map_xml_uuid_v5_same_args():
+    xml_1 = TESTDATA_PATH / "2.xml"
+    m = Model()
+    m.map_xml(str(xml_1), uuid_namespace="abc")
+    df = m.query("""SELECT * WHERE {?s ?p ?o}""")
+
+    m2 = Model()
+    m2.map_xml(str(xml_1), uuid_namespace="abc")
+    df2 = m2.query("""SELECT * WHERE {?s ?p ?o}""")
+    assert df.height == 195
+    assert df.get_column("s").sort().to_list() == df2.get_column("s").sort().to_list()
