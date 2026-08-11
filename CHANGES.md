@@ -1,5 +1,9 @@
 # Change log
 
+## v0.20.28
+### Performance
+- Pretty turtle write performance drastically improved (around 12x better)
+
 ## v0.20.26
 ### Features
 - The IRI maplib:DefaultGraph is the default graph
