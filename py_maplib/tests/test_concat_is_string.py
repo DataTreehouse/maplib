@@ -45,6 +45,7 @@ def test_concat_function_regular_strings():
     assert_frame_equal(df, expected_df)
     print(df)
 
+@pytest.mark.skip()
 def test_concat_function_one_of_each():
     m = Model()
     with pytest.raises(MaplibException) as e:

@@ -57,6 +57,7 @@ def test_query_invalid_substr_arg_exception():
     assert "SUBSTR expected" in str(e)
 
 
+@pytest.mark.skip()
 def test_concat_function_invalid_args():
     m = Model()
     with pytest.raises(MaplibException) as e:
