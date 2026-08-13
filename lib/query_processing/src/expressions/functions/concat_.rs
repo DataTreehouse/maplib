@@ -23,7 +23,7 @@ pub fn concat_(
             ">1".to_string(),
         ));
     }
-    
+
     let SolutionMappings {
         mappings,
         rdf_node_types: datatypes,

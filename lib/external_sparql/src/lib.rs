@@ -1,6 +1,9 @@
+use polars::frame::DataFrame;
+use polars::prelude::{col, Column, IntoLazy};
 use representation::errors::RepresentationError;
 use representation::result::{QueryResult, QueryResultKind};
 use representation::solution_mapping::EagerSolutionMappings;
+use representation::BaseRDFNodeType;
 use reqwest::header::{ACCEPT, USER_AGENT};
 use sparesults::{
     QueryResultsFormat, QueryResultsParser, QueryResultsSyntaxError, QuerySolution,
@@ -77,14 +80,16 @@ impl SparqlEndpoint {
     ) -> Result<QueryResult, SparqlEndpointQueryError> {
         let client = reqwest::Client::new();
         let response = match &self.method {
-            SparqlMethod::GET => client
-                .get(&self.endpoint)
-                .header(ACCEPT, "application/sparql-results+json,application/json,text/javascript,application/javascript")
-                .header(USER_AGENT, "maplib")
-                .query(&[("query", query.to_string())])
-                .query(&[("format", "json"), ("output", "json"), ("results", "json")])
-                .send()
-                .await
+            SparqlMethod::GET => {
+                client
+                    .get(&self.endpoint)
+                    .header(ACCEPT, "application/sparql-results+json,application/json,text/javascript,application/javascript")
+                    .header(USER_AGENT, "maplib")
+                    .query(&[("query", query.to_string())])
+                    .query(&[("format", "json"), ("output", "json"), ("results", "json")])
+                    .send()
+                    .await
+            }
         };
         let solutions = match response {
             Ok(proper_response) => {
@@ -98,13 +103,41 @@ impl SparqlEndpoint {
             }
             Err(error) => return Err(SparqlEndpointQueryError::RequestError(error)),
         };
-        let sm = EagerSolutionMappings::from_query_solutions(solutions.as_slice())
-            .map_err(SparqlEndpointQueryError::InvalidResults)?;
-        Ok(QueryResult {
-            kind: QueryResultKind::Select(sm),
-            debug: None,
-            pushdown_paths: vec![],
-        })
+        if let Query::Select { pattern, .. } = query {
+            let mut vars = Vec::new();
+            pattern.on_in_scope_variable(|x| vars.push(x));
+            let sm = if !solutions.is_empty() {
+                let mut sm = EagerSolutionMappings::from_query_solutions(solutions.as_slice())
+                    .map_err(SparqlEndpointQueryError::InvalidResults)?;
+                let cols: Vec<_> = vars.iter().map(|x| col(x.as_str())).collect();
+                sm.mappings = sm.mappings.lazy().select(cols).collect().unwrap();
+                sm
+            } else {
+                let mut columns = Vec::with_capacity(vars.len());
+                let mut states = HashMap::new();
+                for v in vars {
+                    columns.push(Column::new_empty(
+                        v.as_str().into(),
+                        &BaseRDFNodeType::None.default_input_polars_data_type(),
+                    ));
+                    states.insert(
+                        v.as_str().to_string(),
+                        BaseRDFNodeType::None.into_default_input_rdf_node_state(),
+                    );
+                }
+
+                let df = DataFrame::new(0, columns).unwrap();
+                let sm = EagerSolutionMappings::new(df, states);
+                sm
+            };
+            Ok(QueryResult {
+                kind: QueryResultKind::Select(sm),
+                debug: None,
+                pushdown_paths: vec![],
+            })
+        } else {
+            todo!()
+        }
     }
 }
 

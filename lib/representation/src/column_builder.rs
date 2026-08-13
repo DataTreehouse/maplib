@@ -97,7 +97,7 @@ impl SolutionMappingsColumnBuilder {
                 ser.into_column(),
                 BaseRDFNodeType::None.into_default_input_rdf_node_state(),
             )
-        } else if series_types.len() > 0 {
+        } else if series_types.len() > 1 {
             let mut columns = Vec::with_capacity(series_types.len());
             let mut states = HashMap::new();
             let mut height = 0;
@@ -131,6 +131,7 @@ impl SolutionMappingsColumnBuilder {
                 let state = t.default_input_cat_state();
                 states.insert(t, state);
             }
+
             let mut df = DataFrame::new(height, columns).unwrap();
             df = df
                 .lazy()
