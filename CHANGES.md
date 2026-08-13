@@ -1,5 +1,9 @@
 # Change log
 
+## v0.20.29
+### Bug fixes
+- Fix query external for empty results, variable sequence and iri-columns. 
+
 ## v0.20.28
 ### Performance
 - Pretty turtle write performance drastically improved (around 12x better)
