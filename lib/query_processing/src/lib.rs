@@ -1,4 +1,5 @@
 pub mod aggregates;
+pub mod bindings;
 pub mod cats;
 pub mod constants;
 pub mod errors;

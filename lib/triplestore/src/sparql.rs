@@ -20,6 +20,7 @@ use polars::frame::DataFrame;
 use polars::prelude::{as_struct, col, lit, Expr, IntoLazy, LiteralValue, PlSmallStr};
 use polars_core::frame::UniqueKeepStrategy;
 use polars_core::prelude::{DataType, ExplodeOptions, Series};
+use query_processing::bindings::maybe_replace_bindings;
 use query_processing::expressions::expr_is_null_workaround;
 use query_processing::graph_patterns::unique_workaround;
 use query_processing::pushdowns::Pushdowns;
@@ -35,8 +36,8 @@ use representation::{BaseRDFNodeType, RDFNodeState};
 use representation::{OBJECT_COL_NAME, PREDICATE_COL_NAME, SUBJECT_COL_NAME};
 use spargebra::algebra::{GraphPattern, QueryDataset};
 use spargebra::term::{
-    GraphNamePattern, GroundQuadPattern, GroundTermPattern, NamedNodePattern, QuadPattern,
-    TermPattern,
+    GraphNamePattern, GroundQuadPattern, GroundTerm, GroundTermPattern, NamedNodePattern,
+    QuadPattern, TermPattern,
 };
 use spargebra::{GraphUpdateOperation, Query, Update};
 use std::collections::{HashMap, HashSet};
@@ -68,8 +69,11 @@ impl Triplestore {
         graph: Option<&NamedGraph>,
         prefixes: Option<&HashMap<String, NamedNode>>,
         debug_no_results: bool,
+        bindings: Option<&HashMap<String, GroundTerm>>,
     ) -> Result<QueryResult, SparqlError> {
         let query = Query::parse(query, None, prefixes).map_err(SparqlError::ParseError)?;
+        let query =
+            maybe_replace_bindings(query, bindings).map_err(SparqlError::ReplaceBindingsError)?;
         trace!(?query);
         self.query_parsed(
             &query,

@@ -37,6 +37,7 @@ use representation::constants::OTTR_TRIPLE;
 use representation::dataset::NamedGraph;
 use representation::prefixes::get_default_prefixes;
 use representation::result::QueryResult;
+use spargebra::term::GroundTerm;
 use tracing::instrument;
 use triplestore::errors::TriplestoreError;
 use triplestore::triples_read::ExtendedRdfFormat;
@@ -399,6 +400,7 @@ impl Model {
         include_transient: bool,
         max_rows: Option<usize>,
         debug_no_results: bool,
+        bindings: Option<&HashMap<String, GroundTerm>>,
     ) -> Result<QueryResult, MaplibError> {
         let query_settings = QuerySettings {
             include_transient,
@@ -416,7 +418,7 @@ impl Model {
                 debug_no_results,
             );
             let qr = engine
-                .query_blocking(query, Some(&self.prefixes))
+                .query_blocking(query, Some(&self.prefixes), bindings)
                 .map_err(MaplibError::ChrontextError)?;
             Ok(qr)
         } else {
@@ -429,6 +431,7 @@ impl Model {
                     graph,
                     Some(&self.prefixes),
                     debug_no_results,
+                    bindings,
                 )
                 .map_err(|x| x.into())
         }
@@ -440,9 +443,10 @@ impl Model {
         query: &str,
         endpoint: &str,
         method: SparqlMethod,
+        bindings: Option<&HashMap<String, GroundTerm>>,
     ) -> Result<QueryResult, MaplibError> {
         let endpoint = SparqlEndpoint::new(endpoint, method);
-        let r = endpoint.query_blocking(query, Some(&self.prefixes))?;
+        let r = endpoint.query_blocking(query, Some(&self.prefixes), bindings)?;
         Ok(r)
     }
 

@@ -43,6 +43,8 @@ pub enum SparqlError {
     ValuesError(String),
     #[error("Error parsing literal {0}")]
     ParseLiteralError(RepresentationError),
+    #[error(transparent)]
+    ReplaceBindingsError(RepresentationError),
 }
 
 impl<T> From<PoisonError<T>> for SparqlError {

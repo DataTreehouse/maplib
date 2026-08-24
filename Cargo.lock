@@ -1328,6 +1328,7 @@ name = "external_sparql"
 version = "0.1.0"
 dependencies = [
  "polars",
+ "query_processing",
  "representation",
  "reqwest 0.13.4",
  "sparesults",
@@ -2303,6 +2304,7 @@ dependencies = [
  "rayon",
  "representation",
  "shacl",
+ "spargebra",
  "templates",
  "thiserror",
  "tracing",
@@ -3603,6 +3605,7 @@ dependencies = [
  "pyo3",
  "representation",
  "shacl",
+ "spargebra",
  "templates",
  "thiserror",
  "tikv-jemallocator",

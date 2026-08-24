@@ -28,6 +28,7 @@ use representation::python::PyIRI;
 use representation::result::QueryResult;
 use representation::solution_mapping::EagerSolutionMappings;
 use representation::{BaseRDFNodeType, RDFNodeState};
+use spargebra::term::GroundTerm;
 use std::collections::HashMap;
 use std::fs::File;
 use std::path::{Path, PathBuf};
@@ -341,6 +342,7 @@ pub(crate) fn query_mutex(
     include_transient: Option<bool>,
     max_rows: Option<usize>,
     debug: Option<bool>,
+    bindings: Option<HashMap<String, GroundTerm>>,
 ) -> PyResult<QueryResult> {
     let res = inner
         .query(
@@ -351,6 +353,7 @@ pub(crate) fn query_mutex(
             include_transient.unwrap_or(DEFAULT_INCLUDE_TRANSIENT),
             max_rows,
             debug.unwrap_or(DEFAULT_DEBUG_NO_RESULTS),
+            bindings.as_ref(),
         )
         .map_err(PyMaplibError::from)?;
     Ok(res)
@@ -361,9 +364,10 @@ pub(crate) fn query_external_mutex(
     query: String,
     endpoint: String,
     method: SparqlMethod,
+    bindings: Option<HashMap<String, GroundTerm>>,
 ) -> PyResult<QueryResult> {
     let res = inner
-        .query_external(&query, &endpoint, method)
+        .query_external(&query, &endpoint, method, bindings.as_ref())
         .map_err(PyMaplibError::from)?;
     Ok(res)
 }

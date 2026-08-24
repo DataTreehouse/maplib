@@ -10,14 +10,15 @@ abi3 = ["pyo3/abi3-py310"]
 maplib = { path = "../lib/maplib", features = ["pyo3"] }
 triplestore = { path = "../lib/triplestore", features = ["pyo3"] }
 representation = { path = "../lib/representation" }
-shacl = { path = "../lib/shacl", features = [ "pyo3" ] }
 templates = {path= "../lib/templates"}
+shacl = {path = "../lib/shacl", features = ["pyo3"]}
 cimxml_export = {path = "../lib/cimxml_export", features = [ "pyo3" ]}
 datalog = {path = "../lib/datalog"}
 virtualized_query = {path="../lib/virtualized_query"}
 virtualization = {path="../lib/virtualization"}
 external_sparql = {path="../lib/external_sparql"}
 opc_ua = { path = "../lib/opc_ua" }
+spargebra = {path = "../lib/spargebra"}
 
 pyo3.workspace = true
 oxrdf.workspace = true

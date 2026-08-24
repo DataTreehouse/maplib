@@ -1,5 +1,6 @@
 use polars::frame::DataFrame;
 use polars::prelude::{col, Column, IntoLazy};
+use query_processing::bindings::maybe_replace_bindings;
 use representation::errors::RepresentationError;
 use representation::result::{QueryResult, QueryResultKind};
 use representation::solution_mapping::EagerSolutionMappings;
@@ -9,7 +10,7 @@ use sparesults::{
     QueryResultsFormat, QueryResultsParser, QueryResultsSyntaxError, QuerySolution,
     SliceQueryResultsParserOutput,
 };
-use spargebra::term::NamedNode;
+use spargebra::term::{GroundTerm, NamedNode};
 use spargebra::{Query, SparqlSyntaxError};
 use std::collections::HashMap;
 use thiserror::Error;
@@ -31,6 +32,8 @@ pub enum SparqlEndpointQueryError {
     InvalidResults(RepresentationError),
     #[error("SPARQL parse error: `{0}`")]
     SPARQLSyntaxError(SparqlSyntaxError),
+    #[error(transparent)]
+    BindingReplacementError(RepresentationError),
 }
 
 pub enum SparqlMethod {
@@ -54,13 +57,14 @@ impl SparqlEndpoint {
         &self,
         query: &str,
         prefixes: Option<&HashMap<String, NamedNode>>,
+        bindings: Option<&HashMap<String, GroundTerm>>,
     ) -> Result<QueryResult, SparqlEndpointQueryError> {
         let mut builder = Builder::new_multi_thread();
         builder.enable_all();
         let qr = builder
             .build()
             .unwrap()
-            .block_on(self.async_query(query, prefixes));
+            .block_on(self.async_query(query, prefixes, bindings));
         qr
     }
 
@@ -68,9 +72,12 @@ impl SparqlEndpoint {
         &self,
         query: &str,
         prefixes: Option<&HashMap<String, NamedNode>>,
+        bindings: Option<&HashMap<String, GroundTerm>>,
     ) -> Result<QueryResult, SparqlEndpointQueryError> {
         let query = Query::parse(query, None, prefixes)
             .map_err(SparqlEndpointQueryError::SPARQLSyntaxError)?;
+        let query = maybe_replace_bindings(query, bindings)
+            .map_err(SparqlEndpointQueryError::BindingReplacementError)?;
         self.async_query_parsed(&query).await
     }
 

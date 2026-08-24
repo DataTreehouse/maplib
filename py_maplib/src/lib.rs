@@ -20,7 +20,7 @@ use pyo3::prelude::*;
 use representation::result::{QueryResult, QueryResultKind as SparqlQueryResult};
 use std::collections::HashMap;
 use std::path::PathBuf;
-
+use std::str::FromStr;
 //The below snippet controlling alloc-library is from https://github.com/pola-rs/polars/blob/main/py-polars/src/lib.rs
 //And has a MIT license:
 //Copyright (c) 2020 Ritchie Vink
@@ -46,7 +46,7 @@ use std::path::PathBuf;
 #[cfg(target_os = "linux")]
 use tikv_jemallocator::Jemalloc;
 
-use oxrdf::NamedNode;
+use oxrdf::{NamedNode, Term};
 use oxrdfio::RdfFormat;
 use polars::prelude::{col, lit, IntoLazy};
 use pyo3::types::{PyList, PyString};
@@ -70,6 +70,7 @@ use representation::rdf_to_polars::rdf_named_node_to_polars_literal_value;
 use representation::{
     BaseRDFNodeType, RDFNodeState, OBJECT_COL_NAME, PREDICATE_COL_NAME, SUBJECT_COL_NAME,
 };
+use spargebra::term::GroundTerm;
 use templates::python::owl::PyOWL;
 use templates::python::rdf::PyRDF;
 use templates::python::rdfs::PyRDFS;
@@ -473,4 +474,55 @@ fn resolve_rdf_node_type(obj: &Bound<'_, PyAny>) -> PyResult<BaseRDFNodeType> {
         return Ok(BaseRDFNodeType::Literal(nn));
     }
     Err(PyTypeError::new_err("Expected RDFType or IRI"))
+}
+
+fn maybe_parse_bindings(
+    bindings: Option<HashMap<String, Py<PyAny>>>,
+    py: Python<'_>,
+) -> PyResult<Option<HashMap<String, GroundTerm>>> {
+    if let Some(bindings) = bindings {
+        let mut use_bindings = HashMap::new();
+        for (k, v) in bindings {
+            if let Ok(v) = v.extract::<PyIRI>(py) {
+                use_bindings.insert(k, GroundTerm::NamedNode(v.into_inner()));
+            } else if let Ok(v) = v.extract::<PyLiteral>(py) {
+                use_bindings.insert(k, GroundTerm::Literal(v.literal));
+            } else if let Ok(v) = v.extract::<String>(py) {
+                match Term::from_str(v.as_str()) {
+                    Ok(term) => {
+                        let gt = match term {
+                            Term::NamedNode(nn) => GroundTerm::NamedNode(nn),
+                            Term::BlankNode(b) => {
+                                return Err(PyMaplibError::FunctionArgumentError(
+                                    format!(
+                                        "Blank node binding for variable {}: '{}' not permitted",
+                                        k, b,
+                                    )
+                                    .to_string(),
+                                )
+                                .into());
+                            }
+                            Term::Literal(l) => GroundTerm::Literal(l),
+                        };
+                        use_bindings.insert(k, gt);
+                    }
+                    Err(e) => {
+                        return Err(PyMaplibError::FunctionArgumentError(
+                            format!(
+                                "Invalid term for variable {}: '{}' with error: {}",
+                                k,
+                                v.as_str(),
+                                e
+                            )
+                            .to_string(),
+                        )
+                        .into());
+                    }
+                }
+            }
+        }
+        Ok(Some(use_bindings))
+    } else {
+        Ok(None)
+    }
 }

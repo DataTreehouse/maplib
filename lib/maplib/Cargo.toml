@@ -18,6 +18,7 @@ query_processing = {path ="../query_processing"}
 chrontext = {path = "../chrontext"}
 virtualization = {path = "../virtualization"}
 external_sparql = {path = "../external_sparql"}
+spargebra = {path = "../spargebra"}
 
 uuid = {workspace = true}
 rayon = { workspace = true }

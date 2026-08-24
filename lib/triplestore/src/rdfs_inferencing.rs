@@ -196,7 +196,16 @@ impl Triplestore {
             .iter()
             .map(|x| {
                 let r = self
-                    .query(x, None, false, query_settings, Some(graph), None, false)
+                    .query(
+                        x,
+                        None,
+                        false,
+                        query_settings,
+                        Some(graph),
+                        None,
+                        false,
+                        None,
+                    )
                     .map_err(|x| TriplestoreError::SparqlQueryError(x.to_string()))?;
                 Ok(r)
             })

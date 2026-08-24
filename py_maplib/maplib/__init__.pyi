@@ -794,6 +794,7 @@ class Model:
             include_transient: bool = True,
             max_rows: int = None,
             debug: bool = False,
+            bindings: Dict[str, Union[str, IRI, Literal]] = None,
     ) -> Union[
         DataFrame, SolutionMappings, List[Union[DataFrame, SolutionMappings, str]]
     ]:
@@ -818,6 +819,7 @@ class Model:
         :param include_transient: Include transient triples when querying.
         :param max_rows: Maximum estimated rows in result, helps avoid out-of-memory errors.
         :param debug: Why does my query have no results?
+        :param bindings: Bind the variables (keys) to the following ground terms. Use IRI, Literal classes or strings (e.g. "<urn:id:abc>") as values.
         :return: DataFrame (Select), list of DataFrames (Construct) containing results or SolutionMappings when solution_mappings is set.
 
         """
@@ -828,6 +830,7 @@ class Model:
             endpoint: str,
             solution_mappings: bool = False,
             return_json: bool = False,
+            bindings: Dict[str, Union[str, IRI, Literal]] = None,
     ) -> Union[
         DataFrame, SolutionMappings, List[Union[DataFrame, SolutionMappings, str]]
     ]:
@@ -849,6 +852,7 @@ class Model:
         :param endpoint: The external HTTP SPARQL Endpoint
         :param solution_mappings: Returns SolutionMappings with maplib-native formatting and with RDF typing. Useful for round-trips.
         :param return_json: Return JSON string.
+        :param bindings: Bind the variables (keys) to the following ground terms. Use IRI, Literal classes or strings (e.g. "<urn:id:abc>") as values.
         :return: DataFrame (Select), list of DataFrames (Construct) containing results or SolutionMappings when solution_mappings is set.
         """
 
