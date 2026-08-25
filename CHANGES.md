@@ -1,5 +1,9 @@
 # Change log
 
+## v0.20.30 
+### Features
+- Add bindings parameter that replaces variables with ground terms (safe query parameterization without special syntax)
+
 ## v0.20.29
 ### Bug fixes
 - Fix query external for empty results, variable sequence and iri-columns. 
