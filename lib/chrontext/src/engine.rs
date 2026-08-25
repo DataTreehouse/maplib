@@ -2,7 +2,7 @@ use crate::errors::ChrontextError;
 use representation::dataset::NamedGraph;
 use representation::result::QueryResult;
 use representation::solution_mapping::EagerSolutionMappings;
-use spargebra::term::NamedNode;
+use spargebra::term::{GroundTerm, NamedNode};
 use std::collections::HashMap;
 use std::sync::Arc;
 use triplestore::sparql::QuerySettings;
@@ -34,6 +34,7 @@ impl Engine {
         &self,
         _query: &str,
         _prefixes: Option<&HashMap<String, NamedNode>>,
+        _bindings: Option<&HashMap<String, GroundTerm>>,
     ) -> Result<QueryResult, ChrontextError> {
         unimplemented!("Contact Data Treehouse to try")
     }
