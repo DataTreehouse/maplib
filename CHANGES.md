@@ -1,5 +1,9 @@
 # Change log
 
+## v0.20.32
+### Features
+- Turtle output for construct queries
+
 ## v0.20.30 
 ### Features
 - Add bindings parameter that replaces variables with ground terms (safe query parameterization without special syntax)
