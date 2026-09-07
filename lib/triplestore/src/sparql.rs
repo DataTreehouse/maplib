@@ -15,29 +15,20 @@ use super::{NewTriples, Triplestore};
 use crate::sparql::debug::DebugOutputs;
 use crate::sparql::errors::SparqlError;
 use crate::sparql::rewrite::rewrite;
-use oxrdf::{BlankNode, NamedNode, Variable};
-use polars::frame::DataFrame;
-use polars::prelude::{as_struct, col, lit, Expr, IntoLazy, LiteralValue, PlSmallStr};
-use polars_core::frame::UniqueKeepStrategy;
-use polars_core::prelude::{DataType, ExplodeOptions, Series};
+use oxrdf::NamedNode;
 use query_processing::bindings::maybe_replace_bindings;
-use query_processing::expressions::expr_is_null_workaround;
-use query_processing::graph_patterns::unique_workaround;
 use query_processing::pushdowns::Pushdowns;
-use rayon::prelude::{IntoParallelIterator, ParallelIterator};
-use representation::cats::{Cats, LockedCats};
 use representation::dataset::{NamedGraph, QueryGraph};
 use representation::debug::DebugOutput;
 use representation::query_context::Context;
-use representation::rdf_to_polars::rdf_literal_to_polars_expr;
-use representation::result::{QueryResult, QueryResultKind};
-use representation::solution_mapping::{BaseCatState, EagerSolutionMappings, SolutionMappings};
-use representation::{BaseRDFNodeType, RDFNodeState};
-use representation::{OBJECT_COL_NAME, PREDICATE_COL_NAME, SUBJECT_COL_NAME};
+use representation::result::{
+    ground_quad_pattern_to_quad_pattern, quad_patterns_to_solution_mappings,
+    template_to_solution_mappings, QueryResult, QueryResultKind,
+};
+use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use spargebra::algebra::{GraphPattern, QueryDataset};
 use spargebra::term::{
-    GraphNamePattern, GroundQuadPattern, GroundTerm, GroundTermPattern, NamedNodePattern,
-    QuadPattern, TermPattern,
+    GraphNamePattern, GroundTerm, GroundTermPattern, NamedNodePattern, QuadPattern, TermPattern,
 };
 use spargebra::{GraphUpdateOperation, Query, Update};
 use std::collections::{HashMap, HashSet};
@@ -171,7 +162,8 @@ impl Triplestore {
                             rdf_node_types,
                             &quad_template,
                             self.global_cats.clone(),
-                        )?;
+                        )
+                        .map_err(|x| SparqlError::QuadPatternsError(x.to_string()))?;
                         let solutions = solutions_map
                             .remove(&NamedGraph::DefaultGraph)
                             .unwrap_or(Vec::new());
@@ -379,7 +371,8 @@ impl Triplestore {
                             None,
                             false,
                             &cats,
-                        )?;
+                        )
+                        .map_err(|e| SparqlError::QuadPatternsError(e.to_string()))?;
                         if let Some((df, pred, graph)) = del {
                             let sol = (df, pred);
                             if let Some(existing) = delete_solutions.get_mut(&graph) {
@@ -397,7 +390,8 @@ impl Triplestore {
                         rdf_node_types,
                         insert,
                         self.global_cats.clone(),
-                    )?;
+                    )
+                    .map_err(|x| SparqlError::QuadPatternsError(x.to_string()))?;
                     for (g, s) in insert_solutions {
                         self.insert_construct_result(s, false, &g)?;
                     }
@@ -418,276 +412,6 @@ impl Triplestore {
         };
         let res = UpdateResult { debug };
         Ok(res)
-    }
-}
-
-fn mint_blank_nodes(
-    df: DataFrame,
-    rdf_node_types: &mut HashMap<String, RDFNodeState>,
-    template: &Vec<QuadPattern>,
-) -> DataFrame {
-    let height = df.height();
-    let mut blanks = HashSet::new();
-    for t in template {
-        if let TermPattern::BlankNode(bn) = &t.subject {
-            blanks.insert(bn.to_string());
-        }
-        if let TermPattern::BlankNode(bn) = &t.object {
-            blanks.insert(bn.to_string());
-        }
-    }
-    let mut lf = df.lazy();
-    for b in blanks {
-        let mut blank_ser = Series::from_iter(
-            (0..height)
-                .into_par_iter()
-                .map(|_| format!("b{}", uuid::Uuid::new_v4()))
-                .collect::<Vec<_>>(),
-        );
-        blank_ser.rename(PlSmallStr::from_str(&b));
-        lf = lf.with_column(lit(blank_ser).explode(ExplodeOptions {
-            empty_as_null: false,
-            keep_nulls: true,
-        }));
-        rdf_node_types.insert(
-            b,
-            RDFNodeState::from_bases(BaseRDFNodeType::BlankNode, BaseCatState::String),
-        );
-    }
-    lf.collect().unwrap()
-}
-
-fn ground_quad_pattern_to_quad_pattern(qp: &GroundQuadPattern) -> QuadPattern {
-    let subject = TermPattern::from(qp.subject.clone());
-    let predicate = qp.predicate.clone();
-    let object = TermPattern::from(qp.object.clone());
-    let graph_name = qp.graph_name.clone();
-    QuadPattern {
-        subject,
-        predicate,
-        object,
-        graph_name,
-    }
-}
-
-pub fn template_to_solution_mappings(
-    mut df: DataFrame,
-    mut rdf_node_types: HashMap<String, RDFNodeState>,
-    template: &Vec<QuadPattern>,
-    global_cats: LockedCats,
-) -> Result<HashMap<NamedGraph, Vec<(EagerSolutionMappings, Option<NamedNode>)>>, SparqlError> {
-    df = mint_blank_nodes(df, &mut rdf_node_types, template);
-    let mut solutions_map: HashMap<_, Vec<_>> = HashMap::new();
-    for qp in template {
-        let cats = global_cats.read()?;
-        if let Some((sm, predicate, graph)) =
-            quad_patterns_to_solution_mappings(&df, &rdf_node_types, qp, None, true, &cats)?
-        {
-            if let Some(solutions) = solutions_map.get_mut(&graph) {
-                solutions.push((sm, predicate));
-            } else {
-                solutions_map.insert(graph, vec![(sm, predicate)]);
-            }
-        }
-    }
-    Ok(solutions_map)
-}
-
-pub fn quad_patterns_to_solution_mappings(
-    df: &DataFrame,
-    rdf_node_types: &HashMap<String, RDFNodeState>,
-    quad_pattern: &QuadPattern,
-    preserve_column: Option<&str>,
-    unique: bool,
-    global_cats: &Cats,
-) -> Result<Option<(EagerSolutionMappings, Option<NamedNode>, NamedGraph)>, SparqlError> {
-    let graph = match &quad_pattern.graph_name {
-        GraphNamePattern::NamedNode(nn) => NamedGraph::from_maybe_named_node(Some(nn)),
-        GraphNamePattern::DefaultGraph => NamedGraph::DefaultGraph,
-        GraphNamePattern::Variable(_) => {
-            todo!()
-        }
-    };
-    let mut select_expr = vec![];
-    let mut triple_types = HashMap::new();
-    if let Some(preserve_column) = preserve_column {
-        select_expr.push(col(preserve_column));
-        triple_types.insert(
-            preserve_column.to_string(),
-            rdf_node_types.get(preserve_column).unwrap().clone(),
-        );
-    }
-    let (subj_expr, subj_dt) = term_pattern_expression(
-        rdf_node_types,
-        &quad_pattern.subject,
-        SUBJECT_COL_NAME,
-        global_cats,
-        true,
-    )?;
-    triple_types.insert(SUBJECT_COL_NAME.to_string(), subj_dt);
-    let mut filter_expr = expr_is_null_workaround(
-        col(SUBJECT_COL_NAME),
-        triple_types.get(SUBJECT_COL_NAME).unwrap(),
-    )
-    .not();
-    select_expr.push(subj_expr);
-    let predicate = match &quad_pattern.predicate {
-        NamedNodePattern::NamedNode(predicate) => Some(predicate.clone()),
-        NamedNodePattern::Variable(_) => {
-            let (predicate_expr, predicate_dt) = named_node_pattern_expr(
-                rdf_node_types,
-                &quad_pattern.predicate,
-                PREDICATE_COL_NAME,
-                global_cats,
-            )?;
-            triple_types.insert(PREDICATE_COL_NAME.to_string(), predicate_dt);
-            filter_expr = filter_expr.and(
-                expr_is_null_workaround(
-                    col(PREDICATE_COL_NAME),
-                    triple_types.get(PREDICATE_COL_NAME).unwrap(),
-                )
-                .not(),
-            );
-            select_expr.push(predicate_expr);
-            None
-        }
-    };
-
-    let (obj_expr, obj_dt) = term_pattern_expression(
-        rdf_node_types,
-        &quad_pattern.object,
-        OBJECT_COL_NAME,
-        global_cats,
-        false,
-    )?;
-    select_expr.push(obj_expr);
-    triple_types.insert(OBJECT_COL_NAME.to_string(), obj_dt);
-    filter_expr = filter_expr.and(
-        expr_is_null_workaround(
-            col(OBJECT_COL_NAME),
-            triple_types.get(OBJECT_COL_NAME).unwrap(),
-        )
-        .not(),
-    );
-    let mut lf = df.clone().lazy().select(select_expr).filter(filter_expr);
-    if unique {
-        lf = unique_workaround(lf, &triple_types, None, false, UniqueKeepStrategy::Any);
-    }
-    let df = lf.collect().unwrap();
-    if df.height() > 0 {
-        Ok(Some((
-            EagerSolutionMappings::new(df, triple_types),
-            predicate,
-            graph,
-        )))
-    } else {
-        Ok(None)
-    }
-}
-
-fn term_pattern_expression(
-    rdf_node_types: &HashMap<String, RDFNodeState>,
-    tp: &TermPattern,
-    name: &str,
-    global_cats: &Cats,
-    subject: bool,
-) -> Result<(Expr, RDFNodeState), SparqlError> {
-    match tp {
-        TermPattern::NamedNode(nn) => Ok(named_node_u32_lit(nn, name, global_cats)),
-        TermPattern::BlankNode(bl) => Ok(blank_node_expresson(rdf_node_types, bl, name)?),
-        TermPattern::Literal(thelit) => {
-            let l = rdf_literal_to_polars_expr(thelit)
-                .map_err(SparqlError::ParseLiteralError)?
-                .alias(name);
-            Ok((
-                l,
-                BaseRDFNodeType::Literal(thelit.datatype().into_owned())
-                    .into_default_input_rdf_node_state(),
-            ))
-        }
-        TermPattern::Variable(v) => Ok(variable_expression(rdf_node_types, v, name, subject)?),
-    }
-}
-
-fn named_node_pattern_expr(
-    rdf_node_types: &HashMap<String, RDFNodeState>,
-    nnp: &NamedNodePattern,
-    name: &str,
-    global_cats: &Cats,
-) -> Result<(Expr, RDFNodeState), SparqlError> {
-    match nnp {
-        NamedNodePattern::NamedNode(nn) => Ok(named_node_u32_lit(nn, name, global_cats)),
-        NamedNodePattern::Variable(v) => Ok(variable_expression(rdf_node_types, v, name, false)?),
-    }
-}
-
-fn named_node_u32_lit(nn: &NamedNode, name: &str, global_cats: &Cats) -> (Expr, RDFNodeState) {
-    let (u, state) = global_cats.encode_iri_or_local_cat(nn.as_str());
-    (lit(u).cast(DataType::UInt32).alias(name), state)
-}
-
-fn variable_expression(
-    rdf_node_types: &HashMap<String, RDFNodeState>,
-    v: &Variable,
-    name: &str,
-    subject: bool,
-) -> Result<(Expr, RDFNodeState), SparqlError> {
-    if let Some(t) = rdf_node_types.get(v.as_str()) {
-        if subject {
-            let mut new_map = HashMap::new();
-            let mut exprs = vec![];
-            for (bt, bs) in &t.map {
-                if matches!(bt, BaseRDFNodeType::BlankNode | BaseRDFNodeType::IRI) {
-                    new_map.insert(bt.clone(), bs.clone());
-                    if t.is_multi() {
-                        exprs.push(
-                            col(v.as_str())
-                                .struct_()
-                                .field_by_name(&bt.field_col_name()),
-                        );
-                    } else {
-                        exprs.push(col(v.as_str()))
-                    }
-                }
-            }
-            if exprs.is_empty() {
-                let bt = BaseRDFNodeType::None;
-                let bs = bt.default_input_cat_state();
-                let e = lit(LiteralValue::untyped_null())
-                    .cast(bt.polars_data_type(&bs, true))
-                    .alias(name);
-                let s = RDFNodeState::from_bases(bt, bs);
-                Ok((e, s))
-            } else if exprs.len() == 1 {
-                Ok((
-                    exprs.pop().unwrap().alias(name),
-                    RDFNodeState::from_map(new_map),
-                ))
-            } else {
-                Ok((
-                    as_struct(exprs).alias(name),
-                    RDFNodeState::from_map(new_map),
-                ))
-            }
-        } else {
-            Ok((col(v.as_str()).alias(name), t.clone()))
-        }
-    } else {
-        Err(SparqlError::ConstructWithUndefinedVariable(
-            v.as_str().to_string(),
-        ))
-    }
-}
-
-fn blank_node_expresson(
-    rdf_node_types: &HashMap<String, RDFNodeState>,
-    b: &BlankNode,
-    name: &str,
-) -> Result<(Expr, RDFNodeState), SparqlError> {
-    if let Some(t) = rdf_node_types.get(b.to_string().as_str()) {
-        Ok((col(b.to_string()).alias(name), t.clone()))
-    } else {
-        Err(SparqlError::ConstructWithUndefinedBlankNode(b.to_string()))
     }
 }
 

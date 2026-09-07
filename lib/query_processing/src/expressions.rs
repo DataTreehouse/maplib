@@ -6,7 +6,7 @@ use crate::cats::create_compatible_cats;
 use crate::errors::QueryProcessingError;
 use crate::expressions::comparisons::{typed_comparison_expr, typed_equals_expr};
 use crate::expressions::operations::typed_numerical_operation;
-use oxrdf::vocab::{rdf, xsd};
+use oxrdf::vocab::xsd;
 use oxrdf::{BlankNode, Literal, NamedNode, Variable};
 use polars::frame::UniqueKeepStrategy;
 use polars::prelude::{
@@ -14,7 +14,7 @@ use polars::prelude::{
     LiteralValue, Operator, Scalar,
 };
 use representation::cats::{maybe_decode_expr, Cats, LockedCats};
-use representation::multitype::all_multi_main_cols;
+use representation::null::expr_is_null_workaround;
 use representation::query_context::Context;
 use representation::rdf_to_polars::rdf_literal_to_polars_expr;
 use representation::solution_mapping::{BaseCatState, SolutionMappings};
@@ -450,30 +450,6 @@ pub fn bound(
     Ok(solution_mappings)
 }
 
-pub fn expr_is_null_workaround(expr: Expr, rdf_node_type: &RDFNodeState) -> Expr {
-    if !rdf_node_type.is_multi() {
-        let b = rdf_node_type.get_base_type().unwrap();
-        non_multi_col_is_null_workaround(expr, b)
-    } else {
-        create_all_types_null_expression(expr, rdf_node_type.get_sorted_types())
-    }
-}
-
-pub fn non_multi_col_is_null_workaround(expr: Expr, base_rdf_node_type: &BaseRDFNodeType) -> Expr {
-    match base_rdf_node_type {
-        BaseRDFNodeType::Literal(l) => {
-            if l.as_ref() == rdf::LANG_STRING {
-                expr.struct_()
-                    .field_by_name(LANG_STRING_VALUE_FIELD)
-                    .is_null()
-            } else {
-                expr.is_null()
-            }
-        }
-        _ => expr.is_null(),
-    }
-}
-
 pub fn if_expression(
     mut solution_mappings: SolutionMappings,
     left_context: &Context,
@@ -778,19 +754,6 @@ pub fn drop_inner_contexts(mut sm: SolutionMappings, contexts: &Vec<&Context>) -
     }
     sm.mappings = sm.mappings.drop(by_name(inner, true, false));
     sm
-}
-
-pub fn create_all_types_null_expression(expr: Expr, types: Vec<&BaseRDFNodeType>) -> Expr {
-    let mut all_types_null: Option<Expr> = None;
-    for x in all_multi_main_cols(types) {
-        let e = expr.clone().struct_().field_by_name(&x).is_null();
-        all_types_null = if let Some(all_types_null) = all_types_null {
-            Some(all_types_null.and(e))
-        } else {
-            Some(e)
-        };
-    }
-    all_types_null.unwrap()
 }
 
 fn cast_lang_string_to_string(

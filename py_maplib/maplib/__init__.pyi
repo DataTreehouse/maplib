@@ -791,13 +791,12 @@ class Model:
             graph: str = None,
             streaming: bool = False,
             return_json: bool = False,
+            return_format: str = Union["turtle", "json", "dataframe"],
             include_transient: bool = True,
             max_rows: int = None,
             debug: bool = False,
             bindings: Dict[str, Union[str, IRI, Literal]] = None,
-    ) -> Union[
-        DataFrame, SolutionMappings, List[Union[DataFrame, SolutionMappings, str]]
-    ]:
+    ) -> DataFrame | SolutionMappings | list[DataFrame | SolutionMappings ] | str | None:
         """
         Query the contained knowledge graph using SPARQL
         Currently, SELECT and CONSTRUCT are supported.
@@ -830,10 +829,9 @@ class Model:
             endpoint: str,
             solution_mappings: bool = False,
             return_json: bool = False,
+            return_format: str = Union["turtle", "json", "dataframe"],
             bindings: Dict[str, Union[str, IRI, Literal]] = None,
-    ) -> Union[
-        DataFrame, SolutionMappings, List[Union[DataFrame, SolutionMappings, str]]
-    ]:
+    ) -> DataFrame | SolutionMappings | list[DataFrame | SolutionMappings ] | str | None:
         """
         Query an external endpoint using SPARQL
         Currently SELECT is supported and GET querying is hardcoded with JSON results.

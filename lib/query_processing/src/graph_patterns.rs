@@ -24,8 +24,9 @@ use polars::prelude::{
     SortMultipleOptions,
 };
 use representation::cats::LockedCats;
-use representation::multitype::{nest_multicolumns, unnest_multicols};
+use representation::multitype::unnest_multicols;
 use representation::query_context::Context;
+use representation::result::unique_workaround;
 use representation::solution_mapping::SolutionMappings;
 use representation::{BaseRDFNodeType, RDFNodeState};
 use spargebra::algebra::{Expression, Function};
@@ -311,42 +312,6 @@ fn find_enforced_variable_type_constraints(
         _ => {}
     }
     None
-}
-
-pub fn unique_workaround(
-    lf: LazyFrame,
-    rdf_node_types: &HashMap<String, RDFNodeState>,
-    subset: Option<Vec<String>>,
-    stable: bool,
-    unique_keep_strategy: UniqueKeepStrategy,
-) -> LazyFrame {
-    let (mut lf, maps) = unnest_multicols(lf, rdf_node_types);
-    let unique_set = if let Some(subset) = subset {
-        let mut u = vec![];
-        for s in subset {
-            if let Some((_, cols)) = maps.get(&s) {
-                u.extend(cols.clone());
-            } else {
-                u.push(s);
-            }
-        }
-        Some(u)
-    } else {
-        None
-    };
-    if stable {
-        lf = lf.unique_stable(
-            unique_set.map(|x| by_name(x, true, false)),
-            unique_keep_strategy,
-        );
-    } else {
-        lf = lf.unique(
-            unique_set.map(|x| by_name(x, true, false)),
-            unique_keep_strategy,
-        );
-    }
-    lf = nest_multicolumns(lf, maps);
-    lf
 }
 
 #[allow(clippy::type_complexity)]

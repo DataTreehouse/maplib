@@ -11,11 +11,11 @@ use polars::prelude::{
     by_name, col, lit, Column, DataFrame, DataType, ExplodeOptions, Expr, IntoColumn, IntoLazy,
     LazyFrame, NamedFrom, Series,
 };
-use query_processing::expressions::non_multi_col_is_null_workaround;
 use rayon::iter::{IndexedParallelIterator, ParallelDrainRange, ParallelIterator};
 use representation::constants::OTTR_TRIPLE;
 use representation::dataset::NamedGraph;
 use representation::multitype::split_df_multicols;
+use representation::null::non_multi_col_is_null_workaround;
 use representation::rdf_to_polars::rdf_named_node_to_polars_literal_value;
 use representation::{BaseRDFNodeType, RDFNodeState};
 use representation::{OBJECT_COL_NAME, PREDICATE_COL_NAME, SUBJECT_COL_NAME};

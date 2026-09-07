@@ -21,10 +21,6 @@ pub enum SparqlError {
     QueryProcessingError(#[from] QueryProcessingError),
     #[error(transparent)]
     TriplestoreError(#[from] TriplestoreError),
-    #[error("Construct query with undefined variable {}", .0)]
-    ConstructWithUndefinedVariable(String),
-    #[error("Construct query with undefined blank node {}", .0)]
-    ConstructWithUndefinedBlankNode(String),
     #[error("Full text search lookup error: {}", .0)]
     FtsLookupError(#[from] FtsError),
     #[error("Query interrupted via signal")]
@@ -45,6 +41,8 @@ pub enum SparqlError {
     ParseLiteralError(RepresentationError),
     #[error(transparent)]
     ReplaceBindingsError(RepresentationError),
+    #[error("Error constructing quads from quad patterns `{0}`")]
+    QuadPatternsError(String),
 }
 
 impl<T> From<PoisonError<T>> for SparqlError {

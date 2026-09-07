@@ -1,7 +1,7 @@
-use crate::expressions::expr_is_null_workaround;
 use oxrdf::vocab::xsd;
 use polars::datatypes::DataType;
 use polars::prelude::{any_horizontal, col, Expr};
+use representation::null::expr_is_null_workaround;
 use representation::query_context::Context;
 use representation::solution_mapping::SolutionMappings;
 use representation::{BaseRDFNodeType, RDFNodeState};

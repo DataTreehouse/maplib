@@ -17,7 +17,7 @@ use tracing_subscriber::{filter, prelude::*};
 use maplib::errors::MaplibError;
 
 use pyo3::prelude::*;
-use representation::result::{QueryResult, QueryResultKind as SparqlQueryResult};
+use representation::result::{QueryResult, QueryResultKind as SparqlQueryResult, QueryResultKind};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -65,8 +65,10 @@ use representation::cats::LockedCats;
 use representation::dataset::NamedGraph;
 use representation::debug::DebugOutputs;
 use representation::df_to_python::{df_to_py_df, fix_cats_and_multicolumns};
+use representation::formatting::format_native_columns;
 use representation::python_df_to_rust::polars_df_to_rust_df;
 use representation::rdf_to_polars::rdf_named_node_to_polars_literal_value;
+use representation::response_format::SparqlResponseFormat;
 use representation::{
     BaseRDFNodeType, RDFNodeState, OBJECT_COL_NAME, PREDICATE_COL_NAME, SUBJECT_COL_NAME,
 };
@@ -78,7 +80,7 @@ use templates::python::xsd::PyXSD;
 use templates::python::{py_triple, PyArgument, PyInstance, PyParameter, PyTemplate};
 use templates::MappingColumnType;
 use triplestore::triples_read::ExtendedRdfFormat;
-use triplestore::NewTriples;
+use triplestore::{NewTriples, Triplestore};
 
 use virtualization::python::VirtualizedPythonDatabase;
 use virtualized_query::python::{
@@ -203,81 +205,152 @@ fn query_to_result(
     native_dataframe: bool,
     include_details: bool,
     return_json: bool,
+    response_format: Option<String>,
     global_cats: LockedCats,
+    prefixes: &HashMap<String, NamedNode>,
     py: Python<'_>,
 ) -> PyResult<Py<PyAny>> {
-    if return_json {
-        let json = res.kind.json(global_cats.clone());
-        return Ok(PyString::new(py, &json).into());
-    }
-    let QueryResult {
-        kind,
-        debug,
-        pushdown_paths,
-    } = res;
-    match kind {
-        SparqlQueryResult::Select(EagerSolutionMappings {
-            mut mappings,
-            mut rdf_node_types,
-        }) => {
-            (mappings, rdf_node_types) =
-                fix_cats_and_multicolumns(mappings, rdf_node_types, native_dataframe, global_cats);
-            let pydf = df_to_py_df(
-                mappings,
-                rdf_node_types,
-                debug,
-                Some(pushdown_paths),
-                include_details,
-                py,
-            )?;
-            Ok(pydf)
+    let use_response_format = if return_json {
+        SparqlResponseFormat::JSON
+    } else if let Some(response_format) = response_format {
+        if response_format.to_lowercase() == "json" {
+            SparqlResponseFormat::JSON
+        } else if response_format.to_lowercase() == "turtle" {
+            SparqlResponseFormat::Turtle
+        } else if response_format.to_lowercase() == "dataframe" {
+            SparqlResponseFormat::DataFrame
+        } else {
+            return Err(PyMaplibError::FunctionArgumentError(format!(
+                "Response format should be one of turtle, json, dataframe, not {}",
+                response_format
+            ))
+            .into());
         }
-        SparqlQueryResult::Construct(dfs) => {
-            let mut query_results = vec![];
-            for (
-                EagerSolutionMappings {
+    } else {
+        SparqlResponseFormat::DataFrame
+    };
+
+    match use_response_format {
+        SparqlResponseFormat::JSON => {
+            if !matches!(res.kind, QueryResultKind::Select(..)) {
+                return Err(PyMaplibError::FunctionArgumentError(format!(
+                    "json response format can only be used with select and ask"
+                ))
+                .into());
+            }
+            let json = res.kind.json(global_cats.clone());
+            return Ok(PyString::new(py, &json).into());
+        }
+        SparqlResponseFormat::Turtle => {
+            if !matches!(res.kind, QueryResultKind::Construct(..)) {
+                return Err(PyMaplibError::FunctionArgumentError(format!(
+                    "turtle response format can only be used with construct and describe"
+                ))
+                .into());
+            }
+            if let QueryResultKind::Construct(mut sms) = res.kind {
+                if sms.is_empty() {
+                    return Ok(PyString::new(py, "").into());
+                } else {
+                    // We have a cat problem otherwise..
+                    for (sm, _) in &mut sms {
+                        let lf = format_native_columns(
+                            sm.mappings.clone().lazy(),
+                            &mut sm.rdf_node_types,
+                            global_cats.clone(),
+                        );
+                        sm.mappings = lf.collect().unwrap();
+                    }
+                    let mut ts = Triplestore::new(None, None).unwrap();
+                    ts.insert_construct_result(sms, false, &NamedGraph::DefaultGraph)
+                        .map_err(|x| PyMaplibError::MaplibError(MaplibError::SparqlError(x)))?;
+                    let mut out_bytes = vec![];
+                    ts.write_pretty_turtle(&mut out_bytes, &NamedGraph::DefaultGraph, prefixes)
+                        .map_err(|x| {
+                            PyMaplibError::MaplibError(MaplibError::TriplestoreError(x))
+                        })?;
+                    let s = String::from_utf8(out_bytes).unwrap();
+                    return Ok(PyString::new(py, &s).into());
+                }
+            } else {
+                unreachable!()
+            }
+        }
+        SparqlResponseFormat::DataFrame => {
+            let QueryResult {
+                kind,
+                debug,
+                pushdown_paths,
+            } = res;
+            match kind {
+                SparqlQueryResult::Select(EagerSolutionMappings {
                     mut mappings,
                     mut rdf_node_types,
-                },
-                predicate,
-            ) in dfs
-            {
-                if let Some(predicate) = predicate {
-                    mappings = mappings
-                        .lazy()
-                        .with_column(
-                            lit(rdf_named_node_to_polars_literal_value(&predicate))
-                                .alias(PREDICATE_COL_NAME),
-                        )
-                        .select([
-                            col(SUBJECT_COL_NAME),
-                            col(PREDICATE_COL_NAME),
-                            col(OBJECT_COL_NAME),
-                        ])
-                        .collect()
-                        .unwrap();
-                    rdf_node_types.insert(
-                        PREDICATE_COL_NAME.to_string(),
-                        BaseRDFNodeType::IRI.into_default_input_rdf_node_state(),
+                }) => {
+                    (mappings, rdf_node_types) = fix_cats_and_multicolumns(
+                        mappings,
+                        rdf_node_types,
+                        native_dataframe,
+                        global_cats,
                     );
+                    let pydf = df_to_py_df(
+                        mappings,
+                        rdf_node_types,
+                        debug,
+                        Some(pushdown_paths),
+                        include_details,
+                        py,
+                    )?;
+                    Ok(pydf)
                 }
-                (mappings, rdf_node_types) = fix_cats_and_multicolumns(
-                    mappings,
-                    rdf_node_types,
-                    native_dataframe,
-                    global_cats.clone(),
-                );
-                let pydf = df_to_py_df(
-                    mappings,
-                    rdf_node_types,
-                    debug.clone(),
-                    Some(pushdown_paths.clone()),
-                    include_details,
-                    py,
-                )?;
-                query_results.push(pydf);
+                SparqlQueryResult::Construct(dfs) => {
+                    let mut query_results = vec![];
+                    for (
+                        EagerSolutionMappings {
+                            mut mappings,
+                            mut rdf_node_types,
+                        },
+                        predicate,
+                    ) in dfs
+                    {
+                        if let Some(predicate) = predicate {
+                            mappings = mappings
+                                .lazy()
+                                .with_column(
+                                    lit(rdf_named_node_to_polars_literal_value(&predicate))
+                                        .alias(PREDICATE_COL_NAME),
+                                )
+                                .select([
+                                    col(SUBJECT_COL_NAME),
+                                    col(PREDICATE_COL_NAME),
+                                    col(OBJECT_COL_NAME),
+                                ])
+                                .collect()
+                                .unwrap();
+                            rdf_node_types.insert(
+                                PREDICATE_COL_NAME.to_string(),
+                                BaseRDFNodeType::IRI.into_default_input_rdf_node_state(),
+                            );
+                        }
+                        (mappings, rdf_node_types) = fix_cats_and_multicolumns(
+                            mappings,
+                            rdf_node_types,
+                            native_dataframe,
+                            global_cats.clone(),
+                        );
+                        let pydf = df_to_py_df(
+                            mappings,
+                            rdf_node_types,
+                            debug.clone(),
+                            Some(pushdown_paths.clone()),
+                            include_details,
+                            py,
+                        )?;
+                        query_results.push(pydf);
+                    }
+                    PyList::new(py, query_results)?.into_py_any(py)
+                }
             }
-            PyList::new(py, query_results)?.into_py_any(py)
         }
     }
 }

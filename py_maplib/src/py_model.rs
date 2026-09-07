@@ -335,6 +335,7 @@ impl PyModel {
         graph=None,
         streaming=None,
         return_json=None,
+        return_format=None,
         include_transient=None,
         max_rows=None,
         debug=None,
@@ -350,6 +351,7 @@ impl PyModel {
         graph: Option<String>,
         streaming: Option<bool>,
         return_json: Option<bool>,
+        return_format: Option<String>,
         include_transient: Option<bool>,
         max_rows: Option<usize>,
         debug: Option<bool>,
@@ -359,7 +361,7 @@ impl PyModel {
         let graph = parse_optional_named_node(graph)?;
         let graph = graph.map(|graph| NamedGraph::from_maybe_named_node(Some(&graph)));
         let parsed_bindings = maybe_parse_bindings(bindings, py)?;
-        let (res, cats) = py.detach(|| -> PyResult<(_, LockedCats)> {
+        let (res, cats, prefixes) = py.detach(|| -> PyResult<(_, LockedCats, _)> {
             let mut inner = self.inner.lock().unwrap();
             let cats = inner.triplestore.global_cats.clone();
             let res = query_mutex(
@@ -373,15 +375,18 @@ impl PyModel {
                 debug,
                 parsed_bindings,
             )?;
-            Ok((res, cats))
+            Ok((res, cats, inner.prefixes.clone()))
         })?;
         print_debug_if_exists(res.debug.as_ref());
+
         query_to_result(
             res,
             solution_mappings.unwrap_or(false),
             solution_mappings.unwrap_or(false),
             return_json.unwrap_or(false),
+            return_format,
             cats,
+            &prefixes,
             py,
         )
     }
@@ -392,6 +397,7 @@ impl PyModel {
         endpoint,
         solution_mappings=None,
         return_json=None,
+        return_format=None,
         bindings=None,
         ))]
     #[instrument(skip_all)]
@@ -402,10 +408,11 @@ impl PyModel {
         endpoint: String,
         solution_mappings: Option<bool>,
         return_json: Option<bool>,
+        return_format: Option<String>,
         bindings: Option<HashMap<String, Py<PyAny>>>,
     ) -> PyResult<Py<PyAny>> {
         let parsed_bindings = maybe_parse_bindings(bindings, py)?;
-        let (res, cats) = py.detach(|| -> PyResult<(_, LockedCats)> {
+        let (res, cats, prefixes) = py.detach(|| -> PyResult<(_, LockedCats, _)> {
             let mut inner = self.inner.lock().unwrap();
             let cats = inner.triplestore.global_cats.clone();
             let res = query_external_mutex(
@@ -415,7 +422,7 @@ impl PyModel {
                 SparqlMethod::GET,
                 parsed_bindings,
             )?;
-            Ok((res, cats))
+            Ok((res, cats, inner.prefixes.clone()))
         })?;
         print_debug_if_exists(res.debug.as_ref());
         query_to_result(
@@ -423,7 +430,9 @@ impl PyModel {
             solution_mappings.unwrap_or(false),
             solution_mappings.unwrap_or(false),
             return_json.unwrap_or(false),
+            return_format,
             cats,
+            &prefixes,
             py,
         )
     }

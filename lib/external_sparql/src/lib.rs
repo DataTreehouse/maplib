@@ -1,8 +1,10 @@
 use polars::frame::DataFrame;
 use polars::prelude::{col, Column, IntoLazy};
 use query_processing::bindings::maybe_replace_bindings;
+use representation::cats::{Cats, LockedCats};
+use representation::dataset::NamedGraph;
 use representation::errors::RepresentationError;
-use representation::result::{QueryResult, QueryResultKind};
+use representation::result::{template_to_solution_mappings, QueryResult, QueryResultKind};
 use representation::solution_mapping::EagerSolutionMappings;
 use representation::BaseRDFNodeType;
 use reqwest::header::{ACCEPT, USER_AGENT};
@@ -10,9 +12,12 @@ use sparesults::{
     QueryResultsFormat, QueryResultsParser, QueryResultsSyntaxError, QuerySolution,
     SliceQueryResultsParserOutput,
 };
-use spargebra::term::{GroundTerm, NamedNode};
+use spargebra::algebra::GraphPattern;
+use spargebra::term::{
+    GraphNamePattern, GroundTerm, NamedNode, NamedNodePattern, QuadPattern, TermPattern,
+};
 use spargebra::{Query, SparqlSyntaxError};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use thiserror::Error;
 use tokio::runtime::Builder;
 
@@ -34,6 +39,8 @@ pub enum SparqlEndpointQueryError {
     SPARQLSyntaxError(SparqlSyntaxError),
     #[error(transparent)]
     BindingReplacementError(RepresentationError),
+    #[error("Error creating quads from pattern: `{0}`")]
+    CreateQuadsFromPatternError(RepresentationError),
 }
 
 pub enum SparqlMethod {
@@ -85,6 +92,40 @@ impl SparqlEndpoint {
         &self,
         query: &Query,
     ) -> Result<QueryResult, SparqlEndpointQueryError> {
+        let use_query = match query {
+            Query::Select { .. } => query.clone(),
+            Query::Construct {
+                template,
+                dataset,
+                pattern,
+                base_iri,
+            } => {
+                let mut used_variables = HashSet::new();
+                for p in template {
+                    if let TermPattern::Variable(v) = &p.subject {
+                        used_variables.insert(v);
+                    }
+                    if let TermPattern::Variable(v) = &p.object {
+                        used_variables.insert(v);
+                    }
+                    if let NamedNodePattern::Variable(v) = &p.predicate {
+                        used_variables.insert(v);
+                    }
+                }
+                let use_pattern = GraphPattern::Distinct {
+                    inner: Box::new(GraphPattern::Project {
+                        inner: Box::new(pattern.clone()),
+                        variables: used_variables.into_iter().map(|x| x.clone()).collect(),
+                    }),
+                };
+                Query::Select {
+                    pattern: use_pattern,
+                    dataset: dataset.clone(),
+                    base_iri: base_iri.clone(),
+                }
+            }
+            _ => todo!(),
+        };
         let client = reqwest::Client::new();
         let response = match &self.method {
             SparqlMethod::GET => {
@@ -92,7 +133,7 @@ impl SparqlEndpoint {
                     .get(&self.endpoint)
                     .header(ACCEPT, "application/sparql-results+json,application/json,text/javascript,application/javascript")
                     .header(USER_AGENT, "maplib")
-                    .query(&[("query", query.to_string())])
+                    .query(&[("query", use_query.to_string())])
                     .query(&[("format", "json"), ("output", "json"), ("results", "json")])
                     .send()
                     .await
@@ -110,40 +151,73 @@ impl SparqlEndpoint {
             }
             Err(error) => return Err(SparqlEndpointQueryError::RequestError(error)),
         };
-        if let Query::Select { pattern, .. } = query {
-            let mut vars = Vec::new();
-            pattern.on_in_scope_variable(|x| vars.push(x));
-            let sm = if !solutions.is_empty() {
-                let mut sm = EagerSolutionMappings::from_query_solutions(solutions.as_slice())
-                    .map_err(SparqlEndpointQueryError::InvalidResults)?;
-                let cols: Vec<_> = vars.iter().map(|x| col(x.as_str())).collect();
-                sm.mappings = sm.mappings.lazy().select(cols).collect().unwrap();
-                sm
-            } else {
-                let mut columns = Vec::with_capacity(vars.len());
-                let mut states = HashMap::new();
-                for v in vars {
-                    columns.push(Column::new_empty(
-                        v.as_str().into(),
-                        &BaseRDFNodeType::None.default_input_polars_data_type(),
-                    ));
-                    states.insert(
-                        v.as_str().to_string(),
-                        BaseRDFNodeType::None.into_default_input_rdf_node_state(),
-                    );
-                }
+        let sm = match use_query {
+            Query::Select { pattern, .. } => {
+                let mut vars = Vec::new();
+                pattern.on_in_scope_variable(|x| vars.push(x));
+                let sm = if !solutions.is_empty() {
+                    let mut sm = EagerSolutionMappings::from_query_solutions(solutions.as_slice())
+                        .map_err(SparqlEndpointQueryError::InvalidResults)?;
+                    let cols: Vec<_> = vars.iter().map(|x| col(x.as_str())).collect();
+                    sm.mappings = sm.mappings.lazy().select(cols).collect().unwrap();
+                    sm
+                } else {
+                    let mut columns = Vec::with_capacity(vars.len());
+                    let mut states = HashMap::new();
+                    for v in vars {
+                        columns.push(Column::new_empty(
+                            v.as_str().into(),
+                            &BaseRDFNodeType::None.default_input_polars_data_type(),
+                        ));
+                        states.insert(
+                            v.as_str().to_string(),
+                            BaseRDFNodeType::None.into_default_input_rdf_node_state(),
+                        );
+                    }
 
-                let df = DataFrame::new(0, columns).unwrap();
-                let sm = EagerSolutionMappings::new(df, states);
+                    let df = DataFrame::new(0, columns).unwrap();
+                    let sm = EagerSolutionMappings::new(df, states);
+                    sm
+                };
                 sm
-            };
-            Ok(QueryResult {
+            }
+            _ => unreachable!(),
+        };
+        match query {
+            Query::Select { .. } => Ok(QueryResult {
                 kind: QueryResultKind::Select(sm),
                 debug: None,
                 pushdown_paths: vec![],
-            })
-        } else {
-            todo!()
+            }),
+            Query::Construct { template, .. } => {
+                let quad_template: Vec<_> = template
+                    .iter()
+                    .map(|x| QuadPattern {
+                        subject: x.subject.clone(),
+                        predicate: x.predicate.clone(),
+                        object: x.object.clone(),
+                        graph_name: GraphNamePattern::DefaultGraph,
+                    })
+                    .collect();
+                let mut m = template_to_solution_mappings(
+                    sm.mappings,
+                    sm.rdf_node_types,
+                    &quad_template,
+                    LockedCats::new(Cats::new_empty(None, None)),
+                )
+                .map_err(|x| SparqlEndpointQueryError::CreateQuadsFromPatternError(x))?;
+                let sms = if let Some(sms) = m.remove(&NamedGraph::DefaultGraph) {
+                    sms
+                } else {
+                    vec![]
+                };
+                Ok(QueryResult {
+                    kind: QueryResultKind::Construct(sms),
+                    debug: None,
+                    pushdown_paths: vec![],
+                })
+            }
+            _ => unimplemented!(),
         }
     }
 }

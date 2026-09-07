@@ -85,7 +85,6 @@ def test_write_multi_turtle_provided_prefixes():
     assert df2.height == 24
 
 
-@pytest.mark.skip("This test works but takes too long")
 def test_write_multi_turtle_provided_prefixes_stress():
     m = Model()
     for i in range(3000):
@@ -108,6 +107,20 @@ def test_write_multi_turtle_provided_prefixes_some_stress():
     assert df.height == 800
 
     out = m.writes(format="turtle", prefixes={"myfoaf": "http://xmlns.com/foaf/0.1/"})
+    m2 = Model()
+    m2.reads(out, format="turtle", parallel=True)
+    df2 = m2.query("""SELECT * WHERE {?a ?b ?c}""")
+    assert df2.height == 800
+
+
+def test_query_write_multi_turtle_provided_prefixes_some_stress():
+    m = Model()
+    for i in range(100):
+        m.read(str(TESTDATA_PATH / "read_ntriples.nt"))
+    df = m.query("""SELECT * WHERE {?a ?b ?c}""")
+    assert df.height == 800
+
+    out = m.query("CONSTRUCT {?a ?b ?c} WHERE {?a ?b ?c}", return_format="turtle")
     m2 = Model()
     m2.reads(out, format="turtle", parallel=True)
     df2 = m2.query("""SELECT * WHERE {?a ?b ?c}""")

@@ -27,7 +27,7 @@ pub fn maybe_replace_bindings(
                 pattern,
                 base_iri,
             } => Ok(Query::Construct {
-                template,
+                template: replace_bindings_template(template, bindings)?,
                 dataset,
                 pattern: replace_bindings_graph_pattern(pattern, bindings)?,
                 base_iri,
@@ -54,6 +54,29 @@ pub fn maybe_replace_bindings(
     } else {
         Ok(query)
     }
+}
+
+pub fn replace_bindings_template(
+    template: Vec<TriplePattern>,
+    bindings: &HashMap<String, GroundTerm>,
+) -> Result<Vec<TriplePattern>, RepresentationError> {
+    let mut rep_template = Vec::with_capacity(template.len());
+    for p in template {
+        let TriplePattern {
+            subject,
+            predicate,
+            object,
+        } = p;
+        let subject = maybe_replace_term_pattern(subject, bindings);
+        let object = maybe_replace_term_pattern(object, bindings);
+        let predicate = maybe_replace_named_node_pattern(predicate, bindings)?;
+        rep_template.push(TriplePattern {
+            subject,
+            predicate,
+            object,
+        });
+    }
+    Ok(rep_template)
 }
 
 pub fn replace_bindings_graph_pattern(
