@@ -1,0 +1,9 @@
+[toolchain]
+# The workspace root's polars dependency requests polars' "nightly" cargo
+# feature (Cargo.toml's workspace.dependencies.polars), which some of its
+# own dependencies (foldhash, argminmax) only compile under a nightly rustc.
+# This mirrors flake.nix's `fenix.packages.${system}.complete` (a nightly
+# channel), pinned here to whatever nightly toolchain is already installed
+# locally. Scoped to this directory (where R's Makevars invokes `cargo
+# build` from) so it doesn't force nightly on the rest of the repo.
+channel = "nightly-2026-04-28"

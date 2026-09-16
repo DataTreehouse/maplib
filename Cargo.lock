@@ -2314,6 +2314,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "maplibr"
+version = "0.1.0"
+dependencies = [
+ "maplib",
+ "oxrdf",
+ "oxrdfio",
+ "polars",
+ "polars-arrow",
+ "pyo3",
+ "representation",
+ "savvy",
+ "serde",
+ "serde_json",
+ "sparesults",
+ "spargebra",
+ "templates",
+ "triplestore",
+]
+
+[[package]]
 name = "matchers"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4383,6 +4403,47 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "93fc1dc3aaa9bfed95e02e6eadabb4baf7e3078b0bd1b4d7b6b0b68378900502"
 dependencies = [
  "winapi-util",
+]
+
+[[package]]
+name = "savvy"
+version = "0.8.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c1c95d0e631c3a259af8c2ec2492ad34c30af6399231130d86446691c69ee1f4"
+dependencies = [
+ "cc",
+ "rustversion",
+ "savvy-ffi",
+ "savvy-macro",
+]
+
+[[package]]
+name = "savvy-bindgen"
+version = "0.8.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a6e909d6698c296c73909e8c46b4124781e9e82f2bda72e0471b7cf8e4481c31"
+dependencies = [
+ "proc-macro2",
+ "quote 1.0.46",
+ "syn 2.0.118",
+]
+
+[[package]]
+name = "savvy-ffi"
+version = "0.8.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3f1b0aeb4e546325c4c207d736d95952f8c589b85d2bf80dfc429a1975a17c74"
+
+[[package]]
+name = "savvy-macro"
+version = "0.8.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f8884eebdd646f450ba554e96f32e8904d7d13f573be8d34254374934ab7b619"
+dependencies = [
+ "proc-macro2",
+ "quote 1.0.46",
+ "savvy-bindgen",
+ "syn 2.0.118",
 ]
 
 [[package]]

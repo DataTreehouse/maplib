@@ -1,96 +1,81 @@
 [workspace]
 resolver = "2"
-members = [
-    "lib/in_memory",
-    "lib/disk",
-    "lib/utils",
-    "lib/representation",
-    "lib/maplib",
-    "lib/triplestore",
-    "lib/file_io",
-    "lib/query_processing",
-    "lib/spargebra",
-    "lib/shacl",
-    "lib/fts",
-    "lib/datalog",
-    "lib/cimxml_export",
-    "lib/cimxml_import",
-    "lib/chrontext",
-    "lib/virtualized_query",
-    "lib/virtualization",
-    "lib/opc_ua",
-    "lib/external_sparql",
-    "py_maplib",
-]
+members = ["lib/chrontext", "lib/cimxml_export", "lib/cimxml_import", "lib/datalog", "lib/disk", "lib/external_sparql", "lib/file_io", "lib/fts", "lib/in_memory", "lib/maplib", "lib/opc_ua", "lib/query_processing", "lib/representation", "lib/shacl", "lib/spargebra", "lib/triplestore", "lib/utils", "lib/virtualization", "lib/virtualized_query", "py_maplib", "maplibr/src/rust"]
 
 [workspace.package]
-rust-version = "1.88.0"
 edition = "2021"
+rust-version = "1.88.0"
 
 [workspace.dependencies]
-pyo3 = { version = "0.29.0", features = ["py-clone", "rust_decimal"] }
-#Moment is there to work around a feature toggle bug
-polars = { version = "0.54.4", features = [
-    "simd",
-    "nightly",
-    "performant",
-    "cse",
-    "fmt",
-    "parquet",
-    "moment",
-    "timezones",
-    "lazy",
-] }
-polars-arrow = { version = "0.54.4" }
-polars-core = { version = "0.54.4" }
-rayon = "1.10.0"
-regex = "1.11.1"
-oxrdf = { version = "0.3.3" }
-oxrdfio = { version = "0.2.5" }
-oxttl = { version = "0.2.3" }
-oxjsonld = { version = "0.2.5" }
-oxiri = "0.2.11"
-sparesults = "0.3.3"
-oxsdatatypes = "0.2.2"
+aho-corasick = "1.1.4"
+arrow = "58"
 chrono = "0.4.41"
 chrono-tz = "0.10.3"
-uuid = { version = "1.16.0", features = [
-    "v4", # Lets you generate random UUIDs
-    "v5",
-    "fast-rng", # Use a faster (but still sufficiently random) RNG
-] }
-thiserror = "2.0.12"
-peg = "0.8"
-rand = "0.10.1"
-oxilangtag = "0.1.5"
 fundu = "2.0.1"
 hdt = { version = "0.7.2", default-features = false, features = ["nt"] }
-memmap2 = "0.9.5"
-sprs = "0.11.3"
-walkdir = "2.5.0"
-aho-corasick = "1.1.4"
-simd-json = { version = "0.17.0", features = ["serde_json"] }
-serde_json = { version = "1.0.149" }
-serde = {version = "1.0.228"}
-urlencoding = "2.1.3"
-md-5 = "0.11.0"
-sha1 = "0.11.0"
 hex = "0.4.3"
-memchr = "2.8.0"
-quick-xml = { version = "0.41.0", features = ["arbitrary"] }
-tracing = { version = "0.1", features = ["log"] }
-tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
-tracing-log = "0.2"
 itoa = "1.0.15"
-ryu = "1.0.20"
-#dev-dependencies
+md-5 = "0.11.0"
+memchr = "2.8.0"
+memmap2 = "0.9.5"
+# dev-dependencies
 nohash-hasher = "0.2.0"
-arrow = "58"
 ordered-float = "5.1.0"
-rust_decimal = "1.42.1"
+oxilangtag = "0.1.5"
+oxiri = "0.2.11"
+oxjsonld = { version = "0.2.5" }
+oxrdf = { version = "0.3.3" }
+oxrdfio = { version = "0.2.5" }
+oxsdatatypes = "0.2.2"
+oxttl = { version = "0.2.3" }
+peg = "0.8"
+# Moment is there to work around a feature toggle bug
+polars = {
+  version = "0.54.4",
+  features = [
+    "cse",
+    "fmt",
+    "lazy",
+    "moment",
+    "nightly",
+    "parquet",
+    "performant",
+    "simd",
+    "timezones",
+  ]
+}
+polars-arrow = { version = "0.54.4" }
+polars-core = { version = "0.54.4" }
+pyo3 = { version = "0.29.0", features = ["py-clone", "rust_decimal"] }
+quick-xml = { version = "0.41.0", features = ["arbitrary"] }
+rand = "0.10.1"
 range-set-blaze = "0.5.0"
-reqwest = { version = "0.13.4", features = ["query", "json", "rustls-no-provider"] }
+rayon = "1.10.0"
+regex = "1.11.1"
+reqwest = { version = "0.13.4", features = ["json", "query", "rustls-no-provider"] }
+rust_decimal = "1.42.1"
+ryu = "1.0.20"
+serde = { version = "1.0.228" }
+serde_json = { version = "1.0.149" }
+sha1 = "0.11.0"
+simd-json = { version = "0.17.0", features = ["serde_json"] }
+sparesults = "0.3.3"
+sprs = "0.11.3"
+thiserror = "2.0.12"
+tracing = { version = "0.1", features = ["log"] }
+tracing-log = "0.2"
+tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
+urlencoding = "2.1.3"
+uuid = {
+  version = "1.16.0",
+  features = [
+    "fast-rng",  # Use a faster (but still sufficiently random) RNG
+    "v4",  # Lets you generate random UUIDs
+    "v5",
+  ]
+}
+walkdir = "2.5.0"
 
 [patch.crates-io]
-#polars = { git = 'https://github.com/pola-rs/polars', rev="0df0c25d4db895ec8cad773bedc4e98400e3135e" }
-#polars-core = { git = 'https://github.com/pola-rs/polars', rev="0df0c25d4db895ec8cad773bedc4e98400e3135e" }
+# polars = { git = 'https://github.com/pola-rs/polars', rev="0df0c25d4db895ec8cad773bedc4e98400e3135e" }
+# polars-core = { git = 'https://github.com/pola-rs/polars', rev="0df0c25d4db895ec8cad773bedc4e98400e3135e" }

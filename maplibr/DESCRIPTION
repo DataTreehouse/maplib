@@ -1,0 +1,41 @@
+Package: maplibr
+Title: R Interface to the 'maplib' Knowledge Graph Engine
+Version: 0.0.0.9000
+Authors@R: c(
+    person("Novica", "Nakov", , "nnovica@gmail.com", role = c("aut", "cre", "cph"),
+           comment = c(ORCID = "0009-0005-7773-7718")))
+Description: Build, query, and reason over RDF knowledge graphs backed by the
+    'maplib' Rust engine. Graphs are constructed from tabular data using OTTR
+    mapping templates, queried with SPARQL, and returned as ordinary R
+    data frames via the Arrow C Stream Interface. Also supports RDFS
+    inference and reading/writing common RDF serializations (Turtle,
+    N-Triples, RDF/XML).
+License: Apache License (>= 2.0)
+Encoding: UTF-8
+Depends:
+    R (>= 4.1)
+Imports:
+    R6,
+    S7,
+    nanoarrow,
+    jsonlite
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 8.0.0
+SystemRequirements: Cargo (Rust's package manager), rustc
+Collate:
+    '000-wrappers.R'
+    'errors.R'
+    'terms.R'
+    'vocab.R'
+    'rdf_type.R'
+    'templates.R'
+    'model.R'
+    'model-verbs.R'
+    'zzz.R'
+Suggests:
+    testthat (>= 3.0.0),
+    knitr,
+    rmarkdown,
+    igraph
+Config/testthat/edition: 3
+VignetteBuilder: knitr

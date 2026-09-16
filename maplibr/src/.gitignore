@@ -1,0 +1,7 @@
+*.o
+*.so
+*.dll
+target
+
+Makevars
+Makevars.win

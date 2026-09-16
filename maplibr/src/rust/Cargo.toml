@@ -1,0 +1,40 @@
+[package]
+name = "maplibr"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["lib", "staticlib"]
+
+[dependencies]
+maplib = { path = "../../../lib/maplib", features = ["pyo3"] }
+representation = { path = "../../../lib/representation" }
+spargebra = { path = "../../../lib/spargebra" }
+templates = { path = "../../../lib/templates" }
+triplestore = { path = "../../../lib/triplestore" }
+oxrdf = { workspace = true }
+oxrdfio = { workspace = true }
+sparesults = { workspace = true }
+pyo3 = { workspace = true }
+# Pinned explicitly rather than `workspace = true`: the root workspace's
+# `polars` entry doesn't itself set `default-features`, and Cargo silently
+# ignores a member's `default-features` override in that case (warns
+# "could become a hard error in the future") -- switching this one to
+# workspace = true would silently turn default-features back on here.
+polars = { version = "0.54.4", default-features = false }
+polars-arrow = { workspace = true }
+savvy = "0.8"
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[profile.release]
+# By default, on release build, savvy terminates the R session when a panic
+# occurs. This is the right behavior in that a panic means such a fatal event
+# where we can have no hope of recovery.
+#
+# cf. https://doc.rust-lang.org/book/ch09-03-to-panic-or-not-to-panic.html
+#
+# However, it's possible that the panic is thrown by some of the dependency
+# crate and there's little you can do. In such cases, you can change the
+# following line to `panic = "unwind"` to always catch a panic.
+panic = "abort"

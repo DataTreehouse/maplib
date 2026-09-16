@@ -1,0 +1,5 @@
+@prefix : <http://data.treehouse.example/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+:Planet a rdfs:Class ;
+    rdfs:subClassOf :Planet, rdfs:Resource .

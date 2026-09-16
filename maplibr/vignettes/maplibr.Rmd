@@ -1,0 +1,279 @@
+---
+title: "Getting Started with maplibr"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Getting Started with maplibr}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+```
+
+`maplibr` is an R interface to `maplib`, a Rust RDF knowledge-graph engine
+(the same engine the Python package `py_maplib` wraps). This vignette walks
+through what's implemented today: building a graph, querying and updating it
+with SPARQL, mapping data into RDF (both with OTTR templates and directly),
+RDFS inference, and managing named graphs.
+
+`Model` is an R6 class, so every method is also available as `m$method(...)`
+-- but this vignette uses the pipe-friendly `model_*()` functions throughout
+instead (`m |> model_query(...)` rather than `m$query(...)`), since both are
+fully equivalent and interchangeable, and the pipe form reads better across
+a multi-step pipeline. `model_*()` uses that prefix rather than bare
+`read()`/`write()`/`map()`/`update()` deliberately: those names would mask
+`base::write`, `purrr::map`, and the `stats::update` S3 generic if this
+package were attached alongside a normal tidyverse session.
+
+```{r setup}
+library(maplibr)
+```
+
+## Creating a Model and reading triples
+
+`Model` is the main entry point -- an in-memory RDF knowledge graph.
+`model_reads()` mutates it in place and returns it invisibly, so it chains
+straight off `Model$new()`:
+
+```{r create-and-read}
+m <- Model$new() |>
+  model_reads('
+    <http://example.org/alice> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example.org/Person> .
+    <http://example.org/Person> <http://www.w3.org/2000/01/rdf-schema#subClassOf> <http://example.org/Agent> .
+    <http://example.org/alice> <http://example.org/name> "Alice" .
+  ', format = "ntriples")
+
+model_size(m)
+```
+
+## Serializing back out
+
+```{r writes}
+m |> model_writes() |> cat()
+```
+
+Turtle works too:
+
+```{r writes-turtle}
+m |> model_writes(format = "turtle") |> cat()
+```
+
+`model_read()`/`model_write()` are the file-based counterparts to
+`model_reads()`/`model_writes()` -- `model_read()` guesses the format from
+the file extension (`.ttl`/`.nt`/`.xml`/`.rdf`) when `format` isn't given:
+
+```{r read-write-file}
+path <- tempfile(fileext = ".ttl")
+m |> model_write(path, format = "turtle")
+
+m_from_file <- Model$new() |> model_read(path)
+model_size(m_from_file)
+unlink(path)
+```
+
+## Querying with SPARQL
+
+`model_query()` runs a SPARQL query and returns the result as a data.frame.
+
+```{r query-select}
+m |> model_query("SELECT ?s ?o WHERE { ?s <http://example.org/name> ?o }")
+```
+
+CONSTRUCT queries are supported too, returned as a combined
+subject/predicate/object data.frame:
+
+```{r query-construct}
+m |> model_query("
+  CONSTRUCT { ?s <http://example.org/hasType> ?type }
+  WHERE { ?s a ?type }
+")
+```
+
+`bindings` pre-binds SPARQL variables to fixed `IRI`/`Literal` values before
+the query runs -- useful inside a `FILTER`, though not as a `SELECT`-ed
+column itself:
+
+```{r query-bindings}
+m |> model_query(
+  'SELECT * WHERE { VALUES ?name { "Alice" "Bob" } FILTER(?name = ?who) }',
+  bindings = list(who = Literal("Bob"))
+)
+```
+
+## Updating data with SPARQL UPDATE and INSERT
+
+`model_update()` runs a SPARQL UPDATE (a `DELETE`/`INSERT` ... `WHERE`
+modify statement) against the Model in place. The bare `INSERT DATA { ... }`
+form isn't supported yet by the underlying engine -- use an empty `WHERE {}`
+instead:
+
+```{r update}
+m |> model_update('
+  PREFIX ex: <http://example.org/>
+  INSERT { ex:alice ex:greeting "Hello" } WHERE {}
+')
+m |> model_query("SELECT ?o WHERE { <http://example.org/alice> <http://example.org/greeting> ?o }")
+```
+
+`model_insert()` runs a SPARQL `CONSTRUCT` query and adds its results as new
+triples, optionally into a different graph than it queried:
+
+```{r insert}
+m |> model_insert(
+  "CONSTRUCT { ?s <http://example.org/hasType> ?type } WHERE { ?s a ?type }",
+  target_graph = "urn:graph:types"
+)
+model_size(m, "urn:graph:types")
+```
+
+## Mapping tabular data into RDF with OTTR templates
+
+`model_map()` expands an OTTR template against a data.frame, adding the
+resulting triples to the Model. Templates can be built programmatically...
+
+```{r map-programmatic}
+ex <- Prefix("http://example.org/", "ex")
+my_value <- Variable("MyValue")
+template <- Template(
+  iri = suf(ex, "HasNickname"),
+  parameters = list(Parameter(my_value)),
+  instances = list(Triple(suf(ex, "alice"), suf(ex, "nickname"), my_value))
+)
+
+m |> model_map(template, data.frame(MyValue = c("Ally", "Al")))
+m |> model_query("SELECT ?o WHERE { <http://example.org/alice> <http://example.org/nickname> ?o }")
+```
+
+...or from an stOTTR document string, matching `py_maplib`'s own syntax (see
+the root project's README for the OTTR template language itself). Since
+`model_add_template()` returns the registered template's IRI rather than
+`m`, it's not itself chained onward -- pipe into it, but capture its result
+separately from the `m` you keep mutating:
+
+```{r map-doc-string}
+doc <- '
+@prefix ex:<http://example.org/>.
+ex:HasFriend [?Friend] :: {
+  ottr:Triple(ex:alice, ex:knows, ?Friend)
+} .
+'
+m |> model_add_template(doc)
+m |> model_map("http://example.org/HasFriend", data.frame(Friend = "http://example.org/bob"))
+m |> model_query("SELECT ?o WHERE { <http://example.org/alice> <http://example.org/knows> ?o }")
+```
+
+## Mapping data directly to triples, without a template
+
+For data that doesn't need OTTR's templating power, several `model_map_*()`
+functions add triples directly instead. `model_map_df()` turns a
+data.frame's columns into predicates, one row per subject:
+
+```{r map-df}
+readings <- data.frame(city = c("Oslo", "Bergen"), temp_c = c(14, 16))
+m_direct <- Model$new() |> model_map_df(readings)
+m_direct |> model_query("SELECT ?p ?o WHERE { ?s ?p ?o }")
+```
+
+`model_map_triples()` maps subject/predicate/object columns directly (or
+just subject/object, with a constant `predicate`):
+
+```{r map-triples}
+m_triples <- Model$new() |> model_map_triples(
+  data.frame(subject = "http://example.org/alice", object = "http://example.org/bob"),
+  predicate = "http://example.org/knows"
+)
+m_triples |> model_query("SELECT ?s ?p ?o WHERE { ?s ?p ?o }")
+```
+
+`model_map_json_string()`/`model_map_xml_string()` (and their file-based
+`model_map_json()`/`model_map_xml()` counterparts) apply a fixed convention
+(Facade-X) to a whole JSON or XML document instead:
+
+```{r map-json}
+m_json <- Model$new() |> model_map_json_string('{"name": "Alice", "age": 30}')
+m_json |> model_query("SELECT ?p ?o WHERE { ?s ?p ?o }")
+```
+
+## RDFS inference
+
+`alice` is a `Person`, and `Person` is a subclass of `Agent` -- RDFS
+inference should let us derive that `alice` is also an `Agent`.
+`model_infer_rdfs()` returns the number of newly-inferred triples, not `m`,
+so this one's called directly rather than piped further:
+
+```{r infer}
+n <- m |> model_infer_rdfs()
+n
+```
+
+Inferred triples are *transient* -- kept separately from the main graph, and
+only visible to `model_query()` when asked for explicitly (`model_writes()`
+doesn't currently support this at all, a core-engine limitation, not an
+R-wrapper one -- see the "Upstream issues" section of the package's
+development notes):
+
+```{r infer-transient}
+without <- m |> model_query("SELECT * WHERE { ?s ?p ?o }")
+with_transient <- m |> model_query("SELECT * WHERE { ?s ?p ?o }", include_transient = TRUE)
+nrow(without)
+nrow(with_transient)
+```
+
+## Named graphs
+
+Triples can be routed into named graphs, copied between Models, and split
+back out.
+
+```{r graphs}
+m |> model_reads(
+  '<http://example.org/bob> <http://example.org/name> "Bob" .',
+  format = "ntriples",
+  graph = "urn:graph:extra"
+)
+model_size(m, "urn:graph:extra")
+model_size(m) # default graph, unaffected
+
+m2 <- Model$new() |> model_add_graph(m)
+model_size(m2)
+
+sprout <- m |> model_detach_graph(graph = "urn:graph:extra")
+model_size(sprout)
+model_size(m, "urn:graph:extra") # emptied by the detach
+```
+
+## Prefixes and indexing
+
+Both mutate in place, so a two-step setup pipeline chains naturally:
+
+```{r prefixes-index}
+m |>
+  model_add_prefixes(list(ex = "http://example.org/")) |>
+  model_create_index()
+```
+
+## Visualizing a graph
+
+`maplibr` has no graph-visualization function of its own, but a query result
+is a plain data.frame, so any R graph package works directly on it.
+
+```{r graph-plot, fig.width=6, fig.height=4.5}
+if (requireNamespace("igraph", quietly = TRUE)) {
+  triples <- m |> model_query("SELECT ?s ?p ?o WHERE { ?s ?p ?o }")
+  short_label <- function(iri) sub(".*[/#]", "", iri)
+
+  edges <- data.frame(from = short_label(triples$s), to = short_label(triples$o))
+  g <- igraph::graph_from_data_frame(edges, directed = TRUE)
+  igraph::E(g)$label <- short_label(triples$p)
+
+  plot(
+    g,
+    edge.label = igraph::E(g)$label,
+    vertex.size = 32,
+    vertex.color = "lightblue",
+    vertex.label.cex = 0.9,
+    edge.arrow.size = 0.5,
+    layout = igraph::layout_with_fr(g)
+  )
+}
+```

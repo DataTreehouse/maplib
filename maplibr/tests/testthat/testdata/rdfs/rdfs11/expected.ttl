@@ -1,0 +1,7 @@
+@prefix : <http://data.treehouse.example/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+:Planet rdfs:subClassOf :AstronomicalBody,
+        :PlanetaryBody.
+
+:PlanetaryBody rdfs:subClassOf :AstronomicalBody .
