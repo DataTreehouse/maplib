@@ -10,7 +10,6 @@ use oxrdf::{NamedOrBlankNode, Term};
 use polars::prelude::{as_struct, col, DataType, IntoLazy, NamedFrom, PlSmallStr, Series};
 use polars_core::frame::DataFrame;
 use polars_core::prelude::{Int128Chunked, IntoSeries, NewChunkedArray, StringChunkedBuilder};
-use rust_decimal::Decimal;
 use std::collections::HashMap;
 use std::str::FromStr;
 
@@ -401,14 +400,48 @@ fn parse_xsd_datetime_micros(value: &str) -> Result<i64, RepresentationError> {
     }
 }
 
+/// Parses an xsd:decimal lexical form into the mantissa of a Decimal(precision, scale).
+///
+/// This works on the digits directly instead of going through rust_decimal, whose 96-bit
+/// mantissa (28 digits) cannot hold large values at the default scale and silently
+/// shifted the decimal point. Fraction digits beyond the scale are truncated.
 fn parse_xsd_decimal(value: &str) -> Result<i128, RepresentationError> {
-    match Decimal::from_str(value) {
-        Ok(mut d) => {
-            d.rescale(default_decimal_scale() as u32);
-            Ok(d.mantissa())
-        }
-        Err(x) => Err(RepresentationError::LiteralParseError(x.to_string())),
+    let scale = default_decimal_scale();
+    let precision = default_decimal_precision();
+    let err = || RepresentationError::LiteralParseError(format!("Invalid xsd:decimal: {value}"));
+    let trimmed = value.trim();
+    let (negative, unsigned) = match trimmed.as_bytes().first() {
+        Some(b'-') => (true, &trimmed[1..]),
+        Some(b'+') => (false, &trimmed[1..]),
+        _ => (false, trimmed),
+    };
+    let (int_part, frac_part) = match unsigned.split_once('.') {
+        Some((i, f)) => (i, f),
+        None => (unsigned, ""),
+    };
+    if (int_part.is_empty() && frac_part.is_empty())
+        || !int_part.bytes().all(|b| b.is_ascii_digit())
+        || !frac_part.bytes().all(|b| b.is_ascii_digit())
+    {
+        return Err(err());
     }
+    let int_part = int_part.trim_start_matches('0');
+    if int_part.len() + scale > precision {
+        return Err(RepresentationError::LiteralParseError(format!(
+            "xsd:decimal {value} has more than {} integer digits",
+            precision - scale
+        )));
+    }
+    let mut mantissa: i128 = 0;
+    for b in int_part.bytes() {
+        mantissa = mantissa * 10 + (b - b'0') as i128;
+    }
+    let mut frac_digits = frac_part.bytes();
+    for _ in 0..scale {
+        let d = frac_digits.next().map(|b| (b - b'0') as i128).unwrap_or(0);
+        mantissa = mantissa * 10 + d;
+    }
+    Ok(if negative { -mantissa } else { mantissa })
 }
 
 pub fn ensure_pair<'a>(
