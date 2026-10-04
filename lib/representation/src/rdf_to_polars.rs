@@ -88,5 +88,7 @@ pub fn default_decimal_precision() -> usize {
 }
 
 pub fn default_decimal_scale() -> usize {
-    12
+    // XSD 1.1 Part 2 5.4: minimally conforming processors support decimals i / 10^k
+    // with i < 10^16 and k <= 16, so keep 16 fractional digits instead of truncating.
+    16
 }
