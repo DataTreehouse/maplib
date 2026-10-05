@@ -190,10 +190,19 @@ pub fn variable(
     context: &Context,
 ) -> Result<SolutionMappings, QueryProcessingError> {
     if !solution_mappings.rdf_node_types.contains_key(v.as_str()) {
-        return Err(QueryProcessingError::VariableNotFound(
-            v.as_str().to_string(),
+        // A variable that does not occur in the pattern is unbound in every solution
+        // (SPARQL 1.1, section 18.6), e.g. ORDER BY ?x or COALESCE(?x, ...) where ?x is
+        // never bound. Evaluate it as unbound instead of failing the query.
+        solution_mappings.mappings = solution_mappings.mappings.with_column(
+            lit(LiteralValue::untyped_null())
+                .cast(BaseRDFNodeType::None.default_input_polars_data_type())
+                .alias(context.as_str()),
+        );
+        solution_mappings.rdf_node_types.insert(
             context.as_str().to_string(),
-        ));
+            BaseRDFNodeType::None.into_default_input_rdf_node_state(),
+        );
+        return Ok(solution_mappings);
     }
     solution_mappings.mappings = solution_mappings
         .mappings
@@ -427,10 +436,15 @@ pub fn bound(
     outer_context: &Context,
 ) -> Result<SolutionMappings, QueryProcessingError> {
     if !solution_mappings.rdf_node_types.contains_key(v.as_str()) {
-        return Err(QueryProcessingError::VariableNotFound(
-            v.as_str().to_string(),
+        // A variable that does not occur in the pattern is never bound.
+        solution_mappings.mappings = solution_mappings
+            .mappings
+            .with_column(lit(false).alias(outer_context.as_str()));
+        solution_mappings.rdf_node_types.insert(
             outer_context.as_str().to_string(),
-        ));
+            BaseRDFNodeType::Literal(xsd::BOOLEAN.into_owned()).into_default_input_rdf_node_state(),
+        );
+        return Ok(solution_mappings);
     }
     let expr = expr_is_null_workaround(
         col(v.as_str()),
