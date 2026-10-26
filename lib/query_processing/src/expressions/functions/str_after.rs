@@ -8,7 +8,8 @@ pub fn str_after(c: Column, s: String) -> Result<Column, PolarsError> {
             if let Some(range_to) = range_to {
                 Some(&x[range_to + s.len()..])
             } else {
-                Some(x)
+                // SPARQL 1.1 17.4.3.9/17.4.3.10: no occurrence gives the empty string
+                Some("")
             }
         } else {
             None
