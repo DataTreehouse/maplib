@@ -5,26 +5,26 @@ edition.workspace = true
 rust-version.workspace = true
 
 [features]
-pyo3 = [ "dep:pyo3", "triplestore/pyo3", "shacl/pyo3", "datalog/pyo3", "cimxml_export/pyo3" ]
+pyo3 = ["dep:pyo3", "triplestore/pyo3", "shacl/pyo3", "datalog/pyo3", "cimxml_export/pyo3"]
 
 [dependencies]
-templates = {path = "../templates"}
+templates = { path = "../templates" }
 triplestore = { path = "../triplestore" }
 shacl = { path = "../shacl" }
 representation = { path = "../representation" }
-datalog = {path = "../datalog"}
-cimxml_export = {path = "../cimxml_export"}
-query_processing = {path ="../query_processing"}
-chrontext = {path = "../chrontext"}
-virtualization = {path = "../virtualization"}
-external_sparql = {path = "../external_sparql"}
-spargebra = {path = "../spargebra"}
+datalog = { path = "../datalog" }
+cimxml_export = { path = "../cimxml_export" }
+query_processing = { path = "../query_processing" }
+chrontext = { path = "../chrontext" }
+virtualization = { path = "../virtualization" }
+external_sparql = { path = "../external_sparql" }
+spargebra = { path = "../spargebra" }
 
-uuid = {workspace = true}
+uuid = { workspace = true }
 rayon = { workspace = true }
 oxrdf = { workspace = true }
 oxiri = { workspace = true }
-polars = { workspace = true,  features = [
+polars = { workspace = true, features = [
     "semi_anti_join", "abs", "round_series", "lazy", "concat_str", "is_in", "dtype-full", "strings", "rows",
     "timezones", "polars-time", "temporal", "list_eval", "partition_by", "parquet", "cse", "nightly", "performant",
 ] }

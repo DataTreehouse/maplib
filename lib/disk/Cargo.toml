@@ -8,4 +8,4 @@ rust-version.workspace = true
 nohash-hasher.workspace = true
 arrow.workspace = true
 range-set-blaze.workspace = true
-in_memory = {path="../in_memory"}
+in_memory = { path = "../in_memory" }

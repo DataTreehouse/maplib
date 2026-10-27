@@ -118,7 +118,9 @@ def test_want_xsd_int_got_xsd_boolean():
 
 def test_autoconverted_datetime_to_date():
     
-    df = pl.DataFrame({"MyValue": ["2020-02-02T00:00:00Z"]}).cast(pl.Datetime("ns"))
+    df = pl.DataFrame({"MyValue": ["2020-02-02T00:00:00Z"]}).with_columns(
+        pl.col("MyValue").str.to_datetime(time_unit="ns", time_zone="UTC")
+    )
     model = Model()
     ex = Prefix("http://example.net/ns#")
     my_value = Variable("MyValue")
@@ -144,7 +146,9 @@ def test_autoconverted_datetime_to_date():
 
 def test_autoconverted_optional_datetime_to_date():
     
-    df = pl.DataFrame({"MyValue": ["2020-02-02T00:00:00Z"]}).cast(pl.Datetime("ns"))
+    df = pl.DataFrame({"MyValue": ["2020-02-02T00:00:00Z"]}).with_columns(
+        pl.col("MyValue").str.to_datetime(time_unit="ns", time_zone="UTC")
+    )
     model = Model()
     ex = Prefix("http://example.net/ns#")
     my_value = Variable("MyValue")
@@ -176,9 +180,9 @@ def test_autoconverted_optional_datetime_to_date():
 
 def test_autoconverted_datetime_list_to_date_list_1():
     
-    df = pl.DataFrame({"MyValue": [["2020-02-02T00:00:00Z"]]}).cast(
-        pl.List(pl.Datetime("ns"))
-    )
+    df = pl.DataFrame({"MyValue": [["2020-02-02T00:00:00Z"]]}).with_columns(
+        pl.col("MyValue").list.eval(pl.element().str.to_datetime(time_unit="ns", time_zone="UTC")
+    ))
     model = Model()
     ex = Prefix("http://example.net/ns#")
     my_value = Variable("MyValue")
@@ -210,9 +214,9 @@ def test_autoconverted_datetime_list_to_date_list_1():
 
 def test_autoconverted_datetime_list_to_date_list_2():
     
-    df = pl.DataFrame({"MyValue": [["2020-02-02T00:00:00Z"]]}).cast(
-        pl.List(pl.Datetime("ns"))
-    )
+    df = pl.DataFrame({"MyValue": [["2020-02-02T00:00:00Z"]]}).with_columns(
+        pl.col("MyValue").list.eval(pl.element().str.to_datetime(time_unit="ns", time_zone="UTC")
+    ))
     model = Model()
     ex = Prefix("http://example.net/ns#")
     my_value = Variable("MyValue")

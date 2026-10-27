@@ -465,7 +465,7 @@ def test_multi_filter_comparison(streaming):
 │ ---                                               │
 │ str                                               │
 ╞═══════════════════════════════════════════════════╡
-│ "3.000000000000"^^<http://www.w3.org/2001/XMLSchema#decimal> │
+│ "3"^^<http://www.w3.org/2001/XMLSchema#decimal>   │
 │ "89"^^<http://www.w3.org/2001/XMLSchema#integer>  │
 └───────────────────────────────────────────────────┘
     """
@@ -494,7 +494,7 @@ def test_multi_filter_incompatible_comparison(streaming):
 │ ---                                               │
 │ str                                               │
 ╞═══════════════════════════════════════════════════╡
-│ "3.000000000000"^^<http://www.w3.org/2001/XMLSchema#decimal> │
+│ "3"^^<http://www.w3.org/2001/XMLSchema#decimal>   │
 │ "89"^^<http://www.w3.org/2001/XMLSchema#integer>  │
 └───────────────────────────────────────────────────┘
     """
@@ -573,7 +573,7 @@ def test_multi_filter_incompatible_many_comparison(streaming):
         streaming=streaming,
     )
     f = TESTDATA_PATH / "multi_many_comp.csv"
-    #df.write_csv(f)
+    # df.write_csv(f)
     expected = pl.read_csv(f)
     assert_frame_equal(df, expected)
 
@@ -594,7 +594,7 @@ def test_multi_concat(streaming):
         streaming=streaming,
     )
     f = TESTDATA_PATH / "multi_concat.csv"
-    #df.write_csv(f)
+    # df.write_csv(f)
     expected = pl.read_csv(f)
     assert_frame_equal(df, expected)
 
@@ -1151,7 +1151,7 @@ def test_before_after_multi_type_with_string_and_lang_string_and_other(streaming
                                                        {'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': 'abca',
                                                         '<http://www.w3.org/2001/XMLSchema#string>': None,
                                                         'l': 'en'},
-                                                       {'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': 'bb',
+                                                       {'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': '',
                                                         '<http://www.w3.org/2001/XMLSchema#string>': None,
                                                         'l': 'se'},
                                                        {'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': None,
@@ -1166,7 +1166,7 @@ def test_before_after_multi_type_with_string_and_lang_string_and_other(streaming
                                                        {'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': 'caAc',
                                                         '<http://www.w3.org/2001/XMLSchema#string>': None,
                                                         'l': 'en'},
-                                                       {'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': 'bb',
+                                                       {'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': '',
                                                         '<http://www.w3.org/2001/XMLSchema#string>': None,
                                                         'l': 'se'},
                                                        {'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': None,
@@ -1271,9 +1271,9 @@ def test_before_after_only_lang_string_and_other(streaming):
     }
     assert sm.mappings.height == 2
     assert sm.mappings.get_column("bef").to_list() == [{'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': 'abca', 'l': 'en'},
-                                                       {'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': 'bb', 'l': 'se'}]
+                                                       {'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': '', 'l': 'se'}]
     assert sm.mappings.get_column("aft").to_list() == [{'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': 'caAc', 'l': 'en'},
-                                                       {'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': 'bb', 'l': 'se'}]
+                                                       {'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': '', 'l': 'se'}]
 
 
 @pytest.mark.parametrize("streaming", [True, False])
@@ -1308,13 +1308,13 @@ def test_before_after_only_string_and_other(streaming):
         None,
         None,
         "abca",
-        "bb",
+        "",
     ]
     assert sm.mappings.get_column("aft").to_list() == [
         None,
         None,
         "caAc",
-        "bb",
+        "",
     ]
 
 

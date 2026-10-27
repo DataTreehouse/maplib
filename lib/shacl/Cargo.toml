@@ -4,11 +4,11 @@ version = "0.1.0"
 edition = "2021"
 
 [features]
-pyo3 = [ "dep:pyo3", "triplestore/pyo3" ]
+pyo3 = ["dep:pyo3", "triplestore/pyo3"]
 
 [dependencies]
 representation = { path = "../representation" }
-triplestore = {path="../triplestore"}
+triplestore = { path = "../triplestore" }
 thiserror.workspace = true
 oxrdf.workspace = true
 polars.workspace = true

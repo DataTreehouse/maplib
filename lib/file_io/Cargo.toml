@@ -5,5 +5,5 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-polars = {workspace=true, features=["parquet", "lazy"] }
-thiserror={ workspace= true }
+polars = { workspace = true, features = ["parquet", "lazy"] }
+thiserror = { workspace = true }

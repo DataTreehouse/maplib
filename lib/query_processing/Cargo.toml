@@ -5,11 +5,11 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-representation = { path = "../representation"}
-spargebra = { path = "../spargebra"}
+representation = { path = "../representation" }
+spargebra = { path = "../spargebra" }
 
 oxrdf.workspace = true
-polars = {workspace=true,  features=[
+polars = { workspace = true, features = [
     "performant",
     "nightly",
     "cse",

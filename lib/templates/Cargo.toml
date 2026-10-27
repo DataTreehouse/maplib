@@ -6,7 +6,7 @@ rust-version.workspace = true
 
 [dependencies]
 representation = { path = "../representation" }
-spargebra = {path = "../spargebra"}
+spargebra = { path = "../spargebra" }
 
 oxrdf = { workspace = true }
 tracing = { workspace = true }
@@ -15,4 +15,4 @@ pyo3.workspace = true
 walkdir.workspace = true
 oxiri.workspace = true
 oxilangtag.workspace = true
-peg = {workspace = true }
+peg = { workspace = true }

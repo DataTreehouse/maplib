@@ -4,9 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-representation = {path = "../representation"}
-spargebra = {path = "../spargebra"}
-query_processing = {path = "../query_processing"}
+representation = { path = "../representation" }
+spargebra = { path = "../spargebra" }
+query_processing = { path = "../query_processing" }
 
 thiserror.workspace = true
 reqwest.workspace = true
