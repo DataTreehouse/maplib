@@ -85,7 +85,7 @@ pub fn base_expression_to_formatted(
                 lit("\"") + maybe_decode_expr(expr, base_type, base_state, global_cats) + lit("\"")
             } else if literal_string_rep {
                 lit("\"")
-                    + literal_to_string(
+                    + literal_expr_to_string(
                         maybe_decode_expr(expr, base_type, base_state, global_cats),
                         base_type,
                     )
@@ -267,7 +267,7 @@ pub fn base_expression_to_native(
 /// Lexical form of a non-language-tagged literal. Decimals are stored with a fixed scale,
 /// so the plain string cast pads them with zeros (1.5 -> "1.5000000000000000"). Trim them
 /// to the XSD canonical form, as the N-Triples writer does ("1.5", "798").
-pub fn literal_to_string(e: Expr, t: &BaseRDFNodeType) -> Expr {
+pub fn literal_expr_to_string(e: Expr, t: &BaseRDFNodeType) -> Expr {
     let s = e.cast(DataType::String);
     if t.is_lit_type(xsd::DECIMAL) {
         s.str()

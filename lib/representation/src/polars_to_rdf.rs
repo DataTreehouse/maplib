@@ -1,8 +1,10 @@
 use crate::cats::{decode_column, LockedCats};
 use crate::errors::RepresentationError;
+use crate::formatting::literal_expr_to_string;
 use crate::multitype::{
     extract_column_from_multitype, MULTI_BLANK_DT, MULTI_IRI_DT, MULTI_NONE_DT,
 };
+use crate::rdf_to_polars::{default_decimal_precision, default_decimal_scale};
 use crate::solution_mapping::{BaseCatState, EagerSolutionMappings};
 use crate::{
     literal_blanknode_to_blanknode, literal_iri_to_namednode, BaseRDFNodeType, RDFNodeState,
@@ -12,7 +14,9 @@ use chrono::TimeZone as ChronoTimeZone;
 use chrono::{Datelike, Timelike};
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{BlankNode, Literal, NamedNode, NamedOrBlankNode, Triple, Variable};
-use polars::prelude::{AnyValue, Column, DataFrame, DataType, IntoColumn, Series, TimeZone};
+use polars::prelude::{
+    col, AnyValue, Column, DataFrame, DataType, IntoColumn, IntoLazy, Series, TimeZone,
+};
 use rayon::iter::IndexedParallelIterator;
 use rayon::iter::IntoParallelIterator;
 use rayon::iter::ParallelIterator;
@@ -257,9 +261,16 @@ pub fn basic_rdf_node_type_column_to_term_vec(
                             .collect()
                     }
                 } else {
-                    column
-                        .cast(&DataType::String)
-                        .unwrap()
+                    let mut use_column = column.clone();
+                    use_column.rename("c".into());
+                    let mut df = DataFrame::new(column.len(), vec![use_column]).unwrap();
+                    df = df
+                        .lazy()
+                        .with_column(literal_expr_to_string(col("c"), base_type))
+                        .collect()
+                        .unwrap();
+                    use_column = df.drop_in_place("c").unwrap();
+                    use_column
                         .str()
                         .unwrap()
                         .par_iter()
@@ -406,9 +417,19 @@ pub fn polars_type_to_literal_type(
                 Ok(RDFNodeState::default_from_types(dts))
             }
         }
-        dt => Err(RepresentationError::DatatypeError(format!(
-            "Unknown datatype {dt:?}"
-        ))),
+        dt => {
+            if dt.is_decimal() {
+                Err(RepresentationError::DatatypeError(format!(
+                    "Unknown datatype {dt:?}, decimals should have scale {} and precision {}",
+                    default_decimal_scale(),
+                    default_decimal_precision()
+                )))
+            } else {
+                Err(RepresentationError::DatatypeError(format!(
+                    "Unknown datatype {dt:?}"
+                )))
+            }
+        }
     }
 }
 

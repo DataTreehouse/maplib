@@ -2,7 +2,7 @@ use crate::expressions::cast_lang_string_to_string;
 use polars::datatypes::DataType;
 use polars::prelude::{coalesce, col, lit, Expr, LiteralValue};
 use representation::cats::{maybe_decode_expr, LockedCats};
-use representation::formatting::literal_to_string;
+use representation::formatting::literal_expr_to_string;
 use representation::multitype::{MULTI_BLANK_DT, MULTI_IRI_DT};
 use representation::{BaseRDFNodeType, RDFNodeState};
 
@@ -27,7 +27,7 @@ pub fn str_function(c: &str, t: &RDFNodeState, global_cats: LockedCats) -> Expr 
                     if t.is_lang_string() {
                         cast_lang_string_to_string(c, t, s, global_cats.clone())
                     } else {
-                        literal_to_string(
+                        literal_expr_to_string(
                             maybe_decode_expr(
                                 col(c).struct_().field_by_name(&t.field_col_name()),
                                 t,
@@ -53,7 +53,7 @@ pub fn str_function(c: &str, t: &RDFNodeState, global_cats: LockedCats) -> Expr 
                 if t.is_lang_string() {
                     cast_lang_string_to_string(c, b, s, global_cats)
                 } else {
-                    literal_to_string(maybe_decode_expr(col(c), b, s, global_cats), b)
+                    literal_expr_to_string(maybe_decode_expr(col(c), b, s, global_cats), b)
                 }
             }
             BaseRDFNodeType::None => lit(LiteralValue::untyped_null()).cast(DataType::String),
