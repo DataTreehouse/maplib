@@ -22,7 +22,7 @@ use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::SolutionMappings;
 use representation::{BaseRDFNodeType, RDFNodeState};
 use representation::{OBJECT_COL_NAME, SUBJECT_COL_NAME};
-use spargebra::algebra::{GraphPattern, PropertyPathExpression};
+use spargebra::algebra::{Expression, GraphPattern, PropertyPathExpression};
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 use sprs::{CsMatBase, TriMatBase};
 use std::collections::HashMap;
@@ -36,6 +36,21 @@ type SparseMatrix = CsMatBase<u32, usize, Vec<usize>, Vec<usize>, Vec<u32>, usiz
 struct SparsePathReturn {
     sparmat: SparseMatrix,
     eye: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+enum PathLeaf {
+    NamedNode(NamedNode),
+    NegatedSet(Vec<NamedNode>),
+}
+
+impl PathLeaf {
+    fn negated(nns: &[NamedNode]) -> Self {
+        let mut v = nns.to_vec();
+        v.sort();
+        v.dedup();
+        PathLeaf::NegatedSet(v)
+    }
 }
 
 impl Triplestore {
@@ -137,8 +152,8 @@ impl Triplestore {
             subject_series.len(),
             vec![subject_series.into(), object_series.into()],
         )
-        .unwrap()
-        .lazy();
+            .unwrap()
+            .lazy();
         let lookup_subject_lf =
             lookup_df
                 .clone()
@@ -181,8 +196,8 @@ impl Triplestore {
                     SUBJECT_COL_NAME,
                     &BaseRDFNodeType::IRI,
                 )
-                .collect()
-                .unwrap();
+                    .collect()
+                    .unwrap();
                 dtypes.insert(
                     SUBJECT_COL_NAME.to_string(),
                     BaseRDFNodeType::IRI.into_default_stored_rdf_node_state(),
@@ -194,8 +209,8 @@ impl Triplestore {
                     OBJECT_COL_NAME,
                     &BaseRDFNodeType::IRI,
                 )
-                .collect()
-                .unwrap();
+                    .collect()
+                    .unwrap();
                 dtypes.insert(
                     OBJECT_COL_NAME.to_string(),
                     BaseRDFNodeType::IRI.into_default_stored_rdf_node_state(),
@@ -207,8 +222,8 @@ impl Triplestore {
                     SUBJECT_COL_NAME,
                     &BaseRDFNodeType::Literal(l.datatype().into_owned()),
                 )
-                .collect()
-                .unwrap();
+                    .collect()
+                    .unwrap();
                 dtypes.insert(
                     SUBJECT_COL_NAME.to_string(),
                     BaseRDFNodeType::Literal(l.datatype().into_owned())
@@ -221,8 +236,8 @@ impl Triplestore {
                     OBJECT_COL_NAME,
                     &BaseRDFNodeType::Literal(l.datatype().into_owned()),
                 )
-                .collect()
-                .unwrap();
+                    .collect()
+                    .unwrap();
                 dtypes.insert(
                     OBJECT_COL_NAME.to_string(),
                     BaseRDFNodeType::Literal(l.datatype().into_owned())
@@ -389,8 +404,27 @@ pub fn create_graph_pattern(
         | PropertyPathExpression::ZeroOrOne(_) => {
             panic!("Should never happen")
         }
-        PropertyPathExpression::NegatedPropertySet(_) => {
-            todo!()
+        PropertyPathExpression::NegatedPropertySet(nns) => {
+            let pred_name = format!("v{}", uuid::Uuid::new_v4());
+            let pred_var = Variable::new_unchecked(&pred_name);
+            intermediaries.push(pred_name);
+            let excluded = nns
+                .iter()
+                .map(|nn| Expression::NamedNode(nn.clone()))
+                .collect();
+            GraphPattern::Filter {
+                expr: Expression::Not(Box::new(Expression::In(
+                    Box::new(Expression::Variable(pred_var.clone())),
+                    excluded,
+                ))),
+                inner: Box::new(GraphPattern::Bgp {
+                    patterns: vec![TriplePattern {
+                        subject: subject.clone(),
+                        predicate: NamedNodePattern::Variable(pred_var),
+                        object: object.clone(),
+                    }],
+                }),
+            }
         }
     }
 }
@@ -527,18 +561,18 @@ pub fn need_sparse_matrix(ppe: &PropertyPathExpression) -> bool {
         PropertyPathExpression::ZeroOrMore(_) => true,
         PropertyPathExpression::OneOrMore(_) => true,
         PropertyPathExpression::ZeroOrOne(_) => true,
-        PropertyPathExpression::NegatedPropertySet(_) => todo!("Not supported yet"),
+        PropertyPathExpression::NegatedPropertySet(_) => panic!("Should never happen"),
     }
 }
 
 fn sparse_path(
     ppe: &PropertyPathExpression,
-    namednode_map: &HashMap<NamedNode, DataFrame>,
+    namednode_map: &HashMap<PathLeaf, DataFrame>,
     max_index: usize,
 ) -> SparsePathReturn {
     match ppe {
         PropertyPathExpression::NamedNode(nn) => {
-            if let Some(df) = namednode_map.get(nn) {
+            if let Some(df) = namednode_map.get(&PathLeaf::NamedNode(nn.clone())) {
                 let sparmat = to_csr(df, max_index);
                 SparsePathReturn {
                     sparmat,
@@ -633,14 +667,21 @@ fn sparse_path(
             let sparmat = zero_or_one(sparmat_inner);
             SparsePathReturn { sparmat, eye: true }
         }
-        PropertyPathExpression::NegatedPropertySet(_nns) => {
-            todo!()
+        PropertyPathExpression::NegatedPropertySet(nns) => {
+            let sparmat = match namednode_map.get(&PathLeaf::negated(nns)) {
+                Some(df) => to_csr(df, max_index).map(|x| (x > &0) as u32),
+                None => empty_csr(max_index),
+            };
+            SparsePathReturn {
+                sparmat,
+                eye: false,
+            }
         }
     }
 }
 
 struct U32DataFrameCreator {
-    pub named_nodes: HashMap<NamedNode, (DataFrame, RDFNodeState, RDFNodeState)>,
+    pub named_nodes: HashMap<PathLeaf, (DataFrame, RDFNodeState, RDFNodeState)>,
     include_transient: bool,
     dataset: QueryGraph,
 }
@@ -662,7 +703,7 @@ impl U32DataFrameCreator {
         (
             DataFrame,
             HashMap<String, RDFNodeState>,
-            HashMap<NamedNode, DataFrame>,
+            HashMap<PathLeaf, DataFrame>,
         ),
         QueryProcessingError,
     > {
@@ -826,12 +867,18 @@ impl U32DataFrameCreator {
     ) -> Result<(), SparqlError> {
         match ppe {
             PropertyPathExpression::NamedNode(nn) => {
+                let leaf = PathLeaf::NamedNode(nn.clone());
+                let predicates = vec![nn.clone()];
+
+                if self.named_nodes.contains_key(&leaf) {
+                    return Ok(());
+                }
                 let SolutionMappings {
                     mappings,
                     mut rdf_node_types,
                     ..
                 } = triplestore.get_multi_predicates_solution_mappings(
-                    Some(vec![nn.clone()]),
+                    Some(predicates),
                     &Some(SUBJECT_COL_NAME.to_string()),
                     &None,
                     &Some(OBJECT_COL_NAME.to_string()),
@@ -844,7 +891,7 @@ impl U32DataFrameCreator {
                 )?;
                 let df = mappings.collect().unwrap();
                 self.named_nodes.insert(
-                    nn.clone(),
+                    leaf,
                     (
                         df,
                         rdf_node_types.remove(SUBJECT_COL_NAME).unwrap(),
@@ -873,9 +920,50 @@ impl U32DataFrameCreator {
             PropertyPathExpression::ZeroOrOne(inner) => {
                 self.gather_namednode_dfs(inner, triplestore)
             }
-            PropertyPathExpression::NegatedPropertySet(_nns) => {
-                todo!()
+            PropertyPathExpression::NegatedPropertySet(nns) => {
+                let graph = if let QueryGraph::NamedGraph(g) = &self.dataset {
+                    g
+                } else {
+                    todo!("Negated property sets over a QueryDataset")
+                };
+
+                let allowed: Vec<NamedNode> = triplestore
+                    .all_predicates(graph)
+                    .into_iter()
+                    .filter(|p| !nns.contains(p))
+                    .collect();
+
+                if self.named_nodes.contains_key(&PathLeaf::negated(nns)) {
+                    return Ok(());
+                }
+                let SolutionMappings {
+                    mappings,
+                    mut rdf_node_types,
+                    ..
+                } = triplestore.get_multi_predicates_solution_mappings(
+                    Some(allowed),
+                    &Some(SUBJECT_COL_NAME.to_string()),
+                    &None,
+                    &Some(OBJECT_COL_NAME.to_string()),
+                    &None,
+                    &None,
+                    &None,
+                    &None,
+                    self.include_transient,
+                    &self.dataset,
+                )?;
+                let df = mappings.collect().unwrap();
+                self.named_nodes.insert(
+                    PathLeaf::negated(nns),
+                    (
+                        df,
+                        rdf_node_types.remove(SUBJECT_COL_NAME).unwrap(),
+                        rdf_node_types.remove(OBJECT_COL_NAME).unwrap(),
+                    ),
+                );
+                Ok(())
             }
         }
     }
 }
+
