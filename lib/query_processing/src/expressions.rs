@@ -709,6 +709,7 @@ pub fn exists(
                 build_side: None,
             },
         )
+        .unwrap()
         .with_column(col(outer_context.as_str()).is_null().not());
 
     rdf_node_types.insert(

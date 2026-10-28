@@ -85,6 +85,7 @@ impl MapOptions {
     }
 }
 
+#[derive(Debug)]
 struct OTTRTripleInstance {
     df: DataFrame,
     dynamic_columns: HashMap<String, MappingColumnType>,

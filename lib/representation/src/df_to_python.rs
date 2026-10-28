@@ -14,17 +14,17 @@ use crate::multitype::compress_actual_multitypes;
 use crate::python::PySolutionMappings;
 use crate::query_context::Context;
 use crate::RDFNodeState;
-use arrow::datatypes::ArrowDataType;
 use polars::datatypes::CompatLevel;
 use polars::frame::DataFrame;
 use polars::prelude::{col, ArrayRef, ArrowField, IntoLazy, PlSmallStr};
 use polars::series::Series;
+use polars_arrow::array::StructArray;
 use polars_arrow::record_batch::RecordBatch;
-use polars_core::utils::arrow;
-use polars_core::utils::arrow::array::Array;
-use polars_core::utils::arrow::datatypes::Field;
-use polars_core::utils::arrow::ffi;
-use polars_core::utils::arrow::ffi::{
+use polars_core::utils::polars_arrow;
+use polars_core::utils::polars_arrow::array::Array;
+use polars_core::utils::polars_arrow::datatypes::{ArrowDataType, Field};
+use polars_core::utils::polars_arrow::ffi;
+use polars_core::utils::polars_arrow::ffi::{
     export_array_to_c, export_field_to_c, ArrowArray, ArrowSchema,
 };
 use pyo3::ffi::Py_uintptr_t;
@@ -219,8 +219,7 @@ impl Iterator for DataFrameStreamIterator {
             self.idx += 1;
 
             let col_len = batch_cols.first().map_or(self.height, |c| c.len());
-            let array =
-                arrow::array::StructArray::new(self.dtype.clone(), col_len, batch_cols, None);
+            let array = StructArray::new(self.dtype.clone(), col_len, batch_cols, None);
             Some(Ok(Box::new(array)))
         }
     }

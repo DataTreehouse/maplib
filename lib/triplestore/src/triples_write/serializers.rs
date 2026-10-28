@@ -4,8 +4,8 @@
 
 use polars::polars_compute;
 use polars_core::prelude::*;
-use polars_core::utils::arrow::array::{Array, BooleanArray, PrimitiveArray, Utf8ViewArray};
-use polars_core::utils::arrow::types::NativeType;
+use polars_core::utils::polars_arrow::array::{Array, BooleanArray, PrimitiveArray, Utf8ViewArray};
+use polars_core::utils::polars_arrow::types::NativeType;
 use representation::rdf_to_polars::default_decimal_scale;
 use representation::BaseRDFNodeType;
 use std::io::Write;

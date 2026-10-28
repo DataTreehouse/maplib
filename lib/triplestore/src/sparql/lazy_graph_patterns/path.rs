@@ -151,6 +151,7 @@ impl Triplestore {
                 &[col(LOOKUP_COLUMN)],
                 JoinArgs::new(JoinType::Inner),
             )
+            .unwrap()
             .drop(by_name(["subject_key"], true, false));
         let lookup_object_lf = lookup_df
             .lazy()
@@ -162,6 +163,7 @@ impl Triplestore {
                 &[col(LOOKUP_COLUMN)],
                 JoinArgs::new(JoinType::Inner),
             )
+            .unwrap()
             .drop(by_name(["object_key"], true, false));
         out_df = out_lf.collect().unwrap();
         let mut dtypes = HashMap::new();
@@ -793,6 +795,7 @@ impl U32DataFrameCreator {
                     [col(&subject_row_index)],
                     JoinType::Inner.into(),
                 )
+                .unwrap()
                 .join(
                     lookup_df
                         .clone()
@@ -803,6 +806,7 @@ impl U32DataFrameCreator {
                     [col(&object_row_index)],
                     JoinType::Inner.into(),
                 )
+                .unwrap()
                 .select([col(SUBJECT_COL_NAME), col(OBJECT_COL_NAME)]);
             out_df_map.insert(
                 nns.get(nn_idx as usize).unwrap().clone(),

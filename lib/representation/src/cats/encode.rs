@@ -89,24 +89,13 @@ impl Cats {
                     .unwrap()
                     .field_by_name(LANG_STRING_LANG_FIELD)
                     .unwrap();
-                mappings = mappings.with_column(col(&c).struct_().with_fields(vec![
-                    lit(value_series).explode(ExplodeOptions {
-                        empty_as_null: false,
-                        keep_nulls: true,
-                    }),
-                    lit(lang_series).explode(ExplodeOptions {
-                        empty_as_null: false,
-                        keep_nulls: true,
-                    }),
-                ]));
+                mappings = mappings.with_column(
+                    col(&c)
+                        .struct_()
+                        .with_fields(vec![lit(value_series), lit(lang_series)]),
+                );
             } else if s.is_multi() {
-                mappings =
-                    mappings.with_column(col(&c).struct_().with_fields(vec![lit(enc).explode(
-                        ExplodeOptions {
-                            empty_as_null: false,
-                            keep_nulls: true,
-                        },
-                    )]));
+                mappings = mappings.with_column(col(&c).struct_().with_fields(vec![lit(enc)]));
             } else {
                 mappings = mappings.with_column(lit(enc).explode(ExplodeOptions {
                     empty_as_null: false,

@@ -183,12 +183,15 @@ pub fn minus(
                 .with_nulls_last(true)
                 .with_order_descending(false),
         );
-        left_solution_mappings.mappings = left_solution_mappings.mappings.join(
-            right_mappings,
-            join_on_cols.as_slice(),
-            join_on_cols.as_slice(),
-            JoinArgs::new(JoinType::Anti),
-        );
+        left_solution_mappings.mappings = left_solution_mappings
+            .mappings
+            .join(
+                right_mappings,
+                join_on_cols.as_slice(),
+                join_on_cols.as_slice(),
+                JoinArgs::new(JoinType::Anti),
+            )
+            .unwrap();
         Ok(left_solution_mappings)
     }
 }

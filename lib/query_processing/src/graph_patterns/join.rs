@@ -194,12 +194,14 @@ pub fn join_workaround(
             }
         }
         right_mappings = right_mappings.drop(by_name(to_drop_right, true, false));
-        left_mappings = left_mappings.join(
-            right_mappings,
-            &[col(&dummycol)],
-            &[col(&dummycol)],
-            join_type.into(),
-        );
+        left_mappings = left_mappings
+            .join(
+                right_mappings,
+                &[col(&dummycol)],
+                &[col(&dummycol)],
+                join_type.into(),
+            )
+            .unwrap();
         left_mappings = left_mappings.drop(by_name([dummycol], true, false));
     } else {
         let dummy = if on.is_empty() {
@@ -221,7 +223,9 @@ pub fn join_workaround(
             maintain_order: MaintainOrderJoin::None,
             build_side: None,
         };
-        left_mappings = left_mappings.join(right_mappings, &on, &on, join_args);
+        left_mappings = left_mappings
+            .join(right_mappings, &on, &on, join_args)
+            .unwrap();
         if let Some(dummy) = dummy {
             left_mappings = left_mappings.drop(by_name([dummy], true, false));
         }

@@ -180,7 +180,7 @@ impl Triplestore {
                 if colnames.is_empty() {
                     mappings = mappings.filter(lit(false));
                 } else {
-                    mappings = mappings.join(lf, [], [], JoinType::Cross.into());
+                    mappings = mappings.join(lf, [], [], JoinType::Cross.into()).unwrap();
                 }
                 rdf_node_types.extend(dts);
                 solution_mappings = Some(SolutionMappings {

@@ -249,21 +249,23 @@ fn get_triples_after_deletion(
             .unwrap();
             let to_delete = gct.encoded_triples.df.clone().lazy();
 
-            lf = lf.join(
-                to_delete,
-                [col(SUBJECT_COL_NAME), col(OBJECT_COL_NAME)],
-                [col(SUBJECT_COL_NAME), col(OBJECT_COL_NAME)],
-                JoinArgs {
-                    how: JoinType::Anti,
-                    validation: Default::default(),
-                    suffix: None,
-                    slice: None,
-                    nulls_equal: false,
-                    coalesce: Default::default(),
-                    maintain_order: MaintainOrderJoin::None,
-                    build_side: None,
-                },
-            );
+            lf = lf
+                .join(
+                    to_delete,
+                    [col(SUBJECT_COL_NAME), col(OBJECT_COL_NAME)],
+                    [col(SUBJECT_COL_NAME), col(OBJECT_COL_NAME)],
+                    JoinArgs {
+                        how: JoinType::Anti,
+                        validation: Default::default(),
+                        suffix: None,
+                        slice: None,
+                        nulls_equal: false,
+                        coalesce: Default::default(),
+                        maintain_order: MaintainOrderJoin::None,
+                        build_side: None,
+                    },
+                )
+                .unwrap();
             let df = lf.collect().unwrap();
             if df.height() > 0 {
                 Ok(Some(EncodedTriples {

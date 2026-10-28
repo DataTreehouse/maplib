@@ -30,7 +30,7 @@ edition = "2021"
 [workspace.dependencies]
 pyo3 = { version = "0.29.0", features = ["py-clone", "rust_decimal"] }
 #Moment is there to work around a feature toggle bug
-polars = { version = "0.54.4", features = [
+polars = { version = "0.55.1", features = [
     "simd",
     "nightly",
     "performant",
@@ -41,10 +41,10 @@ polars = { version = "0.54.4", features = [
     "timezones",
     "lazy",
 ] }
-polars-arrow = { version = "0.54.4" }
-polars-core = { version = "0.54.4" }
-rayon = "1.10.0"
-regex = "1.11.1"
+polars-arrow = { version = "0.55.1" }
+polars-core = { version = "0.55.1" }
+rayon = "1.12.0"
+regex = "1.13.1"
 oxrdf = { version = "0.3.3" }
 oxrdfio = { version = "0.2.5" }
 oxttl = { version = "0.2.3" }
@@ -69,9 +69,9 @@ memmap2 = "0.9.5"
 sprs = "0.11.3"
 walkdir = "2.5.0"
 aho-corasick = "1.1.4"
-simd-json = { version = "0.17.0", features = ["serde_json"] }
+simd-json = { version = "0.18.1", features = ["serde_json"] }
 serde_json = { version = "1.0.149" }
-serde = {version = "1.0.228"}
+serde = { version = "1.0.228" }
 urlencoding = "2.1.3"
 md-5 = "0.11.0"
 sha1 = "0.11.0"
@@ -83,14 +83,20 @@ tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
 tracing-log = "0.2"
 itoa = "1.0.15"
 ryu = "1.0.20"
-#dev-dependencies
 nohash-hasher = "0.2.0"
 arrow = "58"
 ordered-float = "5.1.0"
 rust_decimal = "1.42.1"
-range-set-blaze = "0.5.0"
-reqwest = { version = "0.13.4", features = ["query", "json", "rustls-no-provider"] }
+range-set-blaze = "0.8.0"
+reqwest = { version = "0.13.5", features = ["query", "json", "rustls-no-provider"] }
+tokio = { version = "1.54.1" }
 
 [patch.crates-io]
-#polars = { git = 'https://github.com/pola-rs/polars', rev="0df0c25d4db895ec8cad773bedc4e98400e3135e" }
-#polars-core = { git = 'https://github.com/pola-rs/polars', rev="0df0c25d4db895ec8cad773bedc4e98400e3135e" }
+polars = { git = 'https://github.com/pola-rs/polars', rev = "7f902bd3ffd27ff82d14278a09a295ff2f7aed92" }
+polars-core = { git = 'https://github.com/pola-rs/polars', rev = "7f902bd3ffd27ff82d14278a09a295ff2f7aed92" }
+polars-arrow = { git = 'https://github.com/pola-rs/polars', rev = "7f902bd3ffd27ff82d14278a09a295ff2f7aed92" }
+# Neded to get polars patched working, https://github.com/rust-lang/hashbrown/pull/727
+hashbrown = { git = "https://github.com/pola-rs/hashbrown", rev = "d76a6f81abd8f388676aff15068236a8d21c7e1a" }
+
+# Avoids nasty bug: https://github.com/tikv/jemallocator/pull/168
+tikv-jemalloc-sys = { git = "https://github.com/pola-rs/jemallocator", rev = "0d683dfb157097e2075d5e0eaf25f71f514a7552" }

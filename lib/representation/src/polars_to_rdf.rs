@@ -17,9 +17,9 @@ use oxrdf::{BlankNode, Literal, NamedNode, NamedOrBlankNode, Triple, Variable};
 use polars::prelude::{
     col, AnyValue, Column, DataFrame, DataType, IntoColumn, IntoLazy, Series, TimeZone,
 };
-use rayon::iter::IndexedParallelIterator;
 use rayon::iter::IntoParallelIterator;
 use rayon::iter::ParallelIterator;
+use rayon::iter::IndexedParallelIterator;
 use spargebra::term::Term;
 use std::collections::HashSet;
 use std::vec::IntoIter;
@@ -161,7 +161,7 @@ pub fn basic_rdf_node_type_column_to_term_vec(
         BaseRDFNodeType::IRI => decode_column(column, base_type, base_state, global_cats)
             .str()
             .unwrap()
-            .par_iter()
+            .iter()
             .map(|x| x.map(|x| Term::NamedNode(literal_iri_to_namednode(x))))
             .collect(),
         BaseRDFNodeType::BlankNode => {
@@ -177,7 +177,7 @@ pub fn basic_rdf_node_type_column_to_term_vec(
                 decode_column(column, base_type, base_state, global_cats)
                     .str()
                     .unwrap()
-                    .par_iter()
+                    .iter()
                     .map(|x| x.map(|x| Term::BlankNode(literal_blanknode_to_blanknode(x))))
                     .collect()
             }
@@ -223,7 +223,7 @@ pub fn basic_rdf_node_type_column_to_term_vec(
                 let ser = date_column_to_strings(column);
                 ser.str()
                     .unwrap()
-                    .par_iter()
+                    .iter()
                     .map(|x| x.map(|x| Term::Literal(Literal::new_typed_literal(x, l.clone()))))
                     .collect()
             }
@@ -232,7 +232,7 @@ pub fn basic_rdf_node_type_column_to_term_vec(
                     let ser = datetime_column_to_strings(column, tz);
                     ser.str()
                         .unwrap()
-                        .par_iter()
+                        .iter()
                         .map(|x| x.map(|x| Term::Literal(Literal::new_typed_literal(x, l.clone()))))
                         .collect()
                 } else {
@@ -245,14 +245,14 @@ pub fn basic_rdf_node_type_column_to_term_vec(
                         decode_column(column, base_type, base_state, global_cats)
                             .str()
                             .unwrap()
-                            .par_iter()
+                            .iter()
                             .map(|x| x.map(|x| Term::Literal(Literal::new_simple_literal(x))))
                             .collect()
                     } else {
                         decode_column(column, base_type, base_state, global_cats)
                             .str()
                             .unwrap()
-                            .par_iter()
+                            .iter()
                             .map(|x| {
                                 x.map(|x| {
                                     Term::Literal(Literal::new_typed_literal(x, dt.into_owned()))
@@ -273,7 +273,7 @@ pub fn basic_rdf_node_type_column_to_term_vec(
                     use_column
                         .str()
                         .unwrap()
-                        .par_iter()
+                        .iter()
                         .map(|x| {
                             x.map(|x| Term::Literal(Literal::new_typed_literal(x, dt.into_owned())))
                         })

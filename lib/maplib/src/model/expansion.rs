@@ -9,7 +9,7 @@ use oxrdf::vocab::rdf;
 use oxrdf::{NamedNode, Variable};
 use polars::prelude::{
     by_name, col, lit, Column, DataFrame, DataType, ExplodeOptions, Expr, IntoColumn, IntoLazy,
-    LazyFrame, NamedFrom, Series,
+    LazyFrame, Series,
 };
 use rayon::iter::{IndexedParallelIterator, ParallelDrainRange, ParallelIterator};
 use representation::constants::OTTR_TRIPLE;
@@ -247,6 +247,7 @@ impl Model {
             ok_triples.extend(rs);
         }
         let mut all_triples_to_add = vec![];
+
         for CreateTriplesResult {
             df,
             subject_type,
@@ -429,8 +430,7 @@ fn create_triples(
     let mut predicate = None;
 
     if dynamic_columns.is_empty() && df.height() == 0 {
-        df.with_column(Series::new("dummy_column".into(), vec!["dummy_row"]).into_column())
-            .unwrap();
+        df = DataFrame::empty_with_height(1);
     }
 
     for (k, sc) in static_columns {
@@ -800,10 +800,9 @@ fn create_remapped(
     let l = if let Some(c) = column_vec.first() {
         c.len()
     } else {
-        0
+        1
     };
     let mut lf = DataFrame::new(l, column_vec).unwrap().lazy();
-
     for expr in expressions {
         lf = lf.with_column(expr);
     }

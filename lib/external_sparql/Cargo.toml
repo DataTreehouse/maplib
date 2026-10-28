@@ -12,4 +12,4 @@ thiserror.workspace = true
 reqwest.workspace = true
 sparesults.workspace = true
 polars.workspace = true
-tokio = "1.52.1"
+tokio.workspace = true
