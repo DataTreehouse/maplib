@@ -10,7 +10,7 @@ env:
   CARGO_TERM_COLOR: always
   RUST_LOG: debug
   MATURIN_VERSION: '1.9.4'
-  RUST_TOOLCHAIN: nightly-2026-04-01
+  RUST_TOOLCHAIN: nightly-2026-09-01
   PYTHON_VERSION: '3.12'
 
 jobs:
@@ -18,34 +18,34 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - uses: actions/setup-python@v2
-      with:
-        python-version: ${{ env.PYTHON_VERSION }}
+      - uses: actions/setup-python@v2
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
 
-    - name: Install dependencies
-      run: |
-        python -m venv .venv
-        source .venv/bin/activate
-        pip install --upgrade pip
-        pip install "maturin[patchelf]"==${{ env.MATURIN_VERSION }}
-        pip install -r tests/requirements.txt
-      working-directory: ./py_maplib
+      - name: Install dependencies
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          pip install --upgrade pip
+          pip install "maturin[patchelf]"==${{ env.MATURIN_VERSION }}
+          pip install -r tests/requirements.txt
+        working-directory: ./py_maplib
 
-    - name: Set up nightly rust
-      run: |
-        rustup toolchain install ${{ env.RUST_TOOLCHAIN }}
-        rustup default ${{ env.RUST_TOOLCHAIN }}
+      - name: Set up nightly rust
+        run: |
+          rustup toolchain install ${{ env.RUST_TOOLCHAIN }}
+          rustup default ${{ env.RUST_TOOLCHAIN }}
 
-    - name: Build install package
-      run: |
-        source .venv/bin/activate
-        maturin develop
-      working-directory: ./py_maplib
+      - name: Build install package
+        run: |
+          source .venv/bin/activate
+          maturin develop
+        working-directory: ./py_maplib
 
-    - name: pytest
-      run: |
-        source ../.venv/bin/activate
-        pytest
-      working-directory: ./py_maplib/tests
+      - name: pytest
+        run: |
+          source ../.venv/bin/activate
+          pytest
+        working-directory: ./py_maplib/tests
