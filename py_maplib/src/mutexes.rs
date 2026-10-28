@@ -478,7 +478,7 @@ pub(crate) fn validate_mutex(
             inferences_graph.as_ref(),
             include_details.unwrap_or(false),
             include_conforms.unwrap_or(false),
-            streaming.unwrap_or(false),
+            streaming.unwrap_or(DEFAULT_STREAMING),
             max_shape_constraint_results,
             false, //TODO: Needs more work before can be exposed
             max_rows,

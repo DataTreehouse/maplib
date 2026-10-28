@@ -95,7 +95,7 @@ static GLOBAL: Jemalloc = Jemalloc;
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
 
-const DEFAULT_STREAMING: bool = false;
+const DEFAULT_STREAMING: bool = true;
 const DEFAULT_FTS: bool = false;
 const DEFAULT_INCLUDE_TRANSIENT: bool = true;
 const DEFAULT_MAP_TO_TRANSIENT: bool = false;
