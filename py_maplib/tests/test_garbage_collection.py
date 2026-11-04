@@ -1,11 +1,9 @@
-import pytest
+import polars as pl
+from maplib.maplib import SolutionMappings, RDFType
 
 from maplib import Model
-from maplib.maplib import SolutionMappings, RDFType
-import polars as pl
-import logging
 
-@pytest.mark.skip()
+
 def test_gc_happens():
     df = pl.DataFrame({
         "subject": [f"urn:maplib:a_{i}" for i in range(2_000_000)],
@@ -37,4 +35,4 @@ def test_gc_happens():
         }
         """)
 
-    # We are manually checking log output in this test.. 
+    # We are manually checking log output in this test..
