@@ -8,9 +8,13 @@ use polars_core::datatypes::AnyValue;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use representation::cats::{cat_encode_triples, CatTriples, EncodedTriples, LockedCats};
 use representation::dataset::NamedGraph;
-use representation::multitype::{set_struct_all_null_to_null_row, split_df_multicols};
+use representation::multitype::{
+    known_convert_lf_multicol_to_single, set_struct_all_null_to_null_row, split_df_multicols,
+};
 use representation::solution_mapping::EagerSolutionMappings;
-use representation::{BaseRDFNodeType, OBJECT_COL_NAME, PREDICATE_COL_NAME, SUBJECT_COL_NAME};
+use representation::{
+    BaseRDFNodeType, RDFNodeState, OBJECT_COL_NAME, PREDICATE_COL_NAME, SUBJECT_COL_NAME,
+};
 use std::collections::HashMap;
 use std::time::Instant;
 use tracing::trace;
@@ -134,6 +138,26 @@ fn partition_by_global_predicate_col(
     if let Some(predicate) = predicate {
         vec![(sm, predicate)]
     } else {
+        let mut pred_col_t = sm.rdf_node_types.get(PREDICATE_COL_NAME).unwrap().clone();
+        if pred_col_t.is_multi() {
+            if !pred_col_t.map.contains_key(&BaseRDFNodeType::IRI) {
+                unreachable!("Predicates should always be IRI")
+            }
+            sm.mappings = known_convert_lf_multicol_to_single(
+                sm.mappings.lazy(),
+                PREDICATE_COL_NAME,
+                &BaseRDFNodeType::IRI,
+            )
+            .collect()
+            .unwrap();
+            sm.rdf_node_types.insert(
+                PREDICATE_COL_NAME.to_string(),
+                RDFNodeState::from_bases(
+                    BaseRDFNodeType::IRI,
+                    pred_col_t.map.remove(&BaseRDFNodeType::IRI).unwrap(),
+                ),
+            );
+        }
         let partitions = sm
             .mappings
             .partition_by([PREDICATE_COL_NAME], true)
