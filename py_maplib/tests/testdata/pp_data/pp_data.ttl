@@ -1,0 +1,92 @@
+@prefix ex:   <http://example.org/> .
+@prefix foaf: <http://friend.com/> .
+
+ex:kristian
+    foaf:a ex:adrian .
+
+ex:erik
+    foaf:b ex:kristian .
+
+ex:kristian
+    foaf:a ex:bob .
+
+ex:tadas
+    foaf:a ex:kristoffer .
+
+ex:adrian
+    foaf:a ex:stein .
+
+ex:kristian
+    foaf:a ex:tadas .
+
+ex:adrian
+    foaf:a ex:erik .
+
+ex:victoria
+    foaf:a ex:stein .
+
+ex:parick
+    foaf:a ex:William .
+
+ex:William
+    foaf:a ex:parick .
+
+ex:bob
+    foaf:a ex:alice .
+
+ex:alice
+    foaf:a ex:alice .
+
+ex:magnus
+    foaf:a ex:adrian .
+
+ex:bob
+    foaf:b ex:robin .
+
+ex:stein
+    foaf:a ex:tadas .
+
+ex:tadas
+    foaf:a ex:stein .
+
+ex:tadas
+    foaf:a ex:stein .
+
+ex:victoria
+    foaf:a ex:victoria .
+
+ex:victoria
+    foaf:a ex:adrian .
+
+ex:bob
+    foaf:b ex:kristian .
+
+ex:bob
+    foaf:b ex:erik .
+
+ex:bob
+    foaf:a ex:kristoffer .
+
+ex:bob
+    foaf:a ex:tadas .
+
+ex:robin
+    foaf:b ex:erik .
+
+ex:kristian
+    foaf:c ex:adria .
+
+ex:adrian
+    foaf:c ex:robin .
+
+ex:robin
+    foaf:c ex:stein .
+
+ex:stein
+    foaf:c ex:adrian .
+
+ex:magnus
+    foaf:c ex:kristian .
+
+
+

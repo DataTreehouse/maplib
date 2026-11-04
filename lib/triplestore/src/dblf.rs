@@ -457,7 +457,7 @@ impl Triplestore {
         Some(compat_types)
     }
 
-    fn all_predicates(&self, graph: &NamedGraph) -> Vec<NamedNode> {
+    pub(crate) fn all_predicates(&self, graph: &NamedGraph) -> Vec<NamedNode> {
         let mut predicates = HashSet::new();
         if let Some(g) = self.graph_triples_map.get(graph) {
             for nn in g.keys() {
