@@ -47,5 +47,5 @@ jobs:
       - name: pytest
         run: |
           source ../.venv/bin/activate
-          pytest -s
+          pytest -v
         working-directory: ./py_maplib/tests
