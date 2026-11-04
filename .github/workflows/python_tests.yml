@@ -16,7 +16,7 @@ env:
 jobs:
   build_and_test:
     runs-on:
-      group: ubuntu_very_beefy_test
+      group: ubuntu_very_beefy_test_maplib
 
     steps:
       - uses: actions/checkout@v4
