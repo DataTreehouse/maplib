@@ -15,7 +15,8 @@ env:
 
 jobs:
   build_and_test:
-    runs-on: ubuntu-latest
+    runs-on:
+      group: ubuntu_very_beefy_test
 
     steps:
       - uses: actions/checkout@v4
