@@ -395,6 +395,7 @@ impl PyModel {
     #[pyo3(signature = (
         query,
         endpoint,
+        method=None,
         solution_mappings=None,
         return_json=None,
         return_format=None,
@@ -406,22 +407,33 @@ impl PyModel {
         py: Python<'_>,
         query: String,
         endpoint: String,
+        method: Option<String>,
         solution_mappings: Option<bool>,
         return_json: Option<bool>,
         return_format: Option<String>,
         bindings: Option<HashMap<String, Py<PyAny>>>,
     ) -> PyResult<Py<PyAny>> {
         let parsed_bindings = maybe_parse_bindings(bindings, py)?;
+        let method = if let Some(method) = method {
+            match method.to_lowercase().trim() {
+                "get" => SparqlMethod::GET,
+                "post" => SparqlMethod::POST,
+                _ => {
+                    return Err(PyMaplibError::FunctionArgumentError(format!(
+                        "Unsupported method {}",
+                        method
+                    ))
+                    .into())
+                }
+            }
+        } else {
+            SparqlMethod::GET
+        };
+
         let (res, cats, prefixes) = py.detach(|| -> PyResult<(_, LockedCats, _)> {
             let mut inner = self.inner.lock().unwrap();
             let cats = inner.triplestore.global_cats.clone();
-            let res = query_external_mutex(
-                &mut inner,
-                query,
-                endpoint,
-                SparqlMethod::GET,
-                parsed_bindings,
-            )?;
+            let res = query_external_mutex(&mut inner, query, endpoint, method, parsed_bindings)?;
             Ok((res, cats, inner.prefixes.clone()))
         })?;
         print_debug_if_exists(res.debug.as_ref());

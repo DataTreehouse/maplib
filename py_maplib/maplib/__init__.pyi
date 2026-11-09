@@ -1,9 +1,10 @@
+from datetime import datetime, date
 from pathlib import Path
 from typing import Any, Union, List, Dict, Optional, Callable, Literal as LiteralType
-from polars import DataFrame
-from datetime import datetime, date
-from maplib.maplib import rdf
+
 import polars as pl
+from maplib.maplib import rdf
+from polars import DataFrame
 
 a = rdf.type
 
@@ -529,11 +530,10 @@ class Model:
     """
 
     def __init__(
-        self,
-        indexing_options: "IndexingOptions" = None,
-        storage_folder: Union[Path, str] = None,
+            self,
+            indexing_options: "IndexingOptions" = None,
+            storage_folder: Union[Path, str] = None,
     ) -> "Model": ...
-
 
     def serialize(self, path: Union[Path, str]):
         """
@@ -546,7 +546,8 @@ class Model:
         :param path: The path to where the folder containing the triples should be created
         """
 
-    def deserialize(path: Union[Path, str]="./serialized_triples", storage_folder: Union[Path, str] = None) -> "Model":
+    def deserialize(path: Union[Path, str] = "./serialized_triples",
+                    storage_folder: Union[Path, str] = None) -> "Model":
         """
         Deserialization of serialized graphs
 
@@ -557,7 +558,6 @@ class Model:
         :param storage_folder: The target path and folder name where the deserialized triples should be stored
         :return: A model.
         """
-
 
     def add_template(self, template: Union["Template", str]):
         """
@@ -796,7 +796,7 @@ class Model:
             max_rows: int = None,
             debug: bool = False,
             bindings: Dict[str, Union[str, IRI, Literal]] = None,
-    ) -> DataFrame | SolutionMappings | list[DataFrame | SolutionMappings ] | str | None:
+    ) -> DataFrame | SolutionMappings | list[DataFrame | SolutionMappings] | str | None:
         """
         Query the contained knowledge graph using SPARQL
         Currently, SELECT and CONSTRUCT are supported.
@@ -827,11 +827,12 @@ class Model:
             self,
             query: str,
             endpoint: str,
+            method: str = Union["GET", "POST"],
             solution_mappings: bool = False,
             return_json: bool = False,
             return_format: str = Union["turtle", "json", "dataframe"],
             bindings: Dict[str, Union[str, IRI, Literal]] = None,
-    ) -> DataFrame | SolutionMappings | list[DataFrame | SolutionMappings ] | str | None:
+    ) -> DataFrame | SolutionMappings | list[DataFrame | SolutionMappings] | str | None:
         """
         Query an external endpoint using SPARQL
         Currently SELECT is supported and GET querying is hardcoded with JSON results.
@@ -848,12 +849,12 @@ class Model:
 
         :param query: The SPARQL query string
         :param endpoint: The external HTTP SPARQL Endpoint
+        :param method: The HTTP Method to use
         :param solution_mappings: Returns SolutionMappings with maplib-native formatting and with RDF typing. Useful for round-trips.
         :param return_json: Return JSON string.
         :param bindings: Bind the variables (keys) to the following ground terms. Use IRI, Literal classes or strings (e.g. "<urn:id:abc>") as values.
         :return: DataFrame (Select), list of DataFrames (Construct) containing results or SolutionMappings when solution_mappings is set.
         """
-
 
     def update(
             self,
@@ -1216,7 +1217,6 @@ class Model:
         :return number of inferred triples
         """
 
-
     def size(self, graph: str = None) -> int:
         """
         Get the number of triples in a graph.
@@ -1239,7 +1239,7 @@ class Model:
             iri,
             func: Union[Callable[[pl.DataFrame], pl.Series], Callable[[pl.DataFrame], pl.DataFrame],],
             output_type: Union[RDFType, str, IRI],
-            input_types: list[Union[RDFType,str, IRI]] = None
+            input_types: list[Union[RDFType, str, IRI]] = None
     ):
         """
         Add a user-defined function

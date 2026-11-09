@@ -17,9 +17,9 @@ use oxrdf::{BlankNode, Literal, NamedNode, NamedOrBlankNode, Triple, Variable};
 use polars::prelude::{
     col, AnyValue, Column, DataFrame, DataType, IntoColumn, IntoLazy, Series, TimeZone,
 };
+use rayon::iter::IndexedParallelIterator;
 use rayon::iter::IntoParallelIterator;
 use rayon::iter::ParallelIterator;
-use rayon::iter::IndexedParallelIterator;
 use spargebra::term::Term;
 use std::collections::HashSet;
 use std::vec::IntoIter;

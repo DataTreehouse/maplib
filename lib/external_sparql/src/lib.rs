@@ -7,7 +7,7 @@ use representation::errors::RepresentationError;
 use representation::result::{template_to_solution_mappings, QueryResult, QueryResultKind};
 use representation::solution_mapping::EagerSolutionMappings;
 use representation::BaseRDFNodeType;
-use reqwest::header::{ACCEPT, USER_AGENT};
+use reqwest::header::{ACCEPT, CONTENT_TYPE, USER_AGENT};
 use sparesults::{
     QueryResultsFormat, QueryResultsParser, QueryResultsSyntaxError, QuerySolution,
     SliceQueryResultsParserOutput,
@@ -45,6 +45,7 @@ pub enum SparqlEndpointQueryError {
 
 pub enum SparqlMethod {
     GET,
+    POST,
 }
 
 pub struct SparqlEndpoint {
@@ -134,6 +135,17 @@ impl SparqlEndpoint {
                     .header(ACCEPT, "application/sparql-results+json,application/json,text/javascript,application/javascript")
                     .header(USER_AGENT, "maplib")
                     .query(&[("query", use_query.to_string())])
+                    .query(&[("format", "json"), ("output", "json"), ("results", "json")])
+                    .send()
+                    .await
+            },
+            SparqlMethod::POST => {
+                client
+                    .post(&self.endpoint)
+                    .header(CONTENT_TYPE, "application/sparql-query")
+                    .header(ACCEPT, "application/sparql-results+json,application/json,text/javascript,application/javascript")
+                    .header(USER_AGENT, "maplib")
+                    .body(use_query.to_string())
                     .query(&[("format", "json"), ("output", "json"), ("results", "json")])
                     .send()
                     .await
