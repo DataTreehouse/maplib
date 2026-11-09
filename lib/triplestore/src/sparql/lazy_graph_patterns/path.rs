@@ -152,8 +152,8 @@ impl Triplestore {
             subject_series.len(),
             vec![subject_series.into(), object_series.into()],
         )
-            .unwrap()
-            .lazy();
+        .unwrap()
+        .lazy();
         let lookup_subject_lf =
             lookup_df
                 .clone()
@@ -198,8 +198,8 @@ impl Triplestore {
                     SUBJECT_COL_NAME,
                     &BaseRDFNodeType::IRI,
                 )
-                    .collect()
-                    .unwrap();
+                .collect()
+                .unwrap();
                 dtypes.insert(
                     SUBJECT_COL_NAME.to_string(),
                     BaseRDFNodeType::IRI.into_default_stored_rdf_node_state(),
@@ -211,8 +211,8 @@ impl Triplestore {
                     OBJECT_COL_NAME,
                     &BaseRDFNodeType::IRI,
                 )
-                    .collect()
-                    .unwrap();
+                .collect()
+                .unwrap();
                 dtypes.insert(
                     OBJECT_COL_NAME.to_string(),
                     BaseRDFNodeType::IRI.into_default_stored_rdf_node_state(),
@@ -224,8 +224,8 @@ impl Triplestore {
                     SUBJECT_COL_NAME,
                     &BaseRDFNodeType::Literal(l.datatype().into_owned()),
                 )
-                    .collect()
-                    .unwrap();
+                .collect()
+                .unwrap();
                 dtypes.insert(
                     SUBJECT_COL_NAME.to_string(),
                     BaseRDFNodeType::Literal(l.datatype().into_owned())
@@ -238,8 +238,8 @@ impl Triplestore {
                     OBJECT_COL_NAME,
                     &BaseRDFNodeType::Literal(l.datatype().into_owned()),
                 )
-                    .collect()
-                    .unwrap();
+                .collect()
+                .unwrap();
                 dtypes.insert(
                     OBJECT_COL_NAME.to_string(),
                     BaseRDFNodeType::Literal(l.datatype().into_owned())
@@ -563,7 +563,7 @@ pub fn need_sparse_matrix(ppe: &PropertyPathExpression) -> bool {
         PropertyPathExpression::ZeroOrMore(_) => true,
         PropertyPathExpression::OneOrMore(_) => true,
         PropertyPathExpression::ZeroOrOne(_) => true,
-        PropertyPathExpression::NegatedPropertySet(_) => panic!("Should never happen"),
+        PropertyPathExpression::NegatedPropertySet(_) => false,
     }
 }
 
@@ -970,4 +970,3 @@ impl U32DataFrameCreator {
         }
     }
 }
-
