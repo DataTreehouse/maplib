@@ -3,7 +3,6 @@
 # These are marked as strict xfails: when a test starts passing, remove it from this list.
 # Tests tagged [flaky] fail nondeterministically and are non-strict xfails.
 aggregates/agg-avg-03  # Results differ.
-aggregates/agg-count-rows-distinct  # PanicException: not yet implemented: Try count without distinct
 aggregates/agg-empty-group-count-1  # Results differ.
 aggregates/agg-empty-group-count-graph  # PanicException: not yet implemented
 aggregates/agg-empty-group-max-2  # Results differ.
@@ -26,12 +25,12 @@ bindings/values4  # PanicException: called `Result::unwrap()` on an `Err` value:
 bindings/values5  # Results differ.
 bindings/values7  # Results differ.
 bindings/values8  # Results differ.
-cast/cast-bool  # Results differ.
-cast/cast-decimal  # MaplibException: SPARQL execution error: `casting from Boolean to Decimal(38, 16) not supported
-cast/cast-double  # Results differ.
-cast/cast-float  # Results differ.
-cast/cast-int  # Results differ.
-cast/cast-string  # Results differ.
+cast/cast-bool  # Results differ: "0"^^xsd:boolean is stored as a boolean value and returned as "false"
+cast/cast-decimal  # Results differ: "0"^^xsd:boolean is stored as a boolean value and returned as "false"
+cast/cast-double  # Results differ: "0"^^xsd:boolean is stored as a boolean value and returned as "false"
+cast/cast-float  # Results differ: "0"^^xsd:boolean is stored as a boolean value and returned as "false"
+cast/cast-int  # Results differ: "0"^^xsd:boolean is stored as a boolean value and returned as "false"
+cast/cast-string  # Results differ: "0"^^xsd:boolean is stored as a boolean value and returned as "false"
 clear/dawg-clear-all-01  # Default graph differs.
 clear/dawg-clear-default-01  # Default graph differs.
 clear/dawg-clear-graph-01  # Graph <http://example.org/g1> differs.
@@ -64,15 +63,8 @@ drop/dawg-drop-named-01  # Graph <http://example.org/g2> differs.
 exists/exists-graph-variable  # PanicException: not yet implemented
 functions/bnode01  # MaplibException: The function `BNODE` is not implemented yet
 functions/bnode02  # MaplibException: The function `BNODE` is not implemented yet
-functions/concat02  # Results differ.
 functions/hours  # Results differ. xsd:dateTime values are stored in UTC, so the original offset is lost (15:38-08:00 gives 23)
-functions/if02  # MaplibException: SPARQL execution error: `invalid series dtype: expected `Boolean`, got `f64` for se
 functions/iri01  # Results differ.
-functions/replace01  # Results differ.
-functions/strafter01a  # Results differ.
-functions/strafter02  # MaplibException: The following expression should resolve to an xsd:string : "b"@cy
-functions/strbefore01a  # Results differ.
-functions/strbefore02  # MaplibException: The following expression should resolve to an xsd:string : "b"@cy
 functions/strlang01  # PanicException: not yet implemented
 functions/strlang03-rdf11  # PanicException: not yet implemented
 functions/timezone  # TIMEZONE is not implemented; needs the original offset, which is lost when dateTimes are stored in UTC
@@ -104,21 +96,9 @@ subquery/subquery07  # PanicException: not yet implemented
 subquery/subquery11  # Results differ (ordered).
 subquery/subquery15  # PanicException: not yet implemented
 subquery/subquery16  # PanicException: not yet implemented
-syntax-query/test_35a  # PanicException: called `Option::unwrap()` on a `None` value
-syntax-query/test_36a  # PanicException: called `Option::unwrap()` on a `None` value
 syntax-query/test_4  # MaplibException: Custom function not found: <http://example/function>, it is possible to define a fu
 syntax-query/test_42  # PanicException: not yet implemented: QueryDataset(QueryDataset { default: [NamedNode { iri: "http://
-syntax-query/test_5  # PanicException: called `Result::unwrap()` on an `Err` value: ComputeError(ErrString("cannot return e
-syntax-query/test_6  # PanicException: called `Result::unwrap()` on an `Err` value: ComputeError(ErrString("cannot return e
-syntax-query/test_7  # PanicException: not yet implemented: Try count without distinct
 syntax-query/test_group_by_values_scope_03  # query is accepted but should be rejected
-syntax-query/test_pn_03  # PanicException: called `Option::unwrap()` on a `None` value
-syntax-query/test_pn_04  # PanicException: called `Option::unwrap()` on a `None` value
-syntax-query/test_pn_05  # PanicException: called `Option::unwrap()` on a `None` value
-syntax-query/test_pn_06  # PanicException: called `Option::unwrap()` on a `None` value
-syntax-query/test_pn_07  # PanicException: called `Option::unwrap()` on a `None` value
-syntax-query/test_pn_08  # PanicException: called `Option::unwrap()` on a `None` value
-syntax-query/test_pn_09  # PanicException: called `Option::unwrap()` on a `None` value
 syntax-update-1/test_32  # PanicException: not yet implemented
 syntax-update-1/test_33  # PanicException: not yet implemented
 syntax-update-1/test_34  # PanicException: not yet implemented

@@ -250,14 +250,19 @@ pub fn df_to_py_df(
     include_datatypes: bool,
     py: Python,
 ) -> PyResult<Py<PyAny>> {
-    let chunk = df
-        .rechunk_mut()
-        .iter_chunks(CompatLevel::oldest(), true)
-        .next()
-        .unwrap();
     let pyarrow = PyModule::import(py, "pyarrow")?;
     let polars = PyModule::import(py, "polars")?;
-    let py_df = to_py_df(&chunk, py, &pyarrow, &polars)?;
+    let py_df = if df.width() == 0 {
+        // A result without variables (e.g. SELECT * { :a :b :c }) has no record batches
+        polars.call_method0("DataFrame")?.into_py_any(py)?
+    } else {
+        let chunk = df
+            .rechunk_mut()
+            .iter_chunks(CompatLevel::oldest(), true)
+            .next()
+            .unwrap();
+        to_py_df(&chunk, py, &pyarrow, &polars)?
+    };
     if include_datatypes {
         Py::new(
             py,

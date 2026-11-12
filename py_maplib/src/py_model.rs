@@ -90,6 +90,7 @@ impl PyModel {
         })
     }
 
+    #[pyo3(signature = (graph=None))]
     #[instrument(skip_all)]
     fn truncate_graph(&self, py: Python<'_>, graph: Option<String>) -> PyResult<()> {
         let graph = parse_optional_named_node(graph)?;

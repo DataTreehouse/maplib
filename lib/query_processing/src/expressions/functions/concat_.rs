@@ -1,10 +1,13 @@
 use crate::errors::QueryProcessingError;
 use oxrdf::vocab::{rdf, xsd};
-use polars::prelude::{as_struct, coalesce, col, concat_str, lit};
+use polars::prelude::{
+    all_horizontal, as_struct, coalesce, col, concat_str, lit, when, DataType, LiteralValue,
+};
 use representation::cats::{maybe_decode_expr, LockedCats};
+use representation::multitype::set_struct_all_null_to_null_row;
 use representation::query_context::Context;
 use representation::solution_mapping::SolutionMappings;
-use representation::{BaseRDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD};
+use representation::{BaseRDFNodeType, RDFNodeState, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD};
 use spargebra::algebra::{Expression, Function};
 use std::collections::HashMap;
 
@@ -21,21 +24,13 @@ pub fn concat_(
         rdf_node_types: datatypes,
         height_estimate: height_upper_bound,
     } = solution_mappings;
-    let mut any_string = false;
-    let mut any_lang_string = false;
     let base_string = BaseRDFNodeType::Literal(xsd::STRING.into_owned());
     let lang_string = BaseRDFNodeType::Literal(rdf::LANG_STRING.into_owned());
-    for i in 0..args.len() {
-        let c = args_contexts.get(&i).unwrap().as_str();
-        let t = datatypes.get(c).unwrap();
-        if t.map.contains_key(&base_string) {
-            any_string = true;
-        }
-        if t.map.contains_key(&lang_string) {
-            any_lang_string = true;
-        }
-    }
-    let output_lang_string = any_lang_string && !any_string;
+    let all_maybe_lang_string = !args.is_empty()
+        && (0..args.len()).all(|i| {
+            let c = args_contexts.get(&i).unwrap().as_str();
+            datatypes.get(c).unwrap().map.contains_key(&lang_string)
+        });
 
     let mut cols = Vec::with_capacity(args.len());
     let mut lang_cols = Vec::with_capacity(args.len());
@@ -75,28 +70,23 @@ pub fn concat_(
             None
         };
 
-        let use_col = if string_col.is_some() && value_col.is_some() {
-            Some(coalesce(&[string_col.unwrap(), value_col.unwrap()]))
-        } else if string_col.is_some() {
-            string_col
-        } else if value_col.is_some() {
-            value_col
-        } else {
-            None
+        // Arguments that are not string literals (or unbound) are errors, giving an unbound result
+        let use_col = match (string_col, value_col) {
+            (Some(s), Some(v)) => coalesce(&[s, v]),
+            (Some(s), None) => s,
+            (None, Some(v)) => v,
+            (None, None) => lit(LiteralValue::untyped_null()).cast(DataType::String),
         };
-        if let Some(use_col) = use_col {
-            cols.push(use_col);
-        }
+        cols.push(use_col);
 
-        if output_lang_string {
-            if let Some(s) = t.map.get(&lang_string) {
-                lang_cols.push(maybe_decode_expr(
-                    col(c).struct_().field_by_name(LANG_STRING_LANG_FIELD),
-                    &lang_string,
-                    s,
-                    global_cats.clone(),
-                ))
-            }
+        if all_maybe_lang_string {
+            let s = t.map.get(&lang_string).unwrap();
+            lang_cols.push(maybe_decode_expr(
+                col(c).struct_().field_by_name(LANG_STRING_LANG_FIELD),
+                &lang_string,
+                s,
+                global_cats.clone(),
+            ));
         }
     }
 
@@ -104,24 +94,49 @@ pub fn concat_(
     let concat_values = if cols.is_empty() {
         lit("")
     } else {
-        concat_str(cols, "", true)
+        concat_str(cols, "", false)
     };
 
-    let (output_expr, output_type) = if output_lang_string {
+    // The result has a language tag only if all arguments have the same language tag
+    let (output_expr, output_type) = if all_maybe_lang_string {
+        let first_lang = lang_cols.first().unwrap().clone();
+        let same_lang: Vec<_> = lang_cols
+            .iter()
+            .map(|l| l.clone().eq(first_lang.clone()).fill_null(lit(false)))
+            .collect();
+        let is_lang = all_horizontal(same_lang).unwrap();
+        let null_str = lit(LiteralValue::untyped_null()).cast(DataType::String);
+        let state = RDFNodeState::from_map(HashMap::from([
+            (lang_string.clone(), lang_string.default_input_cat_state()),
+            (base_string.clone(), base_string.default_input_cat_state()),
+        ]));
         let ex = as_struct(vec![
-            concat_values.alias(LANG_STRING_VALUE_FIELD),
-            coalesce(&lang_cols).alias(LANG_STRING_LANG_FIELD),
+            when(is_lang.clone())
+                .then(concat_values.clone())
+                .otherwise(null_str.clone())
+                .alias(LANG_STRING_VALUE_FIELD),
+            when(is_lang.clone())
+                .then(first_lang)
+                .otherwise(null_str.clone())
+                .alias(LANG_STRING_LANG_FIELD),
+            when(is_lang)
+                .then(null_str)
+                .otherwise(concat_values)
+                .alias(base_string.field_col_name()),
         ]);
-        (ex, lang_string)
+        (set_struct_all_null_to_null_row(ex, &state), state)
     } else {
-        (concat_values, base_string)
+        (
+            concat_values,
+            base_string.into_default_input_rdf_node_state(),
+        )
     };
 
     let new_mappings = mappings.with_column(output_expr.alias(outer_context.as_str()));
     solution_mappings = SolutionMappings::new(new_mappings, datatypes, height_upper_bound);
     solution_mappings.rdf_node_types.insert(
         outer_context.as_str().to_string(),
-        output_type.into_default_input_rdf_node_state(),
+        output_type,
     );
     Ok(solution_mappings)
 }

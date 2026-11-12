@@ -214,6 +214,63 @@ pub fn variable(
     Ok(solution_mappings)
 }
 
+/// The effective boolean value (SPARQL 1.1 17.2.2) of an expression of the given type.
+/// Errors (unsupported types and unbound values) give null.
+pub fn effective_boolean_value_expr(expr: Expr, t: &RDFNodeState, global_cats: LockedCats) -> Expr {
+    let mut exprs = vec![];
+    for (bt, bs) in &t.map {
+        let e = if t.is_multi() || bt.is_lang_string() {
+            expr.clone().struct_().field_by_name(&bt.field_col_name())
+        } else {
+            expr.clone()
+        };
+        if bt.is_lit_type(xsd::BOOLEAN) {
+            exprs.push(e);
+        } else if bt.is_numeric() {
+            let f = e.cast(DataType::Float64);
+            exprs.push(f.clone().neq(lit(0.0)).and(f.is_nan().not()));
+        } else if bt.is_lit_type(xsd::STRING) || bt.is_lang_string() {
+            exprs.push(
+                maybe_decode_expr(e, bt, bs, global_cats.clone())
+                    .str()
+                    .len_bytes()
+                    .gt(lit(0)),
+            );
+        }
+    }
+    if exprs.is_empty() {
+        lit(LiteralValue::untyped_null()).cast(DataType::Boolean)
+    } else if exprs.len() == 1 {
+        exprs.pop().unwrap()
+    } else {
+        coalesce(&exprs)
+    }
+}
+
+/// Replaces the column of the context with its effective boolean value, unless it is already boolean.
+pub fn effective_boolean_value(
+    mut solution_mappings: SolutionMappings,
+    context: &Context,
+    global_cats: LockedCats,
+) -> SolutionMappings {
+    let t = solution_mappings
+        .rdf_node_types
+        .get(context.as_str())
+        .unwrap();
+    if !t.is_multi() && t.is_lit_type(xsd::BOOLEAN) {
+        return solution_mappings;
+    }
+    let e = effective_boolean_value_expr(col(context.as_str()), t, global_cats);
+    solution_mappings.mappings = solution_mappings
+        .mappings
+        .with_column(e.alias(context.as_str()));
+    solution_mappings.rdf_node_types.insert(
+        context.as_str().to_string(),
+        BaseRDFNodeType::Literal(xsd::BOOLEAN.into_owned()).into_default_input_rdf_node_state(),
+    );
+    solution_mappings
+}
+
 pub fn binary_expression(
     mut solution_mappings: SolutionMappings,
     expression: &Expression,
@@ -222,6 +279,28 @@ pub fn binary_expression(
     outer_context: &Context,
     global_cats: LockedCats,
 ) -> Result<SolutionMappings, QueryProcessingError> {
+    if matches!(expression, Expression::And(..) | Expression::Or(..)) {
+        // Operands are converted to their effective boolean value, errors are null,
+        // and polars uses the same three-valued logic as SPARQL 1.1 17.2.
+        solution_mappings =
+            effective_boolean_value(solution_mappings, left_context, global_cats.clone());
+        solution_mappings = effective_boolean_value(solution_mappings, right_context, global_cats);
+        let expr = if matches!(expression, Expression::And(..)) {
+            col(left_context.as_str()).and(col(right_context.as_str()))
+        } else {
+            col(left_context.as_str()).or(col(right_context.as_str()))
+        };
+        solution_mappings.mappings = solution_mappings
+            .mappings
+            .with_column(expr.alias(outer_context.as_str()));
+        solution_mappings.rdf_node_types.insert(
+            outer_context.as_str().to_string(),
+            BaseRDFNodeType::Literal(xsd::BOOLEAN.into_owned()).into_default_input_rdf_node_state(),
+        );
+        solution_mappings =
+            drop_inner_contexts(solution_mappings, &vec![left_context, right_context]);
+        return Ok(solution_mappings);
+    }
     let left_type = solution_mappings
         .rdf_node_types
         .get(left_context.as_str())
@@ -238,8 +317,6 @@ pub fn binary_expression(
                 | Expression::Greater(..)
                 | Expression::GreaterOrEqual(..)
                 | Expression::LessOrEqual(..)
-                | Expression::And(..)
-                | Expression::Or(..)
                 | Expression::SameTerm(..)
         ) {
             let bool = BaseRDFNodeType::Literal(xsd::BOOLEAN.into_owned());
@@ -472,7 +549,8 @@ pub fn if_expression(
     outer_context: &Context,
     global_cats: LockedCats,
 ) -> Result<SolutionMappings, QueryProcessingError> {
-    //
+    solution_mappings =
+        effective_boolean_value(solution_mappings, left_context, global_cats.clone());
     let mid_state = solution_mappings
         .rdf_node_types
         .get(middle_context.as_str())
@@ -546,13 +624,16 @@ pub fn if_expression(
         right_exprs.pop().unwrap()
     };
 
+    // If the condition is an error (null), the result is an error (null)
     solution_mappings.mappings = solution_mappings.mappings.with_column(
-        (Expr::Ternary {
-            predicate: Arc::new(col(left_context.as_str())),
-            truthy: Arc::new(mid_expr),
-            falsy: Arc::new(right_expr),
-        })
-        .alias(outer_context.as_str()),
+        when(col(left_context.as_str()).is_not_null())
+            .then(Expr::Ternary {
+                predicate: Arc::new(col(left_context.as_str())),
+                truthy: Arc::new(mid_expr),
+                falsy: Arc::new(right_expr),
+            })
+            .otherwise(lit(LiteralValue::untyped_null()))
+            .alias(outer_context.as_str()),
     );
     solution_mappings.rdf_node_types.insert(
         outer_context.as_str().to_string(),

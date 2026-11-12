@@ -178,3 +178,145 @@ def test_rand(m):
     assert len(set(values)) > 1
     rows = bindings(m, "SELECT (DATATYPE(RAND()) AS ?t) WHERE {}")
     assert rows[0]["t"]["value"] == XSD + "double"
+
+
+def term(b):
+    """A JSON binding as (value, datatype, language), or None if unbound."""
+    if b is None:
+        return None
+    return (b["value"], b.get("datatype"), b.get("xml:lang"))
+
+
+def single(m: Model, query: str, var: str = "x"):
+    rows = bindings(m, query)
+    assert len(rows) == 1
+    return term(rows[0].get(var))
+
+
+@pytest.mark.parametrize(
+    "expr,expected",
+    [
+        # Effective boolean value (SPARQL 1.1 17.2.2) of the IF condition
+        ("IF(1, \"y\", \"n\")", ("y", None, None)),
+        ("IF(0, \"y\", \"n\")", ("n", None, None)),
+        ("IF(0.0, \"y\", \"n\")", ("n", None, None)),
+        ("IF(\"a\", \"y\", \"n\")", ("y", None, None)),
+        ("IF(\"\", \"y\", \"n\")", ("n", None, None)),
+        ("IF(\"a\"@en, \"y\", \"n\")", ("y", None, None)),
+        # An error in the condition is an error
+        ("IF(1/0, \"y\", \"n\")", None),
+        ("IF(<http://example.org/x>, \"y\", \"n\")", None),
+    ],
+)
+def test_if_effective_boolean_value(m, expr, expected):
+    assert single(m, f"SELECT ({expr} AS ?x) WHERE {{}}") == expected
+
+
+def test_filter_effective_boolean_value(m):
+    rows = bindings(
+        m,
+        "SELECT ?x WHERE { VALUES ?x { 0 1 2.5 0.0 \"\" \"a\" \"b\"@en <http://example.org/x> } FILTER(?x) }",
+    )
+    assert sorted(r["x"]["value"] for r in rows) == ["1", "2.5", "a", "b"]
+
+
+def test_not_and_or_effective_boolean_value(m):
+    rows = bindings(m, "SELECT ?x WHERE { VALUES ?x { 0 1 \"\" \"a\" } FILTER(!?x) }")
+    assert sorted(r["x"]["value"] for r in rows) == ["", "0"]
+    # An error || true is true, an error && false is false
+    rows = bindings(
+        m,
+        "SELECT ?x WHERE { VALUES ?x { 1 <http://example.org/x> } FILTER(?x || true) }",
+    )
+    assert len(rows) == 2
+    rows = bindings(
+        m,
+        "SELECT ?x WHERE { VALUES ?x { 1 <http://example.org/x> } FILTER(!(?x && false)) }",
+    )
+    assert len(rows) == 2
+
+
+@pytest.mark.parametrize(
+    "expr,expected",
+    [
+        ("xsd:boolean(\"true\")", "true"),
+        ("xsd:boolean(\"1\")", "true"),
+        ("xsd:boolean(\"0\")", "false"),
+        ("xsd:boolean(\"TRUE\")", None),
+        ("xsd:boolean(\"abc\")", None),
+        ("xsd:boolean(0.0)", "false"),
+        ("xsd:boolean(-2)", "true"),
+        ("xsd:integer(\"+12\")", "12"),
+        ("xsd:integer(\"1.5\")", None),
+        ("xsd:integer(\"1E0\")", None),
+        ("xsd:integer(true)", "1"),
+        ("xsd:integer(\"-7.875\"^^xsd:double)", "-7"),
+        ("xsd:integer(\"NaN\"^^xsd:double)", None),
+        ("xsd:decimal(true)", "1"),
+        ("xsd:decimal(\"+33.3300\")", "33.33"),
+        ("xsd:decimal(\"1E0\")", None),
+        ("xsd:decimal(\"INF\"^^xsd:double)", None),
+        ("xsd:double(\"-10.2E3\")", "-10200.0"),
+        ("xsd:double(\"abc\")", None),
+        ("xsd:double(\"2002-10-10T17:00:00Z\"^^xsd:dateTime)", None),
+        ("xsd:string(2.5)", "2.5"),
+        ("xsd:string(1.0)", "1"),
+    ],
+)
+def test_xsd_casts(m, expr, expected):
+    result = single(m, f"SELECT ({expr} AS ?x) WHERE {{}}")
+    if expected is None:
+        assert result is None
+    else:
+        assert result[0] == expected
+
+
+def test_boolean_lexical_forms():
+    m = Model()
+    m.reads(
+        """
+        @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+        <http://example.org/a> <http://example.org/p> "1"^^xsd:boolean, "0"^^xsd:boolean .
+        """,
+        format="turtle",
+    )
+    rows = bindings(m, "SELECT ?o WHERE { ?s ?p ?o }")
+    assert sorted(r["o"]["value"] for r in rows) == ["false", "true"]
+
+
+@pytest.mark.parametrize(
+    "expr,expected",
+    [
+        ("CONCAT(\"a\"@en, \"b\"@en)", ("ab", None, "en")),
+        ("CONCAT(\"a\"@en, \"b\"@fr)", ("ab", None, None)),
+        ("CONCAT(\"a\"@en, \"b\")", ("ab", None, None)),
+        ("CONCAT(\"a\", 1)", None),
+        ("REPLACE(\"english\"@en, \"e\", \"-\")", ("-nglish", None, "en")),
+        ("STRBEFORE(\"abc\"@en, \"b\")", ("a", None, "en")),
+        ("STRBEFORE(\"abc\"@en, \"z\")", ("", None, None)),
+        ("STRBEFORE(\"abc\"@en, \"\")", ("", None, "en")),
+        ("STRBEFORE(\"abc\"@en, \"b\"@en)", ("a", None, "en")),
+        ("STRBEFORE(\"abc\"@en, \"b\"@cy)", None),
+        ("STRBEFORE(\"abc\", \"b\"@cy)", None),
+        ("STRAFTER(\"abc\"@en, \"b\")", ("c", None, "en")),
+        ("STRAFTER(\"abc\"@en, \"z\")", ("", None, None)),
+    ],
+)
+def test_string_functions_language_tags(m, expr, expected):
+    assert single(m, f"SELECT ({expr} AS ?x) WHERE {{}}") == expected
+
+
+def test_count_distinct_star(m):
+    rows = bindings(
+        m,
+        "SELECT (COUNT(DISTINCT *) AS ?x) WHERE { VALUES (?a ?b) { (1 2) (1 2) (1 3) } }",
+    )
+    assert rows[0]["x"]["value"] == "2"
+    rows = bindings(m, "SELECT (COUNT(*) AS ?x) (COUNT(DISTINCT *) AS ?y) WHERE {}")
+    assert rows[0]["x"]["value"] == "1"
+    assert rows[0]["y"]["value"] == "1"
+
+
+def test_select_star_without_variables(m):
+    df = m.query(q("SELECT * WHERE { :s1 :p1 :s2 }"))
+    assert df.width == 0

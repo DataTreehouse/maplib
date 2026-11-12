@@ -2,12 +2,15 @@ use crate::errors::QueryProcessingError;
 use crate::expressions::functions::create_regex_replace_expr::create_regex_replace_expr;
 use crate::expressions::functions::create_regex_string::create_regex_string;
 
-use oxrdf::vocab::xsd;
-use polars::prelude::{coalesce, col};
+use oxrdf::vocab::{rdf, xsd};
+use polars::prelude::{as_struct, coalesce, col, lit, DataType, LiteralValue};
 use representation::cats::{maybe_decode_expr, LockedCats};
+use representation::multitype::set_struct_all_null_to_null_row;
 use representation::query_context::Context;
 use representation::solution_mapping::SolutionMappings;
-use representation::{BaseRDFNodeType, LANG_STRING_VALUE_FIELD};
+use representation::{
+    BaseRDFNodeType, RDFNodeState, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD,
+};
 use spargebra::algebra::{Expression, Function};
 use std::collections::HashMap;
 
@@ -69,41 +72,82 @@ pub fn sparql_replace(
         replacement_bs,
         global_cats.clone(),
     );
-    let expr = if arg_type.is_multi() {
-        let mut exprs = vec![];
-        for (t, s) in &arg_type.map {
-            let replace_expr = create_regex_replace_expr(
-                col(arg_context.as_str())
-                    .struct_()
-                    .field_by_name(&t.field_col_name()),
+    let is_multi = arg_type.is_multi();
+    let mut string_exprs = vec![];
+    let mut lang_value_exprs = vec![];
+    let mut lang_lang_exprs = vec![];
+    for (t, s) in &arg_type.map {
+        let value_col = if is_multi || t.is_lang_string() {
+            col(arg_context.as_str())
+                .struct_()
+                .field_by_name(&t.field_col_name())
+        } else {
+            col(arg_context.as_str())
+        };
+        if t.is_lit_type(xsd::STRING) {
+            string_exprs.push(create_regex_replace_expr(
+                value_col,
                 t,
                 s,
                 &pattern,
                 &replacement_expr,
                 global_cats.clone(),
-            );
-            exprs.push(replace_expr);
+            ));
+        } else if t.is_lang_string() {
+            lang_value_exprs.push(create_regex_replace_expr(
+                value_col,
+                t,
+                s,
+                &pattern,
+                &replacement_expr,
+                global_cats.clone(),
+            ));
+            lang_lang_exprs.push(maybe_decode_expr(
+                col(arg_context.as_str())
+                    .struct_()
+                    .field_by_name(LANG_STRING_LANG_FIELD),
+                t,
+                s,
+                global_cats.clone(),
+            ));
         }
-        coalesce(&exprs)
-    } else {
-        let t = arg_type.get_base_type().unwrap();
-        let s = arg_type.get_base_state().unwrap();
-        let use_col = if t.is_lang_string() {
-            col(arg_context.as_str())
-                .struct_()
-                .field_by_name(LANG_STRING_VALUE_FIELD)
+    }
+    let string_type = BaseRDFNodeType::Literal(xsd::STRING.into_owned());
+    let lang_type = BaseRDFNodeType::Literal(rdf::LANG_STRING.into_owned());
+    // REPLACE keeps the language tag of the first argument (SPARQL 1.1 17.4.3.15)
+    let (expr, state) = if lang_value_exprs.is_empty() {
+        let expr = if string_exprs.is_empty() {
+            lit(LiteralValue::untyped_null()).cast(DataType::String)
         } else {
-            col(arg_context.as_str())
+            coalesce(&string_exprs)
         };
-
-        create_regex_replace_expr(use_col, t, s, &pattern, &replacement_expr, global_cats)
+        (expr, string_type.into_default_input_rdf_node_state())
+    } else {
+        let lang_struct = as_struct(vec![
+            coalesce(&lang_value_exprs).alias(LANG_STRING_VALUE_FIELD),
+            coalesce(&lang_lang_exprs).alias(LANG_STRING_LANG_FIELD),
+        ]);
+        if string_exprs.is_empty() {
+            let state = lang_type.into_default_input_rdf_node_state();
+            (set_struct_all_null_to_null_row(lang_struct, &state), state)
+        } else {
+            let state = RDFNodeState::from_map(HashMap::from([
+                (lang_type.clone(), lang_type.default_input_cat_state()),
+                (string_type.clone(), string_type.default_input_cat_state()),
+            ]));
+            let expr = as_struct(vec![
+                coalesce(&lang_value_exprs).alias(LANG_STRING_VALUE_FIELD),
+                coalesce(&lang_lang_exprs).alias(LANG_STRING_LANG_FIELD),
+                coalesce(&string_exprs).alias(string_type.field_col_name()),
+            ]);
+            (set_struct_all_null_to_null_row(expr, &state), state)
+        }
     };
     solution_mappings.mappings = solution_mappings
         .mappings
         .with_column(expr.alias(outer_context.as_str()));
-    solution_mappings.rdf_node_types.insert(
-        outer_context.as_str().to_string(),
-        BaseRDFNodeType::Literal(xsd::STRING.into_owned()).into_default_input_rdf_node_state(),
-    );
+    solution_mappings
+        .rdf_node_types
+        .insert(outer_context.as_str().to_string(), state);
     Ok(solution_mappings)
 }

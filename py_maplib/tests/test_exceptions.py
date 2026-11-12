@@ -16,15 +16,6 @@ def test_query_groupby_exception():
             SELECT (COUNT(?a) as ?ca) WHERE {?a ?b ?c .} GROUP BY ?ca
         """)
 
-def test_query_filter_exception():
-    m = Model()
-    with pytest.raises(MaplibException) as e:
-        m.query("""
-            SELECT * WHERE {
-                ?a ?b ?c .
-                FILTER("a")
-            }
-        """)
 
 def test_query_contains_function_invalid_args_exception():
     m = Model()

@@ -17,7 +17,7 @@ def test_concat_function_lang_strings():
         │ ---         │
         │ str         │
         ╞═════════════╡
-        │ "foobar"@en │
+        │ foobar      │
         └─────────────┘
     """
     )

@@ -1,6 +1,6 @@
 from typing import Optional, List, Type, Tuple, Dict, Literal as LiteralType
 
-from chrontext import Variable, Literal, IRI
+from maplib import Variable, Literal, IRI
 
 
 class Expression:

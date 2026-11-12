@@ -23,6 +23,15 @@
 - ABS, CEIL and FLOOR work when the argument has multiple types, and CEIL and FLOOR keep the type of the argument (previously xsd:integer)
 - CONCAT accepts zero or one arguments
 - Casting a blank node (e.g. xsd:double(?x)) gives an unbound value instead of failing the query
+- FILTER, IF, NOT (!), AND (&&) and OR (||) use the effective boolean value of their operands (SPARQL 1.1 17.2.2): numbers are true unless zero or NaN, strings are true unless empty, and other values are errors. Previously a non-boolean FILTER failed the query, and IF with an error condition took the else branch instead of being unbound
+- Casts to xsd:boolean, xsd:integer, xsd:decimal, xsd:float and xsd:double follow the XPath casting rules: strings must have a valid lexical form (e.g. xsd:boolean("abc") and xsd:integer("1.5") are unbound, previously false and a number), booleans can be cast to xsd:decimal, NaN and infinite values cast to integers or decimals are unbound, and casting other types such as dateTimes to numerics is unbound
+- xsd:string() of a decimal gives the canonical form (e.g. "2.5"), not the stored representation with padding zeros
+- "1"^^xsd:boolean and "0"^^xsd:boolean are valid booleans (previously rejected when parsing)
+- STRBEFORE and STRAFTER accept a language tagged second argument when it is compatible with the first argument, and give the simple literal "" when there is no match, as required by the SPARQL 1.1 spec
+- REPLACE keeps the language tag of its first argument
+- CONCAT only gives a language tagged result when all arguments have the same language tag, and is unbound when an argument is unbound or not a string
+- COUNT(DISTINCT *) is supported, and COUNT(*) works for patterns without variables
+- SELECT * over a pattern without variables (e.g. { :a :b :c }) no longer panics
 
 ## v0.20.32
 ### Features

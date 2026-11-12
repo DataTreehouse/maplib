@@ -13,6 +13,9 @@ class xsd:
     """
     The xsd namespace: http://www.w3.org/2001/XMLSchema#
     """
+    NCName: "IRI"
+    NMTOKEN: "IRI"
+    Name: "IRI"
     anyURI: "IRI"
     base64Binary: "IRI"
     boolean: "IRI"
@@ -199,6 +202,7 @@ class SolutionMappings:
     mappings: DataFrame
     rdf_types: Dict[str, RDFType]
     debug: Optional[str]
+    pushdown_paths: List[List[str]]
 
     def __init__(self, mappings: DataFrame, rdf_types: Dict[str, RDFType]):
         """
@@ -324,6 +328,9 @@ class Parameter:
 
 
 class Argument:
+    variable: Optional[Variable]
+    "The variable, if the term is a variable."
+
     def __init__(
             self, term: Union[Variable, IRI, Literal], list_expand: Optional[bool] = False
     ):
@@ -335,6 +342,9 @@ class Argument:
 
 
 class Instance:
+    iri: str
+    "The IRI of the instantiated template."
+
     def __init__(
             self,
             iri: "IRI",
@@ -407,33 +417,6 @@ def Triple(
     """
 
 
-class XSD:
-    """
-    The xsd namespace, for convenience.
-    """
-
-    boolean: "IRI"
-    byte: "IRI"
-    date: "IRI"
-    dateTime: "IRI"
-    dateTimeStamp: "IRI"
-    decimal: "IRI"
-    double: "IRI"
-    duration: "IRI"
-    float: "IRI"
-    int_: "IRI"
-    integer: "IRI"
-    language: "IRI"
-    long: "IRI"
-    short: "IRI"
-    string: "IRI"
-
-    def __init__(self):
-        """
-        Create the xsd namespace helper.
-        """
-
-
 # END COMMON WITH CHRONTEXT
 
 class IndexingOptions:
@@ -445,7 +428,7 @@ class IndexingOptions:
             self,
             object_sort_all: bool = None,
             object_sort_some: List["IRI"] = None,
-            fts: str = None,
+            fts: bool = None,
             fts_path: str = None,
     ):
         """
@@ -467,8 +450,8 @@ class ValidationReport:
     Only constructed by maplib.
     """
 
-    conforms: bool
-    "Whether or not the validation report conforms to the shapes"
+    conforms: Optional[bool]
+    "Whether or not the validation report conforms to the shapes (None if not determined)"
 
     shape_targets: DataFrame
     "A DataFrame containing the counts of the targets of each shape and constraint"
@@ -476,7 +459,7 @@ class ValidationReport:
     performance: DataFrame
     "Performance statistics for the validation process"
 
-    report_graph: str
+    report_graph: Optional[str]
     "The named graph where the validation report is stored"
 
     rule_log: str
@@ -485,7 +468,7 @@ class ValidationReport:
     def results(
             self,
             streaming: bool = False,
-    ) -> Optional[Union[DataFrame, "SolutionMappings"]]:
+    ) -> Optional[DataFrame]:
         """
         Return the results of the validation report, if they exist.
 
@@ -535,7 +518,7 @@ class Model:
             storage_folder: Union[Path, str] = None,
     ) -> "Model": ...
 
-    def serialize(self, path: Union[Path, str]):
+    def serialize(self, path: Union[Path, str] = "./serialized_triples"):
         """
         Serialization of named graphs in the Model object
 
@@ -546,13 +529,14 @@ class Model:
         :param path: The path to where the folder containing the triples should be created
         """
 
+    @staticmethod
     def deserialize(path: Union[Path, str] = "./serialized_triples",
                     storage_folder: Union[Path, str] = None) -> "Model":
         """
         Deserialization of serialized graphs
 
         Usage:
-        >>> m.deserialize("serialized", storage_folder="disk")
+        >>> m = Model.deserialize("serialized", storage_folder="disk")
 
         :param path: The path to the folder where the serialized triples and cat map is stored
         :param storage_folder: The target path and folder name where the deserialized triples should be stored
@@ -679,7 +663,7 @@ class Model:
 
     def map_triples(
             self,
-            data: Union[DataFrame, LazyFrame, "SolutionMappings", Iterable[Union[DataFrame, LazyFrame, "SolutionMappings"]]] = None,
+            data: Union[DataFrame, LazyFrame, "SolutionMappings", Iterable[Union[DataFrame, LazyFrame, "SolutionMappings"]]],
             predicate: str = None,
             graph: str = None,
             validate_iris: bool = True,
@@ -791,7 +775,7 @@ class Model:
             graph: str = None,
             streaming: bool = False,
             return_json: bool = False,
-            return_format: str = Union["turtle", "json", "dataframe"],
+            return_format: LiteralType["turtle", "json", "dataframe"] = "dataframe",
             include_transient: bool = True,
             max_rows: int = None,
             debug: bool = False,
@@ -827,10 +811,10 @@ class Model:
             self,
             query: str,
             endpoint: str,
-            method: str = Union["GET", "POST"],
+            method: LiteralType["GET", "POST"] = "GET",
             solution_mappings: bool = False,
             return_json: bool = False,
-            return_format: str = Union["turtle", "json", "dataframe"],
+            return_format: LiteralType["turtle", "json", "dataframe"] = "dataframe",
             bindings: Dict[str, Union[str, IRI, Literal]] = None,
             headers: List[Tuple[str, str]] = None
     ) -> DataFrame | SolutionMappings | list[DataFrame | SolutionMappings] | str | None:
@@ -900,7 +884,7 @@ class Model:
             include_transient: bool = True,
             max_rows: int = None,
             debug: bool = False,
-    ):
+    ) -> Dict[str, Union[DataFrame, "SolutionMappings"]]:
         """
         Insert the results of a Construct query in the graph.
         Useful for being able to use the same query for inspecting what will be inserted and actually inserting.
@@ -928,7 +912,7 @@ class Model:
         :param include_transient: Include transient triples when querying (but see "transient" above).
         :param max_rows: Maximum estimated rows in result, helps avoid out-of-memory errors.
         :param debug: Why does my query have no results?
-        :return: None
+        :return: The newly inserted triples, keyed by predicate IRI (as SolutionMappings when solution_mappings is set).
         """
 
     def validate(
@@ -1101,7 +1085,7 @@ class Model:
     def write(
             self,
             file_path: Union[str, Path],
-            format=LiteralType["ntriples", "turtle", "trig", "nquads", "rdf/xml", "hdt"],
+            format: LiteralType["ntriples", "turtle", "trig", "nquads", "rdf/xml", "hdt"] = None,
             graph: str = None,
             prefixes: Dict[str, str] = None,
     ) -> None:
@@ -1121,7 +1105,7 @@ class Model:
 
     def writes(
             self,
-            format=LiteralType["ntriples", "turtle", "trig", "nquads", "rdf/xml"],
+            format: LiteralType["ntriples", "turtle", "trig", "nquads", "rdf/xml"] = None,
             graph: str = None,
             prefixes: Dict[str, str] = None,
     ) -> str:
@@ -1175,36 +1159,54 @@ class Model:
         :return: A list of the underlying tables that store a given predicate.
         """
 
-    def create_index(
-            self, options: "IndexingOptions" = None, all: bool = True, graph: str = None
-    ):
+    def create_index(self, options: "IndexingOptions" = None) -> None:
         """
         :param options: Indexing options
-        :param all: Apply to all existing and new graphs
-        :param graph: The graph where indexes should be added
-        :return:
+        """
+
+    def compact(self) -> None:
+        """
+        Compact the stored triples, merging the segments that accumulate from repeated
+        additions into a single sorted segment per predicate and type combination.
+        """
+
+    def add_graph(
+            self,
+            other: "Model",
+            source_graph: str = None,
+            target_graph: str = None,
+    ) -> None:
+        """
+        Copy the triples of a graph in another Model into this Model.
+
+        Usage:
+        >>> m.add_graph(other_model, source_graph="urn:graph:a", target_graph="urn:graph:b")
+
+        :param other: The Model to copy triples from.
+        :param source_graph: The IRI of the graph in other to copy from. None means the default graph.
+        :param target_graph: The IRI of the graph in this Model to copy into. None means the default graph.
         """
 
     def infer(
             self,
-            ruleset: Union[str, List[str]],
+            rulesets: Union[str, List[str]],
             graph: str = None,
             max_iterations: Optional[int] = 100_000,
             max_results: Optional[int] = 10_000_000,
             include_transient: bool = True,
             max_rows: Optional[int] = 100_000_000,
             debug: bool = False,
-    ) -> Optional[Dict[str, DataFrame]]:
+    ) -> "InferenceResult":
         """
         Run the inference rules that are provided
-        :param ruleset: The Datalog ruleset (a string).
+        :param rulesets: The Datalog ruleset (a string), or a list of rulesets.
         :param graph: Apply the ruleset to this graph, defaults to the default graph, or the graph specified in the rules.
         :param max_iterations: Maximum number of iterations.
         :param max_results: Maximum number of results.
         :param include_transient: Include transient triples when reasoning.
         :param max_rows: Maximum estimated rows in result, helps avoid out-of-memory errors.
         :param debug: Debugs rule bodies for executions that give no triples.
-        :return: The inferred N-Tuples.
+        :return: The result of inference.
         """
 
     def infer_rdfs(
@@ -1275,7 +1277,20 @@ class Model:
         """
 
 
+class InferenceResult:
+    """
+    The result of running Datalog inference with Model.infer.
+    Only constructed by maplib.
+    """
+
+
 class MaplibException(Exception): ...
+
+
+class FunctionArgumentException(Exception):
+    """
+    Raised when a function is called with invalid arguments.
+    """
 
 
 def explore(

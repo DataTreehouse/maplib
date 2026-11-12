@@ -122,7 +122,7 @@ def test_concat_lang_string_diff_lang():
     │ ---         ┆ ---      │
     │ str         ┆ str      │
     ╞═════════════╪══════════╡
-    │ "barnoe"@en ┆ "bar"@en │
+    │ barnoe      ┆ "bar"@en │
     └─────────────┴──────────┘
     """
     )

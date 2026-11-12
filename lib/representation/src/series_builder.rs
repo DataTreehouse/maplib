@@ -228,8 +228,16 @@ impl SeriesBuilder {
                 v.append_value(lex);
             }
             SeriesBuilder::Bool(v) => {
-                let b = bool::from_str(&lex)
-                    .map_err(|x| RepresentationError::LiteralParseError(x.to_string()))?;
+                // The xsd:boolean lexical space is {true, false, 1, 0}
+                let b = match lex.as_ref() {
+                    "true" | "1" => true,
+                    "false" | "0" => false,
+                    _ => {
+                        return Err(RepresentationError::LiteralParseError(format!(
+                            "Invalid xsd:boolean {lex}"
+                        )))
+                    }
+                };
                 v.push(Some(b));
             }
             SeriesBuilder::U8(v) => {

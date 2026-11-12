@@ -6,7 +6,7 @@ use oxrdf::vocab::xsd;
 use polars::prelude::IntoLazy;
 use query_processing::expressions::functions::func_expression::func_expression;
 use query_processing::expressions::{
-    binary_expression, bound, coalesce_contexts, exists, if_expression, in_expression, literal,
+    binary_expression, bound, coalesce_contexts, effective_boolean_value, exists, if_expression, in_expression, literal,
     named_node, not_expression, unary_minus, unary_plus, variable,
 };
 use query_processing::pushdowns::Pushdowns;
@@ -458,7 +458,7 @@ impl Triplestore {
             }
             Expression::Not(inner) => {
                 let not_context = context.extension_with(PathEntry::Not);
-                let output_solution_mappings = self.lazy_expression(
+                let mut output_solution_mappings = self.lazy_expression(
                     inner,
                     solution_mappings,
                     &not_context,
@@ -467,6 +467,11 @@ impl Triplestore {
                     query_settings,
                     dataset,
                 )?;
+                output_solution_mappings = effective_boolean_value(
+                    output_solution_mappings,
+                    &not_context,
+                    self.global_cats.clone(),
+                );
                 not_expression(output_solution_mappings, &not_context, context)?
             }
             Expression::Exists(inner) => {

@@ -5,6 +5,7 @@ use tracing::{instrument, trace};
 use crate::sparql::QuerySettings;
 use polars::prelude::{col, JoinType};
 use query_processing::expressions::contains_graph_pattern;
+use query_processing::expressions::effective_boolean_value;
 use query_processing::graph_patterns::{filter, join};
 use query_processing::pushdowns::Pushdowns;
 use representation::dataset::QueryGraph;
@@ -73,6 +74,11 @@ impl Triplestore {
                 query_settings,
                 dataset,
             )?;
+            right_solution_mappings = effective_boolean_value(
+                right_solution_mappings,
+                &expression_context,
+                self.global_cats.clone(),
+            );
             right_solution_mappings = filter(right_solution_mappings, &expression_context)?;
             //The following is a workaround:
             let keep_cols: Vec<_> = right_solution_mappings

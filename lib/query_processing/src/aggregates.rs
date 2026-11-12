@@ -3,7 +3,8 @@ use crate::expressions::operations::numeric_promotion_level;
 use oxrdf::vocab::xsd;
 use polars::datatypes::DataType;
 use polars::prelude::{
-    any_horizontal, as_struct, coalesce, col, lit, when, Expr, LiteralValue, SortMultipleOptions,
+    any_horizontal, as_struct, coalesce, col, len, lit, when, Expr, LiteralValue,
+    SortMultipleOptions,
 };
 use representation::cats::LockedCats;
 use representation::multitype::all_multi_cols;
@@ -33,14 +34,29 @@ pub fn count_without_expression(
     distinct: bool,
     rdf_node_types: &HashMap<String, RDFNodeState>,
 ) -> (Expr, RDFNodeState) {
+    if rdf_node_types.is_empty() {
+        // Solutions without variables, e.g. COUNT(*) over { }
+        let out_expr = if distinct {
+            len().gt(lit(0)).cast(DataType::Int64)
+        } else {
+            len()
+        };
+        return count_output(out_expr);
+    }
+    // Sorted for a deterministic struct field order
+    let mut cols: Vec<_> = rdf_node_types.iter().collect();
+    cols.sort_by_key(|(c, _)| c.as_str());
+    let mut is_not_null = vec![];
+    for (c, s) in &cols {
+        is_not_null.push(expr_is_null_workaround(col(c.as_str()), s).not())
+    }
+    let any_not_null = any_horizontal(is_not_null).unwrap();
     let out_expr = if distinct {
-        todo!("Try count without distinct")
+        as_struct(cols.iter().map(|(c, _)| col(c.as_str())).collect())
+            .filter(any_not_null)
+            .n_unique()
     } else {
-        let mut is_not_null = vec![];
-        for (c, s) in rdf_node_types {
-            is_not_null.push(expr_is_null_workaround(col(c), s).not())
-        }
-        any_horizontal(is_not_null).unwrap().sum()
+        any_not_null.sum()
     };
     count_output(out_expr)
 }
