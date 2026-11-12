@@ -1,4 +1,5 @@
 import multiprocessing
+import socket
 import time
 
 import pytest
@@ -22,7 +23,19 @@ def live_endpoint():
     # Start the server in the background
     proc = multiprocessing.Process(target=run_server, daemon=True)
     proc.start()
-    time.sleep(1)  # Give uvicorn a brief second to bind to the port
+    # Wait until uvicorn accepts connections (startup time varies between Python versions)
+    deadline = time.time() + 30
+    while True:
+        try:
+            with socket.create_connection(("127.0.0.1", 8000), timeout=0.5):
+                break
+        except OSError:
+            if not proc.is_alive():
+                pytest.fail("SPARQL endpoint process exited before accepting connections")
+            if time.time() > deadline:
+                proc.terminate()
+                pytest.fail("SPARQL endpoint did not start within 30 seconds")
+            time.sleep(0.05)
     yield "http://127.0.0.1:8000"
     proc.terminate()
 

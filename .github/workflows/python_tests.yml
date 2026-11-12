@@ -11,19 +11,22 @@ env:
   RUST_LOG: debug
   MATURIN_VERSION: '1.9.4'
   RUST_TOOLCHAIN: nightly-2026-09-01
-  PYTHON_VERSION: '3.12'
 
 jobs:
   build_and_test:
     runs-on:
       group: ubuntu_very_beefy_test_maplib
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.12', '3.15']
 
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v2
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
+          python-version: ${{ matrix.python-version }}
 
       - name: Install dependencies
         run: |
