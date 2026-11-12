@@ -31,7 +31,7 @@ def test_issue_73_negated_pp():
     print(f"the time sir: {time.perf_counter() - start_time}")
 
     print(df)
-    df.write_csv("foaftest.csv")
+    df.sort(df.columns).write_csv("foaftest.csv")
 
 
 def test_star_path_over_foaf_knows():
@@ -70,7 +70,7 @@ def test_star_path_over_foaf_knows_192():
     print(f"the time sir: {time.perf_counter() - start_time}")
 
     print(df)
-    df.write_csv("foaftest.csv")
+    df.sort(df.columns).write_csv("foaftest.csv")
 
 
 
@@ -96,7 +96,7 @@ def test_plus_path_over_foaf_knows():
     print(f"the time sir: {time.perf_counter() - start_time}")
 
     print(df)
-    df.write_csv("foaftest.csv")
+    df.sort(df.columns).write_csv("foaftest.csv")
 
 
 
