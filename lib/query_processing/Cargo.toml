@@ -23,6 +23,7 @@ polars = { workspace = true, features = [
     "is_in",
     "dtype-full",
     "strings",
+    "string_pad",
     "rows",
     "timezones",
     "polars-time",
@@ -41,5 +42,6 @@ rayon.workspace = true
 urlencoding.workspace = true
 md-5.workspace = true
 sha1.workspace = true
+sha2.workspace = true
 hex.workspace = true
 pyo3.workspace = true

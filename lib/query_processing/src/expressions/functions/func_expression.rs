@@ -5,10 +5,10 @@ use crate::expressions::functions::ceil_::ceil_;
 use crate::expressions::functions::concat_::concat_;
 use crate::expressions::functions::custom_function::custom_;
 use crate::expressions::functions::datatype_::datatype_;
-use crate::expressions::functions::day_::day_;
+use crate::expressions::functions::date_part::{date_part, DatePart};
 use crate::expressions::functions::encode_for_uri::encode_for_uri;
 use crate::expressions::functions::floor_::floor_;
-use crate::expressions::functions::hours_::hours_;
+use crate::expressions::functions::hash_::{hash_, HashAlgorithm};
 use crate::expressions::functions::iri::iri;
 use crate::expressions::functions::is_blank_::is_blank_;
 use crate::expressions::functions::is_iri::is_iri;
@@ -16,14 +16,9 @@ use crate::expressions::functions::is_literal::is_literal;
 use crate::expressions::functions::lang_::lang_;
 use crate::expressions::functions::lang_matches::lang_matches;
 use crate::expressions::functions::lower_upper_substr::lower_upper_substr;
-use crate::expressions::functions::md5_::md5_;
-use crate::expressions::functions::minutes_::minutes_;
-use crate::expressions::functions::month_::month_;
 use crate::expressions::functions::now_::now_;
 use crate::expressions::functions::replace::sparql_replace;
 use crate::expressions::functions::round_::round_;
-use crate::expressions::functions::seconds_::seconds_;
-use crate::expressions::functions::sha1_::sha1_;
 use crate::expressions::functions::sparql_regex::sparql_regex;
 use crate::expressions::functions::sparql_uuid::uuid;
 use crate::expressions::functions::starts_ends_contains::starts_ends_contains;
@@ -33,7 +28,6 @@ use crate::expressions::functions::str_dt::str_dt;
 use crate::expressions::functions::str_lang::str_lang;
 use crate::expressions::functions::str_len::str_len;
 use crate::expressions::functions::struuid::struuid;
-use crate::expressions::functions::year_::year_;
 use crate::udf::UdfRegistry;
 use representation::cats::LockedCats;
 use representation::query_context::Context;
@@ -52,27 +46,64 @@ pub fn func_expression(
 ) -> Result<SolutionMappings, QueryProcessingError> {
     match func {
         Function::Year => {
-            solution_mappings =
-                year_(solution_mappings, func, args, &args_contexts, outer_context)?;
+            solution_mappings = date_part(
+                solution_mappings,
+                func,
+                args,
+                &args_contexts,
+                outer_context,
+                DatePart::Year,
+            )?;
         }
         Function::Month => {
-            solution_mappings =
-                month_(solution_mappings, func, args, &args_contexts, outer_context)?;
+            solution_mappings = date_part(
+                solution_mappings,
+                func,
+                args,
+                &args_contexts,
+                outer_context,
+                DatePart::Month,
+            )?;
         }
         Function::Day => {
-            solution_mappings = day_(solution_mappings, func, args, &args_contexts, outer_context)?;
+            solution_mappings = date_part(
+                solution_mappings,
+                func,
+                args,
+                &args_contexts,
+                outer_context,
+                DatePart::Day,
+            )?;
         }
         Function::Hours => {
-            solution_mappings =
-                hours_(solution_mappings, func, args, &args_contexts, outer_context)?;
+            solution_mappings = date_part(
+                solution_mappings,
+                func,
+                args,
+                &args_contexts,
+                outer_context,
+                DatePart::Hours,
+            )?;
         }
         Function::Minutes => {
-            solution_mappings =
-                minutes_(solution_mappings, func, args, &args_contexts, outer_context)?;
+            solution_mappings = date_part(
+                solution_mappings,
+                func,
+                args,
+                &args_contexts,
+                outer_context,
+                DatePart::Minutes,
+            )?;
         }
         Function::Seconds => {
-            solution_mappings =
-                seconds_(solution_mappings, func, args, &args_contexts, outer_context)?;
+            solution_mappings = date_part(
+                solution_mappings,
+                func,
+                args,
+                &args_contexts,
+                outer_context,
+                DatePart::Seconds,
+            )?;
         }
         Function::Abs => {
             solution_mappings = abs_(solution_mappings, func, args, &args_contexts, outer_context)?;
@@ -262,24 +293,22 @@ pub fn func_expression(
                 global_cats,
             )?;
         }
-        Function::Sha1 => {
-            solution_mappings = sha1_(
+        Function::Md5 | Function::Sha1 | Function::Sha256 | Function::Sha384 | Function::Sha512 => {
+            let algorithm = match func {
+                Function::Md5 => HashAlgorithm::Md5,
+                Function::Sha1 => HashAlgorithm::Sha1,
+                Function::Sha256 => HashAlgorithm::Sha256,
+                Function::Sha384 => HashAlgorithm::Sha384,
+                _ => HashAlgorithm::Sha512,
+            };
+            solution_mappings = hash_(
                 solution_mappings,
                 func,
                 args,
                 &args_contexts,
                 outer_context,
                 global_cats,
-            )?;
-        }
-        Function::Md5 => {
-            solution_mappings = md5_(
-                solution_mappings,
-                func,
-                args,
-                &args_contexts,
-                outer_context,
-                global_cats,
+                algorithm,
             )?;
         }
         _ => {

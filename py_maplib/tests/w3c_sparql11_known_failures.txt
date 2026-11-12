@@ -92,38 +92,27 @@ functions/ceil01  # MaplibException: SPARQL execution error: ``ceil` operation n
 functions/concat-empty  # MaplibException: Function CONCAT got wrong number of arguments 0, expected >1
 functions/concat-single  # MaplibException: Function CONCAT got wrong number of arguments 1, expected >1
 functions/concat02  # Results differ.
-functions/day  # Results differ.
 functions/floor01  # MaplibException: SPARQL execution error: ``floor` operation not supported for dtype `struct[2]` (exp
-functions/hours  # Results differ.
+functions/hours  # Results differ. xsd:dateTime values are stored in UTC, so the original offset is lost (15:38-08:00 gives 23)
 functions/if02  # MaplibException: SPARQL execution error: `invalid series dtype: expected `Boolean`, got `f64` for se
 functions/in01  # MaplibException: Query type not supported
 functions/in02  # MaplibException: Query type not supported
 functions/iri01  # Results differ.
 functions/isnumeric01  # MaplibException: The function `isNUMERIC` is not implemented yet
-functions/minutes  # Results differ.
-functions/month  # Results differ.
 functions/notin01  # MaplibException: Query type not supported
 functions/notin02  # MaplibException: Query type not supported
 functions/now01  # MaplibException: Query type not supported
 functions/rand01  # MaplibException: Query type not supported
 functions/replace01  # Results differ.
-functions/seconds  # Results differ.
-functions/sha256-01  # MaplibException: The function `SHA256` is not implemented yet
-functions/sha256-02  # MaplibException: The function `SHA256` is not implemented yet
-functions/sha384-01  # MaplibException: The function `SHA384` is not implemented yet
-functions/sha384-02  # MaplibException: The function `SHA384` is not implemented yet
-functions/sha512-01  # MaplibException: The function `SHA512` is not implemented yet
-functions/sha512-02  # MaplibException: The function `SHA512` is not implemented yet
 functions/strafter01a  # Results differ.
 functions/strafter02  # MaplibException: The following expression should resolve to an xsd:string : "b"@cy
 functions/strbefore01a  # Results differ.
 functions/strbefore02  # MaplibException: The following expression should resolve to an xsd:string : "b"@cy
 functions/strlang01  # PanicException: not yet implemented
 functions/strlang03-rdf11  # PanicException: not yet implemented
-functions/timezone  # MaplibException: The function `TIMEZONE` is not implemented yet
-functions/tz  # MaplibException: The function `TZ` is not implemented yet
+functions/timezone  # TIMEZONE is not implemented; needs the original offset, which is lost when dateTimes are stored in UTC
+functions/tz  # TZ is not implemented; needs the original offset, which is lost when dateTimes are stored in UTC
 functions/uuid02  # MaplibException: Query type not supported
-functions/year  # Results differ.
 json-res/jsonres03  # MaplibException: Query type not supported
 json-res/jsonres04  # MaplibException: Query type not supported
 move/move01  # Default graph differs.

@@ -268,6 +268,22 @@ pub fn base_expression_to_native(
 /// so the plain string cast pads them with zeros (1.5 -> "1.5000000000000000"). Trim them
 /// to the XSD canonical form, as the N-Triples writer does ("1.5", "798").
 pub fn literal_expr_to_string(e: Expr, t: &BaseRDFNodeType) -> Expr {
+    if t.is_lit_type(xsd::DATE_TIME) || t.is_lit_type(xsd::DATE_TIME_STAMP) {
+        // Same XSD lexical form as when writing RDF, not the polars string cast
+        return e.map(
+            |x| {
+                let tz = if let DataType::Datetime(_, tz) = x.dtype() {
+                    tz.clone()
+                } else {
+                    None
+                };
+                Ok(datetime_column_to_strings(&x, &tz).into_column())
+            },
+            |_, f| Ok(Field::new(f.name().clone(), DataType::String)),
+        );
+    } else if t.is_lit_type(xsd::DATE) {
+        return e.dt().strftime(XSD_DATE_WITHOUT_TZ_FORMAT);
+    }
     let s = e.cast(DataType::String);
     if t.is_lit_type(xsd::DOUBLE) || t.is_lit_type(xsd::FLOAT) {
         // Polars writes infinity as inf, the xsd:double and xsd:float lexical form is INF

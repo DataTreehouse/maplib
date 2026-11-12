@@ -2,6 +2,7 @@
 
 ## v0.20.34
 ### Features
+- SHA256, SHA384 and SHA512 SPARQL functions
 - Read and write TriG and N-Quads (format "trig" / "nquads", or the .trig / .nq file extensions when reading). Writing these formats outputs all graphs unless a graph is specified
 
 ### Bug fixes
@@ -12,6 +13,8 @@
 - Fix panic when combining lang strings with differently encoded categoricals (e.g. COALESCE(?langString, "x"@en))
 - Infinite xsd:double and xsd:float values are written as INF and -INF (previously inf and -inf, which are not valid lexical forms) in query results, STR() and all RDF serializations
 - DATATYPE() of an unbound value or an error is unbound (previously the datatype of the variable was returned)
+- YEAR, MONTH, DAY, HOURS and MINUTES return xsd:integer and SECONDS returns xsd:decimal including fractional seconds (previously xsd:unsignedInt, dropping fractions)
+- STR() of xsd:dateTime and xsd:date values gives the XSD lexical form (e.g. 2010-06-21T11:28:01+00:00 instead of 2010-06-21 11:28:01.000000+00:00)
 
 ## v0.20.32
 ### Features

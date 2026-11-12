@@ -1,22 +1,40 @@
 use crate::errors::QueryProcessingError;
 use crate::expressions::functions::str_function::str_function;
-use md5::{Digest, Md5};
+use md5::Md5;
 use oxrdf::vocab::xsd;
 use polars::prelude::{IntoColumn, StringChunked};
 use representation::cats::LockedCats;
 use representation::query_context::Context;
 use representation::solution_mapping::SolutionMappings;
 use representation::BaseRDFNodeType;
+use sha1::Sha1;
+use sha2::{Digest, Sha256, Sha384, Sha512};
 use spargebra::algebra::{Expression, Function};
 use std::collections::HashMap;
 
-pub fn md5_(
+#[derive(Clone, Copy)]
+pub enum HashAlgorithm {
+    Md5,
+    Sha1,
+    Sha256,
+    Sha384,
+    Sha512,
+}
+
+fn hex_digest<D: Digest>(s: &str) -> String {
+    hex::encode(D::digest(s.as_bytes()).as_slice())
+}
+
+/// MD5, SHA1, SHA256, SHA384 and SHA512: the lowercase hex digest of the UTF-8 bytes of the
+/// string, as an xsd:string (SPARQL 1.1 section 17.4.6).
+pub fn hash_(
     mut solution_mappings: SolutionMappings,
     func: &Function,
     args: &[Expression],
     args_contexts: &HashMap<usize, Context>,
     outer_context: &Context,
     global_cats: LockedCats,
+    algorithm: HashAlgorithm,
 ) -> Result<SolutionMappings, QueryProcessingError> {
     if args.len() != 1 {
         return Err(QueryProcessingError::BadNumberOfFunctionArguments(
@@ -26,30 +44,25 @@ pub fn md5_(
         ));
     }
     let first_context = args_contexts.get(&0).unwrap();
-    let mut expr = str_function(
+    let expr = str_function(
         first_context.as_str(),
         solution_mappings
             .rdf_node_types
             .get(first_context.as_str())
             .unwrap(),
         global_cats,
-    );
-    expr = expr.map(
+    )
+    .map(
         move |x| {
-            let mut encoded = Vec::with_capacity(x.len());
-
-            for s in x.str()?.iter() {
-                if let Some(s) = s {
-                    let mut hasher = Md5::new();
-                    hasher.update(s.as_bytes());
-                    let out = hasher.finalize();
-                    encoded.push(Some(hex::encode(out.as_slice())));
-                } else {
-                    encoded.push(None);
-                }
-            }
-            let column = StringChunked::from_iter(encoded).into_column();
-            Ok(column)
+            let hash = match algorithm {
+                HashAlgorithm::Md5 => hex_digest::<Md5>,
+                HashAlgorithm::Sha1 => hex_digest::<Sha1>,
+                HashAlgorithm::Sha256 => hex_digest::<Sha256>,
+                HashAlgorithm::Sha384 => hex_digest::<Sha384>,
+                HashAlgorithm::Sha512 => hex_digest::<Sha512>,
+            };
+            let encoded: StringChunked = x.str()?.iter().map(|s| s.map(hash)).collect();
+            Ok(encoded.into_column())
         },
         |_, f| Ok(f.clone()),
     );
