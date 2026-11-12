@@ -281,7 +281,8 @@ class Literal:
     """
 
     value: str
-    datatype: Optional[IRI]
+    datatype: IRI
+    "The datatype IRI (xsd:string for plain literals, rdf:langString for language-tagged literals)."
     language: Optional[str]
 
     def __init__(self, value: str, data_type: "IRI" = None, language: str = None):
@@ -332,11 +333,13 @@ class Argument:
     "The variable, if the term is a variable."
 
     def __init__(
-            self, term: Union[Variable, IRI, Literal], list_expand: Optional[bool] = False
+            self,
+            term: Union["Argument", Variable, IRI, Literal, BlankNode, None],
+            list_expand: Optional[bool] = False,
     ):
         """
         An argument for a template instance.
-        :param term: The term.
+        :param term: The term. None means the argument is unbound (ottr:none). An Argument is returned as-is.
         :param list_expand: Should the argument be expanded? Used with the list_expander argument of instance.
         """
 
@@ -360,7 +363,7 @@ class Instance:
 
 
 class Template:
-    iri: str
+    iri: IRI
     parameters: List[Parameter]
     instances: List[Instance]
     """
@@ -384,8 +387,8 @@ class Template:
 
     def instance(
             self,
-            arguments: List[Union[Argument, Variable, IRI, Literal, None]],
-            list_expander: LiteralType["cross", "zipMin", "zipMax"] = None,
+            arguments: List[Union[Argument, Variable, IRI, Literal, BlankNode, None]],
+            list_expander: Optional[LiteralType["cross", "zipMin", "zipMax"]] = None,
     ) -> Instance:
         """
 
@@ -619,7 +622,7 @@ class Model:
             self,
             path_or_string: Path | str,
             graph: str = None,
-            transient: bool = True,
+            transient: bool = False,
             uuid_namespace: str = None,
     ) -> None:
         """
@@ -642,7 +645,7 @@ class Model:
             self,
             path_or_string: Path | str,
             graph: str = None,
-            transient: bool = True,
+            transient: bool = False,
             uuid_namespace: str = None,
     ) -> None:
         """
@@ -664,7 +667,7 @@ class Model:
     def map_triples(
             self,
             data: Union[DataFrame, LazyFrame, "SolutionMappings", Iterable[Union[DataFrame, LazyFrame, "SolutionMappings"]]],
-            predicate: str = None,
+            predicate: Union[str, IRI] = None,
             graph: str = None,
             validate_iris: bool = True,
     ) -> None:
@@ -761,6 +764,7 @@ class Model:
         :param host: The hostname that we will point the browser to.
         :param port: The port where the graph explorer webserver listens on.
         :param bind: Bind to the following host / ip.
+        :param popup: Pop up the browser window (deprecated, open server.url yourself instead).
         :param fts: Enable full text search indexing
         :param fts_path: Path to the fts index
         :param graph: The named graph to explore, defaults to the default graph
@@ -783,7 +787,7 @@ class Model:
     ) -> DataFrame | SolutionMappings | list[DataFrame | SolutionMappings] | bool | str | None:
         """
         Query the contained knowledge graph using SPARQL
-        Currently, SELECT and CONSTRUCT are supported.
+        Currently, SELECT, CONSTRUCT and ASK are supported.
         Usage:
 
         >>> df = model.query('''
@@ -799,6 +803,7 @@ class Model:
         :param graph: The IRI of the graph to query.
         :param streaming: Use Polars streaming
         :param return_json: Return JSON string.
+        :param return_format: One of "dataframe" (default), "json" (SELECT and ASK only) or "turtle" (CONSTRUCT only). Ignored when return_json is set.
         :param include_transient: Include transient triples when querying.
         :param max_rows: Maximum estimated rows in result, helps avoid out-of-memory errors.
         :param debug: Why does my query have no results?
@@ -820,7 +825,7 @@ class Model:
     ) -> DataFrame | SolutionMappings | list[DataFrame | SolutionMappings] | str | None:
         """
         Query an external endpoint using SPARQL
-        Currently SELECT is supported and GET querying is hardcoded with JSON results.
+        Currently SELECT is supported. Uses GET unless method is set to POST.
         Usage:
 
         >>> df = model.query_external('''
@@ -837,6 +842,7 @@ class Model:
         :param method: The HTTP Method to use
         :param solution_mappings: Returns SolutionMappings with maplib-native formatting and with RDF typing. Useful for round-trips.
         :param return_json: Return JSON string.
+        :param return_format: One of "dataframe" (default), "json" (SELECT and ASK only) or "turtle" (CONSTRUCT only). Ignored when return_json is set.
         :param bindings: Bind the variables (keys) to the following ground terms. Use IRI, Literal classes or strings (e.g. "<urn:id:abc>") as values.
         :param headers: Additional headers to include in the request
         :return: DataFrame (Select), list of DataFrames (Construct) containing results or SolutionMappings when solution_mappings is set.
@@ -856,7 +862,8 @@ class Model:
         Execute a SPARQL Update (e.g. INSERT/DELETE ... WHERE) against the graph.
         Usage:
 
-        >>> m = Model(doc)
+        >>> m = Model()
+        ... m.add_template(doc)
         ... # Omitted
         ... update_pizzas = '''
         ... ...'''
@@ -890,7 +897,8 @@ class Model:
         Useful for being able to use the same query for inspecting what will be inserted and actually inserting.
         Usage:
 
-        >>> m = Model(doc)
+        >>> m = Model()
+        ... m.add_template(doc)
         ... # Omitted
         ... hpizzas = '''
         ... PREFIX pizza:<https://github.com/magbak/maplib/pizza#>
@@ -1284,6 +1292,20 @@ class InferenceResult:
     """
 
 
+class ExploreServer:
+    """
+    A running graph explorer session, returned by Model.explore.
+    """
+
+    url: str
+    "The URL of the graph explorer."
+
+    def stop(self) -> None:
+        """
+        Stop the graph explorer server.
+        """
+
+
 class MaplibException(Exception): ...
 
 
@@ -1336,15 +1358,17 @@ class VirtualizedDatabase:
 
     def __init__(self,
                  database: Any,
-                 resource_sql_map: Optional[Dict[str, Any]],
-                 sql_dialect: Optional[LiteralType["postgres", "bigquery", "databricks"]]):
+                 resource_sql_map: Optional[Dict[str, Any]] = None,
+                 sql_dialect: Optional[LiteralType["postgres", "bigquery", "databricks"]] = None):
         """
         See the tutorial in README.md for guidance on how to use this class.
         This API is subject to change, it will be possible to specify what parts of the SPARQL query may be pushed down into the database.
         For advanced use, the resource_sql_map may be omitted, in which case the VirtualizedQuery will be provided to the query method.
         The user must then translate this VirtualizedQuery (built on SPARQL Algebra) to the target query language.
 
-        :param:database: An instance of a class containing a query method.
-        :param:resource_sql_map: A dict providing a sqlalchemy Select for each resource.
-        :param:sql_dialect: The SQL dialect accepted by the query method.
+        Not available in the open source build: raises NotImplementedError.
+
+        :param database: An instance of a class containing a query method.
+        :param resource_sql_map: A dict providing a sqlalchemy Select for each resource.
+        :param sql_dialect: The SQL dialect accepted by the query method.
         """

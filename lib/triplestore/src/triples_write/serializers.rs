@@ -8,7 +8,6 @@ use polars_core::utils::polars_arrow::array::{Array, BooleanArray, PrimitiveArra
 use polars_core::utils::polars_arrow::types::NativeType;
 use representation::rdf_to_polars::default_decimal_scale;
 use representation::BaseRDFNodeType;
-use std::io::Write;
 
 const TOO_MANY_MSG: &str = "too many items requested from CSV serializer";
 const ARRAY_MISMATCH_MSG: &str = "wrong array type";
@@ -161,24 +160,26 @@ pub(super) fn string_serializer<'a, Iter: Send + 'a>(
         }
     }
 
-    fn write_escaped_char(c: char, f: &mut Vec<u8>) {
-        match c {
-            '\n' => {
-                write!(f, "\\n").unwrap();
-            }
-            '\t' => {
-                write!(f, "\\t").unwrap();
-            }
-            '\r' => {
-                write!(f, "\\r").unwrap();
-            }
-            '"' | '\\' => {
-                write!(f, "\\{c}").unwrap();
-            }
-            _ => {
-                write!(f, "{c}").unwrap();
-            }
+    // All escaped characters are ASCII, so they never occur inside a multi-byte UTF-8 sequence
+    // and we can scan bytes and copy the unescaped runs in bulk.
+    fn write_escaped(s: &str, buf: &mut Vec<u8>) {
+        let bytes = s.as_bytes();
+        buf.reserve(bytes.len());
+        let mut start = 0;
+        for (i, &b) in bytes.iter().enumerate() {
+            let escaped: &[u8] = match b {
+                b'\n' => b"\\n",
+                b'\t' => b"\\t",
+                b'\r' => b"\\r",
+                b'"' => b"\\\"",
+                b'\\' => b"\\\\",
+                _ => continue,
+            };
+            buf.extend_from_slice(&bytes[start..i]);
+            buf.extend_from_slice(escaped);
+            start = i + 1;
         }
+        buf.extend_from_slice(&bytes[start..]);
     }
 
     let iter = update(array);
@@ -187,10 +188,7 @@ pub(super) fn string_serializer<'a, Iter: Send + 'a>(
         let Some(s) = f(iter) else {
             return;
         };
-        let chars = s.chars();
-        for c in chars {
-            write_escaped_char(c, buf);
-        }
+        write_escaped(s, buf);
         buf.push(QUOTE_CHAR);
     };
     Box::new(StringSerializer {

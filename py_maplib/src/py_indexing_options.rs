@@ -34,18 +34,13 @@ impl PyIndexingOptions {
             IndexingOptions::new_default_object_sort(fts, fts_path)
         } else {
             let object_sort_all = object_sort_all.unwrap_or(false);
-            if object_sort_all && object_sort_some.is_none() {
-                IndexingOptions::default()
-            } else {
-                let object_sort_some: Option<HashSet<_>> =
-                    object_sort_some.map(|object_sort_some| {
-                        object_sort_some
-                            .into_iter()
-                            .map(|x| x.into_inner())
-                            .collect()
-                    });
-                IndexingOptions::new(object_sort_all, object_sort_some, fts, fts_path)
-            }
+            let object_sort_some: Option<HashSet<_>> = object_sort_some.map(|object_sort_some| {
+                object_sort_some
+                    .into_iter()
+                    .map(|x| x.into_inner())
+                    .collect()
+            });
+            IndexingOptions::new(object_sort_all, object_sort_some, fts, fts_path)
         };
         PyIndexingOptions { inner }
     }

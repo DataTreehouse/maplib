@@ -57,8 +57,9 @@ impl PyModel {
     #[instrument(skip_all)]
     fn new(
         indexing_options: Option<PyIndexingOptions>,
-        storage_folder: Option<String>,
+        storage_folder: Option<PathBuf>,
     ) -> PyResult<PyModel> {
+        let storage_folder = storage_folder.map(path_to_string);
         let indexing = if let Some(indexing_options) = indexing_options {
             Some(indexing_options.inner)
         } else {
@@ -362,11 +363,11 @@ impl PyModel {
     /// :param host: The hostname that we will point the browser to
     /// :param port: The port where the graph explorer webserver listens on
     /// :param bind: Bind to the following host / ip
-    /// :param popup: Pop up the browser window
+    /// :param popup: Pop up the browser window (deprecated, open server.url yourself instead)
     /// :param fts: Enable full text search indexing
     /// :param fts_path: Path to the fts index
-    /// :param graph: The named graph to query, None is the default graph
-    /// :param new: Use new graph explorer?
+    /// :param graph: The named graph to explore, None is the default graph
+    /// :param page: We use this feature flag to test new frontends (try "new" or "yasgui")
     #[pyo3(signature = (*args, **kwargs), text_signature = "(/)")]
     fn explore(
         self_: PyRef<'_, Self>,
@@ -1042,9 +1043,8 @@ impl PyModel {
         })
     }
 
-    #[pyo3(signature = (path = "./serialized_triples".to_string()))]
-    fn serialize(&self, py: Python<'_>, path: Option<String>) -> PyResult<()> {
-        let path: PathBuf = path.unwrap().into();
+    #[pyo3(signature = (path = PathBuf::from("./serialized_triples")))]
+    fn serialize(&self, py: Python<'_>, path: PathBuf) -> PyResult<()> {
 
         py.detach(move || {
             let mut inner = self.inner.lock().unwrap();
@@ -1054,13 +1054,13 @@ impl PyModel {
 
     #[instrument(skip_all)]
     #[staticmethod]
-    #[pyo3(signature = (path = "./serialized_triples".to_string(), storage_folder=None))]
+    #[pyo3(signature = (path = PathBuf::from("./serialized_triples"), storage_folder=None))]
     fn deserialize(
         py: Python<'_>,
-        path: Option<String>,
-        storage_folder: Option<String>,
+        path: PathBuf,
+        storage_folder: Option<PathBuf>,
     ) -> PyResult<Self> {
-        let path: PathBuf = path.unwrap().into();
+        let storage_folder = storage_folder.map(path_to_string);
 
         let inner: Result<InnerModel, PyMaplibError> = py.detach(move || {
             let inner = InnerModel::deserialize_triples(&path, storage_folder)
@@ -1139,4 +1139,8 @@ impl PyModel {
         })?;
         Ok(())
     }
+}
+
+fn path_to_string(path: PathBuf) -> String {
+    path.to_string_lossy().into_owned()
 }

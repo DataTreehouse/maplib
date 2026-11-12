@@ -92,6 +92,10 @@ range-set-blaze = "0.8.0"
 reqwest = { version = "0.13.5", features = ["query", "json", "rustls-no-provider"] }
 tokio = { version = "1.54.1" }
 
+[profile.release]
+lto = "fat"
+codegen-units = 1
+
 [patch.crates-io]
 polars = { git = 'https://github.com/pola-rs/polars', rev = "7f902bd3ffd27ff82d14278a09a295ff2f7aed92" }
 polars-core = { git = 'https://github.com/pola-rs/polars', rev = "7f902bd3ffd27ff82d14278a09a295ff2f7aed92" }

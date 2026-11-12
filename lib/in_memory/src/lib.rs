@@ -5,8 +5,8 @@ use arrow::array::{Array, RecordBatch, StringArray, UInt32Array};
 use arrow::datatypes::{Field, Schema};
 use nohash_hasher::NoHashHasher;
 use range_set_blaze::RangeSetBlaze;
-use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
-use std::borrow::Cow;
+use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
+use std::borrow::{Borrow, Cow};
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt::{Display, Formatter};
@@ -35,22 +35,100 @@ impl PartialOrd for PrefixCompressedString {
 
 impl Ord for PrefixCompressedString {
     fn cmp(&self, other: &Self) -> Ordering {
-        let self_prefix_slice = self.prefix.as_bytes();
-        let other_prefix_slice = other.prefix.as_bytes();
-        let self_suffix_slice = self.suffix.as_bytes();
-        let other_suffix_slice = other.suffix.as_bytes();
-        for (s, o) in self_prefix_slice
-            .iter()
-            .chain(self_suffix_slice.iter())
-            .zip(other_prefix_slice.iter().chain(other_suffix_slice.iter()))
-        {
-            let cmp = s.cmp(o);
-            if cmp != Ordering::Equal {
-                return cmp;
+        cmp_split_strs(self.parts(), other.parts())
+    }
+}
+
+/// Orders two strings that are each given as (prefix, suffix), as if the parts were concatenated.
+#[inline]
+fn cmp_split_strs((a_pre, a_suf): (&str, &str), (b_pre, b_suf): (&str, &str)) -> Ordering {
+    // Prefixes are interned, so identical prefixes usually share the same allocation.
+    if a_pre.as_ptr() == b_pre.as_ptr() && a_pre.len() == b_pre.len() {
+        return a_suf.as_bytes().cmp(b_suf.as_bytes());
+    }
+    let (a_pre, a_suf, b_pre, b_suf) = (
+        a_pre.as_bytes(),
+        a_suf.as_bytes(),
+        b_pre.as_bytes(),
+        b_suf.as_bytes(),
+    );
+    let (mut a, mut a_on_suffix) = (a_pre, false);
+    let (mut b, mut b_on_suffix) = (b_pre, false);
+    loop {
+        if a.is_empty() {
+            if a_on_suffix {
+                break;
             }
+            a = a_suf;
+            a_on_suffix = true;
+            continue;
         }
-        (self_prefix_slice.len() + self_suffix_slice.len())
-            .cmp(&(other_prefix_slice.len() + other_suffix_slice.len()))
+        if b.is_empty() {
+            if b_on_suffix {
+                break;
+            }
+            b = b_suf;
+            b_on_suffix = true;
+            continue;
+        }
+        let n = a.len().min(b.len());
+        match a[..n].cmp(&b[..n]) {
+            Ordering::Equal => {}
+            o => return o,
+        }
+        a = &a[n..];
+        b = &b[n..];
+    }
+    (a_pre.len() + a_suf.len()).cmp(&(b_pre.len() + b_suf.len()))
+}
+
+/// Lets the prefix compressed map be probed with borrowed parts, without allocating a key.
+trait PrefixCompressedKey {
+    fn parts(&self) -> (&str, &str);
+}
+
+impl PrefixCompressedKey for PrefixCompressedString {
+    #[inline]
+    fn parts(&self) -> (&str, &str) {
+        (self.prefix.as_str(), self.suffix.as_str())
+    }
+}
+
+struct PrefixCompressedRef<'a> {
+    prefix: &'a str,
+    suffix: &'a str,
+}
+
+impl PrefixCompressedKey for PrefixCompressedRef<'_> {
+    #[inline]
+    fn parts(&self) -> (&str, &str) {
+        (self.prefix, self.suffix)
+    }
+}
+
+impl<'a> Borrow<dyn PrefixCompressedKey + 'a> for PrefixCompressedString {
+    fn borrow(&self) -> &(dyn PrefixCompressedKey + 'a) {
+        self
+    }
+}
+
+impl PartialEq for dyn PrefixCompressedKey + '_ {
+    fn eq(&self, other: &Self) -> bool {
+        cmp_split_strs(self.parts(), other.parts()) == Ordering::Equal
+    }
+}
+
+impl Eq for dyn PrefixCompressedKey + '_ {}
+
+impl PartialOrd for dyn PrefixCompressedKey + '_ {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for dyn PrefixCompressedKey + '_ {
+    fn cmp(&self, other: &Self) -> Ordering {
+        cmp_split_strs(self.parts(), other.parts())
     }
 }
 
@@ -176,7 +254,8 @@ impl CatMapsInMemory {
     }
 
     pub fn maybe_encode_strs(&self, s: &[Option<&str>]) -> Vec<Option<u32>> {
-        s.into_iter()
+        s.par_iter()
+            .with_min_len(4096)
             .map(|x| {
                 if let Some(x) = x {
                     self.maybe_encode_in_memory_str(x)
@@ -302,7 +381,7 @@ impl PrefixCompressedCatMapsInMemory {
         let mut spaced = vec![];
         let mut i = 0;
         let mut start_string = None;
-        for (k, _) in self.map.range(..) {
+        for (k, _) in self.map.iter() {
             if start_string.is_none() {
                 start_string = Some(k.clone());
             }
@@ -388,16 +467,7 @@ impl PrefixCompressedCatMapsInMemory {
     }
 
     pub fn contains_str(&self, s: &str) -> bool {
-        let (pre, suf) = split_iri(s);
-        if let Some(pre) = self.prefix_map.get(pre) {
-            let compr = PrefixCompressedString {
-                prefix: pre.clone(),
-                suffix: Arc::new(suf.to_string()),
-            };
-            self.map.contains_key(&compr)
-        } else {
-            false
-        }
+        self.maybe_encode_str(s).is_some()
     }
 
     pub fn contains_u32(&self, u: &u32) -> bool {
@@ -449,15 +519,15 @@ impl PrefixCompressedCatMapsInMemory {
 
     pub fn maybe_encode_str(&self, s: &str) -> Option<u32> {
         let (pre, suf) = split_iri(s);
-        if let Some(pre) = self.prefix_map.get(pre) {
-            let compr = PrefixCompressedString {
-                prefix: pre.clone(),
-                suffix: Arc::new(suf.to_string()),
-            };
-            self.map.get(&compr).map(|u| *u)
-        } else {
-            None
-        }
+        // Use the interned prefix so that comparisons can take the pointer equality fast path
+        let pre = self.prefix_map.get(pre)?;
+        let key = PrefixCompressedRef {
+            prefix: pre.as_str(),
+            suffix: suf,
+        };
+        self.map
+            .get(&key as &dyn PrefixCompressedKey)
+            .copied()
     }
 
     pub fn maybe_encode_prefix_compressed(&self, p: &PrefixCompressedString) -> Option<&u32> {
@@ -587,7 +657,7 @@ impl PrefixCompressedCatMapsInMemory {
     pub fn to_record_batch(&self) -> RecordBatch {
         let mut us = Vec::new();
         let mut strs = Vec::new();
-        for (k, u) in self.map.range(..) {
+        for (k, u) in self.map.iter() {
             let s = format!(
                 "{}{}",
                 self.prefix_map.get(k.prefix.as_str()).unwrap(),
@@ -610,7 +680,7 @@ impl PrefixCompressedCatMapsInMemory {
 
     pub fn global_rank_map(&self, us: &HashSet<u32>) -> HashMap<u32, u32> {
         let mut ranked = HashMap::new();
-        for (i, (_, v)) in self.map.range(..).enumerate() {
+        for (i, (_, v)) in self.map.iter().enumerate() {
             if us.contains(v) {
                 ranked.insert(*v, i as u32);
             }
@@ -625,8 +695,8 @@ impl PrefixCompressedCatMapsInMemory {
 
 #[derive(Debug, Clone)]
 pub struct UncompressedCatMapsInMemory {
-    map: BTreeMap<Arc<String>, u32>,
-    rev_map: HashMap<u32, Arc<String>, BuildHasherDefault<NoHashHasher<u32>>>,
+    map: BTreeMap<Arc<str>, u32>,
+    rev_map: HashMap<u32, Arc<str>, BuildHasherDefault<NoHashHasher<u32>>>,
 }
 
 impl UncompressedCatMapsInMemory {
@@ -634,7 +704,7 @@ impl UncompressedCatMapsInMemory {
         let mut spaced = vec![];
         let mut i = 0;
         let mut start_string = None;
-        for (k, _) in self.map.range::<Arc<String>, _>(..) {
+        for (k, _) in self.map.range::<Arc<str>, _>(..) {
             if start_string.is_none() {
                 start_string = Some(k.clone());
             }
@@ -652,7 +722,7 @@ impl UncompressedCatMapsInMemory {
     fn from_ordered_vec(ss: Vec<(Cow<str>, u32)>) -> UncompressedCatMapsInMemory {
         let ss_arced = ss
             .into_par_iter()
-            .map(|(s, u)| (Arc::new(s.into_owned()), u))
+            .map(|(s, u)| (Arc::<str>::from(s.into_owned()), u))
             .collect::<Vec<_>>();
         let map = BTreeMap::from_iter(ss_arced.into_iter());
         let rev_map = HashMap::from_iter(map.iter().map(|(s, u)| (*u, s.clone())));
@@ -662,7 +732,7 @@ impl UncompressedCatMapsInMemory {
 
 impl UncompressedCatMapsInMemory {
     pub(crate) fn compact(&mut self) {
-        for (i, (_, v)) in self.map.range_mut::<Arc<String>, _>(..).enumerate() {
+        for (i, (_, v)) in self.map.range_mut::<Arc<str>, _>(..).enumerate() {
             *v = i as u32;
         }
         self.rev_map = self.map.iter().map(|(x, y)| (*y, x.clone())).collect();
@@ -675,14 +745,13 @@ impl UncompressedCatMapsInMemory {
         }
     }
 
-    pub fn encode_new_arc_string(&mut self, s: Arc<String>, u: u32) {
+    pub fn encode_new_arc_string(&mut self, s: Arc<str>, u: u32) {
         self.map.insert(s.clone(), u);
         self.rev_map.insert(u, s);
     }
 
     pub fn contains_str(&self, s: &str) -> bool {
-        let arcs = Arc::new(s.to_string());
-        self.map.contains_key(&arcs)
+        self.map.contains_key(s)
     }
 
     pub fn contains_u32(&self, u: &u32) -> bool {
@@ -698,19 +767,18 @@ impl UncompressedCatMapsInMemory {
     }
 
     pub fn encode_new_string(&mut self, s: String, u: u32) {
-        let s = Arc::new(s);
+        let s: Arc<str> = Arc::from(s);
         self.map.insert(s.clone(), u);
         self.rev_map.insert(u, s);
     }
 
     pub fn maybe_encode_str(&self, s: &str) -> Option<u32> {
-        let s = Arc::new(s.to_string());
-        self.map.get(&s).map(|u| *u)
+        self.map.get(s).copied()
     }
 
     pub fn new_singular(value: &str, u: u32) -> Self {
         let mut sing = UncompressedCatMapsInMemory::new_empty();
-        let s = Arc::new(value.to_string());
+        let s: Arc<str> = Arc::from(value);
         sing.map.insert(s.clone(), u);
         sing.rev_map.insert(u, s);
         sing
@@ -831,7 +899,7 @@ impl UncompressedCatMapsInMemory {
     pub fn to_record_batch(&self) -> RecordBatch {
         let mut us = Vec::new();
         let mut strs = Vec::new();
-        for (k, u) in self.map.range::<Arc<String>, _>(..) {
+        for (k, u) in self.map.range::<Arc<str>, _>(..) {
             strs.push(k.as_str());
             us.push(*u);
         }
@@ -849,7 +917,7 @@ impl UncompressedCatMapsInMemory {
 
     pub fn global_rank_map(&self, us: &HashSet<u32>) -> HashMap<u32, u32> {
         let mut ranked = HashMap::new();
-        for (i, (_, v)) in self.map.range::<Arc<String>, _>(..).enumerate() {
+        for (i, (_, v)) in self.map.range::<Arc<str>, _>(..).enumerate() {
             if us.contains(v) {
                 ranked.insert(*v, i as u32);
             }
@@ -906,4 +974,62 @@ pub fn split_iri(iri: &str) -> (&str, &str) {
         None => ("", iri),
     };
     (prefix, suffix)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn split_compare_matches_concatenated_compare() {
+        let strs = [
+            "", "a", "ab", "abc", "abd", "b", "ba", "http://ex.org/a", "http://ex.org/ab",
+            "http://ex.org#a", "http://ex.org/", "http://ex.org", "æøå", "æøb",
+        ];
+        for a in strs {
+            for b in strs {
+                for i in 0..=a.len() {
+                    if !a.is_char_boundary(i) {
+                        continue;
+                    }
+                    for j in 0..=b.len() {
+                        if !b.is_char_boundary(j) {
+                            continue;
+                        }
+                        let got = cmp_split_strs((&a[..i], &a[i..]), (&b[..j], &b[j..]));
+                        assert_eq!(got, a.cmp(b), "{a:?} split at {i} vs {b:?} split at {j}");
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn prefix_compressed_lookup_without_allocation() {
+        let iris = [
+            "http://ex.org/ns#b",
+            "http://ex.org/ns#a",
+            "http://other.org/x/y",
+            "urn:a",
+        ];
+        let mut m = PrefixCompressedCatMapsInMemory::new_empty();
+        for (u, s) in iris.iter().enumerate() {
+            m.encode_new_string(s, u as u32);
+        }
+        for (u, s) in iris.iter().enumerate() {
+            assert_eq!(m.maybe_encode_str(s), Some(u as u32));
+            assert!(m.contains_str(s));
+        }
+        assert_eq!(m.maybe_encode_str("http://ex.org/ns#c"), None);
+        assert_eq!(m.maybe_encode_str("http://nope.org/a"), None);
+        let ordered: Vec<_> = m.map.keys().map(|k| k.to_string()).collect();
+        let mut sorted: Vec<_> = iris.iter().map(|s| s.to_string()).collect();
+        sorted.sort();
+        assert_eq!(ordered, sorted);
+
+        let mut u = UncompressedCatMapsInMemory::new_empty();
+        u.encode_new_string("hello".to_string(), 7);
+        assert_eq!(u.maybe_encode_str("hello"), Some(7));
+        assert_eq!(u.maybe_encode_str("hell"), None);
+    }
 }

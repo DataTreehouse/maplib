@@ -217,9 +217,10 @@ impl PyArgument {
         } else if let Ok(a) = term.extract::<PyArgument>() {
             return Ok(a);
         } else {
-            return Err(PyRepresentationError::BadArgumentError(
-                "rdf_type should be RDFType, e.g. RDFType.IRI()".to_string(),
-            )
+            return Err(PyRepresentationError::BadArgumentError(format!(
+                "term should be Variable, IRI, Literal, BlankNode, Argument or None, but was {}",
+                term.get_type().name()?
+            ))
             .into());
         };
         let argument = Argument { list_expand, term };
