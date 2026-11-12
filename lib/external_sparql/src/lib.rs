@@ -66,13 +66,14 @@ impl SparqlEndpoint {
         query: &str,
         prefixes: Option<&HashMap<String, NamedNode>>,
         bindings: Option<&HashMap<String, GroundTerm>>,
+        headers: Option<&Vec<(String, String)>>,
     ) -> Result<QueryResult, SparqlEndpointQueryError> {
         let mut builder = Builder::new_multi_thread();
         builder.enable_all();
         let qr = builder
             .build()
             .unwrap()
-            .block_on(self.async_query(query, prefixes, bindings));
+            .block_on(self.async_query(query, prefixes, bindings, headers));
         qr
     }
 
@@ -81,17 +82,19 @@ impl SparqlEndpoint {
         query: &str,
         prefixes: Option<&HashMap<String, NamedNode>>,
         bindings: Option<&HashMap<String, GroundTerm>>,
+        headers: Option<&Vec<(String, String)>>,
     ) -> Result<QueryResult, SparqlEndpointQueryError> {
         let query = Query::parse(query, None, prefixes)
             .map_err(SparqlEndpointQueryError::SPARQLSyntaxError)?;
         let query = maybe_replace_bindings(query, bindings)
             .map_err(SparqlEndpointQueryError::BindingReplacementError)?;
-        self.async_query_parsed(&query).await
+        self.async_query_parsed(&query, headers).await
     }
 
     pub async fn async_query_parsed(
         &self,
         query: &Query,
+        headers: Option<&Vec<(String, String)>>,
     ) -> Result<QueryResult, SparqlEndpointQueryError> {
         let use_query = match query {
             Query::Select { .. } => query.clone(),
@@ -128,24 +131,40 @@ impl SparqlEndpoint {
             _ => todo!(),
         };
         let client = reqwest::Client::new();
+
         let response = match &self.method {
             SparqlMethod::GET => {
-                client
-                    .get(&self.endpoint)
-                    .header(ACCEPT, "application/sparql-results+json,application/json,text/javascript,application/javascript")
-                    .header(USER_AGENT, "maplib")
-                    .query(&[("query", use_query.to_string())])
+                let mut rb =
+                    client
+                        .get(&self.endpoint)
+                        .header(ACCEPT, "application/sparql-results+json,application/json,text/javascript,application/javascript")
+                        .header(USER_AGENT, "maplib");
+
+                if let Some(headers) = headers {
+                    for (n, v) in headers {
+                        rb = rb.header(n, v);
+                    }
+                }
+
+                rb.query(&[("query", use_query.to_string())])
                     .query(&[("format", "json"), ("output", "json"), ("results", "json")])
                     .send()
                     .await
-            },
+            }
             SparqlMethod::POST => {
-                client
+                let mut rb = client
                     .post(&self.endpoint)
                     .header(CONTENT_TYPE, "application/sparql-query")
                     .header(ACCEPT, "application/sparql-results+json,application/json,text/javascript,application/javascript")
-                    .header(USER_AGENT, "maplib")
-                    .body(use_query.to_string())
+                    .header(USER_AGENT, "maplib");
+
+                if let Some(headers) = headers {
+                    for (n, v) in headers {
+                        rb = rb.header(n, v);
+                    }
+                }
+
+                rb.body(use_query.to_string())
                     .query(&[("format", "json"), ("output", "json"), ("results", "json")])
                     .send()
                     .await
@@ -217,7 +236,7 @@ impl SparqlEndpoint {
                     &quad_template,
                     LockedCats::new(Cats::new_empty(None, None)),
                 )
-                .map_err(|x| SparqlEndpointQueryError::CreateQuadsFromPatternError(x))?;
+                    .map_err(|x| SparqlEndpointQueryError::CreateQuadsFromPatternError(x))?;
                 let sms = if let Some(sms) = m.remove(&NamedGraph::DefaultGraph) {
                     sms
                 } else {

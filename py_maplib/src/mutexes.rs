@@ -365,9 +365,16 @@ pub(crate) fn query_external_mutex(
     endpoint: String,
     method: SparqlMethod,
     bindings: Option<HashMap<String, GroundTerm>>,
+    headers: Option<Vec<(String, String)>>,
 ) -> PyResult<QueryResult> {
     let res = inner
-        .query_external(&query, &endpoint, method, bindings.as_ref())
+        .query_external(
+            &query,
+            &endpoint,
+            method,
+            bindings.as_ref(),
+            headers.as_ref(),
+        )
         .map_err(PyMaplibError::from)?;
     Ok(res)
 }

@@ -1,6 +1,6 @@
 from datetime import datetime, date
 from pathlib import Path
-from typing import Any, Union, List, Dict, Optional, Callable, Literal as LiteralType
+from typing import Any, Union, List, Dict, Optional, Callable, Literal as LiteralType, Tuple
 
 import polars as pl
 from maplib.maplib import rdf
@@ -832,6 +832,7 @@ class Model:
             return_json: bool = False,
             return_format: str = Union["turtle", "json", "dataframe"],
             bindings: Dict[str, Union[str, IRI, Literal]] = None,
+            headers: List[Tuple[str, str]] = None
     ) -> DataFrame | SolutionMappings | list[DataFrame | SolutionMappings] | str | None:
         """
         Query an external endpoint using SPARQL
@@ -853,6 +854,7 @@ class Model:
         :param solution_mappings: Returns SolutionMappings with maplib-native formatting and with RDF typing. Useful for round-trips.
         :param return_json: Return JSON string.
         :param bindings: Bind the variables (keys) to the following ground terms. Use IRI, Literal classes or strings (e.g. "<urn:id:abc>") as values.
+        :param headers: Additional headers to include in the request
         :return: DataFrame (Select), list of DataFrames (Construct) containing results or SolutionMappings when solution_mappings is set.
         """
 

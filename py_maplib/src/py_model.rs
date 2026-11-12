@@ -400,6 +400,7 @@ impl PyModel {
         return_json=None,
         return_format=None,
         bindings=None,
+        headers=None,
         ))]
     #[instrument(skip_all)]
     fn query_external(
@@ -412,6 +413,7 @@ impl PyModel {
         return_json: Option<bool>,
         return_format: Option<String>,
         bindings: Option<HashMap<String, Py<PyAny>>>,
+        headers: Option<Vec<(String, String)>>,
     ) -> PyResult<Py<PyAny>> {
         let parsed_bindings = maybe_parse_bindings(bindings, py)?;
         let method = if let Some(method) = method {
@@ -433,7 +435,14 @@ impl PyModel {
         let (res, cats, prefixes) = py.detach(|| -> PyResult<(_, LockedCats, _)> {
             let mut inner = self.inner.lock().unwrap();
             let cats = inner.triplestore.global_cats.clone();
-            let res = query_external_mutex(&mut inner, query, endpoint, method, parsed_bindings)?;
+            let res = query_external_mutex(
+                &mut inner,
+                query,
+                endpoint,
+                method,
+                parsed_bindings,
+                headers,
+            )?;
             Ok((res, cats, inner.prefixes.clone()))
         })?;
         print_debug_if_exists(res.debug.as_ref());

@@ -445,9 +445,10 @@ impl Model {
         endpoint: &str,
         method: SparqlMethod,
         bindings: Option<&HashMap<String, GroundTerm>>,
+        headers: Option<&Vec<(String, String)>>,
     ) -> Result<QueryResult, MaplibError> {
         let endpoint = SparqlEndpoint::new(endpoint, method);
-        let r = endpoint.query_blocking(query, Some(&self.prefixes), bindings)?;
+        let r = endpoint.query_blocking(query, Some(&self.prefixes), bindings, headers)?;
         Ok(r)
     }
 
