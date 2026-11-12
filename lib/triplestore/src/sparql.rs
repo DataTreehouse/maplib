@@ -15,7 +15,11 @@ use super::{NewTriples, Triplestore};
 use crate::sparql::debug::DebugOutputs;
 use crate::sparql::errors::SparqlError;
 use crate::sparql::rewrite::rewrite;
+use crate::triples_read::{
+    subject_to_oxrdf_subject, term_to_oxrdf_term, triples_to_triples_to_add,
+};
 use oxrdf::NamedNode;
+use oxrdf::{Term, Triple};
 use query_processing::bindings::maybe_replace_bindings;
 use query_processing::pushdowns::Pushdowns;
 use representation::dataset::{NamedGraph, QueryGraph};
@@ -26,9 +30,11 @@ use representation::result::{
     template_to_solution_mappings, QueryResult, QueryResultKind,
 };
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
+use representation::{RDFNodeState, OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use spargebra::algebra::{GraphPattern, QueryDataset};
 use spargebra::term::{
-    GraphNamePattern, GroundTerm, GroundTermPattern, NamedNodePattern, QuadPattern, TermPattern,
+    GraphName, GraphNamePattern, GroundTerm, GroundTermPattern, NamedNodePattern, QuadPattern,
+    TermPattern,
 };
 use spargebra::{GraphUpdateOperation, Query, Update};
 use std::collections::{HashMap, HashSet};
@@ -291,11 +297,69 @@ impl Triplestore {
         let mut debug_output = if debug_no_results { Some(vec![]) } else { None };
         for u in &update.operations {
             match u {
-                GraphUpdateOperation::InsertData { .. } => {
-                    todo!()
+                GraphUpdateOperation::InsertData { data } => {
+                    // Blank nodes are scoped to this operation, as when parsing a document.
+                    let parser_call = self.parser_call.to_string();
+                    self.parser_call += 1;
+                    let mut triples_by_graph: HashMap<NamedGraph, Vec<Triple>> = HashMap::new();
+                    for q in data {
+                        let g = graph_name_to_named_graph(&q.graph_name);
+                        triples_by_graph.entry(g).or_default().push(Triple::new(
+                            subject_to_oxrdf_subject(q.subject.clone(), &parser_call),
+                            q.predicate.clone(),
+                            term_to_oxrdf_term(q.object.clone(), &parser_call),
+                        ));
+                    }
+                    for (g, triples) in triples_by_graph {
+                        self.add_triples(triples, &g, false)
+                            .map_err(SparqlError::TriplestoreError)?;
+                    }
+                    self.maybe_garbage_collect()?;
                 }
-                GraphUpdateOperation::DeleteData { .. } => {
-                    todo!()
+                GraphUpdateOperation::DeleteData { data } => {
+                    let mut triples_by_graph: HashMap<NamedGraph, Vec<Triple>> = HashMap::new();
+                    for q in data {
+                        triples_by_graph
+                            .entry(graph_name_to_named_graph(&q.graph_name))
+                            .or_default()
+                            .push(Triple::new(
+                                q.subject.clone(),
+                                q.predicate.clone(),
+                                Term::from(q.object.clone()),
+                            ));
+                    }
+                    for (g, triples) in triples_by_graph {
+                        if !self.does_graph_exist(&g) {
+                            continue;
+                        }
+                        let sms: Vec<_> = triples_to_triples_to_add(triples, &g)
+                            .into_iter()
+                            .map(|tta| {
+                                let rdf_node_types = HashMap::from([
+                                    (
+                                        SUBJECT_COL_NAME.to_string(),
+                                        RDFNodeState::from_bases(
+                                            tta.subject_type,
+                                            tta.subject_cat_state,
+                                        ),
+                                    ),
+                                    (
+                                        OBJECT_COL_NAME.to_string(),
+                                        RDFNodeState::from_bases(
+                                            tta.object_type,
+                                            tta.object_cat_state,
+                                        ),
+                                    ),
+                                ]);
+                                (
+                                    EagerSolutionMappings::new(tta.df, rdf_node_types),
+                                    tta.predicate,
+                                )
+                            })
+                            .collect();
+                        self.delete_construct_result(sms, &g)?;
+                    }
+                    self.maybe_garbage_collect()?;
                 }
                 GraphUpdateOperation::DeleteInsert {
                     delete,
@@ -304,7 +368,9 @@ impl Triplestore {
                     pattern,
                 } => {
                     if using.is_some() {
-                        todo!()
+                        return Err(SparqlError::NotSupportedYet(
+                            "USING / USING NAMED in updates".to_string(),
+                        ));
                     }
                     let mut variables = HashSet::new();
                     for d in delete {
@@ -412,6 +478,13 @@ impl Triplestore {
         };
         let res = UpdateResult { debug };
         Ok(res)
+    }
+}
+
+fn graph_name_to_named_graph(graph_name: &GraphName) -> NamedGraph {
+    match graph_name {
+        GraphName::NamedNode(nn) => NamedGraph::from_maybe_named_node(Some(nn)),
+        GraphName::DefaultGraph => NamedGraph::DefaultGraph,
     }
 }
 

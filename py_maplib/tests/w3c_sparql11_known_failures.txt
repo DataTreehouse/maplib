@@ -20,11 +20,6 @@ aggregates/agg-sample-distinct  # MaplibException: Query type not supported
 aggregates/agg08  # query is accepted but should be rejected
 aggregates/agg11  # query is accepted but should be rejected
 basic-update/insert-05a  # Graph <http://example.org/g3> differs.
-basic-update/insert-data-same-bnode  # PanicException: not yet implemented
-basic-update/insert-data-spo-named1  # PanicException: not yet implemented
-basic-update/insert-data-spo-named2  # PanicException: not yet implemented
-basic-update/insert-data-spo-named3  # PanicException: not yet implemented
-basic-update/insert-data-spo1  # PanicException: not yet implemented
 basic-update/insert-using-01  # PanicException: not yet implemented
 basic-update/insert-where-03  # PanicException: not yet implemented
 basic-update/insert-where-04  # PanicException: not yet implemented
@@ -59,12 +54,6 @@ copy/copy03  # Graph <http://example.org/g2> differs.
 copy/copy06  # Default graph differs.
 csv-tsv-res/csv03  # CSV differs.
 csv-tsv-res/csv04  # CSV differs.
-delete-data/dawg-delete-data-01  # PanicException: not yet implemented
-delete-data/dawg-delete-data-02  # PanicException: not yet implemented
-delete-data/dawg-delete-data-03  # PanicException: not yet implemented
-delete-data/dawg-delete-data-04  # PanicException: not yet implemented
-delete-data/dawg-delete-data-05  # PanicException: not yet implemented
-delete-data/dawg-delete-data-06  # PanicException: not yet implemented
 delete-insert/dawg-delete-insert-04  # PanicException: not yet implemented
 delete/dawg-delete-07  # MaplibException: Variable ?o not found
 delete/dawg-delete-using-01  # PanicException: not yet implemented
@@ -160,18 +149,7 @@ syntax-query/test_pn_06  # PanicException: called `Option::unwrap()` on a `None`
 syntax-query/test_pn_07  # PanicException: called `Option::unwrap()` on a `None` value
 syntax-query/test_pn_08  # PanicException: called `Option::unwrap()` on a `None` value
 syntax-query/test_pn_09  # PanicException: called `Option::unwrap()` on a `None` value
-syntax-update-1/test_23  # PanicException: not yet implemented
-syntax-update-1/test_24  # PanicException: not yet implemented
-syntax-update-1/test_25  # PanicException: not yet implemented
-syntax-update-1/test_26  # PanicException: not yet implemented
-syntax-update-1/test_27  # PanicException: not yet implemented
-syntax-update-1/test_28  # PanicException: not yet implemented
-syntax-update-1/test_29  # PanicException: not yet implemented
-syntax-update-1/test_30  # PanicException: not yet implemented
-syntax-update-1/test_31  # PanicException: not yet implemented
 syntax-update-1/test_32  # PanicException: not yet implemented
 syntax-update-1/test_33  # PanicException: not yet implemented
 syntax-update-1/test_34  # PanicException: not yet implemented
 syntax-update-1/test_36  # MaplibException: Graph does not exist: <http://www.w3.org/2009/sparql/docs/tests/data-sparql11/synta
-syntax-update-1/test_53  # PanicException: not yet implemented
-syntax-update-2/syntax-update-other-01  # PanicException: not yet implemented
