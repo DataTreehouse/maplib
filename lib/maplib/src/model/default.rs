@@ -10,7 +10,7 @@ use templates::ast::{
 use tracing::warn;
 
 use crate::errors::MaplibError;
-use crate::model::expansion::validation::infer_type_from_column;
+use crate::model::expansion::validation::{infer_type_from_column, normalize_lang_string_structs};
 use oxrdf::{NamedNode, Variable};
 use polars::prelude::{col, DataFrame, DataType, IntoLazy};
 use templates::MappingColumnType;
@@ -25,6 +25,7 @@ impl Model {
         mapping_column_types: Option<HashMap<String, MappingColumnType>>,
         options: MapOptions,
     ) -> Result<Template, MaplibError> {
+        df = normalize_lang_string_structs(df);
         let mut params = vec![];
         let columns: Vec<String> = df
             .get_column_names()

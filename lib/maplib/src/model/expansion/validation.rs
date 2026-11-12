@@ -4,12 +4,16 @@ use oxrdf::vocab::{rdfs, xsd};
 use oxrdf::NamedNode;
 use polars::datatypes::DataType;
 use polars::frame::DataFrame;
-use polars::prelude::{col, element, ChunkApply, Column, Expr, IntoLazy, Series};
+use polars::prelude::{
+    as_struct, col, element, lit, when, ChunkApply, Column, Expr, IntoLazy, LiteralValue, Series,
+};
 use rayon::current_num_threads;
 use rayon::iter::IntoParallelIterator;
 use rayon::iter::ParallelIterator;
 use representation::polars_to_rdf::polars_type_to_literal_type;
-use representation::{BaseRDFNodeType, RDFNodeState};
+use representation::{
+    BaseRDFNodeType, RDFNodeState, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD,
+};
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use templates::ast::{ptype_is_blank, ptype_is_iri, PType, Parameter, Template};
@@ -23,6 +27,7 @@ pub fn validate(
     template: &Template,
     validate_iris: bool,
 ) -> Result<(Option<DataFrame>, HashMap<String, MappingColumnType>), MappingError> {
+    let df = df.map(normalize_lang_string_structs);
     validate_column_existence(&df, template)?;
     let mut map = HashMap::new();
     if let Some(mut df) = df {
@@ -104,6 +109,54 @@ pub fn validate(
         Ok((Some(df), map))
     } else {
         Ok((None, map))
+    }
+}
+
+pub const USER_LANG_STRING_VALUE_FIELD: &str = "value";
+pub const USER_LANG_STRING_LANG_FIELDS: [&str; 2] = ["language", "lang"];
+
+/// Rewrites struct columns with exactly the fields `value` and `language` (or `lang`)
+/// into the internal language-tagged string representation, so that users can map
+/// rdf:langString literals from a DataFrame without knowing the internal field names.
+pub fn normalize_lang_string_structs(df: DataFrame) -> DataFrame {
+    let mut exprs = vec![];
+    for c in df.columns() {
+        if let DataType::Struct(fields) = c.dtype() {
+            if fields.len() != 2 {
+                continue;
+            }
+            let value_field = fields
+                .iter()
+                .find(|f| f.name.as_str() == USER_LANG_STRING_VALUE_FIELD);
+            let lang_field = fields
+                .iter()
+                .find(|f| USER_LANG_STRING_LANG_FIELDS.contains(&f.name.as_str()));
+            if let (Some(value_field), Some(lang_field)) = (value_field, lang_field) {
+                let name = c.name().as_str();
+                exprs.push(
+                    when(col(name).is_null())
+                        .then(lit(LiteralValue::untyped_null()))
+                        .otherwise(as_struct(vec![
+                            col(name)
+                                .struct_()
+                                .field_by_name(value_field.name.as_str())
+                                .cast(DataType::String)
+                                .alias(LANG_STRING_VALUE_FIELD),
+                            col(name)
+                                .struct_()
+                                .field_by_name(lang_field.name.as_str())
+                                .cast(DataType::String)
+                                .alias(LANG_STRING_LANG_FIELD),
+                        ]))
+                        .alias(name),
+                );
+            }
+        }
+    }
+    if exprs.is_empty() {
+        df
+    } else {
+        df.lazy().with_columns(exprs).collect().unwrap()
     }
 }
 
