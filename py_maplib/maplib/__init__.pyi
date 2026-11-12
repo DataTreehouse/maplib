@@ -1,10 +1,10 @@
 from datetime import datetime, date
 from pathlib import Path
-from typing import Any, Union, List, Dict, Optional, Callable, Literal as LiteralType, Tuple
+from typing import Any, Union, List, Dict, Optional, Callable, Iterable, Literal as LiteralType, Tuple
 
 import polars as pl
 from maplib.maplib import rdf
-from polars import DataFrame
+from polars import DataFrame, LazyFrame
 
 a = rdf.type
 
@@ -612,7 +612,7 @@ class Model:
     def map(
             self,
             template: Union[str, "Template", IRI],
-            data: Union[DataFrame, "SolutionMappings"] = None,
+            data: Union[DataFrame, LazyFrame, "SolutionMappings", Iterable[Union[DataFrame, LazyFrame, "SolutionMappings"]]] = None,
             graph: str = None,
             validate_iris: bool = True,
     ) -> None:
@@ -625,7 +625,8 @@ class Model:
         If the template has no arguments, the df argument is not necessary.
 
         :param template: Template, IRI, IRI string or prefixed template name.
-        :param data: DataFrame where the columns have the same names as the template arguments (when piping the output of queries back in, use SolutionMappings)
+        :param data: DataFrame where the columns have the same names as the template arguments (when piping the output of queries back in, use SolutionMappings).
+            May also be a LazyFrame, which is consumed in a single pass using collect_batches(), or an iterable of DataFrames, LazyFrames or SolutionMappings, which are mapped batch by batch.
         :param graph: The IRI of the graph to add triples to.
         :param validate_iris: Validate any IRI-columns.
         """
@@ -678,7 +679,7 @@ class Model:
 
     def map_triples(
             self,
-            data: Union[DataFrame, "SolutionMappings"] = None,
+            data: Union[DataFrame, LazyFrame, "SolutionMappings", Iterable[Union[DataFrame, LazyFrame, "SolutionMappings"]]] = None,
             predicate: str = None,
             graph: str = None,
             validate_iris: bool = True,
@@ -693,6 +694,7 @@ class Model:
         If the template has no arguments, the df argument is not necessary.
 
         :param data: DataFrame where the columns are named subject and object. May also contain a predicate-column. When piping the output of queries back in, use SolutionMappings.
+            May also be a LazyFrame, which is consumed in a single pass using collect_batches(), or an iterable of DataFrames, LazyFrames or SolutionMappings, which are mapped batch by batch.
         :param verb: The uri of the verb.
         :param graph: The IRI of the graph to add triples to.
         :param validate_iris: Validate any IRI-columns.
@@ -700,9 +702,8 @@ class Model:
 
     def map_default(
             self,
-            data: Union[DataFrame, "SolutionMappings"],
+            data: Union[DataFrame, LazyFrame, "SolutionMappings", Iterable[Union[DataFrame, LazyFrame, "SolutionMappings"]]],
             primary_key_column: str,
-            dry_run: bool = False,
             graph: str = None,
             validate_iris: bool = True,
     ) -> str:
@@ -713,9 +714,10 @@ class Model:
         >>> template_string = m.map_default(df, "myKeyCol")
         ... print(template_string)
 
-        :param data: DataFrame where the columns have the same names as the template arguments (when piping the output of queries back in, use SolutionMappings)
+        :param data: DataFrame where the columns have the same names as the template arguments (when piping the output of queries back in, use SolutionMappings).
+            May also be a LazyFrame, which is consumed in a single pass using collect_batches(), or an iterable of DataFrames, LazyFrames or SolutionMappings with the same schema.
+            In that case, the template is created from the first batch and all its parameters are optional.
         :param primary_key_column: This column will be the subject of all triples in the generated template.
-        :param dry_run: Do not map the template, only return the string.
         :param graph: The IRI of the graph to add triples to.
         :param validate_iris: Validate any IRI-columns.
         :return: The generated template

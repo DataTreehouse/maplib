@@ -524,6 +524,92 @@ pub fn data_to_mappings_types(
     }
 }
 
+/// Mapping input that is either a single (eager) DataFrame, or a stream of batches.
+pub(crate) enum MappingData<'py> {
+    Eager(DataFrame, Option<HashMap<String, RDFNodeState>>),
+    Batched(Bound<'py, PyAny>),
+}
+
+/// Classifies mapping input. DataFrames and SolutionMappings are eager.
+/// LazyFrames and iterables (of DataFrames, LazyFrames or SolutionMappings) are batched.
+pub(crate) fn classify_mapping_data<'py>(
+    data: &Bound<'py, PyAny>,
+    py: Python<'py>,
+) -> PyResult<MappingData<'py>> {
+    if is_batched_mapping_data(data, py)? {
+        Ok(MappingData::Batched(data.clone()))
+    } else {
+        let (df, types) = data_to_mappings_types(data, py)?;
+        Ok(MappingData::Eager(df, types))
+    }
+}
+
+fn is_batched_mapping_data(data: &Bound<'_, PyAny>, py: Python<'_>) -> PyResult<bool> {
+    if data.extract::<PySolutionMappings>().is_ok() {
+        return Ok(false);
+    }
+    let polars = py.import("polars")?;
+    if data.is_instance(&polars.getattr("DataFrame")?)? {
+        return Ok(false);
+    }
+    if data.is_instance(&polars.getattr("LazyFrame")?)? {
+        return Ok(true);
+    }
+    if data.is_instance_of::<pyo3::types::PyString>()
+        || data.is_instance_of::<pyo3::types::PyBytes>()
+    {
+        return Ok(false);
+    }
+    Ok(data.hasattr("__iter__")?)
+}
+
+/// Calls f for each batch in batched mapping input, holding the GIL only while fetching batches.
+/// LazyFrames are consumed in a single pass using collect_batches() when available.
+pub(crate) fn for_each_mapping_batch(
+    data: &Bound<'_, PyAny>,
+    py: Python<'_>,
+    f: &mut dyn FnMut(Python<'_>, DataFrame, Option<HashMap<String, RDFNodeState>>) -> PyResult<()>,
+) -> PyResult<()> {
+    let polars = py.import("polars")?;
+    let lazy_frame_type = polars.getattr("LazyFrame")?;
+    let iter = if data.is_instance(&lazy_frame_type)? {
+        if data.hasattr("collect_batches")? {
+            data.call_method0("collect_batches")?.try_iter()?
+        } else {
+            let df = data.call_method0("collect")?;
+            let (df, types) = data_to_mappings_types(&df, py)?;
+            return f(py, df, types);
+        }
+    } else {
+        data.try_iter()?
+    };
+    for item in iter {
+        let item = item?;
+        if item.is_instance(&lazy_frame_type)? {
+            for_each_mapping_batch(&item, py, f)?;
+        } else {
+            if !is_eager_mapping_item(&item, py)? {
+                return Err(PyMaplibError::FunctionArgumentError(format!(
+                    "Iterable mapping input should only contain DataFrames, LazyFrames or SolutionMappings, but found {}",
+                    item.get_type().name()?
+                ))
+                .into());
+            }
+            let (df, types) = data_to_mappings_types(&item, py)?;
+            f(py, df, types)?;
+        }
+    }
+    Ok(())
+}
+
+fn is_eager_mapping_item(item: &Bound<'_, PyAny>, py: Python<'_>) -> PyResult<bool> {
+    if item.extract::<PySolutionMappings>().is_ok() {
+        return Ok(true);
+    }
+    let polars = py.import("polars")?;
+    item.is_instance(&polars.getattr("DataFrame")?)
+}
+
 fn resolve_rdf_node_type(obj: &Bound<'_, PyAny>) -> PyResult<BaseRDFNodeType> {
     if let Ok(rdf_type) = obj.extract::<PyRDFType>() {
         let state = rdf_type

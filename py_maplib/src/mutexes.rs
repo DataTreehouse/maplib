@@ -33,7 +33,8 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard};
-use tracing::{info, warn};
+use templates::ast::Template;
+use tracing::warn;
 use triplestore::sparql::{InsertResult, UpdateResult};
 use triplestore::triples_read::ExtendedRdfFormat;
 use triplestore::{IndexingOptions, Triplestore};
@@ -125,6 +126,15 @@ pub(crate) fn map_mutex(
     types: Option<HashMap<String, RDFNodeState>>,
     validate_iris: Option<bool>,
 ) -> PyResult<Option<Py<PyAny>>> {
+    let template = resolve_template_mutex(inner, template)?;
+    map_resolved_mutex(inner, &template, df, graph, types, validate_iris)
+}
+
+/// Resolves the template to its IRI, adding it to the model if needed.
+pub(crate) fn resolve_template_mutex(
+    inner: &mut MutexGuard<InnerModel>,
+    template: TemplateType,
+) -> PyResult<String> {
     let template = match template {
         TemplateType::TemplateIRI(i) => i.into_inner().to_string(),
         TemplateType::TemplateString(s) => {
@@ -155,7 +165,17 @@ pub(crate) fn map_mutex(
             t_string
         }
     };
+    Ok(template)
+}
 
+pub(crate) fn map_resolved_mutex(
+    inner: &mut MutexGuard<InnerModel>,
+    template: &str,
+    df: Option<DataFrame>,
+    graph: Option<String>,
+    types: Option<HashMap<String, RDFNodeState>>,
+    validate_iris: Option<bool>,
+) -> PyResult<Option<Py<PyAny>>> {
     let graph = parse_optional_named_node(graph)?;
     let named_graph = NamedGraph::from_maybe_named_node(graph.as_ref());
     let options = MapOptions::from_args(named_graph, validate_iris);
@@ -164,14 +184,14 @@ pub(crate) fn map_mutex(
     if let Some(df) = df {
         if df.height().gt(&0) {
             inner
-                .expand(&template, Some(df), types, options)
+                .expand(template, Some(df), types, options)
                 .map_err(PyMaplibError::from)?;
         } else {
             warn!("Template expansion of {template} with empty DataFrame");
         }
     } else {
         inner
-            .expand(&template, None, None, options)
+            .expand(template, None, None, options)
             .map_err(PyMaplibError::from)?;
     }
 
@@ -304,21 +324,49 @@ pub(crate) fn map_default_mutex(
     inner: &mut MutexGuard<InnerModel>,
     df: DataFrame,
     primary_key_column: String,
-    dry_run: Option<bool>,
     graph: NamedGraph,
     types: Option<HashMap<String, RDFNodeState>>,
     validate_iris: Option<bool>,
 ) -> PyResult<String> {
     let options = MapOptions::from_args(graph, validate_iris);
-    let dry_run = dry_run.unwrap_or(false);
     let types = map_types(types);
     let tmpl = inner
-        .expand_default(df, primary_key_column, vec![], dry_run, types, options)
+        .expand_default(df, primary_key_column, vec![], types, options)
         .map_err(PyMaplibError::from)?;
-    if dry_run {
-        info!("Produced template:\n\n {tmpl}");
-    }
     Ok(format!("{tmpl}"))
+}
+
+pub(crate) fn map_default_first_batch_mutex(
+    inner: &mut MutexGuard<InnerModel>,
+    df: DataFrame,
+    primary_key_column: &str,
+    graph: NamedGraph,
+    types: Option<HashMap<String, RDFNodeState>>,
+    validate_iris: Option<bool>,
+) -> PyResult<Template> {
+    let options = MapOptions::from_args(graph, validate_iris);
+    let types = map_types(types);
+    let tmpl = inner
+        .expand_default_first_batch(df, primary_key_column, &[], types, options)
+        .map_err(PyMaplibError::from)?;
+    Ok(tmpl)
+}
+
+pub(crate) fn map_default_batch_mutex(
+    inner: &mut MutexGuard<InnerModel>,
+    template: &Template,
+    df: DataFrame,
+    primary_key_column: &str,
+    graph: NamedGraph,
+    types: Option<HashMap<String, RDFNodeState>>,
+    validate_iris: Option<bool>,
+) -> PyResult<()> {
+    let options = MapOptions::from_args(graph, validate_iris);
+    let types = map_types(types);
+    inner
+        .expand_default_batch(template, df, primary_key_column, &[], types, options)
+        .map_err(PyMaplibError::from)?;
+    Ok(())
 }
 
 pub fn map_df_mutex(

@@ -3,17 +3,18 @@ use crate::mutexes::{
     add_graph_mutex, add_prefixes_mutex, add_template_mutex, add_udf_mutex,
     add_virtualization_mutex, compact_mutex, create_index_mutex, detach_graph_mutex,
     get_predicate_iris_mutex, get_predicate_mutex, infer_mutex, infer_rdfs_mutex, insert_mutex,
-    list_udfs_mutex, map_default_mutex, map_df_mutex, map_json_mutex, map_mutex, map_triples_mutex,
-    map_xml_mutex, query_external_mutex, query_mutex, read_mutex, read_template_mutex, reads_mutex,
-    serialize_triples_mutex, size_mutex, truncate_graph_mutex, update_mutex, validate_mutex,
-    write_cim_xml_mutex, write_triples_mutex, writes_mutex,
+    list_udfs_mutex, map_default_batch_mutex, map_default_first_batch_mutex, map_default_mutex,
+    map_df_mutex, map_json_mutex, map_mutex, map_resolved_mutex, map_triples_mutex, map_xml_mutex,
+    query_external_mutex, query_mutex, read_mutex, read_template_mutex, reads_mutex,
+    resolve_template_mutex, serialize_triples_mutex, size_mutex, truncate_graph_mutex,
+    update_mutex, validate_mutex, write_cim_xml_mutex, write_triples_mutex, writes_mutex,
 };
 use crate::shacl::PyValidationReport;
 use crate::{
-    create_prefix_map, data_to_mappings_types, map_parameters, maybe_parse_bindings,
-    new_triples_to_dict, parse_named_node, parse_optional_named_node, print_debug_if_exists,
-    query_to_result, resolve_rdf_node_type, ParametersType, PyIndexingOptions, StringOrPathBuf,
-    DEFAULT_INCLUDE_TRANSIENT,
+    classify_mapping_data, create_prefix_map, data_to_mappings_types, for_each_mapping_batch,
+    map_parameters, maybe_parse_bindings, new_triples_to_dict, parse_named_node,
+    parse_optional_named_node, print_debug_if_exists, query_to_result, resolve_rdf_node_type,
+    MappingData, ParametersType, PyIndexingOptions, StringOrPathBuf, DEFAULT_INCLUDE_TRANSIENT,
 };
 
 use datalog::python::PyInferenceResult;
@@ -125,20 +126,49 @@ impl PyModel {
         graph: Option<String>,
         validate_iris: Option<bool>,
     ) -> PyResult<Option<Py<PyAny>>> {
-        let mtypes = data.map(|x| data_to_mappings_types(x, py)).transpose()?;
-        let (mappings, types) = mtypes.unzip();
         let template = template.try_into()?;
-        py.detach(move || {
-            let mut inner = self.inner.lock().unwrap();
-            map_mutex(
-                &mut inner,
-                template,
-                mappings,
-                graph,
-                types.flatten(),
-                validate_iris,
-            )
-        })
+        let data = data.map(|x| classify_mapping_data(x, py)).transpose()?;
+        match data {
+            None => py.detach(move || {
+                let mut inner = self.inner.lock().unwrap();
+                map_mutex(&mut inner, template, None, graph, None, validate_iris)
+            }),
+            Some(MappingData::Eager(mappings, types)) => py.detach(move || {
+                let mut inner = self.inner.lock().unwrap();
+                map_mutex(
+                    &mut inner,
+                    template,
+                    Some(mappings),
+                    graph,
+                    types,
+                    validate_iris,
+                )
+            }),
+            Some(MappingData::Batched(data)) => {
+                let template_iri = py.detach(|| {
+                    let mut inner = self.inner.lock().unwrap();
+                    resolve_template_mutex(&mut inner, template)
+                })?;
+                for_each_mapping_batch(&data, py, &mut |py, mappings, types| {
+                    if mappings.height() == 0 {
+                        return Ok(());
+                    }
+                    py.detach(|| {
+                        let mut inner = self.inner.lock().unwrap();
+                        map_resolved_mutex(
+                            &mut inner,
+                            &template_iri,
+                            Some(mappings),
+                            graph.clone(),
+                            types,
+                            validate_iris,
+                        )
+                    })?;
+                    Ok(())
+                })?;
+                Ok(None)
+            }
+        }
     }
 
     #[pyo3(signature = (graph=None))]
@@ -206,39 +236,97 @@ impl PyModel {
         } else {
             None
         };
-        let (mappings, types) = data_to_mappings_types(data, py)?;
-        py.detach(move || {
-            let mut inner = self.inner.lock().unwrap();
-            map_triples_mutex(&mut inner, mappings, predicate, graph, types, validate_iris)
-        })
+        match classify_mapping_data(data, py)? {
+            MappingData::Eager(mappings, types) => py.detach(move || {
+                let mut inner = self.inner.lock().unwrap();
+                map_triples_mutex(&mut inner, mappings, predicate, graph, types, validate_iris)
+            }),
+            MappingData::Batched(data) => {
+                for_each_mapping_batch(&data, py, &mut |py, mappings, types| {
+                    if mappings.height() == 0 {
+                        return Ok(());
+                    }
+                    py.detach(|| {
+                        let mut inner = self.inner.lock().unwrap();
+                        map_triples_mutex(
+                            &mut inner,
+                            mappings,
+                            predicate.clone(),
+                            graph.clone(),
+                            types,
+                            validate_iris,
+                        )
+                    })?;
+                    Ok(())
+                })?;
+                Ok(None)
+            }
+        }
     }
 
-    #[pyo3(signature = (data, primary_key_column, dry_run=None, graph=None, validate_iris=None))]
+    #[pyo3(signature = (data, primary_key_column, graph=None, validate_iris=None))]
     #[instrument(skip_all)]
     fn map_default(
         &self,
         py: Python<'_>,
         data: &Bound<'_, PyAny>,
         primary_key_column: String,
-        dry_run: Option<bool>,
         graph: Option<String>,
         validate_iris: Option<bool>,
     ) -> PyResult<String> {
-        let (mappings, types) = data_to_mappings_types(data, py)?;
-        py.detach(move || -> PyResult<String> {
-            let mut inner = self.inner.lock().unwrap();
-            let graph = parse_optional_named_node(graph)?;
-            let named_graph = NamedGraph::from_maybe_named_node(graph.as_ref());
-            map_default_mutex(
-                &mut inner,
-                mappings,
-                primary_key_column,
-                dry_run,
-                named_graph,
-                types,
-                validate_iris,
-            )
-        })
+        let graph = parse_optional_named_node(graph)?;
+        let named_graph = NamedGraph::from_maybe_named_node(graph.as_ref());
+        match classify_mapping_data(data, py)? {
+            MappingData::Eager(mappings, types) => py.detach(move || -> PyResult<String> {
+                let mut inner = self.inner.lock().unwrap();
+                map_default_mutex(
+                    &mut inner,
+                    mappings,
+                    primary_key_column,
+                    named_graph,
+                    types,
+                    validate_iris,
+                )
+            }),
+            MappingData::Batched(data) => {
+                let mut template = None;
+                for_each_mapping_batch(&data, py, &mut |py, mappings, types| {
+                    py.detach(|| -> PyResult<()> {
+                        let mut inner = self.inner.lock().unwrap();
+                        if let Some(template) = &template {
+                            map_default_batch_mutex(
+                                &mut inner,
+                                template,
+                                mappings,
+                                &primary_key_column,
+                                named_graph.clone(),
+                                types,
+                                validate_iris,
+                            )
+                        } else {
+                            template = Some(map_default_first_batch_mutex(
+                                &mut inner,
+                                mappings,
+                                &primary_key_column,
+                                named_graph.clone(),
+                                types,
+                                validate_iris,
+                            )?);
+                            Ok(())
+                        }
+                    })
+                })?;
+                if let Some(template) = template {
+                    Ok(format!("{template}"))
+                } else {
+                    Err(PyMaplibError::FunctionArgumentError(
+                        "map_default received no batches, so no template could be created"
+                            .to_string(),
+                    )
+                    .into())
+                }
+            }
+        }
     }
 
     #[pyo3(signature = (df, graph=None, uuid_namespace=None))]
