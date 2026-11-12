@@ -525,8 +525,8 @@ class Model:
     ... m = Model()
     ... m.add_template(doc)
 
-    :param documents: a stOTTR document or a list of these
     :param indexing_options: options for indexing
+    :param storage_folder: folder for on-disk storage of triples, in memory if not given
     """
 
     def __init__(
@@ -691,11 +691,9 @@ class Model:
 
         >>> m.map_triples(df)
 
-        If the template has no arguments, the df argument is not necessary.
-
         :param data: DataFrame where the columns are named subject and object. May also contain a predicate-column. When piping the output of queries back in, use SolutionMappings.
             May also be a LazyFrame, which is consumed in a single pass using collect_batches(), or an iterable of DataFrames, LazyFrames or SolutionMappings, which are mapped batch by batch.
-        :param verb: The uri of the verb.
+        :param predicate: The IRI of the predicate, used when data has no predicate-column.
         :param graph: The IRI of the graph to add triples to.
         :param validate_iris: Validate any IRI-columns.
         """
@@ -871,8 +869,7 @@ class Model:
             debug: bool = False,
     ):
         """
-        Insert the results of a Construct query in the graph.
-        Useful for being able to use the same query for inspecting what will be inserted and actually inserting.
+        Execute a SPARQL Update (e.g. INSERT/DELETE ... WHERE) against the graph.
         Usage:
 
         >>> m = Model(doc)
@@ -883,6 +880,7 @@ class Model:
 
         :param update: The SPARQL Update string
         :param parameters: PVALUES Parameters, for each parameter, the SolutionMappings containing corresponding mappings and types.
+        :param graph: The IRI of the graph to update.
         :param streaming: Use Polars streaming
         :param include_transient: Include transient triples when querying (but see "transient" above).
         :param max_rows: Maximum estimated rows in result, helps avoid out-of-memory errors.
@@ -962,11 +960,10 @@ class Model:
         :param inferences_graph: If this IRI is supplied, any inference results from sh:rule can be found in this named graph.
         :param include_details: Include details of SHACL evaluation alongside the report. Currently uses a lot of memory.
         :param include_conforms: Include those results that conformed. Also applies to details.
-        :param solution_mappings: Returns SolutionMappings instead of DataFrame (includes types for columns).
         :param streaming: Use Polars streaming
         :param max_shape_constraint_results: Maximum number of results per shape and constraint. Reduces the size of the result set.
         :param only_shapes: Validate only these shapes, None means all shapes are validated (must be IRI, cannot be used with deactivate_shapes).
-        :param deactivate_shapes: Disable validation of these shapes (must be IRI, cannot be used with deactivate_shapes).
+        :param deactivate_shapes: Disable validation of these shapes (must be IRI, cannot be used with only_shapes).
         :param dry_run: Only find targets of shapes, but do not validate them.
         :param max_rows: Maximum estimated rows in underlying SPARQL results, helps avoid out-of-memory errors.
         :param serial: Turns off most parallell validation of shapes.
@@ -1019,7 +1016,7 @@ class Model:
 
         Usage:
 
-        >>> m.read("templates.ttl")
+        >>> m.read_template("templates.ttl")
 
         :param file_path: The path of the file containing templates in stOTTR format
         """
@@ -1109,7 +1106,7 @@ class Model:
             prefixes: Dict[str, str] = None,
     ) -> None:
         """
-        Write the non-transient triples to the file path specified in the NTriples format.
+        Write the non-transient triples to the file path specified, in the given format.
 
         Usage:
 
@@ -1138,7 +1135,7 @@ class Model:
         :param format: One of "ntriples", "turtle", "trig", "nquads", "rdf/xml".
         :param graph: The IRI of the graph to write. For "trig" and "nquads", all graphs are written when this is None.
         :param prefixes: The prefixes used for turtle serialization.
-        :return Triples in model in the NTriples format (potentially a large string)
+        :return: Triples in model in the given format (potentially a large string)
         """
 
     def truncate_graph(self, graph: str = None) -> None:
@@ -1226,7 +1223,7 @@ class Model:
         Get the number of triples in a graph.
 
         :param graph: The named graph we are returning the size for
-        :return: The inferred N-Tuples.
+        :return: The number of triples in the graph.
         """
 
     def add_virtualization(self,
