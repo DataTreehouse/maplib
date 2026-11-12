@@ -29,12 +29,9 @@ pub fn xsd_cast_literal(
                     trg_type.clone(),
                     global_cats.clone(),
                 )?,
+                // Casting a blank node is an error, which leaves the result unbound
                 BaseRDFNodeType::BlankNode => {
-                    return Err(QueryProcessingError::BadCastDatatype(
-                        c.to_string(),
-                        trg.clone(),
-                        t.clone(),
-                    ))
+                    lit(LiteralValue::untyped_null()).cast(trg_type.clone())
                 }
                 BaseRDFNodeType::Literal(src_nn) => cast_literal(
                     col(c).struct_().field_by_name(&t.field_col_name()),
@@ -56,11 +53,7 @@ pub fn xsd_cast_literal(
             BaseRDFNodeType::IRI => {
                 cast_iri_to_xsd_literal(col(c), t, s, trg_nn, trg_type.clone(), global_cats.clone())
             }
-            BaseRDFNodeType::BlankNode => Err(QueryProcessingError::BadCastDatatype(
-                c.to_string(),
-                trg.clone(),
-                t.clone(),
-            )),
+            BaseRDFNodeType::BlankNode => Ok(lit(LiteralValue::untyped_null()).cast(trg_type)),
             BaseRDFNodeType::Literal(src_nn) => Ok(cast_literal(
                 col(c),
                 t,

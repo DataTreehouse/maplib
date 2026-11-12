@@ -7,12 +7,55 @@ use representation::{BaseRDFNodeType, RDFNodeState};
 use spargebra::algebra::{Expression, Function};
 use std::collections::HashMap;
 
-pub fn round_(
+#[derive(Clone, Copy)]
+pub enum NumericFunction {
+    Abs,
+    Ceil,
+    Floor,
+    Round,
+}
+
+impl NumericFunction {
+    /// Applies the function to a column of numeric type t. As required by SPARQL 1.1
+    /// 17.4.4, the result has the same type as the argument.
+    fn apply(self, e: Expr, t: &BaseRDFNodeType) -> Expr {
+        let integer = !(t.is_lit_type(xsd::DECIMAL)
+            || t.is_lit_type(xsd::DOUBLE)
+            || t.is_lit_type(xsd::FLOAT));
+        match self {
+            NumericFunction::Abs => e.abs(),
+            NumericFunction::Round => sparql_round(e, t),
+            // Integer types have no fractional part
+            NumericFunction::Ceil | NumericFunction::Floor if integer => e,
+            NumericFunction::Ceil if t.is_lit_type(xsd::DECIMAL) => {
+                // Computed from rounding so that it is exact for decimals
+                let dt = t.default_input_polars_data_type();
+                let r = e.clone().round(0, RoundMode::HalfAwayFromZero);
+                when(r.clone().lt(e))
+                    .then(r.clone() + lit(1).cast(dt))
+                    .otherwise(r)
+            }
+            NumericFunction::Floor if t.is_lit_type(xsd::DECIMAL) => {
+                let dt = t.default_input_polars_data_type();
+                let r = e.clone().round(0, RoundMode::HalfAwayFromZero);
+                when(r.clone().gt(e))
+                    .then(r.clone() - lit(1).cast(dt))
+                    .otherwise(r)
+            }
+            NumericFunction::Ceil => e.ceil(),
+            NumericFunction::Floor => e.floor(),
+        }
+    }
+}
+
+/// ABS, CEIL, FLOOR and ROUND. Non-numeric arguments give an error (unbound).
+pub fn numeric_function(
     mut solution_mappings: SolutionMappings,
     func: &Function,
     args: &[Expression],
     args_contexts: &HashMap<usize, Context>,
     outer_context: &Context,
+    f: NumericFunction,
 ) -> Result<SolutionMappings, QueryProcessingError> {
     if args.len() != 1 {
         return Err(QueryProcessingError::BadNumberOfFunctionArguments(
@@ -32,7 +75,7 @@ pub fn round_(
         for t in existing_type.map.keys() {
             if t.is_numeric() {
                 rounded_exprs.push(
-                    sparql_round(
+                    f.apply(
                         col(first_context.as_str())
                             .struct_()
                             .field_by_name(&t.field_col_name()),
@@ -44,7 +87,7 @@ pub fn round_(
             }
         }
     } else if existing_type.is_numeric() {
-        rounded_exprs.push(sparql_round(
+        rounded_exprs.push(f.apply(
             col(first_context.as_str()),
             existing_type.get_base_type().unwrap(),
         ));

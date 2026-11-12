@@ -214,7 +214,7 @@ impl Triplestore {
         let r_unpacked: Vec<_> = r
             .into_iter()
             .flat_map(|x| match x.kind {
-                QueryResultKind::Select(_) => {
+                QueryResultKind::Select(_) | QueryResultKind::Ask(_) => {
                     unreachable!()
                 }
                 QueryResultKind::Construct(r) => r,

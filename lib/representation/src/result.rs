@@ -34,11 +34,19 @@ pub struct QueryResult {
 pub enum QueryResultKind {
     Select(EagerSolutionMappings),
     Construct(Vec<(EagerSolutionMappings, Option<NamedNode>)>),
+    Ask(bool),
 }
 
 impl QueryResultKind {
     pub fn json(&self, global_cats: LockedCats) -> String {
         match self {
+            QueryResultKind::Ask(b) => {
+                let json_serializer = QueryResultsSerializer::from_format(QueryResultsFormat::Json);
+                let buffer = json_serializer
+                    .serialize_boolean_to_writer(vec![], *b)
+                    .unwrap();
+                String::from_utf8(buffer).unwrap()
+            }
             QueryResultKind::Select(sm) => {
                 let QuerySolutions {
                     variables,

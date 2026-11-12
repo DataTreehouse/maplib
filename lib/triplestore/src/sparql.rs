@@ -183,6 +183,35 @@ impl Triplestore {
                     }
                 }
             }
+            Query::Ask {
+                dataset,
+                pattern,
+                base_iri: _,
+            } => {
+                let SolutionMappings { mappings, .. } = self.lazy_graph_pattern(
+                    pattern,
+                    None,
+                    &context,
+                    parameters,
+                    Pushdowns::new(),
+                    query_settings,
+                    &dataset_or_named_graph(dataset, graph),
+                )?;
+                match pl_interruptable_collect(mappings.limit(1).with_streaming(streaming)) {
+                    Ok(df) => {
+                        if df.height() == 0 {
+                            no_results = true;
+                        }
+                        QueryResultKind::Ask(df.height() > 0)
+                    }
+                    Err(InterruptableCollectError::Interrupted) => {
+                        return Err(SparqlError::InterruptSignal)
+                    }
+                    Err(e) => {
+                        return Err(SparqlError::QueryExecutionError(e.to_string()));
+                    }
+                }
+            }
             _ => return Err(SparqlError::QueryTypeNotSupported),
         };
         let debug_output = if debug_no_results && no_results {
@@ -245,9 +274,9 @@ impl Triplestore {
                 debug_no_results,
             )?;
             let new_triples = match res.kind {
-                QueryResultKind::Select(_) => {
+                QueryResultKind::Select(_) | QueryResultKind::Ask(_) => {
                     return Err(SparqlError::QueryExecutionError(
-                        "Got SELECT query when CONSTRUCT was expected".to_string(),
+                        "Got SELECT or ASK query when CONSTRUCT was expected".to_string(),
                     ))
                 }
                 QueryResultKind::Construct(dfs) => {

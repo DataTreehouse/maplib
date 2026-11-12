@@ -1,6 +1,6 @@
 use crate::errors::QueryProcessingError;
 use oxrdf::vocab::{rdf, xsd};
-use polars::prelude::{as_struct, coalesce, col, concat_str};
+use polars::prelude::{as_struct, coalesce, col, concat_str, lit};
 use representation::cats::{maybe_decode_expr, LockedCats};
 use representation::query_context::Context;
 use representation::solution_mapping::SolutionMappings;
@@ -10,20 +10,12 @@ use std::collections::HashMap;
 
 pub fn concat_(
     mut solution_mappings: SolutionMappings,
-    func: &Function,
+    _func: &Function,
     args: &[Expression],
     args_contexts: &HashMap<usize, Context>,
     outer_context: &Context,
     global_cats: LockedCats,
 ) -> Result<SolutionMappings, QueryProcessingError> {
-    if args.len() < 2 {
-        return Err(QueryProcessingError::BadNumberOfFunctionArguments(
-            func.clone(),
-            args.len(),
-            ">1".to_string(),
-        ));
-    }
-
     let SolutionMappings {
         mappings,
         rdf_node_types: datatypes,
@@ -108,7 +100,12 @@ pub fn concat_(
         }
     }
 
-    let concat_values = concat_str(cols, "", true);
+    // CONCAT() is the empty string
+    let concat_values = if cols.is_empty() {
+        lit("")
+    } else {
+        concat_str(cols, "", true)
+    };
 
     let (output_expr, output_type) = if output_lang_string {
         let ex = as_struct(vec![

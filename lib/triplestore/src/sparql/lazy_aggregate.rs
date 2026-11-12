@@ -78,8 +78,13 @@ impl Triplestore {
                             max(&output_solution_mappings, column_context.as_ref().unwrap());
                     }
                     AggregateFunction::GroupConcat { separator } => {
-                        (out_expr, out_rdf_node_type) =
-                            group_concat(column_context.as_ref().unwrap(), separator, *distinct);
+                        (out_expr, out_rdf_node_type) = group_concat(
+                            &output_solution_mappings,
+                            column_context.as_ref().unwrap(),
+                            separator,
+                            *distinct,
+                            self.global_cats.clone(),
+                        );
                     }
                     AggregateFunction::Sample => {
                         (out_expr, out_rdf_node_type) =

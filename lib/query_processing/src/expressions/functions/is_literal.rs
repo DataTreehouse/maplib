@@ -3,13 +3,37 @@ use oxrdf::vocab::xsd;
 use polars::prelude::{col, lit};
 use representation::query_context::Context;
 use representation::solution_mapping::SolutionMappings;
-use representation::BaseRDFNodeType;
+use representation::{literal_is_numeric, BaseRDFNodeType};
 use std::collections::HashMap;
 
 pub fn is_literal(
+    solution_mappings: SolutionMappings,
+    args_contexts: &HashMap<usize, Context>,
+    outer_context: &Context,
+) -> Result<SolutionMappings, QueryProcessingError> {
+    is_literal_where(solution_mappings, args_contexts, outer_context, |_| true)
+}
+
+/// isNUMERIC: true if the argument is a literal with a numeric datatype.
+pub fn is_numeric(
+    solution_mappings: SolutionMappings,
+    args_contexts: &HashMap<usize, Context>,
+    outer_context: &Context,
+) -> Result<SolutionMappings, QueryProcessingError> {
+    is_literal_where(
+        solution_mappings,
+        args_contexts,
+        outer_context,
+        |t| matches!(t, BaseRDFNodeType::Literal(nn) if literal_is_numeric(nn.as_ref())),
+    )
+}
+
+/// True if the argument is a literal whose type satisfies `accept`.
+fn is_literal_where(
     mut solution_mappings: SolutionMappings,
     args_contexts: &HashMap<usize, Context>,
     outer_context: &Context,
+    accept: impl Fn(&BaseRDFNodeType) -> bool,
 ) -> Result<SolutionMappings, QueryProcessingError> {
     let first_context = args_contexts.get(&0).unwrap();
     let t = solution_mappings
@@ -19,7 +43,7 @@ pub fn is_literal(
     let expr = if t.is_multi() {
         let mut exprs = vec![];
         for t in t.map.keys() {
-            if let BaseRDFNodeType::Literal(_) = t {
+            if matches!(t, BaseRDFNodeType::Literal(_)) && accept(t) {
                 exprs.push(
                     col(first_context.as_str())
                         .struct_()
@@ -36,7 +60,9 @@ pub fn is_literal(
     } else {
         let b = t.get_base_type().unwrap();
         match b {
-            BaseRDFNodeType::Literal(_) => col(first_context.as_str()).is_null().not(),
+            BaseRDFNodeType::Literal(_) if accept(&b) => {
+                col(first_context.as_str()).is_null().not()
+            }
             _ => lit(false),
         }
     };

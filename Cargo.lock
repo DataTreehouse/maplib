@@ -3660,6 +3660,7 @@ dependencies = [
  "oxrdf",
  "polars",
  "pyo3",
+ "rand 0.10.3",
  "rayon",
  "representation",
  "sha1",

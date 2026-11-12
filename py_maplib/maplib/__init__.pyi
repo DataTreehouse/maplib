@@ -796,7 +796,7 @@ class Model:
             max_rows: int = None,
             debug: bool = False,
             bindings: Dict[str, Union[str, IRI, Literal]] = None,
-    ) -> DataFrame | SolutionMappings | list[DataFrame | SolutionMappings] | str | None:
+    ) -> DataFrame | SolutionMappings | list[DataFrame | SolutionMappings] | bool | str | None:
         """
         Query the contained knowledge graph using SPARQL
         Currently, SELECT and CONSTRUCT are supported.
@@ -819,7 +819,7 @@ class Model:
         :param max_rows: Maximum estimated rows in result, helps avoid out-of-memory errors.
         :param debug: Why does my query have no results?
         :param bindings: Bind the variables (keys) to the following ground terms. Use IRI, Literal classes or strings (e.g. "<urn:id:abc>") as values.
-        :return: DataFrame (Select), list of DataFrames (Construct) containing results or SolutionMappings when solution_mappings is set.
+        :return: DataFrame (Select), list of DataFrames (Construct) containing results or SolutionMappings when solution_mappings is set, or a bool (Ask).
 
         """
 

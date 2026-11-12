@@ -7,16 +7,6 @@ aggregates/agg-count-rows-distinct  # PanicException: not yet implemented: Try c
 aggregates/agg-empty-group-count-1  # Results differ.
 aggregates/agg-empty-group-count-graph  # PanicException: not yet implemented
 aggregates/agg-empty-group-max-2  # Results differ.
-aggregates/agg-err-02  # MaplibException: The function `isNUMERIC` is not implemented yet
-aggregates/agg-groupconcat-01  # MaplibException: Query type not supported
-aggregates/agg-groupconcat-02  # Results differ.
-aggregates/agg-groupconcat-03  # MaplibException: Query type not supported
-aggregates/agg-groupconcat-04  # MaplibException: Query type not supported
-aggregates/agg-groupconcat-05  # MaplibException: Query type not supported
-aggregates/agg-groupconcat-06  # MaplibException: Query type not supported
-aggregates/agg-groupconcat-distinct  # MaplibException: Query type not supported
-aggregates/agg-sample-01  # MaplibException: Query type not supported
-aggregates/agg-sample-distinct  # MaplibException: Query type not supported
 aggregates/agg08  # query is accepted but should be rejected
 aggregates/agg11  # query is accepted but should be rejected
 basic-update/insert-05a  # Graph <http://example.org/g3> differs.
@@ -31,7 +21,6 @@ bindings/graph-from-named-1  # PanicException: not yet implemented
 bindings/graph-from-named-2  # PanicException: not yet implemented
 bindings/graph-from-named-3  # Results differ.
 bindings/graph-no-var  # PanicException: not yet implemented
-bindings/values-ask  # MaplibException: Query type not supported
 bindings/values-no-vars-two-rows  # Results differ.
 bindings/values4  # PanicException: called `Result::unwrap()` on an `Err` value: ShapeMismatch(ErrString("could not crea
 bindings/values5  # Results differ.
@@ -73,25 +62,12 @@ drop/dawg-drop-default-01  # Default graph differs.
 drop/dawg-drop-graph-01  # Graph <http://example.org/g1> differs.
 drop/dawg-drop-named-01  # Graph <http://example.org/g2> differs.
 exists/exists-graph-variable  # PanicException: not yet implemented
-exists/exists02  # Results differ.
-functions/abs01  # MaplibException: SPARQL execution error: ``abs` operation not supported for dtype `struct[2]`
 functions/bnode01  # MaplibException: The function `BNODE` is not implemented yet
 functions/bnode02  # MaplibException: The function `BNODE` is not implemented yet
-functions/ceil01  # MaplibException: SPARQL execution error: ``ceil` operation not supported for dtype `struct[2]` (expe
-functions/concat-empty  # MaplibException: Function CONCAT got wrong number of arguments 0, expected >1
-functions/concat-single  # MaplibException: Function CONCAT got wrong number of arguments 1, expected >1
 functions/concat02  # Results differ.
-functions/floor01  # MaplibException: SPARQL execution error: ``floor` operation not supported for dtype `struct[2]` (exp
 functions/hours  # Results differ. xsd:dateTime values are stored in UTC, so the original offset is lost (15:38-08:00 gives 23)
 functions/if02  # MaplibException: SPARQL execution error: `invalid series dtype: expected `Boolean`, got `f64` for se
-functions/in01  # MaplibException: Query type not supported
-functions/in02  # MaplibException: Query type not supported
 functions/iri01  # Results differ.
-functions/isnumeric01  # MaplibException: The function `isNUMERIC` is not implemented yet
-functions/notin01  # MaplibException: Query type not supported
-functions/notin02  # MaplibException: Query type not supported
-functions/now01  # MaplibException: Query type not supported
-functions/rand01  # MaplibException: Query type not supported
 functions/replace01  # Results differ.
 functions/strafter01a  # Results differ.
 functions/strafter02  # MaplibException: The following expression should resolve to an xsd:string : "b"@cy
@@ -101,9 +77,6 @@ functions/strlang01  # PanicException: not yet implemented
 functions/strlang03-rdf11  # PanicException: not yet implemented
 functions/timezone  # TIMEZONE is not implemented; needs the original offset, which is lost when dateTimes are stored in UTC
 functions/tz  # TZ is not implemented; needs the original offset, which is lost when dateTimes are stored in UTC
-functions/uuid02  # MaplibException: Query type not supported
-json-res/jsonres03  # MaplibException: Query type not supported
-json-res/jsonres04  # MaplibException: Query type not supported
 move/move01  # Default graph differs.
 move/move02  # Default graph differs.
 move/move03  # Graph <http://example.org/g2> differs.
@@ -114,7 +87,6 @@ negation/graph-minus  # PanicException: not yet implemented
 negation/partial-minuend  # PanicException: called `Result::unwrap()` on an `Err` value: Context { error: Context { error: Schem
 property-path/pp06  # PanicException: not yet implemented
 property-path/pp07  # PanicException: not yet implemented
-property-path/pp08  # MaplibException: Query type not supported
 property-path/pp16  # Results differ (ordered).
 property-path/pp35  # PanicException: not yet implemented
 property-path/pp36  # Results differ.
@@ -140,8 +112,6 @@ syntax-query/test_5  # PanicException: called `Result::unwrap()` on an `Err` val
 syntax-query/test_6  # PanicException: called `Result::unwrap()` on an `Err` value: ComputeError(ErrString("cannot return e
 syntax-query/test_7  # PanicException: not yet implemented: Try count without distinct
 syntax-query/test_group_by_values_scope_03  # query is accepted but should be rejected
-syntax-query/test_pn_01  # MaplibException: Query type not supported
-syntax-query/test_pn_02  # MaplibException: Query type not supported
 syntax-query/test_pn_03  # PanicException: called `Option::unwrap()` on a `None` value
 syntax-query/test_pn_04  # PanicException: called `Option::unwrap()` on a `None` value
 syntax-query/test_pn_05  # PanicException: called `Option::unwrap()` on a `None` value

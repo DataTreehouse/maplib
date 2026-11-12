@@ -1,9 +1,11 @@
+use crate::expressions::functions::str_function::str_function;
 use crate::expressions::operations::numeric_promotion_level;
 use oxrdf::vocab::xsd;
 use polars::datatypes::DataType;
 use polars::prelude::{
     any_horizontal, as_struct, coalesce, col, lit, when, Expr, LiteralValue, SortMultipleOptions,
 };
+use representation::cats::LockedCats;
 use representation::multitype::all_multi_cols;
 use representation::null::expr_is_null_workaround;
 use representation::query_context::Context;
@@ -142,31 +144,24 @@ pub fn max(solution_mappings: &SolutionMappings, column_context: &Context) -> (E
     (out_expr, out_rdf_node_type)
 }
 
+/// GROUP_CONCAT: joins the string values of the group (as with STR()) with the separator,
+/// which is a single space by default. The result is an xsd:string.
 pub fn group_concat(
+    solution_mappings: &SolutionMappings,
     column_context: &Context,
     separator: &Option<String>,
     distinct: bool,
+    global_cats: LockedCats,
 ) -> (Expr, RDFNodeState) {
     let out_rdf_node_type =
         BaseRDFNodeType::Literal(xsd::STRING.into_owned()).into_default_input_rdf_node_state();
-
-    let use_sep = if let Some(sep) = separator {
-        sep.to_string()
-    } else {
-        "".to_string()
-    };
-    let out_expr = if distinct {
-        col(column_context.as_str())
-            .cast(DataType::String)
-            .unique_stable()
-            .str()
-            .join(use_sep.as_str(), true)
-    } else {
-        col(column_context.as_str())
-            .cast(DataType::String)
-            .str()
-            .join(use_sep.as_str(), true)
-    };
+    let use_sep = separator.as_deref().unwrap_or(" ");
+    let t = rdf_node_type_from_context(column_context, solution_mappings);
+    let mut strings = str_function(column_context.as_str(), t, global_cats);
+    if distinct {
+        strings = strings.unique_stable();
+    }
+    let out_expr = strings.str().join(use_sep, true);
     (out_expr, out_rdf_node_type)
 }
 

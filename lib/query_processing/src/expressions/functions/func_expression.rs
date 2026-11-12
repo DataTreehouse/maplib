@@ -1,24 +1,22 @@
 use crate::errors::QueryProcessingError;
 use crate::expressions::drop_inner_contexts;
-use crate::expressions::functions::abs_::abs_;
-use crate::expressions::functions::ceil_::ceil_;
 use crate::expressions::functions::concat_::concat_;
 use crate::expressions::functions::custom_function::custom_;
 use crate::expressions::functions::datatype_::datatype_;
 use crate::expressions::functions::date_part::{date_part, DatePart};
 use crate::expressions::functions::encode_for_uri::encode_for_uri;
-use crate::expressions::functions::floor_::floor_;
 use crate::expressions::functions::hash_::{hash_, HashAlgorithm};
 use crate::expressions::functions::iri::iri;
 use crate::expressions::functions::is_blank_::is_blank_;
 use crate::expressions::functions::is_iri::is_iri;
-use crate::expressions::functions::is_literal::is_literal;
+use crate::expressions::functions::is_literal::{is_literal, is_numeric};
 use crate::expressions::functions::lang_::lang_;
 use crate::expressions::functions::lang_matches::lang_matches;
 use crate::expressions::functions::lower_upper_substr::lower_upper_substr;
 use crate::expressions::functions::now_::now_;
+use crate::expressions::functions::numeric_function::{numeric_function, NumericFunction};
+use crate::expressions::functions::rand_::rand_;
 use crate::expressions::functions::replace::sparql_replace;
-use crate::expressions::functions::round_::round_;
 use crate::expressions::functions::sparql_regex::sparql_regex;
 use crate::expressions::functions::sparql_uuid::uuid;
 use crate::expressions::functions::starts_ends_contains::starts_ends_contains;
@@ -105,16 +103,21 @@ pub fn func_expression(
                 DatePart::Seconds,
             )?;
         }
-        Function::Abs => {
-            solution_mappings = abs_(solution_mappings, func, args, &args_contexts, outer_context)?;
-        }
-        Function::Ceil => {
-            solution_mappings =
-                ceil_(solution_mappings, func, args, &args_contexts, outer_context)?;
-        }
-        Function::Floor => {
-            solution_mappings =
-                floor_(solution_mappings, func, args, &args_contexts, outer_context)?;
+        Function::Abs | Function::Ceil | Function::Floor | Function::Round => {
+            let f = match func {
+                Function::Abs => NumericFunction::Abs,
+                Function::Ceil => NumericFunction::Ceil,
+                Function::Floor => NumericFunction::Floor,
+                _ => NumericFunction::Round,
+            };
+            solution_mappings = numeric_function(
+                solution_mappings,
+                func,
+                args,
+                &args_contexts,
+                outer_context,
+                f,
+            )?;
         }
         Function::Concat => {
             solution_mappings = concat_(
@@ -129,9 +132,8 @@ pub fn func_expression(
         Function::Now => {
             solution_mappings = now_(solution_mappings, outer_context)?;
         }
-        Function::Round => {
-            solution_mappings =
-                round_(solution_mappings, func, args, &args_contexts, outer_context)?;
+        Function::Rand => {
+            solution_mappings = rand_(solution_mappings, outer_context)?;
         }
         Function::Str => {
             solution_mappings = str_(
@@ -279,6 +281,9 @@ pub fn func_expression(
         }
         Function::IsLiteral => {
             solution_mappings = is_literal(solution_mappings, &args_contexts, outer_context)?;
+        }
+        Function::IsNumeric => {
+            solution_mappings = is_numeric(solution_mappings, &args_contexts, outer_context)?;
         }
         Function::Datatype => {
             solution_mappings = datatype_(solution_mappings, &args_contexts, outer_context)?;

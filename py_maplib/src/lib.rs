@@ -232,7 +232,10 @@ fn query_to_result(
 
     match use_response_format {
         SparqlResponseFormat::JSON => {
-            if !matches!(res.kind, QueryResultKind::Select(..)) {
+            if !matches!(
+                res.kind,
+                QueryResultKind::Select(..) | QueryResultKind::Ask(..)
+            ) {
                 return Err(PyMaplibError::FunctionArgumentError(format!(
                     "json response format can only be used with select and ask"
                 ))
@@ -283,6 +286,7 @@ fn query_to_result(
                 pushdown_paths,
             } = res;
             match kind {
+                SparqlQueryResult::Ask(b) => b.into_py_any(py),
                 SparqlQueryResult::Select(EagerSolutionMappings {
                     mut mappings,
                     mut rdf_node_types,

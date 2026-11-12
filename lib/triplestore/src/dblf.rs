@@ -376,8 +376,19 @@ impl Triplestore {
                     }
                 }
             }
-            let keep_exprs: Vec<_> = keep.iter().map(|x| col(*x)).collect();
-            mappings = mappings.select(keep_exprs);
+            if keep.is_empty() {
+                // A pattern without variables has a single empty solution if it matches.
+                // A frame without columns must have its height set explicitly.
+                let height = mappings
+                    .limit(1)
+                    .collect()
+                    .map_err(|x| TriplestoreError::SparqlQueryError(x.to_string()))?
+                    .height();
+                mappings = DataFrame::empty_with_height(height).lazy();
+            } else {
+                let keep_exprs: Vec<_> = keep.iter().map(|x| col(*x)).collect();
+                mappings = mappings.select(keep_exprs);
+            }
             if !rename_src.is_empty() {
                 mappings = mappings.rename(&rename_src, &rename_trg, true);
             }
@@ -653,6 +664,10 @@ fn multiple_tt_to_lf(
                 }
                 if keep_object {
                     select.push(col(OBJECT_COL_NAME));
+                }
+                if select.is_empty() {
+                    // Keep a column so that the number of matches is not lost
+                    select.push(col(SUBJECT_COL_NAME));
                 }
 
                 let subject_state = subj_type.default_stored_cat_state();

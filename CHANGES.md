@@ -2,10 +2,13 @@
 
 ## v0.20.34
 ### Features
+- ASK queries. m.query() returns a bool, or a SPARQL JSON boolean result with return_format="json"
+- isNUMERIC and RAND SPARQL functions
 - SHA256, SHA384 and SHA512 SPARQL functions
 - Read and write TriG and N-Quads (format "trig" / "nquads", or the .trig / .nq file extensions when reading). Writing these formats outputs all graphs unless a graph is specified
 
 ### Bug fixes
+- Removed the pyarrow <24.0.0 pin. pyarrow only publishes Python 3.15 wheels from 26.0.0, so the pin made maplib uninstallable on Python 3.15
 - COUNT now returns xsd:integer (Int64) as required by the SPARQL 1.1 spec, instead of xsd:unsignedInt (UInt32)
 - SUM, AVG, MIN and MAX now work when the aggregated variable has multiple types. SUM and AVG promote the numeric types in each group (integer < decimal < float < double) and are unbound if a group contains a non-numeric value, MIN and MAX use the SPARQL ordering and keep the type of the selected value
 - Division follows SPARQL op:numeric-divide: integer / integer gives xsd:decimal (e.g. 5 / 2 = 2.5, previously truncated to 2.0 as xsd:double), mixed types are promoted (decimal < float < double), and decimal division by zero is an error (unbound)
@@ -15,6 +18,11 @@
 - DATATYPE() of an unbound value or an error is unbound (previously the datatype of the variable was returned)
 - YEAR, MONTH, DAY, HOURS and MINUTES return xsd:integer and SECONDS returns xsd:decimal including fractional seconds (previously xsd:unsignedInt, dropping fractions)
 - STR() of xsd:dateTime and xsd:date values gives the XSD lexical form (e.g. 2010-06-21T11:28:01+00:00 instead of 2010-06-21 11:28:01.000000+00:00)
+- Triple patterns without variables (e.g. { :s :p :o }) never matched. They now give one solution if the triple exists
+- GROUP_CONCAT concatenated internal codes instead of the string values, and used an empty default separator instead of a single space. It now concatenates the string values (as STR()) of any type, including lang strings
+- ABS, CEIL and FLOOR work when the argument has multiple types, and CEIL and FLOOR keep the type of the argument (previously xsd:integer)
+- CONCAT accepts zero or one arguments
+- Casting a blank node (e.g. xsd:double(?x)) gives an unbound value instead of failing the query
 
 ## v0.20.32
 ### Features

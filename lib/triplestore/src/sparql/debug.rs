@@ -31,6 +31,9 @@ impl Triplestore {
             }
             | Query::Construct {
                 dataset, pattern, ..
+            }
+            | Query::Ask {
+                dataset, pattern, ..
             } => {
                 let qg = &dataset_or_named_graph(dataset, graph);
                 let partial = self.debug_gp(pattern, parameters, qs, qg)?;
