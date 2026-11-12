@@ -1,7 +1,7 @@
 #![feature(pattern)]
 #![feature(str_as_str)]
 
-use arrow::array::{Array, RecordBatch, StringArray, UInt32Array};
+use arrow::array::{Array, RecordBatch, StringArray, StringBuilder, UInt32Array};
 use arrow::datatypes::{Field, Schema};
 use nohash_hasher::NoHashHasher;
 use range_set_blaze::RangeSetBlaze;
@@ -9,14 +9,15 @@ use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, IntoParallelRef
 use std::borrow::{Borrow, Cow};
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap, HashSet};
-use std::fmt::{Display, Formatter};
+use std::fmt::{Display, Formatter, Write};
 use std::hash::BuildHasherDefault;
 use std::sync::Arc;
 
 #[derive(Debug, Clone)]
 pub struct PrefixCompressedString {
-    prefix: Arc<String>,
-    suffix: Arc<String>,
+    // Arc<str> keeps the bytes inline with the refcount: one allocation instead of two.
+    prefix: Arc<str>,
+    suffix: Arc<str>,
 }
 
 impl PartialEq for PrefixCompressedString {
@@ -90,7 +91,7 @@ trait PrefixCompressedKey {
 impl PrefixCompressedKey for PrefixCompressedString {
     #[inline]
     fn parts(&self) -> (&str, &str) {
-        (self.prefix.as_str(), self.suffix.as_str())
+        (&self.prefix, &self.suffix)
     }
 }
 
@@ -139,20 +140,23 @@ impl Display for PrefixCompressedString {
 }
 
 impl PrefixCompressedString {
-    pub fn new(iri: &str, prefix_map: &mut HashMap<String, Arc<String>>) -> Self {
+    pub fn new(iri: &str, prefix_map: &mut HashSet<Arc<str>>) -> Self {
         let (pre, suf) = split_iri(iri);
-        let arc_pre = if let Some(arc_pre) = prefix_map.get(pre) {
-            arc_pre.clone()
-        } else {
-            let pre_string = pre.to_string();
-            let arc_pre = Arc::new(pre_string.clone());
-            prefix_map.insert(pre_string, arc_pre.clone());
-            arc_pre
-        };
         PrefixCompressedString {
-            prefix: arc_pre,
-            suffix: Arc::new(suf.to_string()),
+            prefix: intern_prefix(prefix_map, pre),
+            suffix: Arc::from(suf),
         }
+    }
+}
+
+/// Returns the shared allocation for a prefix, adding it to the set if it is new.
+fn intern_prefix(prefix_map: &mut HashSet<Arc<str>>, pre: &str) -> Arc<str> {
+    if let Some(arc_pre) = prefix_map.get(pre) {
+        arc_pre.clone()
+    } else {
+        let arc_pre: Arc<str> = Arc::from(pre);
+        prefix_map.insert(arc_pre.clone());
+        arc_pre
     }
 }
 
@@ -373,7 +377,7 @@ impl CatMapsInMemory {
 pub struct PrefixCompressedCatMapsInMemory {
     map: BTreeMap<PrefixCompressedString, u32>,
     rev_map: HashMap<u32, PrefixCompressedString, BuildHasherDefault<NoHashHasher<u32>>>,
-    prefix_map: HashMap<String, Arc<String>>,
+    prefix_map: HashSet<Arc<str>>,
 }
 
 impl PrefixCompressedCatMapsInMemory {
@@ -401,27 +405,24 @@ impl PrefixCompressedCatMapsInMemory {
             .par_iter()
             .map(|(s, u)| {
                 let (pre, suf) = split_iri(s.as_str());
-                (pre, Arc::new(suf.to_string()), *u)
+                (pre, Arc::<str>::from(suf), *u)
             })
             .collect::<Vec<_>>();
-        let mut prefix_map: HashMap<String, Arc<String>> = HashMap::new();
+        let mut prefix_map: HashSet<Arc<str>> = HashSet::new();
         let mut prefix_compressed_vec = Vec::with_capacity(split_vec.len());
         for (pre, suf, u) in split_vec {
-            let pre_arc = if let Some(pre_arc) = prefix_map.get(pre) {
-                pre_arc.clone()
-            } else {
-                let pre_arc = Arc::new(pre.to_string());
-                prefix_map.insert(pre.to_string(), pre_arc.clone());
-                pre_arc
-            };
+            let pre_arc = intern_prefix(&mut prefix_map, pre);
             let pc_string = PrefixCompressedString {
                 prefix: pre_arc,
                 suffix: suf,
             };
             prefix_compressed_vec.push((pc_string, u))
         }
+        drop(ss);
         let map = BTreeMap::from_iter(prefix_compressed_vec.into_iter());
-        let rev_map = HashMap::from_iter(map.iter().map(|(x, y)| (*y, x.clone())).into_iter());
+        let mut rev_map =
+            HashMap::with_capacity_and_hasher(map.len(), BuildHasherDefault::default());
+        rev_map.extend(map.iter().map(|(x, y)| (*y, x.clone())));
         PrefixCompressedCatMapsInMemory {
             map,
             rev_map,
@@ -460,8 +461,9 @@ impl PrefixCompressedCatMapsInMemory {
         }
     }
 
-    pub fn encode_new_prefix_compressed_string(&mut self, s: PrefixCompressedString, u: u32) {
-        self.encode_or_add_new_prefix(&s.prefix);
+    pub fn encode_new_prefix_compressed_string(&mut self, mut s: PrefixCompressedString, u: u32) {
+        // Share our own prefix allocation rather than keeping the other map's copy alive
+        s.prefix = intern_prefix(&mut self.prefix_map, &s.prefix);
         self.map.insert(s.clone(), u);
         self.rev_map.insert(u, s);
     }
@@ -488,33 +490,12 @@ impl PrefixCompressedCatMapsInMemory {
 
     fn encode_new_str(&mut self, s: &str, u: u32) {
         let (pre, suf) = split_iri(s);
-        let arc_pre = self.encode_or_add_new_prefix_str(pre);
         let compr = PrefixCompressedString {
-            prefix: arc_pre,
-            suffix: Arc::new(suf.to_string()),
+            prefix: intern_prefix(&mut self.prefix_map, pre),
+            suffix: Arc::from(suf),
         };
         self.map.insert(compr.clone(), u);
         self.rev_map.insert(u, compr);
-    }
-
-    fn encode_or_add_new_prefix(&mut self, pre: &Arc<String>) -> Arc<String> {
-        if let Some(arc_pre) = self.prefix_map.get(pre.as_str()) {
-            arc_pre.clone()
-        } else {
-            self.prefix_map.insert(pre.to_string(), pre.clone());
-            pre.clone()
-        }
-    }
-
-    fn encode_or_add_new_prefix_str(&mut self, pre: &str) -> Arc<String> {
-        if let Some(arc_pre) = self.prefix_map.get(pre) {
-            arc_pre.clone()
-        } else {
-            let pre_string = pre.to_string();
-            let arc_pre = Arc::new(pre_string.clone());
-            self.prefix_map.insert(pre_string, arc_pre.clone());
-            arc_pre
-        }
     }
 
     pub fn maybe_encode_str(&self, s: &str) -> Option<u32> {
@@ -522,7 +503,7 @@ impl PrefixCompressedCatMapsInMemory {
         // Use the interned prefix so that comparisons can take the pointer equality fast path
         let pre = self.prefix_map.get(pre)?;
         let key = PrefixCompressedRef {
-            prefix: pre.as_str(),
+            prefix: pre,
             suffix: suf,
         };
         self.map
@@ -582,12 +563,8 @@ impl PrefixCompressedCatMapsInMemory {
             None
         } else {
             let map = new_map.iter().map(|(x, y)| (y.clone(), *x)).collect();
-            let mut prefix_map = HashMap::new();
-            for p in new_map.values() {
-                if !prefix_map.contains_key(p.prefix.as_str()) {
-                    prefix_map.insert(p.prefix.to_string(), p.prefix.clone());
-                }
-            }
+            let prefix_map: HashSet<Arc<str>> =
+                new_map.values().map(|p| p.prefix.clone()).collect();
             Some(Self {
                 map,
                 rev_map: new_map,
@@ -643,7 +620,7 @@ impl PrefixCompressedCatMapsInMemory {
             }
         }
         for (s, u) in numbered_insert {
-            self.encode_new_prefix_compressed_string(s.clone(), u);
+            self.encode_new_prefix_compressed_string(s, u);
         }
         let remap: HashMap<_, _, BuildHasherDefault<NoHashHasher<u32>>> = remap
             .into_iter()
@@ -655,19 +632,22 @@ impl PrefixCompressedCatMapsInMemory {
     }
 
     pub fn to_record_batch(&self) -> RecordBatch {
-        let mut us = Vec::new();
-        let mut strs = Vec::new();
+        let data_len: usize = self
+            .map
+            .keys()
+            .map(|k| k.prefix.len() + k.suffix.len())
+            .sum();
+        let mut strs = StringBuilder::with_capacity(self.map.len(), data_len);
+        let mut us = Vec::with_capacity(self.map.len());
         for (k, u) in self.map.iter() {
-            let s = format!(
-                "{}{}",
-                self.prefix_map.get(k.prefix.as_str()).unwrap(),
-                &k.suffix
-            );
-            strs.push(s);
+            // Write the parts straight into the arrow buffer instead of allocating a String per row
+            strs.write_str(&k.prefix).unwrap();
+            strs.write_str(&k.suffix).unwrap();
+            strs.append_value("");
             us.push(*u);
         }
-        let strs = StringArray::from_iter(strs.iter().map(|x| Some(x.as_str())));
-        let us = UInt32Array::from_iter(us);
+        let strs = strs.finish();
+        let us = UInt32Array::from(us);
 
         let schema = Schema::new(vec![
             Field::new("str", strs.data_type().clone(), true),
@@ -725,7 +705,9 @@ impl UncompressedCatMapsInMemory {
             .map(|(s, u)| (Arc::<str>::from(s.into_owned()), u))
             .collect::<Vec<_>>();
         let map = BTreeMap::from_iter(ss_arced.into_iter());
-        let rev_map = HashMap::from_iter(map.iter().map(|(s, u)| (*u, s.clone())));
+        let mut rev_map =
+            HashMap::with_capacity_and_hasher(map.len(), BuildHasherDefault::default());
+        rev_map.extend(map.iter().map(|(s, u)| (*u, s.clone())));
         UncompressedCatMapsInMemory { map, rev_map }
     }
 }
@@ -897,15 +879,8 @@ impl UncompressedCatMapsInMemory {
     }
 
     pub fn to_record_batch(&self) -> RecordBatch {
-        let mut us = Vec::new();
-        let mut strs = Vec::new();
-        for (k, u) in self.map.range::<Arc<str>, _>(..) {
-            strs.push(k.as_str());
-            us.push(*u);
-        }
-
-        let strs = StringArray::from_iter(strs.iter().map(|x| Some(*x)));
-        let us = UInt32Array::from_iter(us);
+        let strs = StringArray::from_iter_values(self.map.keys().map(|k| &**k));
+        let us = UInt32Array::from_iter_values(self.map.values().copied());
         let schema = Schema::new(vec![
             Field::new("str", strs.data_type().clone(), true),
             Field::new("cat", us.data_type().clone(), true),
@@ -1026,6 +1001,17 @@ mod tests {
         let mut sorted: Vec<_> = iris.iter().map(|s| s.to_string()).collect();
         sorted.sort();
         assert_eq!(ordered, sorted);
+
+        let rb = m.to_record_batch();
+        let got: Vec<_> = rb
+            .column(0)
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .unwrap()
+            .iter()
+            .map(|x| x.unwrap().to_string())
+            .collect();
+        assert_eq!(got, sorted);
 
         let mut u = UncompressedCatMapsInMemory::new_empty();
         u.encode_new_string("hello".to_string(), 7);
