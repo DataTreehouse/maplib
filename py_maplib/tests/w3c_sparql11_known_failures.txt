@@ -1,0 +1,201 @@
+# W3C SPARQL 1.1 tests that maplib currently fails (used by test_w3c_sparql11.py).
+# One test id per line, optionally followed by "# reason".
+# These are marked as strict xfails: when a test starts passing, remove it from this list.
+# Tests tagged [flaky] fail nondeterministically and are non-strict xfails.
+aggregates/agg-avg-02  # MaplibException: SPARQL execution error: ``mean` operation not supported for dtype `struct[3]`
+aggregates/agg-avg-03  # Results differ.
+aggregates/agg-avg-distinct  # MaplibException: SPARQL execution error: ``mean` operation not supported for dtype `struct[3]`
+aggregates/agg-count-rows-distinct  # PanicException: not yet implemented: Try count without distinct
+aggregates/agg-empty-group-count-1  # Results differ.
+aggregates/agg-empty-group-count-graph  # PanicException: not yet implemented
+aggregates/agg-empty-group-max-2  # Results differ.
+aggregates/agg-err-01  # MaplibException: SPARQL execution error: ``mean` operation not supported for dtype `struct[3]`
+aggregates/agg-err-02  # MaplibException: The function `isNUMERIC` is not implemented yet
+aggregates/agg-groupconcat-01  # MaplibException: Query type not supported
+aggregates/agg-groupconcat-02  # Results differ.
+aggregates/agg-groupconcat-03  # MaplibException: Query type not supported
+aggregates/agg-groupconcat-04  # MaplibException: Query type not supported
+aggregates/agg-groupconcat-05  # MaplibException: Query type not supported
+aggregates/agg-groupconcat-06  # MaplibException: Query type not supported
+aggregates/agg-groupconcat-distinct  # MaplibException: Query type not supported
+aggregates/agg-max-01  # Results differ.
+aggregates/agg-max-02  # Results differ.
+aggregates/agg-max-distinct  # Results differ.
+aggregates/agg-min-02  # Results differ.
+aggregates/agg-min-distinct  # Results differ.
+aggregates/agg-sample-01  # MaplibException: Query type not supported
+aggregates/agg-sample-distinct  # MaplibException: Query type not supported
+aggregates/agg-sum-02  # MaplibException: SPARQL execution error: ``sum` operation not supported for dtype `struct[3]`
+aggregates/agg-sum-distinct  # MaplibException: SPARQL execution error: ``sum` operation not supported for dtype `struct[3]`
+aggregates/agg08  # query is accepted but should be rejected
+aggregates/agg11  # query is accepted but should be rejected
+basic-update/insert-05a  # Graph <http://example.org/g3> differs.
+basic-update/insert-data-same-bnode  # PanicException: not yet implemented
+basic-update/insert-data-spo-named1  # PanicException: not yet implemented
+basic-update/insert-data-spo-named2  # PanicException: not yet implemented
+basic-update/insert-data-spo-named3  # PanicException: not yet implemented
+basic-update/insert-data-spo1  # PanicException: not yet implemented
+basic-update/insert-using-01  # PanicException: not yet implemented
+basic-update/insert-where-03  # PanicException: not yet implemented
+basic-update/insert-where-04  # PanicException: not yet implemented
+basic-update/insert-where-same-bnode  # Graph <http://example.org/g3> differs.
+basic-update/insert-where-same-bnode2  # Graph <http://example.org/g3> differs.
+bind/bind07  # Results differ.
+bindings/graph  # PanicException: not yet implemented
+bindings/graph-from-named-1  # PanicException: not yet implemented
+bindings/graph-from-named-2  # PanicException: not yet implemented
+bindings/graph-from-named-3  # Results differ.
+bindings/graph-no-var  # PanicException: not yet implemented
+bindings/values-ask  # MaplibException: Query type not supported
+bindings/values-no-vars-two-rows  # Results differ.
+bindings/values4  # PanicException: called `Result::unwrap()` on an `Err` value: ShapeMismatch(ErrString("could not crea
+bindings/values5  # Results differ.
+bindings/values7  # Results differ.
+bindings/values8  # Results differ.
+cast/cast-bool  # Results differ.
+cast/cast-decimal  # MaplibException: SPARQL execution error: `casting from Boolean to Decimal(38, 16) not supported
+cast/cast-double  # Results differ.
+cast/cast-float  # Results differ.
+cast/cast-int  # Results differ.
+cast/cast-string  # Results differ.
+clear/dawg-clear-all-01  # Default graph differs.
+clear/dawg-clear-default-01  # Default graph differs.
+clear/dawg-clear-graph-01  # Graph <http://example.org/g1> differs.
+clear/dawg-clear-named-01  # Graph <http://example.org/g2> differs.
+construct/constructlist  # Graphs differ.
+construct/constructwhere04  # PanicException: not yet implemented: QueryDataset(QueryDataset { default: [NamedNode { iri: "http://
+copy/copy01  # Graph <http://example.org/g1> differs.
+copy/copy03  # Graph <http://example.org/g2> differs.
+copy/copy06  # Default graph differs.
+csv-tsv-res/csv03  # CSV differs.
+csv-tsv-res/csv04  # CSV differs.
+delete-data/dawg-delete-data-01  # PanicException: not yet implemented
+delete-data/dawg-delete-data-02  # PanicException: not yet implemented
+delete-data/dawg-delete-data-03  # PanicException: not yet implemented
+delete-data/dawg-delete-data-04  # PanicException: not yet implemented
+delete-data/dawg-delete-data-05  # PanicException: not yet implemented
+delete-data/dawg-delete-data-06  # PanicException: not yet implemented
+delete-insert/dawg-delete-insert-04  # PanicException: not yet implemented
+delete/dawg-delete-07  # MaplibException: Variable ?o not found
+delete/dawg-delete-using-01  # PanicException: not yet implemented
+delete/dawg-delete-using-02a  # PanicException: not yet implemented
+delete/dawg-delete-using-03  # PanicException: not yet implemented
+delete/dawg-delete-using-04  # PanicException: not yet implemented
+delete/dawg-delete-using-05  # PanicException: not yet implemented
+delete/dawg-delete-using-06a  # PanicException: not yet implemented
+delete/dawg-delete-with-01  # PanicException: not yet implemented
+delete/dawg-delete-with-02  # PanicException: not yet implemented
+delete/dawg-delete-with-03  # PanicException: not yet implemented
+delete/dawg-delete-with-04  # PanicException: not yet implemented
+delete/dawg-delete-with-05  # PanicException: not yet implemented
+delete/dawg-delete-with-06  # PanicException: not yet implemented
+drop/dawg-drop-all-01  # Default graph differs.
+drop/dawg-drop-default-01  # Default graph differs.
+drop/dawg-drop-graph-01  # Graph <http://example.org/g1> differs.
+drop/dawg-drop-named-01  # Graph <http://example.org/g2> differs.
+exists/exists-graph-variable  # PanicException: not yet implemented
+exists/exists02  # Results differ.
+functions/abs01  # MaplibException: SPARQL execution error: ``abs` operation not supported for dtype `struct[2]`
+functions/bnode01  # MaplibException: The function `BNODE` is not implemented yet
+functions/bnode02  # MaplibException: The function `BNODE` is not implemented yet
+functions/ceil01  # MaplibException: SPARQL execution error: ``ceil` operation not supported for dtype `struct[2]` (expe
+functions/coalesce01  # Results differ.
+functions/concat-empty  # MaplibException: Function CONCAT got wrong number of arguments 0, expected >1
+functions/concat-single  # MaplibException: Function CONCAT got wrong number of arguments 1, expected >1
+functions/concat02  # Results differ.
+functions/day  # Results differ.
+functions/floor01  # MaplibException: SPARQL execution error: ``floor` operation not supported for dtype `struct[2]` (exp
+functions/hours  # Results differ.
+functions/if02  # MaplibException: SPARQL execution error: `invalid series dtype: expected `Boolean`, got `f64` for se
+functions/in01  # MaplibException: Query type not supported
+functions/in02  # MaplibException: Query type not supported
+functions/iri01  # Results differ.
+functions/isnumeric01  # MaplibException: The function `isNUMERIC` is not implemented yet
+functions/minutes  # Results differ.
+functions/month  # Results differ.
+functions/notin01  # MaplibException: Query type not supported
+functions/notin02  # MaplibException: Query type not supported
+functions/now01  # MaplibException: Query type not supported
+functions/rand01  # MaplibException: Query type not supported
+functions/replace01  # Results differ.
+functions/seconds  # Results differ.
+functions/sha256-01  # MaplibException: The function `SHA256` is not implemented yet
+functions/sha256-02  # MaplibException: The function `SHA256` is not implemented yet
+functions/sha384-01  # MaplibException: The function `SHA384` is not implemented yet
+functions/sha384-02  # MaplibException: The function `SHA384` is not implemented yet
+functions/sha512-01  # MaplibException: The function `SHA512` is not implemented yet
+functions/sha512-02  # MaplibException: The function `SHA512` is not implemented yet
+functions/strafter01a  # Results differ.
+functions/strafter02  # MaplibException: The following expression should resolve to an xsd:string : "b"@cy
+functions/strbefore01a  # Results differ.
+functions/strbefore02  # MaplibException: The following expression should resolve to an xsd:string : "b"@cy
+functions/strlang01  # PanicException: not yet implemented
+functions/strlang03-rdf11  # PanicException: not yet implemented
+functions/timezone  # MaplibException: The function `TIMEZONE` is not implemented yet
+functions/tz  # MaplibException: The function `TZ` is not implemented yet
+functions/uuid02  # MaplibException: Query type not supported
+functions/year  # Results differ.
+grouping/group04  # [flaky] GROUP BY COALESCE(?w, date) sometimes ignores the bound ?w
+json-res/jsonres03  # MaplibException: Query type not supported
+json-res/jsonres04  # MaplibException: Query type not supported
+move/move01  # Default graph differs.
+move/move02  # Default graph differs.
+move/move03  # Graph <http://example.org/g2> differs.
+move/move04  # Graph <http://example.org/g1> differs.
+move/move06  # Default graph differs.
+negation/full-minuend  # Results differ (ordered).
+negation/graph-minus  # PanicException: not yet implemented
+negation/partial-minuend  # PanicException: called `Result::unwrap()` on an `Err` value: Context { error: Context { error: Schem
+project-expression/projexp07  # Results differ.
+property-path/pp06  # PanicException: not yet implemented
+property-path/pp07  # PanicException: not yet implemented
+property-path/pp08  # MaplibException: Query type not supported
+property-path/pp16  # Results differ (ordered).
+property-path/pp35  # PanicException: not yet implemented
+property-path/pp36  # Results differ.
+property-path/values_and_path  # MaplibException: SPARQL execution error: `duplicate: column 'v' is duplicate
+property-path/zero_or_more_set_end  # Results differ.
+property-path/zero_or_more_set_start  # Results differ.
+property-path/zero_or_one_set_end  # Results differ.
+property-path/zero_or_one_set_start  # Results differ.
+subquery/subquery01  # PanicException: not yet implemented
+subquery/subquery02  # PanicException: not yet implemented
+subquery/subquery03  # PanicException: not yet implemented
+subquery/subquery04  # PanicException: not yet implemented
+subquery/subquery05  # PanicException: not yet implemented
+subquery/subquery07  # PanicException: not yet implemented
+subquery/subquery11  # Results differ (ordered).
+subquery/subquery15  # PanicException: not yet implemented
+subquery/subquery16  # PanicException: not yet implemented
+syntax-query/test_35a  # PanicException: called `Option::unwrap()` on a `None` value
+syntax-query/test_36a  # PanicException: called `Option::unwrap()` on a `None` value
+syntax-query/test_4  # MaplibException: Custom function not found: <http://example/function>, it is possible to define a fu
+syntax-query/test_42  # PanicException: not yet implemented: QueryDataset(QueryDataset { default: [NamedNode { iri: "http://
+syntax-query/test_5  # PanicException: called `Result::unwrap()` on an `Err` value: ComputeError(ErrString("cannot return e
+syntax-query/test_6  # PanicException: called `Result::unwrap()` on an `Err` value: ComputeError(ErrString("cannot return e
+syntax-query/test_7  # PanicException: not yet implemented: Try count without distinct
+syntax-query/test_group_by_values_scope_03  # query is accepted but should be rejected
+syntax-query/test_pn_01  # MaplibException: Query type not supported
+syntax-query/test_pn_02  # MaplibException: Query type not supported
+syntax-query/test_pn_03  # PanicException: called `Option::unwrap()` on a `None` value
+syntax-query/test_pn_04  # PanicException: called `Option::unwrap()` on a `None` value
+syntax-query/test_pn_05  # PanicException: called `Option::unwrap()` on a `None` value
+syntax-query/test_pn_06  # PanicException: called `Option::unwrap()` on a `None` value
+syntax-query/test_pn_07  # PanicException: called `Option::unwrap()` on a `None` value
+syntax-query/test_pn_08  # PanicException: called `Option::unwrap()` on a `None` value
+syntax-query/test_pn_09  # PanicException: called `Option::unwrap()` on a `None` value
+syntax-update-1/test_23  # PanicException: not yet implemented
+syntax-update-1/test_24  # PanicException: not yet implemented
+syntax-update-1/test_25  # PanicException: not yet implemented
+syntax-update-1/test_26  # PanicException: not yet implemented
+syntax-update-1/test_27  # PanicException: not yet implemented
+syntax-update-1/test_28  # PanicException: not yet implemented
+syntax-update-1/test_29  # PanicException: not yet implemented
+syntax-update-1/test_30  # PanicException: not yet implemented
+syntax-update-1/test_31  # PanicException: not yet implemented
+syntax-update-1/test_32  # PanicException: not yet implemented
+syntax-update-1/test_33  # PanicException: not yet implemented
+syntax-update-1/test_34  # PanicException: not yet implemented
+syntax-update-1/test_36  # MaplibException: Graph does not exist: <http://www.w3.org/2009/sparql/docs/tests/data-sparql11/synta
+syntax-update-1/test_53  # PanicException: not yet implemented
+syntax-update-2/syntax-update-other-01  # PanicException: not yet implemented

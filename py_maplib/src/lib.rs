@@ -380,6 +380,8 @@ fn resolve_normal_format(format: &str) -> Result<RdfFormat, PyMaplibError> {
         }),
         "ntriples" => Ok(RdfFormat::NTriples),
         "turtle" => Ok(RdfFormat::Turtle),
+        "trig" => Ok(RdfFormat::TriG),
+        "nquads" | "n-quads" | "nq" => Ok(RdfFormat::NQuads),
         "rdf/xml" | "xml" | "rdfxml" => Ok(RdfFormat::RdfXml),
         _ => Err(PyMaplibError::FunctionArgumentError(format!(
             "Unknown format: {}",

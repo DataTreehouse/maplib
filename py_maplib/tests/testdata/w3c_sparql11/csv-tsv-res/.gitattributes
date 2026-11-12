@@ -1,0 +1,5 @@
+# Expected results are compared byte-wise by some harnesses.
+# Keep line endings exactly as committed: csvtsv04.csv is CRLF
+# (SPARQL 1.1 CSV/TSV, section 2), the other result files are LF.
+*.csv -text
+*.tsv -text

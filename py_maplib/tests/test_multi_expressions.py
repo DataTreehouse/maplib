@@ -1576,7 +1576,7 @@ def test_issue_22(streaming):
     print(sm.mappings)
     assert sm.rdf_types == {
         "a": RDFType.Literal("http://www.w3.org/2001/XMLSchema#string"),
-        "c": RDFType.Literal("http://www.w3.org/2001/XMLSchema#unsignedInt"),
+        "c": RDFType.Literal("http://www.w3.org/2001/XMLSchema#integer"),
     }
     assert sm.mappings.height == 3
     assert sm.mappings.get_column("c").to_list() == [2, 1, 2]

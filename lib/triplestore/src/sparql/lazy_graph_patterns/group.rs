@@ -4,7 +4,7 @@ use oxrdf::Variable;
 use tracing::{instrument, trace};
 
 use crate::sparql::QuerySettings;
-use polars::prelude::{coalesce, col, cols, lit, IntoLazy, JoinType};
+use polars::prelude::{coalesce, col, cols, lit, DataType, IntoLazy, JoinType};
 use polars_core::df;
 use query_processing::aggregates::AggregateReturn;
 use query_processing::graph_patterns::{group_by, join, prepare_group_by};
@@ -114,7 +114,11 @@ impl Triplestore {
 
             let mut lf = lf_rhs.left_join(lf_lhs, &*dummy_col_name, &*dummy_col_name);
             for c in count_cols {
-                lf = lf.with_column(coalesce(&[col(c), col(&*dummy_col_name)]));
+                // COUNT over an empty group is 0, COUNT results are Int64 (xsd:integer).
+                lf = lf.with_column(coalesce(&[
+                    col(c),
+                    col(&*dummy_col_name).cast(DataType::Int64),
+                ]));
             }
             lf = lf.drop(cols([&dummy_col_name]));
             grouped.mappings = lf;

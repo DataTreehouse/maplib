@@ -20,11 +20,7 @@ pub fn count_with_expression(column_context: &Context, distinct: bool) -> (Expr,
     } else {
         col(column_context.as_str()).count()
     };
-    (
-        out_expr,
-        BaseRDFNodeType::Literal(xsd::UNSIGNED_INT.into_owned())
-            .into_default_input_rdf_node_state(),
-    )
+    count_output(out_expr)
 }
 
 pub fn count_without_expression(
@@ -40,10 +36,14 @@ pub fn count_without_expression(
         }
         any_horizontal(is_not_null).unwrap().sum()
     };
+    count_output(out_expr)
+}
+
+/// COUNT returns xsd:integer (SPARQL 1.1 section 18.5.1.2), which is stored as Int64.
+fn count_output(expr: Expr) -> (Expr, RDFNodeState) {
     (
-        out_expr,
-        BaseRDFNodeType::Literal(xsd::UNSIGNED_INT.into_owned())
-            .into_default_input_rdf_node_state(),
+        expr.cast(DataType::Int64),
+        BaseRDFNodeType::Literal(xsd::INTEGER.into_owned()).into_default_input_rdf_node_state(),
     )
 }
 

@@ -641,6 +641,13 @@ pub(crate) fn write_triples_mutex(
     let graph = parse_optional_named_node(graph)?;
     let named_graph = NamedGraph::from_maybe_named_node(graph.as_ref());
     match format {
+        ExtendedRdfFormat::Normal(format @ (RdfFormat::TriG | RdfFormat::NQuads)) => {
+            // Dataset formats write all graphs unless a graph is given
+            let only_graph = graph.as_ref().map(|_| &named_graph);
+            inner
+                .write_quads(&mut actual_file, only_graph, format, prefixes.as_ref())
+                .map_err(PyMaplibError::from)?;
+        }
         ExtendedRdfFormat::Normal(format) => {
             inner
                 .write_triples(&mut actual_file, &named_graph, format, prefixes.as_ref())
@@ -737,9 +744,17 @@ pub(crate) fn writes_mutex(
     let mut out = vec![];
     let graph = parse_optional_named_node(graph)?;
     let named_graph = NamedGraph::from_maybe_named_node(graph.as_ref());
-    inner
-        .write_triples(&mut out, &named_graph, format, prefixes.as_ref())
-        .map_err(PyMaplibError::from)?;
+    if matches!(format, RdfFormat::TriG | RdfFormat::NQuads) {
+        // Dataset formats write all graphs unless a graph is given
+        let only_graph = graph.as_ref().map(|_| &named_graph);
+        inner
+            .write_quads(&mut out, only_graph, format, prefixes.as_ref())
+            .map_err(PyMaplibError::from)?;
+    } else {
+        inner
+            .write_triples(&mut out, &named_graph, format, prefixes.as_ref())
+            .map_err(PyMaplibError::from)?;
+    }
     Ok(String::from_utf8(out).unwrap())
 }
 

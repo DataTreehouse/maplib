@@ -65,6 +65,10 @@ impl Triplestore {
             ExtendedRdfFormat::Normal(RdfFormat::Turtle)
         } else if path.extension() == Some("nt".as_ref()) {
             ExtendedRdfFormat::Normal(RdfFormat::NTriples)
+        } else if path.extension() == Some("trig".as_ref()) {
+            ExtendedRdfFormat::Normal(RdfFormat::TriG)
+        } else if path.extension() == Some("nq".as_ref()) {
+            ExtendedRdfFormat::Normal(RdfFormat::NQuads)
         } else if path.extension() == Some("xml".as_ref())
             || path.extension() == Some("rdf".as_ref())
         {
@@ -422,6 +426,14 @@ fn subject_to_oxrdf_subject(s: NamedOrBlankNode, parser_call: &str) -> NamedOrBl
     }
 }
 
+fn graph_name_to_oxrdf_graph_name(g: GraphName, parser_call: &str) -> GraphName {
+    if let GraphName::BlankNode(bn) = g {
+        GraphName::BlankNode(blank_node_to_oxrdf_blank_node(bn, parser_call))
+    } else {
+        g
+    }
+}
+
 fn blank_node_to_oxrdf_blank_node(bn: BlankNode, parser_call: &str) -> BlankNode {
     BlankNode::new_unchecked(format!("{}_{}", bn.as_str(), parser_call))
 }
@@ -458,6 +470,7 @@ fn create_predicate_map<'a>(
                 object,
                 graph_name,
             } = q.map_err(TriplestoreError::RDFSyntaxError)?;
+            let graph_name = graph_name_to_oxrdf_graph_name(graph_name, parser_call);
             let predicate_map =
                 if let Some(predicate_map) = graph_predicate_map.get_mut(&graph_name) {
                     predicate_map

@@ -44,6 +44,10 @@ pub enum TriplestoreError {
     PoisonedLockError,
     #[error("Error writing Turtle {0}")]
     WriteTurtleError(String),
+    #[error("Writing {0} is not supported")]
+    UnsupportedWriteFormat(String),
+    #[error("Error writing quads {0}")]
+    WriteQuadsError(String),
     #[error("Sparql query error {0}")]
     SparqlQueryError(String),
     #[error("Found bad list: {0}")]

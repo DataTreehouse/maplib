@@ -542,6 +542,24 @@ impl Model {
         Ok(())
     }
 
+    /// Writes a dataset format (TriG or N-Quads), all graphs if graph is None.
+    pub fn write_quads<W: Write>(
+        &mut self,
+        buffer: &mut W,
+        graph: Option<&NamedGraph>,
+        rdf_format: RdfFormat,
+        prefixes: Option<&HashMap<String, NamedNode>>,
+    ) -> Result<(), MaplibError> {
+        let mut use_prefixes = self.prefixes.clone();
+        if let Some(prefixes) = prefixes {
+            use_prefixes.extend(prefixes.clone());
+        }
+        self.triplestore
+            .write_quads(buffer, rdf_format, graph, &use_prefixes)
+            .map_err(MaplibError::TriplestoreError)?;
+        Ok(())
+    }
+
     pub fn write_hdt<W: Write>(
         &mut self,
         buffer: &mut W,

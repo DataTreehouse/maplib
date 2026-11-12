@@ -1,6 +1,6 @@
 use super::Triplestore;
 use crate::errors::TriplestoreError;
-use oxrdf::NamedNode;
+use oxrdf::{GraphName, NamedNode};
 use oxrdfio::{RdfFormat, RdfSerializer};
 use polars::prelude::{by_name, col};
 use polars_core::datatypes::DataType;
@@ -32,6 +32,9 @@ impl Triplestore {
         graph: &NamedGraph,
         prefixes: &HashMap<String, NamedNode>,
     ) -> Result<(), TriplestoreError> {
+        if matches!(format, RdfFormat::TriG | RdfFormat::NQuads) {
+            return self.write_quads(buf, format, Some(graph), prefixes);
+        }
         if !self.does_graph_exist(graph) {
             return Ok(());
         }
@@ -131,6 +134,75 @@ impl Triplestore {
                 ))
             })?;
         }
+        Ok(())
+    }
+
+    /// Writes quads in a dataset format (TriG or N-Quads).
+    /// If graph is None, all graphs are written, the default graph first.
+    pub fn write_quads<W: Write>(
+        &mut self,
+        buf: &mut W,
+        format: RdfFormat,
+        graph: Option<&NamedGraph>,
+        prefixes: &HashMap<String, NamedNode>,
+    ) -> Result<(), TriplestoreError> {
+        if !matches!(format, RdfFormat::TriG | RdfFormat::NQuads) {
+            return Err(TriplestoreError::UnsupportedWriteFormat(format!(
+                "{} as quads",
+                format
+            )));
+        }
+        let mut serializer = RdfSerializer::from_format(format);
+        if format == RdfFormat::TriG {
+            let mut sorted_prefixes: Vec<_> = prefixes.iter().collect();
+            sorted_prefixes.sort();
+            for (name, iri) in sorted_prefixes {
+                serializer = serializer
+                    .with_prefix(name, iri.as_str())
+                    .map_err(|e| TriplestoreError::InvalidPrefixIRI(e.to_string()))?;
+            }
+        }
+        let graphs: Vec<NamedGraph> = if let Some(graph) = graph {
+            if self.does_graph_exist(graph) {
+                vec![graph.clone()]
+            } else {
+                vec![]
+            }
+        } else {
+            let mut graphs: Vec<_> = self.graph_triples_map.keys().cloned().collect();
+            graphs.sort_by_key(|g| (!matches!(g, NamedGraph::DefaultGraph), g.to_string()));
+            graphs
+        };
+
+        let mut writer = serializer.for_writer(buf);
+        for graph in &graphs {
+            let graph_name = GraphName::from(graph);
+            for (predicate, df_map) in self.graph_triples_map.get(graph).unwrap() {
+                for ((subject_type, object_type), tt) in df_map {
+                    for (lf, _) in tt.get_lazy_frames(&None, &None)? {
+                        let triples = global_df_as_triples(
+                            lf.collect().unwrap(),
+                            subject_type.clone(),
+                            object_type.clone(),
+                            predicate,
+                            self.global_cats.clone(),
+                        );
+                        for t in triples {
+                            let q = t.in_graph(graph_name.clone());
+                            writer.serialize_quad(&q).map_err(|x| {
+                                TriplestoreError::WriteQuadsError(format!(
+                                    "Error serializing quad {}: {}",
+                                    q, x
+                                ))
+                            })?;
+                        }
+                    }
+                }
+            }
+        }
+        writer.finish().map_err(|x| {
+            TriplestoreError::WriteQuadsError(format!("Error finishing serialization: {}", x))
+        })?;
         Ok(())
     }
 

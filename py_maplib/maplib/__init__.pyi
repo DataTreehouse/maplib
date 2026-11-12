@@ -976,7 +976,7 @@ class Model:
     def read(
             self,
             file_path: Union[str, Path],
-            format: LiteralType["ntriples", "turtle", "rdf/xml", "cim/xml", "json-ld", "hdt"] = None,
+            format: LiteralType["ntriples", "turtle", "trig", "nquads", "rdf/xml", "cim/xml", "json-ld", "hdt"] = None,
             base_iri: str = None,
             transient: bool = False,
             parallel: bool = None,
@@ -997,12 +997,12 @@ class Model:
         >>> m.read("my_triples.ttl")
 
         :param file_path: The path of the file containing triples
-        :param format: One of "ntriples", "turtle", "rdf/xml", "json-ld", "cim/xml" or "hdt", otherwise it is inferred from the file extension.
+        :param format: One of "ntriples", "turtle", "trig", "nquads", "rdf/xml", "json-ld", "cim/xml" or "hdt", otherwise it is inferred from the file extension.
         :param base_iri: Base iri
         :param transient: Should these triples be included when writing the graph to the file system?
         :param parallel: Parse triples in parallel, currently only NTRiples and Turtle. Assumes all prefixes are in the beginning of the document. Defaults to true only for NTriples.
         :param checked: Check IRIs etc.
-        :param graph: The IRI of the graph to read the triples into, if None, it will be the default graph.
+        :param graph: The IRI of the graph to read the triples into, if None, it will be the default graph (or, for TriG, N-Quads and JSON-LD, the graphs named in the document).
         :param replace_graph: Replace the graph with these triples? Will replace the default graph if no graph is specified.
         :param triples_batch_size: Read this many triples in each batch.
         :param known_contexts: Contexts in JSON-LD documents are resolved towards this dict.
@@ -1025,7 +1025,7 @@ class Model:
     def reads(
             self,
             s: str,
-            format: LiteralType["ntriples", "turtle", "rdf/xml", "cim/xml", "json-ld"],
+            format: LiteralType["ntriples", "turtle", "trig", "nquads", "rdf/xml", "cim/xml", "json-ld"],
             base_iri: str = None,
             transient: bool = False,
             parallel: bool = None,
@@ -1045,12 +1045,12 @@ class Model:
         >>> m.reads(my_ntriples_string, format="ntriples")
 
         :param s: String containing serialized triples.
-        :param format: One of "ntriples", "turtle", "rdf/xml", "json-ld" or "cim/xml".
+        :param format: One of "ntriples", "turtle", "trig", "nquads", "rdf/xml", "json-ld" or "cim/xml".
         :param base_iri: Base iri
         :param transient: Should these triples be included when writing the graph to the file system?
         :param parallel: Parse triples in parallel, currently only NTRiples and Turtle. Assumes all prefixes are in the beginning of the document. Defaults to true for NTriples.
         :param checked: Check IRIs etc.
-        :param graph: The IRI of the graph to read the triples into.
+        :param graph: The IRI of the graph to read the triples into. If None, the default graph (or, for TriG, N-Quads and JSON-LD, the graphs named in the document).
         :param replace_graph: Replace the graph with these triples? Will replace the default graph if no graph is specified.
         :param triples_batch_size: Number of triples to read in each batch.
         :param known_contexts: Contexts in JSON-LD documents are resolved towards this dict.
@@ -1102,7 +1102,7 @@ class Model:
     def write(
             self,
             file_path: Union[str, Path],
-            format=LiteralType["ntriples", "turtle", "rdf/xml", "hdt"],
+            format=LiteralType["ntriples", "turtle", "trig", "nquads", "rdf/xml", "hdt"],
             graph: str = None,
             prefixes: Dict[str, str] = None,
     ) -> None:
@@ -1114,15 +1114,15 @@ class Model:
         >>> m.write("my_triples.nt", format="ntriples")
 
         :param file_path: The path of the file containing triples
-        :param format: One of "ntriples", "turtle", "rdf/xml", "hdt".
+        :param format: One of "ntriples", "turtle", "trig", "nquads", "rdf/xml", "hdt".
             HDT is built in memory; literals with special characters are stored N-Triples-escaped, following the Rust hdt crate.
-        :param graph: The IRI of the graph to write.
+        :param graph: The IRI of the graph to write. For "trig" and "nquads", all graphs are written when this is None.
         :param prefixes: The prefixes that will be used in turtle serialization.
         """
 
     def writes(
             self,
-            format=LiteralType["ntriples", "turtle", "rdf/xml"],
+            format=LiteralType["ntriples", "turtle", "trig", "nquads", "rdf/xml"],
             graph: str = None,
             prefixes: Dict[str, str] = None,
     ) -> str:
@@ -1133,8 +1133,8 @@ class Model:
 
         >>> s = m.writes(format="turtle")
 
-        :param format: One of "ntriples", "turtle", "rdf/xml".
-        :param graph: The IRI of the graph to write.
+        :param format: One of "ntriples", "turtle", "trig", "nquads", "rdf/xml".
+        :param graph: The IRI of the graph to write. For "trig" and "nquads", all graphs are written when this is None.
         :param prefixes: The prefixes used for turtle serialization.
         :return Triples in model in the NTriples format (potentially a large string)
         """

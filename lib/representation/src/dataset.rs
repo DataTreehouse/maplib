@@ -35,6 +35,16 @@ impl From<&GraphName> for NamedGraph {
     }
 }
 
+impl From<&NamedGraph> for GraphName {
+    fn from(graph: &NamedGraph) -> Self {
+        match graph {
+            NamedGraph::DefaultGraph => GraphName::DefaultGraph,
+            NamedGraph::NamedGraph(nn) => GraphName::NamedNode(nn.clone()),
+            NamedGraph::BlankNode(bn) => GraphName::BlankNode(bn.clone()),
+        }
+    }
+}
+
 impl Default for NamedGraph {
     fn default() -> Self {
         NamedGraph::DefaultGraph

@@ -1,5 +1,12 @@
 # Change log
 
+## v0.20.34
+### Features
+- Read and write TriG and N-Quads (format "trig" / "nquads", or the .trig / .nq file extensions when reading). Writing these formats outputs all graphs unless a graph is specified
+
+### Bug fixes
+- COUNT now returns xsd:integer (Int64) as required by the SPARQL 1.1 spec, instead of xsd:unsignedInt (UInt32)
+
 ## v0.20.32
 ### Features
 - Turtle output for construct queries
