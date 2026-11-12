@@ -25,6 +25,10 @@ impl Triplestore {
         sms: Vec<(EagerSolutionMappings, Option<NamedNode>)>,
         graph: &NamedGraph,
     ) -> Result<(), SparqlError> {
+        // Nothing can be deleted from a graph that does not exist.
+        if !self.does_graph_exist(graph) {
+            return Ok(());
+        }
         let sms: Vec<_> = sms
             .into_par_iter()
             .map(|(x, y)| partition_by_global_predicate_col(x, y, self.global_cats.clone()))

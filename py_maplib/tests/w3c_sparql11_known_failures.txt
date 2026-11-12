@@ -2,104 +2,30 @@
 # One test id per line, optionally followed by "# reason".
 # These are marked as strict xfails: when a test starts passing, remove it from this list.
 # Tests tagged [flaky] fail nondeterministically and are non-strict xfails.
-aggregates/agg-avg-03  # Results differ.
-aggregates/agg-empty-group-count-1  # Results differ.
-aggregates/agg-empty-group-count-graph  # PanicException: not yet implemented
-aggregates/agg-empty-group-max-2  # Results differ.
+aggregates/agg-avg-03  # Results differ: AVG over an empty group is unbound instead of 0
+aggregates/agg-empty-group-count-graph  # The expected result is a Turtle result set, which the test harness does not support
 aggregates/agg08  # query is accepted but should be rejected
 aggregates/agg11  # query is accepted but should be rejected
-basic-update/insert-05a  # Graph <http://example.org/g3> differs.
-basic-update/insert-using-01  # PanicException: not yet implemented
-basic-update/insert-where-03  # PanicException: not yet implemented
-basic-update/insert-where-04  # PanicException: not yet implemented
-basic-update/insert-where-same-bnode  # Graph <http://example.org/g3> differs.
-basic-update/insert-where-same-bnode2  # Graph <http://example.org/g3> differs.
-bind/bind07  # Results differ.
-bindings/graph  # PanicException: not yet implemented
-bindings/graph-from-named-1  # PanicException: not yet implemented
-bindings/graph-from-named-2  # PanicException: not yet implemented
-bindings/graph-from-named-3  # Results differ.
-bindings/graph-no-var  # PanicException: not yet implemented
-bindings/values-no-vars-two-rows  # Results differ.
-bindings/values4  # PanicException: called `Result::unwrap()` on an `Err` value: ShapeMismatch(ErrString("could not crea
-bindings/values5  # Results differ.
-bindings/values7  # Results differ.
-bindings/values8  # Results differ.
+basic-update/insert-where-same-bnode2  # Graph <http://example.org/g3> differs: a template without variables and an empty WHERE inserts nothing
+bind/bind07  # Results differ: BIND in a nested group sees variables bound outside of the group
+bindings/graph  # The expected result is a Turtle result set, which the test harness does not support
+bindings/graph-no-var  # The expected result is a Turtle result set, which the test harness does not support
+bindings/values7  # Results differ: unbound variables in the solutions are not treated as compatible with VALUES
 cast/cast-bool  # Results differ: "0"^^xsd:boolean is stored as a boolean value and returned as "false"
 cast/cast-decimal  # Results differ: "0"^^xsd:boolean is stored as a boolean value and returned as "false"
 cast/cast-double  # Results differ: "0"^^xsd:boolean is stored as a boolean value and returned as "false"
 cast/cast-float  # Results differ: "0"^^xsd:boolean is stored as a boolean value and returned as "false"
 cast/cast-int  # Results differ: "0"^^xsd:boolean is stored as a boolean value and returned as "false"
 cast/cast-string  # Results differ: "0"^^xsd:boolean is stored as a boolean value and returned as "false"
-clear/dawg-clear-all-01  # Default graph differs.
-clear/dawg-clear-default-01  # Default graph differs.
-clear/dawg-clear-graph-01  # Graph <http://example.org/g1> differs.
-clear/dawg-clear-named-01  # Graph <http://example.org/g2> differs.
-construct/constructlist  # Graphs differ.
-construct/constructwhere04  # PanicException: not yet implemented: QueryDataset(QueryDataset { default: [NamedNode { iri: "http://
-copy/copy01  # Graph <http://example.org/g1> differs.
-copy/copy03  # Graph <http://example.org/g2> differs.
-copy/copy06  # Default graph differs.
-csv-tsv-res/csv03  # CSV differs.
+construct/constructlist  # Graphs differ: the list head blank node of a collection in a CONSTRUCT template is not reused as the subject
+csv-tsv-res/csv03  # CSV differs: doubles are not written in the canonical form (1.0E6 is written as 1000000.0)
 csv-tsv-res/csv04  # CSV differs.
-delete-insert/dawg-delete-insert-04  # PanicException: not yet implemented
-delete/dawg-delete-07  # MaplibException: Variable ?o not found
-delete/dawg-delete-using-01  # PanicException: not yet implemented
-delete/dawg-delete-using-02a  # PanicException: not yet implemented
-delete/dawg-delete-using-03  # PanicException: not yet implemented
-delete/dawg-delete-using-04  # PanicException: not yet implemented
-delete/dawg-delete-using-05  # PanicException: not yet implemented
-delete/dawg-delete-using-06a  # PanicException: not yet implemented
-delete/dawg-delete-with-01  # PanicException: not yet implemented
-delete/dawg-delete-with-02  # PanicException: not yet implemented
-delete/dawg-delete-with-03  # PanicException: not yet implemented
-delete/dawg-delete-with-04  # PanicException: not yet implemented
-delete/dawg-delete-with-05  # PanicException: not yet implemented
-delete/dawg-delete-with-06  # PanicException: not yet implemented
-drop/dawg-drop-all-01  # Default graph differs.
-drop/dawg-drop-default-01  # Default graph differs.
-drop/dawg-drop-graph-01  # Graph <http://example.org/g1> differs.
-drop/dawg-drop-named-01  # Graph <http://example.org/g2> differs.
-exists/exists-graph-variable  # PanicException: not yet implemented
-functions/bnode01  # MaplibException: The function `BNODE` is not implemented yet
-functions/bnode02  # MaplibException: The function `BNODE` is not implemented yet
+delete/dawg-delete-07  # MaplibException: Variable ?o not found. maplib deliberately rejects update templates with variables that are not bound by the WHERE clause
 functions/hours  # Results differ. xsd:dateTime values are stored in UTC, so the original offset is lost (15:38-08:00 gives 23)
-functions/iri01  # Results differ.
-functions/strlang01  # PanicException: not yet implemented
-functions/strlang03-rdf11  # PanicException: not yet implemented
 functions/timezone  # TIMEZONE is not implemented; needs the original offset, which is lost when dateTimes are stored in UTC
 functions/tz  # TZ is not implemented; needs the original offset, which is lost when dateTimes are stored in UTC
-move/move01  # Default graph differs.
-move/move02  # Default graph differs.
-move/move03  # Graph <http://example.org/g2> differs.
-move/move04  # Graph <http://example.org/g1> differs.
-move/move06  # Default graph differs.
-negation/full-minuend  # Results differ (ordered).
-negation/graph-minus  # PanicException: not yet implemented
-negation/partial-minuend  # PanicException: called `Result::unwrap()` on an `Err` value: Context { error: Context { error: Schem
-property-path/pp06  # PanicException: not yet implemented
-property-path/pp07  # PanicException: not yet implemented
-property-path/pp16  # Results differ (ordered).
-property-path/pp35  # PanicException: not yet implemented
+negation/full-minuend  # Results differ (ordered): MINUS does not treat unbound variables as compatible
+negation/partial-minuend  # PanicException: MINUS on variables with differing types (join keys don't match)
 property-path/pp36  # Results differ.
-property-path/values_and_path  # MaplibException: SPARQL execution error: `duplicate: column 'v' is duplicate
-property-path/zero_or_more_set_end  # Results differ.
-property-path/zero_or_more_set_start  # Results differ.
-property-path/zero_or_one_set_end  # Results differ.
-property-path/zero_or_one_set_start  # Results differ.
-subquery/subquery01  # PanicException: not yet implemented
-subquery/subquery02  # PanicException: not yet implemented
-subquery/subquery03  # PanicException: not yet implemented
-subquery/subquery04  # PanicException: not yet implemented
-subquery/subquery05  # PanicException: not yet implemented
-subquery/subquery07  # PanicException: not yet implemented
-subquery/subquery11  # Results differ (ordered).
-subquery/subquery15  # PanicException: not yet implemented
-subquery/subquery16  # PanicException: not yet implemented
+property-path/values_and_path  # MaplibException: duplicate column 'v'
 syntax-query/test_4  # MaplibException: Custom function not found: <http://example/function>, it is possible to define a fu
-syntax-query/test_42  # PanicException: not yet implemented: QueryDataset(QueryDataset { default: [NamedNode { iri: "http://
-syntax-query/test_group_by_values_scope_03  # query is accepted but should be rejected
-syntax-update-1/test_32  # PanicException: not yet implemented
-syntax-update-1/test_33  # PanicException: not yet implemented
-syntax-update-1/test_34  # PanicException: not yet implemented
-syntax-update-1/test_36  # MaplibException: Graph does not exist: <http://www.w3.org/2009/sparql/docs/tests/data-sparql11/synta

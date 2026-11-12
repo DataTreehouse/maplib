@@ -92,7 +92,16 @@ impl Triplestore {
         let mut flat_gps = Vec::new();
         flat_gps.extend(flatten_join_gps(left, left_context));
         flat_gps.extend(flatten_join_gps(right, right_context));
-        let ordered_flat_gps = order_graph_patterns(flat_gps, &solution_mappings);
+        let mut ordered_flat_gps = order_graph_patterns(flat_gps, &solution_mappings);
+        // VALUES with UNDEF are joined last, as unbound values are compatible with anything.
+        // Evaluating them first would constrain the other patterns with nulls.
+        let (mut ordered, with_undef): (Vec<_>, Vec<_>) =
+            ordered_flat_gps.into_iter().partition(|(gp, _)| {
+                !matches!(gp, GraphPattern::Values { bindings, .. }
+                    if bindings.iter().any(|row| row.iter().any(|x| x.is_none())))
+            });
+        ordered.extend(with_undef);
+        ordered_flat_gps = ordered;
         let mut output_solution_mappings = solution_mappings;
         for (gp, ctx) in ordered_flat_gps {
             output_solution_mappings = Some(self.lazy_graph_pattern(

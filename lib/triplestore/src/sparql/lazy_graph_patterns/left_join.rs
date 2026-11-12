@@ -42,6 +42,11 @@ impl Triplestore {
             query_settings,
             dataset,
         )?;
+        // Constraints on variables that only the optional side binds must not be pushed into
+        // it, since a filtered out optional match gives an unbound variable instead.
+        let mut left_variables = vec![];
+        left.on_in_scope_variable(|v| left_variables.push(v.clone()));
+        pushdowns.limit_to_variables(&left_variables);
         pushdowns.add_graph_pattern_pushdowns(right);
 
         let expression_pushdowns = if let Some(expr) = expression {

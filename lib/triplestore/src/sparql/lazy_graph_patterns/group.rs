@@ -105,7 +105,8 @@ impl Triplestore {
             .map(|(v, _)| v.as_str().to_string())
             .collect();
 
-        if !count_cols.is_empty() {
+        // Without GROUP BY, there is always exactly one group, even if there are no solutions.
+        if variables.is_empty() && !aggregates.is_empty() {
             let lf_lhs = grouped
                 .mappings
                 .with_column(lit(0u32).alias(&dummy_col_name));

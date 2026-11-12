@@ -1,5 +1,6 @@
 use crate::errors::QueryProcessingError;
 use crate::expressions::drop_inner_contexts;
+use crate::expressions::functions::bnode_::bnode_;
 use crate::expressions::functions::concat_::concat_;
 use crate::expressions::functions::custom_function::custom_;
 use crate::expressions::functions::datatype_::datatype_;
@@ -314,6 +315,16 @@ pub fn func_expression(
                 outer_context,
                 global_cats,
                 algorithm,
+            )?;
+        }
+        Function::BNode => {
+            solution_mappings = bnode_(
+                solution_mappings,
+                func,
+                args,
+                &args_contexts,
+                outer_context,
+                global_cats,
             )?;
         }
         _ => {

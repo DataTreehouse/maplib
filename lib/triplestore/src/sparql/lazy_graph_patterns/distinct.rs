@@ -1,7 +1,8 @@
 use super::Triplestore;
 use crate::sparql::errors::SparqlError;
 use crate::sparql::QuerySettings;
-use query_processing::graph_patterns::distinct;
+use polars::prelude::JoinType;
+use query_processing::graph_patterns::{distinct, join};
 use query_processing::pushdowns::Pushdowns;
 use representation::dataset::QueryGraph;
 use representation::query_context::{Context, PathEntry};
@@ -23,16 +24,26 @@ impl Triplestore {
         dataset: &QueryGraph,
     ) -> Result<SolutionMappings, SparqlError> {
         trace!("Processing distinct graph pattern");
-        let solution_mappings = self.lazy_graph_pattern(
+        // DISTINCT applies to the inner pattern only, not to the outer solution mappings.
+        let inner_solution_mappings = self.lazy_graph_pattern(
             inner,
-            solution_mappings,
+            None,
             &context.extension_with(PathEntry::DistinctInner),
             parameters,
             pushdowns,
             query_settings,
             dataset,
         )?;
-        let sm = distinct(solution_mappings)?;
+        let mut sm = distinct(inner_solution_mappings)?;
+        if let Some(solution_mappings) = solution_mappings {
+            sm = join(
+                solution_mappings,
+                sm,
+                JoinType::Inner,
+                self.global_cats.clone(),
+                query_settings.max_rows,
+            )?;
+        }
         Ok(sm)
     }
 }

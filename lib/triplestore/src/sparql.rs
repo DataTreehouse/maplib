@@ -26,12 +26,12 @@ use representation::dataset::{NamedGraph, QueryGraph};
 use representation::debug::DebugOutput;
 use representation::query_context::Context;
 use representation::result::{
-    ground_quad_pattern_to_quad_pattern, quad_patterns_to_solution_mappings,
+    expand_graph_variable, ground_quad_pattern_to_quad_pattern, quad_patterns_to_solution_mappings,
     template_to_solution_mappings, QueryResult, QueryResultKind,
 };
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use representation::{RDFNodeState, OBJECT_COL_NAME, SUBJECT_COL_NAME};
-use spargebra::algebra::{GraphPattern, QueryDataset};
+use spargebra::algebra::{GraphPattern, GraphTarget, QueryDataset};
 use spargebra::term::{
     GraphName, GraphNamePattern, GroundTerm, GroundTermPattern, NamedNodePattern, QuadPattern,
     TermPattern,
@@ -396,11 +396,6 @@ impl Triplestore {
                     using,
                     pattern,
                 } => {
-                    if using.is_some() {
-                        return Err(SparqlError::NotSupportedYet(
-                            "USING / USING NAMED in updates".to_string(),
-                        ));
-                    }
                     let mut variables = HashSet::new();
                     for d in delete {
                         if let GroundTermPattern::Variable(v) = &d.subject {
@@ -423,6 +418,13 @@ impl Triplestore {
                         if let NamedNodePattern::Variable(v) = &i.predicate {
                             variables.insert(v.clone());
                         }
+                    }
+                    if variables.is_empty() {
+                        // The number of solutions matters even without template variables,
+                        // e.g. for blank nodes, so it must survive the projection.
+                        pattern.on_in_scope_variable(|v| {
+                            variables.insert(v.clone());
+                        });
                     }
                     let mut variables: Vec<_> = variables.into_iter().collect();
                     variables.sort();
@@ -458,22 +460,29 @@ impl Triplestore {
                     };
                     let mut delete_solutions: HashMap<_, Vec<_>> = HashMap::new();
                     for d in delete {
-                        let cats = self.global_cats.read()?;
-                        let del = quad_patterns_to_solution_mappings(
+                        for (df, qp) in expand_graph_variable(
                             &mappings,
                             &rdf_node_types,
                             &ground_quad_pattern_to_quad_pattern(d),
-                            None,
-                            false,
-                            &cats,
-                        )
-                        .map_err(|e| SparqlError::QuadPatternsError(e.to_string()))?;
-                        if let Some((df, pred, graph)) = del {
-                            let sol = (df, pred);
-                            if let Some(existing) = delete_solutions.get_mut(&graph) {
-                                existing.push(sol)
-                            } else {
-                                delete_solutions.insert(graph, vec![sol]);
+                            self.global_cats.clone(),
+                        ) {
+                            let cats = self.global_cats.read()?;
+                            let del = quad_patterns_to_solution_mappings(
+                                &df,
+                                &rdf_node_types,
+                                &qp,
+                                None,
+                                false,
+                                &cats,
+                            )
+                            .map_err(|e| SparqlError::QuadPatternsError(e.to_string()))?;
+                            if let Some((df, pred, graph)) = del {
+                                let sol = (df, pred);
+                                if let Some(existing) = delete_solutions.get_mut(&graph) {
+                                    existing.push(sol)
+                                } else {
+                                    delete_solutions.insert(graph, vec![sol]);
+                                }
                             }
                         }
                     }
@@ -493,9 +502,35 @@ impl Triplestore {
                     self.maybe_garbage_collect()?;
                 }
                 GraphUpdateOperation::Load { .. } => {}
-                GraphUpdateOperation::Clear { .. } => {}
+                GraphUpdateOperation::Clear { graph: target, .. }
+                | GraphUpdateOperation::Drop { graph: target, .. } => {
+                    // Graphs are kept as empty graphs, so that they can still be referenced.
+                    let default_graph = graph.cloned().unwrap_or(NamedGraph::DefaultGraph);
+                    let to_clear: Vec<NamedGraph> = match target {
+                        GraphTarget::NamedNode(nn) => {
+                            vec![NamedGraph::from_maybe_named_node(Some(nn))]
+                        }
+                        GraphTarget::DefaultGraph => vec![default_graph],
+                        GraphTarget::NamedGraphs | GraphTarget::AllGraphs => {
+                            let all = matches!(target, GraphTarget::AllGraphs);
+                            let mut gs: HashSet<NamedGraph> = HashSet::new();
+                            for g in self
+                                .graph_triples_map
+                                .keys()
+                                .chain(self.graph_transient_triples_map.keys())
+                            {
+                                if all || g != &default_graph {
+                                    gs.insert(g.clone());
+                                }
+                            }
+                            gs.into_iter().collect()
+                        }
+                    };
+                    for g in to_clear {
+                        self.clear_graph(&g)?;
+                    }
+                }
                 GraphUpdateOperation::Create { .. } => {}
-                GraphUpdateOperation::Drop { .. } => {}
             }
         }
         let debug = if let Some(debug_output) = debug_output {

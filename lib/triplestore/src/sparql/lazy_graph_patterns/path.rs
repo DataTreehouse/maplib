@@ -10,16 +10,17 @@ use polars::prelude::{
 use polars_core::prelude::{DataType, ExplodeOptions, SortMultipleOptions};
 use polars_core::utils::Container;
 use query_processing::errors::QueryProcessingError;
-use query_processing::expressions::{literal_enc, named_node_enc};
-use query_processing::graph_patterns::{group_by_workaround, join, union};
+use query_processing::expressions::{literal_enc, named_node_enc, named_node_local_enc};
+use query_processing::graph_patterns::{distinct, group_by_workaround, join, union};
 use query_processing::pushdowns::Pushdowns;
 use representation::cats::LockedCats;
-use representation::dataset::QueryGraph;
+use representation::dataset::{NamedGraph, QueryGraph};
+use representation::null::expr_is_null_workaround;
 use representation::multitype::{
     compress_actual_multitypes, force_convert_multicol_to_single_col, nest_multicolumns,
 };
 use representation::query_context::{Context, PathEntry};
-use representation::solution_mapping::SolutionMappings;
+use representation::solution_mapping::{BaseCatState, SolutionMappings};
 use representation::{BaseRDFNodeType, RDFNodeState};
 use representation::{OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use spargebra::algebra::{Expression, GraphPattern, PropertyPathExpression};
@@ -255,6 +256,7 @@ impl Triplestore {
         let mut rename_src = vec![];
         let mut rename_trg = vec![];
 
+        let mut constant_match_height = 0;
         let cats = self.global_cats.read().unwrap();
         match subject {
             TermPattern::NamedNode(nn) => {
@@ -300,6 +302,7 @@ impl Triplestore {
                     .filter(col(OBJECT_COL_NAME).eq(e))
                     .collect()
                     .unwrap();
+                constant_match_height = out_df.height();
                 out_df = out_df.drop(OBJECT_COL_NAME).unwrap();
             }
             TermPattern::BlankNode(b) => {
@@ -315,6 +318,7 @@ impl Triplestore {
                     .filter(col(OBJECT_COL_NAME).eq(l))
                     .collect()
                     .unwrap();
+                constant_match_height = out_df.height();
                 out_df = out_df.drop(OBJECT_COL_NAME).unwrap();
             }
             TermPattern::Variable(v) => {
@@ -337,6 +341,14 @@ impl Triplestore {
         } else if let TermPattern::BlankNode(b) = object {
             datatypes.insert(b.to_string(), out_dt_obj);
         }
+        let subject_constant = is_constant(subject);
+        let object_constant = is_constant(object);
+        if subject_constant && object_constant {
+            // A frame without columns must have its height set explicitly.
+            let matches = constant_match_height > 0
+                || (matches_zero_length(ppe) && subject == object);
+            out_df = DataFrame::empty_with_height(if matches { 1 } else { 0 });
+        }
         let out_df_height = out_df.height();
 
         let mut out_lf = out_df.lazy();
@@ -348,6 +360,86 @@ impl Triplestore {
             rdf_node_types: datatypes,
             height_estimate: out_df_height,
         };
+        // A zero length path from a constant term matches the term itself,
+        // even if the term does not occur in the graph.
+        if matches_zero_length(ppe) && subject_constant != object_constant {
+            let (constant, variable) = if subject_constant {
+                (subject, object)
+            } else {
+                (object, subject)
+            };
+            let variable = match variable {
+                TermPattern::Variable(v) => v.as_str().to_string(),
+                TermPattern::BlankNode(b) => b.to_string(),
+                _ => unreachable!("Should never happen"),
+            };
+            let (expr, state) = match constant {
+                TermPattern::NamedNode(nn) => {
+                    let (e, local) = named_node_local_enc(nn, &cats);
+                    (
+                        e,
+                        RDFNodeState::from_bases(
+                            BaseRDFNodeType::IRI,
+                            BaseCatState::CategoricalNative(local.map(LockedCats::new)),
+                        ),
+                    )
+                }
+                TermPattern::Literal(l) => {
+                    let (e, bt, bs) = literal_enc(l, &cats)?;
+                    (e, RDFNodeState::from_bases(bt, bs))
+                }
+                _ => unreachable!("Should never happen"),
+            };
+            drop(cats);
+            let zero_length = SolutionMappings::new(
+                DataFrame::empty_with_height(1)
+                    .lazy()
+                    .with_column(expr.alias(&variable)),
+                HashMap::from([(variable, state)]),
+                1,
+            );
+            path_solution_mappings = distinct(union(
+                vec![path_solution_mappings, zero_length],
+                false,
+                self.global_cats.clone(),
+            )?)?;
+        } else {
+            drop(cats);
+        }
+        // A zero length path between two variables matches every node of the graph.
+        let variable_name = |t: &TermPattern| match t {
+            TermPattern::Variable(v) => Some(v.as_str().to_string()),
+            TermPattern::BlankNode(b) => Some(b.to_string()),
+            _ => None,
+        };
+        if let (Some(s), Some(o)) = (variable_name(subject), variable_name(object)) {
+            if s != o && matches_zero_length(ppe) {
+                let nodes = self.zero_length_nodes(
+                    &s,
+                    &o,
+                    solution_mappings.as_ref(),
+                    query_settings,
+                    dataset,
+                )?;
+                let SolutionMappings {
+                    mappings,
+                    mut rdf_node_types,
+                    height_estimate,
+                } = nodes;
+                let state = rdf_node_types.get(&s).unwrap().clone();
+                rdf_node_types.insert(o.clone(), state);
+                let diagonal = SolutionMappings::new(
+                    mappings.with_column(col(&s).alias(&o)),
+                    rdf_node_types,
+                    height_estimate,
+                );
+                path_solution_mappings = distinct(union(
+                    vec![path_solution_mappings, diagonal],
+                    false,
+                    self.global_cats.clone(),
+                )?)?;
+            }
+        }
         if let Some(mappings) = solution_mappings {
             path_solution_mappings = join(
                 path_solution_mappings,
@@ -925,17 +1017,21 @@ impl U32DataFrameCreator {
                 self.gather_namednode_dfs(inner, triplestore)
             }
             PropertyPathExpression::NegatedPropertySet(nns) => {
-                let graph = if let QueryGraph::NamedGraph(g) = &self.dataset {
-                    g
-                } else {
-                    todo!("Negated property sets over a QueryDataset")
+                let graphs: Vec<NamedGraph> = match &self.dataset {
+                    QueryGraph::NamedGraph(g) => vec![g.clone()],
+                    QueryGraph::QueryDataset(qd) => qd
+                        .default
+                        .iter()
+                        .map(|nn| NamedGraph::from_maybe_named_node(Some(nn)))
+                        .collect(),
                 };
-
-                let allowed: Vec<NamedNode> = triplestore
-                    .all_predicates(graph)
-                    .into_iter()
+                let mut allowed: Vec<NamedNode> = graphs
+                    .iter()
+                    .flat_map(|g| triplestore.all_predicates(g))
                     .filter(|p| !nns.contains(p))
                     .collect();
+                allowed.sort();
+                allowed.dedup();
 
                 if self.named_nodes.contains_key(&PathLeaf::negated(nns)) {
                     return Ok(());
@@ -968,5 +1064,79 @@ impl U32DataFrameCreator {
                 Ok(())
             }
         }
+    }
+}
+
+fn is_constant(t: &TermPattern) -> bool {
+    matches!(t, TermPattern::NamedNode(_) | TermPattern::Literal(_))
+}
+
+fn matches_zero_length(ppe: &PropertyPathExpression) -> bool {
+    match ppe {
+        PropertyPathExpression::ZeroOrMore(_) | PropertyPathExpression::ZeroOrOne(_) => true,
+        PropertyPathExpression::Sequence(a, b) => matches_zero_length(a) && matches_zero_length(b),
+        PropertyPathExpression::Alternative(a, b) => {
+            matches_zero_length(a) || matches_zero_length(b)
+        }
+        PropertyPathExpression::Reverse(a) => matches_zero_length(a),
+        _ => false,
+    }
+}
+
+impl Triplestore {
+    /// The nodes that a zero length path between the variables s and o can match, as a
+    /// single column named s. When the incoming solution mappings bind s or o, its values
+    /// are used, since the result is joined with them anyway. Otherwise all subjects and
+    /// objects of the graph are used.
+    fn zero_length_nodes(
+        &self,
+        s: &str,
+        o: &str,
+        solution_mappings: Option<&SolutionMappings>,
+        query_settings: &QuerySettings,
+        dataset: &QueryGraph,
+    ) -> Result<SolutionMappings, SparqlError> {
+        if let Some(sm) = solution_mappings {
+            for v in [s, o] {
+                if let Some(state) = sm.rdf_node_types.get(v) {
+                    let not_null = expr_is_null_workaround(col(v), state).not();
+                    let nodes = SolutionMappings::new(
+                        sm.mappings
+                            .clone()
+                            .filter(not_null)
+                            .select([col(v).alias(s)]),
+                        HashMap::from([(s.to_string(), state.clone())]),
+                        sm.height_estimate,
+                    );
+                    return Ok(distinct(nodes)?);
+                }
+            }
+        }
+        let SolutionMappings {
+            mappings,
+            rdf_node_types,
+            height_estimate,
+        } = self.get_multi_predicates_solution_mappings(
+            None,
+            &Some(SUBJECT_COL_NAME.to_string()),
+            &None,
+            &Some(OBJECT_COL_NAME.to_string()),
+            &None,
+            &None,
+            &None,
+            &None,
+            query_settings.include_transient,
+            dataset,
+        )?;
+        let mut parts = vec![];
+        for c in [SUBJECT_COL_NAME, OBJECT_COL_NAME] {
+            let state = rdf_node_types.get(c).unwrap().clone();
+            parts.push(SolutionMappings::new(
+                mappings.clone().select([col(c).alias(s)]),
+                HashMap::from([(s.to_string(), state)]),
+                height_estimate,
+            ));
+        }
+        Ok(distinct(union(parts, false, self.global_cats.clone())?)?)
     }
 }

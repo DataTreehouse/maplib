@@ -519,6 +519,23 @@ impl Triplestore {
 }
 
 impl Triplestore {
+    /// Removes all triples from the graph, keeping it as an empty graph.
+    pub fn clear_graph(&mut self, graph: &NamedGraph) -> Result<(), TriplestoreError> {
+        if self.storage_folder.is_some() {
+            return Err(TriplestoreError::SparqlQueryError(
+                "Clearing or dropping graphs is not supported with a storage folder".to_string(),
+            ));
+        }
+        let existed = self.graph_triples_map.contains_key(graph);
+        self.truncate(graph);
+        if existed || graph == &NamedGraph::DefaultGraph {
+            self.graph_triples_map.insert(graph.clone(), HashMap::new());
+            self.graph_transient_triples_map
+                .insert(graph.clone(), HashMap::new());
+        }
+        Ok(())
+    }
+
     pub fn truncate(&mut self, graph: &NamedGraph) {
         if self.storage_folder.is_some() {
             todo!("Should drop this folder.. ")

@@ -1,3 +1,4 @@
+mod bnode_;
 mod cast_iri_to_xsd_literal;
 mod cast_literal_;
 mod concat_;

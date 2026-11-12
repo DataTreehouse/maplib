@@ -160,6 +160,10 @@ impl Pushdowns {
                             continue;
                         }
                     }
+                    // An UNDEF value is compatible with anything, so nothing is pushed down.
+                    if bindings.iter().any(|gs| gs.get(i).unwrap().is_none()) {
+                        continue;
+                    }
                     let mut terms = HashSet::new();
                     let mut literal_types = HashSet::new();
                     let mut iri = false;

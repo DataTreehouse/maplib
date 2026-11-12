@@ -15,8 +15,9 @@ use std::sync::Arc;
 
 #[derive(Debug, Clone)]
 pub struct PrefixCompressedString {
-    // Arc<str> keeps the bytes inline with the refcount: one allocation instead of two.
-    prefix: Arc<str>,
+    // Prefixes are few and interned, so a thin pointer (8 bytes) matters more than the extra allocation.
+    prefix: Arc<String>,
+    // Suffixes are mostly unique: Arc<str> keeps the bytes inline with the refcount (one allocation).
     suffix: Arc<str>,
 }
 
@@ -91,7 +92,7 @@ trait PrefixCompressedKey {
 impl PrefixCompressedKey for PrefixCompressedString {
     #[inline]
     fn parts(&self) -> (&str, &str) {
-        (&self.prefix, &self.suffix)
+        (self.prefix.as_str(), &self.suffix)
     }
 }
 
@@ -140,7 +141,7 @@ impl Display for PrefixCompressedString {
 }
 
 impl PrefixCompressedString {
-    pub fn new(iri: &str, prefix_map: &mut HashSet<Arc<str>>) -> Self {
+    pub fn new(iri: &str, prefix_map: &mut HashMap<String, Arc<String>>) -> Self {
         let (pre, suf) = split_iri(iri);
         PrefixCompressedString {
             prefix: intern_prefix(prefix_map, pre),
@@ -150,12 +151,12 @@ impl PrefixCompressedString {
 }
 
 /// Returns the shared allocation for a prefix, adding it to the set if it is new.
-fn intern_prefix(prefix_map: &mut HashSet<Arc<str>>, pre: &str) -> Arc<str> {
+fn intern_prefix(prefix_map: &mut HashMap<String, Arc<String>>, pre: &str) -> Arc<String> {
     if let Some(arc_pre) = prefix_map.get(pre) {
         arc_pre.clone()
     } else {
-        let arc_pre: Arc<str> = Arc::from(pre);
-        prefix_map.insert(arc_pre.clone());
+        let arc_pre = Arc::new(pre.to_string());
+        prefix_map.insert(pre.to_string(), arc_pre.clone());
         arc_pre
     }
 }
@@ -377,7 +378,7 @@ impl CatMapsInMemory {
 pub struct PrefixCompressedCatMapsInMemory {
     map: BTreeMap<PrefixCompressedString, u32>,
     rev_map: HashMap<u32, PrefixCompressedString, BuildHasherDefault<NoHashHasher<u32>>>,
-    prefix_map: HashSet<Arc<str>>,
+    prefix_map: HashMap<String, Arc<String>>,
 }
 
 impl PrefixCompressedCatMapsInMemory {
@@ -408,7 +409,7 @@ impl PrefixCompressedCatMapsInMemory {
                 (pre, Arc::<str>::from(suf), *u)
             })
             .collect::<Vec<_>>();
-        let mut prefix_map: HashSet<Arc<str>> = HashSet::new();
+        let mut prefix_map: HashMap<String, Arc<String>> = HashMap::new();
         let mut prefix_compressed_vec = Vec::with_capacity(split_vec.len());
         for (pre, suf, u) in split_vec {
             let pre_arc = intern_prefix(&mut prefix_map, pre);
@@ -503,7 +504,7 @@ impl PrefixCompressedCatMapsInMemory {
         // Use the interned prefix so that comparisons can take the pointer equality fast path
         let pre = self.prefix_map.get(pre)?;
         let key = PrefixCompressedRef {
-            prefix: pre,
+            prefix: pre.as_str(),
             suffix: suf,
         };
         self.map
@@ -563,8 +564,10 @@ impl PrefixCompressedCatMapsInMemory {
             None
         } else {
             let map = new_map.iter().map(|(x, y)| (y.clone(), *x)).collect();
-            let prefix_map: HashSet<Arc<str>> =
-                new_map.values().map(|p| p.prefix.clone()).collect();
+            let prefix_map: HashMap<String, Arc<String>> = new_map
+                .values()
+                .map(|p| (p.prefix.to_string(), p.prefix.clone()))
+                .collect();
             Some(Self {
                 map,
                 rev_map: new_map,

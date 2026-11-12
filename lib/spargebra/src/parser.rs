@@ -697,6 +697,16 @@ fn build_select(
         for sel_item in sel_items {
             if let SelectionMember::Expression(expression, variable) = sel_item {
                 if !where_visible.contains(variable) {
+                    let mut visible: HashSet<Variable> = HashSet::default();
+                    p.on_in_scope_variable(|v| {
+                        visible.insert(v.clone());
+                    });
+                    if visible.contains(variable) {
+                        // E.g. a variable bound by a trailing VALUES clause
+                        return Err(
+                            "The SELECT overrides an existing variable using an expression",
+                        );
+                    }
                     p = GraphPattern::Extend {
                         inner: Box::new(p),
                         variable: variable.clone(),
@@ -809,6 +819,21 @@ fn build_select(
         }
     }
     Ok(m)
+}
+
+/// IRI() resolves relative IRIs against the base IRI of the query.
+/// The base IRI is only known when parsing, so constant arguments are resolved here.
+fn iri_function(e: Expression, state: &ParserState) -> Expression {
+    if state.base_iri.is_some() {
+        if let Expression::Literal(l) = &e {
+            if l.datatype() == xsd::STRING && l.language().is_none() {
+                if let Ok(iri) = state.parse_iri(l.value().to_string()) {
+                    return Expression::NamedNode(NamedNode::from(iri));
+                }
+            }
+        }
+    }
+    Expression::FunctionCall(Function::Iri, vec![e])
 }
 
 fn are_variables_bound(expression: &Expression, variables: &HashSet<Variable>) -> bool {
@@ -2312,7 +2337,7 @@ parser! {
             } /
             i("DATATYPE") _ "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::Datatype, vec![e]) } /
             i("BOUND") _ "(" _ v:Var() _ ")" { Expression::Bound(v) } /
-            (i("IRI") / i("URI")) _ "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::Iri, vec![e]) } /
+            (i("IRI") / i("URI")) _ "(" _ e:Expression() _ ")" { iri_function(e, state) } /
             i("BNODE") "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::BNode, vec![e]) } /
             i("BNODE") NIL() { Expression::FunctionCall(Function::BNode, vec![]) }  /
             i("RAND") _ NIL() { Expression::FunctionCall(Function::Rand, vec![]) } /

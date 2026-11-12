@@ -179,6 +179,7 @@ impl Triplestore {
                 parameters,
                 pushdowns,
                 query_settings,
+                dataset,
             ),
             GraphPattern::Extend {
                 inner,
@@ -246,7 +247,8 @@ impl Triplestore {
                 dataset,
             ),
             GraphPattern::Reduced { inner } => {
-                let mut sm = self.lazy_graph_pattern(
+                // REDUCED permits, but does not require, eliminating duplicates.
+                self.lazy_graph_pattern(
                     inner,
                     solution_mappings,
                     &context.extension_with(PathEntry::ReducedInner),
@@ -254,21 +256,26 @@ impl Triplestore {
                     pushdowns,
                     query_settings,
                     dataset,
-                )?;
-                sm.mappings = sm.mappings.first();
-                Ok(sm)
+                )
             }
             GraphPattern::Slice {
                 inner,
                 start,
                 length,
             } => {
+                // The slice applies to the inner pattern only (e.g. a subquery with LIMIT),
+                // so it is evaluated without the outer solution mappings and pushdowns.
+                let (inner_pushdowns, outer) = if solution_mappings.is_some() {
+                    (Pushdowns::new(), solution_mappings)
+                } else {
+                    (pushdowns, None)
+                };
                 let mut newsols = self.lazy_graph_pattern(
                     inner,
-                    solution_mappings,
+                    None,
                     &context.extension_with(PathEntry::ReducedInner),
                     parameters,
-                    pushdowns,
+                    inner_pushdowns,
                     query_settings,
                     dataset,
                 )?;
@@ -276,6 +283,15 @@ impl Triplestore {
                     newsols.mappings = newsols.mappings.slice(*start as i64, *length as u32);
                 } else {
                     newsols.mappings = newsols.mappings.slice(*start as i64, u32::MAX);
+                }
+                if let Some(outer) = outer {
+                    newsols = join(
+                        outer,
+                        newsols,
+                        JoinType::Inner,
+                        self.global_cats.clone(),
+                        query_settings.max_rows,
+                    )?;
                 }
                 Ok(newsols)
             }

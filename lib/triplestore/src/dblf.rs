@@ -5,6 +5,7 @@ use oxrdf::{NamedNode, NamedOrBlankNode, Term};
 use polars::prelude::{as_struct, by_name, col, concat, lit, IntoLazy, LazyFrame, UnionArgs};
 use polars_core::prelude::{Column, DataFrame};
 use query_processing::expressions::{blank_node_enc, literal_enc, named_node_enc};
+use query_processing::graph_patterns::{distinct, union};
 use query_processing::type_constraints::{bt_as_constrained, PossibleTypes};
 use representation::cats::Cats;
 use representation::dataset::{NamedGraph, QueryGraph};
@@ -182,11 +183,39 @@ impl Triplestore {
         include_transient: bool,
         dataset: &QueryGraph,
     ) -> Result<SolutionMappings, TriplestoreError> {
-        let named_graph = if let QueryGraph::NamedGraph(ng) = dataset {
-            ng
-        } else {
-            todo!("{:?}", dataset);
-            //Fix calls below
+        let named_graph = match dataset {
+            QueryGraph::NamedGraph(ng) => ng,
+            QueryGraph::QueryDataset(qd) => {
+                // The default graph of the dataset is the RDF merge of the FROM graphs.
+                let mut sms = vec![];
+                for nn in &qd.default {
+                    sms.push(self.get_multi_predicates_solution_mappings(
+                        predicate_uris.clone(),
+                        subject_keep_rename,
+                        predicate_keep_rename,
+                        object_keep_rename,
+                        subjects,
+                        objects,
+                        subject_datatype_ctr,
+                        object_datatype_ctr,
+                        include_transient,
+                        &QueryGraph::NamedGraph(NamedGraph::from_maybe_named_node(Some(nn))),
+                    )?);
+                }
+                return if sms.is_empty() {
+                    Ok(create_empty_lf_datatypes(
+                        subject_keep_rename,
+                        predicate_keep_rename,
+                        object_keep_rename,
+                    ))
+                } else if sms.len() == 1 {
+                    Ok(sms.pop().unwrap())
+                } else {
+                    let sm = union(sms, false, self.global_cats.clone())
+                        .map_err(|x| TriplestoreError::SparqlQueryError(x.to_string()))?;
+                    distinct(sm).map_err(|x| TriplestoreError::SparqlQueryError(x.to_string()))
+                };
+            }
         };
         let predicate_uris = predicate_uris.unwrap_or(self.all_predicates(named_graph));
         let cats = self.global_cats.read()?;

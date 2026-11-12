@@ -214,8 +214,8 @@ pub fn basic_rdf_node_type_column_to_term_vec(
                         (Some(v), Some(l)) => Some(Term::Literal(
                             Literal::new_language_tagged_literal_unchecked(v, l),
                         )),
-                        (None, None) => None,
-                        _ => panic!(),
+                        // A lang string is unbound when its value is null.
+                        _ => None,
                     })
                     .collect()
             }

@@ -1,8 +1,8 @@
-use crate::cats::{Cats, LockedCats};
+use crate::cats::{maybe_decode_expr, Cats, LockedCats};
 use crate::dataset::NamedGraph;
 use crate::debug::DebugOutputs;
 use crate::errors::RepresentationError;
-use crate::multitype::{nest_multicolumns, unnest_multicols};
+use crate::multitype::{nest_multicolumns, unnest_multicols, MULTI_IRI_DT};
 use crate::null::expr_is_null_workaround;
 use crate::polars_to_rdf::{df_as_result, QuerySolutions};
 use crate::query_context::Context;
@@ -142,18 +142,79 @@ pub fn template_to_solution_mappings(
     df = mint_blank_nodes(df, &mut rdf_node_types, template);
     let mut solutions_map: HashMap<_, Vec<_>> = HashMap::new();
     for qp in template {
-        let cats = global_cats.read()?;
-        if let Some((sm, predicate, graph)) =
-            quad_patterns_to_solution_mappings(&df, &rdf_node_types, qp, None, true, &cats)?
-        {
-            if let Some(solutions) = solutions_map.get_mut(&graph) {
-                solutions.push((sm, predicate));
-            } else {
-                solutions_map.insert(graph, vec![(sm, predicate)]);
+        for (df, qp) in expand_graph_variable(&df, &rdf_node_types, qp, global_cats.clone()) {
+            let cats = global_cats.read()?;
+            if let Some((sm, predicate, graph)) =
+                quad_patterns_to_solution_mappings(&df, &rdf_node_types, &qp, None, true, &cats)?
+            {
+                if let Some(solutions) = solutions_map.get_mut(&graph) {
+                    solutions.push((sm, predicate));
+                } else {
+                    solutions_map.insert(graph, vec![(sm, predicate)]);
+                }
             }
         }
     }
     Ok(solutions_map)
+}
+
+/// Replaces a graph name variable in the quad pattern with each IRI that it is bound to,
+/// together with the rows where it has that value. Rows where it is not an IRI are dropped.
+pub fn expand_graph_variable(
+    df: &DataFrame,
+    rdf_node_types: &HashMap<String, RDFNodeState>,
+    qp: &QuadPattern,
+    global_cats: LockedCats,
+) -> Vec<(DataFrame, QuadPattern)> {
+    let v = if let GraphNamePattern::Variable(v) = &qp.graph_name {
+        v
+    } else {
+        return vec![(df.clone(), qp.clone())];
+    };
+    let Some(t) = rdf_node_types.get(v.as_str()) else {
+        return vec![];
+    };
+    let Some(bs) = t.map.get(&BaseRDFNodeType::IRI) else {
+        return vec![];
+    };
+    let iri_col = if t.is_multi() {
+        col(v.as_str()).struct_().field_by_name(MULTI_IRI_DT)
+    } else {
+        col(v.as_str())
+    };
+    const GRAPH_COL: &str = "__maplib_graph_name";
+    let decoded = maybe_decode_expr(iri_col, &BaseRDFNodeType::IRI, bs, global_cats)
+        .cast(DataType::String)
+        .alias(GRAPH_COL);
+    let with_graph = df.clone().lazy().with_column(decoded).collect().unwrap();
+    let graphs = with_graph
+        .column(GRAPH_COL)
+        .unwrap()
+        .as_materialized_series()
+        .unique()
+        .unwrap();
+    let mut out = vec![];
+    let graphs: Vec<String> = graphs
+        .str()
+        .unwrap()
+        .iter()
+        .flatten()
+        .map(|x| x.to_string())
+        .collect();
+    for g in graphs {
+        let g = g.as_str();
+        let filtered = with_graph
+            .clone()
+            .lazy()
+            .filter(col(GRAPH_COL).eq(lit(g)))
+            .drop(by_name([GRAPH_COL], true, false))
+            .collect()
+            .unwrap();
+        let mut new_qp = qp.clone();
+        new_qp.graph_name = GraphNamePattern::NamedNode(NamedNode::new_unchecked(g));
+        out.push((filtered, new_qp));
+    }
+    out
 }
 
 pub fn ground_quad_pattern_to_quad_pattern(qp: &GroundQuadPattern) -> QuadPattern {
@@ -179,8 +240,10 @@ pub fn quad_patterns_to_solution_mappings(
     let graph = match &quad_pattern.graph_name {
         GraphNamePattern::NamedNode(nn) => NamedGraph::from_maybe_named_node(Some(nn)),
         GraphNamePattern::DefaultGraph => NamedGraph::DefaultGraph,
-        GraphNamePattern::Variable(_) => {
-            todo!()
+        GraphNamePattern::Variable(v) => {
+            return Err(RepresentationError::ConstructWithUndefinedVariable(format!(
+                "Graph name variable {v} must be expanded before creating triples"
+            )));
         }
     };
     let mut select_expr = vec![];
