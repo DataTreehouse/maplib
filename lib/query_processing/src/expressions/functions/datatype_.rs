@@ -1,5 +1,6 @@
 use crate::errors::QueryProcessingError;
 use polars::prelude::{coalesce, col, lit, when, LiteralValue};
+use representation::null::expr_is_null_workaround;
 use representation::query_context::Context;
 use representation::rdf_to_polars::rdf_named_node_to_polars_literal_value;
 use representation::solution_mapping::{BaseCatState, SolutionMappings};
@@ -44,7 +45,12 @@ pub fn datatype_(
     } else {
         let b = t.get_base_type().unwrap();
         match b {
-            BaseRDFNodeType::Literal(l) => lit(rdf_named_node_to_polars_literal_value(l)),
+            // DATATYPE of an unbound value is an error (unbound)
+            BaseRDFNodeType::Literal(l) => {
+                when(expr_is_null_workaround(col(first_context.as_str()), t).not())
+                    .then(lit(rdf_named_node_to_polars_literal_value(l)))
+                    .otherwise(lit(LiteralValue::untyped_null()).cast(iri_dtype))
+            }
             _ => lit(LiteralValue::untyped_null()).cast(iri_dtype),
         }
     };

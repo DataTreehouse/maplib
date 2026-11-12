@@ -10,7 +10,7 @@ use oxrdf::vocab::xsd;
 use oxrdf::{BlankNode, Literal, NamedNode, Variable};
 use polars::frame::UniqueKeepStrategy;
 use polars::prelude::{
-    as_struct, by_name, coalesce, col, lit, DataType, Expr, JoinArgs, JoinType, LazyFrame,
+    as_struct, by_name, coalesce, col, lit, when, DataType, Expr, JoinArgs, JoinType, LazyFrame,
     LiteralValue, Operator, Scalar,
 };
 use representation::cats::{maybe_decode_expr, Cats, LockedCats};
@@ -624,33 +624,59 @@ pub fn coalesce_expressions(
                 .into_iter()
                 .map(|x| x.unwrap())
                 .collect();
+
+        // COALESCE returns the first bound argument as a whole. Coalescing each type
+        // separately would mix values of different arguments when they have different types.
+        let bound: Vec<Expr> = exploded
+            .iter()
+            .map(|m| {
+                m.values()
+                    .flat_map(|(e_v, _)| e_v.iter().map(|e| e.clone().is_not_null()))
+                    .reduce(|a, b| a.or(b))
+                    .unwrap_or(lit(false))
+            })
+            .collect();
+        let chosen: Vec<Expr> = (0..bound.len())
+            .map(|i| {
+                let mut c = bound[i].clone();
+                for b in &bound[..i] {
+                    c = c.and(b.clone().not());
+                }
+                c
+            })
+            .collect();
+
         let mut coalesce_map = HashMap::new();
         let mut state_map = HashMap::new();
         for t in &basic_types {
-            let mut to_coalesce = HashMap::new();
-            for m in exploded.iter_mut() {
+            // The sub expressions of this type (e.g. value and language) of each argument
+            let mut to_coalesce: Vec<Vec<Expr>> = vec![];
+            for (m, chosen) in exploded.iter_mut().zip(&chosen) {
                 if let Some((t, (e_v, s))) = m.remove_entry(t) {
-                    for (i, e) in e_v.into_iter().enumerate() {
-                        if !to_coalesce.contains_key(&i) {
-                            to_coalesce.insert(i, vec![]);
+                    for (k, e) in e_v.into_iter().enumerate() {
+                        if to_coalesce.len() <= k {
+                            to_coalesce.push(vec![]);
                         }
-                        let to_coalesce_vec = to_coalesce.get_mut(&i).unwrap();
-                        to_coalesce_vec.push(e);
+                        to_coalesce[k].push(
+                            when(chosen.clone())
+                                .then(e)
+                                .otherwise(lit(LiteralValue::untyped_null())),
+                        );
                     }
                     state_map.insert(t.clone(), s);
                 }
             }
-            coalesce_map.insert(t.clone(), vec![]);
-            let v = coalesce_map.get_mut(t).unwrap();
-            if to_coalesce.get(&0).unwrap().len() == 1 {
-                for (_, mut e) in to_coalesce {
-                    v.push(e.pop().unwrap());
-                }
-            } else {
-                for (_, e) in to_coalesce {
-                    v.push(coalesce(e.as_slice()));
-                }
-            }
+            let v: Vec<Expr> = to_coalesce
+                .into_iter()
+                .map(|mut e| {
+                    if e.len() == 1 {
+                        e.pop().unwrap()
+                    } else {
+                        coalesce(e.as_slice())
+                    }
+                })
+                .collect();
+            coalesce_map.insert(t.clone(), v);
         }
         let new_state = RDFNodeState::from_map(state_map);
         let mut exprs = vec![];

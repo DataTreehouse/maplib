@@ -132,11 +132,17 @@ pub fn create_compatible_cats(
                                     let bt_clone = bt.clone();
                                     *e = e_clone.map(
                                         move |x| {
-                                            renc.clone().re_encode_column(
-                                                x,
-                                                bt_clone.clone(),
-                                                false,
-                                            )
+                                            // Lang strings are split into separate value and
+                                            // language columns here, not a struct
+                                            if bt_clone.is_lang_string() {
+                                                renc.clone().re_encode_single_column(x, false)
+                                            } else {
+                                                renc.clone().re_encode_column(
+                                                    x,
+                                                    bt_clone.clone(),
+                                                    false,
+                                                )
+                                            }
                                         },
                                         |_, f| Ok(f.clone()),
                                     );

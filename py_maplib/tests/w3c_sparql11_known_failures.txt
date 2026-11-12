@@ -2,14 +2,11 @@
 # One test id per line, optionally followed by "# reason".
 # These are marked as strict xfails: when a test starts passing, remove it from this list.
 # Tests tagged [flaky] fail nondeterministically and are non-strict xfails.
-aggregates/agg-avg-02  # MaplibException: SPARQL execution error: ``mean` operation not supported for dtype `struct[3]`
 aggregates/agg-avg-03  # Results differ.
-aggregates/agg-avg-distinct  # MaplibException: SPARQL execution error: ``mean` operation not supported for dtype `struct[3]`
 aggregates/agg-count-rows-distinct  # PanicException: not yet implemented: Try count without distinct
 aggregates/agg-empty-group-count-1  # Results differ.
 aggregates/agg-empty-group-count-graph  # PanicException: not yet implemented
 aggregates/agg-empty-group-max-2  # Results differ.
-aggregates/agg-err-01  # MaplibException: SPARQL execution error: ``mean` operation not supported for dtype `struct[3]`
 aggregates/agg-err-02  # MaplibException: The function `isNUMERIC` is not implemented yet
 aggregates/agg-groupconcat-01  # MaplibException: Query type not supported
 aggregates/agg-groupconcat-02  # Results differ.
@@ -18,15 +15,8 @@ aggregates/agg-groupconcat-04  # MaplibException: Query type not supported
 aggregates/agg-groupconcat-05  # MaplibException: Query type not supported
 aggregates/agg-groupconcat-06  # MaplibException: Query type not supported
 aggregates/agg-groupconcat-distinct  # MaplibException: Query type not supported
-aggregates/agg-max-01  # Results differ.
-aggregates/agg-max-02  # Results differ.
-aggregates/agg-max-distinct  # Results differ.
-aggregates/agg-min-02  # Results differ.
-aggregates/agg-min-distinct  # Results differ.
 aggregates/agg-sample-01  # MaplibException: Query type not supported
 aggregates/agg-sample-distinct  # MaplibException: Query type not supported
-aggregates/agg-sum-02  # MaplibException: SPARQL execution error: ``sum` operation not supported for dtype `struct[3]`
-aggregates/agg-sum-distinct  # MaplibException: SPARQL execution error: ``sum` operation not supported for dtype `struct[3]`
 aggregates/agg08  # query is accepted but should be rejected
 aggregates/agg11  # query is accepted but should be rejected
 basic-update/insert-05a  # Graph <http://example.org/g3> differs.
@@ -99,7 +89,6 @@ functions/abs01  # MaplibException: SPARQL execution error: ``abs` operation not
 functions/bnode01  # MaplibException: The function `BNODE` is not implemented yet
 functions/bnode02  # MaplibException: The function `BNODE` is not implemented yet
 functions/ceil01  # MaplibException: SPARQL execution error: ``ceil` operation not supported for dtype `struct[2]` (expe
-functions/coalesce01  # Results differ.
 functions/concat-empty  # MaplibException: Function CONCAT got wrong number of arguments 0, expected >1
 functions/concat-single  # MaplibException: Function CONCAT got wrong number of arguments 1, expected >1
 functions/concat02  # Results differ.
@@ -135,7 +124,6 @@ functions/timezone  # MaplibException: The function `TIMEZONE` is not implemente
 functions/tz  # MaplibException: The function `TZ` is not implemented yet
 functions/uuid02  # MaplibException: Query type not supported
 functions/year  # Results differ.
-grouping/group04  # [flaky] GROUP BY COALESCE(?w, date) sometimes ignores the bound ?w
 json-res/jsonres03  # MaplibException: Query type not supported
 json-res/jsonres04  # MaplibException: Query type not supported
 move/move01  # Default graph differs.
@@ -146,7 +134,6 @@ move/move06  # Default graph differs.
 negation/full-minuend  # Results differ (ordered).
 negation/graph-minus  # PanicException: not yet implemented
 negation/partial-minuend  # PanicException: called `Result::unwrap()` on an `Err` value: Context { error: Context { error: Schem
-project-expression/projexp07  # Results differ.
 property-path/pp06  # PanicException: not yet implemented
 property-path/pp07  # PanicException: not yet implemented
 property-path/pp08  # MaplibException: Query type not supported

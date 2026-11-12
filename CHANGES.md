@@ -6,6 +6,12 @@
 
 ### Bug fixes
 - COUNT now returns xsd:integer (Int64) as required by the SPARQL 1.1 spec, instead of xsd:unsignedInt (UInt32)
+- SUM, AVG, MIN and MAX now work when the aggregated variable has multiple types. SUM and AVG promote the numeric types in each group (integer < decimal < float < double) and are unbound if a group contains a non-numeric value, MIN and MAX use the SPARQL ordering and keep the type of the selected value
+- Division follows SPARQL op:numeric-divide: integer / integer gives xsd:decimal (e.g. 5 / 2 = 2.5, previously truncated to 2.0 as xsd:double), mixed types are promoted (decimal < float < double), and decimal division by zero is an error (unbound)
+- COALESCE over arguments of different types returns the first bound argument (previously a value of a later argument could be returned nondeterministically)
+- Fix panic when combining lang strings with differently encoded categoricals (e.g. COALESCE(?langString, "x"@en))
+- Infinite xsd:double and xsd:float values are written as INF and -INF (previously inf and -inf, which are not valid lexical forms) in query results, STR() and all RDF serializations
+- DATATYPE() of an unbound value or an error is unbound (previously the datatype of the variable was returned)
 
 ## v0.20.32
 ### Features

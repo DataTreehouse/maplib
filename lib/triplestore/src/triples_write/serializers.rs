@@ -88,7 +88,12 @@ fn float_serializer_no_precision_autoformat<I: NativeType + ryu::Float>(
 ) -> impl Serializer<'_> {
     let f = move |&item, buf: &mut Vec<u8>| {
         let mut buffer = ryu::Buffer::new();
-        let value = buffer.format(item);
+        // ryu writes infinity as inf, the xsd:double and xsd:float lexical form is INF
+        let value = match buffer.format(item) {
+            "inf" => "INF",
+            "-inf" => "-INF",
+            v => v,
+        };
         buf.extend_from_slice(value.as_bytes());
     };
 

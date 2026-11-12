@@ -1,7 +1,7 @@
 use crate::expressions::coalesce_expressions;
 use oxrdf::vocab::xsd;
 use oxrdf::NamedNodeRef;
-use polars::prelude::{col, lit, Expr, LiteralValue};
+use polars::prelude::{col, lit, when, DataType, Expr, LiteralValue};
 use representation::cats::LockedCats;
 use representation::{
     literal_is_boolean, literal_is_date, literal_is_datetime, literal_is_numeric,
@@ -9,7 +9,7 @@ use representation::{
 };
 use spargebra::algebra::Expression;
 use std::cmp;
-use std::ops::{Add, Div, Mul, Sub};
+use std::ops::{Add, Mul, Sub};
 
 pub fn typed_numerical_operation(
     left_col: &str,
@@ -119,10 +119,12 @@ fn op(
     dt_right: NamedNodeRef,
     expression: &Expression,
 ) -> (Expr, RDFNodeState) {
+    if matches!(expression, Expression::Divide(..)) {
+        return divide(e_left, e_right, dt_left, dt_right);
+    }
     let mut e = match expression {
         Expression::Multiply(_, _) => e_left.clone().mul(e_right.clone()),
         Expression::Add(_, _) => e_left.clone().add(e_right.clone()),
-        Expression::Divide(_, _) => e_left.clone().div(e_right.clone()),
         Expression::Subtract(_, _) => e_left.clone().sub(e_right.clone()),
         _ => panic!("Should never happen"),
     };
@@ -131,7 +133,6 @@ fn op(
         let t = match expression {
             Expression::Multiply(_, _) => greatest_common_dt(dt_left, dt_right),
             Expression::Add(_, _) => greatest_common_dt(dt_left, dt_right),
-            Expression::Divide(_, _) => BaseRDFNodeType::Literal(xsd::DOUBLE.into_owned()),
             Expression::Subtract(_, _) => greatest_common_dt(dt_left, dt_right),
             _ => unreachable!("Should never happen"),
         };
@@ -144,6 +145,60 @@ fn op(
             t.into_default_input_rdf_node_state(),
         )
     }
+}
+
+/// Numeric type promotion levels (SPARQL 1.1 section 17.3, XPath op:numeric-*):
+/// integer types < decimal < float < double. None if the type is not numeric.
+pub(crate) fn numeric_promotion_level(t: NamedNodeRef) -> Option<u8> {
+    if !literal_is_numeric(t) {
+        return None;
+    }
+    Some(match t {
+        xsd::DOUBLE => 3,
+        xsd::FLOAT => 2,
+        xsd::DECIMAL => 1,
+        _ => 0,
+    })
+}
+
+/// op:numeric-divide: the operands are promoted to a common type, and integer / integer is
+/// xsd:decimal. Division by zero is an error (unbound) for xsd:decimal, while xsd:float and
+/// xsd:double follow IEEE 754 (INF, -INF or NaN).
+fn divide(
+    e_left: Expr,
+    e_right: Expr,
+    dt_left: NamedNodeRef,
+    dt_right: NamedNodeRef,
+) -> (Expr, RDFNodeState) {
+    let (Some(level_left), Some(level_right)) = (
+        numeric_promotion_level(dt_left),
+        numeric_promotion_level(dt_right),
+    ) else {
+        let t = BaseRDFNodeType::None;
+        return (
+            lit(LiteralValue::untyped_null()).cast(t.default_input_polars_data_type()),
+            t.into_default_input_rdf_node_state(),
+        );
+    };
+    let t = match cmp::max(level_left, level_right) {
+        3 => xsd::DOUBLE,
+        2 => xsd::FLOAT,
+        _ => xsd::DECIMAL,
+    };
+    let t = BaseRDFNodeType::Literal(t.into_owned());
+    let dtype = t.default_input_polars_data_type();
+    let e = if dtype == DataType::Float32 {
+        e_left.cast(DataType::Float32) / e_right.cast(DataType::Float32)
+    } else if dtype == DataType::Float64 {
+        e_left.cast(DataType::Float64) / e_right.cast(DataType::Float64)
+    } else {
+        // Decimal division is computed in floating point and rounded to the decimal scale
+        let right = e_right.cast(DataType::Float64);
+        when(right.clone().eq(lit(0.0)))
+            .then(lit(LiteralValue::untyped_null()).cast(dtype.clone()))
+            .otherwise((e_left.cast(DataType::Float64) / right).cast(dtype.clone()))
+    };
+    (e, t.into_default_input_rdf_node_state())
 }
 
 pub fn compatible_operation(expression: &Expression, l1: NamedNodeRef, l2: NamedNodeRef) -> bool {

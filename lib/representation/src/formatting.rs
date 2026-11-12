@@ -269,7 +269,10 @@ pub fn base_expression_to_native(
 /// to the XSD canonical form, as the N-Triples writer does ("1.5", "798").
 pub fn literal_expr_to_string(e: Expr, t: &BaseRDFNodeType) -> Expr {
     let s = e.cast(DataType::String);
-    if t.is_lit_type(xsd::DECIMAL) {
+    if t.is_lit_type(xsd::DOUBLE) || t.is_lit_type(xsd::FLOAT) {
+        // Polars writes infinity as inf, the xsd:double and xsd:float lexical form is INF
+        s.str().replace(lit(r"^(-?)inf$"), lit("${1}INF"), false)
+    } else if t.is_lit_type(xsd::DECIMAL) {
         s.str()
             .replace_all(lit(r"(\.\d*?)0+$"), lit("${1}"), false)
             .str()
