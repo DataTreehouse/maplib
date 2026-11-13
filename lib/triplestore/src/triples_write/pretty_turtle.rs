@@ -994,21 +994,37 @@ impl Triplestore {
         map: &HashMap<NamedNode, HashMap<(BaseRDFNodeType, BaseRDFNodeType), Triples>>,
     ) -> Result<(HashSet<u32>, HashSet<u32>), TriplestoreError> {
         let mut out_map: HashMap<u32, u8> = HashMap::new();
+        // The blank node subject of the last edge into each blank node. For blank nodes with
+        // in-degree one this is the block they are inlined into.
+        let mut blank_parent: HashMap<u32, u32> = HashMap::new();
         for m in map.values() {
             for (k, v) in m {
-                let object_type = &k.1;
+                let (subject_type, object_type) = k;
                 if object_type.is_blank_node() {
                     if let Some(lfs) = v.get_lazy_frame_slices()? {
                         for lf in lfs {
-                            let df = lf.select([col(OBJECT_COL_NAME)]).collect().unwrap();
+                            let df = lf
+                                .select([col(SUBJECT_COL_NAME), col(OBJECT_COL_NAME)])
+                                .collect()
+                                .unwrap();
                             let objects_u32_iter =
                                 df.column(OBJECT_COL_NAME).unwrap().u32().unwrap();
-                            for u in objects_u32_iter.iter() {
+                            let subjects_u32 = if subject_type.is_blank_node() {
+                                Some(df.column(SUBJECT_COL_NAME).unwrap().u32().unwrap())
+                            } else {
+                                None
+                            };
+                            for (i, u) in objects_u32_iter.iter().enumerate() {
                                 let u = u.unwrap();
                                 if let Some(in_deg) = out_map.get_mut(&u) {
                                     *in_deg = in_deg.saturating_add(1);
                                 } else {
                                     out_map.insert(u, 1);
+                                }
+                                if let Some(subjects_u32) = subjects_u32 {
+                                    blank_parent.insert(u, subjects_u32.get(i).unwrap());
+                                } else {
+                                    blank_parent.remove(&u);
                                 }
                             }
                         }
@@ -1044,8 +1060,52 @@ impl Triplestore {
                 out_one.insert(u);
             }
         }
+        // A blank node with in-degree one is inlined into the block of its only referrer. If
+        // following referrers leads back to the node itself (e.g. _:a :p _:a, or _:a :p _:b .
+        // _:b :p _:a), no block on the cycle is ever written as a top-level block, and the
+        // triples would be lost. Such nodes are labeled instead.
+        for u in find_parent_cycles(&out_one, &blank_parent) {
+            out_one.remove(&u);
+        }
         Ok((zero_out_set, out_one))
     }
+}
+
+/// Returns the nodes of `nodes` that lie on a cycle when following `parent` edges, where the
+/// walk stops at nodes outside `nodes`. Each node has at most one parent, so every cycle is
+/// found by walking from each node until the walk reaches a node already seen.
+fn find_parent_cycles(nodes: &HashSet<u32>, parent: &HashMap<u32, u32>) -> Vec<u32> {
+    const ON_PATH: u8 = 1;
+    const DONE: u8 = 2;
+    let mut state: HashMap<u32, u8> = HashMap::with_capacity(nodes.len());
+    let mut on_cycle = vec![];
+    let mut path = vec![];
+    for start in nodes {
+        path.clear();
+        let mut cur = *start;
+        loop {
+            match state.get(&cur) {
+                None => {
+                    state.insert(cur, ON_PATH);
+                    path.push(cur);
+                    match parent.get(&cur) {
+                        Some(p) if nodes.contains(p) => cur = *p,
+                        _ => break,
+                    }
+                }
+                Some(&ON_PATH) => {
+                    let pos = path.iter().position(|x| *x == cur).unwrap();
+                    on_cycle.extend_from_slice(&path[pos..]);
+                    break;
+                }
+                Some(_) => break,
+            }
+        }
+        for u in &path {
+            state.insert(*u, DONE);
+        }
+    }
+    on_cycle
 }
 
 fn update_blocks_map(

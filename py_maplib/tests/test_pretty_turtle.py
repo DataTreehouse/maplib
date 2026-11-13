@@ -169,3 +169,38 @@ def test_write_lists():
     m2.reads(out, format="turtle")
     df2 = m2.query("""SELECT * WHERE {?a ?b ?c}""")
     assert df2.height == 30
+
+@pytest.mark.parametrize("format", ["turtle", "rdf/xml"])
+@pytest.mark.parametrize(
+    "ntriples",
+    [
+        # Blank node whose only reference is itself
+        "_:j0 <http://example.org/property> _:j0 .",
+        # Cycle of blank nodes with in-degree one
+        """_:a <http://example.org/p> _:b .
+        _:b <http://example.org/p> _:a .""",
+        # Longer cycle with a tail and literals hanging off it
+        """_:a <http://example.org/p> _:b .
+        _:b <http://example.org/p> _:c .
+        _:c <http://example.org/p> _:a .
+        _:a <http://example.org/q> _:d .
+        _:d <http://example.org/r> "x" .
+        <http://example.org/s> <http://example.org/p> _:e .
+        _:e <http://example.org/p> _:e .""",
+    ],
+)
+def test_pretty_write_blank_node_cycles(ntriples, format):
+    m = Model()
+    m.reads(ntriples, format="ntriples")
+    out = m.writes(format=format)
+    m2 = Model()
+    m2.reads(out, format=format)
+    q = "SELECT ?a ?b ?c WHERE {?a ?b ?c}"
+    n = len(m.query(q))
+    assert len(m2.query(q)) == n
+    # Self-loops must survive as self-loops, not as edges between two distinct blank nodes
+    def self_loops(model):
+        lines = [l.split() for l in model.writes(format="ntriples").splitlines() if l.strip()]
+        return sum(1 for l in lines if l[0] == l[2])
+
+    assert self_loops(m2) == self_loops(m)
