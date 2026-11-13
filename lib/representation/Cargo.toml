@@ -15,7 +15,7 @@ in_memory = { path = "../in_memory" }
 
 tracing.workspace = true
 oxrdf = { workspace = true, features = ["oxsdatatypes", "serde"] }
-polars = { workspace = true, features = ["cum_agg", "diagonal_concat", "merge_sorted", "performant", "lazy", "dtype-full", "timezones", "polars-time", "partition_by", "strings"] }
+polars = { workspace = true, features = ["cum_agg", "diagonal_concat", "merge_sorted", "performant", "lazy", "dtype-full", "timezones", "polars-time", "partition_by", "strings", "parquet"] }
 polars-core = { workspace = true, features = ["performant", "simd", "nightly"] }
 chrono.workspace = true
 chrono-tz.workspace = true
@@ -26,6 +26,7 @@ rayon.workspace = true
 nohash-hasher.workspace = true
 uuid.workspace = true
 polars-arrow.workspace = true
+arrow.workspace = true
 memchr.workspace = true
 rust_decimal.workspace = true
 range-set-blaze.workspace = true

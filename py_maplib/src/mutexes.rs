@@ -831,8 +831,14 @@ pub(crate) fn infer_rdfs_mutex(
     inner.infer_rdfs(graph).map_err(PyMaplibError::MaplibError)
 }
 
-pub fn serialize_triples_mutex(inner: &mut MutexGuard<InnerModel>, path: &Path) -> PyResult<()> {
-    Ok(inner.serialize_triples(path).map_err(PyMaplibError::from)?)
+pub fn serialize_triples_mutex(
+    inner: &mut MutexGuard<InnerModel>,
+    path: &Path,
+    raw_db: bool,
+) -> PyResult<()> {
+    Ok(inner
+        .serialize_triples(path, raw_db)
+        .map_err(PyMaplibError::from)?)
 }
 
 pub fn compact_mutex(inner: &mut MutexGuard<InnerModel>) -> PyResult<()> {

@@ -1091,11 +1091,11 @@ impl PyModel {
         })
     }
 
-    #[pyo3(signature = (path = PathBuf::from("./serialized_triples")))]
-    fn serialize(&self, py: Python<'_>, path: PathBuf) -> PyResult<()> {
+    #[pyo3(signature = (path = PathBuf::from("./serialized_triples"), raw_db = false))]
+    fn serialize(&self, py: Python<'_>, path: PathBuf, raw_db: bool) -> PyResult<()> {
         py.detach(move || {
             let mut inner = self.inner.lock().unwrap();
-            serialize_triples_mutex(&mut inner, path.as_ref())
+            serialize_triples_mutex(&mut inner, path.as_ref(), raw_db)
         })
     }
 

@@ -39,7 +39,7 @@ use uuid::Uuid;
 const OFFSET_STEP: usize = 100;
 /// Row group size of triple tables stored on disk. Lookups through the sparse indices read whole
 /// row groups, so smaller groups make point lookups cheaper and full scans slightly slower.
-const DISK_ROW_GROUP_SIZE: usize = 16_384;
+pub(crate) const DISK_ROW_GROUP_SIZE: usize = 16_384;
 const SPARSE_INDEX_KEY_COLUMN_NAME: &str = "key";
 const SPARSE_INDEX_VALUE_COLUMN_NAME: &str = "value";
 

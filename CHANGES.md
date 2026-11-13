@@ -13,6 +13,7 @@
 - Full text search (maplib Enterprise Edition) uses DuckDB instead of tantivy. The index stores the dictionary codes of subjects, predicates and objects, and searches the strings where the dictionaries keep them: with hybrid and disk storage it joins against the on-disk dictionary tables, so no copy of the strings is made, and with memory storage it uses an in-memory DuckDB database. Matching is unchanged: case insensitive, 1.0 for a match of the whole value and 0.75 for a substring match. `fts_path` (in `IndexingOptions` and `Model.explore`) is no longer used, as the index is stored with the dictionaries
 - GeoSPARQL (maplib Enterprise Edition): enable it with `IndexingOptions(geo=True)`. Geometry literals (`geo:wktLiteral`, `geo:wkbLiteral`, `geo:geoJSONLiteral`) are indexed spatially, and the GeoSPARQL functions are supported: the simple features, Egenhofer and RCC8 relations, measurements with units of measure, constructions, properties and serializations, across coordinate reference systems. Spatial filters and spatial joins use the index. `geof:relate`, the query rewrite extension and the aggregate functions are not supported yet
 - Pretty Turtle output only declares the prefixes whose namespace starts a predicate, a datatype or an IRI in the model, sorted by name, instead of all known prefixes. Each prefix is checked with one lookup in the sorted IRI dictionary. The dictionary is shared by all graphs, so a prefix used only in another graph is still declared; with hybrid and disk storage all prefixes are declared as before
+- `Model.serialize` writes the dictionaries of IRIs and literals as parquet files (`cats/<id>.parquet`, columns `str` and `cat`, in string order) instead of DuckDB databases, so a serialized model is parquet throughout and serialization no longer needs maplib Enterprise Edition. `Model.serialize(path, raw_db=True)` (Enterprise Edition) writes them as DuckDB databases as before: larger and slower to write, but deserializing into hybrid or disk storage uses them in place. `Model.deserialize` reads both, also folders written by earlier versions. In Rust, `serialize_triples` takes `raw_db: bool`
 
 ### Performance
 In disk mode the triple tables and their deduplication index are no longer held in memory. With few triples per distinct IRI or literal (as in the CIM data), memory use is dominated by the dictionary and reading, and disk storage saves little.
@@ -25,6 +26,23 @@ Triple table segments are compacted much faster, which matters most for datalog,
 Query results are collected with the Polars streaming engine, which the rest of maplib already used; until now the final step of a query ran on the in-memory engine. Whole-table scans and counts, large result sets and DISTINCT are faster, while small queries are about as fast as before. `MAPLIB_POLARS_ENGINE=in-memory` switches back to the in-memory engine.
 
 Tantivy answered exact matches from its term dictionary, but scanned all strings for substring matches, which it ran whenever the exact matches did not fill the limit. DuckDB scans the strings once per query for both. Reading without full text search is unchanged.
+
+Serialization, compared with the build before these changes on CIM N-Triples (2.2 M triples, IRI-heavy) and a synthetic literal-heavy file (4.5 M triples, 3 M distinct literals), release-test profile, medians of 3 runs alternating between builds, each run in a fresh process. Parquet is the new default, `raw_db` writes DuckDB dictionaries as before:
+
+| Category | Workload | CIM 2.2 M: parquet / `raw_db` | Literals 4.5 M: parquet / `raw_db` |
+|---|---|---|---|
+| Writing | `serialize` (model already compacted) | 1.97 → 0.43 s (**-78%**) / 0.73 s (**-63%**) | 3.90 → 0.79 s (**-80%**) / 1.37 s (**-65%**) |
+| Writing | Size on disk | 107 → 35 MB (**-67%**) / 107 MB | 344 → 103 MB (**-70%**) / 345 MB |
+| Reading | `deserialize`, memory storage | 0.12 → 0.06 s (**-51%**) / 0.06 s (**-51%**) | 0.20 → 0.10 s (**-49%**) / 0.15 s (**-21%**) |
+| Reading | `deserialize`, hybrid storage | 0.05 → 0.55 s (+1115%) / 0.01 s (unchanged, used in place) | 0.06 → 0.72 s (+1094%) / 0.01 s (unchanged, used in place) |
+| Reading | `deserialize`, disk storage | 0.03 → 0.56 s (+1964%) / 0.02 s (unchanged, used in place) | 0.02 → 0.74 s (+3580%) / 0.01 s (unchanged, used in place) |
+| Disk | After `deserialize` with disk storage: count per predicate | 0.079 → 0.043 s (**-46%**) | 0.081 → 0.046 s (**-44%**) |
+| Disk | Same, insert 100 k triples (half new subjects) | unchanged (within noise) | 0.224 → 0.171 s (**-24%**) / 0.193 s (**-14%**) |
+| SPARQL | After `deserialize`: 50 subject lookups (memory / hybrid / disk), insert (memory / hybrid) | unchanged (within noise) | unchanged (within noise) |
+
+- Serialized triple tables are written with row groups of 16,384 rows, as disk storage writes its own triple tables, instead of 1,000 rows. Disk storage copies the files as they are on deserialization, and scans read far fewer row groups.
+- Dictionaries are built into DuckDB (hybrid and disk storage, and `raw_db`) by loading the rows first and building the unique indexes afterwards, instead of inserting into an indexed table, and the dictionaries are deserialized concurrently with the triple tables.
+- With hybrid and disk storage, parquet dictionaries are built into DuckDB databases (including their unique indexes) on deserialization, while `raw_db` dictionaries are used in place, so use `raw_db=True` when a serialized model is loaded into hybrid or disk storage often.
 
 ### Bug fixes
 - Ctrl-C now stops a running query. Before, a long query could keep running until it finished

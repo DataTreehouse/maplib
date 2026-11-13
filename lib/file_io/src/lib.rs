@@ -50,10 +50,11 @@ pub fn write_parquet(
     df: &mut DataFrame,
     file_path: &Path,
     compression: ParquetCompression,
+    row_group_size: Option<usize>,
 ) -> Result<(), FileIOError> {
     let file = File::create(file_path).map_err(FileIOError::FileCreateIOError)?;
     let mut writer = ParquetWriter::new(file);
-    writer = writer.with_row_group_size(Some(1_000));
+    writer = writer.with_row_group_size(row_group_size);
     writer = writer.with_compression(compression);
     writer = writer.set_parallel(true);
     writer.finish(df).map_err(FileIOError::WriteParquetError)?;

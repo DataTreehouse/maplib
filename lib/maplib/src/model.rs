@@ -736,8 +736,8 @@ impl Model {
         })
     }
 
-    pub fn serialize_triples(&mut self, path: &Path) -> Result<(), MaplibError> {
-        self.triplestore.serialize_triples(path)?;
+    pub fn serialize_triples(&mut self, path: &Path, raw_db: bool) -> Result<(), MaplibError> {
+        self.triplestore.serialize_triples(path, raw_db)?;
         Ok(())
     }
 

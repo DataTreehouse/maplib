@@ -642,15 +642,19 @@ class Model:
             storage: LiteralType["memory", "hybrid", "disk"] = None,
     ) -> "Model": ...
 
-    def serialize(self, path: Union[Path, str] = "./serialized_triples"):
+    def serialize(self, path: Union[Path, str] = "./serialized_triples", raw_db: bool = False):
         """
-        Serialization of named graphs in the Model object
+        Serialization of named graphs in the Model object.
+        The triple tables and the dictionaries of IRIs and literals are written as parquet files.
 
         Usage:
         >>> m.read("triples.nt")
         >>> m.serialize("serialized")
 
         :param path: The path to where the folder containing the triples should be created
+        :param raw_db: Write the dictionaries as DuckDB databases instead of parquet files (maplib Enterprise Edition).
+                       The files are larger and slower to write, but deserializing with hybrid or disk storage uses
+                       them in place instead of building the databases, which is much faster.
         """
 
     @staticmethod
