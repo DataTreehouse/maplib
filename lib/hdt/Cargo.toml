@@ -1,0 +1,22 @@
+# Vendored from the hdt crate 0.7.3 (https://github.com/KonradHoeffner/hdt), licensed MIT.
+# Only the core format code is kept (no sophia, sparql, cache, wasm, cli or N-Triples conversion).
+# Maplib additions: index-free scanning of the triples section (HdtScan, TriplesScan), block-wise
+# dictionary decoding (DictSectPFC::decode_blocks) and index-free writing (write_bitmap_triples).
+[package]
+name = "hdt"
+version = "0.7.3"
+authors = ["Tim Baccaert <tbaccaer@vub.be>", "Konrad Höffner", "Greg Hanson"]
+license = "MIT"
+repository = "https://github.com/KonradHoeffner/hdt"
+description = "Header Dictionary Triples (HDT) RDF compression format (vendored into maplib)"
+edition = "2024"
+rust-version = "1.87"
+
+[dependencies]
+bytesize = "2"
+crc = "3"
+log = "0.4"
+ntriple = "0.1"
+qwt = "0.4.0"
+rayon.workspace = true
+thiserror.workspace = true
