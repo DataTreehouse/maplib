@@ -9,6 +9,36 @@ pl.Config.set_fmt_str_lengths(300)
 PATH_HERE = pathlib.Path(__file__).parent
 TESTDATA_PATH = PATH_HERE / "testdata"
 
+
+def test_write_turtle_only_declares_used_prefixes():
+    m = Model()
+    m.reads(
+        """
+        <http://example.net/subj/a> <http://example.org/pred/p> <http://example.com/obj/b> .
+        <http://example.net/subj/a> <http://example.org/pred/q> "1"^^<http://example.edu/dt/myType> .
+        """,
+        format="ntriples",
+    )
+    out = m.writes(
+        format="turtle",
+        prefixes={
+            "s": "http://example.net/subj/",
+            "p": "http://example.org/pred/",
+            "o": "http://example.com/obj/",
+            "dt": "http://example.edu/dt/",
+            "unused": "http://example.net/other/",
+            "unused2": "http://example.com/obj/b/c/",
+        },
+    )
+    for used in ["s", "p", "o", "dt"]:
+        assert f"@prefix {used}: " in out
+    assert "@prefix unused:" not in out
+    assert "@prefix unused2:" not in out
+    m2 = Model()
+    m2.reads(out, format="turtle")
+    assert len(m2.query("SELECT * WHERE {?a ?b ?c}")) == 2
+
+
 def test_write_turtle_default_prefixes():
     m = Model()
     m.read(str(TESTDATA_PATH / "read_ntriples.nt"))

@@ -11,6 +11,7 @@ use rayon::iter::{
 use std::borrow::{Borrow, Cow};
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::ops::Bound;
 use std::fmt::{Display, Formatter, Write};
 use std::hash::BuildHasherDefault;
 use std::sync::{Arc, RwLock};
@@ -174,6 +175,14 @@ impl CatMapsInMemory {
         match self {
             CatMapsInMemory::Compressed(c) => c.get_spaced_strings(stride),
             CatMapsInMemory::Uncompressed(u) => u.get_spaced_strings(stride),
+        }
+    }
+
+    /// Whether some encoded string starts with `prefix` (a single ordered map lookup).
+    pub fn has_string_with_prefix(&self, prefix: &str) -> bool {
+        match self {
+            CatMapsInMemory::Compressed(c) => c.has_string_with_prefix(prefix),
+            CatMapsInMemory::Uncompressed(u) => u.has_string_with_prefix(prefix),
         }
     }
 
@@ -394,6 +403,29 @@ pub struct PrefixCompressedCatMapsInMemory {
 }
 
 impl PrefixCompressedCatMapsInMemory {
+    pub fn has_string_with_prefix(&self, prefix: &str) -> bool {
+        // The map is ordered as if prefix and suffix were concatenated, so the first string not
+        // less than `prefix` starts with it if any string does.
+        let key = PrefixCompressedRef { prefix: "", suffix: prefix };
+        let first = self
+            .map
+            .range::<dyn PrefixCompressedKey, _>((
+                Bound::Included(&key as &dyn PrefixCompressedKey),
+                Bound::Unbounded,
+            ))
+            .next();
+        if let Some((k, _)) = first {
+            let (pre, suf) = k.parts();
+            if pre.len() >= prefix.len() {
+                pre.starts_with(prefix)
+            } else {
+                prefix.starts_with(pre) && suf.starts_with(&prefix[pre.len()..])
+            }
+        } else {
+            false
+        }
+    }
+
     pub fn get_spaced_strings(&self, stride: usize) -> Vec<(String, String)> {
         let mut spaced = vec![];
         let mut i = 0;
@@ -715,6 +747,13 @@ pub struct UncompressedCatMapsInMemory {
 }
 
 impl UncompressedCatMapsInMemory {
+    pub fn has_string_with_prefix(&self, prefix: &str) -> bool {
+        self.map
+            .range::<str, _>((Bound::Included(prefix), Bound::Unbounded))
+            .next()
+            .is_some_and(|(k, _)| k.starts_with(prefix))
+    }
+
     pub fn get_spaced_strings(&self, stride: usize) -> Vec<(String, String)> {
         let mut spaced = vec![];
         let mut i = 0;

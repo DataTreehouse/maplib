@@ -367,11 +367,12 @@ impl Triplestore {
 
         let xml_namespaces = match format {
             PrettyFormat::Turtle => {
-                for (k, v) in prefixes {
+                let used = self.possibly_used_prefixes(map, prefixes)?;
+                for (k, v) in &used {
                     writeln!(writer, "@prefix {}: {} .", k, v)
                         .map_err(|x| TriplestoreError::WriteTurtleError(x.to_string()))?;
                 }
-                if !prefixes.is_empty() {
+                if !used.is_empty() {
                     writeln!(writer)
                         .map_err(|x| TriplestoreError::WriteTurtleError(x.to_string()))?;
                 }
@@ -391,6 +392,41 @@ impl Triplestore {
                 .map_err(|x| TriplestoreError::WriteTurtleError(x.to_string()))?;
         }
         Ok(())
+    }
+
+    /// The prefixes whose namespace starts an IRI that may be written: a predicate, a literal
+    /// datatype or an IRI in the (global) IRI dictionary. The dictionary is shared by all graphs
+    /// and probed with one ordered lookup per prefix, so this may keep a prefix that is not used
+    /// in the graph, but never drops one that is.
+    fn possibly_used_prefixes<'a>(
+        &self,
+        map: &HashMap<NamedNode, HashMap<(BaseRDFNodeType, BaseRDFNodeType), Triples>>,
+        prefixes: &'a HashMap<String, NamedNode>,
+    ) -> Result<Vec<(&'a String, &'a NamedNode)>, TriplestoreError> {
+        let mut datatypes = HashSet::new();
+        for m in map.values() {
+            for (s, o) in m.keys() {
+                for t in [s, o] {
+                    if let BaseRDFNodeType::Literal(dt, _) = t {
+                        if dt.as_ref() != xsd::STRING && dt.as_ref() != rdf::LANG_STRING {
+                            datatypes.insert(dt.as_str());
+                        }
+                    }
+                }
+            }
+        }
+        let cats = self.global_cats.read()?;
+        let mut used: Vec<_> = prefixes
+            .iter()
+            .filter(|(_, ns)| {
+                let ns = ns.as_str();
+                map.keys().any(|p| p.as_str().starts_with(ns))
+                    || datatypes.iter().any(|dt| dt.starts_with(ns))
+                    || cats.may_have_string_with_prefix(&BaseRDFNodeType::IRI, ns)
+            })
+            .collect();
+        used.sort_unstable_by(|a, b| a.0.cmp(b.0));
+        Ok(used)
     }
 
     /// Pretty RDF/XML for several graphs in one document, written in the given order (each graph's
