@@ -113,13 +113,13 @@ impl<'a> TypedSubjectObjectBuilder<'a> {
 
 fn type_from_u8(u: u8) -> BaseRDFNodeType {
     let t = if u == BOOLEAN {
-        BaseRDFNodeType::Literal(xsd::BOOLEAN.into_owned())
+        BaseRDFNodeType::Literal(xsd::BOOLEAN.into_owned(), None)
     } else if u == INTEGER {
-        BaseRDFNodeType::Literal(xsd::LONG.into_owned())
+        BaseRDFNodeType::Literal(xsd::LONG.into_owned(), None)
     } else if u == STRING {
-        BaseRDFNodeType::Literal(xsd::STRING.into_owned())
+        BaseRDFNodeType::Literal(xsd::STRING.into_owned(), None)
     } else if u == FLOAT {
-        BaseRDFNodeType::Literal(xsd::DOUBLE.into_owned())
+        BaseRDFNodeType::Literal(xsd::DOUBLE.into_owned(), None)
     } else if u == IRI {
         BaseRDFNodeType::IRI
     } else {

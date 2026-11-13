@@ -120,7 +120,7 @@ pub fn create_compatible_cats(
                             let renc = match bt {
                                 BaseRDFNodeType::IRI => iri_renc.as_ref(),
                                 BaseRDFNodeType::BlankNode => blank_renc.as_ref(),
-                                BaseRDFNodeType::Literal(l) => literal_renc.get(l),
+                                BaseRDFNodeType::Literal(l, _) => literal_renc.get(l),
                                 BaseRDFNodeType::None => {
                                     unreachable!()
                                 }

@@ -39,6 +39,7 @@ mod str_lang;
 mod str_len;
 mod str_starts_ends_contains_;
 mod struuid;
+mod time_zone;
 mod struuid_v5;
 mod udf;
 mod uuid_v5;

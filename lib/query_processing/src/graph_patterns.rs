@@ -14,15 +14,16 @@ pub use values::*;
 use crate::errors::QueryProcessingError;
 use crate::expressions::comparisons::typed_equals_expr;
 use crate::type_constraints::{
-    conjunction_variable_type, equal_variable_type, ConstraintBaseRDFNodeType, PossibleTypes,
+    conjunction_variable_type, equal_variable_possible_types, ConstraintBaseRDFNodeType, PossibleTypes,
 };
 use oxrdf::vocab::{rdfs, xsd};
 use oxrdf::Variable;
 use polars::frame::UniqueKeepStrategy;
 use polars::prelude::{
-    by_name, col, lit, Expr, JoinArgs, JoinType, LazyFrame, LazyGroupBy, LiteralValue,
-    SortMultipleOptions,
+    by_name, col, len, lit, Expr, IntoLazy, JoinArgs, JoinType, LazyFrame, LazyGroupBy,
+    LiteralValue, SortMultipleOptions,
 };
+use polars::frame::DataFrame;
 use representation::cats::LockedCats;
 use representation::multitype::unnest_multicols;
 use representation::query_context::Context;
@@ -227,7 +228,24 @@ pub fn project(
             );
         }
     }
-    solution_mappings.mappings = solution_mappings.mappings.select(cols.as_slice());
+    solution_mappings.mappings = if cols.is_empty() {
+        // Selecting no columns gives a frame of height 0, but each solution must be kept,
+        // e.g. the single empty solution of a pattern without variables that matches.
+        let height = solution_mappings
+            .mappings
+            .select([len().alias("len")])
+            .collect()
+            .unwrap()
+            .column("len")
+            .unwrap()
+            .get(0)
+            .unwrap()
+            .extract::<usize>()
+            .unwrap();
+        DataFrame::empty_with_height(height).lazy()
+    } else {
+        solution_mappings.mappings.select(cols.as_slice())
+    };
     solution_mappings.rdf_node_types = new_datatypes;
     Ok(solution_mappings)
 }
@@ -265,16 +283,10 @@ fn find_enforced_variable_type_constraints(
             };
         }
         Expression::Equal(left, right) => {
-            if let Some((v, t)) = equal_variable_type(left, right) {
-                return Some(HashMap::from([(
-                    v.as_str().to_string(),
-                    PossibleTypes::singular(t),
-                )]));
-            } else if let Some((v, t)) = equal_variable_type(right, left) {
-                return Some(HashMap::from([(
-                    v.as_str().to_string(),
-                    PossibleTypes::singular(t),
-                )]));
+            if let Some((v, t)) = equal_variable_possible_types(left, right) {
+                return Some(HashMap::from([(v.as_str().to_string(), t)]));
+            } else if let Some((v, t)) = equal_variable_possible_types(right, left) {
+                return Some(HashMap::from([(v.as_str().to_string(), t)]));
             }
         }
         Expression::FunctionCall(f, args) => match f {

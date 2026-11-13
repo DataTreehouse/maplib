@@ -44,7 +44,7 @@ pub fn constant_to_expr(
                     expr,
                     PType::Basic(the_dt.clone()),
                     MappingColumnType::Flat(
-                        BaseRDFNodeType::Literal(the_dt).into_default_input_rdf_node_state(),
+                        BaseRDFNodeType::Literal(the_dt, None).into_default_input_rdf_node_state(),
                     ),
                 )
             }

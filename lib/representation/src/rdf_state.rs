@@ -37,7 +37,7 @@ impl RDFNodeState {
 
     pub fn is_literal(&self) -> bool {
         if let Some(b) = self.get_base_type() {
-            matches!(b, BaseRDFNodeType::Literal(_))
+            matches!(b, BaseRDFNodeType::Literal(_, _))
         } else {
             false
         }

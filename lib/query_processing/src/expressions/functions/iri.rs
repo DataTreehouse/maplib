@@ -34,7 +34,7 @@ pub fn iri(
         let bs = dt.get_base_state().unwrap();
         let (c, s) = match b {
             BaseRDFNodeType::IRI => (col(first_context.as_str()), bs.clone()),
-            BaseRDFNodeType::Literal(l) => {
+            BaseRDFNodeType::Literal(l, _) => {
                 if l.as_ref() == xsd::STRING {
                     (
                         maybe_decode_expr(col(first_context.as_str()), b, bs, global_cats),
@@ -60,7 +60,7 @@ pub fn iri(
 
         for (t, s) in &dt.map {
             match t {
-                BaseRDFNodeType::Literal(l) => {
+                BaseRDFNodeType::Literal(l, _) => {
                     if l.as_ref() == xsd::STRING {
                         string_col = Some(maybe_decode_expr(
                             col(first_context.as_str())

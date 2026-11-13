@@ -72,7 +72,7 @@ pub fn lower_upper_substr(
                     BaseRDFNodeType::None.into_default_input_rdf_node_state(),
                 );
             }
-            BaseRDFNodeType::Literal(_) => {
+            BaseRDFNodeType::Literal(_, _) => {
                 if t.is_lit_type(xsd::STRING) {
                     let str_expr =
                         maybe_decode_expr(col(first_context.as_str()), b, s, global_cats);
@@ -99,7 +99,7 @@ pub fn lower_upper_substr(
                     }
                     solution_mappings.rdf_node_types.insert(
                         outer_context.as_str().to_string(),
-                        BaseRDFNodeType::Literal(xsd::STRING.into_owned())
+                        BaseRDFNodeType::Literal(xsd::STRING.into_owned(), None)
                             .into_default_input_rdf_node_state(),
                     );
                 } else if t.is_lang_string() {
@@ -162,7 +162,7 @@ pub fn lower_upper_substr(
                     );
                     solution_mappings.rdf_node_types.insert(
                         outer_context.as_str().to_string(),
-                        BaseRDFNodeType::Literal(rdf::LANG_STRING.into_owned())
+                        BaseRDFNodeType::Literal(rdf::LANG_STRING.into_owned(), None)
                             .into_default_input_rdf_node_state(),
                     );
                 } else {
@@ -183,7 +183,7 @@ pub fn lower_upper_substr(
         let mut exprs = vec![];
         let mut keep_types = vec![];
         for (t, s) in &t.map {
-            if let BaseRDFNodeType::Literal(l) = t {
+            if let BaseRDFNodeType::Literal(l, _) = t {
                 if l.as_ref() == xsd::STRING {
                     let field_name = t.field_col_name();
                     let str_expr = maybe_decode_expr(

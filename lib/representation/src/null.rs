@@ -14,7 +14,7 @@ pub fn expr_is_null_workaround(expr: Expr, rdf_node_type: &RDFNodeState) -> Expr
 
 pub fn non_multi_col_is_null_workaround(expr: Expr, base_rdf_node_type: &BaseRDFNodeType) -> Expr {
     match base_rdf_node_type {
-        BaseRDFNodeType::Literal(l) => {
+        BaseRDFNodeType::Literal(l, _) => {
             if l.as_ref() == rdf::LANG_STRING {
                 expr.struct_()
                     .field_by_name(LANG_STRING_VALUE_FIELD)

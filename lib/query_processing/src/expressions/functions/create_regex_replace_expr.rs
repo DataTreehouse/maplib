@@ -15,7 +15,7 @@ pub fn create_regex_replace_expr(
 ) -> Expr {
     let do_regex_replace = match t {
         BaseRDFNodeType::BlankNode | BaseRDFNodeType::None | BaseRDFNodeType::IRI => false,
-        BaseRDFNodeType::Literal(l) => {
+        BaseRDFNodeType::Literal(l, _) => {
             matches!(l.as_ref(), xsd::STRING | rdf::LANG_STRING)
         }
     };

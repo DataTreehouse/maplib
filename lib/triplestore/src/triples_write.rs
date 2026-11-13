@@ -9,7 +9,7 @@ use polars_core::runtime::THREAD_POOL;
 use representation::cats::maybe_decode_complex_expr;
 use representation::dataset::NamedGraph;
 use representation::polars_to_rdf::{
-    date_column_to_strings, datetime_column_to_strings, global_df_as_triples,
+    date_column_to_strings, datetime_column_to_xsd_strings, global_df_as_triples,
 };
 use representation::{
     LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD, OBJECT_COL_NAME, SUBJECT_COL_NAME,
@@ -86,7 +86,11 @@ impl Triplestore {
                         };
                         let mut df = lf.collect().unwrap();
                         if !object_type.is_lang_string() {
-                            convert_datelike_to_string(&mut df, OBJECT_COL_NAME);
+                            convert_datelike_to_string(
+                                &mut df,
+                                OBJECT_COL_NAME,
+                                object_type.time_zone_offset(),
+                            );
                         }
 
                         fast_ntriples::write_triples_in_df(
@@ -246,15 +250,18 @@ impl Triplestore {
     }
 }
 
-pub fn convert_datelike_to_string(df: &mut DataFrame, c: &str) {
+pub fn convert_datelike_to_string(df: &mut DataFrame, c: &str, time_zone_offset: Option<i16>) {
     match df.column(c).unwrap().dtype() {
         DataType::Date => {
             df.with_column(date_column_to_strings(df.column(c).unwrap()))
                 .unwrap();
         }
-        DataType::Datetime(_, tz_opt) => {
-            df.with_column(datetime_column_to_strings(df.column(c).unwrap(), tz_opt))
-                .unwrap();
+        DataType::Datetime(..) => {
+            df.with_column(datetime_column_to_xsd_strings(
+                df.column(c).unwrap(),
+                time_zone_offset,
+            ))
+            .unwrap();
         }
         _ => {}
     }

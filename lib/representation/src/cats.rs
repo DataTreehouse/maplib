@@ -57,7 +57,7 @@ impl CatType {
         match self {
             CatType::IRI => BaseRDFNodeType::IRI,
             CatType::Blank => BaseRDFNodeType::BlankNode,
-            CatType::Literal(nn) => BaseRDFNodeType::Literal(nn.clone()),
+            CatType::Literal(nn) => BaseRDFNodeType::Literal(nn.clone(), None),
         }
     }
 
@@ -65,7 +65,7 @@ impl CatType {
         match bt {
             BaseRDFNodeType::IRI => CatType::IRI,
             BaseRDFNodeType::BlankNode => CatType::Blank,
-            BaseRDFNodeType::Literal(l) => CatType::Literal(l.clone()),
+            BaseRDFNodeType::Literal(l, _) => CatType::Literal(l.clone()),
             BaseRDFNodeType::None => {
                 unimplemented!("Should not be called for None")
             }
@@ -180,9 +180,9 @@ impl Cats {
     }
 
     pub fn new_local_singular_literal(l: &str, dt: NamedNode, u: u32) -> (u32, Cats) {
-        let dt = BaseRDFNodeType::Literal(dt);
+        let dt = BaseRDFNodeType::Literal(dt, None);
         let catenc = CatEncs::new_local_singular(l, u, &dt);
-        let t = if let BaseRDFNodeType::Literal(dt) = dt {
+        let t = if let BaseRDFNodeType::Literal(dt, _) = dt {
             CatType::Literal(dt)
         } else {
             unreachable!("Should never happen")
@@ -191,13 +191,13 @@ impl Cats {
     }
 
     pub fn new_local_lang_string(val: &str, lang: &str, u: u32) -> (u32, u32, Cats) {
-        let dt = BaseRDFNodeType::Literal(rdf::LANG_STRING.into_owned());
+        let dt = BaseRDFNodeType::Literal(rdf::LANG_STRING.into_owned(), None);
         let mut catenc = CatEncs::new_local_singular(val, u, &dt);
         let lang_u = u + 1;
         catenc
             .maps
             .encode_new_in_memory_string(Cow::Borrowed(lang), lang_u);
-        let t = if let BaseRDFNodeType::Literal(dt) = dt {
+        let t = if let BaseRDFNodeType::Literal(dt, _) = dt {
             CatType::Literal(dt)
         } else {
             unreachable!("Should never happen")

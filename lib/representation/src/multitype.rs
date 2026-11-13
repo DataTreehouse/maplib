@@ -18,7 +18,7 @@ pub fn convert_lf_col_to_multitype(expr: Expr, dt: &RDFNodeState) -> Expr {
         match base_type {
             BaseRDFNodeType::IRI => as_struct(vec![expr.alias(MULTI_IRI_DT)]),
             BaseRDFNodeType::BlankNode => as_struct(vec![expr.alias(MULTI_BLANK_DT)]),
-            BaseRDFNodeType::Literal(l) => {
+            BaseRDFNodeType::Literal(l, _) => {
                 if rdf::LANG_STRING == l.as_ref() {
                     expr
                 } else {
@@ -40,7 +40,7 @@ pub fn extract_column_from_multitype(
 ) -> Column {
     let colname = subtype.field_col_name();
     match subtype {
-        BaseRDFNodeType::Literal(_) if subtype.is_lang_string() => filter_multitype(
+        BaseRDFNodeType::Literal(_, _) if subtype.is_lang_string() => filter_multitype(
             multitype_column,
             &vec![LANG_STRING_VALUE_FIELD, LANG_STRING_LANG_FIELD],
             LANG_STRING_VALUE_FIELD,

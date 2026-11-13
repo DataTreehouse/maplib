@@ -19,7 +19,7 @@ impl ConstraintBaseRDFNodeType {
         match base {
             BaseRDFNodeType::IRI => ConstraintBaseRDFNodeType::IRI,
             BaseRDFNodeType::BlankNode => ConstraintBaseRDFNodeType::BlankNode,
-            BaseRDFNodeType::Literal(l) => ConstraintBaseRDFNodeType::Literal(l.clone()),
+            BaseRDFNodeType::Literal(l, _) => ConstraintBaseRDFNodeType::Literal(l.clone()),
             BaseRDFNodeType::None => ConstraintBaseRDFNodeType::None,
         }
     }
@@ -141,6 +141,41 @@ pub fn equal_variable_type(
     None
 }
 
+/// The types that a variable can have when it is = to an expression. A dateTime is equal to
+/// the same instant as an xsd:dateTime or an xsd:dateTimeStamp, and a number is equal to the
+/// same value of any numeric datatype, so these are all possible.
+pub fn equal_variable_possible_types(
+    a: &Expression,
+    b: &Expression,
+) -> Option<(Variable, PossibleTypes)> {
+    let (v, t) = equal_variable_type(a, b)?;
+    let mut types = PossibleTypes::singular(t.clone());
+    if let ConstraintBaseRDFNodeType::Literal(l) = &t {
+        let others: Vec<NamedNode> = if representation::literal_is_datetime(l.as_ref()) {
+            datetime_datatypes().into_iter().collect()
+        } else if representation::literal_is_numeric(l.as_ref()) {
+            // Numbers are equal across numeric datatypes, e.g. 1 = 1.0 = "1"^^xsd:int.
+            representation::NUMERIC_DATATYPES
+                .iter()
+                .map(|x| x.into_owned())
+                .collect()
+        } else {
+            vec![]
+        };
+        for other in others {
+            if other.as_ref() != l.as_ref() {
+                types.or(ConstraintBaseRDFNodeType::Literal(other));
+            }
+        }
+    }
+    Some((v, types))
+}
+
+/// The dateTime datatypes, whose values can be equal to each other.
+pub fn datetime_datatypes() -> [oxrdf::NamedNode; 2] {
+    [xsd::DATE_TIME.into_owned(), xsd::DATE_TIME_STAMP.into_owned()]
+}
+
 pub fn get_expression_rdf_type(e: &Expression) -> Option<ConstraintBaseRDFNodeType> {
     match e {
         Expression::NamedNode(_) => Some(ConstraintBaseRDFNodeType::IRI),
@@ -227,7 +262,7 @@ pub fn bt_as_constrained(bt: &BaseRDFNodeType) -> ConstraintBaseRDFNodeType {
     match bt {
         BaseRDFNodeType::IRI => ConstraintBaseRDFNodeType::IRI,
         BaseRDFNodeType::BlankNode => ConstraintBaseRDFNodeType::BlankNode,
-        BaseRDFNodeType::Literal(l) => ConstraintBaseRDFNodeType::Literal(l.clone()),
+        BaseRDFNodeType::Literal(l, _) => ConstraintBaseRDFNodeType::Literal(l.clone()),
         BaseRDFNodeType::None => {
             unreachable!("Should never happen")
         }

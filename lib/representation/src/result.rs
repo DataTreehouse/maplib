@@ -337,7 +337,7 @@ fn term_pattern_expression(
             let l = rdf_literal_to_polars_expr(thelit)?.alias(name);
             Ok((
                 l,
-                BaseRDFNodeType::Literal(thelit.datatype().into_owned())
+                BaseRDFNodeType::from_literal(thelit)
                     .into_default_input_rdf_node_state(),
             ))
         }

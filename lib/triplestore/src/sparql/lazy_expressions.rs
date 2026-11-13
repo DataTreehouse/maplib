@@ -482,7 +482,7 @@ impl Triplestore {
                     .with_row_index(exists_context.as_str(), None);
                 output_solution_mappings.rdf_node_types.insert(
                     exists_context.as_str().to_string(),
-                    BaseRDFNodeType::Literal(xsd::UNSIGNED_INT.into_owned())
+                    BaseRDFNodeType::Literal(xsd::UNSIGNED_INT.into_owned(), None)
                         .into_default_input_rdf_node_state(),
                 );
 

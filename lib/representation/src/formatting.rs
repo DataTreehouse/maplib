@@ -1,6 +1,6 @@
 use crate::cats::{maybe_decode_expr, LockedCats};
 use crate::polars_to_rdf::{
-    datetime_column_to_strings, XSD_DATETIME_WITH_TZ_FORMAT, XSD_DATE_WITHOUT_TZ_FORMAT,
+    datetime_column_to_xsd_strings, XSD_DATE_WITHOUT_TZ_FORMAT,
 };
 use crate::solution_mapping::BaseCatState;
 use crate::{BaseRDFNodeType, RDFNodeState, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD};
@@ -42,25 +42,16 @@ pub fn base_expression_to_formatted(
         BaseRDFNodeType::BlankNode => {
             lit("_:") + maybe_decode_expr(expr, base_type, base_state, global_cats)
         }
-        BaseRDFNodeType::Literal(l) => {
-            if literal_string_rep && l.as_ref() == xsd::DATE_TIME {
+        BaseRDFNodeType::Literal(l, _) => {
+            if literal_string_rep
+                && (l.as_ref() == xsd::DATE_TIME || l.as_ref() == xsd::DATE_TIME_STAMP)
+            {
+                let offset = base_type.time_zone_offset();
                 lit("\"")
                     + expr.map(
-                        |x| {
-                            let dt = x.dtype();
-                            let tz = if let DataType::Datetime(_, tz) = dt {
-                                tz
-                            } else {
-                                panic!()
-                            };
-                            Ok(datetime_column_to_strings(&x, tz).into_column())
-                        },
+                        move |x| Ok(datetime_column_to_xsd_strings(&x, offset).into_column()),
                         |_, f| Ok(Field::new(f.name().clone(), DataType::String)),
                     )
-                    + lit(format!("\"^^{l}"))
-            } else if literal_string_rep && l.as_ref() == xsd::DATE_TIME_STAMP {
-                lit("\"")
-                    + expr.dt().strftime(XSD_DATETIME_WITH_TZ_FORMAT)
                     + lit(format!("\"^^{l}"))
             } else if literal_string_rep && l.as_ref() == xsd::DATE {
                 lit("\"") + expr.dt().strftime(XSD_DATE_WITHOUT_TZ_FORMAT) + lit(format!("\"^^{l}"))
@@ -230,7 +221,7 @@ pub fn base_expression_to_native(
         BaseRDFNodeType::BlankNode => {
             exprs.push(maybe_decode_expr(expr, base_type, base_state, global_cats))
         }
-        BaseRDFNodeType::Literal(_) => {
+        BaseRDFNodeType::Literal(_, _) => {
             if base_type.is_lang_string() {
                 exprs.push(
                     maybe_decode_expr(
@@ -270,15 +261,9 @@ pub fn base_expression_to_native(
 pub fn literal_expr_to_string(e: Expr, t: &BaseRDFNodeType) -> Expr {
     if t.is_lit_type(xsd::DATE_TIME) || t.is_lit_type(xsd::DATE_TIME_STAMP) {
         // Same XSD lexical form as when writing RDF, not the polars string cast
+        let offset = t.time_zone_offset();
         return e.map(
-            |x| {
-                let tz = if let DataType::Datetime(_, tz) = x.dtype() {
-                    tz.clone()
-                } else {
-                    None
-                };
-                Ok(datetime_column_to_strings(&x, &tz).into_column())
-            },
+            move |x| Ok(datetime_column_to_xsd_strings(&x, offset).into_column()),
             |_, f| Ok(Field::new(f.name().clone(), DataType::String)),
         );
     } else if t.is_lit_type(xsd::DATE) {

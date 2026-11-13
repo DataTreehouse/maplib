@@ -71,7 +71,7 @@ pub fn hash_(
         .with_column(expr.alias(outer_context.as_str()));
     solution_mappings.rdf_node_types.insert(
         outer_context.as_str().to_string(),
-        BaseRDFNodeType::Literal(xsd::STRING.into_owned()).into_default_input_rdf_node_state(),
+        BaseRDFNodeType::Literal(xsd::STRING.into_owned(), None).into_default_input_rdf_node_state(),
     );
     Ok(solution_mappings)
 }

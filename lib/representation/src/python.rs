@@ -138,7 +138,7 @@ fn write_base(f: &mut Formatter<'_>, t: &BaseRDFNodeType) -> std::fmt::Result {
         BaseRDFNodeType::BlankNode => {
             write!(f, "RDFType.BlankNode()")
         }
-        BaseRDFNodeType::Literal(l) => {
+        BaseRDFNodeType::Literal(l, _) => {
             write!(f, "RDFType.Literal(\"{}\")", l.as_str())
         }
         BaseRDFNodeType::None => {
@@ -156,7 +156,9 @@ impl PyRDFType {
     fn __richcmp__(&self, other: PyRDFType, op: CompareOp, py: Python) -> PyResult<bool> {
         if matches!(op, CompareOp::Eq) {
             if let (Some(self_flat), Some(other_flat)) = (&self.flat, &other.flat) {
-                Ok(self_flat.types_equal(other_flat))
+                // Time zone offsets are internal, a dateTime is an xsd:dateTime whatever its
+                // offset.
+                Ok(types_without_offsets(self_flat) == types_without_offsets(other_flat))
             } else if let (Some(self_nested), Some(other_nested)) = (&self.nested, &other.nested) {
                 let other_nested = other_nested.extract(py)?;
                 self_nested.borrow(py).__richcmp__(other_nested, op, py)
@@ -176,7 +178,7 @@ impl PyRDFType {
     fn literal(iri: Bound<'_, PyAny>) -> PyResult<PyRDFType> {
         if let Ok(pyiri) = iri.extract::<PyIRI>() {
             Ok(PyRDFType {
-                flat: Some(BaseRDFNodeType::Literal(pyiri.iri).into_default_input_rdf_node_state()),
+                flat: Some(BaseRDFNodeType::Literal(pyiri.iri, None).into_default_input_rdf_node_state()),
                 nested: None,
             })
         } else if let Ok(s) = iri.extract::<String>() {
@@ -184,6 +186,7 @@ impl PyRDFType {
                 flat: Some(
                     BaseRDFNodeType::Literal(
                         NamedNode::new(s).map_err(PyRepresentationError::IriParseError)?,
+                        None,
                     )
                     .into_default_input_rdf_node_state(),
                 ),
@@ -622,4 +625,15 @@ impl PySolutionMappings {
         };
         Ok(m)
     }
+}
+
+fn types_without_offsets(state: &RDFNodeState) -> std::collections::BTreeSet<BaseRDFNodeType> {
+    state
+        .map
+        .keys()
+        .map(|t| match t {
+            BaseRDFNodeType::Literal(l, _) => BaseRDFNodeType::Literal(l.clone(), None),
+            t => t.clone(),
+        })
+        .collect()
 }

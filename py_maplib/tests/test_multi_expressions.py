@@ -42,7 +42,8 @@ def test_multi_filter_numerical_equals(streaming):
     """,
         streaming=streaming,
     )
-    assert df.shape == (0, 2)
+    # = compares numbers with type promotion (op:numeric-equal), so 1 (int) = 1 (integer).
+    assert df.shape == (1, 2)
 
 
 @pytest.mark.parametrize("streaming", [True, False])

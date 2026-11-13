@@ -139,8 +139,8 @@ pub fn str_before_or_after(
         }
     }
 
-    let string_type = BaseRDFNodeType::Literal(xsd::STRING.into_owned());
-    let lang_type = BaseRDFNodeType::Literal(rdf::LANG_STRING.into_owned());
+    let string_type = BaseRDFNodeType::Literal(xsd::STRING.into_owned(), None);
+    let lang_type = BaseRDFNodeType::Literal(rdf::LANG_STRING.into_owned(), None);
     let (expr, state) = if string_exprs.is_empty() && lang_value_exprs.is_empty() {
         (
             lit(LiteralValue::untyped_null()).cast(

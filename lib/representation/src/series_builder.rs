@@ -51,7 +51,7 @@ impl SeriesBuilder {
             BaseRDFNodeType::IRI | BaseRDFNodeType::BlankNode => {
                 SeriesBuilder::String(StringChunkedBuilder::new("s".into(), cap), 0)
             }
-            BaseRDFNodeType::Literal(l) => match l.as_ref() {
+            BaseRDFNodeType::Literal(l, _) => match l.as_ref() {
                 xsd::BOOLEAN => SeriesBuilder::Bool(Vec::with_capacity(cap)),
                 xsd::UNSIGNED_BYTE => SeriesBuilder::U8(Vec::with_capacity(cap)),
                 xsd::UNSIGNED_SHORT => SeriesBuilder::U16(Vec::with_capacity(cap)),

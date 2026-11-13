@@ -4,7 +4,9 @@ use oxrdf::Variable;
 use tracing::{instrument, trace};
 
 use crate::sparql::QuerySettings;
-use polars::prelude::{coalesce, col, cols, lit, DataType, IntoLazy, JoinType};
+use oxrdf::vocab::xsd;
+use polars::prelude::{coalesce, col, cols, lit, when, DataType, IntoLazy, JoinType};
+use representation::BaseRDFNodeType;
 use polars_core::df;
 use query_processing::aggregates::AggregateReturn;
 use query_processing::graph_patterns::{group_by, join, prepare_group_by};
@@ -104,12 +106,22 @@ impl Triplestore {
             })
             .map(|(v, _)| v.as_str().to_string())
             .collect();
+        let sum_avg_cols: Vec<_> = aggregates
+            .iter()
+            .filter(|(_, agg)| {
+                matches!(agg, AggregateExpression::FunctionCall { name, .. }
+                    if matches!(name, AggregateFunction::Sum | AggregateFunction::Avg))
+            })
+            .map(|(v, _)| v.as_str().to_string())
+            .collect();
 
         // Without GROUP BY, there is always exactly one group, even if there are no solutions.
         if variables.is_empty() && !aggregates.is_empty() {
+            let present_col_name = Uuid::new_v4().to_string();
             let lf_lhs = grouped
                 .mappings
-                .with_column(lit(0u32).alias(&dummy_col_name));
+                .with_column(lit(0u32).alias(&dummy_col_name))
+                .with_column(lit(true).alias(&present_col_name));
 
             let lf_rhs = df!(&dummy_col_name => [0u32]).unwrap().lazy();
 
@@ -121,7 +133,34 @@ impl Triplestore {
                     col(&*dummy_col_name).cast(DataType::Int64),
                 ]));
             }
-            lf = lf.drop(cols([&dummy_col_name]));
+            // SUM and AVG over an empty group are 0 (xsd:integer), but a group with values
+            // keeps its result, which is unbound on a type error.
+            let empty = col(&*present_col_name).is_null();
+            for c in sum_avg_cols {
+                let state = grouped.rdf_node_types.get(&c).unwrap();
+                let numeric_type = state
+                    .get_base_type()
+                    .filter(|t| !state.is_multi() && t.is_numeric())
+                    .cloned();
+                if let Some(t) = numeric_type {
+                    let dtype = t.polars_data_type(state.get_base_state().unwrap(), true);
+                    lf = lf.with_column(
+                        when(empty.clone())
+                            .then(lit(0).cast(dtype))
+                            .otherwise(col(&c))
+                            .alias(&c),
+                    );
+                } else if state.is_none() {
+                    // No values, so the result is the integer 0.
+                    lf = lf.with_column(lit(0i64).alias(&c));
+                    grouped.rdf_node_types.insert(
+                        c.clone(),
+                        BaseRDFNodeType::literal(xsd::INTEGER.into_owned())
+                            .into_default_input_rdf_node_state(),
+                    );
+                }
+            }
+            lf = lf.drop(cols([&dummy_col_name, &present_col_name]));
             grouped.mappings = lf;
         }
 

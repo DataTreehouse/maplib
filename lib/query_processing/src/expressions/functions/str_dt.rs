@@ -30,7 +30,7 @@ pub fn str_dt(
         .rdf_node_types
         .get(first_context.as_str())
         .unwrap();
-    let base_string = BaseRDFNodeType::Literal(xsd::STRING.into_owned());
+    let base_string = BaseRDFNodeType::Literal(xsd::STRING.into_owned(), None);
     let use_base = if first_type.is_lit_type(xsd::STRING) {
         Some((
             first_type.get_base_state().unwrap(),
@@ -59,7 +59,7 @@ pub fn str_dt(
                 "STRDT second argument should be IRI"
             )));
         };
-        let out_dt = BaseRDFNodeType::Literal(dt_iri.clone());
+        let out_dt = BaseRDFNodeType::Literal(dt_iri.clone(), None);
         let out_dt_cloned = out_dt.clone();
         let out_polars_type = out_dt.default_input_polars_data_type();
         let outer_context_cloned = outer_context.clone();

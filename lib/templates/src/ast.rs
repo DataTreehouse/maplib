@@ -217,7 +217,7 @@ impl From<&RDFNodeState> for PType {
                 BaseRDFNodeType::BlankNode => {
                     PType::Basic(NamedNode::new_unchecked(OTTR_BLANK_NODE))
                 }
-                BaseRDFNodeType::Literal(l) => PType::Basic(l.to_owned()),
+                BaseRDFNodeType::Literal(l, _) => PType::Basic(l.to_owned()),
                 BaseRDFNodeType::None => PType::None,
             }
         } else {
@@ -257,7 +257,7 @@ pub fn ptype_nn_to_rdf_node_type(nn: NamedNodeRef) -> RDFNodeState {
     } else if ptype_is_iri(nn) {
         BaseRDFNodeType::IRI.into_default_input_rdf_node_state()
     } else {
-        BaseRDFNodeType::Literal(nn.into_owned()).into_default_input_rdf_node_state()
+        BaseRDFNodeType::Literal(nn.into_owned(), None).into_default_input_rdf_node_state()
     }
 }
 

@@ -23,7 +23,7 @@ pub fn str_function(c: &str, t: &RDFNodeState, global_cats: LockedCats) -> Expr 
                     s,
                     global_cats.clone(),
                 ),
-                BaseRDFNodeType::Literal(_) => {
+                BaseRDFNodeType::Literal(_, _) => {
                     if t.is_lang_string() {
                         cast_lang_string_to_string(c, t, s, global_cats.clone())
                     } else {
@@ -49,7 +49,7 @@ pub fn str_function(c: &str, t: &RDFNodeState, global_cats: LockedCats) -> Expr 
             BaseRDFNodeType::IRI | BaseRDFNodeType::BlankNode => {
                 maybe_decode_expr(col(c), b, s, global_cats)
             }
-            BaseRDFNodeType::Literal(_) => {
+            BaseRDFNodeType::Literal(_, _) => {
                 if t.is_lang_string() {
                     cast_lang_string_to_string(c, b, s, global_cats)
                 } else {

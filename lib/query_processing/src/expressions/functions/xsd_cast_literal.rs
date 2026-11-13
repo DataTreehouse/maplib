@@ -12,7 +12,7 @@ pub fn xsd_cast_literal(
     global_cats: LockedCats,
 ) -> Result<Expr, QueryProcessingError> {
     let trg_type = trg.default_input_polars_data_type();
-    let trg_nn = if let BaseRDFNodeType::Literal(nn) = trg {
+    let trg_nn = if let BaseRDFNodeType::Literal(nn, _) = trg {
         nn.as_ref()
     } else {
         panic!("Invalid state")
@@ -33,7 +33,7 @@ pub fn xsd_cast_literal(
                 BaseRDFNodeType::BlankNode => {
                     lit(LiteralValue::untyped_null()).cast(trg_type.clone())
                 }
-                BaseRDFNodeType::Literal(src_nn) => cast_literal(
+                BaseRDFNodeType::Literal(src_nn, _) => cast_literal(
                     col(c).struct_().field_by_name(&t.field_col_name()),
                     t,
                     s,
@@ -54,7 +54,7 @@ pub fn xsd_cast_literal(
                 cast_iri_to_xsd_literal(col(c), t, s, trg_nn, trg_type.clone(), global_cats.clone())
             }
             BaseRDFNodeType::BlankNode => Ok(lit(LiteralValue::untyped_null()).cast(trg_type)),
-            BaseRDFNodeType::Literal(src_nn) => Ok(cast_literal(
+            BaseRDFNodeType::Literal(src_nn, _) => Ok(cast_literal(
                 col(c),
                 t,
                 s,

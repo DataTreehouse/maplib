@@ -8,7 +8,8 @@ query, update and result-format test suites from https://github.com/w3c/rdf-test
 The manifests are read with maplib and a pytest case is generated for each of:
 
 * ``mf:QueryEvaluationTest``  - load the dataset, run the query, compare with the
-  expected result (SPARQL XML/JSON/CSV/TSV results or an RDF graph).
+  expected result (SPARQL XML/JSON/CSV/TSV results, results as RDF in the result set
+  vocabulary, or an RDF graph).
 * ``mf:UpdateEvaluationTest`` - load the dataset, run the update, compare every graph
   of the resulting dataset with the expected dataset.
 * ``mf:PositiveSyntaxTest11`` / ``mf:PositiveUpdateSyntaxTest11`` - must not raise.
@@ -560,6 +561,42 @@ def parse_csv_results(path: Path) -> dict:
     return {"vars": variables, "boolean": None, "rows": rows}
 
 
+RS = "http://www.w3.org/2001/sw/DataAccess/tests/result-set#"
+
+
+def parse_rdf_results(iri) -> dict:
+    """SELECT and ASK results written as RDF with the DAWG result set vocabulary."""
+    m = Model()
+    load_into_model(m, iri)
+    boolean = run_select(
+        m, f"SELECT ?b WHERE {{ ?rs a <{RS}ResultSet> ; <{RS}boolean> ?b }}"
+    )["rows"]
+    variables = [
+        r["v"][1]
+        for r in run_select(
+            m, f"SELECT ?v WHERE {{ ?rs a <{RS}ResultSet> ; <{RS}resultVariable> ?v }}"
+        )["rows"]
+    ]
+    if boolean:
+        return {"vars": variables, "boolean": boolean[0]["b"][1] == "true", "rows": []}
+    # Solutions without bindings are rows too, so the solutions are listed separately.
+    solutions = run_select(
+        m, f"SELECT ?s WHERE {{ ?rs a <{RS}ResultSet> ; <{RS}solution> ?s }}"
+    )["rows"]
+    rows = {r["s"]: {} for r in solutions}
+    bindings = run_select(
+        m,
+        f"""SELECT ?s ?var ?value WHERE {{
+            ?rs a <{RS}ResultSet> ; <{RS}solution> ?s .
+            ?s <{RS}binding> ?b .
+            ?b <{RS}variable> ?var ; <{RS}value> ?value .
+        }}""",
+    )["rows"]
+    for r in bindings:
+        rows[r["s"]][r["var"][1]] = r["value"]
+    return {"vars": variables, "boolean": None, "rows": list(rows.values())}
+
+
 def parse_expected_result(iri) -> dict:
     path = iri_to_path(iri)
     if path.suffix == ".srx":
@@ -570,6 +607,8 @@ def parse_expected_result(iri) -> dict:
         return parse_tsv_results(path)
     if path.suffix == ".csv":
         return parse_csv_results(path)
+    if path.suffix in (".ttl", ".nt", ".rdf"):
+        return parse_rdf_results(iri)
     raise ValueError(f"Unknown result format {path}")
 
 
@@ -620,7 +659,8 @@ def check_query_evaluation(g: Manifest, entry):
     form = query_form(read_text(query_iri))
     result_path = iri_to_path(result_iri)
 
-    if result_path.suffix in (".ttl", ".nt", ".rdf"):
+    # SELECT and ASK results can also be RDF, which parse_expected_result handles.
+    if result_path.suffix in (".ttl", ".nt", ".rdf") and form not in ("SELECT", "ASK"):
         expected = load_graph(result_iri)
         actual = run_construct(m, query)
         assert graph_isomorphic(expected, actual), (

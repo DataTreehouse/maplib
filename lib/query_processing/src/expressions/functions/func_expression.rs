@@ -27,6 +27,7 @@ use crate::expressions::functions::str_dt::str_dt;
 use crate::expressions::functions::str_lang::str_lang;
 use crate::expressions::functions::str_len::str_len;
 use crate::expressions::functions::struuid::struuid;
+use crate::expressions::functions::time_zone::{time_zone_function, TimeZoneFunction};
 use crate::udf::UdfRegistry;
 use representation::cats::LockedCats;
 use representation::query_context::Context;
@@ -317,6 +318,21 @@ pub fn func_expression(
                 algorithm,
             )?;
         }
+        Function::Tz | Function::Timezone => {
+            let which = if matches!(func, Function::Tz) {
+                TimeZoneFunction::Tz
+            } else {
+                TimeZoneFunction::Timezone
+            };
+            solution_mappings = time_zone_function(
+                solution_mappings,
+                func,
+                args,
+                &args_contexts,
+                outer_context,
+                which,
+            )?;
+        }
         Function::BNode => {
             solution_mappings = bnode_(
                 solution_mappings,
@@ -326,11 +342,6 @@ pub fn func_expression(
                 outer_context,
                 global_cats,
             )?;
-        }
-        _ => {
-            return Err(QueryProcessingError::UnimplementedFunction(
-                func.to_string(),
-            ))
         }
     }
     solution_mappings = drop_inner_contexts(solution_mappings, &args_contexts.values().collect());

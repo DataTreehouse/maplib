@@ -361,8 +361,8 @@ pub(crate) fn triples_to_triples_to_add(
     triples: Vec<Triple>,
     graph: &NamedGraph,
 ) -> Vec<TriplesToAdd> {
-    let mut subj_type_map: HashMap<String, BaseRDFNodeType> = HashMap::new();
-    let mut obj_type_map: HashMap<String, BaseRDFNodeType> = HashMap::new();
+    let mut subj_type_map: HashMap<String, Vec<BaseRDFNodeType>> = HashMap::new();
+    let mut obj_type_map: HashMap<String, Vec<BaseRDFNodeType>> = HashMap::new();
     let mut predicate_map: PredMap = HashMap::new();
     for Triple {
         subject,
@@ -465,8 +465,8 @@ fn create_predicate_map<'a>(
         None
     };
     let mut graph_predicate_map = HashMap::new();
-    let mut subj_type_map: HashMap<String, BaseRDFNodeType> = HashMap::new();
-    let mut obj_type_map: HashMap<String, BaseRDFNodeType> = HashMap::new();
+    let mut subj_type_map: HashMap<String, Vec<BaseRDFNodeType>> = HashMap::new();
+    let mut obj_type_map: HashMap<String, Vec<BaseRDFNodeType>> = HashMap::new();
     let mut unparseable = Vec::new();
     let mut empty_iter = false;
     let mut reached_max = false;
@@ -714,19 +714,27 @@ fn hdt_object_string_to_term(o: &str) -> Term {
 
 fn get_or_insert_dt(
     base_rdfnode_type_ref: BaseRDFNodeTypeRef,
-    type_map: &mut HashMap<String, BaseRDFNodeType>,
+    type_map: &mut HashMap<String, Vec<BaseRDFNodeType>>,
 ) -> BaseRDFNodeType {
-    if let Some(t) = type_map.get(base_rdfnode_type_ref.as_str()) {
-        t.clone()
+    // Types are cached by datatype, and dateTime types also differ by time zone offset.
+    let offset = if let BaseRDFNodeTypeRef::Literal(_, offset) = &base_rdfnode_type_ref {
+        *offset
     } else {
-        let owned = base_rdfnode_type_ref.clone().to_owned();
-        type_map.insert(
-            base_rdfnode_type_ref.as_str().to_string(),
-            owned.into_owned(),
-        );
-        type_map
-            .get(base_rdfnode_type_ref.as_str())
-            .unwrap()
-            .clone()
+        None
+    };
+    let matches_offset = |t: &BaseRDFNodeType| match t {
+        BaseRDFNodeType::Literal(_, o) => *o == offset,
+        _ => true,
+    };
+    if let Some(types) = type_map.get(base_rdfnode_type_ref.as_str()) {
+        if let Some(t) = types.iter().find(|t| matches_offset(t)) {
+            return t.clone();
+        }
     }
+    let owned = base_rdfnode_type_ref.clone().into_owned();
+    type_map
+        .entry(base_rdfnode_type_ref.as_str().to_string())
+        .or_default()
+        .push(owned.clone());
+    owned
 }

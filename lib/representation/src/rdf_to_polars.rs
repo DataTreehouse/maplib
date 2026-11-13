@@ -63,7 +63,7 @@ pub fn rdf_literal_to_polars_literal_value_impl(
     value: &str,
     datatype: NamedNodeRef,
 ) -> Result<LiteralValue, RepresentationError> {
-    let dt = BaseRDFNodeType::Literal(datatype.into_owned());
+    let dt = BaseRDFNodeType::Literal(datatype.into_owned(), None);
     let mut sb = SeriesBuilder::new(&dt);
     sb.parse_literal(value, None)?;
     let ser = sb.into_series("dummy");

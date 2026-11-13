@@ -24,8 +24,8 @@ pub fn concat_(
         rdf_node_types: datatypes,
         height_estimate: height_upper_bound,
     } = solution_mappings;
-    let base_string = BaseRDFNodeType::Literal(xsd::STRING.into_owned());
-    let lang_string = BaseRDFNodeType::Literal(rdf::LANG_STRING.into_owned());
+    let base_string = BaseRDFNodeType::Literal(xsd::STRING.into_owned(), None);
+    let lang_string = BaseRDFNodeType::Literal(rdf::LANG_STRING.into_owned(), None);
     let all_maybe_lang_string = !args.is_empty()
         && (0..args.len()).all(|i| {
             let c = args_contexts.get(&i).unwrap().as_str();

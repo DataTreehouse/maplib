@@ -322,8 +322,15 @@ impl Triplestore {
             return Err(TriplestoreError::GraphDoesNotExist(graph.to_string()));
         };
 
-        let (blanks_in_degree_zero, blanks_in_degree_one) =
+        let (mut blanks_in_degree_zero, mut blanks_in_degree_one) =
             self.create_blank_in_degree_zero_and_one_sets(map)?;
+        // List nodes are written separately from their other properties, so they must be
+        // labeled rather than written as [ ... ] or inlined, or they would split into
+        // several blank nodes.
+        for u in self.list_nodes_with_other_properties(map)? {
+            blanks_in_degree_zero.remove(&u);
+            blanks_in_degree_one.remove(&u);
+        }
 
         let mut in_degree_one_blocks_map = HashMap::new();
         for (p, m) in map.iter() {
@@ -760,6 +767,57 @@ impl Triplestore {
         }
 
         Ok(Some(seen_lists))
+    }
+
+    /// Blank nodes that are subjects of rdf:first and also subjects of other predicates.
+    fn list_nodes_with_other_properties(
+        &self,
+        map: &HashMap<NamedNode, HashMap<(BaseRDFNodeType, BaseRDFNodeType), Triples>>,
+    ) -> Result<HashSet<u32>, TriplestoreError> {
+        let blank_subjects = |t: &Triples| -> Result<Vec<u32>, TriplestoreError> {
+            let mut out = vec![];
+            if let Some(lfs) = t.get_lazy_frame_slices()? {
+                for lf in lfs {
+                    let df = lf.select([col(SUBJECT_COL_NAME)]).collect().unwrap();
+                    out.extend(
+                        df.column(SUBJECT_COL_NAME)
+                            .unwrap()
+                            .u32()
+                            .unwrap()
+                            .iter()
+                            .flatten(),
+                    );
+                }
+            }
+            Ok(out)
+        };
+        let mut list_nodes = HashSet::new();
+        if let Some(m) = map.get(&rdf::FIRST.into_owned()) {
+            for ((s, _), t) in m {
+                if s.is_blank_node() {
+                    list_nodes.extend(blank_subjects(t)?);
+                }
+            }
+        }
+        let mut out = HashSet::new();
+        if list_nodes.is_empty() {
+            return Ok(out);
+        }
+        for (p, m) in map {
+            if p.as_ref() == rdf::FIRST || p.as_ref() == rdf::REST {
+                continue;
+            }
+            for ((s, _), t) in m {
+                if s.is_blank_node() {
+                    out.extend(
+                        blank_subjects(t)?
+                            .into_iter()
+                            .filter(|u| list_nodes.contains(u)),
+                    );
+                }
+            }
+        }
+        Ok(out)
     }
 
     fn create_blank_in_degree_zero_and_one_sets(

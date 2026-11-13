@@ -24,8 +24,8 @@ pub fn typed_numerical_operation(
         if right_type.is_multi() {
             for lt in left_type.map.keys() {
                 for rt in right_type.map.keys() {
-                    if let BaseRDFNodeType::Literal(lt_nn) = lt {
-                        if let BaseRDFNodeType::Literal(rt_nn) = rt {
+                    if let BaseRDFNodeType::Literal(lt_nn, _) = lt {
+                        if let BaseRDFNodeType::Literal(rt_nn, _) = rt {
                             ops.push(op(
                                 col(left_col).struct_().field_by_name(&lt.field_col_name()),
                                 col(right_col).struct_().field_by_name(&rt.field_col_name()),
@@ -39,14 +39,14 @@ pub fn typed_numerical_operation(
             }
         } else if !right_type.is_multi() && right_type.is_literal() {
             let rt = right_type.get_base_type().unwrap();
-            let rt_nn = if let BaseRDFNodeType::Literal(rt_nn) = rt {
+            let rt_nn = if let BaseRDFNodeType::Literal(rt_nn, _) = rt {
                 rt_nn
             } else {
                 unreachable!("Should never happen");
             };
             //Only left multi
             for lt in left_type.map.keys() {
-                if let BaseRDFNodeType::Literal(lt_nn) = &lt {
+                if let BaseRDFNodeType::Literal(lt_nn, _) = &lt {
                     ops.push(op(
                         col(left_col).struct_().field_by_name(&lt.field_col_name()),
                         col(right_col),
@@ -60,13 +60,13 @@ pub fn typed_numerical_operation(
     } else if right_type.is_multi() {
         if !left_type.is_multi() && left_type.is_literal() {
             let lt = left_type.get_base_type().unwrap();
-            let lt_nn = if let BaseRDFNodeType::Literal(lt_nn) = lt {
+            let lt_nn = if let BaseRDFNodeType::Literal(lt_nn, _) = lt {
                 lt_nn
             } else {
                 unreachable!("Should never happen")
             };
             for rt in right_type.map.keys() {
-                if let BaseRDFNodeType::Literal(rt_nn) = rt {
+                if let BaseRDFNodeType::Literal(rt_nn, _) = rt {
                     ops.push(op(
                         col(left_col),
                         col(right_col).struct_().field_by_name(&rt.field_col_name()),
@@ -83,13 +83,13 @@ pub fn typed_numerical_operation(
         && right_type.is_literal()
     {
         let lt = left_type.get_base_type().unwrap();
-        let lt_nn = if let BaseRDFNodeType::Literal(lt_nn) = lt {
+        let lt_nn = if let BaseRDFNodeType::Literal(lt_nn, _) = lt {
             lt_nn
         } else {
             unreachable!("Should never happen")
         };
         let rt = right_type.get_base_type().unwrap();
-        let rt_nn = if let BaseRDFNodeType::Literal(rt_nn) = rt {
+        let rt_nn = if let BaseRDFNodeType::Literal(rt_nn, _) = rt {
             rt_nn
         } else {
             unreachable!("Should never happen")
@@ -185,7 +185,7 @@ fn divide(
         2 => xsd::FLOAT,
         _ => xsd::DECIMAL,
     };
-    let t = BaseRDFNodeType::Literal(t.into_owned());
+    let t = BaseRDFNodeType::Literal(t.into_owned(), None);
     let dtype = t.default_input_polars_data_type();
     let e = if dtype == DataType::Float32 {
         e_left.cast(DataType::Float32) / e_right.cast(DataType::Float32)
@@ -234,7 +234,7 @@ fn greatest_common_dt(dt_left: NamedNodeRef, dt_right: NamedNodeRef) -> BaseRDFN
     let use_bits = cmp::max(bits_left, bits_right);
     let decimal = decimal_left || decimal_right;
     let use_type = gen_type(use_bits, decimal, dt_left, dt_right);
-    BaseRDFNodeType::Literal(use_type.into_owned())
+    BaseRDFNodeType::Literal(use_type.into_owned(), None)
 }
 
 fn gen_type(

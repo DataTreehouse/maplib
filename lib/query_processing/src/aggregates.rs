@@ -65,7 +65,7 @@ pub fn count_without_expression(
 fn count_output(expr: Expr) -> (Expr, RDFNodeState) {
     (
         expr.cast(DataType::Int64),
-        BaseRDFNodeType::Literal(xsd::INTEGER.into_owned()).into_default_input_rdf_node_state(),
+        BaseRDFNodeType::Literal(xsd::INTEGER.into_owned(), None).into_default_input_rdf_node_state(),
     )
 }
 
@@ -84,7 +84,7 @@ pub fn sum(
         );
     }
     let out_rdf_node_type = if expr_rdf_node_type.is_bool() {
-        BaseRDFNodeType::Literal(xsd::UNSIGNED_LONG.into_owned())
+        BaseRDFNodeType::Literal(xsd::UNSIGNED_LONG.into_owned(), None)
             .into_default_input_rdf_node_state()
     } else {
         expr_rdf_node_type.clone()
@@ -113,7 +113,7 @@ pub fn avg(
         );
     }
     let out_rdf_node_type = if expr_rdf_node_type.is_bool() {
-        BaseRDFNodeType::Literal(xsd::UNSIGNED_LONG.into_owned())
+        BaseRDFNodeType::Literal(xsd::UNSIGNED_LONG.into_owned(), None)
             .into_default_input_rdf_node_state()
     } else {
         expr_rdf_node_type.clone()
@@ -133,7 +133,7 @@ pub fn min(solution_mappings: &SolutionMappings, column_context: &Context) -> (E
         return multi_min_max(column_context, expr_rdf_node_type, false);
     }
     let out_rdf_node_type = if expr_rdf_node_type.is_bool() {
-        BaseRDFNodeType::Literal(xsd::UNSIGNED_LONG.into_owned())
+        BaseRDFNodeType::Literal(xsd::UNSIGNED_LONG.into_owned(), None)
             .into_default_input_rdf_node_state()
     } else {
         expr_rdf_node_type.clone()
@@ -149,7 +149,7 @@ pub fn max(solution_mappings: &SolutionMappings, column_context: &Context) -> (E
         return multi_min_max(column_context, expr_rdf_node_type, true);
     }
     let out_rdf_node_type = if expr_rdf_node_type.is_bool() {
-        BaseRDFNodeType::Literal(xsd::UNSIGNED_LONG.into_owned())
+        BaseRDFNodeType::Literal(xsd::UNSIGNED_LONG.into_owned(), None)
             .into_default_input_rdf_node_state()
     } else {
         expr_rdf_node_type.clone()
@@ -170,7 +170,7 @@ pub fn group_concat(
     global_cats: LockedCats,
 ) -> (Expr, RDFNodeState) {
     let out_rdf_node_type =
-        BaseRDFNodeType::Literal(xsd::STRING.into_owned()).into_default_input_rdf_node_state();
+        BaseRDFNodeType::Literal(xsd::STRING.into_owned(), None).into_default_input_rdf_node_state();
     let use_sep = separator.as_deref().unwrap_or(" ");
     let t = rdf_node_type_from_context(column_context, solution_mappings);
     let mut strings = str_function(column_context.as_str(), t, global_cats);
@@ -228,7 +228,7 @@ fn null_expr(dtype: DataType) -> Expr {
 }
 
 fn numeric_level(t: &BaseRDFNodeType) -> Option<u8> {
-    if let BaseRDFNodeType::Literal(l) = t {
+    if let BaseRDFNodeType::Literal(l, _) = t {
         numeric_promotion_level(l.as_ref())
     } else {
         None
@@ -245,7 +245,7 @@ fn numeric_aggregate_type(level: u8, agg: NumericAggregate) -> BaseRDFNodeType {
         _ if agg == NumericAggregate::Avg => xsd::DECIMAL,
         _ => xsd::INTEGER,
     };
-    BaseRDFNodeType::Literal(nn.into_owned())
+    BaseRDFNodeType::Literal(nn.into_owned(), None)
 }
 
 /// SUM and AVG over a column with multiple types. The values in each group are promoted to the

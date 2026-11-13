@@ -2,14 +2,9 @@
 # One test id per line, optionally followed by "# reason".
 # These are marked as strict xfails: when a test starts passing, remove it from this list.
 # Tests tagged [flaky] fail nondeterministically and are non-strict xfails.
-aggregates/agg-avg-03  # Results differ: AVG over an empty group is unbound instead of 0
-aggregates/agg-empty-group-count-graph  # The expected result is a Turtle result set, which the test harness does not support
 aggregates/agg08  # query is accepted but should be rejected
 aggregates/agg11  # query is accepted but should be rejected
-basic-update/insert-where-same-bnode2  # Graph <http://example.org/g3> differs: a template without variables and an empty WHERE inserts nothing
 bind/bind07  # Results differ: BIND in a nested group sees variables bound outside of the group
-bindings/graph  # The expected result is a Turtle result set, which the test harness does not support
-bindings/graph-no-var  # The expected result is a Turtle result set, which the test harness does not support
 bindings/values7  # Results differ: unbound variables in the solutions are not treated as compatible with VALUES
 cast/cast-bool  # Results differ: "0"^^xsd:boolean is stored as a boolean value and returned as "false"
 cast/cast-decimal  # Results differ: "0"^^xsd:boolean is stored as a boolean value and returned as "false"
@@ -17,15 +12,10 @@ cast/cast-double  # Results differ: "0"^^xsd:boolean is stored as a boolean valu
 cast/cast-float  # Results differ: "0"^^xsd:boolean is stored as a boolean value and returned as "false"
 cast/cast-int  # Results differ: "0"^^xsd:boolean is stored as a boolean value and returned as "false"
 cast/cast-string  # Results differ: "0"^^xsd:boolean is stored as a boolean value and returned as "false"
-construct/constructlist  # Graphs differ: the list head blank node of a collection in a CONSTRUCT template is not reused as the subject
 csv-tsv-res/csv03  # CSV differs: doubles are not written in the canonical form (1.0E6 is written as 1000000.0)
 csv-tsv-res/csv04  # CSV differs.
 delete/dawg-delete-07  # MaplibException: Variable ?o not found. maplib deliberately rejects update templates with variables that are not bound by the WHERE clause
-functions/hours  # Results differ. xsd:dateTime values are stored in UTC, so the original offset is lost (15:38-08:00 gives 23)
-functions/timezone  # TIMEZONE is not implemented; needs the original offset, which is lost when dateTimes are stored in UTC
-functions/tz  # TZ is not implemented; needs the original offset, which is lost when dateTimes are stored in UTC
 negation/full-minuend  # Results differ (ordered): MINUS does not treat unbound variables as compatible
 negation/partial-minuend  # PanicException: MINUS on variables with differing types (join keys don't match)
-property-path/pp36  # Results differ.
-property-path/values_and_path  # MaplibException: duplicate column 'v'
+property-path/pp16  # Results differ (ordered): zero length paths between two variables only include the nodes of the path, not all nodes of the graph
 syntax-query/test_4  # MaplibException: Custom function not found: <http://example/function>, it is possible to define a fu

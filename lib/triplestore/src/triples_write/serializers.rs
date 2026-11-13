@@ -397,7 +397,7 @@ pub(super) fn serializer_for<'a>(
             },
             array,
         ),
-        (DataType::String, BaseRDFNodeType::Literal(_)) if is_lang_tag => lang_serializer(
+        (DataType::String, BaseRDFNodeType::Literal(_, _)) if is_lang_tag => lang_serializer(
             |iter| Iterator::next(iter).expect(TOO_MANY_MSG),
             |arr| {
                 arr.as_any()
@@ -407,7 +407,7 @@ pub(super) fn serializer_for<'a>(
             },
             array,
         ),
-        (DataType::String, BaseRDFNodeType::Literal(_)) => string_serializer(
+        (DataType::String, BaseRDFNodeType::Literal(_, _)) => string_serializer(
             |iter| Iterator::next(iter).expect(TOO_MANY_MSG),
             |arr| {
                 arr.as_any()

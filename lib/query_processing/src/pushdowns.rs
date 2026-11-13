@@ -1,9 +1,10 @@
 use crate::type_constraints::{
-    conjunction_variable_type, equal_variable_type, ConstraintBaseRDFNodeType, ConstraintExpr,
+    conjunction_variable_type, datetime_datatypes, equal_variable_possible_types,
+    ConstraintBaseRDFNodeType, ConstraintExpr,
     PossibleTypes,
 };
 use oxrdf::vocab::rdfs;
-use oxrdf::{Term, Variable};
+use oxrdf::{Literal, NamedNodeRef, Term, Variable};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use representation::cats::LockedCats;
 use representation::polars_to_rdf::column_as_terms;
@@ -357,7 +358,7 @@ fn find_variable_pushdowns(e: &Expression) -> Option<HashMap<String, HashSet<Ter
                 if let Expression::NamedNode(nn) = right.as_ref() {
                     terms.insert(Term::NamedNode(nn.clone()));
                 } else if let Expression::Literal(l) = right.as_ref() {
-                    terms.insert(Term::Literal(l.clone()));
+                    terms.extend(equal_literal_terms(l)?);
                 } else {
                     return None;
                 }
@@ -367,7 +368,7 @@ fn find_variable_pushdowns(e: &Expression) -> Option<HashMap<String, HashSet<Ter
                 if let Expression::NamedNode(nn) = left.as_ref() {
                     terms.insert(Term::NamedNode(nn.clone()));
                 } else if let Expression::Literal(l) = left.as_ref() {
-                    terms.insert(Term::Literal(l.clone()));
+                    terms.extend(equal_literal_terms(l)?);
                 } else {
                     return None;
                 }
@@ -383,7 +384,7 @@ fn find_variable_pushdowns(e: &Expression) -> Option<HashMap<String, HashSet<Ter
                     if let Expression::NamedNode(nn) = e {
                         terms.insert(Term::NamedNode(nn.clone()));
                     } else if let Expression::Literal(l) = e {
-                        terms.insert(Term::Literal(l.clone()));
+                        terms.extend(equal_literal_terms(l)?);
                     } else {
                         return None;
                     }
@@ -421,16 +422,10 @@ fn find_variable_type_constraints(e: &Expression) -> Option<HashMap<String, Poss
             }
         }
         Expression::Equal(left, right) => {
-            if let Some((v, t)) = equal_variable_type(left, right) {
-                return Some(HashMap::from([(
-                    v.as_str().to_string(),
-                    PossibleTypes::singular(t),
-                )]));
-            } else if let Some((v, t)) = equal_variable_type(right, left) {
-                return Some(HashMap::from([(
-                    v.as_str().to_string(),
-                    PossibleTypes::singular(t),
-                )]));
+            if let Some((v, t)) = equal_variable_possible_types(left, right) {
+                return Some(HashMap::from([(v.as_str().to_string(), t)]));
+            } else if let Some((v, t)) = equal_variable_possible_types(right, left) {
+                return Some(HashMap::from([(v.as_str().to_string(), t)]));
             }
         }
         Expression::FunctionCall(f, args) => match f {
@@ -488,4 +483,99 @@ fn conjunction(
     }
     new_map.extend(right);
     new_map
+}
+
+/// The terms that a variable can be bound to when it is = to the literal, or None if they
+/// cannot be listed, in which case the value is not pushed down.
+///
+/// A dateTime is equal to the same instant as an xsd:dateTime or an xsd:dateTimeStamp, so the
+/// value is pushed down with both datatypes. A number is equal to the same value of any numeric
+/// datatype (with type promotion), see [numeric_equal_terms].
+fn equal_literal_terms(l: &Literal) -> Option<Vec<Term>> {
+    if representation::literal_is_datetime(l.datatype()) {
+        Some(
+            datetime_datatypes()
+                .into_iter()
+                .map(|dt| Term::Literal(Literal::new_typed_literal(l.value(), dt)))
+                .collect(),
+        )
+    } else if representation::literal_is_numeric(l.datatype()) {
+        numeric_equal_terms(l)
+    } else {
+        Some(vec![Term::Literal(l.clone())])
+    }
+}
+
+/// The values of all numeric datatypes that are = to an integer or decimal literal.
+///
+/// Each numeric datatype has at most one value that is equal to such a literal: the same
+/// number for the integer types (when in range) and xsd:decimal, and the nearest double or
+/// float, since the literal is promoted to xsd:double or xsd:float when compared with one.
+/// For an xsd:double or xsd:float literal, many decimals are equal to it after promotion,
+/// so the values cannot be listed and None is returned.
+fn numeric_equal_terms(l: &Literal) -> Option<Vec<Term>> {
+    use oxrdf::vocab::xsd;
+    let dt = l.datatype();
+    if matches!(dt, xsd::DOUBLE | xsd::FLOAT) {
+        return None;
+    }
+    let lexical = l.value().trim();
+    let unsigned = lexical.trim_start_matches(['+', '-']);
+    let negative = lexical.starts_with('-');
+    let (int_part, frac_part) = unsigned.split_once('.').unwrap_or((unsigned, ""));
+    if int_part.is_empty() && frac_part.is_empty()
+        || !int_part.bytes().all(|b| b.is_ascii_digit())
+        || !frac_part.bytes().all(|b| b.is_ascii_digit())
+    {
+        return None;
+    }
+    let frac_part = frac_part.trim_end_matches('0');
+    let int_part = match int_part.trim_start_matches('0') {
+        "" => "0",
+        x => x,
+    };
+    let sign = if negative && (int_part != "0" || !frac_part.is_empty()) {
+        "-"
+    } else {
+        ""
+    };
+    let decimal = if frac_part.is_empty() {
+        format!("{sign}{int_part}")
+    } else {
+        format!("{sign}{int_part}.{frac_part}")
+    };
+    let value: f64 = decimal.parse().ok()?;
+    let mut terms = vec![
+        Term::Literal(Literal::new_typed_literal(&decimal, xsd::DECIMAL)),
+        Term::Literal(Literal::new_typed_literal(value.to_string(), xsd::DOUBLE)),
+        Term::Literal(Literal::new_typed_literal(
+            (value as f32).to_string(),
+            xsd::FLOAT,
+        )),
+    ];
+    if frac_part.is_empty() {
+        // The integer types that the integer is in the range of.
+        let n: i128 = decimal.parse().ok()?;
+        let ranges: [(NamedNodeRef, i128, i128); 13] = [
+            (xsd::INTEGER, i64::MIN as i128, i64::MAX as i128),
+            (xsd::LONG, i64::MIN as i128, i64::MAX as i128),
+            (xsd::INT, i32::MIN as i128, i32::MAX as i128),
+            (xsd::SHORT, i16::MIN as i128, i16::MAX as i128),
+            (xsd::BYTE, i8::MIN as i128, i8::MAX as i128),
+            (xsd::NON_POSITIVE_INTEGER, i64::MIN as i128, 0),
+            (xsd::NEGATIVE_INTEGER, i64::MIN as i128, -1),
+            (xsd::NON_NEGATIVE_INTEGER, 0, u64::MAX as i128),
+            (xsd::POSITIVE_INTEGER, 1, u64::MAX as i128),
+            (xsd::UNSIGNED_LONG, 0, u64::MAX as i128),
+            (xsd::UNSIGNED_INT, 0, u32::MAX as i128),
+            (xsd::UNSIGNED_SHORT, 0, u16::MAX as i128),
+            (xsd::UNSIGNED_BYTE, 0, u8::MAX as i128),
+        ];
+        for (dt, min, max) in ranges {
+            if (min..=max).contains(&n) {
+                terms.push(Term::Literal(Literal::new_typed_literal(n.to_string(), dt)));
+            }
+        }
+    }
+    Some(terms)
 }

@@ -29,7 +29,7 @@ pub fn now_(
     );
     solution_mappings.rdf_node_types.insert(
         outer_context.as_str().to_string(),
-        BaseRDFNodeType::Literal(xsd::DATE_TIME.into_owned()).into_default_input_rdf_node_state(),
+        BaseRDFNodeType::Literal(xsd::DATE_TIME.into_owned(), Some(0)).into_default_input_rdf_node_state(),
     );
     Ok(solution_mappings)
 }

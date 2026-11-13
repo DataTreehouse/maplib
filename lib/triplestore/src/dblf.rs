@@ -745,7 +745,7 @@ fn filter_objects<'a>(object_type: &BaseRDFNodeType, objects: &'a Vec<Term>) -> 
             Term::NamedNode(..) => object_type.is_iri(),
             Term::BlankNode(..) => object_type.is_blank_node(),
             Term::Literal(l) => {
-                if let BaseRDFNodeType::Literal(t) = object_type {
+                if let BaseRDFNodeType::Literal(t, _) = object_type {
                     l.datatype() == t.as_ref()
                 } else {
                     false

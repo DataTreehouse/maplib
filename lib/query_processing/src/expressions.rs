@@ -4,7 +4,9 @@ pub mod operations;
 
 use crate::cats::create_compatible_cats;
 use crate::errors::QueryProcessingError;
-use crate::expressions::comparisons::{typed_comparison_expr, typed_equals_expr};
+use crate::expressions::comparisons::{
+    typed_comparison_expr, typed_equals_expr, typed_value_equals_expr,
+};
 use crate::expressions::operations::typed_numerical_operation;
 use oxrdf::vocab::xsd;
 use oxrdf::{BlankNode, Literal, NamedNode, Variable};
@@ -72,7 +74,7 @@ pub fn literal_enc(
     l: &Literal,
     global_cats: &Cats,
 ) -> Result<(Expr, BaseRDFNodeType, BaseCatState), QueryProcessingError> {
-    let bt = BaseRDFNodeType::Literal(l.datatype().into_owned());
+    let bt = BaseRDFNodeType::from_literal(l);
     let encoded_res = if bt.stored_cat() {
         if bt.is_lang_string() {
             let mut enc = global_cats.maybe_encode_literals(
@@ -266,7 +268,7 @@ pub fn effective_boolean_value(
         .with_column(e.alias(context.as_str()));
     solution_mappings.rdf_node_types.insert(
         context.as_str().to_string(),
-        BaseRDFNodeType::Literal(xsd::BOOLEAN.into_owned()).into_default_input_rdf_node_state(),
+        BaseRDFNodeType::Literal(xsd::BOOLEAN.into_owned(), None).into_default_input_rdf_node_state(),
     );
     solution_mappings
 }
@@ -295,7 +297,7 @@ pub fn binary_expression(
             .with_column(expr.alias(outer_context.as_str()));
         solution_mappings.rdf_node_types.insert(
             outer_context.as_str().to_string(),
-            BaseRDFNodeType::Literal(xsd::BOOLEAN.into_owned()).into_default_input_rdf_node_state(),
+            BaseRDFNodeType::Literal(xsd::BOOLEAN.into_owned(), None).into_default_input_rdf_node_state(),
         );
         solution_mappings =
             drop_inner_contexts(solution_mappings, &vec![left_context, right_context]);
@@ -319,7 +321,7 @@ pub fn binary_expression(
                 | Expression::LessOrEqual(..)
                 | Expression::SameTerm(..)
         ) {
-            let bool = BaseRDFNodeType::Literal(xsd::BOOLEAN.into_owned());
+            let bool = BaseRDFNodeType::Literal(xsd::BOOLEAN.into_owned(), None);
             solution_mappings.mappings = solution_mappings.mappings.with_column(
                 lit(LiteralValue::untyped_null())
                     .cast(bool.default_input_polars_data_type())
@@ -345,7 +347,7 @@ pub fn binary_expression(
         return Ok(solution_mappings);
     }
     if matches!(expression, Expression::Equal(..)) {
-        let e = typed_equals_expr(
+        let e = typed_value_equals_expr(
             left_context.as_str(),
             right_context.as_str(),
             left_type,
@@ -356,7 +358,7 @@ pub fn binary_expression(
             .mappings
             .with_column(e.alias(outer_context.as_str()));
         let t =
-            BaseRDFNodeType::Literal(xsd::BOOLEAN.into_owned()).into_default_input_rdf_node_state();
+            BaseRDFNodeType::Literal(xsd::BOOLEAN.into_owned(), None).into_default_input_rdf_node_state();
         solution_mappings
             .rdf_node_types
             .insert(outer_context.as_str().to_string(), t);
@@ -372,7 +374,7 @@ pub fn binary_expression(
             .mappings
             .with_column(e.alias(outer_context.as_str()));
         let t =
-            BaseRDFNodeType::Literal(xsd::BOOLEAN.into_owned()).into_default_input_rdf_node_state();
+            BaseRDFNodeType::Literal(xsd::BOOLEAN.into_owned(), None).into_default_input_rdf_node_state();
         solution_mappings
             .rdf_node_types
             .insert(outer_context.as_str().to_string(), t);
@@ -394,7 +396,7 @@ pub fn binary_expression(
             .mappings
             .with_column(e.alias(outer_context.as_str()));
         let t =
-            BaseRDFNodeType::Literal(xsd::BOOLEAN.into_owned()).into_default_input_rdf_node_state();
+            BaseRDFNodeType::Literal(xsd::BOOLEAN.into_owned(), None).into_default_input_rdf_node_state();
         solution_mappings
             .rdf_node_types
             .insert(outer_context.as_str().to_string(), t);
@@ -431,7 +433,7 @@ pub fn binary_expression(
             right: Arc::new(col(right_context.as_str())),
         };
         let t =
-            BaseRDFNodeType::Literal(xsd::BOOLEAN.into_owned()).into_default_input_rdf_node_state();
+            BaseRDFNodeType::Literal(xsd::BOOLEAN.into_owned(), None).into_default_input_rdf_node_state();
         solution_mappings.mappings = solution_mappings
             .mappings
             .with_column(expr.alias(outer_context.as_str()));
@@ -501,7 +503,7 @@ pub fn not_expression(
     );
     solution_mappings.rdf_node_types.insert(
         outer_context.as_str().to_string(),
-        BaseRDFNodeType::Literal(xsd::BOOLEAN.into_owned()).into_default_input_rdf_node_state(),
+        BaseRDFNodeType::Literal(xsd::BOOLEAN.into_owned(), None).into_default_input_rdf_node_state(),
     );
     solution_mappings = drop_inner_contexts(solution_mappings, &vec![inner_context]);
     Ok(solution_mappings)
@@ -519,7 +521,7 @@ pub fn bound(
             .with_column(lit(false).alias(outer_context.as_str()));
         solution_mappings.rdf_node_types.insert(
             outer_context.as_str().to_string(),
-            BaseRDFNodeType::Literal(xsd::BOOLEAN.into_owned()).into_default_input_rdf_node_state(),
+            BaseRDFNodeType::Literal(xsd::BOOLEAN.into_owned(), None).into_default_input_rdf_node_state(),
         );
         return Ok(solution_mappings);
     }
@@ -536,7 +538,7 @@ pub fn bound(
         .with_column(expr.alias(outer_context.as_str()));
     solution_mappings.rdf_node_types.insert(
         outer_context.as_str().to_string(),
-        BaseRDFNodeType::Literal(xsd::BOOLEAN.into_owned()).into_default_input_rdf_node_state(),
+        BaseRDFNodeType::Literal(xsd::BOOLEAN.into_owned(), None).into_default_input_rdf_node_state(),
     );
     Ok(solution_mappings)
 }
@@ -821,7 +823,7 @@ pub fn exists(
 
     rdf_node_types.insert(
         outer_context.as_str().to_string(),
-        BaseRDFNodeType::Literal(xsd::BOOLEAN.into_owned()).into_default_input_rdf_node_state(),
+        BaseRDFNodeType::Literal(xsd::BOOLEAN.into_owned(), None).into_default_input_rdf_node_state(),
     );
     let mut solution_mappings = SolutionMappings::new(mappings, rdf_node_types, height_upper_bound);
     solution_mappings = drop_inner_contexts(solution_mappings, &vec![inner_context]);
@@ -845,7 +847,7 @@ pub fn in_expression(
             .rdf_node_types
             .get(right_context.as_str())
             .unwrap();
-        expr = expr.or(typed_equals_expr(
+        expr = expr.or(typed_value_equals_expr(
             left_context.as_str(),
             right_context.as_str(),
             left_type,
@@ -859,7 +861,7 @@ pub fn in_expression(
         .with_column(expr.alias(outer_context.as_str()));
     solution_mappings.rdf_node_types.insert(
         outer_context.as_str().to_string(),
-        BaseRDFNodeType::Literal(xsd::BOOLEAN.into_owned()).into_default_input_rdf_node_state(),
+        BaseRDFNodeType::Literal(xsd::BOOLEAN.into_owned(), None).into_default_input_rdf_node_state(),
     );
     solution_mappings = drop_inner_contexts(solution_mappings, &vec![left_context]);
     solution_mappings = drop_inner_contexts(solution_mappings, &right_contexts.iter().collect());

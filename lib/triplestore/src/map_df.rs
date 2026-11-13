@@ -94,7 +94,7 @@ impl Triplestore {
             object_cat_state: BaseRDFNodeType::IRI.default_input_cat_state(),
             predicate_cat_state: None,
         };
-        let num_dt = BaseRDFNodeType::Literal(xsd::UNSIGNED_INT.into_owned());
+        let num_dt = BaseRDFNodeType::Literal(xsd::UNSIGNED_INT.into_owned(), None);
         let tta_child_num = TriplesToAdd {
             df: df
                 .clone()

@@ -24,7 +24,7 @@ pub fn is_numeric(
         solution_mappings,
         args_contexts,
         outer_context,
-        |t| matches!(t, BaseRDFNodeType::Literal(nn) if literal_is_numeric(nn.as_ref())),
+        |t| matches!(t, BaseRDFNodeType::Literal(nn, _) if literal_is_numeric(nn.as_ref())),
     )
 }
 
@@ -43,7 +43,7 @@ fn is_literal_where(
     let expr = if t.is_multi() {
         let mut exprs = vec![];
         for t in t.map.keys() {
-            if matches!(t, BaseRDFNodeType::Literal(_)) && accept(t) {
+            if matches!(t, BaseRDFNodeType::Literal(_, _)) && accept(t) {
                 exprs.push(
                     col(first_context.as_str())
                         .struct_()
@@ -60,7 +60,7 @@ fn is_literal_where(
     } else {
         let b = t.get_base_type().unwrap();
         match b {
-            BaseRDFNodeType::Literal(_) if accept(&b) => {
+            BaseRDFNodeType::Literal(_, _) if accept(&b) => {
                 col(first_context.as_str()).is_null().not()
             }
             _ => lit(false),
@@ -71,7 +71,7 @@ fn is_literal_where(
         .with_column(expr.alias(outer_context.as_str()));
     solution_mappings.rdf_node_types.insert(
         outer_context.as_str().to_string(),
-        BaseRDFNodeType::Literal(xsd::BOOLEAN.into_owned()).into_default_input_rdf_node_state(),
+        BaseRDFNodeType::Literal(xsd::BOOLEAN.into_owned(), None).into_default_input_rdf_node_state(),
     );
     Ok(solution_mappings)
 }

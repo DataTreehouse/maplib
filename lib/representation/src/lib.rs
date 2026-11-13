@@ -75,6 +75,26 @@ pub fn literal_is_numeric(l: NamedNodeRef) -> bool {
         || is_literal_subtype(l, NamedNode::new_unchecked(OWL_REAL).as_ref())
 }
 
+/// The XSD numeric datatypes, whose values are compared with numeric type promotion.
+pub const NUMERIC_DATATYPES: [NamedNodeRef<'static>; 16] = [
+    xsd::DOUBLE,
+    xsd::FLOAT,
+    xsd::DECIMAL,
+    xsd::INTEGER,
+    xsd::NON_POSITIVE_INTEGER,
+    xsd::NEGATIVE_INTEGER,
+    xsd::LONG,
+    xsd::INT,
+    xsd::SHORT,
+    xsd::BYTE,
+    xsd::NON_NEGATIVE_INTEGER,
+    xsd::UNSIGNED_LONG,
+    xsd::UNSIGNED_INT,
+    xsd::UNSIGNED_SHORT,
+    xsd::UNSIGNED_BYTE,
+    xsd::POSITIVE_INTEGER,
+];
+
 pub fn literal_is_boolean(l: NamedNodeRef) -> bool {
     matches!(l, xsd::BOOLEAN)
 }

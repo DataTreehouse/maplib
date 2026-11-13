@@ -624,7 +624,7 @@ fn resolve_rdf_node_type(obj: &Bound<'_, PyAny>) -> PyResult<BaseRDFNodeType> {
         return Ok(state.map.keys().next().unwrap().clone());
     }
     if let Ok(iri) = obj.extract::<PyIRI>() {
-        return Ok(BaseRDFNodeType::Literal(iri.into_inner()));
+        return Ok(BaseRDFNodeType::Literal(iri.into_inner(), None));
     }
     if let Ok(s) = obj.extract::<String>() {
         if s == "IRI" || s == "iri" {
@@ -636,7 +636,7 @@ fn resolve_rdf_node_type(obj: &Bound<'_, PyAny>) -> PyResult<BaseRDFNodeType> {
         let nn = NamedNode::new(&s).map_err(|e| {
             PyMaplibError::FunctionArgumentError(format!("Invalid IRI '{}': {}", s, e))
         })?;
-        return Ok(BaseRDFNodeType::Literal(nn));
+        return Ok(BaseRDFNodeType::Literal(nn, None));
     }
     Err(PyTypeError::new_err("Expected RDFType or IRI"))
 }

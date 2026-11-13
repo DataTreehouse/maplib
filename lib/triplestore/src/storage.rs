@@ -726,7 +726,7 @@ impl TriplesSegment {
                 .get_lazy_frames(Some(offsets));
         } else if let Some(objects) = objects {
             if let Some(sorted) = &self.object_sort {
-                let allow_pushdown = if let BaseRDFNodeType::Literal(t) = object_type {
+                let allow_pushdown = if let BaseRDFNodeType::Literal(t, _) = object_type {
                     t.as_ref() == xsd::STRING
                 } else {
                     true
@@ -889,7 +889,7 @@ pub fn can_and_should_index_object(
 fn can_index(t: &BaseRDFNodeType) -> bool {
     if matches!(t, BaseRDFNodeType::IRI | BaseRDFNodeType::BlankNode) {
         true
-    } else if let BaseRDFNodeType::Literal(l) = t {
+    } else if let BaseRDFNodeType::Literal(l, _) = t {
         l.as_ref() == xsd::STRING
     } else {
         false
@@ -1151,7 +1151,7 @@ fn compact_segments(
     }
     let subject_encs = maybe_get_cat_encs(cats, subj_type);
     let object_encs = maybe_get_cat_encs(cats, obj_type);
-    let fields = if let BaseRDFNodeType::Literal(nn) = obj_type {
+    let fields = if let BaseRDFNodeType::Literal(nn, _) = obj_type {
         if nn.as_ref() == rdf::LANG_STRING {
             Some((LANG_STRING_VALUE_FIELD, LANG_STRING_LANG_FIELD))
         } else {

@@ -54,8 +54,8 @@ pub fn order_by(
                     } else {
                         Ordering::Less
                     }
-                } else if let BaseRDFNodeType::Literal(x_l) = x {
-                    if let BaseRDFNodeType::Literal(y_l) = y {
+                } else if let BaseRDFNodeType::Literal(x_l, _) = x {
+                    if let BaseRDFNodeType::Literal(y_l, _) = y {
                         x_l.cmp(y_l)
                     } else {
                         Ordering::Greater

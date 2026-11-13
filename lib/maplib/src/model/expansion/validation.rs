@@ -349,7 +349,7 @@ fn infer_validate_mapping_column_type_from_ptype(
                         .map_err(MappingError::DatatypeInferenceError)?;
                     Ok((MappingColumnType::Flat(series_inferred_rdf_node_type), None))
                 } else {
-                    let ptype_rdf_node_type = BaseRDFNodeType::Literal(nn.clone());
+                    let ptype_rdf_node_type = BaseRDFNodeType::Literal(nn.clone(), None);
                     let ptype_dt = ptype_rdf_node_type.default_input_polars_data_type();
                     if ptype_dt.is_string() && datatype.is_string() || &ptype_dt == datatype {
                         Ok((
@@ -366,13 +366,13 @@ fn infer_validate_mapping_column_type_from_ptype(
                             let base_inferred =
                                 series_inferred_rdf_node_type.get_base_type().unwrap();
                             let inferred_nn =
-                                if let BaseRDFNodeType::Literal(inferred_nn) = base_inferred {
+                                if let BaseRDFNodeType::Literal(inferred_nn, _) = base_inferred {
                                     inferred_nn
                                 } else {
                                     unreachable!("Should never happen")
                                 };
                             if is_literal_subtype_ext(inferred_nn.as_ref(), nn.as_ref()) {
-                                let super_t = BaseRDFNodeType::Literal(nn.clone());
+                                let super_t = BaseRDFNodeType::Literal(nn.clone(), None);
                                 let expr = if inferred_nn != nn {
                                     Some(expr.cast(super_t.default_input_polars_data_type()))
                                 } else {

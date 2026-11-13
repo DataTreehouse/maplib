@@ -1,6 +1,7 @@
 use crate::errors::QueryProcessingError;
 use oxrdf::vocab::xsd;
-use polars::prelude::{col, lit, DataType, Expr};
+use crate::expressions::functions::time_zone::local_datetime_expr;
+use polars::prelude::{lit, DataType, Expr};
 use representation::query_context::Context;
 use representation::rdf_to_polars::default_decimal_type;
 use representation::solution_mapping::SolutionMappings;
@@ -35,7 +36,9 @@ pub fn date_part(
             "1".to_string(),
         ));
     }
-    let c = col(args_contexts.get(&0).unwrap().as_str());
+    let arg = args_contexts.get(&0).unwrap().as_str();
+    // The parts are of the local time at the time zone offset of the value.
+    let c = local_datetime_expr(arg, solution_mappings.rdf_node_types.get(arg).unwrap());
     let (expr, t): (Expr, _) = match part {
         DatePart::Year => (c.dt().year().cast(DataType::Int64), xsd::INTEGER),
         DatePart::Month => (c.dt().month().cast(DataType::Int64), xsd::INTEGER),
@@ -60,7 +63,7 @@ pub fn date_part(
         .with_column(expr.alias(outer_context.as_str()));
     solution_mappings.rdf_node_types.insert(
         outer_context.as_str().to_string(),
-        BaseRDFNodeType::Literal(t.into_owned()).into_default_input_rdf_node_state(),
+        BaseRDFNodeType::Literal(t.into_owned(), None).into_default_input_rdf_node_state(),
     );
     Ok(solution_mappings)
 }

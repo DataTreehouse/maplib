@@ -173,7 +173,7 @@ impl Model {
             report_types.insert(
                 "conforms".to_string(),
                 MappingColumnType::Flat(
-                    BaseRDFNodeType::Literal(xsd::BOOLEAN.into_owned())
+                    BaseRDFNodeType::Literal(xsd::BOOLEAN.into_owned(), None)
                         .into_default_input_rdf_node_state(),
                 ),
             );
@@ -289,7 +289,7 @@ fn create_targets_input(
     let mut shape_blanks_builder = SeriesBuilder::new(&BaseRDFNodeType::BlankNode);
     let mut shape_iris_builder = SeriesBuilder::new(&BaseRDFNodeType::IRI);
 
-    let counts_dt = BaseRDFNodeType::Literal(xsd::UNSIGNED_INT.into_owned());
+    let counts_dt = BaseRDFNodeType::Literal(xsd::UNSIGNED_INT.into_owned(), None);
     let mut counts_builder = SeriesBuilder::new(&counts_dt);
 
     for p in &report.shape_targets {

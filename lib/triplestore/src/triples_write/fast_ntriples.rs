@@ -36,7 +36,7 @@ pub(crate) fn write_triples_in_df<W: Write>(
             if x.name() == LANG_STRING_VALUE_FIELD {
                 vec![]
             } else if x.name() == OBJECT_COL_NAME {
-                if let BaseRDFNodeType::Literal(nn) = rdf_node_types.get(OBJECT_COL_NAME).unwrap() {
+                if let BaseRDFNodeType::Literal(nn, _) = rdf_node_types.get(OBJECT_COL_NAME).unwrap() {
                     if needs_explicit_datatype(nn) {
                         let mut suffix: Vec<_> = DATA_TYPE_SEP_CHARS.to_vec();
                         suffix.extend_from_slice(nn.to_string().as_bytes());

@@ -33,7 +33,7 @@ pub fn lang_(
         let b = dt.get_base_type().unwrap();
         let s = dt.get_base_state().unwrap();
         match b {
-            BaseRDFNodeType::Literal(l) => {
+            BaseRDFNodeType::Literal(l, _) => {
                 if l.as_ref() == rdf::LANG_STRING {
                     solution_mappings.mappings = solution_mappings.mappings.with_column(
                         maybe_decode_expr(
@@ -77,7 +77,7 @@ pub fn lang_(
         }
         //Then the rest..
         for (t, _) in &dt.map {
-            if !t.is_lang_string() && matches!(t, BaseRDFNodeType::Literal(_)) {
+            if !t.is_lang_string() && matches!(t, BaseRDFNodeType::Literal(_, _)) {
                 exprs.push(
                     when(
                         col(first_context.as_str())
@@ -99,7 +99,7 @@ pub fn lang_(
     }
     solution_mappings.rdf_node_types.insert(
         outer_context.as_str().to_string(),
-        BaseRDFNodeType::Literal(xsd::STRING.into_owned()).into_default_input_rdf_node_state(),
+        BaseRDFNodeType::Literal(xsd::STRING.into_owned(), None).into_default_input_rdf_node_state(),
     );
     Ok(solution_mappings)
 }

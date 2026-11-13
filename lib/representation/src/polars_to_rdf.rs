@@ -1,3 +1,6 @@
+use polars::prelude::IntoSeries;
+use crate::format_time_zone_offset;
+use polars::datatypes::StringChunked;
 use crate::cats::{decode_column, LockedCats};
 use crate::errors::RepresentationError;
 use crate::formatting::literal_expr_to_string;
@@ -182,7 +185,7 @@ pub fn basic_rdf_node_type_column_to_term_vec(
                     .collect()
             }
         }
-        BaseRDFNodeType::Literal(l) => match l.as_ref() {
+        BaseRDFNodeType::Literal(l, _) => match l.as_ref() {
             rdf::LANG_STRING => {
                 let col_struct = column.struct_().unwrap();
                 let value_col = decode_column(
@@ -228,8 +231,8 @@ pub fn basic_rdf_node_type_column_to_term_vec(
                     .collect()
             }
             xsd::DATE_TIME | xsd::DATE_TIME_STAMP => {
-                if let DataType::Datetime(_, tz) = column.dtype() {
-                    let ser = datetime_column_to_strings(column, tz);
+                if let DataType::Datetime(..) = column.dtype() {
+                    let ser = datetime_column_to_xsd_strings(column, base_type.time_zone_offset());
                     ser.str()
                         .unwrap()
                         .iter()
@@ -297,56 +300,57 @@ pub fn polars_type_to_literal_type(
 ) -> Result<RDFNodeState, RepresentationError> {
     match data_type {
         DataType::Boolean => {
-            Ok(BaseRDFNodeType::Literal(xsd::BOOLEAN.into_owned())
+            Ok(BaseRDFNodeType::Literal(xsd::BOOLEAN.into_owned(), None)
                 .into_default_input_rdf_node_state())
         }
         DataType::Int8 => Ok(
-            BaseRDFNodeType::Literal(xsd::BYTE.into_owned()).into_default_input_rdf_node_state()
+            BaseRDFNodeType::Literal(xsd::BYTE.into_owned(), None).into_default_input_rdf_node_state()
         ),
         DataType::Int16 => {
-            Ok(BaseRDFNodeType::Literal(xsd::SHORT.into_owned())
+            Ok(BaseRDFNodeType::Literal(xsd::SHORT.into_owned(), None)
                 .into_default_input_rdf_node_state())
         }
-        DataType::UInt8 => Ok(BaseRDFNodeType::Literal(xsd::UNSIGNED_BYTE.into_owned())
+        DataType::UInt8 => Ok(BaseRDFNodeType::Literal(xsd::UNSIGNED_BYTE.into_owned(), None)
             .into_default_input_rdf_node_state()),
-        DataType::UInt16 => Ok(BaseRDFNodeType::Literal(xsd::UNSIGNED_SHORT.into_owned())
+        DataType::UInt16 => Ok(BaseRDFNodeType::Literal(xsd::UNSIGNED_SHORT.into_owned(), None)
             .into_default_input_rdf_node_state()),
-        DataType::UInt32 => Ok(BaseRDFNodeType::Literal(xsd::UNSIGNED_INT.into_owned())
+        DataType::UInt32 => Ok(BaseRDFNodeType::Literal(xsd::UNSIGNED_INT.into_owned(), None)
             .into_default_input_rdf_node_state()),
-        DataType::UInt64 => Ok(BaseRDFNodeType::Literal(xsd::UNSIGNED_LONG.into_owned())
+        DataType::UInt64 => Ok(BaseRDFNodeType::Literal(xsd::UNSIGNED_LONG.into_owned(), None)
             .into_default_input_rdf_node_state()),
         DataType::Int32 => {
-            Ok(BaseRDFNodeType::Literal(xsd::INT.into_owned()).into_default_input_rdf_node_state())
+            Ok(BaseRDFNodeType::Literal(xsd::INT.into_owned(), None).into_default_input_rdf_node_state())
         }
         DataType::Int64 => Ok(
-            BaseRDFNodeType::Literal(xsd::LONG.into_owned()).into_default_input_rdf_node_state()
+            BaseRDFNodeType::Literal(xsd::LONG.into_owned(), None).into_default_input_rdf_node_state()
         ),
         DataType::Float32 => {
-            Ok(BaseRDFNodeType::Literal(xsd::FLOAT.into_owned())
+            Ok(BaseRDFNodeType::Literal(xsd::FLOAT.into_owned(), None)
                 .into_default_input_rdf_node_state())
         }
         DataType::Float64 => {
-            Ok(BaseRDFNodeType::Literal(xsd::DOUBLE.into_owned())
+            Ok(BaseRDFNodeType::Literal(xsd::DOUBLE.into_owned(), None)
                 .into_default_input_rdf_node_state())
         }
         DataType::String => {
-            Ok(BaseRDFNodeType::Literal(xsd::STRING.into_owned())
+            Ok(BaseRDFNodeType::Literal(xsd::STRING.into_owned(), None)
                 .into_default_input_rdf_node_state())
         }
         DataType::Date => Ok(
-            BaseRDFNodeType::Literal(xsd::DATE.into_owned()).into_default_input_rdf_node_state()
+            BaseRDFNodeType::Literal(xsd::DATE.into_owned(), None).into_default_input_rdf_node_state()
         ),
         DataType::Decimal(_, 0) => {
-            Ok(BaseRDFNodeType::Literal(xsd::INTEGER.into_owned())
+            Ok(BaseRDFNodeType::Literal(xsd::INTEGER.into_owned(), None)
                 .into_default_input_rdf_node_state())
         }
+        // Time zone aware values are UTC instants, so the offset is 0.
         DataType::Datetime(_, Some(_)) => {
-            Ok(BaseRDFNodeType::Literal(xsd::DATE_TIME_STAMP.into_owned())
+            Ok(BaseRDFNodeType::Literal(xsd::DATE_TIME_STAMP.into_owned(), Some(0))
                 .into_default_input_rdf_node_state())
         }
-        DataType::Datetime(_, None) => Ok(BaseRDFNodeType::Literal(xsd::DATE_TIME.into_owned())
+        DataType::Datetime(_, None) => Ok(BaseRDFNodeType::Literal(xsd::DATE_TIME.into_owned(), None)
             .into_default_input_rdf_node_state()),
-        DataType::Duration(_) => Ok(BaseRDFNodeType::Literal(xsd::DURATION.into_owned())
+        DataType::Duration(_) => Ok(BaseRDFNodeType::Literal(xsd::DURATION.into_owned(), None)
             .into_default_input_rdf_node_state()),
         DataType::Struct(fields) => {
             let names: Vec<_> = fields.iter().map(|x| x.name.as_str()).collect();
@@ -360,7 +364,7 @@ pub fn polars_type_to_literal_type(
                 match *f {
                     LANG_STRING_VALUE_FIELD => {
                         found_lang_string_value = true;
-                        dts.push(BaseRDFNodeType::Literal(rdf::LANG_STRING.into_owned()));
+                        dts.push(BaseRDFNodeType::Literal(rdf::LANG_STRING.into_owned(), None));
                     }
                     LANG_STRING_LANG_FIELD => {
                         found_lang_string_lang = true;
@@ -386,7 +390,7 @@ pub fn polars_type_to_literal_type(
                         if let Some(stripped) = stripped {
                             if let Ok(nn) = NamedNode::new(stripped) {
                                 only_lang_string = false;
-                                dts.push(BaseRDFNodeType::Literal(nn));
+                                dts.push(BaseRDFNodeType::Literal(nn, None));
                             } else {
                                 unknown_fields.insert(f.to_string());
                             }
@@ -411,7 +415,7 @@ pub fn polars_type_to_literal_type(
             }
 
             if only_lang_string {
-                Ok(BaseRDFNodeType::Literal(rdf::LANG_STRING.into_owned())
+                Ok(BaseRDFNodeType::Literal(rdf::LANG_STRING.into_owned(), None)
                     .into_default_input_rdf_node_state())
             } else {
                 Ok(RDFNodeState::default_from_types(dts))
@@ -439,6 +443,32 @@ pub fn date_column_to_strings(column: &Column) -> Column {
         .unwrap()
         .strftime(XSD_DATE_WITHOUT_TZ_FORMAT)
         .unwrap()
+        .into_column()
+}
+
+/// The xsd lexical forms of dateTime values, which are stored as UTC instants.
+/// With a time zone offset in minutes, the local time at that offset is written followed by
+/// the offset ("Z" for 0). Without one, the stored time is written without a time zone.
+pub fn datetime_column_to_xsd_strings(column: &Column, offset: Option<i16>) -> Column {
+    let suffix = offset.map(format_time_zone_offset).unwrap_or_default();
+    let shift = chrono::Duration::minutes(offset.unwrap_or(0) as i64);
+    let strings: StringChunked = column
+        .datetime()
+        .unwrap()
+        .as_datetime_iter()
+        .map(|x| {
+            x.map(|x| {
+                format!(
+                    "{}{}",
+                    (x + shift).format(XSD_DATETIME_WITHOUT_TZ_FORMAT),
+                    suffix
+                )
+            })
+        })
+        .collect();
+    strings
+        .with_name(column.name().clone())
+        .into_series()
         .into_column()
 }
 

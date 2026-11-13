@@ -23,7 +23,7 @@ pub fn datatype_(
     let expr = if t.is_multi() {
         let mut exprs = vec![];
         for t in t.map.keys() {
-            if let BaseRDFNodeType::Literal(l) = t {
+            if let BaseRDFNodeType::Literal(l, _) = t {
                 exprs.push(
                     when(
                         col(first_context.as_str())
@@ -46,7 +46,7 @@ pub fn datatype_(
         let b = t.get_base_type().unwrap();
         match b {
             // DATATYPE of an unbound value is an error (unbound)
-            BaseRDFNodeType::Literal(l) => {
+            BaseRDFNodeType::Literal(l, _) => {
                 when(expr_is_null_workaround(col(first_context.as_str()), t).not())
                     .then(lit(rdf_named_node_to_polars_literal_value(l)))
                     .otherwise(lit(LiteralValue::untyped_null()).cast(iri_dtype))

@@ -96,6 +96,13 @@ tokio = { version = "1.54.1" }
 lto = "fat"
 codegen-units = 1
 
+# Optimized like release, but much faster to build, for running the tests while developing:
+# maturin develop --profile release-test
+[profile.release-test]
+inherits = "release"
+lto = "thin"
+codegen-units = 16
+
 [patch.crates-io]
 polars = { git = 'https://github.com/pola-rs/polars', rev = "7f902bd3ffd27ff82d14278a09a295ff2f7aed92" }
 polars-core = { git = 'https://github.com/pola-rs/polars', rev = "7f902bd3ffd27ff82d14278a09a295ff2f7aed92" }

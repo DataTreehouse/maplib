@@ -39,7 +39,7 @@ impl Triplestore {
 
         let mut pred_map: PredMap = HashMap::new();
         let mut datatypes_map = HashMap::new();
-        let string_type = Arc::new(BaseRDFNodeType::Literal(xsd::STRING.into_owned()));
+        let string_type = Arc::new(BaseRDFNodeType::Literal(xsd::STRING.into_owned(), None));
         datatypes_map.insert(xsd::STRING.as_str().to_string(), string_type.clone());
         let mut prefix_map: HashMap<String, NamedNode> = HashMap::new();
         let mut base_prefix = NamedNode::new_unchecked(XYZ_PREFIX_IRI);
@@ -208,11 +208,11 @@ fn open_element(
                 FX_XMLNS_SEP,
                 &subject,
                 use_sep,
-                &BaseRDFNodeType::Literal(xsd::STRING.into_owned()),
+                &BaseRDFNodeType::Literal(xsd::STRING.into_owned(), None),
             )?;
             new_base_prefix = Some(nn);
         } else if key.starts_with("xmlns:") {
-            let string = BaseRDFNodeType::Literal(xsd::STRING.into_owned());
+            let string = BaseRDFNodeType::Literal(xsd::STRING.into_owned(), None);
             let pre = key.strip_prefix("xmlns:").unwrap();
             let nn = NamedNode::new(value.clone()).map_err(|e| {
                 TriplestoreError::XMLError(format!("Error parsing {}: {}", value, e))
@@ -354,7 +354,7 @@ fn push_iri_u32(pred_map: &mut PredMap, predicate: &str, subject: &str, object: 
         pred_map,
         predicate,
         &BaseRDFNodeType::IRI,
-        &BaseRDFNodeType::Literal(xsd::UNSIGNED_INT.into_owned()),
+        &BaseRDFNodeType::Literal(xsd::UNSIGNED_INT.into_owned(), None),
     );
     pair.0.push_str(subject);
     pair.1.push_u32(object);

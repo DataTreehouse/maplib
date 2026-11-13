@@ -28,7 +28,7 @@ pub fn lang_matches(
         .rdf_node_types
         .get(first_context.as_str())
         .unwrap();
-    let b = BaseRDFNodeType::Literal(xsd::STRING.into_owned());
+    let b = BaseRDFNodeType::Literal(xsd::STRING.into_owned(), None);
     if let Some(s) = t.map.get(&b) {
         let lang_expr = maybe_decode_expr(col(first_context.as_str()), &b, s, global_cats.clone());
         if let Expression::Literal(l) = args.get(1).unwrap() {
@@ -53,7 +53,7 @@ pub fn lang_matches(
             }
             solution_mappings.rdf_node_types.insert(
                 outer_context.as_str().to_string(),
-                BaseRDFNodeType::Literal(xsd::BOOLEAN.into_owned())
+                BaseRDFNodeType::Literal(xsd::BOOLEAN.into_owned(), None)
                     .into_default_input_rdf_node_state(),
             );
         } else {
