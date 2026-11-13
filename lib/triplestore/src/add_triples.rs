@@ -100,7 +100,11 @@ impl Triplestore {
                     if let Some(m) = map.get_mut(&predicate) {
                         if let Some(non_transient_triples) = m.get_mut(&k) {
                             let nondup_df = non_transient_triples
-                                .remove_overlapping_triples_from_dataframe(&encoded_triples.df)?;
+                                .remove_overlapping_triples_from_dataframe(
+                                    &encoded_triples.df,
+                                    &*self.global_cats.read()?,
+                                )?;
+                            non_transient_triples.release_subject_object_index_if_on_disk();
                             if let Some(nondup_df) = nondup_df {
                                 encoded_triples.df = nondup_df;
                             } else {
@@ -142,6 +146,7 @@ impl Triplestore {
             start_prep_add.elapsed().as_secs_f32()
         );
         let indexing = self.indexing.clone();
+        let triples_folder = self.triples_folder.clone();
         //Why does not par iter work?
         let r: Result<Vec<_>, TriplestoreError> = add_vec
             .into_iter()
@@ -165,7 +170,15 @@ impl Triplestore {
                         object_type: o.clone(),
                     };
                     new_triples_vec.push(new_triples);
-                    Triples::new(et.df, s.clone(), o.clone(), &p, &indexing, cats.clone())?
+                    Triples::new(
+                        et.df,
+                        s.clone(),
+                        o.clone(),
+                        &p,
+                        &indexing,
+                        cats.clone(),
+                        triples_folder.as_deref(),
+                    )?
                 };
                 for enc in v_iter {
                     let new_triples_opt = triples.add_triples(enc.df.clone(), cats.clone())?;
@@ -179,6 +192,7 @@ impl Triplestore {
                     };
                     new_triples_vec.push(new_triples);
                 }
+                triples.release_subject_object_index_if_on_disk();
                 let k = (graph, p, s, o);
                 Ok(((k, triples), new_triples_vec))
             })

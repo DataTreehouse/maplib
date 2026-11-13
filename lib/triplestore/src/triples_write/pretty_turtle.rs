@@ -327,6 +327,21 @@ impl Triplestore {
         self.write_pretty(writer, graph, prefixes, PrettyFormat::Turtle)
     }
 
+    /// Pretty Turtle without the prefix declarations (the prefixes are still used to abbreviate
+    /// IRIs). Used to append batches to a Turtle document whose prefixes were declared once at
+    /// the start. Writes nothing if the graph does not exist.
+    pub fn write_pretty_turtle_without_prefix_declarations<W: Write>(
+        &self,
+        writer: &mut W,
+        graph: &NamedGraph,
+        prefixes: &HashMap<String, NamedNode>,
+    ) -> Result<(), TriplestoreError> {
+        if let Some(map) = self.graph_triples_map.get(graph) {
+            self.write_pretty_body(writer, graph, map, prefixes, None)?;
+        }
+        Ok(())
+    }
+
     /// Pretty RDF/XML: one node element per subject, nested blank nodes and collections.
     pub fn write_pretty_rdfxml<W: Write>(
         &self,

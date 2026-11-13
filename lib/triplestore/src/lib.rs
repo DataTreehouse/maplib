@@ -52,7 +52,11 @@ use tracing::{debug, instrument};
 
 #[derive(Clone)]
 pub struct Triplestore {
+    /// The maplib storage folder, set in hybrid and disk storage modes.
     pub storage_folder: Option<PathBuf>,
+    pub storage_mode: StorageMode,
+    /// Folder holding the triple tables as parquet files, set in disk storage mode only.
+    pub(crate) triples_folder: Option<PathBuf>,
     graph_triples_map: HashMap<
         NamedGraph,
         HashMap<NamedNode, HashMap<(BaseRDFNodeType, BaseRDFNodeType), Triples>>,
@@ -70,6 +74,17 @@ pub struct Triplestore {
 }
 
 impl Triplestore {
+    /// The counter that makes blank node labels from parsing and SPARQL updates unique.
+    /// Streaming carries it from one batch triplestore to the next, so that blank nodes
+    /// created in different batches do not get the same label.
+    pub fn blank_node_scope(&self) -> usize {
+        self.parser_call
+    }
+
+    pub fn set_blank_node_scope(&mut self, scope: usize) {
+        self.parser_call = scope;
+    }
+
     pub fn add_graph(
         &mut self,
         other: &Triplestore,
@@ -313,6 +328,7 @@ impl Triplestore {
                         object_type.clone(),
                         object_indexing_enabled,
                         self.global_cats.clone(),
+                        self.triples_folder.as_deref(),
                     )?;
                     Ok((transient, graph, pred, subject_type, object_type, triples))
                 },
@@ -500,6 +516,8 @@ impl Triplestore {
 
             Ok(Triplestore {
                 storage_folder: self.storage_folder.clone(),
+                storage_mode: self.storage_mode,
+                triples_folder: self.triples_folder.clone(),
                 graph_triples_map: HashMap::from_iter([(
                     new_graph_name.clone(),
                     new_graph_triples,
@@ -552,6 +570,86 @@ impl Triplestore {
         self.graph_triples_map.remove(graph);
         self.graph_transient_triples_map.remove(graph);
         self.fts_index.remove(graph);
+    }
+}
+
+/// Where the triplestore keeps its data.
+/// - `Memory`: categorical maps and triple tables in memory.
+/// - `Hybrid`: categorical maps on disk, triple tables in memory.
+/// - `Disk`: categorical maps on disk, triple tables on disk as parquet files.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum StorageMode {
+    #[default]
+    Memory,
+    Hybrid,
+    Disk,
+}
+
+impl StorageMode {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            StorageMode::Memory => "memory",
+            StorageMode::Hybrid => "hybrid",
+            StorageMode::Disk => "disk",
+        }
+    }
+
+    pub fn uses_storage_folder(&self) -> bool {
+        !matches!(self, StorageMode::Memory)
+    }
+}
+
+impl std::str::FromStr for StorageMode {
+    type Err = TriplestoreError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "memory" => Ok(StorageMode::Memory),
+            "hybrid" => Ok(StorageMode::Hybrid),
+            "disk" => Ok(StorageMode::Disk),
+            _ => Err(TriplestoreError::StorageFolderError(format!(
+                "Unknown storage mode {s:?}, expected \"memory\", \"hybrid\" or \"disk\""
+            ))),
+        }
+    }
+}
+
+/// Storage mode together with the folder it stores data in.
+#[derive(Clone, Debug, Default)]
+pub struct StorageOptions {
+    pub mode: StorageMode,
+    pub folder: Option<String>,
+}
+
+impl StorageOptions {
+    pub fn memory() -> Self {
+        Self::default()
+    }
+
+    /// Resolves the storage mode from the user's arguments. Without an explicit mode, a storage
+    /// folder means hybrid storage (the behaviour before storage modes existed) and no folder
+    /// means in-memory storage.
+    pub fn new(
+        mode: Option<StorageMode>,
+        folder: Option<String>,
+    ) -> Result<Self, TriplestoreError> {
+        let mode = mode.unwrap_or(if folder.is_some() {
+            StorageMode::Hybrid
+        } else {
+            StorageMode::Memory
+        });
+        match (mode, &folder) {
+            (StorageMode::Memory, Some(_)) => Err(TriplestoreError::StorageFolderError(
+                "A storage folder cannot be used with storage=\"memory\"".to_string(),
+            )),
+            (StorageMode::Hybrid | StorageMode::Disk, None) => {
+                Err(TriplestoreError::StorageFolderError(format!(
+                    "storage=\"{}\" requires a storage folder",
+                    mode.as_str()
+                )))
+            }
+            _ => Ok(Self { mode, folder }),
+        }
     }
 }
 
@@ -657,10 +755,10 @@ impl NewTriples {
 impl Triplestore {
     #[instrument(skip_all)]
     pub fn new(
-        storage_folder: Option<String>,
+        storage: StorageOptions,
         indexing: Option<IndexingOptions>,
     ) -> Result<Triplestore, TriplestoreError> {
-        let pathbuf = maybe_delete_and_recreate_storage_folder(storage_folder.as_ref())?;
+        let (pathbuf, triples_folder) = prepare_storage(&storage)?;
         let indexing = indexing.unwrap_or_default();
         let fts_index = maybe_create_fts_index_map(&indexing)?;
 
@@ -672,6 +770,8 @@ impl Triplestore {
                 Default::default(),
             )]),
             storage_folder: pathbuf,
+            storage_mode: storage.mode,
+            triples_folder,
             parser_call: 0,
             indexing,
             fts_index,
@@ -753,6 +853,26 @@ fn maybe_create_fts_index_map(
         HashMap::new()
     };
     Ok(fts_index_map)
+}
+
+const TRIPLES_FOLDER: &str = "triples";
+
+/// Resets the storage folder and returns it, along with the folder for triple tables in disk mode.
+fn prepare_storage(
+    storage: &StorageOptions,
+) -> Result<(Option<PathBuf>, Option<PathBuf>), TriplestoreError> {
+    let storage_folder = maybe_delete_and_recreate_storage_folder(storage.folder.as_ref())?;
+    let triples_folder = if storage.mode == StorageMode::Disk {
+        let mut p = storage_folder
+            .clone()
+            .expect("Disk storage always has a storage folder");
+        p.push(TRIPLES_FOLDER);
+        create_folder_if_not_exists(p.as_path()).map_err(TriplestoreError::FileIOError)?;
+        Some(p)
+    } else {
+        None
+    };
+    Ok((storage_folder, triples_folder))
 }
 
 fn maybe_delete_and_recreate_storage_folder(

@@ -3,6 +3,7 @@ mod error;
 mod mutexes;
 mod py_indexing_options;
 mod py_model;
+mod py_stream;
 mod shacl;
 
 use crate::error::*;
@@ -80,7 +81,7 @@ use templates::python::xsd::PyXSD;
 use templates::python::{py_triple, PyArgument, PyInstance, PyParameter, PyTemplate};
 use templates::MappingColumnType;
 use triplestore::triples_read::ExtendedRdfFormat;
-use triplestore::{NewTriples, Triplestore};
+use triplestore::{NewTriples, StorageOptions, Triplestore};
 
 use virtualization::python::VirtualizedPythonDatabase;
 use virtualized_query::python::{
@@ -130,7 +131,7 @@ impl TryFrom<Bound<'_, PyAny>> for TemplateType {
 }
 
 #[derive(Clone, FromPyObject)]
-enum StringOrPathBuf {
+pub(crate) enum StringOrPathBuf {
     String(String),
     PathBuf(PathBuf),
 }
@@ -159,6 +160,7 @@ fn _maplib(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     m.add_class::<PyIndexingOptions>()?;
     m.add_class::<PyModel>()?;
+    m.add_class::<py_stream::PyModelStream>()?;
     m.add_class::<PyValidationReport>()?;
     m.add_class::<PySolutionMappings>()?;
     m.add_class::<PyInferenceResult>()?;
@@ -263,7 +265,7 @@ fn query_to_result(
                         );
                         sm.mappings = lf.collect().unwrap();
                     }
-                    let mut ts = Triplestore::new(None, None).unwrap();
+                    let mut ts = Triplestore::new(StorageOptions::memory(), None).unwrap();
                     ts.insert_construct_result(sms, false, &NamedGraph::DefaultGraph)
                         .map_err(|x| PyMaplibError::MaplibError(MaplibError::SparqlError(x)))?;
                     let mut out_bytes = vec![];
@@ -599,6 +601,60 @@ pub(crate) fn for_each_mapping_batch(
         }
     }
     Ok(())
+}
+
+/// JSON or XML input: a single document (a string or a path), or an iterable of documents.
+pub(crate) enum DocumentData<'py> {
+    Single(StringOrPathBuf),
+    Many(Bound<'py, PyAny>),
+}
+
+pub(crate) fn classify_document_data<'py>(
+    data: &Bound<'py, PyAny>,
+    kind: &str,
+) -> PyResult<DocumentData<'py>> {
+    if let Ok(single) = data.extract::<StringOrPathBuf>() {
+        Ok(DocumentData::Single(single))
+    } else if data.hasattr("__iter__")? {
+        Ok(DocumentData::Many(data.clone()))
+    } else {
+        Err(PyMaplibError::FunctionArgumentError(format!(
+            "{kind} input should be a string, a path or an iterable of strings and paths, but was {}",
+            data.get_type().name()?
+        ))
+        .into())
+    }
+}
+
+/// Calls f with the index and contents of each document in an iterable of documents, holding the
+/// GIL only while fetching documents.
+pub(crate) fn for_each_document(
+    data: &Bound<'_, PyAny>,
+    kind: &str,
+    f: &mut dyn FnMut(Python<'_>, usize, StringOrPathBuf) -> PyResult<()>,
+) -> PyResult<()> {
+    let py = data.py();
+    for (i, item) in data.try_iter()?.enumerate() {
+        let item = item?;
+        let doc = item.extract::<StringOrPathBuf>().map_err(|_| {
+            PyMaplibError::FunctionArgumentError(format!(
+                "Iterable {kind} input should only contain strings and paths, but found {}",
+                item.get_type()
+                    .name()
+                    .map(|x| x.to_string())
+                    .unwrap_or_default()
+            ))
+        })?;
+        f(py, i, doc)?;
+    }
+    Ok(())
+}
+
+/// The uuid namespace of document number i of several documents. Each document gets its own
+/// namespace, so that documents do not produce the same IRIs. Without a uuid namespace, documents
+/// read from paths use their path, and documents given as strings a random namespace.
+pub(crate) fn document_uuid_namespace(uuid_namespace: &Option<String>, i: usize) -> Option<String> {
+    uuid_namespace.as_ref().map(|ns| format!("{ns}/{i}"))
 }
 
 fn is_eager_mapping_item(item: &Bound<'_, PyAny>, py: Python<'_>) -> PyResult<bool> {

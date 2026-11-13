@@ -488,6 +488,107 @@ class ValidationReport:
         """
 
 
+
+class ModelStream:
+    """
+    A lazy pipeline over batched mapping input, created with stream=True in Model.map, Model.map_triples,
+    Model.map_default, Model.map_json and Model.map_xml. Each step returns a new ModelStream, and nothing
+    runs until collect() is called.
+
+    When collected, each batch of the input (a DataFrame of an iterable or LazyFrame, or documents_per_batch
+    JSON/XML documents) is mapped into a fresh in-memory model with the templates, prefixes and UDFs of the
+    Model. The steps then run on that batch model in the order they were added, each write step appends the
+    batch to its file, and the batch model is dropped. Memory use depends on the batch size, not on the size
+    of the input. The triples of the Model itself are not changed.
+
+    Queries, updates and rules only see the triples of the current batch, so results that depend on
+    triples in other batches (such as joins across batches) are not found.
+
+    Usage:
+
+    >>> m = Model()
+    ... m.add_template(doc)
+    ... (
+    ...     m.map("ex:ExampleTemplate", pl.scan_parquet("big.parquet"), stream=True)
+    ...     .update(update_query)
+    ...     .insert(construct_query)
+    ...     .write("out.nt")
+    ...     .write("out.ttl", format="turtle")
+    ...     .collect()
+    ... )
+
+    Mapping documents transiently and writing only what is constructed from them:
+
+    >>> with open("records.jsonl") as lines:
+    ...     m.map_json(lines, transient=True, stream=True, documents_per_batch=1000) \
+    ...         .insert(construct_query).write("out.nt").collect()
+    """
+
+    def update(
+            self,
+            update: str,
+            parameters: ParametersType = None,
+            graph: str = None,
+            include_transient: bool = True,
+            max_rows: int = None,
+            debug: bool = False,
+    ) -> "ModelStream":
+        """
+        Add a SPARQL Update step, see Model.update.
+        """
+
+    def insert(
+            self,
+            query: str,
+            parameters: ParametersType = None,
+            transient: bool = False,
+            source_graph: str = None,
+            target_graph: str = None,
+            include_transient: bool = True,
+            max_rows: int = None,
+            debug: bool = False,
+    ) -> "ModelStream":
+        """
+        Add a step that inserts the results of a Construct query into the batch, see Model.insert.
+        """
+
+    def infer(
+            self,
+            rulesets: Union[str, List[str]],
+            graph: str = None,
+            max_iterations: Optional[int] = 100_000,
+            max_results: Optional[int] = 10_000_000,
+            include_transient: bool = True,
+            max_rows: Optional[int] = 100_000_000,
+            debug: bool = False,
+    ) -> "ModelStream":
+        """
+        Add a Datalog inference step, see Model.infer.
+        """
+
+    def write(
+            self,
+            file_path: Union[str, Path],
+            format: LiteralType["ntriples", "turtle", "nquads"] = None,
+            graph: str = None,
+            prefixes: Dict[str, str] = None,
+    ) -> "ModelStream":
+        """
+        Add a step that appends the non-transient triples of each batch to a file. The file is created
+        (or truncated) when the stream is collected. Turtle prefixes are declared once at the start of the file.
+
+        :param file_path: The path of the file.
+        :param format: One of "ntriples" (the default), "turtle" or "nquads".
+        :param graph: The IRI of the graph to write. For "nquads", all graphs are written when this is None.
+        :param prefixes: The prefixes that will be used in turtle serialization.
+        """
+
+    def collect(self) -> None:
+        """
+        Run the stream: map each batch, run the steps on it and write it. Iterators given as input are consumed.
+        """
+
+
 class Model:
     """
     A model session allowing:
@@ -507,14 +608,25 @@ class Model:
     ... m = Model()
     ... m.add_template(doc)
 
+    Storage modes:
+
+    * ``"memory"``: categorical maps (strings) and triple tables are kept in memory.
+    * ``"hybrid"``: categorical maps are stored on disk, triple tables in memory.
+    * ``"disk"``: categorical maps are stored on disk, and triple tables as parquet files on disk.
+
+    >>> m = Model(storage="disk", storage_folder="maplib_disk")
+
     :param indexing_options: options for indexing
-    :param storage_folder: folder for on-disk storage of triples, in memory if not given
+    :param storage_folder: folder for on-disk storage, required for the hybrid and disk storage modes
+    :param storage: "memory", "hybrid" or "disk". Defaults to "hybrid" when a storage folder is given,
+                    and "memory" otherwise.
     """
 
     def __init__(
             self,
             indexing_options: "IndexingOptions" = None,
             storage_folder: Union[Path, str] = None,
+            storage: LiteralType["memory", "hybrid", "disk"] = None,
     ) -> "Model": ...
 
     def serialize(self, path: Union[Path, str] = "./serialized_triples"):
@@ -530,15 +642,18 @@ class Model:
 
     @staticmethod
     def deserialize(path: Union[Path, str] = "./serialized_triples",
-                    storage_folder: Union[Path, str] = None) -> "Model":
+                    storage_folder: Union[Path, str] = None,
+                    storage: LiteralType["memory", "hybrid", "disk"] = None) -> "Model":
         """
         Deserialization of serialized graphs
 
         Usage:
-        >>> m = Model.deserialize("serialized", storage_folder="disk")
+        >>> m = Model.deserialize("serialized", storage_folder="maplib_disk", storage="disk")
 
         :param path: The path to the folder where the serialized triples and cat map is stored
         :param storage_folder: The target path and folder name where the deserialized triples should be stored
+        :param storage: "memory", "hybrid" or "disk", see Model. Defaults to "hybrid" when a storage folder
+                        is given, and "memory" otherwise.
         :return: A model.
         """
 
@@ -598,7 +713,8 @@ class Model:
             data: Union[DataFrame, LazyFrame, "SolutionMappings", Iterable[Union[DataFrame, LazyFrame, "SolutionMappings"]]] = None,
             graph: str = None,
             validate_iris: bool = True,
-    ) -> None:
+            stream: bool = False,
+    ) -> Optional["ModelStream"]:
         """
         Map a template using a DataFrame
         Usage:
@@ -612,15 +728,20 @@ class Model:
             May also be a LazyFrame, which is consumed in a single pass using collect_batches(), or an iterable of DataFrames, LazyFrames or SolutionMappings, which are mapped batch by batch.
         :param graph: The IRI of the graph to add triples to.
         :param validate_iris: Validate any IRI-columns.
+        :param stream: Return a ModelStream instead of mapping into this Model. Steps added to the stream
+            (update, insert, infer, write) run batch by batch when it is collected, see ModelStream.
+        :return: A ModelStream when stream is set, otherwise None.
         """
 
     def map_json(
             self,
-            path_or_string: Path | str,
+            path_or_string: Union[Path, str, Iterable[Union[Path, str]]],
             graph: str = None,
             transient: bool = False,
             uuid_namespace: str = None,
-    ) -> None:
+            stream: bool = False,
+            documents_per_batch: int = 1,
+    ) -> Optional["ModelStream"]:
         """
         Map a JSON file or string to triples.
         Usage:
@@ -631,19 +752,28 @@ class Model:
 
         >>> m.map_json('{"my_key":[true, "abc"]}')
 
-        :param path_or_string: Path to a JSON document or a JSON string.
+        :param path_or_string: Path to a JSON document or a JSON string, or an iterable of them (e.g. a generator
+            of JSON strings), which are mapped one document at a time.
         :param graph: The IRI of the graph to add triples to. None is the default graph.
         :param transient: Should the triples be included when serializing the graph?
         :param uuid_namespace: Generates uuid v5 uris based on this namespace.
+            With several documents, document number i uses the namespace "<uuid_namespace>/<i>",
+            so that the documents do not get the same IRIs.
+        :param stream: Return a ModelStream instead of mapping into this Model. Steps added to the stream
+            (update, insert, infer, write) run batch by batch when it is collected, see ModelStream.
+        :param documents_per_batch: With stream, the number of documents mapped into each batch.
+        :return: A ModelStream when stream is set, otherwise None.
         """
 
     def map_xml(
             self,
-            path_or_string: Path | str,
+            path_or_string: Union[Path, str, Iterable[Union[Path, str]]],
             graph: str = None,
             transient: bool = False,
             uuid_namespace: str = None,
-    ) -> None:
+            stream: bool = False,
+            documents_per_batch: int = 1,
+    ) -> Optional["ModelStream"]:
         """
         Map an XML file or string to triples.
         Usage:
@@ -654,10 +784,17 @@ class Model:
 
         >>> m.map_xml('<root><child>value</child></root>')
 
-        :param path_or_string: Path to an XML document or an XML string.
+        :param path_or_string: Path to a XML document or a XML string, or an iterable of them (e.g. a generator
+            of XML strings), which are mapped one document at a time.
         :param graph: The IRI of the graph to add triples to. None is the default graph.
         :param transient: Should the triples be included when serializing the graph?
         :param uuid_namespace: Generates uuid v5 uris based on this namespace.
+            With several documents, document number i uses the namespace "<uuid_namespace>/<i>",
+            so that the documents do not get the same IRIs.
+        :param stream: Return a ModelStream instead of mapping into this Model. Steps added to the stream
+            (update, insert, infer, write) run batch by batch when it is collected, see ModelStream.
+        :param documents_per_batch: With stream, the number of documents mapped into each batch.
+        :return: A ModelStream when stream is set, otherwise None.
         """
 
     def map_triples(
@@ -666,7 +803,8 @@ class Model:
             predicate: Union[str, IRI] = None,
             graph: str = None,
             validate_iris: bool = True,
-    ) -> None:
+            stream: bool = False,
+    ) -> Optional["ModelStream"]:
         """
         Map a template using a DataFrame with columns subject, object and predicate
         The predicate column can also be supplied as a string if it is the same for all rows.
@@ -679,6 +817,9 @@ class Model:
         :param predicate: The IRI of the predicate, used when data has no predicate-column.
         :param graph: The IRI of the graph to add triples to.
         :param validate_iris: Validate any IRI-columns.
+        :param stream: Return a ModelStream instead of mapping into this Model. Steps added to the stream
+            (update, insert, infer, write) run batch by batch when it is collected, see ModelStream.
+        :return: A ModelStream when stream is set, otherwise None.
         """
 
     def map_default(
@@ -687,7 +828,8 @@ class Model:
             primary_key_column: str,
             graph: str = None,
             validate_iris: bool = True,
-    ) -> str:
+            stream: bool = False,
+    ) -> Union[str, "ModelStream"]:
         """
         Create a default template and map it based on a dataframe.
         Usage:
@@ -701,7 +843,10 @@ class Model:
         :param primary_key_column: This column will be the subject of all triples in the generated template.
         :param graph: The IRI of the graph to add triples to.
         :param validate_iris: Validate any IRI-columns.
-        :return: The generated template
+        :param stream: Return a ModelStream instead of mapping into this Model. Steps added to the stream
+            (update, insert, infer, write) run batch by batch when it is collected, see ModelStream.
+            The template is then created from the first batch when the stream is collected.
+        :return: The generated template, or a ModelStream when stream is set.
         """
 
     def map_df(

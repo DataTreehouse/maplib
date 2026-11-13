@@ -3,7 +3,7 @@ from typing import List, Optional
 
 import pytest
 
-from .disk import disk_params
+from .disk import disk_params, storage_kwargs
 from maplib import Model
 from polars.testing import assert_frame_equal
 import polars as pl
@@ -18,7 +18,7 @@ TESTDATA_PATH = PATH_HERE / "testdata" / "jsons"
 @pytest.mark.parametrize("disk", disk_params())
 def test_map_json_path_as_str_1(disk):
     json_1 = TESTDATA_PATH / "1.json"
-    m = Model(storage_folder=disk)
+    m = Model(**storage_kwargs(disk))
     start_map = time.time()
     m.map_json(str(json_1))
     map_took = time.time() - start_map
@@ -52,7 +52,7 @@ def test_map_json_path_as_str_1(disk):
 @pytest.mark.parametrize("disk", disk_params())
 def test_map_json_path_as_str_2(disk):
     json_2 = TESTDATA_PATH / "2.json"
-    m = Model(storage_folder=disk)
+    m = Model(**storage_kwargs(disk))
     m.map_json(str(json_2))
     df = m.query("""SELECT * WHERE {?a ?b ?c}""")
     assert df.height == 53
@@ -100,7 +100,7 @@ def test_map_json_path_as_str_3():
 @pytest.mark.parametrize("disk", disk_params())
 def test_map_json_path_as_path_1(disk):
     json_1 = TESTDATA_PATH / "1.json"
-    m = Model(storage_folder=disk)
+    m = Model(**storage_kwargs(disk))
     start_map = time.time()
     m.map_json(json_1)
     map_took = time.time() - start_map
@@ -134,7 +134,7 @@ def test_map_json_path_as_path_1(disk):
 @pytest.mark.parametrize("disk", disk_params())
 def test_map_json_path_as_path_2(disk):
     json_2 = TESTDATA_PATH / "2.json"
-    m = Model(storage_folder=disk)
+    m = Model(**storage_kwargs(disk))
     m.map_json(json_2)
     df = m.query("""SELECT * WHERE {?a ?b ?c}""")
     assert df.height == 53
@@ -226,7 +226,7 @@ def test_insert(disk):
     { "name": "Bob", "address": { "city": "Swansea" } }
     ]}
     """
-    m = Model(storage_folder=disk)
+    m = Model(**storage_kwargs(disk))
     m.map_json(s, graph="urn:graph:tmp")
     users = """
         PREFIX :<https://github.com/DataTreehouse/maplib/users#>

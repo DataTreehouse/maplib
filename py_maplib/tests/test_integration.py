@@ -1,4 +1,4 @@
-from .disk import disk_params
+from .disk import disk_params, storage_kwargs
 from maplib import Model, IndexingOptions
 import pytest
 from polars.testing import assert_frame_equal
@@ -67,7 +67,7 @@ def windpower_model(request):
     n = 40
     disk=request.param["disk"]
     start_time = time.time()
-    model = Model(storage_folder=disk)
+    model = Model(**storage_kwargs(disk))
     model.add_template(instance_mapping)
     # Used as a prefix
     wpex = "https://github.com/magbak/chrontext/windpower_example#"

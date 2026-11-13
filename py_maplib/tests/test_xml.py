@@ -3,7 +3,7 @@ import pathlib
 import pytest
 
 import polars as pl
-from .disk import disk_params
+from .disk import disk_params, storage_kwargs
 from maplib import Model
 
 PATH_HERE = pathlib.Path(__file__).parent
@@ -13,7 +13,7 @@ TESTDATA_PATH = PATH_HERE / "testdata" / "xmls"
 @pytest.mark.parametrize("disk", disk_params())
 def test_map_xml_path_as_str_1(disk):
     xml_1 = TESTDATA_PATH / "1.xml"
-    m = Model(storage_folder=disk)
+    m = Model(**storage_kwargs(disk))
     m.map_xml(str(xml_1))
     df = m.query("""SELECT * WHERE {?s ?p ?o}""")
     assert df.height > 0
@@ -42,7 +42,7 @@ def test_map_xml_path_as_str_1(disk):
 @pytest.mark.parametrize("disk", disk_params())
 def test_map_xml_path_as_str_2_repeated_children(disk):
     xml_2 = TESTDATA_PATH / "2.xml"
-    m = Model(storage_folder=disk)
+    m = Model(**storage_kwargs(disk))
     m.map_xml(str(xml_2))
 
     df_items = m.query(
@@ -64,7 +64,7 @@ def test_map_xml_path_as_str_2_repeated_children(disk):
 @pytest.mark.parametrize("disk", disk_params())
 def test_map_xml_path_as_path_1(disk):
     xml_1 = TESTDATA_PATH / "1.xml"
-    m = Model(storage_folder=disk)
+    m = Model(**storage_kwargs(disk))
     m.map_xml(xml_1)
     df = m.query("""SELECT * WHERE {?s ?p ?o}""")
     assert df.height > 0
@@ -93,7 +93,7 @@ def test_map_xml_path_as_path_1(disk):
 @pytest.mark.parametrize("disk", disk_params())
 def test_map_xml_path_as_path_2_repeated_children(disk):
     xml_2 = TESTDATA_PATH / "2.xml"
-    m = Model(storage_folder=disk)
+    m = Model(**storage_kwargs(disk))
     m.map_xml(xml_2)
 
     df_items = m.query(

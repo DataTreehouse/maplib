@@ -1,5 +1,5 @@
 import pytest
-from .disk import disk_params
+from .disk import disk_params, storage_kwargs
 from maplib import (
     Model,
     xsd,
@@ -19,7 +19,7 @@ def test_map_df_easy(disk):
         "a": ["abc", "def"],
         "b": [1,2]
     })
-    m = Model()
+    m = Model(**storage_kwargs(disk))
     m.map_df(df)
     out_df = m.query("""
     SELECT * WHERE {
@@ -38,7 +38,7 @@ def test_map_df_named_graph_arg(disk):
         "a": ["abc", "def"],
         "b": [1,2]
     })
-    m = Model()
+    m = Model(**storage_kwargs(disk))
     m.map_df(df, "urn:maplib:test")
     out_df = m.query("""
     SELECT * WHERE {

@@ -1,6 +1,5 @@
 use super::{
-    maybe_create_fts_index_map, maybe_delete_and_recreate_storage_folder, IndexingOptions,
-    Triplestore,
+    maybe_create_fts_index_map, prepare_storage, IndexingOptions, StorageOptions, Triplestore,
 };
 use crate::errors::TriplestoreError;
 use crate::storage::Triples;
@@ -162,9 +161,9 @@ impl Triplestore {
 
     pub fn deserialize_triples(
         path: &Path,
-        storage_folder: Option<String>,
+        storage: StorageOptions,
     ) -> Result<Triplestore, TripleSerializationError> {
-        let storage_pathbuf = maybe_delete_and_recreate_storage_folder(storage_folder.as_ref())?;
+        let (storage_pathbuf, triples_folder) = prepare_storage(&storage)?;
 
         let triples_path = create_path(path, TRIPLES_PATH);
         let metadata_file_path = create_path(&triples_path, METADATA_FILE);
@@ -174,7 +173,7 @@ impl Triplestore {
             serde_json::from_slice(&metadata_bytes).unwrap();
 
         let start_deserialize_triples = Instant::now();
-        let triples_vec: Result<Vec<_>, FileIOError> = triplestore_metadata
+        let triples_vec: Result<Vec<_>, TripleSerializationError> = triplestore_metadata
             .triples_uuid_map
             .into_par_iter()
             .map(|(uuid, (graph, predicate, subject_type, object_type))| {
@@ -186,27 +185,27 @@ impl Triplestore {
                 let object_subject_sparse_index_file =
                     create_path(&this_triple_path, OS_SPARSE_INDEX_FILE);
 
-                let subject_object_df = scan_parquet(&subject_object_file)?.collect().unwrap();
                 let subject_object_index_df = scan_parquet(&subject_object_sparse_index_file)?
                     .collect()
                     .unwrap();
-                let (object_subject_df, object_subject_index_df) = if object_subject_file.exists() {
-                    let object_subject_df = scan_parquet(&object_subject_file)?.collect().unwrap();
+                let (object_subject_file, object_subject_index_df) = if object_subject_file.exists()
+                {
                     let object_subject_index_df = scan_parquet(&object_subject_sparse_index_file)?
                         .collect()
                         .unwrap();
-                    (Some(object_subject_df), Some(object_subject_index_df))
+                    (Some(object_subject_file), Some(object_subject_index_df))
                 } else {
                     (None, None)
                 };
-                let triples = Triples::in_memory_from_serialization(
-                    subject_object_df,
+                let triples = Triples::from_serialization(
+                    &subject_object_file,
                     subject_object_index_df,
-                    object_subject_df,
+                    object_subject_file.as_deref(),
                     object_subject_index_df,
                     subject_type.clone(),
                     object_type.clone(),
-                );
+                    triples_folder.as_deref(),
+                )?;
                 Ok((graph, predicate, subject_type, object_type, triples))
             })
             .collect();
@@ -242,6 +241,8 @@ impl Triplestore {
                 Default::default(),
             )]),
             storage_folder: storage_pathbuf,
+            storage_mode: storage.mode,
+            triples_folder,
             parser_call: 0,
             indexing: triplestore_metadata.indexing,
             fts_index,

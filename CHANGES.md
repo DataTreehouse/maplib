@@ -1,7 +1,38 @@
 # Change log
 
 ## Unreleased
+### Features
+- Streaming ([#87](https://github.com/DataTreehouse/maplib/issues/87)): `Model.map`, `map_triples`, `map_default`, `map_json` and `map_xml` take `stream=True` and then return a lazy `ModelStream`, e.g. `m.map(template, lf, stream=True).update(...).infer(...).insert(...).write("out.nt").write("out.ttl", format="turtle").collect()`. On `collect()`, each batch of the input is mapped into a fresh in-memory model with the templates, prefixes and UDFs of the model, the steps run on it in order, the `write` steps append it to their files (N-Triples, Turtle with prefixes declared once, or N-Quads), and the batch is dropped, so memory use depends on the batch size and not on the size of the input. The model's own triples are not changed. Steps only see the triples of the current batch. Blank node labels stay unique across batches
+- `Model.map_json` and `Model.map_xml` also take an iterable of documents (strings or paths), e.g. a generator over the lines of a JSON Lines file, mapped one document at a time. With a `uuid_namespace`, document number i uses the namespace `<uuid_namespace>/<i>` so that documents do not get the same IRIs. With `stream=True`, `documents_per_batch` documents are mapped into each batch; mapping them with `transient=True` and inserting a CONSTRUCT query writes only the constructed triples
+- Storage modes: `Model(storage="memory" | "hybrid" | "disk", storage_folder=...)`, also for `Model.deserialize`. `"memory"` keeps everything in memory, `"hybrid"` stores the dictionaries of IRIs and literals on disk (what `storage_folder` did before), and the new `"disk"` mode also stores the triple tables on disk as parquet files in `<storage_folder>/maplib_storage/triples`. Files of triple tables that are replaced (by compaction or deletes) or whose model is dropped are removed. Without `storage`, a `storage_folder` still means hybrid storage, so existing code is unaffected. Hybrid and disk storage require maplib Enterprise Edition. In Rust, `Model::new`, `Model::deserialize_triples` and `Triplestore::new` take a `StorageOptions` instead of the storage folder
+
+### Performance
+Storage modes compared on an Apple M-series laptop (14 cores), built with the release-test profile, medians of 2 runs alternating with v0.21.0. Memory and hybrid storage are unchanged compared with v0.21.0 (all differences within run-to-run noise).
+
+| Category | Workload | Memory | Hybrid | Disk | Disk vs. hybrid |
+|---|---|---|---|---|---|
+| Disk | 20 M triples (4 predicates, 2 M subjects), RSS after loading | 2.69 GB | 3.36 GB | 2.85 GB | **-15%** |
+| Disk | Same, peak RSS | 3.28 GB | 4.01 GB | 3.40 GB | **-15%** |
+| Disk | Same, load time | 8.13 s | 8.87 s | 9.60 s | +8% |
+| Disk | Same, 20 subject lookups / count all / INSERT 2 M triples | 0.014 / 0.086 / 0.77 s | 0.20 / 0.092 / 0.53 s | 0.21 / 0.12 / 0.59 s | +3% / +30% / +11% |
+| Disk | RDF/XML, CIM 2.3 M triples: read / 50 subject lookups / join | 1.47 / 0.10 / 0.012 s | 3.60 / 3.33 / 0.047 s | 3.70 / 3.85 / 0.048 s | +3% / +16% / +2% |
+
+In disk mode the triple tables and their deduplication index are no longer held in memory. With few triples per distinct IRI or literal (as in the CIM data), memory use is dominated by the dictionary and reading, and disk storage saves little.
+
+Triple table segments are compacted much faster, which matters most for datalog, where every iteration adds a small batch of triples to tables that are often large:
+- Size-tiered compaction: only the trailing segments of comparable size are merged with the new triples, so a large table is no longer rewritten every 11 inserts. A table has O(log n) segments (at most 16).
+- Merging sorts packed rank keys with Polars instead of a value-by-value heap merge, and builds the object sort from the merged triples instead of also reading and merging the object sorts of the segments.
+- Disk mode: new triples are deduplicated against only the row groups that may hold their subjects, found through the sparse subject index, instead of reloading every stored triple of the table into an index on each insert. Small trailing segments (under 16k triples) stay in memory until merged, so small inserts don't write and rewrite small parquet files.
+
+| Category | Workload | Memory | Hybrid | Disk |
+|---|---|---|---|---|
+| Datalog | Transitive closure, 60 iterations into a 5 M triple table (8.7 M triples after), inference time | 17.7 → 4.1 s (**-77%**) | 14.6 → 3.3 s (**-77%**) | 37.4 → 11.2 s (**-70%**) |
+| Datalog | Same, peak RSS | 5.31 → 2.73 GB (**-49%**) | 5.83 → 3.15 GB (**-46%**) | 6.34 → 4.00 GB (**-37%**) |
+
+(Release-test profile, means of 2 runs alternating with the build before this change; subject and object lookups on the result are unchanged.)
+
 ### Bug fixes
+- Hybrid storage: `Model.compact()` (also run by `Model.serialize()`) failed with a DuckDB "Duplicate key" error once the dictionary had to be renumbered, e.g. after more than ten inserts into the same predicate
 - SHACL rules: a rule that re-asserts a triple already in the data graph no longer makes inference loop until `max_iterations` (or forever with one rule). Inserting transient triples that all already existed non-transiently dropped the earlier transient triples with the same predicate, which were then inferred again on every iteration ([#76](https://github.com/DataTreehouse/maplib/issues/76))
 - SHACL rules: rules whose WHERE clause has no triple pattern on `$this` (only `OPTIONAL` / `BIND`) now also run for focus nodes that become targets of their shape after the rule first ran ([#77](https://github.com/DataTreehouse/maplib/issues/77))
 

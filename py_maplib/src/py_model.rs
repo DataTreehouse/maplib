@@ -4,17 +4,19 @@ use crate::mutexes::{
     add_virtualization_mutex, compact_mutex, create_index_mutex, detach_graph_mutex,
     get_predicate_iris_mutex, get_predicate_mutex, infer_mutex, infer_rdfs_mutex, insert_mutex,
     list_udfs_mutex, map_default_batch_mutex, map_default_first_batch_mutex, map_default_mutex,
-    map_df_mutex, map_json_mutex, map_mutex, map_resolved_mutex, map_triples_mutex, map_xml_mutex,
+    map_df_mutex, map_mutex, map_resolved_mutex, map_triples_mutex,
     query_external_mutex, query_mutex, read_mutex, read_template_mutex, reads_mutex,
     resolve_template_mutex, serialize_triples_mutex, size_mutex, truncate_graph_mutex,
     update_mutex, validate_mutex, write_cim_xml_mutex, write_triples_mutex, writes_mutex,
 };
+use crate::py_stream::{DocumentKind, PyModelStream, StreamSource};
 use crate::shacl::PyValidationReport;
 use crate::{
-    classify_mapping_data, create_prefix_map, data_to_mappings_types, for_each_mapping_batch,
-    map_parameters, maybe_parse_bindings, new_triples_to_dict, parse_named_node,
-    parse_optional_named_node, print_debug_if_exists, query_to_result, resolve_rdf_node_type,
-    MappingData, ParametersType, PyIndexingOptions, StringOrPathBuf, DEFAULT_INCLUDE_TRANSIENT,
+    classify_document_data, classify_mapping_data, create_prefix_map, data_to_mappings_types,
+    document_uuid_namespace, for_each_document, for_each_mapping_batch, map_parameters,
+    maybe_parse_bindings, new_triples_to_dict, parse_named_node, parse_optional_named_node,
+    print_debug_if_exists, query_to_result, resolve_rdf_node_type, DocumentData, MappingData,
+    ParametersType, PyIndexingOptions, DEFAULT_INCLUDE_TRANSIENT,
 };
 
 use datalog::python::PyInferenceResult;
@@ -22,6 +24,7 @@ use external_sparql::SparqlMethod;
 use maplib::model::Model as InnerModel;
 use opc_ua::mappings::map_opc_ua;
 use pyo3::prelude::*;
+use pyo3::types::PyString;
 use pyo3::{pyclass, pymethods, Bound, Py, PyAny, PyRef, PyResult, Python};
 use representation::cats::LockedCats;
 use representation::dataset::NamedGraph;
@@ -30,11 +33,14 @@ use representation::python::PyIRI;
 use representation::solution_mapping::EagerSolutionMappings;
 use representation::BaseRDFNodeType;
 use std::collections::HashMap;
+use pyo3::exceptions::PyValueError;
 use std::path::PathBuf;
+use std::str::FromStr;
 use std::sync::Mutex;
 use templates::python::PyTemplate;
 use tracing::instrument;
 use triplestore::sparql::InsertResult;
+use triplestore::{StorageMode, StorageOptions};
 use virtualization::python::VirtualizedPythonDatabase;
 
 #[pyclass(name = "Model", frozen)]
@@ -53,13 +59,14 @@ impl PyModel {
 #[pymethods]
 impl PyModel {
     #[new]
-    #[pyo3(signature = (indexing_options=None, storage_folder=None))]
+    #[pyo3(signature = (indexing_options=None, storage_folder=None, storage=None))]
     #[instrument(skip_all)]
     fn new(
         indexing_options: Option<PyIndexingOptions>,
         storage_folder: Option<PathBuf>,
+        storage: Option<String>,
     ) -> PyResult<PyModel> {
-        let storage_folder = storage_folder.map(path_to_string);
+        let storage = storage_options(storage, storage_folder)?;
         let indexing = if let Some(indexing_options) = indexing_options {
             Some(indexing_options.inner)
         } else {
@@ -67,7 +74,7 @@ impl PyModel {
         };
         Ok(PyModel {
             inner: Mutex::new(
-                InnerModel::new(None, storage_folder, indexing, None)
+                InnerModel::new(None, storage, indexing, None)
                     .map_err(PyMaplibError::from)?,
             ),
         })
@@ -118,25 +125,45 @@ impl PyModel {
         })
     }
 
-    #[pyo3(signature = (template, data=None, graph=None, validate_iris=None))]
+    #[pyo3(signature = (template, data=None, graph=None, validate_iris=None, stream=None))]
     #[instrument(skip_all)]
     fn map(
-        &self,
+        slf: &Bound<'_, Self>,
         py: Python<'_>,
         template: Bound<'_, PyAny>,
         data: Option<&Bound<'_, PyAny>>,
         graph: Option<String>,
         validate_iris: Option<bool>,
+        stream: Option<bool>,
     ) -> PyResult<Option<Py<PyAny>>> {
+        let this = slf.get();
         let template = template.try_into()?;
+        if stream.unwrap_or(false) {
+            let data = stream_data(data)?;
+            parse_optional_named_node(graph.clone())?;
+            let template_iri = py.detach(|| {
+                let mut inner = this.inner.lock().unwrap();
+                resolve_template_mutex(&mut inner, template)
+            })?;
+            let stream = PyModelStream::new(
+                slf.clone().unbind(),
+                data,
+                StreamSource::Map {
+                    template_iri,
+                    graph,
+                    validate_iris,
+                },
+            );
+            return Ok(Some(Py::new(py, stream)?.into_any()));
+        }
         let data = data.map(|x| classify_mapping_data(x, py)).transpose()?;
         match data {
             None => py.detach(move || {
-                let mut inner = self.inner.lock().unwrap();
+                let mut inner = this.inner.lock().unwrap();
                 map_mutex(&mut inner, template, None, graph, None, validate_iris)
             }),
             Some(MappingData::Eager(mappings, types)) => py.detach(move || {
-                let mut inner = self.inner.lock().unwrap();
+                let mut inner = this.inner.lock().unwrap();
                 map_mutex(
                     &mut inner,
                     template,
@@ -148,7 +175,7 @@ impl PyModel {
             }),
             Some(MappingData::Batched(data)) => {
                 let template_iri = py.detach(|| {
-                    let mut inner = self.inner.lock().unwrap();
+                    let mut inner = this.inner.lock().unwrap();
                     resolve_template_mutex(&mut inner, template)
                 })?;
                 for_each_mapping_batch(&data, py, &mut |py, mappings, types| {
@@ -156,7 +183,7 @@ impl PyModel {
                         return Ok(());
                     }
                     py.detach(|| {
-                        let mut inner = self.inner.lock().unwrap();
+                        let mut inner = this.inner.lock().unwrap();
                         map_resolved_mutex(
                             &mut inner,
                             &template_iri,
@@ -182,48 +209,68 @@ impl PyModel {
         })
     }
 
-    #[pyo3(signature = (path_or_string, graph=None, transient=None, uuid_namespace=None))]
+    #[pyo3(signature = (path_or_string, graph=None, transient=None, uuid_namespace=None, stream=None, documents_per_batch=None))]
     #[instrument(skip_all)]
     fn map_json(
-        &self,
+        slf: &Bound<'_, Self>,
         py: Python<'_>,
-        path_or_string: StringOrPathBuf,
+        path_or_string: &Bound<'_, PyAny>,
         graph: Option<String>,
         transient: Option<bool>,
         uuid_namespace: Option<String>,
-    ) -> PyResult<()> {
-        py.detach(move || {
-            let mut inner = self.inner.lock().unwrap();
-            map_json_mutex(&mut inner, path_or_string, graph, transient, uuid_namespace)
-        })
+        stream: Option<bool>,
+        documents_per_batch: Option<usize>,
+    ) -> PyResult<Option<Py<PyAny>>> {
+        map_documents(
+            slf,
+            py,
+            DocumentKind::Json,
+            path_or_string,
+            graph,
+            transient,
+            uuid_namespace,
+            stream,
+            documents_per_batch,
+        )
     }
 
-    #[pyo3(signature = (path_or_string, graph=None, transient=None, uuid_namespace=None))]
+    #[pyo3(signature = (path_or_string, graph=None, transient=None, uuid_namespace=None, stream=None, documents_per_batch=None))]
     #[instrument(skip_all)]
     fn map_xml(
-        &self,
+        slf: &Bound<'_, Self>,
         py: Python<'_>,
-        path_or_string: StringOrPathBuf,
+        path_or_string: &Bound<'_, PyAny>,
         graph: Option<String>,
         transient: Option<bool>,
         uuid_namespace: Option<String>,
-    ) -> PyResult<()> {
-        py.detach(move || {
-            let mut inner = self.inner.lock().unwrap();
-            map_xml_mutex(&mut inner, path_or_string, graph, transient, uuid_namespace)
-        })
+        stream: Option<bool>,
+        documents_per_batch: Option<usize>,
+    ) -> PyResult<Option<Py<PyAny>>> {
+        map_documents(
+            slf,
+            py,
+            DocumentKind::Xml,
+            path_or_string,
+            graph,
+            transient,
+            uuid_namespace,
+            stream,
+            documents_per_batch,
+        )
     }
 
-    #[pyo3(signature = (data, predicate=None, graph=None, validate_iris=None))]
+    #[pyo3(signature = (data, predicate=None, graph=None, validate_iris=None, stream=None))]
     #[instrument(skip_all)]
     fn map_triples(
-        &self,
+        slf: &Bound<'_, Self>,
         py: Python<'_>,
         data: &Bound<'_, PyAny>,
         predicate: Option<Bound<'_, PyAny>>,
         graph: Option<String>,
         validate_iris: Option<bool>,
+        stream: Option<bool>,
     ) -> PyResult<Option<Py<PyAny>>> {
+        let this = slf.get();
         let predicate = if let Some(predicate) = predicate {
             Some(if let Ok(predicate) = predicate.extract::<PyIRI>() {
                 predicate.iri.as_str().to_string()
@@ -238,9 +285,22 @@ impl PyModel {
         } else {
             None
         };
+        if stream.unwrap_or(false) {
+            parse_optional_named_node(graph.clone())?;
+            let stream = PyModelStream::new(
+                slf.clone().unbind(),
+                data.clone().unbind(),
+                StreamSource::MapTriples {
+                    predicate,
+                    graph,
+                    validate_iris,
+                },
+            );
+            return Ok(Some(Py::new(py, stream)?.into_any()));
+        }
         match classify_mapping_data(data, py)? {
             MappingData::Eager(mappings, types) => py.detach(move || {
-                let mut inner = self.inner.lock().unwrap();
+                let mut inner = this.inner.lock().unwrap();
                 map_triples_mutex(&mut inner, mappings, predicate, graph, types, validate_iris)
             }),
             MappingData::Batched(data) => {
@@ -249,7 +309,7 @@ impl PyModel {
                         return Ok(());
                     }
                     py.detach(|| {
-                        let mut inner = self.inner.lock().unwrap();
+                        let mut inner = this.inner.lock().unwrap();
                         map_triples_mutex(
                             &mut inner,
                             mappings,
@@ -266,21 +326,35 @@ impl PyModel {
         }
     }
 
-    #[pyo3(signature = (data, primary_key_column, graph=None, validate_iris=None))]
+    #[pyo3(signature = (data, primary_key_column, graph=None, validate_iris=None, stream=None))]
     #[instrument(skip_all)]
     fn map_default(
-        &self,
+        slf: &Bound<'_, Self>,
         py: Python<'_>,
         data: &Bound<'_, PyAny>,
         primary_key_column: String,
         graph: Option<String>,
         validate_iris: Option<bool>,
-    ) -> PyResult<String> {
+        stream: Option<bool>,
+    ) -> PyResult<Py<PyAny>> {
+        let this = slf.get();
         let graph = parse_optional_named_node(graph)?;
         let named_graph = NamedGraph::from_maybe_named_node(graph.as_ref());
-        match classify_mapping_data(data, py)? {
+        if stream.unwrap_or(false) {
+            let stream = PyModelStream::new(
+                slf.clone().unbind(),
+                data.clone().unbind(),
+                StreamSource::MapDefault {
+                    primary_key_column,
+                    graph: named_graph,
+                    validate_iris,
+                },
+            );
+            return Ok(Py::new(py, stream)?.into_any());
+        }
+        let template = match classify_mapping_data(data, py)? {
             MappingData::Eager(mappings, types) => py.detach(move || -> PyResult<String> {
-                let mut inner = self.inner.lock().unwrap();
+                let mut inner = this.inner.lock().unwrap();
                 map_default_mutex(
                     &mut inner,
                     mappings,
@@ -294,7 +368,7 @@ impl PyModel {
                 let mut template = None;
                 for_each_mapping_batch(&data, py, &mut |py, mappings, types| {
                     py.detach(|| -> PyResult<()> {
-                        let mut inner = self.inner.lock().unwrap();
+                        let mut inner = this.inner.lock().unwrap();
                         if let Some(template) = &template {
                             map_default_batch_mutex(
                                 &mut inner,
@@ -328,7 +402,8 @@ impl PyModel {
                     .into())
                 }
             }
-        }
+        }?;
+        Ok(PyString::new(py, &template).into_any().unbind())
     }
 
     #[pyo3(signature = (df, graph=None, uuid_namespace=None))]
@@ -1042,16 +1117,17 @@ impl PyModel {
 
     #[instrument(skip_all)]
     #[staticmethod]
-    #[pyo3(signature = (path = PathBuf::from("./serialized_triples"), storage_folder=None))]
+    #[pyo3(signature = (path = PathBuf::from("./serialized_triples"), storage_folder=None, storage=None))]
     fn deserialize(
         py: Python<'_>,
         path: PathBuf,
         storage_folder: Option<PathBuf>,
+        storage: Option<String>,
     ) -> PyResult<Self> {
-        let storage_folder = storage_folder.map(path_to_string);
+        let storage = storage_options(storage, storage_folder)?;
 
         let inner: Result<InnerModel, PyMaplibError> = py.detach(move || {
-            let inner = InnerModel::deserialize_triples(&path, storage_folder)
+            let inner = InnerModel::deserialize_triples(&path, storage)
                 .map_err(PyMaplibError::from)?;
             Ok(inner)
         });
@@ -1131,4 +1207,89 @@ impl PyModel {
 
 fn path_to_string(path: PathBuf) -> String {
     path.to_string_lossy().into_owned()
+}
+
+/// Resolves the `storage` and `storage_folder` arguments of `Model`, raising `ValueError` on an
+/// unknown storage mode or a mode that does not fit the folder argument.
+fn storage_options(
+    storage: Option<String>,
+    storage_folder: Option<PathBuf>,
+) -> PyResult<StorageOptions> {
+    let mode = storage
+        .map(|s| StorageMode::from_str(&s))
+        .transpose()
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    StorageOptions::new(mode, storage_folder.map(path_to_string))
+        .map_err(|e| PyValueError::new_err(e.to_string()))
+}
+
+/// Mapping input of a stream, which is consumed when the stream is collected.
+fn stream_data(data: Option<&Bound<'_, PyAny>>) -> PyResult<Py<PyAny>> {
+    if let Some(data) = data {
+        Ok(data.clone().unbind())
+    } else {
+        Err(
+            PyMaplibError::FunctionArgumentError("stream=True requires data to map".to_string())
+                .into(),
+        )
+    }
+}
+
+/// map_json and map_xml: maps a document, an iterable of documents, or returns a stream over them.
+#[allow(clippy::too_many_arguments)]
+fn map_documents(
+    slf: &Bound<'_, PyModel>,
+    py: Python<'_>,
+    kind: DocumentKind,
+    data: &Bound<'_, PyAny>,
+    graph: Option<String>,
+    transient: Option<bool>,
+    uuid_namespace: Option<String>,
+    stream: Option<bool>,
+    documents_per_batch: Option<usize>,
+) -> PyResult<Option<Py<PyAny>>> {
+    let this = slf.get();
+    parse_optional_named_node(graph.clone())?;
+    let documents = classify_document_data(data, kind.name())?;
+    if stream.unwrap_or(false) {
+        if documents_per_batch == Some(0) {
+            return Err(PyMaplibError::FunctionArgumentError(
+                "documents_per_batch should be at least 1".to_string(),
+            )
+            .into());
+        }
+        let stream = PyModelStream::new(
+            slf.clone().unbind(),
+            data.clone().unbind(),
+            StreamSource::Documents {
+                kind,
+                graph,
+                transient,
+                uuid_namespace,
+                documents_per_batch: documents_per_batch.unwrap_or(1),
+            },
+        );
+        return Ok(Some(Py::new(py, stream)?.into_any()));
+    }
+    match documents {
+        DocumentData::Single(doc) => py.detach(|| {
+            let mut inner = this.inner.lock().unwrap();
+            kind.map_mutex(&mut inner, doc, graph, transient, uuid_namespace)
+        })?,
+        DocumentData::Many(docs) => {
+            for_each_document(&docs, kind.name(), &mut |py, i, doc| {
+                py.detach(|| {
+                    let mut inner = this.inner.lock().unwrap();
+                    kind.map_mutex(
+                        &mut inner,
+                        doc,
+                        graph.clone(),
+                        transient,
+                        document_uuid_namespace(&uuid_namespace, i),
+                    )
+                })
+            })?
+        }
+    }
+    Ok(None)
 }

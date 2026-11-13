@@ -28,7 +28,7 @@ use templates::document::document_from_str;
 use templates::MappingColumnType;
 use triplestore::sparql::errors::SparqlError;
 use triplestore::sparql::{InsertResult, QuerySettings, UpdateResult};
-use triplestore::{IndexingOptions, NewTriples, Triplestore};
+use triplestore::{IndexingOptions, NewTriples, StorageOptions, Triplestore};
 
 use chrontext::engine::{ChrontextSettings, Engine};
 use datalog::ast::DatalogRuleset;
@@ -102,7 +102,7 @@ impl Model {
     #[instrument(skip_all)]
     pub fn new(
         template_dataset: Option<&TemplateDataset>,
-        storage_folder: Option<String>,
+        storage: StorageOptions,
         indexing: Option<IndexingOptions>,
         prefixes: Option<HashMap<String, NamedNode>>,
     ) -> Result<Model, MaplibError> {
@@ -119,7 +119,7 @@ impl Model {
         Ok(Model {
             blank_node_counter: 0,
             template_dataset,
-            triplestore: Triplestore::new(storage_folder, Some(indexing.clone()))
+            triplestore: Triplestore::new(storage, Some(indexing.clone()))
                 .map_err(MaplibError::TriplestoreError)?,
             indexing,
             prefixes: use_prefixes,
@@ -130,37 +130,37 @@ impl Model {
     pub fn from_folder<P: AsRef<Path>>(
         path: P,
         recursive: bool,
-        storage_folder: Option<String>,
+        storage: StorageOptions,
     ) -> Result<Model, MaplibError> {
         let dataset = TemplateDataset::from_folder(path, recursive, Some(&get_default_prefixes()))
             .map_err(MaplibError::TemplateError)?;
-        Model::new(Some(&dataset), storage_folder, None, None)
+        Model::new(Some(&dataset), storage, None, None)
     }
 
     pub fn from_file<P: AsRef<Path>>(
         path: P,
-        storage_folder: Option<String>,
+        storage: StorageOptions,
     ) -> Result<Model, MaplibError> {
         let dataset = TemplateDataset::from_file(path, Some(&get_default_prefixes()))
             .map_err(MaplibError::TemplateError)?;
-        Model::new(Some(&dataset), storage_folder, None, None)
+        Model::new(Some(&dataset), storage, None, None)
     }
 
-    pub fn from_str(s: &str, storage_folder: Option<String>) -> Result<Model, MaplibError> {
+    pub fn from_str(s: &str, storage: StorageOptions) -> Result<Model, MaplibError> {
         let doc = document_from_str(s, Some(&get_default_prefixes()))?;
         let dataset =
             TemplateDataset::from_documents(vec![doc]).map_err(MaplibError::TemplateError)?;
-        Model::new(Some(&dataset), storage_folder, None, None)
+        Model::new(Some(&dataset), storage, None, None)
     }
 
-    pub fn from_strs(ss: Vec<&str>, storage_folder: Option<String>) -> Result<Model, MaplibError> {
+    pub fn from_strs(ss: Vec<&str>, storage: StorageOptions) -> Result<Model, MaplibError> {
         let mut docs = vec![];
         for s in ss {
             let doc = document_from_str(s, Some(&get_default_prefixes()))?;
             docs.push(doc);
         }
         let dataset = TemplateDataset::from_documents(docs).map_err(MaplibError::TemplateError)?;
-        Model::new(Some(&dataset), storage_folder, None, None)
+        Model::new(Some(&dataset), storage, None, None)
     }
 
     pub fn add_template(&mut self, template: Template) -> Result<(), MaplibError> {
@@ -759,9 +759,9 @@ impl Model {
 
     pub fn deserialize_triples(
         path: &Path,
-        storage_folder: Option<String>,
+        storage: StorageOptions,
     ) -> Result<Self, MaplibError> {
-        let triplestore = Triplestore::deserialize_triples(path, storage_folder)?;
+        let triplestore = Triplestore::deserialize_triples(path, storage)?;
         Ok(Model {
             blank_node_counter: 0,
             template_dataset: Default::default(),

@@ -1,17 +1,28 @@
-from typing import List, Optional
+from typing import Any, Dict, List
 import os
 import pathlib
 
 PATH_HERE = pathlib.Path(__file__).parent
 
-def disk_params() -> List[Optional[str]]:
+STORAGE_FOLDER = "disk"
+
+
+def is_maplib_ee() -> bool:
     import dotenv
     dotenv.load_dotenv(PATH_HERE.parent.parent/".env")
-    if "MAPLIB_EE" in os.environ:
-        is_maplib_ee = os.environ["MAPLIB_EE"]
+    return bool(os.environ.get("MAPLIB_EE", False))
+
+
+def disk_params() -> List[str]:
+    """Storage modes to parameterize tests over. Hybrid and disk storage need maplib_ee."""
+    if is_maplib_ee():
+        return ["memory", "hybrid", "disk"]
     else:
-        is_maplib_ee = False
-    if is_maplib_ee:
-        return [None, "disk"]
-    else:
-        return [None]
+        return ["memory"]
+
+
+def storage_kwargs(storage: str) -> Dict[str, Any]:
+    """Model / Model.deserialize keyword arguments for a storage mode from disk_params()."""
+    if storage == "memory":
+        return {"storage": "memory"}
+    return {"storage": storage, "storage_folder": STORAGE_FOLDER}
