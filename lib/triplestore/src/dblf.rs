@@ -205,6 +205,26 @@ impl Triplestore {
             }
         }
 
+        // When the same variable occurs in several positions, slices where the types of those
+        // positions cannot match yield no solutions. They must be dropped before deciding
+        // whether a column needs to be multi-typed, or a column could be made a struct while
+        // only one of its types remains.
+        let same_subject_object =
+            subject_keep_rename.is_some() && subject_keep_rename == object_keep_rename;
+        let same_subject_predicate =
+            subject_keep_rename.is_some() && subject_keep_rename == predicate_keep_rename;
+        let same_object_predicate =
+            object_keep_rename.is_some() && object_keep_rename == predicate_keep_rename;
+        sms.retain(|sm| {
+            // Unwraps are safe because kept columns have types
+            !(same_subject_object
+                && sm.subject_type.as_ref().unwrap() != sm.object_type.as_ref().unwrap())
+                && !(same_subject_predicate
+                    && sm.subject_type.as_ref().unwrap() != &BaseRDFNodeType::IRI)
+                && !(same_object_predicate
+                    && sm.object_type.as_ref().unwrap() != &BaseRDFNodeType::IRI)
+        });
+
         if !sms.is_empty() {
             let subject_need_multi =
                 partial_check_need_multi(&sms, true, subject_keep_rename.is_some());
@@ -228,20 +248,12 @@ impl Triplestore {
                 if let Some(s) = &subject_keep_rename {
                     if let Some(o) = &object_keep_rename {
                         if s == o {
-                            // Case: Columns with same names have differing types
-                            // Unwrap is safe because subject and object columns should be kept
-                            if subject_type.as_ref().unwrap() != object_type.as_ref().unwrap() {
-                                continue;
-                            }
                             mappings =
                                 mappings.filter(col(SUBJECT_COL_NAME).eq(col(OBJECT_COL_NAME)));
                         }
                     }
                     if let Some(p) = &predicate_keep_rename {
                         if s == p {
-                            if subject_type.as_ref().unwrap() != &BaseRDFNodeType::IRI {
-                                continue;
-                            }
                             let expr = named_node_enc(
                                 predicate.as_ref().unwrap(),
                                 &self
@@ -258,9 +270,6 @@ impl Triplestore {
                 if let Some(o) = &object_keep_rename {
                     if let Some(p) = &predicate_keep_rename {
                         if o == p {
-                            if object_type.as_ref().unwrap() != &BaseRDFNodeType::IRI {
-                                continue;
-                            }
                             let expr = named_node_enc(
                                 predicate.as_ref().unwrap(),
                                 &self
@@ -749,7 +758,11 @@ pub fn create_empty_lf_datatypes(
             &BaseRDFNodeType::None.default_stored_polars_data_type(),
         ))
     }
-    if let Some(predicate_rename) = predicate_keep_rename {
+    // The same variable may occur in several positions, but needs only one column
+    if let Some(predicate_rename) = predicate_keep_rename
+        .as_ref()
+        .filter(|x| !out_datatypes.contains_key(*x))
+    {
         out_datatypes.insert(
             predicate_rename.to_string(),
             BaseRDFNodeType::None.into_default_stored_rdf_node_state(),
@@ -759,7 +772,10 @@ pub fn create_empty_lf_datatypes(
             &BaseRDFNodeType::None.default_stored_polars_data_type(),
         ))
     }
-    if let Some(object_rename) = object_keep_rename {
+    if let Some(object_rename) = object_keep_rename
+        .as_ref()
+        .filter(|x| !out_datatypes.contains_key(*x))
+    {
         let dt = BaseRDFNodeType::None;
         let polars_dt = dt.default_stored_polars_data_type();
         let use_datatype = dt.into_default_input_rdf_node_state();
