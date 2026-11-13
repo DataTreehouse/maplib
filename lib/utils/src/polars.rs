@@ -1,8 +1,7 @@
-use polars::error::abort::{catch_polars_abort, register_polars_abort_mechanism};
+use polars::error::abort::catch_polars_abort;
 use polars::prelude::Engine;
 use polars::{error::PolarsError, frame::DataFrame, prelude::LazyFrame};
 use std::panic::AssertUnwindSafe;
-use std::sync::OnceLock;
 #[cfg(not(feature = "pyo3"))]
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use std::collections::HashMap;
@@ -24,23 +23,15 @@ pub enum InterruptableCollectError {
 /// The engine used for query result collection. `MAPLIB_POLARS_ENGINE=in-memory` selects the
 /// in-memory engine, anything else the streaming engine.
 fn query_engine() -> Engine {
-    static ENGINE: OnceLock<Engine> = OnceLock::new();
-    *ENGINE.get_or_init(
-        || match std::env::var("MAPLIB_POLARS_ENGINE").as_deref() {
-            Ok("in-memory") | Ok("in_memory") => Engine::InMemory,
-            _ => Engine::Streaming,
-        },
-    )
+    match std::env::var("MAPLIB_POLARS_ENGINE").as_deref() {
+        Ok("in-memory") | Ok("in_memory") => Engine::InMemory,
+        _ => Engine::Streaming,
+    }
 }
 
-/// Installs Polars' SIGINT hook, which lets running queries abort on Ctrl-C. The previous
-/// (Python) handler is chained, so Python still raises KeyboardInterrupt afterwards.
-pub fn register_interrupt_handler() {
-    static REGISTERED: OnceLock<()> = OnceLock::new();
-    REGISTERED.get_or_init(register_polars_abort_mechanism);
-}
-
-/// collect a Polars LazyFrame in a way that allows a KeyboardInterrupt to cancel the search
+/// collect a Polars LazyFrame in a way that allows a KeyboardInterrupt to cancel the search.
+/// On the streaming engine this relies on Polars' abort mechanism, so the SIGINT hook must be
+/// installed with `polars::error::abort::register_polars_abort_mechanism` at startup.
 pub fn pl_interruptable_collect(lf: LazyFrame) -> Result<DataFrame, InterruptableCollectError> {
     match query_engine() {
         Engine::InMemory => pl_interruptable_collect_in_memory(lf),

@@ -22,9 +22,12 @@ Triple table segments are compacted much faster, which matters most for datalog,
 - Merging sorts packed rank keys with Polars instead of a value-by-value heap merge, and builds the object sort from the merged triples instead of also reading and merging the object sorts of the segments.
 - Disk mode: new triples are deduplicated against only the row groups that may hold their subjects, found through the sparse subject index, instead of reloading every stored triple of the table into an index on each insert. Small trailing segments (under 16k triples) stay in memory until merged, so small inserts don't write and rewrite small parquet files.
 
+Query results are collected with the Polars streaming engine, which the rest of maplib already used; until now the final step of a query ran on the in-memory engine. Whole-table scans and counts, large result sets and DISTINCT are faster, while small queries are about as fast as before. `MAPLIB_POLARS_ENGINE=in-memory` switches back to the in-memory engine.
+
 Tantivy answered exact matches from its term dictionary, but scanned all strings for substring matches, which it ran whenever the exact matches did not fill the limit. DuckDB scans the strings once per query for both. Reading without full text search is unchanged.
 
 ### Bug fixes
+- Ctrl-C now stops a running query. Before, a long query could keep running until it finished
 - Hybrid storage: `Model.compact()` (also run by `Model.serialize()`) failed with a DuckDB "Duplicate key" error once the dictionary had to be renumbered, e.g. after more than ten inserts into the same predicate
 - SHACL rules: a rule that re-asserts a triple already in the data graph no longer makes inference loop until `max_iterations` (or forever with one rule). Inserting transient triples that all already existed non-transiently dropped the earlier transient triples with the same predicate, which were then inferred again on every iteration ([#76](https://github.com/DataTreehouse/maplib/issues/76))
 - SHACL rules: rules whose WHERE clause has no triple pattern on `$this` (only `OPTIONAL` / `BIND`) now also run for focus nodes that become targets of their shape after the rule first ran ([#77](https://github.com/DataTreehouse/maplib/issues/77))

@@ -157,6 +157,10 @@ fn _maplib(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
         .finish();
     fmt.init();
 
+    // Lets Ctrl-C abort running queries. Python's SIGINT handler is chained, so
+    // KeyboardInterrupt is still raised.
+    polars::error::abort::register_polars_abort_mechanism();
+
     m.add_class::<PyIndexingOptions>()?;
     m.add_class::<PyModel>()?;
     m.add_class::<py_stream::PyModelStream>()?;

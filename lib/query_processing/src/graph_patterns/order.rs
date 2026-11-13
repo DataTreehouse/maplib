@@ -110,7 +110,17 @@ pub fn order_by(
 
 fn make_ordering_expr(e: Expr, cats: LockedCats, t: BaseRDFNodeType, s: BaseCatState) -> Expr {
     if let BaseCatState::CategoricalNative(local) = s {
-        e.map(
+        let output_dtype = if t.is_lang_string() {
+            DataType::Struct(vec![
+                Field::new(LANG_STRING_VALUE_FIELD.into(), DataType::UInt32),
+                Field::new(LANG_STRING_LANG_FIELD.into(), DataType::UInt32),
+            ])
+        } else {
+            DataType::UInt32
+        };
+        // Ranks are local to the values seen in one call, so this must see the whole column at
+        // once: `apply`, not the elementwise `map`, which the streaming engine runs per batch.
+        e.apply(
             move |x| {
                 let original_name = x.name().clone();
                 let mut u32_ser_vec = vec![];
@@ -174,7 +184,7 @@ fn make_ordering_expr(e: Expr, cats: LockedCats, t: BaseRDFNodeType, s: BaseCatS
                 ser.rename(original_name);
                 Ok(ser.into_column())
             },
-            |_, f| Ok(Field::new(f.name().clone(), DataType::UInt32)),
+            move |_, f| Ok(Field::new(f.name().clone(), output_dtype.clone())),
         )
     } else {
         e

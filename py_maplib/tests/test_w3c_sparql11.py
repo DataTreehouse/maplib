@@ -468,7 +468,10 @@ def query_form(query: str) -> str:
 
 
 def is_ordered(query: str) -> bool:
-    return "ORDER BY" in " ".join(strip_comments(query).upper().split())
+    # Only a top-level ORDER BY (after the outermost group) orders the final results; an
+    # ORDER BY inside a subquery leaves the order of the outer solutions undefined.
+    q = " ".join(strip_comments(query).upper().split())
+    return "ORDER BY" in q[q.rfind("}") + 1 :]
 
 
 # Parsed SPARQL results are dicts: {"vars": [...], "boolean": bool or None,
