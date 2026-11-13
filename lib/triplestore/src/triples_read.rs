@@ -1,12 +1,13 @@
+mod hdt_read;
+
 use super::Triplestore;
 use crate::errors::TriplestoreError;
 use crate::{NewTriples, TriplesToAdd};
 use std::cmp;
 
 use cimxml_import::{fix_cim_quad, Remapper};
-use hdt::Hdt;
 use memmap2::MmapOptions;
-use oxrdf::{BlankNode, GraphName, Literal, NamedNode, NamedOrBlankNode, Quad, Term, Triple};
+use oxrdf::{BlankNode, GraphName, NamedNode, NamedOrBlankNode, Quad, Term, Triple};
 use oxrdfio::{
     JsonLdProfileSet, LoadedDocument, RdfFormat, RdfParser, RdfSyntaxError, SliceQuadParser,
 };
@@ -28,10 +29,7 @@ use representation::{OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::Cursor;
 use std::path::Path;
-use std::str::FromStr;
-use std::sync::Arc;
 use std::time::Instant;
 use tracing::{debug, instrument};
 
@@ -154,6 +152,10 @@ impl Triplestore {
             slice
         };
 
+        if rdf_format == ExtendedRdfFormat::HDT {
+            return self.read_hdt(use_slice, graph, triples_batch_size);
+        }
+
         let start_quadproc_now = Instant::now();
         let parallel = if let Some(parallel) = parallel {
             parallel
@@ -165,13 +167,9 @@ impl Triplestore {
                     | ExtendedRdfFormat::CIMXML
             )
         };
-        let hdt;
         let rdfxml_chunks: Vec<Cow<'_, [u8]>>;
-        let mut readers = if rdf_format == ExtendedRdfFormat::HDT {
-            hdt = Hdt::read(Cursor::new(use_slice))
-                .map_err(|e| TriplestoreError::HDTError(e.to_string()))?;
-            vec![hdt_reader(&hdt)]
-        } else if parallel && rdf_format == ExtendedRdfFormat::Normal(RdfFormat::Turtle) {
+        let mut readers = if parallel && rdf_format == ExtendedRdfFormat::Normal(RdfFormat::Turtle)
+        {
             parallel_turtle_readers(use_slice, prefixes, checked, base_iri)
         } else if parallel && rdf_format == ExtendedRdfFormat::Normal(RdfFormat::NTriples) {
             parallel_ntriples_readers(use_slice, checked)
@@ -559,14 +557,6 @@ fn create_predicate_map<'a>(
     Ok((out_r, graph_predicate_map))
 }
 
-fn hdt_reader(hdt: &Hdt) -> MyFromSliceQuadReader<'_> {
-    MyFromSliceQuadReader {
-        parser: MyFromSliceQuadReaderKind::HDT(Box::new(
-            hdt.triples_all().map(hdt_string_triple_to_quad),
-        )),
-    }
-}
-
 fn parallel_turtle_readers<'a>(
     slice: &'a [u8],
     prefixes: &HashMap<String, NamedNode>,
@@ -696,7 +686,6 @@ pub enum MyFromSliceQuadReaderKind<'a> {
     NTriplesPar(SliceNTriplesParser<'a>),
     /// One chunk of a split RDF/XML document. `Some(base_iri)` if the document is CIM/XML.
     RdfXmlPar(SliceRdfXmlParser<'a>, Option<Option<String>>),
-    HDT(Box<dyn Iterator<Item = Quad> + Send + 'a>),
 }
 
 impl Iterator for MyFromSliceQuadReader<'_> {
@@ -733,37 +722,8 @@ impl Iterator for MyFromSliceQuadReader<'_> {
                 }
                 Err(e) => Err(e.into()),
             },
-            MyFromSliceQuadReaderKind::HDT(iter) => Ok(iter.next()?),
         })
     }
-}
-
-fn hdt_string_triple_to_quad(t: [Arc<str>; 3]) -> Quad {
-    let [s, p, o] = t;
-    let subject = if let Some(label) = s.strip_prefix("_:") {
-        NamedOrBlankNode::BlankNode(BlankNode::new_unchecked(label))
-    } else {
-        NamedOrBlankNode::NamedNode(NamedNode::new_unchecked(s.as_ref()))
-    };
-    let predicate = NamedNode::new_unchecked(p.as_ref());
-    Quad::new(
-        subject,
-        predicate,
-        hdt_object_string_to_term(&o),
-        GraphName::DefaultGraph,
-    )
-}
-
-fn hdt_object_string_to_term(o: &str) -> Term {
-    if o.starts_with('"') {
-        return Literal::from_str(o)
-            .unwrap_or_else(|_| Literal::new_simple_literal(o))
-            .into();
-    }
-    if let Some(label) = o.strip_prefix("_:") {
-        return BlankNode::new_unchecked(label).into();
-    }
-    NamedNode::new_unchecked(o).into()
 }
 
 fn get_or_insert_dt(

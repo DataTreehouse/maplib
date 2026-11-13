@@ -118,12 +118,15 @@ Faster lookups, property paths and small inserts:
 
 (Medians of 2 runs alternating with the build before this change, under heavy load from other processes; differences below ~5% are within the noise.)
 
+Reading and writing HDT is much faster. Reading decodes each term of the HDT dictionary once and maps it directly into the model's dictionaries, then adds the triples as integer IDs in parallel batches, without building HDT query indexes. Writing deduplicates and maps triples using the model's dictionary codes, decodes only the distinct terms, and writes the triples section without building query indexes. The written files are unchanged.
+
 ### Bug fixes
 - Ctrl-C now stops a running query. Before, a long query could keep running until it finished
 - A triple pattern with the same variable in two positions (e.g. `?s <p> ?s`) panicked, in queries and in `DELETE WHERE`, when the predicate also had triples where the two positions had different types (e.g. blank node subjects with IRI objects)
 - Hybrid storage: `Model.compact()` (also run by `Model.serialize()`) failed with a DuckDB "Duplicate key" error once the dictionary had to be renumbered, e.g. after more than ten inserts into the same predicate
 - SHACL rules: a rule that re-asserts a triple already in the data graph no longer makes inference loop until `max_iterations` (or forever with one rule). Inserting transient triples that all already existed non-transiently dropped the earlier transient triples with the same predicate, which were then inferred again on every iteration ([#76](https://github.com/DataTreehouse/maplib/issues/76))
 - SHACL rules: rules whose WHERE clause has no triple pattern on `$this` (only `OPTIONAL` / `BIND`) now also run for focus nodes that become targets of their shape after the rule first ran ([#77](https://github.com/DataTreehouse/maplib/issues/77))
+- HDT: writing the same model twice could give different files, as the properties of the triples section's control information were written in random order
 - Full text search: with a fixed subject (`ex:a maplib:fts ?fts`), the limit was applied before filtering on the subject, so few or no results were returned. Triples deleted with SPARQL Update were still found, now they are no longer found after `Model.compact()`. An on-disk index no longer leaves a folder behind for every index created
 
 ## v0.21.0

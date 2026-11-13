@@ -70,7 +70,6 @@ def test_hdt_round_trip_preserves_typed_and_language_literals(tmp_path):
 
     assert isomorphic(model_as_rdflib_graph(m), model_as_rdflib_graph(m2))
 
-@pytest.mark.skip("Flaky due to subtraction with overflow issue")
 def test_empty_graph_hdt_round_trip(tmp_path):
     m = Model()
     m.reads("<urn:maplib:s> <urn:maplib:p> <urn:maplib:o> .", format="ntriples")
@@ -169,3 +168,69 @@ def test_hdt_round_trip_preserves_language_tags(tmp_path):
     m2.read(str(hdt_path))
 
     assert m.writes(format="ntriples").strip() == m2.writes(format="ntriples").strip()
+
+
+MIXED_NT = """
+<urn:maplib:s1> <urn:maplib:p> "plain" .
+<urn:maplib:s1> <urn:maplib:lang> "hello"@en .
+<urn:maplib:s2> <urn:maplib:lang> "hei"@no .
+<urn:maplib:s1> <urn:maplib:int> "42"^^<http://www.w3.org/2001/XMLSchema#integer> .
+<urn:maplib:s2> <urn:maplib:int> "43"^^<http://www.w3.org/2001/XMLSchema#integer> .
+<urn:maplib:s1> <urn:maplib:dbl> "NaN"^^<http://www.w3.org/2001/XMLSchema#double> .
+<urn:maplib:s2> <urn:maplib:dbl> "1.5E0"^^<http://www.w3.org/2001/XMLSchema#double> .
+<urn:maplib:s1> <urn:maplib:dt> "2020-01-01T10:00:00+02:00"^^<http://www.w3.org/2001/XMLSchema#dateTime> .
+<urn:maplib:s2> <urn:maplib:dt> "2020-01-01T10:00:00Z"^^<http://www.w3.org/2001/XMLSchema#dateTime> .
+<urn:maplib:s1> <urn:maplib:custom> "x"^^<urn:maplib:customType> .
+<urn:maplib:s1> <urn:maplib:obj> <urn:maplib:s2> .
+<urn:maplib:s2> <urn:maplib:obj> _:b1 .
+_:b1 <urn:maplib:p> "leaf" .
+"""
+
+
+def test_hdt_round_trip_mixed_literals_in_small_read_batches(tmp_path):
+    m = Model()
+    m.reads(MIXED_NT, format="ntriples")
+    hdt_path = tmp_path / "mixed.hdt"
+    m.write(str(hdt_path), format="hdt")
+
+    for batch_size in [1, 2, 10_000_000]:
+        m2 = Model()
+        m2.read(str(hdt_path), triples_batch_size=batch_size)
+        res = m2.query("SELECT ?s ?p ?o WHERE { ?s ?p ?o }")
+        assert res.height == 13, batch_size
+        assert isomorphic(model_as_rdflib_graph(m), model_as_rdflib_graph(m2))
+
+
+def test_hdt_read_into_model_with_overlapping_terms(tmp_path):
+    m = Model()
+    m.reads(MIXED_NT, format="ntriples")
+    hdt_path = tmp_path / "mixed.hdt"
+    m.write(str(hdt_path), format="hdt")
+
+    m2 = Model()
+    m2.reads(
+        """
+        <urn:maplib:s1> <urn:maplib:p> "plain" .
+        <urn:maplib:s3> <urn:maplib:p> "other" .
+        <urn:maplib:s3> <urn:maplib:lang> "hello"@en .
+        """,
+        format="ntriples",
+    )
+    m2.read(str(hdt_path))
+    res = m2.query("SELECT ?s ?p ?o WHERE { ?s ?p ?o }")
+    # 13 from the HDT file, one duplicate, two new.
+    assert res.height == 15
+    res = m2.query(
+        'SELECT ?s WHERE { ?s <urn:maplib:lang> "hello"@en }'
+    ).sort("s")
+    assert res.get_column("s").to_list() == ["<urn:maplib:s1>", "<urn:maplib:s3>"]
+
+
+def test_hdt_write_is_deterministic(tmp_path):
+    m = Model()
+    m.reads(MIXED_NT, format="ntriples")
+    a = tmp_path / "a.hdt"
+    b = tmp_path / "b.hdt"
+    m.write(str(a), format="hdt")
+    m.write(str(b), format="hdt")
+    assert a.read_bytes() == b.read_bytes()

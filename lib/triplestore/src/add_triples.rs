@@ -37,7 +37,7 @@ impl Triplestore {
     }
 
     #[instrument(skip_all)]
-    fn add_local_cat_triples(
+    pub(crate) fn add_local_cat_triples(
         &mut self,
         local_cat_triples: Vec<CatTriples>,
     ) -> Result<Vec<NewTriples>, TriplestoreError> {

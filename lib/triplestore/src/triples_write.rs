@@ -224,26 +224,7 @@ impl Triplestore {
         buf: &mut W,
         graph: &NamedGraph,
     ) -> Result<(), TriplestoreError> {
-        let mut builder = hdt_write::HdtBuilder::new();
-        if self.does_graph_exist(graph) {
-            for (predicate, df_map) in self.graph_triples_map.get(graph).unwrap() {
-                for ((subject_type, object_type), tt) in df_map {
-                    for (lf, _) in tt.get_lazy_frames(&None, &None)? {
-                        let triples = global_df_as_triples(
-                            lf.collect().unwrap(),
-                            subject_type.clone(),
-                            object_type.clone(),
-                            predicate,
-                            self.global_cats.clone(),
-                        );
-                        for t in &triples {
-                            builder.add_triple(t);
-                        }
-                    }
-                }
-            }
-        }
-        builder.finish(buf)
+        hdt_write::write_hdt(self, buf, graph)
     }
 
     pub(crate) fn check_graph_exists(&self, graph: &NamedGraph) -> Result<(), TriplestoreError> {

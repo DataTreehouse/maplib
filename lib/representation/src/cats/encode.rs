@@ -10,10 +10,10 @@ use in_memory::CatMapsInMemory;
 use oxrdf::NamedNode;
 use polars::frame::DataFrame;
 use polars::prelude::{
-    as_struct, col, lit, ExplodeOptions, IntoColumn, IntoLazy, PlSmallStr, Series,
+    as_struct, col, lit, ExplodeOptions, IntoColumn, IntoLazy, NamedFrom, PlSmallStr, Series,
 };
 use std::borrow::Cow;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 impl CatEncs {
@@ -180,6 +180,61 @@ impl Cats {
             None
         };
         (ser, local)
+    }
+
+    /// Encodes strings of the given type directly into these (global) cats, adding the missing
+    /// ones, and returns the encoding of each input string in order. Duplicates are allowed.
+    /// Unlike [`Cats::encode_series`], no local cats are created, so the result needs no
+    /// re-encoding when it is added to the triplestore.
+    pub fn encode_strs_globally(&mut self, t: &CatType, strs: &[&str]) -> Vec<u32> {
+        if self.is_in_memory() {
+            let series = Series::new(PlSmallStr::EMPTY, strs);
+            let encoded = self
+                .encode_strings_global(vec![(t.as_base_rdf_node_type(), series)])
+                .pop()
+                .unwrap();
+            return encoded.u32().unwrap().into_no_null_iter().collect();
+        }
+        if !self.cat_map.contains_key(t) {
+            let enc = CatEncs::new_empty(
+                self.path.as_ref().map(|x| x.as_ref()),
+                &t.as_base_rdf_node_type(),
+            );
+            self.cat_map.insert(t.clone(), enc);
+        }
+        let opts: Vec<_> = strs.iter().map(|s| Some(*s)).collect();
+        let mut found = self.cat_map.get(t).unwrap().maybe_encode_strs(&opts);
+        let missing: Vec<usize> = found
+            .iter()
+            .enumerate()
+            .filter_map(|(i, u)| if u.is_none() { Some(i) } else { None })
+            .collect();
+        if !missing.is_empty() {
+            let mut seen = HashSet::with_capacity(missing.len());
+            let new_strings: Vec<String> = missing
+                .iter()
+                .filter(|i| seen.insert(strs[**i]))
+                .map(|i| strs[*i].to_string())
+                .collect();
+            let mut counter = self.get_counter(t);
+            let enc = self.cat_map.get_mut(t).unwrap();
+            enc.maps
+                .encode_all_new_non_duplicated_strings(new_strings, &mut counter);
+            self.set_counter(counter, t);
+            let missing_strs: Vec<_> = missing.iter().map(|i| Some(strs[*i])).collect();
+            let encoded = self
+                .cat_map
+                .get(t)
+                .unwrap()
+                .maybe_encode_strs(&missing_strs);
+            for (i, u) in missing.into_iter().zip(encoded) {
+                found[i] = u;
+            }
+        }
+        found
+            .into_iter()
+            .map(|u| u.expect("string was just encoded"))
+            .collect()
     }
 
     pub fn maybe_encode_blanks(&self, blanks: &[Option<&str>]) -> Vec<Option<u32>> {
