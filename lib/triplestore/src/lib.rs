@@ -3,6 +3,7 @@ extern crate core;
 mod add_triples;
 pub mod cats;
 mod dblf;
+mod fts_rebuild;
 pub mod errors;
 mod map_df;
 mod map_json;
@@ -351,7 +352,8 @@ impl Triplestore {
             let triples_map = pred_map.get_mut(&pred).unwrap();
             triples_map.insert((subject_type, object_type), triples);
         }
-
+        // Compaction renumbers the cats that the full text search indexes refer to.
+        self.rebuild_fts_indexes()?;
         Ok(())
     }
 

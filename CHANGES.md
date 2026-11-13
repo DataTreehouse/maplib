@@ -5,6 +5,7 @@
 - Streaming ([#87](https://github.com/DataTreehouse/maplib/issues/87)): `Model.map`, `map_triples`, `map_default`, `map_json` and `map_xml` take `stream=True` and then return a lazy `ModelStream`, e.g. `m.map(template, lf, stream=True).update(...).infer(...).insert(...).write("out.nt").write("out.ttl", format="turtle").collect()`. On `collect()`, each batch of the input is mapped into a fresh in-memory model with the templates, prefixes and UDFs of the model, the steps run on it in order, the `write` steps append it to their files (N-Triples, Turtle with prefixes declared once, or N-Quads), and the batch is dropped, so memory use depends on the batch size and not on the size of the input. The model's own triples are not changed. Steps only see the triples of the current batch. Blank node labels stay unique across batches
 - `Model.map_json` and `Model.map_xml` also take an iterable of documents (strings or paths), e.g. a generator over the lines of a JSON Lines file, mapped one document at a time. With a `uuid_namespace`, document number i uses the namespace `<uuid_namespace>/<i>` so that documents do not get the same IRIs. With `stream=True`, `documents_per_batch` documents are mapped into each batch; mapping them with `transient=True` and inserting a CONSTRUCT query writes only the constructed triples
 - Storage modes: `Model(storage="memory" | "hybrid" | "disk", storage_folder=...)`, also for `Model.deserialize`. `"memory"` keeps everything in memory, `"hybrid"` stores the dictionaries of IRIs and literals on disk (what `storage_folder` did before), and the new `"disk"` mode also stores the triple tables on disk as parquet files in `<storage_folder>/maplib_storage/triples`. Files of triple tables that are replaced (by compaction or deletes) or whose model is dropped are removed. Without `storage`, a `storage_folder` still means hybrid storage, so existing code is unaffected. Hybrid and disk storage require maplib Enterprise Edition. In Rust, `Model::new`, `Model::deserialize_triples` and `Triplestore::new` take a `StorageOptions` instead of the storage folder
+- Full text search (maplib Enterprise Edition) uses DuckDB instead of tantivy. The index stores the dictionary codes of subjects, predicates and objects, and searches the strings where the dictionaries keep them: with hybrid and disk storage it joins against the on-disk dictionary tables, so no copy of the strings is made, and with memory storage it uses an in-memory DuckDB database. Matching is unchanged: case insensitive, 1.0 for a match of the whole value and 0.75 for a substring match. `fts_path` (in `IndexingOptions` and `Model.explore`) is no longer used, as the index is stored with the dictionaries
 
 ### Performance
 Storage modes compared on an Apple M-series laptop (14 cores), built with the release-test profile, medians of 2 runs alternating with v0.21.0. Memory and hybrid storage are unchanged compared with v0.21.0 (all differences within run-to-run noise).
@@ -31,10 +32,24 @@ Triple table segments are compacted much faster, which matters most for datalog,
 
 (Release-test profile, means of 2 runs alternating with the build before this change; subject and object lookups on the result are unchanged.)
 
+Full text search on DuckDB, compared with tantivy on 1 M indexed string literals (500 k subjects, half `xsd:string` labels, half `rdf:langString` comments), release-test profile, means of 2 runs alternating with the build before this change, query times medians of 7:
+
+| Category | Workload | Memory | Hybrid |
+|---|---|---|---|
+| FTS | `create_index` on a loaded model | 0.56 → 0.16 s (**-71%**) | 0.67 → 0.06 s (**-91%**) |
+| FTS | Reading 1.5 M triples with FTS enabled (total read time) | 1.94 → 1.45 s (**-25%**) | 3.42 → 2.81 s (**-18%**) |
+| FTS | Substring query, limit 10 / 1000 / 1000 unique subjects | 543 / 543 / 543 → 13 / 14 / 25 ms (**-98% / -97% / -95%**) | 541 / 541 / 541 → 50 / 78 / 87 ms (**-91% / -86% / -84%**) |
+| FTS | Exact match, 500 hits, limit 1000 | 957 → 11 ms (**-99%**) | 950 → 28 ms (**-97%**) |
+| FTS | No match | 478 → 3.8 ms (**-99%**) | 475 → 14 ms (**-97%**) |
+| FTS | Exact match, limit 10 (filled by exact matches) | 0.72 → 10.2 ms (+1324%) | 0.64 → 24.0 ms (+3653%) |
+
+Tantivy answered exact matches from its term dictionary, but scanned all strings for substring matches, which it ran whenever the exact matches did not fill the limit. DuckDB scans the strings once per query for both. Reading without full text search is unchanged.
+
 ### Bug fixes
 - Hybrid storage: `Model.compact()` (also run by `Model.serialize()`) failed with a DuckDB "Duplicate key" error once the dictionary had to be renumbered, e.g. after more than ten inserts into the same predicate
 - SHACL rules: a rule that re-asserts a triple already in the data graph no longer makes inference loop until `max_iterations` (or forever with one rule). Inserting transient triples that all already existed non-transiently dropped the earlier transient triples with the same predicate, which were then inferred again on every iteration ([#76](https://github.com/DataTreehouse/maplib/issues/76))
 - SHACL rules: rules whose WHERE clause has no triple pattern on `$this` (only `OPTIONAL` / `BIND`) now also run for focus nodes that become targets of their shape after the rule first ran ([#77](https://github.com/DataTreehouse/maplib/issues/77))
+- Full text search: with a fixed subject (`ex:a maplib:fts ?fts`), the limit was applied before filtering on the subject, so few or no results were returned. Triples deleted with SPARQL Update were still found, now they are no longer found after `Model.compact()`. An on-disk index no longer leaves a folder behind for every index created
 
 ## v0.21.0
 ### Performance

@@ -439,8 +439,9 @@ class IndexingOptions:
 
         :param object_sort_all: Enable object-indexing for all suitable predicates (doubles memory requirement).
         :param object_sort_some: Enable object-indexing for a selected list of predicates.
-        :param fts: Enable full text search, in memory if a path is not given.
-        :param fts_path: Enable full text search, stored at the path
+        :param fts: Enable full text search. The index is stored with the categorical maps (strings): on disk
+                    for the hybrid and disk storage modes, in memory otherwise.
+        :param fts_path: Deprecated and ignored, except that it enables full text search.
         """
 
 
@@ -907,7 +908,7 @@ class Model:
         :param bind: Bind to the following host / ip.
         :param popup: Pop up the browser window (deprecated, open server.url yourself instead).
         :param fts: Enable full text search indexing
-        :param fts_path: Path to the fts index
+        :param fts_path: Deprecated and ignored, the index is stored with the categorical maps (strings).
         :param graph: The named graph to explore, defaults to the default graph
         :param page: We use this feature flag to test new frontends (try "new" or "yasgui")
         """

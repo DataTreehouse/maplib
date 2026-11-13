@@ -31,6 +31,10 @@ impl FtsIndex {
         unimplemented!("Contact Data Treehouse to enable full text search")
     }
 
+    pub fn clear(&mut self, _global_cats: LockedCats) -> Result<(), FtsError> {
+        unimplemented!("Contact Data Treehouse to enable full text search")
+    }
+
     pub fn commit(&mut self, _drop_writer: bool) -> Result<(), FtsError> {
         unimplemented!("Contact Data Treehouse to enable full text search")
     }
