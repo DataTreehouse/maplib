@@ -6,9 +6,8 @@ use crate::errors::TriplestoreError;
 use crate::storage::so_index::SubjectObjectIndex;
 use polars::prelude::{col, concat, LazyFrame, UnionArgs};
 use polars_core::prelude::DataFrame;
-use representation::cats::Cats;
+use representation::cats::{distinct_codes, extend_codes, Cats};
 use representation::{OBJECT_COL_NAME, SUBJECT_COL_NAME};
-use std::collections::HashSet;
 use std::path::Path;
 use std::time::Instant;
 use tracing::trace;
@@ -35,10 +34,14 @@ impl Triples {
         df: DataFrame,
         global_cats: &Cats,
     ) -> Result<Option<DataFrame>, TriplestoreError> {
-        let new_df = if self.subject_object_index.is_none() && self.triples_folder.is_some() {
-            // Disk storage mode without a resident index: deduplicate against the stored triples
-            // with the same subjects only.
-            let mut index = self.subject_lookup_index(&df, global_cats)?;
+        let lookup_index = if self.subject_object_index.is_none() {
+            self.temporary_lookup_index(&df, global_cats)?
+        } else {
+            None
+        };
+        let new_df = if let Some(mut index) = lookup_index {
+            // No resident index: deduplicate against the stored triples with the same subjects
+            // only.
             index.maybe_insert_deduplicate(&df, true)
         } else {
             self.ensure_subject_object_index()?;
@@ -133,6 +136,58 @@ impl Triples {
         Ok(())
     }
 
+    /// When the table has no resident deduplication index: an index of (at least) the stored
+    /// triples whose subject occurs in `df`, or None if building the full index is preferable.
+    ///
+    /// In disk storage mode the full index is not kept, so the lookup index is always used. In
+    /// memory, the lookup index is used when the rows that may hold the subjects of `df` are at
+    /// most half of the table, so that a small first insert into a large table does not index
+    /// every stored triple. A large insert builds the full index, which is then kept for later
+    /// inserts.
+    pub(crate) fn temporary_lookup_index(
+        &self,
+        df: &DataFrame,
+        cats: &Cats,
+    ) -> Result<Option<SubjectObjectIndex>, TriplestoreError> {
+        if self.triples_folder.is_some() {
+            return Ok(Some(self.subject_lookup_index(df, cats)?));
+        }
+        let Some(subjects) = subject_strings(df, cats, &self.subject_type) else {
+            return Ok(None);
+        };
+        let strs: Vec<&str> = subjects.iter().map(|x| x.as_str()).collect();
+        let mut ranges = Vec::with_capacity(self.segments.len());
+        let mut rows = 0;
+        for seg in &self.segments {
+            let offsets = get_lookup_offsets(
+                &strs,
+                &seg.subject_sparse_index.as_ref().unwrap().map,
+                seg.height,
+            );
+            rows += offsets.iter().map(|(_, len)| len).sum::<usize>();
+            ranges.push(offsets);
+        }
+        if rows * 2 > self.height {
+            return Ok(None);
+        }
+        let mut index = SubjectObjectIndex::new(&self.subject_type, &self.object_type);
+        for (seg, offsets) in self.segments.iter().zip(ranges) {
+            if offsets.is_empty() {
+                continue;
+            }
+            for (lf, _) in seg
+                .subject_sort
+                .as_ref()
+                .unwrap()
+                .get_lazy_frames(Some(offsets))?
+            {
+                let stored = lf.collect().map_err(TriplestoreError::LazyLoadError)?;
+                index.insert(&stored);
+            }
+        }
+        Ok(Some(index))
+    }
+
     /// An index of (at least) the stored triples whose subject occurs in `df`. Uses the sparse
     /// subject indices of the segments, so that only the relevant row groups are read.
     pub(crate) fn subject_lookup_index(
@@ -192,14 +247,9 @@ fn subject_strings(
     subject_type: &representation::BaseRDFNodeType,
 ) -> Option<Vec<String>> {
     let encs = maybe_get_cat_encs(cats, subject_type)?;
-    let us: HashSet<u32> = df
-        .column(SUBJECT_COL_NAME)
-        .unwrap()
-        .u32()
-        .unwrap()
-        .into_no_null_iter()
-        .collect();
-    let us: Vec<_> = us.into_iter().map(Some).collect();
+    let mut codes = Vec::new();
+    extend_codes(&mut codes, df.column(SUBJECT_COL_NAME).unwrap());
+    let us: Vec<_> = distinct_codes(codes).into_iter().map(Some).collect();
     let mut strings: Vec<String> = encs
         .maps
         .decode_batch(&us)

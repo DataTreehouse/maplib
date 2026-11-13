@@ -9,3 +9,5 @@ nohash-hasher.workspace = true
 rayon.workspace = true
 arrow.workspace = true
 range-set-blaze.workspace = true
+hashbrown = "0.16"
+foldhash = "0.2"

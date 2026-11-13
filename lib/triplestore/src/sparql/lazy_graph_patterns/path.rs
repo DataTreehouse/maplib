@@ -2,7 +2,7 @@ use super::Triplestore;
 use crate::sparql::errors::SparqlError;
 use crate::sparql::QuerySettings;
 use oxrdf::vocab::xsd;
-use oxrdf::{NamedNode, Variable};
+use oxrdf::{NamedNode, Term, Variable};
 use polars::prelude::{
     by_name, col, lit, AnyValue, DataFrame, IntoLazy, IntoSeries, JoinArgs, JoinType, Series,
     UniqueKeepStrategy,
@@ -13,7 +13,8 @@ use query_processing::errors::QueryProcessingError;
 use query_processing::expressions::{literal_enc, named_node_enc, named_node_local_enc};
 use query_processing::graph_patterns::{distinct, group_by_workaround, join, union};
 use query_processing::pushdowns::Pushdowns;
-use representation::cats::LockedCats;
+use rayon::prelude::*;
+use representation::cats::{Cats, LockedCats};
 use representation::dataset::{NamedGraph, QueryGraph};
 use representation::multitype::{
     compress_actual_multitypes, force_convert_multicol_to_single_col, nest_multicolumns,
@@ -25,7 +26,7 @@ use representation::{OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use spargebra::algebra::{Expression, GraphPattern, PropertyPathExpression};
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 use sprs::{CsMatBase, TriMatBase};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 const NAMED_NODE_INDEX_COL: &str = "named_node_index_column";
 const VALUE_COLUMN: &str = "value";
@@ -121,6 +122,18 @@ impl Triplestore {
 
         let mut out_df;
 
+        // Values that the ends of the path are bound to, from the solution mappings so far.
+        let mut pushdowns = pushdowns;
+        let focus: Vec<&str> = [subject, object]
+            .into_iter()
+            .filter_map(|t| match t {
+                TermPattern::Variable(v) => Some(v.as_str()),
+                _ => None,
+            })
+            .collect();
+        let solution_mappings = solution_mappings
+            .map(|sm| pushdowns.add_from_solution_mappings(sm, self.global_cats.clone(), &focus));
+
         let mut df_creator = U32DataFrameCreator::new(dataset.clone());
         df_creator.gather_namednode_dfs(ppe, self)?;
         let (lookup_df, lookup_dtypes, namednode_dfs) =
@@ -132,18 +145,35 @@ impl Triplestore {
             .max()
             .unwrap()
             .unwrap_or(0);
-        let SparsePathReturn { sparmat, .. } = sparse_path(ppe, &namednode_dfs, max_index as usize);
-
-        let mut subject_vec = vec![];
-        let mut object_vec = vec![];
-        for (i, row) in sparmat.outer_iterator().enumerate() {
-            for (j, v) in row.iter() {
-                if v > &0 {
-                    subject_vec.push(i as u32);
-                    object_vec.push(j as u32);
+        let bound = {
+            let cats = self.global_cats.read().unwrap();
+            bound_start_keys(
+                subject,
+                object,
+                &pushdowns,
+                &lookup_df,
+                &lookup_dtypes,
+                &cats,
+            )
+        };
+        let (subject_vec, object_vec) = if let Some((starts, reversed)) = bound {
+            // Only the paths from the nodes an end is bound to are followed.
+            paths_from(ppe, starts, reversed, &namednode_dfs, max_index as usize)
+        } else {
+            let SparsePathReturn { sparmat, .. } =
+                sparse_path(ppe, &namednode_dfs, max_index as usize);
+            let mut subject_vec = vec![];
+            let mut object_vec = vec![];
+            for (i, row) in sparmat.outer_iterator().enumerate() {
+                for (j, v) in row.iter() {
+                    if v > &0 {
+                        subject_vec.push(i as u32);
+                        object_vec.push(j as u32);
+                    }
                 }
             }
-        }
+            (subject_vec, object_vec)
+        };
         let mut subject_series = Series::from_iter(subject_vec);
         subject_series.rename("subject_key".into());
         let mut object_series = Series::from_iter(object_vec);
@@ -1066,4 +1096,357 @@ fn term_variable_name(t: &TermPattern) -> Option<String> {
         TermPattern::BlankNode(b) => Some(b.to_string()),
         _ => None,
     }
+}
+
+/// The lookup keys of the nodes that one end of the path is bound to, and whether that end is
+/// the object (so the path is followed backwards), or None if neither end is bound to IRIs that
+/// can be listed. The end with fewer values is chosen.
+fn bound_start_keys(
+    subject: &TermPattern,
+    object: &TermPattern,
+    pushdowns: &Pushdowns,
+    lookup_df: &DataFrame,
+    lookup_dtypes: &HashMap<String, RDFNodeState>,
+    cats: &Cats,
+) -> Option<(Vec<u32>, bool)> {
+    let subject_codes = bound_iri_codes(subject, pushdowns, cats);
+    let object_codes = bound_iri_codes(object, pushdowns, cats);
+    let (codes, reversed) = match (subject_codes, object_codes) {
+        (Some(s), Some(o)) if o.len() < s.len() => (o, true),
+        (Some(s), _) => (s, false),
+        (None, Some(o)) => (o, true),
+        (None, None) => return None,
+    };
+    let keys = lookup_keys_of_iris(lookup_df, lookup_dtypes, codes)?;
+    Some((keys, reversed))
+}
+
+/// The global codes of the IRIs that an end of the path is bound to: a constant IRI, or a
+/// variable whose possible values are pushed down and are all IRIs. IRIs that are not in the
+/// dictionary are left out, since they do not occur in the graph.
+fn bound_iri_codes(t: &TermPattern, pushdowns: &Pushdowns, cats: &Cats) -> Option<Vec<u32>> {
+    let iris: Vec<Option<&str>> = match t {
+        TermPattern::NamedNode(nn) => vec![Some(nn.as_str())],
+        TermPattern::Variable(v) => {
+            let values = pushdowns.variables_values.get(v.as_str())?;
+            let mut iris = Vec::with_capacity(values.len());
+            for x in values {
+                let Term::NamedNode(nn) = x else {
+                    return None;
+                };
+                iris.push(Some(nn.as_str()));
+            }
+            iris
+        }
+        _ => return None,
+    };
+    Some(
+        cats.maybe_encode_iri_slice(&iris)
+            .into_iter()
+            .flatten()
+            .collect(),
+    )
+}
+
+/// The sorted lookup keys of the IRIs with the given global codes, or None if the IRIs of the
+/// lookup are not encoded with global codes.
+fn lookup_keys_of_iris(
+    lookup_df: &DataFrame,
+    lookup_dtypes: &HashMap<String, RDFNodeState>,
+    codes: Vec<u32>,
+) -> Option<Vec<u32>> {
+    let state = lookup_dtypes.get(VALUE_COLUMN).unwrap();
+    match state.map.get(&BaseRDFNodeType::IRI) {
+        None => return Some(vec![]),
+        Some(BaseCatState::CategoricalNative(None)) => {}
+        Some(_) => return None,
+    }
+    let value = if state.is_multi() {
+        col(VALUE_COLUMN)
+            .struct_()
+            .field_by_name(&BaseRDFNodeType::IRI.field_col_name())
+    } else {
+        col(VALUE_COLUMN)
+    };
+    let df = lookup_df
+        .clone()
+        .lazy()
+        .select([
+            value.alias(VALUE_COLUMN),
+            col(LOOKUP_COLUMN).cast(DataType::UInt32),
+        ])
+        .collect()
+        .unwrap();
+    let wanted: HashSet<u32> = codes.into_iter().collect();
+    let values = df.column(VALUE_COLUMN).unwrap().u32().unwrap();
+    let keys = df.column(LOOKUP_COLUMN).unwrap().u32().unwrap();
+    let mut out: Vec<u32> = values
+        .iter()
+        .zip(keys.iter())
+        .filter_map(|(v, k)| match (v, k) {
+            (Some(v), Some(k)) if wanted.contains(&v) => Some(k),
+            _ => None,
+        })
+        .collect();
+    out.sort_unstable();
+    out.dedup();
+    Some(out)
+}
+
+/// The edges of a path leaf as adjacency lists over lookup keys (compressed sparse rows).
+struct Adjacency {
+    offsets: Vec<usize>,
+    targets: Vec<u32>,
+}
+
+impl Adjacency {
+    /// From a frame of subject and object keys, followed backwards if `reversed`.
+    fn new(df: &DataFrame, n: usize, reversed: bool) -> Self {
+        let (from, to) = if reversed {
+            (OBJECT_COL_NAME, SUBJECT_COL_NAME)
+        } else {
+            (SUBJECT_COL_NAME, OBJECT_COL_NAME)
+        };
+        let from = df.column(from).unwrap().u32().unwrap();
+        let to = df.column(to).unwrap().u32().unwrap();
+        let edges: Vec<(u32, u32)> = from
+            .iter()
+            .zip(to.iter())
+            .filter_map(|(f, t)| Some((f?, t?)))
+            .collect();
+        let mut offsets = vec![0usize; n + 1];
+        for (f, _) in &edges {
+            offsets[*f as usize + 1] += 1;
+        }
+        for i in 1..offsets.len() {
+            offsets[i] += offsets[i - 1];
+        }
+        let mut next = offsets.clone();
+        let mut targets = vec![0u32; edges.len()];
+        for (f, t) in edges {
+            targets[next[f as usize]] = t;
+            next[f as usize] += 1;
+        }
+        Adjacency { offsets, targets }
+    }
+
+    fn neighbours(&self, u: u32) -> &[u32] {
+        let u = u as usize;
+        if u + 1 < self.offsets.len() {
+            &self.targets[self.offsets[u]..self.offsets[u + 1]]
+        } else {
+            &[]
+        }
+    }
+}
+
+/// For each start node, the sorted set of nodes reached from it.
+type Reached = Vec<Vec<u32>>;
+
+/// The (subject, object) key pairs of the paths matching `ppe` that start (or, if `reversed`,
+/// end) at one of `starts`. Each node set is extended one step at a time, so the cost depends on
+/// the part of the graph reachable from the starts rather than on the whole graph.
+fn paths_from(
+    ppe: &PropertyPathExpression,
+    starts: Vec<u32>,
+    reversed: bool,
+    namednode_map: &HashMap<PathLeaf, DataFrame>,
+    max_index: usize,
+) -> (Vec<u32>, Vec<u32>) {
+    let mut leaves = HashSet::new();
+    path_leaves(ppe, reversed, &mut leaves);
+    let adjacencies: HashMap<(PathLeaf, bool), Adjacency> = leaves
+        .into_par_iter()
+        .filter_map(|(leaf, rev)| {
+            let df = namednode_map.get(&leaf)?;
+            let adj = Adjacency::new(df, max_index + 1, rev);
+            Some(((leaf, rev), adj))
+        })
+        .collect();
+    let initial: Reached = starts.iter().map(|s| vec![*s]).collect();
+    let reached = follow(ppe, initial, reversed, &adjacencies);
+    let n: usize = reached.iter().map(|r| r.len()).sum();
+    let mut from = Vec::with_capacity(n);
+    let mut to = Vec::with_capacity(n);
+    for (s, nodes) in starts.into_iter().zip(reached) {
+        for o in nodes {
+            from.push(s);
+            to.push(o);
+        }
+    }
+    if reversed {
+        (to, from)
+    } else {
+        (from, to)
+    }
+}
+
+/// The leaves of a path expression, with whether each is followed backwards.
+fn path_leaves(
+    ppe: &PropertyPathExpression,
+    reversed: bool,
+    leaves: &mut HashSet<(PathLeaf, bool)>,
+) {
+    match ppe {
+        PropertyPathExpression::NamedNode(nn) => {
+            leaves.insert((PathLeaf::NamedNode(nn.clone()), reversed));
+        }
+        PropertyPathExpression::NegatedPropertySet(nns) => {
+            leaves.insert((PathLeaf::negated(nns), reversed));
+        }
+        PropertyPathExpression::Reverse(inner) => path_leaves(inner, !reversed, leaves),
+        PropertyPathExpression::Sequence(a, b) | PropertyPathExpression::Alternative(a, b) => {
+            path_leaves(a, reversed, leaves);
+            path_leaves(b, reversed, leaves);
+        }
+        PropertyPathExpression::ZeroOrMore(inner)
+        | PropertyPathExpression::OneOrMore(inner)
+        | PropertyPathExpression::ZeroOrOne(inner) => path_leaves(inner, reversed, leaves),
+    }
+}
+
+/// The nodes reached from each set of `reached` nodes by one match of `ppe` (backwards if
+/// `reversed`).
+fn follow(
+    ppe: &PropertyPathExpression,
+    reached: Reached,
+    reversed: bool,
+    adjacencies: &HashMap<(PathLeaf, bool), Adjacency>,
+) -> Reached {
+    match ppe {
+        PropertyPathExpression::NamedNode(nn) => step(
+            adjacencies.get(&(PathLeaf::NamedNode(nn.clone()), reversed)),
+            &reached,
+        ),
+        PropertyPathExpression::NegatedPropertySet(nns) => step(
+            adjacencies.get(&(PathLeaf::negated(nns), reversed)),
+            &reached,
+        ),
+        PropertyPathExpression::Reverse(inner) => follow(inner, reached, !reversed, adjacencies),
+        PropertyPathExpression::Sequence(a, b) => {
+            let (first, second) = if reversed { (b, a) } else { (a, b) };
+            let mid = follow(first, reached, reversed, adjacencies);
+            follow(second, mid, reversed, adjacencies)
+        }
+        PropertyPathExpression::Alternative(a, b) => {
+            let left = follow(a, reached.clone(), reversed, adjacencies);
+            let right = follow(b, reached, reversed, adjacencies);
+            zip_reached(left, right, |l, r| union_sorted(&l, &r))
+        }
+        PropertyPathExpression::ZeroOrOne(inner) => {
+            let once = follow(inner, reached.clone(), reversed, adjacencies);
+            zip_reached(reached, once, |l, r| union_sorted(&l, &r))
+        }
+        PropertyPathExpression::OneOrMore(inner) => {
+            one_or_more_from(inner, reached, reversed, adjacencies)
+        }
+        PropertyPathExpression::ZeroOrMore(inner) => {
+            let more = one_or_more_from(inner, reached.clone(), reversed, adjacencies);
+            zip_reached(reached, more, |l, r| union_sorted(&l, &r))
+        }
+    }
+}
+
+/// The nodes reached by one or more matches of `inner`: the newly reached nodes are followed
+/// until no new nodes are reached.
+fn one_or_more_from(
+    inner: &PropertyPathExpression,
+    reached: Reached,
+    reversed: bool,
+    adjacencies: &HashMap<(PathLeaf, bool), Adjacency>,
+) -> Reached {
+    let mut all = follow(inner, reached, reversed, adjacencies);
+    let mut frontier = all.clone();
+    loop {
+        let next = follow(inner, frontier, reversed, adjacencies);
+        let new: Reached = next
+            .into_par_iter()
+            .zip(all.par_iter())
+            .map(|(n, a)| difference_sorted(&n, a))
+            .collect();
+        if new.iter().all(|x| x.is_empty()) {
+            return all;
+        }
+        all = all
+            .into_par_iter()
+            .zip(new.par_iter())
+            .map(|(a, n)| if n.is_empty() { a } else { union_sorted(&a, n) })
+            .collect();
+        frontier = new;
+    }
+}
+
+fn step(adjacency: Option<&Adjacency>, reached: &Reached) -> Reached {
+    let Some(adjacency) = adjacency else {
+        return vec![vec![]; reached.len()];
+    };
+    reached
+        .par_iter()
+        .map(|nodes| {
+            let mut out = vec![];
+            for n in nodes {
+                out.extend_from_slice(adjacency.neighbours(*n));
+            }
+            out.sort_unstable();
+            out.dedup();
+            out
+        })
+        .collect()
+}
+
+fn zip_reached(
+    left: Reached,
+    right: Reached,
+    f: impl Fn(Vec<u32>, Vec<u32>) -> Vec<u32> + Sync + Send,
+) -> Reached {
+    left.into_par_iter()
+        .zip(right.into_par_iter())
+        .map(|(l, r)| f(l, r))
+        .collect()
+}
+
+fn union_sorted(a: &[u32], b: &[u32]) -> Vec<u32> {
+    if a.is_empty() {
+        return b.to_vec();
+    }
+    if b.is_empty() {
+        return a.to_vec();
+    }
+    let mut out = Vec::with_capacity(a.len() + b.len());
+    let (mut i, mut j) = (0, 0);
+    while i < a.len() && j < b.len() {
+        match a[i].cmp(&b[j]) {
+            std::cmp::Ordering::Less => {
+                out.push(a[i]);
+                i += 1;
+            }
+            std::cmp::Ordering::Greater => {
+                out.push(b[j]);
+                j += 1;
+            }
+            std::cmp::Ordering::Equal => {
+                out.push(a[i]);
+                i += 1;
+                j += 1;
+            }
+        }
+    }
+    out.extend_from_slice(&a[i..]);
+    out.extend_from_slice(&b[j..]);
+    out
+}
+
+/// The elements of `a` that are not in `b`.
+fn difference_sorted(a: &[u32], b: &[u32]) -> Vec<u32> {
+    let mut out = vec![];
+    let mut j = 0;
+    for x in a {
+        while j < b.len() && b[j] < *x {
+            j += 1;
+        }
+        if j >= b.len() || b[j] != *x {
+            out.push(*x);
+        }
+    }
+    out
 }

@@ -1,6 +1,7 @@
 use crate::{OBJECT_RANK_COL_NAME, SUBJECT_RANK_COL_NAME};
 use ordered_float::OrderedFloat;
 use oxrdf::vocab::xsd;
+use polars::prelude::PlHashSet as HashSet;
 use polars::prelude::{as_struct, col, IntoLazy, PlSmallStr};
 use polars_core::datatypes::{
     BooleanChunked, Int16Chunked, Int8Chunked, UInt16Chunked, UInt8Chunked,
@@ -18,7 +19,6 @@ use representation::{
     BaseRDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD, OBJECT_COL_NAME,
     SUBJECT_COL_NAME,
 };
-use std::collections::HashSet;
 
 pub fn bool_chunked(c: &Column) -> &BooleanChunked {
     c.bool().unwrap()
@@ -153,7 +153,7 @@ macro_rules! binary_nonlang_nonlang_index_impl {
         impl $struct_name {
             pub fn new() -> Self {
                 Self {
-                    index: HashSet::new(),
+                    index: HashSet::default(),
                 }
             }
 
@@ -267,7 +267,7 @@ macro_rules! binary_nonlang_lang_index_impl {
         impl $struct_name {
             pub fn new() -> Self {
                 Self {
-                    index: HashSet::new(),
+                    index: HashSet::default(),
                 }
             }
 

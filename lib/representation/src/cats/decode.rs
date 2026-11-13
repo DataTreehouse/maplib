@@ -2,6 +2,7 @@ use super::{CatEncs, CatType, Cats};
 use crate::cats::LockedCats;
 use crate::solution_mapping::BaseCatState;
 use crate::{BaseRDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD};
+use in_memory::CatMapsInMemory;
 use oxrdf::NamedNode;
 use polars::datatypes::{DataType, Field, PlSmallStr};
 use polars::frame::column::ScalarColumn;
@@ -9,12 +10,63 @@ use polars::frame::DataFrame;
 use polars::prelude::{
     as_struct, col, Column, Expr, IntoColumn, IntoLazy, NamedFrom, PolarsResult, SeriesSealed,
 };
+use polars::prelude::{IntoSeries, StringChunked};
 use polars::series::Series;
+use polars_arrow::array::{Array, MutableBinaryViewArray, PrimitiveArray, Utf8ViewArray};
+use rayon::prelude::*;
 use std::borrow::Cow;
 
 impl CatEncs {
     // Does not break apart lang strings, assumes only series of u32 in input, not struct.
     pub fn decode_series(
+        &self,
+        ser: &Series,
+        bt: &BaseRDFNodeType,
+        local_cats: Option<LockedCats>,
+    ) -> PolarsResult<Series> {
+        self.decode_series_wrapped(ser, bt, local_cats, "", "")
+    }
+
+    /// Decodes a series of codes, putting `prefix` and `suffix` around every value (e.g. "<" and
+    /// ">" for IRIs).
+    pub fn decode_series_wrapped(
+        &self,
+        ser: &Series,
+        bt: &BaseRDFNodeType,
+        local_cats: Option<LockedCats>,
+        prefix: &str,
+        suffix: &str,
+    ) -> PolarsResult<Series> {
+        let local_guard = local_cats.as_ref().map(|l| l.read().unwrap());
+        let local_enc = local_guard.as_ref().and_then(|g| g.get_enc(bt));
+        if let Some(global) = self.maps.as_in_memory() {
+            let local = local_enc.map(|e| e.maps.as_in_memory());
+            if !matches!(local, Some(None)) {
+                // Local codes take precedence over global ones.
+                let mut maps = vec![];
+                if let Some(Some(l)) = local {
+                    maps.push(l);
+                }
+                maps.push(global);
+                return decode_codes(ser, &maps, prefix, suffix);
+            }
+        }
+        drop(local_guard);
+        let s = self.decode_series_with_batches(ser, bt, local_cats)?;
+        if prefix.is_empty() && suffix.is_empty() {
+            Ok(s)
+        } else {
+            Ok(s.str()?
+                .apply_into_string_amortized(|v, out| {
+                    out.push_str(prefix);
+                    out.push_str(v);
+                    out.push_str(suffix);
+                })
+                .into_series())
+        }
+    }
+
+    fn decode_series_with_batches(
         &self,
         ser: &Series,
         bt: &BaseRDFNodeType,
@@ -135,6 +187,21 @@ impl Cats {
         enc.decode_series(ser, bt, local_cats)
     }
 
+    /// Like `decode_of_type`, with `prefix` and `suffix` around every value.
+    pub fn decode_of_type_wrapped(
+        &self,
+        ser: &Series,
+        bt: &BaseRDFNodeType,
+        local_cats: Option<LockedCats>,
+        prefix: &str,
+        suffix: &str,
+    ) -> PolarsResult<Series> {
+        let ct = CatType::from_base_rdf_node_type(bt);
+        let dummy_enc = CatEncs::new_empty(None, bt);
+        let enc = self.cat_map.get(&ct).unwrap_or(&dummy_enc);
+        enc.decode_series_wrapped(ser, bt, local_cats, prefix, suffix)
+    }
+
     pub fn get_enc(&self, t: &BaseRDFNodeType) -> Option<&CatEncs> {
         let ct = CatType::from_base_rdf_node_type(t);
         self.cat_map.get(&ct)
@@ -239,6 +306,18 @@ pub fn decode_expr(
     local_cats: Option<LockedCats>,
     global_cats: LockedCats,
 ) -> Expr {
+    decode_expr_wrapped(expr, base_rdf_node_type, local_cats, global_cats, "", "")
+}
+
+/// Decodes codes, putting `prefix` and `suffix` around every value in the same pass.
+pub fn decode_expr_wrapped(
+    expr: Expr,
+    base_rdf_node_type: BaseRDFNodeType,
+    local_cats: Option<LockedCats>,
+    global_cats: LockedCats,
+    prefix: &'static str,
+    suffix: &'static str,
+) -> Expr {
     expr.map(
         move |x| {
             let original_name = x.name().to_string();
@@ -246,18 +325,22 @@ pub fn decode_expr(
             let len = x.len();
             let mut s = match x {
                 Column::Series(x) => {
-                    let ser = global_cats.decode_of_type(
+                    let ser = global_cats.decode_of_type_wrapped(
                         x.as_series(),
                         &base_rdf_node_type,
                         local_cats.as_ref().map(|x| x.clone()),
+                        prefix,
+                        suffix,
                     )?;
                     ser.into_column()
                 }
                 Column::Scalar(s) => {
-                    let s = global_cats.decode_of_type(
+                    let s = global_cats.decode_of_type_wrapped(
                         &s.as_single_value_series(),
                         &base_rdf_node_type,
                         local_cats.as_ref().map(|x| x.clone()),
+                        prefix,
+                        suffix,
                     )?;
                     Column::Scalar(ScalarColumn::from_single_value_series(s, len))
                 }
@@ -267,4 +350,56 @@ pub fn decode_expr(
         },
         |_, f| Ok(Field::new(f.name().clone(), DataType::String)),
     )
+}
+
+const DECODE_ROWS_PER_TASK: usize = 16_384;
+
+/// Decodes a UInt32 series with in-memory dictionaries (the first that has a code wins), writing
+/// each value once into a string array, in parallel blocks of rows.
+fn decode_codes(
+    ser: &Series,
+    maps: &[&CatMapsInMemory],
+    prefix: &str,
+    suffix: &str,
+) -> PolarsResult<Series> {
+    let ser = ser.rechunk();
+    let ch = ser.u32()?;
+    let n = ch.len();
+    let empty = PrimitiveArray::<u32>::from_vec(vec![]);
+    let arr = ch.downcast_iter().next().unwrap_or(&empty);
+    let wrap = !prefix.is_empty() || !suffix.is_empty();
+    let chunks: Vec<Utf8ViewArray> = (0..n.div_ceil(DECODE_ROWS_PER_TASK))
+        .into_par_iter()
+        .map(|t| {
+            let from = t * DECODE_ROWS_PER_TASK;
+            let to = (from + DECODE_ROWS_PER_TASK).min(n);
+            let mut b = MutableBinaryViewArray::<str>::with_capacity(to - from);
+            let mut scratch = String::new();
+            for i in from..to {
+                if !arr.is_valid(i) {
+                    b.push_null();
+                    continue;
+                }
+                let u = arr.value(i);
+                match maps.iter().find_map(|m| m.decode_parts(u)) {
+                    None => b.push_null(),
+                    Some((p, q)) if p.is_empty() && !wrap => b.push_value(q),
+                    Some((p, q)) => {
+                        scratch.clear();
+                        scratch.push_str(prefix);
+                        scratch.push_str(p);
+                        scratch.push_str(q);
+                        scratch.push_str(suffix);
+                        b.push_value(scratch.as_str());
+                    }
+                }
+            }
+            b.freeze()
+        })
+        .collect();
+    let name = ser.name().clone();
+    if chunks.is_empty() {
+        return Ok(Series::new_empty(name, &DataType::String));
+    }
+    Ok(StringChunked::from_chunk_iter(name, chunks).into_series())
 }

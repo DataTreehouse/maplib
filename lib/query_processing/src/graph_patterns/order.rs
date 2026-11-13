@@ -5,12 +5,12 @@ use polars::frame::DataFrame;
 use polars::prelude::{
     as_struct, col, Expr, IntoColumn, IntoLazy, PlSmallStr, SortMultipleOptions,
 };
+use polars::prelude::{IntoSeries, UInt32Chunked};
 use polars::series::Series;
-use representation::cats::LockedCats;
+use representation::cats::{distinct_codes, extend_codes, LockedCats, RankMap};
 use representation::solution_mapping::{BaseCatState, SolutionMappings};
 use representation::{BaseRDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD};
 use std::cmp::Ordering;
-use std::collections::{HashMap, HashSet};
 
 pub fn order_by(
     mut solution_mappings: SolutionMappings,
@@ -130,36 +130,29 @@ fn make_ordering_expr(e: Expr, cats: LockedCats, t: BaseRDFNodeType, s: BaseCatS
                 } else {
                     u32_ser_vec.push(x.as_materialized_series_maintain_scalar());
                 }
-                let mut u32s = HashSet::new();
+                let mut codes = Vec::new();
                 for u32_ser in u32_ser_vec {
-                    u32s.extend(
-                        u32_ser
-                            .u32()?
-                            .iter()
-                            .filter(|x| x.is_some())
-                            .map(|x| x.unwrap()),
-                    )
+                    extend_codes(&mut codes, &u32_ser.into_column());
                 }
+                let codes = distinct_codes(codes);
 
                 let t = t.clone();
-                let local = local.clone();
-                let local_cats_local_rank_map = if let Some(local) = local {
-                    let rank = local.read().unwrap().local_rank_map(&u32s, &t);
-                    Some(rank)
-                } else {
-                    None
+                // Local codes take precedence over global ones, as they are re-encodings.
+                let local_ranks = local
+                    .as_ref()
+                    .map(|local| local.read().unwrap().global_ranks(&codes, &t));
+                let global_ranks = cats.read().unwrap().global_ranks(&codes, &t);
+                let ranks = Ranks {
+                    local: local_ranks,
+                    global: global_ranks,
                 };
-                let mut global_cats_local_rank_map = cats.read().unwrap().local_rank_map(&u32s, &t);
-                if let Some(local_rank_map) = local_cats_local_rank_map {
-                    global_cats_local_rank_map.extend(local_rank_map);
-                }
                 let mut ser = if t.is_lang_string() {
                     let value_ser = x.struct_()?.field_by_name(LANG_STRING_VALUE_FIELD)?;
                     let lang_ser = x.struct_()?.field_by_name(LANG_STRING_LANG_FIELD)?;
 
-                    let mut value_ser_rank = map_to_rank(&value_ser, &global_cats_local_rank_map)?;
+                    let mut value_ser_rank = map_to_rank(&value_ser, &ranks)?;
                     value_ser_rank.rename(PlSmallStr::from_str(LANG_STRING_VALUE_FIELD));
-                    let mut lang_ser_rank = map_to_rank(&lang_ser, &global_cats_local_rank_map)?;
+                    let mut lang_ser_rank = map_to_rank(&lang_ser, &ranks)?;
                     lang_ser_rank.rename(PlSmallStr::from_str(LANG_STRING_LANG_FIELD));
                     let mut df = DataFrame::new(
                         x.len(),
@@ -179,7 +172,7 @@ fn make_ordering_expr(e: Expr, cats: LockedCats, t: BaseRDFNodeType, s: BaseCatS
                     let column = df.drop_in_place(original_name.as_str())?;
                     column.as_materialized_series().clone()
                 } else {
-                    map_to_rank(x.as_materialized_series(), &global_cats_local_rank_map)?
+                    map_to_rank(x.as_materialized_series(), &ranks)?
                 };
                 ser.rename(original_name);
                 Ok(ser.into_column())
@@ -191,13 +184,29 @@ fn make_ordering_expr(e: Expr, cats: LockedCats, t: BaseRDFNodeType, s: BaseCatS
     }
 }
 
-fn map_to_rank(series: &Series, global_rank_map: &HashMap<u32, u32>) -> PolarsResult<Series> {
-    let ser = Series::from_iter(series.u32()?.iter().map(|x| {
-        if let Some(x) = x {
-            global_rank_map.get(&x).cloned()
-        } else {
-            None
+struct Ranks {
+    local: Option<RankMap>,
+    global: RankMap,
+}
+
+impl Ranks {
+    #[inline]
+    fn get(&self, u: u32) -> Option<u32> {
+        if let Some(local) = &self.local {
+            if let Some(r) = local.get(u) {
+                return Some(r);
+            }
         }
-    }));
-    Ok(ser)
+        self.global.get(u)
+    }
+}
+
+fn map_to_rank(series: &Series, ranks: &Ranks) -> PolarsResult<Series> {
+    let ch = series.u32()?;
+    let out: UInt32Chunked = if ch.null_count() == 0 {
+        ch.into_no_null_iter().map(|u| ranks.get(u)).collect()
+    } else {
+        ch.iter().map(|u| u.and_then(|u| ranks.get(u))).collect()
+    };
+    Ok(out.into_series())
 }

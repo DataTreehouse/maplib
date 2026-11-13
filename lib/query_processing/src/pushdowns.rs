@@ -12,9 +12,15 @@ use spargebra::algebra::{Expression, Function, GraphPattern};
 use spargebra::term::{GroundTerm, NamedNodePattern, TermPattern, TriplePattern};
 use std::collections::{HashMap, HashSet};
 
-pub const CHECK_SMALL_HEIGHT: usize = 10_000;
-
+/// Solution mappings estimated to have at most this many rows are collected to check whether
+/// their values can be pushed down.
+pub const CHECK_SMALL_HEIGHT: usize = 100_000;
+/// The values of every variable of solution mappings with at most this many rows are pushed down.
 pub const SMALL_HEIGHT: usize = 500;
+/// The values of the variables of the pattern being evaluated are pushed down from solution
+/// mappings with at most this many rows. Converting values to terms costs time proportional to
+/// the number of distinct values, which is small compared with scanning large triple tables.
+pub const MEDIUM_HEIGHT: usize = 100_000;
 pub const OWL_REAL: &str = "http://www.w3.org/2002/07/owl#real";
 
 //Todos: pushdowns from joins..
@@ -48,47 +54,70 @@ impl Pushdowns {
 }
 
 impl Pushdowns {
+    /// Pushes down the values of the variables of `sm`. When `sm` has more than [SMALL_HEIGHT]
+    /// rows, only the values of the variables in `focus` (those of the pattern about to be
+    /// evaluated) are pushed down.
     pub fn add_from_solution_mappings(
         &mut self,
         sm: SolutionMappings,
         global_cats: LockedCats,
+        focus: &[&str],
     ) -> SolutionMappings {
-        let mut should_add_from_solution_mappings = false;
-        for v in sm.rdf_node_types.keys() {
-            if let Some(vv) = self.variables_values.get(v) {
-                if vv.len() > sm.height_estimate {
-                    should_add_from_solution_mappings = true;
-                    break;
-                }
-            } else {
-                should_add_from_solution_mappings = true;
-                break;
-            }
+        if sm.height_estimate > CHECK_SMALL_HEIGHT {
+            return sm;
         }
-        if should_add_from_solution_mappings && sm.height_estimate <= CHECK_SMALL_HEIGHT {
-            let eager_sm = sm.as_eager();
-            if eager_sm.mappings.height() <= SMALL_HEIGHT {
-                let columns = eager_sm.mappings.columns();
-                let pushdowns: HashMap<_, _> = columns
-                    .into_par_iter()
-                    .map(|x| {
-                        let name = x.name().as_str();
-                        let maybe_terms = column_as_terms(
-                            x,
-                            eager_sm.rdf_node_types.get(name).unwrap(),
-                            global_cats.clone(),
-                            false,
-                        );
-                        let terms: HashSet<_> = maybe_terms.into_iter().flatten().collect();
-                        (name.to_string(), terms)
-                    })
-                    .collect();
-                self.variables_values = conjunction(&mut self.variables_values, pushdowns);
-            }
-            eager_sm.as_lazy()
+        // Variables with more known values than rows of `sm` would be constrained further.
+        let could_constrain = |v: &str, height: usize| match self.variables_values.get(v) {
+            Some(vv) => vv.len() > height,
+            None => true,
+        };
+        if !sm
+            .rdf_node_types
+            .keys()
+            .any(|v| could_constrain(v, sm.height_estimate))
+        {
+            return sm;
+        }
+        let eager_sm = sm.as_eager();
+        let height = eager_sm.mappings.height();
+        let columns: Vec<_> = if height <= SMALL_HEIGHT {
+            eager_sm.mappings.columns().iter().collect()
+        } else if height <= MEDIUM_HEIGHT {
+            eager_sm
+                .mappings
+                .columns()
+                .iter()
+                .filter(|c| {
+                    let name = c.name().as_str();
+                    focus.contains(&name) && could_constrain(name, height)
+                })
+                .collect()
         } else {
-            sm
+            vec![]
+        };
+        if !columns.is_empty() {
+            let pushdowns: HashMap<_, _> = columns
+                .into_par_iter()
+                .map(|x| {
+                    let name = x.name().as_str();
+                    let unique = if height > SMALL_HEIGHT {
+                        x.unique().unwrap()
+                    } else {
+                        x.clone()
+                    };
+                    let maybe_terms = column_as_terms(
+                        &unique,
+                        eager_sm.rdf_node_types.get(name).unwrap(),
+                        global_cats.clone(),
+                        false,
+                    );
+                    let terms: HashSet<_> = maybe_terms.into_iter().flatten().collect();
+                    (name.to_string(), terms)
+                })
+                .collect();
+            self.variables_values = conjunction(&mut self.variables_values, pushdowns);
         }
+        eager_sm.as_lazy()
     }
 
     pub fn add_patterns_pushdowns(&mut self, patterns: &Vec<TriplePattern>) {

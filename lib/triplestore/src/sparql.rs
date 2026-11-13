@@ -34,8 +34,8 @@ use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use representation::{RDFNodeState, OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use spargebra::algebra::{GraphPattern, GraphTarget, QueryDataset};
 use spargebra::term::{
-    GraphName, GraphNamePattern, GroundTerm, GroundTermPattern, NamedNodePattern, QuadPattern,
-    TermPattern,
+    GraphName, GraphNamePattern, GroundQuadPattern, GroundTerm, GroundTermPattern,
+    NamedNodePattern, QuadPattern, TermPattern,
 };
 use spargebra::{GraphUpdateOperation, Query, Update};
 use std::collections::{HashMap, HashSet};
@@ -373,6 +373,15 @@ impl Triplestore {
                     using,
                     pattern,
                 } => {
+                    if !debug_no_results && insert.is_empty() && using.is_none() {
+                        if let Some(n) =
+                            self.delete_whole_tables(delete, pattern, query_settings, graph)
+                        {
+                            self.n_triples_deleted += n;
+                            self.maybe_garbage_collect()?;
+                            continue;
+                        }
+                    }
                     let mut variables = HashSet::new();
                     for d in delete {
                         if let GroundTermPattern::Variable(v) = &d.subject {
@@ -509,6 +518,74 @@ impl Triplestore {
         };
         let res = UpdateResult { debug };
         Ok(res)
+    }
+}
+
+impl Triplestore {
+    /// Fast path for deleting all triples of a graph, or all triples with a given predicate:
+    /// `DELETE WHERE { ?s ?p ?o }` and `DELETE WHERE { ?s <p> ?o }` (or the same as
+    /// `DELETE { .. } WHERE { .. }` without INSERT or USING). When the pattern is matched in the
+    /// graph that the triples are deleted from, every triple of the matching tables is deleted,
+    /// so the tables are dropped without evaluating the pattern. Returns the number of deleted
+    /// triples, or None if the fast path does not apply.
+    fn delete_whole_tables(
+        &mut self,
+        delete: &[GroundQuadPattern],
+        pattern: &GraphPattern,
+        query_settings: &QuerySettings,
+        graph: Option<&NamedGraph>,
+    ) -> Option<usize> {
+        let [d] = delete else {
+            return None;
+        };
+        let GraphPattern::Bgp { patterns } = pattern else {
+            return None;
+        };
+        let [tp] = patterns.as_slice() else {
+            return None;
+        };
+        if !matches!(d.graph_name, GraphNamePattern::DefaultGraph) || d.predicate != tp.predicate {
+            return None;
+        }
+        let (
+            GroundTermPattern::Variable(s),
+            GroundTermPattern::Variable(o),
+            TermPattern::Variable(ts),
+            TermPattern::Variable(to),
+        ) = (&d.subject, &d.object, &tp.subject, &tp.object)
+        else {
+            return None;
+        };
+        if s != ts || o != to || s == o {
+            return None;
+        }
+        if let NamedNodePattern::Variable(p) = &d.predicate {
+            if p == s || p == o {
+                return None;
+            }
+        }
+        // The triples are deleted from the default graph of the update, so the pattern must be
+        // matched in exactly that graph.
+        let target = NamedGraph::DefaultGraph;
+        match self.query_graph(&None, graph, query_settings) {
+            QueryGraph::NamedGraph(g) if g == target => {}
+            _ => return None,
+        }
+        let Some(tables) = self.graph_triples_map.get_mut(&target) else {
+            return Some(0);
+        };
+        let height = |m: &HashMap<_, crate::storage::Triples>| -> usize {
+            m.values().map(|t| t.get_height()).sum()
+        };
+        let n = match &d.predicate {
+            NamedNodePattern::Variable(_) => {
+                let n = tables.values().map(height).sum();
+                tables.clear();
+                n
+            }
+            NamedNodePattern::NamedNode(p) => tables.remove(p).map(|m| height(&m)).unwrap_or(0),
+        };
+        Some(n)
     }
 }
 

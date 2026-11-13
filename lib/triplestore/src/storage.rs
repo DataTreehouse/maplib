@@ -8,18 +8,19 @@ use file_io::{scan_parquet, FileIOError};
 use oxrdf::vocab::xsd;
 use oxrdf::{NamedNode, NamedOrBlankNode, Term};
 use polars::prelude::{
-    as_struct, col, concat, IdxSize, IntoLazy, LazyFrame, PlSmallStr, UnionArgs,
+    as_struct, col, concat, IdxCa, IdxSize, IntoLazy, LazyFrame, PlSmallStr, UnionArgs,
 };
 use polars::prelude::{ParquetCompression, ParquetWriter};
 use polars_core::frame::DataFrame;
+use polars_core::prelude::DataType;
 use polars_core::prelude::{
     IntoColumn, Series, SortMultipleOptions, StringChunked, StringChunkedBuilder, UInt32Chunked,
     UInt64Chunked,
 };
 use polars_core::utils::Container;
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use representation::cats::{
-    CatEncs, Cats, LockedCats, OBJECT_RANK_COL_NAME, SUBJECT_RANK_COL_NAME,
+    distinct_codes, extend_codes, CatEncs, Cats, LockedCats, RankMap, OBJECT_RANK_COL_NAME,
+    SUBJECT_RANK_COL_NAME,
 };
 use representation::{
     BaseRDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD, OBJECT_COL_NAME,
@@ -139,10 +140,10 @@ impl Triples {
         df: &DataFrame,
         cats: &Cats,
     ) -> Result<Option<DataFrame>, TriplestoreError> {
-        if self.subject_object_index.is_none() && self.triples_folder.is_some() {
-            return Ok(self
-                .subject_lookup_index(df, cats)?
-                .maybe_insert_deduplicate(df, false));
+        if self.subject_object_index.is_none() {
+            if let Some(mut index) = self.temporary_lookup_index(df, cats)? {
+                return Ok(index.maybe_insert_deduplicate(df, false));
+            }
         }
         self.ensure_subject_object_index()?;
         let maybe_df = self
@@ -164,7 +165,7 @@ impl Triples {
     }
 
     pub fn compact(self, cats: &Cats) -> Result<StoredTriples, TriplestoreError> {
-        let t_u32s = self.get_u32s()?;
+        let t_u32s = self.get_codes()?;
 
         let mut subject_sorts = Vec::new();
         for seg in &self.segments {
@@ -197,7 +198,7 @@ impl Triples {
             if self.object_type == t {
                 use_cols.push(OBJECT_COL_NAME);
             };
-            let rank_map = Arc::new(cats.rank_map(&u32s, &t));
+            let rank_map = Arc::new(cats.global_ranks(&u32s, &t));
 
             for use_col in use_cols {
                 if t.is_lang_string() {
@@ -210,13 +211,8 @@ impl Triples {
                                 .field_by_name(LANG_STRING_VALUE_FIELD)
                                 .map(
                                     move |x| {
-                                        let rank_map = rank_map_cloned1.clone();
-                                        let u32s = UInt32Chunked::from_iter(
-                                            x.u32()?
-                                                .iter()
-                                                .map(|x| rank_map.get(&x.unwrap()).copied()),
-                                        );
-                                        Ok(u32s.into_column())
+                                        Ok(codes_to_ranks(x.u32()?, &rank_map_cloned1)
+                                            .into_column())
                                     },
                                     |_, y| Ok(y.clone()),
                                 )
@@ -226,13 +222,8 @@ impl Triples {
                                 .field_by_name(LANG_STRING_LANG_FIELD)
                                 .map(
                                     move |x| {
-                                        let rank_map = rank_map_cloned2.clone();
-                                        let u32s = UInt32Chunked::from_iter(
-                                            x.u32()?
-                                                .iter()
-                                                .map(|x| rank_map.get(&x.unwrap()).copied()),
-                                        );
-                                        Ok(u32s.into_column())
+                                        Ok(codes_to_ranks(x.u32()?, &rank_map_cloned2)
+                                            .into_column())
                                     },
                                     |_, y| Ok(y.clone()),
                                 )
@@ -246,11 +237,7 @@ impl Triples {
                         col(use_col)
                             .map(
                                 move |x| {
-                                    let rank_map = rank_map_cloned.clone();
-                                    let u32s = UInt32Chunked::from_iter(
-                                        x.u32()?.iter().map(|x| rank_map.get(&x.unwrap()).copied()),
-                                    );
-                                    Ok(u32s.into_column())
+                                    Ok(codes_to_ranks(x.u32()?, &rank_map_cloned).into_column())
                                 },
                                 |_, y| Ok(y.clone()),
                             )
@@ -364,6 +351,45 @@ impl Triples {
 }
 
 impl Triples {
+    /// The distinct (sorted) codes of each categorical type used by the triples.
+    pub fn get_codes(&self) -> Result<Vec<(BaseRDFNodeType, Vec<u32>)>, TriplestoreError> {
+        let mut type_codes: HashMap<BaseRDFNodeType, Vec<u32>> = HashMap::new();
+        let s_cat = self.subject_type.stored_cat();
+        let o_cat = self.object_type.stored_cat();
+        if !s_cat && !o_cat {
+            return Ok(vec![]);
+        }
+        if let Some(lfs) = self.get_lazy_frame_slices()? {
+            for lf in lfs {
+                let df = lf.collect().map_err(TriplestoreError::LazyLoadError)?;
+                if s_cat {
+                    extend_codes(
+                        type_codes.entry(self.subject_type.clone()).or_default(),
+                        df.column(SUBJECT_COL_NAME).unwrap(),
+                    );
+                }
+                if o_cat {
+                    let v = type_codes.entry(self.object_type.clone()).or_default();
+                    let o = df.column(OBJECT_COL_NAME).unwrap();
+                    if self.object_type.is_lang_string() {
+                        let st = o.struct_().unwrap();
+                        for f in [LANG_STRING_VALUE_FIELD, LANG_STRING_LANG_FIELD] {
+                            extend_codes(v, &st.field_by_name(f).unwrap().into_column());
+                        }
+                    } else {
+                        extend_codes(v, o);
+                    }
+                }
+            }
+        }
+        Ok(type_codes
+            .into_iter()
+            .map(|(t, v)| (t, distinct_codes(v)))
+            .collect())
+    }
+}
+
+impl Triples {
     pub fn new(
         mut df: DataFrame,
         subject_type: BaseRDFNodeType,
@@ -377,9 +403,12 @@ impl Triples {
             can_and_should_index_object(&object_type, predicate_iri, indexing);
         let height = df.height();
         let mut segments = vec![];
-        let mut subject_object_index = SubjectObjectIndex::new(&subject_type, &object_type);
-        let maybe_df = subject_object_index.maybe_insert_deduplicate(&df, true);
-        df = maybe_df.unwrap();
+        // The triples are already sorted and deduplicated (`add_rank_sort_triples`). The
+        // deduplication index, which holds every triple of the table, is only built when more
+        // triples are added (`ensure_subject_object_index`), so tables that are only read and
+        // queried never hold it.
+        df.rechunk_mut();
+        let df = without_all_valid_validity(df);
         let cats = cats.read().unwrap();
 
         let segment = TriplesSegment::new(
@@ -399,7 +428,7 @@ impl Triples {
             subject_type,
             object_type,
             object_indexing_enabled,
-            subject_object_index: Some(subject_object_index),
+            subject_object_index: None,
             triples_folder: triples_folder.map(|x| x.to_owned()),
         })
     }
@@ -415,14 +444,8 @@ impl Triples {
         df.rechunk_mut();
         let height = df.height();
         let mut segments = vec![];
-        // In disk storage mode the deduplication index is only built when triples are added.
-        let subject_object_index = if triples_folder.is_none() {
-            let mut subject_object_index = SubjectObjectIndex::new(&subject_type, &object_type);
-            subject_object_index.insert(&df);
-            Some(subject_object_index)
-        } else {
-            None
-        };
+        // The deduplication index is only built when triples are added.
+        let subject_object_index = None;
         let cats = cats.read().unwrap();
         let segment = TriplesSegment::new(
             df,
@@ -742,7 +765,7 @@ impl TriplesSegment {
                 .subject_sort
                 .as_ref()
                 .unwrap()
-                .get_lazy_frames(Some(offsets));
+                .get_lazy_frames(coalesce_lookup_ranges(offsets, self.height));
         } else if let Some(objects) = objects {
             if let Some(sorted) = &self.object_sort {
                 let allow_pushdown = if let BaseRDFNodeType::Literal(t, _) = object_type {
@@ -758,7 +781,7 @@ impl TriplesSegment {
                         &self.object_sparse_index.as_ref().unwrap().map,
                         self.height,
                     );
-                    Some(offsets)
+                    coalesce_lookup_ranges(offsets, self.height)
                 } else {
                     None
                 };
@@ -978,23 +1001,38 @@ impl StoredTriples {
         &self,
         offsets: Option<Vec<(usize, usize)>>,
     ) -> Result<Vec<(LazyFrame, usize)>, TriplestoreError> {
-        let (lf, height) = self.get_lazy_frame_and_height()?;
-        let out = if let Some(offsets) = offsets {
-            let output: Result<Vec<_>, TriplestoreError> = offsets
-                .into_par_iter()
-                .map(|(offset, len)| {
-                    let lf = lf
-                        .clone()
-                        .select([col(SUBJECT_COL_NAME), col(OBJECT_COL_NAME)])
-                        .slice(offset as i64, len as IdxSize);
-                    Ok((lf, len))
-                })
-                .collect();
-            output?
-        } else {
-            vec![(lf, height)]
+        let Some(offsets) = offsets else {
+            return Ok(vec![self.get_lazy_frame_and_height()?]);
         };
-        Ok(out)
+        if let StoredTriples::TriplesInMemory(mem) = self {
+            // Gather the rows of all ranges at once, rather than slicing and concatenating many
+            // lazy frames.
+            let df = mem.df.as_ref().unwrap();
+            let rows: usize = offsets.iter().map(|(_, len)| len).sum();
+            let out = if offsets.len() == 1 {
+                let (offset, len) = offsets[0];
+                df.slice(offset as i64, len)
+            } else {
+                let mut idx: Vec<IdxSize> = Vec::with_capacity(rows);
+                for (offset, len) in &offsets {
+                    idx.extend((*offset as IdxSize)..((offset + len) as IdxSize));
+                }
+                let idx = IdxCa::from_vec(PlSmallStr::EMPTY, idx);
+                df.take(&idx).unwrap()
+            };
+            return Ok(vec![(out.lazy(), rows)]);
+        }
+        let (lf, _) = self.get_lazy_frame_and_height()?;
+        Ok(offsets
+            .into_iter()
+            .map(|(offset, len)| {
+                let lf = lf
+                    .clone()
+                    .select([col(SUBJECT_COL_NAME), col(OBJECT_COL_NAME)])
+                    .slice(offset as i64, len as IdxSize);
+                (lf, len)
+            })
+            .collect())
     }
 }
 
@@ -1078,40 +1116,6 @@ impl Drop for TriplesOnDisk {
     }
 }
 
-fn get_lookup_interval(
-    trg: &Arc<String>,
-    sparse_map: &BTreeMap<Arc<String>, usize>,
-    height: usize,
-) -> (usize, usize) {
-    let mut from = 0;
-    //Todo: remove this clone..
-    let mut range_backwards = sparse_map.range(..trg.clone());
-    while let Some((s, prev)) = range_backwards.next_back() {
-        if s != trg {
-            from = cmp::min(*prev, height);
-            break;
-        }
-    }
-    //Todo: remove this clone..
-    let range_forwards = sparse_map.range(trg.clone()..);
-    let mut to = height - 1;
-    for (s, next) in range_forwards {
-        if *s != *trg {
-            to = *next;
-            break;
-        }
-    }
-    // We correct here since ranges are exclusive in Polars slice
-    let exclusive_to = to + 1;
-    if from > exclusive_to {
-        panic!(
-            "Out of order should never happen: trg {}, map {:?}, from {}, to {}",
-            trg, sparse_map, from, to
-        );
-    }
-    (from, exclusive_to)
-}
-
 fn get_subject_strings<'a>(subjects: &[&'a NamedOrBlankNode]) -> Vec<&'a str> {
     let mut strings: Vec<_> = subjects
         .iter()
@@ -1139,37 +1143,97 @@ fn get_object_strings<'a>(objects: &[&'a Term]) -> Vec<&'a str> {
     strings
 }
 
+/// The row ranges `(offset, len)` that may hold the targets, from the sparse index of a sorted
+/// column of `height` rows. Overlapping ranges are merged.
+///
+/// For a target, the range starts at the indexed row of the last key before the target (or at
+/// the start), and ends at the indexed row of the first key after the target (or at the end),
+/// inclusive. The targets MUST be sorted. The targets and the keys of the index are walked
+/// together, so the cost is linear in the number of targets plus the size of the index.
 fn get_lookup_offsets(
     trgs: &[&str],
     sparse_map: &BTreeMap<Arc<String>, usize>,
     height: usize,
 ) -> Vec<(usize, usize)> {
-    //Trgs MUST be sorted
-    let offsets = trgs
-        .iter()
-        .map(|trg| get_lookup_interval(&Arc::new(trg.to_string()), sparse_map, height));
-
-    let mut out_offsets = vec![];
-    let mut last_offset: Option<(usize, usize)> = None;
-    for (from, to) in offsets {
-        if let Some((last_from, last_to)) = last_offset {
-            if from <= last_to {
-                last_offset = Some((last_from, to));
+    let mut out_offsets: Vec<(usize, usize)> = vec![];
+    let mut keys = sparse_map.iter().peekable();
+    // The offset of the last key before the current target.
+    let mut before: Option<usize> = None;
+    for trg in trgs {
+        while let Some((k, offset)) = keys.peek() {
+            if k.as_str() < *trg {
+                before = Some(**offset);
+                keys.next();
             } else {
-                out_offsets.push((last_from, last_to));
-                last_offset = Some((from, to));
+                break;
             }
-        } else {
-            last_offset = Some((from, to));
         }
-    }
-    if let Some(last_offset) = last_offset {
-        out_offsets.push(last_offset);
+        let from = before.map(|x| cmp::min(x, height)).unwrap_or(0);
+        // The first key after the target (skipping a key equal to the target).
+        let mut after = keys.clone();
+        let to = loop {
+            match after.next() {
+                Some((k, _)) if k.as_str() == *trg => continue,
+                Some((_, offset)) => break *offset,
+                None => break height - 1,
+            }
+        };
+        // Ranges are exclusive in Polars slice.
+        let exclusive_to = to + 1;
+        assert!(from <= exclusive_to, "Out of order should never happen");
+        if let Some(last) = out_offsets.last_mut() {
+            if from <= last.1 {
+                last.1 = last.1.max(exclusive_to);
+                continue;
+            }
+        }
+        out_offsets.push((from, exclusive_to));
     }
     out_offsets
         .into_iter()
         .map(|(from, to)| (from, to - from))
         .collect()
+}
+
+/// Reading more than this many separate ranges of a table is slower than reading ranges with
+/// small gaps between them merged.
+const MAX_LOOKUP_RANGES: usize = 256;
+
+/// Prepares lookup ranges for reading: returns None if the ranges cover more than half of the
+/// `height` rows (reading everything is then cheaper), and otherwise merges the ranges separated
+/// by the smallest gaps until there are at most [MAX_LOOKUP_RANGES].
+fn coalesce_lookup_ranges(
+    mut offsets: Vec<(usize, usize)>,
+    height: usize,
+) -> Option<Vec<(usize, usize)>> {
+    let rows: usize = offsets.iter().map(|(_, len)| len).sum();
+    if rows * 2 > height {
+        return None;
+    }
+    if offsets.len() > MAX_LOOKUP_RANGES {
+        let mut gaps: Vec<usize> = offsets
+            .windows(2)
+            .map(|w| w[1].0 - (w[0].0 + w[0].1))
+            .collect();
+        let k = offsets.len() - MAX_LOOKUP_RANGES;
+        let (_, max_merged_gap, _) = gaps.select_nth_unstable(k - 1);
+        let max_merged_gap = *max_merged_gap;
+        let mut merged: Vec<(usize, usize)> = Vec::with_capacity(MAX_LOOKUP_RANGES + 1);
+        let mut n_merged = 0;
+        for (offset, len) in offsets.drain(..) {
+            if let Some(last) = merged.last_mut() {
+                let gap = offset - (last.0 + last.1);
+                if gap <= max_merged_gap && n_merged < k {
+                    last.1 = offset + len - last.0;
+                    n_merged += 1;
+                    continue;
+                }
+            }
+            merged.push((offset, len));
+        }
+        offsets = merged;
+    }
+    Some(offsets)
 }
 
 fn get_u32_at_offset(u32_chunked: &UInt32Chunked, offset: usize) -> Option<u32> {
@@ -1383,16 +1447,48 @@ const SO_RANK_KEY_COL_NAME: &str = "so_rank_key";
 const LANG_VALUE_RANK_COL_NAME: &str = "lang_value_rank";
 const LANG_LANG_RANK_COL_NAME: &str = "lang_lang_rank";
 
-fn map_ranks(
-    c: &polars_core::prelude::Column,
-    rank_map: &HashMap<u32, u32>,
-    name: &str,
-) -> UInt32Chunked {
+fn map_ranks(c: &polars_core::prelude::Column, rank_map: &RankMap, name: &str) -> UInt32Chunked {
     let ranks: Vec<u32> = c
         .u32()
         .unwrap()
         .into_no_null_iter()
-        .map(|u| *rank_map.get(&u).unwrap())
+        .map(|u| rank_map.get(u).unwrap())
         .collect();
     UInt32Chunked::from_vec(name.into(), ranks)
+}
+
+/// The rank of every code, null where the code is null or has no rank.
+pub(crate) fn codes_to_ranks(ch: &UInt32Chunked, rank_map: &RankMap) -> UInt32Chunked {
+    let mut out: UInt32Chunked = if ch.null_count() == 0 {
+        ch.into_no_null_iter().map(|u| rank_map.get(u)).collect()
+    } else {
+        ch.iter().map(|u| u.and_then(|u| rank_map.get(u))).collect()
+    };
+    out.rename(ch.name().clone());
+    out
+}
+
+/// Drops the validity bitmaps of columns without nulls (e.g. codes built from iterators of
+/// options), so that the stored triples take the null-free fast paths of Polars kernels.
+fn without_all_valid_validity(df: DataFrame) -> DataFrame {
+    let height = df.height();
+    let columns: Vec<_> = df
+        .columns()
+        .iter()
+        .map(|c| {
+            let s = c.as_materialized_series();
+            let has_validity = s.chunks().iter().any(|a| a.validity().is_some());
+            if s.null_count() == 0 && has_validity && !matches!(s.dtype(), DataType::Struct(_)) {
+                let chunks = s.chunks().iter().map(|a| a.with_validity(None)).collect();
+                // Safety: the chunks have the dtype of the series, only without validity.
+                unsafe {
+                    Series::from_chunks_and_dtype_unchecked(s.name().clone(), chunks, s.dtype())
+                }
+                .into_column()
+            } else {
+                c.clone()
+            }
+        })
+        .collect();
+    DataFrame::new(height, columns).unwrap()
 }

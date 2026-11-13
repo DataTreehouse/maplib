@@ -44,8 +44,83 @@ Serialization, compared with the build before these changes on CIM N-Triples (2.
 - Dictionaries are built into DuckDB (hybrid and disk storage, and `raw_db`) by loading the rows first and building the unique indexes afterwards, instead of inserting into an indexed table, and the dictionaries are deserialized concurrently with the triple tables.
 - With hybrid and disk storage, parquet dictionaries are built into DuckDB databases (including their unique indexes) on deserialization, while `raw_db` dictionaries are used in place, so use `raw_db=True` when a serialized model is loaded into hybrid or disk storage often.
 
+Faster reading, ORDER BY, counting and deleting (memory storage):
+- Dictionary ranks (used to sort triples when they are added or compacted, and for ORDER BY) are looked up in arrays indexed by the dictionary code instead of hash maps, and the distinct codes of a batch are found with a bitset instead of a hash set. The deduplication index of triple tables uses a faster hash function.
+- The deduplication index of a triple table is built when triples are first added to an existing table, not when the table is created, so tables that are only read and queried never hold it.
+- Triple tables of different predicates and types are built in parallel when triples are added.
+- New dictionary entries are merged into the dictionary in one pass when they are many compared with its size, instead of one at a time.
+- `COUNT(*)` (or COUNT of one of the variables) over `?s ?p ?o` in a single graph is answered from the sizes of the triple tables.
+- `DELETE WHERE { ?s ?p ?o }` and `DELETE WHERE { ?s <p> ?o }` (also as `DELETE { .. } WHERE { .. }` without INSERT or USING), matched in the graph they delete from, drop the triple tables without evaluating the pattern.
+- Garbage collection of the dictionary after large deletes marks the used codes in a bitset instead of building range sets per table segment.
+
+| Category | Workload | Before | After | Change |
+|---|---|---|---|---|
+| Reading | N-Triples, 20 M triples (4 predicates, 2 M subjects) | 19.6 / 20.1 s | 10.6 / 10.9 s | **-46%** |
+| Reading | N-Triples, 8 M triples (400 predicates) | 4.50 s | 4.38 s | -3% |
+| Reading | RDF/XML, CIM 2.2 M triples | 1.71 / 1.90 s | 1.23 / 1.28 s | **-28% / -33%** |
+| SPARQL | ORDER BY over 5 M IRIs, LIMIT 10 | 0.29 s | 0.077 s | **-74%** |
+| SPARQL | ORDER BY over 5 M string literals, LIMIT 10 | 0.73 s | 0.077 s | **-90%** |
+| SPARQL | `COUNT(*)` of all 20 M triples | 0.128 s | < 1 ms | **-99.9%** |
+| SPARQL Update | 30 CONSTRUCT inserts of ~2 k triples into a 5 M triple table | 4.13 s | 4.13 s | unchanged |
+| SPARQL Update | `DELETE WHERE { ?s <p> ?o }`, 5 M triples (incl. garbage collection) | 0.348 s | 0.067 s | **-81%** |
+| SPARQL Update | `DELETE WHERE { ?s ?p ?o }`, 15 M triples (incl. garbage collection) | 0.63 s | 0.57 s | -9% |
+| Memory | Peak RSS, 20 M triple workload | 6.14 GB | 6.44 GB | +5% |
+
+(Release-test profile, Apple M-series laptop (14 cores), medians of 3 runs alternating with the build before this change, while other jobs were running on the machine. Where two numbers are given they are from two rounds of runs. RSS after reading varied by more than ±1 GB between runs of the same build, so it is not reported; the deduplication index that is no longer built takes about 14 bytes per triple. The higher peak comes from building tables in parallel.)
+
+In-memory dictionaries store their strings back to back in a chunked arena, with flat per-entry vectors of offsets, lengths, prefixes and codes, a hash table from strings to entries and an array from codes to entries. This replaces a `BTreeMap` from strings to codes, a reverse `HashMap` and a separate allocation per string: about 30 bytes per entry on top of the string instead of about 100. String order is no longer maintained on every insert, but computed when needed (ranks, compaction, ordered output) and cached; after inserts only the new strings are sorted and merged into the cached order. Looking up a string is a hash probe instead of a walk down a B-tree.
+
+| Category | Workload | Before (with the changes above) | After | Change | vs. v0.21.0 |
+|---|---|---|---|---|---|
+| Reading | N-Triples, 20 M triples (4 predicates, 2 M subjects) | 11.7 s | 8.3 s | **-29%** | **-62%** |
+| Reading | N-Triples, 8 M triples (400 predicates, ~8 M distinct strings) | 5.00 s | 2.96 s | **-41%** | **-44%** |
+| Reading | RDF/XML, CIM 2.2 M triples | 1.76 s | 1.12 s | **-36%** | **-43%** |
+| Memory | Peak RSS, 8 M triples | 3.33 GB | 2.44 GB | **-27%** | **-31%** |
+| Memory | Peak RSS, CIM 2.2 M triples | 1.51 GB | 1.28 GB | **-15%** | **-19%** |
+| Memory | Peak RSS, 20 M triple workload | 6.10 GB | 5.66 GB | **-7%** | -2% |
+| SPARQL Update | `DELETE WHERE { ?s ?p ?o }`, 15 M triples (incl. garbage collection) | 0.68 s | 0.26 s | **-62%** | **-75%** |
+| SPARQL | ORDER BY, COUNT, inserts, predicate deletes | | | unchanged | |
+
+(Medians of 2 runs per variant alternating between v0.21.0, the build with the changes above and this build, under heavy memory pressure from other jobs, so RSS after reading is not reported. The 20 M triple workload peaks while parsing, before the dictionary is complete, so the dictionary saves less there.)
+
+Faster encoding and decoding with in-memory dictionaries:
+- Reading, mapping and inserting encode string columns directly with global codes: all values are looked up in the dictionary in parallel, the new ones are deduplicated in parallel and added once with consecutive codes. Before, each column got its own local dictionary, which was then merged into the global dictionary and its codes re-encoded. Hybrid and disk storage keep the previous path.
+- Repeated values next to each other are looked up once, and constant columns (e.g. from templates) are encoded once instead of once per row.
+- Query results and formatted values (`<iri>`, `_:blank`, `"string"`) are decoded straight into string arrays in parallel, without building a string per value first.
+
+| Category | Workload | Before (with the changes above) | After | Change | vs. v0.21.0 |
+|---|---|---|---|---|---|
+| Reading | N-Triples, 20 M triples (4 predicates, 2 M subjects) | 6.49 s | 3.98 s | **-39%** | **-81%** |
+| Reading | N-Triples, 8 M triples (400 predicates) | 2.26 s | 1.53 s | **-32%** | **-64%** |
+| Reading | RDF/XML, CIM 2.2 M triples | 0.93 s | 0.60 s | **-35%** | **-68%** |
+| Mapping | Template with 4 triples (2 constant), 3 M rows | 1.36 s | 1.09 s | **-20%** | **-89%** |
+| SPARQL | SELECT 5 M rows of IRIs / string literals | 0.152 / 0.090 s | 0.121 / 0.085 s | **-21%** / -6% | **-32% / -36%** |
+| Memory | Peak RSS, 8 M triples / CIM / mapping / 20 M triples | 2.58 / 1.29 / 2.38 / 5.50 GB | 2.50 / 1.30 / 2.31 / 5.69 GB | -3% / 0% / -3% / +3% | **-31% / -17% / -39%** / -3% |
+
+(Medians of 2 runs alternating with the build before this change. The v0.21.0 column uses v0.21.0 runs from an earlier round on the same machine.)
+
+Faster lookups, property paths and small inserts:
+- Property paths (`+`, `*`, `?`) with a bound end, a constant IRI or a variable whose values are known from VALUES or earlier patterns, follow the paths from those nodes only, step by step, instead of computing the transitive closure of the whole graph and filtering it.
+- The values of a pattern's variables are pushed down from solution mappings of up to 100 000 rows (was 500). Lookups of many values walk the sorted values and the sparse index together instead of searching the index once per value, and read an in-memory table with one gather instead of one slice per range. When the ranges cover more than half of a table the whole table is read, and at most 256 ranges of a stored table are read.
+- A small insert or delete into a large in-memory table without a deduplication index checks only the stored triples with the same subjects, instead of indexing every triple of the table first.
+
+| Category | Workload | Before (with the changes above) | After | Change |
+|---|---|---|---|---|
+| SPARQL | VALUES with 20 000 subjects joined with a 5 M triple table | 186 ms | 39 ms | **-79%** |
+| SPARQL | The same, then a second pattern on the ~25 000 objects found | 213 ms | 38 ms | **-82%** |
+| SPARQL | VALUES with 2 000 subjects (alone / with a second pattern) | 24 / 27 ms | 24 / 23 ms | 0% / -16% |
+| Property paths | `ex:t199999 ex:parent+ ?a` in a 200 000 node tree | 319 ms | 24 ms | **-92%** |
+| Property paths | `?d ex:parent* ex:t3` (65 535 results) | 158 ms | 22 ms | **-86%** |
+| Property paths | `ex:parent+` from 1 000 VALUES | 206 ms | 34 ms | **-84%** |
+| Inserting | 200 triples into a 20 M triple graph (first / second insert) | 7 / 16 ms | 6 / 15 ms | ~0% |
+| Inserting | 30 CONSTRUCT inserts into a 20 M triple graph | 4.14 s | 4.27 s | +3% |
+| Memory | Peak RSS, lookups / 20 M triples with inserts | 5.62 / 5.70 GB | 5.39 / 5.62 GB | -4% / -1% |
+
+(Medians of 2 runs alternating with the build before this change, under heavy load from other processes; differences below ~5% are within the noise.)
+
 ### Bug fixes
 - Ctrl-C now stops a running query. Before, a long query could keep running until it finished
+- A triple pattern with the same variable in two positions (e.g. `?s <p> ?s`) panicked, in queries and in `DELETE WHERE`, when the predicate also had triples where the two positions had different types (e.g. blank node subjects with IRI objects)
 - Hybrid storage: `Model.compact()` (also run by `Model.serialize()`) failed with a DuckDB "Duplicate key" error once the dictionary had to be renumbered, e.g. after more than ten inserts into the same predicate
 - SHACL rules: a rule that re-asserts a triple already in the data graph no longer makes inference loop until `max_iterations` (or forever with one rule). Inserting transient triples that all already existed non-transiently dropped the earlier transient triples with the same predicate, which were then inferred again on every iteration ([#76](https://github.com/DataTreehouse/maplib/issues/76))
 - SHACL rules: rules whose WHERE clause has no triple pattern on `$this` (only `OPTIONAL` / `BIND`) now also run for focus nodes that become targets of their shape after the rule first ran ([#77](https://github.com/DataTreehouse/maplib/issues/77))

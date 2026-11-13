@@ -1,5 +1,6 @@
 use super::{
-    add_rank_sort_triples, prepare_add_triples_par, NewTriples, TriplesToAdd, Triplestore,
+    add_rank_sort_triples, can_encode_globally, prepare_add_triples_global,
+    prepare_add_triples_par, NewTriples, TriplesToAdd, Triplestore,
 };
 use crate::errors::TriplestoreError;
 use crate::storage::Triples;
@@ -17,7 +18,11 @@ impl Triplestore {
         ts: Vec<TriplesToAdd>,
     ) -> Result<Vec<NewTriples>, TriplestoreError> {
         let prepare_triples_now = Instant::now();
-        let dfs_to_add = prepare_add_triples_par(ts, self.global_cats.clone())?;
+        let dfs_to_add = if can_encode_globally(&ts, &self.global_cats) {
+            prepare_add_triples_global(ts, self.global_cats.clone())?
+        } else {
+            prepare_add_triples_par(ts, self.global_cats.clone())?
+        };
         trace!(
             "Preparing triples took {} seconds",
             prepare_triples_now.elapsed().as_secs_f32()
@@ -117,10 +122,10 @@ impl Triplestore {
         );
         let indexing = self.indexing.clone();
         let triples_folder = self.triples_folder.clone();
-        //Why does not par iter work?
+        // Tables are independent, so they are built in parallel.
         let r: Result<Vec<_>, TriplestoreError> = add_vec
-            .into_iter()
-            .map(move |(graph, p, s, o, triples, v)| {
+            .into_par_iter()
+            .map(|(graph, p, s, o, triples, v)| {
                 let mut new_triples_vec = vec![];
                 let mut v_iter = v.into_iter();
                 let mut triples = if let Some(triples) = triples {

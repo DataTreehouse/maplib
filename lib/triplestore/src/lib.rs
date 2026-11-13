@@ -18,6 +18,7 @@ pub mod triples_read;
 pub mod triples_write;
 
 use crate::errors::TriplestoreError;
+use crate::storage::codes_to_ranks;
 use crate::storage::Triples;
 use file_io::create_folder_if_not_exists;
 use fts::FtsIndex;
@@ -28,14 +29,16 @@ use polars::prelude::{
     as_struct, col, concat, lit, AnyValue, DataFrame, Expr, IntoLazy, PlSmallStr, RankMethod,
     RankOptions, UnionArgs,
 };
-use polars_core::prelude::{IntoColumn, Series, SortMultipleOptions};
+use polars_core::frame::column::ScalarColumn;
+use polars_core::prelude::IntoSeries;
+use polars_core::prelude::{Column, IntoColumn, Series, SortMultipleOptions, StructChunked};
 use pyo3::{Py, PyAny};
 use range_set_blaze::RangeSetBlaze;
 use rayon::iter::{IntoParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
 use rayon::iter::{IntoParallelRefIterator, ParallelDrainRange};
 use representation::cats::{
-    cat_encode_triples, CatTriples, CatType, Cats, EncodedTriples, LockedCats,
-    OBJECT_RANK_COL_NAME, SUBJECT_RANK_COL_NAME,
+    cat_encode_triples, distinct_codes, extend_codes, CatTriples, CatType, Cats, EncodedTriples,
+    LockedCats, OBJECT_RANK_COL_NAME, SUBJECT_RANK_COL_NAME,
 };
 use representation::multitype::set_struct_all_null_to_null_row;
 use representation::solution_mapping::{BaseCatState, EagerSolutionMappings};
@@ -203,60 +206,62 @@ impl Triplestore {
                     );
                     rs = rs - pred_graph_rs;
                 }
+                // Marks the codes used by triples in a bitset over the code range, then
+                // collects the codes of the map that are not marked.
+                let size = rs.last().map(|x| x as usize + 1).unwrap_or(0);
+                let mut used = vec![0u64; size.div_ceil(64)];
+                let mut mark = |c: &Column| {
+                    for u in c.u32().unwrap().iter().flatten() {
+                        let u = u as usize;
+                        if u < size {
+                            used[u >> 6] |= 1 << (u & 63);
+                        }
+                    }
+                };
                 for g in self.graph_triples_map.values() {
                     for v in g.values() {
                         for ((st, ot), triples) in v {
-                            if st == &t {
-                                let lfs = triples.get_lazy_frames(&None, &None)?;
-                                for (lf, _) in lfs {
-                                    let df = lf.select([col(SUBJECT_COL_NAME)]).collect().unwrap();
-                                    let s_col = df.column(SUBJECT_COL_NAME).unwrap();
-                                    let s_rs = RangeSetBlaze::from_iter(
-                                        s_col.u32().unwrap().iter().map(|x| x.unwrap()),
-                                    );
-                                    rs = rs - s_rs;
-                                }
+                            if st != &t && ot != &t {
+                                continue;
                             }
-                            if ot == &t {
-                                let lfs = triples.get_lazy_frames(&None, &None)?;
-                                for (lf, _) in lfs {
-                                    let df = lf.select([col(OBJECT_COL_NAME)]).collect().unwrap();
+                            for (lf, _) in triples.get_lazy_frames(&None, &None)? {
+                                let df = lf.collect().unwrap();
+                                if st == &t {
+                                    mark(df.column(SUBJECT_COL_NAME).unwrap());
+                                }
+                                if ot == &t {
                                     let o_col = df.column(OBJECT_COL_NAME).unwrap();
                                     if t.is_lang_string() {
-                                        let o_rs = RangeSetBlaze::from_iter(
-                                            o_col
-                                                .struct_()
-                                                .unwrap()
-                                                .field_by_name(LANG_STRING_LANG_FIELD)
-                                                .unwrap()
-                                                .u32()
-                                                .unwrap()
-                                                .iter()
-                                                .map(|x| x.unwrap())
-                                                .chain(
-                                                    o_col
-                                                        .struct_()
-                                                        .unwrap()
-                                                        .field_by_name(LANG_STRING_VALUE_FIELD)
-                                                        .unwrap()
-                                                        .u32()
-                                                        .unwrap()
-                                                        .iter()
-                                                        .map(|x| x.unwrap()),
-                                                ),
-                                        );
-                                        rs = rs - o_rs;
+                                        let st = o_col.struct_().unwrap();
+                                        for f in [LANG_STRING_VALUE_FIELD, LANG_STRING_LANG_FIELD] {
+                                            mark(&st.field_by_name(f).unwrap().into_column());
+                                        }
                                     } else {
-                                        let o_rs = RangeSetBlaze::from_iter(
-                                            o_col.u32().unwrap().iter().map(|x| x.unwrap()),
-                                        );
-                                        rs = rs - o_rs;
+                                        mark(o_col);
                                     }
                                 }
                             }
                         }
                     }
                 }
+                let is_used = |u: u32| used[(u as usize) >> 6] & (1 << (u as usize & 63)) != 0;
+                let mut garbage: Vec<std::ops::RangeInclusive<u32>> = vec![];
+                for r in rs.ranges() {
+                    let mut run_start: Option<u32> = None;
+                    for u in r.clone() {
+                        if is_used(u) {
+                            if let Some(start) = run_start.take() {
+                                garbage.push(start..=u - 1);
+                            }
+                        } else if run_start.is_none() {
+                            run_start = Some(u);
+                        }
+                    }
+                    if let Some(start) = run_start {
+                        garbage.push(start..=*r.end());
+                    }
+                }
+                let rs = RangeSetBlaze::from_iter(garbage);
                 let n_collected = rs.len() as u32;
                 if !rs.is_empty() {
                     ce.maps.garbage_collect_cats(rs)
@@ -921,13 +926,12 @@ struct TriplesToAddPartitionedPredicate {
     pub object_cat_state: BaseCatState,
 }
 
-#[instrument(skip_all)]
-pub fn prepare_add_triples_par(
+/// Splits the triples to add into one data frame per predicate.
+fn partition_triples_to_add(
     mut ts: Vec<TriplesToAdd>,
-    global_cats: LockedCats,
-) -> Result<Vec<CatTriples>, TriplestoreError> {
-    let all_partitioned: Vec<TriplesToAddPartitionedPredicate> = ts
-        .par_drain(..)
+    global_cats: &LockedCats,
+) -> Vec<TriplesToAddPartitionedPredicate> {
+    ts.par_drain(..)
         .map(|t| {
             let TriplesToAdd {
                 df,
@@ -967,7 +971,15 @@ pub fn prepare_add_triples_par(
             all_partitioned
         })
         .flatten()
-        .collect();
+        .collect()
+}
+
+#[instrument(skip_all)]
+pub fn prepare_add_triples_par(
+    ts: Vec<TriplesToAdd>,
+    global_cats: LockedCats,
+) -> Result<Vec<CatTriples>, TriplestoreError> {
+    let all_partitioned = partition_triples_to_add(ts, &global_cats);
     let all_partitioned: Vec<_> = all_partitioned
         .into_par_iter()
         .map(
@@ -995,6 +1007,102 @@ pub fn prepare_add_triples_par(
         )
         .collect();
     Ok(all_partitioned)
+}
+
+/// Whether the triples can be encoded directly with global codes: the dictionaries are in
+/// memory and no column comes with a local dictionary of its own.
+pub(crate) fn can_encode_globally(ts: &[TriplesToAdd], global_cats: &LockedCats) -> bool {
+    let no_locals = |s: &BaseCatState| !matches!(s, BaseCatState::CategoricalNative(Some(_)));
+    global_cats.read().unwrap().is_in_memory()
+        && ts.iter().all(|t| {
+            no_locals(&t.subject_cat_state)
+                && no_locals(&t.object_cat_state)
+                && t.predicate_cat_state.as_ref().is_none_or(no_locals)
+        })
+}
+
+/// Like `prepare_add_triples_par`, but encodes the string columns directly with global codes
+/// (see `Cats::encode_strings_global`), so the result has no local dictionaries. Requires
+/// `can_encode_globally`.
+#[instrument(skip_all)]
+pub(crate) fn prepare_add_triples_global(
+    ts: Vec<TriplesToAdd>,
+    global_cats: LockedCats,
+) -> Result<Vec<CatTriples>, TriplestoreError> {
+    let mut parts = partition_triples_to_add(ts, &global_cats);
+    // The string columns (or lang string fields) to encode: (part, column, field, length if
+    // the column is a constant).
+    let mut targets: Vec<(usize, &'static str, Option<&'static str>, Option<usize>)> = vec![];
+    let mut to_encode: Vec<(BaseRDFNodeType, Series)> = vec![];
+    for (i, p) in parts.iter().enumerate() {
+        for (c, t, state) in [
+            (SUBJECT_COL_NAME, &p.subject_type, &p.subject_cat_state),
+            (OBJECT_COL_NAME, &p.object_type, &p.object_cat_state),
+        ] {
+            if !(t.stored_cat() && matches!(state, BaseCatState::String)) {
+                continue;
+            }
+            let column = p.df.column(c).unwrap();
+            if t.is_lang_string() {
+                let st = column.struct_().unwrap();
+                for f in [LANG_STRING_VALUE_FIELD, LANG_STRING_LANG_FIELD] {
+                    to_encode.push((t.clone(), st.field_by_name(f).unwrap()));
+                    targets.push((i, c, Some(f), None));
+                }
+            } else if let Column::Scalar(sc) = column {
+                // A constant (e.g. from a template) is encoded once.
+                to_encode.push((t.clone(), sc.as_single_value_series()));
+                targets.push((i, c, None, Some(sc.len())));
+            } else {
+                to_encode.push((t.clone(), column.as_materialized_series().clone()));
+                targets.push((i, c, None, None));
+            }
+        }
+    }
+    let encoded = global_cats.write()?.encode_strings_global(to_encode);
+    let mut encoded = targets.into_iter().zip(encoded).peekable();
+    while let Some(((i, c, field, scalar_len), mut s)) = encoded.next() {
+        let df = &mut parts[i].df;
+        if field.is_some() {
+            // The value field is followed by the lang field of the same column.
+            let (_, mut lang) = encoded.next().unwrap();
+            s.rename(LANG_STRING_VALUE_FIELD.into());
+            lang.rename(LANG_STRING_LANG_FIELD.into());
+            let st = StructChunked::from_series(c.into(), s.len(), [s, lang].iter())
+                .map_err(TriplestoreError::LazyLoadError)?;
+            df.with_column(st.into_series().into_column()).unwrap();
+        } else if let Some(len) = scalar_len {
+            s.rename(c.into());
+            df.with_column(Column::Scalar(ScalarColumn::from_single_value_series(
+                s, len,
+            )))
+            .unwrap();
+        } else {
+            s.rename(c.into());
+            df.with_column(s.into_column()).unwrap();
+        }
+    }
+    Ok(parts
+        .into_iter()
+        .map(|p| {
+            let cat_type =
+                |t: &BaseRDFNodeType| t.stored_cat().then(|| CatType::from_base_rdf_node_type(t));
+            CatTriples {
+                encoded_triples: EncodedTriples {
+                    df: p.df,
+                    subject: cat_type(&p.subject_type),
+                    subject_local_cat_uuid: None,
+                    object: cat_type(&p.object_type),
+                    object_local_cat_uuid: None,
+                },
+                predicate: p.predicate,
+                graph: p.graph,
+                subject_type: p.subject_type,
+                object_type: p.object_type,
+                local_cats: vec![],
+            }
+        })
+        .collect())
 }
 
 pub fn add_rank_sort_triples(
@@ -1056,76 +1164,32 @@ fn create_rank_expr(
     global_cats: LockedCats,
 ) -> Result<Expr, TriplestoreError> {
     let rank_expr = if t.stored_cat() {
-        let u32_set: HashSet<u32> = if t.is_lang_string() {
-            let mut u32_set: HashSet<_> = df
-                .column(c)
-                .unwrap()
-                .struct_()
-                .unwrap()
-                .field_by_name(LANG_STRING_VALUE_FIELD)
-                .unwrap()
-                .u32()
-                .unwrap()
-                .iter()
-                .map(|x| x.unwrap())
-                .collect();
-            u32_set.extend(
-                df.column(c)
-                    .unwrap()
-                    .struct_()
-                    .unwrap()
-                    .field_by_name(LANG_STRING_LANG_FIELD)
-                    .unwrap()
-                    .u32()
-                    .unwrap()
-                    .iter()
-                    .map(|x| x.unwrap()),
-            );
-            u32_set
+        let mut codes = Vec::new();
+        let column = df.column(c).unwrap();
+        if t.is_lang_string() {
+            let st = column.struct_().unwrap();
+            for f in [LANG_STRING_VALUE_FIELD, LANG_STRING_LANG_FIELD] {
+                extend_codes(&mut codes, &st.field_by_name(f).unwrap().into_column());
+            }
         } else {
-            df.column(c)
-                .unwrap()
-                .u32()
-                .unwrap()
-                .iter()
-                .map(|x| x.unwrap())
-                .collect()
-        };
-        let rank_map = global_cats.read()?.sort_rank_map(&u32_set, t);
+            extend_codes(&mut codes, column);
+        }
+        let codes = distinct_codes(codes);
+        let rank_map = Arc::new(global_cats.read()?.sort_ranks(&codes, t));
         if t.is_lang_string() {
             let mut e = col(c).map(
                 move |x| {
-                    let mut u32_values = Vec::with_capacity(x.len());
-                    for u in x
-                        .struct_()?
-                        .field_by_name(LANG_STRING_VALUE_FIELD)?
-                        .u32()
-                        .unwrap()
-                        .iter()
-                    {
-                        if let Some(u) = u {
-                            u32_values.push(rank_map.get(&u).cloned());
-                        } else {
-                            u32_values.push(None)
-                        }
-                    }
-                    let mut u32_langs = Vec::with_capacity(x.len());
-                    for u in x
-                        .struct_()?
-                        .field_by_name(LANG_STRING_LANG_FIELD)?
-                        .u32()
-                        .unwrap()
-                        .iter()
-                    {
-                        if let Some(u) = u {
-                            u32_langs.push(rank_map.get(&u).cloned());
-                        } else {
-                            u32_langs.push(None)
-                        }
-                    }
-                    let mut c_values = Series::from_iter(u32_values);
+                    let mut c_values = codes_to_ranks(
+                        x.struct_()?.field_by_name(LANG_STRING_VALUE_FIELD)?.u32()?,
+                        &rank_map,
+                    )
+                    .into_series();
                     c_values.rename(PlSmallStr::from_str(LANG_STRING_VALUE_FIELD));
-                    let mut c_langs = Series::from_iter(u32_langs);
+                    let mut c_langs = codes_to_ranks(
+                        x.struct_()?.field_by_name(LANG_STRING_LANG_FIELD)?.u32()?,
+                        &rank_map,
+                    )
+                    .into_series();
                     c_langs.rename(PlSmallStr::from_str(LANG_STRING_LANG_FIELD));
                     let mut df = DataFrame::new(
                         x.len(),
@@ -1158,19 +1222,7 @@ fn create_rank_expr(
             e
         } else {
             col(c).map(
-                move |x| {
-                    let mut u32s = Vec::with_capacity(x.len());
-                    for u in x.u32()?.iter() {
-                        if let Some(u) = u {
-                            u32s.push(rank_map.get(&u).cloned());
-                        } else {
-                            u32s.push(None)
-                        }
-                    }
-                    let mut c = Series::from_iter(u32s);
-                    c.rename(x.name().clone());
-                    Ok(c.into_column())
-                },
+                move |x| Ok(codes_to_ranks(x.u32()?, &rank_map).into_column()),
                 |_, f| Ok(f.clone()),
             )
         }

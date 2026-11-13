@@ -272,45 +272,44 @@ fn encode_single_string_series(
     };
 
     let mut encoded_global_local = Vec::with_capacity(series.len());
-
-    if let Some(enc) = maybe_encoded_global {
-        for (glob, s) in enc.into_iter().zip(series.str().unwrap().iter()) {
-            if let Some(glob) = glob {
-                encoded_global_local.push(Some(glob));
-            } else {
-                if let Some(s) = s {
-                    if let Some(u) = new_enc.maps.maybe_encode_in_memory_str(s) {
-                        encoded_global_local.push(Some(u))
-                    } else {
-                        *use_height += 1;
-                        let su = *use_height;
-                        new_enc
-                            .maps
-                            .encode_new_in_memory_string(Cow::Borrowed(s), su);
-                        encoded_global_local.push(Some(su))
-                    }
-                } else {
-                    encoded_global_local.push(None);
-                }
-            }
+    // Codes of strings not in the global map, from the local map.
+    let mut encode_local = |s: &str| -> u32 {
+        if let Some(u) = new_enc.maps.maybe_encode_in_memory_str(s) {
+            u
+        } else {
+            *use_height += 1;
+            let su = *use_height;
+            new_enc
+                .maps
+                .encode_new_in_memory_string(Cow::Borrowed(s), su);
+            su
         }
-    } else {
-        for s in series.str().unwrap().iter() {
-            if let Some(s) = s {
-                if let Some(u) = new_enc.maps.maybe_encode_in_memory_str(s) {
-                    encoded_global_local.push(Some(u))
-                } else {
-                    *use_height += 1;
-                    let su = *use_height;
-                    new_enc
-                        .maps
-                        .encode_new_in_memory_string(Cow::Borrowed(s), su);
-                    encoded_global_local.push(Some(su))
-                }
-            } else {
-                encoded_global_local.push(None);
-            }
+    };
+    // Consecutive repeats of the same string are looked up once.
+    let mut prev: Option<(&str, u32)> = None;
+    let strs = series.str().unwrap();
+    let globals: Box<dyn Iterator<Item = Option<u32>>> = match maybe_encoded_global {
+        Some(enc) => Box::new(enc.into_iter()),
+        None => Box::new(std::iter::repeat(None)),
+    };
+    for (glob, s) in globals.zip(strs.iter()) {
+        if glob.is_some() {
+            encoded_global_local.push(glob);
+            continue;
         }
+        let Some(s) = s else {
+            encoded_global_local.push(None);
+            continue;
+        };
+        let u = match prev {
+            Some((p, u)) if p == s => u,
+            _ => {
+                let u = encode_local(s);
+                prev = Some((s, u));
+                u
+            }
+        };
+        encoded_global_local.push(Some(u));
     }
     let ser = Series::from_iter(encoded_global_local);
     ser

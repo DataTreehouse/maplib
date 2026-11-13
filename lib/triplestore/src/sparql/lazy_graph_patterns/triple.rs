@@ -34,8 +34,13 @@ impl Triplestore {
             context.as_str()
         );
 
+        let focus = pattern_variables(triple_pattern);
         let mut solution_mappings = solution_mappings.map(|solution_mappings| {
-            pushdowns.add_from_solution_mappings(solution_mappings, self.global_cats.clone())
+            pushdowns.add_from_solution_mappings(
+                solution_mappings,
+                self.global_cats.clone(),
+                &focus,
+            )
         });
         let subjects = create_subjects(&triple_pattern.subject, &pushdowns.variables_values);
         let subject_type_ctr = create_type_constraint(
@@ -214,6 +219,20 @@ impl Triplestore {
         }
         Ok(solution_mappings.unwrap())
     }
+}
+
+/// The names of the variables and blank nodes of a triple pattern.
+fn pattern_variables(tp: &TriplePattern) -> Vec<&str> {
+    let mut vs = vec![];
+    for t in [&tp.subject, &tp.object] {
+        if let TermPattern::Variable(v) = t {
+            vs.push(v.as_str());
+        }
+    }
+    if let NamedNodePattern::Variable(v) = &tp.predicate {
+        vs.push(v.as_str());
+    }
+    vs
 }
 
 fn create_type_constraint(

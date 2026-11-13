@@ -1,4 +1,4 @@
-use crate::cats::{maybe_decode_expr, LockedCats};
+use crate::cats::{decode_expr_wrapped, maybe_decode_expr, LockedCats};
 use crate::polars_to_rdf::{datetime_column_to_xsd_strings, XSD_DATE_WITHOUT_TZ_FORMAT};
 use crate::solution_mapping::BaseCatState;
 use crate::{BaseRDFNodeType, RDFNodeState, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD};
@@ -34,11 +34,9 @@ pub fn base_expression_to_formatted(
     literal_string_rep: bool,
 ) -> Expr {
     let expr = match base_type {
-        BaseRDFNodeType::IRI => {
-            lit("<") + maybe_decode_expr(expr, base_type, base_state, global_cats) + lit(">")
-        }
+        BaseRDFNodeType::IRI => wrap_decoded(expr, base_type, base_state, global_cats, "<", ">"),
         BaseRDFNodeType::BlankNode => {
-            lit("_:") + maybe_decode_expr(expr, base_type, base_state, global_cats)
+            wrap_decoded(expr, base_type, base_state, global_cats, "_:", "")
         }
         BaseRDFNodeType::Literal(l, _) => {
             if literal_string_rep
@@ -71,7 +69,7 @@ pub fn base_expression_to_formatted(
                         global_cats,
                     )
             } else if literal_string_rep && l.as_ref() == xsd::STRING {
-                lit("\"") + maybe_decode_expr(expr, base_type, base_state, global_cats) + lit("\"")
+                wrap_decoded(expr, base_type, base_state, global_cats, "\"", "\"")
             } else if literal_string_rep {
                 lit("\"")
                     + literal_expr_to_string(
@@ -278,5 +276,28 @@ pub fn literal_expr_to_string(e: Expr, t: &BaseRDFNodeType) -> Expr {
             .replace_all(lit(r"\.$"), lit(""), false)
     } else {
         s
+    }
+}
+
+/// `prefix` + the decoded value + `suffix`. Categorical values are decoded and wrapped in one
+/// pass, without building the decoded strings first.
+fn wrap_decoded(
+    expr: Expr,
+    base_type: &BaseRDFNodeType,
+    base_state: &BaseCatState,
+    global_cats: LockedCats,
+    prefix: &'static str,
+    suffix: &'static str,
+) -> Expr {
+    match base_state {
+        BaseCatState::CategoricalNative(local_cats) => decode_expr_wrapped(
+            expr,
+            base_type.clone(),
+            local_cats.as_ref().cloned(),
+            global_cats,
+            prefix,
+            suffix,
+        ),
+        BaseCatState::String | BaseCatState::NonString => lit(prefix) + expr + lit(suffix),
     }
 }

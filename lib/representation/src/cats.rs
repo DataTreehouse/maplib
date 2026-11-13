@@ -1,3 +1,4 @@
+mod bulk_encode;
 mod decode;
 mod encode;
 mod globalize;
@@ -10,6 +11,8 @@ pub use decode::*;
 pub use encode::*;
 pub use globalize::*;
 pub use image::*;
+pub use in_memory::{distinct_codes, RankMap};
+use polars::prelude::{Column, IntoColumn};
 pub use re_encode::*;
 use std::borrow::Cow;
 use std::cmp;
@@ -344,75 +347,61 @@ impl Cats {
         dfs: Vec<&DataFrame>,
         subject_type: &BaseRDFNodeType,
         object_type: &BaseRDFNodeType,
-    ) -> HashMap<BaseRDFNodeType, HashMap<u32, u32>> {
-        let mut src_u_map: HashMap<BaseRDFNodeType, HashSet<u32>> = HashMap::new();
+    ) -> HashMap<BaseRDFNodeType, RankMap> {
+        let mut src_u_map: HashMap<BaseRDFNodeType, Vec<u32>> = HashMap::new();
         for df in dfs {
             if subject_type.stored_cat() {
-                if let Some(v) = src_u_map.get_mut(subject_type) {
-                    v.extend(
-                        df.column(SUBJECT_COL_NAME)
-                            .unwrap()
-                            .u32()
-                            .unwrap()
-                            .iter()
-                            .map(|x| x.unwrap()),
-                    );
-                } else {
-                    let v: HashSet<_> = df
-                        .column(SUBJECT_COL_NAME)
-                        .unwrap()
-                        .u32()
-                        .unwrap()
-                        .iter()
-                        .map(|x| x.unwrap())
-                        .collect();
-                    src_u_map.insert(subject_type.clone(), v);
-                }
+                let v = src_u_map.entry(subject_type.clone()).or_default();
+                extend_codes(v, df.column(SUBJECT_COL_NAME).unwrap());
             }
             if object_type.stored_cat() {
-                let mut obj_u32_series = vec![];
+                let v = src_u_map.entry(object_type.clone()).or_default();
+                let o = df.column(OBJECT_COL_NAME).unwrap();
                 if object_type.is_lang_string() {
-                    obj_u32_series.push(
-                        df.column(OBJECT_COL_NAME)
+                    let st = o.struct_().unwrap();
+                    extend_codes(
+                        v,
+                        &st.field_by_name(LANG_STRING_VALUE_FIELD)
                             .unwrap()
-                            .struct_()
-                            .unwrap()
-                            .field_by_name(LANG_STRING_VALUE_FIELD)
-                            .unwrap(),
+                            .into_column(),
                     );
-                    obj_u32_series.push(
-                        df.column(OBJECT_COL_NAME)
+                    extend_codes(
+                        v,
+                        &st.field_by_name(LANG_STRING_LANG_FIELD)
                             .unwrap()
-                            .struct_()
-                            .unwrap()
-                            .field_by_name(LANG_STRING_LANG_FIELD)
-                            .unwrap(),
+                            .into_column(),
                     );
                 } else {
-                    obj_u32_series.push(
-                        df.column(OBJECT_COL_NAME)
-                            .unwrap()
-                            .as_materialized_series_maintain_scalar(),
-                    );
-                }
-                for c in obj_u32_series {
-                    if let Some(v) = src_u_map.get_mut(object_type) {
-                        v.extend(c.u32().unwrap().iter().map(|x| x.unwrap()));
-                    } else {
-                        let v: HashSet<_> = c.u32().unwrap().iter().map(|x| x.unwrap()).collect();
-                        src_u_map.insert(object_type.clone(), v);
-                    }
+                    extend_codes(v, o);
                 }
             }
         }
-        let rank_maps: HashMap<_, _> = src_u_map
+        src_u_map
             .into_par_iter()
             .map(|(k, v)| {
-                let rm = self.sort_rank_map(&v, &k);
+                let rm = self.sort_ranks(&distinct_codes(v), &k);
                 (k, rm)
             })
-            .collect();
-        rank_maps
+            .collect()
+    }
+
+    /// Positions of the codes `us` (sorted, distinct) in the string order of the whole map.
+    pub fn global_ranks(&self, us: &[u32], dt: &BaseRDFNodeType) -> RankMap {
+        if let Some(cm) = self.cat_map.get(&CatType::from_base_rdf_node_type(dt)) {
+            cm.maps.global_ranks(us)
+        } else {
+            RankMap::empty()
+        }
+    }
+
+    /// Ranks that order `us` (sorted, distinct) by string value, valid only for comparing values
+    /// within `us` (e.g. to sort a batch of triples).
+    pub fn sort_ranks(&self, us: &[u32], dt: &BaseRDFNodeType) -> RankMap {
+        if let Some(cm) = self.cat_map.get(&CatType::from_base_rdf_node_type(dt)) {
+            cm.maps.sort_ranks(us)
+        } else {
+            RankMap::empty()
+        }
     }
 
     pub fn rank_map(&self, us: &HashSet<u32>, dt: &BaseRDFNodeType) -> HashMap<u32, u32> {
@@ -444,4 +433,17 @@ impl Cats {
 
 fn new_cat_path(path: &Path) -> PathBuf {
     path.join(uuid::Uuid::new_v4().to_string())
+}
+
+/// Appends the non-null codes of a UInt32 column.
+pub fn extend_codes(v: &mut Vec<u32>, c: &Column) {
+    let ch = c.u32().unwrap();
+    v.reserve(ch.len() - ch.null_count());
+    if ch.null_count() == 0 {
+        for arr in ch.downcast_iter() {
+            v.extend_from_slice(arr.values().as_slice());
+        }
+    } else {
+        v.extend(ch.iter().flatten());
+    }
 }

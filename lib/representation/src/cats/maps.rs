@@ -1,7 +1,7 @@
 use crate::cats::CatReEnc;
 use crate::BaseRDFNodeType;
 use disk::CatMapsOnDisk;
-use in_memory::CatMapsInMemory;
+use in_memory::{CatMapsInMemory, RankMap};
 use range_set_blaze::RangeSetBlaze;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
@@ -78,6 +78,14 @@ impl CatMaps {
             cat_map: Arc::new(map),
         }
     }
+    /// The in-memory dictionary, if the dictionary is in memory.
+    pub fn as_in_memory(&self) -> Option<&CatMapsInMemory> {
+        match self {
+            CatMaps::InMemory(m) => Some(m),
+            CatMaps::OnDisk(_) => None,
+        }
+    }
+
     pub fn contains_u32(&self, u: &u32) -> bool {
         match self {
             CatMaps::InMemory(m) => m.contains_u32(u),
@@ -203,6 +211,27 @@ impl CatMaps {
         match self {
             CatMaps::InMemory(m) => m.local_rank_map(us),
             CatMaps::OnDisk(d) => d.local_rank_map(us),
+        }
+    }
+
+    /// Positions of the codes `us` (sorted, distinct) in the string order of the whole map.
+    pub fn global_ranks(&self, us: &[u32]) -> RankMap {
+        match self {
+            CatMaps::InMemory(m) => m.global_ranks(),
+            CatMaps::OnDisk(d) => {
+                RankMap::from_hash_map(d.global_rank_map(&us.iter().copied().collect()))
+            }
+        }
+    }
+
+    /// Ranks that order `us` (sorted, distinct) by string value, valid only for comparing values
+    /// within `us`.
+    pub fn sort_ranks(&self, us: &[u32]) -> RankMap {
+        match self {
+            CatMaps::InMemory(m) => m.sort_ranks(us),
+            CatMaps::OnDisk(d) => {
+                RankMap::from_hash_map(d.local_rank_map(&us.iter().copied().collect()))
+            }
         }
     }
 
