@@ -82,7 +82,7 @@ impl Triplestore {
                 include_transient,
                 &QueryGraph::from_named_graph(graph),
             )?;
-            let eager_sm = sm.as_eager(false);
+            let eager_sm = sm.as_eager();
             eager_sms.push(eager_sm);
         }
         Ok(eager_sms)

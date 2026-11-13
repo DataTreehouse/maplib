@@ -7,7 +7,6 @@ use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{BlankNode, NamedNode, NamedNodeRef, Term, TermRef, Variable};
 use polars::prelude::{col, concat, LazyFrame, UnionArgs};
 use polars_core::frame::DataFrame;
-use polars_core::runtime::THREAD_POOL;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use representation::cats::LockedCats;
 use representation::dataset::NamedGraph;
@@ -19,9 +18,28 @@ use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 use spargebra::Query;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::io::Write;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
+
+mod rdfxml;
 
 const STRIDE: usize = 20_000;
+
+/// Threads for the pretty writer's own parallelism, separate from polars' and rayon's global pools
+/// (see write_pretty).
+static PRETTY_WRITER_POOL: LazyLock<rayon::ThreadPool> = LazyLock::new(|| {
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(std::thread::available_parallelism().map_or(1, |n| n.get()))
+        .thread_name(|i| format!("maplib-pretty-writer-{i}"))
+        .build()
+        .expect("could not spawn pretty writer threads")
+});
+
+/// Output syntax of the pretty writer: both share how subject blocks are built.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PrettyFormat {
+    Turtle,
+    RdfXml,
+}
 
 #[derive(Debug, Clone)]
 struct TurtleBlock {
@@ -306,21 +324,106 @@ impl Triplestore {
         graph: &NamedGraph,
         prefixes: &HashMap<String, NamedNode>,
     ) -> Result<(), TriplestoreError> {
-        for (k, v) in prefixes {
-            writeln!(writer, "@prefix {}: {} .", k, v)
-                .map_err(|x| TriplestoreError::WriteTurtleError(x.to_string()))?;
-        }
-        if !prefixes.is_empty() {
-            writeln!(writer).map_err(|x| TriplestoreError::WriteTurtleError(x.to_string()))?;
-        }
+        self.write_pretty(writer, graph, prefixes, PrettyFormat::Turtle)
+    }
 
-        let prefix_replacer = PrefixReplacer::new(prefixes);
+    /// Pretty RDF/XML: one node element per subject, nested blank nodes and collections.
+    pub fn write_pretty_rdfxml<W: Write>(
+        &self,
+        writer: &mut W,
+        graph: &NamedGraph,
+        prefixes: &HashMap<String, NamedNode>,
+    ) -> Result<(), TriplestoreError> {
+        self.write_pretty(writer, graph, prefixes, PrettyFormat::RdfXml)
+    }
 
+    fn write_pretty<W: Write>(
+        &self,
+        writer: &mut W,
+        graph: &NamedGraph,
+        prefixes: &HashMap<String, NamedNode>,
+        format: PrettyFormat,
+    ) -> Result<(), TriplestoreError> {
         let map = if let Some(map) = self.graph_triples_map.get(graph) {
             map
         } else {
             return Err(TriplestoreError::GraphDoesNotExist(graph.to_string()));
         };
+
+        let xml_namespaces = match format {
+            PrettyFormat::Turtle => {
+                for (k, v) in prefixes {
+                    writeln!(writer, "@prefix {}: {} .", k, v)
+                        .map_err(|x| TriplestoreError::WriteTurtleError(x.to_string()))?;
+                }
+                if !prefixes.is_empty() {
+                    writeln!(writer)
+                        .map_err(|x| TriplestoreError::WriteTurtleError(x.to_string()))?;
+                }
+                None
+            }
+            PrettyFormat::RdfXml => {
+                let ns = rdfxml::XmlNamespaces::new(prefixes, map.keys());
+                ns.write_root_start(writer)
+                    .map_err(|x| TriplestoreError::WriteTurtleError(x.to_string()))?;
+                Some(ns)
+            }
+        };
+
+        self.write_pretty_body(writer, graph, map, prefixes, xml_namespaces.as_ref())?;
+        if xml_namespaces.is_some() {
+            rdfxml::XmlNamespaces::write_root_end(writer)
+                .map_err(|x| TriplestoreError::WriteTurtleError(x.to_string()))?;
+        }
+        Ok(())
+    }
+
+    /// Pretty RDF/XML for several graphs in one document, written in the given order (each graph's
+    /// subjects in their own section). `extra_namespace_iris` are IRIs (e.g. the classes used as
+    /// node element names) whose namespaces should be declared besides those of the predicates.
+    /// IRIs starting with `fragment_base` (which should end with '#') are written relative to the
+    /// document, as rdf:ID / "#..." references, as CIM/XML requires.
+    pub fn write_pretty_rdfxml_graphs<W: Write>(
+        &self,
+        writer: &mut W,
+        graphs: &[NamedGraph],
+        prefixes: &HashMap<String, NamedNode>,
+        extra_namespace_iris: &[NamedNode],
+        fragment_base: Option<&str>,
+    ) -> Result<(), TriplestoreError> {
+        let mut maps = Vec::with_capacity(graphs.len());
+        for graph in graphs {
+            if let Some(map) = self.graph_triples_map.get(graph) {
+                maps.push((graph, map));
+            } else {
+                return Err(TriplestoreError::GraphDoesNotExist(graph.to_string()));
+            }
+        }
+        let ns = rdfxml::XmlNamespaces::new(
+            prefixes,
+            maps.iter()
+                .flat_map(|(_, map)| map.keys())
+                .chain(extra_namespace_iris.iter()),
+        )
+        .with_fragment_base(fragment_base);
+        ns.write_root_start(writer)
+            .map_err(|x| TriplestoreError::WriteTurtleError(x.to_string()))?;
+        for (graph, map) in maps {
+            self.write_pretty_body(writer, graph, map, prefixes, Some(&ns))?;
+        }
+        rdfxml::XmlNamespaces::write_root_end(writer)
+            .map_err(|x| TriplestoreError::WriteTurtleError(x.to_string()))
+    }
+
+    fn write_pretty_body<W: Write>(
+        &self,
+        writer: &mut W,
+        graph: &NamedGraph,
+        map: &HashMap<NamedNode, HashMap<(BaseRDFNodeType, BaseRDFNodeType), Triples>>,
+        prefixes: &HashMap<String, NamedNode>,
+        xml_namespaces: Option<&rdfxml::XmlNamespaces>,
+    ) -> Result<(), TriplestoreError> {
+        let prefix_replacer = PrefixReplacer::new(prefixes);
 
         let (mut blanks_in_degree_zero, mut blanks_in_degree_one) =
             self.create_blank_in_degree_zero_and_one_sets(map)?;
@@ -400,7 +503,10 @@ impl Triplestore {
             } else {
                 BaseRDFNodeType::BlankNode
             };
-            let n_threads = THREAD_POOL.current_num_threads();
+            // The parallel work below runs polars collects (column decoding and lazy frame
+            // collects) that need free rayon workers. Running it on polars' pool or rayon's global
+            // pool deadlocks when all their threads are blocked in this loop, so it gets its own.
+            let n_threads = PRETTY_WRITER_POOL.current_num_threads();
             let mut spaced_strings = self
                 .global_cats
                 .read()?
@@ -418,45 +524,46 @@ impl Triplestore {
                         thread_strings.push(spaced_strings.pop().unwrap());
                     }
                 }
-                let r: Result<Vec<_>, TriplestoreError> = THREAD_POOL
-                    .install(|| {
-                        thread_strings
-                            .into_par_iter()
-                            .map(|(from_string, to_string)| {
-                                let r = self.create_block_segment(
-                                    subject_type.is_iri(),
-                                    map,
-                                    from_string.as_str(),
-                                    to_string.as_str(),
-                                    use_used_subjects,
-                                    &blanks_in_degree_zero,
-                                    &blanks_in_degree_one,
-                                    lists_map.is_some(),
-                                );
-                                r
-                            })
-                    })
-                    .collect();
+                let r: Result<Vec<_>, TriplestoreError> = PRETTY_WRITER_POOL.install(|| {
+                    thread_strings
+                        .into_par_iter()
+                        .map(|(from_string, to_string)| {
+                            let r = self.create_block_segment(
+                                subject_type.is_iri(),
+                                map,
+                                from_string.as_str(),
+                                to_string.as_str(),
+                                use_used_subjects,
+                                &blanks_in_degree_zero,
+                                &blanks_in_degree_one,
+                                lists_map.is_some(),
+                            );
+                            r
+                        })
+                        .collect()
+                });
 
                 let r = r?;
 
-                let written: Result<(Vec<_>, Vec<_>), TriplestoreError> = THREAD_POOL
+                let written: Result<(Vec<_>, Vec<_>), TriplestoreError> = PRETTY_WRITER_POOL
                     .install(|| {
-                        r.into_par_iter().map(|new_map| {
-                            let mut writer: Vec<u8> = Vec::new();
-                            let replaced = write_blocks(
-                                &mut writer,
-                                new_map,
-                                &type_nn,
-                                &prefix_replacer,
-                                &in_degree_one_blocks_map,
-                                self.global_cats.clone(),
-                                &subject_type,
-                            )?;
-                            Ok((writer, replaced))
-                        })
-                    })
-                    .collect();
+                        r.into_par_iter()
+                            .map(|new_map| {
+                                let mut writer: Vec<u8> = Vec::new();
+                                let replaced = write_blocks(
+                                    &mut writer,
+                                    new_map,
+                                    &type_nn,
+                                    &prefix_replacer,
+                                    xml_namespaces,
+                                    &in_degree_one_blocks_map,
+                                    self.global_cats.clone(),
+                                    &subject_type,
+                                )?;
+                                Ok((writer, replaced))
+                            })
+                            .collect()
+                    });
                 let (written, replaced) = written?;
                 for r in replaced {
                     for u in r {
@@ -488,18 +595,30 @@ impl Triplestore {
                         (rdf::REST.into_owned(), vec![l]),
                     ]),
                 };
-                turtle_block
-                    .write_block(
+                if let Some(ns) = xml_namespaces {
+                    rdfxml::write_block(
                         writer,
-                        &type_nn,
-                        &prefix_replacer,
-                        has_subject,
+                        &turtle_block,
+                        ns,
                         &in_degree_one_blocks_map,
                         1,
+                        has_subject,
                     )
                     .map_err(|x| TriplestoreError::WriteTurtleError(x.to_string()))?;
-                writeln!(writer, " .\n")
-                    .map_err(|x| TriplestoreError::WriteTurtleError(x.to_string()))?;
+                } else {
+                    turtle_block
+                        .write_block(
+                            writer,
+                            &type_nn,
+                            &prefix_replacer,
+                            has_subject,
+                            &in_degree_one_blocks_map,
+                            1,
+                        )
+                        .map_err(|x| TriplestoreError::WriteTurtleError(x.to_string()))?;
+                    writeln!(writer, " .\n")
+                        .map_err(|x| TriplestoreError::WriteTurtleError(x.to_string()))?;
+                }
             }
         }
         Ok(())
@@ -652,7 +771,6 @@ impl Triplestore {
                     base_iri: None,
                 },
                 None,
-                false,
                 &QuerySettings {
                     include_transient: false,
                     max_rows: None,
@@ -975,18 +1093,25 @@ fn write_blocks<W: Write>(
     blocks_map: HashMap<u32, TurtleBlock>,
     type_nn: &NamedNode,
     prefix_replacer: &PrefixReplacer,
+    xml_namespaces: Option<&rdfxml::XmlNamespaces>,
     in_degree_one_map: &HashMap<u32, TurtleBlockOrTermOrList>,
     global_cats: LockedCats,
     subject_dt: &BaseRDFNodeType,
 ) -> Result<Vec<u32>, TriplestoreError> {
     let keys: HashSet<_> = blocks_map.keys().cloned().collect();
-    let rank_map = global_cats.read()?.local_rank_map(&keys, subject_dt);
+    // Only the order of the subjects in this segment matters, so a sort rank map suffices (a
+    // global rank map walks the whole dictionary, for every segment).
+    let rank_map = global_cats.read()?.sort_rank_map(&keys, subject_dt);
     let inv_rank_map: BTreeMap<_, _> = rank_map.into_iter().map(|(x, y)| (y, x)).collect();
 
     let out: Result<Vec<Vec<_>>, TriplestoreError> = inv_rank_map
         .range(..)
         .map(|(_, k)| {
             if let Some(block) = blocks_map.get(k) {
+                if let Some(ns) = xml_namespaces {
+                    return rdfxml::write_block(writer, block, ns, in_degree_one_map, 1, true)
+                        .map_err(|x| TriplestoreError::WriteTurtleError(x.to_string()));
+                }
                 let r = block
                     .write_block(writer, type_nn, prefix_replacer, true, in_degree_one_map, 1)
                     .map_err(|x| TriplestoreError::WriteTurtleError(x.to_string()));

@@ -398,7 +398,7 @@ impl Cats {
         let rank_maps: HashMap<_, _> = src_u_map
             .into_par_iter()
             .map(|(k, v)| {
-                let rm = self.local_rank_map(&v, &k);
+                let rm = self.sort_rank_map(&v, &k);
                 (k, rm)
             })
             .collect();
@@ -408,6 +408,16 @@ impl Cats {
     pub fn rank_map(&self, us: &HashSet<u32>, dt: &BaseRDFNodeType) -> HashMap<u32, u32> {
         if let Some(cm) = self.cat_map.get(&CatType::from_base_rdf_node_type(dt)) {
             cm.maps.global_rank_map(us)
+        } else {
+            HashMap::new()
+        }
+    }
+
+    /// Ranks that order `us` by string value, valid only for comparing values within `us`
+    /// (e.g. to sort a batch of triples). Do not merge these with ranks from another call.
+    pub fn sort_rank_map(&self, us: &HashSet<u32>, dt: &BaseRDFNodeType) -> HashMap<u32, u32> {
+        if let Some(cm) = self.cat_map.get(&CatType::from_base_rdf_node_type(dt)) {
+            cm.maps.sort_rank_map(us)
         } else {
             HashMap::new()
         }

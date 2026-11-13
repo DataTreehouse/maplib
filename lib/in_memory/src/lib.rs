@@ -11,7 +11,7 @@ use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt::{Display, Formatter, Write};
 use std::hash::BuildHasherDefault;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 #[derive(Debug, Clone)]
 pub struct PrefixCompressedString {
@@ -244,6 +244,15 @@ impl CatMapsInMemory {
         }
     }
 
+    /// Ranks of `us` in string order, dense from 0. Only the relative order is meaningful, so
+    /// this costs O(|us| log |us|) instead of walking the whole map like `global_rank_map`.
+    pub fn local_rank_map(&self, us: &HashSet<u32>) -> HashMap<u32, u32> {
+        match self {
+            CatMapsInMemory::Compressed(c) => c.local_rank_map(us),
+            CatMapsInMemory::Uncompressed(u) => u.local_rank_map(us),
+        }
+    }
+
     pub fn contains_u32(&self, u: &u32) -> bool {
         match self {
             CatMapsInMemory::Compressed(m) => m.contains_u32(u),
@@ -379,6 +388,7 @@ pub struct PrefixCompressedCatMapsInMemory {
     map: BTreeMap<PrefixCompressedString, u32>,
     rev_map: HashMap<u32, PrefixCompressedString, BuildHasherDefault<NoHashHasher<u32>>>,
     prefix_map: HashMap<String, Arc<String>>,
+    rank_cache: RankCache,
 }
 
 impl PrefixCompressedCatMapsInMemory {
@@ -428,12 +438,14 @@ impl PrefixCompressedCatMapsInMemory {
             map,
             rev_map,
             prefix_map,
+            rank_cache: Default::default(),
         }
     }
 }
 
 impl PrefixCompressedCatMapsInMemory {
     pub(crate) fn compact(&mut self) {
+        self.rank_cache.invalidate();
         for (i, (_, v)) in self
             .map
             .range_mut::<PrefixCompressedString, _>(..)
@@ -445,6 +457,7 @@ impl PrefixCompressedCatMapsInMemory {
     }
 
     pub(crate) fn garbage_collect_cats(&mut self, p0: RangeSetBlaze<u32>) {
+        self.rank_cache.invalidate();
         let mut to_delete = Vec::new();
         for r in p0 {
             to_delete.push(self.rev_map.remove(&r).unwrap());
@@ -459,10 +472,12 @@ impl PrefixCompressedCatMapsInMemory {
             map: Default::default(),
             rev_map: Default::default(),
             prefix_map: Default::default(),
+            rank_cache: Default::default(),
         }
     }
 
     pub fn encode_new_prefix_compressed_string(&mut self, mut s: PrefixCompressedString, u: u32) {
+        self.rank_cache.invalidate();
         // Share our own prefix allocation rather than keeping the other map's copy alive
         s.prefix = intern_prefix(&mut self.prefix_map, &s.prefix);
         self.map.insert(s.clone(), u);
@@ -486,10 +501,12 @@ impl PrefixCompressedCatMapsInMemory {
     }
 
     pub fn encode_new_string(&mut self, s: &str, u: u32) {
+        self.rank_cache.invalidate();
         self.encode_new_str(s, u)
     }
 
     fn encode_new_str(&mut self, s: &str, u: u32) {
+        self.rank_cache.invalidate();
         let (pre, suf) = split_iri(s);
         let compr = PrefixCompressedString {
             prefix: intern_prefix(&mut self.prefix_map, pre),
@@ -572,6 +589,7 @@ impl PrefixCompressedCatMapsInMemory {
                 map,
                 rev_map: new_map,
                 prefix_map,
+                rank_cache: Default::default(),
             })
         }
     }
@@ -602,6 +620,7 @@ impl PrefixCompressedCatMapsInMemory {
         other: &PrefixCompressedCatMapsInMemory,
         c: &mut u32,
     ) -> HashMap<u32, u32, BuildHasherDefault<NoHashHasher<u32>>> {
+        self.rank_cache.invalidate();
         let (remap, insert): (Vec<_>, Vec<_>) = other
             .map
             .par_iter()
@@ -661,14 +680,26 @@ impl PrefixCompressedCatMapsInMemory {
         rb
     }
 
+    pub fn local_rank_map(&self, us: &HashSet<u32>) -> HashMap<u32, u32> {
+        let mut keyed: Vec<_> = us
+            .iter()
+            .filter_map(|u| self.rev_map.get(u).map(|s| (s, *u)))
+            .collect();
+        keyed.sort_unstable_by(|a, b| a.0.cmp(b.0));
+        keyed
+            .into_iter()
+            .enumerate()
+            .map(|(i, (_, u))| (u, i as u32))
+            .collect()
+    }
+
+    /// The position of each code of `us` in the string order of the whole map. The positions are
+    /// cached until the map changes, so repeated calls cost O(|us|) instead of a walk over the map.
     pub fn global_rank_map(&self, us: &HashSet<u32>) -> HashMap<u32, u32> {
-        let mut ranked = HashMap::new();
-        for (i, (_, v)) in self.map.iter().enumerate() {
-            if us.contains(v) {
-                ranked.insert(*v, i as u32);
-            }
-        }
-        ranked
+        let ranks = self
+            .rank_cache
+            .get_or_build(|| positions(self.map.iter().map(|(_, v)| *v)));
+        lookup_ranks(&ranks, us)
     }
 
     pub fn range_set(&self) -> RangeSetBlaze<u32> {
@@ -680,6 +711,7 @@ impl PrefixCompressedCatMapsInMemory {
 pub struct UncompressedCatMapsInMemory {
     map: BTreeMap<Arc<str>, u32>,
     rev_map: HashMap<u32, Arc<str>, BuildHasherDefault<NoHashHasher<u32>>>,
+    rank_cache: RankCache,
 }
 
 impl UncompressedCatMapsInMemory {
@@ -711,12 +743,17 @@ impl UncompressedCatMapsInMemory {
         let mut rev_map =
             HashMap::with_capacity_and_hasher(map.len(), BuildHasherDefault::default());
         rev_map.extend(map.iter().map(|(s, u)| (*u, s.clone())));
-        UncompressedCatMapsInMemory { map, rev_map }
+        UncompressedCatMapsInMemory {
+            map,
+            rev_map,
+            rank_cache: Default::default(),
+        }
     }
 }
 
 impl UncompressedCatMapsInMemory {
     pub(crate) fn compact(&mut self) {
+        self.rank_cache.invalidate();
         for (i, (_, v)) in self.map.range_mut::<Arc<str>, _>(..).enumerate() {
             *v = i as u32;
         }
@@ -727,10 +764,12 @@ impl UncompressedCatMapsInMemory {
         UncompressedCatMapsInMemory {
             map: Default::default(),
             rev_map: Default::default(),
+            rank_cache: Default::default(),
         }
     }
 
     pub fn encode_new_arc_string(&mut self, s: Arc<str>, u: u32) {
+        self.rank_cache.invalidate();
         self.map.insert(s.clone(), u);
         self.rev_map.insert(u, s);
     }
@@ -752,6 +791,7 @@ impl UncompressedCatMapsInMemory {
     }
 
     pub fn encode_new_string(&mut self, s: String, u: u32) {
+        self.rank_cache.invalidate();
         let s: Arc<str> = Arc::from(s);
         self.map.insert(s.clone(), u);
         self.rev_map.insert(u, s);
@@ -819,6 +859,7 @@ impl UncompressedCatMapsInMemory {
             Some(Self {
                 map,
                 rev_map: new_rev_map,
+                rank_cache: Default::default(),
             })
         }
     }
@@ -849,6 +890,7 @@ impl UncompressedCatMapsInMemory {
         other: &UncompressedCatMapsInMemory,
         c: &mut u32,
     ) -> HashMap<u32, u32, BuildHasherDefault<NoHashHasher<u32>>> {
+        self.rank_cache.invalidate();
         let (remap, insert): (Vec<_>, Vec<_>) = other
             .map
             .par_iter()
@@ -893,14 +935,25 @@ impl UncompressedCatMapsInMemory {
         rb
     }
 
+    pub fn local_rank_map(&self, us: &HashSet<u32>) -> HashMap<u32, u32> {
+        let mut keyed: Vec<_> = us
+            .iter()
+            .filter_map(|u| self.rev_map.get(u).map(|s| (s, *u)))
+            .collect();
+        keyed.sort_unstable_by(|a, b| a.0.cmp(b.0));
+        keyed
+            .into_iter()
+            .enumerate()
+            .map(|(i, (_, u))| (u, i as u32))
+            .collect()
+    }
+
+    /// See `PrefixCompressedCatMapsInMemory::global_rank_map`.
     pub fn global_rank_map(&self, us: &HashSet<u32>) -> HashMap<u32, u32> {
-        let mut ranked = HashMap::new();
-        for (i, (_, v)) in self.map.range::<Arc<str>, _>(..).enumerate() {
-            if us.contains(v) {
-                ranked.insert(*v, i as u32);
-            }
-        }
-        ranked
+        let ranks = self
+            .rank_cache
+            .get_or_build(|| positions(self.map.range::<Arc<str>, _>(..).map(|(_, v)| *v)));
+        lookup_ranks(&ranks, us)
     }
 
     pub fn range_set(&self) -> RangeSetBlaze<u32> {
@@ -908,6 +961,7 @@ impl UncompressedCatMapsInMemory {
     }
 
     pub fn garbage_collect_cats(&mut self, range_set: RangeSetBlaze<u32>) {
+        self.rank_cache.invalidate();
         // Får inn et range set med U32-er. Disse skal fjernes fra catmapet, og så brukes til å fjerne strenger fra revmapet
         let mut to_delete = Vec::new();
         for r in range_set {
@@ -1021,4 +1075,57 @@ mod tests {
         assert_eq!(u.maybe_encode_str("hello"), Some(7));
         assert_eq!(u.maybe_encode_str("hell"), None);
     }
+}
+
+/// Cached positions of the codes of a cat map in string order (`u32::MAX` for codes not in the
+/// map), cleared by every method that changes the map. Clones start without a cache.
+#[derive(Debug, Default)]
+struct RankCache(RwLock<Option<Arc<Vec<u32>>>>);
+
+impl Clone for RankCache {
+    fn clone(&self) -> Self {
+        Self::default()
+    }
+}
+
+impl RankCache {
+    fn invalidate(&mut self) {
+        *self.0.get_mut().unwrap() = None;
+    }
+
+    fn get_or_build(&self, build: impl FnOnce() -> Vec<u32>) -> Arc<Vec<u32>> {
+        if let Some(ranks) = self.0.read().unwrap().as_ref() {
+            return ranks.clone();
+        }
+        let mut cache = self.0.write().unwrap();
+        if let Some(ranks) = cache.as_ref() {
+            return ranks.clone();
+        }
+        let ranks = Arc::new(build());
+        *cache = Some(ranks.clone());
+        ranks
+    }
+}
+
+/// Position of each code in the iteration order given by `codes_in_order`. When a code occurs
+/// more than once the last position wins, like inserting the positions into a map in order.
+fn positions(codes_in_order: impl Iterator<Item = u32>) -> Vec<u32> {
+    let mut ranks: Vec<u32> = Vec::new();
+    for (i, u) in codes_in_order.enumerate() {
+        let u = u as usize;
+        if u >= ranks.len() {
+            ranks.resize(u + 1, u32::MAX);
+        }
+        ranks[u] = i as u32;
+    }
+    ranks
+}
+
+fn lookup_ranks(ranks: &[u32], us: &HashSet<u32>) -> HashMap<u32, u32> {
+    us.iter()
+        .filter_map(|u| match ranks.get(*u as usize) {
+            Some(r) if *r != u32::MAX => Some((*u, *r)),
+            _ => None,
+        })
+        .collect()
 }

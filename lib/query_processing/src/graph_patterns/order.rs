@@ -25,7 +25,7 @@ pub fn order_by(
     let mut order_exprs = vec![];
     let mut asc_bools = vec![];
     for (c, a) in columns.iter().zip(asc_ordering) {
-        solution_mappings = solution_mappings.as_eager(false).as_lazy();
+        solution_mappings = solution_mappings.as_eager().as_lazy();
 
         let t = solution_mappings.rdf_node_types.get(c).unwrap();
         if t.is_multi() {

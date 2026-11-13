@@ -188,6 +188,15 @@ impl CatMaps {
         }
     }
 
+    /// Ranks that order `us` by string value, valid only for comparing values within `us`.
+    /// Cheap for in-memory maps: O(|us| log |us|) rather than a walk over the whole map.
+    pub fn sort_rank_map(&self, us: &HashSet<u32>) -> HashMap<u32, u32> {
+        match self {
+            CatMaps::InMemory(m) => m.local_rank_map(us),
+            CatMaps::OnDisk(d) => d.local_rank_map(us),
+        }
+    }
+
     pub fn range_set(&self) -> RangeSetBlaze<u32> {
         match self {
             CatMaps::InMemory(in_memory) => in_memory.range_set(),

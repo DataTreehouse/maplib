@@ -54,8 +54,7 @@ def test_add_template_instead_of_constructor_df():
     model.map("http://example.net/ns#ExampleTemplate", df)
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_create_model_with_optional_value_missing_df(streaming):
+def test_create_model_with_optional_value_missing_df():
     doc = """
     @prefix ex:<http://example.net/ns#>.
     ex:ExampleTemplate [?MyValue, ??MyOtherValue] :: {
@@ -76,7 +75,6 @@ def test_create_model_with_optional_value_missing_df(streaming):
     ?obj1 ex:hasValue ?A
     } 
     """,
-        streaming=streaming,
     )
     expected_df = pl.DataFrame(
         {
@@ -93,13 +91,11 @@ def test_create_model_with_optional_value_missing_df(streaming):
         ?obj1 ex:hasOtherValue ?A
         } 
         """,
-        streaming=streaming,
     )
     assert qres.height == 0
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_create_programmatic_model_with_optional_value_missing_df(streaming):
+def test_create_programmatic_model_with_optional_value_missing_df():
     df = pl.DataFrame({"MyValue": ["A"]})
     model = Model()
     ex = Prefix("http://example.net/ns#")
@@ -123,7 +119,6 @@ def test_create_programmatic_model_with_optional_value_missing_df(streaming):
         ?obj1 ex:hasValue ?A
         } 
         """,
-        streaming=streaming,
     )
     expected_df = pl.DataFrame(
         {
@@ -140,13 +135,11 @@ def test_create_programmatic_model_with_optional_value_missing_df(streaming):
         ?obj1 ex:hasOtherValue ?A
         } 
         """,
-        streaming=streaming,
     )
     assert qres.height == 0
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_create_programmatic_model_with_default(streaming):
+def test_create_programmatic_model_with_default():
     df = pl.DataFrame({"MyValue": ["A"]})
     mapping = Model()
     ex = Prefix("http://example.net/ns#")
@@ -179,14 +172,12 @@ def test_create_programmatic_model_with_default(streaming):
         ?obj1 ex:hasYetAnotherValue ?B .
         } 
         """,
-        streaming=streaming,
     )
     expected_df = pl.DataFrame({"A": ["123"], "B": [123]})
     assert_frame_equal(qres, expected_df)
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_create_programmatic_mapping_with_nested_default(streaming):
+def test_create_programmatic_mapping_with_nested_default():
     
     df = pl.DataFrame({"MyValue": ["A"]})
     mapping = Model()
@@ -226,14 +217,12 @@ def test_create_programmatic_mapping_with_nested_default(streaming):
         ?obj1 ex:hasYetAnotherValue ?B .
         } 
         """,
-        streaming=streaming,
     )
     expected_df = pl.DataFrame({"A": ["123"], "B": [123]})
     assert_frame_equal(qres, expected_df)
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_create_programmatic_mapping_with_nested_default_and_missing_column(streaming):
+def test_create_programmatic_mapping_with_nested_default_and_missing_column():
     
     df = pl.DataFrame({"MyValue": ["A"]})
     mapping = Model()
@@ -277,14 +266,12 @@ def test_create_programmatic_mapping_with_nested_default_and_missing_column(stre
         ?obj1 ex:hasYetAnotherValue ?B .
         } 
         """,
-        streaming=streaming,
     )
     expected_df = pl.DataFrame({"A": ["123"], "B": [123]})
     assert_frame_equal(qres, expected_df)
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_create_programmatic_mapping_with_nested_partial_default(streaming):
+def test_create_programmatic_mapping_with_nested_partial_default():
     
     df = pl.DataFrame(
         {
@@ -334,7 +321,6 @@ def test_create_programmatic_mapping_with_nested_partial_default(streaming):
         ?S ex:hasYetAnotherValue ?B .
         } ORDER BY ?S ?A ?B
         """,
-        streaming=streaming,
     )
     expected_df = pl.DataFrame(
         {
@@ -346,8 +332,7 @@ def test_create_programmatic_mapping_with_nested_partial_default(streaming):
     assert_frame_equal(qres, expected_df)
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_create_programmatic_mapping_with_nested_none_optional(streaming):
+def test_create_programmatic_mapping_with_nested_none_optional():
     
     df = pl.DataFrame({"MyValue": ["A", "B"]})
     mapping = Model()
@@ -384,7 +369,6 @@ def test_create_programmatic_mapping_with_nested_none_optional(streaming):
         }
         } ORDER BY ?S ?A ?B
         """,
-        streaming=streaming,
     )
     expected_df = pl.DataFrame(
         {"S": [f"<{my_object.iri}>"] * 2, "A": ["A", "B"], "B": [None, None]}
@@ -393,8 +377,7 @@ def test_create_programmatic_mapping_with_nested_none_optional(streaming):
     assert_frame_equal(qres, expected_df)
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_create_programmatic_mapping_with_partial_default(streaming):
+def test_create_programmatic_mapping_with_partial_default():
     
     df = pl.DataFrame(
         {
@@ -434,7 +417,6 @@ def test_create_programmatic_mapping_with_partial_default(streaming):
         ?S ex:hasYetAnotherValue ?B .
         } ORDER BY ?S ?A ?B
         """,
-        streaming=streaming,
     )
     expected_df = pl.DataFrame(
         {
@@ -446,8 +428,7 @@ def test_create_programmatic_mapping_with_partial_default(streaming):
     assert_frame_equal(qres, expected_df)
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_create_mapping_from_empty_signature(streaming):
+def test_create_mapping_from_empty_signature():
     doc = """
     @prefix ex:<http://example.net/ns#>.
     ex:ExampleTemplate [] :: {
@@ -466,7 +447,6 @@ def test_create_mapping_from_empty_signature(streaming):
         ?obj1 ex:hasObj ?obj2
         } 
         """,
-        streaming=streaming,
     )
     expected_df = pl.DataFrame(
         {
@@ -478,8 +458,7 @@ def test_create_mapping_from_empty_signature(streaming):
     assert_frame_equal(qres, expected_df)
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_uri_subject_query(streaming):
+def test_uri_subject_query():
     doc = """
     @prefix ex:<http://example.net/ns#>.
     ex:ExampleTemplate [] :: {
@@ -498,7 +477,6 @@ def test_uri_subject_query(streaming):
         ex:myObject ex:hasObj ?obj2
         } 
         """,
-        streaming=streaming,
     )
     expected_df = pl.DataFrame({"obj2": "<http://example.net/ns#myOtherObject>"})
 

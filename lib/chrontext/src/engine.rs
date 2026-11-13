@@ -21,7 +21,6 @@ impl Engine {
     pub fn new(
         _chrontext_settings: &ChrontextSettings,
         _triplestore: &Triplestore,
-        _streaming: bool,
         _parameters: Option<&HashMap<String, EagerSolutionMappings>>,
         _query_settings: QuerySettings,
         _graph: Option<NamedGraph>,

@@ -8,7 +8,7 @@ use crate::{
 };
 use crate::{
     DEFAULT_DEBUG_NO_RESULTS, DEFAULT_INCLUDE_TRANSIENT, DEFAULT_MAP_TO_TRANSIENT,
-    DEFAULT_STREAMING, DEFAULT_TRIPLES_BATCH_SIZE,
+    DEFAULT_TRIPLES_BATCH_SIZE,
 };
 
 use chrono::Utc;
@@ -23,7 +23,6 @@ use oxrdfio::RdfFormat;
 use polars::frame::DataFrame;
 use pyo3::prelude::*;
 use representation::df_to_python::fix_cats_and_multicolumns;
-use representation::polars_to_rdf::XSD_DATETIME_WITH_TZ_FORMAT;
 use representation::python::PyIRI;
 use representation::result::QueryResult;
 use representation::solution_mapping::EagerSolutionMappings;
@@ -386,7 +385,6 @@ pub(crate) fn query_mutex(
     query: String,
     mapped_parameters: Option<HashMap<String, EagerSolutionMappings>>,
     graph: Option<NamedGraph>,
-    streaming: Option<bool>,
     include_transient: Option<bool>,
     max_rows: Option<usize>,
     debug: Option<bool>,
@@ -397,7 +395,6 @@ pub(crate) fn query_mutex(
             &query,
             mapped_parameters.as_ref(),
             graph.as_ref(),
-            streaming.unwrap_or(DEFAULT_STREAMING),
             include_transient.unwrap_or(DEFAULT_INCLUDE_TRANSIENT),
             max_rows,
             debug.unwrap_or(DEFAULT_DEBUG_NO_RESULTS),
@@ -432,7 +429,6 @@ pub(crate) fn update_mutex(
     update: String,
     mapped_parameters: Option<HashMap<String, EagerSolutionMappings>>,
     graph: Option<String>,
-    streaming: Option<bool>,
     include_transient: Option<bool>,
     max_rows: Option<usize>,
     debug: Option<bool>,
@@ -445,7 +441,6 @@ pub(crate) fn update_mutex(
             &update,
             mapped_parameters.as_ref(),
             named_graph.as_ref(),
-            streaming.unwrap_or(DEFAULT_STREAMING),
             include_transient.unwrap_or(DEFAULT_INCLUDE_TRANSIENT),
             max_rows,
             debug.unwrap_or(DEFAULT_DEBUG_NO_RESULTS),
@@ -475,7 +470,6 @@ pub(crate) fn validate_mutex(
     inferences_graph: Option<String>,
     include_details: Option<bool>,
     include_conforms: Option<bool>,
-    streaming: Option<bool>,
     max_shape_constraint_results: Option<usize>,
     only_shapes: Option<Vec<String>>,
     deactivate_shapes: Option<Vec<String>>,
@@ -533,7 +527,6 @@ pub(crate) fn validate_mutex(
             inferences_graph.as_ref(),
             include_details.unwrap_or(false),
             include_conforms.unwrap_or(false),
-            streaming.unwrap_or(DEFAULT_STREAMING),
             max_shape_constraint_results,
             false, //TODO: Needs more work before can be exposed
             max_rows,
@@ -555,7 +548,6 @@ pub(crate) fn insert_mutex(
     query: String,
     mapped_parameters: Option<HashMap<String, EagerSolutionMappings>>,
     transient: Option<bool>,
-    streaming: Option<bool>,
     source_graph: NamedGraph,
     target_graph: NamedGraph,
     include_transient: Option<bool>,
@@ -570,7 +562,6 @@ pub(crate) fn insert_mutex(
             include_transient.unwrap_or(DEFAULT_INCLUDE_TRANSIENT),
             &target_graph,
             transient.unwrap_or(false),
-            streaming.unwrap_or(DEFAULT_STREAMING),
             max_rows,
             debug.unwrap_or(DEFAULT_DEBUG_NO_RESULTS),
         )
@@ -711,6 +702,9 @@ pub(crate) fn write_triples_mutex(
     Ok(())
 }
 
+/// CIM/XML header times are UTC with whole seconds, e.g. 2021-02-02T22:28:41Z.
+const CIM_XML_DATETIME_FORMAT: &str = "%Y-%m-%dT%H:%M:%SZ";
+
 pub(crate) fn write_cim_xml_mutex(
     inner: &mut MutexGuard<InnerModel>,
     file_path: String,
@@ -738,11 +732,11 @@ pub(crate) fn write_cim_xml_mutex(
     let profile_graph = parse_named_node(profile_graph)?;
     let profile_graph = NamedGraph::from_maybe_named_node(Some(&profile_graph));
     let created = oxrdf::Literal::new_typed_literal(
-        created.unwrap_or(Utc::now().format(XSD_DATETIME_WITH_TZ_FORMAT).to_string()),
+        created.unwrap_or(Utc::now().format(CIM_XML_DATETIME_FORMAT).to_string()),
         xsd::DATE_TIME,
     );
     let scenario_time = oxrdf::Literal::new_typed_literal(
-        scenario_time.unwrap_or(Utc::now().format(XSD_DATETIME_WITH_TZ_FORMAT).to_string()),
+        scenario_time.unwrap_or(Utc::now().format(CIM_XML_DATETIME_FORMAT).to_string()),
         xsd::DATE_TIME,
     );
     let modeling_authority_set = modeling_authority_set.map(oxrdf::Literal::new_simple_literal);

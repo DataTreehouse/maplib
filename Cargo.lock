@@ -2659,14 +2659,13 @@ dependencies = [
 [[package]]
 name = "oxrdfxml"
 version = "0.2.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b69a81d41e2ee7d0d296980e6e44d3d2282f558cd82a8b3b4988c2eb06a6e07d"
 dependencies = [
  "oxilangtag",
  "oxiri",
  "oxrdf",
  "quick-xml 0.37.5",
  "thiserror",
+ "tokio",
 ]
 
 [[package]]
@@ -3679,6 +3678,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "331e97a1af0bf59823e6eadffe373d7b27f485be8748f71471c662c1f269b7fb"
 dependencies = [
  "memchr",
+ "tokio",
 ]
 
 [[package]]
@@ -5053,6 +5053,7 @@ dependencies = [
  "ordered-float",
  "oxrdf",
  "oxrdfio",
+ "oxrdfxml",
  "oxttl",
  "polars",
  "polars-core",

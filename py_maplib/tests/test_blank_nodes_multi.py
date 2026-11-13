@@ -46,8 +46,7 @@ def blank_person_model() -> Model:
     return m
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_simple_query_no_error(blank_person_model, streaming):
+def test_simple_query_no_error(blank_person_model):
     qres = blank_person_model.query(
         """
         PREFIX foaf:<http://xmlns.com/foaf/0.1/>
@@ -58,7 +57,6 @@ def test_simple_query_no_error(blank_person_model, streaming):
         ?p foaf:firstName ?firstName .
         } ORDER BY ?firstName ?lastName
         """,
-        streaming=streaming,
     ).sort(["firstName", "lastName"])
     expected_df = pl.DataFrame(
         {"firstName": ["Ann", "Bob"], "lastName": ["Strong", "Brite"]}
@@ -85,8 +83,7 @@ def test_simple_query_blank_node_output_no_error(blank_person_model):
     assert len(res) == 2
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_multi_datatype_query_no_error(blank_person_model, streaming):
+def test_multi_datatype_query_no_error(blank_person_model):
     sm = blank_person_model.query(
         """
         PREFIX foaf:<http://xmlns.com/foaf/0.1/>
@@ -96,7 +93,6 @@ def test_multi_datatype_query_no_error(blank_person_model, streaming):
         } 
         """,
         solution_mappings=True,
-        streaming=streaming,
     )
     by = ["s", "v", "o"]
     df = sm.mappings.sort(by=by)
@@ -113,8 +109,7 @@ def test_multi_datatype_query_no_error(blank_person_model, streaming):
     assert_frame_equal(df, expected_df)
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_multi_datatype_union_query_no_error(blank_person_model, streaming):
+def test_multi_datatype_union_query_no_error(blank_person_model):
     res = blank_person_model.query(
         """
         PREFIX foaf:<http://xmlns.com/foaf/0.1/>
@@ -126,7 +121,6 @@ def test_multi_datatype_union_query_no_error(blank_person_model, streaming):
         }
         } 
         """,
-        streaming=streaming,
     )
     by = ["s", "o"]
     df = res.sort(by=by)
@@ -136,8 +130,7 @@ def test_multi_datatype_union_query_no_error(blank_person_model, streaming):
     assert_frame_equal(df, expected_df)
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_multi_datatype_union_sort_query(blank_person_model, streaming):
+def test_multi_datatype_union_sort_query(blank_person_model):
     df = blank_person_model.query(
         """
         PREFIX foaf:<http://xmlns.com/foaf/0.1/>
@@ -149,7 +142,6 @@ def test_multi_datatype_union_sort_query(blank_person_model, streaming):
         }
         } ORDER BY ?o ?s
         """,
-        streaming=streaming,
     )
     filename = TESTDATA_PATH / "multi_datatype_union_sort_query.csv"
     # df.write_csv(filename)
@@ -157,8 +149,7 @@ def test_multi_datatype_union_sort_query(blank_person_model, streaming):
     assert_frame_equal(df, expected_df)
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_multi_datatype_union_sort_desc1_query(blank_person_model, streaming):
+def test_multi_datatype_union_sort_desc1_query(blank_person_model):
     df = blank_person_model.query(
         """
         PREFIX foaf:<http://xmlns.com/foaf/0.1/>
@@ -170,7 +161,6 @@ def test_multi_datatype_union_sort_desc1_query(blank_person_model, streaming):
         }
         } ORDER BY DESC(?o) ?s
         """,
-        streaming=streaming,
     )
     filename = TESTDATA_PATH / "multi_datatype_union_sort_desc1_query.csv"
     # df.write_csv(filename)
@@ -178,8 +168,7 @@ def test_multi_datatype_union_sort_desc1_query(blank_person_model, streaming):
     assert_frame_equal(df, expected_df)
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_multi_datatype_union_query_native_df(blank_person_model, streaming):
+def test_multi_datatype_union_query_native_df(blank_person_model):
     res = blank_person_model.query(
         """
         PREFIX foaf:<http://xmlns.com/foaf/0.1/>
@@ -192,7 +181,6 @@ def test_multi_datatype_union_query_native_df(blank_person_model, streaming):
         } 
         """,
         solution_mappings=True,
-        streaming=streaming,
     )
     by = ["s", "o"]
     df = res.mappings.sort(by=by)
@@ -203,8 +191,7 @@ def test_multi_datatype_union_query_native_df(blank_person_model, streaming):
     assert_frame_equal(df, expected_df, check_exact=False)
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_multi_datatype_left_join_query_no_error(blank_person_model, streaming):
+def test_multi_datatype_left_join_query_no_error(blank_person_model):
     res = blank_person_model.query(
         """
         PREFIX foaf:<http://xmlns.com/foaf/0.1/>
@@ -216,7 +203,6 @@ def test_multi_datatype_left_join_query_no_error(blank_person_model, streaming):
         }
         } 
         """,
-        streaming=streaming,
     )
     by = ["s", "o"]
     df = res.sort(by=by)
@@ -226,8 +212,7 @@ def test_multi_datatype_left_join_query_no_error(blank_person_model, streaming):
     assert_frame_equal(df, expected_df)
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_multi_datatype_join_query_two_vars_no_error(blank_person_model, streaming):
+def test_multi_datatype_join_query_two_vars_no_error(blank_person_model):
     res = blank_person_model.query(
         """
         PREFIX foaf:<http://xmlns.com/foaf/0.1/>
@@ -241,7 +226,6 @@ def test_multi_datatype_join_query_two_vars_no_error(blank_person_model, streami
         }
         } 
         """,
-        streaming=streaming,
     )
     by = ["s", "o"]
     df = res.sort(by=by)
@@ -251,8 +235,7 @@ def test_multi_datatype_join_query_two_vars_no_error(blank_person_model, streami
     assert_frame_equal(df, expected_df)
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_multi_datatype_join_query_no_error(blank_person_model, streaming):
+def test_multi_datatype_join_query_no_error(blank_person_model):
     res = blank_person_model.query(
         """
         PREFIX foaf:<http://xmlns.com/foaf/0.1/>
@@ -266,7 +249,6 @@ def test_multi_datatype_join_query_no_error(blank_person_model, streaming):
         }
         } 
         """,
-        streaming=streaming,
     )
     by = ["s1", "s2", "o"]
     df = res.sort(by=by)
@@ -276,8 +258,7 @@ def test_multi_datatype_join_query_no_error(blank_person_model, streaming):
     assert_frame_equal(df, expected_df)
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_multi_datatype_query_sorting_sorting(blank_person_model, streaming):
+def test_multi_datatype_query_sorting_sorting(blank_person_model):
     res = blank_person_model.query(
         """
         PREFIX foaf:<http://xmlns.com/foaf/0.1/>
@@ -286,7 +267,6 @@ def test_multi_datatype_query_sorting_sorting(blank_person_model, streaming):
         ?s ?v ?o .
         } ORDER BY ?s ?v ?o
         """,
-        streaming=streaming,
     ).sort(["s", "v", "o"])
     # TODO: Fix multitype sorting
     filename = TESTDATA_PATH / "multi_datatype_query_sorting.csv"

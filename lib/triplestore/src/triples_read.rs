@@ -10,6 +10,7 @@ use oxrdf::{BlankNode, GraphName, Literal, NamedNode, NamedOrBlankNode, Quad, Te
 use oxrdfio::{
     JsonLdProfileSet, LoadedDocument, RdfFormat, RdfParser, RdfSyntaxError, SliceQuadParser,
 };
+use oxrdfxml::{RdfXmlParser, SliceRdfXmlParser};
 use oxttl::ntriples::SliceNTriplesParser;
 use oxttl::turtle::SliceTurtleParser;
 use oxttl::{NTriplesParser, TurtleParser};
@@ -24,6 +25,7 @@ use representation::{
     SeriesBuilder,
 };
 use representation::{OBJECT_COL_NAME, SUBJECT_COL_NAME};
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::Cursor;
@@ -161,9 +163,15 @@ impl Triplestore {
         let parallel = if let Some(parallel) = parallel {
             parallel
         } else {
-            matches!(rdf_format, ExtendedRdfFormat::Normal(RdfFormat::NTriples))
+            matches!(
+                rdf_format,
+                ExtendedRdfFormat::Normal(RdfFormat::NTriples)
+                    | ExtendedRdfFormat::Normal(RdfFormat::RdfXml)
+                    | ExtendedRdfFormat::CIMXML
+            )
         };
         let hdt;
+        let rdfxml_chunks: Vec<Cow<'_, [u8]>>;
         let mut readers = if rdf_format == ExtendedRdfFormat::HDT {
             hdt = Hdt::read(Cursor::new(use_slice))
                 .map_err(|e| TriplestoreError::HDTError(e.to_string()))?;
@@ -172,6 +180,17 @@ impl Triplestore {
             parallel_turtle_readers(use_slice, prefixes, checked, base_iri)
         } else if parallel && rdf_format == ExtendedRdfFormat::Normal(RdfFormat::NTriples) {
             parallel_ntriples_readers(use_slice, checked)
+        } else if parallel
+            && matches!(
+                rdf_format,
+                ExtendedRdfFormat::Normal(RdfFormat::RdfXml) | ExtendedRdfFormat::CIMXML
+            )
+        {
+            let threads = std::thread::available_parallelism()
+                .map(|t| t.get())
+                .unwrap_or(1);
+            rdfxml_chunks = oxrdfxml::split_slice_for_parallel_parsing(use_slice, threads);
+            parallel_rdfxml_readers(&rdfxml_chunks, &rdf_format, checked, base_iri)
         } else {
             vec![rdf_parser_reader(
                 use_slice,
@@ -599,6 +618,35 @@ fn parallel_ntriples_readers(slice: &[u8], checked: bool) -> Vec<MyFromSliceQuad
         .collect()
 }
 
+fn parallel_rdfxml_readers<'a>(
+    chunks: &'a [Cow<'a, [u8]>],
+    rdf_format: &ExtendedRdfFormat,
+    checked: bool,
+    base_iri: Option<String>,
+) -> Vec<MyFromSliceQuadReader<'a>> {
+    let mut parser = RdfXmlParser::new();
+    if !checked {
+        parser = parser.lenient();
+    }
+    if let Some(base_iri) = &base_iri {
+        parser = parser.with_base_iri(base_iri).unwrap();
+    }
+    let cim_base_iri = if matches!(rdf_format, ExtendedRdfFormat::CIMXML) {
+        Some(base_iri)
+    } else {
+        None
+    };
+    chunks
+        .iter()
+        .map(|chunk| MyFromSliceQuadReader {
+            parser: MyFromSliceQuadReaderKind::RdfXmlPar(
+                parser.clone().for_slice(chunk.as_ref()),
+                cim_base_iri.clone(),
+            ),
+        })
+        .collect()
+}
+
 fn rdf_parser_reader<'a>(
     slice: &'a [u8],
     rdf_format: &ExtendedRdfFormat,
@@ -652,6 +700,8 @@ pub enum MyFromSliceQuadReaderKind<'a> {
     CIMXML(SliceQuadParser<'a>, Option<String>),
     TurtlePar(SliceTurtleParser<'a>),
     NTriplesPar(SliceNTriplesParser<'a>),
+    /// One chunk of a split RDF/XML document. `Some(base_iri)` if the document is CIM/XML.
+    RdfXmlPar(SliceRdfXmlParser<'a>, Option<Option<String>>),
     HDT(Box<dyn Iterator<Item = Quad> + Send + 'a>),
 }
 
@@ -677,6 +727,16 @@ impl Iterator for MyFromSliceQuadReader<'_> {
             },
             MyFromSliceQuadReaderKind::NTriplesPar(parser) => match parser.next()? {
                 Ok(triple) => Ok(triple.in_graph(GraphName::default())),
+                Err(e) => Err(e.into()),
+            },
+            MyFromSliceQuadReaderKind::RdfXmlPar(parser, cim_base_iri) => match parser.next()? {
+                Ok(triple) => {
+                    let quad = triple.in_graph(GraphName::default());
+                    Ok(match cim_base_iri {
+                        Some(base_iri) => fix_cim_quad(quad, base_iri.as_ref()),
+                        None => quad,
+                    })
+                }
                 Err(e) => Err(e.into()),
             },
             MyFromSliceQuadReaderKind::HDT(iter) => Ok(iter.next()?),

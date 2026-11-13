@@ -61,7 +61,6 @@ impl Triplestore {
         &self,
         query: &str,
         parameters: Option<&HashMap<String, EagerSolutionMappings>>,
-        streaming: bool,
         query_settings: &QuerySettings,
         graph: Option<&NamedGraph>,
         prefixes: Option<&HashMap<String, NamedNode>>,
@@ -72,21 +71,13 @@ impl Triplestore {
         let query =
             maybe_replace_bindings(query, bindings).map_err(SparqlError::ReplaceBindingsError)?;
         trace!(?query);
-        self.query_parsed(
-            &query,
-            parameters,
-            streaming,
-            query_settings,
-            graph,
-            debug_no_results,
-        )
+        self.query_parsed(&query, parameters, query_settings, graph, debug_no_results)
     }
 
     pub fn query_parsed(
         &self,
         query: &Query,
         parameters: Option<&HashMap<String, EagerSolutionMappings>>,
-        streaming: bool,
         query_settings: &QuerySettings,
         graph: Option<&NamedGraph>,
         debug_no_results: bool,
@@ -114,7 +105,7 @@ impl Triplestore {
                     &dataset_or_named_graph(dataset, graph),
                 )?;
 
-                match pl_interruptable_collect(mappings.with_streaming(streaming)) {
+                match pl_interruptable_collect(mappings) {
                     Ok(df) => {
                         if df.height() == 0 {
                             no_results = true;
@@ -148,7 +139,7 @@ impl Triplestore {
                     query_settings,
                     &dataset_or_named_graph(dataset, graph),
                 )?;
-                match pl_interruptable_collect(mappings.with_streaming(streaming)) {
+                match pl_interruptable_collect(mappings) {
                     Ok(df) => {
                         if df.height() == 0 {
                             no_results = true;
@@ -197,7 +188,7 @@ impl Triplestore {
                     query_settings,
                     &dataset_or_named_graph(dataset, graph),
                 )?;
-                match pl_interruptable_collect(mappings.limit(1).with_streaming(streaming)) {
+                match pl_interruptable_collect(mappings.limit(1)) {
                     Ok(df) => {
                         if df.height() == 0 {
                             no_results = true;
@@ -233,7 +224,6 @@ impl Triplestore {
         query: &str,
         parameters: Option<&HashMap<String, EagerSolutionMappings>>,
         transient: bool,
-        streaming: bool,
         query_settings: &QuerySettings,
         source_graph: &NamedGraph,
         target_graph: &NamedGraph,
@@ -245,7 +235,6 @@ impl Triplestore {
             &query,
             parameters,
             transient,
-            streaming,
             query_settings,
             source_graph,
             target_graph,
@@ -258,7 +247,6 @@ impl Triplestore {
         query: &Query,
         parameters: Option<&HashMap<String, EagerSolutionMappings>>,
         transient: bool,
-        streaming: bool,
         query_settings: &QuerySettings,
         source_graph: &NamedGraph,
         target_graph: &NamedGraph,
@@ -268,7 +256,6 @@ impl Triplestore {
             let res = self.query_parsed(
                 query,
                 parameters,
-                streaming,
                 query_settings,
                 Some(source_graph),
                 debug_no_results,
@@ -296,21 +283,14 @@ impl Triplestore {
         &mut self,
         update: &str,
         parameters: Option<&HashMap<String, EagerSolutionMappings>>,
-        streaming: bool,
         query_settings: &QuerySettings,
         graph: Option<&NamedGraph>,
         prefixes: Option<&HashMap<String, NamedNode>>,
         debug_no_results: bool,
     ) -> Result<UpdateResult, SparqlError> {
         let update = Update::parse(update, None, prefixes).map_err(SparqlError::ParseError)?;
-        let res = self.update_parsed(
-            &update,
-            parameters,
-            streaming,
-            query_settings,
-            graph,
-            debug_no_results,
-        )?;
+        let res =
+            self.update_parsed(&update, parameters, query_settings, graph, debug_no_results)?;
         Ok(res)
     }
 
@@ -318,7 +298,6 @@ impl Triplestore {
         &mut self,
         update: &Update,
         parameters: Option<&HashMap<String, EagerSolutionMappings>>,
-        streaming: bool,
         query_settings: &QuerySettings,
         graph: Option<&NamedGraph>,
         debug_no_results: bool,
@@ -437,14 +416,8 @@ impl Triplestore {
                         pattern: p,
                         base_iri: None,
                     };
-                    let QueryResult { kind, debug, .. } = self.query_parsed(
-                        &q,
-                        parameters,
-                        streaming,
-                        query_settings,
-                        graph,
-                        debug_no_results,
-                    )?;
+                    let QueryResult { kind, debug, .. } =
+                        self.query_parsed(&q, parameters, query_settings, graph, debug_no_results)?;
                     if debug_no_results {
                         if let Some(debug) = debug {
                             debug_output.as_mut().unwrap().extend(debug.debug_outputs);

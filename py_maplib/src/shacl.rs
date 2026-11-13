@@ -63,9 +63,7 @@ impl PyValidationReport {
         Ok(self.inner.rules_result.to_string())
     }
 
-    #[pyo3(signature = (streaming=None))]
-    pub fn results(&self, streaming: Option<bool>, py: Python<'_>) -> PyResult<Option<Py<PyAny>>> {
-        let streaming = streaming.unwrap_or(false);
+    pub fn results(&self, py: Python<'_>) -> PyResult<Option<Py<PyAny>>> {
         let report = py.detach(|| -> Result<_, PyMaplibError> {
             let sm = self
                 .inner
@@ -76,7 +74,7 @@ impl PyValidationReport {
                     let EagerSolutionMappings {
                         mut mappings,
                         mut rdf_node_types,
-                    } = sm.as_eager(streaming);
+                    } = sm.as_eager();
                     (mappings, rdf_node_types) = fix_cats_and_multicolumns(
                         mappings,
                         rdf_node_types,
@@ -102,10 +100,7 @@ impl PyValidationReport {
         }
     }
 
-    #[pyo3(signature = (streaming=None))]
-    pub fn details(&self, streaming: Option<bool>, py: Python<'_>) -> PyResult<Option<Py<PyAny>>> {
-        let streaming = streaming.unwrap_or(false);
-
+    pub fn details(&self, py: Python<'_>) -> PyResult<Option<Py<PyAny>>> {
         let details = py.detach(|| -> Result<_, PyMaplibError> {
             let sm = self
                 .inner
@@ -116,7 +111,7 @@ impl PyValidationReport {
                     let EagerSolutionMappings {
                         mut mappings,
                         mut rdf_node_types,
-                    } = sm.as_eager(streaming);
+                    } = sm.as_eager();
                     (mappings, rdf_node_types) = fix_cats_and_multicolumns(
                         mappings,
                         rdf_node_types,

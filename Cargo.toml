@@ -10,6 +10,7 @@ members = [
     "lib/file_io",
     "lib/query_processing",
     "lib/spargebra",
+    "lib/oxrdfxml",
     "lib/shacl",
     "lib/fts",
     "lib/datalog",
@@ -104,6 +105,8 @@ lto = "thin"
 codegen-units = 16
 
 [patch.crates-io]
+# Vendored RDF/XML parser/serializer from oxigraph, with parallel parsing added.
+oxrdfxml = { path = "lib/oxrdfxml" }
 polars = { git = 'https://github.com/pola-rs/polars', rev = "7f902bd3ffd27ff82d14278a09a295ff2f7aed92" }
 polars-core = { git = 'https://github.com/pola-rs/polars', rev = "7f902bd3ffd27ff82d14278a09a295ff2f7aed92" }
 polars-arrow = { git = 'https://github.com/pola-rs/polars', rev = "7f902bd3ffd27ff82d14278a09a295ff2f7aed92" }

@@ -126,7 +126,7 @@ impl Triplestore {
             max_rows: None,
             strict_project: false,
         };
-        self.insert(RDFS_9, None, true, false, &qs, graph, graph, None, false)
+        self.insert(RDFS_9, None, true, &qs, graph, graph, None, false)
             .map_err(|x| TriplestoreError::RDFSClassInheritanceError(x.to_string()))?;
         Ok(())
     }
@@ -196,16 +196,7 @@ impl Triplestore {
             .iter()
             .map(|x| {
                 let r = self
-                    .query(
-                        x,
-                        None,
-                        false,
-                        query_settings,
-                        Some(graph),
-                        None,
-                        false,
-                        None,
-                    )
+                    .query(x, None, query_settings, Some(graph), None, false, None)
                     .map_err(|x| TriplestoreError::SparqlQueryError(x.to_string()))?;
                 Ok(r)
             })

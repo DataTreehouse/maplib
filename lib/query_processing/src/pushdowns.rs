@@ -67,7 +67,7 @@ impl Pushdowns {
             }
         }
         if should_add_from_solution_mappings && sm.height_estimate <= CHECK_SMALL_HEIGHT {
-            let eager_sm = sm.as_eager(false);
+            let eager_sm = sm.as_eager();
             if eager_sm.mappings.height() <= SMALL_HEIGHT {
                 let columns = eager_sm.mappings.columns();
                 let pushdowns: HashMap<_, _> = columns

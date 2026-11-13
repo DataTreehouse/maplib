@@ -470,24 +470,20 @@ class ValidationReport:
 
     def results(
             self,
-            streaming: bool = False,
     ) -> Optional[DataFrame]:
         """
         Return the results of the validation report, if they exist.
 
-        :param streaming: Use the Polars streaming functionality.
         :return: The SHACL validation report, as a DataFrame
         """
 
     def details(
             self,
-            streaming: bool = False,
     ) -> Optional[DataFrame]:
         """
         Returns the details of the validation report.
         Only available if validation was called with include_details=True.
 
-        :param streaming: Use the Polars streaming functionality.
         :return: Details of the SHACL validation report, as a DataFrame
         """
 
@@ -777,7 +773,6 @@ class Model:
             parameters: ParametersType = None,
             solution_mappings: bool = False,
             graph: str = None,
-            streaming: bool = False,
             return_json: bool = False,
             return_format: LiteralType["turtle", "json", "dataframe"] = "dataframe",
             include_transient: bool = True,
@@ -801,7 +796,6 @@ class Model:
         :param parameters: PVALUES Parameters, for each parameter, the SolutionMappings containing corresponding mappings and types.
         :param solution_mappings: Returns SolutionMappings with maplib-native formatting and with RDF typing. Useful for round-trips.
         :param graph: The IRI of the graph to query.
-        :param streaming: Use Polars streaming
         :param return_json: Return JSON string.
         :param return_format: One of "dataframe" (default), "json" (SELECT and ASK only) or "turtle" (CONSTRUCT only). Ignored when return_json is set.
         :param include_transient: Include transient triples when querying.
@@ -853,7 +847,6 @@ class Model:
             update: str,
             parameters: ParametersType = None,
             graph: str = None,
-            streaming: bool = False,
             include_transient: bool = True,
             max_rows: int = None,
             debug: bool = False,
@@ -872,7 +865,6 @@ class Model:
         :param update: The SPARQL Update string
         :param parameters: PVALUES Parameters, for each parameter, the SolutionMappings containing corresponding mappings and types.
         :param graph: The IRI of the graph to update.
-        :param streaming: Use Polars streaming
         :param include_transient: Include transient triples when querying (but see "transient" above).
         :param max_rows: Maximum estimated rows in result, helps avoid out-of-memory errors.
         :param debug: Why does my query have no results?
@@ -885,7 +877,6 @@ class Model:
             parameters: ParametersType = None,
             solution_mappings: bool = False,
             transient: bool = False,
-            streaming: bool = False,
             source_graph: str = None,
             target_graph: str = None,
             include_transient: bool = True,
@@ -916,7 +907,6 @@ class Model:
         :param transient: Should the inserted triples be transient?
         :param source_graph: The IRI of the source graph to execute the construct query.
         :param target_graph: The IRI of the target graph to insert into.
-        :param streaming: Use Polars streaming
         :param include_transient: Include transient triples when querying (but see "transient" above).
         :param max_rows: Maximum estimated rows in result, helps avoid out-of-memory errors.
         :param debug: Why does my query have no results?
@@ -932,7 +922,6 @@ class Model:
             include_details: bool = False,
             include_conforms: bool = False,
 
-            streaming: bool = False,
             max_shape_constraint_results: int = None,
             only_shapes: List[str] = None,
             deactivate_shapes: List[str] = None,
@@ -952,7 +941,6 @@ class Model:
         :param inferences_graph: If this IRI is supplied, any inference results from sh:rule can be found in this named graph.
         :param include_details: Include details of SHACL evaluation alongside the report. Currently uses a lot of memory.
         :param include_conforms: Include those results that conformed. Also applies to details.
-        :param streaming: Use Polars streaming
         :param max_shape_constraint_results: Maximum number of results per shape and constraint. Reduces the size of the result set.
         :param only_shapes: Validate only these shapes, None means all shapes are validated (must be IRI, cannot be used with deactivate_shapes).
         :param deactivate_shapes: Disable validation of these shapes (must be IRI, cannot be used with only_shapes).

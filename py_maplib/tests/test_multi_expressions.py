@@ -11,8 +11,7 @@ PATH_HERE = pathlib.Path(__file__).parent
 TESTDATA_PATH = PATH_HERE / "testdata"
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_multi_filter_equals(streaming):
+def test_multi_filter_equals():
     m = Model()
     df = m.query(
         """
@@ -23,12 +22,10 @@ def test_multi_filter_equals(streaming):
     FILTER(?a = :hello2)
     }
     """,
-        streaming=streaming,
     )
     assert_frame_equal(df, pl.DataFrame({"a": ["<http://example.net/hello2>"]}))
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_multi_filter_numerical_equals(streaming):
+def test_multi_filter_numerical_equals():
     m = Model()
     df = m.query(
         """
@@ -40,14 +37,12 @@ def test_multi_filter_numerical_equals(streaming):
     FILTER(?a = ?b)
     }
     """,
-        streaming=streaming,
     )
     # = compares numbers with type promotion (op:numeric-equal), so 1 (int) = 1 (integer).
     assert df.shape == (1, 2)
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_multi_filter_numerical_same_term(streaming):
+def test_multi_filter_numerical_same_term():
     m = Model()
     df = m.query(
         """
@@ -59,12 +54,10 @@ def test_multi_filter_numerical_same_term(streaming):
     FILTER(SAMETERM(?a, ?b))
     }
     """,
-        streaming=streaming,
     )
     assert df.shape == (0, 2)
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_multi_filter_numerical_cast_real_equals(streaming):
+def test_multi_filter_numerical_cast_real_equals():
     m = Model()
     df = m.query(
         """
@@ -76,13 +69,11 @@ def test_multi_filter_numerical_cast_real_equals(streaming):
     FILTER(xsd:double(?a) = xsd:double(?b))
     }
     """,
-        streaming=streaming,
     )
     assert df.shape == (1, 2)
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_multi_filter_numerical_cast_integer_equals(streaming):
+def test_multi_filter_numerical_cast_integer_equals():
     m = Model()
     df = m.query(
         """
@@ -94,13 +85,11 @@ def test_multi_filter_numerical_cast_integer_equals(streaming):
     FILTER(xsd:integer(?a) = xsd:integer(?b))
     }
     """,
-        streaming=streaming,
     )
     assert df.shape == (1, 2)
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_multi_filter_numerical_cast_string_equals(streaming):
+def test_multi_filter_numerical_cast_string_equals():
     m = Model()
     df = m.query(
         """
@@ -112,13 +101,11 @@ def test_multi_filter_numerical_cast_string_equals(streaming):
     FILTER(xsd:string(?a) = xsd:string(?b))
     }
     """,
-        streaming=streaming,
     )
     assert df.shape == (1, 2)
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_multi_strlen(streaming):
+def test_multi_strlen():
     m = Model()
     df = m.query(
         """
@@ -128,13 +115,11 @@ def test_multi_strlen(streaming):
         VALUES (?a) { ("123"^^xsd:int) ("Hello") ("") ("ABC"^^xsd:string)}
     } 
     """,
-        streaming=streaming,
     )
     assert df.get_column("len").sum() == 11
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_multi_filter_uri_cast_string_equals(streaming):
+def test_multi_filter_uri_cast_string_equals():
     m = Model()
     df = m.query(
         """
@@ -145,13 +130,11 @@ def test_multi_filter_uri_cast_string_equals(streaming):
         FILTER(xsd:string(?a) = "http://example.net/something")
     }
     """,
-        streaming=streaming,
     )
     assert df.shape == (1, 1)
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_filter_uri_cast_string_equals(streaming):
+def test_filter_uri_cast_string_equals():
     m = Model()
     df = m.query(
         """
@@ -162,13 +145,11 @@ def test_filter_uri_cast_string_equals(streaming):
         FILTER(xsd:string(?a) = "http://example.net/something")
     }
     """,
-        streaming=streaming,
     )
     assert df.shape == (1, 1)
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_multi_filter_equals_with_datatypes(streaming):
+def test_multi_filter_equals_with_datatypes():
     m = Model()
     sm = m.query(
         """
@@ -180,7 +161,6 @@ def test_multi_filter_equals_with_datatypes(streaming):
     }
     """,
         solution_mappings=True,
-        streaming=streaming,
     )
     assert sm.rdf_types == {"a": RDFType.IRI}
     assert_frame_equal(
@@ -188,8 +168,7 @@ def test_multi_filter_equals_with_datatypes(streaming):
     )
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_multi_value_different_types_filter_equals_with_datatypes(streaming):
+def test_multi_value_different_types_filter_equals_with_datatypes():
     m = Model()
     sm = m.query(
         """
@@ -201,14 +180,12 @@ def test_multi_value_different_types_filter_equals_with_datatypes(streaming):
     }
     """,
         solution_mappings=True,
-        streaming=streaming,
     )
     assert sm.rdf_types == {"a": RDFType.Literal(xsd.boolean)}
     assert_frame_equal(sm.mappings, pl.DataFrame({"a": [True]}))
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_multi_value_different_types_filter_isiri_or_equals_with_datatypes(streaming):
+def test_multi_value_different_types_filter_isiri_or_equals_with_datatypes():
     m = Model()
     sm = m.query(
         """
@@ -220,7 +197,6 @@ def test_multi_value_different_types_filter_isiri_or_equals_with_datatypes(strea
     }
     """,
         solution_mappings=True,
-        streaming=streaming,
     )
     assert sm.rdf_types == {
         "a": RDFType.Multi([RDFType.IRI, RDFType.Literal(xsd.integer)])
@@ -234,8 +210,7 @@ def test_multi_value_different_types_filter_isiri_or_equals_with_datatypes(strea
     )
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_coalesce_both_multi_same_types(streaming):
+def test_coalesce_both_multi_same_types():
     m = Model()
     sm = m.query(
         """
@@ -251,15 +226,13 @@ def test_coalesce_both_multi_same_types(streaming):
     }
     """,
         solution_mappings=True,
-        streaming=streaming,
     )
     print(sm.mappings)
     print(sm.rdf_types)
     assert sm.mappings.get_column("c").is_null().sum() == 0
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_coalesce_both_multi_different_types(streaming):
+def test_coalesce_both_multi_different_types():
     m = Model()
     sm = m.query(
         """
@@ -275,13 +248,11 @@ def test_coalesce_both_multi_different_types(streaming):
     }
     """,
         solution_mappings=True,
-        streaming=streaming,
     )
     assert sm.mappings.get_column("c").is_null().sum() == 0
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_coalesce_both_multi_different_types_rhs_less(streaming):
+def test_coalesce_both_multi_different_types_rhs_less():
     m = Model()
     sm = m.query(
         """
@@ -297,13 +268,11 @@ def test_coalesce_both_multi_different_types_rhs_less(streaming):
     }
     """,
         solution_mappings=True,
-        streaming=streaming,
     )
     assert sm.mappings.get_column("c").is_null().sum() == 0
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_coalesce_only_lhs_multi(streaming):
+def test_coalesce_only_lhs_multi():
     m = Model()
     sm = m.query(
         """
@@ -319,13 +288,11 @@ def test_coalesce_only_lhs_multi(streaming):
     }
     """,
         solution_mappings=True,
-        streaming=streaming,
     )
     assert sm.mappings.get_column("c").is_null().sum() == 0
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_coalesce_only_rhs_multi(streaming):
+def test_coalesce_only_rhs_multi():
     m = Model()
     sm = m.query(
         """
@@ -341,13 +308,11 @@ def test_coalesce_only_rhs_multi(streaming):
     }
     """,
         solution_mappings=True,
-        streaming=streaming,
     )
     assert sm.mappings.get_column("c").is_null().sum() == 0
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_div_by_unbound_is_unbound(streaming):
+def test_div_by_unbound_is_unbound():
     m = Model()
     sm = m.query(
         """
@@ -363,14 +328,12 @@ def test_div_by_unbound_is_unbound(streaming):
     }
     """,
         solution_mappings=True,
-        streaming=streaming,
     )
     assert sm.mappings.height == 3
     assert sm.mappings.get_column("c").is_null().sum() == 1
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_coalesce_no_multi(streaming):
+def test_coalesce_no_multi():
     m = Model()
     sm = m.query(
         """
@@ -386,14 +349,12 @@ def test_coalesce_no_multi(streaming):
     }
     """,
         solution_mappings=True,
-        streaming=streaming,
     )
     assert sm.rdf_types == {"c": RDFType.IRI, "b": RDFType.IRI, "a": RDFType.IRI}
     assert sm.mappings.get_column("c").is_null().sum() == 0
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_multi_filter_equals_mirrored(streaming):
+def test_multi_filter_equals_mirrored():
     m = Model()
     df = m.query(
         """
@@ -404,13 +365,11 @@ def test_multi_filter_equals_mirrored(streaming):
     FILTER(:hello2 = ?a)
     }
     """,
-        streaming=streaming,
     )
     assert_frame_equal(df, pl.DataFrame({"a": ["<http://example.net/hello2>"]}))
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_multi_filter_equals_two_multi(streaming):
+def test_multi_filter_equals_two_multi():
     m = Model()
     df = m.query(
         """
@@ -422,13 +381,11 @@ def test_multi_filter_equals_two_multi(streaming):
     FILTER(?b = ?a)
     }
     """,
-        streaming=streaming,
     )
     assert_frame_equal(df, pl.DataFrame({"a": ["<http://example.net/hello2>"]}))
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_multi_filter_is_in(streaming):
+def test_multi_filter_is_in():
     m = Model()
     df = m.query(
         """
@@ -439,14 +396,12 @@ def test_multi_filter_is_in(streaming):
         FILTER(?a in (:hello2, "abc"))
     }
     """,
-        streaming=streaming,
     )
     print(df)
     assert_frame_equal(df, pl.DataFrame({"a": ["<http://example.net/hello2>"]}))
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_multi_filter_comparison(streaming):
+def test_multi_filter_comparison():
     m = Model()
     df = m.query(
         """
@@ -457,7 +412,6 @@ def test_multi_filter_comparison(streaming):
     FILTER(?a > 1.4)
     } ORDER BY ?a
     """,
-        streaming=streaming,
     )
     expected = pl.from_repr(
         """
@@ -474,8 +428,7 @@ def test_multi_filter_comparison(streaming):
     assert_frame_equal(df, expected)
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_multi_filter_incompatible_comparison(streaming):
+def test_multi_filter_incompatible_comparison():
     m = Model()
     df = m.query(
         """
@@ -486,7 +439,6 @@ def test_multi_filter_incompatible_comparison(streaming):
     FILTER(?a > 1.4)
     } ORDER BY ?a
     """,
-        streaming=streaming,
     )
     expected = pl.from_repr(
         """
@@ -503,8 +455,7 @@ def test_multi_filter_incompatible_comparison(streaming):
     assert_frame_equal(df, expected)
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_parse_strange_year(streaming):
+def test_parse_strange_year():
     m = Model()
     df = m.query(
         """
@@ -514,7 +465,6 @@ def test_parse_strange_year(streaming):
         VALUES (?a) { ("9999-01-01T08:00:00"^^xsd:dateTime) }
     } 
     """,
-        streaming=streaming,
     )
     expected = pl.from_repr(
         """
@@ -530,8 +480,7 @@ def test_parse_strange_year(streaming):
     assert_frame_equal(df, expected)
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_multi_filter_incompatible_datetime_comparison(streaming):
+def test_multi_filter_incompatible_datetime_comparison():
     m = Model()
     df = m.query(
         """
@@ -542,7 +491,6 @@ def test_multi_filter_incompatible_datetime_comparison(streaming):
     FILTER(?a > "2021-01-01T07:59:59"^^xsd:dateTime)
     } ORDER BY ?a
     """,
-        streaming=streaming,
     )
     expected = pl.from_repr(
         """
@@ -558,8 +506,7 @@ def test_multi_filter_incompatible_datetime_comparison(streaming):
     assert_frame_equal(df, expected)
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_multi_filter_incompatible_many_comparison(streaming):
+def test_multi_filter_incompatible_many_comparison():
     m = Model()
     df = m.query(
         """
@@ -571,7 +518,6 @@ def test_multi_filter_incompatible_many_comparison(streaming):
     FILTER(?a < ?b)
     } ORDER BY ?a ?b
     """,
-        streaming=streaming,
     )
     f = TESTDATA_PATH / "multi_many_comp.csv"
     # df.write_csv(f)
@@ -579,8 +525,7 @@ def test_multi_filter_incompatible_many_comparison(streaming):
     assert_frame_equal(df, expected)
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_multi_concat(streaming):
+def test_multi_concat():
     m = Model()
     df = m.query(
         """
@@ -592,15 +537,13 @@ def test_multi_concat(streaming):
     BIND(CONCAT(STR(?a),"_", STR(?b)) AS ?c)
     } ORDER BY ?a ?b
     """,
-        streaming=streaming,
     )
     f = TESTDATA_PATH / "multi_concat.csv"
     # df.write_csv(f)
     expected = pl.read_csv(f)
     assert_frame_equal(df, expected)
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_multi_concat_count(streaming):
+def test_multi_concat_count():
     m = Model()
     df = m.query(
         """
@@ -611,14 +554,12 @@ def test_multi_concat_count(streaming):
     VALUES (?b) { (2) (2.0) (90) ("AString") ("2021-01-01T08:00:01"^^xsd:dateTime) }
     } 
     """,
-        streaming=streaming,
     )
     assert df.shape == (1,1)
     assert df.get_column("c")[0] == 25
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_strlang(streaming):
+def test_strlang():
     m = Model()
     df = m.query(
         """
@@ -628,13 +569,11 @@ def test_strlang(streaming):
     BIND(STRLANG("a", "en") AS ?a)
     } 
     """,
-        streaming=streaming,
     )
     assert df.height == 1
     assert df.get_column("a")[0] == "\"a\"@en"
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_multi_filter_incompatible_datetimestamp_comparison(streaming):
+def test_multi_filter_incompatible_datetimestamp_comparison():
     m = Model()
     df = m.query(
         """
@@ -645,7 +584,6 @@ def test_multi_filter_incompatible_datetimestamp_comparison(streaming):
     FILTER(?a > "2021-01-01T07:59:59+00:00"^^xsd:dateTimeStamp)
     } ORDER BY ?a
     """,
-        streaming=streaming,
     )
     expected = pl.from_repr(
         """
@@ -661,8 +599,7 @@ def test_multi_filter_incompatible_datetimestamp_comparison(streaming):
     assert_frame_equal(df, expected)
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_generate_uuids(streaming):
+def test_generate_uuids():
     m = Model()
     sm = m.query(
         """
@@ -674,7 +611,6 @@ def test_generate_uuids(streaming):
     } ORDER BY ?a
     """,
         solution_mappings=True,
-        streaming=streaming,
     )
     assert sm.rdf_types == {
         "a": RDFType.Literal("http://www.w3.org/2001/XMLSchema#integer"),
@@ -689,8 +625,7 @@ def test_generate_uuids(streaming):
 
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_now(streaming):
+def test_now():
     m = Model()
     sm = m.query(
         """
@@ -701,7 +636,6 @@ def test_now(streaming):
     }
     """,
         solution_mappings=True,
-        streaming=streaming,
     )
     assert sm.rdf_types == {
         "now": RDFType.Literal("http://www.w3.org/2001/XMLSchema#dateTime"),
@@ -709,8 +643,7 @@ def test_now(streaming):
     assert sm.mappings.height == 1
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_generate_iri_all_strings(streaming):
+def test_generate_iri_all_strings():
     m = Model()
     sm = m.query(
         """
@@ -722,7 +655,6 @@ def test_generate_iri_all_strings(streaming):
     } ORDER BY ?a
     """,
         solution_mappings=True,
-        streaming=streaming,
     )
     assert sm.rdf_types == {
         "a": RDFType.Literal("http://www.w3.org/2001/XMLSchema#string"),
@@ -734,8 +666,7 @@ def test_generate_iri_all_strings(streaming):
     assert_frame_equal(expected, sm.mappings)
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_generate_iri(streaming):
+def test_generate_iri():
     m = Model()
     sm = m.query(
         """
@@ -747,7 +678,6 @@ def test_generate_iri(streaming):
     } ORDER BY ?a
     """,
         solution_mappings=True,
-        streaming=streaming,
     )
     assert sm.rdf_types == {
         "a": RDFType.Multi(
@@ -765,8 +695,7 @@ def test_generate_iri(streaming):
     assert_frame_equal(expected, sm.mappings)
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_generate_str_uuids(streaming):
+def test_generate_str_uuids():
     m = Model()
     sm = m.query(
         """
@@ -778,7 +707,6 @@ def test_generate_str_uuids(streaming):
     } ORDER BY ?a
     """,
         solution_mappings=True,
-        streaming=streaming,
     )
     assert sm.rdf_types == {
         "a": RDFType.Literal("http://www.w3.org/2001/XMLSchema#integer"),
@@ -788,8 +716,7 @@ def test_generate_str_uuids(streaming):
     assert sm.mappings.get_column("struuid").unique().len() == 3
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_replace_single(streaming):
+def test_replace_single():
     m = Model()
     sm = m.query(
         """
@@ -801,7 +728,6 @@ def test_replace_single(streaming):
     } ORDER BY ?a
     """,
         solution_mappings=True,
-        streaming=streaming,
     )
     assert sm.rdf_types == {
         "a": RDFType.Literal("http://www.w3.org/2001/XMLSchema#string"),
@@ -811,8 +737,7 @@ def test_replace_single(streaming):
     assert sm.mappings.get_column("replace").to_list() == ["ba", "bacbac", "bb"]
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_case_single(streaming):
+def test_case_single():
     m = Model()
     sm = m.query(
         """
@@ -825,7 +750,6 @@ def test_case_single(streaming):
     } ORDER BY ?a
     """,
         solution_mappings=True,
-        streaming=streaming,
     )
     assert sm.rdf_types == {
         "a": RDFType.Literal("http://www.w3.org/2001/XMLSchema#string"),
@@ -837,8 +761,7 @@ def test_case_single(streaming):
     assert sm.mappings.get_column("lcase").to_list() == ["ab", "abcaac", "bb"]
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_mul_types_single(streaming):
+def test_mul_types_single():
     m = Model()
     sm = m.query(
         """
@@ -859,7 +782,6 @@ def test_mul_types_single(streaming):
     } ORDER BY ?a
     """,
         solution_mappings=True,
-        streaming=streaming,
     )
     assert sm.rdf_types == {
         "a": RDFType.Literal("http://www.w3.org/2001/XMLSchema#string"),
@@ -875,8 +797,7 @@ def test_mul_types_single(streaming):
     }
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_substr_single(streaming):
+def test_substr_single():
     m = Model()
     sm = m.query(
         """
@@ -889,7 +810,6 @@ def test_substr_single(streaming):
     } ORDER BY ?a
     """,
         solution_mappings=True,
-        streaming=streaming,
     )
     assert sm.rdf_types == {
         "a": RDFType.Literal("http://www.w3.org/2001/XMLSchema#string"),
@@ -901,8 +821,7 @@ def test_substr_single(streaming):
     assert sm.mappings.get_column("sub2").to_list() == ["ab", "abc", "bb"]
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_case_single_lang(streaming):
+def test_case_single_lang():
     m = Model()
     sm = m.query(
         """
@@ -915,7 +834,6 @@ def test_case_single_lang(streaming):
     } ORDER BY ?a
     """,
         solution_mappings=True,
-        streaming=streaming,
     )
     assert sm.rdf_types == {
         "a": RDFType.Literal("http://www.w3.org/1999/02/22-rdf-syntax-ns#langString"),
@@ -936,8 +854,7 @@ def test_case_single_lang(streaming):
                                                           'l': 'en'},
                                                          {'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': 'bb', 'l': 'se'}]
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_substr_multi_type_with_only_lang(streaming):
+def test_substr_multi_type_with_only_lang():
     m = Model()
     sm = m.query(
         """
@@ -950,7 +867,6 @@ def test_substr_multi_type_with_only_lang(streaming):
     } ORDER BY ?a
     """,
         solution_mappings=True,
-        streaming=streaming,
     )
     assert sm.rdf_types == {
         "a": RDFType.Multi(
@@ -979,8 +895,7 @@ def test_substr_multi_type_with_only_lang(streaming):
                                                         {'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': None, 'l': None}]
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_case_multi_type_with_only_lang(streaming):
+def test_case_multi_type_with_only_lang():
     m = Model()
     sm = m.query(
         """
@@ -993,7 +908,6 @@ def test_case_multi_type_with_only_lang(streaming):
     } ORDER BY ?a
     """,
         solution_mappings=True,
-        streaming=streaming,
     )
     assert sm.rdf_types == {
         "a": RDFType.Multi(
@@ -1024,8 +938,7 @@ def test_case_multi_type_with_only_lang(streaming):
                                                          {'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': None, 'l': None}]
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_case_multi_type_with_string_and_lang_string_and_other(streaming):
+def test_case_multi_type_with_string_and_lang_string_and_other():
     m = Model()
     sm = m.query(
         """
@@ -1038,7 +951,6 @@ def test_case_multi_type_with_string_and_lang_string_and_other(streaming):
     } ORDER BY ?a
     """,
         solution_mappings=True,
-        streaming=streaming,
     )
     assert sm.rdf_types == {
         "a": RDFType.Multi(
@@ -1101,8 +1013,7 @@ def test_case_multi_type_with_string_and_lang_string_and_other(streaming):
                                                           'l': None}]
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_before_after_multi_type_with_string_and_lang_string_and_other(streaming):
+def test_before_after_multi_type_with_string_and_lang_string_and_other():
     m = Model()
     sm = m.query(
         """
@@ -1115,7 +1026,6 @@ def test_before_after_multi_type_with_string_and_lang_string_and_other(streaming
     } ORDER BY ?a
     """,
         solution_mappings=True,
-        streaming=streaming,
     )
     assert sm.rdf_types == {
         "a": RDFType.Multi(
@@ -1178,8 +1088,7 @@ def test_before_after_multi_type_with_string_and_lang_string_and_other(streaming
                                                         'l': None}]
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_before_after_lang_string_and_other(streaming):
+def test_before_after_lang_string_and_other():
     m = Model()
     sm = m.query(
         """
@@ -1192,7 +1101,6 @@ def test_before_after_lang_string_and_other(streaming):
     } ORDER BY ?a
     """,
         solution_mappings=True,
-        streaming=streaming,
     )
     assert sm.rdf_types == {
         "a": RDFType.Multi(
@@ -1232,14 +1140,12 @@ def test_before_after_lang_string_and_other(streaming):
     BIND(STRAFTER(?a, "ab") as ?aft)
     } ORDER BY ?a
     """,
-        streaming=streaming,
     )
     assert df.get_column("bef").to_list() == [None, '"abca"@en', '""', None]
     assert df.get_column("aft").to_list() == [None, '"caAc"@en', '""', None]
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_before_after_only_string(streaming):
+def test_before_after_only_string():
     m = Model()
     sm = m.query(
         """
@@ -1252,7 +1158,6 @@ def test_before_after_only_string(streaming):
     } ORDER BY ?a
     """,
         solution_mappings=True,
-        streaming=streaming,
     )
     assert sm.mappings.height == 1
     assert sm.mappings.get_column("bef").to_list() == [
@@ -1264,8 +1169,7 @@ def test_before_after_only_string(streaming):
 
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_before_after_only_lang_string_and_other(streaming):
+def test_before_after_only_lang_string_and_other():
     m = Model()
     sm = m.query(
         """
@@ -1278,7 +1182,6 @@ def test_before_after_only_lang_string_and_other(streaming):
     } ORDER BY ?a
     """,
         solution_mappings=True,
-        streaming=streaming,
     )
     print(sm.mappings)
     assert sm.rdf_types == {
@@ -1307,8 +1210,7 @@ def test_before_after_only_lang_string_and_other(streaming):
                                                        {'<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>': None, 'l': None, '<http://www.w3.org/2001/XMLSchema#string>': ''}]
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_before_after_only_string_and_other(streaming):
+def test_before_after_only_string_and_other():
     m = Model()
     sm = m.query(
         """
@@ -1321,7 +1223,6 @@ def test_before_after_only_string_and_other(streaming):
     } ORDER BY ?a
     """,
         solution_mappings=True,
-        streaming=streaming,
     )
     assert sm.rdf_types == {
         "a": RDFType.Multi(
@@ -1349,8 +1250,7 @@ def test_before_after_only_string_and_other(streaming):
     ]
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_substr_multi_type_with_string_and_lang_string_and_other(streaming):
+def test_substr_multi_type_with_string_and_lang_string_and_other():
     m = Model()
     sm = m.query(
         """
@@ -1363,7 +1263,6 @@ def test_substr_multi_type_with_string_and_lang_string_and_other(streaming):
     } ORDER BY ?a
     """,
         solution_mappings=True,
-        streaming=streaming,
     )
     assert sm.rdf_types == {
         "a": RDFType.Multi(
@@ -1426,8 +1325,7 @@ def test_substr_multi_type_with_string_and_lang_string_and_other(streaming):
                                                          'l': None}]
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_replace_multi(streaming):
+def test_replace_multi():
     m = Model()
     sm = m.query(
         """
@@ -1439,7 +1337,6 @@ def test_replace_multi(streaming):
     } ORDER BY ?a
     """,
         solution_mappings=True,
-        streaming=streaming,
     )
     assert sm.rdf_types == {
         "a": RDFType.Multi(
@@ -1454,8 +1351,7 @@ def test_replace_multi(streaming):
     assert sm.mappings.get_column("replace").to_list() == [None, "ba", "bacbac"]
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_replace_multi_str_of_iri(streaming):
+def test_replace_multi_str_of_iri():
     m = Model()
     sm = m.query(
         """
@@ -1467,7 +1363,6 @@ def test_replace_multi_str_of_iri(streaming):
     } ORDER BY ?a
     """,
         solution_mappings=True,
-        streaming=streaming,
     )
     assert sm.rdf_types == {
         "a": RDFType.Multi(
@@ -1483,8 +1378,7 @@ def test_replace_multi_str_of_iri(streaming):
 
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_regex_multi(streaming):
+def test_regex_multi():
     m = Model()
     sm = m.query(
         """
@@ -1496,7 +1390,6 @@ def test_regex_multi(streaming):
     } ORDER BY ?a
     """,
         solution_mappings=True,
-        streaming=streaming,
     )
     assert sm.rdf_types == {
         "a": RDFType.Multi(
@@ -1512,8 +1405,7 @@ def test_regex_multi(streaming):
 
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_regex_multi_str_iri(streaming):
+def test_regex_multi_str_iri():
     m = Model()
     sm = m.query(
         """
@@ -1525,7 +1417,6 @@ def test_regex_multi_str_iri(streaming):
     } ORDER BY ?a
     """,
         solution_mappings=True,
-        streaming=streaming,
     )
     assert sm.rdf_types == {
         "a": RDFType.Multi(
@@ -1541,8 +1432,7 @@ def test_regex_multi_str_iri(streaming):
 
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_strdt_double(streaming):
+def test_strdt_double():
     m = Model()
     sm = m.query(
         """
@@ -1554,7 +1444,6 @@ def test_strdt_double(streaming):
     } ORDER BY ?a
     """,
         solution_mappings=True,
-        streaming=streaming,
     )
     assert sm.rdf_types == {
         "a": RDFType.Literal("http://www.w3.org/2001/XMLSchema#string"),
@@ -1565,8 +1454,7 @@ def test_strdt_double(streaming):
 
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_regex(streaming):
+def test_regex():
     m = Model()
     sm = m.query(
         """
@@ -1578,7 +1466,6 @@ def test_regex(streaming):
     } ORDER BY ?a
     """,
         solution_mappings=True,
-        streaming=streaming,
     )
     assert sm.rdf_types == {
         "a": RDFType.Literal("http://www.w3.org/2001/XMLSchema#string"),
@@ -1588,8 +1475,7 @@ def test_regex(streaming):
     assert sm.mappings.get_column("replace").to_list() == [True, True, False]
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_issue_22(streaming):
+def test_issue_22():
     m = Model()
     sm = m.query(
         """
@@ -1602,7 +1488,6 @@ def test_issue_22(streaming):
     ORDER BY ?a 
     """,
         solution_mappings=True,
-        streaming=streaming,
     )
     print(sm.mappings)
     assert sm.rdf_types == {
@@ -1613,8 +1498,7 @@ def test_issue_22(streaming):
     assert sm.mappings.get_column("c").to_list() == [2, 1, 2]
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_filtering_error(streaming):
+def test_filtering_error():
     m = Model()
     sm = m.query(
         """
@@ -1626,13 +1510,11 @@ def test_filtering_error(streaming):
     } 
     """,
         solution_mappings=True,
-        streaming=streaming,
     )
     assert sm.mappings.height == 5
 
 
-@pytest.mark.parametrize("streaming", [True, False])
-def test_some_hash_functions(streaming):
+def test_some_hash_functions():
     m = Model()
     sm = m.query(
         """
@@ -1646,6 +1528,5 @@ def test_some_hash_functions(streaming):
     } 
     """,
         solution_mappings=True,
-        streaming=streaming,
     )
     assert sm.mappings.height == 5

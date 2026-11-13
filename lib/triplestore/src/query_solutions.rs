@@ -15,20 +15,10 @@ pub fn query_select(
     triplestore: &Triplestore,
     graph: Option<&NamedGraph>,
     deduplicate: bool,
-    streaming: bool,
     query_settings: &QuerySettings,
     prefixes: Option<&HashMap<String, NamedNode>>,
 ) -> Result<QuerySolutions, SparqlError> {
-    let qres = triplestore.query(
-        query,
-        None,
-        streaming,
-        query_settings,
-        graph,
-        prefixes,
-        false,
-        None,
-    )?;
+    let qres = triplestore.query(query, None, query_settings, graph, prefixes, false, None)?;
 
     let sm = if let QueryResultKind::Select(EagerSolutionMappings {
         mut mappings,

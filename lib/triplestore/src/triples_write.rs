@@ -107,6 +107,8 @@ impl Triplestore {
             }
         } else if RdfFormat::Turtle == format {
             self.write_pretty_turtle(buf, graph, prefixes)?;
+        } else if RdfFormat::RdfXml == format {
+            self.write_pretty_rdfxml(buf, graph, prefixes)?;
         } else {
             let mut writer = RdfSerializer::from_format(format).for_writer(buf);
 

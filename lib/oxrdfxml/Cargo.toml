@@ -1,0 +1,27 @@
+# Vendored from oxigraph's oxrdfxml 0.2.5 (https://github.com/oxigraph/oxigraph/tree/main/lib/oxrdfxml),
+# licensed MIT OR Apache-2.0. Patched in via [patch.crates-io] in the workspace Cargo.toml, so oxrdfio
+# uses this copy too. Maplib additions: parallel parsing (src/parallel.rs).
+[package]
+name = "oxrdfxml"
+version = "0.2.5"
+authors = ["Tpt <thomas@pellissier-tanon.fr>"]
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+keywords = ["RDFXML", "XML", "RDF"]
+repository = "https://github.com/oxigraph/oxigraph/tree/master/lib/oxrdfxml"
+description = "Parser and serializer for the RDF/XML format (vendored into maplib)"
+edition = "2024"
+rust-version = "1.87"
+
+[features]
+default = []
+rdf-12 = ["oxrdf/rdf-12"]
+async-tokio = ["dep:tokio", "quick-xml/async-tokio"]
+
+[dependencies]
+oxilangtag = "0.1"
+oxiri = "0.2.11"
+oxrdf = "=0.3.5"
+quick-xml = "0.37"
+thiserror = ">=1.0.50, <3.0"
+tokio = { version = "1.29", optional = true, features = ["io-util"] }

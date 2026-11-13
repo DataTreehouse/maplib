@@ -1,13 +1,65 @@
 # Change log
 
-## v0.20.34
+## v0.21.0
+### Performance
+Net change per category compared with v0.20.33, measured on an Apple M-series laptop (14 cores). Both versions were built with the same settings (thin LTO, 16 codegen units) and run alternately; times are medians of 2 runs. 
+
+| Category | Workload | v0.20.33 | v0.21.0 | Change |
+|---|---|---|---|---|
+| Reading | Turtle 1.2 GB / 2.5 GB / 2.9 GB, in memory | 10.13 / 11.90 / 12.77 s | 5.90 / 4.59 / 6.08 s | **-42% / -61% / -52%** |
+| Reading | Turtle 260 MB, in memory / disk-backed | 1.23 / 8.27 s | 0.74 / 2.97 s | **-40% / -64%** |
+| Reading | RDF/XML, CIM 200 MB (2.2 M triples) | 3.58 s | 1.72 s | **-52%** |
+| Reading | RDF/XML written by maplib, re-read | 4.14 s | 1.42 s | **-66%** |
+| Writing | RDF/XML, CIM 2.2 M triples | 42.41 s | 0.76 s | **-98% (56x faster)** |
+| Writing | RDF/XML output size, same data | 494 MB | 212 MB | **-57%** |
+| Writing | CIM/XML (`write_cim_xml`): bridgwater 2.1 M triples / Nordic44 / MiniGrid | 16.54 / 0.76 / 0.48 s | 1.36 / 0.35 / 0.24 s | **-92% / -54% / -50%** |
+| Writing | Turtle, CIM 2.2 M triples / 1.2 GB model | hangs (deadlock) | 0.71 / 1.42 s | fixed |
+| SPARQL, disk | `LIMIT 10` / single subject lookup | 1.014 / 1.910 s | 0.103 / 0.187 s | **-90% / -90%** |
+| SPARQL, disk | GROUP BY count / label filter / ORDER BY LIMIT | 9.4 / 43.2 / 41.5 ms | 2.3 / 26.3 / 15.8 ms | **-75% / -39% / -62%** |
+| SPARQL, memory | ORDER BY over IRIs (1 M rows) | 0.188 s | 0.169 s | -10% |
+| SPARQL, memory | 15 other benchmark queries (joins, GROUP BY, DISTINCT, FILTER, OPTIONAL, MINUS) | 3-79 ms | 3-85 ms | unchanged (ms-level noise) |
+| SHACL, memory | ERA FR (511 k results) / ERA large shapes (730 k results) | 15.27 / 11.96 s | 1.44 / 0.83 s | **-91% / -93%** |
+| SHACL, memory | ERA ES / ERA small shapes | 2.24 / 0.79 s | 0.74 / 0.14 s | **-67% / -82%** |
+| SHACL, disk | ERA ES | 1.60 s | 0.86 s | **-46%** |
+| Datalog | CIM enrichment, inference time | 12.35 s | 6.29 s | **-49%** |
+| Datalog | CIM enrichment, whole pipeline (read + inference) | 20.88 s | 10.34 s | **-50%** |
+
+Besides the changes listed below, the memory improvements earlier in this release contribute to the faster reading and SHACL validation.
+
+- RDF/XML is parsed in parallel, by splitting the document between top-level elements. The RDF/XML parser from Oxigraph (oxrdfxml) is now included in maplib to make this possible
+- RDF/XML is written with a new pretty serializer (see Features)
+- CIM/XML is written by building temporary graphs with two SPARQL queries driven by the profiles (one for the instances of the profile classes, one for their profile properties) and writing them with the pretty RDF/XML serializer, instead of running queries per class and property
+- Disk-backed models keep their category map databases open instead of opening a database for every lookup, which makes small queries about ten times faster
+- Inserting triples no longer ranks the inserted values against the whole dictionary, which made every insert cost time proportional to the number of distinct IRIs and literals in the model. This was most of the per-iteration cost of datalog inference
+- The sort order of the dictionary is cached between ORDER BY queries and datalog iterations, until new values are added
+- Removed debug output that SHACL validation printed for every sh:class constraint (it also evaluated the constraint a second time)
+
+### Breaking changes
+- The `streaming` parameter is removed from `Model.query`, `Model.update`, `Model.insert`, `Model.validate`, `ValidationReport.results` and `ValidationReport.details`. Polars already runs lazy queries with its streaming engine, so the parameter had no effect (benchmarks with `streaming=True` and `streaming=False` were identical). Remove the argument from calls
+- RDF/XML (and CIM/XML) is read in parallel by default (`parallel=None`). Pass `parallel=False` to read sequentially. Line numbers in parse errors may refer to the position within a chunk of the document
+- RDF/XML output is now formatted differently (one element per subject, nested blank nodes), but contains the same triples
+- `write_cim_xml` writes CIM/XML as IEC 61970-552 / CGMES requires (see Bug fixes). Objects are identified relative to the document (rdf:ID="_<mRID>", rdf:resource="#_<mRID>"), so read the files with the same `base_iri` as the original data, as for any CGMES file
+
 ### Features
+- `write_cim_xml` uses the pretty RDF/XML serializer. The exported triples are the same as before (the FullModel header first, then one typed element per instance with the properties its class has in the profiles, literal values as plain strings), but elements and properties are ordered differently
+- Pretty RDF/XML serializer, working like the pretty turtle serializer: one node element per subject with all its properties, typed node elements when the type has a prefix, blank nodes that are used once nested where they are used, RDF lists written with rdf:parseType="Collection" when possible, and all namespaces declared on the root element
 - ASK queries. m.query() returns a bool, or a SPARQL JSON boolean result with return_format="json"
 - isNUMERIC and RAND SPARQL functions
 - SHA256, SHA384 and SHA512 SPARQL functions
 - Read and write TriG and N-Quads (format "trig" / "nquads", or the .trig / .nq file extensions when reading). Writing these formats outputs all graphs unless a graph is specified
 
 ### Bug fixes
+- `write_cim_xml` was not compliant with IEC 61970-552 / CGMES (also before this release):
+  - Objects were written with absolute IRIs (rdf:about="urn:...:#_<mRID>"); they are now rdf:ID="_<mRID>" with rdf:resource="#_<mRID>" references, when all objects share one base IRI
+  - Enumeration values (e.g. cim:WindingConnection.Y) were written as objects when the vocabulary was in the data graph
+  - Objects that also had superclass types (e.g. cim:Equipment) were written once per type; they are now written once, as their most specific class
+  - Association ends that the profiles mark as not used (cims:AssociationUsed "No") are never written, and the used end is derived from them when the data only has the unused end
+  - Only the namespaces that are used are declared, and the default Model.created / Model.scenarioTime are UTC with whole seconds (e.g. 2021-02-02T22:28:41Z)
+- Disk-backed models wrote subjects on the boundaries between internal segments twice when writing turtle or RDF/XML (giving invalid RDF/XML with a duplicate rdf:ID)
+- Writing turtle could hang forever (a deadlock between the pretty turtle writer's parallelism and Polars), e.g. for CGMES/CIM models
+- sh:not required every constraint of its shape to fail, instead of the shape not conforming. Combined with sh:or this gave false results, e.g. 363 false sh:or results when validating CGMES shapes against the SHACL-SHACL shapes (pyshacl agrees there are none)
+- sh:not with a shape that has several constraints of which some pass and some fail (e.g. two sh:class values) treated the shape as conforming, giving false sh:not results
+- Inserting triples could drop triples whose values had been re-encoded in the dictionary, as their values could not be ranked when sorting
 - Removed the pyarrow <24.0.0 pin. pyarrow only publishes Python 3.15 wheels from 26.0.0, so the pin made maplib uninstallable on Python 3.15
 - COUNT now returns xsd:integer (Int64) as required by the SPARQL 1.1 spec, instead of xsd:unsignedInt (UInt32)
 - SUM, AVG, MIN and MAX now work when the aggregated variable has multiple types. SUM and AVG promote the numeric types in each group (integer < decimal < float < double) and are unbound if a group contains a non-numeric value, MIN and MAX use the SPARQL ordering and keep the type of the selected value

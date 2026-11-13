@@ -536,6 +536,15 @@ impl Triplestore {
         Ok(())
     }
 
+    /// Forgets a graph that was only needed temporarily (e.g. while writing a file). Unlike
+    /// `truncate`, this also works with a storage folder: the graph's files then stay in the
+    /// folder until it is next reset.
+    pub fn remove_temporary_graph(&mut self, graph: &NamedGraph) {
+        self.graph_triples_map.remove(graph);
+        self.graph_transient_triples_map.remove(graph);
+        self.fts_index.remove(graph);
+    }
+
     pub fn truncate(&mut self, graph: &NamedGraph) {
         if self.storage_folder.is_some() {
             todo!("Should drop this folder.. ")
@@ -965,7 +974,7 @@ fn create_rank_expr(
                 .map(|x| x.unwrap())
                 .collect()
         };
-        let rank_map = global_cats.read()?.local_rank_map(&u32_set, t);
+        let rank_map = global_cats.read()?.sort_rank_map(&u32_set, t);
         if t.is_lang_string() {
             let mut e = col(c).map(
                 move |x| {

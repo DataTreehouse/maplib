@@ -87,19 +87,19 @@ impl SolutionMappings {
         }
     }
 
-    pub fn as_eager(self, streaming: bool) -> EagerSolutionMappings {
+    /// Collects the mappings. Polars picks the engine (the streaming engine for lazy plans).
+    pub fn as_eager(self) -> EagerSolutionMappings {
         EagerSolutionMappings {
-            mappings: self.mappings.with_streaming(streaming).collect().unwrap(),
+            mappings: self.mappings.collect().unwrap(),
             rdf_node_types: self.rdf_node_types,
         }
     }
 
     pub fn as_eager_interruptable(
         self,
-        streaming: bool,
     ) -> Result<EagerSolutionMappings, InterruptableCollectError> {
         {
-            let df = pl_interruptable_collect(self.mappings.with_streaming(streaming))?;
+            let df = pl_interruptable_collect(self.mappings)?;
             Ok(EagerSolutionMappings {
                 mappings: df,
                 rdf_node_types: self.rdf_node_types,
