@@ -5,13 +5,13 @@ use tracing::{instrument, trace};
 use crate::sparql::QuerySettings;
 use oxrdf::NamedNode;
 use polars::prelude::{col, Expr, IntoLazy, JoinType};
-use representation::null::expr_is_null_workaround;
 use polars_core::frame::DataFrame;
 use query_processing::expressions::named_node_local_enc;
 use query_processing::graph_patterns::{join, union};
 use query_processing::pushdowns::Pushdowns;
 use representation::cats::LockedCats;
 use representation::dataset::{NamedGraph, QueryGraph};
+use representation::null::expr_is_null_workaround;
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{BaseCatState, EagerSolutionMappings, SolutionMappings};
 use representation::{BaseRDFNodeType, RDFNodeState};
@@ -62,7 +62,7 @@ impl Triplestore {
                 Ok(sm)
             }
             NamedNodePattern::Variable(v) => {
-                let graphs = self.named_graphs_in_dataset(dataset, query_settings.include_transient);
+                let graphs = self.named_graphs_in_dataset(dataset);
                 if graphs.is_empty() {
                     let mut sm = self.lazy_graph_pattern(
                         inner,
@@ -116,9 +116,7 @@ impl Triplestore {
                         } = sm;
                         rdf_node_types.insert(v.as_str().to_string(), state);
                         sms.push(SolutionMappings::new(
-                            mappings
-                                .filter(is_null)
-                                .with_column(enc.alias(v.as_str())),
+                            mappings.filter(is_null).with_column(enc.alias(v.as_str())),
                             rdf_node_types,
                             height_estimate,
                         ));
@@ -142,11 +140,7 @@ impl Triplestore {
     }
 
     /// The named graphs of the dataset that GRAPH ?var ranges over, sorted for determinism.
-    fn named_graphs_in_dataset(
-        &self,
-        dataset: &QueryGraph,
-        include_transient: bool,
-    ) -> Vec<NamedNode> {
+    fn named_graphs_in_dataset(&self, dataset: &QueryGraph) -> Vec<NamedNode> {
         if let QueryGraph::QueryDataset(qd) = dataset {
             // FROM and USING always give the named graphs (possibly none),
             // whereas only WITH leaves all named graphs available.
@@ -155,16 +149,10 @@ impl Triplestore {
             }
         }
         let mut graphs = HashSet::new();
-        let mut maps = vec![&self.graph_triples_map];
-        if include_transient {
-            maps.push(&self.graph_transient_triples_map);
-        }
-        for map in maps {
-            for (g, predicates) in map {
-                if let NamedGraph::NamedGraph(nn) = g {
-                    if predicates.values().any(|m| !m.is_empty()) {
-                        graphs.insert(nn.clone());
-                    }
+        for (g, predicates) in &self.graph_triples_map {
+            if let NamedGraph::NamedGraph(nn) = g {
+                if predicates.values().any(|m| !m.is_empty()) {
+                    graphs.insert(nn.clone());
                 }
             }
         }

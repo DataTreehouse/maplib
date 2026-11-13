@@ -47,3 +47,6 @@ pub const SKOS_PREFIX: &str = "skos";
 pub const SKOS_PREFIX_IRI: &str = "http://www.w3.org/2004/02/skos/core#";
 
 pub const DEFAULT_GRAPH_IRI: &str = "https://datatreehouse.github.io/maplib/vocab#DefaultGraph";
+/// The reserved named graph for triples that are used for querying, validation and reasoning,
+/// but that should not end up in the output. It is included in queries with `include_graphs`.
+pub const TRANSIENT_GRAPH_IRI: &str = "https://datatreehouse.github.io/maplib/vocab#TransientGraph";

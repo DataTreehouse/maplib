@@ -2,7 +2,6 @@
 (cat maps on disk and triple tables as parquet files on disk)."""
 import gc
 import pathlib
-import shutil
 
 import polars as pl
 import pytest
@@ -173,10 +172,11 @@ def test_storage_named_graphs(storage):
 
 
 @pytest.mark.parametrize("storage", disk_params())
-def test_storage_deserialize(storage):
+def test_storage_deserialize(storage, tmp_path):
     original = memory_model()
-    original.serialize("serialized_storage")
-    m = Model.deserialize("serialized_storage", **storage_kwargs(storage))
+    serialized = str(tmp_path / "serialized")
+    original.serialize(serialized)
+    m = Model.deserialize(serialized, **storage_kwargs(storage))
     assert_frame_equal(triples_df(m), triples_df(original))
     if storage == "disk":
         assert len(parquet_files()) > 0
@@ -196,7 +196,6 @@ def test_storage_deserialize(storage):
         """
     )
     assert df.height == 3
-    shutil.rmtree("serialized_storage", ignore_errors=True)
 
 
 @pytest.mark.parametrize("storage", [s for s in disk_params() if s == "disk"])

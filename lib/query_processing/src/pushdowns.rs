@@ -1,7 +1,6 @@
 use crate::type_constraints::{
     conjunction_variable_type, datetime_datatypes, equal_variable_possible_types,
-    ConstraintBaseRDFNodeType, ConstraintExpr,
-    PossibleTypes,
+    ConstraintBaseRDFNodeType, ConstraintExpr, PossibleTypes,
 };
 use oxrdf::vocab::rdfs;
 use oxrdf::{Literal, NamedNodeRef, Term, Variable};

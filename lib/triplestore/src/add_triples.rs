@@ -15,7 +15,6 @@ impl Triplestore {
     pub fn add_triples_vec(
         &mut self,
         ts: Vec<TriplesToAdd>,
-        transient: bool,
     ) -> Result<Vec<NewTriples>, TriplestoreError> {
         let prepare_triples_now = Instant::now();
         let dfs_to_add = prepare_add_triples_par(ts, self.global_cats.clone())?;
@@ -24,7 +23,7 @@ impl Triplestore {
             prepare_triples_now.elapsed().as_secs_f32()
         );
         let add_triples_now = Instant::now();
-        let new_triples = self.add_local_cat_triples(dfs_to_add, transient)?;
+        let new_triples = self.add_local_cat_triples(dfs_to_add)?;
         trace!(
             "Adding triples df took {} seconds",
             add_triples_now.elapsed().as_secs_f32()
@@ -36,7 +35,6 @@ impl Triplestore {
     fn add_local_cat_triples(
         &mut self,
         local_cat_triples: Vec<CatTriples>,
-        transient: bool,
     ) -> Result<Vec<NewTriples>, TriplestoreError> {
         let start_globalize = Instant::now();
         let cat_triples = self.globalize(local_cat_triples);
@@ -63,7 +61,7 @@ impl Triplestore {
             start_sort_rank.elapsed().as_secs_f32()
         );
         let start_add_global = Instant::now();
-        let res = self.add_global_cat_triples(cat_triples, transient);
+        let res = self.add_global_cat_triples(cat_triples);
         trace!(
             "Add global took: {} seconds",
             start_add_global.elapsed().as_secs_f32()
@@ -75,13 +73,12 @@ impl Triplestore {
     pub(crate) fn add_global_cat_triples(
         &mut self,
         global_cat_triples: Vec<CatTriples>,
-        transient: bool,
     ) -> Result<Vec<NewTriples>, TriplestoreError> {
         let start_prep_add = Instant::now();
         let mut add_map: HashMap<_, (_, Vec<_>)> = HashMap::new();
 
         for CatTriples {
-            mut encoded_triples,
+            encoded_triples,
             predicate,
             graph,
             subject_type,
@@ -89,37 +86,10 @@ impl Triplestore {
             local_cats: _,
         } in global_cat_triples
         {
-            self.add_graph_if_not_exists(&graph, transient);
+            self.add_graph_if_not_exists(&graph);
             let k = (subject_type.clone(), object_type.clone());
 
-            // Remove triples that are already inserted non-transiently. This must happen before
-            // the existing transient triples are taken out of the map below: if nothing is left to
-            // add, we skip this batch, and the existing transient triples must stay in place.
-            if transient {
-                if let Some(map) = self.graph_triples_map.get_mut(&graph) {
-                    if let Some(m) = map.get_mut(&predicate) {
-                        if let Some(non_transient_triples) = m.get_mut(&k) {
-                            let nondup_df = non_transient_triples
-                                .remove_overlapping_triples_from_dataframe(
-                                    &encoded_triples.df,
-                                    &*self.global_cats.read()?,
-                                )?;
-                            non_transient_triples.release_subject_object_index_if_on_disk();
-                            if let Some(nondup_df) = nondup_df {
-                                encoded_triples.df = nondup_df;
-                            } else {
-                                continue;
-                            }
-                        }
-                    }
-                }
-            };
-
-            let use_map = if transient {
-                &mut self.graph_transient_triples_map.get_mut(&graph).unwrap()
-            } else {
-                &mut self.graph_triples_map.get_mut(&graph).unwrap()
-            };
+            let use_map = self.graph_triples_map.get_mut(&graph).unwrap();
             let triples = if let Some(m) = use_map.get_mut(&predicate) {
                 m.remove(&k)
             } else {
@@ -201,11 +171,7 @@ impl Triplestore {
 
         let out_new_triples: Vec<_> = out_new_triples.into_iter().flatten().collect();
         for ((graph, p, s, o), v) in to_add_map {
-            let use_map = if transient {
-                self.graph_transient_triples_map.get_mut(&graph).unwrap()
-            } else {
-                self.graph_triples_map.get_mut(&graph).unwrap()
-            };
+            let use_map = self.graph_triples_map.get_mut(&graph).unwrap();
             if !use_map.contains_key(&p) {
                 use_map.insert(p.clone(), HashMap::new());
             }

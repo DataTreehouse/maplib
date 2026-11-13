@@ -47,12 +47,7 @@ pub fn bnode_(
             |_, f| Ok(f.clone()),
         );
         concat_str(
-            [
-                lit(format!("bn{}r", *BNODE_PREFIX)),
-                row,
-                lit("s"),
-                hexed,
-            ],
+            [lit(format!("bn{}r", *BNODE_PREFIX)), row, lit("s"), hexed],
             "",
             false,
         )

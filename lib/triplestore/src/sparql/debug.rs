@@ -1,4 +1,4 @@
-use super::{dataset_or_named_graph, QuerySettings, Triplestore};
+use super::{QuerySettings, Triplestore};
 use crate::sparql::errors::SparqlError;
 use crate::sparql::lazy_graph_patterns::path::{create_graph_pattern, need_sparse_matrix};
 use crate::sparql::lazy_graph_patterns::triples_ordering::order_triple_patterns;
@@ -35,7 +35,7 @@ impl Triplestore {
             | Query::Ask {
                 dataset, pattern, ..
             } => {
-                let qg = &dataset_or_named_graph(dataset, graph);
+                let qg = &self.query_graph(dataset, graph, qs);
                 let partial = self.debug_gp(pattern, parameters, qs, qg)?;
                 let dbg = match partial {
                     PartialDebugOutput::PartialResults => vec![DebugOutput::HasResults],

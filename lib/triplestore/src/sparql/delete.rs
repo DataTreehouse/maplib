@@ -73,35 +73,16 @@ impl Triplestore {
                     get_triples_after_deletion(&gct, self.graph_triples_map.get(graph).unwrap())?;
 
                 if let Some(mut gct) = remaining_gct {
-                    self.delete_if_exists(&gct, false, graph)?;
+                    self.delete_if_exists(&gct, graph)?;
                     gct.encoded_triples = add_rank_sort_triples(
                         gct.encoded_triples,
                         &gct.subject_type,
                         &gct.object_type,
                         self.global_cats.clone(),
                     )?;
-                    self.add_global_cat_triples(vec![gct], false)?;
+                    self.add_global_cat_triples(vec![gct])?;
                 } else {
-                    self.delete_if_exists(&gct, false, graph)?;
-                }
-            }
-
-            if self.graph_transient_triples_map.contains_key(graph) {
-                let remaining_gct = get_triples_after_deletion(
-                    &gct,
-                    self.graph_transient_triples_map.get(graph).unwrap(),
-                )?;
-                if let Some(mut gct) = remaining_gct {
-                    self.delete_if_exists(&gct, true, graph)?;
-                    gct.encoded_triples = add_rank_sort_triples(
-                        gct.encoded_triples,
-                        &gct.subject_type,
-                        &gct.object_type,
-                        self.global_cats.clone(),
-                    )?;
-                    self.add_global_cat_triples(vec![gct], true)?;
-                } else {
-                    self.delete_if_exists(&gct, true, graph)?;
+                    self.delete_if_exists(&gct, graph)?;
                 }
             }
         }
@@ -111,15 +92,10 @@ impl Triplestore {
     fn delete_if_exists(
         &mut self,
         gct: &CatTriples,
-        transient: bool,
         graph: &NamedGraph,
     ) -> Result<(), TriplestoreError> {
         self.check_graph_exists(graph)?;
-        let use_map = if transient {
-            self.graph_transient_triples_map.get_mut(graph).unwrap()
-        } else {
-            self.graph_triples_map.get_mut(graph).unwrap()
-        };
+        let use_map = self.graph_triples_map.get_mut(graph).unwrap();
         let map_empty = if let Some(m1) = use_map.get_mut(&gct.predicate) {
             let k = (gct.subject_type.clone(), gct.object_type.clone());
             m1.remove(&k);

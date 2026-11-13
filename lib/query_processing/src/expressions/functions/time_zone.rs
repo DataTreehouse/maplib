@@ -4,16 +4,13 @@ use polars::prelude::{coalesce, col, lit, when, DataType, Expr, LiteralValue};
 use representation::query_context::Context;
 use representation::rdf_to_polars::{default_time_unit, default_time_zone};
 use representation::solution_mapping::SolutionMappings;
-use representation::{
-    format_time_zone_offset, literal_is_datetime, BaseRDFNodeType, RDFNodeState,
-};
+use representation::{format_time_zone_offset, literal_is_datetime, BaseRDFNodeType, RDFNodeState};
 use spargebra::algebra::{Expression, Function};
 use std::collections::HashMap;
 
 /// The dateTime types of a column, with the expression for the values of each type.
 fn datetime_parts(c: &str, t: &RDFNodeState) -> Vec<(Expr, BaseRDFNodeType)> {
-    let is_datetime =
-        |bt: &BaseRDFNodeType| matches!(bt, BaseRDFNodeType::Literal(l, _) if literal_is_datetime(l.as_ref()));
+    let is_datetime = |bt: &BaseRDFNodeType| matches!(bt, BaseRDFNodeType::Literal(l, _) if literal_is_datetime(l.as_ref()));
     if t.is_multi() {
         let mut types: Vec<_> = t.map.keys().filter(|bt| is_datetime(bt)).collect();
         types.sort();
@@ -49,7 +46,10 @@ pub fn local_datetime_expr(c: &str, t: &RDFNodeState) -> Expr {
     let mut parts_with_types = datetime_parts(c, t);
     if t.is_multi() {
         if let Some(bt) = t.map.keys().find(|bt| bt.is_lit_type(xsd::DATE)) {
-            parts_with_types.push((col(c).struct_().field_by_name(&bt.field_col_name()), bt.clone()));
+            parts_with_types.push((
+                col(c).struct_().field_by_name(&bt.field_col_name()),
+                bt.clone(),
+            ));
         }
     } else if let Some(bt) = t.get_base_type() {
         if bt.is_lit_type(xsd::DATE) {
@@ -72,7 +72,9 @@ pub fn local_datetime_expr(c: &str, t: &RDFNodeState) -> Expr {
         .collect();
     match parts.len() {
         // Not a dateTime, which gives a type error and thus an unbound value.
-        0 => null_of(BaseRDFNodeType::literal(xsd::DATE_TIME.into_owned()).default_input_polars_data_type()),
+        0 => null_of(
+            BaseRDFNodeType::literal(xsd::DATE_TIME.into_owned()).default_input_polars_data_type(),
+        ),
         1 => parts.into_iter().next().unwrap(),
         _ => coalesce(&parts),
     }

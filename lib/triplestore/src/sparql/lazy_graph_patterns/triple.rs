@@ -65,7 +65,6 @@ impl Triplestore {
                 &objects,
                 &subject_type_ctr,
                 &object_type_ctr,
-                query_settings.include_transient,
                 dataset,
             )?,
             NamedNodePattern::Variable(v) => {
@@ -156,7 +155,6 @@ impl Triplestore {
                     &objects,
                     &subject_type_ctr,
                     &object_type_ctr,
-                    query_settings.include_transient,
                     dataset,
                 )?
             }

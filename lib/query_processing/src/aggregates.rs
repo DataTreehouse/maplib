@@ -65,7 +65,8 @@ pub fn count_without_expression(
 fn count_output(expr: Expr) -> (Expr, RDFNodeState) {
     (
         expr.cast(DataType::Int64),
-        BaseRDFNodeType::Literal(xsd::INTEGER.into_owned(), None).into_default_input_rdf_node_state(),
+        BaseRDFNodeType::Literal(xsd::INTEGER.into_owned(), None)
+            .into_default_input_rdf_node_state(),
     )
 }
 
@@ -169,8 +170,8 @@ pub fn group_concat(
     distinct: bool,
     global_cats: LockedCats,
 ) -> (Expr, RDFNodeState) {
-    let out_rdf_node_type =
-        BaseRDFNodeType::Literal(xsd::STRING.into_owned(), None).into_default_input_rdf_node_state();
+    let out_rdf_node_type = BaseRDFNodeType::Literal(xsd::STRING.into_owned(), None)
+        .into_default_input_rdf_node_state();
     let use_sep = separator.as_deref().unwrap_or(" ");
     let t = rdf_node_type_from_context(column_context, solution_mappings);
     let mut strings = str_function(column_context.as_str(), t, global_cats);

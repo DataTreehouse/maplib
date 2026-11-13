@@ -31,7 +31,6 @@ impl Triplestore {
         &mut self,
         u8s: &mut Vec<u8>,
         named_graph: &NamedGraph,
-        transient: bool,
         uuid_namespace: Option<String>,
     ) -> Result<(), TriplestoreError> {
         let mut reader = Reader::from_reader(Cursor::new(u8s.as_slice()));
@@ -154,7 +153,7 @@ impl Triplestore {
             buf.clear();
         }
 
-        flush_pred_map(self, pred_map, named_graph, transient)
+        flush_pred_map(self, pred_map, named_graph)
     }
 }
 
@@ -298,7 +297,6 @@ fn flush_pred_map(
     triples: &mut Triplestore,
     pred_map: PredMap,
     named_graph: &NamedGraph,
-    transient: bool,
 ) -> Result<(), TriplestoreError> {
     let mut tta_vec = Vec::new();
     for (pred_iri, sub_map) in pred_map {
@@ -334,7 +332,7 @@ fn flush_pred_map(
             }
         }
     }
-    triples.add_triples_vec(tta_vec, transient)?;
+    triples.add_triples_vec(tta_vec)?;
     Ok(())
 }
 

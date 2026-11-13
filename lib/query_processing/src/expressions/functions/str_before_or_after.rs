@@ -4,7 +4,7 @@ use crate::expressions::functions::keep_field_::keep_field;
 use crate::expressions::functions::str_after::str_after;
 use crate::expressions::functions::str_before::str_before;
 use oxrdf::vocab::{rdf, xsd};
-use polars::prelude::{as_struct, DataType, coalesce, col, lit, when, Expr, LiteralValue};
+use polars::prelude::{as_struct, coalesce, col, lit, when, DataType, Expr, LiteralValue};
 use representation::cats::{maybe_decode_expr, LockedCats};
 use representation::multitype::set_struct_all_null_to_null_row;
 use representation::query_context::Context;
@@ -131,11 +131,7 @@ pub fn str_before_or_after(
                     .then(apply_func(value))
                     .otherwise(null_string()),
             );
-            lang_lang_exprs.push(
-                when(keep)
-                    .then(lang)
-                    .otherwise(null_string()),
-            );
+            lang_lang_exprs.push(when(keep).then(lang).otherwise(null_string()));
         }
     }
 

@@ -1,7 +1,7 @@
 import polars as pl
 import pytest
 
-from maplib import Model
+from maplib import Model, TRANSIENT_GRAPH
 
 TEMPLATE = """
 @prefix ex:<http://example.net/ns#>.
@@ -382,7 +382,7 @@ def test_stream_map_json_transient_construct(tmp_path, documents_per_batch):
     (
         m.map_json(
             _json_docs(),
-            transient=True,
+            graph=TRANSIENT_GRAPH,
             stream=True,
             documents_per_batch=documents_per_batch,
         )
@@ -394,7 +394,7 @@ def test_stream_map_json_transient_construct(tmp_path, documents_per_batch):
     assert m.size() == 0
     for path, format in [(tmp_path / "out.nt", "ntriples"), (tmp_path / "out.ttl", "turtle")]:
         out = _read(path, format)
-        # Only the constructed triples are written, the mapped document triples are transient
+        # Only the constructed triples are written, the mapped document triples are in the transient graph
         assert out.size() == N_DOCS
         df = out.query(f"SELECT ?r ?n WHERE {{ ?r <{EX}name> ?n }}")
         assert _distinct(df, "r") == N_DOCS

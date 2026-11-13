@@ -2,15 +2,15 @@ use super::Triplestore;
 use crate::sparql::errors::SparqlError;
 use crate::sparql::QuerySettings;
 use oxrdf::Variable;
-use polars::prelude::JoinType;
 use polars::prelude::IntoLazy;
+use polars::prelude::JoinType;
 use polars_core::frame::DataFrame;
 use query_processing::graph_patterns::{join, union, values_pattern};
-use std::collections::HashMap;
 use query_processing::pushdowns::Pushdowns;
 use representation::query_context::Context;
 use representation::solution_mapping::SolutionMappings;
 use spargebra::term::GroundTerm;
+use std::collections::HashMap;
 
 impl Triplestore {
     pub(crate) fn lazy_values(

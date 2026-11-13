@@ -1,8 +1,6 @@
-use polars::prelude::IntoSeries;
-use crate::format_time_zone_offset;
-use polars::datatypes::StringChunked;
 use crate::cats::{decode_column, LockedCats};
 use crate::errors::RepresentationError;
+use crate::format_time_zone_offset;
 use crate::formatting::literal_expr_to_string;
 use crate::multitype::{
     extract_column_from_multitype, MULTI_BLANK_DT, MULTI_IRI_DT, MULTI_NONE_DT,
@@ -17,6 +15,8 @@ use chrono::TimeZone as ChronoTimeZone;
 use chrono::{Datelike, Timelike};
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{BlankNode, Literal, NamedNode, NamedOrBlankNode, Triple, Variable};
+use polars::datatypes::StringChunked;
+use polars::prelude::IntoSeries;
 use polars::prelude::{
     col, AnyValue, Column, DataFrame, DataType, IntoColumn, IntoLazy, Series, TimeZone,
 };
@@ -299,57 +299,52 @@ pub fn polars_type_to_literal_type(
     data_type: &DataType,
 ) -> Result<RDFNodeState, RepresentationError> {
     match data_type {
-        DataType::Boolean => {
-            Ok(BaseRDFNodeType::Literal(xsd::BOOLEAN.into_owned(), None)
-                .into_default_input_rdf_node_state())
-        }
-        DataType::Int8 => Ok(
-            BaseRDFNodeType::Literal(xsd::BYTE.into_owned(), None).into_default_input_rdf_node_state()
+        DataType::Boolean => Ok(BaseRDFNodeType::Literal(xsd::BOOLEAN.into_owned(), None)
+            .into_default_input_rdf_node_state()),
+        DataType::Int8 => Ok(BaseRDFNodeType::Literal(xsd::BYTE.into_owned(), None)
+            .into_default_input_rdf_node_state()),
+        DataType::Int16 => Ok(BaseRDFNodeType::Literal(xsd::SHORT.into_owned(), None)
+            .into_default_input_rdf_node_state()),
+        DataType::UInt8 => Ok(
+            BaseRDFNodeType::Literal(xsd::UNSIGNED_BYTE.into_owned(), None)
+                .into_default_input_rdf_node_state(),
         ),
-        DataType::Int16 => {
-            Ok(BaseRDFNodeType::Literal(xsd::SHORT.into_owned(), None)
-                .into_default_input_rdf_node_state())
-        }
-        DataType::UInt8 => Ok(BaseRDFNodeType::Literal(xsd::UNSIGNED_BYTE.into_owned(), None)
-            .into_default_input_rdf_node_state()),
-        DataType::UInt16 => Ok(BaseRDFNodeType::Literal(xsd::UNSIGNED_SHORT.into_owned(), None)
-            .into_default_input_rdf_node_state()),
-        DataType::UInt32 => Ok(BaseRDFNodeType::Literal(xsd::UNSIGNED_INT.into_owned(), None)
-            .into_default_input_rdf_node_state()),
-        DataType::UInt64 => Ok(BaseRDFNodeType::Literal(xsd::UNSIGNED_LONG.into_owned(), None)
-            .into_default_input_rdf_node_state()),
-        DataType::Int32 => {
-            Ok(BaseRDFNodeType::Literal(xsd::INT.into_owned(), None).into_default_input_rdf_node_state())
-        }
-        DataType::Int64 => Ok(
-            BaseRDFNodeType::Literal(xsd::LONG.into_owned(), None).into_default_input_rdf_node_state()
+        DataType::UInt16 => Ok(
+            BaseRDFNodeType::Literal(xsd::UNSIGNED_SHORT.into_owned(), None)
+                .into_default_input_rdf_node_state(),
         ),
-        DataType::Float32 => {
-            Ok(BaseRDFNodeType::Literal(xsd::FLOAT.into_owned(), None)
-                .into_default_input_rdf_node_state())
-        }
-        DataType::Float64 => {
-            Ok(BaseRDFNodeType::Literal(xsd::DOUBLE.into_owned(), None)
-                .into_default_input_rdf_node_state())
-        }
-        DataType::String => {
-            Ok(BaseRDFNodeType::Literal(xsd::STRING.into_owned(), None)
-                .into_default_input_rdf_node_state())
-        }
-        DataType::Date => Ok(
-            BaseRDFNodeType::Literal(xsd::DATE.into_owned(), None).into_default_input_rdf_node_state()
+        DataType::UInt32 => Ok(
+            BaseRDFNodeType::Literal(xsd::UNSIGNED_INT.into_owned(), None)
+                .into_default_input_rdf_node_state(),
         ),
-        DataType::Decimal(_, 0) => {
-            Ok(BaseRDFNodeType::Literal(xsd::INTEGER.into_owned(), None)
-                .into_default_input_rdf_node_state())
-        }
+        DataType::UInt64 => Ok(
+            BaseRDFNodeType::Literal(xsd::UNSIGNED_LONG.into_owned(), None)
+                .into_default_input_rdf_node_state(),
+        ),
+        DataType::Int32 => Ok(BaseRDFNodeType::Literal(xsd::INT.into_owned(), None)
+            .into_default_input_rdf_node_state()),
+        DataType::Int64 => Ok(BaseRDFNodeType::Literal(xsd::LONG.into_owned(), None)
+            .into_default_input_rdf_node_state()),
+        DataType::Float32 => Ok(BaseRDFNodeType::Literal(xsd::FLOAT.into_owned(), None)
+            .into_default_input_rdf_node_state()),
+        DataType::Float64 => Ok(BaseRDFNodeType::Literal(xsd::DOUBLE.into_owned(), None)
+            .into_default_input_rdf_node_state()),
+        DataType::String => Ok(BaseRDFNodeType::Literal(xsd::STRING.into_owned(), None)
+            .into_default_input_rdf_node_state()),
+        DataType::Date => Ok(BaseRDFNodeType::Literal(xsd::DATE.into_owned(), None)
+            .into_default_input_rdf_node_state()),
+        DataType::Decimal(_, 0) => Ok(BaseRDFNodeType::Literal(xsd::INTEGER.into_owned(), None)
+            .into_default_input_rdf_node_state()),
         // Time zone aware values are UTC instants, so the offset is 0.
-        DataType::Datetime(_, Some(_)) => {
-            Ok(BaseRDFNodeType::Literal(xsd::DATE_TIME_STAMP.into_owned(), Some(0))
+        DataType::Datetime(_, Some(_)) => Ok(BaseRDFNodeType::Literal(
+            xsd::DATE_TIME_STAMP.into_owned(),
+            Some(0),
+        )
+        .into_default_input_rdf_node_state()),
+        DataType::Datetime(_, None) => {
+            Ok(BaseRDFNodeType::Literal(xsd::DATE_TIME.into_owned(), None)
                 .into_default_input_rdf_node_state())
         }
-        DataType::Datetime(_, None) => Ok(BaseRDFNodeType::Literal(xsd::DATE_TIME.into_owned(), None)
-            .into_default_input_rdf_node_state()),
         DataType::Duration(_) => Ok(BaseRDFNodeType::Literal(xsd::DURATION.into_owned(), None)
             .into_default_input_rdf_node_state()),
         DataType::Struct(fields) => {
@@ -364,7 +359,10 @@ pub fn polars_type_to_literal_type(
                 match *f {
                     LANG_STRING_VALUE_FIELD => {
                         found_lang_string_value = true;
-                        dts.push(BaseRDFNodeType::Literal(rdf::LANG_STRING.into_owned(), None));
+                        dts.push(BaseRDFNodeType::Literal(
+                            rdf::LANG_STRING.into_owned(),
+                            None,
+                        ));
                     }
                     LANG_STRING_LANG_FIELD => {
                         found_lang_string_lang = true;
@@ -415,8 +413,10 @@ pub fn polars_type_to_literal_type(
             }
 
             if only_lang_string {
-                Ok(BaseRDFNodeType::Literal(rdf::LANG_STRING.into_owned(), None)
-                    .into_default_input_rdf_node_state())
+                Ok(
+                    BaseRDFNodeType::Literal(rdf::LANG_STRING.into_owned(), None)
+                        .into_default_input_rdf_node_state(),
+                )
             } else {
                 Ok(RDFNodeState::default_from_types(dts))
             }

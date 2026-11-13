@@ -4,25 +4,26 @@ use crate::mutexes::{
     add_virtualization_mutex, compact_mutex, create_index_mutex, detach_graph_mutex,
     get_predicate_iris_mutex, get_predicate_mutex, infer_mutex, infer_rdfs_mutex, insert_mutex,
     list_udfs_mutex, map_default_batch_mutex, map_default_first_batch_mutex, map_default_mutex,
-    map_df_mutex, map_mutex, map_resolved_mutex, map_triples_mutex,
-    query_external_mutex, query_mutex, read_mutex, read_template_mutex, reads_mutex,
-    resolve_template_mutex, serialize_triples_mutex, size_mutex, truncate_graph_mutex,
-    update_mutex, validate_mutex, write_cim_xml_mutex, write_triples_mutex, writes_mutex,
+    map_df_mutex, map_mutex, map_resolved_mutex, map_triples_mutex, query_external_mutex,
+    query_mutex, read_mutex, read_template_mutex, reads_mutex, resolve_template_mutex,
+    serialize_triples_mutex, size_mutex, truncate_graph_mutex, update_mutex, validate_mutex,
+    write_cim_xml_mutex, write_triples_mutex, writes_mutex,
 };
 use crate::py_stream::{DocumentKind, PyModelStream, StreamSource};
 use crate::shacl::PyValidationReport;
 use crate::{
     classify_document_data, classify_mapping_data, create_prefix_map, data_to_mappings_types,
     document_uuid_namespace, for_each_document, for_each_mapping_batch, map_parameters,
-    maybe_parse_bindings, new_triples_to_dict, parse_named_node, parse_optional_named_node,
-    print_debug_if_exists, query_to_result, resolve_rdf_node_type, DocumentData, MappingData,
-    ParametersType, PyIndexingOptions, DEFAULT_INCLUDE_TRANSIENT,
+    maybe_parse_bindings, new_triples_to_dict, parse_include_graphs, parse_named_node,
+    parse_optional_named_node, print_debug_if_exists, query_to_result, resolve_rdf_node_type,
+    DocumentData, MappingData, ParametersType, PyIndexingOptions,
 };
 
 use datalog::python::PyInferenceResult;
 use external_sparql::SparqlMethod;
 use maplib::model::Model as InnerModel;
 use opc_ua::mappings::map_opc_ua;
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyString;
 use pyo3::{pyclass, pymethods, Bound, Py, PyAny, PyRef, PyResult, Python};
@@ -33,7 +34,6 @@ use representation::python::PyIRI;
 use representation::solution_mapping::EagerSolutionMappings;
 use representation::BaseRDFNodeType;
 use std::collections::HashMap;
-use pyo3::exceptions::PyValueError;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Mutex;
@@ -74,8 +74,7 @@ impl PyModel {
         };
         Ok(PyModel {
             inner: Mutex::new(
-                InnerModel::new(None, storage, indexing, None)
-                    .map_err(PyMaplibError::from)?,
+                InnerModel::new(None, storage, indexing, None).map_err(PyMaplibError::from)?,
             ),
         })
     }
@@ -209,14 +208,13 @@ impl PyModel {
         })
     }
 
-    #[pyo3(signature = (path_or_string, graph=None, transient=None, uuid_namespace=None, stream=None, documents_per_batch=None))]
+    #[pyo3(signature = (path_or_string, graph=None, uuid_namespace=None, stream=None, documents_per_batch=None))]
     #[instrument(skip_all)]
     fn map_json(
         slf: &Bound<'_, Self>,
         py: Python<'_>,
         path_or_string: &Bound<'_, PyAny>,
         graph: Option<String>,
-        transient: Option<bool>,
         uuid_namespace: Option<String>,
         stream: Option<bool>,
         documents_per_batch: Option<usize>,
@@ -227,21 +225,19 @@ impl PyModel {
             DocumentKind::Json,
             path_or_string,
             graph,
-            transient,
             uuid_namespace,
             stream,
             documents_per_batch,
         )
     }
 
-    #[pyo3(signature = (path_or_string, graph=None, transient=None, uuid_namespace=None, stream=None, documents_per_batch=None))]
+    #[pyo3(signature = (path_or_string, graph=None, uuid_namespace=None, stream=None, documents_per_batch=None))]
     #[instrument(skip_all)]
     fn map_xml(
         slf: &Bound<'_, Self>,
         py: Python<'_>,
         path_or_string: &Bound<'_, PyAny>,
         graph: Option<String>,
-        transient: Option<bool>,
         uuid_namespace: Option<String>,
         stream: Option<bool>,
         documents_per_batch: Option<usize>,
@@ -252,7 +248,6 @@ impl PyModel {
             DocumentKind::Xml,
             path_or_string,
             graph,
-            transient,
             uuid_namespace,
             stream,
             documents_per_batch,
@@ -500,7 +495,7 @@ impl PyModel {
         graph=None,
         return_json=None,
         return_format=None,
-        include_transient=None,
+        include_graphs=None,
         max_rows=None,
         debug=None,
         bindings=None,
@@ -515,7 +510,7 @@ impl PyModel {
         graph: Option<String>,
         return_json: Option<bool>,
         return_format: Option<String>,
-        include_transient: Option<bool>,
+        include_graphs: Option<Vec<String>>,
         max_rows: Option<usize>,
         debug: Option<bool>,
         bindings: Option<HashMap<String, Py<PyAny>>>,
@@ -532,7 +527,7 @@ impl PyModel {
                 query,
                 mapped_parameters,
                 graph,
-                include_transient,
+                include_graphs,
                 max_rows,
                 debug,
                 parsed_bindings,
@@ -625,7 +620,7 @@ impl PyModel {
             update,
             parameters=None,
             graph=None,
-            include_transient=None,
+            include_graphs=None,
             max_rows=None,
             debug=None,
     ))]
@@ -636,7 +631,7 @@ impl PyModel {
         update: String,
         parameters: Option<ParametersType>,
         graph: Option<String>,
-        include_transient: Option<bool>,
+        include_graphs: Option<Vec<String>>,
         max_rows: Option<usize>,
         debug: Option<bool>,
     ) -> PyResult<()> {
@@ -648,7 +643,7 @@ impl PyModel {
                 update,
                 mapped_parameters,
                 graph,
-                include_transient,
+                include_graphs,
                 max_rows,
                 debug,
             )
@@ -728,10 +723,9 @@ impl PyModel {
             query,
             parameters=None,
             solution_mappings=None,
-            transient=None,
             source_graph=None,
             target_graph=None,
-            include_transient=None,
+            include_graphs=None,
             max_rows=None,
             debug=None,
     ))]
@@ -742,10 +736,9 @@ impl PyModel {
         query: String,
         parameters: Option<ParametersType>,
         solution_mappings: Option<bool>,
-        transient: Option<bool>,
         source_graph: Option<String>,
         target_graph: Option<String>,
-        include_transient: Option<bool>,
+        include_graphs: Option<Vec<String>>,
         max_rows: Option<usize>,
         debug: Option<bool>,
     ) -> PyResult<HashMap<String, Py<PyAny>>> {
@@ -763,10 +756,9 @@ impl PyModel {
                 &mut inner,
                 query,
                 mapped_parameters,
-                transient,
                 source_graph,
                 target_graph,
-                include_transient,
+                include_graphs,
                 max_rows,
                 debug,
             )?;
@@ -787,7 +779,6 @@ impl PyModel {
         file_path,
         format=None,
         base_iri=None,
-        transient=None,
         parallel=None,
         checked=None,
         graph=None,
@@ -802,7 +793,6 @@ impl PyModel {
         file_path: &Bound<'_, PyAny>,
         format: Option<String>,
         base_iri: Option<String>,
-        transient: Option<bool>,
         parallel: Option<bool>,
         checked: Option<bool>,
         graph: Option<String>,
@@ -818,7 +808,6 @@ impl PyModel {
                 file_path,
                 format,
                 base_iri,
-                transient,
                 parallel,
                 checked,
                 graph,
@@ -845,7 +834,6 @@ impl PyModel {
         s,
         format,
         base_iri=None,
-        transient=None,
         parallel=None,
         checked=None,
         graph=None,
@@ -860,7 +848,6 @@ impl PyModel {
         s: &str,
         format: &str,
         base_iri: Option<String>,
-        transient: Option<bool>,
         parallel: Option<bool>,
         checked: Option<bool>,
         graph: Option<String>,
@@ -875,7 +862,6 @@ impl PyModel {
                 s,
                 format,
                 base_iri,
-                transient,
                 parallel,
                 checked,
                 graph,
@@ -990,33 +976,32 @@ impl PyModel {
         })
     }
 
-    #[pyo3(signature = (graph=None, include_transient=None))]
+    #[pyo3(signature = (graph=None, include_graphs=None))]
     #[instrument(skip_all)]
     fn get_predicate_iris(
         &self,
         py: Python<'_>,
         graph: Option<String>,
-        include_transient: Option<bool>,
+        include_graphs: Option<Vec<String>>,
     ) -> PyResult<Vec<PyIRI>> {
         py.detach(move || {
             let mut inner = self.inner.lock().unwrap();
-            get_predicate_iris_mutex(&mut inner, graph, include_transient)
+            get_predicate_iris_mutex(&mut inner, graph, include_graphs)
         })
     }
 
-    #[pyo3(signature = (iri, graph=None, include_transient=None))]
+    #[pyo3(signature = (iri, graph=None, include_graphs=None))]
     #[instrument(skip_all)]
     fn get_predicate(
         &self,
         py: Python<'_>,
         iri: PyIRI,
         graph: Option<String>,
-        include_transient: Option<bool>,
+        include_graphs: Option<Vec<String>>,
     ) -> PyResult<Vec<Py<PyAny>>> {
-        let include_transient = include_transient.unwrap_or(false);
         let eager_sms = py.detach(|| {
             let mut inner = self.inner.lock().unwrap();
-            get_predicate_mutex(&mut inner, iri, graph, include_transient)
+            get_predicate_mutex(&mut inner, iri, graph, include_graphs)
         })?;
         let mut out = vec![];
         for EagerSolutionMappings {
@@ -1035,7 +1020,7 @@ impl PyModel {
         graph=None,
         max_iterations=100_000,
         max_results=10_000_000,
-        include_transient=None,
+        include_graphs=None,
         max_rows=100_000_000,
         debug=None))]
     #[instrument(skip_all)]
@@ -1046,7 +1031,7 @@ impl PyModel {
         graph: Option<String>,
         max_iterations: Option<usize>,
         max_results: Option<usize>,
-        include_transient: Option<bool>,
+        include_graphs: Option<Vec<String>>,
         max_rows: Option<usize>,
         debug: Option<bool>,
     ) -> PyResult<PyInferenceResult> {
@@ -1073,7 +1058,7 @@ impl PyModel {
                 max_iterations,
                 max_results,
                 named_graph.as_ref(),
-                include_transient.unwrap_or(DEFAULT_INCLUDE_TRANSIENT),
+                parse_include_graphs(include_graphs, true)?,
                 max_rows,
                 debug,
             )?;
@@ -1108,7 +1093,6 @@ impl PyModel {
 
     #[pyo3(signature = (path = PathBuf::from("./serialized_triples")))]
     fn serialize(&self, py: Python<'_>, path: PathBuf) -> PyResult<()> {
-
         py.detach(move || {
             let mut inner = self.inner.lock().unwrap();
             serialize_triples_mutex(&mut inner, path.as_ref())
@@ -1127,8 +1111,8 @@ impl PyModel {
         let storage = storage_options(storage, storage_folder)?;
 
         let inner: Result<InnerModel, PyMaplibError> = py.detach(move || {
-            let inner = InnerModel::deserialize_triples(&path, storage)
-                .map_err(PyMaplibError::from)?;
+            let inner =
+                InnerModel::deserialize_triples(&path, storage).map_err(PyMaplibError::from)?;
             Ok(inner)
         });
         Ok(Self {
@@ -1243,7 +1227,6 @@ fn map_documents(
     kind: DocumentKind,
     data: &Bound<'_, PyAny>,
     graph: Option<String>,
-    transient: Option<bool>,
     uuid_namespace: Option<String>,
     stream: Option<bool>,
     documents_per_batch: Option<usize>,
@@ -1264,7 +1247,6 @@ fn map_documents(
             StreamSource::Documents {
                 kind,
                 graph,
-                transient,
                 uuid_namespace,
                 documents_per_batch: documents_per_batch.unwrap_or(1),
             },
@@ -1274,22 +1256,19 @@ fn map_documents(
     match documents {
         DocumentData::Single(doc) => py.detach(|| {
             let mut inner = this.inner.lock().unwrap();
-            kind.map_mutex(&mut inner, doc, graph, transient, uuid_namespace)
+            kind.map_mutex(&mut inner, doc, graph, uuid_namespace)
         })?,
-        DocumentData::Many(docs) => {
-            for_each_document(&docs, kind.name(), &mut |py, i, doc| {
-                py.detach(|| {
-                    let mut inner = this.inner.lock().unwrap();
-                    kind.map_mutex(
-                        &mut inner,
-                        doc,
-                        graph.clone(),
-                        transient,
-                        document_uuid_namespace(&uuid_namespace, i),
-                    )
-                })
-            })?
-        }
+        DocumentData::Many(docs) => for_each_document(&docs, kind.name(), &mut |py, i, doc| {
+            py.detach(|| {
+                let mut inner = this.inner.lock().unwrap();
+                kind.map_mutex(
+                    &mut inner,
+                    doc,
+                    graph.clone(),
+                    document_uuid_namespace(&uuid_namespace, i),
+                )
+            })
+        })?,
     }
     Ok(None)
 }

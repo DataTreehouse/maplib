@@ -26,8 +26,6 @@ pub enum TriplestoreError {
     ReadTriplesFileError(io::Error),
     #[error("Invalid base iri {0}")]
     InvalidBaseIri(String),
-    #[error("Error subtracting from transient triples {0}")]
-    SubtractTransientTriplesError(String),
     #[error("RDFS Class inheritance error {0}")]
     RDFSClassInheritanceError(String),
     #[error("Indexing error {0}")]

@@ -78,7 +78,7 @@ pub fn validate(
     _include_details: bool,
     _include_conforms: bool,
     _max_shape_constraint_results: Option<usize>,
-    _include_transient: bool,
+    _include_graphs: Vec<NamedGraph>,
     _max_rows: Option<usize>,
     _only_shapes: Option<Vec<NamedNode>>,
     _deactivate_shapes: Vec<NamedNode>,
@@ -97,7 +97,7 @@ pub fn infer_shacl(
     _shapes_graph: &NamedGraph,
     _max_iterations: Option<usize>,
     _max_results: Option<usize>,
-    _include_transient: bool,
+    _include_graphs: Vec<NamedGraph>,
     _max_rows: Option<usize>,
     _debug_no_results: bool,
 ) -> Result<ShaclInferenceResult, ShaclError> {

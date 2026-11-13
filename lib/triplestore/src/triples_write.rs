@@ -175,7 +175,14 @@ impl Triplestore {
                 vec![]
             }
         } else {
-            let mut graphs: Vec<_> = self.graph_triples_map.keys().cloned().collect();
+            // The transient graph is only written when asked for explicitly.
+            let transient = NamedGraph::transient();
+            let mut graphs: Vec<_> = self
+                .graph_triples_map
+                .keys()
+                .filter(|g| *g != &transient)
+                .cloned()
+                .collect();
             graphs.sort_by_key(|g| (!matches!(g, NamedGraph::DefaultGraph), g.to_string()));
             graphs
         };

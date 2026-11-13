@@ -6,10 +6,7 @@ use crate::{
     NamedGraph, PyIndexingOptions, PyTemplate, StringOrPathBuf, TemplateType,
     VirtualizedPythonDatabase,
 };
-use crate::{
-    DEFAULT_DEBUG_NO_RESULTS, DEFAULT_INCLUDE_TRANSIENT, DEFAULT_MAP_TO_TRANSIENT,
-    DEFAULT_TRIPLES_BATCH_SIZE,
-};
+use crate::{parse_include_graphs, DEFAULT_DEBUG_NO_RESULTS, DEFAULT_TRIPLES_BATCH_SIZE};
 
 use chrono::Utc;
 use cimxml_export::export::FullModelDetails;
@@ -201,7 +198,6 @@ pub(crate) fn map_json_mutex(
     inner: &mut MutexGuard<InnerModel>,
     string_or_path: StringOrPathBuf,
     graph: Option<String>,
-    transient: Option<bool>,
     uuid_namespace: Option<String>,
 ) -> PyResult<()> {
     let graph = parse_optional_named_node(graph)?;
@@ -213,33 +209,18 @@ pub(crate) fn map_json_mutex(
 
             if is_json_string {
                 inner
-                    .map_json_string(
-                        string,
-                        &named_graph,
-                        transient.unwrap_or(DEFAULT_MAP_TO_TRANSIENT),
-                        uuid_namespace,
-                    )
+                    .map_json_string(string, &named_graph, uuid_namespace)
                     .map_err(PyMaplibError::from)?;
             } else {
                 let p = PathBuf::from(string.as_str());
                 inner
-                    .map_json_path(
-                        p.as_ref(),
-                        &named_graph,
-                        transient.unwrap_or(DEFAULT_MAP_TO_TRANSIENT),
-                        uuid_namespace,
-                    )
+                    .map_json_path(p.as_ref(), &named_graph, uuid_namespace)
                     .map_err(PyMaplibError::from)?;
             }
         }
         StringOrPathBuf::PathBuf(path) => {
             inner
-                .map_json_path(
-                    path.as_ref(),
-                    &named_graph,
-                    transient.unwrap_or(DEFAULT_MAP_TO_TRANSIENT),
-                    uuid_namespace,
-                )
+                .map_json_path(path.as_ref(), &named_graph, uuid_namespace)
                 .map_err(PyMaplibError::from)?;
         }
     }
@@ -250,7 +231,6 @@ pub(crate) fn map_xml_mutex(
     inner: &mut MutexGuard<InnerModel>,
     string_or_path: StringOrPathBuf,
     graph: Option<String>,
-    transient: Option<bool>,
     uuid_namespace: Option<String>,
 ) -> PyResult<()> {
     let graph = parse_optional_named_node(graph)?;
@@ -262,33 +242,18 @@ pub(crate) fn map_xml_mutex(
 
             if is_xml_string {
                 inner
-                    .map_xml_string(
-                        string,
-                        &named_graph,
-                        transient.unwrap_or(DEFAULT_MAP_TO_TRANSIENT),
-                        uuid_namespace,
-                    )
+                    .map_xml_string(string, &named_graph, uuid_namespace)
                     .map_err(PyMaplibError::from)?;
             } else {
                 let p = PathBuf::from(string);
                 inner
-                    .map_xml_path(
-                        p.as_ref(),
-                        &named_graph,
-                        transient.unwrap_or(DEFAULT_MAP_TO_TRANSIENT),
-                        uuid_namespace,
-                    )
+                    .map_xml_path(p.as_ref(), &named_graph, uuid_namespace)
                     .map_err(PyMaplibError::from)?;
             }
         }
         StringOrPathBuf::PathBuf(path) => {
             inner
-                .map_xml_path(
-                    path.as_ref(),
-                    &named_graph,
-                    transient.unwrap_or(DEFAULT_MAP_TO_TRANSIENT),
-                    uuid_namespace,
-                )
+                .map_xml_path(path.as_ref(), &named_graph, uuid_namespace)
                 .map_err(PyMaplibError::from)?;
         }
     }
@@ -385,7 +350,7 @@ pub(crate) fn query_mutex(
     query: String,
     mapped_parameters: Option<HashMap<String, EagerSolutionMappings>>,
     graph: Option<NamedGraph>,
-    include_transient: Option<bool>,
+    include_graphs: Option<Vec<String>>,
     max_rows: Option<usize>,
     debug: Option<bool>,
     bindings: Option<HashMap<String, GroundTerm>>,
@@ -395,7 +360,7 @@ pub(crate) fn query_mutex(
             &query,
             mapped_parameters.as_ref(),
             graph.as_ref(),
-            include_transient.unwrap_or(DEFAULT_INCLUDE_TRANSIENT),
+            parse_include_graphs(include_graphs, true)?,
             max_rows,
             debug.unwrap_or(DEFAULT_DEBUG_NO_RESULTS),
             bindings.as_ref(),
@@ -429,7 +394,7 @@ pub(crate) fn update_mutex(
     update: String,
     mapped_parameters: Option<HashMap<String, EagerSolutionMappings>>,
     graph: Option<String>,
-    include_transient: Option<bool>,
+    include_graphs: Option<Vec<String>>,
     max_rows: Option<usize>,
     debug: Option<bool>,
 ) -> PyResult<UpdateResult> {
@@ -441,7 +406,7 @@ pub(crate) fn update_mutex(
             &update,
             mapped_parameters.as_ref(),
             named_graph.as_ref(),
-            include_transient.unwrap_or(DEFAULT_INCLUDE_TRANSIENT),
+            parse_include_graphs(include_graphs, true)?,
             max_rows,
             debug.unwrap_or(DEFAULT_DEBUG_NO_RESULTS),
         )
@@ -528,7 +493,7 @@ pub(crate) fn validate_mutex(
             include_details.unwrap_or(false),
             include_conforms.unwrap_or(false),
             max_shape_constraint_results,
-            false, //TODO: Needs more work before can be exposed
+            vec![], //TODO: Needs more work before can be exposed
             max_rows,
             only_shapes,
             deactivate_shapes,
@@ -547,10 +512,9 @@ pub(crate) fn insert_mutex(
     inner: &mut MutexGuard<InnerModel>,
     query: String,
     mapped_parameters: Option<HashMap<String, EagerSolutionMappings>>,
-    transient: Option<bool>,
     source_graph: NamedGraph,
     target_graph: NamedGraph,
-    include_transient: Option<bool>,
+    include_graphs: Option<Vec<String>>,
     max_rows: Option<usize>,
     debug: Option<bool>,
 ) -> PyResult<InsertResult> {
@@ -559,9 +523,8 @@ pub(crate) fn insert_mutex(
             &query,
             mapped_parameters.as_ref(),
             &source_graph,
-            include_transient.unwrap_or(DEFAULT_INCLUDE_TRANSIENT),
+            parse_include_graphs(include_graphs, true)?,
             &target_graph,
-            transient.unwrap_or(false),
             max_rows,
             debug.unwrap_or(DEFAULT_DEBUG_NO_RESULTS),
         )
@@ -575,7 +538,6 @@ pub(crate) fn read_mutex(
     file_path: String,
     format: Option<String>,
     base_iri: Option<String>,
-    transient: Option<bool>,
     parallel: Option<bool>,
     checked: Option<bool>,
     graph: Option<String>,
@@ -596,7 +558,6 @@ pub(crate) fn read_mutex(
             path,
             format,
             base_iri,
-            transient.unwrap_or(false),
             parallel,
             checked.unwrap_or(true),
             &named_graph,
@@ -622,7 +583,6 @@ pub(crate) fn reads_mutex(
     s: &str,
     format: &str,
     base_iri: Option<String>,
-    transient: Option<bool>,
     parallel: Option<bool>,
     checked: Option<bool>,
     graph: Option<String>,
@@ -644,7 +604,6 @@ pub(crate) fn reads_mutex(
             s,
             format,
             base_iri,
-            transient.unwrap_or(false),
             parallel,
             checked.unwrap_or(true),
             &named_graph,
@@ -803,12 +762,12 @@ pub(crate) fn writes_mutex(
 pub(crate) fn get_predicate_iris_mutex(
     inner: &mut MutexGuard<InnerModel>,
     graph: Option<String>,
-    include_transient: Option<bool>,
+    include_graphs: Option<Vec<String>>,
 ) -> PyResult<Vec<PyIRI>> {
     let graph = parse_optional_named_node(graph)?;
     let named_graph = NamedGraph::from_maybe_named_node(graph.as_ref());
     let nns = inner
-        .get_predicate_iris(&named_graph, include_transient.unwrap_or(false))
+        .get_predicate_iris(&named_graph, &parse_include_graphs(include_graphs, false)?)
         .map_err(PyMaplibError::from)?;
     Ok(nns.into_iter().map(PyIRI::from).collect())
 }
@@ -817,12 +776,16 @@ pub(crate) fn get_predicate_mutex(
     inner: &mut MutexGuard<InnerModel>,
     iri: PyIRI,
     graph: Option<String>,
-    include_transient: bool,
+    include_graphs: Option<Vec<String>>,
 ) -> PyResult<Vec<EagerSolutionMappings>> {
     let graph = parse_optional_named_node(graph)?;
     let named_graph = NamedGraph::from_maybe_named_node(graph.as_ref());
     let eager_sms = inner
-        .get_predicate(&iri.into_inner(), &named_graph, include_transient)
+        .get_predicate(
+            &iri.into_inner(),
+            &named_graph,
+            &parse_include_graphs(include_graphs, false)?,
+        )
         .map_err(PyMaplibError::from)?;
     let global_cats = &inner.triplestore.global_cats;
     let mut out_eager_sms = Vec::with_capacity(eager_sms.len());
@@ -844,7 +807,7 @@ pub(crate) fn infer_mutex(
     max_iterations: Option<usize>,
     max_results: Option<usize>,
     graph: Option<&NamedGraph>,
-    include_transient: bool,
+    include_graphs: Vec<NamedGraph>,
     max_rows: Option<usize>,
     debug: Option<bool>,
 ) -> Result<InferenceResult, PyMaplibError> {
@@ -854,7 +817,7 @@ pub(crate) fn infer_mutex(
             max_iterations,
             max_results,
             graph,
-            include_transient,
+            include_graphs,
             max_rows,
             debug.unwrap_or(DEFAULT_DEBUG_NO_RESULTS),
         )

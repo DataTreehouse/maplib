@@ -4,7 +4,7 @@ import pathlib
 
 PATH_HERE = pathlib.Path(__file__).parent
 
-STORAGE_FOLDER = "disk"
+STORAGE_FOLDER = str(PATH_HERE / "disk")
 
 
 def is_maplib_ee() -> bool:

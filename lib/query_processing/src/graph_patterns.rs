@@ -14,16 +14,17 @@ pub use values::*;
 use crate::errors::QueryProcessingError;
 use crate::expressions::comparisons::typed_equals_expr;
 use crate::type_constraints::{
-    conjunction_variable_type, equal_variable_possible_types, ConstraintBaseRDFNodeType, PossibleTypes,
+    conjunction_variable_type, equal_variable_possible_types, ConstraintBaseRDFNodeType,
+    PossibleTypes,
 };
 use oxrdf::vocab::{rdfs, xsd};
 use oxrdf::Variable;
+use polars::frame::DataFrame;
 use polars::frame::UniqueKeepStrategy;
 use polars::prelude::{
     by_name, col, len, lit, Expr, IntoLazy, JoinArgs, JoinType, LazyFrame, LazyGroupBy,
     LiteralValue, SortMultipleOptions,
 };
-use polars::frame::DataFrame;
 use representation::cats::LockedCats;
 use representation::multitype::unnest_multicols;
 use representation::query_context::Context;

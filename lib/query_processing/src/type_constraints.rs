@@ -173,7 +173,10 @@ pub fn equal_variable_possible_types(
 
 /// The dateTime datatypes, whose values can be equal to each other.
 pub fn datetime_datatypes() -> [oxrdf::NamedNode; 2] {
-    [xsd::DATE_TIME.into_owned(), xsd::DATE_TIME_STAMP.into_owned()]
+    [
+        xsd::DATE_TIME.into_owned(),
+        xsd::DATE_TIME_STAMP.into_owned(),
+    ]
 }
 
 pub fn get_expression_rdf_type(e: &Expression) -> Option<ConstraintBaseRDFNodeType> {

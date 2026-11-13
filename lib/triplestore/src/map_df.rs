@@ -130,7 +130,7 @@ impl Triplestore {
         triples_to_add.push(tta_children);
         triples_to_add.push(tta_child_num);
         triples_to_add.push(root);
-        self.add_triples_vec(triples_to_add, false)?;
+        self.add_triples_vec(triples_to_add)?;
         Ok(())
     }
 }

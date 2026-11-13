@@ -1,7 +1,5 @@
 use crate::cats::{maybe_decode_expr, LockedCats};
-use crate::polars_to_rdf::{
-    datetime_column_to_xsd_strings, XSD_DATE_WITHOUT_TZ_FORMAT,
-};
+use crate::polars_to_rdf::{datetime_column_to_xsd_strings, XSD_DATE_WITHOUT_TZ_FORMAT};
 use crate::solution_mapping::BaseCatState;
 use crate::{BaseRDFNodeType, RDFNodeState, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD};
 use oxrdf::vocab::{rdf, xsd};

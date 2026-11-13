@@ -178,7 +178,9 @@ impl PyRDFType {
     fn literal(iri: Bound<'_, PyAny>) -> PyResult<PyRDFType> {
         if let Ok(pyiri) = iri.extract::<PyIRI>() {
             Ok(PyRDFType {
-                flat: Some(BaseRDFNodeType::Literal(pyiri.iri, None).into_default_input_rdf_node_state()),
+                flat: Some(
+                    BaseRDFNodeType::Literal(pyiri.iri, None).into_default_input_rdf_node_state(),
+                ),
                 nested: None,
             })
         } else if let Ok(s) = iri.extract::<String>() {

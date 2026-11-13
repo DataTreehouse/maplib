@@ -122,20 +122,27 @@ WHERE {
 impl Triplestore {
     pub fn rdfs_class_inheritance(&mut self, graph: &NamedGraph) -> Result<(), TriplestoreError> {
         let qs = QuerySettings {
-            include_transient: false,
+            include_graphs: vec![],
             max_rows: None,
             strict_project: false,
         };
-        self.insert(RDFS_9, None, true, &qs, graph, graph, None, false)
-            .map_err(|x| TriplestoreError::RDFSClassInheritanceError(x.to_string()))?;
+        self.insert(
+            RDFS_9,
+            None,
+            &qs,
+            graph,
+            &NamedGraph::transient(),
+            None,
+            false,
+        )
+        .map_err(|x| TriplestoreError::RDFSClassInheritanceError(x.to_string()))?;
         Ok(())
     }
 
-    pub fn drop_rdfs_class_inheritance(
-        &mut self,
-        graph: &NamedGraph,
-    ) -> Result<(), TriplestoreError> {
-        if let Some(t) = self.graph_transient_triples_map.get_mut(graph) {
+    /// Removes the rdf:type triples from the transient graph, where `rdfs_class_inheritance`
+    /// puts them.
+    pub fn drop_rdfs_class_inheritance(&mut self) -> Result<(), TriplestoreError> {
+        if let Some(t) = self.graph_triples_map.get_mut(&NamedGraph::transient()) {
             t.remove(&rdf::TYPE.into_owned());
         }
         Ok(())
@@ -146,7 +153,7 @@ impl Triplestore {
         graph: &NamedGraph,
     ) -> Result<usize, TriplestoreError> {
         let qs = QuerySettings {
-            include_transient: true,
+            include_graphs: vec![NamedGraph::transient()],
             max_rows: None,
             strict_project: false,
         };
@@ -212,7 +219,7 @@ impl Triplestore {
             })
             .collect();
         let nt = self
-            .insert_construct_result(r_unpacked, true, graph)
+            .insert_construct_result(r_unpacked, &NamedGraph::transient())
             .map_err(|x| TriplestoreError::SparqlQueryError(x.to_string()))?;
         let c = nt
             .into_iter()

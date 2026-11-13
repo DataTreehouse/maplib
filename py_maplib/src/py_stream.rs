@@ -17,9 +17,9 @@ use crate::mutexes::{
 use crate::py_model::PyModel;
 use crate::{
     classify_document_data, classify_mapping_data, create_prefix_map, document_uuid_namespace,
-    for_each_document, for_each_mapping_batch, map_parameters, parse_optional_named_node,
-    print_debug_if_exists, resolve_format, DocumentData, MappingData, ParametersType,
-    StringOrPathBuf, DEFAULT_INCLUDE_TRANSIENT,
+    for_each_document, for_each_mapping_batch, map_parameters, parse_include_graphs,
+    parse_optional_named_node, print_debug_if_exists, resolve_format, DocumentData, MappingData,
+    ParametersType, StringOrPathBuf,
 };
 use maplib::model::Model as InnerModel;
 use oxrdf::NamedNode;
@@ -60,7 +60,6 @@ pub(crate) enum StreamSource {
     Documents {
         kind: DocumentKind,
         graph: Option<String>,
-        transient: Option<bool>,
         uuid_namespace: Option<String>,
         documents_per_batch: usize,
     },
@@ -85,12 +84,11 @@ impl DocumentKind {
         inner: &mut std::sync::MutexGuard<InnerModel>,
         doc: StringOrPathBuf,
         graph: Option<String>,
-        transient: Option<bool>,
         uuid_namespace: Option<String>,
     ) -> PyResult<()> {
         match self {
-            DocumentKind::Json => map_json_mutex(inner, doc, graph, transient, uuid_namespace),
-            DocumentKind::Xml => map_xml_mutex(inner, doc, graph, transient, uuid_namespace),
+            DocumentKind::Json => map_json_mutex(inner, doc, graph, uuid_namespace),
+            DocumentKind::Xml => map_xml_mutex(inner, doc, graph, uuid_namespace),
         }
     }
 }
@@ -107,17 +105,16 @@ enum StreamStep {
         update: String,
         parameters: Option<HashMap<String, EagerSolutionMappings>>,
         graph: Option<String>,
-        include_transient: Option<bool>,
+        include_graphs: Option<Vec<String>>,
         max_rows: Option<usize>,
         debug: Option<bool>,
     },
     Insert {
         query: String,
         parameters: Option<HashMap<String, EagerSolutionMappings>>,
-        transient: Option<bool>,
         source_graph: NamedGraph,
         target_graph: NamedGraph,
-        include_transient: Option<bool>,
+        include_graphs: Option<Vec<String>>,
         max_rows: Option<usize>,
         debug: Option<bool>,
     },
@@ -126,7 +123,7 @@ enum StreamStep {
         graph: Option<NamedGraph>,
         max_iterations: Option<usize>,
         max_results: Option<usize>,
-        include_transient: bool,
+        include_graphs: Vec<NamedGraph>,
         max_rows: Option<usize>,
         debug: Option<bool>,
     },
@@ -176,7 +173,7 @@ impl PyModelStream {
             update,
             parameters=None,
             graph=None,
-            include_transient=None,
+            include_graphs=None,
             max_rows=None,
             debug=None,
     ))]
@@ -186,7 +183,7 @@ impl PyModelStream {
         update: String,
         parameters: Option<ParametersType>,
         graph: Option<String>,
-        include_transient: Option<bool>,
+        include_graphs: Option<Vec<String>>,
         max_rows: Option<usize>,
         debug: Option<bool>,
     ) -> PyResult<PyModelStream> {
@@ -198,7 +195,7 @@ impl PyModelStream {
                 update,
                 parameters,
                 graph,
-                include_transient,
+                include_graphs,
                 max_rows,
                 debug,
             },
@@ -209,10 +206,9 @@ impl PyModelStream {
     #[pyo3(signature = (
             query,
             parameters=None,
-            transient=None,
             source_graph=None,
             target_graph=None,
-            include_transient=None,
+            include_graphs=None,
             max_rows=None,
             debug=None,
     ))]
@@ -221,10 +217,9 @@ impl PyModelStream {
         py: Python<'_>,
         query: String,
         parameters: Option<ParametersType>,
-        transient: Option<bool>,
         source_graph: Option<String>,
         target_graph: Option<String>,
-        include_transient: Option<bool>,
+        include_graphs: Option<Vec<String>>,
         max_rows: Option<usize>,
         debug: Option<bool>,
     ) -> PyResult<PyModelStream> {
@@ -238,10 +233,9 @@ impl PyModelStream {
             StreamStep::Insert {
                 query,
                 parameters,
-                transient,
                 source_graph,
                 target_graph,
-                include_transient,
+                include_graphs,
                 max_rows,
                 debug,
             },
@@ -254,7 +248,7 @@ impl PyModelStream {
         graph=None,
         max_iterations=100_000,
         max_results=10_000_000,
-        include_transient=None,
+        include_graphs=None,
         max_rows=100_000_000,
         debug=None))]
     fn infer(
@@ -264,7 +258,7 @@ impl PyModelStream {
         graph: Option<String>,
         max_iterations: Option<usize>,
         max_results: Option<usize>,
-        include_transient: Option<bool>,
+        include_graphs: Option<Vec<String>>,
         max_rows: Option<usize>,
         debug: Option<bool>,
     ) -> PyResult<PyModelStream> {
@@ -287,7 +281,7 @@ impl PyModelStream {
                 graph,
                 max_iterations,
                 max_results,
-                include_transient: include_transient.unwrap_or(DEFAULT_INCLUDE_TRANSIENT),
+                include_graphs: parse_include_graphs(include_graphs, true)?,
                 max_rows,
                 debug,
             },
@@ -557,7 +551,6 @@ fn map_batch(
             let StreamSource::Documents {
                 kind,
                 graph,
-                transient,
                 uuid_namespace,
                 ..
             } = source
@@ -569,7 +562,6 @@ fn map_batch(
                     inner,
                     doc,
                     graph.clone(),
-                    *transient,
                     document_uuid_namespace(uuid_namespace, i),
                 )?;
             }
@@ -650,7 +642,7 @@ fn run_steps(
                 update,
                 parameters,
                 graph,
-                include_transient,
+                include_graphs,
                 max_rows,
                 debug,
             } => {
@@ -659,7 +651,7 @@ fn run_steps(
                     update.clone(),
                     parameters.clone(),
                     graph.clone(),
-                    *include_transient,
+                    include_graphs.clone(),
                     *max_rows,
                     *debug,
                 )?;
@@ -668,10 +660,9 @@ fn run_steps(
             StreamStep::Insert {
                 query,
                 parameters,
-                transient,
                 source_graph,
                 target_graph,
-                include_transient,
+                include_graphs,
                 max_rows,
                 debug,
             } => {
@@ -679,10 +670,9 @@ fn run_steps(
                     inner,
                     query.clone(),
                     parameters.clone(),
-                    *transient,
                     source_graph.clone(),
                     target_graph.clone(),
-                    *include_transient,
+                    include_graphs.clone(),
                     *max_rows,
                     *debug,
                 )?;
@@ -693,7 +683,7 @@ fn run_steps(
                 graph,
                 max_iterations,
                 max_results,
-                include_transient,
+                include_graphs,
                 max_rows,
                 debug,
             } => {
@@ -703,7 +693,7 @@ fn run_steps(
                     *max_iterations,
                     *max_results,
                     graph.as_ref(),
-                    *include_transient,
+                    include_graphs.clone(),
                     *max_rows,
                     *debug,
                 )?;

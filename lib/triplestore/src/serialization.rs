@@ -236,10 +236,6 @@ impl Triplestore {
         let fts_index = maybe_create_fts_index_map(&triplestore_metadata.indexing)?;
         Ok(Triplestore {
             graph_triples_map,
-            graph_transient_triples_map: HashMap::from([(
-                NamedGraph::DefaultGraph,
-                Default::default(),
-            )]),
             storage_folder: storage_pathbuf,
             storage_mode: storage.mode,
             triples_folder,

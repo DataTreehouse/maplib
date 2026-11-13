@@ -35,7 +35,8 @@ pub fn str_len(
     solution_mappings.mappings = solution_mappings.mappings.with_column(expr);
     solution_mappings.rdf_node_types.insert(
         outer_context.as_str().to_string(),
-        BaseRDFNodeType::Literal(xsd::INTEGER.into_owned(), None).into_default_input_rdf_node_state(),
+        BaseRDFNodeType::Literal(xsd::INTEGER.into_owned(), None)
+            .into_default_input_rdf_node_state(),
     );
     Ok(solution_mappings)
 }

@@ -22,6 +22,7 @@ use oxrdf::NamedNode;
 use oxrdf::{Term, Triple};
 use query_processing::bindings::maybe_replace_bindings;
 use query_processing::pushdowns::Pushdowns;
+use representation::constants::DEFAULT_GRAPH_IRI;
 use representation::dataset::{NamedGraph, QueryGraph};
 use representation::debug::DebugOutput;
 use representation::query_context::Context;
@@ -50,7 +51,9 @@ pub struct UpdateResult {
 
 #[derive(Debug, Clone)]
 pub struct QuerySettings {
-    pub include_transient: bool,
+    /// Graphs whose triples are merged into the default graph of the query, e.g. the transient
+    /// graph. Graphs that do not exist or are empty are skipped.
+    pub include_graphs: Vec<NamedGraph>,
     pub max_rows: Option<usize>,
     pub strict_project: bool,
 }
@@ -102,7 +105,7 @@ impl Triplestore {
                     parameters,
                     Pushdowns::new(),
                     query_settings,
-                    &dataset_or_named_graph(dataset, graph),
+                    &self.query_graph(dataset, graph, query_settings),
                 )?;
 
                 match pl_interruptable_collect(mappings) {
@@ -137,7 +140,7 @@ impl Triplestore {
                     parameters,
                     Pushdowns::new(),
                     query_settings,
-                    &dataset_or_named_graph(dataset, graph),
+                    &self.query_graph(dataset, graph, query_settings),
                 )?;
                 match pl_interruptable_collect(mappings) {
                     Ok(df) => {
@@ -186,7 +189,7 @@ impl Triplestore {
                     parameters,
                     Pushdowns::new(),
                     query_settings,
-                    &dataset_or_named_graph(dataset, graph),
+                    &self.query_graph(dataset, graph, query_settings),
                 )?;
                 match pl_interruptable_collect(mappings.limit(1)) {
                     Ok(df) => {
@@ -223,7 +226,6 @@ impl Triplestore {
         &mut self,
         query: &str,
         parameters: Option<&HashMap<String, EagerSolutionMappings>>,
-        transient: bool,
         query_settings: &QuerySettings,
         source_graph: &NamedGraph,
         target_graph: &NamedGraph,
@@ -234,7 +236,6 @@ impl Triplestore {
         self.insert_parsed(
             &query,
             parameters,
-            transient,
             query_settings,
             source_graph,
             target_graph,
@@ -246,7 +247,6 @@ impl Triplestore {
         &mut self,
         query: &Query,
         parameters: Option<&HashMap<String, EagerSolutionMappings>>,
-        transient: bool,
         query_settings: &QuerySettings,
         source_graph: &NamedGraph,
         target_graph: &NamedGraph,
@@ -266,9 +266,7 @@ impl Triplestore {
                         "Got SELECT or ASK query when CONSTRUCT was expected".to_string(),
                     ))
                 }
-                QueryResultKind::Construct(dfs) => {
-                    self.insert_construct_result(dfs, transient, target_graph)
-                }
+                QueryResultKind::Construct(dfs) => self.insert_construct_result(dfs, target_graph),
             };
             Ok(InsertResult {
                 new_triples: new_triples?,
@@ -319,7 +317,7 @@ impl Triplestore {
                         ));
                     }
                     for (g, triples) in triples_by_graph {
-                        self.add_triples(triples, &g, false)
+                        self.add_triples(triples, &g)
                             .map_err(SparqlError::TriplestoreError)?;
                     }
                     self.maybe_garbage_collect()?;
@@ -470,7 +468,7 @@ impl Triplestore {
                     )
                     .map_err(|x| SparqlError::QuadPatternsError(x.to_string()))?;
                     for (g, s) in insert_solutions {
-                        self.insert_construct_result(s, false, &g)?;
+                        self.insert_construct_result(s, &g)?;
                     }
                     self.maybe_garbage_collect()?;
                 }
@@ -487,11 +485,7 @@ impl Triplestore {
                         GraphTarget::NamedGraphs | GraphTarget::AllGraphs => {
                             let all = matches!(target, GraphTarget::AllGraphs);
                             let mut gs: HashSet<NamedGraph> = HashSet::new();
-                            for g in self
-                                .graph_triples_map
-                                .keys()
-                                .chain(self.graph_transient_triples_map.keys())
-                            {
+                            for g in self.graph_triples_map.keys() {
                                 if all || g != &default_graph {
                                     gs.insert(g.clone());
                                 }
@@ -525,15 +519,67 @@ fn graph_name_to_named_graph(graph_name: &GraphName) -> NamedGraph {
     }
 }
 
-fn dataset_or_named_graph(
-    dataset: &Option<QueryDataset>,
-    graph: Option<&NamedGraph>,
-) -> QueryGraph {
-    if let Some(dataset) = dataset {
-        QueryGraph::QueryDataset(dataset.clone())
-    } else if let Some(graph) = graph {
-        QueryGraph::from_named_graph(graph)
-    } else {
-        QueryGraph::NamedGraph(NamedGraph::DefaultGraph)
+impl Triplestore {
+    /// The graph or dataset a query runs against. The `include_graphs` of the query settings are
+    /// merged into the default graph, as if they were given with FROM.
+    pub fn query_graph(
+        &self,
+        dataset: &Option<QueryDataset>,
+        graph: Option<&NamedGraph>,
+        query_settings: &QuerySettings,
+    ) -> QueryGraph {
+        let include: Vec<NamedNode> = query_settings
+            .include_graphs
+            .iter()
+            .filter(|g| self.graph_has_triples(g))
+            .filter_map(named_graph_as_named_node)
+            .collect();
+        if let Some(dataset) = dataset {
+            let mut dataset = dataset.clone();
+            // A dataset without FROM graphs has an empty default graph, which stays empty.
+            if !dataset.default.is_empty() {
+                for nn in include {
+                    if !dataset.default.contains(&nn) {
+                        dataset.default.push(nn);
+                    }
+                }
+            }
+            return QueryGraph::QueryDataset(dataset);
+        }
+        let graph = graph.cloned().unwrap_or(NamedGraph::DefaultGraph);
+        let include: Vec<NamedNode> = include
+            .into_iter()
+            .filter(|nn| NamedGraph::from_maybe_named_node(Some(nn)) != graph)
+            .collect();
+        if include.is_empty() {
+            return QueryGraph::NamedGraph(graph);
+        }
+        if let Some(graph_nn) = named_graph_as_named_node(&graph) {
+            let mut default = vec![graph_nn];
+            default.extend(include);
+            QueryGraph::QueryDataset(QueryDataset {
+                default,
+                named: None,
+            })
+        } else {
+            // Blank node graphs cannot be given as FROM graphs.
+            QueryGraph::NamedGraph(graph)
+        }
+    }
+
+    fn graph_has_triples(&self, graph: &NamedGraph) -> bool {
+        if let Some(m) = self.graph_triples_map.get(graph) {
+            m.values().any(|m| !m.is_empty())
+        } else {
+            false
+        }
+    }
+}
+
+fn named_graph_as_named_node(graph: &NamedGraph) -> Option<NamedNode> {
+    match graph {
+        NamedGraph::DefaultGraph => Some(NamedNode::new_unchecked(DEFAULT_GRAPH_IRI)),
+        NamedGraph::NamedGraph(nn) => Some(nn.clone()),
+        NamedGraph::BlankNode(_) => None,
     }
 }

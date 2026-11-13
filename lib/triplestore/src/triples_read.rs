@@ -46,13 +46,12 @@ pub enum ExtendedRdfFormat {
 
 impl Triplestore {
     #[allow(clippy::too_many_arguments)]
-    #[instrument(skip(self, rdf_format, base_iri, transient, parallel, checked))]
+    #[instrument(skip(self, rdf_format, base_iri, parallel, checked))]
     pub fn read_triples_from_path(
         &mut self,
         path: &Path,
         rdf_format: Option<ExtendedRdfFormat>,
         base_iri: Option<String>,
-        transient: bool,
         parallel: Option<bool>,
         checked: bool,
         graph: &NamedGraph,
@@ -93,7 +92,6 @@ impl Triplestore {
             map.as_ref(),
             rdf_format,
             base_iri,
-            transient,
             parallel,
             checked,
             graph,
@@ -116,7 +114,6 @@ impl Triplestore {
         s: &str,
         rdf_format: ExtendedRdfFormat,
         base_iri: Option<String>,
-        transient: bool,
         parallel: Option<bool>,
         checked: bool,
         graph: &NamedGraph,
@@ -128,7 +125,6 @@ impl Triplestore {
             s.as_bytes(),
             rdf_format,
             base_iri,
-            transient,
             parallel,
             checked,
             graph,
@@ -145,7 +141,6 @@ impl Triplestore {
         slice: &[u8],
         rdf_format: ExtendedRdfFormat,
         base_iri: Option<String>,
-        transient: bool,
         parallel: Option<bool>,
         checked: bool,
         graph: &NamedGraph,
@@ -349,7 +344,7 @@ impl Triplestore {
             );
             let start_add_triples_vec = Instant::now();
             self.parser_call += 1;
-            self.add_triples_vec(ttas, transient)?;
+            self.add_triples_vec(ttas)?;
             debug!(
                 "Adding triples vec took {} seconds",
                 start_add_triples_vec.elapsed().as_secs_f64()
@@ -367,10 +362,9 @@ impl Triplestore {
         &mut self,
         triples: Vec<Triple>,
         graph: &NamedGraph,
-        transient: bool,
     ) -> Result<Vec<NewTriples>, TriplestoreError> {
         let ttas = triples_to_triples_to_add(triples, graph);
-        self.add_triples_vec(ttas, transient)
+        self.add_triples_vec(ttas)
     }
 }
 

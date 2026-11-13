@@ -4,6 +4,13 @@ from typing import Any, Union, List, Dict, Optional, Callable, Iterable, Literal
 
 import polars as pl
 from maplib.maplib import rdf
+
+TRANSIENT_GRAPH: str
+"""
+The IRI of the reserved graph for triples that should be available for querying, validation and reasoning,
+but not written: map, read or insert into this graph, and include it in queries with include_graphs.
+Queries, updates, inserts and inference include it by default.
+"""
 from polars import DataFrame, LazyFrame
 
 a = rdf.type
@@ -518,10 +525,11 @@ class ModelStream:
     ...     .collect()
     ... )
 
-    Mapping documents transiently and writing only what is constructed from them:
+    Mapping documents into the transient graph and writing only what is constructed from them:
 
-    >>> with open("records.jsonl") as lines:
-    ...     m.map_json(lines, transient=True, stream=True, documents_per_batch=1000) \
+    >>> from maplib import TRANSIENT_GRAPH
+    ... with open("records.jsonl") as lines:
+    ...     m.map_json(lines, graph=TRANSIENT_GRAPH, stream=True, documents_per_batch=1000) \
     ...         .insert(construct_query).write("out.nt").collect()
     """
 
@@ -530,7 +538,7 @@ class ModelStream:
             update: str,
             parameters: ParametersType = None,
             graph: str = None,
-            include_transient: bool = True,
+            include_graphs: Optional[List[str]] = None,
             max_rows: int = None,
             debug: bool = False,
     ) -> "ModelStream":
@@ -542,10 +550,9 @@ class ModelStream:
             self,
             query: str,
             parameters: ParametersType = None,
-            transient: bool = False,
             source_graph: str = None,
             target_graph: str = None,
-            include_transient: bool = True,
+            include_graphs: Optional[List[str]] = None,
             max_rows: int = None,
             debug: bool = False,
     ) -> "ModelStream":
@@ -559,7 +566,7 @@ class ModelStream:
             graph: str = None,
             max_iterations: Optional[int] = 100_000,
             max_results: Optional[int] = 10_000_000,
-            include_transient: bool = True,
+            include_graphs: Optional[List[str]] = None,
             max_rows: Optional[int] = 100_000_000,
             debug: bool = False,
     ) -> "ModelStream":
@@ -575,12 +582,13 @@ class ModelStream:
             prefixes: Dict[str, str] = None,
     ) -> "ModelStream":
         """
-        Add a step that appends the non-transient triples of each batch to a file. The file is created
+        Add a step that appends the triples of each batch to a file. The file is created
         (or truncated) when the stream is collected. Turtle prefixes are declared once at the start of the file.
 
         :param file_path: The path of the file.
         :param format: One of "ntriples" (the default), "turtle" or "nquads".
-        :param graph: The IRI of the graph to write. For "nquads", all graphs are written when this is None.
+        :param graph: The IRI of the graph to write. For "nquads", all graphs except the transient graph are written
+            when this is None.
         :param prefixes: The prefixes that will be used in turtle serialization.
         """
 
@@ -738,7 +746,6 @@ class Model:
             self,
             path_or_string: Union[Path, str, Iterable[Union[Path, str]]],
             graph: str = None,
-            transient: bool = False,
             uuid_namespace: str = None,
             stream: bool = False,
             documents_per_batch: int = 1,
@@ -756,7 +763,6 @@ class Model:
         :param path_or_string: Path to a JSON document or a JSON string, or an iterable of them (e.g. a generator
             of JSON strings), which are mapped one document at a time.
         :param graph: The IRI of the graph to add triples to. None is the default graph.
-        :param transient: Should the triples be included when serializing the graph?
         :param uuid_namespace: Generates uuid v5 uris based on this namespace.
             With several documents, document number i uses the namespace "<uuid_namespace>/<i>",
             so that the documents do not get the same IRIs.
@@ -770,7 +776,6 @@ class Model:
             self,
             path_or_string: Union[Path, str, Iterable[Union[Path, str]]],
             graph: str = None,
-            transient: bool = False,
             uuid_namespace: str = None,
             stream: bool = False,
             documents_per_batch: int = 1,
@@ -788,7 +793,6 @@ class Model:
         :param path_or_string: Path to a XML document or a XML string, or an iterable of them (e.g. a generator
             of XML strings), which are mapped one document at a time.
         :param graph: The IRI of the graph to add triples to. None is the default graph.
-        :param transient: Should the triples be included when serializing the graph?
         :param uuid_namespace: Generates uuid v5 uris based on this namespace.
             With several documents, document number i uses the namespace "<uuid_namespace>/<i>",
             so that the documents do not get the same IRIs.
@@ -921,7 +925,7 @@ class Model:
             graph: str = None,
             return_json: bool = False,
             return_format: LiteralType["turtle", "json", "dataframe"] = "dataframe",
-            include_transient: bool = True,
+            include_graphs: Optional[List[str]] = None,
             max_rows: int = None,
             debug: bool = False,
             bindings: Dict[str, Union[str, IRI, Literal]] = None,
@@ -944,7 +948,8 @@ class Model:
         :param graph: The IRI of the graph to query.
         :param return_json: Return JSON string.
         :param return_format: One of "dataframe" (default), "json" (SELECT and ASK only) or "turtle" (CONSTRUCT only). Ignored when return_json is set.
-        :param include_transient: Include transient triples when querying.
+        :param include_graphs: IRIs of graphs whose triples are merged into the queried graph, as with FROM.
+            None includes the transient graph (TRANSIENT_GRAPH), use [] to query only the graph itself.
         :param max_rows: Maximum estimated rows in result, helps avoid out-of-memory errors.
         :param debug: Why does my query have no results?
         :param bindings: Bind the variables (keys) to the following ground terms. Use IRI, Literal classes or strings (e.g. "<urn:id:abc>") as values.
@@ -993,7 +998,7 @@ class Model:
             update: str,
             parameters: ParametersType = None,
             graph: str = None,
-            include_transient: bool = True,
+            include_graphs: Optional[List[str]] = None,
             max_rows: int = None,
             debug: bool = False,
     ):
@@ -1011,7 +1016,8 @@ class Model:
         :param update: The SPARQL Update string
         :param parameters: PVALUES Parameters, for each parameter, the SolutionMappings containing corresponding mappings and types.
         :param graph: The IRI of the graph to update.
-        :param include_transient: Include transient triples when querying (but see "transient" above).
+        :param include_graphs: IRIs of graphs whose triples are merged into the queried graph, as with FROM.
+            None includes the transient graph (TRANSIENT_GRAPH), use [] to query only the graph itself.
         :param max_rows: Maximum estimated rows in result, helps avoid out-of-memory errors.
         :param debug: Why does my query have no results?
         :return: None
@@ -1022,10 +1028,9 @@ class Model:
             query: str,
             parameters: ParametersType = None,
             solution_mappings: bool = False,
-            transient: bool = False,
             source_graph: str = None,
             target_graph: str = None,
-            include_transient: bool = True,
+            include_graphs: Optional[List[str]] = None,
             max_rows: int = None,
             debug: bool = False,
     ) -> Dict[str, Union[DataFrame, "SolutionMappings"]]:
@@ -1050,10 +1055,11 @@ class Model:
         :param query: The SPARQL Insert query string
         :param parameters: PVALUES Parameters, for each parameter, the SolutionMappings containing corresponding mappings and types.
         :param solution_mappings: Returns SolutionMappings with maplib-native formatting and with RDF typing. Useful for round-trips.
-        :param transient: Should the inserted triples be transient?
         :param source_graph: The IRI of the source graph to execute the construct query.
-        :param target_graph: The IRI of the target graph to insert into.
-        :param include_transient: Include transient triples when querying (but see "transient" above).
+        :param target_graph: The IRI of the target graph to insert into. Use TRANSIENT_GRAPH for triples that should
+            be available for querying, validation and reasoning, but not written.
+        :param include_graphs: IRIs of graphs whose triples are merged into the queried graph, as with FROM.
+            None includes the transient graph (TRANSIENT_GRAPH), use [] to query only the graph itself.
         :param max_rows: Maximum estimated rows in result, helps avoid out-of-memory errors.
         :param debug: Why does my query have no results?
         :return: The newly inserted triples, keyed by predicate IRI (as SolutionMappings when solution_mappings is set).
@@ -1103,7 +1109,6 @@ class Model:
             file_path: Union[str, Path],
             format: LiteralType["ntriples", "turtle", "trig", "nquads", "rdf/xml", "cim/xml", "json-ld", "hdt"] = None,
             base_iri: str = None,
-            transient: bool = False,
             parallel: bool = None,
             checked: bool = True,
             graph: str = None,
@@ -1114,8 +1119,8 @@ class Model:
         """
         Reads triples from a file path.
         You can specify the format, or it will be derived using file extension, e.g. filename.ttl or filename.nt.
-        Specify transient if you only want the triples to be available for further querying and validation,
-        but not persisted using write-methods.
+        Read into graph=TRANSIENT_GRAPH if you only want the triples to be available for further querying and
+        validation, but not persisted using write-methods.
 
         Usage:
 
@@ -1124,7 +1129,6 @@ class Model:
         :param file_path: The path of the file containing triples
         :param format: One of "ntriples", "turtle", "trig", "nquads", "rdf/xml", "json-ld", "cim/xml" or "hdt", otherwise it is inferred from the file extension.
         :param base_iri: Base iri
-        :param transient: Should these triples be included when writing the graph to the file system?
         :param parallel: Parse triples in parallel, currently only NTRiples and Turtle. Assumes all prefixes are in the beginning of the document. Defaults to true only for NTriples.
         :param checked: Check IRIs etc.
         :param graph: The IRI of the graph to read the triples into, if None, it will be the default graph (or, for TriG, N-Quads and JSON-LD, the graphs named in the document).
@@ -1152,7 +1156,6 @@ class Model:
             s: str,
             format: LiteralType["ntriples", "turtle", "trig", "nquads", "rdf/xml", "cim/xml", "json-ld"],
             base_iri: str = None,
-            transient: bool = False,
             parallel: bool = None,
             checked: bool = True,
             graph: str = None,
@@ -1162,8 +1165,8 @@ class Model:
     ) -> None:
         """
         Reads triples from a string.
-        Specify transient if you only want the triples to be available for further querying and validation,
-        but not persisted using write-methods.
+        Read into graph=TRANSIENT_GRAPH if you only want the triples to be available for further querying and
+        validation, but not persisted using write-methods.
 
         Usage:
 
@@ -1172,7 +1175,6 @@ class Model:
         :param s: String containing serialized triples.
         :param format: One of "ntriples", "turtle", "trig", "nquads", "rdf/xml", "json-ld" or "cim/xml".
         :param base_iri: Base iri
-        :param transient: Should these triples be included when writing the graph to the file system?
         :param parallel: Parse triples in parallel, currently only NTRiples and Turtle. Assumes all prefixes are in the beginning of the document. Defaults to true for NTriples.
         :param checked: Check IRIs etc.
         :param graph: The IRI of the graph to read the triples into. If None, the default graph (or, for TriG, N-Quads and JSON-LD, the graphs named in the document).
@@ -1232,7 +1234,7 @@ class Model:
             prefixes: Dict[str, str] = None,
     ) -> None:
         """
-        Write the non-transient triples to the file path specified, in the given format.
+        Write the triples to the file path specified, in the given format.
 
         Usage:
 
@@ -1241,7 +1243,8 @@ class Model:
         :param file_path: The path of the file containing triples
         :param format: One of "ntriples", "turtle", "trig", "nquads", "rdf/xml", "hdt".
             HDT is built in memory; literals with special characters are stored N-Triples-escaped, following the Rust hdt crate.
-        :param graph: The IRI of the graph to write. For "trig" and "nquads", all graphs are written when this is None.
+        :param graph: The IRI of the graph to write. For "trig" and "nquads", all graphs except the transient graph
+            are written when this is None.
         :param prefixes: The prefixes that will be used in turtle serialization.
         """
 
@@ -1252,14 +1255,15 @@ class Model:
             prefixes: Dict[str, str] = None,
     ) -> str:
         """
-        Write the non-transient triples to a string in memory.
+        Write the triples to a string in memory.
 
         Usage:
 
         >>> s = m.writes(format="turtle")
 
         :param format: One of "ntriples", "turtle", "trig", "nquads", "rdf/xml".
-        :param graph: The IRI of the graph to write. For "trig" and "nquads", all graphs are written when this is None.
+        :param graph: The IRI of the graph to write. For "trig" and "nquads", all graphs except the transient graph
+            are written when this is None.
         :param prefixes: The prefixes used for turtle serialization.
         :return: Triples in model in the given format (potentially a large string)
         """
@@ -1267,7 +1271,7 @@ class Model:
     def truncate_graph(self, graph: str = None) -> None:
         """
         Removes all triples associated with the given graph from the triplestore,
-        includes transient triples and full-text search entries.
+        including full-text search entries.
 
         :param graph: The IRI of the graph to truncate.
         """
@@ -1283,21 +1287,21 @@ class Model:
         """
 
     def get_predicate_iris(
-            self, graph: str = None, include_transient: bool = False
+            self, graph: str = None, include_graphs: Optional[List[str]] = None
     ) -> List["IRI"]:
         """
         :param graph: The graph to get the predicate iris from.
-        :param include_transient: Should we include predicates only between transient triples?
+        :param include_graphs: IRIs of graphs whose predicates are included as well, e.g. [TRANSIENT_GRAPH].
         :return: The IRIs of the predicates currently in the given graph.
         """
 
     def get_predicate(
-            self, iri: "IRI", graph: str = None, include_transient: bool = False
+            self, iri: "IRI", graph: str = None, include_graphs: Optional[List[str]] = None
     ) -> List["SolutionMappings"]:
         """
         :param iri: The predicate IRI
         :param graph: The graph to get the predicate from.
-        :param include_transient: Should we include transient triples?
+        :param include_graphs: IRIs of graphs whose triples with the predicate are merged in, e.g. [TRANSIENT_GRAPH].
         :return: A list of the underlying tables that store a given predicate.
         """
 
@@ -1335,7 +1339,7 @@ class Model:
             graph: str = None,
             max_iterations: Optional[int] = 100_000,
             max_results: Optional[int] = 10_000_000,
-            include_transient: bool = True,
+            include_graphs: Optional[List[str]] = None,
             max_rows: Optional[int] = 100_000_000,
             debug: bool = False,
     ) -> "InferenceResult":
@@ -1345,7 +1349,8 @@ class Model:
         :param graph: Apply the ruleset to this graph, defaults to the default graph, or the graph specified in the rules.
         :param max_iterations: Maximum number of iterations.
         :param max_results: Maximum number of results.
-        :param include_transient: Include transient triples when reasoning.
+        :param include_graphs: IRIs of graphs whose triples are merged into the graph that is reasoned over, as with FROM.
+            None includes the transient graph (TRANSIENT_GRAPH), use [] to query only the graph itself.
         :param max_rows: Maximum estimated rows in result, helps avoid out-of-memory errors.
         :param debug: Debugs rule bodies for executions that give no triples.
         :return: The result of inference.
@@ -1357,7 +1362,8 @@ class Model:
     ) -> int:
         """
         RDFS Inference with rules: 2, 3, 5, 6, 8, 9, 10, 11.
-        The inferred triples are transient, and will not be serialized.
+        The inferred triples are put in the transient graph (TRANSIENT_GRAPH), so they are not written unless
+        that graph is written explicitly.
         :param graph: Apply rdfs inferencing to this graph, defaults to the default graph, or the graph specified in the rules.
         :return number of inferred triples
         """

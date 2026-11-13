@@ -52,9 +52,9 @@ ings_var = Variable("ings")
 template = Template(
     iri= pi.suf("PizzaTemplate"),
     parameters= [
-        Parameter(variable=p_var, rdf_type=RDFType.IRI()),
-        Parameter(variable=c_var, rdf_type=RDFType.IRI()),
-        Parameter(variable=ings_var, rdf_type=RDFType.Nested(RDFType.IRI()))
+        Parameter(variable=p_var, rdf_type=RDFType.IRI),
+        Parameter(variable=c_var, rdf_type=RDFType.IRI),
+        Parameter(variable=ings_var, rdf_type=RDFType.Nested(RDFType.IRI))
     ],
     instances= [
         Triple(p_var, a, pi.suf("Pizza")),
@@ -77,7 +77,6 @@ hpizzas = """
         ?p pi:hasIngredient pi:Pineapple .
     }"""
 m.insert(hpizzas)
-return m
 ```
 
 We can immediately query the mapped knowledge graph:
@@ -143,12 +142,72 @@ Indeed, we have added the triple:
 | str                                                        |
 | "<https://github.com/DataTreehouse/maplib/pizza#Hawaiian>" |
 
+## Streaming large inputs
+The mapping methods `map`, `map_triples` and `map_default` accept a DataFrame, but also a Polars LazyFrame (consumed in one pass with `collect_batches()`) or any iterable of DataFrames, LazyFrames or SolutionMappings. Each batch is mapped into the model as it arrives, so the input never has to fit in memory as a whole:
+
+```python
+m.map(template, pl.scan_parquet("pizzas/*.parquet"))
+```
+
+The triples still end up in the model. When the result is too large for that, or when you only want to transform data from one format to another, pass `stream=True`. You then get a lazy `ModelStream` instead, and add steps to it that run batch by batch when you call `collect()`:
+
+```python
+(
+    m.map(template, pl.scan_parquet("pizzas/*.parquet"), stream=True)
+    .insert(hpizzas)                          # CONSTRUCT, as Model.insert
+    .update(some_sparql_update)               # SPARQL Update, as Model.update
+    .infer(rules)                             # Datalog, as Model.infer
+    .write("pizzas.nt")                       # N-Triples (the default)
+    .write("pizzas.ttl", format="turtle")
+    .collect()
+)
+```
+
+For each batch, `collect()`:
+1. maps the batch into a fresh in-memory model that has the templates, prefixes and UDFs of `m`,
+2. runs the steps on it in the order you added them; a `write` step appends the triples of the batch to its file (not those in the transient graph), so writing before and after a step gives you both versions,
+3. drops the batch model before the next batch.
+
+Memory use therefore depends on the batch size and not on the size of the input. Things to be aware of:
+- The steps only see the triples of the current batch. A query that joins triples from different batches finds nothing, so split the input so that what belongs together is in the same batch.
+- `m` itself is not changed: its triples are neither read nor written by the stream.
+- Each step returns a new `ModelStream`, so a partial pipeline can be reused; nothing runs before `collect()`. Iterators given as input are consumed by `collect()`.
+- Write steps support `"ntriples"`, `"turtle"` (prefixes are declared once at the top) and `"nquads"`. Files are created, or overwritten, when `collect()` starts.
+- Blank nodes, both from templates and from SPARQL updates, get labels that are unique across batches.
+- `map_default(..., stream=True)` creates the default template from the first batch.
+- Datalog (`infer`) requires maplib Enterprise Edition.
+
+### JSON and XML documents
+`map_json` and `map_xml` accept a single document (a string or a path) or an iterable of documents, which are mapped one at a time. Without a `uuid_namespace`, IRIs are generated from the path of a document, or randomly for a document given as a string. With a `uuid_namespace`, document number `i` of an iterable uses the namespace `<uuid_namespace>/<i>`, so the documents get different but reproducible IRIs.
+
+With `stream=True`, `documents_per_batch` documents (default 1) are mapped into each batch. A useful pattern is to map the documents into the transient graph, construct the triples you want, and write only those. For example, converting a JSON Lines file with one record per line:
+
+```python
+records = """
+PREFIX fx:  <http://sparql.xyz/facade-x/ns/>
+PREFIX xyz: <http://sparql.xyz/facade-x/data/>
+PREFIX ex:  <http://example.net/>
+CONSTRUCT { ?r a ex:Record ; ex:name ?name } WHERE { ?r a fx:root ; xyz:name ?name }
+"""
+from maplib import TRANSIENT_GRAPH
+
+with open("records.jsonl") as lines:
+    (
+        Model()
+        .map_json(lines, graph=TRANSIENT_GRAPH, stream=True, documents_per_batch=10_000)
+        .insert(records)
+        .write("records.nt")
+        .collect()
+    )
+```
+
 ## API
 The [API](https://datatreehouse.github.io/maplib/maplib.html) is simple, and contains only one class and a few methods for:
-- expanding templates
+- expanding templates, also from LazyFrames and iterables of batches
+- streaming pipelines that map, transform and write large inputs batch by batch
 - querying with SPARQL
 - validating with SHACL
-- reading JSON to triples using Façade-X
+- reading JSON and XML to triples using Façade-X, also from iterables of documents
 - importing triples (Turtle, RDF/XML, NTriples, JSON-LD, HDT)
 - writing triples (Turtle, RDF/XML, NTriples)
 - creating a new Model from a named graph

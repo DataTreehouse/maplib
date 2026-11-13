@@ -19,7 +19,7 @@ pub fn infer(
     _ruleset: &DatalogRuleset,
     _max_iterations: Option<usize>,
     _max_results: Option<usize>,
-    _include_transient: bool,
+    _include_graphs: Vec<NamedGraph>,
     _max_rows: Option<usize>,
     _debug_no_results: bool,
 ) -> Result<InferenceResult, DatalogError> {

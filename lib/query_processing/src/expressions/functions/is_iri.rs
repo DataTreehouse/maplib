@@ -39,7 +39,8 @@ pub fn is_iri(
 
     solution_mappings.rdf_node_types.insert(
         outer_context.as_str().to_string(),
-        BaseRDFNodeType::Literal(xsd::BOOLEAN.into_owned(), None).into_default_input_rdf_node_state(),
+        BaseRDFNodeType::Literal(xsd::BOOLEAN.into_owned(), None)
+            .into_default_input_rdf_node_state(),
     );
     Ok(solution_mappings)
 }

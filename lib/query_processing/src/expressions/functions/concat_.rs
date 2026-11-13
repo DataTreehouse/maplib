@@ -7,7 +7,9 @@ use representation::cats::{maybe_decode_expr, LockedCats};
 use representation::multitype::set_struct_all_null_to_null_row;
 use representation::query_context::Context;
 use representation::solution_mapping::SolutionMappings;
-use representation::{BaseRDFNodeType, RDFNodeState, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD};
+use representation::{
+    BaseRDFNodeType, RDFNodeState, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD,
+};
 use spargebra::algebra::{Expression, Function};
 use std::collections::HashMap;
 
@@ -134,9 +136,8 @@ pub fn concat_(
 
     let new_mappings = mappings.with_column(output_expr.alias(outer_context.as_str()));
     solution_mappings = SolutionMappings::new(new_mappings, datatypes, height_upper_bound);
-    solution_mappings.rdf_node_types.insert(
-        outer_context.as_str().to_string(),
-        output_type,
-    );
+    solution_mappings
+        .rdf_node_types
+        .insert(outer_context.as_str().to_string(), output_type);
     Ok(solution_mappings)
 }

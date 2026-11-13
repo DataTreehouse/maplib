@@ -236,7 +236,7 @@ impl SparqlEndpoint {
                     &quad_template,
                     LockedCats::new(Cats::new_empty(None, None)),
                 )
-                    .map_err(|x| SparqlEndpointQueryError::CreateQuadsFromPatternError(x))?;
+                .map_err(|x| SparqlEndpointQueryError::CreateQuadsFromPatternError(x))?;
                 let sms = if let Some(sms) = m.remove(&NamedGraph::DefaultGraph) {
                     sms
                 } else {

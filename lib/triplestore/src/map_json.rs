@@ -134,7 +134,6 @@ impl Triplestore {
         u8s: &mut [u8],
         uuid_namespace: Option<String>,
         named_graph: &NamedGraph,
-        transient: bool,
     ) -> Result<(), TriplestoreError> {
         let prefix = NamedNode::new_unchecked(XYZ_PREFIX_IRI);
         let v: Value = simd_json::serde::from_slice(u8s).unwrap();
@@ -199,7 +198,7 @@ impl Triplestore {
                 }
             }
         }
-        self.add_triples_vec(triples_to_add, transient)?;
+        self.add_triples_vec(triples_to_add)?;
         Ok(())
     }
 }

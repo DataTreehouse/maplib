@@ -1,4 +1,4 @@
-use crate::constants::DEFAULT_GRAPH_IRI;
+use crate::constants::{DEFAULT_GRAPH_IRI, TRANSIENT_GRAPH_IRI};
 use oxrdf::{BlankNode, GraphName, NamedNode};
 use serde::{Deserialize, Serialize};
 use spargebra::algebra::QueryDataset;
@@ -12,6 +12,11 @@ pub enum NamedGraph {
 }
 
 impl NamedGraph {
+    /// The reserved graph for transient triples, see `TRANSIENT_GRAPH_IRI`.
+    pub fn transient() -> NamedGraph {
+        NamedGraph::NamedGraph(NamedNode::new_unchecked(TRANSIENT_GRAPH_IRI))
+    }
+
     pub fn from_maybe_named_node(nn: Option<&NamedNode>) -> NamedGraph {
         if let Some(nn) = nn {
             if nn.as_str() == DEFAULT_GRAPH_IRI {

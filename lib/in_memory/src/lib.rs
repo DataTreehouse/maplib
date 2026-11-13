@@ -5,7 +5,9 @@ use arrow::array::{Array, RecordBatch, StringArray, StringBuilder, UInt32Array};
 use arrow::datatypes::{Field, Schema};
 use nohash_hasher::NoHashHasher;
 use range_set_blaze::RangeSetBlaze;
-use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
+use rayon::iter::{
+    IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
+};
 use std::borrow::{Borrow, Cow};
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -524,9 +526,7 @@ impl PrefixCompressedCatMapsInMemory {
             prefix: pre.as_str(),
             suffix: suf,
         };
-        self.map
-            .get(&key as &dyn PrefixCompressedKey)
-            .copied()
+        self.map.get(&key as &dyn PrefixCompressedKey).copied()
     }
 
     pub fn maybe_encode_prefix_compressed(&self, p: &PrefixCompressedString) -> Option<&u32> {
@@ -1015,8 +1015,20 @@ mod tests {
     #[test]
     fn split_compare_matches_concatenated_compare() {
         let strs = [
-            "", "a", "ab", "abc", "abd", "b", "ba", "http://ex.org/a", "http://ex.org/ab",
-            "http://ex.org#a", "http://ex.org/", "http://ex.org", "æøå", "æøb",
+            "",
+            "a",
+            "ab",
+            "abc",
+            "abd",
+            "b",
+            "ba",
+            "http://ex.org/a",
+            "http://ex.org/ab",
+            "http://ex.org#a",
+            "http://ex.org/",
+            "http://ex.org",
+            "æøå",
+            "æøb",
         ];
         for a in strs {
             for b in strs {

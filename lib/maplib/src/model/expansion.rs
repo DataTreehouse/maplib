@@ -332,7 +332,7 @@ impl Model {
         }
 
         self.triplestore
-            .add_triples_vec(all_triples_to_add, false)
+            .add_triples_vec(all_triples_to_add)
             .map_err(MappingError::TriplestoreError)?;
 
         self.blank_node_counter = new_blank_node_counter;

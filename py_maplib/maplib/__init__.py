@@ -38,6 +38,7 @@ __all__ = [
     "add_triples",
     "generate_templates",
     "MaplibException",
+    "TRANSIENT_GRAPH",
 ]
 
 import pathlib

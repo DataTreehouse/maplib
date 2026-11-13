@@ -568,7 +568,7 @@ def test_programmatic_model_with_prefix():
     assert_frame_equal(qres, expected_df)
 
 
-def test_create_and_write_no_bug_string_lit_df():
+def test_create_and_write_no_bug_string_lit_df(tmp_path):
     doc = """
     @prefix ex:<http://example.net/ns#>.
     ex:ExampleTemplate [?MyString] :: {
@@ -580,7 +580,7 @@ def test_create_and_write_no_bug_string_lit_df():
     model = Model()
     model.add_template(doc)
     model.map("http://example.net/ns#ExampleTemplate", df)
-    ntfile = "create_and_write_no_bug_string_lit.nt"
+    ntfile = tmp_path / "create_and_write_no_bug_string_lit.nt"
     model.write(ntfile, format="ntriples")
     with open(ntfile) as f:
         lines = f.readlines()
@@ -592,7 +592,7 @@ def test_create_and_write_no_bug_string_lit_df():
     ]
 
 
-def test_create_and_write_no_bug_bool_lit_df():
+def test_create_and_write_no_bug_bool_lit_df(tmp_path):
     doc = """
     @prefix ex:<http://example.net/ns#>.
     ex:ExampleTemplate [?MyBool] :: {
@@ -604,7 +604,7 @@ def test_create_and_write_no_bug_bool_lit_df():
     model = Model()
     model.add_template(doc)
     model.map("http://example.net/ns#ExampleTemplate", df)
-    ntfile = "create_and_write_no_bug_bool_lit.nt"
+    ntfile = tmp_path / "create_and_write_no_bug_bool_lit.nt"
     model.write(ntfile, format="ntriples")
     with open(ntfile) as f:
         lines = f.readlines()
@@ -616,13 +616,13 @@ def test_create_and_write_no_bug_bool_lit_df():
     ]
 
 
-def test_create_and_write_no_bug_lang_string_lit_df():
+def test_create_and_write_no_bug_lang_string_lit_df(tmp_path):
     model = Model()
     model.reads(
         '<http://example.net/ns#myObject> <http://example.net/ns#hasValue> "HELLO!!"@en .',
         format="ntriples",
     )
-    ntfile = "create_and_write_no_bug_string_lit.nt"
+    ntfile = tmp_path / "create_and_write_no_bug_string_lit.nt"
     model.write(ntfile, format="ntriples")
     with open(ntfile) as f:
         lines = f.readlines()

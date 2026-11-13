@@ -62,10 +62,6 @@ pub struct Triplestore {
         NamedGraph,
         HashMap<NamedNode, HashMap<(BaseRDFNodeType, BaseRDFNodeType), Triples>>,
     >,
-    graph_transient_triples_map: HashMap<
-        NamedGraph,
-        HashMap<NamedNode, HashMap<(BaseRDFNodeType, BaseRDFNodeType), Triples>>,
-    >,
     parser_call: usize,
     indexing: IndexingOptions,
     fts_index: HashMap<NamedGraph, FtsIndex>,
@@ -135,7 +131,7 @@ impl Triplestore {
                     triples_to_add.push(tta);
                 }
             }
-            self.add_triples_vec(triples_to_add, false)?;
+            self.add_triples_vec(triples_to_add)?;
         }
         Ok(())
     }
@@ -166,11 +162,7 @@ impl Triplestore {
 
     pub fn garbage_collect(&mut self) -> Result<u32, TriplestoreError> {
         let mut predicate_and_graph_iris = Vec::new();
-        for (g, m) in self
-            .graph_triples_map
-            .iter()
-            .chain(self.graph_transient_triples_map.iter())
-        {
+        for (g, m) in self.graph_triples_map.iter() {
             if let NamedGraph::NamedGraph(nn) = &g {
                 predicate_and_graph_iris.push(nn);
             }
@@ -206,11 +198,7 @@ impl Triplestore {
                     );
                     rs = rs - pred_graph_rs;
                 }
-                for g in self
-                    .graph_triples_map
-                    .values()
-                    .chain(self.graph_transient_triples_map.values())
-                {
+                for g in self.graph_triples_map.values() {
                     for v in g.values() {
                         for ((st, ot), triples) in v {
                             if st == &t {
@@ -280,17 +268,11 @@ impl Triplestore {
 
     pub fn compact(&mut self) -> Result<(), TriplestoreError> {
         let mut to_compact = Vec::new();
-        for ((graph, map), transient) in self
-            .graph_triples_map
-            .drain()
-            .map(|x| (x, false))
-            .chain(self.graph_transient_triples_map.drain().map(|x| (x, true)))
-        {
+        for (graph, map) in self.graph_triples_map.drain() {
             for (pred, map) in map {
                 for ((subject_type, object_type), triples) in map {
                     to_compact.push((
                         (
-                            transient,
                             graph.clone(),
                             pred.clone(),
                             subject_type.clone(),
@@ -318,11 +300,7 @@ impl Triplestore {
         let data_and_triples: Result<Vec<_>, TriplestoreError> = compacted
             .into_par_iter()
             .map(
-                |(
-                    (transient, graph, pred, subject_type, object_type),
-                    object_indexing_enabled,
-                    st,
-                )| {
+                |((graph, pred, subject_type, object_type), object_indexing_enabled, st)| {
                     let triples = Triples::new_compacted(
                         st.get_lazy_frame()?.collect().unwrap(),
                         subject_type.clone(),
@@ -331,17 +309,13 @@ impl Triplestore {
                         self.global_cats.clone(),
                         self.triples_folder.as_deref(),
                     )?;
-                    Ok((transient, graph, pred, subject_type, object_type, triples))
+                    Ok((graph, pred, subject_type, object_type, triples))
                 },
             )
             .collect();
 
-        for (transient, graph, pred, subject_type, object_type, triples) in data_and_triples? {
-            let use_graph_map = if transient {
-                &mut self.graph_transient_triples_map
-            } else {
-                &mut self.graph_triples_map
-            };
+        for (graph, pred, subject_type, object_type, triples) in data_and_triples? {
+            let use_graph_map = &mut self.graph_triples_map;
             if !use_graph_map.contains_key(&graph) {
                 use_graph_map.insert(graph.clone(), HashMap::new());
             }
@@ -492,7 +466,6 @@ impl Triplestore {
             let cats_image = c.image(&us, None);
 
             let new_graph_triples = self.graph_triples_map.remove(graph).unwrap();
-            let new_graph_transient_triples = self.graph_transient_triples_map.remove(graph);
 
             let new_graph_name = if preserve_name {
                 graph.clone()
@@ -500,11 +473,6 @@ impl Triplestore {
                 NamedGraph::DefaultGraph
             };
 
-            let mut new_graph_transient_triples_map = HashMap::new();
-            if let Some(new_graph_transient_triples) = new_graph_transient_triples {
-                new_graph_transient_triples_map
-                    .insert(new_graph_name.clone(), new_graph_transient_triples);
-            }
             let new_fts_index = self.fts_index.remove(graph);
             let mut new_fts_index_map = HashMap::new();
             if let Some(new_fts_index) = new_fts_index {
@@ -524,7 +492,6 @@ impl Triplestore {
                     new_graph_name.clone(),
                     new_graph_triples,
                 )]),
-                graph_transient_triples_map: new_graph_transient_triples_map,
                 parser_call: self.parser_call,
                 indexing: self.indexing.clone(),
                 fts_index: new_fts_index_map,
@@ -550,8 +517,6 @@ impl Triplestore {
         self.truncate(graph);
         if existed || graph == &NamedGraph::DefaultGraph {
             self.graph_triples_map.insert(graph.clone(), HashMap::new());
-            self.graph_transient_triples_map
-                .insert(graph.clone(), HashMap::new());
         }
         Ok(())
     }
@@ -561,7 +526,6 @@ impl Triplestore {
     /// folder until it is next reset.
     pub fn remove_temporary_graph(&mut self, graph: &NamedGraph) {
         self.graph_triples_map.remove(graph);
-        self.graph_transient_triples_map.remove(graph);
         self.fts_index.remove(graph);
     }
 
@@ -570,7 +534,6 @@ impl Triplestore {
             todo!("Should drop this folder.. ")
         }
         self.graph_triples_map.remove(graph);
-        self.graph_transient_triples_map.remove(graph);
         self.fts_index.remove(graph);
     }
 }
@@ -767,10 +730,6 @@ impl Triplestore {
         let locked_cats = LockedCats::new_empty(pathbuf.as_ref().map(|x| x.as_ref()));
         Ok(Triplestore {
             graph_triples_map: HashMap::from([(NamedGraph::DefaultGraph, Default::default())]),
-            graph_transient_triples_map: HashMap::from([(
-                NamedGraph::DefaultGraph,
-                Default::default(),
-            )]),
             storage_folder: pathbuf,
             storage_mode: storage.mode,
             triples_folder,
@@ -824,16 +783,9 @@ impl Triplestore {
         Ok(())
     }
 
-    fn add_graph_if_not_exists(&mut self, graph: &NamedGraph, transient: bool) {
-        if transient {
-            if !self.graph_transient_triples_map.contains_key(graph) {
-                self.graph_transient_triples_map
-                    .insert(graph.clone(), HashMap::new());
-            }
-        } else {
-            if !self.graph_triples_map.contains_key(graph) {
-                self.graph_triples_map.insert(graph.clone(), HashMap::new());
-            }
+    fn add_graph_if_not_exists(&mut self, graph: &NamedGraph) {
+        if !self.graph_triples_map.contains_key(graph) {
+            self.graph_triples_map.insert(graph.clone(), HashMap::new());
         }
     }
 }

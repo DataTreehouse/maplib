@@ -11,8 +11,8 @@
 //! everything a top-level element inherits comes from the root start tag, which every chunk has.
 //! `rdf:ID` uniqueness is only checked within a chunk.
 
-use quick_xml::events::{BytesStart, Event};
 use quick_xml::Reader;
+use quick_xml::events::{BytesStart, Event};
 use std::borrow::Cow;
 
 const RDF_NS: &[u8] = b"http://www.w3.org/1999/02/22-rdf-syntax-ns#";

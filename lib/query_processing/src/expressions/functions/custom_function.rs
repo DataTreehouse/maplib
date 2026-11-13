@@ -93,7 +93,8 @@ pub fn custom_(
         );
         solution_mappings.rdf_node_types.insert(
             outer_context.as_str().to_string(),
-            BaseRDFNodeType::Literal(xsd::INTEGER.into_owned(), None).into_default_input_rdf_node_state(),
+            BaseRDFNodeType::Literal(xsd::INTEGER.into_owned(), None)
+                .into_default_input_rdf_node_state(),
         );
     } else if nn.as_str() == DATETIME_AS_SECONDS {
         if args.len() != 1 {
@@ -113,7 +114,8 @@ pub fn custom_(
         );
         solution_mappings.rdf_node_types.insert(
             outer_context.as_str().to_string(),
-            BaseRDFNodeType::Literal(xsd::INTEGER.into_owned(), None).into_default_input_rdf_node_state(),
+            BaseRDFNodeType::Literal(xsd::INTEGER.into_owned(), None)
+                .into_default_input_rdf_node_state(),
         );
     } else if nn.as_str() == MICROS_AS_DATETIME {
         if args.len() != 1 {
@@ -171,7 +173,8 @@ pub fn custom_(
         );
         solution_mappings.rdf_node_types.insert(
             outer_context.as_str().to_string(),
-            BaseRDFNodeType::Literal(xsd::INTEGER.into_owned(), None).into_default_input_rdf_node_state(),
+            BaseRDFNodeType::Literal(xsd::INTEGER.into_owned(), None)
+                .into_default_input_rdf_node_state(),
         );
     } else if nn.as_str() == FLOOR_DATETIME_TO_SECONDS_INTERVAL {
         if args.len() != 2 {

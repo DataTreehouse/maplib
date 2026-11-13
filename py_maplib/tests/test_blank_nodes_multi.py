@@ -65,10 +65,11 @@ def test_simple_query_no_error(blank_person_model):
     assert_frame_equal(qres, expected_df)
 
 
-def test_simple_query_blank_node_output_no_error(blank_person_model):
-    blank_person_model.write("out.nt", format="ntriples")
+def test_simple_query_blank_node_output_no_error(blank_person_model, tmp_path):
+    out = tmp_path / "out.nt"
+    blank_person_model.write(out, format="ntriples")
     gr = rdflib.Graph()
-    gr.parse("out.nt", format="ntriples")
+    gr.parse(out, format="ntriples")
     res = gr.query(
         """
             PREFIX foaf:<http://xmlns.com/foaf/0.1/>

@@ -15,7 +15,14 @@ pub fn typed_equals_expr(
     right_type: &RDFNodeState,
     global_cats: LockedCats,
 ) -> Expr {
-    typed_equals_expr_impl(left_col, right_col, left_type, right_type, global_cats, false)
+    typed_equals_expr_impl(
+        left_col,
+        right_col,
+        left_type,
+        right_type,
+        global_cats,
+        false,
+    )
 }
 
 /// Value equality (=): as sameTerm, but numbers of different numeric datatypes are equal when
@@ -29,7 +36,14 @@ pub fn typed_value_equals_expr(
     right_type: &RDFNodeState,
     global_cats: LockedCats,
 ) -> Expr {
-    typed_equals_expr_impl(left_col, right_col, left_type, right_type, global_cats, true)
+    typed_equals_expr_impl(
+        left_col,
+        right_col,
+        left_type,
+        right_type,
+        global_cats,
+        true,
+    )
 }
 
 fn typed_equals_expr_impl(

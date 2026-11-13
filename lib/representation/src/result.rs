@@ -241,9 +241,9 @@ pub fn quad_patterns_to_solution_mappings(
         GraphNamePattern::NamedNode(nn) => NamedGraph::from_maybe_named_node(Some(nn)),
         GraphNamePattern::DefaultGraph => NamedGraph::DefaultGraph,
         GraphNamePattern::Variable(v) => {
-            return Err(RepresentationError::ConstructWithUndefinedVariable(format!(
-                "Graph name variable {v} must be expanded before creating triples"
-            )));
+            return Err(RepresentationError::ConstructWithUndefinedVariable(
+                format!("Graph name variable {v} must be expanded before creating triples"),
+            ));
         }
     };
     let mut select_expr = vec![];
@@ -337,8 +337,7 @@ fn term_pattern_expression(
             let l = rdf_literal_to_polars_expr(thelit)?.alias(name);
             Ok((
                 l,
-                BaseRDFNodeType::from_literal(thelit)
-                    .into_default_input_rdf_node_state(),
+                BaseRDFNodeType::from_literal(thelit).into_default_input_rdf_node_state(),
             ))
         }
         TermPattern::Variable(v) => Ok(variable_expression(rdf_node_types, v, name, subject)?),

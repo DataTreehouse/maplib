@@ -121,7 +121,7 @@ impl Triplestore {
 
         let mut out_df;
 
-        let mut df_creator = U32DataFrameCreator::new(query_settings, dataset.clone());
+        let mut df_creator = U32DataFrameCreator::new(dataset.clone());
         df_creator.gather_namednode_dfs(ppe, self)?;
         let (lookup_df, lookup_dtypes, namednode_dfs) =
             df_creator.create_u32_dfs(self.global_cats.clone())?;
@@ -240,8 +240,7 @@ impl Triplestore {
                 .unwrap();
                 dtypes.insert(
                     SUBJECT_COL_NAME.to_string(),
-                    BaseRDFNodeType::from_literal(l)
-                        .into_default_stored_rdf_node_state(),
+                    BaseRDFNodeType::from_literal(l).into_default_stored_rdf_node_state(),
                 );
             }
             if let TermPattern::Literal(l) = object {
@@ -254,8 +253,7 @@ impl Triplestore {
                 .unwrap();
                 dtypes.insert(
                     OBJECT_COL_NAME.to_string(),
-                    BaseRDFNodeType::from_literal(l)
-                        .into_default_stored_rdf_node_state(),
+                    BaseRDFNodeType::from_literal(l).into_default_stored_rdf_node_state(),
                 );
             }
         }
@@ -362,8 +360,8 @@ impl Triplestore {
         let object_constant = is_constant(object);
         if subject_constant && object_constant {
             // A frame without columns must have its height set explicitly.
-            let matches = constant_match_height > 0
-                || (matches_zero_length(ppe) && subject == object);
+            let matches =
+                constant_match_height > 0 || (matches_zero_length(ppe) && subject == object);
             out_df = DataFrame::empty_with_height(if matches { 1 } else { 0 });
         }
         let out_df_height = out_df.height();
@@ -759,15 +757,13 @@ fn sparse_path(
 
 struct U32DataFrameCreator {
     pub named_nodes: HashMap<PathLeaf, (DataFrame, RDFNodeState, RDFNodeState)>,
-    include_transient: bool,
     dataset: QueryGraph,
 }
 
 impl U32DataFrameCreator {
-    pub fn new(query_settings: &QuerySettings, dataset: QueryGraph) -> Self {
+    pub fn new(dataset: QueryGraph) -> Self {
         U32DataFrameCreator {
             named_nodes: Default::default(),
-            include_transient: query_settings.include_transient,
             dataset,
         }
     }
@@ -965,7 +961,6 @@ impl U32DataFrameCreator {
                     &None,
                     &None,
                     &None,
-                    self.include_transient,
                     &self.dataset,
                 )?;
                 let df = mappings.collect().unwrap();
@@ -1032,7 +1027,6 @@ impl U32DataFrameCreator {
                     &None,
                     &None,
                     &None,
-                    self.include_transient,
                     &self.dataset,
                 )?;
                 let df = mappings.collect().unwrap();

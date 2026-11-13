@@ -63,6 +63,7 @@ use datalog::python::PyInferenceResult;
 use mimalloc::MiMalloc;
 use pyo3::exceptions::PyTypeError;
 use representation::cats::LockedCats;
+use representation::constants::TRANSIENT_GRAPH_IRI;
 use representation::dataset::NamedGraph;
 use representation::debug::DebugOutputs;
 use representation::df_to_python::{df_to_py_df, fix_cats_and_multicolumns};
@@ -97,8 +98,6 @@ static GLOBAL: Jemalloc = Jemalloc;
 static GLOBAL: MiMalloc = MiMalloc;
 
 const DEFAULT_FTS: bool = false;
-const DEFAULT_INCLUDE_TRANSIENT: bool = true;
-const DEFAULT_MAP_TO_TRANSIENT: bool = false;
 const DEFAULT_DEBUG_NO_RESULTS: bool = false;
 const DEFAULT_TRIPLES_BATCH_SIZE: usize = 10_000_000;
 
@@ -180,6 +179,7 @@ fn _maplib(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyInstance>()?;
     m.add_function(wrap_pyfunction!(py_triple, m)?)?;
     m.add("MaplibException", py.get_type::<MaplibException>())?;
+    m.add("TRANSIENT_GRAPH", TRANSIENT_GRAPH_IRI)?;
     m.add(
         "FunctionArgumentException",
         py.get_type::<FunctionArgumentException>(),
@@ -266,7 +266,7 @@ fn query_to_result(
                         sm.mappings = lf.collect().unwrap();
                     }
                     let mut ts = Triplestore::new(StorageOptions::memory(), None).unwrap();
-                    ts.insert_construct_result(sms, false, &NamedGraph::DefaultGraph)
+                    ts.insert_construct_result(sms, &NamedGraph::DefaultGraph)
                         .map_err(|x| PyMaplibError::MaplibError(MaplibError::SparqlError(x)))?;
                     let mut out_bytes = vec![];
                     ts.write_pretty_turtle(&mut out_bytes, &NamedGraph::DefaultGraph, prefixes)
@@ -408,6 +408,28 @@ fn resolve_format(format: &str) -> Result<ExtendedRdfFormat, PyMaplibError> {
 
 fn parse_named_node(s: String) -> PyResult<NamedNode> {
     Ok(NamedNode::new(s).map_err(|x| PyMaplibError::from(MaplibError::from(x)))?)
+}
+
+/// The graphs to merge into the default graph of a query. None gives the transient graph if
+/// `default_transient`, and no graphs otherwise.
+fn parse_include_graphs(
+    include_graphs: Option<Vec<String>>,
+    default_transient: bool,
+) -> PyResult<Vec<NamedGraph>> {
+    if let Some(include_graphs) = include_graphs {
+        include_graphs
+            .into_iter()
+            .map(|g| {
+                Ok(NamedGraph::from_maybe_named_node(Some(&parse_named_node(
+                    g,
+                )?)))
+            })
+            .collect()
+    } else if default_transient {
+        Ok(vec![NamedGraph::transient()])
+    } else {
+        Ok(vec![])
+    }
 }
 
 fn parse_optional_named_node(s: Option<String>) -> PyResult<Option<NamedNode>> {

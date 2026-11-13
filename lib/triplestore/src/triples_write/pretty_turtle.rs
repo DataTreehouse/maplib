@@ -787,7 +787,7 @@ impl Triplestore {
                 },
                 None,
                 &QuerySettings {
-                    include_transient: false,
+                    include_graphs: vec![],
                     max_rows: None,
                     strict_project: false,
                 },

@@ -213,7 +213,6 @@ impl Model {
         &mut self,
         path: &Path,
         graph: &NamedGraph,
-        transient: bool,
         uuid_namespace: Option<String>,
     ) -> Result<(), MaplibError> {
         let mut u8s =
@@ -224,7 +223,7 @@ impl Model {
             String::from(path.to_string_lossy())
         };
         self.triplestore
-            .map_json(&mut u8s, Some(use_uuid_namespace), graph, transient)
+            .map_json(&mut u8s, Some(use_uuid_namespace), graph)
             .map_err(MaplibError::TriplestoreError)
     }
 
@@ -233,13 +232,12 @@ impl Model {
         &mut self,
         mut p: String,
         graph: &NamedGraph,
-        transient: bool,
         uuid_namespace: Option<String>,
     ) -> Result<(), MaplibError> {
         //Safety: we are never reading this vec back to a string
         let u8s = unsafe { p.as_mut_vec() };
         self.triplestore
-            .map_json(u8s, uuid_namespace, graph, transient)
+            .map_json(u8s, uuid_namespace, graph)
             .map_err(MaplibError::TriplestoreError)
     }
 
@@ -260,7 +258,6 @@ impl Model {
         &mut self,
         path: &Path,
         graph: &NamedGraph,
-        transient: bool,
         uuid_namespace: Option<String>,
     ) -> Result<(), MaplibError> {
         let mut u8s = fs::read(path).map_err(|x| TriplestoreError::XMLError(x.to_string()))?;
@@ -270,7 +267,7 @@ impl Model {
             String::from(path.to_string_lossy())
         };
         self.triplestore
-            .map_xml(&mut u8s, graph, transient, Some(use_uuid_namespace))
+            .map_xml(&mut u8s, graph, Some(use_uuid_namespace))
             .map_err(MaplibError::TriplestoreError)
     }
 
@@ -279,13 +276,12 @@ impl Model {
         &mut self,
         mut p: String,
         graph: &NamedGraph,
-        transient: bool,
         uuid_namespace: Option<String>,
     ) -> Result<(), MaplibError> {
         //Safety: we are never reading this vec back to a string
         let u8s = unsafe { p.as_mut_vec() };
         self.triplestore
-            .map_xml(u8s, graph, transient, uuid_namespace)
+            .map_xml(u8s, graph, uuid_namespace)
             .map_err(MaplibError::TriplestoreError)
     }
 
@@ -296,7 +292,6 @@ impl Model {
         p: &Path,
         rdf_format: Option<ExtendedRdfFormat>,
         base_iri: Option<String>,
-        transient: bool,
         parallel: Option<bool>,
         checked: bool,
         graph: &NamedGraph,
@@ -312,7 +307,6 @@ impl Model {
                 p,
                 rdf_format,
                 base_iri,
-                transient,
                 parallel,
                 checked,
                 graph,
@@ -342,7 +336,6 @@ impl Model {
         s: &str,
         rdf_format: ExtendedRdfFormat,
         base_iri: Option<String>,
-        transient: bool,
         parallel: Option<bool>,
         checked: bool,
         graph: &NamedGraph,
@@ -358,7 +351,6 @@ impl Model {
                 s,
                 rdf_format,
                 base_iri,
-                transient,
                 parallel,
                 checked,
                 graph,
@@ -386,7 +378,7 @@ impl Model {
     pub fn templates_to_graph(&mut self, graph: &NamedGraph) -> Result<(), MaplibError> {
         let triples = templates_to_triples(&self.template_dataset.templates);
         self.triplestore
-            .add_triples(triples, graph, false)
+            .add_triples(triples, graph)
             .map_err(MaplibError::TriplestoreError)?;
         Ok(())
     }
@@ -397,13 +389,13 @@ impl Model {
         query: &str,
         parameters: Option<&HashMap<String, EagerSolutionMappings>>,
         graph: Option<&NamedGraph>,
-        include_transient: bool,
+        include_graphs: Vec<NamedGraph>,
         max_rows: Option<usize>,
         debug_no_results: bool,
         bindings: Option<&HashMap<String, GroundTerm>>,
     ) -> Result<QueryResult, MaplibError> {
         let query_settings = QuerySettings {
-            include_transient,
+            include_graphs,
             max_rows,
             strict_project: false,
         };
@@ -455,14 +447,13 @@ impl Model {
         query: &str,
         parameters: Option<&HashMap<String, EagerSolutionMappings>>,
         source_graph: &NamedGraph,
-        include_source_transient: bool,
+        include_graphs: Vec<NamedGraph>,
         target_graph: &NamedGraph,
-        insert_target_transient: bool,
         max_rows: Option<usize>,
         debug_no_results: bool,
     ) -> Result<InsertResult, MaplibError> {
         let query_settings = QuerySettings {
-            include_transient: include_source_transient,
+            include_graphs,
             max_rows,
             strict_project: true,
         };
@@ -470,7 +461,6 @@ impl Model {
             .insert(
                 query,
                 parameters,
-                insert_target_transient,
                 &query_settings,
                 source_graph,
                 target_graph,
@@ -485,12 +475,12 @@ impl Model {
         update: &str,
         parameters: Option<&HashMap<String, EagerSolutionMappings>>,
         graph: Option<&NamedGraph>,
-        include_transient: bool,
+        include_graphs: Vec<NamedGraph>,
         max_rows: Option<usize>,
         debug_no_results: bool,
     ) -> Result<UpdateResult, MaplibError> {
         let query_settings = QuerySettings {
-            include_transient,
+            include_graphs,
             max_rows,
             strict_project: true,
         };
@@ -509,12 +499,11 @@ impl Model {
     pub fn insert_construct_result(
         &mut self,
         sms: Vec<(EagerSolutionMappings, Option<NamedNode>)>,
-        transient: bool,
         target_graph: &NamedGraph,
     ) -> Result<Vec<NewTriples>, SparqlError> {
         let new_triples = self
             .triplestore
-            .insert_construct_result(sms, transient, target_graph)?;
+            .insert_construct_result(sms, target_graph)?;
         Ok(new_triples)
     }
 
@@ -615,7 +604,7 @@ impl Model {
         include_details: bool,
         include_conforms: bool,
         max_shape_constraint_results: Option<usize>,
-        include_transient: bool,
+        include_graphs: Vec<NamedGraph>,
         max_rows: Option<usize>,
         only_shapes: Option<Vec<NamedNode>>,
         deactivate_shapes: Vec<NamedNode>,
@@ -632,7 +621,7 @@ impl Model {
             include_details,
             include_conforms,
             max_shape_constraint_results,
-            include_transient,
+            include_graphs,
             max_rows,
             only_shapes,
             deactivate_shapes,
@@ -660,10 +649,10 @@ impl Model {
     pub fn get_predicate_iris(
         &mut self,
         graph: &NamedGraph,
-        include_transient: bool,
+        include_graphs: &[NamedGraph],
     ) -> Result<Vec<NamedNode>, MaplibError> {
         self.triplestore
-            .get_predicate_iris(include_transient, graph)
+            .get_predicate_iris(graph, include_graphs)
             .map_err(MaplibError::TriplestoreError)
     }
 
@@ -672,11 +661,11 @@ impl Model {
         &mut self,
         predicate: &NamedNode,
         graph: &NamedGraph,
-        include_transient: bool,
+        include_graphs: &[NamedGraph],
     ) -> Result<Vec<EagerSolutionMappings>, MaplibError> {
         let sms = self
             .triplestore
-            .get_predicate_eager_solution_mappings(predicate, include_transient, graph)
+            .get_predicate_eager_solution_mappings(predicate, graph, include_graphs)
             .map_err(MaplibError::TriplestoreError)?;
         Ok(sms)
     }
@@ -695,7 +684,7 @@ impl Model {
         max_iterations: Option<usize>,
         max_results: Option<usize>,
         graph: Option<&NamedGraph>,
-        include_transient: bool,
+        include_graphs: Vec<NamedGraph>,
         max_rows: Option<usize>,
         debug_no_results: bool,
     ) -> Result<InferenceResult, MaplibError> {
@@ -719,7 +708,7 @@ impl Model {
             ruleset.as_ref().unwrap(),
             max_iterations,
             max_results,
-            include_transient,
+            include_graphs,
             max_rows,
             debug_no_results,
         );
@@ -757,10 +746,7 @@ impl Model {
         Ok(())
     }
 
-    pub fn deserialize_triples(
-        path: &Path,
-        storage: StorageOptions,
-    ) -> Result<Self, MaplibError> {
+    pub fn deserialize_triples(path: &Path, storage: StorageOptions) -> Result<Self, MaplibError> {
         let triplestore = Triplestore::deserialize_triples(path, storage)?;
         Ok(Model {
             blank_node_counter: 0,
