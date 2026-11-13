@@ -4,7 +4,6 @@
 # Tests tagged [flaky] fail nondeterministically and are non-strict xfails.
 aggregates/agg08  # query is accepted but should be rejected
 aggregates/agg11  # query is accepted but should be rejected
-bind/bind07  # Results differ: BIND in a nested group sees variables bound outside of the group
 bindings/values7  # Results differ: unbound variables in the solutions are not treated as compatible with VALUES
 cast/cast-bool  # Results differ: "0"^^xsd:boolean is stored as a boolean value and returned as "false"
 cast/cast-decimal  # Results differ: "0"^^xsd:boolean is stored as a boolean value and returned as "false"

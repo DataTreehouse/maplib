@@ -1,5 +1,10 @@
 # Change log
 
+## Unreleased
+### Bug fixes
+- SHACL rules: a rule that re-asserts a triple already in the data graph no longer makes inference loop until `max_iterations` (or forever with one rule). Inserting transient triples that all already existed non-transiently dropped the earlier transient triples with the same predicate, which were then inferred again on every iteration ([#76](https://github.com/DataTreehouse/maplib/issues/76))
+- SHACL rules: rules whose WHERE clause has no triple pattern on `$this` (only `OPTIONAL` / `BIND`) now also run for focus nodes that become targets of their shape after the rule first ran ([#77](https://github.com/DataTreehouse/maplib/issues/77))
+
 ## v0.21.0
 ### Performance
 Net change per category compared with v0.20.33, measured on an Apple M-series laptop (14 cores). Both versions were built with the same settings (thin LTO, 16 codegen units) and run alternately; times are medians of 2 runs. 

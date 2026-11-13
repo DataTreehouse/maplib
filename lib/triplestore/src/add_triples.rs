@@ -90,29 +90,11 @@ impl Triplestore {
         } in global_cat_triples
         {
             self.add_graph_if_not_exists(&graph, transient);
-            let use_map = if transient {
-                &mut self.graph_transient_triples_map.get_mut(&graph).unwrap()
-            } else {
-                &mut self.graph_triples_map.get_mut(&graph).unwrap()
-            };
-            let mut map = HashMap::new();
-            map.insert(
-                SUBJECT_COL_NAME.to_string(),
-                subject_type.clone().into_default_stored_rdf_node_state(),
-            );
-            map.insert(
-                OBJECT_COL_NAME.to_string(),
-                object_type.clone().into_default_stored_rdf_node_state(),
-            );
-
             let k = (subject_type.clone(), object_type.clone());
-            let triples = if let Some(m) = use_map.get_mut(&predicate) {
-                m.remove(&k)
-            } else {
-                None
-            };
 
-            // Remove triples that are already inserted non-transiently
+            // Remove triples that are already inserted non-transiently. This must happen before
+            // the existing transient triples are taken out of the map below: if nothing is left to
+            // add, we skip this batch, and the existing transient triples must stay in place.
             if transient {
                 if let Some(map) = self.graph_triples_map.get_mut(&graph) {
                     if let Some(m) = map.get_mut(&predicate) {
@@ -127,6 +109,17 @@ impl Triplestore {
                         }
                     }
                 }
+            };
+
+            let use_map = if transient {
+                &mut self.graph_transient_triples_map.get_mut(&graph).unwrap()
+            } else {
+                &mut self.graph_triples_map.get_mut(&graph).unwrap()
+            };
+            let triples = if let Some(m) = use_map.get_mut(&predicate) {
+                m.remove(&k)
+            } else {
+                None
             };
 
             let (s, o) = k;
