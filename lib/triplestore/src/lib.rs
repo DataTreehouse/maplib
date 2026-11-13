@@ -3,8 +3,9 @@ extern crate core;
 mod add_triples;
 pub mod cats;
 mod dblf;
-mod fts_rebuild;
 pub mod errors;
+mod fts_rebuild;
+mod geo_index;
 mod map_df;
 mod map_json;
 mod map_xml;
@@ -20,6 +21,7 @@ use crate::errors::TriplestoreError;
 use crate::storage::Triples;
 use file_io::create_folder_if_not_exists;
 use fts::FtsIndex;
+use geo::GeoIndex;
 use oxrdf::vocab::{rdf, rdfs};
 use oxrdf::NamedNode;
 use polars::prelude::{
@@ -65,6 +67,9 @@ pub struct Triplestore {
     parser_call: usize,
     indexing: IndexingOptions,
     fts_index: HashMap<NamedGraph, FtsIndex>,
+    /// Geometry literals in DuckDB with a spatial index, when GeoSPARQL indexing is enabled.
+    /// One per triplestore: it is keyed by cats, which are shared between the graphs.
+    pub(crate) geo_index: Option<GeoIndex>,
     pub global_cats: LockedCats,
     n_triples_deleted: usize,
     pub udf_registry: Arc<UdfRegistry>,
@@ -326,8 +331,9 @@ impl Triplestore {
             let triples_map = pred_map.get_mut(&pred).unwrap();
             triples_map.insert((subject_type, object_type), triples);
         }
-        // Compaction renumbers the cats that the full text search indexes refer to.
+        // Compaction renumbers the cats that the full text search and geo indexes refer to.
         self.rebuild_fts_indexes()?;
+        self.rebuild_geo_index()?;
         Ok(())
     }
 
@@ -484,7 +490,7 @@ impl Triplestore {
                     .insert(NamedGraph::default(), HashMap::new());
             }
 
-            Ok(Triplestore {
+            let mut detached = Triplestore {
                 storage_folder: self.storage_folder.clone(),
                 storage_mode: self.storage_mode,
                 triples_folder: self.triples_folder.clone(),
@@ -495,10 +501,18 @@ impl Triplestore {
                 parser_call: self.parser_call,
                 indexing: self.indexing.clone(),
                 fts_index: new_fts_index_map,
+                // The new triplestore has its own cats, so it gets its own geo index.
+                geo_index: None,
                 global_cats: LockedCats::new(cats_image),
                 n_triples_deleted: 0,
                 udf_registry: Arc::new(UdfRegistry::new()),
-            })
+            };
+            if detached.indexing.geo {
+                detached.geo_index =
+                    maybe_create_geo_index(&detached.indexing, detached.storage_folder.as_deref())?;
+                detached.rebuild_geo_index()?;
+            }
+            Ok(detached)
         } else {
             Err(TriplestoreError::GraphDoesNotExist(graph.to_string()))
         }
@@ -626,6 +640,10 @@ pub struct IndexingOptions {
     pub fts: bool,
     #[serde(skip)]
     pub fts_path: Option<PathBuf>,
+    /// Index geometry literals for GeoSPARQL. Kept when serializing, and the index is rebuilt
+    /// when the triplestore is read back.
+    #[serde(default)]
+    pub geo: bool,
 }
 
 impl IndexingOptions {
@@ -641,7 +659,13 @@ impl IndexingOptions {
             object_sort_some,
             fts,
             fts_path,
+            geo: false,
         }
+    }
+
+    pub fn with_geo(mut self, geo: bool) -> Self {
+        self.geo = geo;
+        self
     }
 
     pub fn new_default_object_sort(fts: bool, fts_path: Option<PathBuf>) -> IndexingOptions {
@@ -726,6 +750,7 @@ impl Triplestore {
         let (pathbuf, triples_folder) = prepare_storage(&storage)?;
         let indexing = indexing.unwrap_or_default();
         let fts_index = maybe_create_fts_index_map(&indexing)?;
+        let geo_index = maybe_create_geo_index(&indexing, pathbuf.as_deref())?;
 
         let locked_cats = LockedCats::new_empty(pathbuf.as_ref().map(|x| x.as_ref()));
         Ok(Triplestore {
@@ -736,6 +761,7 @@ impl Triplestore {
             parser_call: 0,
             indexing,
             fts_index,
+            geo_index,
             global_cats: locked_cats,
             n_triples_deleted: 0,
             udf_registry: Arc::new(UdfRegistry::new()),
@@ -779,6 +805,10 @@ impl Triplestore {
                 }
             }
         }
+        if indexing.geo && self.geo_index.is_none() {
+            self.geo_index = maybe_create_geo_index(&indexing, self.storage_folder.as_deref())?;
+            self.rebuild_geo_index()?;
+        }
         self.indexing = indexing;
         Ok(())
     }
@@ -807,6 +837,19 @@ fn maybe_create_fts_index_map(
         HashMap::new()
     };
     Ok(fts_index_map)
+}
+
+pub(crate) fn maybe_create_geo_index(
+    indexing: &IndexingOptions,
+    storage_folder: Option<&Path>,
+) -> Result<Option<GeoIndex>, TriplestoreError> {
+    if indexing.geo {
+        Ok(Some(
+            GeoIndex::new(storage_folder).map_err(TriplestoreError::GeoError)?,
+        ))
+    } else {
+        Ok(None)
+    }
 }
 
 const TRIPLES_FOLDER: &str = "triples";

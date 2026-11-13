@@ -1,5 +1,6 @@
 use crate::errors::TriplestoreError;
 use fts::FtsError;
+use geo::GeoError;
 use oxrdf::Variable;
 use query_processing::errors::QueryProcessingError;
 use representation::errors::RepresentationError;
@@ -23,6 +24,8 @@ pub enum SparqlError {
     TriplestoreError(#[from] TriplestoreError),
     #[error("Full text search lookup error: {}", .0)]
     FtsLookupError(#[from] FtsError),
+    #[error("GeoSPARQL error: {}", .0)]
+    GeoError(#[from] GeoError),
     #[error("Query interrupted via signal")]
     InterruptSignal,
     #[error("A lock was open when a thread crashed, cannot guarantee data constitency")]

@@ -205,6 +205,7 @@ impl Triplestore {
             }
         }
 
+        self.add_to_geo_index(&out_new_triples)?;
         Ok(out_new_triples)
     }
 }

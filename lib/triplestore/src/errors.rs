@@ -1,5 +1,6 @@
 use file_io::FileIOError;
 use fts::FtsError;
+use geo::GeoError;
 use oxrdfio::RdfSyntaxError;
 use polars::prelude::PolarsError;
 use std::io;
@@ -36,6 +37,8 @@ pub enum TriplestoreError {
     FileIOError(FileIOError),
     #[error("Full text search error {0}")]
     FtsError(FtsError),
+    #[error("GeoSPARQL error: {0}")]
+    GeoError(GeoError),
     #[error("Graph does not exist: {0}")]
     GraphDoesNotExist(String),
     #[error("A lock was open when a thread crashed, cannot guarantee data consistency")]

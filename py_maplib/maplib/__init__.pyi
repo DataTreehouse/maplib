@@ -440,6 +440,7 @@ class IndexingOptions:
             object_sort_some: List["IRI"] = None,
             fts: bool = None,
             fts_path: str = None,
+            geo: bool = None,
     ):
         """
         Defaults to indexing on subjects and objects for select types (e.g. rdf:type and rdfs:label)
@@ -449,6 +450,9 @@ class IndexingOptions:
         :param fts: Enable full text search. The index is stored with the categorical maps (strings): on disk
                     for the hybrid and disk storage modes, in memory otherwise.
         :param fts_path: Deprecated and ignored, except that it enables full text search.
+        :param geo: Enable the GeoSPARQL index (maplib EE). Geometry literals (geo:wktLiteral,
+                    geo:wkbLiteral, geo:geoJSONLiteral) are stored with a spatial index, and GeoSPARQL
+                    filters use it. GeoSPARQL functions also work without the index, but slower.
         """
 
 

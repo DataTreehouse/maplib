@@ -1,6 +1,7 @@
 mod distinct;
 mod extend;
 mod filter;
+mod geo_filter;
 mod graph;
 mod group;
 mod join;

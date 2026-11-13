@@ -7,6 +7,10 @@ import os
 
 # use default memory pool to prevent segmentation fault
 os.environ['ARROW_DEFAULT_MEMORY_POOL'] = 'system'
+# maplib EE wheels ship the DuckDB spatial extension used for GeoSPARQL in ext/.
+_spatial_extension = os.path.join(os.path.dirname(__file__), "ext", "spatial.duckdb_extension")
+if os.path.exists(_spatial_extension):
+    os.environ.setdefault("MAPLIB_SPATIAL_EXTENSION", _spatial_extension)
 import pyarrow as pa
 import logging
 

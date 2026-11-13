@@ -14,6 +14,7 @@ representation = { path = "../representation" }
 file_io = { path = "../file_io" }
 spargebra = { path = "../spargebra" }
 fts = { path = "../fts" }
+geo = { path = "../geo" }
 cimxml_import = { path = "../cimxml_import" }
 
 rayon.workspace = true

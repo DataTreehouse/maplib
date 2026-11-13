@@ -1,5 +1,6 @@
 use super::{
-    maybe_create_fts_index_map, prepare_storage, IndexingOptions, StorageOptions, Triplestore,
+    maybe_create_fts_index_map, maybe_create_geo_index, prepare_storage, IndexingOptions,
+    StorageOptions, Triplestore,
 };
 use crate::errors::TriplestoreError;
 use crate::storage::Triples;
@@ -234,7 +235,9 @@ impl Triplestore {
         );
 
         let fts_index = maybe_create_fts_index_map(&triplestore_metadata.indexing)?;
-        Ok(Triplestore {
+        let geo_index =
+            maybe_create_geo_index(&triplestore_metadata.indexing, storage_pathbuf.as_deref())?;
+        let mut triplestore = Triplestore {
             graph_triples_map,
             storage_folder: storage_pathbuf,
             storage_mode: storage.mode,
@@ -242,10 +245,14 @@ impl Triplestore {
             parser_call: 0,
             indexing: triplestore_metadata.indexing,
             fts_index,
+            geo_index,
             global_cats: LockedCats::new(cats),
             n_triples_deleted: 0,
             udf_registry: Arc::new(UdfRegistry::new()),
-        })
+        };
+        // The geo index is not serialized, it is rebuilt from the triples.
+        triplestore.rebuild_geo_index()?;
+        Ok(triplestore)
     }
 }
 

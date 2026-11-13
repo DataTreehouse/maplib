@@ -14,7 +14,7 @@ use representation::dataset::QueryGraph;
 use representation::query_context::{Context, PathEntry};
 use representation::solution_mapping::{EagerSolutionMappings, SolutionMappings};
 use representation::BaseRDFNodeType;
-use spargebra::algebra::Expression;
+use spargebra::algebra::{Expression, Function};
 
 impl Triplestore {
     pub fn lazy_expression(
@@ -592,15 +592,26 @@ impl Triplestore {
                     )?;
                     args_contexts.insert(i, arg_context);
                 }
-                func_expression(
-                    output_solution_mappings,
-                    func,
-                    args,
-                    args_contexts,
-                    context,
-                    self.global_cats.clone(),
-                    Some(&self.udf_registry),
-                )?
+                match func {
+                    Function::Custom(nn) if geo::is_geo_function(nn) => geo::evaluate_function(
+                        self.geo_index.as_ref(),
+                        nn,
+                        args,
+                        output_solution_mappings,
+                        &args_contexts,
+                        context,
+                        self.global_cats.clone(),
+                    )?,
+                    _ => func_expression(
+                        output_solution_mappings,
+                        func,
+                        args,
+                        args_contexts,
+                        context,
+                        self.global_cats.clone(),
+                        Some(&self.udf_registry),
+                    )?,
+                }
             }
         };
         Ok(output_solution_mappings)

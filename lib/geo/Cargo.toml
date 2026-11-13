@@ -1,0 +1,13 @@
+[package]
+name = "geo"
+version = "0.1.0"
+edition = "2021"
+rust-version.workspace = true
+
+[dependencies]
+representation = { path = "../representation" }
+spargebra = { path = "../spargebra" }
+
+oxrdf.workspace = true
+thiserror.workspace = true
+polars.workspace = true

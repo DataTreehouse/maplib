@@ -13,6 +13,7 @@ members = [
     "lib/oxrdfxml",
     "lib/shacl",
     "lib/fts",
+    "lib/geo",
     "lib/datalog",
     "lib/cimxml_export",
     "lib/cimxml_import",

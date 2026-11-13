@@ -1,4 +1,8 @@
+use polars::error::abort::{catch_polars_abort, register_polars_abort_mechanism};
+use polars::prelude::Engine;
 use polars::{error::PolarsError, frame::DataFrame, prelude::LazyFrame};
+use std::panic::AssertUnwindSafe;
+use std::sync::OnceLock;
 #[cfg(not(feature = "pyo3"))]
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use std::collections::HashMap;
@@ -17,8 +21,46 @@ pub enum InterruptableCollectError {
     Polars(#[from] PolarsError),
 }
 
+/// The engine used for query result collection. `MAPLIB_POLARS_ENGINE=in-memory` selects the
+/// in-memory engine, anything else the streaming engine.
+fn query_engine() -> Engine {
+    static ENGINE: OnceLock<Engine> = OnceLock::new();
+    *ENGINE.get_or_init(
+        || match std::env::var("MAPLIB_POLARS_ENGINE").as_deref() {
+            Ok("in-memory") | Ok("in_memory") => Engine::InMemory,
+            _ => Engine::Streaming,
+        },
+    )
+}
+
+/// Installs Polars' SIGINT hook, which lets running queries abort on Ctrl-C. The previous
+/// (Python) handler is chained, so Python still raises KeyboardInterrupt afterwards.
+pub fn register_interrupt_handler() {
+    static REGISTERED: OnceLock<()> = OnceLock::new();
+    REGISTERED.get_or_init(register_polars_abort_mechanism);
+}
+
 /// collect a Polars LazyFrame in a way that allows a KeyboardInterrupt to cancel the search
 pub fn pl_interruptable_collect(lf: LazyFrame) -> Result<DataFrame, InterruptableCollectError> {
+    match query_engine() {
+        Engine::InMemory => pl_interruptable_collect_in_memory(lf),
+        engine => {
+            // A lazy frame without sinks always collects to a single DataFrame.
+            let result = catch_polars_abort(AssertUnwindSafe(|| {
+                lf.collect_with_engine(engine).map(|r| r.unwrap_single())
+            }));
+            match result {
+                Ok(Ok(df)) => Ok(df),
+                Ok(Err(e)) => Err(e.into()),
+                Err(_) => Err(InterruptableCollectError::Interrupted),
+            }
+        }
+    }
+}
+
+fn pl_interruptable_collect_in_memory(
+    lf: LazyFrame,
+) -> Result<DataFrame, InterruptableCollectError> {
     let future = lf.collect_concurrently()?;
 
     #[cfg(feature = "pyo3")]

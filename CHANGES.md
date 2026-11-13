@@ -11,42 +11,15 @@
 - `Model.map_json` and `Model.map_xml` also take an iterable of documents (strings or paths), e.g. a generator over the lines of a JSON Lines file, mapped one document at a time. With a `uuid_namespace`, document number i uses the namespace `<uuid_namespace>/<i>` so that documents do not get the same IRIs. With `stream=True`, `documents_per_batch` documents are mapped into each batch; mapping them into `graph=TRANSIENT_GRAPH` and inserting a CONSTRUCT query writes only the constructed triples
 - Storage modes: `Model(storage="memory" | "hybrid" | "disk", storage_folder=...)`, also for `Model.deserialize`. `"memory"` keeps everything in memory, `"hybrid"` stores the dictionaries of IRIs and literals on disk (what `storage_folder` did before), and the new `"disk"` mode also stores the triple tables on disk as parquet files in `<storage_folder>/maplib_storage/triples`. Files of triple tables that are replaced (by compaction or deletes) or whose model is dropped are removed. Without `storage`, a `storage_folder` still means hybrid storage, so existing code is unaffected. Hybrid and disk storage require maplib Enterprise Edition. In Rust, `Model::new`, `Model::deserialize_triples` and `Triplestore::new` take a `StorageOptions` instead of the storage folder
 - Full text search (maplib Enterprise Edition) uses DuckDB instead of tantivy. The index stores the dictionary codes of subjects, predicates and objects, and searches the strings where the dictionaries keep them: with hybrid and disk storage it joins against the on-disk dictionary tables, so no copy of the strings is made, and with memory storage it uses an in-memory DuckDB database. Matching is unchanged: case insensitive, 1.0 for a match of the whole value and 0.75 for a substring match. `fts_path` (in `IndexingOptions` and `Model.explore`) is no longer used, as the index is stored with the dictionaries
+- GeoSPARQL (maplib Enterprise Edition): enable it with `IndexingOptions(geo=True)`. Geometry literals (`geo:wktLiteral`, `geo:wkbLiteral`, `geo:geoJSONLiteral`) are indexed spatially, and the GeoSPARQL functions are supported: the simple features, Egenhofer and RCC8 relations, measurements with units of measure, constructions, properties and serializations, across coordinate reference systems. Spatial filters and spatial joins use the index. `geof:relate`, the query rewrite extension and the aggregate functions are not supported yet
 
 ### Performance
-Storage modes compared on an Apple M-series laptop (14 cores), built with the release-test profile, medians of 2 runs alternating with v0.21.0. Memory and hybrid storage are unchanged compared with v0.21.0 (all differences within run-to-run noise).
-
-| Category | Workload | Memory | Hybrid | Disk | Disk vs. hybrid |
-|---|---|---|---|---|---|
-| Disk | 20 M triples (4 predicates, 2 M subjects), RSS after loading | 2.69 GB | 3.36 GB | 2.85 GB | **-15%** |
-| Disk | Same, peak RSS | 3.28 GB | 4.01 GB | 3.40 GB | **-15%** |
-| Disk | Same, load time | 8.13 s | 8.87 s | 9.60 s | +8% |
-| Disk | Same, 20 subject lookups / count all / INSERT 2 M triples | 0.014 / 0.086 / 0.77 s | 0.20 / 0.092 / 0.53 s | 0.21 / 0.12 / 0.59 s | +3% / +30% / +11% |
-| Disk | RDF/XML, CIM 2.3 M triples: read / 50 subject lookups / join | 1.47 / 0.10 / 0.012 s | 3.60 / 3.33 / 0.047 s | 3.70 / 3.85 / 0.048 s | +3% / +16% / +2% |
-
 In disk mode the triple tables and their deduplication index are no longer held in memory. With few triples per distinct IRI or literal (as in the CIM data), memory use is dominated by the dictionary and reading, and disk storage saves little.
 
 Triple table segments are compacted much faster, which matters most for datalog, where every iteration adds a small batch of triples to tables that are often large:
 - Size-tiered compaction: only the trailing segments of comparable size are merged with the new triples, so a large table is no longer rewritten every 11 inserts. A table has O(log n) segments (at most 16).
 - Merging sorts packed rank keys with Polars instead of a value-by-value heap merge, and builds the object sort from the merged triples instead of also reading and merging the object sorts of the segments.
 - Disk mode: new triples are deduplicated against only the row groups that may hold their subjects, found through the sparse subject index, instead of reloading every stored triple of the table into an index on each insert. Small trailing segments (under 16k triples) stay in memory until merged, so small inserts don't write and rewrite small parquet files.
-
-| Category | Workload | Memory | Hybrid | Disk |
-|---|---|---|---|---|
-| Datalog | Transitive closure, 60 iterations into a 5 M triple table (8.7 M triples after), inference time | 17.7 → 4.1 s (**-77%**) | 14.6 → 3.3 s (**-77%**) | 37.4 → 11.2 s (**-70%**) |
-| Datalog | Same, peak RSS | 5.31 → 2.73 GB (**-49%**) | 5.83 → 3.15 GB (**-46%**) | 6.34 → 4.00 GB (**-37%**) |
-
-(Release-test profile, means of 2 runs alternating with the build before this change; subject and object lookups on the result are unchanged.)
-
-Full text search on DuckDB, compared with tantivy on 1 M indexed string literals (500 k subjects, half `xsd:string` labels, half `rdf:langString` comments), release-test profile, means of 2 runs alternating with the build before this change, query times medians of 7:
-
-| Category | Workload | Memory | Hybrid |
-|---|---|---|---|
-| FTS | `create_index` on a loaded model | 0.56 → 0.16 s (**-71%**) | 0.67 → 0.06 s (**-91%**) |
-| FTS | Reading 1.5 M triples with FTS enabled (total read time) | 1.94 → 1.45 s (**-25%**) | 3.42 → 2.81 s (**-18%**) |
-| FTS | Substring query, limit 10 / 1000 / 1000 unique subjects | 543 / 543 / 543 → 13 / 14 / 25 ms (**-98% / -97% / -95%**) | 541 / 541 / 541 → 50 / 78 / 87 ms (**-91% / -86% / -84%**) |
-| FTS | Exact match, 500 hits, limit 1000 | 957 → 11 ms (**-99%**) | 950 → 28 ms (**-97%**) |
-| FTS | No match | 478 → 3.8 ms (**-99%**) | 475 → 14 ms (**-97%**) |
-| FTS | Exact match, limit 10 (filled by exact matches) | 0.72 → 10.2 ms (+1324%) | 0.64 → 24.0 ms (+3653%) |
 
 Tantivy answered exact matches from its term dictionary, but scanned all strings for substring matches, which it ran whenever the exact matches did not fill the limit. DuckDB scans the strings once per query for both. Reading without full text search is unchanged.
 
@@ -58,28 +31,6 @@ Tantivy answered exact matches from its term dictionary, but scanned all strings
 
 ## v0.21.0
 ### Performance
-Net change per category compared with v0.20.33, measured on an Apple M-series laptop (14 cores). Both versions were built with the same settings (thin LTO, 16 codegen units) and run alternately; times are medians of 2 runs. 
-
-| Category | Workload | v0.20.33 | v0.21.0 | Change |
-|---|---|---|---|---|
-| Reading | Turtle 1.2 GB / 2.5 GB / 2.9 GB, in memory | 10.13 / 11.90 / 12.77 s | 5.90 / 4.59 / 6.08 s | **-42% / -61% / -52%** |
-| Reading | Turtle 260 MB, in memory / disk-backed | 1.23 / 8.27 s | 0.74 / 2.97 s | **-40% / -64%** |
-| Reading | RDF/XML, CIM 200 MB (2.2 M triples) | 3.58 s | 1.72 s | **-52%** |
-| Reading | RDF/XML written by maplib, re-read | 4.14 s | 1.42 s | **-66%** |
-| Writing | RDF/XML, CIM 2.2 M triples | 42.41 s | 0.76 s | **-98% (56x faster)** |
-| Writing | RDF/XML output size, same data | 494 MB | 212 MB | **-57%** |
-| Writing | CIM/XML (`write_cim_xml`): bridgwater 2.1 M triples / Nordic44 / MiniGrid | 16.54 / 0.76 / 0.48 s | 1.36 / 0.35 / 0.24 s | **-92% / -54% / -50%** |
-| Writing | Turtle, CIM 2.2 M triples / 1.2 GB model | hangs (deadlock) | 0.71 / 1.42 s | fixed |
-| SPARQL, disk | `LIMIT 10` / single subject lookup | 1.014 / 1.910 s | 0.103 / 0.187 s | **-90% / -90%** |
-| SPARQL, disk | GROUP BY count / label filter / ORDER BY LIMIT | 9.4 / 43.2 / 41.5 ms | 2.3 / 26.3 / 15.8 ms | **-75% / -39% / -62%** |
-| SPARQL, memory | ORDER BY over IRIs (1 M rows) | 0.188 s | 0.169 s | -10% |
-| SPARQL, memory | 15 other benchmark queries (joins, GROUP BY, DISTINCT, FILTER, OPTIONAL, MINUS) | 3-79 ms | 3-85 ms | unchanged (ms-level noise) |
-| SHACL, memory | ERA FR (511 k results) / ERA large shapes (730 k results) | 15.27 / 11.96 s | 1.44 / 0.83 s | **-91% / -93%** |
-| SHACL, memory | ERA ES / ERA small shapes | 2.24 / 0.79 s | 0.74 / 0.14 s | **-67% / -82%** |
-| SHACL, disk | ERA ES | 1.60 s | 0.86 s | **-46%** |
-| Datalog | CIM enrichment, inference time | 12.35 s | 6.29 s | **-49%** |
-| Datalog | CIM enrichment, whole pipeline (read + inference) | 20.88 s | 10.34 s | **-50%** |
-
 Besides the changes listed below, the memory improvements earlier in this release contribute to the faster reading and SHACL validation.
 
 - RDF/XML is parsed in parallel, by splitting the document between top-level elements. The RDF/XML parser from Oxigraph (oxrdfxml) is now included in maplib to make this possible

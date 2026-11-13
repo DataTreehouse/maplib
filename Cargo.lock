@@ -1502,6 +1502,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "geo"
+version = "0.1.0"
+dependencies = [
+ "oxrdf",
+ "polars",
+ "representation",
+ "spargebra",
+ "thiserror",
+]
+
+[[package]]
 name = "getrandom"
 version = "0.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5047,6 +5058,7 @@ dependencies = [
  "cimxml_import",
  "file_io",
  "fts",
+ "geo",
  "hdt",
  "itoa",
  "memmap2",
