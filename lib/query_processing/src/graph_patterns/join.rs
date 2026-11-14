@@ -2,8 +2,8 @@ use crate::errors::QueryProcessingError;
 use crate::graph_patterns::cats::create_compatible_cats;
 use polars::datatypes::PlSmallStr;
 use polars::prelude::{
-    as_struct, by_name, col, lit, Expr, JoinArgs, JoinType, LazyFrame, LiteralValue,
-    MaintainOrderJoin,
+    as_struct, by_name, col, concat, len, lit, Expr, JoinArgs, JoinType, LazyFrame, LiteralValue,
+    MaintainOrderJoin, UnionArgs,
 };
 use representation::cats::LockedCats;
 use representation::multitype::{
@@ -193,7 +193,14 @@ pub fn join_workaround(
                 }
             }
         }
-        right_mappings = right_mappings.drop(by_name(to_drop_right, true, false));
+        // No right row can match, so only the schema of the right side is needed: an inner join
+        // is empty, and a left join gives the left rows with the right columns unbound.
+        right_mappings = right_mappings
+            .drop(by_name(to_drop_right, true, false))
+            .limit(0);
+        if join_type == JoinType::Inner {
+            left_mappings = left_mappings.limit(0);
+        }
         left_mappings = left_mappings
             .join(
                 right_mappings,
@@ -203,16 +210,35 @@ pub fn join_workaround(
             )
             .unwrap();
         left_mappings = left_mappings.drop(by_name([dummycol], true, false));
-    } else {
-        let dummy = if on.is_empty() {
-            let dummy = uuid::Uuid::new_v4().to_string();
-            left_mappings = left_mappings.with_column(lit(true).alias(&dummy));
-            right_mappings = right_mappings.with_column(lit(true).alias(&dummy));
-            on.push(col(&dummy));
-            Some(dummy)
+    } else if on.is_empty() {
+        // No shared variables: the cartesian product. A join on a constant key would put every
+        // row in one hash bucket and run on one thread.
+        let product = left_mappings
+            .clone()
+            .cross_join(right_mappings.clone(), None);
+        left_mappings = if join_type == JoinType::Inner {
+            product
         } else {
-            None
+            // OPTIONAL keeps the left rows, with the right variables unbound, when the right side
+            // has no rows. The count of right rows is joined onto the left rows to keep them only
+            // then. Common subplan elimination evaluates each side once.
+            let count = uuid::Uuid::new_v4().to_string();
+            let unmatched = left_mappings
+                .cross_join(right_mappings.select([len().alias(&count)]), None)
+                .filter(col(&count).eq(lit(0u32)))
+                .drop(by_name([count], true, false));
+            concat(
+                [product, unmatched],
+                UnionArgs {
+                    diagonal: true,
+                    rechunk: false,
+                    parallel: true,
+                    ..Default::default()
+                },
+            )
+            .unwrap()
         };
+    } else {
         let join_args = JoinArgs {
             how: join_type,
             validation: Default::default(),
@@ -226,9 +252,6 @@ pub fn join_workaround(
         left_mappings = left_mappings
             .join(right_mappings, &on, &on, join_args)
             .unwrap();
-        if let Some(dummy) = dummy {
-            left_mappings = left_mappings.drop(by_name([dummy], true, false));
-        }
     }
 
     let mut unified_exploded = HashMap::new();

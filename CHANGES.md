@@ -32,6 +32,10 @@ Triple table segments are compacted much faster, which matters most for datalog,
 
 Query results are collected with the Polars streaming engine, which the rest of maplib already used; until now the final step of a query ran on the in-memory engine. Whole-table scans and counts, large result sets and DISTINCT are faster, while small queries are about as fast as before. `MAPLIB_POLARS_ENGINE=in-memory` switches back to the in-memory engine.
 
+`IN` with a list of IRIs looks the values up in a hash set instead of comparing with each IRI in turn, so long lists no longer slow a query down. Property paths with `*`, `+` and `?` map the computed paths back to IRIs and literals by position instead of with joins. Patterns without shared variables (also inside `OPTIONAL`) are combined with a parallel cross join instead of a join on a constant key, which ran on one thread.
+
+After `Model.compact()`, subjects are marked as sorted, so DISTINCT and grouping on subjects are faster.
+
 Tantivy answered exact matches from its term dictionary, but scanned all strings for substring matches, which it ran whenever the exact matches did not fill the limit. DuckDB scans the strings once per query for both. Reading without full text search is unchanged.
 
 Serialization, compared with the build before these changes on CIM N-Triples (2.2 M triples, IRI-heavy) and a synthetic literal-heavy file (4.5 M triples, 3 M distinct literals), release-test profile, medians of 3 runs alternating between builds, each run in a fresh process. Parquet is the new default, `raw_db` writes DuckDB dictionaries as before:

@@ -14,7 +14,7 @@ use oxrdf::{BlankNode, Literal, NamedNode, Variable};
 use polars::frame::UniqueKeepStrategy;
 use polars::prelude::{
     as_struct, by_name, coalesce, col, lit, when, DataType, Expr, JoinArgs, JoinType, LazyFrame,
-    LiteralValue, Operator, Scalar,
+    LiteralValue, NamedFrom, Operator, Scalar, Series,
 };
 use representation::cats::{maybe_decode_expr, Cats, LockedCats};
 use representation::null::expr_is_null_workaround;
@@ -876,6 +876,54 @@ pub fn in_expression(
     solution_mappings = drop_inner_contexts(solution_mappings, &right_contexts.iter().collect());
 
     Ok(solution_mappings)
+}
+
+/// Whether `left IN (iri, ...)` can use `in_iris_expression`: the left side holds only IRIs,
+/// encoded with the global dictionary.
+pub fn can_use_in_iris(solution_mappings: &SolutionMappings, left_context: &Context) -> bool {
+    let Some(state) = solution_mappings.rdf_node_types.get(left_context.as_str()) else {
+        return false;
+    };
+    matches!(
+        (state.get_base_type(), state.get_base_state()),
+        (Some(t), Some(BaseCatState::CategoricalNative(None))) if t.is_iri()
+    )
+}
+
+/// `left IN (iri, ...)` as a lookup of dictionary codes, for a left side that
+/// `can_use_in_iris` accepts. This gives the same result as comparing with each IRI in turn: an
+/// IRI only equals the same IRI, and an IRI that is not in the dictionary equals no stored value.
+pub fn in_iris_expression(
+    mut solution_mappings: SolutionMappings,
+    left_context: &Context,
+    iris: &[&NamedNode],
+    outer_context: &Context,
+    global_cats: &Cats,
+) -> SolutionMappings {
+    let iri_strs: Vec<_> = iris.iter().map(|x| Some(x.as_str())).collect();
+    let codes: Vec<u32> = global_cats
+        .maybe_encode_iri_slice(&iri_strs)
+        .into_iter()
+        .flatten()
+        .collect();
+    let left = col(left_context.as_str());
+    let expr = if codes.is_empty() {
+        lit(false)
+    } else {
+        let codes = Series::new("".into(), codes);
+        left.clone()
+            .is_not_null()
+            .and(left.is_in(lit(codes).implode(false), false))
+    };
+    solution_mappings.mappings = solution_mappings
+        .mappings
+        .with_column(expr.alias(outer_context.as_str()));
+    solution_mappings.rdf_node_types.insert(
+        outer_context.as_str().to_string(),
+        BaseRDFNodeType::Literal(xsd::BOOLEAN.into_owned(), None)
+            .into_default_input_rdf_node_state(),
+    );
+    drop_inner_contexts(solution_mappings, &vec![left_context])
 }
 
 pub fn drop_inner_contexts(mut sm: SolutionMappings, contexts: &Vec<&Context>) -> SolutionMappings {

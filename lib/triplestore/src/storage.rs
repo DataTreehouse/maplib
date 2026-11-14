@@ -8,7 +8,7 @@ use file_io::{scan_parquet, FileIOError};
 use oxrdf::vocab::xsd;
 use oxrdf::{NamedNode, NamedOrBlankNode, Term};
 use polars::prelude::{
-    as_struct, col, concat, IdxCa, IdxSize, IntoLazy, LazyFrame, PlSmallStr, UnionArgs,
+    as_struct, col, concat, lit, IdxCa, IdxSize, IntoLazy, LazyFrame, PlSmallStr, UnionArgs,
 };
 use polars::prelude::{ParquetCompression, ParquetWriter};
 use polars_core::frame::DataFrame;
@@ -17,6 +17,7 @@ use polars_core::prelude::{
     IntoColumn, Series, SortMultipleOptions, StringChunked, StringChunkedBuilder, UInt32Chunked,
     UInt64Chunked,
 };
+use polars_core::series::IsSorted;
 use polars_core::utils::Container;
 use representation::bundle::SerializedFile;
 use representation::cats::{
@@ -273,6 +274,12 @@ impl Triples {
                     ],
                     sort_options,
                 );
+            } else if self.subject_type.stored_cat() && self.object_type.stored_cat() {
+                // Both columns hold u32 codes, which are now in string order: a single packed
+                // key sorts much faster than two columns.
+                let key = col(SUBJECT_COL_NAME).cast(DataType::UInt64) * lit(1u64 << 32)
+                    + col(OBJECT_COL_NAME).cast(DataType::UInt64);
+                lf = lf.sort_by_exprs(vec![key], sort_options);
             } else {
                 lf = lf.sort(
                     vec![
@@ -283,7 +290,32 @@ impl Triples {
                 );
             }
         };
-        let df = lf.collect().unwrap();
+        let mut df = lf.collect().unwrap();
+        if self.subject_type.stored_cat() {
+            // The subject codes are now ranks in string order and the triples are sorted by
+            // subject, so the codes should be sorted. Telling Polars lets it use its fast paths
+            // for sorted data. Codes added later are not in string order, so this only holds
+            // for compacted triples; it is checked, as a wrong flag would give wrong results.
+            let mut subjects = df
+                .column(SUBJECT_COL_NAME)
+                .unwrap()
+                .as_materialized_series()
+                .clone();
+            let sorted = {
+                let ca = subjects.u32().unwrap();
+                ca.null_count() == 0
+                    && ca
+                        .into_no_null_iter()
+                        .zip(ca.into_no_null_iter().skip(1))
+                        .all(|(a, b)| a <= b)
+            };
+            if sorted {
+                subjects.set_sorted_flag(IsSorted::Ascending);
+                df.with_column(subjects.into_column()).unwrap();
+            } else {
+                warn!("Compacted triples are not sorted by subject code");
+            }
+        }
         let st = StoredTriples::TriplesInMemory(Box::new(TriplesInMemory::new(df)));
         Ok(st)
     }
@@ -1094,7 +1126,8 @@ impl TriplesOnDisk {
         triples_folder: &Path,
     ) -> Result<Self, TriplestoreError> {
         let path = Self::new_path(triples_folder);
-        file.copy_to(&path).map_err(|e| TriplestoreError::FileIOError(FileIOError::FileCreateIOError(e)))?;
+        file.copy_to(&path)
+            .map_err(|e| TriplestoreError::FileIOError(FileIOError::FileCreateIOError(e)))?;
         let mut on_disk = Self { path, height: 0 };
         let height_df = on_disk
             .scan()?

@@ -4,8 +4,8 @@ use crate::sparql::QuerySettings;
 use oxrdf::vocab::xsd;
 use oxrdf::{NamedNode, Term, Variable};
 use polars::prelude::{
-    by_name, col, lit, AnyValue, DataFrame, IntoLazy, IntoSeries, JoinArgs, JoinType, Series,
-    UniqueKeepStrategy,
+    by_name, col, lit, AnyValue, DataFrame, IdxCa, IntoColumn, IntoLazy, IntoSeries, JoinType,
+    UInt32Chunked,
 };
 use polars_core::prelude::{DataType, ExplodeOptions, SortMultipleOptions};
 use polars_core::utils::Container;
@@ -159,7 +159,7 @@ impl Triplestore {
                 &cats,
             )
         };
-        let (subject_vec, object_vec) = if let Some((starts, reversed)) = bound {
+        let (mut subject_vec, mut object_vec) = if let Some((starts, reversed)) = bound {
             // Only the paths from the nodes an end is bound to are followed.
             paths_from(ppe, starts, reversed, &namednode_dfs, max_index as usize)
         } else {
@@ -177,43 +177,36 @@ impl Triplestore {
             }
             (subject_vec, object_vec)
         };
-        let mut subject_series = Series::from_iter(subject_vec);
-        subject_series.rename("subject_key".into());
-        let mut object_series = Series::from_iter(object_vec);
-        object_series.rename("object_key".into());
-        let mut out_lf = DataFrame::new(
-            subject_series.len(),
-            vec![subject_series.into(), object_series.into()],
-        )
-        .unwrap()
-        .lazy();
-        let lookup_subject_lf =
-            lookup_df
-                .clone()
-                .lazy()
-                .rename([VALUE_COLUMN], [SUBJECT_COL_NAME], true);
-        out_lf = out_lf
-            .join(
-                lookup_subject_lf,
-                &[col("subject_key")],
-                &[col(LOOKUP_COLUMN)],
-                JoinArgs::new(JoinType::Inner),
-            )
+        // Without any values (an empty dataset), the matrix is still 1x1 and a zero-length path
+        // gives it an entry, which has no value to map to.
+        let n_values = lookup_df.height() as u32;
+        if subject_vec
+            .iter()
+            .chain(object_vec.iter())
+            .any(|k| *k >= n_values)
+        {
+            let (s, o): (Vec<u32>, Vec<u32>) = subject_vec
+                .iter()
+                .zip(object_vec.iter())
+                .filter(|(s, o)| **s < n_values && **o < n_values)
+                .map(|(s, o)| (*s, *o))
+                .unzip();
+            subject_vec = s;
+            object_vec = o;
+        }
+        // Row i of the lookup table holds the value with key i, so keys are mapped to values by
+        // gathering rows instead of joining.
+        let values = lookup_df.column(VALUE_COLUMN).unwrap();
+        let height = subject_vec.len();
+        let subjects = values
+            .take(&IdxCa::from_vec("".into(), subject_vec))
             .unwrap()
-            .drop(by_name(["subject_key"], true, false));
-        let lookup_object_lf = lookup_df
-            .lazy()
-            .rename([VALUE_COLUMN], [OBJECT_COL_NAME], true);
-        out_lf = out_lf
-            .join(
-                lookup_object_lf,
-                &[col("object_key")],
-                &[col(LOOKUP_COLUMN)],
-                JoinArgs::new(JoinType::Inner),
-            )
+            .with_name(SUBJECT_COL_NAME.into());
+        let objects = values
+            .take(&IdxCa::from_vec("".into(), object_vec))
             .unwrap()
-            .drop(by_name(["object_key"], true, false));
-        out_df = out_lf.collect().unwrap();
+            .with_name(OBJECT_COL_NAME.into());
+        out_df = DataFrame::new(height, vec![subjects, objects]).unwrap();
         // With the same variable at both ends, the path must end where it starts.
         let same_variable = matches!(
             (term_variable_name(subject), term_variable_name(object)),
@@ -903,15 +896,60 @@ impl U32DataFrameCreator {
         ]);
         mappings = nest_multicolumns(mappings, maps);
 
+        // One row per distinct value, so the key of a value is its row number.
         mappings = mappings.with_row_index(LOOKUP_COLUMN, None);
-        mappings = mappings.explode(
-            by_name([&subject_row_index, &object_row_index], true, false),
-            ExplodeOptions {
-                empty_as_null: false,
-                keep_nulls: true,
-            },
-        );
-        let mut lookup_df = mappings.collect().unwrap();
+        let grouped = mappings.collect().unwrap();
+
+        // Each exploded row is one row of the union: exactly one of the two row indices is set,
+        // and together they cover 0..2 * df_height. Scatter the keys into a dense array, so that
+        // row i of df has subject key keys[i] and object key keys[df_height + i].
+        let exploded = grouped
+            .clone()
+            .lazy()
+            .select([
+                col(LOOKUP_COLUMN),
+                col(&subject_row_index),
+                col(&object_row_index),
+            ])
+            .explode(
+                by_name([&subject_row_index, &object_row_index], true, false),
+                ExplodeOptions {
+                    empty_as_null: false,
+                    keep_nulls: true,
+                },
+            )
+            .collect()
+            .unwrap();
+        let mut keys = vec![0u32; 2 * df_height];
+        let key_ca = exploded.column(LOOKUP_COLUMN).unwrap().idx().unwrap();
+        let subj_ca = exploded
+            .column(&subject_row_index)
+            .unwrap()
+            .cast(&DataType::UInt32)
+            .unwrap();
+        let obj_ca = exploded
+            .column(&object_row_index)
+            .unwrap()
+            .cast(&DataType::UInt32)
+            .unwrap();
+        for ((k, s), o) in key_ca
+            .iter()
+            .zip(subj_ca.u32().unwrap().iter())
+            .zip(obj_ca.u32().unwrap().iter())
+        {
+            let pos = s.or(o).unwrap() as usize;
+            keys[pos] = k.unwrap() as u32;
+        }
+        let object_keys = keys.split_off(df_height);
+        let df = DataFrame::new(
+            df_height,
+            vec![
+                df.column(NAMED_NODE_INDEX_COL).unwrap().clone(),
+                UInt32Chunked::from_vec(SUBJECT_COL_NAME.into(), keys).into_column(),
+                UInt32Chunked::from_vec(OBJECT_COL_NAME.into(), object_keys).into_column(),
+            ],
+        )
+        .unwrap();
 
         let out_dfs = df.partition_by([NAMED_NODE_INDEX_COL], true).unwrap();
         let mut out_df_map = HashMap::new();
@@ -925,45 +963,13 @@ impl U32DataFrameCreator {
                 .unwrap()
                 .get(0)
                 .unwrap();
-            let mut lf = df
-                .select([&subject_row_index, &object_row_index])
-                .unwrap()
-                .lazy();
-            lf = lf
-                .join(
-                    lookup_df
-                        .clone()
-                        .lazy()
-                        .rename([LOOKUP_COLUMN], [SUBJECT_COL_NAME], true)
-                        .select([col(&subject_row_index), col(SUBJECT_COL_NAME)]),
-                    [col(&subject_row_index)],
-                    [col(&subject_row_index)],
-                    JoinType::Inner.into(),
-                )
-                .unwrap()
-                .join(
-                    lookup_df
-                        .clone()
-                        .lazy()
-                        .rename([LOOKUP_COLUMN], [OBJECT_COL_NAME], true)
-                        .select([col(&object_row_index), col(OBJECT_COL_NAME)]),
-                    [col(&object_row_index)],
-                    [col(&object_row_index)],
-                    JoinType::Inner.into(),
-                )
-                .unwrap()
-                .select([col(SUBJECT_COL_NAME), col(OBJECT_COL_NAME)]);
-            out_df_map.insert(
-                nns.get(nn_idx as usize).unwrap().clone(),
-                lf.collect().unwrap(),
-            );
+            out_df_map.insert(nns.get(nn_idx as usize).unwrap().clone(), df);
         }
-        lookup_df = lookup_df
+        // Row i of the lookup table holds the value with key i.
+        let lookup_df = grouped
             .drop(&subject_row_index)
             .unwrap()
             .drop(&object_row_index)
-            .unwrap()
-            .unique::<(), ()>(None, UniqueKeepStrategy::Any, None)
             .unwrap();
         Ok((lookup_df, lookup_df_types, out_df_map))
     }

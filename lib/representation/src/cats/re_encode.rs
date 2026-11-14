@@ -31,8 +31,7 @@ impl CatReEnc {
         forget_others: bool,
     ) -> LazyFrame {
         if bt.is_lang_string() {
-            let move_bt1 = bt.clone();
-            let move_bt2 = bt.clone();
+            // Each field is a plain column of codes, so it is re-encoded as a single column.
             let self_clone = self.clone();
             lf = lf.with_column(
                 col(c)
@@ -43,11 +42,7 @@ impl CatReEnc {
                             .field_by_name(LANG_STRING_VALUE_FIELD)
                             .map(
                                 move |x| {
-                                    self_clone.clone().re_encode_column(
-                                        x,
-                                        move_bt1.clone(),
-                                        forget_others,
-                                    )
+                                    self_clone.clone().re_encode_single_column(x, forget_others)
                                 },
                                 |_, f| Ok(f.clone()),
                             )
@@ -56,13 +51,7 @@ impl CatReEnc {
                             .struct_()
                             .field_by_name(LANG_STRING_LANG_FIELD)
                             .map(
-                                move |x| {
-                                    self.clone().re_encode_column(
-                                        x,
-                                        move_bt2.clone(),
-                                        forget_others,
-                                    )
-                                },
+                                move |x| self.clone().re_encode_single_column(x, forget_others),
                                 |_, f| Ok(f.clone()),
                             )
                             .alias(LANG_STRING_LANG_FIELD),

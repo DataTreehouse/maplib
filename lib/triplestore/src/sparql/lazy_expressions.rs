@@ -3,11 +3,13 @@ use std::collections::HashMap;
 
 use crate::sparql::errors::SparqlError;
 use oxrdf::vocab::xsd;
+use oxrdf::NamedNode;
 use polars::prelude::IntoLazy;
 use query_processing::expressions::functions::func_expression::func_expression;
 use query_processing::expressions::{
-    binary_expression, bound, coalesce_contexts, effective_boolean_value, exists, if_expression,
-    in_expression, literal, named_node, not_expression, unary_minus, unary_plus, variable,
+    binary_expression, bound, can_use_in_iris, coalesce_contexts, effective_boolean_value, exists,
+    if_expression, in_expression, in_iris_expression, literal, named_node, not_expression,
+    unary_minus, unary_plus, variable,
 };
 use query_processing::pushdowns::Pushdowns;
 use representation::dataset::QueryGraph;
@@ -287,6 +289,24 @@ impl Triplestore {
                     query_settings,
                     dataset,
                 )?;
+                let iris: Option<Vec<&NamedNode>> = right
+                    .iter()
+                    .map(|e| match e {
+                        Expression::NamedNode(nn) => Some(nn),
+                        _ => None,
+                    })
+                    .collect();
+                if let Some(iris) = iris {
+                    if can_use_in_iris(&output_solution_mappings, &left_context) {
+                        return Ok(in_iris_expression(
+                            output_solution_mappings,
+                            &left_context,
+                            &iris,
+                            context,
+                            &cats,
+                        ));
+                    }
+                }
                 for i in 0..right.len() {
                     let expr = right.get(i).unwrap();
                     let expr_context = right_contexts.get(i).unwrap();
