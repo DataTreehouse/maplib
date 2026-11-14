@@ -18,4 +18,16 @@ impl VirtualizedPythonDatabase {
             "Contact Data Treehouse to try",
         ))
     }
+
+    #[staticmethod]
+    #[pyo3(name = "Cognite", signature = (client, resource_cognite_map=None))]
+    pub fn cognite(
+        client: Py<PyAny>,
+        resource_cognite_map: Option<Py<PyAny>>,
+    ) -> PyResult<VirtualizedPythonDatabase> {
+        let _ = (client, resource_cognite_map);
+        Err(PyNotImplementedError::new_err(
+            "Contact Data Treehouse to try",
+        ))
+    }
 }

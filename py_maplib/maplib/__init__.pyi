@@ -1535,3 +1535,27 @@ class VirtualizedDatabase:
         :param resource_sql_map: A dict providing a sqlalchemy Select for each resource.
         :param sql_dialect: The SQL dialect accepted by the query method.
         """
+
+    @staticmethod
+    def Cognite(client: Any,
+                resource_cognite_map: Optional[Dict[str, Dict[str, str]]] = None) -> "VirtualizedDatabase":
+        """
+        A virtualized database backed by time series in Cognite Data Fusion, queried with a cognite-sdk client.
+        The id of each time series in the knowledge graph is its external id (or its id or instance id, see below).
+        Time ranges in filters are sent to CDF as start and end, and grouping by
+        chrontext:FloorDateTimeToSecondsInterval with MIN, MAX, SUM, COUNT or AVG of the value uses CDF aggregates.
+        The rest of the query is evaluated on the retrieved datapoints.
+
+        Not available in the open source build: raises NotImplementedError.
+
+        Usage:
+
+        >>> from cognite.client import CogniteClient
+        >>> vdb = VirtualizedDatabase.Cognite(CogniteClient())
+        >>> m.add_virtualization(virtualized_database=vdb, resources={"my_resource": template})
+
+        :param client: A cognite.client.CogniteClient.
+        :param resource_cognite_map: Optional settings per resource: "id_type" is "external_id" (default), "id" or
+            "instance_id" (written as "space:externalId"), and "timestamp" and "value" name the template parameters
+            holding the timestamp and the value (default "timestamp" and "value").
+        """
