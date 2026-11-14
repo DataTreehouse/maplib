@@ -165,6 +165,7 @@ class AggregateExpression:
     """
     name: str
     expression: Optional[Expression]
+    distinct: bool
     separator: Optional[str]
 
 

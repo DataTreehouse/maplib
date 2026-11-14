@@ -1590,18 +1590,33 @@ class VirtualizedDatabase:
     def __init__(self,
                  database: Any,
                  resource_sql_map: Optional[Dict[str, Any]] = None,
-                 sql_dialect: Optional[LiteralType["postgres", "bigquery", "databricks"]] = None):
+                 sql_dialect: Optional[Union[LiteralType["duckdb", "snowflake", "bigquery", "databricks", "postgres"], Any]] = None):
         """
-        See the tutorial in README.md for guidance on how to use this class.
-        This API is subject to change, it will be possible to specify what parts of the SPARQL query may be pushed down into the database.
+        Virtualize a database, so that SPARQL queries over the resources it holds are pushed down to it.
+
+        The databases in maplib.virtualization (DuckDBDatabase, SnowflakeDatabase, BigQueryDatabase and
+        DatabricksDatabase) are ready to use, and know their SQL dialect:
+
+        >>> from maplib.virtualization import SnowflakeDatabase
+        >>> vdb = VirtualizedDatabase(
+        ...     SnowflakeDatabase(account="...", user="...", warehouse="...", database="...", schema="..."),
+        ...     resource_sql_map={"my_resource": "SELECT sensor_id AS id, ts AS timestamp, value FROM readings"},
+        ... )
+        >>> m.add_virtualization(vdb, resources={"my_resource": my_template})
+
+        Any object with a query method that takes an SQL string and returns a polars DataFrame works as the
+        database, given the sql_dialect.
         For advanced use, the resource_sql_map may be omitted, in which case the VirtualizedQuery will be provided to the query method.
         The user must then translate this VirtualizedQuery (built on SPARQL Algebra) to the target query language.
 
         Not available in the open source build: raises NotImplementedError.
 
-        :param database: An instance of a class containing a query method.
-        :param resource_sql_map: A dict providing a sqlalchemy Select for each resource.
-        :param sql_dialect: The SQL dialect accepted by the query method.
+        :param database: An object with a query method.
+        :param resource_sql_map: For each resource, the SQL that gives its rows: an SQL string, an sqlalchemy Table or an sqlalchemy Select.
+            It must have an id column, and a column for each of the other parameters of the resource's template.
+        :param sql_dialect: The SQL dialect accepted by the query method: one of "duckdb", "snowflake", "bigquery",
+            "databricks" and "postgres", or an instance of an SQLDialect from maplib.virtualization to customize the SQL.
+            Defaults to the sql_dialect attribute of the database.
         """
 
     @staticmethod

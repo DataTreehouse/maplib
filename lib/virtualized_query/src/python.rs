@@ -651,6 +651,7 @@ impl PyOrderExpression {
 pub struct PyAggregateExpression {
     pub function: AggregateFunction,
     pub expression: Option<Py<PyExpression>>,
+    pub distinct: bool,
 }
 
 impl PyAggregateExpression {
@@ -659,13 +660,19 @@ impl PyAggregateExpression {
         py: Python,
     ) -> PyResult<PyAggregateExpression> {
         Ok(match aggregate_expression {
-            AggregateExpression::CountSolutions { .. } => PyAggregateExpression {
+            AggregateExpression::CountSolutions { distinct } => PyAggregateExpression {
                 function: AggregateFunction::Count,
                 expression: None,
+                distinct: *distinct,
             },
-            AggregateExpression::FunctionCall { name, expr, .. } => PyAggregateExpression {
+            AggregateExpression::FunctionCall {
+                name,
+                expr,
+                distinct,
+            } => PyAggregateExpression {
                 function: name.clone(),
                 expression: Some(Py::new(py, PyExpression::new(expr, py)?)?),
+                distinct: *distinct,
             },
         })
     }
@@ -681,6 +688,11 @@ impl PyAggregateExpression {
     #[getter]
     fn expression(&self) -> Option<Py<PyExpression>> {
         self.expression.clone()
+    }
+
+    #[getter]
+    fn distinct(&self) -> bool {
+        self.distinct
     }
 
     #[getter]

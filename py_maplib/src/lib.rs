@@ -221,6 +221,7 @@ fn _maplib(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
         py.get_type::<FunctionArgumentException>(),
     )?;
     m.add_class::<VirtualizedPythonDatabase>()?;
+    virtualization::python::register_python_modules(py, m)?;
     //m.add_class::<PyFlightClient>()?;
 
     let child = PyModule::new(m.py(), "vq")?;

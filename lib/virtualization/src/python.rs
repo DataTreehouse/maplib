@@ -11,7 +11,7 @@ impl VirtualizedPythonDatabase {
     pub fn new(
         database: Py<PyAny>,
         resource_sql_map: Option<Py<PyAny>>,
-        sql_dialect: Option<String>,
+        sql_dialect: Option<Py<PyAny>>,
     ) -> PyResult<VirtualizedPythonDatabase> {
         let _ = (database, resource_sql_map, sql_dialect);
         Err(PyNotImplementedError::new_err(
@@ -30,4 +30,16 @@ impl VirtualizedPythonDatabase {
             "Contact Data Treehouse to try",
         ))
     }
+}
+
+/// Add a maplib.virtualization module that explains that virtualization is not in this build.
+pub fn register_python_modules(py: Python<'_>, parent: &Bound<'_, PyModule>) -> PyResult<()> {
+    let module = PyModule::from_code(
+        py,
+        c"def __getattr__(name):\n    if name.startswith('__'):\n        raise AttributeError(name)\n    raise NotImplementedError('Contact Data Treehouse to try')\n",
+        c"maplib/virtualization.py",
+        c"maplib.virtualization",
+    )?;
+    parent.setattr("virtualization", &module)?;
+    Ok(())
 }
