@@ -43,14 +43,19 @@ def test_typed_template_iris(templates):
     assert templates[EX + "Dog_notype"].iri.iri == EX + "Dog_notype"
 
 
+def _local(name):
+    # Parameters are named by the prefixed IRI of the property, e.g. ns1:barkVolume
+    return name.split(":")[-1]
+
+
 def test_parameters(templates):
-    dog_params = {p.variable.name: p for p in templates[EX + "Dog"].parameters}
+    dog_params = {_local(p.variable.name): p for p in templates[EX + "Dog"].parameters}
     assert dog_params["id"].optional is False
     for name in ["barkVolume", "owner", "name"]:
         assert name in dog_params
         assert dog_params[name].optional is True
 
-    animal_params = {p.variable.name for p in templates[EX + "Animal"].parameters}
+    animal_params = {_local(p.variable.name) for p in templates[EX + "Animal"].parameters}
     assert animal_params == {"id", "name"}
 
 
@@ -62,17 +67,14 @@ def test_map_generated_templates():
     m = Model()
     for t in templates.values():
         m.add_template(t)
-    m.map(
-        EX + "Dog",
-        pl.DataFrame(
-            {
-                "id": [EX + "rex", EX + "fido"],
-                "name": ["Rex", "Fido"],
-                "barkVolume": [10, None],
-                "owner": [EX + "alice", None],
-            }
-        ),
-    )
+    columns = {
+        "id": [EX + "rex", EX + "fido"],
+        "name": ["Rex", "Fido"],
+        "barkVolume": [10, None],
+        "owner": [EX + "alice", None],
+    }
+    names = {_local(p.variable.name): p.variable.name for p in templates[EX + "Dog"].parameters}
+    m.map(EX + "Dog", pl.DataFrame({names[k]: v for k, v in columns.items()}))
     df = m.query(
         f"""
         PREFIX ex: <{EX}>
