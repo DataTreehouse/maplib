@@ -1,0 +1,30 @@
+@prefix csvw: <http://www.w3.org/ns/csvw#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+ [
+    a csvw:TableGroup;
+    csvw:table [
+      a csvw:Table;
+      rdfs:label "date format (valid dateTime combinations with formats)";
+      rdfs:comment "The supported date and time formats listed here are expressed in terms of the date field symbols defined in [UAX35] and MUST be interpreted by implementations as defined in that specification.";
+      csvw:row [
+        a csvw:Row;
+        csvw:describes [
+          <test190.csv#d%2DM%2Dyyyy%20HHmm> "2015-03-15T15:02:00"^^xsd:dateTime;
+          <test190.csv#d%2DM%2Dyyyy%20HHmm%20X> "2015-03-15T15:02:00Z"^^xsd:dateTime;
+          <test190.csv#dd%2DMM%2Dyyyy%20HH%3Amm> "2015-03-15T15:02:00"^^xsd:dateTime;
+          <test190.csv#yyyy%2DMM%2Ddd%20HH%3Amm%3Ass> "2015-03-15T15:02:37"^^xsd:dateTime;
+          <test190.csv#yyyy%2DMM%2Ddd%20HH%3Amm%3Ass%20X> "2015-03-15T15:02:37+08:00"^^xsd:dateTimeStamp;
+          <test190.csv#yyyy%2DMM%2DddTHH%3Amm> "2015-03-15T15:02:00"^^xsd:dateTime;
+          <test190.csv#yyyy%2DMM%2DddTHH%3Amm%3Ass> "2015-03-15T15:02:37"^^xsd:dateTime;
+          <test190.csv#yyyy%2DMM%2DddTHH%3Amm%3AssXXX> "2015-03-15T15:02:37-05:00"^^xsd:dateTime;
+          <test190.csv#yyyyMMdd%20HHmmss> "2015-03-15T15:02:37"^^xsd:dateTime
+        ];
+        csvw:rownum 1;
+        csvw:url <test190.csv#row=2>
+      ];
+      csvw:url <test190.csv>
+    ]
+ ] .

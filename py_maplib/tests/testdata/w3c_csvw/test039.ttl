@@ -1,0 +1,30 @@
+@prefix : <test039.csv#> .
+@prefix csvw: <http://www.w3.org/ns/csvw#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<test039.csv#modelrow=1> <test039.csv#col=aboutUrl> "about"@en .
+
+<test039.csv#row=1> <test039.csv#COL=propertyUrl> "prop"@en;
+   <test039.csv#col=datatype> "string"^^xsd:normalizedString;
+   <test039.csv#col=default> "def"@en;
+   <test039.csv#col=lang> "en"@en-US;
+   <test039.csv#col=null> "empty"@en;
+   <test039.csv#col=ordered> "true"@en;
+   <test039.csv#col=separator> "-"@en;
+   <test039.csv#col=textDirection> "ltr"@en;
+   <test039.csv#col=valueUrl> rdf:value .
+
+ [
+    a csvw:TableGroup;
+    csvw:table [
+      a csvw:Table;
+      csvw:row [
+        a csvw:Row;
+        csvw:describes <test039.csv#row=1>, <test039.csv#modelrow=1>;
+        csvw:rownum 1;
+        csvw:url <test039.csv#row=2>
+      ];
+      csvw:url <test039.csv>
+    ]
+ ] .

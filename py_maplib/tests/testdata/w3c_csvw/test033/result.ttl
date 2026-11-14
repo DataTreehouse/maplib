@@ -1,0 +1,30 @@
+@prefix : <events-listing.csv#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix schema: <http://schema.org/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+:event-1 a schema:MusicEvent;
+   schema:location :place-1;
+   schema:name "B.B. King";
+   schema:offers :offer-1;
+   schema:startDate "2014-04-12T19:30:00"^^xsd:dateTime .
+
+:event-2 a schema:MusicEvent;
+   schema:location :place-2;
+   schema:name "B.B. King";
+   schema:offers :offer-2;
+   schema:startDate "2014-04-13T20:00:00"^^xsd:dateTime .
+
+:offer-1 a schema:Offer;
+   schema:url "https://www.etix.com/ticket/1771656"^^xsd:anyURI .
+
+:offer-2 a schema:Offer;
+   schema:url "http://frontgatetickets.com/venue.php?id=11766"^^xsd:anyURI .
+
+:place-1 a schema:Place;
+   schema:address "79 Washington St., Providence, RI";
+   schema:name "Lupo’s Heartbreak Hotel" .
+
+:place-2 a schema:Place;
+   schema:address "Lynn, MA, 01901";
+   schema:name "Lynn Auditorium" .

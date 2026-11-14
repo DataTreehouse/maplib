@@ -1,0 +1,83 @@
+@prefix : <tree-ops-ext.csv#> .
+@prefix csvw: <http://www.w3.org/ns/csvw#> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix dcat: <http://www.w3.org/ns/dcat#> .
+@prefix oa: <http://www.w3.org/ns/oa#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix schema: <http://schema.org/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<http://example.org/tree-ops-ext#gid-1> :dbh 11;
+   :inventory_date "2010-10-18"^^xsd:date;
+   :kml "<Point><coordinates>-122.156485,37.440963</coordinates></Point>"^^rdf:XMLLiteral;
+   :on_street "ADDISON AV";
+   :protected false;
+   :species "Celtis australis";
+   :trim_cycle "Large Tree Routine Prune"@en .
+
+<http://example.org/tree-ops-ext#gid-2> :dbh 11;
+   :inventory_date "2010-06-02"^^xsd:date;
+   :kml "<Point><coordinates>-122.156749,37.440958</coordinates></Point>"^^rdf:XMLLiteral;
+   :on_street "EMERSON ST";
+   :protected false;
+   :species "Liquidambar styraciflua";
+   :trim_cycle "Large Tree Routine Prune"@en .
+
+<http://example.org/tree-ops-ext#gid-6> :comments "cavity or decay"^^xsd:normalizedString,
+     "trunk decay"^^xsd:normalizedString,
+     "codominant leaders"^^xsd:normalizedString,
+     "included bark"^^xsd:normalizedString,
+     "large leader or limb decay"^^xsd:normalizedString,
+     "previous failure root damage"^^xsd:normalizedString,
+     "root decay"^^xsd:normalizedString,
+     "beware of BEES"^^xsd:normalizedString;
+   :dbh 29;
+   :inventory_date "2010-06-01"^^xsd:date;
+   :kml "<Point><coordinates>-122.156299,37.441151</coordinates></Point>"^^rdf:XMLLiteral;
+   :on_street "ADDISON AV";
+   :protected true;
+   :species "Robinia pseudoacacia";
+   :trim_cycle "Large Tree Routine Prune"@en .
+
+<http://example.org/tree-ops-ext> a csvw:Table;
+   dc:title "Tree Operations"@en;
+   dcat:keyword "tree"@en,
+     "street"@en,
+     "maintenance"@en;
+   dc:license <http://opendefinition.org/licenses/cc-by/>;
+   dc:modified "2010-12-31"^^xsd:date;
+   dc:publisher [
+     schema:name "Example Municipality"@en;
+     schema:url <http://example.org>
+   ];
+   csvw:note [
+     a oa:Annotation;
+     oa:hasBody [
+       a oa:EmbeddedContent;
+       dc:format "text/plain";
+       rdf:value "This is a very interesting comment about the table; it's a table!"@en
+     ];
+     oa:hasTarget <http://example.org/tree-ops-ext>
+   ];
+   csvw:row [
+      a csvw:Row;
+     csvw:describes <http://example.org/tree-ops-ext#gid-1>;
+     csvw:rownum 1;
+     csvw:url <tree-ops-ext.csv#row=2>
+   ],  [
+      a csvw:Row;
+     csvw:describes <http://example.org/tree-ops-ext#gid-2>;
+     csvw:rownum 2;
+     csvw:url <tree-ops-ext.csv#row=3>
+   ],  [
+      a csvw:Row;
+     csvw:describes <http://example.org/tree-ops-ext#gid-6>;
+     csvw:rownum 3;
+     csvw:url <tree-ops-ext.csv#row=4>
+   ];
+   csvw:url <tree-ops-ext.csv> .
+
+ [
+    a csvw:TableGroup;
+    csvw:table <http://example.org/tree-ops-ext>
+ ] .

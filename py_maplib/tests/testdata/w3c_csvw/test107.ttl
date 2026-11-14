@@ -1,0 +1,36 @@
+@prefix csvw: <http://www.w3.org/ns/csvw#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+ [
+    a csvw:TableGroup;
+    csvw:table [
+      a csvw:Table;
+      rdfs:comment "tableSchema with invalid value MUST act as if it was an empty object";
+      csvw:row [
+        a csvw:Row;
+        csvw:describes [
+          <tree-ops.csv#_col.1> "1";
+          <tree-ops.csv#_col.2> "ADDISON AV";
+          <tree-ops.csv#_col.3> "Celtis australis";
+          <tree-ops.csv#_col.4> "Large Tree Routine Prune";
+          <tree-ops.csv#_col.5> "10/18/2010"
+        ];
+        csvw:rownum 1;
+        csvw:url <tree-ops.csv#row=2>
+      ],  [
+        a csvw:Row;
+        csvw:describes [
+          <tree-ops.csv#_col.1> "2";
+          <tree-ops.csv#_col.2> "EMERSON ST";
+          <tree-ops.csv#_col.3> "Liquidambar styraciflua";
+          <tree-ops.csv#_col.4> "Large Tree Routine Prune";
+          <tree-ops.csv#_col.5> "6/2/2010"
+        ];
+        csvw:rownum 2;
+        csvw:url <tree-ops.csv#row=3>
+      ];
+      csvw:url <tree-ops.csv>
+    ]
+ ] .

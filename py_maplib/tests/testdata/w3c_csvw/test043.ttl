@@ -1,0 +1,28 @@
+@prefix csvw: <http://www.w3.org/ns/csvw#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+ [
+    a csvw:TableGroup;
+    csvw:table [
+      a csvw:Table;
+      csvw:row [
+        a csvw:Row;
+        csvw:describes [
+          <test043.csv#aboutUrl> "about";
+          <test043.csv#datatype> "string";
+          <test043.csv#default> "def";
+          <test043.csv#lang> "en";
+          <test043.csv#null> "empty";
+          <test043.csv#ordered> "true";
+          <test043.csv#propertyUrl> "prop";
+          <test043.csv#separator> "-";
+          <test043.csv#textDirection> "ltr";
+          <test043.csv#valueUrl> "value"
+        ];
+        csvw:rownum 1;
+        csvw:url <test043.csv#row=2>
+      ];
+      csvw:url <test043.csv>
+    ]
+ ] .

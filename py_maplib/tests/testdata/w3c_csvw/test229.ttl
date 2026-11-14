@@ -1,0 +1,22 @@
+@prefix csvw: <http://www.w3.org/ns/csvw#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+ [
+    a csvw:TableGroup;
+    csvw:table [
+      a csvw:Table;
+      rdfs:label "matching minLength with separator";
+      rdfs:comment "If the value is a list, the constraint applies to each element of the list.";
+      csvw:row [
+        a csvw:Row;
+        csvw:describes [ <test229.csv#list> "a"^^xsd:NMTOKEN,
+            "bb"^^xsd:NMTOKEN,
+            "ccc"^^xsd:NMTOKEN];
+        csvw:rownum 1;
+        csvw:url <test229.csv#row=2>
+      ];
+      csvw:url <test229.csv>
+    ]
+ ] .

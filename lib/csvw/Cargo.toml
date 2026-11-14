@@ -1,0 +1,19 @@
+[package]
+name = "csvw"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+triplestore = { path = "../triplestore" }
+representation = { path = "../representation" }
+
+oxrdf.workspace = true
+oxiri.workspace = true
+oxilangtag.workspace = true
+polars = { workspace = true, features = ["lazy", "dtype-full", "strings"] }
+serde_json.workspace = true
+regex.workspace = true
+thiserror.workspace = true
+uuid.workspace = true
+tracing.workspace = true

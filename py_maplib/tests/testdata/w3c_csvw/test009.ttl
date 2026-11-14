@@ -1,0 +1,46 @@
+@prefix : <test009.csv#> .
+@prefix csvw: <http://www.w3.org/ns/csvw#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+ [
+    a csvw:TableGroup;
+    csvw:table [
+      a csvw:Table;
+      csvw:row [
+        a csvw:Row;
+        csvw:describes [
+          :GID "1";
+          :Inventory%20Date "10/18/2010";
+          :On%20Street "ADDISON AV";
+          :Species "Celtis australis";
+          :Trim%20Cycle "Large Tree Routine Prune"
+        ];
+        csvw:rownum 1;
+        csvw:url <test009.csv#row=2>
+      ],  [
+        a csvw:Row;
+        csvw:describes [
+          :GID "2";
+          :Inventory%20Date "6/2/2010";
+          :On%20Street "EMERSON ST";
+          :Species "Liquidambar styraciflua";
+          :Trim%20Cycle "Large Tree Routine Prune"
+        ];
+        csvw:rownum 2;
+        csvw:url <test009.csv#row=3>
+      ],  [
+        a csvw:Row;
+        csvw:describes [
+          :GID "3";
+          :Inventory%20Date "6/2/2010";
+          :On%20Street "EMERSON ST";
+          :Species "Liquidambar styraciflua";
+          :Trim%20Cycle "Large Tree Routine Prune"
+        ];
+        csvw:rownum 3;
+        csvw:url <test009.csv#row=4>
+      ];
+      csvw:url <test009.csv>
+    ]
+ ] .

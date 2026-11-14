@@ -1,0 +1,14 @@
+@prefix : <tree-ops.csv#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+:gid-1 :GID "1";
+   :inventory_date "2010-10-18"^^xsd:date;
+   :on_street "ADDISON AV";
+   :species "Celtis australis";
+   :trim_cycle "Large Tree Routine Prune" .
+
+:gid-2 :GID "2";
+   :inventory_date "2010-06-02"^^xsd:date;
+   :on_street "EMERSON ST";
+   :species "Liquidambar styraciflua";
+   :trim_cycle "Large Tree Routine Prune" .

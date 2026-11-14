@@ -1,0 +1,20 @@
+@prefix csvw: <http://www.w3.org/ns/csvw#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+ [
+    a csvw:TableGroup;
+    csvw:table [
+      a csvw:Table;
+      rdfs:label "`@base` set in `@context` overriding eg CSV location";
+      rdfs:comment "If present, its value MUST be a string that is interpreted as a URL which is resolved against the location of the metadata document to provide the **base URL** for other URLs in the metadata document.";
+      csvw:row [
+        a csvw:Row;
+        csvw:describes [ <http://www.w3.org/2013/csvw/tests/test273/action.csv#name> "Foo"];
+        csvw:rownum "1"^^xsd:integer;
+        csvw:url <http://www.w3.org/2013/csvw/tests/test273/action.csv#row=2>
+      ];
+      csvw:url <http://www.w3.org/2013/csvw/tests/test273/action.csv>
+    ]
+ ] .

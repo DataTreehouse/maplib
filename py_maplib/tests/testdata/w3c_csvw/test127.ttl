@@ -1,0 +1,54 @@
+@prefix csvw: <http://www.w3.org/ns/csvw#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+ [
+    a csvw:TableGroup;
+    rdfs:comment "if TM is not compatible with EM validators MUST raise an error, other processors MUST generate a warning and continue processing";
+    csvw:table [
+      a csvw:Table;
+      csvw:row [
+        a csvw:Row;
+        csvw:describes [
+          <test127.csv#Family%20Name> "Simpson";
+          <test127.csv#Surname> "Homer"
+        ];
+        csvw:rownum 1;
+        csvw:url <test127.csv#row=2>
+      ],  [
+        a csvw:Row;
+        csvw:describes [
+          <test127.csv#Family%20Name> "Simpson";
+          <test127.csv#Surname> "Marge"
+        ];
+        csvw:rownum 2;
+        csvw:url <test127.csv#row=3>
+      ],  [
+        a csvw:Row;
+        csvw:describes [
+          <test127.csv#Family%20Name> "Simpson";
+          <test127.csv#Surname> "Bart"
+        ];
+        csvw:rownum 3;
+        csvw:url <test127.csv#row=4>
+      ],  [
+        a csvw:Row;
+        csvw:describes [
+          <test127.csv#Family%20Name> "Simpson";
+          <test127.csv#Surname> "Lisa"
+        ];
+        csvw:rownum 4;
+        csvw:url <test127.csv#row=5>
+      ],  [
+        a csvw:Row;
+        csvw:describes [
+          <test127.csv#Family%20Name> "Simpson";
+          <test127.csv#Surname> "Maggie"
+        ];
+        csvw:rownum 5;
+        csvw:url <test127.csv#row=6>
+      ];
+      csvw:url <test127.csv>
+    ]
+ ] .

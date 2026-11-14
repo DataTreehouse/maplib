@@ -1,0 +1,24 @@
+@prefix csvw: <http://www.w3.org/ns/csvw#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+ [
+    a csvw:TableGroup;
+    csvw:table [
+      a csvw:Table;
+      rdfs:label "number format (value not matching format)";
+      rdfs:comment "If the datatype format annotation is a single string, this is interpreted in the same way as if it were an object with a pattern property whose value is that string.";
+      csvw:row [
+        a csvw:Row;
+        csvw:describes [
+          <test157.csv#decimal> "10.10";
+          <test157.csv#double> "10.10e10";
+          <test157.csv#integer> "10.1"
+        ];
+        csvw:rownum 1;
+        csvw:url <test157.csv#row=2>
+      ];
+      csvw:url <test157.csv>
+    ]
+ ] .

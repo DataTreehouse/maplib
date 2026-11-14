@@ -1,0 +1,46 @@
+@prefix : <events-listing.csv#> .
+@prefix csvw: <http://www.w3.org/ns/csvw#> .
+@prefix schema: <http://schema.org/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+_:95cc7970-ce99-44b0-900c-e2c2c028bbd3 a csvw:TableGroup ;
+  csvw:table [ a csvw:Table ;
+    csvw:url <events-listing.csv> ;
+    csvw:row [
+      a csvw:Row;
+      csvw:rownum 1 ;
+      csvw:url <events-listing.csv#row=2> ;
+      csvw:describes :event-1, :place-1, :offer-1
+    ], [
+      a csvw:Row;
+      csvw:rownum 2 ;
+      csvw:url <events-listing.csv#row=3> ;
+      csvw:describes :event-2, :place-2, :offer-2
+    ]
+  ] .
+
+:event-1 a schema:MusicEvent ;
+  schema:name "B.B. King" ;
+  schema:startDate "2014-04-12T19:30:00"^^xsd:dateTime ;
+  schema:location :place-1 ;
+  schema:offers :offer-1 .
+
+:place-1 a schema:Place ;
+  schema:name "Lupo’s Heartbreak Hotel" ;
+  schema:address "79 Washington St., Providence, RI" .
+
+:offer-1 a schema:Offer ;
+  schema:url "https://www.etix.com/ticket/1771656"^^xsd:anyURI .
+
+:event-2 a schema:MusicEvent ;
+  schema:name "B.B. King" ;
+  schema:startDate "2014-04-13T20:00:00"^^xsd:dateTime ;
+  schema:location :place-2 ;
+  schema:offers :offer-2 .
+
+:place-2 a schema:Place ;
+  schema:name "Lynn Auditorium" ;
+  schema:address "Lynn, MA, 01901" .
+
+:offer-2 a schema:Offer ;
+  schema:url "http://frontgatetickets.com/venue.php?id=11766"^^xsd:anyURI .

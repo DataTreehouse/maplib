@@ -1,0 +1,96 @@
+@prefix csvw: <http://www.w3.org/ns/csvw#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+ [
+    a csvw:TableGroup;
+    csvw:table [
+      a csvw:Table;
+      rdfs:label "duration format (valid combinations)";
+      rdfs:comment "If the datatype base is a duration type, the datatype format annotation provides a regular expression for the string values.";
+      csvw:row [
+        a csvw:Row;
+        csvw:describes [
+          <test194.csv#dayTimeDuration> "P1DT2H";
+          <test194.csv#duration> "PT130S";
+          <test194.csv#yearMonthDuration> "P0Y20M"
+        ];
+        csvw:rownum 1;
+        csvw:url <test194.csv#row=2>
+      ],  [
+        a csvw:Row;
+        csvw:describes [
+          <test194.csv#dayTimeDuration> "P1DT2H3M";
+          <test194.csv#duration> "PT130M";
+          <test194.csv#yearMonthDuration> "P0Y20M"
+        ];
+        csvw:rownum 2;
+        csvw:url <test194.csv#row=3>
+      ],  [
+        a csvw:Row;
+        csvw:describes [
+          <test194.csv#dayTimeDuration> "P1DT2H3S";
+          <test194.csv#duration> "PT130H";
+          <test194.csv#yearMonthDuration> "P0Y20M"
+        ];
+        csvw:rownum 3;
+        csvw:url <test194.csv#row=4>
+      ],  [
+        a csvw:Row;
+        csvw:describes [
+          <test194.csv#dayTimeDuration> "P1DT2M";
+          <test194.csv#duration> "P130D";
+          <test194.csv#yearMonthDuration> "P0Y20M"
+        ];
+        csvw:rownum 4;
+        csvw:url <test194.csv#row=5>
+      ],  [
+        a csvw:Row;
+        csvw:describes [
+          <test194.csv#dayTimeDuration> "P1DT2S";
+          <test194.csv#duration> "P130M";
+          <test194.csv#yearMonthDuration> "P0Y20M"
+        ];
+        csvw:rownum 5;
+        csvw:url <test194.csv#row=6>
+      ],  [
+        a csvw:Row;
+        csvw:describes [
+          <test194.csv#dayTimeDuration> "P1DT2H";
+          <test194.csv#duration> "P130Y";
+          <test194.csv#yearMonthDuration> "P0Y20M"
+        ];
+        csvw:rownum 6;
+        csvw:url <test194.csv#row=7>
+      ],  [
+        a csvw:Row;
+        csvw:describes [
+          <test194.csv#dayTimeDuration> "P1DT2H";
+          <test194.csv#duration> "PT2M10S";
+          <test194.csv#yearMonthDuration> "P0Y20M"
+        ];
+        csvw:rownum 7;
+        csvw:url <test194.csv#row=8>
+      ],  [
+        a csvw:Row;
+        csvw:describes [
+          <test194.csv#dayTimeDuration> "P0DT2H";
+          <test194.csv#duration> "P0Y20M0D";
+          <test194.csv#yearMonthDuration> "P1Y20M"
+        ];
+        csvw:rownum 8;
+        csvw:url <test194.csv#row=9>
+      ],  [
+        a csvw:Row;
+        csvw:describes [
+          <test194.csv#dayTimeDuration> "-P1DT2H";
+          <test194.csv#duration> "-P60D";
+          <test194.csv#yearMonthDuration> "-P0Y20M"
+        ];
+        csvw:rownum 9;
+        csvw:url <test194.csv#row=10>
+      ];
+      csvw:url <test194.csv>
+    ]
+ ] .

@@ -7,6 +7,7 @@ members = [
     "lib/representation",
     "lib/maplib",
     "lib/triplestore",
+    "lib/csvw",
     "lib/file_io",
     "lib/query_processing",
     "lib/spargebra",

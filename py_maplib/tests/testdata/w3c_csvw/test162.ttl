@@ -1,0 +1,20 @@
+@prefix csvw: <http://www.w3.org/ns/csvw#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+ [
+    a csvw:TableGroup;
+    csvw:table [
+      a csvw:Table;
+      rdfs:label "numeric format (consecutive groupChar)";
+      rdfs:comment "Implementations MUST add a validation error to the errors annotation for the cell if the string being parsed contains two consecutive groupChar strings.";
+      csvw:row [
+        a csvw:Row;
+        csvw:describes [ <test162.csv#decimal> "123,,456.789"];
+        csvw:rownum 1;
+        csvw:url <test162.csv#row=2>
+      ];
+      csvw:url <test162.csv>
+    ]
+ ] .

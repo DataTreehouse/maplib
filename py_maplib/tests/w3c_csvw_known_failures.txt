@@ -1,0 +1,9 @@
+# W3C CSVW RDF tests that maplib currently fails (used by test_w3c_csvw.py).
+# One test id per line, optionally followed by "# reason".
+# These are marked as strict xfails: when a test starts passing, remove it from this list.
+test014 # metadata linked with an HTTP Link header, maplib does not fetch documents over HTTP
+test016 # metadata linked with an HTTP Link header, maplib does not fetch documents over HTTP
+test120 # metadata linked with an HTTP Link header, maplib does not fetch documents over HTTP
+test122 # metadata linked with an HTTP Link header, maplib does not fetch documents over HTTP
+test187 # maplib can not store xsd:date values with time zones, they are output as strings
+test188 # maplib can not store xsd:date values with time zones, they are output as strings

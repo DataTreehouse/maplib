@@ -1,0 +1,75 @@
+@prefix csvw: <http://www.w3.org/ns/csvw#> .
+@prefix geo: <http://www.geonames.org/ontology#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix schema: <http://schema.org/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<http://example.org/countries.csv#AD> schema:latitude "42.546245"^^xsd:double;
+   schema:longitude "1.601554"^^xsd:double;
+   schema:name "Andorra";
+   geo:countryCode "AD" .
+
+<http://example.org/countries.csv#AE> schema:latitude "23.424076"^^xsd:double;
+   schema:longitude "53.847818"^^xsd:double;
+   schema:name "United Arab Emirates";
+   geo:countryCode "AE" .
+
+<http://example.org/countries.csv#AF> schema:latitude "33.93911"^^xsd:double;
+   schema:longitude "67.709953"^^xsd:double;
+   schema:name "Afghanistan";
+   geo:countryCode "AF" .
+
+ [
+    a csvw:TableGroup;
+    csvw:table [
+      a csvw:Table;
+      csvw:row [
+        a csvw:Row;
+        csvw:describes <http://example.org/countries.csv#AD>;
+        csvw:rownum 1;
+        csvw:url <countries.csv#row=2>
+      ],  [
+        a csvw:Row;
+        csvw:describes <http://example.org/countries.csv#AE>;
+        csvw:rownum 2;
+        csvw:url <countries.csv#row=3>
+      ],  [
+        a csvw:Row;
+        csvw:describes <http://example.org/countries.csv#AF>;
+        csvw:rownum 3;
+        csvw:url <countries.csv#row=4>
+      ];
+      csvw:url <countries.csv>
+    ],  [
+      a csvw:Table;
+      csvw:row [
+        a csvw:Row;
+        csvw:describes [
+          <country_slice.csv#countryRef> <http://example.org/countries.csv#AF>;
+          <country_slice.csv#population> 9616353;
+          <country_slice.csv#year> "1960"^^xsd:gYear
+        ];
+        csvw:rownum 1;
+        csvw:url <country_slice.csv#row=2>
+      ],  [
+        a csvw:Row;
+        csvw:describes [
+          <country_slice.csv#countryRef> <http://example.org/countries.csv#AF>;
+          <country_slice.csv#population> 9799379;
+          <country_slice.csv#year> "1961"^^xsd:gYear
+        ];
+        csvw:rownum 2;
+        csvw:url <country_slice.csv#row=3>
+      ],  [
+        a csvw:Row;
+        csvw:describes [
+          <country_slice.csv#countryRef> <http://example.org/countries.csv#AF>;
+          <country_slice.csv#population> 9989846;
+          <country_slice.csv#year> "1962"^^xsd:gYear
+        ];
+        csvw:rownum 3;
+        csvw:url <country_slice.csv#row=4>
+      ];
+      csvw:url <country_slice.csv>
+    ]
+ ] .

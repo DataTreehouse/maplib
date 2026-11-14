@@ -1,0 +1,35 @@
+@prefix csvw: <http://www.w3.org/ns/csvw#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+ [
+    a csvw:TableGroup;
+    csvw:table [
+      a csvw:Table;
+      rdfs:label "Unicode in non-Normalized form";
+      rdfs:comment "No Unicode normalization (as specified in [[UAX15]]) is applied to these string values.";
+      csvw:row [
+        a csvw:Row;
+        csvw:describes [
+          <test248.csv#characters> "Å";
+          <test248.csv#codepoints> "212B";
+          <test248.csv#description> "a-with-ring";
+          <test248.csv#nfc> "00C5"
+        ];
+        csvw:rownum 1;
+        csvw:url <test248.csv#row=2>
+      ],  [
+        a csvw:Row;
+        csvw:describes [
+          <test248.csv#characters> "ḍ̇";
+          <test248.csv#codepoints> "1E0B 0323";
+          <test248.csv#description> "combining marks";
+          <test248.csv#nfc> "1E0D 0307"
+        ];
+        csvw:rownum 2;
+        csvw:url <test248.csv#row=3>
+      ];
+      csvw:url <test248.csv>
+    ]
+ ] .

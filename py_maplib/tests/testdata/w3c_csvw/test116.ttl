@@ -1,0 +1,43 @@
+@prefix csvw: <http://www.w3.org/ns/csvw#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+ [
+    a csvw:TableGroup;
+    csvw:table [
+      a csvw:Table;
+      csvw:row [
+        a csvw:Row;
+        csvw:describes [
+          <test116.csv?query#countryCode> "AD";
+          <test116.csv?query#latitude> "42.546245";
+          <test116.csv?query#longitude> "1.601554";
+          <test116.csv?query#name> "Andorra"
+        ];
+        csvw:rownum 1;
+        csvw:url <test116.csv?query#row=2>
+      ],  [
+        a csvw:Row;
+        csvw:describes [
+          <test116.csv?query#countryCode> "AE";
+          <test116.csv?query#latitude> "23.424076";
+          <test116.csv?query#longitude> "53.847818";
+          <test116.csv?query#name> "United Arab Emirates"
+        ];
+        csvw:rownum 2;
+        csvw:url <test116.csv?query#row=3>
+      ],  [
+        a csvw:Row;
+        csvw:describes [
+          <test116.csv?query#countryCode> "AF";
+          <test116.csv?query#latitude> "33.93911";
+          <test116.csv?query#longitude> "67.709953";
+          <test116.csv?query#name> "Afghanistan"
+        ];
+        csvw:rownum 3;
+        csvw:url <test116.csv?query#row=4>
+      ];
+      csvw:url <test116.csv?query>
+    ]
+ ] .
+

@@ -1,0 +1,63 @@
+@prefix csvw: <http://www.w3.org/ns/csvw#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+ [
+    a csvw:TableGroup;
+    csvw:table [
+      a csvw:Table;
+      rdfs:label "date format (valid native combinations)";
+      rdfs:comment "The supported date and time formats listed here are expressed in terms of the date field symbols defined in [UAX35] and MUST be interpreted by implementations as defined in that specification.";
+      csvw:row [
+        a csvw:Row;
+        csvw:describes [
+          <test187.csv#date> "2015-03-22"^^xsd:date;
+          <test187.csv#dateTime> "2015-03-15T15:02:37"^^xsd:dateTime;
+          <test187.csv#dateTimeStamp> "2015-03-15T15:02:37Z"^^xsd:dateTimeStamp;
+          <test187.csv#datetime> "2015-03-15T15:02:37"^^xsd:dateTime;
+          <test187.csv#gDay> "---31"^^xsd:gDay;
+          <test187.csv#gMonth> "--02"^^xsd:gMonth;
+          <test187.csv#gMonthDay> "--02-21"^^xsd:gMonthDay;
+          <test187.csv#gYear> "9999"^^xsd:gYear;
+          <test187.csv#gYearMonth> "1999-05"^^xsd:gYearMonth;
+          <test187.csv#time> "15:02:37"^^xsd:time
+        ];
+        csvw:rownum 1;
+        csvw:url <test187.csv#row=2>
+      ],  [
+        a csvw:Row;
+        csvw:describes [
+          <test187.csv#date> "2015-03-22Z"^^xsd:date;
+          <test187.csv#dateTime> "2015-03-15T15:02:37Z"^^xsd:dateTime;
+          <test187.csv#dateTimeStamp> "2015-03-15T15:02:37Z"^^xsd:dateTimeStamp;
+          <test187.csv#datetime> "2015-03-15T15:02:37Z"^^xsd:dateTime;
+          <test187.csv#gDay> "---31Z"^^xsd:gDay;
+          <test187.csv#gMonth> "--02Z"^^xsd:gMonth;
+          <test187.csv#gMonthDay> "--02-21Z"^^xsd:gMonthDay;
+          <test187.csv#gYear> "9999Z"^^xsd:gYear;
+          <test187.csv#gYearMonth> "1999-05Z"^^xsd:gYearMonth;
+          <test187.csv#time> "15:02:37Z"^^xsd:time
+        ];
+        csvw:rownum 2;
+        csvw:url <test187.csv#row=3>
+      ],  [
+        a csvw:Row;
+        csvw:describes [
+          <test187.csv#date> "2015-03-22-08:00"^^xsd:date;
+          <test187.csv#dateTime> "2015-03-15T15:02:37-08:00"^^xsd:dateTime;
+          <test187.csv#dateTimeStamp> "2015-03-15T15:02:37-08:00"^^xsd:dateTimeStamp;
+          <test187.csv#datetime> "2015-03-15T15:02:37-08:00"^^xsd:dateTime;
+          <test187.csv#gDay> "---31-08:00"^^xsd:gDay;
+          <test187.csv#gMonth> "--02-08:00"^^xsd:gMonth;
+          <test187.csv#gMonthDay> "--02-21-08:00"^^xsd:gMonthDay;
+          <test187.csv#gYear> "9999-08:00"^^xsd:gYear;
+          <test187.csv#gYearMonth> "1999-05-08:00"^^xsd:gYearMonth;
+          <test187.csv#time> "15:02:37-08:00"^^xsd:time
+        ];
+        csvw:rownum 3;
+        csvw:url <test187.csv#row=4>
+      ];
+      csvw:url <test187.csv>
+    ]
+ ] .

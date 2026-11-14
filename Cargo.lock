@@ -1064,6 +1064,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "csvw"
+version = "0.1.0"
+dependencies = [
+ "oxilangtag",
+ "oxiri",
+ "oxrdf",
+ "polars",
+ "regex",
+ "representation",
+ "serde_json",
+ "thiserror",
+ "tracing",
+ "triplestore",
+ "uuid",
+]
+
+[[package]]
 name = "datalog"
 version = "0.1.0"
 dependencies = [
@@ -2159,6 +2176,7 @@ dependencies = [
  "chrontext",
  "cimxml_export",
  "cimxml_import",
+ "csvw",
  "datalog",
  "external_sparql",
  "oxiri",
@@ -3514,6 +3532,7 @@ version = "0.21.0"
 dependencies = [
  "chrono",
  "cimxml_export",
+ "csvw",
  "datalog",
  "external_sparql",
  "maplib",

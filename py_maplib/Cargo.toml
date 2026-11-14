@@ -9,6 +9,7 @@ abi3 = ["pyo3/abi3-py310"]
 [dependencies]
 maplib = { path = "../lib/maplib", features = ["pyo3"] }
 triplestore = { path = "../lib/triplestore", features = ["pyo3"] }
+csvw = { path = "../lib/csvw" }
 representation = { path = "../lib/representation" }
 templates = { path = "../lib/templates" }
 shacl = { path = "../lib/shacl", features = ["pyo3"] }

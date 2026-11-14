@@ -1,0 +1,20 @@
+@prefix csvw: <http://www.w3.org/ns/csvw#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+ [
+    a csvw:TableGroup;
+    csvw:table [
+      a csvw:Table;
+      rdfs:label "date format (extra milliseconds)";
+      rdfs:comment "The supported date and time formats listed here are expressed in terms of the date field symbols defined in [UAX35] and MUST be interpreted by implementations as defined in that specification.";
+      csvw:row [
+        a csvw:Row;
+        csvw:describes [ <test247.csv#HH%3Amm%3Ass.S> "15:02:37.143"];
+        csvw:rownum 1;
+        csvw:url <test247.csv#row=2>
+      ];
+      csvw:url <test247.csv>
+    ]
+ ] .

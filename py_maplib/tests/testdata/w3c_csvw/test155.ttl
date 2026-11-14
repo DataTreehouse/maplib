@@ -1,0 +1,130 @@
+@prefix csvw: <http://www.w3.org/ns/csvw#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+ [
+    a csvw:TableGroup;
+    csvw:table [
+      a csvw:Table;
+      rdfs:label "number format (valid combinations)";
+      rdfs:comment "If the datatype format annotation is a single string, this is interpreted in the same way as if it were an object with a pattern property whose value is that string.";
+      csvw:row [
+        a csvw:Row;
+        csvw:describes [
+          <test155.csv#byte> "-10"^^xsd:byte;
+          <test155.csv#decimal> "0.1"^^xsd:decimal;
+          <test155.csv#double> "0.0e0"^^xsd:double;
+          <test155.csv#float> "0.0e0"^^xsd:float;
+          <test155.csv#int> "-10"^^xsd:int;
+          <test155.csv#integer> 0;
+          <test155.csv#long> "-10"^^xsd:long;
+          <test155.csv#negativeInteger> "-1"^^xsd:negativeInteger;
+          <test155.csv#nonNegativeInteger> "1"^^xsd:nonNegativeInteger;
+          <test155.csv#nonPositiveInteger> "0"^^xsd:nonPositiveInteger;
+          <test155.csv#number> 0.0e0;
+          <test155.csv#positiveInteger> "1"^^xsd:positiveInteger;
+          <test155.csv#short> "-10"^^xsd:short;
+          <test155.csv#unsignedByte> "1"^^xsd:unsignedByte;
+          <test155.csv#unsignedInt> "1"^^xsd:unsignedInt;
+          <test155.csv#unsignedLong> "1"^^xsd:unsignedLong;
+          <test155.csv#unsignedShort> "1"^^xsd:unsignedShort
+        ];
+        csvw:rownum 1;
+        csvw:url <test155.csv#row=2>
+      ],  [
+        a csvw:Row;
+        csvw:describes [
+          <test155.csv#byte> "123"^^xsd:byte;
+          <test155.csv#decimal> "10.1"^^xsd:decimal;
+          <test155.csv#double> "10.10e1"^^xsd:double;
+          <test155.csv#float> "10.10e1"^^xsd:float;
+          <test155.csv#int> "1234"^^xsd:int;
+          <test155.csv#integer> "10"^^xsd:integer;
+          <test155.csv#long> "1234"^^xsd:long;
+          <test155.csv#negativeInteger> "-123"^^xsd:negativeInteger;
+          <test155.csv#nonNegativeInteger> "123"^^xsd:nonNegativeInteger;
+          <test155.csv#nonPositiveInteger> "-123"^^xsd:nonPositiveInteger;
+          <test155.csv#number> "10.10e1"^^xsd:double;
+          <test155.csv#positiveInteger> "123"^^xsd:positiveInteger;
+          <test155.csv#short> "1234"^^xsd:short;
+          <test155.csv#unsignedByte> "123"^^xsd:unsignedByte;
+          <test155.csv#unsignedInt> "1234"^^xsd:unsignedInt;
+          <test155.csv#unsignedLong> "1234"^^xsd:unsignedLong;
+          <test155.csv#unsignedShort> "1234"^^xsd:unsignedShort
+         ];
+        csvw:rownum 2;
+        csvw:url <test155.csv#row=3>
+      ],  [
+        a csvw:Row;
+        csvw:describes [
+          <test155.csv#byte> "123"^^xsd:byte;
+          <test155.csv#decimal> "10.1"^^xsd:decimal;
+          <test155.csv#double> "NaN"^^xsd:double;
+          <test155.csv#float> "NaN"^^xsd:float;
+          <test155.csv#int> "1234"^^xsd:int;
+          <test155.csv#integer> "10"^^xsd:integer;
+          <test155.csv#long> "1234"^^xsd:long;
+          <test155.csv#negativeInteger> "-123"^^xsd:negativeInteger;
+          <test155.csv#nonNegativeInteger> "123"^^xsd:nonNegativeInteger;
+          <test155.csv#nonPositiveInteger> "-123"^^xsd:nonPositiveInteger;
+          <test155.csv#number> "NaN"^^xsd:double;
+          <test155.csv#positiveInteger> "123"^^xsd:positiveInteger;
+          <test155.csv#short> "1234"^^xsd:short;
+          <test155.csv#unsignedByte> "123"^^xsd:unsignedByte;
+          <test155.csv#unsignedInt> "1234"^^xsd:unsignedInt;
+          <test155.csv#unsignedLong> "1234"^^xsd:unsignedLong;
+          <test155.csv#unsignedShort> "1234"^^xsd:unsignedShort
+        ];
+        csvw:rownum 3;
+        csvw:url <test155.csv#row=4>
+      ],  [
+        a csvw:Row;
+        csvw:describes [
+          <test155.csv#byte> "123"^^xsd:byte;
+          <test155.csv#decimal> "10.1"^^xsd:decimal;
+          <test155.csv#double> "INF"^^xsd:double;
+          <test155.csv#float> "INF"^^xsd:float;
+          <test155.csv#int> "1234"^^xsd:int;
+          <test155.csv#integer> "10"^^xsd:integer;
+          <test155.csv#long> "1234"^^xsd:long;
+          <test155.csv#negativeInteger> "-123"^^xsd:negativeInteger;
+          <test155.csv#nonNegativeInteger> "123"^^xsd:nonNegativeInteger;
+          <test155.csv#nonPositiveInteger> "-123"^^xsd:nonPositiveInteger;
+          <test155.csv#number> "INF"^^xsd:double;
+          <test155.csv#positiveInteger> "123"^^xsd:positiveInteger;
+          <test155.csv#short> "1234"^^xsd:short;
+          <test155.csv#unsignedByte> "123"^^xsd:unsignedByte;
+          <test155.csv#unsignedInt> "1234"^^xsd:unsignedInt;
+          <test155.csv#unsignedLong> "1234"^^xsd:unsignedLong;
+          <test155.csv#unsignedShort> "1234"^^xsd:unsignedShort
+        ];
+        csvw:rownum 4;
+        csvw:url <test155.csv#row=5>
+      ],  [
+        a csvw:Row;
+        csvw:describes [
+          <test155.csv#byte> "123"^^xsd:byte;
+          <test155.csv#decimal> "10.1"^^xsd:decimal;
+          <test155.csv#double> "-INF"^^xsd:double;
+          <test155.csv#float> "-INF"^^xsd:float;
+          <test155.csv#int> "1234"^^xsd:int;
+          <test155.csv#integer> "10"^^xsd:integer;
+          <test155.csv#long> "1234"^^xsd:long;
+          <test155.csv#negativeInteger> "-123"^^xsd:negativeInteger;
+          <test155.csv#nonNegativeInteger> "123"^^xsd:nonNegativeInteger;
+          <test155.csv#nonPositiveInteger> "-123"^^xsd:nonPositiveInteger;
+          <test155.csv#number> "-INF"^^xsd:double;
+          <test155.csv#positiveInteger> "123"^^xsd:positiveInteger;
+          <test155.csv#short> "1234"^^xsd:short;
+          <test155.csv#unsignedByte> "123"^^xsd:unsignedByte;
+          <test155.csv#unsignedInt> "1234"^^xsd:unsignedInt;
+          <test155.csv#unsignedLong> "1234"^^xsd:unsignedLong;
+          <test155.csv#unsignedShort> "1234"^^xsd:unsignedShort
+        ];
+        csvw:rownum 5;
+        csvw:url <test155.csv#row=6>
+      ];
+      csvw:url <test155.csv>
+    ]
+ ] .

@@ -249,6 +249,55 @@ impl Model {
             .map_err(MaplibError::TriplestoreError)
     }
 
+    /// Converts tabular data to RDF using CSV on the Web (CSVW) metadata.
+    ///
+    /// `source` and `metadata` are local paths or IRIs. `iri_mappings` maps IRI prefixes to
+    /// local directories: documents with IRIs starting with such a prefix are read from that
+    /// directory, and local paths below such a directory get IRIs with that prefix.
+    /// Returns the SPARQL Update that was used, and the warnings.
+    #[instrument(skip_all)]
+    pub fn map_csvw(
+        &mut self,
+        source: &str,
+        metadata: Option<&str>,
+        graph: &NamedGraph,
+        minimal: bool,
+        iri_mappings: &[(String, std::path::PathBuf)],
+    ) -> Result<csvw::CsvwResult, MaplibError> {
+        let mut loader = csvw::loader::Loader::new();
+        for (prefix, dir) in iri_mappings {
+            loader.add_mapping(prefix.clone(), dir.clone());
+        }
+        let to_iri = |s: &str| -> Result<String, MaplibError> {
+            if csvw::jsonld::is_absolute_iri(s) && !Path::new(s).exists() {
+                return Ok(s.to_string());
+            }
+            let p = std::path::absolute(Path::new(s))
+                .map_err(|x| csvw::errors::CsvwError::ReadError(s.to_string(), x.to_string()))?;
+            for (prefix, dir) in iri_mappings {
+                if let Ok(dir) = std::path::absolute(dir) {
+                    if let Ok(rest) = p.strip_prefix(&dir) {
+                        let rest = rest.to_string_lossy().replace('\\', "/");
+                        return Ok(format!("{prefix}{rest}"));
+                    }
+                }
+            }
+            Ok(csvw::loader::file_iri(&p)?)
+        };
+        let source_iri = to_iri(source)?;
+        let metadata_iri = match metadata {
+            Some(m) => Some(to_iri(m)?),
+            None => None,
+        };
+        let options = csvw::CsvwOptions {
+            minimal,
+            metadata: metadata_iri,
+            graph: graph.clone(),
+        };
+        let res = csvw::csvw_to_rdf(&mut self.triplestore, &source_iri, &loader, &options)?;
+        Ok(res)
+    }
+
     #[instrument(skip_all)]
     pub fn map_df(
         &mut self,

@@ -1,0 +1,27 @@
+@prefix csvw: <http://www.w3.org/ns/csvw#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+ [
+    a csvw:TableGroup;
+    csvw:table [
+      a csvw:Table;
+      rdfs:label "float value constraint not matching maximum";
+      rdfs:comment "validate the value based on the length constraints described in section 4.6.1 Length Constraints, the value constraints described in section 4.6.2 Value Constraints and the datatype format annotation if one is specified, as described below. If there are any errors, add them to the list of errors for the cell";
+      csvw:row [
+        a csvw:Row;
+        csvw:describes [
+          <test204.csv#maxExclusive> "4"^^xsd:float;
+          <test204.csv#maxInclusive> "5"^^xsd:float;
+          <test204.csv#maximum> "6";
+          <test204.csv#minExclusive> "6"^^xsd:float;
+          <test204.csv#minInclusive> "5"^^xsd:float;
+          <test204.csv#minimum> "5"^^xsd:float
+        ];
+        csvw:rownum 1;
+        csvw:url <test204.csv#row=2>
+      ];
+      csvw:url <test204.csv>
+    ]
+ ] .

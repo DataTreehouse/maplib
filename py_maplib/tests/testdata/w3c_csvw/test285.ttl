@@ -1,0 +1,87 @@
+@prefix csvw: <http://www.w3.org/ns/csvw#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+ [
+    a csvw:TableGroup;
+    csvw:table [
+      a csvw:Table;
+      rdfs:label "valid number patterns (grouping)";
+      rdfs:comment "A number format pattern as defined in [UAX35]. Implementations MUST recognise number format patterns containing the symbols `0`, `#`, the specified decimalChar (or `.` if unspecified), the specified groupChar (or `,` if unspecified), `E`, `+`, `%` and `&permil;`.";
+      csvw:row [
+        a csvw:Row;
+        csvw:describes [
+          <http://www.w3.org/2013/csvw/tests/test285.csv#0.0%23%23%2C%23%23%23> "1.1"^^xsd:decimal;
+          <http://www.w3.org/2013/csvw/tests/test285.csv#0.00%23%2C%23%23%23> "1.19"^^xsd:decimal;
+          <http://www.w3.org/2013/csvw/tests/test285.csv#0.000%2C%23%23%23> "1.199"^^xsd:decimal;
+          <http://www.w3.org/2013/csvw/tests/test285.csv#0.000%2C0%23%23> "1.1999"^^xsd:decimal;
+          <http://www.w3.org/2013/csvw/tests/test285.csv#0.000%2C00%23> "1.19999"^^xsd:decimal;
+          <http://www.w3.org/2013/csvw/tests/test285.csv#0.000%2C000> "1.199999"^^xsd:decimal
+        ];
+        csvw:rownum "1"^^xsd:integer;
+        csvw:url <http://www.w3.org/2013/csvw/tests/test285.csv#row=2>
+      ],  [
+        a csvw:Row;
+        csvw:describes [
+          <http://www.w3.org/2013/csvw/tests/test285.csv#0.0%23%23%2C%23%23%23> "1.12"^^xsd:decimal;
+          <http://www.w3.org/2013/csvw/tests/test285.csv#0.00%23%2C%23%23%23> "1.12"^^xsd:decimal;
+          <http://www.w3.org/2013/csvw/tests/test285.csv#0.000%2C%23%23%23> "1.129"^^xsd:decimal;
+          <http://www.w3.org/2013/csvw/tests/test285.csv#0.000%2C0%23%23> "1.1299"^^xsd:decimal;
+          <http://www.w3.org/2013/csvw/tests/test285.csv#0.000%2C00%23> "1.12999"^^xsd:decimal;
+          <http://www.w3.org/2013/csvw/tests/test285.csv#0.000%2C000> "1.129999"^^xsd:decimal
+        ];
+        csvw:rownum "2"^^xsd:integer;
+        csvw:url <http://www.w3.org/2013/csvw/tests/test285.csv#row=3>
+      ],  [
+        a csvw:Row;
+        csvw:describes [
+          <http://www.w3.org/2013/csvw/tests/test285.csv#0.0%23%23%2C%23%23%23> "1.123"^^xsd:decimal;
+          <http://www.w3.org/2013/csvw/tests/test285.csv#0.00%23%2C%23%23%23> "1.123"^^xsd:decimal;
+          <http://www.w3.org/2013/csvw/tests/test285.csv#0.000%2C%23%23%23> "1.123"^^xsd:decimal;
+          <http://www.w3.org/2013/csvw/tests/test285.csv#0.000%2C0%23%23> "1.1239"^^xsd:decimal;
+          <http://www.w3.org/2013/csvw/tests/test285.csv#0.000%2C00%23> "1.12399"^^xsd:decimal;
+          <http://www.w3.org/2013/csvw/tests/test285.csv#0.000%2C000> "1.123999"^^xsd:decimal
+        ];
+        csvw:rownum "3"^^xsd:integer;
+        csvw:url <http://www.w3.org/2013/csvw/tests/test285.csv#row=4>
+      ],  [
+        a csvw:Row;
+        csvw:describes [
+          <http://www.w3.org/2013/csvw/tests/test285.csv#0.0%23%23%2C%23%23%23> "1.1234"^^xsd:decimal;
+          <http://www.w3.org/2013/csvw/tests/test285.csv#0.00%23%2C%23%23%23> "1.1234"^^xsd:decimal;
+          <http://www.w3.org/2013/csvw/tests/test285.csv#0.000%2C%23%23%23> "1.1234"^^xsd:decimal;
+          <http://www.w3.org/2013/csvw/tests/test285.csv#0.000%2C0%23%23> "1.1234"^^xsd:decimal;
+          <http://www.w3.org/2013/csvw/tests/test285.csv#0.000%2C00%23> "1.12349"^^xsd:decimal;
+          <http://www.w3.org/2013/csvw/tests/test285.csv#0.000%2C000> "1.123499"^^xsd:decimal
+        ];
+        csvw:rownum "4"^^xsd:integer;
+        csvw:url <http://www.w3.org/2013/csvw/tests/test285.csv#row=5>
+      ],  [
+        a csvw:Row;
+        csvw:describes [
+          <http://www.w3.org/2013/csvw/tests/test285.csv#0.0%23%23%2C%23%23%23> "1.12345"^^xsd:decimal;
+          <http://www.w3.org/2013/csvw/tests/test285.csv#0.00%23%2C%23%23%23> "1.12345"^^xsd:decimal;
+          <http://www.w3.org/2013/csvw/tests/test285.csv#0.000%2C%23%23%23> "1.12345"^^xsd:decimal;
+          <http://www.w3.org/2013/csvw/tests/test285.csv#0.000%2C0%23%23> "1.12345"^^xsd:decimal;
+          <http://www.w3.org/2013/csvw/tests/test285.csv#0.000%2C00%23> "1.12345"^^xsd:decimal;
+          <http://www.w3.org/2013/csvw/tests/test285.csv#0.000%2C000> "1.123459"^^xsd:decimal
+        ];
+        csvw:rownum "5"^^xsd:integer;
+        csvw:url <http://www.w3.org/2013/csvw/tests/test285.csv#row=6>
+      ],  [
+        a csvw:Row;
+        csvw:describes [
+          <http://www.w3.org/2013/csvw/tests/test285.csv#0.0%23%23%2C%23%23%23> "1.123456"^^xsd:decimal;
+          <http://www.w3.org/2013/csvw/tests/test285.csv#0.00%23%2C%23%23%23> "1.123456"^^xsd:decimal;
+          <http://www.w3.org/2013/csvw/tests/test285.csv#0.000%2C%23%23%23> "1.123456"^^xsd:decimal;
+          <http://www.w3.org/2013/csvw/tests/test285.csv#0.000%2C0%23%23> "1.123456"^^xsd:decimal;
+          <http://www.w3.org/2013/csvw/tests/test285.csv#0.000%2C00%23> "1.123456"^^xsd:decimal;
+          <http://www.w3.org/2013/csvw/tests/test285.csv#0.000%2C000> "1.123456"^^xsd:decimal
+        ];
+        csvw:rownum "6"^^xsd:integer;
+        csvw:url <http://www.w3.org/2013/csvw/tests/test285.csv#row=7>
+      ];
+      csvw:url <http://www.w3.org/2013/csvw/tests/test285.csv>
+    ]
+ ] .

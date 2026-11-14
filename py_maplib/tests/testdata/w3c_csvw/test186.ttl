@@ -1,0 +1,20 @@
+@prefix csvw: <http://www.w3.org/ns/csvw#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+ [
+    a csvw:TableGroup;
+    csvw:table [
+      a csvw:Table;
+      rdfs:label "boolean format (not matching datatype)";
+      rdfs:comment "Implementations MUST add a validation error to the errors annotation for the cell if the string being parsed.";
+      csvw:row [
+        a csvw:Row;
+        csvw:describes [ <test186.csv#boolean> "100"];
+        csvw:rownum 1;
+        csvw:url <test186.csv#row=2>
+      ];
+      csvw:url <test186.csv>
+    ]
+ ] .

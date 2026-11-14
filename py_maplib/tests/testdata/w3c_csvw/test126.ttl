@@ -1,0 +1,43 @@
+@prefix csvw: <http://www.w3.org/ns/csvw#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+ [
+    a csvw:TableGroup;
+    rdfs:comment "if the string is the same as any one of the values of the column null annotation, then the resulting value is null. If the column separator annotation is null and the column required annotation is true, add an error to the list of errors for the cell.";
+    csvw:table [
+      a csvw:Table;
+      csvw:row [
+        a csvw:Row;
+        csvw:describes [
+          <test126.csv#countryCode> "AD";
+          <test126.csv#latitude> "42.546245"^^xsd:double;
+          <test126.csv#longitude> "1.601554"^^xsd:double;
+          <test126.csv#name> "Andorra"
+        ];
+        csvw:rownum 1;
+        csvw:url <test126.csv#row=2>
+      ],  [
+        a csvw:Row;
+        csvw:describes [
+          <test126.csv#countryCode> "AE";
+          <test126.csv#latitude> "23.424076"^^xsd:double;
+          <test126.csv#longitude> "53.847818"^^xsd:double;
+          <test126.csv#name> "United Arab Emirates"
+        ];
+        csvw:rownum 2;
+        csvw:url <test126.csv#row=3>
+      ],  [
+        a csvw:Row;
+        csvw:describes [
+          <test126.csv#countryCode> "AF";
+          <test126.csv#longitude> "67.709953"^^xsd:double;
+          <test126.csv#name> "Afghanistan"
+        ];
+        csvw:rownum 3;
+        csvw:url <test126.csv#row=4>
+      ];
+      csvw:url <test126.csv>
+    ]
+ ] .

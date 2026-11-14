@@ -55,4 +55,6 @@ pub enum MaplibError {
     TripleSerializationError(#[from] TripleSerializationError),
     #[error(transparent)]
     SparqlEndpointQueryError(#[from] SparqlEndpointQueryError),
+    #[error(transparent)]
+    CsvwError(#[from] csvw::errors::CsvwError),
 }

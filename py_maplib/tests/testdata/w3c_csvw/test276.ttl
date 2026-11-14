@@ -1,0 +1,37 @@
+@prefix csvw: <http://www.w3.org/ns/csvw#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+ [
+    a csvw:TableGroup;
+    rdfs:label "property acceptable on column appears on table group";
+    rdfs:comment "Table Group may only use defined properties.";
+    csvw:table [
+      a csvw:Table;
+      csvw:row [
+        a csvw:Row;
+        csvw:describes [
+          <http://www.w3.org/2013/csvw/tests/tree-ops.csv#GID> "1";
+          <http://www.w3.org/2013/csvw/tests/tree-ops.csv#inventory_date> "2010-10-18"^^xsd:date;
+          <http://www.w3.org/2013/csvw/tests/tree-ops.csv#on_street> "ADDISON AV";
+          <http://www.w3.org/2013/csvw/tests/tree-ops.csv#species> "Celtis australis";
+          <http://www.w3.org/2013/csvw/tests/tree-ops.csv#trim_cycle> "Large Tree Routine Prune"
+        ];
+        csvw:rownum "1"^^xsd:integer;
+        csvw:url <http://www.w3.org/2013/csvw/tests/tree-ops.csv#row=2>
+      ],  [
+        a csvw:Row;
+        csvw:describes [
+          <http://www.w3.org/2013/csvw/tests/tree-ops.csv#GID> "2";
+          <http://www.w3.org/2013/csvw/tests/tree-ops.csv#inventory_date> "2010-06-02"^^xsd:date;
+          <http://www.w3.org/2013/csvw/tests/tree-ops.csv#on_street> "EMERSON ST";
+          <http://www.w3.org/2013/csvw/tests/tree-ops.csv#species> "Liquidambar styraciflua";
+          <http://www.w3.org/2013/csvw/tests/tree-ops.csv#trim_cycle> "Large Tree Routine Prune"
+        ];
+        csvw:rownum "2"^^xsd:integer;
+        csvw:url <http://www.w3.org/2013/csvw/tests/tree-ops.csv#row=3>
+      ];
+      csvw:url <http://www.w3.org/2013/csvw/tests/tree-ops.csv>
+    ]
+ ] .

@@ -1,0 +1,20 @@
+@prefix csvw: <http://www.w3.org/ns/csvw#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+ [
+    a csvw:TableGroup;
+    csvw:table [
+      a csvw:Table;
+      rdfs:label "invalid negativeInteger";
+      rdfs:comment "Implementations MUST add a validation error to the errors annotation for the cell contains an exponent, does not meet the numeric format defined above.";
+      csvw:row [
+        a csvw:Row;
+        csvw:describes [ <test177.csv#negativeInteger> "123"];
+        csvw:rownum 1;
+        csvw:url <test177.csv#row=2>
+      ];
+      csvw:url <test177.csv>
+    ]
+ ] .

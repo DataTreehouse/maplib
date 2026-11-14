@@ -1,0 +1,35 @@
+@prefix : <tree-ops-ext.csv#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<http://example.org/tree-ops-ext#gid-1> :dbh 11;
+   :inventory_date "2010-10-18"^^xsd:date;
+   :kml "<Point><coordinates>-122.156485,37.440963</coordinates></Point>"^^rdf:XMLLiteral;
+   :on_street "ADDISON AV";
+   :protected false;
+   :species "Celtis australis";
+   :trim_cycle "Large Tree Routine Prune"@en .
+
+<http://example.org/tree-ops-ext#gid-2> :dbh 11;
+   :inventory_date "2010-06-02"^^xsd:date;
+   :kml "<Point><coordinates>-122.156749,37.440958</coordinates></Point>"^^rdf:XMLLiteral;
+   :on_street "EMERSON ST";
+   :protected false;
+   :species "Liquidambar styraciflua";
+   :trim_cycle "Large Tree Routine Prune"@en .
+
+<http://example.org/tree-ops-ext#gid-6> :comments "cavity or decay"^^xsd:normalizedString,
+     "trunk decay"^^xsd:normalizedString,
+     "codominant leaders"^^xsd:normalizedString,
+     "included bark"^^xsd:normalizedString,
+     "large leader or limb decay"^^xsd:normalizedString,
+     "previous failure root damage"^^xsd:normalizedString,
+     "root decay"^^xsd:normalizedString,
+     "beware of BEES"^^xsd:normalizedString;
+   :dbh 29;
+   :inventory_date "2010-06-01"^^xsd:date;
+   :kml "<Point><coordinates>-122.156299,37.441151</coordinates></Point>"^^rdf:XMLLiteral;
+   :on_street "ADDISON AV";
+   :protected true;
+   :species "Robinia pseudoacacia";
+   :trim_cycle "Large Tree Routine Prune"@en .

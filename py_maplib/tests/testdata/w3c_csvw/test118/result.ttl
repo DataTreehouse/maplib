@@ -1,0 +1,44 @@
+@prefix csvw: <http://www.w3.org/ns/csvw#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+ [
+    a csvw:TableGroup;
+    rdfs:comment "Uses directory metadata";
+    csvw:table [
+      a csvw:Table;
+      csvw:row [
+        a csvw:Row;
+        csvw:describes [
+          <action.csv?query#countryCode> "AD";
+          <action.csv?query#latitude> "42.546245"^^xsd:double;
+          <action.csv?query#longitude> "1.601554"^^xsd:double;
+          <action.csv?query#name> "Andorra"
+        ];
+        csvw:rownum 1;
+        csvw:url <action.csv?query#row=2>
+      ],  [
+        a csvw:Row;
+        csvw:describes [
+          <action.csv?query#countryCode> "AE";
+          <action.csv?query#latitude> "23.424076"^^xsd:double;
+          <action.csv?query#longitude> "53.847818"^^xsd:double;
+          <action.csv?query#name> "United Arab Emirates"
+        ];
+        csvw:rownum 2;
+        csvw:url <action.csv?query#row=3>
+      ],  [
+        a csvw:Row;
+        csvw:describes [
+          <action.csv?query#countryCode> "AF";
+          <action.csv?query#latitude> "33.93911"^^xsd:double;
+          <action.csv?query#longitude> "67.709953"^^xsd:double;
+          <action.csv?query#name> "Afghanistan"
+        ];
+        csvw:rownum 3;
+        csvw:url <action.csv?query#row=4>
+      ];
+      csvw:url <action.csv?query>
+    ]
+ ] .

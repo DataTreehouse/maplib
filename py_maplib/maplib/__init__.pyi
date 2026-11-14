@@ -863,6 +863,49 @@ class Model:
         :return: The generated template as a stOTTR string.
         """
 
+    def map_csvw(
+            self,
+            source: Union[str, Path],
+            metadata: Union[str, Path] = None,
+            graph: str = None,
+            minimal: bool = False,
+            iri_mappings: Dict[str, Union[str, Path]] = None,
+    ) -> str:
+        """
+        Convert tabular data (CSV, TSV, ...) to RDF using CSV on the Web (CSVW) metadata, see
+        https://www.w3.org/TR/tabular-data-primer/ and https://www.w3.org/TR/csv2rdf/.
+
+        The tables are first added to temporary graphs using Facade-X (as Model.map_df does),
+        then a SPARQL Update generated from the metadata creates the RDF and drops the temporary graphs.
+        The update is returned, so that it can be inspected or adapted for a custom mapping.
+
+        Usage:
+
+        >>> m.map_csvw("tree-ops.csv-metadata.json")
+
+        or, with a CSV file, locating the metadata as described in the specification
+        (``tree-ops.csv-metadata.json`` or ``csv-metadata.json`` in the same folder) or else using the header row:
+
+        >>> m.map_csvw("tree-ops.csv")
+
+        Documents are never fetched over the network. ``file:`` IRIs are read directly, and other IRIs
+        are read from local folders given by iri_mappings:
+
+        >>> m.map_csvw("https://example.org/data/metadata.json",
+        ...            iri_mappings={"https://example.org/data/": "local_copy_of_data"})
+
+        Warnings (e.g. cells that do not match their datatype) are issued using the Python warnings module.
+
+        :param source: A path or IRI of a metadata document (JSON) or a tabular data file.
+        :param metadata: A path or IRI of user supplied metadata, which overrides any other metadata.
+        :param graph: The IRI of the graph to add triples to. None is the default graph.
+        :param minimal: Use minimal mode, which only outputs the triples describing the cells.
+            Otherwise, the standard mode also describes the group of tables, the tables and the rows.
+        :param iri_mappings: Maps IRI prefixes to local folders. Local paths below such a folder get IRIs with the prefix,
+            which are used as the base of relative URLs in the metadata.
+        :return: The SPARQL Update that was used.
+        """
+
     def map_df(
             self,
             df: DataFrame,

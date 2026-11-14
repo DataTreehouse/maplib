@@ -1,0 +1,79 @@
+@prefix : <test007.csv#> .
+@prefix csvw: <http://www.w3.org/ns/csvw#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+ [
+    a csvw:TableGroup;
+    csvw:table [
+      a csvw:Table;
+      csvw:row [
+        a csvw:Row;
+        csvw:describes [
+          :FamilyName "Simpson";
+          :Surname "Homer";
+          :childFoaf "http://example/bart";
+          :childName "Bart";
+          :foaf_id "http://example/homer"
+        ];
+        csvw:rownum 1;
+        csvw:url <test007.csv#row=2>
+      ],  [
+        a csvw:Row;
+        csvw:describes [
+          :FamilyName "Simpson";
+          :Surname "Homer";
+          :childFoaf "http://example/lisa";
+          :childName "Lisa";
+          :foaf_id "http://example/homer"
+        ];
+        csvw:rownum 2;
+        csvw:url <test007.csv#row=3>
+      ],  [
+        a csvw:Row;
+        csvw:describes [
+          :FamilyName "Simpson";
+          :Surname "Homer";
+          :childFoaf "http://example/maggie";
+          :childName "Maggie";
+          :foaf_id "http://example/homer"
+        ];
+        csvw:rownum 3;
+        csvw:url <test007.csv#row=4>
+      ],  [
+        a csvw:Row;
+        csvw:describes [
+          :FamilyName "Simpson";
+          :Surname "Marge";
+          :childFoaf "http://example/bart";
+          :childName "Bart";
+          :foaf_id "http://example/marge"
+        ];
+        csvw:rownum 4;
+        csvw:url <test007.csv#row=5>
+      ],  [
+        a csvw:Row;
+        csvw:describes [
+          :FamilyName "Simpson";
+          :Surname "Marge";
+          :childFoaf "http://example/lisa";
+          :childName "Lisa";
+          :foaf_id "http://example/marge"
+        ];
+        csvw:rownum 5;
+        csvw:url <test007.csv#row=6>
+      ],  [
+        a csvw:Row;
+        csvw:describes [
+          :FamilyName "Simpson";
+          :Surname "Marge";
+          :childFoaf "http://example/maggie";
+          :childName "Maggie";
+          :foaf_id "http://example/marge"
+        ];
+        csvw:rownum 6;
+        csvw:url <test007.csv#row=7>
+      ];
+      csvw:url <test007.csv>
+    ]
+ ] .

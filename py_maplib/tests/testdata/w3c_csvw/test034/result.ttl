@@ -1,0 +1,73 @@
+@prefix csvw: <http://www.w3.org/ns/csvw#> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix foaf: <http://xmlns.com/foaf/0.1/> .
+@prefix org: <http://www.w3.org/ns/org#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+_:3d36cfbb-d2d5-4573-a1a7-3bf817062db8 a csvw:TableGroup ;
+  csvw:table [ a csvw:Table ;
+    csvw:url <senior-roles.csv> ;
+    csvw:row [ a csvw:Row ;
+      csvw:rownum "1"^^xsd:integer ;
+      csvw:url <senior-roles.csv#row=2> ;
+      csvw:describes <http://example.org/organization/hefce.ac.uk/post/90115>, <http://example.org/organization/hefce.ac.uk/person/1>
+    ], [ a csvw:Row ;
+      csvw:rownum "2"^^xsd:integer ;
+      csvw:url <senior-roles.csv#row=3> ;
+      csvw:describes <http://example.org/organization/hefce.ac.uk/post/90334>, <http://example.org/organization/hefce.ac.uk/person/2>
+    ]
+  ], [ a csvw:Table ;
+    csvw:url <junior-roles.csv> ;
+    csvw:row [ a csvw:Row ;
+      csvw:rownum "1"^^xsd:integer ;
+      csvw:url <junior-roles.csv#row=2> ;
+      csvw:describes _:d8b8e40c-8c74-458b-99f7-64d1cf5c65f2
+    ], [ a csvw:Row ;
+      csvw:rownum "2"^^xsd:integer ;
+      csvw:url <junior-roles.csv#row=3> ;
+      csvw:describes _:fa1fa954-dd5f-4aa1-b2bc-20bf9867fac6
+    ]
+  ] .
+
+<http://example.org/organization/hefce.ac.uk/post/90115>
+  dc:identifier "90115" ;
+  org:heldBy <http://example.org/organization/hefce.ac.uk/person/1> ;
+  <http://example.org/gov.uk/def/grade> "SCS1A" ;
+  <http://example.org/gov.uk/def/job> "Deputy Chief Executive" ;
+  org:reportsTo <http://example.org/organization/hefce.ac.uk/post/90334> ;
+  <http://example.org/gov.uk/def/profession> "Finance" ;
+  org:postIn <http://example.org/organization/hefce.ac.uk> .
+
+<http://example.org/organization/hefce.ac.uk/person/1>
+  foaf:name "Steve Egan" .
+
+<http://example.org/organization/hefce.ac.uk/post/90334>
+  dc:identifier "90334" ;
+  org:heldBy <http://example.org/organization/hefce.ac.uk/person/2> ;
+  <http://example.org/gov.uk/def/grade> "SCS4" ;
+  <http://example.org/gov.uk/def/job> "Chief Executive" ;
+  <http://example.org/gov.uk/def/profession> "Policy" ;
+  org:postIn <http://example.org/organization/hefce.ac.uk> .
+
+<http://example.org/organization/hefce.ac.uk/person/2>
+  foaf:name "Sir Alan Langlands" .
+
+_:d8b8e40c-8c74-458b-99f7-64d1cf5c65f2
+  org:reportsTo <http://example.org/organization/hefce.ac.uk/post/90115> ;
+  <http://example.org/gov.uk/def/grade> "4" ;
+  <http://example.org/gov.uk/def/min_pay> "17426"^^xsd:integer ;
+  <http://example.org/gov.uk/def/max_pay> "20002"^^xsd:integer ;
+  <http://example.org/gov.uk/def/job> "Administrator" ;
+  <http://example.org/gov.uk/def/number_of_posts> "8.67"^^xsd:double ;
+  <http://example.org/gov.uk/def/profession> "Operational Delivery" ;
+  org:postIn <http://example.org/organization/hefce.ac.uk> .
+
+_:fa1fa954-dd5f-4aa1-b2bc-20bf9867fac6
+  org:reportsTo <http://example.org/organization/hefce.ac.uk/post/90115> ;
+  <http://example.org/gov.uk/def/grade> "5" ;
+  <http://example.org/gov.uk/def/min_pay> "19546"^^xsd:integer ;
+  <http://example.org/gov.uk/def/max_pay> "22478"^^xsd:integer ;
+  <http://example.org/gov.uk/def/job> "Administrator" ;
+  <http://example.org/gov.uk/def/number_of_posts> "0.5"^^xsd:double ;
+  <http://example.org/gov.uk/def/profession> "Operational Delivery" ;
+  org:postIn <http://example.org/organization/hefce.ac.uk> .

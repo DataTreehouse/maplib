@@ -1,0 +1,39 @@
+@prefix csvw: <http://www.w3.org/ns/csvw#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+ [
+    a csvw:TableGroup;
+    csvw:table [
+      a csvw:Table;
+      rdfs:label "multiple column primaryKey success";
+      rdfs:comment "As defined in [tabular-data-model], validators must check that each row has a unique combination of values of cells in the indicated columns.";
+      csvw:row [
+        a csvw:Row;
+        csvw:describes [
+          <test233.csv#PK1> "foo";
+          <test233.csv#PK2> "bar"
+        ];
+        csvw:rownum 1;
+        csvw:url <test233.csv#row=2>
+      ],  [
+        a csvw:Row;
+        csvw:describes [
+          <test233.csv#PK1> "foo";
+          <test233.csv#PK2> "baz"
+        ];
+        csvw:rownum 2;
+        csvw:url <test233.csv#row=3>
+      ],  [
+        a csvw:Row;
+        csvw:describes [
+          <test233.csv#PK1> "baz";
+          <test233.csv#PK2> "bar"
+        ];
+        csvw:rownum 3;
+        csvw:url <test233.csv#row=4>
+      ];
+      csvw:url <test233.csv>
+    ]
+ ] .

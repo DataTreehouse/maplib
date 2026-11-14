@@ -1,0 +1,67 @@
+@prefix : <test006.csv#> .
+@prefix csvw: <http://www.w3.org/ns/csvw#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+ [
+    a csvw:TableGroup;
+    csvw:table [
+      a csvw:Table;
+      csvw:row [
+        a csvw:Row;
+        csvw:describes [
+          :FamilyName "Simpson";
+          :Surname "Homer";
+          :childName "Bart"
+        ];
+        csvw:rownum 1;
+        csvw:url <test006.csv#row=2>
+      ],  [
+        a csvw:Row;
+        csvw:describes [
+          :FamilyName "Simpson";
+          :Surname "Homer";
+          :childName "Lisa"
+        ];
+        csvw:rownum 2;
+        csvw:url <test006.csv#row=3>
+      ],  [
+        a csvw:Row;
+        csvw:describes [
+          :FamilyName "Simpson";
+          :Surname "Homer";
+          :childName "Maggie"
+        ];
+        csvw:rownum 3;
+        csvw:url <test006.csv#row=4>
+      ],  [
+        a csvw:Row;
+        csvw:describes [
+          :FamilyName "Simpson";
+          :Surname "Marge";
+          :childName "Bart"
+        ];
+        csvw:rownum 4;
+        csvw:url <test006.csv#row=5>
+      ],  [
+        a csvw:Row;
+        csvw:describes [
+          :FamilyName "Simpson";
+          :Surname "Marge";
+          :childName "Lisa"
+        ];
+        csvw:rownum 5;
+        csvw:url <test006.csv#row=6>
+      ],  [
+        a csvw:Row;
+        csvw:describes [
+          :FamilyName "Simpson";
+          :Surname "Marge";
+          :childName "Maggie"
+        ];
+        csvw:rownum 6;
+        csvw:url <test006.csv#row=7>
+      ];
+      csvw:url <test006.csv>
+    ]
+ ] .

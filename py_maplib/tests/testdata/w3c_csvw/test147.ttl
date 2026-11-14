@@ -1,0 +1,37 @@
+@prefix csvw: <http://www.w3.org/ns/csvw#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+ [
+    a csvw:TableGroup;
+    csvw:table [
+      a csvw:Table;
+      rdfs:label "title incompatible with title on case";
+      rdfs:comment "If there is a non-empty case-sensitive intersection between the titles values, where matches must have a matching language; und matches any language, and languages match if they are equal when truncated, as defined in [BCP47], to the length of the shortest language tag.";
+      csvw:row [
+        a csvw:Row;
+        csvw:describes [
+          <tree-ops.csv#gid> "1";
+          <tree-ops.csv#inventory%20date> "10/18/2010";
+          <tree-ops.csv#on%20street> "ADDISON AV";
+          <tree-ops.csv#species> "Celtis australis";
+          <tree-ops.csv#trim%20cycle> "Large Tree Routine Prune"
+        ];
+        csvw:rownum 1;
+        csvw:url <tree-ops.csv#row=2>
+      ],  [
+        a csvw:Row;
+        csvw:describes [
+          <tree-ops.csv#gid> "2";
+          <tree-ops.csv#inventory%20date> "6/2/2010";
+          <tree-ops.csv#on%20street> "EMERSON ST";
+          <tree-ops.csv#species> "Liquidambar styraciflua";
+          <tree-ops.csv#trim%20cycle> "Large Tree Routine Prune"
+        ];
+        csvw:rownum 2;
+        csvw:url <tree-ops.csv#row=3>
+      ];
+      csvw:url <tree-ops.csv>
+    ]
+ ] .

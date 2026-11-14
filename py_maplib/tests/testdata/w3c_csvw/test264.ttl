@@ -1,0 +1,40 @@
+@prefix csvw: <http://www.w3.org/ns/csvw#> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix schema: <http://schema.org/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+ [
+    a csvw:TableGroup;
+    csvw:table [
+      a csvw:Table;
+      rdfs:label "@type on a common property can be a CURIE if the prefix is one of the built-in ones";
+      dc:relation [ a schema:Thing];
+      rdfs:comment "The value of any member of `@type` MUST be either a _term_ defined in [csvw-context], a _prefixed name_ where the prefix is a term defined in [csvw-context], or an absolute URL.";
+      csvw:row [
+        a csvw:Row;
+        csvw:describes [
+          <http://www.w3.org/2013/csvw/tests/tree-ops.csv#GID> "1";
+          <http://www.w3.org/2013/csvw/tests/tree-ops.csv#inventory_date> "2010-10-18"^^xsd:date;
+          <http://www.w3.org/2013/csvw/tests/tree-ops.csv#on_street> "ADDISON AV";
+          <http://www.w3.org/2013/csvw/tests/tree-ops.csv#species> "Celtis australis";
+          <http://www.w3.org/2013/csvw/tests/tree-ops.csv#trim_cycle> "Large Tree Routine Prune"
+        ];
+        csvw:rownum "1"^^xsd:integer;
+        csvw:url <http://www.w3.org/2013/csvw/tests/tree-ops.csv#row=2>
+      ],  [
+        a csvw:Row;
+        csvw:describes [
+          <http://www.w3.org/2013/csvw/tests/tree-ops.csv#GID> "2";
+          <http://www.w3.org/2013/csvw/tests/tree-ops.csv#inventory_date> "2010-06-02"^^xsd:date;
+          <http://www.w3.org/2013/csvw/tests/tree-ops.csv#on_street> "EMERSON ST";
+          <http://www.w3.org/2013/csvw/tests/tree-ops.csv#species> "Liquidambar styraciflua";
+          <http://www.w3.org/2013/csvw/tests/tree-ops.csv#trim_cycle> "Large Tree Routine Prune"
+        ];
+        csvw:rownum "2"^^xsd:integer;
+        csvw:url <http://www.w3.org/2013/csvw/tests/tree-ops.csv#row=3>
+      ];
+      csvw:url <http://www.w3.org/2013/csvw/tests/tree-ops.csv>
+    ]
+ ] .

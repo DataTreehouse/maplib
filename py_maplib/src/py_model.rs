@@ -341,6 +341,44 @@ impl PyModel {
         py.detach(move || generate_template_mutex(df, &primary_key_column, types))
     }
 
+    #[pyo3(signature = (source, metadata=None, graph=None, minimal=None, iri_mappings=None))]
+    #[instrument(skip_all)]
+    fn map_csvw(
+        &self,
+        py: Python<'_>,
+        source: PathBuf,
+        metadata: Option<PathBuf>,
+        graph: Option<String>,
+        minimal: Option<bool>,
+        iri_mappings: Option<HashMap<String, PathBuf>>,
+    ) -> PyResult<String> {
+        let source = source.to_string_lossy().to_string();
+        let metadata = metadata.map(|m| m.to_string_lossy().to_string());
+        let mut mappings: Vec<(String, PathBuf)> = iri_mappings.unwrap_or_default().into_iter().collect();
+        mappings.sort();
+        let res = py.detach(move || -> PyResult<csvw::CsvwResult> {
+            let mut inner = self.inner.write().unwrap();
+            let graph = parse_optional_named_node(graph)?;
+            let named_graph = NamedGraph::from_maybe_named_node(graph.as_ref());
+            inner
+                .map_csvw(
+                    &source,
+                    metadata.as_deref(),
+                    &named_graph,
+                    minimal.unwrap_or(false),
+                    &mappings,
+                )
+                .map_err(|x| PyMaplibError::from(x).into())
+        })?;
+        let category = py.get_type::<pyo3::exceptions::PyUserWarning>();
+        for w in &res.warnings {
+            let msg = std::ffi::CString::new(format!("CSVW: {w}").replace('\0', ""))
+                .unwrap_or_default();
+            PyErr::warn(py, category.as_any(), &msg, 1)?;
+        }
+        Ok(res.update)
+    }
+
     #[pyo3(signature = (df, graph=None, uuid_namespace=None))]
     #[instrument(skip_all)]
     fn map_df(

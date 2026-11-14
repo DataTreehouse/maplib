@@ -1,0 +1,45 @@
+@prefix : <test010.csv#> .
+@prefix csvw: <http://www.w3.org/ns/csvw#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+ [
+    a csvw:TableGroup;
+    csvw:table [
+      a csvw:Table;
+      csvw:row [
+        a csvw:Row;
+        csvw:describes [
+          :country "AD";
+          :name "Andorra"
+        ];
+        csvw:rownum 1;
+        csvw:url <test010.csv#row=2>
+      ],  [
+        a csvw:Row;
+        csvw:describes [
+          :country "AF";
+          :name "Afghanistan"
+        ];
+        csvw:rownum 2;
+        csvw:url <test010.csv#row=3>
+      ],  [
+        a csvw:Row;
+        csvw:describes [
+          :country "AI";
+          :name "Anguilla"
+        ];
+        csvw:rownum 3;
+        csvw:url <test010.csv#row=4>
+      ],  [
+        a csvw:Row;
+        csvw:describes [
+          :country "AL";
+          :name "Albania"
+        ];
+        csvw:rownum 4;
+        csvw:url <test010.csv#row=5>
+      ];
+      csvw:url <test010.csv>
+    ]
+ ] .

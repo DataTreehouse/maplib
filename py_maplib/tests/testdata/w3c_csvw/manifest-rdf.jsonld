@@ -1,0 +1,4071 @@
+{
+  "@context": {
+    "xsd": "http://www.w3.org/2001/XMLSchema#",
+    "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+    "mf": "http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#",
+    "mq": "http://www.w3.org/2001/sw/DataAccess/tests/test-query#",
+    "rdft": "http://www.w3.org/ns/rdftest#",
+    "csvt": "http://www.w3.org/2013/csvw/tests/vocab#",
+    "id": "@id",
+    "type": "@type",
+    "action": {
+      "@id": "mf:action",
+      "@type": "@id"
+    },
+    "approval": {
+      "@id": "rdft:approval",
+      "@type": "@id"
+    },
+    "comment": "rdfs:comment",
+    "contentType": "csvt:contentType",
+    "entries": {
+      "@id": "mf:entries",
+      "@type": "@id",
+      "@container": "@list"
+    },
+    "httpLink": "csvt:httpLink",
+    "implicit": {
+      "@id": "mf:implicit",
+      "@type": "@id",
+      "@container": "@set"
+    },
+    "label": "rdfs:label",
+    "metadata": {
+      "@id": "csvt:metadata",
+      "@type": "@id"
+    },
+    "minimal": "csvt:minimal",
+    "name": "mf:name",
+    "noProv": "csvt:noProv",
+    "option": "csvt:option",
+    "result": {
+      "@id": "mf:result",
+      "@type": "@id"
+    }
+  },
+  "id": "manifest-rdf",
+  "type": "mf:Manifest",
+  "label": "CSVW RDF Tests",
+  "comment": "Tests transformation of CSV to RDF.",
+  "entries": [
+    {
+      "id": "manifest-rdf#test001",
+      "type": "csvt:ToRdfTest",
+      "name": "Simple table",
+      "comment": "The simplest possible table without metadata",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test001.csv",
+      "result": "test001.ttl"
+    },
+    {
+      "id": "manifest-rdf#test005",
+      "type": "csvt:ToRdfTest",
+      "name": "Identifier references",
+      "comment": "A table with entity identifiers and references to other entities without metadata",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test005.csv",
+      "result": "test005.ttl"
+    },
+    {
+      "id": "manifest-rdf#test006",
+      "type": "csvt:ToRdfTest",
+      "name": "No identifiers",
+      "comment": "Records contain two entities with relationships which are duplicated without metadata",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test006.csv",
+      "result": "test006.ttl"
+    },
+    {
+      "id": "manifest-rdf#test007",
+      "type": "csvt:ToRdfTest",
+      "name": "Joined table with unique identifiers",
+      "comment": "Joined data with identified records without metadata",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test007.csv",
+      "result": "test007.ttl"
+    },
+    {
+      "id": "manifest-rdf#test008",
+      "type": "csvt:ToRdfTest",
+      "name": "Microsyntax - internal field separator",
+      "comment": "One field has comma-separated values without metadata",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test008.csv",
+      "result": "test008.ttl"
+    },
+    {
+      "id": "manifest-rdf#test009",
+      "type": "csvt:ToRdfTest",
+      "name": "Microsyntax - formatted time",
+      "comment": "Field with parseable human formatted time without metadata",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test009.csv",
+      "result": "test009.ttl"
+    },
+    {
+      "id": "manifest-rdf#test010",
+      "type": "csvt:ToRdfTest",
+      "name": "Country-codes-and-names example",
+      "comment": "Country-codes-and-names example",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test010.csv",
+      "result": "test010.ttl"
+    },
+    {
+      "id": "manifest-rdf#test011",
+      "type": "csvt:ToRdfTest",
+      "name": "tree-ops example with metadata",
+      "comment": "Processors MUST use the first metadata found for processing a tabular data file by using overriding metadata, if provided. Otherwise processors MUST attempt to locate the first metadata document from the Link header or the metadata located through site-wide configuration.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test011/tree-ops.csv",
+      "result": "test011/result.ttl",
+      "implicit": [
+        "test011/tree-ops.csv-metadata.json"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test012",
+      "type": "csvt:ToRdfTest",
+      "name": "tree-ops example with directory metadata",
+      "comment": "Processors MUST use the first metadata found for processing a tabular data file by using overriding metadata, if provided. Otherwise processors MUST attempt to locate the first metadata document from the Link header or the metadata located through site-wide configuration.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test012/tree-ops.csv",
+      "result": "test012/result.ttl",
+      "implicit": [
+        "test012/csv-metadata.json"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test013",
+      "type": "csvt:ToRdfTest",
+      "name": "tree-ops example from user metadata",
+      "comment": "Processors MUST use the first metadata found for processing a tabular data file by using overriding metadata, if provided. Otherwise processors MUST attempt to locate the first metadata document from the Link header or the metadata located through site-wide configuration.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true,
+        "metadata": "test013-user-metadata.json"
+      },
+      "action": "tree-ops.csv",
+      "result": "test013.ttl",
+      "implicit": [
+        "test013-user-metadata.json"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test014",
+      "type": "csvt:ToRdfTest",
+      "name": "tree-ops example with linked metadata",
+      "comment": "Processors MUST use the first metadata found for processing a tabular data file by using overriding metadata, if provided. Otherwise processors MUST attempt to locate the first metadata document from the Link header or the metadata located through site-wide configuration.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test014/tree-ops.csv",
+      "result": "test014/result.ttl",
+      "implicit": [
+        "test014/linked-metadata.json"
+      ],
+      "httpLink": "<linked-metadata.json>; rel=\"describedby\"; type=\"application/csvm+json\""
+    },
+    {
+      "id": "manifest-rdf#test015",
+      "type": "csvt:ToRdfTest",
+      "name": "tree-ops example with user and directory metadata",
+      "comment": "Processors MUST use the first metadata found for processing a tabular data file by using overriding metadata, if provided. Otherwise processors MUST attempt to locate the first metadata document from the Link header or the metadata located through site-wide configuration.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true,
+        "metadata": "test015/user-metadata.json"
+      },
+      "action": "test015/tree-ops.csv",
+      "result": "test015/result.ttl",
+      "implicit": [
+        "test015/csv-metadata.json",
+        "test015/user-metadata.json"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test016",
+      "type": "csvt:ToRdfTest",
+      "name": "tree-ops example with linked and directory metadata",
+      "comment": "Processors MUST use the first metadata found for processing a tabular data file by using overriding metadata, if provided. Otherwise processors MUST attempt to locate the first metadata document from the Link header or the metadata located through site-wide configuration.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test016/tree-ops.csv",
+      "result": "test016/result.ttl",
+      "implicit": [
+        "test016/csv-metadata.json",
+        "test016/linked-metadata.json"
+      ],
+      "httpLink": "<linked-metadata.json>; rel=\"describedby\"; type=\"application/csvm+json\""
+    },
+    {
+      "id": "manifest-rdf#test017",
+      "type": "csvt:ToRdfTest",
+      "name": "tree-ops example with file and directory metadata",
+      "comment": "Processors MUST use the first metadata found for processing a tabular data file by using overriding metadata, if provided. Otherwise processors MUST attempt to locate the first metadata document from the Link header or the metadata located through site-wide configuration.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test017/tree-ops.csv",
+      "result": "test017/result.ttl",
+      "implicit": [
+        "test017/tree-ops.csv-metadata.json",
+        "test017/csv-metadata.json"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test018",
+      "type": "csvt:ToRdfTest",
+      "name": "tree-ops example with user, file and directory metadata",
+      "comment": "Processors MUST use the first metadata found for processing a tabular data file by using overriding metadata, if provided. Otherwise processors MUST attempt to locate the first metadata document from the Link header or the metadata located through site-wide configuration.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true,
+        "metadata": "test018/user-metadata.json"
+      },
+      "action": "test018/tree-ops.csv",
+      "result": "test018/result.ttl",
+      "implicit": [
+        "test018/tree-ops.csv-metadata.json",
+        "test018/csv-metadata.json",
+        "test018/user-metadata.json"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test023",
+      "type": "csvt:ToRdfTest",
+      "name": "dialect: header=false",
+      "comment": "If `true`, sets the `header row count` flag to 1, and if `false` to 0, unless `headerRowCount` is provided, in which case the value provided for the `header` property is ignored.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true,
+        "metadata": "test023-user-metadata.json"
+      },
+      "action": "tree-ops.csv",
+      "result": "test023.ttl",
+      "implicit": [
+        "test023-user-metadata.json"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test027",
+      "type": "csvt:ToRdfTest",
+      "name": "tree-ops minimal output",
+      "comment": "Processors MUST use the first metadata found for processing a tabular data file by using overriding metadata, if provided. Otherwise processors MUST attempt to locate the first metadata document from the Link header or the metadata located through site-wide configuration.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true,
+        "metadata": "test027-user-metadata.json",
+        "minimal": true
+      },
+      "action": "tree-ops.csv",
+      "result": "test027.ttl",
+      "implicit": [
+        "test027-user-metadata.json"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test028",
+      "type": "csvt:ToRdfTest",
+      "name": "countries.csv example",
+      "comment": "If no metadata is supplied or found, processors MUST use embedded metadata.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "countries.csv",
+      "result": "test028.ttl"
+    },
+    {
+      "id": "manifest-rdf#test029",
+      "type": "csvt:ToRdfTest",
+      "name": "countries.csv minimal",
+      "comment": "If no metadata is supplied or found, processors MUST use embedded metadata.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true,
+        "minimal": true
+      },
+      "action": "countries.csv",
+      "result": "test029.ttl"
+    },
+    {
+      "id": "manifest-rdf#test030",
+      "type": "csvt:ToRdfTest",
+      "name": "countries.json example",
+      "comment": "countries.json from metadata",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "countries.json",
+      "result": "test030.ttl",
+      "implicit": [
+        "countries.csv",
+        "country_slice.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test031",
+      "type": "csvt:ToRdfTest",
+      "name": "countries.json example minimal output",
+      "comment": "countries.json from metadata minimal output",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true,
+        "minimal": true
+      },
+      "action": "countries.json",
+      "result": "test031.ttl",
+      "implicit": [
+        "countries.csv",
+        "country_slice.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test032",
+      "type": "csvt:ToRdfTest",
+      "name": "events-listing.csv example",
+      "comment": "events-listing example from metadata, virtual columns and multiple subjects per row",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test032/csv-metadata.json",
+      "result": "test032/result.ttl",
+      "implicit": [
+        "test032/events-listing.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test033",
+      "type": "csvt:ToRdfTest",
+      "name": "events-listing.csv minimal output",
+      "comment": "events-listing example from metadata, virtual columns and multiple subjects per row; minimal output",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true,
+        "minimal": true
+      },
+      "action": "test033/csv-metadata.json",
+      "result": "test033/result.ttl",
+      "implicit": [
+        "test033/events-listing.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test034",
+      "type": "csvt:ToRdfTest",
+      "name": "roles example",
+      "comment": "Public Sector Roles example with referenced schemas. Validation fails because organization.csv intentionally contains an invalid reference.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test034/csv-metadata.json",
+      "result": "test034/result.ttl",
+      "implicit": [
+        "test034/senior-roles.csv",
+        "test034/junior-roles.csv",
+        "test034/gov.uk/data/organizations.csv",
+        "test034/gov.uk/data/professions.csv",
+        "test034/gov.uk/schema/junior-roles.json",
+        "test034/gov.uk/schema/senior-roles.json",
+        "test034/gov.uk/schema/organizations.json",
+        "test034/gov.uk/schema/professions.json"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test035",
+      "type": "csvt:ToRdfTest",
+      "name": "roles minimal",
+      "comment": "Public Sector Roles example with referenced schemas; minimal output. Validation fails because organization.csv intentionally contains an invalid reference.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true,
+        "minimal": true
+      },
+      "action": "test035/csv-metadata.json",
+      "result": "test035/result.ttl",
+      "implicit": [
+        "test035/senior-roles.csv",
+        "test035/junior-roles.csv",
+        "test035/gov.uk/data/organizations.csv",
+        "test035/gov.uk/data/professions.csv",
+        "test035/gov.uk/schema/junior-roles.json",
+        "test035/gov.uk/schema/senior-roles.json",
+        "test035/gov.uk/schema/organizations.json",
+        "test035/gov.uk/schema/professions.json"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test036",
+      "type": "csvt:ToRdfTest",
+      "name": "tree-ops-ext example",
+      "comment": "tree-ops extended example",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test036/tree-ops-ext.csv",
+      "result": "test036/result.ttl",
+      "implicit": [
+        "test036/tree-ops-ext.csv-metadata.json"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test037",
+      "type": "csvt:ToRdfTest",
+      "name": "tree-ops-ext minimal",
+      "comment": "tree-ops extended example; minimal output",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true,
+        "minimal": true
+      },
+      "action": "test037/tree-ops-ext.csv",
+      "result": "test037/result.ttl",
+      "implicit": [
+        "test037/tree-ops-ext.csv-metadata.json"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test038",
+      "type": "csvt:ToRdfTest",
+      "name": "inherited properties propagation",
+      "comment": "Setting inherited properties at different levels inherit to cell",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test038-metadata.json",
+      "result": "test038.ttl",
+      "implicit": [
+        "test038.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test039",
+      "type": "csvt:ToRdfTest",
+      "name": "valid inherited properties",
+      "comment": "Different combinations of valid inherited properties",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test039-metadata.json",
+      "result": "test039.ttl",
+      "implicit": [
+        "test039.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test040",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "invalid null",
+      "comment": "If a property has a value that is not permitted by this specification, then if a default value is provided for that property, compliant applications MUST use that default value and MUST generate a warning. If no default value is provided for that property, compliant applications MUST generate a warning and behave as if the property had not been specified.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test040-metadata.json",
+      "result": "test040.ttl",
+      "implicit": [
+        "test040.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test041",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "invalid lang",
+      "comment": "If a property has a value that is not permitted by this specification, then if a default value is provided for that property, compliant applications MUST use that default value and MUST generate a warning. If no default value is provided for that property, compliant applications MUST generate a warning and behave as if the property had not been specified.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test041-metadata.json",
+      "result": "test041.ttl",
+      "implicit": [
+        "test041.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test042",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "invalid textDirection",
+      "comment": "If a property has a value that is not permitted by this specification, then if a default value is provided for that property, compliant applications MUST use that default value and MUST generate a warning. If no default value is provided for that property, compliant applications MUST generate a warning and behave as if the property had not been specified.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test042-metadata.json",
+      "result": "test042.ttl",
+      "implicit": [
+        "test042.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test043",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "invalid separator",
+      "comment": "If a property has a value that is not permitted by this specification, then if a default value is provided for that property, compliant applications MUST use that default value and MUST generate a warning. If no default value is provided for that property, compliant applications MUST generate a warning and behave as if the property had not been specified.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test043-metadata.json",
+      "result": "test043.ttl",
+      "implicit": [
+        "test043.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test044",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "invalid ordered",
+      "comment": "If a property has a value that is not permitted by this specification, then if a default value is provided for that property, compliant applications MUST use that default value and MUST generate a warning. If no default value is provided for that property, compliant applications MUST generate a warning and behave as if the property had not been specified.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test044-metadata.json",
+      "result": "test044.ttl",
+      "implicit": [
+        "test044.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test045",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "invalid default",
+      "comment": "If a property has a value that is not permitted by this specification, then if a default value is provided for that property, compliant applications MUST use that default value and MUST generate a warning. If no default value is provided for that property, compliant applications MUST generate a warning and behave as if the property had not been specified.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test045-metadata.json",
+      "result": "test045.ttl",
+      "implicit": [
+        "test045.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test046",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "invalid dataype",
+      "comment": "If a property has a value that is not permitted by this specification, then if a default value is provided for that property, compliant applications MUST use that default value and MUST generate a warning. If no default value is provided for that property, compliant applications MUST generate a warning and behave as if the property had not been specified.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test046-metadata.json",
+      "result": "test046.ttl",
+      "implicit": [
+        "test046.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test047",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "invalid aboutUrl",
+      "comment": "If a property has a value that is not permitted by this specification, then if a default value is provided for that property, compliant applications MUST use that default value and MUST generate a warning. If no default value is provided for that property, compliant applications MUST generate a warning and behave as if the property had not been specified.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test047-metadata.json",
+      "result": "test047.ttl",
+      "implicit": [
+        "test047.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test048",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "invalid propertyUrl",
+      "comment": "If a property has a value that is not permitted by this specification, then if a default value is provided for that property, compliant applications MUST use that default value and MUST generate a warning. If no default value is provided for that property, compliant applications MUST generate a warning and behave as if the property had not been specified.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test048-metadata.json",
+      "result": "test048.ttl",
+      "implicit": [
+        "test048.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test049",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "invalid valueUrl",
+      "comment": "If a property has a value that is not permitted by this specification, then if a default value is provided for that property, compliant applications MUST use that default value and MUST generate a warning. If no default value is provided for that property, compliant applications MUST generate a warning and behave as if the property had not been specified.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test049-metadata.json",
+      "result": "test049.ttl",
+      "implicit": [
+        "test049.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test059",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "dialect: invalid commentPrefix",
+      "comment": "If a property has a value that is not permitted by this specification, then if a default value is provided for that property, compliant applications MUST use that default value and MUST generate a warning. If no default value is provided for that property, compliant applications MUST generate a warning and behave as if the property had not been specified.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test059-metadata.json",
+      "result": "test059.ttl",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test060",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "dialect: invalid delimiter",
+      "comment": "If a property has a value that is not permitted by this specification, then if a default value is provided for that property, compliant applications MUST use that default value and MUST generate a warning. If no default value is provided for that property, compliant applications MUST generate a warning and behave as if the property had not been specified.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test060-metadata.json",
+      "result": "test060.ttl",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test061",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "dialect: invalid doubleQuote",
+      "comment": "If a property has a value that is not permitted by this specification, then if a default value is provided for that property, compliant applications MUST use that default value and MUST generate a warning. If no default value is provided for that property, compliant applications MUST generate a warning and behave as if the property had not been specified.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test061-metadata.json",
+      "result": "test061.ttl",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test062",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "dialect: invalid encoding",
+      "comment": "If a property has a value that is not permitted by this specification, then if a default value is provided for that property, compliant applications MUST use that default value and MUST generate a warning. If no default value is provided for that property, compliant applications MUST generate a warning and behave as if the property had not been specified.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test062-metadata.json",
+      "result": "test062.ttl",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test063",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "dialect: invalid header",
+      "comment": "If a property has a value that is not permitted by this specification, then if a default value is provided for that property, compliant applications MUST use that default value and MUST generate a warning. If no default value is provided for that property, compliant applications MUST generate a warning and behave as if the property had not been specified.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test063-metadata.json",
+      "result": "test063.ttl",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test065",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "dialect: invalid headerRowCount",
+      "comment": "If a property has a value that is not permitted by this specification, then if a default value is provided for that property, compliant applications MUST use that default value and MUST generate a warning. If no default value is provided for that property, compliant applications MUST generate a warning and behave as if the property had not been specified.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test065-metadata.json",
+      "result": "test065.ttl",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test066",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "dialect: invalid lineTerminators",
+      "comment": "If a property has a value that is not permitted by this specification, then if a default value is provided for that property, compliant applications MUST use that default value and MUST generate a warning. If no default value is provided for that property, compliant applications MUST generate a warning and behave as if the property had not been specified.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test066-metadata.json",
+      "result": "test066.ttl",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test067",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "dialect: invalid quoteChar",
+      "comment": "If a property has a value that is not permitted by this specification, then if a default value is provided for that property, compliant applications MUST use that default value and MUST generate a warning. If no default value is provided for that property, compliant applications MUST generate a warning and behave as if the property had not been specified.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test067-metadata.json",
+      "result": "test067.ttl",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test068",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "dialect: invalid skipBlankRows",
+      "comment": "If a property has a value that is not permitted by this specification, then if a default value is provided for that property, compliant applications MUST use that default value and MUST generate a warning. If no default value is provided for that property, compliant applications MUST generate a warning and behave as if the property had not been specified.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test068-metadata.json",
+      "result": "test068.ttl",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test069",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "dialect: invalid skipColumns",
+      "comment": "If a property has a value that is not permitted by this specification, then if a default value is provided for that property, compliant applications MUST use that default value and MUST generate a warning. If no default value is provided for that property, compliant applications MUST generate a warning and behave as if the property had not been specified.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test069-metadata.json",
+      "result": "test069.ttl",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test070",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "dialect: invalid skipInitialSpace",
+      "comment": "If a property has a value that is not permitted by this specification, then if a default value is provided for that property, compliant applications MUST use that default value and MUST generate a warning. If no default value is provided for that property, compliant applications MUST generate a warning and behave as if the property had not been specified.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test070-metadata.json",
+      "result": "test070.ttl",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test071",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "dialect: invalid skipRows",
+      "comment": "If a property has a value that is not permitted by this specification, then if a default value is provided for that property, compliant applications MUST use that default value and MUST generate a warning. If no default value is provided for that property, compliant applications MUST generate a warning and behave as if the property had not been specified.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test071-metadata.json",
+      "result": "test071.ttl",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test072",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "dialect: invalid trim",
+      "comment": "If a property has a value that is not permitted by this specification, then if a default value is provided for that property, compliant applications MUST use that default value and MUST generate a warning. If no default value is provided for that property, compliant applications MUST generate a warning and behave as if the property had not been specified.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test072-metadata.json",
+      "result": "test072.ttl",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test073",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "invalid @language",
+      "comment": "The value of `@language` MUST be a valid `BCP47` language code",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test073-metadata.json",
+      "result": "test073.ttl",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test074",
+      "type": "csvt:NegativeRdfTest",
+      "name": "empty tables",
+      "comment": "Compliant application MUST raise an error if this array does not contain one or more `table descriptions`.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test074-metadata.json",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test075",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "invalid tableGroup tableDirection",
+      "comment": "An atomic property that MUST have a single string value that is one of \"rtl\", \"ltr\" or \"auto\".",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test075-metadata.json",
+      "result": "test075.ttl",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test076",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "invalid table tableDirection",
+      "comment": "An atomic property that MUST have a single string value that is one of \"rtl\", \"ltr\" or \"auto\".",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test076-metadata.json",
+      "result": "test076.ttl",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test077",
+      "type": "csvt:NegativeRdfTest",
+      "name": "invalid tableGroup @id",
+      "comment": "It MUST NOT start with `_:`.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test077-metadata.json",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test078",
+      "type": "csvt:NegativeRdfTest",
+      "name": "invalid table @id",
+      "comment": "It MUST NOT start with `_:`.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test078-metadata.json",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test079",
+      "type": "csvt:NegativeRdfTest",
+      "name": "invalid schema @id",
+      "comment": "It MUST NOT start with `_:`.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test079-metadata.json",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test080",
+      "type": "csvt:NegativeRdfTest",
+      "name": "invalid column @id",
+      "comment": "It MUST NOT start with `_:`.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test080-metadata.json",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test081",
+      "type": "csvt:NegativeRdfTest",
+      "name": "invalid dialect @id",
+      "comment": "It MUST NOT start with `_:`.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test081-metadata.json",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test082",
+      "type": "csvt:NegativeRdfTest",
+      "name": "invalid template @id",
+      "comment": "It MUST NOT start with `_:`.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test082-metadata.json",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test083",
+      "type": "csvt:NegativeRdfTest",
+      "name": "invalid tableGroup @type",
+      "comment": "If included `@type` MUST be `TableGroup`",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test083-metadata.json",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test084",
+      "type": "csvt:NegativeRdfTest",
+      "name": "invalid table @type",
+      "comment": "If included `@type` MUST be `TableGroup`",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test084-metadata.json",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test085",
+      "type": "csvt:NegativeRdfTest",
+      "name": "invalid schema @type",
+      "comment": "If included `@type` MUST be `TableGroup`",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test085-metadata.json",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test086",
+      "type": "csvt:NegativeRdfTest",
+      "name": "invalid column @type",
+      "comment": "If included `@type` MUST be `TableGroup`",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test086-metadata.json",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test087",
+      "type": "csvt:NegativeRdfTest",
+      "name": "invalid dialect @type",
+      "comment": "If included `@type` MUST be `Dialect`",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test087-metadata.json",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test088",
+      "type": "csvt:NegativeRdfTest",
+      "name": "invalid transformation @type",
+      "comment": "If included `@type` MUST be `Template`",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test088-metadata.json",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test089",
+      "type": "csvt:NegativeRdfTest",
+      "name": "missing tables in TableGroup",
+      "comment": "The `tables` property is required in a `TableGroup`",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test089-metadata.json",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test090",
+      "type": "csvt:NegativeRdfTest",
+      "name": "missing url in Table",
+      "comment": "The `url` property is required in a `Table`",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test090-metadata.json",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test093",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "undefined properties",
+      "comment": "Compliant applications MUST ignore properties (aside from _common properties_) which are not defined in this specification and MUST generate a warning when they are encoutered",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test093-metadata.json",
+      "result": "test093.ttl",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test095",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "inconsistent array values: transformations",
+      "comment": "Any items within an array that are not valid objects of the type expected are ignored",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test095-metadata.json",
+      "result": "test095.ttl",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test097",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "inconsistent array values: foreignKeys",
+      "comment": "Any items within an array that are not valid objects of the type expected are ignored",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test097-metadata.json",
+      "result": "test097.ttl",
+      "implicit": [
+        "countries.csv",
+        "country_slice.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test098",
+      "type": "csvt:NegativeRdfTest",
+      "name": "inconsistent array values: tables",
+      "comment": "If the supplied value of an array property is not an array (eg if it is an integer), compliant applications MUST issue a warning and proceed as if the property had been supplied with an empty array. Compliant application MUST raise an error if this array does not contain one or more table descriptions.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test098-metadata.json",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test099",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "inconsistent array values: transformations",
+      "comment": "If the supplied value of an array property is not an array (eg if it is an integer), compliant applications MUST issue a warning and proceed as if the property had been supplied with an empty array",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test099-metadata.json",
+      "result": "test099.ttl",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test100",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "inconsistent array values: columns",
+      "comment": "If the supplied value of an array property is not an array (eg if it is an integer), compliant applications MUST issue a warning and proceed as if the property had been supplied with an empty array",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test100-metadata.json",
+      "result": "test100.ttl",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test101",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "inconsistent array values: foreignKeys",
+      "comment": "If the supplied value of an array property is not an array (eg if it is an integer), compliant applications MUST issue a warning and proceed as if the property had been supplied with an empty array",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test101-metadata.json",
+      "result": "test101.ttl",
+      "implicit": [
+        "countries.csv",
+        "country_slice.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test102",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "inconsistent link values: @id",
+      "comment": "If the supplied value of an array property is not an array (eg if it is an integer), compliant applications MUST issue a warning and proceed as if the property had been supplied with an empty array",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test102-metadata.json",
+      "result": "test102.ttl",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test103",
+      "type": "csvt:NegativeRdfTest",
+      "name": "inconsistent link values: url",
+      "comment": "If the supplied value of an array property is not an array (eg if it is an integer), compliant applications MUST issue a warning and proceed as if the property had been supplied with an empty array",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test103-metadata.json",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test104",
+      "type": "csvt:NegativeRdfTest",
+      "name": "invalid columnReference",
+      "comment": "The referenced description object MUST have a name property",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test104-metadata.json",
+      "implicit": [
+        "countries.csv",
+        "country_slice.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test105",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "invalid primaryKey",
+      "comment": "The referenced description object MUST have a name property",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test105-metadata.json",
+      "result": "test105.ttl",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test106",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "invalid dialect",
+      "comment": "If the supplied value of an object property is not a string or object (eg if it is an integer), compliant applications MUST issue a warning and proceed as if the property had been specified as an object with no properties.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test106-metadata.json",
+      "result": "test106.ttl",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test107",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "invalid tableSchema",
+      "comment": "If the supplied value of an object property is not a string or object (eg if it is an integer), compliant applications MUST issue a warning and proceed as if the property had been specified as an object with no properties.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test107-metadata.json",
+      "result": "test107.ttl",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test108",
+      "type": "csvt:NegativeRdfTest",
+      "name": "invalid reference",
+      "comment": "If the supplied value of an object property is not a string or object (eg if it is an integer), compliant applications MUST issue a warning and proceed as if the property had been specified as an object with no properties.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test108-metadata.json",
+      "implicit": [
+        "countries.csv",
+        "country_slice.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test109",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "titles with invalid language",
+      "comment": "Natural Language properties may be objects whose properties MUST be language codes as defined by [BCP47] and whose values are either strings or arrays, providing natural language strings in that language. Validation fails because without a title, the metadata is incompatible with the CSV, which isn't a problem when not validating.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test109-metadata.json",
+      "result": "test109.ttl",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test110",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "titles with non-string values",
+      "comment": "Natural Language properties may be objects whose properties MUST be language codes as defined by [BCP47] and whose values are either strings or arrays, providing natural language strings in that language",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test110-metadata.json",
+      "result": "test110.ttl",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test111",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "titles with invalid value",
+      "comment": "If the supplied value of a natural language property is not a string, array or object (eg if it is an integer), compliant applications MUST issue a warning and proceed as if the property had been specified as an empty array. Validation fails because without a title, the metadata is incompatible with the CSV, which isn't a problem when not validating.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test111-metadata.json",
+      "result": "test111.ttl",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test112",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "titles with non-string array values",
+      "comment": "If the supplied value is an array, any items in that array that are not strings MUST be ignored",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test112-metadata.json",
+      "result": "test112.ttl",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test113",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "invalid suppressOutput",
+      "comment": "Atomic properties: Processors MUST issue a warning if a property is set to an invalid value type",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test113-metadata.json",
+      "result": "test113.ttl",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test114",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "invalid name",
+      "comment": "Atomic properties: Processors MUST issue a warning if a property is set to an invalid value type",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test114-metadata.json",
+      "result": "test114.ttl",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test115",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "invalid virtual",
+      "comment": "Atomic properties: Processors MUST issue a warning if a property is set to an invalid value type",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test115-metadata.json",
+      "result": "test115.ttl",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test116",
+      "type": "csvt:ToRdfTest",
+      "name": "file-metadata with query component not found",
+      "comment": "processors MUST attempt to locate a metadata documents through site-wide configuration.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test116.csv?query",
+      "result": "test116.ttl",
+      "implicit": [
+        "test116.csv-metadata.json"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test117",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "file-metadata not referencing file",
+      "comment": "If the metadata file found at this location does not explicitly include a reference to the requested tabular data file then it MUST be ignored.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test117.csv",
+      "result": "test117.ttl",
+      "implicit": [
+        "test117.csv-metadata.json"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test118",
+      "type": "csvt:ToRdfTest",
+      "name": "directory-metadata with query component",
+      "comment": "processors MUST attempt to locate a metadata documents through site-wide configuration. component.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test118/action.csv?query",
+      "result": "test118/result.ttl",
+      "implicit": [
+        "test118/csv-metadata.json"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test119",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "directory-metadata not referencing file",
+      "comment": "If the metadata file found at this location does not explicitly include a reference to the requested tabular data file then it MUST be ignored.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test119/action.csv",
+      "result": "test119/result.ttl",
+      "implicit": [
+        "test119/csv-metadata.json"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test120",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "link-metadata not referencing file",
+      "comment": "If the metadata file found at this location does not explicitly include a reference to the requested tabular data file then it MUST be ignored.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test120.csv",
+      "result": "test120.ttl",
+      "implicit": [
+        "test120-linked-metadata.json"
+      ],
+      "httpLink": "<test120-linked-metadata.json>; rel=\"describedby\"; type=\"application/csvm+json\""
+    },
+    {
+      "id": "manifest-rdf#test121",
+      "type": "csvt:ToRdfTest",
+      "name": "user-metadata not referencing file",
+      "comment": "User-specified metadata does not need to reference the starting CSV",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true,
+        "metadata": "test121-user-metadata.json"
+      },
+      "action": "test121.csv",
+      "result": "test121.ttl",
+      "implicit": [
+        "test121-ref.csv",
+        "test121-user-metadata.json"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test122",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "link-metadata not describing file uses file-metadata",
+      "comment": "If the metadata file found at this location does not explicitly include a reference to the requested tabular data file then it MUST be ignored.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test122.csv",
+      "result": "test122.ttl",
+      "implicit": [
+        "test122.csv-metadata.json",
+        "test122-linked-metadata.json"
+      ],
+      "httpLink": "<test122-linked-metadata.json>; rel=\"describedby\"; type=\"application/csvm+json\""
+    },
+    {
+      "id": "manifest-rdf#test123",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "file-metadata not describing file uses directory-metadata",
+      "comment": "If the metadata file found at this location does not explicitly include a reference to the requested tabular data file then it MUST be ignored.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test123/action.csv",
+      "result": "test123/result.ttl",
+      "implicit": [
+        "test123/action.csv-metadata.json",
+        "test123/csv-metadata.json"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test124",
+      "type": "csvt:ToRdfTest",
+      "name": "metadata with columns not matching csv titles",
+      "comment": "If not validating, and one schema has a name property but not a titles property, and the other has a titles property but not a name property.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true,
+        "metadata": "test124-user-metadata.json"
+      },
+      "action": "tree-ops.csv",
+      "result": "test124.ttl",
+      "implicit": [
+        "test124-user-metadata.json"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test125",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "required column with empty cell",
+      "comment": "If the column required annotation is true, add an error to the list of errors for the cell.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test125-metadata.json",
+      "result": "test125.ttl",
+      "implicit": [
+        "test125.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test126",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "required column with cell matching null",
+      "comment": "if the string is the same as any one of the values of the column null annotation, then the resulting value is null. If the column separator annotation is null and the column required annotation is true, add an error to the list of errors for the cell.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test126-metadata.json",
+      "result": "test126.ttl",
+      "implicit": [
+        "test126.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test127",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "incompatible table",
+      "comment": "if TM is not compatible with EM validators MUST raise an error, other processors MUST generate a warning and continue processing",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test127-metadata.json",
+      "result": "test127.ttl",
+      "implicit": [
+        "test127.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test128",
+      "type": "csvt:NegativeRdfTest",
+      "name": "duplicate column names",
+      "comment": "The name properties of the column descriptions MUST be unique within a given table description.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test128-metadata.json",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test129",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "columnn name as integer",
+      "comment": "This (name) MUST be a string and this property has no default value, which means it MUST be ignored if the supplied value is not a string.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test129-metadata.json",
+      "result": "test129.ttl",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test130",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "invalid column name",
+      "comment": "column names are restricted as defined in Variables in [URI-TEMPLATE] ",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test130-metadata.json",
+      "result": "test130.ttl",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test131",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "invalid column name",
+      "comment": "column names are restricted ... names beginning with '_' are reserved by this specification and MUST NOT be used within metadata documents.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test131-metadata.json",
+      "result": "test131.ttl",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test132",
+      "type": "csvt:ToRdfTest",
+      "name": "name annotation from title percent encoded",
+      "comment": "If there is no name property defined on this column, the first titles value having the same language tag as default language, or und or if no default language is specified, becomes the name annotation for the described column. This annotation MUST be percent-encoded as necessary to conform to the syntactic requirements defined in [RFC3986]",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test132-metadata.json",
+      "result": "test132.ttl",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test133",
+      "type": "csvt:NegativeRdfTest",
+      "name": "virtual before non-virtual",
+      "comment": "If present, a virtual column MUST appear after all other non-virtual column definitions.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test133-metadata.json",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test134",
+      "type": "csvt:NegativeRdfTest",
+      "name": "context in common property",
+      "comment": "A metadata document MUST NOT add a new context",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test134-metadata.json",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test135",
+      "type": "csvt:NegativeRdfTest",
+      "name": "@list value",
+      "comment": "Values MUST NOT use list objects or set objects.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test135-metadata.json",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test136",
+      "type": "csvt:NegativeRdfTest",
+      "name": "@set value",
+      "comment": "Values MUST NOT use list objects or set objects.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test136-metadata.json",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test137",
+      "type": "csvt:NegativeRdfTest",
+      "name": "@type out of range (as datatype)",
+      "comment": "The value of any @id or @type contained within a metadata document MUST NOT be a blank node.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test137-metadata.json",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test138",
+      "type": "csvt:NegativeRdfTest",
+      "name": "@type out of range (as node type)",
+      "comment": "The value of any @id or @type contained within a metadata document MUST NOT be a blank node.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test138-metadata.json",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test139",
+      "type": "csvt:NegativeRdfTest",
+      "name": "@type out of range (as node type) - string",
+      "comment": "The value of any member of @type MUST be either a term defined in [csvw-context], a prefixed name where the prefix is a term defined in [csvw-context], or an absolute URL.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test139-metadata.json",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test140",
+      "type": "csvt:NegativeRdfTest",
+      "name": "@type out of range (as node type) - integer",
+      "comment": "The value of any member of @type MUST be either a term defined in [csvw-context], a prefixed name where the prefix is a term defined in [csvw-context], or an absolute URL.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test140-metadata.json",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test141",
+      "type": "csvt:NegativeRdfTest",
+      "name": "@id out of range (as node type) - bnode",
+      "comment": "The value of any @id or @type contained within a metadata document MUST NOT be a blank node.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test141-metadata.json",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test142",
+      "type": "csvt:NegativeRdfTest",
+      "name": "@value with @language and @type",
+      "comment": "If a @value property is used on an object, that object MUST NOT have any other properties aside from either @type or @language, and MUST NOT have both @type and @language as properties. The value of the @value property MUST be a string, number, or boolean value.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test142-metadata.json",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test143",
+      "type": "csvt:NegativeRdfTest",
+      "name": "@value with extra properties",
+      "comment": "If a @value property is used on an object, that object MUST NOT have any other properties aside from either @type or @language, and MUST NOT have both @type and @language as properties. The value of the @value property MUST be a string, number, or boolean value.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test143-metadata.json",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test144",
+      "type": "csvt:NegativeRdfTest",
+      "name": "@language outside of @value",
+      "comment": "A @language property MUST NOT be used on an object unless it also has a @value property.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test144-metadata.json",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test146",
+      "type": "csvt:NegativeRdfTest",
+      "name": "Invalid faux-keyword",
+      "comment": "Aside from @value, @type, @language, and @id, the properties used on an object MUST NOT start with @.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test146-metadata.json",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test147",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "title incompatible with title on case",
+      "comment": "If there is a non-empty case-sensitive intersection between the titles values, where matches MUST have a matching language; `und` matches any language, and languages match if they are equal when truncated, as defined in [BCP47], to the length of the shortest language tag.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test147-metadata.json",
+      "result": "test147.ttl",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test148",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "title incompatible with title on language",
+      "comment": "If there is a non-empty case-sensitive intersection between the titles values, where matches MUST have a matching language; `und` matches any language, and languages match if they are equal when truncated, as defined in [BCP47], to the length of the shortest language tag.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test148-metadata.json",
+      "result": "test148.ttl",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test149",
+      "type": "csvt:ToRdfTest",
+      "name": "title compatible with title on less specific language",
+      "comment": "If there is a non-empty case-sensitive intersection between the titles values, where matches MUST have a matching language; `und` matches any language, and languages match if they are equal when truncated, as defined in [BCP47], to the length of the shortest language tag.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test149-metadata.json",
+      "result": "test149.ttl",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test150",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "non-builtin datatype (datatype value)",
+      "comment": "If the value of this property is a string, it MUST be one of the built-in datatypes defined in section 5.11.1 Built-in Datatypes or an absolute URL",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test150-metadata.json",
+      "result": "test150.ttl",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test151",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "non-builtin datatype (base value)",
+      "comment": "If the value of this property is a string, it MUST be one of the built-in datatypes",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test151-metadata.json",
+      "result": "test151.ttl",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test152",
+      "type": "csvt:ToRdfTest",
+      "name": "string format (valid combinations)",
+      "comment": "If the datatype base is not numeric, boolean, a date/time type, or a duration type, the datatype format annotation provides a regular expression for the string values",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test152-metadata.json",
+      "result": "test152.ttl",
+      "implicit": [
+        "test152.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test153",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "string format (bad format string)",
+      "comment": "If the datatype base is not numeric, boolean, a date/time type, or a duration type, the datatype format annotation provides a regular expression for the string values",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test153-metadata.json",
+      "result": "test153.ttl",
+      "implicit": [
+        "test153.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test154",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "string format (value not matching format)",
+      "comment": "If the datatype base is not numeric, boolean, a date/time type, or a duration type, the datatype format annotation provides a regular expression for the string values",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test154-metadata.json",
+      "result": "test154.ttl",
+      "implicit": [
+        "test154.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test155",
+      "type": "csvt:ToRdfTest",
+      "name": "number format (valid combinations)",
+      "comment": "If the datatype format annotation is a single string, this is interpreted in the same way as if it were an object with a pattern property whose value is that string",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test155-metadata.json",
+      "result": "test155.ttl",
+      "implicit": [
+        "test155.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test156",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "number format (bad format string)",
+      "comment": "If the datatype format annotation is a single string, this is interpreted in the same way as if it were an object with a pattern property whose value is that string",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test156-metadata.json",
+      "result": "test156.ttl",
+      "implicit": [
+        "test156.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test157",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "number format (value not matching format)",
+      "comment": "If the datatype format annotation is a single string, this is interpreted in the same way as if it were an object with a pattern property whose value is that string",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test157-metadata.json",
+      "result": "test157.ttl",
+      "implicit": [
+        "test157.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test158",
+      "type": "csvt:ToRdfTest",
+      "name": "number format (valid combinations)",
+      "comment": "Numeric dataype with object format",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test158-metadata.json",
+      "result": "test158.ttl",
+      "implicit": [
+        "test158.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test159",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "number format (bad pattern format string)",
+      "comment": "If the datatype format annotation is a single string, this is interpreted in the same way as if it were an object with a pattern property whose value is that string",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test159-metadata.json",
+      "result": "test159.ttl",
+      "implicit": [
+        "test159.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test160",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "number format (not matching values with pattern)",
+      "comment": "Implementations MUST add a validation error to the errors annotation for the cell if the string being parsed",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test160-metadata.json",
+      "result": "test160.ttl",
+      "implicit": [
+        "test160.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test161",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "number format (not matching values without pattern)",
+      "comment": "Implementations MUST add a validation error to the errors annotation for the cell if the string being parsed",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test161-metadata.json",
+      "result": "test161.ttl",
+      "implicit": [
+        "test161.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test162",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "numeric format (consecutive groupChar)",
+      "comment": "Implementations MUST add a validation error to the errors annotation for the cell if the string being parsed contains two consecutive groupChar strings",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test162-metadata.json",
+      "result": "test162.ttl",
+      "implicit": [
+        "test162.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test163",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "integer datatype with decimalChar",
+      "comment": "Implementations MUST add a validation error to the errors annotation for the cell if the string being parsed contains the decimalChar, if the datatype base is integer or one of its sub-values",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test163-metadata.json",
+      "result": "test163.ttl",
+      "implicit": [
+        "test163.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test164",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "decimal datatype with exponent",
+      "comment": "Implementations MUST add a validation error to the errors annotation for the cell contains an exponent, if the datatype base is decimal or one of its sub-values",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test164-metadata.json",
+      "result": "test164.ttl",
+      "implicit": [
+        "test164.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test165",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "decimal type with NaN",
+      "comment": "Implementations MUST add a validation error to the errors annotation for the cell contains an exponent, is one of the special values NaN, INF, or -INF, if the datatype base is decimal or one of its sub-values",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test165-metadata.json",
+      "result": "test165.ttl",
+      "implicit": [
+        "test165.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test166",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "decimal type with INF",
+      "comment": "Implementations MUST add a validation error to the errors annotation for the cell contains an exponent, is one of the special values NaN, INF, or -INF, if the datatype base is decimal or one of its sub-values",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test166-metadata.json",
+      "result": "test166.ttl",
+      "implicit": [
+        "test166.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test167",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "decimal type with -INF",
+      "comment": "Implementations MUST add a validation error to the errors annotation for the cell contains an exponent, is one of the special values NaN, INF, or -INF, if the datatype base is decimal or one of its sub-values",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test167-metadata.json",
+      "result": "test167.ttl",
+      "implicit": [
+        "test167.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test168",
+      "type": "csvt:ToRdfTest",
+      "name": "decimal with implicit groupChar",
+      "comment": "When parsing the string value of a cell against this format specification, implementations MUST recognise and parse numbers",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test168-metadata.json",
+      "result": "test168.ttl",
+      "implicit": [
+        "test168.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test169",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "invalid decimal",
+      "comment": "Implementations MUST add a validation error to the errors annotation for the cell contains an exponent, does not meet the numeric format defined above",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test169-metadata.json",
+      "result": "test169.ttl",
+      "implicit": [
+        "test169.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test170",
+      "type": "csvt:ToRdfTest",
+      "name": "decimal with percent",
+      "comment": "Implementations MUST use the sign, exponent, percent, and per-mille signs when parsing the string value of a cell to provide the value of the cell",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test170-metadata.json",
+      "result": "test170.ttl",
+      "implicit": [
+        "test170.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test171",
+      "type": "csvt:ToRdfTest",
+      "name": "decimal with per-mille",
+      "comment": "Implementations MUST use the sign, exponent, percent, and per-mille signs when parsing the string value of a cell to provide the value of the cell",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test171-metadata.json",
+      "result": "test171.ttl",
+      "implicit": [
+        "test171.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test172",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "invalid byte",
+      "comment": "Implementations MUST add a validation error to the errors annotation for the cell contains an exponent, does not meet the numeric format defined above",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test172-metadata.json",
+      "result": "test172.ttl",
+      "implicit": [
+        "test172.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test173",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "invald unsignedLong",
+      "comment": "Implementations MUST add a validation error to the errors annotation for the cell contains an exponent, does not meet the numeric format defined above",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test173-metadata.json",
+      "result": "test173.ttl",
+      "implicit": [
+        "test173.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test174",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "invalid unsignedShort",
+      "comment": "Implementations MUST add a validation error to the errors annotation for the cell contains an exponent, does not meet the numeric format defined above",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test174-metadata.json",
+      "result": "test174.ttl",
+      "implicit": [
+        "test174.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test175",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "invalid unsignedByte",
+      "comment": "Implementations MUST add a validation error to the errors annotation for the cell contains an exponent, does not meet the numeric format defined above",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test175-metadata.json",
+      "result": "test175.ttl",
+      "implicit": [
+        "test175.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test176",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "invalid positiveInteger",
+      "comment": "Implementations MUST add a validation error to the errors annotation for the cell contains an exponent, does not meet the numeric format defined above",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test176-metadata.json",
+      "result": "test176.ttl",
+      "implicit": [
+        "test176.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test177",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "invalid negativeInteger",
+      "comment": "Implementations MUST add a validation error to the errors annotation for the cell contains an exponent, does not meet the numeric format defined above",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test177-metadata.json",
+      "result": "test177.ttl",
+      "implicit": [
+        "test177.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test178",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "invalid nonPositiveInteger",
+      "comment": "Implementations MUST add a validation error to the errors annotation for the cell contains an exponent, does not meet the numeric format defined above",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test178-metadata.json",
+      "result": "test178.ttl",
+      "implicit": [
+        "test178.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test179",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "invalid nonNegativeInteger",
+      "comment": "Implementations MUST add a validation error to the errors annotation for the cell contains an exponent, does not meet the numeric format defined above",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test179-metadata.json",
+      "result": "test179.ttl",
+      "implicit": [
+        "test179.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test180",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "invalid double",
+      "comment": "Implementations MUST add a validation error to the errors annotation for the cell contains an exponent, does not meet the numeric format defined above",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test180-metadata.json",
+      "result": "test180.ttl",
+      "implicit": [
+        "test180.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test181",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "invalid number",
+      "comment": "Implementations MUST add a validation error to the errors annotation for the cell contains an exponent, does not meet the numeric format defined above",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test181-metadata.json",
+      "result": "test181.ttl",
+      "implicit": [
+        "test181.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test182",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "invalid float",
+      "comment": "Implementations MUST add a validation error to the errors annotation for the cell contains an exponent, does not meet the numeric format defined above",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test182-metadata.json",
+      "result": "test182.ttl",
+      "implicit": [
+        "test182.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test183",
+      "type": "csvt:ToRdfTest",
+      "name": "boolean format (valid combinations)",
+      "comment": "If the datatype base for a cell is boolean, the datatype format annotation provides the true and false values expected, separated by `|`.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test183-metadata.json",
+      "result": "test183.ttl",
+      "implicit": [
+        "test183.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test184",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "boolean format (bad format string)",
+      "comment": "If the datatype base for a cell is boolean, the datatype format annotation provides the true and false values expected, separated by `|`.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test184-metadata.json",
+      "result": "test184.ttl",
+      "implicit": [
+        "test184.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test185",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "boolean format (value not matching format)",
+      "comment": "If the datatype base for a cell is boolean, the datatype format annotation provides the true and false values expected, separated by `|`.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test185-metadata.json",
+      "result": "test185.ttl",
+      "implicit": [
+        "test185.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test186",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "boolean format (not matching datatype)",
+      "comment": "Implementations MUST add a validation error to the errors annotation for the cell if the string being parsed",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test186-metadata.json",
+      "result": "test186.ttl",
+      "implicit": [
+        "test186.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test187",
+      "type": "csvt:ToRdfTest",
+      "name": "date format (valid native combinations)",
+      "comment": "The supported date and time formats listed here are expressed in terms of the date field symbols defined in [UAX35] and MUST be interpreted by implementations as defined in that specification.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test187-metadata.json",
+      "result": "test187.ttl",
+      "implicit": [
+        "test187.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test188",
+      "type": "csvt:ToRdfTest",
+      "name": "date format (valid date combinations with formats)",
+      "comment": "The supported date and time formats listed here are expressed in terms of the date field symbols defined in [UAX35] and MUST be interpreted by implementations as defined in that specification.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test188-metadata.json",
+      "result": "test188.ttl",
+      "implicit": [
+        "test188.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test189",
+      "type": "csvt:ToRdfTest",
+      "name": "date format (valid time combinations with formats)",
+      "comment": "The supported date and time formats listed here are expressed in terms of the date field symbols defined in [UAX35] and MUST be interpreted by implementations as defined in that specification.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test189-metadata.json",
+      "result": "test189.ttl",
+      "implicit": [
+        "test189.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test190",
+      "type": "csvt:ToRdfTest",
+      "name": "date format (valid dateTime combinations with formats)",
+      "comment": "The supported date and time formats listed here are expressed in terms of the date field symbols defined in [UAX35] and MUST be interpreted by implementations as defined in that specification.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test190-metadata.json",
+      "result": "test190.ttl",
+      "implicit": [
+        "test190.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test191",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "date format (bad format string)",
+      "comment": "The supported date and time formats listed here are expressed in terms of the date field symbols defined in [UAX35] and MUST be interpreted by implementations as defined in that specification.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test191-metadata.json",
+      "result": "test191.ttl",
+      "implicit": [
+        "test191.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test192",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "date format (value not matching format)",
+      "comment": "The supported date and time formats listed here are expressed in terms of the date field symbols defined in [UAX35] and MUST be interpreted by implementations as defined in that specification.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test192-metadata.json",
+      "result": "test192.ttl",
+      "implicit": [
+        "test192.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test193",
+      "type": "csvt:ToRdfTest",
+      "name": "duration format (valid combinations)",
+      "comment": "If the datatype base is a duration type, the datatype format annotation provides a regular expression for the string values",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test193-metadata.json",
+      "result": "test193.ttl",
+      "implicit": [
+        "test193.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test194",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "duration format (value not matching format)",
+      "comment": "If the datatype base is a duration type, the datatype format annotation provides a regular expression for the string values",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test194-metadata.json",
+      "result": "test194.ttl",
+      "implicit": [
+        "test194.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test195",
+      "type": "csvt:ToRdfTest",
+      "name": "values with matching length",
+      "comment": "validate the value based on the length constraints described in section 4.6.1 Length Constraints, the value constraints described in section 4.6.2 Value Constraints and the datatype format annotation if one is specified, as described below. If there are any errors, add them to the list of errors for the cell.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test195-metadata.json",
+      "result": "test195.ttl",
+      "implicit": [
+        "test195.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test196",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "values with wrong length",
+      "comment": "validate the value based on the length constraints described in section 4.6.1 Length Constraints, the value constraints described in section 4.6.2 Value Constraints and the datatype format annotation if one is specified, as described below. If there are any errors, add them to the list of errors for the cell.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test196-metadata.json",
+      "result": "test196.ttl",
+      "implicit": [
+        "test196.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test197",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "values with wrong maxLength",
+      "comment": "validate the value based on the length constraints described in section 4.6.1 Length Constraints, the value constraints described in section 4.6.2 Value Constraints and the datatype format annotation if one is specified, as described below. If there are any errors, add them to the list of errors for the cell.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test197-metadata.json",
+      "result": "test197.ttl",
+      "implicit": [
+        "test197.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test198",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "values with wrong minLength",
+      "comment": "validate the value based on the length constraints described in section 4.6.1 Length Constraints, the value constraints described in section 4.6.2 Value Constraints and the datatype format annotation if one is specified, as described below. If there are any errors, add them to the list of errors for the cell.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test198-metadata.json",
+      "result": "test198.ttl",
+      "implicit": [
+        "test198.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test199",
+      "type": "csvt:NegativeRdfTest",
+      "name": "length < minLength",
+      "comment": "Applications MUST raise an error if both length and minLength are specified and length is less than minLength. ",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test199-metadata.json",
+      "implicit": [
+        "test199.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test200",
+      "type": "csvt:NegativeRdfTest",
+      "name": "length > maxLength",
+      "comment": "Applications MUST raise an error if both length and maxLength are specified and length is greater than maxLength. ",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test200-metadata.json",
+      "implicit": [
+        "test200.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test201",
+      "type": "csvt:NegativeRdfTest",
+      "name": "length on date",
+      "comment": "Applications MUST raise an error if length, maxLength, or minLength are specified and the base datatype is not string or one of its subtypes, or a binary type.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test201-metadata.json",
+      "implicit": [
+        "test201.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test202",
+      "type": "csvt:ToRdfTest",
+      "name": "float matching constraints",
+      "comment": "validate the value based on the length constraints described in section 4.6.1 Length Constraints, the value constraints described in section 4.6.2 Value Constraints and the datatype format annotation if one is specified, as described below. If there are any errors, add them to the list of errors for the cell.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test202-metadata.json",
+      "result": "test202.ttl",
+      "implicit": [
+        "test202.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test203",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "float value constraint not matching minimum",
+      "comment": "validate the value based on the length constraints described in section 4.6.1 Length Constraints, the value constraints described in section 4.6.2 Value Constraints and the datatype format annotation if one is specified, as described below. If there are any errors, add them to the list of errors for the cell.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test203-metadata.json",
+      "result": "test203.ttl",
+      "implicit": [
+        "test203.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test204",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "float value constraint not matching maximum",
+      "comment": "validate the value based on the length constraints described in section 4.6.1 Length Constraints, the value constraints described in section 4.6.2 Value Constraints and the datatype format annotation if one is specified, as described below. If there are any errors, add them to the list of errors for the cell.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test204-metadata.json",
+      "result": "test204.ttl",
+      "implicit": [
+        "test204.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test205",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "float value constraint not matching minInclusive",
+      "comment": "validate the value based on the length constraints described in section 4.6.1 Length Constraints, the value constraints described in section 4.6.2 Value Constraints and the datatype format annotation if one is specified, as described below. If there are any errors, add them to the list of errors for the cell.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test205-metadata.json",
+      "result": "test205.ttl",
+      "implicit": [
+        "test205.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test206",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "float value constraint not matching minExclusive",
+      "comment": "validate the value based on the length constraints described in section 4.6.1 Length Constraints, the value constraints described in section 4.6.2 Value Constraints and the datatype format annotation if one is specified, as described below. If there are any errors, add them to the list of errors for the cell.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test206-metadata.json",
+      "result": "test206.ttl",
+      "implicit": [
+        "test206.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test207",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "float value constraint not matching maxInclusive",
+      "comment": "validate the value based on the length constraints described in section 4.6.1 Length Constraints, the value constraints described in section 4.6.2 Value Constraints and the datatype format annotation if one is specified, as described below. If there are any errors, add them to the list of errors for the cell.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test207-metadata.json",
+      "result": "test207.ttl",
+      "implicit": [
+        "test207.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test208",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "float value constraint not matching maxExclusive",
+      "comment": "validate the value based on the length constraints described in section 4.6.1 Length Constraints, the value constraints described in section 4.6.2 Value Constraints and the datatype format annotation if one is specified, as described below. If there are any errors, add them to the list of errors for the cell.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test208-metadata.json",
+      "result": "test208.ttl",
+      "implicit": [
+        "test208.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test209",
+      "type": "csvt:ToRdfTest",
+      "name": "date matching constraints",
+      "comment": "validate the value based on the length constraints described in section 4.6.1 Length Constraints, the value constraints described in section 4.6.2 Value Constraints and the datatype format annotation if one is specified, as described below. If there are any errors, add them to the list of errors for the cell.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test209-metadata.json",
+      "result": "test209.ttl",
+      "implicit": [
+        "test209.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test210",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "date value constraint not matching minimum",
+      "comment": "validate the value based on the length constraints described in section 4.6.1 Length Constraints, the value constraints described in section 4.6.2 Value Constraints and the datatype format annotation if one is specified, as described below. If there are any errors, add them to the list of errors for the cell.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test210-metadata.json",
+      "result": "test210.ttl",
+      "implicit": [
+        "test210.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test211",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "date value constraint not matching maximum",
+      "comment": "validate the value based on the length constraints described in section 4.6.1 Length Constraints, the value constraints described in section 4.6.2 Value Constraints and the datatype format annotation if one is specified, as described below. If there are any errors, add them to the list of errors for the cell.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test211-metadata.json",
+      "result": "test211.ttl",
+      "implicit": [
+        "test211.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test212",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "date value constraint not matching minInclusive",
+      "comment": "validate the value based on the length constraints described in section 4.6.1 Length Constraints, the value constraints described in section 4.6.2 Value Constraints and the datatype format annotation if one is specified, as described below. If there are any errors, add them to the list of errors for the cell.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test212-metadata.json",
+      "result": "test212.ttl",
+      "implicit": [
+        "test212.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test213",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "date value constraint not matching minExclusive",
+      "comment": "validate the value based on the length constraints described in section 4.6.1 Length Constraints, the value constraints described in section 4.6.2 Value Constraints and the datatype format annotation if one is specified, as described below. If there are any errors, add them to the list of errors for the cell.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test213-metadata.json",
+      "result": "test213.ttl",
+      "implicit": [
+        "test213.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test214",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "date value constraint not matching maxInclusive",
+      "comment": "validate the value based on the length constraints described in section 4.6.1 Length Constraints, the value constraints described in section 4.6.2 Value Constraints and the datatype format annotation if one is specified, as described below. If there are any errors, add them to the list of errors for the cell.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test214-metadata.json",
+      "result": "test214.ttl",
+      "implicit": [
+        "test214.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test215",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "date value constraint not matching maxExclusive",
+      "comment": "validate the value based on the length constraints described in section 4.6.1 Length Constraints, the value constraints described in section 4.6.2 Value Constraints and the datatype format annotation if one is specified, as described below. If there are any errors, add them to the list of errors for the cell.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test215-metadata.json",
+      "result": "test215.ttl",
+      "implicit": [
+        "test215.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test216",
+      "type": "csvt:NegativeRdfTest",
+      "name": "minInclusive and minExclusive",
+      "comment": "Applications MUST raise an error if both minInclusive and minExclusive are specified, or if both maxInclusive and maxExclusive are specified. ",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test216-metadata.json",
+      "implicit": [
+        "test216.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test217",
+      "type": "csvt:NegativeRdfTest",
+      "name": "maxInclusive and maxExclusive",
+      "comment": "Applications MUST raise an error if both minInclusive and minExclusive are specified, or if both maxInclusive and maxExclusive are specified. ",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test217-metadata.json",
+      "implicit": [
+        "test217.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test218",
+      "type": "csvt:NegativeRdfTest",
+      "name": "maxInclusive < minInclusive",
+      "comment": "Applications MUST raise an error if both minInclusive and maxInclusive are specified and maxInclusive is less than minInclusive, or if both minInclusive and maxExclusive are specified and maxExclusive is less than or equal to minInclusive.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test218-metadata.json",
+      "implicit": [
+        "test218.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test219",
+      "type": "csvt:NegativeRdfTest",
+      "name": "maxExclusive = minInclusive",
+      "comment": "Applications MUST raise an error if both minInclusive and maxInclusive are specified and maxInclusive is less than minInclusive, or if both minInclusive and maxExclusive are specified and maxExclusive is less than or equal to minInclusive.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test219-metadata.json",
+      "implicit": [
+        "test219.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test220",
+      "type": "csvt:NegativeRdfTest",
+      "name": "maxExclusive < minExclusive",
+      "comment": "Applications MUST raise an error if both minExclusive and maxExclusive are specified and maxExclusive is less than minExclusive, or if both minExclusive and maxInclusive are specified and maxInclusive is less than or equal to minExclusive.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test220-metadata.json",
+      "implicit": [
+        "test220.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test221",
+      "type": "csvt:NegativeRdfTest",
+      "name": "maxInclusive = minExclusive",
+      "comment": "Applications MUST raise an error if both minExclusive and maxExclusive are specified and maxExclusive is less than minExclusive, or if both minExclusive and maxInclusive are specified and maxInclusive is less than or equal to minExclusive.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test221-metadata.json",
+      "implicit": [
+        "test221.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test222",
+      "type": "csvt:NegativeRdfTest",
+      "name": "string datatype with minimum",
+      "comment": "Applications MUST raise an error if minimum, minInclusive, maximum, maxInclusive, minExclusive, or maxExclusive are specified and the base datatype is not a numeric, date/time, or duration type.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test222-metadata.json",
+      "implicit": [
+        "test222.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test223",
+      "type": "csvt:NegativeRdfTest",
+      "name": "string datatype with maxium",
+      "comment": "Applications MUST raise an error if minimum, minInclusive, maximum, maxInclusive, minExclusive, or maxExclusive are specified and the base datatype is not a numeric, date/time, or duration type.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test223-metadata.json",
+      "implicit": [
+        "test223.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test224",
+      "type": "csvt:NegativeRdfTest",
+      "name": "string datatype with minInclusive",
+      "comment": "Applications MUST raise an error if minimum, minInclusive, maximum, maxInclusive, minExclusive, or maxExclusive are specified and the base datatype is not a numeric, date/time, or duration type.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test224-metadata.json",
+      "implicit": [
+        "test224.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test225",
+      "type": "csvt:NegativeRdfTest",
+      "name": "string datatype with maxInclusive",
+      "comment": "Applications MUST raise an error if minimum, minInclusive, maximum, maxInclusive, minExclusive, or maxExclusive are specified and the base datatype is not a numeric, date/time, or duration type.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test225-metadata.json",
+      "implicit": [
+        "test225.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test226",
+      "type": "csvt:NegativeRdfTest",
+      "name": "string datatype with minExclusive",
+      "comment": "Applications MUST raise an error if minimum, minInclusive, maximum, maxInclusive, minExclusive, or maxExclusive are specified and the base datatype is not a numeric, date/time, or duration type.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test226-metadata.json",
+      "implicit": [
+        "test226.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test227",
+      "type": "csvt:NegativeRdfTest",
+      "name": "string datatype with maxExclusive",
+      "comment": "Applications MUST raise an error if minimum, minInclusive, maximum, maxInclusive, minExclusive, or maxExclusive are specified and the base datatype is not a numeric, date/time, or duration type.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test227-metadata.json",
+      "implicit": [
+        "test227.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test228",
+      "type": "csvt:ToRdfTest",
+      "name": "length with separator",
+      "comment": "If the value is a list, the constraint applies to each element of the list.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test228-metadata.json",
+      "result": "test228.ttl",
+      "implicit": [
+        "test228.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test229",
+      "type": "csvt:ToRdfTest",
+      "name": "matching minLength with separator",
+      "comment": "If the value is a list, the constraint applies to each element of the list.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test229-metadata.json",
+      "result": "test229.ttl",
+      "implicit": [
+        "test229.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test230",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "failing minLength with separator",
+      "comment": "If the value is a list, the constraint applies to each element of the list.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test230-metadata.json",
+      "result": "test230.ttl",
+      "implicit": [
+        "test230.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test231",
+      "type": "csvt:ToRdfTest",
+      "name": "single column primaryKey success",
+      "comment": "As defined in [tabular-data-model], validators MUST check that each row has a unique combination of values of cells in the indicated columns.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test231-metadata.json",
+      "result": "test231.ttl",
+      "implicit": [
+        "test231.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test232",
+      "type": "csvt:ToRdfTest",
+      "name": "single column primaryKey violation",
+      "comment": "Validators MUST raise errors if there is more than one row with the same primary key",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test232-metadata.json",
+      "result": "test232.ttl",
+      "implicit": [
+        "test232.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test233",
+      "type": "csvt:ToRdfTest",
+      "name": "multiple column primaryKey success",
+      "comment": "As defined in [tabular-data-model], validators MUST check that each row has a unique combination of values of cells in the indicated columns.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test233-metadata.json",
+      "result": "test233.ttl",
+      "implicit": [
+        "test233.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test234",
+      "type": "csvt:ToRdfTest",
+      "name": "multiple column primaryKey violation",
+      "comment": "Validators MUST raise errors if there is more than one row with the same primary key",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test234-metadata.json",
+      "result": "test234.ttl",
+      "implicit": [
+        "test234.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test235",
+      "type": "csvt:ToRdfTest",
+      "name": "rowTitles on one column",
+      "comment": "if row titles is not null, insert any titles specified for the row. For each value, tv, of the row titles annotation",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test235-metadata.json",
+      "result": "test235.ttl",
+      "implicit": [
+        "countries.csv",
+        "country_slice.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test236",
+      "type": "csvt:ToRdfTest",
+      "name": "rowTitles on multiple columns",
+      "comment": "if row titles is not null, insert any titles specified for the row. For each value, tv, of the row titles annotation",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test236-metadata.json",
+      "result": "test236.ttl",
+      "implicit": [
+        "countries.csv",
+        "country_slice.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test237",
+      "type": "csvt:ToRdfTest",
+      "name": "rowTitles on one column (minimal)",
+      "comment": "if row titles is not null, insert any titles specified for the row. For each value, tv, of the row titles annotation",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true,
+        "minimal": true
+      },
+      "action": "test237-metadata.json",
+      "result": "test237.ttl",
+      "implicit": [
+        "countries.csv",
+        "country_slice.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test238",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "datatype value an absolute URL",
+      "comment": "it must be the name of one of the built-in datatypes defined in section 5.11.1 Built-in Datatypes",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test238-metadata.json",
+      "result": "test238.ttl",
+      "implicit": [
+        "test238.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test242",
+      "type": "csvt:ToRdfTest",
+      "name": "datatype @id an absolute URL",
+      "comment": "If included, @id is a link property that identifies the datatype described by this datatype description.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test242-metadata.json",
+      "result": "test242.ttl",
+      "implicit": [
+        "test242.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test243",
+      "type": "csvt:NegativeRdfTest",
+      "name": "invalid datatype @id",
+      "comment": "It MUST NOT start with `_:`.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test243-metadata.json",
+      "implicit": [
+        "test243.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test244",
+      "type": "csvt:NegativeRdfTest",
+      "name": "invalid datatype @id",
+      "comment": "It MUST NOT be the URL of a built-in datatype.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test244-metadata.json",
+      "implicit": [
+        "test244.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test245",
+      "type": "csvt:ToRdfTest",
+      "name": "date format (valid time combinations with formats and milliseconds)",
+      "comment": "The supported date and time formats listed here are expressed in terms of the date field symbols defined in [UAX35] and MUST be interpreted by implementations as defined in that specification.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test245-metadata.json",
+      "result": "test245.ttl",
+      "implicit": [
+        "test245.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test246",
+      "type": "csvt:ToRdfTest",
+      "name": "date format (valid dateTime combinations with formats and milliseconds)",
+      "comment": "The supported date and time formats listed here are expressed in terms of the date field symbols defined in [UAX35] and MUST be interpreted by implementations as defined in that specification.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test246-metadata.json",
+      "result": "test246.ttl",
+      "implicit": [
+        "test246.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test247",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "date format (extra milliseconds)",
+      "comment": "The supported date and time formats listed here are expressed in terms of the date field symbols defined in [UAX35] and MUST be interpreted by implementations as defined in that specification.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test247-metadata.json",
+      "result": "test247.ttl",
+      "implicit": [
+        "test247.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test248",
+      "type": "csvt:ToRdfTest",
+      "name": "Unicode in non-Normalized form",
+      "comment": "No Unicode normalization (as specified in [UAX15]) is applied to these string values",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test248-metadata.json",
+      "result": "test248.ttl",
+      "implicit": [
+        "test248.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test251",
+      "type": "csvt:NegativeRdfTest",
+      "name": "missing source reference",
+      "comment": "As defined in [tabular-data-model], validators MUST check that, for each row, the combination of cells in the referencing columns references a unique row within the referenced table through a combination of cells in the referenced columns.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test251-metadata.json",
+      "implicit": [
+        "countries.csv",
+        "country_slice.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test252",
+      "type": "csvt:NegativeRdfTest",
+      "name": "missing destination reference column",
+      "comment": "As defined in [tabular-data-model], validators MUST check that, for each row, the combination of cells in the referencing columns references a unique row within the referenced table through a combination of cells in the referenced columns.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test252-metadata.json",
+      "implicit": [
+        "countries.csv",
+        "country_slice.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test253",
+      "type": "csvt:NegativeRdfTest",
+      "name": "missing destination table",
+      "comment": "As defined in [tabular-data-model], validators MUST check that, for each row, the combination of cells in the referencing columns references a unique row within the referenced table through a combination of cells in the referenced columns.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test253-metadata.json",
+      "implicit": [
+        "countries.csv",
+        "country_slice.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test259",
+      "type": "csvt:ToRdfTest",
+      "name": "tree-ops example with csvm.json (w3.org/.well-known/csvm)",
+      "comment": "Processors MUST use the first metadata found for processing a tabular data file by using overriding metadata, if provided. Otherwise processors MUST attempt to locate the first metadata document from the Link header or the metadata located through site-wide configuration.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test259/tree-ops.csv",
+      "result": "test259/result.ttl",
+      "implicit": [
+        "test259/csvm.json"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test260",
+      "type": "csvt:ToRdfTest",
+      "name": "tree-ops example with {+url}.json (w3.org/.well-known/csvm)",
+      "comment": "Processors MUST use the first metadata found for processing a tabular data file by using overriding metadata, if provided. Otherwise processors MUST attempt to locate the first metadata document from the Link header or the metadata located through site-wide configuration.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test260/tree-ops.csv",
+      "result": "test260/result.ttl",
+      "implicit": [
+        "test260/tree-ops.csv.json"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test261",
+      "type": "csvt:NegativeRdfTest",
+      "name": "maxLength < minLength",
+      "comment": "Applications MUST raise an error if both minLength and maxLength are specified and minLength is greater than maxLength.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test261-metadata.json",
+      "implicit": [
+        "test261.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test263",
+      "type": "csvt:ToRdfTest",
+      "name": "@type on a common property can be a built-in type",
+      "comment": "The value of any member of `@type` MUST be either a _term_ defined in [csvw-context], a _prefixed name_ where the prefix is a term defined in [csvw-context], or an absolute URL.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test263-metadata.json",
+      "result": "test263.ttl",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test264",
+      "type": "csvt:ToRdfTest",
+      "name": "@type on a common property can be a CURIE if the prefix is one of the built-in ones",
+      "comment": "The value of any member of `@type` MUST be either a _term_ defined in [csvw-context], a _prefixed name_ where the prefix is a term defined in [csvw-context], or an absolute URL.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test264-metadata.json",
+      "result": "test264.ttl",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test266",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "`null` contains an array of (valid) string & (invalid) numeric values",
+      "comment": "Processors MUST issue a warning if a property is set to an invalid value type",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test266-metadata.json",
+      "result": "test266.ttl",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test267",
+      "type": "csvt:NegativeRdfTest",
+      "name": "@id on datatype is invalid (eg starts with _:)",
+      "comment": "It MUST NOT start with `_:` and it MUST NOT be the URL of a built-in datatype.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test267-metadata.json",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test268",
+      "type": "csvt:ToRdfTest",
+      "name": "`base` missing on datatype (defaults to string)",
+      "comment": "An atomic property that contains a single string: the name of one of the built-in datatypes, as listed above (and which are defined as terms in the default context). Its default is string.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test268-metadata.json",
+      "result": "test268.ttl",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test269",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "`format` for a boolean datatype is a string but in the wrong form (eg YN)",
+      "comment": "If the datatype base for a cell is `boolean`, the datatype format annotation provides the true value followed by the false value, separated by `|`. If the format does not follow this syntax, implementations MUST issue a warning and proceed as if no format had been provided.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test269-metadata.json",
+      "result": "test269.ttl",
+      "implicit": [
+        "test269.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test270",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "transformation includes an invalid property (eg foo)",
+      "comment": "All terms used within a metadata document MUST be defined in [csvw-context] defined for this specification",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test270-metadata.json",
+      "result": "test270.ttl",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test271",
+      "type": "csvt:NegativeRdfTest",
+      "name": "foreign key includes an invalid property (eg `dc:description`)",
+      "comment": "A foreign key definition is a JSON object that must contain only the following properties. . .",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test271-metadata.json",
+      "implicit": [
+        "test271.csv",
+        "countries.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test272",
+      "type": "csvt:NegativeRdfTest",
+      "name": "foreign key reference includes an invalid property (eg `dc:description`)",
+      "comment": "A foreign key definition is a JSON object that must contain only the following properties. . .",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test272-metadata.json",
+      "implicit": [
+        "test272.csv",
+        "countries.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test273",
+      "type": "csvt:ToRdfTest",
+      "name": "`@base` set in `@context` overriding eg CSV location",
+      "comment": "If present, its value MUST be a string that is interpreted as a URL which is resolved against the location of the metadata document to provide the **base URL** for other URLs in the metadata document.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test273-metadata.json",
+      "result": "test273.ttl",
+      "implicit": [
+        "test273/action.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test274",
+      "type": "csvt:NegativeRdfTest",
+      "name": "`@context` object includes properties other than `@base` and `@language`",
+      "comment": "The `@context` MUST have one of the following values: An array composed of a string followed by an object, where the string is `http://www.w3.org/ns/csvw` and the object represents a local context definition, which is restricted to contain either or both of the following members.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test274-metadata.json",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test275",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "property acceptable on column appears on table group",
+      "comment": "Table Group may only use defined properties.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test275-metadata.json",
+      "result": "test275.ttl",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test276",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "property acceptable on column appears on table",
+      "comment": "Table may only use defined properties.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test276-metadata.json",
+      "result": "test276.ttl",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test277",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "property acceptable on table appears on column",
+      "comment": "Column may only use defined properties.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test277-metadata.json",
+      "result": "test277.ttl",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test278",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "CSV has more headers than there are columns in the metadata",
+      "comment": "Two schemas are compatible if they have the same number of non-virtual column descriptions, and the non-virtual column descriptions at the same index within each are compatible with each other.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test278-metadata.json",
+      "result": "test278.ttl",
+      "implicit": [
+        "tree-ops.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test279",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "duration not matching xsd pattern",
+      "comment": "Value MUST be a valid xsd:duration.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test279-metadata.json",
+      "result": "test279.ttl",
+      "implicit": [
+        "test279.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test280",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "dayTimeDuration not matching xsd pattern",
+      "comment": "Value MUST be a valid xsd:dayTimeDuration.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test280-metadata.json",
+      "result": "test280.ttl",
+      "implicit": [
+        "test280.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test281",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "yearMonthDuration not matching xsd pattern",
+      "comment": "Value MUST be a valid xsd:yearMonthDuration.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test281-metadata.json",
+      "result": "test281.ttl",
+      "implicit": [
+        "test281.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test282",
+      "type": "csvt:ToRdfTest",
+      "name": "valid number patterns",
+      "comment": "A number format pattern as defined in [UAX35]. Implementations MUST recognise number format patterns containing the symbols `0`, `#`, the specified decimalChar (or `.` if unspecified), the specified groupChar (or `,` if unspecified), `E`, `+`, `%` and `&permil;`.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test282-metadata.json",
+      "result": "test282.ttl",
+      "implicit": [
+        "test282.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test283",
+      "type": "csvt:ToRdfTest",
+      "name": "valid number patterns (signs and percent/permille)",
+      "comment": "A number format pattern as defined in [UAX35]. Implementations MUST recognise number format patterns containing the symbols `0`, `#`, the specified decimalChar (or `.` if unspecified), the specified groupChar (or `,` if unspecified), `E`, `+`, `%` and `&permil;`.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test283-metadata.json",
+      "result": "test283.ttl",
+      "implicit": [
+        "test283.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test284",
+      "type": "csvt:ToRdfTest",
+      "name": "valid number patterns (grouping)",
+      "comment": "A number format pattern as defined in [UAX35]. Implementations MUST recognise number format patterns containing the symbols `0`, `#`, the specified decimalChar (or `.` if unspecified), the specified groupChar (or `,` if unspecified), `E`, `+`, `%` and `&permil;`.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test284-metadata.json",
+      "result": "test284.ttl",
+      "implicit": [
+        "test284.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test285",
+      "type": "csvt:ToRdfTest",
+      "name": "valid number patterns (fractional grouping)",
+      "comment": "A number format pattern as defined in [UAX35]. Implementations MUST recognise number format patterns containing the symbols `0`, `#`, the specified decimalChar (or `.` if unspecified), the specified groupChar (or `,` if unspecified), `E`, `+`, `%` and `&permil;`.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test285-metadata.json",
+      "result": "test285.ttl",
+      "implicit": [
+        "test285.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test286",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "invalid ##0 1,234",
+      "comment": "A number format pattern as defined in [UAX35]. Implementations MUST recognise number format patterns containing the symbols `0`, `#`, the specified decimalChar (or `.` if unspecified), the specified groupChar (or `,` if unspecified), `E`, `+`, `%` and `&permil;`.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test286-metadata.json",
+      "result": "test286.ttl",
+      "implicit": [
+        "test286.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test287",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "invalid ##0 123.4",
+      "comment": "A number format pattern as defined in [UAX35]. Implementations MUST recognise number format patterns containing the symbols `0`, `#`, the specified decimalChar (or `.` if unspecified), the specified groupChar (or `,` if unspecified), `E`, `+`, `%` and `&permil;`.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test287-metadata.json",
+      "result": "test287.ttl",
+      "implicit": [
+        "test287.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test288",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "invalid #,#00 1",
+      "comment": "A number format pattern as defined in [UAX35]. Implementations MUST recognise number format patterns containing the symbols `0`, `#`, the specified decimalChar (or `.` if unspecified), the specified groupChar (or `,` if unspecified), `E`, `+`, `%` and `&permil;`.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test288-metadata.json",
+      "result": "test288.ttl",
+      "implicit": [
+        "test288.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test289",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "invalid #,#00 1234",
+      "comment": "A number format pattern as defined in [UAX35]. Implementations MUST recognise number format patterns containing the symbols `0`, `#`, the specified decimalChar (or `.` if unspecified), the specified groupChar (or `,` if unspecified), `E`, `+`, `%` and `&permil;`.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test289-metadata.json",
+      "result": "test289.ttl",
+      "implicit": [
+        "test289.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test290",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "invalid #,#00 12,34",
+      "comment": "A number format pattern as defined in [UAX35]. Implementations MUST recognise number format patterns containing the symbols `0`, `#`, the specified decimalChar (or `.` if unspecified), the specified groupChar (or `,` if unspecified), `E`, `+`, `%` and `&permil;`.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test290-metadata.json",
+      "result": "test290.ttl",
+      "implicit": [
+        "test290.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test291",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "invalid #,#00 12,34,567",
+      "comment": "A number format pattern as defined in [UAX35]. Implementations MUST recognise number format patterns containing the symbols `0`, `#`, the specified decimalChar (or `.` if unspecified), the specified groupChar (or `,` if unspecified), `E`, `+`, `%` and `&permil;`.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test291-metadata.json",
+      "result": "test291.ttl",
+      "implicit": [
+        "test291.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test292",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "invalid #,##,#00 1",
+      "comment": "A number format pattern as defined in [UAX35]. Implementations MUST recognise number format patterns containing the symbols `0`, `#`, the specified decimalChar (or `.` if unspecified), the specified groupChar (or `,` if unspecified), `E`, `+`, `%` and `&permil;`.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test292-metadata.json",
+      "result": "test292.ttl",
+      "implicit": [
+        "test292.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test293",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "invalid #,##,#00 1234",
+      "comment": "A number format pattern as defined in [UAX35]. Implementations MUST recognise number format patterns containing the symbols `0`, `#`, the specified decimalChar (or `.` if unspecified), the specified groupChar (or `,` if unspecified), `E`, `+`, `%` and `&permil;`.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test293-metadata.json",
+      "result": "test293.ttl",
+      "implicit": [
+        "test293.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test294",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "invalid #,##,#00 12,34",
+      "comment": "A number format pattern as defined in [UAX35]. Implementations MUST recognise number format patterns containing the symbols `0`, `#`, the specified decimalChar (or `.` if unspecified), the specified groupChar (or `,` if unspecified), `E`, `+`, `%` and `&permil;`.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test294-metadata.json",
+      "result": "test294.ttl",
+      "implicit": [
+        "test294.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test295",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "invalid #,##,#00 1,234,567",
+      "comment": "A number format pattern as defined in [UAX35]. Implementations MUST recognise number format patterns containing the symbols `0`, `#`, the specified decimalChar (or `.` if unspecified), the specified groupChar (or `,` if unspecified), `E`, `+`, `%` and `&permil;`.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test295-metadata.json",
+      "result": "test295.ttl",
+      "implicit": [
+        "test295.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test296",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "invalid #0.# 12.34",
+      "comment": "A number format pattern as defined in [UAX35]. Implementations MUST recognise number format patterns containing the symbols `0`, `#`, the specified decimalChar (or `.` if unspecified), the specified groupChar (or `,` if unspecified), `E`, `+`, `%` and `&permil;`.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test296-metadata.json",
+      "result": "test296.ttl",
+      "implicit": [
+        "test296.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test297",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "invalid #0.# 1,234.5",
+      "comment": "A number format pattern as defined in [UAX35]. Implementations MUST recognise number format patterns containing the symbols `0`, `#`, the specified decimalChar (or `.` if unspecified), the specified groupChar (or `,` if unspecified), `E`, `+`, `%` and `&permil;`.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test297-metadata.json",
+      "result": "test297.ttl",
+      "implicit": [
+        "test297.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test298",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "invalid #0.0 1",
+      "comment": "A number format pattern as defined in [UAX35]. Implementations MUST recognise number format patterns containing the symbols `0`, `#`, the specified decimalChar (or `.` if unspecified), the specified groupChar (or `,` if unspecified), `E`, `+`, `%` and `&permil;`.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test298-metadata.json",
+      "result": "test298.ttl",
+      "implicit": [
+        "test298.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test299",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "invalid #0.0 12.34",
+      "comment": "A number format pattern as defined in [UAX35]. Implementations MUST recognise number format patterns containing the symbols `0`, `#`, the specified decimalChar (or `.` if unspecified), the specified groupChar (or `,` if unspecified), `E`, `+`, `%` and `&permil;`.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test299-metadata.json",
+      "result": "test299.ttl",
+      "implicit": [
+        "test299.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test300",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "invalid #0.0# 1",
+      "comment": "A number format pattern as defined in [UAX35]. Implementations MUST recognise number format patterns containing the symbols `0`, `#`, the specified decimalChar (or `.` if unspecified), the specified groupChar (or `,` if unspecified), `E`, `+`, `%` and `&permil;`.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test300-metadata.json",
+      "result": "test300.ttl",
+      "implicit": [
+        "test300.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test301",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "invalid #0.0# 12.345",
+      "comment": "A number format pattern as defined in [UAX35]. Implementations MUST recognise number format patterns containing the symbols `0`, `#`, the specified decimalChar (or `.` if unspecified), the specified groupChar (or `,` if unspecified), `E`, `+`, `%` and `&permil;`.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test301-metadata.json",
+      "result": "test301.ttl",
+      "implicit": [
+        "test301.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test302",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "invalid #0.0#,# 1",
+      "comment": "A number format pattern as defined in [UAX35]. Implementations MUST recognise number format patterns containing the symbols `0`, `#`, the specified decimalChar (or `.` if unspecified), the specified groupChar (or `,` if unspecified), `E`, `+`, `%` and `&permil;`.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test302-metadata.json",
+      "result": "test302.ttl",
+      "implicit": [
+        "test302.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test303",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "invalid #0.0#,# 12.345",
+      "comment": "A number format pattern as defined in [UAX35]. Implementations MUST recognise number format patterns containing the symbols `0`, `#`, the specified decimalChar (or `.` if unspecified), the specified groupChar (or `,` if unspecified), `E`, `+`, `%` and `&permil;`.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test303-metadata.json",
+      "result": "test303.ttl",
+      "implicit": [
+        "test303.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test304",
+      "type": "csvt:ToRdfTestWithWarnings",
+      "name": "invalid #0.0#,# 12.34,567",
+      "comment": "A number format pattern as defined in [UAX35]. Implementations MUST recognise number format patterns containing the symbols `0`, `#`, the specified decimalChar (or `.` if unspecified), the specified groupChar (or `,` if unspecified), `E`, `+`, `%` and `&permil;`.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test304-metadata.json",
+      "result": "test304.ttl",
+      "implicit": [
+        "test304.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test305",
+      "type": "csvt:ToRdfTest",
+      "name": "multiple values with same subject and property (unordered)",
+      "comment": "Values in separate columns using the same propertyUrl are kept in proper relative order.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test305-metadata.json",
+      "result": "test305.ttl",
+      "implicit": [
+        "test305.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test306",
+      "type": "csvt:ToRdfTest",
+      "name": "multiple values with same subject and property (ordered)",
+      "comment": "Values in separate columns using the same propertyUrl are kept in proper relative order.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test306-metadata.json",
+      "result": "test306.ttl",
+      "implicit": [
+        "test306.csv"
+      ]
+    },
+    {
+      "id": "manifest-rdf#test307",
+      "type": "csvt:ToRdfTest",
+      "name": "multiple values with same subject and property (ordered and unordered)",
+      "comment": "Values in separate columns using the same propertyUrl are kept in proper relative order.",
+      "approval": "rdft:Approved",
+      "option": {
+        "noProv": true
+      },
+      "action": "test307-metadata.json",
+      "result": "test307.ttl",
+      "implicit": [
+        "test307.csv"
+      ]
+    }
+  ]
+}

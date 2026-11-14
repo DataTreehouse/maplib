@@ -1,0 +1,24 @@
+@prefix csvw: <http://www.w3.org/ns/csvw#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+ [
+    a csvw:TableGroup;
+    csvw:table [
+      a csvw:Table;
+      rdfs:label "number format (not matching values with pattern)";
+      rdfs:comment "Implementations MUST add a validation error to the errors annotation for the cell if the string being parsed.";
+      csvw:row [
+        a csvw:Row;
+        csvw:describes [
+        <test160.csv#decimal> "10.10";
+        <test160.csv#double> "10.10e10";
+        <test160.csv#integer> "10.1"
+        ];
+        csvw:rownum 1;
+        csvw:url <test160.csv#row=2>
+      ];
+      csvw:url <test160.csv>
+    ]
+ ] .

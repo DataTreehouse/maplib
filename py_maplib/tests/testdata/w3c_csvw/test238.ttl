@@ -1,0 +1,20 @@
+@prefix csvw: <http://www.w3.org/ns/csvw#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+ [
+    a csvw:TableGroup;
+    csvw:table [
+      a csvw:Table;
+      rdfs:label "datatype value an absolute URL that does not resolve";
+      rdfs:comment "If the value of this property is a string, it MUST be one of the built-in datatypes defined in section 5.11.1 Built-in Datatypes or an absolute URL.";
+      csvw:row [
+        a csvw:Row;
+        csvw:describes [ <test238.csv#string> "foo"];
+        csvw:rownum 1;
+        csvw:url <test238.csv#row=2>
+      ];
+      csvw:url <test238.csv>
+    ]
+ ] .

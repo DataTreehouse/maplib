@@ -1,0 +1,20 @@
+@prefix csvw: <http://www.w3.org/ns/csvw#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+ [
+    a csvw:TableGroup;
+    csvw:table [
+      a csvw:Table;
+      rdfs:label "integer datatype with decimalChar";
+      rdfs:comment "Implementations MUST add a validation error to the errors annotation for the cell if the string being parsed contains the decimalChar, if the datatype base is integer or one of its sub-values.";
+      csvw:row [
+        a csvw:Row;
+        csvw:describes [ <test163.csv#integer> "3.2"];
+        csvw:rownum 1;
+        csvw:url <test163.csv#row=2>
+      ];
+      csvw:url <test163.csv>
+    ]
+ ] .
