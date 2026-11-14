@@ -201,7 +201,7 @@ def test_multi_value_different_types_filter_isiri_or_equals_with_datatypes():
     assert sm.rdf_types == {
         "a": RDFType.Multi([RDFType.IRI, RDFType.Literal(xsd.integer)])
     }
-    file = "multi_value_different_types.parquet"
+    file = PATH_HERE / "multi_value_different_types.parquet"
     #sm.mappings.write_parquet(file)
     expected = pl.read_parquet(file)
     assert_frame_equal(

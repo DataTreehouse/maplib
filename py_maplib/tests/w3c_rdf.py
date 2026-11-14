@@ -213,7 +213,7 @@ def parse_nquads(text: str) -> List[tuple]:
                 dt = tok.group("dt")
                 return literal(
                     unescape(tok.group("lit")[1:-1]),
-                    dt[1:-1] if dt else None,
+                    unescape(dt[1:-1]) if dt else None,
                     tok.group("lang"),
                     tok.group("dir"),
                 )

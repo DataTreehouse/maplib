@@ -123,6 +123,7 @@ Faster lookups, property paths and small inserts:
 Reading and writing HDT is much faster. Reading decodes each term of the HDT dictionary once and maps it directly into the model's dictionaries, then adds the triples as integer IDs in parallel batches, without building HDT query indexes. Writing deduplicates and maps triples using the model's dictionary codes, decodes only the distinct terms, and writes the triples section without building query indexes. The written files are unchanged.
 
 ### Bug fixes
+- SPARQL: `+`, `-`, `*` and `/` were parsed as right associative, so `8 - 3 - 2` gave 7 and `12 / 2 / 3` gave 18. Operators of the same precedence are now left associative, as the SPARQL grammar specifies. Serialized queries put arithmetic in parentheses, so that `8 - (3 - 2)` and `(1 + 2) * 3` keep their meaning
 - Ctrl-C now stops a running query. Before, a long query could keep running until it finished
 - A triple pattern with the same variable in two positions (e.g. `?s <p> ?s`) panicked, in queries and in `DELETE WHERE`, when the predicate also had triples where the two positions had different types (e.g. blank node subjects with IRI objects)
 - Hybrid storage: `Model.compact()` (also run by `Model.serialize()`) failed with a DuckDB "Duplicate key" error once the dictionary had to be renumbered, e.g. after more than ten inserts into the same predicate

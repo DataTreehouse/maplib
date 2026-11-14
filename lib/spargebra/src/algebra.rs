@@ -295,16 +295,16 @@ impl fmt::Display for Expression {
                 f.write_str(")")
             }
             Self::Add(a, b) => {
-                write!(f, "{a} + {b}")
+                write!(f, "({a} + {b})")
             }
             Self::Subtract(a, b) => {
-                write!(f, "{a} - {b}")
+                write!(f, "({a} - {b})")
             }
             Self::Multiply(a, b) => {
-                write!(f, "{a} * {b}")
+                write!(f, "({a} * {b})")
             }
             Self::Divide(a, b) => {
-                write!(f, "{a} / {b}")
+                write!(f, "({a} / {b})")
             }
             Self::UnaryPlus(e) => write!(f, "+{e}"),
             Self::UnaryMinus(e) => write!(f, "-{e}"),
