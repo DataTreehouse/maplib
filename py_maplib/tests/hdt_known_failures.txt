@@ -1,0 +1,4 @@
+# HDT compliance test cases maplib currently fails (used by test_hdt_compliance.py).
+# One test id per line, optionally followed by "# reason".
+# These are strict xfails: when a test starts passing, remove it from this list.
+# Other known failures are marked in test_hdt_compliance.py itself.

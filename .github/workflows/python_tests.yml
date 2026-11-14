@@ -49,7 +49,10 @@ jobs:
         working-directory: ./py_maplib
 
       - name: pytest
+        env:
+          HDT_REFERENCE_REQUIRED: "1"
         run: |
           source ../.venv/bin/activate
+          python fetch_hdt_reference.py
           pytest -v
         working-directory: ./py_maplib/tests

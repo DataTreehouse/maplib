@@ -4,6 +4,9 @@
 //! the global cats), so the triples are deduplicated and mapped to HDT IDs as integers, and only
 //! the distinct terms are decoded to the strings of the dictionary. Literals that are not cat
 //! stored are formatted once per distinct value.
+//!
+//! As in hdt-java and hdt-cpp, a literal is stored with its value as it is, not N-Triples escaped:
+//! `"value"`, `"value"@lang` or `"value"^^<datatype>`.
 
 use crate::errors::TriplestoreError;
 use crate::Triplestore;
@@ -13,8 +16,8 @@ use hdt::dict_sect_pfc::DictSectPFC;
 use hdt::four_sect_dict::FourSectDict;
 use hdt::header::Header;
 use hdt::triples::write_bitmap_triples;
-use oxrdf::vocab::rdf;
-use oxrdf::{Literal, NamedNode};
+use oxrdf::vocab::{rdf, xsd};
+use oxrdf::{NamedNode, Term};
 use polars::prelude::{
     col, Column, DataFrame, IntoColumn, IntoLazy, JoinArgs, JoinType, NamedFrom, PlHashMap, Series,
 };
@@ -33,6 +36,7 @@ use tracing::debug;
 
 const BLOCK_SIZE: usize = 16;
 const BASE_IRI: &str = "https://github.com/DataTreehouse/maplib";
+const HDT_DATASET: &str = "http://purl.org/HDT/hdt#Dataset";
 const ROW_INDEX_COL: &str = "__hdt_row";
 
 /// A term of the graph, identified by its encoding.
@@ -155,6 +159,17 @@ pub(super) fn write_hdt<W: Write>(
     let shared = decoder.section(shared);
     let subject_only = decoder.section(subject_only);
     let object_only = decoder.section(object_only);
+    // Dictionary strings are NUL terminated.
+    if let Some((s, _)) = shared
+        .iter()
+        .chain(&object_only)
+        .find(|(s, _)| s.contains('\0'))
+    {
+        return Err(TriplestoreError::HDTError(format!(
+            "HDT cannot store U+0000 (NUL), as in the literal {}",
+            s.replace('\0', "\\u0000")
+        )));
+    }
     let mut predicate_strings: Vec<(&str, usize)> = predicates
         .iter()
         .enumerate()
@@ -320,7 +335,7 @@ fn typed_objects(
     );
     let strings = terms
         .into_iter()
-        .map(|t| t.map(|t| t.to_string()).unwrap_or_default())
+        .map(|t| t.map(|t| dictionary_string(&t)).unwrap_or_default())
         .collect();
     let rows = DataFrame::new(
         n,
@@ -363,7 +378,7 @@ fn typed_objects(
     let rows = terms
         .into_iter()
         .map(|t| {
-            let s = t.map(|t| t.to_string()).unwrap_or_default();
+            let s = t.map(|t| dictionary_string(&t)).unwrap_or_default();
             let next = strings.len() as u32;
             *ids.entry(s).or_insert_with_key(|s| {
                 strings.push(s.clone());
@@ -471,15 +486,33 @@ impl TermDecoder<'_> {
             TermKey::Cat(t, u) => {
                 let dt = &self.cat_datatypes[t as usize];
                 let value = decode(&CatType::Literal(dt.clone()), u);
-                Literal::new_typed_literal(value, dt.clone()).to_string()
+                literal_string(&value, None, Some(dt.as_str()))
             }
             TermKey::Lang(v, l) => {
                 let t = CatType::Literal(rdf::LANG_STRING.into_owned());
-                Literal::new_language_tagged_literal_unchecked(decode(&t, v), decode(&t, l))
-                    .to_string()
+                literal_string(&decode(&t, v), Some(&decode(&t, l)), None)
             }
             TermKey::Typed(i) => self.typed_strings[i as usize].clone(),
         }
+    }
+}
+
+/// A literal in HDT dictionary form, with its value unescaped.
+fn literal_string(value: &str, lang: Option<&str>, datatype: Option<&str>) -> String {
+    match (lang, datatype) {
+        (Some(lang), _) => format!("\"{value}\"@{lang}"),
+        (None, Some(dt)) if dt != xsd::STRING.as_str() => format!("\"{value}\"^^<{dt}>"),
+        _ => format!("\"{value}\""),
+    }
+}
+
+/// A literal object in HDT dictionary form. Other terms do not reach here, as IRIs and blank
+/// nodes are cat stored.
+fn dictionary_string(term: &Term) -> String {
+    match term {
+        Term::Literal(l) => literal_string(l.value(), l.language(), Some(l.datatype().as_str())),
+        Term::NamedNode(n) => n.as_str().to_owned(),
+        Term::BlankNode(b) => b.to_string(),
     }
 }
 
@@ -505,8 +538,10 @@ fn statistics_header(dict: &FourSectDict, num_triples: usize) -> Header {
     let distinct_subjects = dict.subjects.num_strings() + dict.shared.num_strings();
     let distinct_objects = dict.objects.num_strings() + dict.shared.num_strings();
 
-    insert_literal(&mut body, &base, RDF_TYPE, HDT_CONTAINER);
-    insert_literal(&mut body, &base, RDF_TYPE, VOID_DATASET);
+    // Like hdt-java and hdt-cpp. The reader takes a literal "...#HDTv1" type as the mark of a file
+    // from an earlier maplib version, which stored literals escaped.
+    insert_id(&mut body, &base, RDF_TYPE, &Id::Named(HDT_DATASET.to_owned()));
+    insert_id(&mut body, &base, RDF_TYPE, &Id::Named(VOID_DATASET.to_owned()));
     insert_literal(&mut body, &base, VOID_TRIPLES, num_triples);
     insert_literal(
         &mut body,
@@ -518,11 +553,17 @@ fn statistics_header(dict: &FourSectDict, num_triples: usize) -> Header {
     insert_literal(&mut body, &base, VOID_DISTINCT_OBJECTS, distinct_objects);
 
     insert_id(&mut body, &base, HDT_STATISTICAL_INFORMATION, &stats_id);
-    insert_id(&mut body, &base, HDT_STATISTICAL_INFORMATION, &pub_id);
+    insert_id(&mut body, &base, HDT_PUBLICATION_INFORMATION, &pub_id);
     insert_id(&mut body, &base, HDT_FORMAT_INFORMATION, &format_id);
     insert_id(&mut body, &format_id, HDT_DICTIONARY, &dict_id);
     insert_id(&mut body, &format_id, HDT_TRIPLES, &triples_id);
 
+    insert_id(
+        &mut body,
+        &dict_id,
+        DC_TERMS_FORMAT,
+        &Id::Named(HDT_DICTIONARY_TYPE_FOUR.to_owned()),
+    );
     insert_literal(
         &mut body,
         &dict_id,
@@ -538,7 +579,12 @@ fn statistics_header(dict: &FourSectDict, num_triples: usize) -> Header {
     );
     insert_literal(&mut body, &dict_id, HDT_DICT_BLOCK_SIZE, BLOCK_SIZE);
 
-    insert_literal(&mut body, &triples_id, DC_TERMS_FORMAT, HDT_TYPE_BITMAP);
+    insert_id(
+        &mut body,
+        &triples_id,
+        DC_TERMS_FORMAT,
+        &Id::Named(HDT_TYPE_BITMAP.to_owned()),
+    );
     insert_literal(&mut body, &triples_id, HDT_NUM_TRIPLES, num_triples);
     insert_literal(&mut body, &triples_id, HDT_TRIPLES_ORDER, "SPO");
 

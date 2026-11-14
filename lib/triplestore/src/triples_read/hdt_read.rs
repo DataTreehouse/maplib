@@ -60,8 +60,13 @@ impl Triplestore {
         triples_batch_size: usize,
     ) -> Result<(), TriplestoreError> {
         let start = Instant::now();
-        let HdtScan { dict, triples, .. } = HdtScan::read(Cursor::new(slice))
+        let HdtScan {
+            header,
+            dict,
+            triples,
+        } = HdtScan::read(Cursor::new(slice))
             .map_err(|e| TriplestoreError::HDTError(e.to_string()))?;
+        let escaped_literals = has_escaped_literals(&header);
         debug!(
             "Reading the HDT sections took {} seconds",
             start.elapsed().as_secs_f32()
@@ -74,7 +79,10 @@ impl Triplestore {
         let chunks: Vec<TermChunk> = jobs
             .par_iter()
             .map(|(section, blocks)| {
-                let mut chunk = TermChunk::default();
+                let mut chunk = TermChunk {
+                    escaped_literals,
+                    ..Default::default()
+                };
                 sections[*section]
                     .decode_blocks(blocks.clone(), |_, s| chunk.push_term(s, &blank_suffix));
                 chunk
@@ -203,6 +211,8 @@ struct TermChunk {
     datatype_cats: HashMap<String, Option<u16>>,
     literal_types: HashMap<String, Vec<BaseRDFNodeType>>,
     slots: Vec<Slot>,
+    /// Literal values are stored with N-Triples escapes, see [`has_escaped_literals`].
+    escaped_literals: bool,
 }
 
 impl TermChunk {
@@ -237,7 +247,7 @@ impl TermChunk {
     }
 
     fn literal_slot(&mut self, s: &str) -> Slot {
-        let (value, suffix) = split_hdt_literal(s);
+        let (value, suffix) = split_hdt_literal(s, self.escaped_literals);
         match suffix {
             LiteralSuffix::Language(lang) => {
                 let t = self.type_id(BaseRDFNodeType::Literal(
@@ -290,11 +300,22 @@ enum LiteralSuffix<'a> {
     Datatype(&'a str),
 }
 
+/// Whether the literal values of the dictionary are stored with N-Triples escapes. hdt-java,
+/// hdt-cpp and maplib store the values themselves, but earlier versions of maplib and of the hdt
+/// crate stored them escaped. Those versions are recognised by their header, which gives the
+/// dataset type as the literal `"http://purl.org/HDT/hdt#HDTv1"` instead of an IRI.
+fn has_escaped_literals(header: &hdt::header::Header) -> bool {
+    header.body.iter().any(|t| {
+        t.predicate == rdf::TYPE.as_str()
+            && matches!(&t.object, hdt::containers::rdf::Term::Literal(_))
+            && format!("{:?}", t.object) == format!("\"{}\"", hdt::vocab::HDT_CONTAINER)
+    })
+}
+
 /// Splits an HDT dictionary literal (`"value"`, `"value"@lang` or `"value"^^<datatype>`) into its
-/// value and its language tag or datatype. Values are stored unescaped by hdt-java and hdt-cpp,
-/// but with N-Triples escapes by earlier maplib versions and the hdt crate, so escapes are
+/// value and its language tag or datatype. With `escaped`, N-Triples escapes in the value are
 /// resolved when they parse.
-fn split_hdt_literal(s: &str) -> (Cow<'_, str>, LiteralSuffix<'_>) {
+fn split_hdt_literal(s: &str, escaped: bool) -> (Cow<'_, str>, LiteralSuffix<'_>) {
     if let Some(close) = s.rfind('"').filter(|c| *c > 0) {
         let raw = &s[1..close];
         let rest = &s[close + 1..];
@@ -308,7 +329,12 @@ fn split_hdt_literal(s: &str) -> (Cow<'_, str>, LiteralSuffix<'_>) {
                 .map(LiteralSuffix::Datatype)
         };
         if let Some(suffix) = suffix {
-            return (unescape(raw), suffix);
+            let value = if escaped {
+                unescape(raw)
+            } else {
+                Cow::Borrowed(raw)
+            };
+            return (value, suffix);
         }
     }
     (

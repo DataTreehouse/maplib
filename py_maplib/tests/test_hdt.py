@@ -262,6 +262,10 @@ def _w3c_model() -> Model:
         # escapes a surrogate pair.
         if "-bad-" in f.name or f.name == "test-38.nt":
             continue
+        # HDT cannot store U+0000, its dictionary strings are NUL terminated.
+        raw = f.read_bytes()
+        if b"\\u0000" in raw or b"\\U00000000" in raw or b"\0" in raw:
+            continue
         m.read(str(f), format="ntriples")
     for f in sorted(W3C_SPARQL11_PATH.glob("*/*.ttl")):
         if not f.name.startswith("manifest") and f.name not in W3C_SPARQL11_RELATIVE:
