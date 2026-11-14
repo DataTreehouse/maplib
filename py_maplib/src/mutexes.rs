@@ -389,7 +389,6 @@ pub(crate) fn validate_mutex(
     inferences_graph: Option<String>,
     include_details: Option<bool>,
     include_conforms: Option<bool>,
-    max_shape_constraint_results: Option<usize>,
     only_shapes: Option<Vec<String>>,
     deactivate_shapes: Option<Vec<String>>,
     dry_run: Option<bool>,
@@ -446,7 +445,6 @@ pub(crate) fn validate_mutex(
             inferences_graph.as_ref(),
             include_details.unwrap_or(false),
             include_conforms.unwrap_or(false),
-            max_shape_constraint_results,
             vec![], //TODO: Needs more work before can be exposed
             max_rows,
             only_shapes,
@@ -813,7 +811,6 @@ pub(crate) fn infer_mutex(
     inner: &mut InnerModel,
     rulesets: Vec<String>,
     max_iterations: Option<usize>,
-    max_results: Option<usize>,
     graph: Option<&NamedGraph>,
     include_graphs: Vec<NamedGraph>,
     max_rows: Option<usize>,
@@ -823,7 +820,6 @@ pub(crate) fn infer_mutex(
         .infer(
             rulesets,
             max_iterations,
-            max_results,
             graph,
             include_graphs,
             max_rows,

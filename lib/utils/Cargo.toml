@@ -10,5 +10,7 @@ pyo3 = ["dep:pyo3"]
 [dependencies]
 polars = { workspace = true, features = ["lazy"] }
 thiserror.workspace = true
+polars-config.workspace = true
+polars-ooc.workspace = true
 
 pyo3 = { workspace = true, optional = true }

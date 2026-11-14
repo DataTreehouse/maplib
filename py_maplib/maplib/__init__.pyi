@@ -569,7 +569,6 @@ class ModelStream:
             rulesets: Union[str, List[str]],
             graph: str = None,
             max_iterations: Optional[int] = 100_000,
-            max_results: Optional[int] = 10_000_000,
             include_graphs: Optional[List[str]] = None,
             max_rows: Optional[int] = 100_000_000,
             debug: bool = False,
@@ -1083,8 +1082,6 @@ class Model:
             inferences_graph: str = None,
             include_details: bool = False,
             include_conforms: bool = False,
-
-            max_shape_constraint_results: int = None,
             only_shapes: List[str] = None,
             deactivate_shapes: List[str] = None,
             dry_run: bool = False,
@@ -1103,7 +1100,6 @@ class Model:
         :param inferences_graph: If this IRI is supplied, any inference results from sh:rule can be found in this named graph.
         :param include_details: Include details of SHACL evaluation alongside the report. Currently uses a lot of memory.
         :param include_conforms: Include those results that conformed. Also applies to details.
-        :param max_shape_constraint_results: Maximum number of results per shape and constraint. Reduces the size of the result set.
         :param only_shapes: Validate only these shapes, None means all shapes are validated (must be IRI, cannot be used with deactivate_shapes).
         :param deactivate_shapes: Disable validation of these shapes (must be IRI, cannot be used with only_shapes).
         :param dry_run: Only find targets of shapes, but do not validate them.
@@ -1388,7 +1384,6 @@ class Model:
             rulesets: Union[str, List[str]],
             graph: str = None,
             max_iterations: Optional[int] = 100_000,
-            max_results: Optional[int] = 10_000_000,
             include_graphs: Optional[List[str]] = None,
             max_rows: Optional[int] = 100_000_000,
             debug: bool = False,
@@ -1398,7 +1393,6 @@ class Model:
         :param rulesets: The Datalog ruleset (a string), or a list of rulesets.
         :param graph: Apply the ruleset to this graph, defaults to the default graph, or the graph specified in the rules.
         :param max_iterations: Maximum number of iterations.
-        :param max_results: Maximum number of results.
         :param include_graphs: IRIs of graphs whose triples are merged into the graph that is reasoned over, as with FROM.
             None includes the transient graph (TRANSIENT_GRAPH), use [] to query only the graph itself.
         :param max_rows: Maximum estimated rows in result, helps avoid out-of-memory errors.
@@ -1503,6 +1497,37 @@ class FunctionArgumentException(Exception):
     """
     Raised when a function is called with invalid arguments.
     """
+
+
+def set_memory_limit(
+        max_memory_mb: Optional[int] = None,
+        spill_dir: Optional[Union[str, Path]] = None,
+        max_spill_mb: Optional[int] = None,
+        abort_above_mb: Optional[int] = None,
+) -> None:
+    """Limits the memory used by queries, so that large queries spill to disk instead of
+    running out of memory. Over the limit, joins, aggregations, sorts and query results
+    move intermediate data to disk. The limit counts all memory used by maplib, including
+    the triples of the models, which are not spilled.
+
+    Without a call, the limit is 80% of the system memory (respecting container limits).
+    Each call sets all four settings; arguments left as None get their defaults.
+    The settings apply to the whole process and to queries started after the call.
+
+    >>> import maplib
+    >>> maplib.set_memory_limit(max_memory_mb=8000, spill_dir="/scratch/maplib")
+
+    :param max_memory_mb: Spill to disk when maplib uses more than this many megabytes (10^6 bytes).
+    :param spill_dir: The folder for spill files. Defaults to the system temporary folder. Set it before running any query: it is fixed at the first spill.
+    :param max_spill_mb: The most megabytes to spill to disk. Defaults to 64 GB.
+    :param abort_above_mb: Stop the process (with a message on stderr) when maplib uses more than this many megabytes even after spilling. Off by default. This stops the process before the operating system kills it, and is not an exception that can be caught.
+    """
+
+def memory_usage() -> int:
+    """The estimated number of bytes allocated by maplib."""
+
+def memory_limit() -> int:
+    """The memory limit in bytes above which queries spill to disk. See set_memory_limit."""
 
 
 def explore(

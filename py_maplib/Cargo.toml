@@ -36,17 +36,14 @@ chrono.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 
+# The global allocator. It wraps jemalloc on Unix and mimalloc elsewhere, and counts the bytes
+# allocated so that the Polars streaming engine can spill to disk when over its memory budget.
+polars-ooc = { workspace = true, features = ["fast_alloc"] }
+utils = { path = "../lib/utils" }
+
 [lib]
 name = "maplib"
 crate-type = ["cdylib"]
-
-# Conditional dependency specification of mimalloc and jemallocator copied from: https://github.com/pola-rs/polars/blob/main/py-polars/Cargo.toml
-# Licence in /licensing/POLARS_LICENSE
-[target.'cfg(not(target_os = "linux"))'.dependencies]
-mimalloc = { version = "0.1", default-features = false }
-
-[target.'cfg(target_os = "linux")'.dependencies]
-tikv-jemallocator = { version = "*", features = ["disable_initial_exec_tls"] }
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("gil-refs", "rdf-star"))'] }

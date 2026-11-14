@@ -45,9 +45,6 @@ use std::str::FromStr;
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#[cfg(target_os = "linux")]
-use tikv_jemallocator::Jemalloc;
-
 use oxrdf::{NamedNode, Term};
 use oxrdfio::RdfFormat;
 use polars::prelude::{col, lit, IntoLazy};
@@ -60,8 +57,6 @@ use representation::python::{
 use representation::solution_mapping::EagerSolutionMappings;
 
 use datalog::python::PyInferenceResult;
-#[cfg(not(target_os = "linux"))]
-use mimalloc::MiMalloc;
 use pyo3::exceptions::PyTypeError;
 use representation::cats::LockedCats;
 use representation::constants::TRANSIENT_GRAPH_IRI;
@@ -90,13 +85,46 @@ use virtualized_query::python::{
     PyAggregateExpression, PyExpression, PyOrderExpression, PyVirtualizedQuery,
 };
 
-#[cfg(target_os = "linux")]
+// Counts allocations (on top of jemalloc on Unix, mimalloc elsewhere), which the Polars
+// streaming engine needs to know when to spill to disk. See `utils::memory`.
 #[global_allocator]
-static GLOBAL: Jemalloc = Jemalloc;
+static GLOBAL: polars_ooc::Allocator = polars_ooc::Allocator;
 
-#[cfg(not(target_os = "linux"))]
-#[global_allocator]
-static GLOBAL: MiMalloc = MiMalloc;
+/// Limits the memory used by queries. Over the limit, the query engine spills intermediate
+/// data to disk instead of growing further. Arguments left as None get their defaults.
+#[pyfunction]
+#[pyo3(signature = (max_memory_mb=None, spill_dir=None, max_spill_mb=None, abort_above_mb=None))]
+fn set_memory_limit(
+    max_memory_mb: Option<u64>,
+    spill_dir: Option<PathBuf>,
+    max_spill_mb: Option<u64>,
+    abort_above_mb: Option<u64>,
+) -> PyResult<()> {
+    if max_memory_mb == Some(0) {
+        return Err(FunctionArgumentException::new_err(
+            "max_memory_mb must be positive",
+        ));
+    }
+    utils::memory::set_memory_limits(&utils::memory::MemoryLimits {
+        max_memory_mb,
+        spill_dir,
+        max_spill_mb,
+        abort_above_mb,
+    });
+    Ok(())
+}
+
+/// The estimated number of bytes allocated by maplib.
+#[pyfunction]
+fn memory_usage() -> u64 {
+    utils::memory::memory_usage()
+}
+
+/// The memory limit in bytes above which queries spill to disk.
+#[pyfunction]
+fn memory_limit() -> u64 {
+    utils::memory::memory_budget()
+}
 
 const DEFAULT_FTS: bool = false;
 const DEFAULT_DEBUG_NO_RESULTS: bool = false;
@@ -183,6 +211,9 @@ fn _maplib(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyTemplate>()?;
     m.add_class::<PyInstance>()?;
     m.add_function(wrap_pyfunction!(py_triple, m)?)?;
+    m.add_function(wrap_pyfunction!(set_memory_limit, m)?)?;
+    m.add_function(wrap_pyfunction!(memory_usage, m)?)?;
+    m.add_function(wrap_pyfunction!(memory_limit, m)?)?;
     m.add("MaplibException", py.get_type::<MaplibException>())?;
     m.add("TRANSIENT_GRAPH", TRANSIENT_GRAPH_IRI)?;
     m.add(

@@ -1,12 +1,12 @@
 use crate::errors::QueryProcessingError;
 use polars::datatypes::{DataType, Field};
 use polars::error::PolarsResult;
-use polars::frame::DataFrame;
 use polars::prelude::{
-    as_struct, col, Expr, IntoColumn, IntoLazy, PlSmallStr, SortMultipleOptions,
+    col, Column, Expr, IntoColumn, PlSmallStr, Schema, SortMultipleOptions, StructChunked,
 };
 use polars::prelude::{IntoSeries, UInt32Chunked};
 use polars::series::Series;
+use std::sync::Arc;
 use representation::cats::{distinct_codes, extend_codes, LockedCats, RankMap};
 use representation::solution_mapping::{BaseCatState, SolutionMappings};
 use representation::{BaseRDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD};
@@ -25,8 +25,6 @@ pub fn order_by(
     let mut order_exprs = vec![];
     let mut asc_bools = vec![];
     for (c, a) in columns.iter().zip(asc_ordering) {
-        solution_mappings = solution_mappings.as_eager().as_lazy();
-
         let t = solution_mappings.rdf_node_types.get(c).unwrap();
         if t.is_multi() {
             let ts: Vec<_> = t.map.iter().collect();
@@ -118,11 +116,25 @@ fn make_ordering_expr(e: Expr, cats: LockedCats, t: BaseRDFNodeType, s: BaseCatS
         } else {
             DataType::UInt32
         };
-        // Ranks are local to the values seen in one call, so this must see the whole column at
-        // once: `apply`, not the elementwise `map`, which the streaming engine runs per batch.
+        let output_type = move |_: &Schema, f: &Field| Ok(Field::new(f.name().clone(), output_dtype.clone()));
+
+        // With in-memory dictionaries, the ranks of all codes are cached, so they are taken once
+        // here and the column is ranked batch by batch (the elementwise `map`). That lets the
+        // streaming engine sort without holding the whole input in memory, and spill.
+        let all_global = cats.read().unwrap().all_global_ranks(&t);
+        let all_local = match &local {
+            Some(local) => local.read().unwrap().all_global_ranks(&t).map(Some),
+            None => Some(None),
+        };
+        if let (Some(global), Some(local)) = (all_global, all_local) {
+            let ranks = Arc::new(Ranks { local, global });
+            return e.map(move |x| rank_column(&x, &t, &ranks), output_type);
+        }
+
+        // Otherwise the ranks are looked up for the codes in the column, which gives ranks
+        // comparable only within that call, so it must see the whole column at once: `apply`.
         e.apply(
             move |x| {
-                let original_name = x.name().clone();
                 let mut u32_ser_vec = vec![];
                 if t.is_lang_string() {
                     u32_ser_vec.push(x.struct_()?.field_by_name(LANG_STRING_VALUE_FIELD)?);
@@ -136,7 +148,6 @@ fn make_ordering_expr(e: Expr, cats: LockedCats, t: BaseRDFNodeType, s: BaseCatS
                 }
                 let codes = distinct_codes(codes);
 
-                let t = t.clone();
                 // Local codes take precedence over global ones, as they are re-encodings.
                 let local_ranks = local
                     .as_ref()
@@ -146,42 +157,35 @@ fn make_ordering_expr(e: Expr, cats: LockedCats, t: BaseRDFNodeType, s: BaseCatS
                     local: local_ranks,
                     global: global_ranks,
                 };
-                let mut ser = if t.is_lang_string() {
-                    let value_ser = x.struct_()?.field_by_name(LANG_STRING_VALUE_FIELD)?;
-                    let lang_ser = x.struct_()?.field_by_name(LANG_STRING_LANG_FIELD)?;
-
-                    let mut value_ser_rank = map_to_rank(&value_ser, &ranks)?;
-                    value_ser_rank.rename(PlSmallStr::from_str(LANG_STRING_VALUE_FIELD));
-                    let mut lang_ser_rank = map_to_rank(&lang_ser, &ranks)?;
-                    lang_ser_rank.rename(PlSmallStr::from_str(LANG_STRING_LANG_FIELD));
-                    let mut df = DataFrame::new(
-                        x.len(),
-                        vec![value_ser_rank.into_column(), lang_ser_rank.into_column()],
-                    )?;
-                    df = df
-                        .lazy()
-                        .with_column(
-                            as_struct(vec![
-                                col(LANG_STRING_VALUE_FIELD),
-                                col(LANG_STRING_LANG_FIELD),
-                            ])
-                            .alias(original_name.as_str()),
-                        )
-                        .select([col(original_name.as_str())])
-                        .collect()?;
-                    let column = df.drop_in_place(original_name.as_str())?;
-                    column.as_materialized_series().clone()
-                } else {
-                    map_to_rank(x.as_materialized_series(), &ranks)?
-                };
-                ser.rename(original_name);
-                Ok(ser.into_column())
+                rank_column(&x, &t, &ranks)
             },
-            move |_, f| Ok(Field::new(f.name().clone(), output_dtype.clone())),
+            output_type,
         )
     } else {
         e
     }
+}
+
+/// Replaces the codes in `x` by their ranks, field by field for language-tagged strings.
+fn rank_column(x: &Column, t: &BaseRDFNodeType, ranks: &Ranks) -> PolarsResult<Column> {
+    let original_name = x.name().clone();
+    let mut ser = if t.is_lang_string() {
+        let st = x.struct_()?;
+        let mut value_rank = map_to_rank(&st.field_by_name(LANG_STRING_VALUE_FIELD)?, ranks)?;
+        value_rank.rename(PlSmallStr::from_str(LANG_STRING_VALUE_FIELD));
+        let mut lang_rank = map_to_rank(&st.field_by_name(LANG_STRING_LANG_FIELD)?, ranks)?;
+        lang_rank.rename(PlSmallStr::from_str(LANG_STRING_LANG_FIELD));
+        StructChunked::from_series(
+            original_name.clone(),
+            x.len(),
+            [value_rank, lang_rank].iter(),
+        )?
+        .into_series()
+    } else {
+        map_to_rank(x.as_materialized_series(), ranks)?
+    };
+    ser.rename(original_name);
+    Ok(ser.into_column())
 }
 
 struct Ranks {

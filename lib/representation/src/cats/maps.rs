@@ -224,6 +224,15 @@ impl CatMaps {
         }
     }
 
+    /// The positions of all codes in the string order of the whole map, when they are cheap to
+    /// have: in-memory maps cache them. `None` for maps on disk, which look up ranks per call.
+    pub fn all_global_ranks(&self) -> Option<RankMap> {
+        match self {
+            CatMaps::InMemory(m) => Some(m.global_ranks()),
+            CatMaps::OnDisk(_) => None,
+        }
+    }
+
     /// Ranks that order `us` (sorted, distinct) by string value, valid only for comparing values
     /// within `us`.
     pub fn sort_ranks(&self, us: &[u32]) -> RankMap {

@@ -43,6 +43,9 @@ __all__ = [
     "generate_templates",
     "MaplibException",
     "TRANSIENT_GRAPH",
+    "set_memory_limit",
+    "memory_usage",
+    "memory_limit",
 ]
 
 import pathlib

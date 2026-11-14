@@ -3144,6 +3144,7 @@ dependencies = [
  "async-trait",
  "boxcar",
  "libc",
+ "mimalloc",
  "polars-async",
  "polars-config",
  "polars-core",
@@ -3153,6 +3154,8 @@ dependencies = [
  "rand 0.10.3",
  "rand_distr",
  "thread_local",
+ "tikv-jemalloc-sys",
+ "tikv-jemallocator",
  "tokio",
  "uuid",
 ]
@@ -3514,21 +3517,21 @@ dependencies = [
  "datalog",
  "external_sparql",
  "maplib",
- "mimalloc",
  "opc_ua",
  "oxrdf",
  "oxrdfio",
  "polars",
+ "polars-ooc",
  "pyo3",
  "representation",
  "shacl",
  "spargebra",
  "templates",
  "thiserror",
- "tikv-jemallocator",
  "tracing",
  "tracing-subscriber",
  "triplestore",
+ "utils",
  "uuid",
  "virtualization",
  "virtualized_query",
@@ -3598,9 +3601,11 @@ dependencies = [
 name = "query_processing"
 version = "0.3.12"
 dependencies = [
+ "chrono",
  "hex",
  "md-5",
  "oxrdf",
+ "oxsdatatypes",
  "polars",
  "pyo3",
  "rand 0.10.3",
@@ -5118,6 +5123,8 @@ name = "utils"
 version = "0.1.0"
 dependencies = [
  "polars",
+ "polars-config",
+ "polars-ooc",
  "pyo3",
  "thiserror",
 ]

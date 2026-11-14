@@ -394,6 +394,17 @@ impl Cats {
         }
     }
 
+    /// The positions of all codes of `dt` in the string order of the whole map, the same as
+    /// [`Cats::global_ranks`] gives for any codes, so that values can be ranked batch by batch.
+    /// `None` when that would be expensive (maps on disk).
+    pub fn all_global_ranks(&self, dt: &BaseRDFNodeType) -> Option<RankMap> {
+        if let Some(cm) = self.cat_map.get(&CatType::from_base_rdf_node_type(dt)) {
+            cm.maps.all_global_ranks()
+        } else {
+            Some(RankMap::empty())
+        }
+    }
+
     /// Ranks that order `us` (sorted, distinct) by string value, valid only for comparing values
     /// within `us` (e.g. to sort a batch of triples).
     pub fn sort_ranks(&self, us: &[u32], dt: &BaseRDFNodeType) -> RankMap {
