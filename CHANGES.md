@@ -35,6 +35,7 @@
 
 ### Bug fixes
 - JSON results of SELECT queries (`return_format="json"`) list the variables in the order of the projection, instead of an arbitrary order
+- `Model.query_external` no longer panics ("entered unreachable code") on SELECT results where a variable is unbound in some rows, as with OPTIONAL. Unbound values are nulls, also before the first bound value, and a variable that is never bound is a column of nulls
 
 ### Performance
 In disk mode the triple tables and their deduplication index are no longer held in memory. With few triples per distinct IRI or literal (as in the CIM data), memory use is dominated by the dictionary and reading, and disk storage saves little.

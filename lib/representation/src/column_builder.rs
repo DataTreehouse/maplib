@@ -52,11 +52,13 @@ impl SolutionMappingsColumnBuilder {
         Ok(())
     }
 
+    /// An unbound value: a null in every type's builder so far. A builder for a type seen later is
+    /// filled with nulls up to the height, so unbound rows need no builder of their own.
     pub fn push_none(&mut self) {
-        let t_ref = BaseRDFNodeTypeRef::None;
-        self.maybe_add_builder_with_height(&t_ref);
-        self.map.get_mut(t_ref.as_str()).unwrap().push_none();
-        self.push_others_none(&t_ref);
+        for b in self.map.values_mut() {
+            b.push_none();
+        }
+        self.height += 1;
     }
 
     fn maybe_add_builder_with_height(&mut self, t_ref: &BaseRDFNodeTypeRef) {
@@ -79,6 +81,7 @@ impl SolutionMappingsColumnBuilder {
     }
 
     pub fn finish(self, name: &str) -> Result<(Column, RDFNodeState), RepresentationError> {
+        let height = self.height;
         let mut series_types: Vec<_> = self
             .map
             .into_par_iter()
@@ -89,8 +92,10 @@ impl SolutionMappingsColumnBuilder {
             })
             .collect();
         Ok(if series_types.is_empty() {
-            let ser = Series::new_empty(
+            // unbound in every row (or no rows): a column of nulls
+            let ser = Series::full_null(
                 name.into(),
+                height,
                 &BaseRDFNodeType::None.default_input_polars_data_type(),
             );
             (
