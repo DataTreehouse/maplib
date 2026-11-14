@@ -4,20 +4,19 @@ use super::{
 };
 use crate::errors::TriplestoreError;
 use crate::storage::{Triples, DISK_ROW_GROUP_SIZE};
-use file_io::{scan_parquet, write_parquet, FileIOError};
+use file_io::FileIOError;
 use oxrdf::NamedNode;
-use polars::prelude::{IntoLazy, LazyFrame, ParquetCompression, PolarsError};
+use polars::prelude::{IntoLazy, ParquetCompression, PolarsError};
 use query_processing::udf::UdfRegistry;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use representation::bundle::{BundleWriter, SerializationSource, SerializationTarget};
 use representation::cats::serialization::{CatSerializationError, CATS_FOLDER};
 use representation::cats::{Cats, LockedCats};
 use representation::dataset::NamedGraph;
 use representation::BaseRDFNodeType;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::fs::{create_dir_all, File};
-use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 use std::time::Instant;
 use thiserror::Error;
@@ -64,15 +63,67 @@ struct TriplestoreMetadata {
 }
 
 impl Triplestore {
-    /// Serializes the triplestore to the folder `path`. The triple tables are parquet files, and
-    /// so are the cat maps unless `raw_db` is set, which writes them as DuckDB databases.
+    /// Serializes the triplestore to `path`: with `single_file` a single file bundle (see
+    /// [`representation::bundle`]), otherwise a folder. The triple tables are parquet files, and so are the cat
+    /// maps unless `raw_db` is set, which writes them as DuckDB databases.
     pub fn serialize_triples(
         &mut self,
         path: &Path,
         raw_db: bool,
+        single_file: bool,
     ) -> Result<(), TripleSerializationError> {
-        self.garbage_collect()?;
-        self.compact()?;
+        if !single_file {
+            return self.serialize_triples_folder(path, raw_db);
+        }
+        if path.is_dir() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::IsADirectory,
+                format!(
+                    "{} is a folder, serialize it with single_file=False or choose a file path",
+                    path.display()
+                ),
+            )
+            .into());
+        }
+        let file_name = path.file_name().ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("{} is not a file path", path.display()),
+            )
+        })?;
+        let parent = match path.parent() {
+            Some(p) if !p.as_os_str().is_empty() => p,
+            _ => Path::new("."),
+        };
+        // The bundle is written next to the target, so that renaming it into place stays on the
+        // same file system and never leaves a partial file at `path`. DuckDB databases are made
+        // in a scratch folder there before they are added.
+        let id = Uuid::new_v4();
+        let file_name = file_name.to_string_lossy();
+        let scratch_dir = parent.join(format!(".{file_name}.{id}.tmp"));
+        let tmp_file = parent.join(format!(".{file_name}.{id}.partial"));
+        let res = BundleWriter::create(&tmp_file, scratch_dir.clone())
+            .map_err(TripleSerializationError::from)
+            .and_then(|w| {
+                let target = SerializationTarget::Bundle(w);
+                self.serialize_triples_to(&target, raw_db)?;
+                Ok(target.finish()?)
+            })
+            .and_then(|_| Ok(std::fs::rename(&tmp_file, path)?));
+        if scratch_dir.exists() {
+            let _ = std::fs::remove_dir_all(&scratch_dir);
+        }
+        if res.is_err() {
+            let _ = std::fs::remove_file(&tmp_file);
+        }
+        res
+    }
+
+    fn serialize_triples_folder(
+        &mut self,
+        path: &Path,
+        raw_db: bool,
+    ) -> Result<(), TripleSerializationError> {
         if path.exists() {
             for f in std::fs::read_dir(path)? {
                 let f = f?;
@@ -84,10 +135,18 @@ impl Triplestore {
                 }
             }
         }
+        self.serialize_triples_to(&SerializationTarget::Folder(path.to_owned()), raw_db)
+    }
+
+    fn serialize_triples_to(
+        &mut self,
+        target: &SerializationTarget,
+        raw_db: bool,
+    ) -> Result<(), TripleSerializationError> {
+        self.garbage_collect()?;
+        self.compact()?;
 
         let mut to_serialize = vec![];
-        let triples_path = create_path(path, TRIPLES_PATH);
-
         let mut triples_uuid_map = HashMap::new();
 
         for (graph, map) in &self.graph_triples_map {
@@ -100,12 +159,13 @@ impl Triplestore {
                         object_type.clone(),
                     );
                     let key = Uuid::new_v4().to_string();
-                    let this_triples_folder = create_path(&triples_path, &key);
-                    create_dir_all(&this_triples_folder)?;
+                    let rel = |name: &str| format!("{TRIPLES_PATH}/{key}/{name}");
+                    let pb_subjects = rel(SO_TRIPLES_FILE);
+                    let pb_subjects_index = rel(SO_SPARSE_INDEX_FILE);
+                    let pb_objects = rel(OS_TRIPLES_FILE);
+                    let pb_objects_index = rel(OS_SPARSE_INDEX_FILE);
                     triples_uuid_map.insert(key, value);
 
-                    let pb_subjects = create_path(&this_triples_folder, SO_TRIPLES_FILE);
-                    let pb_subjects_index = create_path(&this_triples_folder, SO_SPARSE_INDEX_FILE);
                     let mut subject_object_sort = triples.get_all_triples_lazy_frames(true)?;
                     let mut subject_object_sparse_index =
                         triples.get_sparse_indices_as_data_frames(true);
@@ -130,15 +190,12 @@ impl Triplestore {
                         "Should always be compacted before serialization"
                     );
                     if !object_subject_sort.is_empty() {
-                        let pb_objects = create_path(&this_triples_folder, OS_TRIPLES_FILE);
                         to_serialize.push((
                             pb_objects,
                             object_subject_sort.pop().unwrap(),
                             TRIPLES_ROW_GROUP_SIZE,
                         ));
 
-                        let pb_objects_index =
-                            create_path(&this_triples_folder, OS_SPARSE_INDEX_FILE);
                         let mut object_subject_sparse_index =
                             triples.get_sparse_indices_as_data_frames(false);
                         to_serialize.push((
@@ -156,17 +213,21 @@ impl Triplestore {
             indexing: self.indexing.clone(),
         };
 
-        //Serializing metadata
-        let triplestore_metadata_path = create_path(&triples_path, METADATA_FILE);
         let triplestore_metadata_string = serde_json::to_string_pretty(&triplestore_metadata)?;
-
-        let mut f = File::create(triplestore_metadata_path)?;
-        write!(f, "{}", triplestore_metadata_string)?;
+        target.write_bytes(
+            &format!("{TRIPLES_PATH}/{METADATA_FILE}"),
+            triplestore_metadata_string.as_bytes(),
+        )?;
 
         let res: Result<(), TripleSerializationError> = to_serialize
             .into_par_iter()
-            .map(|(pb, triples, row_group_size)| {
-                write_triples_parquet(triples, &pb, row_group_size)?;
+            .map(|(rel, triples, row_group_size)| {
+                target.write_parquet(
+                    &rel,
+                    &mut triples.collect()?,
+                    ParquetCompression::Snappy,
+                    row_group_size,
+                )?;
                 Ok(())
             })
             .collect();
@@ -175,23 +236,23 @@ impl Triplestore {
         self.global_cats
             .read()
             .expect("Should always be readable")
-            .serialize_cats(path, raw_db)?;
+            .serialize_cats(target, raw_db)?;
 
         Ok(())
     }
 
+    /// Deserializes a triplestore serialized to `path`, which is either a single file bundle or a
+    /// folder.
     pub fn deserialize_triples(
         path: &Path,
         storage: StorageOptions,
     ) -> Result<Triplestore, TripleSerializationError> {
+        let source = SerializationSource::open(path)?;
+        let metadata_bytes = source
+            .file(&format!("{TRIPLES_PATH}/{METADATA_FILE}"))
+            .read()?;
+        let triplestore_metadata: TriplestoreMetadata = serde_json::from_slice(&metadata_bytes)?;
         let (storage_pathbuf, triples_folder) = prepare_storage(&storage)?;
-
-        let triples_path = create_path(path, TRIPLES_PATH);
-        let metadata_file_path = create_path(&triples_path, METADATA_FILE);
-        assert!(metadata_file_path.exists());
-        let metadata_bytes = std::fs::read(&metadata_file_path)?;
-        let triplestore_metadata: TriplestoreMetadata =
-            serde_json::from_slice(&metadata_bytes).unwrap();
 
         // The cats do not depend on the triples, so they are deserialized at the same time. With
         // hybrid and disk storage, building the on-disk cat maps (and their indices) is usually
@@ -204,32 +265,24 @@ impl Triplestore {
                     .triples_uuid_map
                     .into_par_iter()
                     .map(|(uuid, (graph, predicate, subject_type, object_type))| {
-                        let this_triple_path = create_path(&triples_path, &uuid);
-                        let subject_object_file = create_path(&this_triple_path, SO_TRIPLES_FILE);
-                        let object_subject_file = create_path(&this_triple_path, OS_TRIPLES_FILE);
-                        let subject_object_sparse_index_file =
-                            create_path(&this_triple_path, SO_SPARSE_INDEX_FILE);
-                        let object_subject_sparse_index_file =
-                            create_path(&this_triple_path, OS_SPARSE_INDEX_FILE);
+                        let file =
+                            |name: &str| source.file(&format!("{TRIPLES_PATH}/{uuid}/{name}"));
+                        let subject_object_file = file(SO_TRIPLES_FILE);
+                        let object_subject_file = file(OS_TRIPLES_FILE);
 
-                        let subject_object_index_df =
-                            scan_parquet(&subject_object_sparse_index_file)?
-                                .collect()
-                                .unwrap();
+                        let subject_object_index_df = file(SO_SPARSE_INDEX_FILE).read_parquet()?;
                         let (object_subject_file, object_subject_index_df) =
                             if object_subject_file.exists() {
                                 let object_subject_index_df =
-                                    scan_parquet(&object_subject_sparse_index_file)?
-                                        .collect()
-                                        .unwrap();
+                                    file(OS_SPARSE_INDEX_FILE).read_parquet()?;
                                 (Some(object_subject_file), Some(object_subject_index_df))
                             } else {
                                 (None, None)
                             };
                         let triples = Triples::from_serialization(
-                            &subject_object_file,
+                            subject_object_file,
                             subject_object_index_df,
-                            object_subject_file.as_deref(),
+                            object_subject_file,
                             object_subject_index_df,
                             subject_type.clone(),
                             object_type.clone(),
@@ -246,7 +299,7 @@ impl Triplestore {
             },
             || {
                 let start_deserialize_cats = Instant::now();
-                let cats = Cats::deserialize_cats(path, storage_folder);
+                let cats = Cats::deserialize_cats(&source, storage_folder);
                 debug!(
                     "Deserialized cats in {} seconds",
                     start_deserialize_cats.elapsed().as_secs_f32()
@@ -288,24 +341,4 @@ impl Triplestore {
         triplestore.rebuild_geo_index()?;
         Ok(triplestore)
     }
-}
-
-fn write_triples_parquet(
-    lf: LazyFrame,
-    path: &Path,
-    row_group_size: Option<usize>,
-) -> Result<(), TripleSerializationError> {
-    write_parquet(
-        &mut lf.collect()?,
-        path,
-        ParquetCompression::Snappy,
-        row_group_size,
-    )?;
-    Ok(())
-}
-
-fn create_path(path: &Path, s: &str) -> PathBuf {
-    let mut new_path = path.to_owned();
-    new_path.push(s);
-    new_path
 }

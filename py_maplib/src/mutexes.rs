@@ -835,9 +835,10 @@ pub fn serialize_triples_mutex(
     inner: &mut MutexGuard<InnerModel>,
     path: &Path,
     raw_db: bool,
+    single_file: bool,
 ) -> PyResult<()> {
     Ok(inner
-        .serialize_triples(path, raw_db)
+        .serialize_triples(path, raw_db, single_file)
         .map_err(PyMaplibError::from)?)
 }
 

@@ -1091,17 +1091,23 @@ impl PyModel {
         })
     }
 
-    #[pyo3(signature = (path = PathBuf::from("./serialized_triples"), raw_db = false))]
-    fn serialize(&self, py: Python<'_>, path: PathBuf, raw_db: bool) -> PyResult<()> {
+    #[pyo3(signature = (path = PathBuf::from("./model.maplib"), raw_db = false, single_file = true))]
+    fn serialize(
+        &self,
+        py: Python<'_>,
+        path: PathBuf,
+        raw_db: bool,
+        single_file: bool,
+    ) -> PyResult<()> {
         py.detach(move || {
             let mut inner = self.inner.lock().unwrap();
-            serialize_triples_mutex(&mut inner, path.as_ref(), raw_db)
+            serialize_triples_mutex(&mut inner, path.as_ref(), raw_db, single_file)
         })
     }
 
     #[instrument(skip_all)]
     #[staticmethod]
-    #[pyo3(signature = (path = PathBuf::from("./serialized_triples"), storage_folder=None, storage=None))]
+    #[pyo3(signature = (path = PathBuf::from("./model.maplib"), storage_folder=None, storage=None))]
     fn deserialize(
         py: Python<'_>,
         path: PathBuf,

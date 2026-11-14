@@ -1,6 +1,7 @@
 extern crate core;
 
 mod base_rdf_type;
+pub mod bundle;
 pub mod cats;
 pub mod column_builder;
 pub mod constants;

@@ -18,6 +18,7 @@ use polars_core::prelude::{
     UInt64Chunked,
 };
 use polars_core::utils::Container;
+use representation::bundle::SerializedFile;
 use representation::cats::{
     distinct_codes, extend_codes, CatEncs, Cats, LockedCats, RankMap, OBJECT_RANK_COL_NAME,
     SUBJECT_RANK_COL_NAME,
@@ -102,9 +103,9 @@ impl Triples {
     /// Creates triples from serialized parquet files. In disk storage mode (`triples_folder` set)
     /// the files are copied into the triples folder, otherwise they are read into memory.
     pub fn from_serialization(
-        subject_object_file: &Path,
+        subject_object_file: SerializedFile<'_>,
         subject_object_index_df: DataFrame,
-        object_subject_file: Option<&Path>,
+        object_subject_file: Option<SerializedFile<'_>>,
         object_subject_index_df: Option<DataFrame>,
         subject_type: BaseRDFNodeType,
         object_type: BaseRDFNodeType,
@@ -979,7 +980,7 @@ impl StoredTriples {
     }
 
     fn from_parquet_file(
-        file: &Path,
+        file: SerializedFile<'_>,
         triples_folder: Option<&Path>,
     ) -> Result<Self, TriplestoreError> {
         if let Some(triples_folder) = triples_folder {
@@ -987,10 +988,15 @@ impl StoredTriples {
                 TriplesOnDisk::copy_from(file, triples_folder)?,
             )))
         } else {
-            let df = scan_parquet(file)
-                .map_err(TriplestoreError::FileIOError)?
-                .collect()
-                .map_err(TriplestoreError::LazyLoadError)?;
+            let df = match file {
+                SerializedFile::Path(file) => scan_parquet(&file)
+                    .map_err(TriplestoreError::FileIOError)?
+                    .collect()
+                    .map_err(TriplestoreError::LazyLoadError)?,
+                SerializedFile::InBundle(..) => file
+                    .read_parquet()
+                    .map_err(TriplestoreError::LazyLoadError)?,
+            };
             Ok(StoredTriples::TriplesInMemory(Box::new(
                 TriplesInMemory::new(df),
             )))
@@ -1078,10 +1084,12 @@ impl TriplesOnDisk {
         Ok(Self { path, height })
     }
 
-    fn copy_from(file: &Path, triples_folder: &Path) -> Result<Self, TriplestoreError> {
+    fn copy_from(
+        file: SerializedFile<'_>,
+        triples_folder: &Path,
+    ) -> Result<Self, TriplestoreError> {
         let path = Self::new_path(triples_folder);
-        std::fs::copy(file, &path)
-            .map_err(|e| TriplestoreError::FileIOError(FileIOError::FileCreateIOError(e)))?;
+        file.copy_to(&path).map_err(|e| TriplestoreError::FileIOError(FileIOError::FileCreateIOError(e)))?;
         let mut on_disk = Self { path, height: 0 };
         let height_df = on_disk
             .scan()?

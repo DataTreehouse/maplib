@@ -642,32 +642,37 @@ class Model:
             storage: LiteralType["memory", "hybrid", "disk"] = None,
     ) -> "Model": ...
 
-    def serialize(self, path: Union[Path, str] = "./serialized_triples", raw_db: bool = False):
+    def serialize(self, path: Union[Path, str] = "./model.maplib", raw_db: bool = False,
+                  single_file: bool = True):
         """
         Serialization of named graphs in the Model object.
-        The triple tables and the dictionaries of IRIs and literals are written as parquet files.
+        The triple tables and the dictionaries of IRIs and literals are written as parquet files,
+        by default bundled into a single file.
 
         Usage:
         >>> m.read("triples.nt")
-        >>> m.serialize("serialized")
+        >>> m.serialize("model.maplib")
 
-        :param path: The path to where the folder containing the triples should be created
+        :param path: The path of the file (or with single_file=False, the folder) to write. Any file name or
+                     extension can be used, .maplib is the convention.
         :param raw_db: Write the dictionaries as DuckDB databases instead of parquet files (maplib Enterprise Edition).
                        The files are larger and slower to write, but deserializing with hybrid or disk storage uses
                        them in place instead of building the databases, which is much faster.
+        :param single_file: Write a single file. With False, a folder of parquet files (and DuckDB databases)
+                            is written instead.
         """
 
     @staticmethod
-    def deserialize(path: Union[Path, str] = "./serialized_triples",
+    def deserialize(path: Union[Path, str] = "./model.maplib",
                     storage_folder: Union[Path, str] = None,
                     storage: LiteralType["memory", "hybrid", "disk"] = None) -> "Model":
         """
         Deserialization of serialized graphs
 
         Usage:
-        >>> m = Model.deserialize("serialized", storage_folder="maplib_disk", storage="disk")
+        >>> m = Model.deserialize("model.maplib", storage_folder="maplib_disk", storage="disk")
 
-        :param path: The path to the folder where the serialized triples and cat map is stored
+        :param path: The path to the file or folder written by Model.serialize, either kind is detected.
         :param storage_folder: The target path and folder name where the deserialized triples should be stored
         :param storage: "memory", "hybrid" or "disk", see Model. Defaults to "hybrid" when a storage folder
                         is given, and "memory" otherwise.

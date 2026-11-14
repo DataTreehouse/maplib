@@ -1,4 +1,5 @@
 use super::{CatEncs, CatType, Cats};
+use crate::bundle::{SerializationSource, SerializationTarget};
 use crate::cats::maps::CatMaps;
 use arrow::array::{AsArray, RecordBatch, StringArray, UInt32Array};
 use arrow::datatypes::{DataType, Field, Schema};
@@ -6,15 +7,13 @@ use disk::CatMapsOnDisk;
 use in_memory::CatMapsInMemory;
 use oxrdf::NamedNode;
 use polars::prelude::{
-    Column, DataFrame, IntoColumn, NamedFrom, ParquetCompression, ParquetReader, ParquetWriter,
-    PlSmallStr, PolarsError, SerReader, Series,
+    Column, DataFrame, IntoColumn, NamedFrom, ParquetCompression, PlSmallStr, PolarsError, Series,
 };
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::collections::HashMap;
-use std::fs::{create_dir_all, File};
-use std::io::{BufWriter, Write};
+use std::fs::create_dir_all;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use thiserror::Error;
@@ -42,10 +41,6 @@ fn create_path(path: &Path, s: &str) -> PathBuf {
     let mut pb = path.to_owned();
     pb.push(s);
     pb
-}
-
-fn cat_map_parquet_path(cat_path: &Path, id: &str) -> PathBuf {
-    create_path(cat_path, &format!("{id}.{CAT_MAP_FILE_EXTENSION}"))
 }
 
 #[derive(Serialize, Deserialize)]
@@ -85,44 +80,73 @@ impl CatMapOnDiskMetadata {
 }
 
 impl Cats {
+    /// Deserializes the cat maps of a serialization folder or bundle.
     pub fn deserialize_cats(
-        path: &Path,
+        source: &SerializationSource,
         storage_folder: Option<&Path>,
     ) -> Result<Self, CatSerializationError> {
-        let cat_path = create_path(path, CATS_FOLDER);
-        let metadata_file_path = create_path(&cat_path, CATS_METADATA_FILE);
-
-        let cats_metadata: CatsMetadata =
-            serde_json::from_slice(&std::fs::read(metadata_file_path)?)?;
+        let metadata_file = source.file(&format!("{CATS_FOLDER}/{CATS_METADATA_FILE}"));
+        let cats_metadata: CatsMetadata = serde_json::from_slice(&metadata_file.read()?)?;
 
         let map: Result<HashMap<CatType, CatEncs>, CatSerializationError> = cats_metadata
             .uuid_cat_type_map
             .par_iter()
             .map(|(id, t)| {
                 let is_iri = t.cat_type.as_base_rdf_node_type().is_iri();
-                let parquet_path = cat_map_parquet_path(&cat_path, id);
-                let maps = if parquet_path.exists() {
-                    let df = read_cat_map_parquet(&parquet_path)?;
+                let parquet_file =
+                    source.file(&format!("{CATS_FOLDER}/{id}.{CAT_MAP_FILE_EXTENSION}"));
+                let maps = if parquet_file.exists() {
+                    let name = parquet_file.display();
+                    let df = parquet_file.read_parquet()?;
                     if let Some(storage_folder) = storage_folder {
                         let dest_path = create_path(storage_folder, id);
-                        let rb = data_frame_to_record_batch(&df, &parquet_path)?;
+                        let rb = data_frame_to_record_batch(&df, &name)?;
                         CatMaps::OnDisk(CatMapsOnDisk::from_in_memory(&dest_path, rb))
                     } else {
-                        CatMaps::InMemory(data_frame_to_in_memory(&df, is_iri, &parquet_path)?)
+                        CatMaps::InMemory(data_frame_to_in_memory(&df, is_iri, &name)?)
                     }
                 } else {
                     // Raw DuckDB database (`raw_db`, and the format of earlier versions).
-                    let src_path = create_path(&cat_path, id);
-                    if let Some(storage_folder) = storage_folder {
-                        let dest_path = create_path(storage_folder, id);
-                        CatMaps::OnDisk(CatMapsOnDisk::new(
-                            &src_path,
-                            t.name.clone(),
-                            Some(&dest_path),
-                        ))
-                    } else {
-                        let cmod = CatMapsOnDisk::new(&src_path, t.name.clone(), None);
-                        CatMaps::InMemory(cmod.to_memory(is_iri))
+                    match source {
+                        SerializationSource::Folder(path) => {
+                            let src_path = create_path(&create_path(path, CATS_FOLDER), id);
+                            if let Some(storage_folder) = storage_folder {
+                                let dest_path = create_path(storage_folder, id);
+                                CatMaps::OnDisk(CatMapsOnDisk::new(
+                                    &src_path,
+                                    t.name.clone(),
+                                    Some(&dest_path),
+                                ))
+                            } else {
+                                let cmod = CatMapsOnDisk::new(&src_path, t.name.clone(), None);
+                                CatMaps::InMemory(cmod.to_memory(is_iri))
+                            }
+                        }
+                        SerializationSource::Bundle(_) => {
+                            // The database is copied out of the bundle: to the storage folder,
+                            // where it is used in place, or to a temporary folder to be read
+                            // into memory.
+                            if let Some(storage_folder) = storage_folder {
+                                let dest_path = create_path(storage_folder, id);
+                                extract_cat_db(source, id, &dest_path)?;
+                                CatMaps::OnDisk(CatMapsOnDisk::new(
+                                    &dest_path,
+                                    t.name.clone(),
+                                    None,
+                                ))
+                            } else {
+                                let tmp_dir = std::env::temp_dir()
+                                    .join(format!("maplib-cats-{}", Uuid::new_v4()));
+                                create_dir_all(&tmp_dir)?;
+                                let tmp_path = create_path(&tmp_dir, id);
+                                let res = extract_cat_db(source, id, &tmp_path).map(|_| {
+                                    let cmod = CatMapsOnDisk::new(&tmp_path, t.name.clone(), None);
+                                    cmod.to_memory(is_iri)
+                                });
+                                let _ = std::fs::remove_dir_all(&tmp_dir);
+                                CatMaps::InMemory(res?)
+                            }
+                        }
                     }
                 };
                 Ok((t.cat_type.clone(), CatEncs { maps }))
@@ -136,10 +160,11 @@ impl Cats {
     /// of earlier versions, requires maplib Enterprise Edition). Deserializing raw DuckDB cat maps
     /// into hybrid or disk storage uses the databases in place, which is much faster than building
     /// them from parquet files.
-    pub fn serialize_cats(&self, path: &Path, raw_db: bool) -> Result<(), CatSerializationError> {
-        let cat_path = create_path(path, CATS_FOLDER);
-        create_dir_all(&cat_path)?;
-
+    pub fn serialize_cats(
+        &self,
+        target: &SerializationTarget,
+        raw_db: bool,
+    ) -> Result<(), CatSerializationError> {
         let map: Result<HashMap<String, CatMapOnDiskMetadata>, CatSerializationError> = self
             .cat_map
             .par_iter()
@@ -153,14 +178,22 @@ impl Cats {
                         .to_record_batch(),
                 };
                 let name = if raw_db {
-                    let db_path = create_path(&cat_path, &path_uuid);
-                    CatMapsOnDisk::from_in_memory(&db_path, rb)
+                    let rel = format!("{CATS_FOLDER}/{path_uuid}");
+                    let db_path = target.db_path(&rel)?;
+                    let name = CatMapsOnDisk::from_in_memory(&db_path, rb)
                         .get_name()
-                        .to_string()
+                        .to_string();
+                    target.finish_db(&rel, &db_path)?;
+                    name
                 } else {
                     let mut df = record_batch_to_data_frame(&rb)?;
                     drop(rb);
-                    write_cat_map_parquet(&mut df, &cat_map_parquet_path(&cat_path, &path_uuid))?;
+                    target.write_parquet(
+                        &format!("{CATS_FOLDER}/{path_uuid}.{CAT_MAP_FILE_EXTENSION}"),
+                        &mut df,
+                        ParquetCompression::Snappy,
+                        None,
+                    )?;
                     String::new()
                 };
                 Ok((path_uuid, CatMapOnDiskMetadata::new(name, t.clone())))
@@ -168,26 +201,30 @@ impl Cats {
             .collect();
         let cats_metadata = CatsMetadata::new(&self, map?);
         let cats_string = serde_json::to_string_pretty(&cats_metadata)?;
-        let metadata_file_path = create_path(&cat_path, CATS_METADATA_FILE);
-        let mut f = File::create(metadata_file_path)?;
-        write!(f, "{}", cats_string)?;
+        target.write_bytes(
+            &format!("{CATS_FOLDER}/{CATS_METADATA_FILE}"),
+            cats_string.as_bytes(),
+        )?;
 
         Ok(())
     }
 }
 
-fn write_cat_map_parquet(df: &mut DataFrame, path: &Path) -> Result<(), CatSerializationError> {
-    let file = BufWriter::new(File::create(path)?);
-    ParquetWriter::new(file)
-        .with_compression(ParquetCompression::Snappy)
-        .set_parallel(true)
-        .finish(df)?;
+/// Copies a raw DuckDB cat map database, with its write-ahead log if there is one, out of a
+/// bundle to `dest`.
+fn extract_cat_db(
+    source: &SerializationSource,
+    id: &str,
+    dest: &Path,
+) -> Result<(), CatSerializationError> {
+    source.file(&format!("{CATS_FOLDER}/{id}")).copy_to(dest)?;
+    let wal = source.file(&format!("{CATS_FOLDER}/{id}.wal"));
+    if wal.exists() {
+        let mut wal_dest = dest.as_os_str().to_owned();
+        wal_dest.push(".wal");
+        wal.copy_to(Path::new(&wal_dest))?;
+    }
     Ok(())
-}
-
-fn read_cat_map_parquet(path: &Path) -> Result<DataFrame, CatSerializationError> {
-    let file = File::open(path)?;
-    Ok(ParquetReader::new(file).finish()?)
 }
 
 fn record_batch_to_data_frame(rb: &RecordBatch) -> Result<DataFrame, CatSerializationError> {
@@ -202,14 +239,14 @@ fn record_batch_to_data_frame(rb: &RecordBatch) -> Result<DataFrame, CatSerializ
     Ok(DataFrame::new(rb.num_rows(), columns)?)
 }
 
-fn malformed(path: &Path, e: impl ToString) -> CatSerializationError {
-    CatSerializationError::MalformedCatMapFile(path.to_string_lossy().to_string(), e.to_string())
+fn malformed(path: &str, e: impl ToString) -> CatSerializationError {
+    CatSerializationError::MalformedCatMapFile(path.to_string(), e.to_string())
 }
 
 fn data_frame_to_in_memory(
     df: &DataFrame,
     is_iri: bool,
-    path: &Path,
+    path: &str,
 ) -> Result<CatMapsInMemory, CatSerializationError> {
     let strs = df
         .column(STR_COLUMN)?
@@ -230,7 +267,7 @@ fn data_frame_to_in_memory(
 
 fn data_frame_to_record_batch(
     df: &DataFrame,
-    path: &Path,
+    path: &str,
 ) -> Result<RecordBatch, CatSerializationError> {
     let strs = df
         .column(STR_COLUMN)?

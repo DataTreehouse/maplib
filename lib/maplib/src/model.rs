@@ -736,8 +736,14 @@ impl Model {
         })
     }
 
-    pub fn serialize_triples(&mut self, path: &Path, raw_db: bool) -> Result<(), MaplibError> {
-        self.triplestore.serialize_triples(path, raw_db)?;
+    pub fn serialize_triples(
+        &mut self,
+        path: &Path,
+        raw_db: bool,
+        single_file: bool,
+    ) -> Result<(), MaplibError> {
+        self.triplestore
+            .serialize_triples(path, raw_db, single_file)?;
         Ok(())
     }
 
