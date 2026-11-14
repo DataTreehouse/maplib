@@ -1,0 +1,14 @@
+# Facade-X tests (test_facade_x.py) that maplib currently does not pass.
+# One test id per line, optionally followed by '# reason'. These are run as strict xfails.
+
+# JSON null: SPARQL Anything skips nulls by default and maps them to xyz:null with
+# json.null-values=true, maplib always maps them to fx:null.
+json/NullValues  # null is fx:null, SPARQL Anything uses xyz:null
+json/NullValues_2  # null is fx:null, SPARQL Anything uses xyz:null
+docs/default_json  # nulls are mapped (to fx:null), SPARQL Anything skips them by default
+
+# XML
+xml/Lang  # attributes in the reserved xml namespace (xml:space) fail with "Could not find prefix xml", xml:lang is dropped instead of language-tagging text
+xml/LangTags  # attributes in the reserved xml namespace fail with "Could not find prefix xml", xml:lang is dropped instead of language-tagging text
+xml/test2  # text nodes are trimmed, SPARQL Anything keeps whitespace (trim-strings=false by default)
+docs/default_xml  # xmlns:prefix declarations add a node under the predicate xyz: (the bare data namespace) with fx:prefixIRI/prefixName/prefixSeparator, SPARQL Anything does not map them

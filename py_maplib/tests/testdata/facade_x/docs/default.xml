@@ -1,0 +1,5 @@
+<?xml version="1.0" ?>
+<xx:Element xmlns:xx="http://www.example.org">
+	<xx:someThing>Hallo world</xx:someThing>
+	<xx:someThingElse xx:key="0.1"/>
+</xx:Element>
