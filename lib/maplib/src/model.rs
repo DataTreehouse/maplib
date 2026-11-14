@@ -758,21 +758,23 @@ SELECT ?loc ?crs ?seq ?x ?y ?z WHERE {{
     fn resolve_template(&self, s: &str) -> Result<&Template, MaplibError> {
         if let Some(t) = self.template_dataset.get(s) {
             return Ok(t);
-        } else {
-            let mut split_colon = s.split(':');
-            let prefix_maybe = split_colon.next();
-            if let Some(prefix) = prefix_maybe {
-                if let Some(nn) = self.template_dataset.prefix_map.get(prefix) {
-                    let possible_template_name = nn.as_str().to_string()
-                        + split_colon.collect::<Vec<&str>>().join(":").as_str();
-                    if let Some(t) = self.template_dataset.get(&possible_template_name) {
-                        return Ok(t);
-                    } else {
-                        return Err(MappingError::NoTemplateForTemplateNameFromPrefix(
-                            possible_template_name,
-                        )
-                        .into());
-                    }
+        }
+        if let Some((prefix, local)) = s.split_once(':') {
+            // Prefixes of the template documents take precedence over those of the model
+            let nn = self
+                .template_dataset
+                .prefix_map
+                .get(prefix)
+                .or_else(|| self.prefixes.get(prefix));
+            if let Some(nn) = nn {
+                let possible_template_name = nn.as_str().to_string() + local;
+                if let Some(t) = self.template_dataset.get(&possible_template_name) {
+                    return Ok(t);
+                } else {
+                    return Err(MappingError::NoTemplateForTemplateNameFromPrefix(
+                        possible_template_name,
+                    )
+                    .into());
                 }
             }
         }

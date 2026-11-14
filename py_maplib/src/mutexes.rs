@@ -119,7 +119,7 @@ pub(crate) fn resolve_template_mutex(
     template: TemplateType,
 ) -> PyResult<String> {
     let template = match template {
-        TemplateType::TemplateIRI(i) => i.into_inner().to_string(),
+        TemplateType::TemplateIRI(i) => i.into_inner().into_string(),
         TemplateType::TemplateString(s) => {
             if let Ok(nn) = NamedNode::new(&s) {
                 nn.as_str().to_string()
