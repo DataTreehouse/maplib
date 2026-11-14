@@ -1534,15 +1534,31 @@ def explore(
     """
 
 
-def generate_templates(m: Model, graph: Optional[str]) -> Dict[str, Template]:
+def generate_templates(m: Model, graph: Optional[str] = None) -> Dict[str, Template]:
     """Generate templates for instantiating the classes in an ontology
 
-    :param m: The model where the ontology is stored. We mainly rely on rdfs:subClassOf, rdfs:range and rdfs:domain.
-    :param graph: The named graph where the ontology is stored.
+    :param m: The model where the ontology is stored. We rely on owl:Class/rdfs:Class declarations, rdfs:subClassOf, rdfs:domain, rdfs:range (also via owl:unionOf), owl:Restriction and the declared types of properties.
+    :param graph: The named graph where the ontology is stored. Defaults to the default graph.
 
-    :return A dictionary of templates for instantiating the classes in the ontology, where the keys are the class URIs.
+    :return A dictionary of templates for instantiating the classes in the ontology, where the keys are the class IRIs.
+        For each class there is a template with the class IRI, which also produces the rdf:type triple, and one with
+        the IRI of the class suffixed by "_notype", which does not. The subject is the parameter "id",
+        the other (optional) parameters are named after the local names of the properties.
+        Name clashes are resolved with suffixes ("_inverse" for reverse properties, then "_2", "_3", ...).
+        Templates of subclasses instantiate the "_notype" templates of their superclasses,
+        so all templates must be added to the Model you want to populate.
 
-    Usage example - note that it is important to add the templates to the Model you want to populate."""
+    Usage example - note that it is important to add the templates to the Model you want to populate.
+    >>> from maplib import Model, generate_templates
+    >>>
+    >>> m_ont = Model()
+    >>> m_ont.read("my_ontology.ttl")
+    >>> templates = generate_templates(m_ont)
+    >>> m = Model()
+    >>> for t in templates.values():
+    >>>     m.add_template(t)
+    >>> m.map("https://example.net/MyClass", df)
+    """
 
 
 class VirtualizedDatabase:

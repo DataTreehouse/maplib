@@ -279,7 +279,7 @@ parser! {
             PType::Lub(Box::new(pt))
         }
 
-        rule Var() -> Variable = name:(VAR1() / VAR2()) { Variable::new_unchecked(name) }
+        rule Var() -> Variable = name:(PREFIXED_VAR() / VAR1() / VAR2()) { Variable::new_unchecked(name) }
 
         rule StottrConstantTermOrList() -> ConstantTermOrList = ts:StottrConstantTermList() {
             ConstantTermOrList::ConstantList(ts)
@@ -374,6 +374,11 @@ parser! {
         rule BLANK_NODE_LABEL() -> &'input str = "_:" b:$((['0'..='9'] / PN_CHARS_U()) PN_CHARS()* ("."+ PN_CHARS()+)*) {
             b
         }
+
+        // Template variables may also be prefixed names, e.g. ?ex:name, so that columns can be named after properties.
+        rule PREFIXED_VAR() -> &'input str = ['?' | '$'] v:$(PN_PREFIX()? ":" PN_LOCAL_NO_ESCAPES()) { v }
+
+        rule PN_LOCAL_NO_ESCAPES() = (PN_CHARS_U() / [':' | '0'..='9']) (PN_CHARS() / [':'])* (['.']+ (PN_CHARS() / [':'])+)?
 
         rule VAR1() -> &'input str = "?" v:$(VARNAME()) { v }
 

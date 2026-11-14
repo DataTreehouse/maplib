@@ -343,8 +343,8 @@ pub struct PyVariable {
 impl PyVariable {
     #[new]
     pub fn new(name: String) -> PyResult<Self> {
-        let variable =
-            Variable::new(name).map_err(PyRepresentationError::VariableNameParseError)?;
+        let variable = crate::variable_names::new_template_variable(name)
+            .map_err(PyRepresentationError::VariableNameParseError)?;
         Ok(PyVariable { variable })
     }
 

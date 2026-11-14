@@ -1,40 +1,90 @@
-import polars as pl
-from typing import List
+import warnings
+from typing import Dict, Iterable, List, Set, Tuple
 
 
-def topological_sort(subclasses: pl.DataFrame) -> List[str]:
-    in_degree_df = subclasses.group_by("child").agg([pl.col("parent").count()])
-    in_degree_dict = {}
-    for d in in_degree_df.iter_rows(named=True):
-        in_degree_dict[d["child"]] = d["parent"]
+def topological_sort(
+    classes: Iterable[str], edges: Iterable[Tuple[str, str]]
+) -> Tuple[List[str], Dict[str, List[str]]]:
+    """Order classes so that every superclass comes before its subclasses.
 
-    out_edges_df = subclasses.group_by("parent").agg([pl.col("child")])
-    out_edges_dict = {}
-    for d in out_edges_df.iter_rows(named=True):
-        out_edges_dict[d["parent"]] = d["child"]
+    :param classes: All classes that should be in the ordering, also those without any subclass edges.
+    :param edges: (child, parent) pairs from rdfs:subClassOf.
+    :return: The ordering, and for each class the parents that its template should instantiate.
+        Self-loops are ignored. Cycles are broken deterministically (with a warning), since classes in a
+        subclass cycle are equivalent and would otherwise instantiate each other forever.
+        Redundant parents (those that are also ancestors of another parent) are pruned, so that
+        the triples of a superclass are produced only once.
+    """
+    nodes: Set[str] = set(classes)
+    parents: Dict[str, Set[str]] = {}
+    for child, parent in edges:
+        nodes.add(child)
+        nodes.add(parent)
+        if child == parent:
+            continue
+        parents.setdefault(child, set()).add(parent)
 
-    sorting = []
+    children: Dict[str, Set[str]] = {}
+    for child, ps in parents.items():
+        for p in ps:
+            children.setdefault(p, set()).add(child)
 
-    # First, we can add those parents who have no parents.
-    for p in subclasses.select("parent").unique().iter_rows(named=True):
-        if p["parent"] not in in_degree_dict:
-            sorting.append(p["parent"])
-            for out_edge in out_edges_dict[p["parent"]]:
-                in_degree_dict[out_edge] = in_degree_dict[out_edge] - 1
+    remaining_in_degree = {n: len(parents.get(n, ())) for n in nodes}
+    placed: Set[str] = set()
+    ordering: List[str] = []
+    ready = sorted(n for n, d in remaining_in_degree.items() if d == 0)
+    broken_cycle_members: List[str] = []
 
-    # Next, a topological sort defines ordering.
-    while len(in_degree_dict) > 0:
-        found_p = None
-        for p, i in in_degree_dict.items():
-            if i == 0:
-                found_p = p
-                break
-        if found_p is None:
-            assert False, "Error in the algorithm.. "
+    def place(n: str):
+        placed.add(n)
+        ordering.append(n)
+        newly_ready = []
+        for c in children.get(n, ()):
+            if c in placed:
+                continue
+            remaining_in_degree[c] -= 1
+            if remaining_in_degree[c] == 0:
+                newly_ready.append(c)
+        return newly_ready
 
-        sorting.append(found_p)
-        in_degree_dict.pop(found_p)
-        if found_p in out_edges_dict:
-            for out_edge in out_edges_dict[found_p]:
-                in_degree_dict[out_edge] = in_degree_dict[out_edge] - 1
-    return sorting
+    while len(ordering) < len(nodes):
+        if not ready:
+            # Only cycles remain, break one by placing its smallest member.
+            n = min(x for x in nodes if x not in placed)
+            broken_cycle_members.append(n)
+            ready = [n]
+        n = ready.pop(0)
+        if n in placed:
+            continue
+        ready = sorted(set(ready) | set(place(n)))
+
+    if broken_cycle_members:
+        warnings.warn(
+            "Cyclic rdfs:subClassOf hierarchy, ignoring the subclass edges into: "
+            + ", ".join(broken_cycle_members)
+        )
+
+    position = {n: i for i, n in enumerate(ordering)}
+    # Only keep edges to parents that were placed before the child (drops cycle edges).
+    direct_parents: Dict[str, List[str]] = {}
+    for n in ordering:
+        direct_parents[n] = sorted(
+            (p for p in parents.get(n, ()) if position[p] < position[n]),
+            key=lambda p: position[p],
+        )
+
+    ancestors: Dict[str, Set[str]] = {}
+    for n in ordering:
+        a: Set[str] = set()
+        for p in direct_parents[n]:
+            a.add(p)
+            a |= ancestors[p]
+        ancestors[n] = a
+
+    pruned: Dict[str, List[str]] = {}
+    for n in ordering:
+        ps = direct_parents[n]
+        pruned[n] = [
+            p for p in ps if not any(p in ancestors[q] for q in ps if q != p)
+        ]
+    return ordering, pruned
