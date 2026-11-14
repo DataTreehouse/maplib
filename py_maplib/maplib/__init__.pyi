@@ -1007,7 +1007,7 @@ class Model:
         """
         Map the data model of a Cognite Data Fusion (CDF) project to RDF, using a cognite-sdk client.
         Datapoints are not read. Instead, the datapoints of time series (nodes in cdf_cdm:CogniteTimeSeries)
-        are virtualized, and fetched from CDF when a query needs them (see VirtualizedDatabase.cognite).
+        are virtualized, and fetched from CDF when a query needs them (see VirtualizedDatabase.Cognite).
 
         - Each view becomes an rdfs:Class, with rdfs:subClassOf the views it implements.
         - Each container property mapped by a view becomes a predicate, so views that map the same container
