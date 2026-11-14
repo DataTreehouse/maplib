@@ -46,9 +46,24 @@ pub fn validate(
             }
             if !found_column_type {
                 if let Ok(c) = df.column(name) {
+                    let is_duration = matches!(c.dtype(), DataType::Duration(_));
                     let (t, expr) = infer_cast_mapping_column_type(p, c)?;
                     if let Some(expr) = expr {
-                        df = df.lazy().with_column(expr).collect().unwrap();
+                        df = df
+                            .lazy()
+                            .with_column(expr)
+                            .collect()
+                            .map_err(|e| column_conversion_error(name, e))?;
+                    }
+                    // xsd:duration values are stored by their lexical form
+                    if is_duration
+                        && matches!(&t, MappingColumnType::Flat(s) if s.is_lit_type(xsd::DURATION))
+                    {
+                        df = df
+                            .lazy()
+                            .with_column(col(name).dt().to_string("iso"))
+                            .collect()
+                            .map_err(|e| column_conversion_error(name, e))?;
                     }
                     map.insert(name.to_string(), t);
                 }
@@ -110,6 +125,10 @@ pub fn validate(
     } else {
         Ok((None, map))
     }
+}
+
+fn column_conversion_error(name: &str, e: impl std::fmt::Display) -> MappingError {
+    MappingError::LiteralParseError(format!("Could not convert column {name}: {e}"))
 }
 
 pub const USER_LANG_STRING_VALUE_FIELD: &str = "value";

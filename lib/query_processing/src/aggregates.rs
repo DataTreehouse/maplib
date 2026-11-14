@@ -84,6 +84,9 @@ pub fn sum(
             NumericAggregate::Sum,
         );
     }
+    if let Some(unbound) = non_numeric_aggregate(expr_rdf_node_type) {
+        return unbound;
+    }
     let out_rdf_node_type = if expr_rdf_node_type.is_bool() {
         BaseRDFNodeType::Literal(xsd::UNSIGNED_LONG.into_owned(), None)
             .into_default_input_rdf_node_state()
@@ -112,6 +115,9 @@ pub fn avg(
             distinct,
             NumericAggregate::Avg,
         );
+    }
+    if let Some(unbound) = non_numeric_aggregate(expr_rdf_node_type) {
+        return unbound;
     }
     let out_rdf_node_type = if expr_rdf_node_type.is_bool() {
         BaseRDFNodeType::Literal(xsd::UNSIGNED_LONG.into_owned(), None)
@@ -224,7 +230,26 @@ fn multi_field(multi: &Expr, t: &BaseRDFNodeType) -> Expr {
     multi.clone().struct_().field_by_name(&t.field_col_name())
 }
 
+/// SUM and AVG of a non-numeric column are errors in SPARQL, so the result is unbound.
+fn non_numeric_aggregate(state: &RDFNodeState) -> Option<(Expr, RDFNodeState)> {
+    let numeric = state.is_bool()
+        || state
+            .get_base_type()
+            .and_then(numeric_level)
+            .is_some();
+    if numeric {
+        return None;
+    }
+    // A null xsd:integer, so that only an empty group gives 0.
+    let t = BaseRDFNodeType::Literal(xsd::INTEGER.into_owned(), None);
+    Some((
+        null_expr(t.default_input_polars_data_type()),
+        t.into_default_input_rdf_node_state(),
+    ))
+}
+
 fn null_expr(dtype: DataType) -> Expr {
+
     lit(LiteralValue::untyped_null()).cast(dtype)
 }
 

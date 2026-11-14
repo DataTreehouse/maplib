@@ -59,4 +59,10 @@ pub enum MappingError {
     MaximumRecursionLimit(usize, String),
     #[error("Literal parse error: {}", .0)]
     LiteralParseError(String),
+    #[error("Column {} has nulls, but filling them with a default value containing blank nodes is not supported", .0)]
+    BlankNodeDefaultNotSupported(String),
+    #[error("Empty constant list {:?} is not supported, use rdf:nil instead", .0)]
+    EmptyConstantListNotSupported(ConstantTermOrList),
+    #[error("Argument {} is list expanded, but has the non-list type {:?}", .0, .1)]
+    ListExpandNonList(String, MappingColumnType),
 }

@@ -1173,6 +1173,7 @@ class Model:
             triples_batch_size: int = 10_000_000,
             known_contexts: Dict[str, str] = None,
             geo: bool = False,
+            strict: bool = False,
     ) -> None:
         """
         Reads triples from a file path, from bytes in memory or from a file-like object.
@@ -1203,6 +1204,7 @@ class Model:
                     the location becomes a geo:Feature with a geo:hasGeometry / geo:hasDefaultGeometry whose geo:asWKT is a POINT,
                     LINESTRING or POLYGON (closed rings), ordered by cim:PositionPoint.sequenceNumber. EPSG:4326 coordinates
                     are written in the GeoSPARQL default CRS84 (longitude latitude), other CRSs get their CRS IRI in the WKT literal.
+        :param strict: Raise an error if a literal cannot be parsed as its datatype, e.g. "abc"^^xsd:integer. By default such triples are dropped and a warning is logged.
         """
 
     def read_template(
@@ -1231,6 +1233,7 @@ class Model:
             triples_batch_size: int = 10_000_000,
             known_contexts: Dict[str, str] = None,
             geo: bool = False,
+            strict: bool = False,
     ) -> None:
         """
         Reads triples from a string.
@@ -1254,6 +1257,7 @@ class Model:
                     the location becomes a geo:Feature with a geo:hasGeometry / geo:hasDefaultGeometry whose geo:asWKT is a POINT,
                     LINESTRING or POLYGON (closed rings), ordered by cim:PositionPoint.sequenceNumber. EPSG:4326 coordinates
                     are written in the GeoSPARQL default CRS84 (longitude latitude), other CRSs get their CRS IRI in the WKT literal.
+        :param strict: Raise an error if a literal cannot be parsed as its datatype, e.g. "abc"^^xsd:integer. By default such triples are dropped and a warning is logged.
         """
 
     def write_cim_xml(

@@ -55,6 +55,11 @@ pub fn constant_to_expr(
             ),
         },
         ConstantTermOrList::ConstantList(inner) => {
+            if inner.is_empty() {
+                return Err(MappingError::EmptyConstantListNotSupported(
+                    constant_term.clone(),
+                ));
+            }
             let mut expressions = vec![];
             let mut last_ptype: Option<PType> = None;
             let mut last_mapping_col_type = None;

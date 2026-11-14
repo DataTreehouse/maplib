@@ -5,7 +5,7 @@ use crate::query_context::Context;
 use crate::rdf_to_polars::{default_decimal_scale, rdf_literal_to_polars_literal_value};
 use crate::solution_mapping::EagerSolutionMappings;
 use crate::{BaseRDFNodeType, RDFNodeState};
-use chrono::{DateTime, TimeDelta, TimeZone};
+use chrono::{DateTime, FixedOffset, TimeDelta, TimeZone};
 use chrono_tz::Tz;
 use oxrdf::vocab::xsd;
 use oxrdf::{
@@ -13,7 +13,7 @@ use oxrdf::{
     VariableNameParseError,
 };
 use oxsdatatypes::Duration;
-use polars::datatypes::{AnyValue, TimeUnit};
+use polars::datatypes::{AnyValue, DataType, TimeUnit};
 use polars::prelude::LiteralValue;
 use pyo3::basic::CompareOp;
 use pyo3::exceptions::PyException;
@@ -239,26 +239,30 @@ impl PyRDFType {
 
     #[staticmethod]
     #[pyo3(name = "Multi")]
-    fn multi(rdf_types: Vec<Py<PyRDFType>>, py: Python) -> PyRDFType {
+    fn multi(rdf_types: Vec<Py<PyRDFType>>, py: Python) -> PyResult<PyRDFType> {
         let mut mapped = HashMap::new();
         for r in rdf_types {
-            let state = r.borrow(py).as_rdf_node_state();
+            let state = r.borrow(py).as_rdf_node_state()?;
             mapped.extend(state.map);
         }
         let rdf_node_state = RDFNodeState::from_map(mapped);
-        PyRDFType {
+        Ok(PyRDFType {
             flat: Some(rdf_node_state),
             nested: None,
-        }
+        })
     }
 }
 
 impl PyRDFType {
-    pub fn as_rdf_node_state(&self) -> RDFNodeState {
+    /// The state of a flat type, nested types are only supported when mapping templates.
+    pub fn as_rdf_node_state(&self) -> PyResult<RDFNodeState> {
         if let Some(rdf_node_state) = &self.flat {
-            rdf_node_state.clone()
+            Ok(rdf_node_state.clone())
         } else {
-            todo!()
+            Err(PyRepresentationError::BadArgumentError(
+                "RDFType.Nested can only be used for template arguments, not here".to_string(),
+            )
+            .into())
         }
     }
 }
@@ -402,8 +406,14 @@ impl PyLiteral {
     }
 
     pub fn to_native(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let conversion_error = |reason: String| {
+            PyRepresentationError::RepresentationError(RepresentationError::LiteralParseError(
+                format!("Cannot convert {} to a Python value: {reason}", self.literal),
+            ))
+        };
         if self.literal.datatype() == xsd::DURATION {
-            let duration = Duration::from_str(self.literal.value()).unwrap();
+            let duration = Duration::from_str(self.literal.value())
+                .map_err(|e| conversion_error(e.to_string()))?;
             return PyXSDDuration { duration }.into_py_any(py);
         }
 
@@ -428,46 +438,54 @@ impl PyLiteral {
                     AnyValue::Decimal(d, ..) => {
                         Decimal::new(d as i64, default_decimal_scale() as u32).into_py_any(py)
                     }
-                    AnyValue::Date(_d) => {
-                        todo!()
-                    }
+                    AnyValue::Date(days) => DateTime::UNIX_EPOCH
+                        .date_naive()
+                        .checked_add_signed(TimeDelta::days(days as i64))
+                        .ok_or_else(|| conversion_error("date out of range".to_string()))?
+                        .into_py_any(py),
                     AnyValue::Datetime(i, tu, tz) => {
-                        //From temporal conversion in polars
-                        let delta = match tu {
-                            TimeUnit::Nanoseconds => TimeDelta::nanoseconds(i),
-                            TimeUnit::Microseconds => TimeDelta::microseconds(i),
-                            TimeUnit::Milliseconds => TimeDelta::milliseconds(i),
-                        };
-                        let dt = DateTime::UNIX_EPOCH.checked_add_signed(delta).unwrap();
-                        if let Some(tz) = tz {
-                            let tz = tz.parse::<Tz>().unwrap();
-                            let dt = tz.from_utc_datetime(&dt.naive_utc());
-                            dt.into_py_any(py)
-                        } else {
-                            dt.into_py_any(py)
-                        }
+                        datetime_to_py(py, i, tu, tz.map(|tz| tz.as_str()), &conversion_error)
                     }
-                    AnyValue::DatetimeOwned(i, tu, tz) => {
-                        //From temporal conversion in polars
-                        let delta = match tu {
-                            TimeUnit::Nanoseconds => TimeDelta::nanoseconds(i),
-                            TimeUnit::Microseconds => TimeDelta::microseconds(i),
-                            TimeUnit::Milliseconds => TimeDelta::milliseconds(i),
-                        };
-                        let dt = DateTime::UNIX_EPOCH.checked_add_signed(delta).unwrap();
-                        if let Some(tz) = &tz {
-                            let tz = tz.parse::<Tz>().unwrap();
-                            let dt = tz.from_utc_datetime(&dt.naive_utc());
-                            dt.into_py_any(py)
-                        } else {
-                            dt.into_py_any(py)
-                        }
-                    }
-                    s => todo!("To python: {:?}", s),
+                    AnyValue::DatetimeOwned(i, tu, tz) => datetime_to_py(
+                        py,
+                        i,
+                        tu,
+                        tz.as_ref().map(|tz| tz.as_str()),
+                        &conversion_error,
+                    ),
+                    s => Err(conversion_error(format!("unsupported value {s:?}")).into()),
                 }
             }
-            _ => todo!(),
+            _ => Err(conversion_error("not a scalar".to_string()).into()),
         }
+    }
+}
+
+/// Converts a polars datetime to a Python datetime, adapted from the temporal conversion in polars.
+fn datetime_to_py(
+    py: Python<'_>,
+    i: i64,
+    tu: TimeUnit,
+    tz: Option<&str>,
+    conversion_error: &dyn Fn(String) -> PyRepresentationError,
+) -> PyResult<Py<PyAny>> {
+    let delta = match tu {
+        TimeUnit::Nanoseconds => TimeDelta::nanoseconds(i),
+        TimeUnit::Microseconds => TimeDelta::microseconds(i),
+        TimeUnit::Milliseconds => TimeDelta::milliseconds(i),
+    };
+    let dt = DateTime::UNIX_EPOCH
+        .checked_add_signed(delta)
+        .ok_or_else(|| conversion_error("datetime out of range".to_string()))?;
+    let Some(tz) = tz else {
+        return dt.into_py_any(py);
+    };
+    if let Ok(tz) = tz.parse::<Tz>() {
+        tz.from_utc_datetime(&dt.naive_utc()).into_py_any(py)
+    } else if let Ok(offset) = tz.parse::<FixedOffset>() {
+        offset.from_utc_datetime(&dt.naive_utc()).into_py_any(py)
+    } else {
+        Err(conversion_error(format!("unknown time zone {tz}")).into())
     }
 }
 
@@ -560,18 +578,18 @@ pub struct PySolutionMappings {
 impl PySolutionMappings {
     #[new]
     #[pyo3(signature = (mappings, rdf_types))]
-    fn new(mappings: Py<PyAny>, rdf_types: HashMap<String, PyRDFType>) -> Self {
+    fn new(mappings: Py<PyAny>, rdf_types: HashMap<String, PyRDFType>) -> PyResult<Self> {
         let mut rdf_node_types = HashMap::new();
         for (k, v) in rdf_types {
-            let t = v.as_rdf_node_state();
+            let t = v.as_rdf_node_state()?;
             rdf_node_types.insert(k, t);
         }
-        PySolutionMappings {
+        Ok(PySolutionMappings {
             mappings,
             rdf_node_states: rdf_node_types,
             pushdown_paths: Default::default(),
             debug: None,
-        }
+        })
     }
 
     #[getter]
@@ -620,12 +638,53 @@ impl PySolutionMappings {
 impl PySolutionMappings {
     pub fn to_inner(&self, py: Python<'_>) -> PyResult<EagerSolutionMappings> {
         let mappings = polars_df_to_rust_df(&self.mappings.clone().into_bound(py))?;
+        for (c, state) in &self.rdf_node_states {
+            if let Ok(column) = mappings.column(c) {
+                check_column_matches_rdf_type(c, column.dtype(), state)?;
+            }
+        }
 
         let m = EagerSolutionMappings {
             mappings,
             rdf_node_types: self.rdf_node_states.clone(),
         };
         Ok(m)
+    }
+}
+
+/// Checks that a user provided column can hold values of the declared RDF type: strings for
+/// IRIs, blank nodes and string-like literals, structs with the right fields for language
+/// strings and multiple types, and non-string values otherwise.
+fn check_column_matches_rdf_type(
+    c: &str,
+    actual: &DataType,
+    state: &RDFNodeState,
+) -> Result<(), PyRepresentationError> {
+    let expected = if state.is_multi() {
+        state.polars_data_type()
+    } else {
+        let (t, s) = state.map.iter().next().ok_or_else(|| {
+            PyRepresentationError::BadArgumentError(format!("Column {c} has an empty RDFType"))
+        })?;
+        if t.is_none() {
+            return Ok(());
+        }
+        t.polars_data_type(s, false)
+    };
+    let ok = match (&expected, actual) {
+        (DataType::Struct(expected_fields), DataType::Struct(actual_fields)) => expected_fields
+            .iter()
+            .all(|f| actual_fields.iter().any(|a| a.name == f.name)),
+        (DataType::Struct(_), _) | (_, DataType::Struct(_)) => false,
+        (DataType::String, a) => a.is_string() || a.is_categorical() || a.is_enum(),
+        (_, a) => !a.is_string(),
+    };
+    if ok {
+        Ok(())
+    } else {
+        Err(PyRepresentationError::BadArgumentError(format!(
+            "Column {c} has datatype {actual}, which cannot hold values of type {state:?}, expected {expected}"
+        )))
     }
 }
 

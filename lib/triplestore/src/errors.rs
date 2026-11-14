@@ -69,6 +69,14 @@ pub enum TriplestoreError {
     HDTError(String),
     #[error("Storage folder error {0}")]
     StorageFolderError(String),
+    #[error("Could not parse {0}. Read with strict=False to log and drop such triples instead")]
+    UnparseableValue(String),
+    #[error("File format of {0} is not supported, supply the format explicitly")]
+    UnsupportedReadFormat(String),
+    #[error("Prefix {0} has an invalid IRI: {1}")]
+    InvalidPrefix(String, String),
+    #[error("Could not memory map file: {0}")]
+    MemoryMapError(io::Error),
 }
 
 impl<T> From<PoisonError<T>> for TriplestoreError {

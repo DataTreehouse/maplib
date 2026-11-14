@@ -136,7 +136,8 @@ impl Triplestore {
         named_graph: &NamedGraph,
     ) -> Result<(), TriplestoreError> {
         let prefix = NamedNode::new_unchecked(XYZ_PREFIX_IRI);
-        let v: Value = simd_json::serde::from_slice(u8s).unwrap();
+        let v: Value = simd_json::serde::from_slice(u8s)
+            .map_err(|e| TriplestoreError::ReadJSONFileError(e.to_string()))?;
 
         let mut pred_map = HashMap::new();
         let rdf_type = rdf::TYPE.into_owned();

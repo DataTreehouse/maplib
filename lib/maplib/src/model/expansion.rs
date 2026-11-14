@@ -351,9 +351,16 @@ fn fill_nulls_with_defaults(
     default: &ConstantTermOrList,
 ) -> Result<LazyFrame, MappingError> {
     if default.has_blank_node() {
-        let df = lf.collect().unwrap();
-        if df.column(c).unwrap().is_null().any() {
-            todo!();
+        let df = lf
+            .collect()
+            .map_err(|e| MappingError::LiteralParseError(e.to_string()))?;
+        let has_nulls = df
+            .column(c)
+            .map_err(|_| MappingError::MissingParameterColumn(c.to_string()))?
+            .is_null()
+            .any();
+        if has_nulls {
+            return Err(MappingError::BlankNodeDefaultNotSupported(c.to_string()));
         } else {
             return Ok(df.lazy());
         }
@@ -815,10 +822,16 @@ fn create_remapped(
 
     if let Some(le) = &instance.list_expander {
         for e in &to_expand {
-            if let Some((k, MappingColumnType::Nested(v))) = new_dynamic_columns.remove_entry(*e) {
-                new_dynamic_columns.insert(k, *v);
-            } else {
-                panic!("This situation should never arise")
+            match new_dynamic_columns.remove_entry(*e) {
+                Some((k, MappingColumnType::Nested(v))) => {
+                    new_dynamic_columns.insert(k, *v);
+                }
+                Some((k, t)) => {
+                    return Err(MappingError::ListExpandNonList(k, t));
+                }
+                None => {
+                    return Err(MappingError::UnknownVariableError(e.to_string()));
+                }
             }
         }
         match le {

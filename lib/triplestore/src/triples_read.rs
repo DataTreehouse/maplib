@@ -31,9 +31,56 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::path::Path;
 use std::time::Instant;
-use tracing::{debug, instrument};
+use tracing::{debug, instrument, warn};
 
 const UTF8_BOM: [u8; 3] = [0xEF, 0xBB, 0xBF];
+const DROPPED_EXAMPLES: usize = 5;
+
+/// Values that could not be parsed into their column type and were dropped with their triples.
+/// Keeps a count and a few examples to log.
+#[derive(Default, Debug)]
+pub(crate) struct DroppedValues {
+    count: usize,
+    examples: Vec<String>,
+}
+
+impl DroppedValues {
+    pub(crate) fn push(&mut self, describe: impl FnOnce() -> String) {
+        if self.examples.len() < DROPPED_EXAMPLES {
+            self.examples.push(describe());
+        }
+        self.count += 1;
+    }
+
+    pub(crate) fn count(&self) -> usize {
+        self.count
+    }
+
+    pub(crate) fn examples(&self) -> &[String] {
+        &self.examples
+    }
+
+    pub(crate) fn merge(&mut self, other: DroppedValues) {
+        self.count += other.count;
+        for e in other.examples {
+            if self.examples.len() < DROPPED_EXAMPLES {
+                self.examples.push(e);
+            }
+        }
+    }
+
+    /// Logs a warning if any triples were dropped.
+    pub(crate) fn warn(&self, what: &str) {
+        if self.count > 0 {
+            warn!(
+                "Dropped {} {} with values that could not be parsed, for example: {}",
+                self.count,
+                what,
+                self.examples.join("; ")
+            );
+        }
+    }
+}
 
 #[derive(Eq, PartialEq, Debug, Clone)]
 pub enum ExtendedRdfFormat {
@@ -44,7 +91,7 @@ pub enum ExtendedRdfFormat {
 
 impl Triplestore {
     #[allow(clippy::too_many_arguments)]
-    #[instrument(skip(self, rdf_format, base_iri, parallel, checked))]
+    #[instrument(skip(self, rdf_format, base_iri, parallel, checked, strict))]
     pub fn read_triples_from_path(
         &mut self,
         path: &Path,
@@ -52,6 +99,7 @@ impl Triplestore {
         base_iri: Option<String>,
         parallel: Option<bool>,
         checked: bool,
+        strict: bool,
         graph: &NamedGraph,
         prefixes: &HashMap<String, NamedNode>,
         triples_batch_size: usize,
@@ -81,17 +129,20 @@ impl Triplestore {
         } else if path.extension() == Some("hdt".as_ref()) {
             ExtendedRdfFormat::HDT
         } else {
-            todo!("Have not implemented file format {:?}", path);
+            return Err(TriplestoreError::UnsupportedReadFormat(
+                path.to_string_lossy().to_string(),
+            ));
         };
         let file = File::open(path).map_err(TriplestoreError::ReadTriplesFileError)?;
         let opt = MmapOptions::new();
-        let map = unsafe { opt.map(&file).unwrap() };
+        let map = unsafe { opt.map(&file) }.map_err(TriplestoreError::MemoryMapError)?;
         self.read_triples(
             map.as_ref(),
             rdf_format,
             base_iri,
             parallel,
             checked,
+            strict,
             graph,
             prefixes,
             triples_batch_size,
@@ -114,6 +165,7 @@ impl Triplestore {
         base_iri: Option<String>,
         parallel: Option<bool>,
         checked: bool,
+        strict: bool,
         graph: &NamedGraph,
         prefixes: &HashMap<String, NamedNode>,
         triples_batch_size: usize,
@@ -125,6 +177,7 @@ impl Triplestore {
             base_iri,
             parallel,
             checked,
+            strict,
             graph,
             prefixes,
             triples_batch_size,
@@ -141,6 +194,7 @@ impl Triplestore {
         base_iri: Option<String>,
         parallel: Option<bool>,
         checked: bool,
+        strict: bool,
         graph: &NamedGraph,
         prefixes: &HashMap<String, NamedNode>,
         triples_batch_size: usize,
@@ -153,7 +207,7 @@ impl Triplestore {
         };
 
         if rdf_format == ExtendedRdfFormat::HDT {
-            return self.read_hdt(use_slice, graph, triples_batch_size);
+            return self.read_hdt(use_slice, graph, triples_batch_size, strict);
         }
 
         let start_quadproc_now = Instant::now();
@@ -170,7 +224,7 @@ impl Triplestore {
         let rdfxml_chunks: Vec<Cow<'_, [u8]>>;
         let mut readers = if parallel && rdf_format == ExtendedRdfFormat::Normal(RdfFormat::Turtle)
         {
-            parallel_turtle_readers(use_slice, prefixes, checked, base_iri)
+            parallel_turtle_readers(use_slice, prefixes, checked, base_iri)?
         } else if parallel && rdf_format == ExtendedRdfFormat::Normal(RdfFormat::NTriples) {
             parallel_ntriples_readers(use_slice, checked)
         } else if parallel
@@ -183,7 +237,7 @@ impl Triplestore {
                 .map(|t| t.get())
                 .unwrap_or(1);
             rdfxml_chunks = oxrdfxml::split_slice_for_parallel_parsing(use_slice, threads);
-            parallel_rdfxml_readers(&rdfxml_chunks, &rdf_format, checked, base_iri)
+            parallel_rdfxml_readers(&rdfxml_chunks, &rdf_format, checked, base_iri)?
         } else {
             vec![rdf_parser_reader(
                 use_slice,
@@ -191,22 +245,26 @@ impl Triplestore {
                 checked,
                 base_iri,
                 known_contexts,
-            )]
+            )?]
         };
         debug!("Effective parallelization for reading is {}", readers.len());
 
         let parser_call = self.parser_call.to_string();
+        let mut dropped = DroppedValues::default();
         while !readers.is_empty() {
             let reader_batch_size = triples_batch_size / cmp::max(1, readers.len());
             let readers_predicate_maps: Vec<_> = readers
                 .into_par_iter()
-                .map(|r| create_predicate_map(r, &rdf_format, &parser_call, reader_batch_size))
+                .map(|r| {
+                    create_predicate_map(r, &rdf_format, &parser_call, reader_batch_size, strict)
+                })
                 .collect();
 
             let mut updated_readers = vec![];
             let mut predicate_maps = vec![];
             for rp in readers_predicate_maps {
-                let (reader, predicate_map) = rp?;
+                let (reader, predicate_map, reader_dropped) = rp?;
+                dropped.merge(reader_dropped);
                 if let Some(reader) = reader {
                     updated_readers.push(reader);
                 }
@@ -348,6 +406,7 @@ impl Triplestore {
                 start_add_triples_vec.elapsed().as_secs_f64()
             );
         }
+        dropped.warn("triples");
         Ok(())
     }
 
@@ -361,17 +420,20 @@ impl Triplestore {
         triples: Vec<Triple>,
         graph: &NamedGraph,
     ) -> Result<Vec<NewTriples>, TriplestoreError> {
-        let ttas = triples_to_triples_to_add(triples, graph);
+        let (ttas, dropped) = triples_to_triples_to_add(triples, graph);
+        dropped.warn("triples");
         self.add_triples_vec(ttas)
     }
 }
 
 /// Groups in-memory triples by predicate and subject/object type, and builds one subject/object
-/// DataFrame per group, in the same column representation the RDF readers produce.
+/// DataFrame per group, in the same column representation the RDF readers produce. Triples whose
+/// object cannot be parsed into its column type are dropped and counted in [`DroppedValues`].
 pub(crate) fn triples_to_triples_to_add(
     triples: Vec<Triple>,
     graph: &NamedGraph,
-) -> Vec<TriplesToAdd> {
+) -> (Vec<TriplesToAdd>, DroppedValues) {
+    let mut dropped = DroppedValues::default();
     let mut subj_type_map: HashMap<String, Vec<BaseRDFNodeType>> = HashMap::new();
     let mut obj_type_map: HashMap<String, Vec<BaseRDFNodeType>> = HashMap::new();
     let mut predicate_map: PredMap = HashMap::new();
@@ -395,8 +457,9 @@ pub(crate) fn triples_to_triples_to_add(
                     SeriesBuilder::new(&object_type),
                 )
             });
-        if objects.parse_term(&object).is_ok() {
-            subjects.push_named_or_blank(&subject);
+        match objects.parse_term(&object) {
+            Ok(()) => subjects.push_named_or_blank(&subject),
+            Err(e) => dropped.push(|| format!("{subject} {predicate} {object} ({e})")),
         }
     }
 
@@ -427,7 +490,7 @@ pub(crate) fn triples_to_triples_to_add(
             }
         }
     }
-    ttas
+    (ttas, dropped)
 }
 
 pub(crate) fn term_to_oxrdf_term(t: Term, parser_call: &str) -> Term {
@@ -463,10 +526,12 @@ fn create_predicate_map<'a>(
     rdf_format: &ExtendedRdfFormat,
     parser_call: &str,
     max_iterations: usize,
+    strict: bool,
 ) -> Result<
     (
         Option<MyFromSliceQuadReader<'a>>,
         HashMap<GraphName, PredMap>,
+        DroppedValues,
     ),
     TriplestoreError,
 > {
@@ -478,7 +543,7 @@ fn create_predicate_map<'a>(
     let mut graph_predicate_map = HashMap::new();
     let mut subj_type_map: HashMap<String, Vec<BaseRDFNodeType>> = HashMap::new();
     let mut obj_type_map: HashMap<String, Vec<BaseRDFNodeType>> = HashMap::new();
-    let mut unparseable = Vec::new();
+    let mut dropped = DroppedValues::default();
     let mut empty_iter = false;
     let mut reached_max = false;
     let mut i = 0usize;
@@ -539,10 +604,13 @@ fn create_predicate_map<'a>(
                     subjects.push_named_or_blank(&subject_to_insert);
                 }
                 Err(e) => {
-                    unparseable.push((
-                        Triple::new(subject_to_insert, predicate, object_to_insert),
-                        e,
-                    ));
+                    let triple = Triple::new(subject_to_insert, predicate, object_to_insert);
+                    if strict {
+                        return Err(TriplestoreError::UnparseableValue(format!(
+                            "the object of {triple} ({e})"
+                        )));
+                    }
+                    dropped.push(|| format!("{triple} ({e})"));
                 }
             }
         } else {
@@ -554,7 +622,7 @@ fn create_predicate_map<'a>(
         i += 1;
     }
     let out_r = if empty_iter { None } else { Some(r) };
-    Ok((out_r, graph_predicate_map))
+    Ok((out_r, graph_predicate_map, dropped))
 }
 
 fn parallel_turtle_readers<'a>(
@@ -562,27 +630,31 @@ fn parallel_turtle_readers<'a>(
     prefixes: &HashMap<String, NamedNode>,
     checked: bool,
     base_iri: Option<String>,
-) -> Vec<MyFromSliceQuadReader<'a>> {
+) -> Result<Vec<MyFromSliceQuadReader<'a>>, TriplestoreError> {
     let threads = std::thread::available_parallelism()
         .map(|t| t.get())
         .unwrap_or(1);
     let mut parser = TurtleParser::new();
     for (k, v) in prefixes {
-        parser = parser.with_prefix(k, v.as_str()).unwrap();
+        parser = parser
+            .with_prefix(k, v.as_str())
+            .map_err(|e| TriplestoreError::InvalidPrefix(k.clone(), e.to_string()))?;
     }
     if !checked {
         parser = parser.lenient();
     }
     if let Some(base_iri) = base_iri {
-        parser = parser.with_base_iri(base_iri).unwrap();
+        parser = parser
+            .with_base_iri(&base_iri)
+            .map_err(|e| TriplestoreError::InvalidBaseIri(format!("{base_iri}: {e}")))?;
     }
-    parser
+    Ok(parser
         .split_slice_for_parallel_parsing(slice, threads)
         .into_iter()
         .map(|r| MyFromSliceQuadReader {
             parser: MyFromSliceQuadReaderKind::TurtlePar(r),
         })
-        .collect()
+        .collect())
 }
 
 fn parallel_ntriples_readers(slice: &[u8], checked: bool) -> Vec<MyFromSliceQuadReader<'_>> {
@@ -607,20 +679,22 @@ fn parallel_rdfxml_readers<'a>(
     rdf_format: &ExtendedRdfFormat,
     checked: bool,
     base_iri: Option<String>,
-) -> Vec<MyFromSliceQuadReader<'a>> {
+) -> Result<Vec<MyFromSliceQuadReader<'a>>, TriplestoreError> {
     let mut parser = RdfXmlParser::new();
     if !checked {
         parser = parser.lenient();
     }
     if let Some(base_iri) = &base_iri {
-        parser = parser.with_base_iri(base_iri).unwrap();
+        parser = parser
+            .with_base_iri(base_iri)
+            .map_err(|e| TriplestoreError::InvalidBaseIri(format!("{base_iri}: {e}")))?;
     }
     let cim_base_iri = if matches!(rdf_format, ExtendedRdfFormat::CIMXML) {
         Some(base_iri)
     } else {
         None
     };
-    chunks
+    Ok(chunks
         .iter()
         .map(|chunk| MyFromSliceQuadReader {
             parser: MyFromSliceQuadReaderKind::RdfXmlPar(
@@ -628,7 +702,7 @@ fn parallel_rdfxml_readers<'a>(
                 cim_base_iri.clone(),
             ),
         })
-        .collect()
+        .collect())
 }
 
 fn rdf_parser_reader<'a>(
@@ -637,7 +711,7 @@ fn rdf_parser_reader<'a>(
     checked: bool,
     base_iri: Option<String>,
     known_contexts: HashMap<String, String>,
-) -> MyFromSliceQuadReader<'a> {
+) -> Result<MyFromSliceQuadReader<'a>, TriplestoreError> {
     let use_format = match rdf_format {
         ExtendedRdfFormat::Normal(n) => *n,
         ExtendedRdfFormat::CIMXML => RdfFormat::RdfXml,
@@ -648,7 +722,9 @@ fn rdf_parser_reader<'a>(
         parser = parser.lenient();
     }
     if let Some(base_iri) = &base_iri {
-        parser = parser.with_base_iri(base_iri).unwrap();
+        parser = parser
+            .with_base_iri(base_iri)
+            .map_err(|e| TriplestoreError::InvalidBaseIri(format!("{base_iri}: {e}")))?;
     }
     let mut for_slice = parser.for_slice(slice);
     if matches!(use_format, RdfFormat::JsonLd { .. }) {
@@ -670,7 +746,7 @@ fn rdf_parser_reader<'a>(
     } else {
         MyFromSliceQuadReaderKind::Other(for_slice)
     };
-    MyFromSliceQuadReader { parser }
+    Ok(MyFromSliceQuadReader { parser })
 }
 
 //Adapted from proposed change to https://github.com/oxigraph/

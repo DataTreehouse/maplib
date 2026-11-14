@@ -426,8 +426,13 @@ pub fn py_rdf_type_to_rdf_node_state(
             py_rdf_type_to_rdf_node_state(nested, py)?,
         )))
     } else {
+        // Not nested, so the type is flat
         Ok(MappingColumnType::Flat(
-            py_rdf_type.borrow(py).as_rdf_node_state(),
+            py_rdf_type
+                .borrow(py)
+                .flat
+                .clone()
+                .expect("non-nested RDFType is flat"),
         ))
     }
 }

@@ -333,6 +333,15 @@ fn term_pattern_expression(
     match tp {
         TermPattern::NamedNode(nn) => Ok(named_node_u32_lit(nn, name, global_cats)),
         TermPattern::BlankNode(bl) => Ok(blank_node_expresson(rdf_node_types, bl, name)?),
+        // A literal cannot be a subject, so the template produces no triples.
+        TermPattern::Literal(_) if subject => {
+            let bt = BaseRDFNodeType::None;
+            let bs = bt.default_input_cat_state();
+            let e = lit(LiteralValue::untyped_null())
+                .cast(bt.polars_data_type(&bs, true))
+                .alias(name);
+            Ok((e, RDFNodeState::from_bases(bt, bs)))
+        }
         TermPattern::Literal(thelit) => {
             let l = rdf_literal_to_polars_expr(thelit)?.alias(name);
             Ok((
@@ -340,7 +349,14 @@ fn term_pattern_expression(
                 BaseRDFNodeType::from_literal(thelit).into_default_input_rdf_node_state(),
             ))
         }
-        TermPattern::Variable(v) => Ok(variable_expression(rdf_node_types, v, name, subject)?),
+        TermPattern::Variable(v) => {
+            let keep: Option<fn(&BaseRDFNodeType) -> bool> = if subject {
+                Some(|bt| matches!(bt, BaseRDFNodeType::BlankNode | BaseRDFNodeType::IRI))
+            } else {
+                None
+            };
+            Ok(variable_expression(rdf_node_types, v, name, keep)?)
+        }
     }
 }
 
@@ -352,7 +368,13 @@ fn named_node_pattern_expr(
 ) -> Result<(Expr, RDFNodeState), RepresentationError> {
     match nnp {
         NamedNodePattern::NamedNode(nn) => Ok(named_node_u32_lit(nn, name, global_cats)),
-        NamedNodePattern::Variable(v) => Ok(variable_expression(rdf_node_types, v, name, false)?),
+        // Only IRIs can be predicates, other bindings produce no triple.
+        NamedNodePattern::Variable(v) => Ok(variable_expression(
+            rdf_node_types,
+            v,
+            name,
+            Some(|bt| matches!(bt, BaseRDFNodeType::IRI)),
+        )?),
     }
 }
 
@@ -365,14 +387,14 @@ fn variable_expression(
     rdf_node_types: &HashMap<String, RDFNodeState>,
     v: &Variable,
     name: &str,
-    subject: bool,
+    keep: Option<fn(&BaseRDFNodeType) -> bool>,
 ) -> Result<(Expr, RDFNodeState), RepresentationError> {
     if let Some(t) = rdf_node_types.get(v.as_str()) {
-        if subject {
+        if let Some(keep) = keep {
             let mut new_map = HashMap::new();
             let mut exprs = vec![];
             for (bt, bs) in &t.map {
-                if matches!(bt, BaseRDFNodeType::BlankNode | BaseRDFNodeType::IRI) {
+                if keep(bt) {
                     new_map.insert(bt.clone(), bs.clone());
                     if t.is_multi() {
                         exprs.push(

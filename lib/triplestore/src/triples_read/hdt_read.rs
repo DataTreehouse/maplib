@@ -6,7 +6,7 @@
 //! through these maps, so no term is parsed, hashed or allocated per triple, and no local cats
 //! have to be merged and re-encoded afterwards.
 
-use super::get_or_insert_dt;
+use super::{get_or_insert_dt, DroppedValues};
 use crate::errors::TriplestoreError;
 use crate::Triplestore;
 use hdt::dict_sect_pfc::DictSectPFC;
@@ -31,7 +31,7 @@ use std::io::Cursor;
 use std::ops::Range;
 use std::str::FromStr;
 use std::time::Instant;
-use tracing::debug;
+use tracing::{debug, warn};
 
 /// Type index of dictionary entries that cannot be added (e.g. "abc"^^xsd:int), whose triples are
 /// skipped like the other readers skip unparseable literals.
@@ -58,6 +58,7 @@ impl Triplestore {
         slice: &[u8],
         graph: &NamedGraph,
         triples_batch_size: usize,
+        strict: bool,
     ) -> Result<(), TriplestoreError> {
         let start = Instant::now();
         let HdtScan {
@@ -76,7 +77,7 @@ impl Triplestore {
         let blank_suffix = self.parser_call.to_string();
         let sections = [&dict.shared, &dict.subjects, &dict.objects];
         let jobs = dictionary_jobs(&sections);
-        let chunks: Vec<TermChunk> = jobs
+        let mut chunks: Vec<TermChunk> = jobs
             .par_iter()
             .map(|(section, blocks)| {
                 let mut chunk = TermChunk {
@@ -88,6 +89,20 @@ impl Triplestore {
                 chunk
             })
             .collect();
+        let mut invalid = DroppedValues::default();
+        for chunk in &mut chunks {
+            invalid.merge(std::mem::take(&mut chunk.invalid));
+        }
+        if invalid.count() > 0 {
+            if strict {
+                return Err(TriplestoreError::UnparseableValue(format!(
+                    "{} HDT dictionary entries, for example: {}",
+                    invalid.count(),
+                    invalid.examples().join("; ")
+                )));
+            }
+            invalid.warn("HDT dictionary entries");
+        }
         let predicates = decode_predicates(&dict.predicates);
         let terms = {
             let mut cats = self.global_cats.write().unwrap();
@@ -103,6 +118,7 @@ impl Triplestore {
         let threads = rayon::current_num_threads();
         let batch_size = cmp::max(triples_batch_size, 1);
         let mut batch_start = 0;
+        let mut dropped_triples = 0;
         while batch_start < num_triples {
             let start_batch = Instant::now();
             let batch_end = cmp::min(num_triples, batch_start + batch_size);
@@ -118,6 +134,7 @@ impl Triplestore {
                 .into_par_iter()
                 .map(|r| TripleGroups::scan(&triples, r, &terms, predicates.len()))
                 .collect();
+            dropped_triples += parts.iter().map(|p| p.dropped).sum::<usize>();
             let cat_triples = merge_groups(parts)
                 .into_par_iter()
                 .map(|(key, subjects, objects)| {
@@ -131,6 +148,11 @@ impl Triplestore {
             );
             self.add_local_cat_triples(cat_triples)?;
             batch_start = batch_end;
+        }
+        if dropped_triples > 0 {
+            warn!(
+                "Dropped {dropped_triples} HDT triples with invalid or unparseable terms"
+            );
         }
         self.parser_call += 1;
         Ok(())
@@ -213,6 +235,8 @@ struct TermChunk {
     slots: Vec<Slot>,
     /// Literal values are stored with N-Triples escapes, see [`has_escaped_literals`].
     escaped_literals: bool,
+    /// Dictionary entries that could not be parsed.
+    invalid: DroppedValues,
 }
 
 impl TermChunk {
@@ -243,6 +267,9 @@ impl TermChunk {
             let t = self.type_id(BaseRDFNodeType::IRI);
             Slot::Cat(t, self.arenas[t as usize].push(&[s]))
         };
+        if matches!(slot, Slot::Invalid) {
+            self.invalid.push(|| s.to_string());
+        }
         self.slots.push(slot);
     }
 
@@ -587,6 +614,8 @@ type GroupKey = (u32, u16, u16);
 struct TripleGroups {
     index: HashMap<GroupKey, usize>,
     groups: Vec<(GroupKey, Vec<u32>, Vec<u32>)>,
+    /// Triples dropped since a term or the predicate was invalid.
+    dropped: usize,
 }
 
 impl TripleGroups {
@@ -602,6 +631,7 @@ impl TripleGroups {
             let s = terms.subject(s);
             let o = terms.object(o);
             if s.ty == INVALID || o.ty == INVALID || p == 0 || p > num_predicates {
+                out.dropped += 1;
                 return;
             }
             let key = ((p - 1) as u32, s.ty, o.ty);

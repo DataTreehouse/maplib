@@ -338,7 +338,10 @@ impl Triplestore {
                         if !self.does_graph_exist(&g) {
                             continue;
                         }
-                        let sms: Vec<_> = triples_to_triples_to_add(triples, &g)
+                        // Triples with values that cannot be parsed cannot be stored, so there is
+                        // nothing to delete for them.
+                        let (ttas, _dropped) = triples_to_triples_to_add(triples, &g);
+                        let sms: Vec<_> = ttas
                             .into_iter()
                             .map(|tta| {
                                 let rdf_node_types = HashMap::from([

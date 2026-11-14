@@ -493,6 +493,7 @@ pub(crate) fn read_mutex(
     triples_batch_size: Option<usize>,
     known_contexts: HashMap<String, String>,
     geo: bool,
+    strict: bool,
 ) -> PyResult<()> {
     let graph = parse_optional_named_node(graph)?;
     let named_graph = NamedGraph::from_maybe_named_node(graph.as_ref());
@@ -512,6 +513,7 @@ pub(crate) fn read_mutex(
             base_iri,
             parallel,
             checked,
+            strict,
             &named_graph,
             replace_graph,
             triples_batch_size,
@@ -535,6 +537,7 @@ pub(crate) fn read_mutex(
                 base_iri,
                 parallel,
                 checked,
+                strict,
                 &named_graph,
                 replace_graph,
                 triples_batch_size,
@@ -582,6 +585,7 @@ pub(crate) fn reads_mutex(
     triples_batch_size: Option<usize>,
     known_contexts: HashMap<String, String>,
     geo: bool,
+    strict: bool,
 ) -> PyResult<()> {
     let graph = parse_optional_named_node(graph)?;
     let named_graph = NamedGraph::from_maybe_named_node(graph.as_ref());
@@ -600,6 +604,7 @@ pub(crate) fn reads_mutex(
             base_iri,
             parallel,
             checked.unwrap_or(true),
+            strict,
             &named_graph,
             replace_graph.unwrap_or(false),
             triples_batch_size.unwrap_or(DEFAULT_TRIPLES_BATCH_SIZE),
@@ -758,7 +763,7 @@ pub(crate) fn writes_mutex(
         }
     }
     let out = write_bytes_mutex(inner, format, graph, prefixes)?;
-    Ok(String::from_utf8(out).unwrap())
+    String::from_utf8(out).map_err(|e| PyMaplibError::RuntimeError(e.to_string()).into())
 }
 
 pub(crate) fn get_predicate_iris_mutex(

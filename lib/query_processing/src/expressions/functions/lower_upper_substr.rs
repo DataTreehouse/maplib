@@ -37,21 +37,22 @@ pub fn lower_upper_substr(
         }
     }
     let first_context = args_contexts.get(&0).unwrap();
-    let starting_loc = if let Some(Expression::Literal(starting_loc_lit)) = args.get(1) {
-        let starting_loc: i64 = starting_loc_lit
-            .value()
-            .parse()
-            .map_err(|_x| QueryProcessingError::ExpectedIntegerArgument(func.clone()))?;
-        //Indexing starts at 1!
-        Some(lit(starting_loc - 1))
+    // SUBSTR(s, start, length) keeps the characters at the 1-based positions p with
+    // start <= p < start + length, so positions before 1 are cut from the length.
+    let (starting_loc, length) = if matches!(func, Function::SubStr) {
+        let start = integer_literal_argument(args.get(1), func)?;
+        let length = args
+            .get(2)
+            .map(|a| integer_literal_argument(Some(a), func))
+            .transpose()?;
+        let from = start.max(1);
+        let length = match length {
+            Some(length) => lit(start.saturating_add(length).saturating_sub(from).max(0)),
+            None => lit(LiteralValue::untyped_null()).cast(DataType::Int64),
+        };
+        (Some(lit(from - 1)), length)
     } else {
-        None
-    };
-    let length = if let Some(Expression::Literal(length)) = args.get(2) {
-        let length: i64 = length.value().parse().unwrap();
-        lit(length)
-    } else {
-        lit(LiteralValue::untyped_null()).cast(DataType::Int64)
+        (None, lit(LiteralValue::untyped_null()).cast(DataType::Int64))
     };
     let t = solution_mappings
         .rdf_node_types
@@ -306,4 +307,30 @@ pub fn lower_upper_substr(
         }
     }
     Ok(solution_mappings)
+}
+
+/// Reads an integer SUBSTR argument, which must be a (possibly signed) literal.
+fn integer_literal_argument(
+    arg: Option<&Expression>,
+    func: &Function,
+) -> Result<i64, QueryProcessingError> {
+    let err = || QueryProcessingError::ExpectedIntegerArgument(func.clone());
+    match arg {
+        Some(Expression::Literal(l)) => parse_integer_lexical(l.value()).ok_or_else(err),
+        Some(Expression::UnaryMinus(inner)) => {
+            Ok(integer_literal_argument(Some(inner), func)?.saturating_neg())
+        }
+        Some(Expression::UnaryPlus(inner)) => integer_literal_argument(Some(inner), func),
+        _ => Err(err()),
+    }
+}
+
+/// Parses an integer, also accepting decimals and doubles with an integral value such as 2.0,
+/// which SUBSTR rounds.
+fn parse_integer_lexical(s: &str) -> Option<i64> {
+    if let Ok(i) = s.parse::<i64>() {
+        return Some(i);
+    }
+    let f = s.parse::<f64>().ok()?;
+    f.is_finite().then(|| f.round() as i64)
 }

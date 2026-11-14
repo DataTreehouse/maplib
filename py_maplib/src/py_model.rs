@@ -807,6 +807,7 @@ impl PyModel {
         triples_batch_size=None,
         known_contexts=None,
         geo=None,
+        strict=false,
     ))]
     #[instrument(skip_all)]
     fn read(
@@ -822,6 +823,7 @@ impl PyModel {
         triples_batch_size: Option<usize>,
         known_contexts: Option<HashMap<String, String>>,
         geo: Option<bool>,
+        strict: bool,
     ) -> PyResult<()> {
         let source = ReadSource::extract(file_path)?;
         py.detach(move || {
@@ -838,6 +840,7 @@ impl PyModel {
                 triples_batch_size,
                 known_contexts.unwrap_or_default(),
                 geo.unwrap_or(false),
+                strict,
             )
         })
     }
@@ -865,6 +868,7 @@ impl PyModel {
         triples_batch_size=None,
         known_contexts=None,
         geo=None,
+        strict=false,
     ))]
     #[instrument(skip_all)]
     fn reads(
@@ -880,6 +884,7 @@ impl PyModel {
         triples_batch_size: Option<usize>,
         known_contexts: Option<HashMap<String, String>>,
         geo: Option<bool>,
+        strict: bool,
     ) -> PyResult<()> {
         py.detach(|| {
             let mut inner = self.inner.write().unwrap();
@@ -895,6 +900,7 @@ impl PyModel {
                 triples_batch_size,
                 known_contexts.unwrap_or_default(),
                 geo.unwrap_or(false),
+                strict,
             )
         })
     }

@@ -183,7 +183,13 @@ fn _maplib(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     let fmt = tracing_subscriber::fmt()
         //.with_span_events(FmtSpan::NEW | FmtSpan::CLOSE)
         .with_max_level(filter::LevelFilter::INFO)
-        .with_env_filter(EnvFilter::from_default_env())
+        .with_writer(std::io::stderr)
+        // Warnings, e.g. about dropped values, are shown unless RUST_LOG says otherwise.
+        .with_env_filter(
+            EnvFilter::builder()
+                .with_default_directive(filter::LevelFilter::WARN.into())
+                .from_env_lossy(),
+        )
         .finish();
     fmt.init();
 
@@ -302,9 +308,13 @@ fn query_to_result(
                             &mut sm.rdf_node_types,
                             global_cats.clone(),
                         );
-                        sm.mappings = lf.collect().unwrap();
+                        sm.mappings = lf
+                            .collect()
+                            .map_err(|e| PyMaplibError::RuntimeError(e.to_string()))?;
                     }
-                    let mut ts = Triplestore::new(StorageOptions::memory(), None).unwrap();
+                    let mut ts = Triplestore::new(StorageOptions::memory(), None).map_err(|x| {
+                        PyMaplibError::MaplibError(MaplibError::TriplestoreError(x))
+                    })?;
                     ts.insert_construct_result(sms, &NamedGraph::DefaultGraph)
                         .map_err(|x| PyMaplibError::MaplibError(MaplibError::SparqlError(x)))?;
                     let mut out_bytes = vec![];
@@ -312,7 +322,8 @@ fn query_to_result(
                         .map_err(|x| {
                             PyMaplibError::MaplibError(MaplibError::TriplestoreError(x))
                         })?;
-                    let s = String::from_utf8(out_bytes).unwrap();
+                    let s = String::from_utf8(out_bytes)
+                        .map_err(|e| PyMaplibError::RuntimeError(e.to_string()))?;
                     return Ok(PyString::new(py, &s).into());
                 }
             } else {
@@ -370,7 +381,7 @@ fn query_to_result(
                                     col(OBJECT_COL_NAME),
                                 ])
                                 .collect()
-                                .unwrap();
+                                .map_err(|e| PyMaplibError::RuntimeError(e.to_string()))?;
                             rdf_node_types.insert(
                                 PREDICATE_COL_NAME.to_string(),
                                 BaseRDFNodeType::IRI.into_default_input_rdf_node_state(),

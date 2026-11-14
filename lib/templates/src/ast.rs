@@ -335,16 +335,10 @@ impl ConstantTermOrList {
         match self {
             ConstantTermOrList::ConstantTerm(ct) => ct.ptype(),
             ConstantTermOrList::ConstantList(cl) => {
-                let mut inner_type = None;
-                for p in cl {
-                    let p_ptype = p.ptype();
-                    if let Some(inner_type) = &inner_type {
-                        assert_eq!(inner_type, &p_ptype);
-                    } else {
-                        inner_type = Some(p_ptype);
-                    }
-                }
-                PType::List(Box::new(inner_type.unwrap_or(PType::None)))
+                // The type of the first element. Lists with inconsistent element types are
+                // rejected with an error when they are turned into expressions.
+                let inner_type = cl.first().map(|p| p.ptype()).unwrap_or(PType::None);
+                PType::List(Box::new(inner_type))
             }
         }
     }

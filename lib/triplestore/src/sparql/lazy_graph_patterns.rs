@@ -312,7 +312,7 @@ impl Triplestore {
                 dataset,
             ),
             GraphPattern::Service { .. } => {
-                unimplemented!("Services are not implemented")
+                return Err(SparqlError::ServiceNotSupported);
             }
             GraphPattern::PValues {
                 variables,

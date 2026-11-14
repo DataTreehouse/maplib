@@ -14,7 +14,7 @@ use representation::solution_mapping::SolutionMappings;
 use representation::{BaseRDFNodeType, RDFNodeState};
 use std::cmp;
 use std::collections::{HashMap, HashSet};
-use tracing::warn;
+use tracing::debug;
 
 pub fn join(
     left_solution_mappings: SolutionMappings,
@@ -151,7 +151,7 @@ pub fn join_workaround(
     } else if on.is_empty() {
         let left_cols: Vec<_> = left_datatypes.keys().cloned().collect();
         let right_cols: Vec<_> = right_datatypes.keys().cloned().collect();
-        warn!(
+        debug!(
             "Cross join detected left columns {} right columns {}",
             left_cols.join(","),
             right_cols.join(",")

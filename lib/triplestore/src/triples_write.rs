@@ -84,7 +84,7 @@ impl Triplestore {
                         } else {
                             lf = lf.select([col(SUBJECT_COL_NAME), col(OBJECT_COL_NAME)]);
                         };
-                        let mut df = lf.collect().unwrap();
+                        let mut df = lf.collect().map_err(TriplestoreError::LazyLoadError)?;
                         if !object_type.is_lang_string() {
                             convert_datelike_to_string(
                                 &mut df,
@@ -101,7 +101,7 @@ impl Triplestore {
                             CHUNK_SIZE,
                             n_threads,
                         )
-                        .unwrap();
+                        .map_err(|e| TriplestoreError::WriteNTriplesError(e.to_string()))?;
                     }
                 }
             }
@@ -116,7 +116,7 @@ impl Triplestore {
                 for ((subject_type, object_type), tt) in df_map {
                     for (lf, _) in tt.get_lazy_frames(&None, &None)? {
                         let triples = global_df_as_triples(
-                            lf.collect().unwrap(),
+                            lf.collect().map_err(TriplestoreError::LazyLoadError)?,
                             subject_type.clone(),
                             object_type.clone(),
                             predicate,
@@ -194,7 +194,7 @@ impl Triplestore {
                 for ((subject_type, object_type), tt) in df_map {
                     for (lf, _) in tt.get_lazy_frames(&None, &None)? {
                         let triples = global_df_as_triples(
-                            lf.collect().unwrap(),
+                            lf.collect().map_err(TriplestoreError::LazyLoadError)?,
                             subject_type.clone(),
                             object_type.clone(),
                             predicate,
