@@ -83,6 +83,10 @@ pub struct BasicVirtualizedQuery {
     pub identifier_variable: Variable,
     pub column_mapping: HashMap<Variable, TermPattern>,
     pub expected_unknown_cols: HashSet<Variable>,
+    /// Query variables matched to template variables that are not parameters, i.e. blank nodes
+    /// created by the template. They have no column in the virtualized database, and are bound
+    /// to a fresh blank node per row when the results are attached.
+    pub blank_node_variables: HashSet<Variable>,
     pub resource_variable: Variable,
     pub query_source_context: Context,
     pub query_source_variable: Variable,
@@ -150,6 +154,14 @@ impl BasicVirtualizedQuery {
                                                                             obj,
                                                                         ) = &p.object
                                                                         {
+                                                                            if !param_vars
+                                                                                .contains(tobj)
+                                                                            {
+                                                                                self.blank_node_variables
+                                                                                    .insert(
+                                                                                        obj.clone(),
+                                                                                    );
+                                                                            }
                                                                             queue.push((obj, tobj));
                                                                         }
                                                                     }
@@ -417,6 +429,31 @@ impl VirtualizedQuery {
         }
     }
 
+    /// The query variables bound to blank nodes created by the templates, see
+    /// BasicVirtualizedQuery::blank_node_variables. Grouped queries have none, since the rows are
+    /// aggregated in the virtualized database.
+    pub fn get_blank_node_variables(&self) -> Vec<&Variable> {
+        match self {
+            VirtualizedQuery::Basic(b) => {
+                let mut vs: Vec<_> = b.blank_node_variables.iter().collect();
+                vs.sort();
+                vs
+            }
+            VirtualizedQuery::Filtered(inner, _)
+            | VirtualizedQuery::Sliced(inner, ..)
+            | VirtualizedQuery::Ordered(inner, ..) => inner.get_blank_node_variables(),
+            VirtualizedQuery::InnerJoin(inners, _) => {
+                let mut vs = vec![];
+                for inner in inners {
+                    vs.extend(inner.get_blank_node_variables())
+                }
+                vs
+            }
+            VirtualizedQuery::Grouped(_) => vec![],
+            VirtualizedQuery::ExpressionAs(t, ..) => t.get_blank_node_variables(),
+        }
+    }
+
     pub fn get_resource_variables(&self) -> Vec<&Variable> {
         match self {
             VirtualizedQuery::Basic(b) => {
@@ -494,6 +531,7 @@ impl BasicVirtualizedQuery {
             grouping_mapping: None,
             grouping_col: None,
             expected_unknown_cols: Default::default(),
+            blank_node_variables: Default::default(),
         }
     }
 }
