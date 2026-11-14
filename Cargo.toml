@@ -24,6 +24,7 @@ members = [
     "lib/virtualization",
     "lib/opc_ua",
     "lib/external_sparql",
+    "lib/server",
     "py_maplib",
 ]
 

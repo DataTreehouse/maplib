@@ -1,3 +1,5 @@
+pub mod maplib_endpoint;
+
 use polars::frame::DataFrame;
 use polars::prelude::{col, Column, IntoLazy};
 use query_processing::bindings::maybe_replace_bindings;

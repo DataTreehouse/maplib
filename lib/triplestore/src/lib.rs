@@ -358,6 +358,18 @@ impl Triplestore {
         self.graph_triples_map.contains_key(graph)
     }
 
+    /// The graphs that hold triples.
+    pub fn graph_names(&self) -> Vec<NamedGraph> {
+        let mut graphs: Vec<_> = self
+            .graph_triples_map
+            .iter()
+            .filter(|(_, m)| m.values().any(|m| !m.is_empty()))
+            .map(|(g, _)| g.clone())
+            .collect();
+        graphs.sort_by_key(|g| g.to_string());
+        graphs
+    }
+
     pub fn add_cat_cache(&self, graphs: &[&NamedGraph]) -> Result<(), TriplestoreError> {
         if self.storage_folder.is_some() {
             let mut type_u32s_map: HashMap<BaseRDFNodeType, HashSet<u32>> = HashMap::new();

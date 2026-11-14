@@ -957,6 +957,7 @@ class Model:
         To run from Jupyter Notebook use:
         >>> server = m.explore()
         You can later stop the server with
+        >>> df = Model().query("SELECT * WHERE {?s ?p ?o}", endpoint=server.url)  # From another process or host
         >>> server.stop()
 
         :param host: The hostname that we will point the browser to.
@@ -981,6 +982,8 @@ class Model:
             max_rows: int = None,
             debug: bool = False,
             bindings: Dict[str, Union[str, IRI, Literal]] = None,
+            endpoint: Optional[str] = None,
+            endpoint_token: Optional[str] = None,
     ) -> DataFrame | SolutionMappings | list[DataFrame | SolutionMappings] | bool | str | None:
         """
         Query the contained knowledge graph using SPARQL
@@ -1005,6 +1008,11 @@ class Model:
         :param max_rows: Maximum estimated rows in result, helps avoid out-of-memory errors.
         :param debug: Why does my query have no results?
         :param bindings: Bind the variables (keys) to the following ground terms. Use IRI, Literal classes or strings (e.g. "<urn:id:abc>") as values.
+        :param endpoint: Query a maplib server started with Model.serve() instead of this Model, e.g. server.url or
+                         "http://host:7878". The results are the same as from Model.query() on the served Model: they
+                         are sent as Arrow over plain HTTP, with maplib's own types, and zstd compressed when the
+                         server is on another host. parameters and debug can not be used with an endpoint.
+        :param endpoint_token: The auth_token of the server, if it has one.
         :return: DataFrame (Select), list of DataFrames (Construct) containing results or SolutionMappings when solution_mappings is set, or a bool (Ask).
 
         """
@@ -1422,6 +1430,88 @@ class Model:
         :param target_graph: The IRI of the graph in this Model to copy into. None means the default graph.
         """
 
+    def serve(
+            self,
+            host: str = "127.0.0.1",
+            port: Optional[int] = 7878,
+            flight_port: Optional[int] = 7879,
+            allow_update: bool = False,
+            arrow_http: bool = True,
+            auth_token: Optional[str] = None,
+            cors_origins: Optional[List[str]] = None,
+            graph: Optional[str] = None,
+            include_graphs: Optional[List[str]] = None,
+            max_rows: Optional[int] = None,
+            max_request_bytes: Optional[int] = None,
+            batch_rows: Optional[int] = None,
+            result_ttl: Optional[float] = None,
+            arrow_compression: LiteralType["auto", "zstd", "none"] = "auto",
+            block: bool = False,
+    ) -> "Server":
+        """
+        Serve the Model over the SPARQL 1.1 Protocol and Arrow Flight (maplib Enterprise Edition).
+        Both endpoints run at the same time, in the background, on the Model itself: queries see
+        changes made from Python, and updates through the endpoints are seen from Python.
+
+        The SPARQL endpoints (on port):
+        - /sparql: SPARQL 1.1 Protocol query and update, and the service description on GET.
+          SELECT and ASK results as JSON, XML, CSV, TSV or Arrow IPC (application/vnd.apache.arrow.stream),
+          CONSTRUCT and DESCRIBE results as Turtle, N-Triples, RDF/XML, JSON-LD, N-Quads or TriG.
+          The format parameter (e.g. format=csv) overrides the Accept header. HTTP/1.1 and HTTP/2 (h2c) are served.
+        - /query and /update: query only and update only. /update is only served with allow_update.
+        - /store: the SPARQL 1.1 Graph Store HTTP Protocol (?graph=<iri> or ?default). Other paths
+          are graphs identified by their URL.
+        - /arrow/...: the Arrow API over plain HTTP, see arrow_http.
+        - /: a query page. /health and /status.
+
+        The Arrow Flight endpoint (on flight_port), for pyarrow.flight:
+        - do_get(Ticket(query)): the result as with Model.query(), the query is SPARQL text or JSON
+          {"query": ..., "graph": ..., "default_graph_uris": [...], "named_graph_uris": [...], "native_dataframe": false,
+          "compression": "zstd" | "none" | "auto"}.
+        - get_flight_info(FlightDescriptor.for_command(query)): runs the query and keeps the result
+          for result_ttl seconds, with its schema and size, and a ticket to fetch it with do_get.
+        - list_flights(): the graphs, FlightDescriptor.for_path("graph", iri) gives a graph's triples.
+        - do_put(FlightDescriptor.for_command('{"template": ..., "graph": ...}'), schema): maps the
+          uploaded data with a template (IRI or stOTTR document).
+        - do_action: "update", "graphs", "status", "drop_result", "clear_results".
+
+        Usage:
+        >>> server = m.serve(allow_update=True)
+        >>> server.url
+        'http://127.0.0.1:7878/sparql'
+        >>> client = pyarrow.flight.connect(server.flight_url)
+        >>> table = client.do_get(pyarrow.flight.Ticket("SELECT * WHERE {?s ?p ?o}")).read_all()
+        >>> server.stop()
+
+        :param host: The address to listen on. Use "0.0.0.0" to listen on all interfaces, together with auth_token.
+        :param port: The port of the SPARQL endpoints, None to not serve them, 0 for any free port.
+        :param flight_port: The port of the Arrow Flight endpoint, None to not serve it, 0 for any free port.
+        :param allow_update: Allow SPARQL Update, Graph Store Protocol writes and Arrow API (Flight and HTTP) writes.
+        :param arrow_http: Serve the Arrow API over plain HTTP on port, for networks where gRPC (Flight) does not get
+                           through, e.g. behind proxies, load balancers or firewalls: POST /arrow/query with a query
+                           command as JSON gives an Arrow IPC stream, GET /arrow/graphs lists the graphs,
+                           GET /arrow/graph?graph=<iri> gives a graph's triples, and POST /arrow/map?template=<iri>
+                           maps an uploaded Arrow IPC stream. Model.query(endpoint=) uses it.
+        :param auth_token: Require "Authorization: Bearer <auth_token>" on all requests (except /health).
+                           With Flight, use the header, or client.authenticate_basic_token(user, auth_token).
+        :param cors_origins: Web page origins allowed to use the endpoints, e.g. ["https://yasgui.org"], ["*"] for all.
+                             None (the default) allows none, so other web sites can not read data or send updates.
+        :param graph: The IRI of the graph queried when the request gives no dataset. None is the default graph.
+        :param include_graphs: Graphs merged into the default graph of queries, as with Model.query.
+        :param max_rows: Queries with more result rows than this fail.
+        :param max_request_bytes: The largest request (body, Flight message or Flight upload) accepted, 256 MiB by default.
+        :param batch_rows: Rows per Arrow record batch, 65536 by default.
+        :param result_ttl: Seconds that results prepared by get_flight_info are kept, 600 by default.
+        :param arrow_compression: Compression of the record batches of Arrow results (Flight and format=arrow), as
+                                  defined by the Arrow IPC format, so readers such as pyarrow decompress them
+                                  transparently. "auto" compresses with zstd for clients on other hosts, where the
+                                  network is the bottleneck, and not for clients on the same host, where compressing
+                                  costs more time than it saves. Requests can choose with "compression" in the Flight
+                                  command or ticket, or the compression parameter over HTTP.
+        :param block: Block until the server stops, Ctrl-C stops it.
+        :return: The running Server.
+        """
+
     def infer(
             self,
             rulesets: Union[str, List[str]],
@@ -1531,6 +1621,48 @@ class ExploreServer:
         """
         Stop the graph explorer server.
         """
+
+
+class Server:
+    """
+    A running SPARQL and Arrow Flight server, returned by Model.serve.
+    Can be used as a context manager, which stops the server on exit.
+    The server keeps running when the Server object is no longer referenced, until stop() or exit.
+    """
+
+    url: Optional[str]
+    "The SPARQL query and update endpoint, e.g. http://127.0.0.1:7878/sparql."
+    query_url: Optional[str]
+    "The query endpoint."
+    update_url: Optional[str]
+    "The update endpoint."
+    store_url: Optional[str]
+    "The Graph Store Protocol endpoint."
+    port: Optional[int]
+    "The port of the SPARQL endpoints."
+    flight_url: Optional[str]
+    "The Arrow Flight endpoint, for pyarrow.flight.connect, e.g. grpc://127.0.0.1:7879."
+    flight_port: Optional[int]
+    "The port of the Arrow Flight endpoint."
+    running: bool
+    "Whether the server is running."
+
+    def stop(self) -> None:
+        """
+        Stop the server. Running requests are allowed to finish.
+        """
+
+    def wait(self, timeout: Optional[float] = None) -> bool:
+        """
+        Block until the server stops, at most timeout seconds. Ctrl-C stops the server.
+
+        :param timeout: Seconds to wait, None to wait until the server stops.
+        :return: Whether the server has stopped.
+        """
+
+    def __enter__(self) -> "Server": ...
+
+    def __exit__(self, *args) -> bool: ...
 
 
 class MaplibException(Exception): ...

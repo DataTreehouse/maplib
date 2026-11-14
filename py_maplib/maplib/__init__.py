@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 __all__ = [
     "Model",
     "ModelStream",
+    "Server",
     "a",
     "Triple",
     "SolutionMappings",

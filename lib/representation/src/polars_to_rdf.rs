@@ -81,28 +81,30 @@ pub fn column_as_terms(
     terms
 }
 
+/// The solutions, with the variables in the order of the columns (the projection of a query).
 pub fn df_as_result(sm: &EagerSolutionMappings, global_cats: LockedCats) -> QuerySolutions {
+    let typed_columns: Vec<_> = sm
+        .mappings
+        .get_column_names()
+        .into_iter()
+        .filter_map(|c| sm.rdf_node_types.get(c.as_str()).map(|t| (c.as_str(), t)))
+        .collect();
+    let variables: Vec<_> = typed_columns
+        .iter()
+        .map(|(c, _)| Variable::new_unchecked(*c))
+        .collect();
     if sm.mappings.height() == 0 {
-        let variables = sm
-            .rdf_node_types
-            .keys()
-            .map(|x| Variable::new(x).unwrap())
-            .collect();
         return QuerySolutions {
             variables,
             solutions: vec![],
         };
     }
     let mut all_terms = vec![];
-    let mut variables = vec![];
     let height = sm.mappings.height();
-    for (k, t) in &sm.rdf_node_types {
-        if let Ok(ser) = sm.mappings.column(k) {
-            //TODO: Perhaps correct this upstream?
-            variables.push(Variable::new_unchecked(k));
-            let terms = column_as_terms(ser, t, global_cats.clone(), false);
-            all_terms.push(terms);
-        }
+    for (k, t) in &typed_columns {
+        let ser = sm.mappings.column(k).unwrap();
+        let terms = column_as_terms(ser, t, global_cats.clone(), false);
+        all_terms.push(terms);
     }
     let mut solns = vec![];
     for _i in 0..height {

@@ -26,7 +26,9 @@ rayon.workspace = true
 nohash-hasher.workspace = true
 uuid.workspace = true
 polars-arrow.workspace = true
-arrow.workspace = true
+arrow = { workspace = true, features = ["ffi", "ipc"] }
+# zstd compressed Arrow results of the maplib endpoints. zstd is already used by polars.
+arrow-ipc = { version = "58.4.1", features = ["zstd"] }
 memchr.workspace = true
 rust_decimal.workspace = true
 range-set-blaze.workspace = true

@@ -29,7 +29,6 @@ use spargebra::term::GroundTerm;
 use std::collections::HashMap;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::sync::RwLock;
 use tracing::warn;
 use triplestore::sparql::{InsertResult, UpdateResult};
 use triplestore::triples_read::ExtendedRdfFormat;
@@ -99,10 +98,7 @@ pub(crate) fn detach_graph_mutex(
     let sprout = model
         .detach_graph(graph, preserve_name)
         .map_err(PyMaplibError::from)?;
-    let m = PyModel {
-        inner: RwLock::new(sprout),
-    };
-    Ok(m)
+    Ok(PyModel::from_inner_mapping(sprout))
 }
 
 pub(crate) fn map_mutex(

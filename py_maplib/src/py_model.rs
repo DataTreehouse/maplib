@@ -9,6 +9,7 @@ use crate::mutexes::{
     update_mutex, validate_mutex, write_bytes_mutex, write_cim_xml_mutex, write_triples_mutex,
     writes_mutex,
 };
+use crate::py_server::{server_error, PyServer};
 use crate::py_io::{ReadSource, WriteTarget};
 use crate::py_stream::{DocumentKind, PyModelStream, StreamSource};
 use crate::shacl::PyValidationReport;
@@ -19,8 +20,10 @@ use crate::{
     parse_optional_named_node, print_debug_if_exists, query_to_result, resolve_rdf_node_type,
     DocumentData, MappingData, ParametersType, PyIndexingOptions,
 };
+use server::{serve as serve_model, ArrowCompression, ServerOptions};
 
 use datalog::python::PyInferenceResult;
+use external_sparql::maplib_endpoint::{query_maplib_endpoint, MaplibEndpointQuery};
 use external_sparql::SparqlMethod;
 use maplib::model::Model as InnerModel;
 use opc_ua::mappings::map_opc_ua;
@@ -32,12 +35,13 @@ use representation::cats::LockedCats;
 use representation::dataset::NamedGraph;
 use representation::df_to_python::df_to_py_df;
 use representation::python::PyIRI;
+use representation::result::QueryResult;
 use representation::solution_mapping::EagerSolutionMappings;
 use representation::BaseRDFNodeType;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::str::FromStr;
-use std::sync::RwLock;
+use std::sync::{Arc, RwLock};
 use templates::python::PyTemplate;
 use tracing::instrument;
 use triplestore::sparql::InsertResult;
@@ -46,13 +50,14 @@ use virtualization::python::VirtualizedPythonDatabase;
 
 #[pyclass(name = "Model", frozen)]
 pub struct PyModel {
-    pub inner: RwLock<InnerModel>,
+    // Shared with the endpoints started by serve().
+    pub inner: Arc<RwLock<InnerModel>>,
 }
 
 impl PyModel {
     pub fn from_inner_mapping(inner: InnerModel) -> PyModel {
         PyModel {
-            inner: RwLock::new(inner),
+            inner: Arc::new(RwLock::new(inner)),
         }
     }
 }
@@ -73,11 +78,9 @@ impl PyModel {
         } else {
             None
         };
-        Ok(PyModel {
-            inner: RwLock::new(
-                InnerModel::new(None, storage, indexing, None).map_err(PyMaplibError::from)?,
-            ),
-        })
+        Ok(PyModel::from_inner_mapping(
+            InnerModel::new(None, storage, indexing, None).map_err(PyMaplibError::from)?,
+        ))
     }
 
     #[instrument(skip_all)]
@@ -477,6 +480,8 @@ impl PyModel {
         max_rows=None,
         debug=None,
         bindings=None,
+        endpoint=None,
+        endpoint_token=None,
     ))]
     #[instrument(skip_all)]
     fn query(
@@ -492,7 +497,54 @@ impl PyModel {
         max_rows: Option<usize>,
         debug: Option<bool>,
         bindings: Option<HashMap<String, Py<PyAny>>>,
+        endpoint: Option<String>,
+        endpoint_token: Option<String>,
     ) -> PyResult<Py<PyAny>> {
+        if let Some(endpoint) = endpoint {
+            if parameters.is_some() {
+                return Err(PyMaplibError::FunctionArgumentError(
+                    "parameters can not be used with endpoint".to_string(),
+                )
+                .into());
+            }
+            let parsed_bindings = maybe_parse_bindings(bindings, py)?;
+            let q = MaplibEndpointQuery {
+                query,
+                graph,
+                include_graphs,
+                max_rows,
+                bindings: parsed_bindings
+                    .map(|b| b.into_iter().map(|(k, v)| (k, v.to_string())).collect()),
+                auth_token: endpoint_token,
+            };
+            let (kind, cats, prefixes) = py.detach(|| -> PyResult<_> {
+                let kind = query_maplib_endpoint(&endpoint, &q)
+                    .map_err(|e| PyMaplibError::RuntimeError(e.to_string()))?;
+                // The results have no dictionary encoded columns, the model's dictionaries
+                // are only used for formatting, and the model's prefixes for Turtle.
+                let inner = self.inner.read().unwrap();
+                Ok((
+                    kind,
+                    inner.triplestore.global_cats.clone(),
+                    inner.prefixes.clone(),
+                ))
+            })?;
+            let res = QueryResult {
+                kind,
+                debug: None,
+                pushdown_paths: vec![],
+            };
+            return query_to_result(
+                res,
+                solution_mappings.unwrap_or(false),
+                solution_mappings.unwrap_or(false),
+                return_json.unwrap_or(false),
+                return_format,
+                cats,
+                &prefixes,
+                py,
+            );
+        }
         let mapped_parameters = map_parameters(parameters, py)?;
         let graph = parse_optional_named_node(graph)?;
         let graph = graph.map(|graph| NamedGraph::from_maybe_named_node(Some(&graph)));
@@ -1110,9 +1162,7 @@ impl PyModel {
                 InnerModel::deserialize_triples(&path, storage).map_err(PyMaplibError::from)?;
             Ok(inner)
         });
-        Ok(Self {
-            inner: RwLock::new(inner?),
-        })
+        Ok(PyModel::from_inner_mapping(inner?))
     }
 
     #[pyo3(signature = (iri, func, output_type, input_types=None))]
@@ -1193,6 +1243,88 @@ impl PyModel {
             )?;
             Ok(())
         })
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    #[pyo3(signature = (
+        host="127.0.0.1".to_string(),
+        port=Some(7878),
+        flight_port=Some(7879),
+        allow_update=false,
+        arrow_http=true,
+        auth_token=None,
+        cors_origins=None,
+        graph=None,
+        include_graphs=None,
+        max_rows=None,
+        max_request_bytes=None,
+        batch_rows=None,
+        result_ttl=None,
+        arrow_compression=None,
+        block=false,
+    ))]
+    fn serve(
+        &self,
+        py: Python<'_>,
+        host: String,
+        port: Option<u16>,
+        flight_port: Option<u16>,
+        allow_update: bool,
+        arrow_http: bool,
+        auth_token: Option<String>,
+        cors_origins: Option<Vec<String>>,
+        graph: Option<String>,
+        include_graphs: Option<Vec<String>>,
+        max_rows: Option<usize>,
+        max_request_bytes: Option<usize>,
+        batch_rows: Option<usize>,
+        result_ttl: Option<f64>,
+        arrow_compression: Option<String>,
+        block: bool,
+    ) -> PyResult<Py<PyServer>> {
+        let mut options = ServerOptions {
+            host,
+            sparql_port: port,
+            flight_port,
+            allow_update,
+            arrow_http,
+            auth_token,
+            graph: parse_optional_named_node(graph)?
+                .map(|g| NamedGraph::from_maybe_named_node(Some(&g))),
+            include_graphs: parse_include_graphs(include_graphs, true)?,
+            max_rows,
+            ..ServerOptions::default()
+        };
+        if let Some(cors_origins) = cors_origins {
+            options.cors_origins = cors_origins;
+        }
+        if let Some(max_request_bytes) = max_request_bytes {
+            options.max_request_bytes = max_request_bytes;
+        }
+        if let Some(batch_rows) = batch_rows {
+            options.batch_rows = batch_rows;
+        }
+        if let Some(result_ttl) = result_ttl {
+            if !(result_ttl >= 0.0 && result_ttl.is_finite()) {
+                return Err(PyMaplibError::FunctionArgumentError(
+                    "result_ttl must be a non-negative number of seconds".to_string(),
+                )
+                .into());
+            }
+            options.result_ttl = std::time::Duration::from_secs_f64(result_ttl);
+        }
+        if let Some(c) = arrow_compression {
+            options.arrow_compression = ArrowCompression::parse(&c).map_err(server_error)?;
+        }
+        let model = self.inner.clone();
+        let handle = py
+            .detach(move || serve_model(model, options))
+            .map_err(server_error)?;
+        let server = Py::new(py, PyServer::new(handle))?;
+        if block {
+            server.get().wait(py, None)?;
+        }
+        Ok(server)
     }
 }
 

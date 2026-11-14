@@ -20,6 +20,7 @@ virtualization = { path = "../lib/virtualization" }
 external_sparql = { path = "../lib/external_sparql" }
 opc_ua = { path = "../lib/opc_ua" }
 spargebra = { path = "../lib/spargebra" }
+server = { path = "../lib/server" }
 
 pyo3.workspace = true
 oxrdf.workspace = true

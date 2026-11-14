@@ -3543,6 +3543,7 @@ dependencies = [
  "polars-ooc",
  "pyo3",
  "representation",
+ "server",
  "shacl",
  "spargebra",
  "templates",
@@ -4354,6 +4355,15 @@ dependencies = [
  "itoa",
  "ryu",
  "serde",
+]
+
+[[package]]
+name = "server"
+version = "0.1.0"
+dependencies = [
+ "maplib",
+ "representation",
+ "thiserror",
 ]
 
 [[package]]

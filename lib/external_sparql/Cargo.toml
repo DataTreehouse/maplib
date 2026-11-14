@@ -13,3 +13,4 @@ reqwest.workspace = true
 sparesults.workspace = true
 polars.workspace = true
 tokio.workspace = true
+serde_json.workspace = true

@@ -3,6 +3,7 @@ mod error;
 mod mutexes;
 mod py_indexing_options;
 mod py_model;
+mod py_server;
 mod py_stream;
 mod py_io;
 mod shacl;
@@ -192,6 +193,7 @@ fn _maplib(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     m.add_class::<PyIndexingOptions>()?;
     m.add_class::<PyModel>()?;
+    m.add_class::<py_server::PyServer>()?;
     m.add_class::<py_stream::PyModelStream>()?;
     m.add_class::<PyValidationReport>()?;
     m.add_class::<PySolutionMappings>()?;

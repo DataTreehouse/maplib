@@ -1,5 +1,6 @@
 extern crate core;
 
+pub mod arrow_wire;
 mod base_rdf_type;
 pub mod bundle;
 pub mod cats;
