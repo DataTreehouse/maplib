@@ -170,8 +170,10 @@ fn triples_solution_mappings_to_global_cat_triples(
     global_cats: LockedCats,
     graph: &NamedGraph,
 ) -> Result<Vec<CatTriples>, TriplestoreError> {
+    // Sequential on purpose: each item collects with Polars, see SEQUENTIAL_COLLECT_LOOPS in
+    // lib.rs.
     let mappings_maps_preds: Vec<_> = sm_preds
-        .into_par_iter()
+        .into_iter()
         .map(|(sm, predicate)| {
             let EagerSolutionMappings {
                 mappings,

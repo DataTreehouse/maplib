@@ -4,7 +4,6 @@ use super::{
 };
 use crate::errors::TriplestoreError;
 use crate::storage::Triples;
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use representation::cats::CatTriples;
 use representation::{BaseRDFNodeType, OBJECT_COL_NAME, SUBJECT_COL_NAME};
 use std::collections::HashMap;
@@ -48,8 +47,10 @@ impl Triplestore {
             start_globalize.elapsed().as_secs_f32()
         );
         let start_sort_rank = Instant::now();
+        // Sequential on purpose: each item collects with Polars, see SEQUENTIAL_COLLECT_LOOPS in
+        // lib.rs.
         let cat_triples: Result<_, TriplestoreError> = cat_triples
-            .into_par_iter()
+            .into_iter()
             .map(|mut t| {
                 t.encoded_triples = add_rank_sort_triples(
                     t.encoded_triples,
@@ -122,9 +123,10 @@ impl Triplestore {
         );
         let indexing = self.indexing.clone();
         let triples_folder = self.triples_folder.clone();
-        // Tables are independent, so they are built in parallel.
+        // Sequential on purpose: building a table collects with Polars, see
+        // SEQUENTIAL_COLLECT_LOOPS in lib.rs.
         let r: Result<Vec<_>, TriplestoreError> = add_vec
-            .into_par_iter()
+            .into_iter()
             .map(|(graph, p, s, o, triples, v)| {
                 let mut new_triples_vec = vec![];
                 let mut v_iter = v.into_iter();

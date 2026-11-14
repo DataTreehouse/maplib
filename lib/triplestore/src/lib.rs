@@ -34,8 +34,8 @@ use polars_core::prelude::IntoSeries;
 use polars_core::prelude::{Column, IntoColumn, Series, SortMultipleOptions, StructChunked};
 use pyo3::{Py, PyAny};
 use range_set_blaze::RangeSetBlaze;
+use rayon::iter::IntoParallelRefIterator;
 use rayon::iter::{IntoParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
-use rayon::iter::{IntoParallelRefIterator, ParallelDrainRange};
 use representation::cats::{
     cat_encode_triples, distinct_codes, extend_codes, CatTriples, CatType, Cats, EncodedTriples,
     LockedCats, OBJECT_RANK_COL_NAME, SUBJECT_RANK_COL_NAME,
@@ -55,6 +55,14 @@ use query_processing::udf::UdfRegistry;
 use representation::cats::maps::CatMaps;
 use representation::dataset::NamedGraph;
 use tracing::{debug, instrument};
+
+// SEQUENTIAL_COLLECT_LOOPS: loops whose items collect a Polars LazyFrame (directly or through
+// Triples::new, add_triples, compaction and so on) iterate sequentially, not with Rayon. A
+// collect runs Polars' streaming engine, which blocks the calling thread until the query is
+// done. On a Rayon worker that wait lets Rayon hand the thread further items of the same loop,
+// so streaming queries pile up on top of each other until no thread is left to drive them and
+// adding triples deadlocks. This happens whether the loop runs on Rayon's global pool or on
+// Polars' own pool. Each collect is still parallel inside Polars.
 
 #[derive(Clone)]
 pub struct Triplestore {
@@ -307,8 +315,9 @@ impl Triplestore {
             .write()
             .expect("Should be writable")
             .compact();
+        // Sequential on purpose: each item collects with Polars, see SEQUENTIAL_COLLECT_LOOPS.
         let data_and_triples: Result<Vec<_>, TriplestoreError> = compacted
-            .into_par_iter()
+            .into_iter()
             .map(
                 |((graph, pred, subject_type, object_type), object_indexing_enabled, st)| {
                     let triples = Triples::new_compacted(
@@ -940,10 +949,11 @@ struct TriplesToAddPartitionedPredicate {
 
 /// Splits the triples to add into one data frame per predicate.
 fn partition_triples_to_add(
-    mut ts: Vec<TriplesToAdd>,
+    ts: Vec<TriplesToAdd>,
     global_cats: &LockedCats,
 ) -> Vec<TriplesToAddPartitionedPredicate> {
-    ts.par_drain(..)
+    // Sequential on purpose: each item collects with Polars, see SEQUENTIAL_COLLECT_LOOPS.
+    ts.into_iter()
         .map(|t| {
             let TriplesToAdd {
                 df,
