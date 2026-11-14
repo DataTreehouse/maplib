@@ -2,7 +2,7 @@ use crate::errors::QueryProcessingError;
 use polars::datatypes::{DataType, Field};
 use polars::error::PolarsResult;
 use polars::prelude::{
-    col, Column, Expr, IntoColumn, PlSmallStr, Schema, SortMultipleOptions, StructChunked,
+    coalesce, col, lit, when, Column, Expr, IntoColumn, NULL, PlSmallStr, Schema, SortMultipleOptions, StructChunked,
 };
 use polars::prelude::{IntoSeries, UInt32Chunked};
 use polars::series::Series;
@@ -10,6 +10,7 @@ use std::sync::Arc;
 use representation::cats::{distinct_codes, extend_codes, LockedCats, RankMap};
 use representation::solution_mapping::{BaseCatState, SolutionMappings};
 use representation::{BaseRDFNodeType, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD};
+use oxrdf::vocab::xsd;
 use std::cmp::Ordering;
 
 pub fn order_by(
@@ -54,7 +55,9 @@ pub fn order_by(
                     }
                 } else if let BaseRDFNodeType::Literal(x_l, _) = x {
                     if let BaseRDFNodeType::Literal(y_l, _) = y {
-                        x_l.cmp(y_l)
+                        // Types of the same datatype differ only in the time zone, which gives a
+                        // deterministic order to the fields of the datatype.
+                        x_l.cmp(y_l).then_with(|| x.cmp(y))
                     } else {
                         Ordering::Greater
                     }
@@ -66,7 +69,26 @@ pub fn order_by(
             // Nulls are first in ascending sort
             // By placing literals first, we are using the subsequent types to break ties where the literal is null.
             ts.reverse();
-            for (t, s) in ts {
+            let mut i = 0;
+            while i < ts.len() {
+                let (t, s) = ts[i];
+                // dateTimes with different time zones are different types, stored as UTC
+                // instants. They are ordered together by instant, then by time zone.
+                let run = ts[i..]
+                    .iter()
+                    .take_while(|(u, _)| is_date_time(u) && same_datatype(t, u))
+                    .count();
+                if run > 1 {
+                    let mut run_types: Vec<_> = ts[i..i + run].iter().map(|(u, _)| *u).collect();
+                    run_types.sort();
+                    order_exprs.push(date_time_instant_expr(c, &run_types));
+                    order_exprs.push(time_zone_rank_expr(c, &run_types));
+                    asc_bools.push(a);
+                    asc_bools.push(a);
+                    i += run;
+                    continue;
+                }
+                i += 1;
                 asc_bools.push(a);
                 if t.is_lang_string() {
                     order_exprs.push(make_ordering_expr(
@@ -104,6 +126,54 @@ pub fn order_by(
     );
 
     Ok(solution_mappings)
+}
+
+fn is_date_time(t: &BaseRDFNodeType) -> bool {
+    t.is_lit_type(xsd::DATE_TIME) || t.is_lit_type(xsd::DATE_TIME_STAMP)
+}
+
+fn same_datatype(x: &BaseRDFNodeType, y: &BaseRDFNodeType) -> bool {
+    matches!((x, y), (BaseRDFNodeType::Literal(x, _), BaseRDFNodeType::Literal(y, _)) if x == y)
+}
+
+/// The UTC instant of the dateTime in any of the fields of `types`, null for other rows.
+///
+/// A dateTime without a time zone is stored as if it was in UTC, so it is ordered as if its
+/// implicit time zone was Z. XPath leaves the implicit time zone to the implementation, and
+/// SPARQL 1.1 only requires that ORDER BY gives the same order every time.
+fn date_time_instant_expr(c: &str, types: &[&BaseRDFNodeType]) -> Expr {
+    coalesce(
+        &types
+            .iter()
+            .map(|t| {
+                col(c)
+                    .struct_()
+                    .field_by_name(&t.field_col_name())
+                    .cast(DataType::Int64)
+            })
+            .collect::<Vec<_>>(),
+    )
+}
+
+/// Breaks ties between dateTimes at the same instant by time zone: no time zone first, then by
+/// increasing offset.
+fn time_zone_rank_expr(c: &str, types: &[&BaseRDFNodeType]) -> Expr {
+    coalesce(
+        &types
+            .iter()
+            .enumerate()
+            .map(|(rank, t)| {
+                when(
+                    col(c)
+                        .struct_()
+                        .field_by_name(&t.field_col_name())
+                        .is_not_null(),
+                )
+                .then(lit(rank as u32))
+                .otherwise(lit(NULL).cast(DataType::UInt32))
+            })
+            .collect::<Vec<_>>(),
+    )
 }
 
 fn make_ordering_expr(e: Expr, cats: LockedCats, t: BaseRDFNodeType, s: BaseCatState) -> Expr {
