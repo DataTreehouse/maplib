@@ -132,7 +132,10 @@ impl Triplestore {
             })
             .collect();
         let solution_mappings = solution_mappings
-            .map(|sm| pushdowns.add_from_solution_mappings(sm, self.global_cats.clone(), &focus));
+            .map(|sm| {
+                // Paths walk outward from the pushed values, so no table size limits them.
+                pushdowns.add_from_solution_mappings(sm, self.global_cats.clone(), &focus, None)
+            });
 
         let mut df_creator = U32DataFrameCreator::new(dataset.clone());
         df_creator.gather_namednode_dfs(ppe, self)?;

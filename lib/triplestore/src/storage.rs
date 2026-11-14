@@ -100,6 +100,11 @@ pub struct Triples {
 }
 
 impl Triples {
+    /// The number of triples.
+    pub fn height(&self) -> usize {
+        self.height
+    }
+
     /// Creates triples from serialized parquet files. In disk storage mode (`triples_folder` set)
     /// the files are copied into the triples folder, otherwise they are read into memory.
     pub fn from_serialization(

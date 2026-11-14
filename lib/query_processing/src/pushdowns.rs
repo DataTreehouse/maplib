@@ -21,6 +21,10 @@ pub const SMALL_HEIGHT: usize = 500;
 /// mappings with at most this many rows. Converting values to terms costs time proportional to
 /// the number of distinct values, which is small compared with scanning large triple tables.
 pub const MEDIUM_HEIGHT: usize = 100_000;
+/// Values are pushed down from more than [SMALL_HEIGHT] rows only if the triple table the
+/// pattern reads has at least this many times more rows. Otherwise converting the values to
+/// terms and looking them up costs more than reading the table and joining.
+pub const MEDIUM_TABLE_FACTOR: usize = 16;
 pub const OWL_REAL: &str = "http://www.w3.org/2002/07/owl#real";
 
 //Todos: pushdowns from joins..
@@ -56,13 +60,19 @@ impl Pushdowns {
 impl Pushdowns {
     /// Pushes down the values of the variables of `sm`. When `sm` has more than [SMALL_HEIGHT]
     /// rows, only the values of the variables in `focus` (those of the pattern about to be
-    /// evaluated) are pushed down.
+    /// evaluated) are pushed down, and only when `table_height` (the number of triples the
+    /// pattern would otherwise read, if known) is at least [MEDIUM_TABLE_FACTOR] times larger.
     pub fn add_from_solution_mappings(
         &mut self,
         sm: SolutionMappings,
         global_cats: LockedCats,
         focus: &[&str],
+        table_height: Option<usize>,
     ) -> SolutionMappings {
+        let medium_height = match table_height {
+            Some(t) => MEDIUM_HEIGHT.min(t / MEDIUM_TABLE_FACTOR),
+            None => MEDIUM_HEIGHT,
+        };
         if sm.height_estimate > CHECK_SMALL_HEIGHT {
             return sm;
         }
@@ -82,7 +92,7 @@ impl Pushdowns {
         let height = eager_sm.mappings.height();
         let columns: Vec<_> = if height <= SMALL_HEIGHT {
             eager_sm.mappings.columns().iter().collect()
-        } else if height <= MEDIUM_HEIGHT {
+        } else if height <= medium_height {
             eager_sm
                 .mappings
                 .columns()

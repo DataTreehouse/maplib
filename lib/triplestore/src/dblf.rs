@@ -18,6 +18,26 @@ use representation::{
 use std::collections::{HashMap, HashSet};
 
 impl Triplestore {
+    /// The number of triples with the given predicate in the graph, or in the default graphs of
+    /// the dataset.
+    pub(crate) fn predicate_height(&self, predicate: &NamedNode, dataset: &QueryGraph) -> usize {
+        let graphs: Vec<NamedGraph> = match dataset {
+            QueryGraph::NamedGraph(ng) => vec![ng.clone()],
+            QueryGraph::QueryDataset(qd) => qd
+                .default
+                .iter()
+                .map(|nn| NamedGraph::from_maybe_named_node(Some(nn)))
+                .collect(),
+        };
+        graphs
+            .iter()
+            .filter_map(|g| self.graph_triples_map.get(g))
+            .filter_map(|m| m.get(predicate))
+            .flat_map(|m| m.values())
+            .map(|t| t.height())
+            .sum()
+    }
+
     /// The predicates of the graph, together with the predicates of the included graphs.
     pub fn get_predicate_iris(
         &self,

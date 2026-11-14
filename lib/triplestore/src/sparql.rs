@@ -9,7 +9,7 @@ mod lazy_order;
 mod rewrite;
 
 use tracing::{instrument, trace, warn};
-use utils::polars::{pl_interruptable_collect, InterruptableCollectError};
+use utils::polars::{pl_interruptable_collect_estimated, InterruptableCollectError};
 
 use super::{NewTriples, Triplestore};
 use crate::sparql::debug::DebugOutputs;
@@ -97,7 +97,7 @@ impl Triplestore {
                 let SolutionMappings {
                     mappings,
                     rdf_node_types: types,
-                    ..
+                    height_estimate,
                 } = self.lazy_graph_pattern(
                     pattern,
                     None,
@@ -108,7 +108,7 @@ impl Triplestore {
                     &self.query_graph(dataset, graph, query_settings),
                 )?;
 
-                match pl_interruptable_collect(mappings) {
+                match pl_interruptable_collect_estimated(mappings, height_estimate) {
                     Ok(df) => {
                         if df.height() == 0 {
                             no_results = true;
@@ -132,7 +132,7 @@ impl Triplestore {
                 let SolutionMappings {
                     mappings,
                     rdf_node_types,
-                    ..
+                    height_estimate,
                 } = self.lazy_graph_pattern(
                     pattern,
                     None,
@@ -142,7 +142,7 @@ impl Triplestore {
                     query_settings,
                     &self.query_graph(dataset, graph, query_settings),
                 )?;
-                match pl_interruptable_collect(mappings) {
+                match pl_interruptable_collect_estimated(mappings, height_estimate) {
                     Ok(df) => {
                         if df.height() == 0 {
                             no_results = true;
@@ -191,7 +191,7 @@ impl Triplestore {
                     query_settings,
                     &self.query_graph(dataset, graph, query_settings),
                 )?;
-                match pl_interruptable_collect(mappings.limit(1)) {
+                match pl_interruptable_collect_estimated(mappings.limit(1), 1) {
                     Ok(df) => {
                         if df.height() == 0 {
                             no_results = true;

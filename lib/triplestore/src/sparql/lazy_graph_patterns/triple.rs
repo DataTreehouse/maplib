@@ -35,11 +35,17 @@ impl Triplestore {
         );
 
         let focus = pattern_variables(triple_pattern);
+        // With a constant predicate, the pushdown is weighed against the size of its table.
+        let table_height = match &triple_pattern.predicate {
+            NamedNodePattern::NamedNode(n) => Some(self.predicate_height(n, dataset)),
+            NamedNodePattern::Variable(_) => None,
+        };
         let mut solution_mappings = solution_mappings.map(|solution_mappings| {
             pushdowns.add_from_solution_mappings(
                 solution_mappings,
                 self.global_cats.clone(),
                 &focus,
+                table_height,
             )
         });
         let subjects = create_subjects(&triple_pattern.subject, &pushdowns.variables_values);

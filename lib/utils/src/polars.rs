@@ -20,12 +20,22 @@ pub enum InterruptableCollectError {
     Polars(#[from] PolarsError),
 }
 
-/// The engine used for query result collection. `MAPLIB_POLARS_ENGINE=in-memory` selects the
-/// in-memory engine, anything else the streaming engine.
-fn query_engine() -> Engine {
+/// Query results estimated to have at most this many rows are collected with the in-memory
+/// engine. The streaming engine has a fixed cost of a few milliseconds per collect, which
+/// dominates small queries such as lookups of one subject.
+pub const SMALL_COLLECT_HEIGHT: usize = 65_536;
+
+/// The engine used for query result collection. `MAPLIB_POLARS_ENGINE=in-memory` or `streaming`
+/// selects that engine. Otherwise results estimated to be small (see [SMALL_COLLECT_HEIGHT]) use
+/// the in-memory engine and everything else the streaming engine.
+fn query_engine(height_estimate: Option<usize>) -> Engine {
     match std::env::var("MAPLIB_POLARS_ENGINE").as_deref() {
         Ok("in-memory") | Ok("in_memory") => Engine::InMemory,
-        _ => Engine::Streaming,
+        Ok("streaming") => Engine::Streaming,
+        _ => match height_estimate {
+            Some(h) if h <= SMALL_COLLECT_HEIGHT => Engine::InMemory,
+            _ => Engine::Streaming,
+        },
     }
 }
 
@@ -33,7 +43,23 @@ fn query_engine() -> Engine {
 /// On the streaming engine this relies on Polars' abort mechanism, so the SIGINT hook must be
 /// installed with `polars::error::abort::register_polars_abort_mechanism` at startup.
 pub fn pl_interruptable_collect(lf: LazyFrame) -> Result<DataFrame, InterruptableCollectError> {
-    match query_engine() {
+    collect_with_engine(lf, query_engine(None))
+}
+
+/// Like [pl_interruptable_collect], for a result estimated to have at most `height_estimate`
+/// rows: small results are collected with the in-memory engine.
+pub fn pl_interruptable_collect_estimated(
+    lf: LazyFrame,
+    height_estimate: usize,
+) -> Result<DataFrame, InterruptableCollectError> {
+    collect_with_engine(lf, query_engine(Some(height_estimate)))
+}
+
+fn collect_with_engine(
+    lf: LazyFrame,
+    engine: Engine,
+) -> Result<DataFrame, InterruptableCollectError> {
+    match engine {
         Engine::InMemory => pl_interruptable_collect_in_memory(lf),
         engine => {
             // A lazy frame without sinks always collects to a single DataFrame.
