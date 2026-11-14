@@ -2,7 +2,7 @@ mod constant_terms;
 pub mod default;
 pub mod errors;
 pub mod expansion;
-mod shacl_report_mapping;
+pub mod shacl_report_mapping;
 
 use crate::errors::MaplibError;
 use crate::model::errors::MappingError;

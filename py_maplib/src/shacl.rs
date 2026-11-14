@@ -6,7 +6,23 @@ use representation::dataset::NamedGraph;
 use representation::df_to_python::{df_to_py_df, fix_cats_and_multicolumns};
 use representation::solution_mapping::EagerSolutionMappings;
 use shacl::ValidationReport as RustValidationReport;
+use maplib::model::shacl_report_mapping::format_shacl_message_list;
+use polars::prelude::{col, DataFrame, IntoLazy};
 use std::collections::HashMap;
+
+const MESSAGE_COL: &str = "message";
+
+/// The messages of a result as a list of strings, "value"@lang for language tagged strings.
+fn format_message_column(df: DataFrame) -> DataFrame {
+    if df.column(MESSAGE_COL).is_ok() {
+        df.lazy()
+            .with_column(format_shacl_message_list(col(MESSAGE_COL)).alias(MESSAGE_COL))
+            .collect()
+            .unwrap()
+    } else {
+        df
+    }
+}
 
 #[derive(Clone)]
 #[pyclass(name = "ValidationReport", from_py_object)]
@@ -75,6 +91,7 @@ impl PyValidationReport {
                         mut mappings,
                         mut rdf_node_types,
                     } = sm.as_eager();
+                    mappings = format_message_column(mappings);
                     (mappings, rdf_node_types) = fix_cats_and_multicolumns(
                         mappings,
                         rdf_node_types,
@@ -112,6 +129,7 @@ impl PyValidationReport {
                         mut mappings,
                         mut rdf_node_types,
                     } = sm.as_eager();
+                    mappings = format_message_column(mappings);
                     (mappings, rdf_node_types) = fix_cats_and_multicolumns(
                         mappings,
                         rdf_node_types,

@@ -491,6 +491,8 @@ class ValidationReport:
     ) -> Optional[DataFrame]:
         """
         Return the results of the validation report, if they exist.
+        The message column is a list of the messages of the result (one per sh:message of the shape or
+        SPARQL constraint), formatted as "value"@lang for language tagged strings and as the value for strings.
 
         :return: The SHACL validation report, as a DataFrame
         """

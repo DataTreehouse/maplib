@@ -1,16 +1,18 @@
 use super::{MapOptions, Model};
 use crate::errors::MaplibError;
-use oxrdf::vocab::xsd;
+use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{NamedNode, NamedOrBlankNode};
 use polars::datatypes::{AnyValue, DataType, PlSmallStr};
 use polars::frame::DataFrame;
 use polars::prelude::{
-    as_struct, by_name, col, lit, IdxSize, IntoColumn, IntoLazy, LazyFrame, LiteralValue,
-    NamedFrom, Series,
+    as_struct, by_name, col, lit, when, Expr, IdxSize, IntoColumn, IntoLazy, LazyFrame,
+    LiteralValue, NamedFrom, Series,
 };
 use representation::dataset::NamedGraph;
 use representation::solution_mapping::SolutionMappings;
-use representation::{BaseRDFNodeType, RDFNodeState, SeriesBuilder};
+use representation::{
+    BaseRDFNodeType, RDFNodeState, SeriesBuilder, LANG_STRING_LANG_FIELD, LANG_STRING_VALUE_FIELD,
+};
 use shacl::ValidationReport;
 use std::collections::HashMap;
 use templates::MappingColumnType;
@@ -57,10 +59,10 @@ ottr:Triple(?result, sh:sourceShape, ?source_shape),
 ottr:Triple(?result, sh:value, ?value),
 ottr:Triple(?result, sh:sourceConstraintComponent, ?source_constraint_component),
 ottr:Triple(?result, sh:focusNode, ?focus_node),
-ottr:Triple(?result, sh:resultMessage, ?message),
 ottr:Triple(?result, sh:resultSeverity, ?result_severity),
 ottr:Triple(?result, sh:resultPath, ?result_path),
 ottr:Triple(?result, maplib:resultConforms, ?conforms),
+cross | ottr:Triple(?result, sh:resultMessage, ++?message),
 cross | ottr:Triple(?result, maplib:details, ++?details),
 } .
 
@@ -211,6 +213,34 @@ impl Model {
     }
 }
 
+const MESSAGE_COL: &str = "message";
+
+/// The type of the elements of the message column of SHACL validation results:
+/// language tagged strings, strings and none, as non-categorical strings.
+pub fn shacl_message_element_state() -> RDFNodeState {
+    RDFNodeState::default_from_types(vec![
+        BaseRDFNodeType::Literal(rdf::LANG_STRING.into_owned(), None),
+        BaseRDFNodeType::Literal(xsd::STRING.into_owned(), None),
+        BaseRDFNodeType::None,
+    ])
+}
+
+/// Formats the elements of the message column of SHACL validation results:
+/// "value"@lang for language tagged strings, and the value for strings.
+pub fn format_shacl_message_list(expr: Expr) -> Expr {
+    let element = col("");
+    let lang = element.clone().struct_().field_by_name(LANG_STRING_LANG_FIELD);
+    let lang_value = element.clone().struct_().field_by_name(LANG_STRING_VALUE_FIELD);
+    let string_value = element.struct_().field_by_name(
+        &BaseRDFNodeType::Literal(xsd::STRING.into_owned(), None).field_col_name(),
+    );
+    expr.list().eval(
+        when(lang.clone().is_not_null())
+            .then(lit("\"") + lang_value + lit("\"@") + lang)
+            .otherwise(string_value),
+    )
+}
+
 fn create_results_input(
     mut mappings: LazyFrame,
     types: &HashMap<String, RDFNodeState>,
@@ -258,6 +288,16 @@ fn create_results_input(
     let mut column_types = HashMap::new();
     for (k, v) in rdf_node_types {
         column_types.insert(k, MappingColumnType::Flat(v));
+    }
+
+    // A result has a list of messages, as a shape may have several sh:message values
+    if column_types.contains_key(MESSAGE_COL) {
+        column_types.insert(
+            MESSAGE_COL.to_string(),
+            MappingColumnType::Nested(Box::new(MappingColumnType::Flat(
+                shacl_message_element_state(),
+            ))),
+        );
     }
 
     if column_types.contains_key("details") {
