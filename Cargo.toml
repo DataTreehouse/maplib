@@ -23,6 +23,7 @@ members = [
     "lib/virtualized_query",
     "lib/virtualization",
     "lib/opc_ua",
+    "lib/cdf",
     "lib/external_sparql",
     "lib/server",
     "py_maplib",

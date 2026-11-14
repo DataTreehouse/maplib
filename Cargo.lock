@@ -682,6 +682,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "cdf"
+version = "0.1.0"
+dependencies = [
+ "pyo3",
+]
+
+[[package]]
 name = "cfg-if"
 version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3584,6 +3591,7 @@ dependencies = [
 name = "py_maplib"
 version = "0.21.0"
 dependencies = [
+ "cdf",
  "chrono",
  "cimxml_export",
  "csvw",

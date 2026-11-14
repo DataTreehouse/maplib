@@ -20,6 +20,7 @@ virtualized_query = { path = "../lib/virtualized_query" }
 virtualization = { path = "../lib/virtualization" }
 external_sparql = { path = "../lib/external_sparql" }
 opc_ua = { path = "../lib/opc_ua" }
+cdf = { path = "../lib/cdf" }
 spargebra = { path = "../lib/spargebra" }
 server = { path = "../lib/server" }
 

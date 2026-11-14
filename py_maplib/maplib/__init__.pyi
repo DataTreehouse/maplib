@@ -993,6 +993,55 @@ class Model:
         :return: None
         """
 
+    def map_cdf(
+            self,
+            client: Any,
+            data_models: Any = None,
+            spaces: Union[str, List[str]] = None,
+            graph: str = None,
+            base_iri: str = None,
+            include_schema: bool = True,
+            include_edges: bool = True,
+            virtualize_time_series: bool = True,
+    ):
+        """
+        Map the data model of a Cognite Data Fusion (CDF) project to RDF, using a cognite-sdk client.
+        Datapoints are not read. Instead, the datapoints of time series (nodes in cdf_cdm:CogniteTimeSeries)
+        are virtualized, and fetched from CDF when a query needs them (see VirtualizedDatabase.cognite).
+
+        - Each view becomes an rdfs:Class, with rdfs:subClassOf the views it implements.
+        - Each container property mapped by a view becomes a predicate, so views that map the same container
+          property share the predicate.
+        - Nodes and edges become resources typed with the views they have data in.
+          Direct relations are IRIs, and an edge adds a triple from its start node to its end node
+          with the edge type as the predicate.
+        - Each time series node gets chrontext:hasResource and chrontext:hasExternalId, so it can be queried with
+          ?ts chrontext:hasDataPoint ?dp . ?dp chrontext:hasTimestamp ?t . ?dp chrontext:hasValue ?v .
+
+        IRIs are <base_iri>node/<space>/<externalId>, <base_iri>edge/<space>/<externalId>,
+        <base_iri>view/<space>/<externalId>, <base_iri>datamodel/<space>/<externalId> and
+        <base_iri>property/<space>/<container>/<property>.
+
+        Not available in the open source build: raises NotImplementedError.
+
+        Usage:
+
+        >>> from cognite.client import CogniteClient
+        >>> m.map_cdf(CogniteClient(), data_models=[("my_space", "MyModel", "v1")])
+
+        :param client: A cognite.client.CogniteClient.
+        :param data_models: The data models (DataModelId or (space, externalId, version)) to map.
+            Defaults to all data models in the project, except the global ones.
+        :param spaces: Only map instances in these spaces.
+        :param graph: The IRI of the graph to add triples to.
+        :param base_iri: The namespace of the IRIs of CDF resources. Defaults to urn:cdf:<project>:
+        :param include_schema: Map the data models, views and properties.
+        :param include_edges: Map the edges of the edge connections in the views, also those without properties.
+        :param virtualize_time_series: Virtualize the datapoints of the time series nodes.
+            Replaces any virtualization added to this model before.
+        :return: None
+        """
+
     def explore(
             self,
             host: str = "localhost",

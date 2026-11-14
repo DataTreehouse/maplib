@@ -27,10 +27,11 @@ use datalog::python::PyInferenceResult;
 use external_sparql::maplib_endpoint::{query_maplib_endpoint, MaplibEndpointQuery};
 use external_sparql::SparqlMethod;
 use maplib::model::Model as InnerModel;
+use cdf::map_cdf;
 use opc_ua::mappings::map_opc_ua;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use pyo3::types::PyBytes;
+use pyo3::types::{PyBytes, PyDict, PyString};
 use pyo3::{pyclass, pymethods, Bound, Py, PyAny, PyRef, PyResult, Python};
 use representation::cats::LockedCats;
 use representation::dataset::NamedGraph;
@@ -452,6 +453,34 @@ impl PyModel {
         });
 
         Ok(())
+    }
+
+    #[pyo3(signature = (client, data_models=None, spaces=None, graph=None, base_iri=None,
+        include_schema=None, include_edges=None, virtualize_time_series=None))]
+    #[instrument(skip_all)]
+    #[allow(clippy::too_many_arguments)]
+    fn map_cdf(
+        slf: &Bound<'_, Self>,
+        client: &Bound<'_, PyAny>,
+        data_models: Option<Bound<'_, PyAny>>,
+        spaces: Option<Bound<'_, PyAny>>,
+        graph: Option<String>,
+        base_iri: Option<String>,
+        include_schema: Option<bool>,
+        include_edges: Option<bool>,
+        virtualize_time_series: Option<bool>,
+    ) -> PyResult<()> {
+        parse_optional_named_node(graph.clone())?;
+        let options = PyDict::new(slf.py());
+        options.set_item("data_models", data_models)?;
+        options.set_item("spaces", spaces)?;
+        options.set_item("graph", graph)?;
+        options.set_item("base_iri", base_iri)?;
+        options.set_item("include_schema", include_schema)?;
+        options.set_item("include_edges", include_edges)?;
+        options.set_item("virtualize_time_series", virtualize_time_series)?;
+        // The mapping adds triples through this Model, so the inner model must not be locked here.
+        map_cdf(slf.as_any(), client, &options)
     }
 
     #[pyo3(signature = (virtualized_database, resources))]
