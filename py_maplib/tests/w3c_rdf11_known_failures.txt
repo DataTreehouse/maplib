@@ -36,3 +36,8 @@ rdf-turtle/literal_with_BACKSPACE@rdf/xml  # XML 1.0 cannot contain these contro
 rdf-turtle/literal_with_FORM_FEED@rdf/xml  # XML 1.0 cannot contain these control characters, so RDF/XML cannot hold the literal
 rdf-turtle/literal_with_escaped_BACKSPACE@rdf/xml  # XML 1.0 cannot contain these control characters, so RDF/XML cannot hold the literal
 rdf-turtle/literal_with_escaped_FORM_FEED@rdf/xml  # XML 1.0 cannot contain these control characters, so RDF/XML cannot hold the literal
+rdf-turtle/LITERAL1_ascii_boundaries@hdt  # HDT dictionary strings are NUL terminated, so HDT cannot hold a literal with U+0000
+rdf-turtle/LITERAL1_all_controls@hdt  # HDT dictionary strings are NUL terminated, so HDT cannot hold a literal with U+0000
+rdf-turtle/LITERAL_LONG1_ascii_boundaries@hdt  # HDT dictionary strings are NUL terminated, so HDT cannot hold a literal with U+0000
+rdf-turtle/LITERAL2_ascii_boundaries@hdt  # HDT dictionary strings are NUL terminated, so HDT cannot hold a literal with U+0000
+rdf-turtle/LITERAL_LONG2_ascii_boundaries@hdt  # HDT dictionary strings are NUL terminated, so HDT cannot hold a literal with U+0000
