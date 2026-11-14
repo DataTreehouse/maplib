@@ -1,11 +1,10 @@
 use crate::error::PyMaplibError;
-use crate::py_model::PyModel;
 use crate::py_io::{finish_writer, ReadSource, WriteTarget};
+use crate::py_model::PyModel;
 use crate::shacl::PyValidationReport;
 use crate::{
-    map_types, parse_named_node, parse_optional_named_node, resolve_format,
-    NamedGraph, PyIndexingOptions, PyTemplate, StringOrPathBuf, TemplateType,
-    VirtualizedPythonDatabase,
+    map_types, parse_named_node, parse_optional_named_node, resolve_format, NamedGraph,
+    PyIndexingOptions, PyTemplate, StringOrPathBuf, TemplateType, VirtualizedPythonDatabase,
 };
 use crate::{parse_include_graphs, DEFAULT_DEBUG_NO_RESULTS, DEFAULT_TRIPLES_BATCH_SIZE};
 
@@ -14,6 +13,7 @@ use cimxml_export::export::FullModelDetails;
 use datalog::inference::InferenceResult;
 use external_sparql::SparqlMethod;
 use maplib::errors::MaplibError;
+use maplib::model::default::generate_default_template;
 use maplib::model::{MapOptions, Model as InnerModel};
 use oxrdf::vocab::xsd;
 use oxrdf::NamedNode;
@@ -30,16 +30,12 @@ use std::collections::HashMap;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::RwLock;
-use templates::ast::Template;
 use tracing::warn;
 use triplestore::sparql::{InsertResult, UpdateResult};
 use triplestore::triples_read::ExtendedRdfFormat;
 use triplestore::{IndexingOptions, Triplestore};
 
-pub(crate) fn add_template_mutex(
-    inner: &mut InnerModel,
-    template: TemplateType,
-) -> PyResult<()> {
+pub(crate) fn add_template_mutex(inner: &mut InnerModel, template: TemplateType) -> PyResult<()> {
     match template {
         TemplateType::TemplateString(s) => {
             inner
@@ -61,10 +57,7 @@ pub(crate) fn add_template_mutex(
     Ok(())
 }
 
-pub(crate) fn size_mutex(
-    inner: &InnerModel,
-    graph: Option<String>,
-) -> PyResult<usize> {
+pub(crate) fn size_mutex(inner: &InnerModel, graph: Option<String>) -> PyResult<usize> {
     let graph = parse_optional_named_node(graph)?;
     let graph = NamedGraph::from_maybe_named_node(graph.as_ref());
     Ok(inner.graph_size(&graph))
@@ -93,10 +86,7 @@ pub(crate) fn add_prefixes_mutex(
     Ok(())
 }
 
-pub(crate) fn truncate_graph_mutex(
-    inner: &mut InnerModel,
-    graph: &NamedGraph,
-) -> PyResult<()> {
+pub(crate) fn truncate_graph_mutex(inner: &mut InnerModel, graph: &NamedGraph) -> PyResult<()> {
     inner.triplestore.truncate(graph);
     Ok(())
 }
@@ -285,53 +275,16 @@ pub(crate) fn map_triples_mutex(
     Ok(None)
 }
 
-pub(crate) fn map_default_mutex(
-    inner: &mut InnerModel,
+/// Generates a default template from the data without changing the model.
+pub(crate) fn generate_template_mutex(
     df: DataFrame,
-    primary_key_column: String,
-    graph: NamedGraph,
+    primary_key_column: &str,
     types: Option<HashMap<String, RDFNodeState>>,
-    validate_iris: Option<bool>,
 ) -> PyResult<String> {
-    let options = MapOptions::from_args(graph, validate_iris);
     let types = map_types(types);
-    let tmpl = inner
-        .expand_default(df, primary_key_column, vec![], types, options)
+    let tmpl = generate_default_template(df, primary_key_column, &[], types.as_ref())
         .map_err(PyMaplibError::from)?;
     Ok(format!("{tmpl}"))
-}
-
-pub(crate) fn map_default_first_batch_mutex(
-    inner: &mut InnerModel,
-    df: DataFrame,
-    primary_key_column: &str,
-    graph: NamedGraph,
-    types: Option<HashMap<String, RDFNodeState>>,
-    validate_iris: Option<bool>,
-) -> PyResult<Template> {
-    let options = MapOptions::from_args(graph, validate_iris);
-    let types = map_types(types);
-    let tmpl = inner
-        .expand_default_first_batch(df, primary_key_column, &[], types, options)
-        .map_err(PyMaplibError::from)?;
-    Ok(tmpl)
-}
-
-pub(crate) fn map_default_batch_mutex(
-    inner: &mut InnerModel,
-    template: &Template,
-    df: DataFrame,
-    primary_key_column: &str,
-    graph: NamedGraph,
-    types: Option<HashMap<String, RDFNodeState>>,
-    validate_iris: Option<bool>,
-) -> PyResult<()> {
-    let options = MapOptions::from_args(graph, validate_iris);
-    let types = map_types(types);
-    inner
-        .expand_default_batch(template, df, primary_key_column, &[], types, options)
-        .map_err(PyMaplibError::from)?;
-    Ok(())
 }
 
 pub fn map_df_mutex(
@@ -617,10 +570,7 @@ fn check_geo_format(geo: bool, format: Option<&ExtendedRdfFormat>) -> PyResult<(
 /// HDT files start with the cookie of their global control information.
 const HDT_MAGIC: &[u8] = b"$HDT";
 
-pub(crate) fn read_template_mutex(
-    inner: &mut InnerModel,
-    file_path: String,
-) -> PyResult<()> {
+pub(crate) fn read_template_mutex(inner: &mut InnerModel, file_path: String) -> PyResult<()> {
     let path = Path::new(&file_path);
     inner.read_template(path).map_err(PyMaplibError::from)?;
     Ok(())

@@ -504,7 +504,7 @@ class ValidationReport:
 class ModelStream:
     """
     A lazy pipeline over batched mapping input, created with stream=True in Model.map, Model.map_triples,
-    Model.map_default, Model.map_json and Model.map_xml. Each step returns a new ModelStream, and nothing
+    Model.map_json and Model.map_xml. Each step returns a new ModelStream, and nothing
     runs until collect() is called.
 
     When collected, each batch of the input (a DataFrame of an iterable or LazyFrame, or documents_per_batch
@@ -841,31 +841,27 @@ class Model:
         :return: A ModelStream when stream is set, otherwise None.
         """
 
-    def map_default(
+    def generate_template(
             self,
-            data: Union[DataFrame, LazyFrame, "SolutionMappings", Iterable[Union[DataFrame, LazyFrame, "SolutionMappings"]]],
+            data: Union[DataFrame, "SolutionMappings"],
             primary_key_column: str,
-            graph: str = None,
-            validate_iris: bool = True,
-            stream: bool = False,
-    ) -> Union[str, "ModelStream"]:
+    ) -> str:
         """
-        Create a default template and map it based on a dataframe.
+        Generate a default template from a DataFrame. This is always a dry run: nothing is mapped and the
+        template is not added to the Model. The primary key column becomes the subject of one ottr:Triple per
+        other column, with predicates in the urn:maplib_default: namespace. A parameter is optional when its
+        column contains nulls. Map the data with the template using Model.map.
         Usage:
 
-        >>> template_string = m.map_default(df, "myKeyCol")
+        >>> template_string = m.generate_template(df, "myKeyCol")
         ... print(template_string)
+        ... m.map(template_string, df)
 
         :param data: DataFrame where the columns have the same names as the template arguments (when piping the output of queries back in, use SolutionMappings).
-            May also be a LazyFrame, which is consumed in a single pass using collect_batches(), or an iterable of DataFrames, LazyFrames or SolutionMappings with the same schema.
-            In that case, the template is created from the first batch and all its parameters are optional.
+            To generate a template for a LazyFrame or batched input, pass a representative DataFrame, e.g. the first batch.
         :param primary_key_column: This column will be the subject of all triples in the generated template.
-        :param graph: The IRI of the graph to add triples to.
-        :param validate_iris: Validate any IRI-columns.
-        :param stream: Return a ModelStream instead of mapping into this Model. Steps added to the stream
-            (update, insert, infer, write) run batch by batch when it is collected, see ModelStream.
-            The template is then created from the first batch when the stream is collected.
-        :return: The generated template, or a ModelStream when stream is set.
+            It should be a String column of IRIs for the template to be mapped.
+        :return: The generated template as a stOTTR string.
         """
 
     def map_df(

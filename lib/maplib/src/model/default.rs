@@ -1,6 +1,4 @@
-use super::Model;
 use crate::model::errors::MappingError;
-use crate::model::MapOptions;
 use representation::constants::{DEFAULT_PREFIX_IRI, OTTR_IRI, OTTR_TRIPLE};
 use std::collections::HashMap;
 use templates::ast::{
@@ -12,125 +10,44 @@ use tracing::warn;
 use crate::errors::MaplibError;
 use crate::model::expansion::validation::{infer_type_from_column, normalize_lang_string_structs};
 use oxrdf::{NamedNode, Variable};
-use polars::prelude::{col, DataFrame, DataType, IntoLazy};
+use polars::prelude::{DataFrame, DataType};
 use templates::MappingColumnType;
 
-impl Model {
-    pub fn expand_default(
-        &mut self,
-        df: DataFrame,
-        pk_col: String,
-        fk_cols: Vec<String>,
-        mapping_column_types: Option<HashMap<String, MappingColumnType>>,
-        options: MapOptions,
-    ) -> Result<Template, MaplibError> {
-        let df = prepare_default_df(df, &pk_col, &fk_cols, true);
-        let template =
-            create_default_template(&df, &pk_col, &fk_cols, mapping_column_types.as_ref(), false)?;
-        self.template_dataset.templates.push(template.clone());
-        self.expand(
-            template.signature.iri.as_str(),
-            Some(df),
-            mapping_column_types,
-            options,
-        )?;
-        Ok(template)
-    }
-
-    /// Creates a default template from the first batch of a stream of batches with the same schema.
-    /// All parameters are optional, since later batches may contain nulls where the first did not.
-    /// The template is added to the model and the batch is mapped.
-    /// Subsequent batches should be mapped with expand_default_batch.
-    pub fn expand_default_first_batch(
-        &mut self,
-        df: DataFrame,
-        pk_col: &str,
-        fk_cols: &[String],
-        mapping_column_types: Option<HashMap<String, MappingColumnType>>,
-        options: MapOptions,
-    ) -> Result<Template, MaplibError> {
-        let df = prepare_default_df(df, pk_col, fk_cols, true);
-        let template =
-            create_default_template(&df, pk_col, fk_cols, mapping_column_types.as_ref(), true)?;
-        self.template_dataset.templates.push(template.clone());
-        if df.height() > 0 {
-            self.expand(
-                template.signature.iri.as_str(),
-                Some(df),
-                mapping_column_types,
-                options,
-            )?;
-        }
-        Ok(template)
-    }
-
-    /// Maps a subsequent batch using a default template created by expand_default_first_batch.
-    pub fn expand_default_batch(
-        &mut self,
-        template: &Template,
-        df: DataFrame,
-        pk_col: &str,
-        fk_cols: &[String],
-        mapping_column_types: Option<HashMap<String, MappingColumnType>>,
-        options: MapOptions,
-    ) -> Result<(), MaplibError> {
-        if df.height() == 0 {
-            return Ok(());
-        }
-        let df = prepare_default_df(df, pk_col, fk_cols, false);
-        self.expand(
-            template.signature.iri.as_str(),
-            Some(df),
-            mapping_column_types,
-            options,
-        )?;
-        Ok(())
-    }
-}
-
-fn prepare_default_df(
-    mut df: DataFrame,
+/// Generates a default template from a DataFrame without mapping anything.
+/// The primary key column becomes the subject of one ottr:Triple per other column,
+/// with predicates in the default namespace. Parameters are optional when the column has nulls.
+pub fn generate_default_template(
+    df: DataFrame,
     pk_col: &str,
     fk_cols: &[String],
-    warn: bool,
-) -> DataFrame {
-    df = normalize_lang_string_structs(df);
-    let columns: Vec<String> = df
-        .get_column_names()
-        .iter()
-        .map(|x| x.to_string())
-        .collect();
-    for c in &columns {
-        let is_pk = c == pk_col;
-        if !is_pk && !fk_cols.contains(c) {
+    mapping_column_types: Option<&HashMap<String, MappingColumnType>>,
+) -> Result<Template, MaplibError> {
+    if !df.get_column_names().iter().any(|c| c.as_str() == pk_col) {
+        return Err(MappingError::MissingParameterColumn(pk_col.to_string()).into());
+    }
+    let df = normalize_lang_string_structs(df);
+    warn_non_string_keys(&df, pk_col, fk_cols);
+    create_default_template(&df, pk_col, fk_cols, mapping_column_types)
+}
+
+/// Key columns are typed as ottr:IRI in the template, so mapping it requires String key columns.
+fn warn_non_string_keys(df: &DataFrame, pk_col: &str, fk_cols: &[String]) {
+    for c in df.columns() {
+        let name = c.name().as_str();
+        let kind = if name == pk_col {
+            "Primary"
+        } else if fk_cols.iter().any(|f| f == name) {
+            "Foreign"
+        } else {
             continue;
-        }
-        let dt = df.column(c).unwrap().dtype().clone();
-        if let DataType::List(..) = dt {
-            todo!()
-        }
-        if dt != DataType::String {
-            if warn {
-                if is_pk {
-                    warn!(
-                        "Primary key column {} is not String but instead {}. Will be cast",
-                        c, dt
-                    );
-                } else {
-                    warn!(
-                        "Foreign key column {} is not String but instead {}. Will be cast",
-                        c, dt
-                    );
-                }
-            }
-            df = df
-                .lazy()
-                .with_column(col(c).cast(DataType::String))
-                .collect()
-                .unwrap();
+        };
+        if c.dtype() != &DataType::String {
+            warn!(
+                "{kind} key column {name} is not String but instead {}. Cast it to String before mapping with the generated template",
+                c.dtype()
+            );
         }
     }
-    df
 }
 
 fn create_default_template(
@@ -138,7 +55,6 @@ fn create_default_template(
     pk_col: &str,
     fk_cols: &[String],
     mapping_column_types: Option<&HashMap<String, MappingColumnType>>,
-    all_optional: bool,
 ) -> Result<Template, MaplibError> {
     let mut params = vec![];
     let columns: Vec<String> = df
@@ -147,7 +63,7 @@ fn create_default_template(
         .map(|x| x.to_string())
         .collect();
     for c in &columns {
-        let has_null = all_optional || df.column(c).unwrap().is_null().any();
+        let has_null = df.column(c).unwrap().is_null().any();
         let ptype = if c == pk_col || fk_cols.contains(c) {
             PType::Basic(NamedNode::new_unchecked(OTTR_IRI))
         } else {

@@ -84,13 +84,7 @@ def test_map_triples_lazyframe_and_iterable():
     assert _count(m) == N
 
 
-def test_map_default_lazyframe():
-    m = Model()
-    m.map_default(_df().lazy(), "s")
-    assert _count(m) == N
-
-
-def test_map_default_iterable_nulls_in_later_batch():
+def test_generate_template_is_dry_run():
     df = pl.DataFrame(
         {
             "s": [f"http://example.net/ns#s{i}" for i in range(4)],
@@ -98,15 +92,25 @@ def test_map_default_iterable_nulls_in_later_batch():
         }
     )
     m = Model()
-    tmpl = m.map_default([df.slice(0, 2), df.slice(2)], "s")
+    tmpl = m.generate_template(df, "s")
     assert "default_template" in tmpl
+    assert m.size() == 0
+    m.map(tmpl, [df.slice(0, 2), df.slice(2)])
     assert _count(m) == 3
 
 
-def test_map_default_empty_iterable():
+def test_generate_template_rejects_batched_input():
     m = Model()
-    with pytest.raises(Exception, match="(Iterable mapping input|no batches)"):
-        m.map_default([], "s")
+    with pytest.raises(Exception, match="generate_template takes a DataFrame"):
+        m.generate_template(_df().lazy(), "s")
+    with pytest.raises(Exception, match="generate_template takes a DataFrame"):
+        m.generate_template([_df()], "s")
+
+
+def test_generate_template_missing_primary_key_column():
+    m = Model()
+    with pytest.raises(Exception, match="missing"):
+        m.generate_template(_df(), "nope")
 
 
 # Streaming: m.map(..., stream=True) returns a lazy ModelStream that maps, transforms and writes
@@ -266,9 +270,10 @@ def test_stream_map_triples(tmp_path):
     assert _count_pred(_read(tmp_path / "out.nq", "nquads"), "p") == N
 
 
-def test_stream_map_default(tmp_path):
+def test_stream_generated_template(tmp_path):
     m = Model()
-    s = m.map_default(list(_batches()), "s", stream=True)
+    tmpl = m.generate_template(_df(), "s")
+    s = m.map(tmpl, list(_batches()), stream=True)
     s.write(tmp_path / "out.ttl", format="turtle").collect()
     out = _read(tmp_path / "out.ttl", "turtle")
     assert out.query("SELECT ?s ?v WHERE { ?s ?p ?v FILTER(isLiteral(?v)) }").height == N

@@ -143,7 +143,7 @@ Indeed, we have added the triple:
 | "<https://github.com/DataTreehouse/maplib/pizza#Hawaiian>" |
 
 ## Streaming large inputs
-The mapping methods `map`, `map_triples` and `map_default` accept a DataFrame, but also a Polars LazyFrame (consumed in one pass with `collect_batches()`) or any iterable of DataFrames, LazyFrames or SolutionMappings. Each batch is mapped into the model as it arrives, so the input never has to fit in memory as a whole:
+The mapping methods `map` and `map_triples` accept a DataFrame, but also a Polars LazyFrame (consumed in one pass with `collect_batches()`) or any iterable of DataFrames, LazyFrames or SolutionMappings. Each batch is mapped into the model as it arrives, so the input never has to fit in memory as a whole:
 
 ```python
 m.map(template, pl.scan_parquet("pizzas/*.parquet"))
@@ -174,7 +174,6 @@ Memory use therefore depends on the batch size and not on the size of the input.
 - Each step returns a new `ModelStream`, so a partial pipeline can be reused; nothing runs before `collect()`. Iterators given as input are consumed by `collect()`.
 - Write steps support `"ntriples"`, `"turtle"` (prefixes are declared once at the top) and `"nquads"`. Files are created, or overwritten, when `collect()` starts.
 - Blank nodes, both from templates and from SPARQL updates, get labels that are unique across batches.
-- `map_default(..., stream=True)` creates the default template from the first batch.
 - Datalog (`infer`) requires maplib Enterprise Edition.
 
 ### JSON and XML documents

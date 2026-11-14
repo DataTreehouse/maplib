@@ -350,9 +350,10 @@ def test_default():
         }
     )
 
-    t = m.map_default(df, "subject")
+    t = m.generate_template(df, "subject")
     #Checks that the template can be added ok.
     m.add_template(t)
+    m.map(t, df)
     result = m.query(
         """
         PREFIX ex: <http://example.net/ns#>
@@ -390,7 +391,7 @@ def test_default_list():
         [pl.col("myList1").drop_nulls(), pl.col("myList2")]
     )
 
-    m.map_default(df, "subject")
+    m.map(m.generate_template(df, "subject"), df)
 
     result = m.query(
         """

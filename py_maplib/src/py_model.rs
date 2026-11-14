@@ -2,15 +2,15 @@ use crate::error::PyMaplibError;
 use crate::mutexes::{
     add_graph_mutex, add_prefixes_mutex, add_template_mutex, add_udf_mutex,
     add_virtualization_mutex, compact_mutex, create_index_mutex, detach_graph_mutex,
-    get_predicate_iris_mutex, get_predicate_mutex, infer_mutex, infer_rdfs_mutex, insert_mutex,
-    list_udfs_mutex, map_default_batch_mutex, map_default_first_batch_mutex, map_default_mutex,
-    map_df_mutex, map_mutex, map_resolved_mutex, map_triples_mutex, query_external_mutex,
-    query_mutex, read_mutex, read_template_mutex, reads_mutex, resolve_template_mutex,
-    serialize_triples_mutex, size_mutex, truncate_graph_mutex, update_mutex, validate_mutex,
-    write_bytes_mutex, write_cim_xml_mutex, write_triples_mutex, writes_mutex,
+    generate_template_mutex, get_predicate_iris_mutex, get_predicate_mutex, infer_mutex,
+    infer_rdfs_mutex, insert_mutex, list_udfs_mutex, map_df_mutex, map_mutex, map_resolved_mutex,
+    map_triples_mutex, query_external_mutex, query_mutex, read_mutex, read_template_mutex,
+    reads_mutex, resolve_template_mutex, serialize_triples_mutex, size_mutex, truncate_graph_mutex,
+    update_mutex, validate_mutex, write_bytes_mutex, write_cim_xml_mutex, write_triples_mutex,
+    writes_mutex,
 };
-use crate::py_stream::{DocumentKind, PyModelStream, StreamSource};
 use crate::py_io::{ReadSource, WriteTarget};
+use crate::py_stream::{DocumentKind, PyModelStream, StreamSource};
 use crate::shacl::PyValidationReport;
 use crate::{
     classify_document_data, classify_mapping_data, create_prefix_map, data_to_mappings_types,
@@ -26,7 +26,7 @@ use maplib::model::Model as InnerModel;
 use opc_ua::mappings::map_opc_ua;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use pyo3::types::{PyBytes, PyString};
+use pyo3::types::PyBytes;
 use pyo3::{pyclass, pymethods, Bound, Py, PyAny, PyRef, PyResult, Python};
 use representation::cats::LockedCats;
 use representation::dataset::NamedGraph;
@@ -322,84 +322,23 @@ impl PyModel {
         }
     }
 
-    #[pyo3(signature = (data, primary_key_column, graph=None, validate_iris=None, stream=None))]
+    /// Generates a default template from the data. This is always a dry run: nothing is mapped
+    /// and the template is not added to the model.
+    #[pyo3(signature = (data, primary_key_column))]
     #[instrument(skip_all)]
-    fn map_default(
-        slf: &Bound<'_, Self>,
+    fn generate_template(
+        &self,
         py: Python<'_>,
         data: &Bound<'_, PyAny>,
         primary_key_column: String,
-        graph: Option<String>,
-        validate_iris: Option<bool>,
-        stream: Option<bool>,
-    ) -> PyResult<Py<PyAny>> {
-        let this = slf.get();
-        let graph = parse_optional_named_node(graph)?;
-        let named_graph = NamedGraph::from_maybe_named_node(graph.as_ref());
-        if stream.unwrap_or(false) {
-            let stream = PyModelStream::new(
-                slf.clone().unbind(),
-                data.clone().unbind(),
-                StreamSource::MapDefault {
-                    primary_key_column,
-                    graph: named_graph,
-                    validate_iris,
-                },
-            );
-            return Ok(Py::new(py, stream)?.into_any());
-        }
-        let template = match classify_mapping_data(data, py)? {
-            MappingData::Eager(mappings, types) => py.detach(move || -> PyResult<String> {
-                let mut inner = this.inner.write().unwrap();
-                map_default_mutex(
-                    &mut inner,
-                    mappings,
-                    primary_key_column,
-                    named_graph,
-                    types,
-                    validate_iris,
-                )
-            }),
-            MappingData::Batched(data) => {
-                let mut template = None;
-                for_each_mapping_batch(&data, py, &mut |py, mappings, types| {
-                    py.detach(|| -> PyResult<()> {
-                        let mut inner = this.inner.write().unwrap();
-                        if let Some(template) = &template {
-                            map_default_batch_mutex(
-                                &mut inner,
-                                template,
-                                mappings,
-                                &primary_key_column,
-                                named_graph.clone(),
-                                types,
-                                validate_iris,
-                            )
-                        } else {
-                            template = Some(map_default_first_batch_mutex(
-                                &mut inner,
-                                mappings,
-                                &primary_key_column,
-                                named_graph.clone(),
-                                types,
-                                validate_iris,
-                            )?);
-                            Ok(())
-                        }
-                    })
-                })?;
-                if let Some(template) = template {
-                    Ok(format!("{template}"))
-                } else {
-                    Err(PyMaplibError::FunctionArgumentError(
-                        "map_default received no batches, so no template could be created"
-                            .to_string(),
-                    )
-                    .into())
-                }
-            }
-        }?;
-        Ok(PyString::new(py, &template).into_any().unbind())
+    ) -> PyResult<String> {
+        let MappingData::Eager(df, types) = classify_mapping_data(data, py)? else {
+            return Err(PyMaplibError::FunctionArgumentError(
+                "generate_template takes a DataFrame or SolutionMappings, collect LazyFrames or pass a single batch".to_string(),
+            )
+            .into());
+        };
+        py.detach(move || generate_template_mutex(df, &primary_key_column, types))
     }
 
     #[pyo3(signature = (df, graph=None, uuid_namespace=None))]
@@ -593,14 +532,8 @@ impl PyModel {
         let (res, cats, prefixes) = py.detach(|| -> PyResult<(_, LockedCats, _)> {
             let inner = self.inner.read().unwrap();
             let cats = inner.triplestore.global_cats.clone();
-            let res = query_external_mutex(
-                &inner,
-                query,
-                endpoint,
-                method,
-                parsed_bindings,
-                headers,
-            )?;
+            let res =
+                query_external_mutex(&inner, query, endpoint, method, parsed_bindings, headers)?;
             Ok((res, cats, inner.prefixes.clone()))
         })?;
         print_debug_if_exists(res.debug.as_ref());

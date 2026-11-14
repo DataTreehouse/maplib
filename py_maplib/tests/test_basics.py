@@ -730,7 +730,7 @@ def test_map_triples_roundtrip():
     df = model2.query("""SELECT * WHERE {?subject ?predicate ?object}""")
     assert df.height == 3
 
-def test_map_default_triples():
+def test_generate_template_triples():
     df = pl.DataFrame(
         {
             "subject": [
@@ -746,7 +746,9 @@ def test_map_default_triples():
         }
     )
     m = Model()
-    tpl = m.map_default(df, primary_key_column="subject")
+    tpl = m.generate_template(df, primary_key_column="subject")
+    assert m.size() == 0
+    m.map(tpl, df)
     # print(tpl)
     df = m.query(
         """
@@ -769,7 +771,7 @@ def test_map_default_triples():
     assert_frame_equal(df, expected)
 
 
-def test_map_default_triples_non_iri_object():
+def test_generate_template_triples_non_iri_object():
     df = pl.DataFrame(
         {
             "subject": [
@@ -785,7 +787,9 @@ def test_map_default_triples_non_iri_object():
         }
     )
     m = Model()
-    tpl = m.map_default(df, primary_key_column="subject")
+    tpl = m.generate_template(df, primary_key_column="subject")
+    assert m.size() == 0
+    m.map(tpl, df)
     # print(tpl)
     df = m.query(
         """
@@ -909,7 +913,8 @@ def test_lang_tagged():
         ).alias("my_lang_col")
     )
     m = Model()
-    m.map_default(df.select("id", "my_lang_col"), "id")
+    df = df.select("id", "my_lang_col")
+    m.map(m.generate_template(df, "id"), df)
     sm = m.query("SELECT * WHERE {?a ?b ?c}", solution_mappings=True)
     assert sm.rdf_types["c"] == RDFType.Literal(rdf.langString)
 
