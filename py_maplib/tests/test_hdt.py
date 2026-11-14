@@ -1,4 +1,5 @@
 import hashlib
+import io
 import pathlib
 
 import polars as pl
@@ -334,6 +335,12 @@ def test_hdt_round_trip_w3c_test_data(tmp_path):
 
     hdt_path = tmp_path / "w3c.hdt"
     m.write(str(hdt_path), format="hdt")
+    # Writing to bytes and to a file-like object gives the same file
+    hdt_bytes = hdt_path.read_bytes()
+    assert m.write_bytes(format="hdt") == hdt_bytes
+    buf = io.BytesIO()
+    m.write(buf, format="hdt")
+    assert buf.getvalue() == hdt_bytes
     for batch_size in [3, 10_000_000]:
         m2 = Model()
         m2.read(str(hdt_path), triples_batch_size=batch_size)

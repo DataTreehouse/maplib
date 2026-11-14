@@ -15,6 +15,7 @@ use crate::mutexes::{
     map_json_mutex, map_resolved_mutex, map_triples_mutex, map_xml_mutex, update_mutex,
 };
 use crate::py_model::PyModel;
+use crate::py_io::WriteTarget;
 use crate::{
     classify_document_data, classify_mapping_data, create_prefix_map, document_uuid_namespace,
     for_each_document, for_each_mapping_batch, map_parameters, parse_include_graphs,
@@ -30,9 +31,7 @@ use representation::dataset::NamedGraph;
 use representation::solution_mapping::EagerSolutionMappings;
 use representation::RDFNodeState;
 use std::collections::HashMap;
-use std::fs::File;
 use std::io::{BufWriter, Write};
-use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use templates::ast::Template;
 use tracing::instrument;
@@ -99,6 +98,8 @@ enum BatchInput {
     Documents(Vec<(usize, StringOrPathBuf)>),
 }
 
+type StreamWriter = BufWriter<Box<dyn Write + Send>>;
+
 #[derive(Clone)]
 enum StreamStep {
     Update {
@@ -128,7 +129,7 @@ enum StreamStep {
         debug: Option<bool>,
     },
     Write {
-        file_path: PathBuf,
+        target: WriteTarget,
         format: RdfFormat,
         /// None writes all graphs for N-Quads.
         graph: Option<NamedGraph>,
@@ -297,7 +298,7 @@ impl PyModelStream {
         graph: Option<String>,
         prefixes: Option<Bound<'_, PyAny>>,
     ) -> PyResult<PyModelStream> {
-        let file_path = PathBuf::from(file_path.str()?.to_string());
+        let target = WriteTarget::extract(file_path)?;
         let format = if let Some(format) = format {
             resolve_format(&format)?
         } else {
@@ -325,7 +326,7 @@ impl PyModelStream {
         Ok(self.with_step(
             py,
             StreamStep::Write {
-                file_path,
+                target,
                 format,
                 graph,
                 prefixes,
@@ -458,20 +459,17 @@ fn empty_model_like(model: &mut InnerModel, take_templates: bool) -> PyResult<In
 fn open_writers(
     steps: &[StreamStep],
     model_prefixes: &HashMap<String, NamedNode>,
-) -> PyResult<Vec<Option<BufWriter<File>>>> {
+) -> PyResult<Vec<Option<StreamWriter>>> {
     let mut writers = vec![];
     for step in steps {
         if let StreamStep::Write {
-            file_path,
+            target,
             format,
             prefixes,
             ..
         } = step
         {
-            let file = File::create(file_path).map_err(|x| {
-                PyMaplibError::from(maplib::errors::MaplibError::FileCreateIOError(x))
-            })?;
-            let mut w = BufWriter::new(file);
+            let mut w = BufWriter::new(target.open()?);
             if *format == RdfFormat::Turtle {
                 let prefixes = merge_prefixes(model_prefixes, prefixes.as_ref());
                 let mut sorted: Vec<_> = prefixes.iter().collect();
@@ -508,7 +506,7 @@ fn run_batch(
     state: &mut BatchState,
     source: &StreamSource,
     steps: &[StreamStep],
-    writers: &mut [Option<BufWriter<File>>],
+    writers: &mut [Option<StreamWriter>],
     input: BatchInput,
 ) -> PyResult<()> {
     let batch_model = Mutex::new(empty_model_like(&mut state.carrier, true)?);
@@ -531,7 +529,7 @@ fn run_batch_steps(
     default_template: &mut Option<Template>,
     source: &StreamSource,
     steps: &[StreamStep],
-    writers: &mut [Option<BufWriter<File>>],
+    writers: &mut [Option<StreamWriter>],
     input: BatchInput,
 ) -> PyResult<()> {
     map_batch(inner, default_template, source, input)?;
@@ -634,7 +632,7 @@ fn map_batch(
 fn run_steps(
     inner: &mut std::sync::MutexGuard<InnerModel>,
     steps: &[StreamStep],
-    writers: &mut [Option<BufWriter<File>>],
+    writers: &mut [Option<StreamWriter>],
 ) -> PyResult<()> {
     for (step, writer) in steps.iter().zip(writers.iter_mut()) {
         match step {
@@ -714,7 +712,7 @@ fn run_steps(
 
 fn write_batch(
     inner: &mut InnerModel,
-    w: &mut BufWriter<File>,
+    w: &mut StreamWriter,
     format: RdfFormat,
     graph: Option<&NamedGraph>,
     prefixes: Option<&HashMap<String, NamedNode>>,

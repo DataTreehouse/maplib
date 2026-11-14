@@ -1,8 +1,9 @@
 use crate::error::PyMaplibError;
 use crate::py_model::PyModel;
+use crate::py_io::{finish_writer, ReadSource, WriteTarget};
 use crate::shacl::PyValidationReport;
 use crate::{
-    map_types, parse_named_node, parse_optional_named_node, resolve_format, resolve_normal_format,
+    map_types, parse_named_node, parse_optional_named_node, resolve_format,
     NamedGraph, PyIndexingOptions, PyTemplate, StringOrPathBuf, TemplateType,
     VirtualizedPythonDatabase,
 };
@@ -26,7 +27,7 @@ use representation::solution_mapping::EagerSolutionMappings;
 use representation::{BaseRDFNodeType, RDFNodeState};
 use spargebra::term::GroundTerm;
 use std::collections::HashMap;
-use std::fs::File;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard};
 use templates::ast::Template;
@@ -535,7 +536,7 @@ pub(crate) fn insert_mutex(
 
 pub(crate) fn read_mutex(
     inner: &mut MutexGuard<InnerModel>,
-    file_path: String,
+    source: ReadSource,
     format: Option<String>,
     base_iri: Option<String>,
     parallel: Option<bool>,
@@ -548,26 +549,53 @@ pub(crate) fn read_mutex(
 ) -> PyResult<()> {
     let graph = parse_optional_named_node(graph)?;
     let named_graph = NamedGraph::from_maybe_named_node(graph.as_ref());
-    let path = Path::new(&file_path);
     let format = if let Some(format) = format {
         Some(resolve_format(&format)?)
     } else {
         None
     };
     check_geo_format(geo, format.as_ref())?;
-    inner
-        .read_triples(
-            path,
+    let checked = checked.unwrap_or(true);
+    let replace_graph = replace_graph.unwrap_or(false);
+    let triples_batch_size = triples_batch_size.unwrap_or(DEFAULT_TRIPLES_BATCH_SIZE);
+    match source {
+        ReadSource::Path(file_path) => inner.read_triples(
+            Path::new(&file_path),
             format,
             base_iri,
             parallel,
-            checked.unwrap_or(true),
+            checked,
             &named_graph,
-            replace_graph.unwrap_or(false),
-            triples_batch_size.unwrap_or(DEFAULT_TRIPLES_BATCH_SIZE),
+            replace_graph,
+            triples_batch_size,
             known_contexts,
-        )
-        .map_err(PyMaplibError::from)?;
+        ),
+        ReadSource::Bytes(data) => {
+            let format = match format {
+                Some(format) => format,
+                None if data.starts_with(HDT_MAGIC) => ExtendedRdfFormat::HDT,
+                None => {
+                    return Err(PyMaplibError::FunctionArgumentError(
+                        "The format must be given when reading bytes or a file-like object"
+                            .to_string(),
+                    )
+                    .into())
+                }
+            };
+            inner.read_bytes(
+                &data,
+                format,
+                base_iri,
+                parallel,
+                checked,
+                &named_graph,
+                replace_graph,
+                triples_batch_size,
+                known_contexts,
+            )
+        }
+    }
+    .map_err(PyMaplibError::from)?;
     if geo {
         inner
             .map_cim_geometries(&named_graph)
@@ -585,6 +613,9 @@ fn check_geo_format(geo: bool, format: Option<&ExtendedRdfFormat>) -> PyResult<(
     }
     Ok(())
 }
+
+/// HDT files start with the cookie of their global control information.
+const HDT_MAGIC: &[u8] = b"$HDT";
 
 pub(crate) fn read_template_mutex(
     inner: &mut MutexGuard<InnerModel>,
@@ -613,7 +644,7 @@ pub(crate) fn reads_mutex(
     let format = resolve_format(format)?;
     if format == ExtendedRdfFormat::HDT {
         return Err(PyMaplibError::FunctionArgumentError(
-            "HDT is a binary format, use read() instead of reads()".to_string(),
+            "HDT is a binary format, use read() with a path, bytes or a file-like object instead of reads()".to_string(),
         )
         .into());
     }
@@ -641,11 +672,30 @@ pub(crate) fn reads_mutex(
 
 pub(crate) fn write_triples_mutex(
     inner: &mut MutexGuard<InnerModel>,
-    file_path: String,
+    target: WriteTarget,
     format: Option<String>,
     graph: Option<String>,
     prefixes: Option<HashMap<String, NamedNode>>,
 ) -> PyResult<()> {
+    let format = resolve_write_format(format)?;
+    let mut w = target.open()?;
+    write_to(inner, &mut w, format, graph, prefixes)?;
+    finish_writer(&mut w)
+}
+
+pub(crate) fn write_bytes_mutex(
+    inner: &mut MutexGuard<InnerModel>,
+    format: Option<String>,
+    graph: Option<String>,
+    prefixes: Option<HashMap<String, NamedNode>>,
+) -> PyResult<Vec<u8>> {
+    let format = resolve_write_format(format)?;
+    let mut out = vec![];
+    write_to(inner, &mut out, format, graph, prefixes)?;
+    Ok(out)
+}
+
+fn resolve_write_format(format: Option<String>) -> PyResult<ExtendedRdfFormat> {
     let format = if let Some(format) = format {
         resolve_format(&format)?
     } else {
@@ -657,9 +707,16 @@ pub(crate) fn write_triples_mutex(
         )
         .into());
     }
-    let path_buf = PathBuf::from(file_path);
-    let mut actual_file = File::create(path_buf.as_path())
-        .map_err(|x| PyMaplibError::from(MaplibError::FileCreateIOError(x)))?;
+    Ok(format)
+}
+
+fn write_to<W: Write>(
+    inner: &mut MutexGuard<InnerModel>,
+    w: &mut W,
+    format: ExtendedRdfFormat,
+    graph: Option<String>,
+    prefixes: Option<HashMap<String, NamedNode>>,
+) -> PyResult<()> {
     let graph = parse_optional_named_node(graph)?;
     let named_graph = NamedGraph::from_maybe_named_node(graph.as_ref());
     match format {
@@ -667,20 +724,20 @@ pub(crate) fn write_triples_mutex(
             // Dataset formats write all graphs unless a graph is given
             let only_graph = graph.as_ref().map(|_| &named_graph);
             inner
-                .write_quads(&mut actual_file, only_graph, format, prefixes.as_ref())
+                .write_quads(w, only_graph, format, prefixes.as_ref())
                 .map_err(PyMaplibError::from)?;
         }
         ExtendedRdfFormat::Normal(format) => {
             inner
-                .write_triples(&mut actual_file, &named_graph, format, prefixes.as_ref())
+                .write_triples(w, &named_graph, format, prefixes.as_ref())
                 .map_err(PyMaplibError::from)?;
         }
         ExtendedRdfFormat::HDT => {
             inner
-                .write_hdt(&mut actual_file, &named_graph)
+                .write_hdt(w, &named_graph)
                 .map_err(PyMaplibError::from)?;
         }
-        ExtendedRdfFormat::CIMXML => unreachable!("rejected above"),
+        ExtendedRdfFormat::CIMXML => unreachable!("rejected by resolve_write_format"),
     }
     Ok(())
 }
@@ -690,7 +747,7 @@ const CIM_XML_DATETIME_FORMAT: &str = "%Y-%m-%dT%H:%M:%SZ";
 
 pub(crate) fn write_cim_xml_mutex(
     inner: &mut MutexGuard<InnerModel>,
-    file_path: String,
+    target: WriteTarget,
     profile_graph: String,
     model_iri: Option<String>,
     version: Option<String>,
@@ -725,9 +782,6 @@ pub(crate) fn write_cim_xml_mutex(
     let modeling_authority_set = modeling_authority_set.map(oxrdf::Literal::new_simple_literal);
     let graph = parse_optional_named_node(graph)?;
     let graph = NamedGraph::from_maybe_named_node(graph.as_ref());
-    let path_buf = PathBuf::from(file_path);
-    let mut actual_file = File::create(path_buf.as_path())
-        .map_err(|x| PyMaplibError::from(MaplibError::FileCreateIOError(x)))?;
     let fullmodel_details = FullModelDetails::new(
         model_iri,
         description,
@@ -737,16 +791,11 @@ pub(crate) fn write_cim_xml_mutex(
         modeling_authority_set,
     )
     .map_err(|x| PyMaplibError::from(MaplibError::CIMXMLError(x)))?;
+    let mut w = target.open()?;
     inner
-        .write_cim_xml(
-            &mut actual_file,
-            fullmodel_details,
-            prefixes,
-            &graph,
-            &profile_graph,
-        )
-        .unwrap();
-    Ok(())
+        .write_cim_xml(&mut w, fullmodel_details, prefixes, &graph, &profile_graph)
+        .map_err(PyMaplibError::from)?;
+    finish_writer(&mut w)
 }
 
 pub(crate) fn writes_mutex(
@@ -755,31 +804,16 @@ pub(crate) fn writes_mutex(
     graph: Option<String>,
     prefixes: Option<HashMap<String, NamedNode>>,
 ) -> PyResult<String> {
-    let format = if let Some(format) = format {
+    if let Some(format) = &format {
         if format.eq_ignore_ascii_case("hdt") {
             return Err(PyMaplibError::FunctionArgumentError(
-                "HDT is a binary format, use write() instead of writes()".to_string(),
+                "HDT is a binary format, use write_bytes() or write() instead of writes()"
+                    .to_string(),
             )
             .into());
         }
-        resolve_normal_format(&format)?
-    } else {
-        RdfFormat::NTriples
-    };
-    let mut out = vec![];
-    let graph = parse_optional_named_node(graph)?;
-    let named_graph = NamedGraph::from_maybe_named_node(graph.as_ref());
-    if matches!(format, RdfFormat::TriG | RdfFormat::NQuads) {
-        // Dataset formats write all graphs unless a graph is given
-        let only_graph = graph.as_ref().map(|_| &named_graph);
-        inner
-            .write_quads(&mut out, only_graph, format, prefixes.as_ref())
-            .map_err(PyMaplibError::from)?;
-    } else {
-        inner
-            .write_triples(&mut out, &named_graph, format, prefixes.as_ref())
-            .map_err(PyMaplibError::from)?;
     }
+    let out = write_bytes_mutex(inner, format, graph, prefixes)?;
     Ok(String::from_utf8(out).unwrap())
 }
 

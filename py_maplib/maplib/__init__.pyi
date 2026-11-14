@@ -1,6 +1,6 @@
 from datetime import datetime, date
 from pathlib import Path
-from typing import Any, Union, List, Dict, Optional, Callable, Iterable, Literal as LiteralType, Tuple
+from typing import Any, Union, List, Dict, Optional, Callable, Iterable, Literal as LiteralType, Tuple, BinaryIO, TextIO
 
 import polars as pl
 from maplib.maplib import rdf
@@ -580,16 +580,17 @@ class ModelStream:
 
     def write(
             self,
-            file_path: Union[str, Path],
+            file_path: Union[str, Path, BinaryIO],
             format: LiteralType["ntriples", "turtle", "nquads"] = None,
             graph: str = None,
             prefixes: Dict[str, str] = None,
     ) -> "ModelStream":
         """
-        Add a step that appends the triples of each batch to a file. The file is created
+        Add a step that appends the triples of each batch to a file or a binary file-like object. The file is created
         (or truncated) when the stream is collected. Turtle prefixes are declared once at the start of the file.
 
-        :param file_path: The path of the file.
+        :param file_path: The path of the file, or a binary file-like object (anything with a write method that
+            accepts bytes, such as io.BytesIO or a file opened with "wb"). The object is flushed but not closed.
         :param format: One of "ntriples" (the default), "turtle" or "nquads".
         :param graph: The IRI of the graph to write. For "nquads", all graphs except the transient graph are written
             when this is None.
@@ -1119,7 +1120,7 @@ class Model:
 
     def read(
             self,
-            file_path: Union[str, Path],
+            file_path: Union[str, Path, bytes, bytearray, memoryview, BinaryIO, TextIO],
             format: LiteralType["ntriples", "turtle", "trig", "nquads", "rdf/xml", "cim/xml", "json-ld", "hdt"] = None,
             base_iri: str = None,
             parallel: bool = None,
@@ -1131,16 +1132,22 @@ class Model:
             geo: bool = False,
     ) -> None:
         """
-        Reads triples from a file path.
+        Reads triples from a file path, from bytes in memory or from a file-like object.
         You can specify the format, or it will be derived using file extension, e.g. filename.ttl or filename.nt.
+        For bytes and file-like objects the format must be given, except for HDT, which is detected.
         Read into graph=TRANSIENT_GRAPH if you only want the triples to be available for further querying and
         validation, but not persisted using write-methods.
 
         Usage:
 
         >>> m.read("my_triples.ttl")
+        >>> m.read(hdt_bytes, format="hdt")
+        >>> with open("my_triples.nt", "rb") as f:
+        ...     m.read(f, format="ntriples")
 
-        :param file_path: The path of the file containing triples
+        :param file_path: The path of the file containing triples, bytes (bytes, bytearray or memoryview), or a
+            file-like object with a read method, which is read to the end into memory before parsing. Text streams
+            are read as UTF-8.
         :param format: One of "ntriples", "turtle", "trig", "nquads", "rdf/xml", "json-ld", "cim/xml" or "hdt", otherwise it is inferred from the file extension.
         :param base_iri: Base iri
         :param parallel: Parse triples in parallel, currently only NTRiples and Turtle. Assumes all prefixes are in the beginning of the document. Defaults to true only for NTriples.
@@ -1208,7 +1215,7 @@ class Model:
 
     def write_cim_xml(
             self,
-            file_path: Union[str, Path],
+            file_path: Union[str, Path, BinaryIO],
             profile_graph: str,
             model_iri: str = None,
             version: str = None,
@@ -1237,7 +1244,7 @@ class Model:
         >>>     version="22",
         >>> )
 
-        :param file_path: The path of the file containing triples
+        :param file_path: The path of the file, or a binary file-like object (see Model.write).
         :param profile_graph: The IRI of the graph containing the ontology of the CIM profile to write.
         :param model_iri: model_iri a md:FullModel. Is generated if not provided.
         :param version: model_iri md:Model.version version .
@@ -1251,24 +1258,48 @@ class Model:
 
     def write(
             self,
-            file_path: Union[str, Path],
+            file_path: Union[str, Path, BinaryIO],
             format: LiteralType["ntriples", "turtle", "trig", "nquads", "rdf/xml", "hdt"] = None,
             graph: str = None,
             prefixes: Dict[str, str] = None,
     ) -> None:
         """
-        Write the triples to the file path specified, in the given format.
+        Write the triples to the file path or binary file-like object specified, in the given format.
 
         Usage:
 
         >>> m.write("my_triples.nt", format="ntriples")
+        >>> with open("my_triples.hdt", "wb") as f:
+        ...     m.write(f, format="hdt")
 
-        :param file_path: The path of the file containing triples
+        :param file_path: The path of the file, or a binary file-like object: anything with a write method
+            that accepts bytes, such as io.BytesIO, a file opened with "wb" or a socket file. Writes to it are
+            buffered, and it is flushed but not closed. Use write_bytes to get the output as bytes.
         :param format: One of "ntriples", "turtle", "trig", "nquads", "rdf/xml", "hdt".
             HDT is built in memory; literals with special characters are stored N-Triples-escaped, following the Rust hdt crate.
         :param graph: The IRI of the graph to write. For "trig" and "nquads", all graphs except the transient graph
             are written when this is None.
         :param prefixes: The prefixes that will be used in turtle serialization.
+        """
+
+    def write_bytes(
+            self,
+            format: LiteralType["ntriples", "turtle", "trig", "nquads", "rdf/xml", "hdt"] = None,
+            graph: str = None,
+            prefixes: Dict[str, str] = None,
+    ) -> bytes:
+        """
+        Write the triples to bytes in memory, in any format, including the binary HDT format.
+
+        Usage:
+
+        >>> b = m.write_bytes(format="hdt")
+
+        :param format: One of "ntriples", "turtle", "trig", "nquads", "rdf/xml", "hdt".
+        :param graph: The IRI of the graph to write. For "trig" and "nquads", all graphs except the transient graph
+            are written when this is None.
+        :param prefixes: The prefixes used for turtle serialization.
+        :return: The serialized triples (UTF-8 for the text formats).
         """
 
     def writes(

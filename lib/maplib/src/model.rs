@@ -464,6 +464,38 @@ SELECT ?loc ?crs ?seq ?x ?y ?z WHERE {{
             .map_err(MaplibError::TriplestoreError)
     }
 
+    /// Reads triples from bytes in memory, in any format including HDT.
+    #[allow(clippy::too_many_arguments)]
+    pub fn read_bytes(
+        &mut self,
+        data: &[u8],
+        rdf_format: ExtendedRdfFormat,
+        base_iri: Option<String>,
+        parallel: Option<bool>,
+        checked: bool,
+        graph: &NamedGraph,
+        replace_graph: bool,
+        triples_batch_size: usize,
+        known_contexts: HashMap<String, String>,
+    ) -> Result<(), MaplibError> {
+        if replace_graph {
+            self.truncate_graph(graph)
+        }
+        self.triplestore
+            .read_triples(
+                data,
+                rdf_format,
+                base_iri,
+                parallel,
+                checked,
+                graph,
+                &self.prefixes,
+                triples_batch_size,
+                known_contexts,
+            )
+            .map_err(MaplibError::TriplestoreError)
+    }
+
     /// The templates held by this model, excluding the built-in `ottr:Triple` primitive that
     /// `TemplateDataset` injects as the base case every template expands to.
     pub fn get_templates(&self) -> Vec<&Template> {

@@ -27,6 +27,7 @@ RDF terms are tuples: ("uri", iri), ("bnode", label),
 ("triple", subject, predicate, object).
 """
 
+import io
 import json
 import re
 from collections import Counter, defaultdict
@@ -416,8 +417,9 @@ def load_known_failures(suite: Suite) -> Dict[str, str]:
     return known
 
 
-ROUND_TRIP_FORMATS = ["ntriples", "nquads", "turtle", "trig", "rdf/xml"]
-TRIPLE_FORMATS = {"ntriples", "turtle", "rdf/xml"}
+ROUND_TRIP_FORMATS = ["ntriples", "nquads", "turtle", "trig", "rdf/xml", "hdt"]
+TRIPLE_FORMATS = {"ntriples", "turtle", "rdf/xml", "hdt"}
+BINARY_FORMATS = {"hdt"}
 
 
 def build_round_trip_params(suite: Suite):
@@ -448,14 +450,29 @@ def run_round_trip(g: Manifest, entry, out_format: str):
     if out_format in TRIPLE_FORMATS and any(q[3] is not None for q in expected):
         pytest.skip(f"{out_format} cannot hold named graphs")
     m = read_action(in_format, action)
-    written = m.writes(format=out_format)
-    m2 = Model()
-    m2.reads(written, format=out_format)
-    actual = dump_dataset(m2)
-    assert isomorphic(expected, actual), (
-        f"Datasets differ after writing {out_format}.\nExpected:\n{format_quads(expected)}\n"
-        f"Actual:\n{format_quads(actual)}\nWritten:\n{written}"
-    )
+    written = m.write_bytes(format=out_format)
+    # Writing to a file-like object gives the same document, as does writes() for text formats
+    buf = io.BytesIO()
+    m.write(buf, format=out_format)
+    assert buf.getvalue() == written
+    if out_format not in BINARY_FORMATS:
+        assert m.writes(format=out_format).encode() == written
+    # Read back from bytes, from a file-like object and (for text formats) from a string
+    readers = [
+        lambda m2: m2.read(written, format=out_format),
+        lambda m2: m2.read(io.BytesIO(written), format=out_format),
+    ]
+    if out_format not in BINARY_FORMATS:
+        readers.append(lambda m2: m2.reads(written.decode(), format=out_format))
+    shown = written if out_format in BINARY_FORMATS else written.decode()
+    for read in readers:
+        m2 = Model()
+        read(m2)
+        actual = dump_dataset(m2)
+        assert isomorphic(expected, actual), (
+            f"Datasets differ after writing {out_format}.\nExpected:\n{format_quads(expected)}\n"
+            f"Actual:\n{format_quads(actual)}\nWritten:\n{shown}"
+        )
 
 
 def build_params(suite: Suite):

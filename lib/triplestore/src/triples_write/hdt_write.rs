@@ -615,8 +615,16 @@ fn insert_id(body: &mut BTreeSet<HdtTriple>, s: &Id, p: &str, o: &Id) {
     ));
 }
 
-fn hdt_error(e: impl std::fmt::Display) -> TriplestoreError {
-    TriplestoreError::HDTError(e.to_string())
+/// Includes the sources, so that e.g. the IO error of a failed write is not hidden.
+fn hdt_error(e: impl std::error::Error) -> TriplestoreError {
+    let mut msg = e.to_string();
+    let mut source = e.source();
+    while let Some(s) = source {
+        msg.push_str(": ");
+        msg.push_str(&s.to_string());
+        source = s.source();
+    }
+    TriplestoreError::HDTError(msg)
 }
 
 fn polars_error(e: impl std::fmt::Display) -> TriplestoreError {

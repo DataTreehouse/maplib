@@ -4,6 +4,7 @@ mod mutexes;
 mod py_indexing_options;
 mod py_model;
 mod py_stream;
+mod py_io;
 mod shacl;
 
 use crate::error::*;

@@ -7,9 +7,10 @@ use crate::mutexes::{
     map_df_mutex, map_mutex, map_resolved_mutex, map_triples_mutex, query_external_mutex,
     query_mutex, read_mutex, read_template_mutex, reads_mutex, resolve_template_mutex,
     serialize_triples_mutex, size_mutex, truncate_graph_mutex, update_mutex, validate_mutex,
-    write_cim_xml_mutex, write_triples_mutex, writes_mutex,
+    write_bytes_mutex, write_cim_xml_mutex, write_triples_mutex, writes_mutex,
 };
 use crate::py_stream::{DocumentKind, PyModelStream, StreamSource};
+use crate::py_io::{ReadSource, WriteTarget};
 use crate::shacl::PyValidationReport;
 use crate::{
     classify_document_data, classify_mapping_data, create_prefix_map, data_to_mappings_types,
@@ -25,7 +26,7 @@ use maplib::model::Model as InnerModel;
 use opc_ua::mappings::map_opc_ua;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use pyo3::types::PyString;
+use pyo3::types::{PyBytes, PyString};
 use pyo3::{pyclass, pymethods, Bound, Py, PyAny, PyRef, PyResult, Python};
 use representation::cats::LockedCats;
 use representation::dataset::NamedGraph;
@@ -802,12 +803,12 @@ impl PyModel {
         known_contexts: Option<HashMap<String, String>>,
         geo: Option<bool>,
     ) -> PyResult<()> {
-        let file_path = file_path.str()?.to_string();
+        let source = ReadSource::extract(file_path)?;
         py.detach(move || {
             let mut inner = self.inner.lock().unwrap();
             read_mutex(
                 &mut inner,
-                file_path,
+                source,
                 format,
                 base_iri,
                 parallel,
@@ -917,13 +918,30 @@ impl PyModel {
         graph: Option<String>,
         prefixes: Option<Bound<'_, PyAny>>,
     ) -> PyResult<()> {
-        let file_path = file_path.str()?.to_string();
+        let target = WriteTarget::extract(file_path)?;
         let prefixes = create_prefix_map(prefixes)?;
 
         py.detach(move || {
             let mut inner = self.inner.lock().unwrap();
-            write_triples_mutex(&mut inner, file_path, format, graph, prefixes)
+            write_triples_mutex(&mut inner, target, format, graph, prefixes)
         })
+    }
+
+    #[pyo3(signature = (format=None, graph=None, prefixes=None))]
+    #[instrument(skip_all)]
+    fn write_bytes<'py>(
+        &self,
+        py: Python<'py>,
+        format: Option<String>,
+        graph: Option<String>,
+        prefixes: Option<Bound<'_, PyAny>>,
+    ) -> PyResult<Bound<'py, PyBytes>> {
+        let prefixes = create_prefix_map(prefixes)?;
+        let out = py.detach(move || {
+            let mut inner = self.inner.lock().unwrap();
+            write_bytes_mutex(&mut inner, format, graph, prefixes)
+        })?;
+        Ok(PyBytes::new(py, &out))
     }
 
     #[pyo3(signature = (
@@ -944,14 +962,14 @@ impl PyModel {
         prefixes: Option<Bound<'_, PyAny>>,
         graph: Option<String>,
     ) -> PyResult<()> {
-        let file_path = file_path.str()?.to_string();
+        let target = WriteTarget::extract(file_path)?;
         let use_prefixes = create_prefix_map(prefixes)?.unwrap_or(Default::default());
 
         py.detach(move || {
             let mut inner = self.inner.lock().unwrap();
             write_cim_xml_mutex(
                 &mut inner,
-                file_path,
+                target,
                 profile_graph,
                 model_iri,
                 version,
