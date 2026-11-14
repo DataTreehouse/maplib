@@ -1042,6 +1042,84 @@ class Model:
         :return: None
         """
 
+    def map_osipi(
+            self,
+            url: str,
+            asset_database: Optional[str] = None,
+            asset_server: Optional[str] = None,
+            root_element: Optional[str] = None,
+            username: Optional[str] = None,
+            password: Optional[str] = None,
+            token: Optional[str] = None,
+            verify_ssl: bool = True,
+            graph: Optional[str] = None,
+            base_iri: Optional[str] = None,
+            read_static_values: bool = True,
+            default_start_time: Optional[str] = None,
+            default_end_time: Optional[str] = None,
+            page_size: int = 10000,
+            max_concurrency: int = 8,
+            timeout: Optional[float] = None,
+    ):
+        """
+        Read an OSIsoft PI (AVEVA PI) Asset Framework model through the PI Web API, and
+        virtualize the time series of its attributes so that their data points can be queried
+        in SPARQL together with the model. Replaces any existing virtualization of the Model.
+
+        The model uses the prefix osipi: <urn:maplib_osipi:> and contains:
+
+        - osipi:AssetServer, osipi:AssetDatabase (osipi:hasDatabase),
+        - an rdfs:Class for each element template (osipi:ElementTemplate, rdfs:subClassOf its base template or osipi:Element),
+        - each element (osipi:Element, rdf:type its template), with osipi:hasChild / osipi:hasParent, and osipi:hasElement from the database to the top elements,
+        - each attribute (osipi:Attribute), with osipi:hasAttribute from its element, osipi:hasChildAttribute / osipi:hasParentAttribute,
+          and osipi:type, osipi:unit, osipi:dataReference, osipi:configString and osipi:value (the current value of attributes without data references),
+        - osipi:name, rdfs:label, osipi:description, osipi:path, osipi:id, osipi:webId and osipi:category on all of these.
+
+        Each attribute with a data reference (e.g. a PI Point) has a time series
+        (chrontext:hasTimeseries) with data points that are read from the PI Web API when queried:
+        chrontext:hasDataPoint, then chrontext:hasTimestamp, chrontext:hasValue (xsd:double, unbound for non-numeric values),
+        osipi:hasState (digital state names and string values), osipi:isGood, osipi:isQuestionable, osipi:isSubstituted and osipi:isAnnotated.
+
+        Bounds on the timestamp in FILTERs limit the recorded values requested from PI.
+        A query without a lower bound on the timestamp fails unless default_start_time is set.
+
+        Not available in the open source build.
+
+        Usage:
+        >>> m = Model()
+        >>> m.map_osipi("https://myserver/piwebapi", asset_database="\\\\\\\\MyAFServer\\\\MyDatabase",
+        ...             username="me", password="...")
+        >>> df = m.query('''
+        ... PREFIX osipi: <urn:maplib_osipi:>
+        ... PREFIX chrontext: <https://github.com/DataTreehouse/chrontext#>
+        ... PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+        ... SELECT ?pump ?t ?v WHERE {
+        ...     ?pump osipi:templateName "Pump" ; osipi:hasAttribute ?a .
+        ...     ?a osipi:name "Flow" ; chrontext:hasTimeseries ?ts .
+        ...     ?ts chrontext:hasDataPoint ?dp .
+        ...     ?dp chrontext:hasTimestamp ?t ; chrontext:hasValue ?v .
+        ...     FILTER(?t >= "2024-01-01T00:00:00Z"^^xsd:dateTime && ?t < "2024-01-02T00:00:00Z"^^xsd:dateTime)
+        ... }''')
+
+        :param url: The root of the PI Web API, e.g. https://myserver/piwebapi
+        :param asset_database: The name or path (\\\\server\\database) of the AF database to read. All databases if None.
+        :param asset_server: The name or path of the AF server to read databases from. All servers if None.
+        :param root_element: Only read this element and its descendants. Either an absolute path (\\\\server\\database\\element) or a path relative to the database.
+        :param username: The username for basic authentication.
+        :param password: The password for basic authentication.
+        :param token: A bearer token, instead of username and password.
+        :param verify_ssl: Verify the certificate of the PI Web API.
+        :param graph: The IRI of the graph to add the Asset Framework triples to.
+        :param base_iri: The prefix of the IRIs of servers, databases, templates, elements and attributes. Defaults to urn:maplib_osipi:
+        :param read_static_values: Read the current values of attributes without data references into osipi:value.
+        :param default_start_time: The PI time (e.g. "*-7d" or "2024-01-01T00:00:00Z") to read from when a query has no lower bound on the timestamp.
+        :param default_end_time: The PI time to read to when a query has no upper bound on the timestamp. Defaults to now ("*").
+        :param page_size: The maxCount of each PI Web API request; larger results are paged.
+        :param max_concurrency: The maximum number of concurrent PI Web API requests.
+        :param timeout: The timeout of each PI Web API request in seconds.
+        :return: None
+        """
+
     def explore(
             self,
             host: str = "localhost",

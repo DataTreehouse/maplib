@@ -45,6 +45,10 @@ use tracing::instrument;
 use triplestore::errors::TriplestoreError;
 use triplestore::triples_read::ExtendedRdfFormat;
 use virtualization::python::VirtualizedPythonDatabase;
+use virtualization::osipi::{
+    osipi_resource_template, read_asset_framework, OSIPIAssetModel, OSIPIDatabase, OSIPISettings,
+    OSIPI_NAMESPACE, OSIPI_RESOURCE,
+};
 use virtualization::{Virtualization, VirtualizedDatabase};
 
 /// CGMES 3.0 and CGMES 2.4.15 namespaces.
@@ -215,6 +219,46 @@ impl Model {
             virtualization,
         });
         Ok(())
+    }
+
+    /// Reads the element hierarchy, element templates and attributes of the PI Asset Framework
+    /// through the PI Web API into `graph`, and virtualizes the time series of the attributes,
+    /// so that their data points can be queried in SPARQL. Replaces any existing virtualization.
+    #[instrument(skip_all)]
+    pub fn map_osipi(
+        &mut self,
+        settings: OSIPISettings,
+        graph: &NamedGraph,
+    ) -> Result<OSIPIAssetModel, MaplibError> {
+        let asset_model = read_asset_framework(&settings)?;
+        let template = osipi_resource_template()?;
+        let db = OSIPIDatabase::new(settings)?;
+        self.reads(
+            &asset_model.ntriples,
+            ExtendedRdfFormat::Normal(RdfFormat::NTriples),
+            None,
+            None,
+            false,
+            false,
+            graph,
+            false,
+            10_000_000,
+            HashMap::new(),
+        )?;
+        for (k, v) in [
+            ("osipi", OSIPI_NAMESPACE),
+            ("chrontext", "https://github.com/DataTreehouse/chrontext#"),
+        ] {
+            self.prefixes
+                .insert(k.to_string(), NamedNode::new_unchecked(v));
+        }
+        self.chrontext_settings = Some(ChrontextSettings {
+            virtualized_database: Arc::new(VirtualizedDatabase::OSIPIDatabase(db)),
+            virtualization: Virtualization {
+                resources: HashMap::from([(OSIPI_RESOURCE.to_string(), template)]),
+            },
+        });
+        Ok(asset_model)
     }
 
     #[instrument(skip_all)]

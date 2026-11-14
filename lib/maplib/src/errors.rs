@@ -12,6 +12,7 @@ use thiserror::Error;
 use triplestore::errors::TriplestoreError;
 use triplestore::serialization::TripleSerializationError;
 use triplestore::sparql::errors::SparqlError;
+use virtualization::osipi::OSIPIError;
 
 #[derive(Error, Debug)]
 pub enum MaplibError {
@@ -57,4 +58,6 @@ pub enum MaplibError {
     SparqlEndpointQueryError(#[from] SparqlEndpointQueryError),
     #[error(transparent)]
     CsvwError(#[from] csvw::errors::CsvwError),
+    #[error(transparent)]
+    OSIPIError(#[from] OSIPIError),
 }

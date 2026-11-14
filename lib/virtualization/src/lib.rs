@@ -1,7 +1,9 @@
+use crate::osipi::OSIPIDatabase;
 use crate::python::VirtualizedPythonDatabase;
 use std::collections::HashMap;
 use templates::ast::Template;
 
+pub mod osipi;
 pub mod python;
 
 #[derive(Debug, Clone)]
@@ -11,4 +13,5 @@ pub struct Virtualization {
 
 pub enum VirtualizedDatabase {
     VirtualizedPythonDatabase(VirtualizedPythonDatabase),
+    OSIPIDatabase(OSIPIDatabase),
 }

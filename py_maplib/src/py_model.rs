@@ -48,6 +48,7 @@ use templates::python::PyTemplate;
 use tracing::instrument;
 use triplestore::sparql::InsertResult;
 use triplestore::{StorageMode, StorageOptions};
+use virtualization::osipi::{OSIPIAuth, OSIPISettings, OSIPI_NAMESPACE};
 use virtualization::python::VirtualizedPythonDatabase;
 
 #[pyclass(name = "Model", frozen)]
@@ -481,6 +482,89 @@ impl PyModel {
         options.set_item("virtualize_time_series", virtualize_time_series)?;
         // The mapping adds triples through this Model, so the inner model must not be locked here.
         map_cdf(slf.as_any(), client, &options)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    #[pyo3(signature = (
+        url,
+        asset_database=None,
+        asset_server=None,
+        root_element=None,
+        username=None,
+        password=None,
+        token=None,
+        verify_ssl=true,
+        graph=None,
+        base_iri=None,
+        read_static_values=true,
+        default_start_time=None,
+        default_end_time=None,
+        page_size=10_000,
+        max_concurrency=8,
+        timeout=None,
+    ))]
+    #[instrument(skip_all)]
+    fn map_osipi(
+        &self,
+        py: Python<'_>,
+        url: String,
+        asset_database: Option<String>,
+        asset_server: Option<String>,
+        root_element: Option<String>,
+        username: Option<String>,
+        password: Option<String>,
+        token: Option<String>,
+        verify_ssl: bool,
+        graph: Option<String>,
+        base_iri: Option<String>,
+        read_static_values: bool,
+        default_start_time: Option<String>,
+        default_end_time: Option<String>,
+        page_size: usize,
+        max_concurrency: usize,
+        timeout: Option<f64>,
+    ) -> PyResult<()> {
+        let auth = match (username, password, token) {
+            (Some(username), Some(password), None) => OSIPIAuth::Basic { username, password },
+            (None, None, Some(token)) => OSIPIAuth::Bearer { token },
+            (None, None, None) => OSIPIAuth::None,
+            _ => {
+                return Err(PyMaplibError::FunctionArgumentError(
+                    "Provide either both username and password, or a token, not both".to_string(),
+                )
+                .into())
+            }
+        };
+        if page_size == 0 || max_concurrency == 0 {
+            return Err(PyMaplibError::FunctionArgumentError(
+                "page_size and max_concurrency must be positive".to_string(),
+            )
+            .into());
+        }
+        let settings = OSIPISettings {
+            url,
+            auth,
+            verify_ssl,
+            asset_server,
+            asset_database,
+            root_element,
+            base_iri: base_iri.unwrap_or_else(|| OSIPI_NAMESPACE.to_string()),
+            read_static_values,
+            default_start_time,
+            default_end_time,
+            page_size,
+            max_concurrency,
+            timeout_seconds: timeout,
+        };
+        let graph = parse_optional_named_node(graph)?;
+        let graph = NamedGraph::from_maybe_named_node(graph.as_ref());
+        py.detach(|| {
+            let mut inner = self.inner.write().unwrap();
+            inner
+                .map_osipi(settings, &graph)
+                .map_err(PyMaplibError::from)?;
+            Ok(())
+        })
     }
 
     #[pyo3(signature = (virtualized_database, resources))]
