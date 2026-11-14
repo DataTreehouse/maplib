@@ -437,6 +437,35 @@ impl VirtualizedQuery {
         }
     }
 
+    pub fn get_basics(&self) -> Vec<&BasicVirtualizedQuery> {
+        match self {
+            VirtualizedQuery::Basic(b) => vec![b],
+            VirtualizedQuery::Filtered(inner, _)
+            | VirtualizedQuery::Sliced(inner, ..)
+            | VirtualizedQuery::Ordered(inner, ..)
+            | VirtualizedQuery::ExpressionAs(inner, ..) => inner.get_basics(),
+            VirtualizedQuery::InnerJoin(inners, _) => {
+                inners.iter().flat_map(|x| x.get_basics()).collect()
+            }
+            VirtualizedQuery::Grouped(grouped) => grouped.vq.get_basics(),
+        }
+    }
+
+    /// The basic queries, in the same order as get_basics()
+    pub fn get_basics_mut(&mut self) -> Vec<&mut BasicVirtualizedQuery> {
+        match self {
+            VirtualizedQuery::Basic(b) => vec![b],
+            VirtualizedQuery::Filtered(inner, _)
+            | VirtualizedQuery::Sliced(inner, ..)
+            | VirtualizedQuery::Ordered(inner, ..)
+            | VirtualizedQuery::ExpressionAs(inner, ..) => inner.get_basics_mut(),
+            VirtualizedQuery::InnerJoin(inners, _) => {
+                inners.iter_mut().flat_map(|x| x.get_basics_mut()).collect()
+            }
+            VirtualizedQuery::Grouped(grouped) => grouped.vq.get_basics_mut(),
+        }
+    }
+
     pub fn has_equivalent_variable(&self, variable: &Variable, context: &Context) -> bool {
         for ts in self.get_virtualized_variables() {
             if ts.equivalent(variable, context) {
