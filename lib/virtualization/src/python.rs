@@ -7,13 +7,14 @@ pub struct VirtualizedPythonDatabase {}
 #[pymethods]
 impl VirtualizedPythonDatabase {
     #[new]
-    #[pyo3(signature = (database, resource_sql_map=None, sql_dialect=None))]
+    #[pyo3(signature = (database, resource_sql_map=None, sql_dialect=None, pushdowns=None))]
     pub fn new(
         database: Py<PyAny>,
         resource_sql_map: Option<Py<PyAny>>,
         sql_dialect: Option<Py<PyAny>>,
+        pushdowns: Option<Vec<String>>,
     ) -> PyResult<VirtualizedPythonDatabase> {
-        let _ = (database, resource_sql_map, sql_dialect);
+        let _ = (database, resource_sql_map, sql_dialect, pushdowns);
         Err(PyNotImplementedError::new_err(
             "Contact Data Treehouse to try",
         ))

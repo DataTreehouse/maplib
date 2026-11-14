@@ -1865,7 +1865,8 @@ class VirtualizedDatabase:
     def __init__(self,
                  database: Any,
                  resource_sql_map: Optional[Dict[str, Any]] = None,
-                 sql_dialect: Optional[Union[LiteralType["duckdb", "snowflake", "bigquery", "databricks", "postgres"], Any]] = None):
+                 sql_dialect: Optional[Union[LiteralType["duckdb", "snowflake", "bigquery", "databricks", "postgres"], Any]] = None,
+                 pushdowns: Optional[List[LiteralType["value_conditions", "group_by", "ordering"]]] = None):
         """
         Virtualize a database, so that SPARQL queries over the resources it holds are pushed down to it.
 
@@ -1883,6 +1884,7 @@ class VirtualizedDatabase:
         database, given the sql_dialect.
         For advanced use, the resource_sql_map may be omitted, in which case the VirtualizedQuery will be provided to the query method.
         The user must then translate this VirtualizedQuery (built on SPARQL Algebra) to the target query language.
+        For OPC UA History Access servers, see maplib.opcua.OPCUAHistoryDatabase.
 
         Not available in the open source build: raises NotImplementedError.
 
@@ -1892,6 +1894,10 @@ class VirtualizedDatabase:
         :param sql_dialect: The SQL dialect accepted by the query method: one of "duckdb", "snowflake", "bigquery",
             "databricks" and "postgres", or an instance of an SQLDialect from maplib.virtualization to customize the SQL.
             Defaults to the sql_dialect attribute of the database.
+        :param pushdowns: The parts of the SPARQL query that may be pushed down into the database: "value_conditions",
+            "group_by" and "ordering". Defaults to the pushdowns attribute of the database if it has one, otherwise all of them.
+            Conditions (value_conditions) outside of a group by are evaluated again afterwards.
+            With group_by, the database must compute the aggregations exactly.
         """
 
     @staticmethod
