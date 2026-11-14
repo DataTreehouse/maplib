@@ -12,6 +12,7 @@
 //! directly from their byte ranges and DuckDB databases are copied out of the bundle. Parquet
 //! files are encoded in memory and appended as they are finished, so they are written once.
 
+use file_io::remote::{RemoteLocation, RemoteOptions, TempFile, UpdateVersion};
 use polars::prelude::{
     DataFrame, ParquetCompression, ParquetReader, ParquetWriter, PolarsResult, SerReader,
 };
@@ -38,6 +39,8 @@ struct BundleIndex {
 pub struct Bundle {
     path: PathBuf,
     files: BTreeMap<String, (u64, u64)>,
+    /// A bundle downloaded from object storage, removed when the bundle is dropped.
+    _download: Option<TempFile>,
 }
 
 struct BundleWriterState {
@@ -119,6 +122,99 @@ impl BundleWriter {
 pub enum SerializationTarget {
     Folder(PathBuf),
     Bundle(BundleWriter),
+    Remote(RemoteFolderWriter),
+}
+
+/// The object holding the name of the current generation of a serialization folder in object
+/// storage, see [`RemoteFolderWriter`].
+pub const LATEST_FILE: &str = "LATEST";
+const GENERATION_PREFIX: &str = "gen-";
+/// Generations kept in object storage: the current one and the one before, which readers that
+/// opened it before it was replaced may still be reading lazily.
+const GENERATIONS_KEPT: usize = 2;
+
+/// Writes a serialization folder to object storage. The files go to a new generation folder,
+/// `<location>/gen-<time>-<id>/`, and when all are written the generation is published by
+/// replacing `<location>/LATEST`, which holds its name. Readers that open the location read
+/// `LATEST` first, so they see either the previous or the new serialization whole, never a mix.
+/// `LATEST` is replaced with a conditional put, so if another writer published a generation
+/// since this one started, `finish` fails instead of overwriting it. Generations older than the
+/// last two are then deleted.
+pub struct RemoteFolderWriter {
+    root: RemoteLocation,
+    generation: String,
+    folder: RemoteLocation,
+    latest_version: Option<UpdateVersion>,
+    /// Where files that must exist on disk before they are uploaded (DuckDB databases) are made.
+    scratch_dir: PathBuf,
+}
+
+impl RemoteFolderWriter {
+    pub fn create(root: RemoteLocation, scratch_parent: Option<&Path>) -> io::Result<Self> {
+        let latest_version = root.child(LATEST_FILE).version()?;
+        let millis = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis())
+            .unwrap_or(0);
+        let id = uuid::Uuid::new_v4().simple().to_string();
+        let generation = format!("{GENERATION_PREFIX}{millis:016}-{}", &id[..8]);
+        let folder = root.child(&generation);
+        let scratch_dir = scratch_parent
+            .map(|p| p.to_owned())
+            .unwrap_or_else(std::env::temp_dir)
+            .join(format!(".maplib-upload-{id}"));
+        Ok(Self {
+            root,
+            generation,
+            folder,
+            latest_version,
+            scratch_dir,
+        })
+    }
+
+    /// The folder of the generation being written.
+    pub fn folder(&self) -> &RemoteLocation {
+        &self.folder
+    }
+
+    fn finish(self) -> io::Result<()> {
+        let _ = std::fs::remove_dir_all(&self.scratch_dir);
+        let latest = self.root.child(LATEST_FILE);
+        let published = latest.put_if(
+            self.generation.clone().into_bytes().into(),
+            self.latest_version.clone(),
+        )?;
+        if !published {
+            let _ = self.folder.delete_all();
+            return Err(io::Error::new(
+                io::ErrorKind::AlreadyExists,
+                format!(
+                    "{} was changed by another writer while it was serialized, the new \
+                     serialization was not published",
+                    self.root
+                ),
+            ));
+        }
+        let mut older: Vec<String> = self
+            .root
+            .list_folders()?
+            .into_iter()
+            .filter(|g| g.starts_with(GENERATION_PREFIX) && *g < self.generation)
+            .collect();
+        older.sort();
+        let keep_old = GENERATIONS_KEPT - 1;
+        if older.len() > keep_old {
+            for g in &older[..older.len() - keep_old] {
+                self.root.child(g).delete_all()?;
+            }
+        }
+        Ok(())
+    }
+
+    fn abort(&self) {
+        let _ = std::fs::remove_dir_all(&self.scratch_dir);
+        let _ = self.folder.delete_all();
+    }
 }
 
 impl SerializationTarget {
@@ -139,6 +235,7 @@ impl SerializationTarget {
                 std::fs::write(Self::folder_path(folder, rel)?, bytes)
             }
             SerializationTarget::Bundle(w) => w.add_bytes(rel, bytes),
+            SerializationTarget::Remote(r) => Ok(r.folder.child(rel).put_large(bytes.to_vec())?),
         }
     }
 
@@ -170,6 +267,11 @@ impl SerializationTarget {
                 writer(&mut buf, compression, row_group_size).finish(df)?;
                 w.add_bytes(rel, &buf)?;
             }
+            SerializationTarget::Remote(r) => {
+                let mut buf = Vec::new();
+                writer(&mut buf, compression, row_group_size).finish(df)?;
+                r.folder.child(rel).put_large(buf).map_err(io::Error::from)?;
+            }
         }
         Ok(())
     }
@@ -182,30 +284,53 @@ impl SerializationTarget {
                 create_dir_all(&w.scratch_dir)?;
                 Ok(w.scratch_dir.join(rel.replace('/', "_")))
             }
+            SerializationTarget::Remote(r) => {
+                create_dir_all(&r.scratch_dir)?;
+                Ok(r.scratch_dir.join(rel.replace('/', "_")))
+            }
         }
     }
 
     /// Adds a database written at `db_path(rel)`, with its write-ahead log if there is one.
     pub fn finish_db(&self, rel: &str, path: &Path) -> io::Result<()> {
-        let SerializationTarget::Bundle(w) = self else {
-            return Ok(());
-        };
-        w.add_file(rel, path)?;
         let mut wal = path.as_os_str().to_owned();
         wal.push(".wal");
         let wal = PathBuf::from(wal);
+        match self {
+            SerializationTarget::Folder(_) => return Ok(()),
+            SerializationTarget::Bundle(w) => {
+                w.add_file(rel, path)?;
+                if wal.exists() {
+                    w.add_file(&format!("{rel}.wal"), &wal)?;
+                }
+            }
+            SerializationTarget::Remote(r) => {
+                r.folder.child(rel).upload_from(path)?;
+                if wal.exists() {
+                    r.folder.child(&format!("{rel}.wal")).upload_from(&wal)?;
+                }
+            }
+        }
         if wal.exists() {
-            w.add_file(&format!("{rel}.wal"), &wal)?;
             std::fs::remove_file(&wal)?;
         }
         std::fs::remove_file(path)
     }
 
-    /// Completes a bundle, a folder needs nothing more.
+    /// Completes a bundle, or publishes a folder in object storage. A local folder needs
+    /// nothing more.
     pub fn finish(self) -> io::Result<()> {
         match self {
             SerializationTarget::Folder(_) => Ok(()),
             SerializationTarget::Bundle(w) => w.finish(),
+            SerializationTarget::Remote(r) => r.finish(),
+        }
+    }
+
+    /// Removes what was written of a serialization that failed, for object storage.
+    pub fn abort(&self) {
+        if let SerializationTarget::Remote(r) = self {
+            r.abort()
         }
     }
 }
@@ -259,7 +384,15 @@ impl Bundle {
         Ok(Bundle {
             path: path.to_owned(),
             files: index.files,
+            _download: None,
         })
+    }
+
+    /// Opens a bundle downloaded to `download`, which is removed when the bundle is dropped.
+    pub fn open_downloaded(download: TempFile) -> io::Result<Bundle> {
+        let mut b = Bundle::open(download.path())?;
+        b._download = Some(download);
+        Ok(b)
     }
 
     pub fn path(&self) -> &Path {
@@ -325,6 +458,8 @@ impl Bundle {
 pub enum SerializationSource {
     Folder(PathBuf),
     Bundle(Bundle),
+    /// A serialization folder in object storage, read file by file.
+    Remote(RemoteLocation),
 }
 
 impl SerializationSource {
@@ -348,7 +483,42 @@ impl SerializationSource {
                 SerializedFile::Path(p)
             }
             SerializationSource::Bundle(b) => SerializedFile::InBundle(b, rel.to_string()),
+            SerializationSource::Remote(r) => SerializedFile::Remote(r.child(rel)),
         }
+    }
+
+    /// Opens a serialization in object storage at `url`: a single file bundle, which is
+    /// downloaded to a temporary file in `scratch_parent` (by default the system temporary
+    /// folder), or a folder, read file by file. A folder written by [`RemoteFolderWriter`] is
+    /// read at the generation named by its `LATEST` object.
+    pub fn open_remote(
+        url: &str,
+        options: &RemoteOptions,
+        scratch_parent: Option<&Path>,
+    ) -> io::Result<Self> {
+        Self::open_remote_location(RemoteLocation::parse(url, options)?, scratch_parent)
+    }
+
+    /// Opens a serialization in object storage at `loc`, see `open_remote`.
+    pub fn open_remote_location(loc: RemoteLocation, scratch_parent: Option<&Path>) -> io::Result<Self> {
+        if loc.file_name().is_some() && loc.exists()? {
+            let name = loc.file_name().unwrap_or("model.maplib").to_string();
+            let tmp = TempFile::new(scratch_parent, &name)?;
+            loc.download_to(tmp.path())?;
+            return Ok(SerializationSource::Bundle(Bundle::open_downloaded(tmp)?));
+        }
+        let latest = loc.child(LATEST_FILE);
+        if latest.exists()? {
+            let generation = String::from_utf8_lossy(&latest.get()?).trim().to_string();
+            return Ok(SerializationSource::Remote(loc.child(&generation)));
+        }
+        if loc.child("triples/metadata.json").exists()? {
+            return Ok(SerializationSource::Remote(loc));
+        }
+        Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            format!("No serialized model found at {loc}"),
+        ))
     }
 }
 
@@ -356,6 +526,7 @@ impl SerializationSource {
 pub enum SerializedFile<'a> {
     Path(PathBuf),
     InBundle(&'a Bundle, String),
+    Remote(RemoteLocation),
 }
 
 impl SerializedFile<'_> {
@@ -363,6 +534,7 @@ impl SerializedFile<'_> {
         match self {
             SerializedFile::Path(p) => p.exists(),
             SerializedFile::InBundle(b, name) => b.contains(name),
+            SerializedFile::Remote(r) => r.exists().unwrap_or(false),
         }
     }
 
@@ -370,6 +542,7 @@ impl SerializedFile<'_> {
         match self {
             SerializedFile::Path(p) => std::fs::read(p),
             SerializedFile::InBundle(b, name) => b.read(name),
+            SerializedFile::Remote(r) => Ok(r.get()?.to_vec()),
         }
     }
 
@@ -377,6 +550,10 @@ impl SerializedFile<'_> {
         match self {
             SerializedFile::Path(p) => ParquetReader::new(File::open(p)?).finish(),
             SerializedFile::InBundle(b, name) => b.read_parquet(name),
+            SerializedFile::Remote(r) => {
+                let bytes = r.get().map_err(io::Error::from)?;
+                ParquetReader::new(Cursor::new(bytes)).finish()
+            }
         }
     }
 
@@ -385,6 +562,7 @@ impl SerializedFile<'_> {
         match self {
             SerializedFile::Path(p) => std::fs::copy(p, dest).map(|_| ()),
             SerializedFile::InBundle(b, name) => b.extract(name, dest),
+            SerializedFile::Remote(r) => r.download_to(dest).map(|_| ()).map_err(io::Error::from),
         }
     }
 
@@ -392,6 +570,73 @@ impl SerializedFile<'_> {
         match self {
             SerializedFile::Path(p) => p.display().to_string(),
             SerializedFile::InBundle(b, name) => format!("{}!{name}", b.path().display()),
+            SerializedFile::Remote(r) => r.to_string(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn write_generation(root: &RemoteLocation, content: &str) -> io::Result<RemoteFolderWriter> {
+        let w = RemoteFolderWriter::create(root.clone(), None)?;
+        let t = SerializationTarget::Remote(w);
+        t.write_bytes("triples/metadata.json", content.as_bytes())?;
+        match t {
+            SerializationTarget::Remote(w) => Ok(w),
+            _ => unreachable!(),
+        }
+    }
+
+    fn read_latest(root: &RemoteLocation) -> String {
+        let source = SerializationSource::open_remote_location(root.clone(), None).unwrap();
+        String::from_utf8(source.file("triples/metadata.json").read().unwrap()).unwrap()
+    }
+
+    #[test]
+    fn remote_folder_generations_are_published_and_pruned() {
+        let root = RemoteLocation::in_memory().child("models/m");
+        for i in 0..4 {
+            write_generation(&root, &format!("v{i}"))
+                .unwrap()
+                .finish()
+                .unwrap();
+            assert_eq!(read_latest(&root), format!("v{i}"));
+            // Generation names sort by time, make sure the next one is later.
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
+        let generations: Vec<_> = root
+            .list_folders()
+            .unwrap()
+            .into_iter()
+            .filter(|g| g.starts_with(GENERATION_PREFIX))
+            .collect();
+        assert_eq!(generations.len(), GENERATIONS_KEPT);
+    }
+
+    #[test]
+    fn concurrent_publish_is_refused() {
+        let root = RemoteLocation::in_memory().child("m");
+        write_generation(&root, "first").unwrap().finish().unwrap();
+        // Both writers start from the same published generation.
+        let a = write_generation(&root, "a").unwrap();
+        let b = write_generation(&root, "b").unwrap();
+        let a_folder = a.folder().clone();
+        b.finish().unwrap();
+        let err = a.finish().unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::AlreadyExists);
+        assert_eq!(read_latest(&root), "b");
+        // The refused generation was removed.
+        assert!(a_folder.list().unwrap().is_empty());
+    }
+
+    #[test]
+    fn missing_remote_serialization_is_not_found() {
+        let root = RemoteLocation::in_memory().child("nothing/here");
+        let err = SerializationSource::open_remote_location(root, None)
+            .err()
+            .unwrap();
+        assert_eq!(err.kind(), io::ErrorKind::NotFound);
     }
 }

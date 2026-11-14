@@ -9,14 +9,17 @@ use oxrdf::NamedNode;
 use polars::prelude::{IntoLazy, ParquetCompression, PolarsError};
 use query_processing::udf::UdfRegistry;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
-use representation::bundle::{BundleWriter, SerializationSource, SerializationTarget};
+use file_io::remote::{RemoteLocation, RemoteOptions, TempFile};
+use representation::bundle::{
+    BundleWriter, RemoteFolderWriter, SerializationSource, SerializationTarget,
+};
 use representation::cats::serialization::{CatSerializationError, CATS_FOLDER};
 use representation::cats::{Cats, LockedCats};
 use representation::dataset::NamedGraph;
 use representation::BaseRDFNodeType;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Instant;
 use thiserror::Error;
@@ -60,6 +63,10 @@ const TRIPLES_ROW_GROUP_SIZE: Option<usize> = Some(DISK_ROW_GROUP_SIZE);
 struct TriplestoreMetadata {
     triples_uuid_map: HashMap<String, (NamedGraph, NamedNode, BaseRDFNodeType, BaseRDFNodeType)>,
     indexing: IndexingOptions,
+    /// The number of triples of each table, so that tables in object storage need not be
+    /// downloaded to be opened. Missing in serializations of earlier versions.
+    #[serde(default)]
+    heights: HashMap<String, usize>,
 }
 
 impl Triplestore {
@@ -148,6 +155,7 @@ impl Triplestore {
 
         let mut to_serialize = vec![];
         let mut triples_uuid_map = HashMap::new();
+        let mut heights = HashMap::new();
 
         for (graph, map) in &self.graph_triples_map {
             for (pred, triples_map) in map {
@@ -164,6 +172,7 @@ impl Triplestore {
                     let pb_subjects_index = rel(SO_SPARSE_INDEX_FILE);
                     let pb_objects = rel(OS_TRIPLES_FILE);
                     let pb_objects_index = rel(OS_SPARSE_INDEX_FILE);
+                    heights.insert(key.clone(), triples.len());
                     triples_uuid_map.insert(key, value);
 
                     let mut subject_object_sort = triples.get_all_triples_lazy_frames(true)?;
@@ -211,13 +220,8 @@ impl Triplestore {
         let triplestore_metadata = TriplestoreMetadata {
             triples_uuid_map,
             indexing: self.indexing.clone(),
+            heights,
         };
-
-        let triplestore_metadata_string = serde_json::to_string_pretty(&triplestore_metadata)?;
-        target.write_bytes(
-            &format!("{TRIPLES_PATH}/{METADATA_FILE}"),
-            triplestore_metadata_string.as_bytes(),
-        )?;
 
         let res: Result<(), TripleSerializationError> = to_serialize
             .into_par_iter()
@@ -238,7 +242,63 @@ impl Triplestore {
             .expect("Should always be readable")
             .serialize_cats(target, raw_db)?;
 
+        // The metadata is written last, so that a folder with metadata has all its files.
+        let triplestore_metadata_string = serde_json::to_string_pretty(&triplestore_metadata)?;
+        target.write_bytes(
+            &format!("{TRIPLES_PATH}/{METADATA_FILE}"),
+            triplestore_metadata_string.as_bytes(),
+        )?;
+
         Ok(())
+    }
+
+    /// Serializes the triplestore to object storage at `location`. With `single_file`, the
+    /// bundle is written to a temporary file in `scratch_parent` (by default the system
+    /// temporary folder) and uploaded; the object appears whole when the upload completes.
+    /// Otherwise a serialization folder is written to a new generation and published, see
+    /// [`RemoteFolderWriter`]. Deserializing a folder into disk storage only downloads the
+    /// triple tables when they are read.
+    pub fn serialize_triples_remote(
+        &mut self,
+        location: &RemoteLocation,
+        raw_db: bool,
+        single_file: bool,
+        scratch_parent: Option<&Path>,
+    ) -> Result<(), TripleSerializationError> {
+        let scratch_parent = scratch_parent
+            .map(|p| p.to_owned())
+            .or_else(|| self.storage_folder.clone());
+        if single_file {
+            let name = location.file_name().unwrap_or("model.maplib").to_string();
+            let tmp = TempFile::new(scratch_parent.as_deref(), &name)?;
+            self.serialize_triples(tmp.path(), raw_db, true)?;
+            location
+                .upload_from(tmp.path())
+                .map_err(std::io::Error::from)?;
+            return Ok(());
+        }
+        let writer = RemoteFolderWriter::create(location.clone(), scratch_parent.as_deref())?;
+        let target = SerializationTarget::Remote(writer);
+        match self.serialize_triples_to(&target, raw_db) {
+            Ok(()) => Ok(target.finish()?),
+            Err(e) => {
+                target.abort();
+                Err(e)
+            }
+        }
+    }
+
+    /// Deserializes a triplestore serialized to object storage at `url`, a single file bundle
+    /// or a folder, see [`SerializationSource::open_remote`].
+    pub fn deserialize_triples_remote(
+        url: &str,
+        options: &RemoteOptions,
+        storage: StorageOptions,
+    ) -> Result<Triplestore, TripleSerializationError> {
+        let (storage_pathbuf, triples_folder) = prepare_storage(&storage)?;
+        // A bundle is downloaded next to the storage, where there is room for it.
+        let source = SerializationSource::open_remote(url, options, storage_pathbuf.as_deref())?;
+        Self::deserialize_triples_from(source, storage, storage_pathbuf, triples_folder)
     }
 
     /// Deserializes a triplestore serialized to `path`, which is either a single file bundle or a
@@ -248,11 +308,21 @@ impl Triplestore {
         storage: StorageOptions,
     ) -> Result<Triplestore, TripleSerializationError> {
         let source = SerializationSource::open(path)?;
+        let (storage_pathbuf, triples_folder) = prepare_storage(&storage)?;
+        Self::deserialize_triples_from(source, storage, storage_pathbuf, triples_folder)
+    }
+
+    fn deserialize_triples_from(
+        source: SerializationSource,
+        storage: StorageOptions,
+        storage_pathbuf: Option<PathBuf>,
+        triples_folder: Option<PathBuf>,
+    ) -> Result<Triplestore, TripleSerializationError> {
         let metadata_bytes = source
             .file(&format!("{TRIPLES_PATH}/{METADATA_FILE}"))
             .read()?;
         let triplestore_metadata: TriplestoreMetadata = serde_json::from_slice(&metadata_bytes)?;
-        let (storage_pathbuf, triples_folder) = prepare_storage(&storage)?;
+        let heights = &triplestore_metadata.heights;
 
         // The cats do not depend on the triples, so they are deserialized at the same time. With
         // hybrid and disk storage, building the on-disk cat maps (and their indices) is usually
@@ -287,6 +357,7 @@ impl Triplestore {
                             subject_type.clone(),
                             object_type.clone(),
                             triples_folder.as_deref(),
+                            heights.get(&uuid).copied(),
                         )?;
                         Ok((graph, predicate, subject_type, object_type, triples))
                     })

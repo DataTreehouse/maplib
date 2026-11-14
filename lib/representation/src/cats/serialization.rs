@@ -122,8 +122,9 @@ impl Cats {
                                 CatMaps::InMemory(cmod.to_memory(is_iri))
                             }
                         }
-                        SerializationSource::Bundle(_) => {
-                            // The database is copied out of the bundle: to the storage folder,
+                        SerializationSource::Bundle(_) | SerializationSource::Remote(_) => {
+                            // The database is copied out of the bundle (or downloaded from
+                            // object storage): to the storage folder,
                             // where it is used in place, or to a temporary folder to be read
                             // into memory.
                             if let Some(storage_folder) = storage_folder {

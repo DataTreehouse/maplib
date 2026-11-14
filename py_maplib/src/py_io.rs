@@ -3,6 +3,7 @@
 //! e.g. `io.BytesIO`, an open file or a socket file).
 
 use crate::error::PyMaplibError;
+use file_io::remote::{is_remote, Input, Output, RemoteOptions};
 use maplib::errors::MaplibError;
 use pyo3::prelude::*;
 use pyo3::pybacked::PyBackedBytes;
@@ -92,6 +93,63 @@ impl WriteTarget {
             ))),
         }
     }
+}
+
+impl WriteTarget {
+    /// Like `open`, but a path that is a URL of object storage (gs://, az://, ...) is uploaded
+    /// to as it is written. Complete the writer with `TargetWriter::finish`; for object storage
+    /// the object only appears then.
+    pub(crate) fn open_with(&self, storage_options: &RemoteOptions) -> PyResult<TargetWriter> {
+        if let WriteTarget::Path(path) = self {
+            if let Some(url) = path.to_str().filter(|p| is_remote(p)) {
+                let out = Output::create(url, storage_options)
+                    .map_err(|x| PyMaplibError::from(MaplibError::FileCreateIOError(x)))?;
+                return Ok(TargetWriter::Remote(out));
+            }
+        }
+        Ok(TargetWriter::Local(self.open()?))
+    }
+}
+
+/// A writer from `WriteTarget::open_with`.
+pub(crate) enum TargetWriter {
+    Local(Box<dyn Write + Send>),
+    Remote(Output),
+}
+
+impl TargetWriter {
+    /// Flushes the writer, or completes the upload, turning errors into Python exceptions.
+    pub(crate) fn finish(self) -> PyResult<()> {
+        match self {
+            TargetWriter::Local(mut w) => finish_writer(&mut w),
+            TargetWriter::Remote(out) => out
+                .finish()
+                .map_err(|x| PyMaplibError::from(MaplibError::FileCreateIOError(x)).into()),
+        }
+    }
+}
+
+impl Write for TargetWriter {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        match self {
+            TargetWriter::Local(w) => w.write(buf),
+            TargetWriter::Remote(w) => w.write(buf),
+        }
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        match self {
+            TargetWriter::Local(w) => w.flush(),
+            TargetWriter::Remote(w) => w.flush(),
+        }
+    }
+}
+
+/// A local path to read `path_or_url` from: the path itself, or for a URL of object storage a
+/// downloaded temporary copy that is removed when the returned value is dropped.
+pub(crate) fn open_input(path_or_url: &str, storage_options: &RemoteOptions) -> PyResult<Input> {
+    Input::open(path_or_url, storage_options)
+        .map_err(|x| PyMaplibError::from(MaplibError::FileCreateIOError(x)).into())
 }
 
 /// Flushes the writer, turning errors (e.g. from the Python object) into Python exceptions.

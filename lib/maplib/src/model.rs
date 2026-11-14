@@ -10,6 +10,7 @@ use cimxml_export::export::{cim_xml_write, FullModelDetails};
 use datalog::inference::{infer, InferenceResult};
 use datalog::parser::parse_datalog_ruleset;
 use cimxml_import::{cim_geometries_to_geosparql, CimPositionPoint};
+use file_io::remote::{RemoteLocation, RemoteOptions};
 use oxrdf::{NamedNode, Term};
 use oxrdfio::RdfFormat;
 use polars::prelude::DataFrame;
@@ -967,16 +968,42 @@ SELECT ?loc ?crs ?seq ?x ?y ?z WHERE {{
         Ok(())
     }
 
+    /// Serializes the model to object storage, see `Triplestore::serialize_triples_remote`.
+    pub fn serialize_triples_remote(
+        &mut self,
+        location: &RemoteLocation,
+        raw_db: bool,
+        single_file: bool,
+    ) -> Result<(), MaplibError> {
+        self.triplestore
+            .serialize_triples_remote(location, raw_db, single_file, None)?;
+        Ok(())
+    }
+
+    /// Deserializes a model from object storage, see `Triplestore::deserialize_triples_remote`.
+    pub fn deserialize_triples_remote(
+        url: &str,
+        options: &RemoteOptions,
+        storage: StorageOptions,
+    ) -> Result<Self, MaplibError> {
+        let triplestore = Triplestore::deserialize_triples_remote(url, options, storage)?;
+        Ok(Self::from_triplestore(triplestore))
+    }
+
     pub fn deserialize_triples(path: &Path, storage: StorageOptions) -> Result<Self, MaplibError> {
         let triplestore = Triplestore::deserialize_triples(path, storage)?;
-        Ok(Model {
+        Ok(Self::from_triplestore(triplestore))
+    }
+
+    fn from_triplestore(triplestore: Triplestore) -> Self {
+        Model {
             blank_node_counter: 0,
             template_dataset: Default::default(),
             triplestore,
             indexing: Default::default(),
             prefixes: Default::default(),
             chrontext_settings: None,
-        })
+        }
     }
 
     pub fn add_udf(

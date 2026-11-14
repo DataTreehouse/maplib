@@ -9,6 +9,7 @@ pyo3 = ["utils/pyo3"]
 
 [dependencies]
 utils = { path = "../utils" }
+file_io = { path = "../file_io" }
 spargebra = { path = "../spargebra" }
 disk = { path = "../disk" }
 in_memory = { path = "../in_memory" }

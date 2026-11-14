@@ -1,3 +1,4 @@
+use file_io::remote::is_remote;
 use crate::error::PyMaplibError;
 use crate::mutexes::{
     add_graph_mutex, add_prefixes_mutex, add_template_mutex, add_udf_mutex,
@@ -72,7 +73,7 @@ impl PyModel {
         storage_folder: Option<PathBuf>,
         storage: Option<String>,
     ) -> PyResult<PyModel> {
-        let storage = storage_options(storage, storage_folder)?;
+        let storage = storage_options_from(storage, storage_folder)?;
         let indexing = if let Some(indexing_options) = indexing_options {
             Some(indexing_options.inner)
         } else {
@@ -808,6 +809,7 @@ impl PyModel {
         known_contexts=None,
         geo=None,
         strict=false,
+        storage_options=None,
     ))]
     #[instrument(skip_all)]
     fn read(
@@ -824,8 +826,10 @@ impl PyModel {
         known_contexts: Option<HashMap<String, String>>,
         geo: Option<bool>,
         strict: bool,
+        storage_options: Option<HashMap<String, String>>,
     ) -> PyResult<()> {
         let source = ReadSource::extract(file_path)?;
+        let storage_options = storage_options.unwrap_or_default();
         py.detach(move || {
             let mut inner = self.inner.write().unwrap();
             read_mutex(
@@ -841,18 +845,25 @@ impl PyModel {
                 known_contexts.unwrap_or_default(),
                 geo.unwrap_or(false),
                 strict,
+                &storage_options,
             )
         })
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[pyo3(signature = (file_path))]
+    #[pyo3(signature = (file_path, storage_options=None))]
     #[instrument(skip_all)]
-    fn read_template(&self, py: Python<'_>, file_path: &Bound<'_, PyAny>) -> PyResult<()> {
+    fn read_template(
+        &self,
+        py: Python<'_>,
+        file_path: &Bound<'_, PyAny>,
+        storage_options: Option<HashMap<String, String>>,
+    ) -> PyResult<()> {
         let file_path = file_path.str()?.to_string();
+        let storage_options = storage_options.unwrap_or_default();
         py.detach(move || {
             let mut inner = self.inner.write().unwrap();
-            read_template_mutex(&mut inner, file_path)
+            read_template_mutex(&mut inner, file_path, &storage_options)
         })
     }
 
@@ -934,7 +945,7 @@ impl PyModel {
         })
     }
 
-    #[pyo3(signature = (file_path, format=None, graph=None, prefixes=None))]
+    #[pyo3(signature = (file_path, format=None, graph=None, prefixes=None, storage_options=None))]
     #[instrument(skip_all)]
     fn write(
         &self,
@@ -943,14 +954,16 @@ impl PyModel {
         format: Option<String>,
         graph: Option<Bound<'_, PyAny>>,
         prefixes: Option<Bound<'_, PyAny>>,
+        storage_options: Option<HashMap<String, String>>,
     ) -> PyResult<()> {
         let target = WriteTarget::extract(file_path)?;
         let prefixes = create_prefix_map(prefixes)?;
         let graph = GraphArg::extract(graph.as_ref())?;
+        let storage_options = storage_options.unwrap_or_default();
 
         py.detach(move || {
             let inner = self.inner.read().unwrap();
-            write_triples_mutex(&inner, target, format, graph, prefixes)
+            write_triples_mutex(&inner, target, format, graph, prefixes, &storage_options)
         })
     }
 
@@ -974,7 +987,8 @@ impl PyModel {
 
     #[pyo3(signature = (
         file_path, profile_graph, model_iri=None, version=None, description=None, created=None,
-        scenario_time=None, modeling_authority_set=None, prefixes=None, graph=None))]
+        scenario_time=None, modeling_authority_set=None, prefixes=None, graph=None,
+        storage_options=None))]
     #[instrument(skip_all)]
     fn write_cim_xml(
         &self,
@@ -989,9 +1003,11 @@ impl PyModel {
         modeling_authority_set: Option<String>,
         prefixes: Option<Bound<'_, PyAny>>,
         graph: Option<String>,
+        storage_options: Option<HashMap<String, String>>,
     ) -> PyResult<()> {
         let target = WriteTarget::extract(file_path)?;
         let use_prefixes = create_prefix_map(prefixes)?.unwrap_or(Default::default());
+        let storage_options = storage_options.unwrap_or_default();
 
         py.detach(move || {
             let mut inner = self.inner.write().unwrap();
@@ -1007,6 +1023,7 @@ impl PyModel {
                 modeling_authority_set,
                 use_prefixes,
                 graph,
+                &storage_options,
             )
         })
     }
@@ -1141,34 +1158,45 @@ impl PyModel {
         })
     }
 
-    #[pyo3(signature = (path = PathBuf::from("./model.maplib"), raw_db = false, single_file = true))]
+    #[pyo3(signature = (path = PathBuf::from("./model.maplib"), raw_db = false, single_file = true, storage_options = None))]
     fn serialize(
         &self,
         py: Python<'_>,
         path: PathBuf,
         raw_db: bool,
         single_file: bool,
+        storage_options: Option<HashMap<String, String>>,
     ) -> PyResult<()> {
+        let storage_options = storage_options.unwrap_or_default();
         py.detach(move || {
             let mut inner = self.inner.write().unwrap();
-            serialize_triples_mutex(&mut inner, path.as_ref(), raw_db, single_file)
+            serialize_triples_mutex(&mut inner, path.as_ref(), raw_db, single_file, &storage_options)
         })
     }
 
     #[instrument(skip_all)]
     #[staticmethod]
-    #[pyo3(signature = (path = PathBuf::from("./model.maplib"), storage_folder=None, storage=None))]
+    #[pyo3(signature = (path = PathBuf::from("./model.maplib"), storage_folder=None, storage=None, storage_options=None, cache_size=None))]
     fn deserialize(
         py: Python<'_>,
         path: PathBuf,
         storage_folder: Option<PathBuf>,
         storage: Option<String>,
+        storage_options: Option<HashMap<String, String>>,
+        cache_size: Option<u64>,
     ) -> PyResult<Self> {
-        let storage = storage_options(storage, storage_folder)?;
+        let storage = storage_options_from(storage, storage_folder)?;
+        let remote_options = storage_options.unwrap_or_default();
+        if let Some(cache_size) = cache_size {
+            triplestore::storage::remote_segments::set_cache_limit(Some(cache_size));
+        }
 
         let inner: Result<InnerModel, PyMaplibError> = py.detach(move || {
-            let inner =
-                InnerModel::deserialize_triples(&path, storage).map_err(PyMaplibError::from)?;
+            let inner = match path.to_str().filter(|p| is_remote(p)) {
+                Some(url) => InnerModel::deserialize_triples_remote(url, &remote_options, storage),
+                None => InnerModel::deserialize_triples(&path, storage),
+            }
+            .map_err(PyMaplibError::from)?;
             Ok(inner)
         });
         Ok(PyModel::from_inner_mapping(inner?))
@@ -1343,7 +1371,7 @@ fn path_to_string(path: PathBuf) -> String {
 
 /// Resolves the `storage` and `storage_folder` arguments of `Model`, raising `ValueError` on an
 /// unknown storage mode or a mode that does not fit the folder argument.
-fn storage_options(
+fn storage_options_from(
     storage: Option<String>,
     storage_folder: Option<PathBuf>,
 ) -> PyResult<StorageOptions> {

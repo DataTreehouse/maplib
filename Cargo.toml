@@ -100,6 +100,10 @@ rust_decimal = "1.42.1"
 range-set-blaze = "0.8.0"
 reqwest = { version = "0.13.5", features = ["query", "json", "rustls-no-provider"] }
 tokio = { version = "1.54.1" }
+object_store = { version = "0.14.2", features = ["gcp", "azure", "aws", "http", "fs"] }
+futures = "0.3.31"
+bytes = "1.10.1"
+url = "2.5.4"
 
 [profile.release]
 lto = "fat"

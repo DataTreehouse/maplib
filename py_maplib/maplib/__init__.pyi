@@ -635,6 +635,20 @@ class Model:
 
     >>> m = Model(storage="disk", storage_folder="maplib_disk")
 
+    Object storage: read, read_template, write, write_cim_xml, serialize and deserialize also take URLs of
+    Google Cloud Storage (gs://bucket/path), Azure Blob Storage (az://container/path, abfss://container@account.dfs.core.windows.net/path
+    or https://account.blob.core.windows.net/container/path), Amazon S3 (s3://bucket/path), HTTP(S) and file://.
+    Credentials are found as the cloud SDKs find them: from the environment (e.g. GOOGLE_APPLICATION_CREDENTIALS,
+    AZURE_STORAGE_ACCOUNT_NAME and AZURE_STORAGE_ACCOUNT_KEY or AZURE_STORAGE_SAS_KEY, AWS_ACCESS_KEY_ID), and on cloud
+    machines from the metadata server or managed identity. They can be given with storage_options, using the option names of
+    Polars' storage_options (the object_store crate), e.g. {"google_service_account": "/path/key.json"} or
+    {"azure_storage_account_name": "acc", "azure_storage_use_emulator": "true"}. Files that are read are downloaded to the
+    system temporary folder first (set TMPDIR to change it), and files that are written are uploaded as they are written;
+    the object appears when the write completes.
+
+    >>> m.read("gs://my-bucket/data/triples.ttl")
+    >>> m.write("az://my-container/out/triples.nt")
+
     :param indexing_options: options for indexing
     :param storage_folder: folder for on-disk storage, required for the hybrid and disk storage modes
     :param storage: "memory", "hybrid" or "disk". Defaults to "hybrid" when a storage folder is given,
@@ -649,7 +663,7 @@ class Model:
     ) -> "Model": ...
 
     def serialize(self, path: Union[Path, str] = "./model.maplib", raw_db: bool = False,
-                  single_file: bool = True):
+                  single_file: bool = True, storage_options: Dict[str, str] = None):
         """
         Serialization of named graphs in the Model object.
         The triple tables and the dictionaries of IRIs and literals are written as parquet files,
@@ -666,12 +680,25 @@ class Model:
                        them in place instead of building the databases, which is much faster.
         :param single_file: Write a single file. With False, a folder of parquet files (and DuckDB databases)
                             is written instead.
+        :param storage_options: Options for object storage URLs, such as credentials, see the Model class documentation.
+
+        The path can be a URL of object storage, see the Model class documentation, e.g. gs://bucket/models/model.maplib.
+        A single file is written locally (next to the storage folder of the model, or in the system temporary folder)
+        and uploaded; the object appears whole when the upload is complete. With single_file=False, the folder is written
+        to a new generation folder under the URL (gen-<time>-<id>/), which is then published by replacing the object
+        LATEST under the URL with its name. Readers see either the previous or the new model, never a mix. If another
+        writer published a model to the URL after this serialization started, it fails instead of replacing it. The
+        current and the previous generation are kept, older ones are deleted.
+
+        >>> m.serialize("gs://my-bucket/models/model", single_file=False, raw_db=True)
         """
 
     @staticmethod
     def deserialize(path: Union[Path, str] = "./model.maplib",
                     storage_folder: Union[Path, str] = None,
-                    storage: LiteralType["memory", "hybrid", "disk"] = None) -> "Model":
+                    storage: LiteralType["memory", "hybrid", "disk"] = None,
+                    storage_options: Dict[str, str] = None,
+                    cache_size: int = None) -> "Model":
         """
         Deserialization of serialized graphs
 
@@ -682,7 +709,23 @@ class Model:
         :param storage_folder: The target path and folder name where the deserialized triples should be stored
         :param storage: "memory", "hybrid" or "disk", see Model. Defaults to "hybrid" when a storage folder
                         is given, and "memory" otherwise.
+        :param storage_options: Options for object storage URLs, such as credentials, see the Model class documentation.
+        :param cache_size: The most bytes of triple tables downloaded from object storage to keep in storage folders
+                           with disk storage, for all models of the process. 0 keeps them all, and None leaves the
+                           limit as it is (by default no limit, or the environment variable MAPLIB_REMOTE_CACHE_BYTES).
         :return: A model.
+
+        The path can be a URL of object storage, see the Model class documentation: a single file, which is downloaded,
+        or a folder written by serialize with single_file=False. With storage="disk", the triple tables of a folder are not
+        downloaded when it is deserialized, but when they are first read, into the storage folder. With a cache_size, the
+        least recently read tables are removed from the storage folder when the downloaded tables take more space, and
+        downloaded again when they are read. Tables read in the last five minutes are kept, so the cache can be larger
+        than cache_size for a while. Triples added to the model are kept locally until it is serialized again. The
+        dictionaries of IRIs and literals are downloaded when deserializing; serialize with raw_db=True so that they are
+        used as they are with hybrid and disk storage.
+
+        >>> m = Model.deserialize("gs://my-bucket/models/model", storage="disk",
+        ...                       storage_folder="/mnt/nvme/maplib", cache_size=200 * 2**30)
         """
 
     def add_template(self, template: Union["Template", str]):
@@ -1180,9 +1223,11 @@ class Model:
             known_contexts: Dict[str, str] = None,
             geo: bool = False,
             strict: bool = False,
+            storage_options: Dict[str, str] = None,
     ) -> None:
         """
-        Reads triples from a file path, from bytes in memory or from a file-like object.
+        Reads triples from a file path, a URL of object storage (see the Model class documentation),
+        bytes in memory or a file-like object.
         You can specify the format, or it will be derived using file extension, e.g. filename.ttl or filename.nt.
         For bytes and file-like objects the format must be given, except for HDT, which is detected.
         Read into graph=TRANSIENT_GRAPH if you only want the triples to be available for further querying and
@@ -1211,20 +1256,25 @@ class Model:
                     LINESTRING or POLYGON (closed rings), ordered by cim:PositionPoint.sequenceNumber. EPSG:4326 coordinates
                     are written in the GeoSPARQL default CRS84 (longitude latitude), other CRSs get their CRS IRI in the WKT literal.
         :param strict: Raise an error if a literal cannot be parsed as its datatype, e.g. "abc"^^xsd:integer. By default such triples are dropped and a warning is logged.
+        :param storage_options: Options for object storage URLs, such as credentials, e.g.
+            {"azure_storage_account_name": ..., "azure_storage_account_key": ...}. See the Model class documentation.
         """
 
     def read_template(
             self,
             file_path: Union[str, Path],
+            storage_options: Dict[str, str] = None,
     ) -> None:
         """
-        Reads template(s) from a file path.
+        Reads template(s) from a file path, or a URL of object storage (see the Model class documentation).
 
         Usage:
 
         >>> m.read_template("templates.ttl")
 
         :param file_path: The path of the file containing templates in stOTTR format
+        :param storage_options: Options for object storage URLs, such as credentials, e.g.
+            {"azure_storage_account_name": ..., "azure_storage_account_key": ...}. See the Model class documentation.
         """
 
     def reads(
@@ -1278,9 +1328,10 @@ class Model:
             modeling_authority_set: str = None,
             prefixes: Dict[str, str] = None,
             graph: str = None,
+            storage_options: Dict[str, str] = None,
     ) -> None:
         """
-        Write the legacy CIM XML format.
+        Write the legacy CIM XML format, to a file path or a URL of object storage (see the Model class documentation).
 
         >>> PROFILE_GRAPH = "urn:graph:profiles"
         >>> m = Model()
@@ -1307,6 +1358,8 @@ class Model:
         :param modeling_authority_set: model_iri md:Model.modelingAuthoritySet modeling_authority_set .
         :param prefixes: Prefixes to be used in XML export.
         :param graph: The graph to write, defaults to the default graph.
+        :param storage_options: Options for object storage URLs, such as credentials, e.g.
+            {"azure_storage_account_name": ..., "azure_storage_account_key": ...}. See the Model class documentation.
         """
 
     def write(
@@ -1315,9 +1368,12 @@ class Model:
             format: LiteralType["ntriples", "turtle", "trig", "nquads", "rdf/xml", "json-ld", "hdt"] = None,
             graph: Union[str, List[str]] = None,
             prefixes: Dict[str, str] = None,
+            storage_options: Dict[str, str] = None,
     ) -> None:
         """
-        Write the triples to the file path or binary file-like object specified, in the given format.
+        Write the triples to the file path, URL of object storage (see the Model class documentation) or
+        binary file-like object specified, in the given format. An object in object storage is uploaded as
+        it is written, and appears when the write completes.
 
         Usage:
 
@@ -1338,6 +1394,8 @@ class Model:
             while a single graph is written at the top level. For "trig" and "nquads", all graphs except the transient
             graph are written when this is None.
         :param prefixes: The prefixes that will be used in turtle, RDF/XML and JSON-LD serialization.
+        :param storage_options: Options for object storage URLs, such as credentials, e.g.
+            {"azure_storage_account_name": ..., "azure_storage_account_key": ...}. See the Model class documentation.
         """
 
     def write_bytes(

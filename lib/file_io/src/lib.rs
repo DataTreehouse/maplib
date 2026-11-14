@@ -75,3 +75,5 @@ pub fn scan_parquet(file_path: &Path) -> Result<LazyFrame, FileIOError> {
     )
     .map_err(FileIOError::ReadParquetError)
 }
+
+pub mod remote;

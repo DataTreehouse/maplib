@@ -11,6 +11,7 @@ pyo3 = ["dep:pyo3", "triplestore/pyo3", "shacl/pyo3", "datalog/pyo3", "cimxml_ex
 templates = { path = "../templates" }
 triplestore = { path = "../triplestore" }
 csvw = { path = "../csvw" }
+file_io = { path = "../file_io" }
 shacl = { path = "../shacl" }
 representation = { path = "../representation" }
 datalog = { path = "../datalog" }

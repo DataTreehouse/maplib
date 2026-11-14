@@ -7,3 +7,9 @@ rust-version.workspace = true
 [dependencies]
 polars = { workspace = true, features = ["parquet", "lazy"] }
 thiserror = { workspace = true }
+object_store = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread"] }
+futures = { workspace = true }
+bytes = { workspace = true }
+url = { workspace = true }
+uuid = { workspace = true }

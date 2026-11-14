@@ -1,5 +1,6 @@
 use crate::error::PyMaplibError;
-use crate::py_io::{finish_writer, ReadSource, WriteTarget};
+use crate::py_io::{open_input, ReadSource, WriteTarget};
+use file_io::remote::{is_remote, RemoteLocation, RemoteOptions};
 use crate::py_model::PyModel;
 use crate::shacl::PyValidationReport;
 use crate::{
@@ -494,6 +495,7 @@ pub(crate) fn read_mutex(
     known_contexts: HashMap<String, String>,
     geo: bool,
     strict: bool,
+    storage_options: &RemoteOptions,
 ) -> PyResult<()> {
     let graph = parse_optional_named_node(graph)?;
     let named_graph = NamedGraph::from_maybe_named_node(graph.as_ref());
@@ -507,18 +509,22 @@ pub(crate) fn read_mutex(
     let replace_graph = replace_graph.unwrap_or(false);
     let triples_batch_size = triples_batch_size.unwrap_or(DEFAULT_TRIPLES_BATCH_SIZE);
     match source {
-        ReadSource::Path(file_path) => inner.read_triples(
-            Path::new(&file_path),
-            format,
-            base_iri,
-            parallel,
-            checked,
-            strict,
-            &named_graph,
-            replace_graph,
-            triples_batch_size,
-            known_contexts,
-        ),
+        ReadSource::Path(file_path) => {
+            // A URL of object storage is downloaded to a temporary file first.
+            let input = open_input(&file_path, storage_options)?;
+            inner.read_triples(
+                input.path(),
+                format,
+                base_iri,
+                parallel,
+                checked,
+                strict,
+                &named_graph,
+                replace_graph,
+                triples_batch_size,
+                known_contexts,
+            )
+        }
         ReadSource::Bytes(data) => {
             let format = match format {
                 Some(format) => format,
@@ -567,9 +573,13 @@ fn check_geo_format(geo: bool, format: Option<&ExtendedRdfFormat>) -> PyResult<(
 /// HDT files start with the cookie of their global control information.
 const HDT_MAGIC: &[u8] = b"$HDT";
 
-pub(crate) fn read_template_mutex(inner: &mut InnerModel, file_path: String) -> PyResult<()> {
-    let path = Path::new(&file_path);
-    inner.read_template(path).map_err(PyMaplibError::from)?;
+pub(crate) fn read_template_mutex(
+    inner: &mut InnerModel,
+    file_path: String,
+    storage_options: &RemoteOptions,
+) -> PyResult<()> {
+    let input = open_input(&file_path, storage_options)?;
+    inner.read_template(input.path()).map_err(PyMaplibError::from)?;
     Ok(())
 }
 
@@ -686,15 +696,16 @@ pub(crate) fn write_triples_mutex(
     format: Option<String>,
     graph: GraphArg,
     prefixes: Option<HashMap<String, NamedNode>>,
+    storage_options: &RemoteOptions,
 ) -> PyResult<()> {
     let format = resolve_write_format(format)?;
     // A bad list of graphs fails before the target is opened, so no empty file is left.
     if let GraphArg::Many(graphs) = &graph {
         resolve_graph_list(inner, &format, graphs)?;
     }
-    let mut w = target.open()?;
+    let mut w = target.open_with(storage_options)?;
     write_to(inner, &mut w, format, graph, prefixes)?;
-    finish_writer(&mut w)
+    w.finish()
 }
 
 pub(crate) fn write_bytes_mutex(
@@ -784,6 +795,7 @@ pub(crate) fn write_cim_xml_mutex(
     modeling_authority_set: Option<String>,
     mut prefixes: HashMap<String, NamedNode>,
     graph: Option<String>,
+    storage_options: &RemoteOptions,
 ) -> PyResult<()> {
     if !prefixes.contains_key("cim") {
         prefixes.insert(
@@ -818,11 +830,11 @@ pub(crate) fn write_cim_xml_mutex(
         modeling_authority_set,
     )
     .map_err(|x| PyMaplibError::from(MaplibError::CIMXMLError(x)))?;
-    let mut w = target.open()?;
+    let mut w = target.open_with(storage_options)?;
     inner
         .write_cim_xml(&mut w, fullmodel_details, prefixes, &graph, &profile_graph)
         .map_err(PyMaplibError::from)?;
-    finish_writer(&mut w)
+    w.finish()
 }
 
 pub(crate) fn writes_mutex(
@@ -919,7 +931,15 @@ pub fn serialize_triples_mutex(
     path: &Path,
     raw_db: bool,
     single_file: bool,
+    storage_options: &RemoteOptions,
 ) -> PyResult<()> {
+    if let Some(url) = path.to_str().filter(|p| is_remote(p)) {
+        let location = RemoteLocation::parse(url, storage_options)
+            .map_err(|x| PyMaplibError::from(MaplibError::FileCreateIOError(x.into())))?;
+        return Ok(inner
+            .serialize_triples_remote(&location, raw_db, single_file)
+            .map_err(PyMaplibError::from)?);
+    }
     Ok(inner
         .serialize_triples(path, raw_db, single_file)
         .map_err(PyMaplibError::from)?)

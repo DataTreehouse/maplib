@@ -1,9 +1,11 @@
 mod deduplication;
+pub mod remote_segments;
 pub mod so_index;
 
 use crate::errors::TriplestoreError;
 use crate::storage::so_index::SubjectObjectIndex;
 use crate::IndexingOptions;
+use file_io::remote::RemoteLocation;
 use file_io::{scan_parquet, FileIOError};
 use oxrdf::vocab::xsd;
 use oxrdf::{NamedNode, NamedOrBlankNode, Term};
@@ -107,7 +109,10 @@ impl Triples {
     }
 
     /// Creates triples from serialized parquet files. In disk storage mode (`triples_folder` set)
-    /// the files are copied into the triples folder, otherwise they are read into memory.
+    /// the files are copied into the triples folder, otherwise they are read into memory. Files
+    /// in object storage with a known `height` (number of triples) are not copied in disk
+    /// storage mode, but downloaded when they are first read, see [`remote_segments`].
+    #[allow(clippy::too_many_arguments)]
     pub fn from_serialization(
         subject_object_file: SerializedFile<'_>,
         subject_object_index_df: DataFrame,
@@ -116,11 +121,13 @@ impl Triples {
         subject_type: BaseRDFNodeType,
         object_type: BaseRDFNodeType,
         triples_folder: Option<&Path>,
+        height: Option<usize>,
     ) -> Result<Self, TriplestoreError> {
         let object_indexing_enabled = object_subject_file.is_some();
-        let subject_sort = StoredTriples::from_parquet_file(subject_object_file, triples_folder)?;
+        let subject_sort =
+            StoredTriples::from_parquet_file(subject_object_file, triples_folder, height)?;
         let object_sort = object_subject_file
-            .map(|f| StoredTriples::from_parquet_file(f, triples_folder))
+            .map(|f| StoredTriples::from_parquet_file(f, triples_folder, height))
             .transpose()?;
         let height = subject_sort.height();
         let segment = TriplesSegment {
@@ -140,6 +147,15 @@ impl Triples {
             subject_object_index: None,
             triples_folder: triples_folder.map(|x| x.to_owned()),
         })
+    }
+
+    /// The number of triples.
+    pub fn len(&self) -> usize {
+        self.height
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.height == 0
     }
 
     pub fn remove_overlapping_triples_from_dataframe(
@@ -1019,18 +1035,23 @@ impl StoredTriples {
     fn from_parquet_file(
         file: SerializedFile<'_>,
         triples_folder: Option<&Path>,
+        height: Option<usize>,
     ) -> Result<Self, TriplestoreError> {
         if let Some(triples_folder) = triples_folder {
-            Ok(StoredTriples::TriplesOnDisk(Arc::new(
-                TriplesOnDisk::copy_from(file, triples_folder)?,
-            )))
+            let on_disk = match (file, height) {
+                (SerializedFile::Remote(location), Some(height)) => {
+                    TriplesOnDisk::remote(location, height, triples_folder)
+                }
+                (file, _) => TriplesOnDisk::copy_from(file, triples_folder)?,
+            };
+            Ok(StoredTriples::TriplesOnDisk(Arc::new(on_disk)))
         } else {
             let df = match file {
                 SerializedFile::Path(file) => scan_parquet(&file)
                     .map_err(TriplestoreError::FileIOError)?
                     .collect()
                     .map_err(TriplestoreError::LazyLoadError)?,
-                SerializedFile::InBundle(..) => file
+                SerializedFile::InBundle(..) | SerializedFile::Remote(..) => file
                     .read_parquet()
                     .map_err(TriplestoreError::LazyLoadError)?,
             };
@@ -1096,10 +1117,12 @@ impl TriplesInMemory {
 }
 
 /// A triple table stored as a parquet file. Shared through an `Arc` between clones of the
-/// triplestore; the file is removed when the last reference is dropped.
+/// triplestore; the file is removed when the last reference is dropped. A table in object
+/// storage is downloaded to its path when it is read, see [`remote_segments`].
 pub struct TriplesOnDisk {
     path: PathBuf,
     height: usize,
+    remote: Option<Arc<remote_segments::RemoteSegment>>,
 }
 
 impl TriplesOnDisk {
@@ -1118,7 +1141,26 @@ impl TriplesOnDisk {
             .set_parallel(true)
             .finish(&mut df)
             .map_err(|e| TriplestoreError::FileIOError(FileIOError::WriteParquetError(e)))?;
-        Ok(Self { path, height })
+        Ok(Self {
+            path,
+            height,
+            remote: None,
+        })
+    }
+
+    fn remote(location: RemoteLocation, height: usize, triples_folder: &Path) -> Self {
+        let path = Self::new_path(triples_folder);
+        Self {
+            remote: Some(remote_segments::RemoteSegment::new(location, path.clone())),
+            path,
+            height,
+        }
+    }
+
+    /// Whether the table is in object storage and has not been downloaded (or was removed
+    /// from the cache).
+    pub fn is_remote_only(&self) -> bool {
+        self.remote.as_ref().is_some_and(|r| !r.is_local())
     }
 
     fn copy_from(
@@ -1128,7 +1170,11 @@ impl TriplesOnDisk {
         let path = Self::new_path(triples_folder);
         file.copy_to(&path)
             .map_err(|e| TriplestoreError::FileIOError(FileIOError::FileCreateIOError(e)))?;
-        let mut on_disk = Self { path, height: 0 };
+        let mut on_disk = Self {
+            path,
+            height: 0,
+            remote: None,
+        };
         let height_df = on_disk
             .scan()?
             .select([polars::prelude::len()])
@@ -1146,6 +1192,11 @@ impl TriplesOnDisk {
     }
 
     fn scan(&self) -> Result<LazyFrame, TriplestoreError> {
+        if let Some(remote) = &self.remote {
+            remote
+                .ensure_local()
+                .map_err(|e| TriplestoreError::FileIOError(FileIOError::FileCreateIOError(e)))?;
+        }
         scan_parquet(&self.path).map_err(TriplestoreError::FileIOError)
     }
 
@@ -1156,6 +1207,10 @@ impl TriplesOnDisk {
 
 impl Drop for TriplesOnDisk {
     fn drop(&mut self) {
+        if self.remote.is_some() {
+            // The cached copy, if any, is removed by the RemoteSegment.
+            return;
+        }
         if let Err(e) = std::fs::remove_file(&self.path) {
             warn!("Could not remove triples file {:?}: {}", self.path, e);
         }
