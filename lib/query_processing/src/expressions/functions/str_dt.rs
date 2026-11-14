@@ -1,14 +1,62 @@
 use crate::errors::QueryProcessingError;
 use oxrdf::vocab::xsd;
 use polars::error::PolarsError;
-use polars::prelude::{col, lit, IntoColumn, LiteralValue};
+use polars::prelude::{as_struct, col, lit, Expr, IntoColumn, LiteralValue};
 use representation::cats::{maybe_decode_expr, LockedCats};
+use representation::multitype::set_struct_all_null_to_null_row;
 use representation::query_context::Context;
 use representation::solution_mapping::SolutionMappings;
-use representation::{BaseRDFNodeType, SeriesBuilder};
+use representation::{
+    literal_is_datetime, literal_time_zone, BaseRDFNodeType, RDFNodeState, SeriesBuilder,
+};
 use spargebra::algebra::{Expression, Function};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use tracing::warn;
+
+/// Parses the lexical forms of a string column as literals of the type out_dt. With an offset,
+/// only the dateTime values with that time zone offset are parsed, the others are null.
+fn parse_expr(
+    decoded_col: Expr,
+    out_dt: &BaseRDFNodeType,
+    offset: Option<Option<i16>>,
+    name: &str,
+) -> Expr {
+    let out_dt_cloned = out_dt.clone();
+    let out_polars_type = out_dt.default_input_polars_data_type();
+    let name = name.to_string();
+    decoded_col.map(
+        move |x| {
+            let mut builder = SeriesBuilder::new(&out_dt_cloned);
+            let datatype = match &out_dt_cloned {
+                BaseRDFNodeType::Literal(l, _) => Some(l.as_ref()),
+                _ => None,
+            };
+            for v in x.str()?.iter() {
+                let keep = match (v, offset, datatype) {
+                    (Some(v), Some(o), Some(dt)) => literal_time_zone(v, dt) == o,
+                    (Some(_), _, _) => true,
+                    (None, _, _) => false,
+                };
+                if let (true, Some(v)) = (keep, v) {
+                    if let Err(e) = builder.parse_literal(v, None) {
+                        warn!("Could not parse literal {}", e);
+                        return Err(PolarsError::InvalidOperation(
+                            "Error parsing literal to target type in STRDT function".into(),
+                        ));
+                    }
+                } else {
+                    builder.push_none();
+                }
+            }
+            Ok(builder.into_series(&name).into_column())
+        },
+        move |_, f| {
+            let mut field = f.clone();
+            field.dtype = out_polars_type.clone();
+            Ok(field)
+        },
+    )
+}
 
 pub fn str_dt(
     mut solution_mappings: SolutionMappings,
@@ -59,46 +107,64 @@ pub fn str_dt(
                 "STRDT second argument should be IRI"
             )));
         };
-        let out_dt = BaseRDFNodeType::Literal(dt_iri.clone(), None);
-        let out_dt_cloned = out_dt.clone();
-        let out_polars_type = out_dt.default_input_polars_data_type();
-        let outer_context_cloned = outer_context.clone();
         let decoded_col =
             maybe_decode_expr(use_base_col, &base_string, use_base_state, global_cats);
-        let expr = decoded_col.map(
-            move |x| {
-                let mut builder = SeriesBuilder::new(&out_dt_cloned.clone());
-                for v in x.str()?.iter() {
-                    if let Some(v) = v {
-                        match builder.parse_literal(v, None) {
-                            Ok(_) => {}
-                            Err(e) => {
-                                warn!("Could not parse literal {}", e);
-                                return Err(PolarsError::InvalidOperation(
-                                    "Error parsing literal to target type in STRDT function".into(),
-                                ));
-                            }
-                        }
-                    } else {
-                        builder.push_none();
-                    }
-                }
-                let series = builder.into_series(outer_context_cloned.clone().as_str());
-                Ok(series.into_column())
-            },
-            move |_, f| {
-                let mut field = f.clone();
-                field.dtype = out_polars_type.clone();
-                Ok(field)
-            },
-        );
+        // The time zone offset of a dateTime is a part of its type, so there is one type for
+        // each offset among the values.
+        let offsets: Vec<Option<i16>> = if literal_is_datetime(dt_iri.as_ref()) {
+            let df = solution_mappings
+                .mappings
+                .clone()
+                .select([decoded_col.clone().alias("lexical")])
+                .collect()
+                .map_err(|e| QueryProcessingError::BadArgument(e.to_string()))?;
+            let lexicals = df
+                .column("lexical")
+                .unwrap()
+                .str()
+                .map_err(|e| QueryProcessingError::BadArgument(e.to_string()))?
+                .clone();
+            let mut offsets: Vec<_> = lexicals
+                .iter()
+                .flatten()
+                .map(|v| literal_time_zone(v, dt_iri.as_ref()))
+                .collect::<HashSet<_>>()
+                .into_iter()
+                .collect();
+            offsets.sort();
+            offsets
+        } else {
+            vec![]
+        };
+        let (expr, state) = if offsets.len() <= 1 {
+            let offset = offsets.first().cloned().flatten();
+            let out_dt = BaseRDFNodeType::Literal(dt_iri.clone(), offset);
+            let expr = parse_expr(decoded_col, &out_dt, None, outer_context.as_str());
+            (expr, out_dt.into_default_input_rdf_node_state())
+        } else {
+            let mut fields = vec![];
+            let mut map = HashMap::new();
+            for offset in offsets {
+                let out_dt = BaseRDFNodeType::Literal(dt_iri.clone(), offset);
+                let name = out_dt.field_col_name();
+                fields.push(
+                    parse_expr(decoded_col.clone(), &out_dt, Some(offset), &name).alias(&name),
+                );
+                let cat_state = out_dt.default_input_cat_state();
+                map.insert(out_dt, cat_state);
+            }
+            let state = RDFNodeState::from_map(map);
+            (
+                set_struct_all_null_to_null_row(as_struct(fields), &state),
+                state,
+            )
+        };
         solution_mappings.mappings = solution_mappings
             .mappings
             .with_column(expr.alias(outer_context.as_str()));
-        solution_mappings.rdf_node_types.insert(
-            outer_context.as_str().to_string(),
-            out_dt.into_default_input_rdf_node_state(),
-        );
+        solution_mappings
+            .rdf_node_types
+            .insert(outer_context.as_str().to_string(), state);
     } else {
         solution_mappings.mappings = solution_mappings.mappings.with_column(
             lit(LiteralValue::untyped_null())

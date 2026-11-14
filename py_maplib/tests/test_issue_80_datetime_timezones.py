@@ -157,3 +157,53 @@ def test_issue_80_same_instant_is_not_same_term(model, datatype):
         }}"""
     )
     assert same_term.height == 0
+
+
+def test_issue_80_strdt_keeps_the_time_zone():
+    # STRDT used to give UTC instants without the offset, e.g. 2015-03-15T20:02:37
+    m = Model()
+    res = select(
+        m,
+        """PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+        SELECT ?s ?v WHERE {
+            VALUES (?s ?lex) { (<http://example.org/a> "2015-03-15T15:02:37-05:00") }
+            BIND(STRDT(?lex, xsd:dateTime) AS ?v)
+        }""",
+    )
+    assert res["http://example.org/a"]["v"] == ("2015-03-15T15:02:37-05:00", XSD + "dateTime")
+
+
+def test_issue_80_strdt_mixed_time_zones():
+    m = Model()
+    m.update(
+        """PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+        INSERT { ?s <http://example.org/p> ?v } WHERE {
+            VALUES (?s ?lex) {
+                (<http://example.org/a> "2015-03-15T15:02:37-05:00")
+                (<http://example.org/b> "2015-03-15T15:02:37+08:00")
+                (<http://example.org/c> "2015-03-15T15:02:37Z")
+                (<http://example.org/d> "2015-03-15T15:02:37")
+            }
+            BIND(STRDT(?lex, xsd:dateTime) AS ?v)
+        }"""
+    )
+    nt = m.writes(format="ntriples")
+    for s, lex in [
+        ("a", "2015-03-15T15:02:37-05:00"),
+        ("b", "2015-03-15T15:02:37+08:00"),
+        ("c", "2015-03-15T15:02:37Z"),
+        ("d", "2015-03-15T15:02:37"),
+    ]:
+        assert (
+            f'<http://example.org/{s}> <http://example.org/p> "{lex}"^^<{XSD}dateTime> .'
+            in nt
+        ), nt
+    res = select(
+        m,
+        """PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+        SELECT ?s ?tz WHERE { ?s <http://example.org/p> ?v BIND(TZ(?v) AS ?tz) }""",
+    )
+    assert res["http://example.org/a"]["tz"][0] == "-05:00"
+    assert res["http://example.org/b"]["tz"][0] == "+08:00"
+    assert res["http://example.org/c"]["tz"][0] == "Z"
+    assert res["http://example.org/d"]["tz"][0] == ""
