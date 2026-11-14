@@ -297,6 +297,7 @@ dependencies = [
  "arrow-schema",
  "arrow-select",
  "flatbuffers",
+ "zstd",
 ]
 
 [[package]]
@@ -355,6 +356,9 @@ name = "arrow-schema"
 version = "58.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8506ad465ebb9483bb6efa1e2e78a313549122c6dd67dc2f7087297b762eaede"
+dependencies = [
+ "bitflags",
+]
 
 [[package]]
 name = "arrow-select"
@@ -1275,6 +1279,7 @@ dependencies = [
  "query_processing",
  "representation",
  "reqwest",
+ "serde_json",
  "sparesults",
  "spargebra",
  "thiserror",
@@ -4038,6 +4043,7 @@ name = "representation"
 version = "0.6.10"
 dependencies = [
  "arrow",
+ "arrow-ipc",
  "chrono",
  "chrono-tz",
  "disk",
