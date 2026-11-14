@@ -9,7 +9,8 @@ use crate::model::errors::MappingError;
 use cimxml_export::export::{cim_xml_write, FullModelDetails};
 use datalog::inference::{infer, InferenceResult};
 use datalog::parser::parse_datalog_ruleset;
-use oxrdf::NamedNode;
+use cimxml_import::{cim_geometries_to_geosparql, CimPositionPoint};
+use oxrdf::{NamedNode, Term};
 use oxrdfio::RdfFormat;
 use polars::prelude::DataFrame;
 use pyo3::{Py, PyAny};
@@ -36,13 +37,20 @@ use external_sparql::{SparqlEndpoint, SparqlMethod};
 use representation::constants::OTTR_TRIPLE;
 use representation::dataset::NamedGraph;
 use representation::prefixes::get_default_prefixes;
-use representation::result::QueryResult;
+use representation::polars_to_rdf::{df_as_result, QuerySolutions};
+use representation::result::{QueryResult, QueryResultKind};
 use spargebra::term::GroundTerm;
 use tracing::instrument;
 use triplestore::errors::TriplestoreError;
 use triplestore::triples_read::ExtendedRdfFormat;
 use virtualization::python::VirtualizedPythonDatabase;
 use virtualization::{Virtualization, VirtualizedDatabase};
+
+/// CGMES 3.0 and CGMES 2.4.15 namespaces.
+const CIM_NAMESPACES: [&str; 2] = [
+    "http://iec.ch/TC57/CIM100#",
+    "http://iec.ch/TC57/2013/CIM-schema-cim16#",
+];
 
 pub struct Model {
     pub blank_node_counter: usize,
@@ -315,6 +323,101 @@ impl Model {
                 known_contexts,
             )
             .map_err(MaplibError::TriplestoreError)
+    }
+
+    /// Add GeoSPARQL geometries for the cim:Location resources in the graph, built from their
+    /// cim:PositionPoint coordinates and the CRS of their cim:CoordinateSystem.
+    #[instrument(skip_all)]
+    pub fn map_cim_geometries(&mut self, graph: &NamedGraph) -> Result<(), MaplibError> {
+        let mut points = vec![];
+        for cim in CIM_NAMESPACES {
+            let query = format!(
+                r#"PREFIX cim: <{cim}>
+SELECT ?loc ?crs ?seq ?x ?y ?z WHERE {{
+    ?pp cim:PositionPoint.Location ?loc .
+    ?pp cim:PositionPoint.xPosition ?xv .
+    ?pp cim:PositionPoint.yPosition ?yv .
+    OPTIONAL {{ ?pp cim:PositionPoint.sequenceNumber ?seqv }}
+    OPTIONAL {{ ?pp cim:PositionPoint.zPosition ?zv }}
+    OPTIONAL {{ ?loc cim:Location.CoordinateSystem ?cs . ?cs cim:CoordinateSystem.crsUrn ?crsv }}
+    FILTER(isIRI(?loc))
+    BIND(STR(?xv) AS ?x)
+    BIND(STR(?yv) AS ?y)
+    BIND(STR(?zv) AS ?z)
+    BIND(STR(?seqv) AS ?seq)
+    BIND(STR(?crsv) AS ?crs)
+}}"#
+            );
+            let res = self.query(&query, None, Some(graph), vec![], None, false, None)?;
+            let QueryResultKind::Select(sm) = res.kind else {
+                unreachable!("Should never happen")
+            };
+            let QuerySolutions {
+                variables,
+                solutions,
+            } = df_as_result(&sm, self.triplestore.global_cats.clone());
+            let idx = |name: &str| variables.iter().position(|v| v.as_str() == name);
+            let (loc_i, crs_i, seq_i, x_i, y_i, z_i) = (
+                idx("loc"),
+                idx("crs"),
+                idx("seq"),
+                idx("x"),
+                idx("y"),
+                idx("z"),
+            );
+            let get = |row: &Vec<Option<Term>>, i: Option<usize>| -> Option<String> {
+                match i.and_then(|i| row.get(i)).and_then(|t| t.as_ref()) {
+                    Some(Term::Literal(l)) => Some(l.value().to_string()),
+                    Some(Term::NamedNode(nn)) => Some(nn.as_str().to_string()),
+                    _ => None,
+                }
+            };
+            for row in &solutions {
+                let Some(Some(Term::NamedNode(location))) = loc_i.and_then(|i| row.get(i)) else {
+                    continue;
+                };
+                let (Some(x), Some(y)) = (get(row, x_i), get(row, y_i)) else {
+                    continue;
+                };
+                let sequence_number = match get(row, seq_i) {
+                    Some(s) => Some(s.trim().parse::<i64>().map_err(|_| {
+                        MaplibError::CIMGeometryError(format!(
+                            "Invalid sequence number {s} for position point of {location}"
+                        ))
+                    })?),
+                    None => None,
+                };
+                points.push(CimPositionPoint {
+                    location: location.clone(),
+                    crs_urn: get(row, crs_i),
+                    sequence_number,
+                    x,
+                    y,
+                    z: get(row, z_i),
+                });
+            }
+        }
+        if points.is_empty() {
+            return Ok(());
+        }
+        let triples =
+            cim_geometries_to_geosparql(points).map_err(MaplibError::CIMGeometryError)?;
+        let mut nt = String::new();
+        for t in triples {
+            nt.push_str(&t.to_string());
+            nt.push_str(" .\n");
+        }
+        self.reads(
+            &nt,
+            ExtendedRdfFormat::Normal(RdfFormat::NTriples),
+            None,
+            Some(false),
+            true,
+            graph,
+            false,
+            10_000_000,
+            HashMap::new(),
+        )
     }
 
     #[allow(clippy::too_many_arguments)]

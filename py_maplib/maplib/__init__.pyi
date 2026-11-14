@@ -1128,6 +1128,7 @@ class Model:
             replace_graph: bool = False,
             triples_batch_size: int = 10_000_000,
             known_contexts: Dict[str, str] = None,
+            geo: bool = False,
     ) -> None:
         """
         Reads triples from a file path.
@@ -1148,6 +1149,10 @@ class Model:
         :param replace_graph: Replace the graph with these triples? Will replace the default graph if no graph is specified.
         :param triples_batch_size: Read this many triples in each batch.
         :param known_contexts: Contexts in JSON-LD documents are resolved towards this dict.
+        :param geo: Only for format="cim/xml". Map the cim:PositionPoint coordinates of each cim:Location in the graph to GeoSPARQL:
+                    the location becomes a geo:Feature with a geo:hasGeometry / geo:hasDefaultGeometry whose geo:asWKT is a POINT,
+                    LINESTRING or POLYGON (closed rings), ordered by cim:PositionPoint.sequenceNumber. EPSG:4326 coordinates
+                    are written in the GeoSPARQL default CRS84 (longitude latitude), other CRSs get their CRS IRI in the WKT literal.
         """
 
     def read_template(
@@ -1175,6 +1180,7 @@ class Model:
             replace_graph: bool = False,
             triples_batch_size: int = 10_000_000,
             known_contexts: Dict[str, str] = None,
+            geo: bool = False,
     ) -> None:
         """
         Reads triples from a string.
@@ -1194,6 +1200,10 @@ class Model:
         :param replace_graph: Replace the graph with these triples? Will replace the default graph if no graph is specified.
         :param triples_batch_size: Number of triples to read in each batch.
         :param known_contexts: Contexts in JSON-LD documents are resolved towards this dict.
+        :param geo: Only for format="cim/xml". Map the cim:PositionPoint coordinates of each cim:Location in the graph to GeoSPARQL:
+                    the location becomes a geo:Feature with a geo:hasGeometry / geo:hasDefaultGeometry whose geo:asWKT is a POINT,
+                    LINESTRING or POLYGON (closed rings), ordered by cim:PositionPoint.sequenceNumber. EPSG:4326 coordinates
+                    are written in the GeoSPARQL default CRS84 (longitude latitude), other CRSs get their CRS IRI in the WKT literal.
         """
 
     def write_cim_xml(

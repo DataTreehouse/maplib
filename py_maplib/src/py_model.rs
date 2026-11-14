@@ -785,6 +785,7 @@ impl PyModel {
         replace_graph=None,
         triples_batch_size=None,
         known_contexts=None,
+        geo=None,
     ))]
     #[instrument(skip_all)]
     fn read(
@@ -799,6 +800,7 @@ impl PyModel {
         replace_graph: Option<bool>,
         triples_batch_size: Option<usize>,
         known_contexts: Option<HashMap<String, String>>,
+        geo: Option<bool>,
     ) -> PyResult<()> {
         let file_path = file_path.str()?.to_string();
         py.detach(move || {
@@ -814,6 +816,7 @@ impl PyModel {
                 replace_graph,
                 triples_batch_size,
                 known_contexts.unwrap_or_default(),
+                geo.unwrap_or(false),
             )
         })
     }
@@ -840,6 +843,7 @@ impl PyModel {
         replace_graph=None,
         triples_batch_size=None,
         known_contexts=None,
+        geo=None,
     ))]
     #[instrument(skip_all)]
     fn reads(
@@ -854,6 +858,7 @@ impl PyModel {
         replace_graph: Option<bool>,
         triples_batch_size: Option<usize>,
         known_contexts: Option<HashMap<String, String>>,
+        geo: Option<bool>,
     ) -> PyResult<()> {
         py.detach(|| {
             let mut inner = self.inner.lock().unwrap();
@@ -868,6 +873,7 @@ impl PyModel {
                 replace_graph,
                 triples_batch_size,
                 known_contexts.unwrap_or_default(),
+                geo.unwrap_or(false),
             )
         })
     }

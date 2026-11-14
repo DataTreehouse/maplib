@@ -544,6 +544,7 @@ pub(crate) fn read_mutex(
     replace_graph: Option<bool>,
     triples_batch_size: Option<usize>,
     known_contexts: HashMap<String, String>,
+    geo: bool,
 ) -> PyResult<()> {
     let graph = parse_optional_named_node(graph)?;
     let named_graph = NamedGraph::from_maybe_named_node(graph.as_ref());
@@ -553,6 +554,7 @@ pub(crate) fn read_mutex(
     } else {
         None
     };
+    check_geo_format(geo, format.as_ref())?;
     inner
         .read_triples(
             path,
@@ -566,6 +568,21 @@ pub(crate) fn read_mutex(
             known_contexts,
         )
         .map_err(PyMaplibError::from)?;
+    if geo {
+        inner
+            .map_cim_geometries(&named_graph)
+            .map_err(PyMaplibError::from)?;
+    }
+    Ok(())
+}
+
+fn check_geo_format(geo: bool, format: Option<&ExtendedRdfFormat>) -> PyResult<()> {
+    if geo && format != Some(&ExtendedRdfFormat::CIMXML) {
+        return Err(PyMaplibError::FunctionArgumentError(
+            "geo=True is only supported with format=\"cim/xml\"".to_string(),
+        )
+        .into());
+    }
     Ok(())
 }
 
@@ -589,6 +606,7 @@ pub(crate) fn reads_mutex(
     replace_graph: Option<bool>,
     triples_batch_size: Option<usize>,
     known_contexts: HashMap<String, String>,
+    geo: bool,
 ) -> PyResult<()> {
     let graph = parse_optional_named_node(graph)?;
     let named_graph = NamedGraph::from_maybe_named_node(graph.as_ref());
@@ -599,6 +617,7 @@ pub(crate) fn reads_mutex(
         )
         .into());
     }
+    check_geo_format(geo, Some(&format))?;
     inner
         .reads(
             s,
@@ -612,6 +631,11 @@ pub(crate) fn reads_mutex(
             known_contexts,
         )
         .map_err(PyMaplibError::from)?;
+    if geo {
+        inner
+            .map_cim_geometries(&named_graph)
+            .map_err(PyMaplibError::from)?;
+    }
     Ok(())
 }
 

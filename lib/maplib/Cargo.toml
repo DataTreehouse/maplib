@@ -14,6 +14,7 @@ shacl = { path = "../shacl" }
 representation = { path = "../representation" }
 datalog = { path = "../datalog" }
 cimxml_export = { path = "../cimxml_export" }
+cimxml_import = { path = "../cimxml_import" }
 query_processing = { path = "../query_processing" }
 chrontext = { path = "../chrontext" }
 virtualization = { path = "../virtualization" }

@@ -25,6 +25,8 @@ pub enum MaplibError {
     DatalogError(DatalogError),
     #[error(transparent)]
     CIMXMLError(CIMXMLError),
+    #[error("Error mapping CIM geometries to GeoSPARQL: {0}")]
+    CIMGeometryError(String),
     #[error("Error creating file: `{0}`")]
     FileCreateIOError(io::Error),
     #[error("Error writing parquet: `{0}`")]
