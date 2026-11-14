@@ -1,3 +1,4 @@
+import hashlib
 import pathlib
 
 import polars as pl
@@ -234,3 +235,118 @@ def test_hdt_write_is_deterministic(tmp_path):
     m.write(str(a), format="hdt")
     m.write(str(b), format="hdt")
     assert a.read_bytes() == b.read_bytes()
+
+
+
+# Real RDF data with many kinds of literals and blank nodes, from the W3C test suites: the
+# positive N-Triples syntax tests and the expected results of the Turtle evaluation tests of RDF
+# 1.1 (everything about strings: escapes, control characters, UTF-8 boundaries, language tags),
+# and the data of the SPARQL 1.1 query tests (numbers, dates, booleans, custom datatypes).
+W3C_RDF11_PATH = TESTDATA_PATH / "w3c_rdf11"
+W3C_SPARQL11_PATH = TESTDATA_PATH / "w3c_sparql11"
+# SPARQL 1.1 data files with relative IRIs, which need a base IRI to be read.
+W3C_SPARQL11_RELATIVE = {
+    "agg-empty-group-count-graph.ttl",
+    "graph-no-var.ttl",
+    "graph.ttl",
+    "clear-default.ttl",
+    "drop-default.ttl",
+    "exists-graph-variable.ttl",
+}
+
+
+def _w3c_model() -> Model:
+    m = Model()
+    for f in sorted(W3C_RDF11_PATH.glob("rdf-*/*.nt")):
+        # Skip the negative syntax tests, and test-38.nt, which no manifest uses and which
+        # escapes a surrogate pair.
+        if "-bad-" in f.name or f.name == "test-38.nt":
+            continue
+        m.read(str(f), format="ntriples")
+    for f in sorted(W3C_SPARQL11_PATH.glob("*/*.ttl")):
+        if not f.name.startswith("manifest") and f.name not in W3C_SPARQL11_RELATIVE:
+            m.read(str(f), format="turtle")
+    return m
+
+
+def _datatype_counts(m: Model) -> dict:
+    df = m.query(
+        """
+        SELECT ?dt (COUNT(*) AS ?n) WHERE {
+            ?s ?p ?o . FILTER(isLiteral(?o)) BIND(DATATYPE(?o) AS ?dt)
+        } GROUP BY ?dt
+        """
+    )
+    return dict(zip(df.get_column("dt").to_list(), df.get_column("n").to_list()))
+
+
+def _non_blank_ntriples(m: Model) -> list:
+    return sorted(
+        line for line in m.writes(format="ntriples").splitlines() if "_:" not in line
+    )
+
+
+def _blank_node_signature(m: Model, rounds: int = 6) -> list:
+    """The triples with blank nodes, with each blank node replaced by a colour from a few rounds
+    of colour refinement over its neighbourhood. Equal for isomorphic graphs whatever the blank
+    node labels, which are renamed on every read. Unlike rdflib's isomorphism check, it stays
+    fast with many blank nodes that look alike."""
+    triples = []
+    for line in m.writes(format="ntriples").splitlines():
+        if "_:" in line:
+            s, p, o = line[: -len(" .")].split(" ", 2)
+            triples.append((s, p, o))
+    blank = lambda t: t.startswith("_:")
+    colour = {t: "" for s, _, o in triples for t in (s, o) if blank(t)}
+    term = lambda t: colour[t] if blank(t) else t
+    for _ in range(rounds):
+        edges = {b: [] for b in colour}
+        for s, p, o in triples:
+            if blank(s):
+                edges[s].append(("out", p, term(o)))
+            if blank(o):
+                edges[o].append(("in", p, term(s)))
+        colour = {
+            b: hashlib.sha256(repr((colour[b], sorted(e))).encode()).hexdigest()[:16]
+            for b, e in edges.items()
+        }
+    return sorted((term(s), p, term(o)) for s, p, o in triples)
+
+
+def test_hdt_round_trip_w3c_test_data(tmp_path):
+    from polars.testing import assert_frame_equal
+
+    m = _w3c_model()
+    n = m.query("SELECT (COUNT(*) AS ?n) WHERE { ?s ?p ?o }").get_column("n")[0]
+    assert n > 900
+    counts = _datatype_counts(m)
+    assert len(counts) >= 15, counts
+    expected_triples = _non_blank_ntriples(m)
+    expected_blank = _blank_node_signature(m)
+    assert len(expected_blank) > 200
+    predicates = sorted(
+        m.query("SELECT DISTINCT ?p WHERE { ?s ?p ?o }").get_column("p").to_list()
+    )
+
+    hdt_path = tmp_path / "w3c.hdt"
+    m.write(str(hdt_path), format="hdt")
+    for batch_size in [3, 10_000_000]:
+        m2 = Model()
+        m2.read(str(hdt_path), triples_batch_size=batch_size)
+        assert _datatype_counts(m2) == counts, batch_size
+        assert _non_blank_ntriples(m2) == expected_triples, batch_size
+        assert _blank_node_signature(m2) == expected_blank, batch_size
+        # The values come back with the same native column types, per predicate.
+        for p in predicates:
+            q = f"SELECT ?s ?o WHERE {{ ?s {p} ?o FILTER(!isBlank(?s) && !isBlank(?o)) }}"
+            assert_frame_equal(
+                m.query(q).sort(["s", "o"]), m2.query(q).sort(["s", "o"]), check_exact=True
+            )
+
+    # A second generation, written from what was read, holds the same triples.
+    hdt_path2 = tmp_path / "w3c2.hdt"
+    m2.write(str(hdt_path2), format="hdt")
+    m3 = Model()
+    m3.read(str(hdt_path2))
+    assert _non_blank_ntriples(m3) == expected_triples
+    assert _blank_node_signature(m3) == expected_blank

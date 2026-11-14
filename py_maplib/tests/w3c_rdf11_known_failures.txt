@@ -1,0 +1,38 @@
+# W3C RDF 1.1 tests that maplib currently fails (used by test_w3c_rdf11.py).
+# One test id per line, optionally followed by "# reason".
+# These are marked as strict xfails: when a test starts passing, remove it from this list.
+rdf-turtle/bareword_decimal  # Numeric literals are stored as values, so the lexical form becomes canonical (e.g. "01" -> "1", "1.0"^^xsd:decimal -> "1", "1e0" -> "1.0")
+rdf-turtle/bareword_double  # Numeric literals are stored as values, so the lexical form becomes canonical (e.g. "01" -> "1", "1.0"^^xsd:decimal -> "1", "1e0" -> "1.0")
+rdf-turtle/double_lower_case_e  # Numeric literals are stored as values, so the lexical form becomes canonical (e.g. "01" -> "1", "1.0"^^xsd:decimal -> "1", "1e0" -> "1.0")
+rdf-turtle/positive_numeric  # Numeric literals are stored as values, so the lexical form becomes canonical (e.g. "01" -> "1", "1.0"^^xsd:decimal -> "1", "1e0" -> "1.0")
+rdf-turtle/numeric_with_leading_0  # Numeric literals are stored as values, so the lexical form becomes canonical (e.g. "01" -> "1", "1.0"^^xsd:decimal -> "1", "1e0" -> "1.0")
+rdf-turtle/turtle-subm-11  # Numeric literals are stored as values, so the lexical form becomes canonical (e.g. "01" -> "1", "1.0"^^xsd:decimal -> "1", "1e0" -> "1.0")
+rdf-turtle/turtle-subm-17  # Numeric literals are stored as values, so the lexical form becomes canonical (e.g. "01" -> "1", "1.0"^^xsd:decimal -> "1", "1e0" -> "1.0")
+rdf-turtle/turtle-subm-19  # Numeric literals are stored as values, so the lexical form becomes canonical (e.g. "01" -> "1", "1.0"^^xsd:decimal -> "1", "1e0" -> "1.0")
+rdf-turtle/turtle-subm-20  # Numeric literals are stored as values, so the lexical form becomes canonical (e.g. "01" -> "1", "1.0"^^xsd:decimal -> "1", "1e0" -> "1.0")
+rdf-turtle/turtle-subm-26  # Numeric literals are stored as values: decimals are canonicalized and limited to 16 fractional digits
+rdf-trig/anonymous_blank_node_graph  # GRAPH ?g does not range over graphs named by blank nodes (the quads are stored and written)
+rdf-trig/labeled_blank_node_graph  # GRAPH ?g does not range over graphs named by blank nodes (the quads are stored and written)
+rdf-trig/alternating_bnode_graphs  # GRAPH ?g does not range over graphs named by blank nodes (the quads are stored and written)
+rdf-trig/bareword_decimal  # Numeric literals are stored as values, so the lexical form becomes canonical (e.g. "01" -> "1", "1.0"^^xsd:decimal -> "1", "1e0" -> "1.0")
+rdf-trig/bareword_double  # Numeric literals are stored as values, so the lexical form becomes canonical (e.g. "01" -> "1", "1.0"^^xsd:decimal -> "1", "1e0" -> "1.0")
+rdf-trig/double_lower_case_e  # Numeric literals are stored as values, so the lexical form becomes canonical (e.g. "01" -> "1", "1.0"^^xsd:decimal -> "1", "1e0" -> "1.0")
+rdf-trig/positive_numeric  # Numeric literals are stored as values, so the lexical form becomes canonical (e.g. "01" -> "1", "1.0"^^xsd:decimal -> "1", "1e0" -> "1.0")
+rdf-trig/numeric_with_leading_0  # Numeric literals are stored as values, so the lexical form becomes canonical (e.g. "01" -> "1", "1.0"^^xsd:decimal -> "1", "1e0" -> "1.0")
+rdf-trig/trig-subm-11  # Numeric literals are stored as values, so the lexical form becomes canonical (e.g. "01" -> "1", "1.0"^^xsd:decimal -> "1", "1e0" -> "1.0")
+rdf-trig/trig-subm-17  # Numeric literals are stored as values, so the lexical form becomes canonical (e.g. "01" -> "1", "1.0"^^xsd:decimal -> "1", "1e0" -> "1.0")
+rdf-trig/trig-subm-19  # Numeric literals are stored as values, so the lexical form becomes canonical (e.g. "01" -> "1", "1.0"^^xsd:decimal -> "1", "1e0" -> "1.0")
+rdf-trig/trig-subm-20  # Numeric literals are stored as values, so the lexical form becomes canonical (e.g. "01" -> "1", "1.0"^^xsd:decimal -> "1", "1e0" -> "1.0")
+rdf-trig/trig-subm-26  # Numeric literals are stored as values: decimals are canonicalized and limited to 16 fractional digits
+rdf-xml/datatypes-test002  # An ill-typed literal ("flargh"^^xsd:integer) is dropped when reading
+rdf-xml/xml-canon-test001  # rdf:parseType="Literal" keeps the in-scope xmlns declarations in the XML literal
+rdf-xml/xml-canon-test002  # rdf:parseType="Literal" keeps the in-scope xmlns declarations in the XML literal
+rdf-turtle/LITERAL1_ascii_boundaries@rdf/xml  # XML 1.0 cannot contain these control characters, so RDF/XML cannot hold the literal
+rdf-turtle/LITERAL1_all_controls@rdf/xml  # XML 1.0 cannot contain these control characters, so RDF/XML cannot hold the literal
+rdf-turtle/LITERAL_LONG1_ascii_boundaries@rdf/xml  # XML 1.0 cannot contain these control characters, so RDF/XML cannot hold the literal
+rdf-turtle/LITERAL2_ascii_boundaries@rdf/xml  # XML 1.0 cannot contain these control characters, so RDF/XML cannot hold the literal
+rdf-turtle/LITERAL_LONG2_ascii_boundaries@rdf/xml  # XML 1.0 cannot contain these control characters, so RDF/XML cannot hold the literal
+rdf-turtle/literal_with_BACKSPACE@rdf/xml  # XML 1.0 cannot contain these control characters, so RDF/XML cannot hold the literal
+rdf-turtle/literal_with_FORM_FEED@rdf/xml  # XML 1.0 cannot contain these control characters, so RDF/XML cannot hold the literal
+rdf-turtle/literal_with_escaped_BACKSPACE@rdf/xml  # XML 1.0 cannot contain these control characters, so RDF/XML cannot hold the literal
+rdf-turtle/literal_with_escaped_FORM_FEED@rdf/xml  # XML 1.0 cannot contain these control characters, so RDF/XML cannot hold the literal
