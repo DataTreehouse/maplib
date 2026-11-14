@@ -5,6 +5,12 @@ from typing import Any, Union, List, Dict, Optional, Callable, Iterable, Literal
 import polars as pl
 from maplib.maplib import rdf
 
+DEFAULT_GRAPH: str
+"""
+The IRI that stands for the default graph wherever a graph IRI is given, e.g. in a list of graphs to write:
+m.write("out.jsonld", format="json-ld", graph=[DEFAULT_GRAPH, "http://example.com/g1"]).
+"""
+
 TRANSIENT_GRAPH: str
 """
 The IRI of the reserved graph for triples that should be available for querying, validation and reasoning,
@@ -1306,8 +1312,8 @@ class Model:
     def write(
             self,
             file_path: Union[str, Path, BinaryIO],
-            format: LiteralType["ntriples", "turtle", "trig", "nquads", "rdf/xml", "hdt"] = None,
-            graph: str = None,
+            format: LiteralType["ntriples", "turtle", "trig", "nquads", "rdf/xml", "json-ld", "hdt"] = None,
+            graph: Union[str, List[str]] = None,
             prefixes: Dict[str, str] = None,
     ) -> None:
         """
@@ -1318,21 +1324,26 @@ class Model:
         >>> m.write("my_triples.nt", format="ntriples")
         >>> with open("my_triples.hdt", "wb") as f:
         ...     m.write(f, format="hdt")
+        >>> m.write("my_dataset.jsonld", format="json-ld", graph=[DEFAULT_GRAPH, "http://example.com/g1"])
 
         :param file_path: The path of the file, or a binary file-like object: anything with a write method
             that accepts bytes, such as io.BytesIO, a file opened with "wb" or a socket file. Writes to it are
             buffered, and it is flushed but not closed. Use write_bytes to get the output as bytes.
-        :param format: One of "ntriples", "turtle", "trig", "nquads", "rdf/xml", "hdt".
+        :param format: One of "ntriples", "turtle", "trig", "nquads", "rdf/xml", "json-ld", "hdt".
             HDT is built in memory; literals with special characters are stored N-Triples-escaped, following the Rust hdt crate.
-        :param graph: The IRI of the graph to write. For "trig" and "nquads", all graphs except the transient graph
-            are written when this is None.
-        :param prefixes: The prefixes that will be used in turtle serialization.
+            JSON-LD is written as a compacted document with one node object per subject, using the prefixes in its @context.
+        :param graph: The IRI of the graph to write, or for "json-ld", "trig" and "nquads" a list of graph IRIs to write
+            as a dataset (use DEFAULT_GRAPH for the default graph); the listed graphs must exist. In JSON-LD, the default
+            graph is written at the top level and the other graphs as graph objects ({"@id": ..., "@graph": [...]}),
+            while a single graph is written at the top level. For "trig" and "nquads", all graphs except the transient
+            graph are written when this is None.
+        :param prefixes: The prefixes that will be used in turtle, RDF/XML and JSON-LD serialization.
         """
 
     def write_bytes(
             self,
-            format: LiteralType["ntriples", "turtle", "trig", "nquads", "rdf/xml", "hdt"] = None,
-            graph: str = None,
+            format: LiteralType["ntriples", "turtle", "trig", "nquads", "rdf/xml", "json-ld", "hdt"] = None,
+            graph: Union[str, List[str]] = None,
             prefixes: Dict[str, str] = None,
     ) -> bytes:
         """
@@ -1342,17 +1353,18 @@ class Model:
 
         >>> b = m.write_bytes(format="hdt")
 
-        :param format: One of "ntriples", "turtle", "trig", "nquads", "rdf/xml", "hdt".
-        :param graph: The IRI of the graph to write. For "trig" and "nquads", all graphs except the transient graph
-            are written when this is None.
-        :param prefixes: The prefixes used for turtle serialization.
+        :param format: One of "ntriples", "turtle", "trig", "nquads", "rdf/xml", "json-ld", "hdt".
+        :param graph: The IRI of the graph to write, or for "json-ld", "trig" and "nquads" a list of graph IRIs to write
+            as a dataset (use DEFAULT_GRAPH for the default graph); see write.
+            For "trig" and "nquads", all graphs except the transient graph are written when this is None.
+        :param prefixes: The prefixes used for turtle, RDF/XML and JSON-LD serialization.
         :return: The serialized triples (UTF-8 for the text formats).
         """
 
     def writes(
             self,
-            format: LiteralType["ntriples", "turtle", "trig", "nquads", "rdf/xml"] = None,
-            graph: str = None,
+            format: LiteralType["ntriples", "turtle", "trig", "nquads", "rdf/xml", "json-ld"] = None,
+            graph: Union[str, List[str]] = None,
             prefixes: Dict[str, str] = None,
     ) -> str:
         """
@@ -1362,10 +1374,11 @@ class Model:
 
         >>> s = m.writes(format="turtle")
 
-        :param format: One of "ntriples", "turtle", "trig", "nquads", "rdf/xml".
-        :param graph: The IRI of the graph to write. For "trig" and "nquads", all graphs except the transient graph
-            are written when this is None.
-        :param prefixes: The prefixes used for turtle serialization.
+        :param format: One of "ntriples", "turtle", "trig", "nquads", "rdf/xml", "json-ld".
+        :param graph: The IRI of the graph to write, or for "json-ld", "trig" and "nquads" a list of graph IRIs to write
+            as a dataset (use DEFAULT_GRAPH for the default graph); see write.
+            For "trig" and "nquads", all graphs except the transient graph are written when this is None.
+        :param prefixes: The prefixes used for turtle, RDF/XML and JSON-LD serialization.
         :return: Triples in model in the given format (potentially a large string)
         """
 

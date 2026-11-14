@@ -655,7 +655,7 @@ fn write_batch(
 ) -> PyResult<()> {
     match format {
         RdfFormat::NQuads => inner
-            .write_quads(w, graph, format, prefixes)
+            .write_quads(w, graph.map(std::slice::from_ref), format, prefixes)
             .map_err(PyMaplibError::from)?,
         RdfFormat::Turtle => {
             let use_prefixes = merge_prefixes(&inner.prefixes, prefixes);

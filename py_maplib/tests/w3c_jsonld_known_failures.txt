@@ -1,0 +1,5 @@
+# W3C JSON-LD tests that maplib currently fails (used by test_w3c_jsonld.py).
+# One test id per line, optionally followed by "# reason".
+# These are marked as strict xfails: when a test starts passing, remove it from this list.
+toRdf/te127  # Reading panics in oxjsonld: "The remote context stack is invalid" (protected terms in nested remote contexts)
+toRdf/te128  # Reading panics in oxjsonld: "The remote context stack is invalid" (protected terms in nested remote contexts)

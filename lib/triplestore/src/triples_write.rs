@@ -33,7 +33,12 @@ impl Triplestore {
         prefixes: &HashMap<String, NamedNode>,
     ) -> Result<(), TriplestoreError> {
         if matches!(format, RdfFormat::TriG | RdfFormat::NQuads) {
-            return self.write_quads(buf, format, Some(graph), prefixes);
+            return self.write_quads(buf, format, Some(std::slice::from_ref(graph)), prefixes);
+        }
+        if matches!(format, RdfFormat::JsonLd { .. }) {
+            // The graph is written as the default graph of the document. Also writes a document
+            // without triples.
+            return self.write_pretty_jsonld(buf, Some(graph), &[], prefixes);
         }
         if !self.does_graph_exist(graph) {
             return Ok(());
@@ -144,12 +149,13 @@ impl Triplestore {
     }
 
     /// Writes quads in a dataset format (TriG or N-Quads).
-    /// If graph is None, all graphs are written, the default graph first.
+    /// The given graphs that exist are written, in the given order. If graphs is None, all graphs
+    /// are written, the default graph first.
     pub fn write_quads<W: Write>(
         &self,
         buf: &mut W,
         format: RdfFormat,
-        graph: Option<&NamedGraph>,
+        graphs: Option<&[NamedGraph]>,
         prefixes: &HashMap<String, NamedNode>,
     ) -> Result<(), TriplestoreError> {
         if !matches!(format, RdfFormat::TriG | RdfFormat::NQuads) {
@@ -168,12 +174,14 @@ impl Triplestore {
                     .map_err(|e| TriplestoreError::InvalidPrefixIRI(e.to_string()))?;
             }
         }
-        let graphs: Vec<NamedGraph> = if let Some(graph) = graph {
-            if self.does_graph_exist(graph) {
-                vec![graph.clone()]
-            } else {
-                vec![]
+        let graphs: Vec<NamedGraph> = if let Some(graphs) = graphs {
+            let mut out: Vec<NamedGraph> = Vec::with_capacity(graphs.len());
+            for g in graphs {
+                if self.does_graph_exist(g) && !out.contains(g) {
+                    out.push(g.clone());
+                }
             }
+            out
         } else {
             // The transient graph is only written when asked for explicitly.
             let transient = NamedGraph::transient();
@@ -235,7 +243,7 @@ impl Triplestore {
         }
     }
 
-    pub(crate) fn does_graph_exist(&self, graph: &NamedGraph) -> bool {
+    pub fn does_graph_exist(&self, graph: &NamedGraph) -> bool {
         self.graph_triples_map.contains_key(graph)
     }
 }

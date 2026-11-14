@@ -11,8 +11,9 @@ The manifests are read with maplib and a pytest case is generated for each of:
 * ``rdft:Test{NTriples,NQuads}PositiveC14N`` - parse the action, write it as N-Triples /
   N-Quads with maplib and compare the lines with the expected canonical form.
 * Serializer round trips: for each eval test, the parsed dataset is written with maplib in
-  every format that can hold it (N-Triples, Turtle and RDF/XML only for a default graph),
-  read back, and compared with the expected result. These have the ids ``<test id>@<format>``.
+  every format that can hold it (N-Triples, Turtle, RDF/XML and HDT only for a default graph;
+  JSON-LD with the graphs of the expected result given as a list in ``graph``), read back, and
+  compared with the expected result. These have the ids ``<test id>@<format>``.
 
 Entailment tests are skipped. The dataset of a model is read back with a SPARQL query with
 JSON results, which carry triple terms and base directions, so that the eval tests do not
@@ -37,7 +38,7 @@ from typing import Dict, List, Optional
 
 import pytest
 
-from maplib import Model
+from maplib import DEFAULT_GRAPH, Model
 
 TESTS_DIR = Path(__file__).parent
 
@@ -417,9 +418,15 @@ def load_known_failures(suite: Suite) -> Dict[str, str]:
     return known
 
 
-ROUND_TRIP_FORMATS = ["ntriples", "nquads", "turtle", "trig", "rdf/xml", "hdt"]
+ROUND_TRIP_FORMATS = ["ntriples", "nquads", "turtle", "trig", "rdf/xml", "json-ld", "hdt"]
 TRIPLE_FORMATS = {"ntriples", "turtle", "rdf/xml", "hdt"}
 BINARY_FORMATS = {"hdt"}
+
+
+def dataset_graphs(quads: List[tuple]) -> List[str]:
+    """The graphs of the quads (DEFAULT_GRAPH for the default graph), to write them as a dataset."""
+    named = sorted({q[3][1] for q in quads if q[3] is not None and q[3][0] == "uri"})
+    return ([DEFAULT_GRAPH] if any(q[3] is None for q in quads) else []) + named
 
 
 def build_round_trip_params(suite: Suite):
@@ -450,13 +457,15 @@ def run_round_trip(g: Manifest, entry, out_format: str):
     if out_format in TRIPLE_FORMATS and any(q[3] is not None for q in expected):
         pytest.skip(f"{out_format} cannot hold named graphs")
     m = read_action(in_format, action)
-    written = m.write_bytes(format=out_format)
+    # JSON-LD writes the graphs it is given.
+    graph = {"graph": dataset_graphs(expected)} if out_format == "json-ld" else {}
+    written = m.write_bytes(format=out_format, **graph)
     # Writing to a file-like object gives the same document, as does writes() for text formats
     buf = io.BytesIO()
-    m.write(buf, format=out_format)
+    m.write(buf, format=out_format, **graph)
     assert buf.getvalue() == written
     if out_format not in BINARY_FORMATS:
-        assert m.writes(format=out_format).encode() == written
+        assert m.writes(format=out_format, **graph).encode() == written
     # Read back from bytes, from a file-like object and (for text formats) from a string
     readers = [
         lambda m2: m2.read(written, format=out_format),

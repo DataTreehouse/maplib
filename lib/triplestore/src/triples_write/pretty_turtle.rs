@@ -20,6 +20,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::io::Write;
 use std::sync::{Arc, LazyLock};
 
+mod jsonld;
 mod rdfxml;
 
 const STRIDE: usize = 20_000;
@@ -39,6 +40,15 @@ static PRETTY_WRITER_POOL: LazyLock<rayon::ThreadPool> = LazyLock::new(|| {
 pub(crate) enum PrettyFormat {
     Turtle,
     RdfXml,
+}
+
+/// The syntax the subject blocks are written in, with what it needs to write IRIs.
+#[derive(Clone, Copy)]
+enum PrettySyntax<'a> {
+    Turtle,
+    RdfXml(&'a rdfxml::XmlNamespaces),
+    /// With the indentation depth of the node objects.
+    JsonLd(&'a jsonld::JsonLdContext, usize),
 }
 
 #[derive(Debug, Clone)]
@@ -337,7 +347,14 @@ impl Triplestore {
         prefixes: &HashMap<String, NamedNode>,
     ) -> Result<(), TriplestoreError> {
         if let Some(map) = self.graph_triples_map.get(graph) {
-            self.write_pretty_body(writer, graph, map, prefixes, None)?;
+            self.write_pretty_body(
+                writer,
+                graph,
+                map,
+                prefixes,
+                PrettySyntax::Turtle,
+                &HashSet::new(),
+            )?;
         }
         Ok(())
     }
@@ -365,7 +382,8 @@ impl Triplestore {
             return Err(TriplestoreError::GraphDoesNotExist(graph.to_string()));
         };
 
-        let xml_namespaces = match format {
+        let write_err = |x: std::io::Error| TriplestoreError::WriteTurtleError(x.to_string());
+        match format {
             PrettyFormat::Turtle => {
                 let used = self.possibly_used_prefixes(map, prefixes)?;
                 for (k, v) in &used {
@@ -376,22 +394,161 @@ impl Triplestore {
                     writeln!(writer)
                         .map_err(|x| TriplestoreError::WriteTurtleError(x.to_string()))?;
                 }
-                None
+                self.write_pretty_body(
+                writer,
+                graph,
+                map,
+                prefixes,
+                PrettySyntax::Turtle,
+                &HashSet::new(),
+            )?;
             }
             PrettyFormat::RdfXml => {
                 let ns = rdfxml::XmlNamespaces::new(prefixes, map.keys());
-                ns.write_root_start(writer)
-                    .map_err(|x| TriplestoreError::WriteTurtleError(x.to_string()))?;
-                Some(ns)
+                ns.write_root_start(writer).map_err(write_err)?;
+                self.write_pretty_body(
+                    writer,
+                    graph,
+                    map,
+                    prefixes,
+                    PrettySyntax::RdfXml(&ns),
+                    &HashSet::new(),
+                )?;
+                rdfxml::XmlNamespaces::write_root_end(writer).map_err(write_err)?;
             }
-        };
-
-        self.write_pretty_body(writer, graph, map, prefixes, xml_namespaces.as_ref())?;
-        if xml_namespaces.is_some() {
-            rdfxml::XmlNamespaces::write_root_end(writer)
-                .map_err(|x| TriplestoreError::WriteTurtleError(x.to_string()))?;
         }
         Ok(())
+    }
+
+    /// The blank nodes that are in more than one of the graphs. Blank node labels are shared
+    /// by the graphs of a document, so these must be written with their label.
+    fn blanks_in_several_graphs(
+        &self,
+        maps: &[&HashMap<NamedNode, HashMap<(BaseRDFNodeType, BaseRDFNodeType), Triples>>],
+    ) -> Result<HashSet<u32>, TriplestoreError> {
+        let mut shared = HashSet::new();
+        if maps.len() < 2 {
+            return Ok(shared);
+        }
+        let mut seen: HashMap<u32, usize> = HashMap::new();
+        for (i, map) in maps.iter().enumerate() {
+            for m in map.values() {
+                for ((s, o), t) in m {
+                    let mut cols = vec![];
+                    if s.is_blank_node() {
+                        cols.push(SUBJECT_COL_NAME);
+                    }
+                    if o.is_blank_node() {
+                        cols.push(OBJECT_COL_NAME);
+                    }
+                    if cols.is_empty() {
+                        continue;
+                    }
+                    if let Some(lfs) = t.get_lazy_frame_slices()? {
+                        for lf in lfs {
+                            let exprs: Vec<_> = cols.iter().map(|c| col(*c)).collect();
+                            let df = lf.select(exprs).collect().unwrap();
+                            for c in &cols {
+                                for u in df.column(c).unwrap().u32().unwrap().iter().flatten() {
+                                    match seen.get(&u) {
+                                        Some(j) if *j != i => {
+                                            shared.insert(u);
+                                        }
+                                        Some(_) => {}
+                                        None => {
+                                            seen.insert(u, i);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Ok(shared)
+    }
+
+    /// Pretty JSON-LD: a compacted document with one node object per subject of `top_graph` in
+    /// the top level `@graph` (none if it is None or does not exist), followed by a graph object
+    /// (`{"@id": ..., "@graph": [...]}`) for each of `named_graphs` that exists, in order.
+    pub fn write_pretty_jsonld<W: Write>(
+        &self,
+        writer: &mut W,
+        top_graph: Option<&NamedGraph>,
+        named_graphs: &[NamedGraph],
+        prefixes: &HashMap<String, NamedNode>,
+    ) -> Result<(), TriplestoreError> {
+        let mut named = Vec::with_capacity(named_graphs.len());
+        for g in named_graphs {
+            if matches!(g, NamedGraph::DefaultGraph) {
+                return Err(TriplestoreError::UnsupportedWriteFormat(
+                    "the default graph as a named graph in JSON-LD".to_string(),
+                ));
+            }
+            if Some(g) == top_graph || named.iter().any(|(n, _)| *n == g) {
+                continue;
+            }
+            if let Some(map) = self.graph_triples_map.get(g) {
+                named.push((g, map));
+            }
+        }
+        let top = top_graph.and_then(|g| self.graph_triples_map.get(g).map(|m| (g, m)));
+
+        let all_maps: Vec<_> = top
+            .iter()
+            .chain(named.iter())
+            .map(|(_, m)| *m)
+            .collect();
+        let mut used: BTreeMap<&String, &NamedNode> = BTreeMap::new();
+        for map in &all_maps {
+            used.extend(self.possibly_used_prefixes(map, prefixes)?);
+        }
+        // An IRI starting with "<prefix name>:" (e.g. <foaf:Person>) would be read as a compact
+        // IRI, so such prefixes are left out (they only abbreviate). Where the dictionary can not
+        // tell (on disk), the prefix is kept, and such an IRI fails when it is written.
+        {
+            let cats = self.global_cats.read()?;
+            used.retain(|name, _| {
+                let scheme = format!("{name}:");
+                cats.has_string_with_prefix(&BaseRDFNodeType::IRI, &scheme) != Some(true)
+                    && !all_maps
+                        .iter()
+                        .flat_map(|m| m.keys())
+                        .any(|p| p.as_str().starts_with(&scheme))
+            });
+        }
+        let ctx = jsonld::JsonLdContext::new(used.into_iter());
+        let shared_blanks = self.blanks_in_several_graphs(&all_maps)?;
+
+        let write_err = |x: std::io::Error| TriplestoreError::WriteTurtleError(x.to_string());
+        ctx.write_start(writer).map_err(write_err)?;
+        let mut wrote_top = false;
+        if let Some((graph, map)) = top {
+            wrote_top = self.write_pretty_body(
+                writer,
+                graph,
+                map,
+                prefixes,
+                PrettySyntax::JsonLd(&ctx, jsonld::NODE_DEPTH),
+                &shared_blanks,
+            )?;
+        }
+        for (g, map) in named {
+            ctx.write_graph_start(writer, g, wrote_top)
+                .map_err(write_err)?;
+            let wrote_nodes = self.write_pretty_body(
+                writer,
+                g,
+                map,
+                prefixes,
+                PrettySyntax::JsonLd(&ctx, jsonld::GRAPH_NODE_DEPTH),
+                &shared_blanks,
+            )?;
+            jsonld::JsonLdContext::write_graph_end(writer, wrote_nodes).map_err(write_err)?;
+            wrote_top = true;
+        }
+        jsonld::JsonLdContext::write_end(writer, wrote_top).map_err(write_err)
     }
 
     /// The prefixes whose namespace starts an IRI that may be written: a predicate, a literal
@@ -459,8 +616,17 @@ impl Triplestore {
         .with_fragment_base(fragment_base);
         ns.write_root_start(writer)
             .map_err(|x| TriplestoreError::WriteTurtleError(x.to_string()))?;
+        let shared_blanks =
+            self.blanks_in_several_graphs(&maps.iter().map(|(_, m)| *m).collect::<Vec<_>>())?;
         for (graph, map) in maps {
-            self.write_pretty_body(writer, graph, map, prefixes, Some(&ns))?;
+            self.write_pretty_body(
+                writer,
+                graph,
+                map,
+                prefixes,
+                PrettySyntax::RdfXml(&ns),
+                &shared_blanks,
+            )?;
         }
         rdfxml::XmlNamespaces::write_root_end(writer)
             .map_err(|x| TriplestoreError::WriteTurtleError(x.to_string()))
@@ -472,20 +638,47 @@ impl Triplestore {
         graph: &NamedGraph,
         map: &HashMap<NamedNode, HashMap<(BaseRDFNodeType, BaseRDFNodeType), Triples>>,
         prefixes: &HashMap<String, NamedNode>,
-        xml_namespaces: Option<&rdfxml::XmlNamespaces>,
-    ) -> Result<(), TriplestoreError> {
+        syntax: PrettySyntax,
+        // Blank nodes that must be written with their label (not as [ ... ], inlined or as part
+        // of a list), e.g. as they are also used in another graph of the same document.
+        labeled_blanks: &HashSet<u32>,
+    ) -> Result<bool, TriplestoreError> {
         let prefix_replacer = PrefixReplacer::new(prefixes);
+        // JSON-LD node objects are written with a separator before each, which is dropped for the
+        // first one written.
+        let mut wrote_any = false;
+        let mut emit = |writer: &mut W, w: &[u8]| -> Result<(), TriplestoreError> {
+            let w = if !wrote_any && matches!(syntax, PrettySyntax::JsonLd(..)) {
+                w.strip_prefix(jsonld::NODE_SEPARATOR).unwrap_or(w)
+            } else {
+                w
+            };
+            wrote_any |= !w.is_empty();
+            writer
+                .write_all(w)
+                .map_err(|x| TriplestoreError::WriteTurtleError(x.to_string()))
+        };
 
         let (mut blanks_in_degree_zero, mut blanks_in_degree_one) =
             self.create_blank_in_degree_zero_and_one_sets(map)?;
         // List nodes are written separately from their other properties, so they must be
         // labeled rather than written as [ ... ] or inlined, or they would split into
         // several blank nodes.
-        for u in self.list_nodes_with_other_properties(map)? {
-            blanks_in_degree_zero.remove(&u);
-            blanks_in_degree_one.remove(&u);
+        for u in self
+            .list_nodes_with_other_properties(map)?
+            .iter()
+            .chain(labeled_blanks)
+        {
+            blanks_in_degree_zero.remove(u);
+            blanks_in_degree_one.remove(u);
         }
 
+        // The rdf:first and rdf:rest triples of these nodes are written by the lists.
+        let mut list_members = HashSet::new();
+        let mut lists_map =
+            self.create_lists_map(map, graph, &blanks_in_degree_one, &mut list_members)?;
+
+        let no_subjects = HashSet::new();
         let mut in_degree_one_blocks_map = HashMap::new();
         for (p, m) in map.iter() {
             for (k, t) in m.iter() {
@@ -493,10 +686,11 @@ impl Triplestore {
                 if !s.is_blank_node() {
                     continue;
                 }
-
-                if p.as_ref() == rdf::REST || p.as_ref() == rdf::FIRST {
-                    continue;
-                }
+                let skip_subjects = if is_list_pred_and_subject_type(p, s) {
+                    &list_members
+                } else {
+                    &no_subjects
+                };
 
                 if let Some(lfs) = t.get_lazy_frame_slices()? {
                     for lf in lfs {
@@ -509,7 +703,7 @@ impl Triplestore {
                             o,
                             self.global_cats.clone(),
                             Some(&blanks_in_degree_one),
-                            &HashSet::new(),
+                            skip_subjects,
                             &blanks_in_degree_zero,
                             &blanks_in_degree_one,
                         )?;
@@ -521,7 +715,6 @@ impl Triplestore {
             .into_iter()
             .map(|(k, v)| (k, TurtleBlockOrTermOrList::TurtleBlock(v)))
             .collect();
-        let mut lists_map = self.create_lists_map(map, graph, &blanks_in_degree_one)?;
         if let Some(lists) = &mut lists_map {
             let keys: Vec<_> = lists.keys().cloned().collect();
             for k in keys {
@@ -543,7 +736,9 @@ impl Triplestore {
         }
 
         let used_iri_subjects = HashSet::new();
-        let used_blank_subjects = in_degree_one_blocks_map.keys().cloned().collect();
+        let used_blank_subjects: HashSet<u32> = in_degree_one_blocks_map.keys().cloned().collect();
+        let used_blank_list_subjects: HashSet<u32> =
+            used_blank_subjects.union(&list_members).cloned().collect();
         let type_nn = rdf::TYPE.into_owned();
 
         // Max 2 iterations, iri and blank
@@ -585,9 +780,9 @@ impl Triplestore {
                                 from_string.as_str(),
                                 to_string.as_str(),
                                 use_used_subjects,
+                                &used_blank_list_subjects,
                                 &blanks_in_degree_zero,
                                 &blanks_in_degree_one,
-                                lists_map.is_some(),
                             );
                             r
                         })
@@ -606,7 +801,7 @@ impl Triplestore {
                                     new_map,
                                     &type_nn,
                                     &prefix_replacer,
-                                    xml_namespaces,
+                                    syntax,
                                     &in_degree_one_blocks_map,
                                     self.global_cats.clone(),
                                     &subject_type,
@@ -622,9 +817,7 @@ impl Triplestore {
                     }
                 }
                 for w in written {
-                    writer
-                        .write_all(&w)
-                        .map_err(|x| TriplestoreError::WriteTurtleError(x.to_string()))?;
+                    emit(writer, &w)?;
                 }
             }
         }
@@ -646,33 +839,20 @@ impl Triplestore {
                         (rdf::REST.into_owned(), vec![l]),
                     ]),
                 };
-                if let Some(ns) = xml_namespaces {
-                    rdfxml::write_block(
-                        writer,
-                        &turtle_block,
-                        ns,
-                        &in_degree_one_blocks_map,
-                        1,
-                        has_subject,
-                    )
-                    .map_err(|x| TriplestoreError::WriteTurtleError(x.to_string()))?;
-                } else {
-                    turtle_block
-                        .write_block(
-                            writer,
-                            &type_nn,
-                            &prefix_replacer,
-                            has_subject,
-                            &in_degree_one_blocks_map,
-                            1,
-                        )
-                        .map_err(|x| TriplestoreError::WriteTurtleError(x.to_string()))?;
-                    writeln!(writer, " .\n")
-                        .map_err(|x| TriplestoreError::WriteTurtleError(x.to_string()))?;
-                }
+                let mut w: Vec<u8> = Vec::new();
+                write_block(
+                    &mut w,
+                    &turtle_block,
+                    &type_nn,
+                    &prefix_replacer,
+                    syntax,
+                    &in_degree_one_blocks_map,
+                    has_subject,
+                )?;
+                emit(writer, &w)?;
             }
         }
-        Ok(())
+        Ok(wrote_any)
     }
 
     fn create_block_segment(
@@ -682,9 +862,11 @@ impl Triplestore {
         string_start: &str,
         string_ends: &str,
         used_subjects: &HashSet<u32>,
+        // Used instead of used_subjects for the rdf:first and rdf:rest of blank nodes: these
+        // also include the list nodes, whose rdf:first and rdf:rest are written by their list.
+        used_list_subjects: &HashSet<u32>,
         blanks_in_degree_zero: &HashSet<u32>,
         blanks_in_degree_one: &HashSet<u32>,
-        has_lists: bool,
     ) -> Result<HashMap<u32, TurtleBlock>, TriplestoreError> {
         let mut blocks_map = HashMap::new();
 
@@ -694,9 +876,11 @@ impl Triplestore {
                 if k.0.is_iri() != is_iri {
                     continue;
                 }
-                if has_lists && is_list_pred_and_subject_type(p, &k.0) {
-                    continue;
-                }
+                let used_subjects = if is_list_pred_and_subject_type(p, &k.0) {
+                    used_list_subjects
+                } else {
+                    used_subjects
+                };
 
                 let (s, o) = k;
 
@@ -728,14 +912,23 @@ impl Triplestore {
         Ok(blocks_map)
     }
 
+    /// The well-formed RDF lists with blank node list nodes, by their first node. Each list node
+    /// has one rdf:first and one rdf:rest, and the nodes after the first are only the object of
+    /// the rdf:rest of the node before (and have no other properties). The list nodes are added to
+    /// `list_members`: their rdf:first and rdf:rest triples are written by the list. The
+    /// rdf:first and rdf:rest triples of other nodes (e.g. of a list without rdf:nil, or with a
+    /// node that is referred to twice) are written as any other triples.
     fn create_lists_map(
         &self,
         map: &HashMap<NamedNode, HashMap<(BaseRDFNodeType, BaseRDFNodeType), Triples>>,
         graph: &NamedGraph,
         blank_in_degree_one_set: &HashSet<u32>,
+        list_members: &mut HashSet<u32>,
     ) -> Result<Option<HashMap<u32, TermOrList>>, TriplestoreError> {
         let mut inv_rest_blank_blank_map: HashMap<u32, Vec<u32>> = HashMap::new();
         let mut first_blank_term_map = HashMap::new();
+        let mut first_counts: HashMap<u32, usize> = HashMap::new();
+        let mut rest_counts: HashMap<u32, usize> = HashMap::new();
         let mut blank_lists_map = HashMap::new();
 
         if let Some(first_triple_map) = map.get(&rdf::FIRST.into_owned()) {
@@ -745,6 +938,9 @@ impl Triplestore {
                     if let Some(lfs) = lfs {
                         let df = concat_lfs_subject_object(lfs).collect().unwrap();
                         let subject_u32s = df.column(SUBJECT_COL_NAME).unwrap().u32().unwrap();
+                        for s in subject_u32s.iter().flatten() {
+                            *first_counts.entry(s).or_default() += 1;
+                        }
                         let os = o.default_stored_cat_state();
 
                         let to_replace_terms = if o.is_blank_node() {
@@ -847,56 +1043,65 @@ impl Triplestore {
                 ));
             }
             let su32 = sm.mappings.column(SUBJECT_COL_NAME).unwrap().u32().unwrap();
-            for u in su32.iter() {
-                if let Some(first) = first_blank_term_map.get(&u.unwrap()) {
-                    blank_lists_map.insert(u.unwrap(), TermOrList::List(vec![first.clone()]));
-                } else {
-                    return Err(TriplestoreError::BadListError(
-                        "Some list is missing rdf:first".to_string(),
-                    ));
-                }
-            }
-        } else {
-            unreachable!("Should never happen")
-        }
-        if let Some(rest_triple_map) = map.get(&rdf::REST.into_owned()) {
-            for ((s, o), v) in rest_triple_map {
-                //The last elements must already be added (see above), since o is iri rdf:nil for last elems.
-                if s.is_blank_node() && o.is_blank_node() {
+            if let Some(rest_triple_map) = map.get(&rdf::REST.into_owned()) {
+                for ((s, o), v) in rest_triple_map {
+                    if !s.is_blank_node() {
+                        continue;
+                    }
                     let lf = v.get_lazy_frame_slices()?;
                     if let Some(lfs) = lf {
                         let df = concat_lfs_subject_object(lfs).collect().unwrap();
                         let subject_u32s = df.column(SUBJECT_COL_NAME).unwrap().u32().unwrap();
-                        let object_u32s = df.column(OBJECT_COL_NAME).unwrap().u32().unwrap();
-
-                        for (s, o) in subject_u32s.iter().zip(object_u32s.iter()) {
-                            let s = s.unwrap();
-                            let o = o.unwrap();
-                            if let Some(subjects) = inv_rest_blank_blank_map.get_mut(&o) {
-                                subjects.push(s);
-                            } else {
-                                inv_rest_blank_blank_map.insert(o, vec![s]);
+                        for s in subject_u32s.iter().flatten() {
+                            *rest_counts.entry(s).or_default() += 1;
+                        }
+                        // The last nodes are found above, their rdf:rest is rdf:nil.
+                        if o.is_blank_node() {
+                            let object_u32s = df.column(OBJECT_COL_NAME).unwrap().u32().unwrap();
+                            for (s, o) in subject_u32s.iter().zip(object_u32s.iter()) {
+                                inv_rest_blank_blank_map
+                                    .entry(o.unwrap())
+                                    .or_default()
+                                    .push(s.unwrap());
                             }
                         }
                     }
                 }
             }
+            let is_list_node = |u: &u32| {
+                first_counts.get(u) == Some(&1)
+                    && rest_counts.get(u) == Some(&1)
+                    && first_blank_term_map.contains_key(u)
+            };
+            for u in su32.iter().flatten() {
+                if is_list_node(&u) {
+                    blank_lists_map.insert(
+                        u,
+                        TermOrList::List(vec![first_blank_term_map.get(&u).unwrap().clone()]),
+                    );
+                }
+            }
+            // Walk the lists from their last node towards their first. A node is inside a list
+            // (not its first node) if its only referrer is the rdf:rest of the node before.
             let mut finished_blank_lists_map = HashMap::new();
             while !blank_lists_map.is_empty() {
                 let mut new_blank_lists_map = HashMap::new();
-
                 for (blank, mut list) in blank_lists_map {
-                    if let Some(blanks) = inv_rest_blank_blank_map.get(&blank) {
-                        for blank in blanks {
-                            if let Some(first) = first_blank_term_map.get(blank) {
-                                list.push(first.clone());
-                                new_blank_lists_map.insert(*blank, list.clone());
-                            } else {
-                                return Err(TriplestoreError::BadListError(
-                                    "Some list is missing rdf:first".to_string(),
-                                ));
-                            }
+                    list_members.insert(blank);
+                    let previous = match inv_rest_blank_blank_map.get(&blank) {
+                        Some(previous)
+                            if previous.len() == 1
+                                && blank_in_degree_one_set.contains(&blank)
+                                && is_list_node(&previous[0])
+                                && !list_members.contains(&previous[0]) =>
+                        {
+                            Some(previous[0])
                         }
+                        _ => None,
+                    };
+                    if let Some(previous) = previous {
+                        list.push(first_blank_term_map.get(&previous).unwrap().clone());
+                        new_blank_lists_map.insert(previous, list);
                     } else {
                         list.reverse();
                         finished_blank_lists_map.insert(blank, list);
@@ -905,8 +1110,11 @@ impl Triplestore {
                 blank_lists_map = new_blank_lists_map;
             }
             blank_lists_map = finished_blank_lists_map;
+            if blank_lists_map.is_empty() {
+                return Ok(None);
+            }
         } else {
-            return Ok(None);
+            unreachable!("Should never happen")
         }
         // We fix the nested lists here
         let mut seen_lists = HashMap::new();
@@ -1204,7 +1412,7 @@ fn write_blocks<W: Write>(
     blocks_map: HashMap<u32, TurtleBlock>,
     type_nn: &NamedNode,
     prefix_replacer: &PrefixReplacer,
-    xml_namespaces: Option<&rdfxml::XmlNamespaces>,
+    syntax: PrettySyntax,
     in_degree_one_map: &HashMap<u32, TurtleBlockOrTermOrList>,
     global_cats: LockedCats,
     subject_dt: &BaseRDFNodeType,
@@ -1219,17 +1427,15 @@ fn write_blocks<W: Write>(
         .range(..)
         .map(|(_, k)| {
             if let Some(block) = blocks_map.get(k) {
-                if let Some(ns) = xml_namespaces {
-                    return rdfxml::write_block(writer, block, ns, in_degree_one_map, 1, true)
-                        .map_err(|x| TriplestoreError::WriteTurtleError(x.to_string()));
-                }
-                let r = block
-                    .write_block(writer, type_nn, prefix_replacer, true, in_degree_one_map, 1)
-                    .map_err(|x| TriplestoreError::WriteTurtleError(x.to_string()));
-                let replaced = r?;
-                writeln!(writer, " .\n")
-                    .map_err(|x| TriplestoreError::WriteTurtleError(x.to_string()))?;
-                Ok(replaced)
+                write_block(
+                    writer,
+                    block,
+                    type_nn,
+                    prefix_replacer,
+                    syntax,
+                    in_degree_one_map,
+                    true,
+                )
             } else {
                 Ok(vec![])
             }
@@ -1237,6 +1443,41 @@ fn write_blocks<W: Write>(
         .collect();
     let outs = out?.into_iter().flatten().collect();
     Ok(outs)
+}
+
+/// Writes a top level subject block in the given syntax. Returns the in-degree-one blank nodes it
+/// inlined.
+fn write_block<W: Write>(
+    writer: &mut W,
+    block: &TurtleBlock,
+    type_nn: &NamedNode,
+    prefix_replacer: &PrefixReplacer,
+    syntax: PrettySyntax,
+    in_degree_one_map: &HashMap<u32, TurtleBlockOrTermOrList>,
+    write_subject: bool,
+) -> Result<Vec<u32>, TriplestoreError> {
+    let r = match syntax {
+        PrettySyntax::Turtle => block
+            .write_block(
+                writer,
+                type_nn,
+                prefix_replacer,
+                write_subject,
+                in_degree_one_map,
+                1,
+            )
+            .and_then(|replaced| writeln!(writer, " .\n").map(|_| replaced)),
+        PrettySyntax::RdfXml(ns) => {
+            rdfxml::write_block(writer, block, ns, in_degree_one_map, 1, write_subject)
+        }
+        PrettySyntax::JsonLd(ctx, depth) => writer
+            .write_all(jsonld::NODE_SEPARATOR)
+            .and_then(|_| jsonld::write_indent(writer, depth))
+            .and_then(|_| {
+                jsonld::write_block(writer, block, ctx, in_degree_one_map, depth, write_subject)
+            }),
+    };
+    r.map_err(|x| TriplestoreError::WriteTurtleError(x.to_string()))
 }
 
 struct PrefixReplacer {

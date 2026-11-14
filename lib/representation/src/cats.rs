@@ -183,6 +183,16 @@ impl Cats {
         }
     }
 
+    /// Whether some string of the given type starts with `prefix`, None if this is not known
+    /// (see CatMaps::has_string_with_prefix).
+    pub fn has_string_with_prefix(&self, t: &BaseRDFNodeType, prefix: &str) -> Option<bool> {
+        if let Some(cat) = self.cat_map.get(&CatType::from_base_rdf_node_type(t)) {
+            cat.maps.has_string_with_prefix(prefix)
+        } else {
+            Some(false)
+        }
+    }
+
     pub fn compact(&mut self) {
         let _: Vec<_> = self
             .cat_map

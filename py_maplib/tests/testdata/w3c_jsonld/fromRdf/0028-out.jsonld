@@ -1,0 +1,28 @@
+[
+  {
+    "@id": "http://example.com",
+    "http://example.com/property": [
+      {
+        "@value": "string"
+      },
+      {
+        "@language": "en",
+        "@value": "hello"
+      },
+      {
+        "@value": "No",
+        "@type": "http://www.w3.org/2001/XMLSchema#boolean"
+      },
+      {
+        "@value": "AAA",
+        "@type": "http://www.w3.org/2001/XMLSchema#double"
+      },
+      {
+        "@value": {
+          "x": 1
+        },
+        "@type": "@json"
+      }
+    ]
+  }
+]

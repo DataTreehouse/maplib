@@ -1,0 +1,5 @@
+<http://example.com> <http://example.com/property> "string" .
+<http://example.com> <http://example.com/property> "hello"@en .
+<http://example.com> <http://example.com/property> "No"^^<http://www.w3.org/2001/XMLSchema#boolean> .
+<http://example.com> <http://example.com/property> "AAA"^^<http://www.w3.org/2001/XMLSchema#double> .
+<http://example.com> <http://example.com/property> "{\"x\": 1}"^^<http://www.w3.org/1999/02/22-rdf-syntax-ns#JSON> .

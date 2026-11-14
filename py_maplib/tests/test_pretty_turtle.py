@@ -204,3 +204,43 @@ def test_pretty_write_blank_node_cycles(ntriples, format):
         return sum(1 for l in lines if l[0] == l[2])
 
     assert self_loops(m2) == self_loops(m)
+
+
+@pytest.mark.parametrize("format", ["turtle", "rdf/xml", "json-ld"])
+@pytest.mark.parametrize(
+    "data",
+    [
+        # A list without rdf:nil
+        """<http://ex.com/s> <http://ex.com/p> _:a .
+        _:a <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> "a" .
+        _:a <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> _:b .
+        _:b <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> "b" .
+        """,
+        # A list whose second node is also referred to by another triple
+        """<http://ex.com/s> <http://ex.com/p> _:a .
+        <http://ex.com/t> <http://ex.com/p> _:b .
+        _:a <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> "a" .
+        _:a <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> _:b .
+        _:b <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> "b" .
+        _:b <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> <http://www.w3.org/1999/02/22-rdf-syntax-ns#nil> .
+        """,
+        # A list node with two rdf:first
+        """<http://ex.com/s> <http://ex.com/p> _:a .
+        _:a <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> "a" .
+        _:a <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> "b" .
+        _:a <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> <http://www.w3.org/1999/02/22-rdf-syntax-ns#nil> .
+        """,
+    ],
+)
+def test_pretty_writers_keep_malformed_lists(data, format):
+    m = Model()
+    m.reads(data, format="ntriples")
+    m2 = Model()
+    m2.reads(m.writes(format=format), format=format)
+    count = "SELECT (COUNT(*) AS ?n) WHERE { ?s ?p ?o }"
+    assert m2.query(count)["n"][0] == m.query(count)["n"][0]
+    lists = """
+    SELECT ?v WHERE { <http://ex.com/s> <http://ex.com/p>/<http://www.w3.org/1999/02/22-rdf-syntax-ns#first> ?v }
+    ORDER BY ?v
+    """
+    assert m2.query(lists)["v"].to_list() == m.query(lists)["v"].to_list()

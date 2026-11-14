@@ -619,14 +619,79 @@ pub(crate) fn reads_mutex(
     Ok(())
 }
 
+/// The `graph` argument of write, write_bytes and writes: one graph IRI (None for the default
+/// graph) or a list of graph IRIs to write as a dataset.
+pub(crate) enum GraphArg {
+    One(Option<String>),
+    Many(Vec<String>),
+}
+
+impl GraphArg {
+    pub(crate) fn extract(graph: Option<&Bound<'_, PyAny>>) -> PyResult<GraphArg> {
+        match graph {
+            None => Ok(GraphArg::One(None)),
+            Some(g) if g.is_none() => Ok(GraphArg::One(None)),
+            Some(g) => {
+                if let Ok(s) = g.extract::<String>() {
+                    Ok(GraphArg::One(Some(s)))
+                } else if let Ok(v) = g.extract::<Vec<String>>() {
+                    Ok(GraphArg::Many(v))
+                } else {
+                    Err(PyMaplibError::FunctionArgumentError(
+                        "graph must be a graph IRI or a list of graph IRIs".to_string(),
+                    )
+                    .into())
+                }
+            }
+        }
+    }
+}
+
+/// A list of graphs to write as a dataset: the format must be JSON-LD, TriG or N-Quads, and the
+/// graphs must exist.
+fn resolve_graph_list(
+    inner: &InnerModel,
+    format: &ExtendedRdfFormat,
+    graphs: &[String],
+) -> PyResult<(RdfFormat, Vec<NamedGraph>)> {
+    let format = match format {
+        ExtendedRdfFormat::Normal(
+            f @ (RdfFormat::JsonLd { .. } | RdfFormat::TriG | RdfFormat::NQuads),
+        ) => *f,
+        _ => {
+            return Err(PyMaplibError::FunctionArgumentError(
+                "A list of graphs can only be written in json-ld, trig or nquads".to_string(),
+            )
+            .into())
+        }
+    };
+    let mut named_graphs = Vec::with_capacity(graphs.len());
+    for g in graphs {
+        let nn = parse_named_node(g.clone())?;
+        let named_graph = NamedGraph::from_maybe_named_node(Some(&nn));
+        if !inner.triplestore.does_graph_exist(&named_graph) {
+            return Err(PyMaplibError::FunctionArgumentError(format!(
+                "The graph {named_graph} does not exist"
+            ))
+            .into());
+        }
+        named_graphs.push(named_graph);
+    }
+    Ok((format, named_graphs))
+}
+
 pub(crate) fn write_triples_mutex(
     inner: &InnerModel,
     target: WriteTarget,
     format: Option<String>,
-    graph: Option<String>,
+    graph: GraphArg,
     prefixes: Option<HashMap<String, NamedNode>>,
 ) -> PyResult<()> {
     let format = resolve_write_format(format)?;
+    // A bad list of graphs fails before the target is opened, so no empty file is left.
+    if let GraphArg::Many(graphs) = &graph {
+        resolve_graph_list(inner, &format, graphs)?;
+    }
     let mut w = target.open()?;
     write_to(inner, &mut w, format, graph, prefixes)?;
     finish_writer(&mut w)
@@ -635,7 +700,7 @@ pub(crate) fn write_triples_mutex(
 pub(crate) fn write_bytes_mutex(
     inner: &InnerModel,
     format: Option<String>,
-    graph: Option<String>,
+    graph: GraphArg,
     prefixes: Option<HashMap<String, NamedNode>>,
 ) -> PyResult<Vec<u8>> {
     let format = resolve_write_format(format)?;
@@ -663,15 +728,28 @@ fn write_to<W: Write>(
     inner: &InnerModel,
     w: &mut W,
     format: ExtendedRdfFormat,
-    graph: Option<String>,
+    graph: GraphArg,
     prefixes: Option<HashMap<String, NamedNode>>,
 ) -> PyResult<()> {
+    let graph = match graph {
+        GraphArg::Many(graphs) => {
+            let (format, graphs) = resolve_graph_list(inner, &format, &graphs)?;
+            if matches!(format, RdfFormat::JsonLd { .. }) {
+                inner.write_jsonld(w, &graphs, prefixes.as_ref())
+            } else {
+                inner.write_quads(w, Some(&graphs), format, prefixes.as_ref())
+            }
+            .map_err(PyMaplibError::from)?;
+            return Ok(());
+        }
+        GraphArg::One(graph) => graph,
+    };
     let graph = parse_optional_named_node(graph)?;
     let named_graph = NamedGraph::from_maybe_named_node(graph.as_ref());
     match format {
         ExtendedRdfFormat::Normal(format @ (RdfFormat::TriG | RdfFormat::NQuads)) => {
             // Dataset formats write all graphs unless a graph is given
-            let only_graph = graph.as_ref().map(|_| &named_graph);
+            let only_graph = graph.as_ref().map(|_| std::slice::from_ref(&named_graph));
             inner
                 .write_quads(w, only_graph, format, prefixes.as_ref())
                 .map_err(PyMaplibError::from)?;
@@ -750,7 +828,7 @@ pub(crate) fn write_cim_xml_mutex(
 pub(crate) fn writes_mutex(
     inner: &InnerModel,
     format: Option<String>,
-    graph: Option<String>,
+    graph: GraphArg,
     prefixes: Option<HashMap<String, NamedNode>>,
 ) -> PyResult<String> {
     if let Some(format) = &format {

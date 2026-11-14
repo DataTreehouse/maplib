@@ -60,7 +60,7 @@ use representation::solution_mapping::EagerSolutionMappings;
 use datalog::python::PyInferenceResult;
 use pyo3::exceptions::PyTypeError;
 use representation::cats::LockedCats;
-use representation::constants::TRANSIENT_GRAPH_IRI;
+use representation::constants::{DEFAULT_GRAPH_IRI, TRANSIENT_GRAPH_IRI};
 use representation::dataset::NamedGraph;
 use representation::debug::DebugOutputs;
 use representation::df_to_python::{df_to_py_df, fix_cats_and_multicolumns};
@@ -224,6 +224,7 @@ fn _maplib(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(memory_limit, m)?)?;
     m.add("MaplibException", py.get_type::<MaplibException>())?;
     m.add("TRANSIENT_GRAPH", TRANSIENT_GRAPH_IRI)?;
+    m.add("DEFAULT_GRAPH", DEFAULT_GRAPH_IRI)?;
     m.add(
         "FunctionArgumentException",
         py.get_type::<FunctionArgumentException>(),

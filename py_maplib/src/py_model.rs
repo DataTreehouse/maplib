@@ -7,7 +7,7 @@ use crate::mutexes::{
     map_triples_mutex, query_external_mutex, query_mutex, read_mutex, read_template_mutex,
     reads_mutex, resolve_template_mutex, serialize_triples_mutex, size_mutex, truncate_graph_mutex,
     update_mutex, validate_mutex, write_bytes_mutex, write_cim_xml_mutex, write_triples_mutex,
-    writes_mutex,
+    writes_mutex, GraphArg,
 };
 use crate::py_server::{server_error, PyServer};
 use crate::py_io::{ReadSource, WriteTarget};
@@ -941,11 +941,12 @@ impl PyModel {
         py: Python<'_>,
         file_path: &Bound<'_, PyAny>,
         format: Option<String>,
-        graph: Option<String>,
+        graph: Option<Bound<'_, PyAny>>,
         prefixes: Option<Bound<'_, PyAny>>,
     ) -> PyResult<()> {
         let target = WriteTarget::extract(file_path)?;
         let prefixes = create_prefix_map(prefixes)?;
+        let graph = GraphArg::extract(graph.as_ref())?;
 
         py.detach(move || {
             let inner = self.inner.read().unwrap();
@@ -959,10 +960,11 @@ impl PyModel {
         &self,
         py: Python<'py>,
         format: Option<String>,
-        graph: Option<String>,
+        graph: Option<Bound<'_, PyAny>>,
         prefixes: Option<Bound<'_, PyAny>>,
     ) -> PyResult<Bound<'py, PyBytes>> {
         let prefixes = create_prefix_map(prefixes)?;
+        let graph = GraphArg::extract(graph.as_ref())?;
         let out = py.detach(move || {
             let inner = self.inner.read().unwrap();
             write_bytes_mutex(&inner, format, graph, prefixes)
@@ -1015,10 +1017,11 @@ impl PyModel {
         &self,
         py: Python<'_>,
         format: Option<String>,
-        graph: Option<String>,
+        graph: Option<Bound<'_, PyAny>>,
         prefixes: Option<Bound<'_, PyAny>>,
     ) -> PyResult<String> {
         let use_prefixes = create_prefix_map(prefixes)?;
+        let graph = GraphArg::extract(graph.as_ref())?;
 
         py.detach(|| {
             let inner = self.inner.read().unwrap();

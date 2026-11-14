@@ -715,11 +715,33 @@ SELECT ?loc ?crs ?seq ?x ?y ?z WHERE {{
         Ok(())
     }
 
-    /// Writes a dataset format (TriG or N-Quads), all graphs if graph is None.
+    /// Writes the graphs as a JSON-LD dataset: the triples of the default graph (if it is one of
+    /// them) at the top level, and a graph object for each of the other graphs. Graphs that do
+    /// not exist are left out.
+    pub fn write_jsonld<W: Write>(
+        &self,
+        buffer: &mut W,
+        graphs: &[NamedGraph],
+        prefixes: Option<&HashMap<String, NamedNode>>,
+    ) -> Result<(), MaplibError> {
+        let mut use_prefixes = self.prefixes.clone();
+        if let Some(prefixes) = prefixes {
+            use_prefixes.extend(prefixes.clone());
+        }
+        let default = NamedGraph::DefaultGraph;
+        let top = graphs.contains(&default).then_some(&default);
+        let named: Vec<_> = graphs.iter().filter(|g| **g != default).cloned().collect();
+        self.triplestore
+            .write_pretty_jsonld(buffer, top, &named, &use_prefixes)
+            .map_err(MaplibError::TriplestoreError)
+    }
+
+    /// Writes a dataset format (TriG or N-Quads): the given graphs that exist, or all graphs if
+    /// graphs is None.
     pub fn write_quads<W: Write>(
         &self,
         buffer: &mut W,
-        graph: Option<&NamedGraph>,
+        graphs: Option<&[NamedGraph]>,
         rdf_format: RdfFormat,
         prefixes: Option<&HashMap<String, NamedNode>>,
     ) -> Result<(), MaplibError> {
@@ -728,7 +750,7 @@ SELECT ?loc ?crs ?seq ?x ?y ?z WHERE {{
             use_prefixes.extend(prefixes.clone());
         }
         self.triplestore
-            .write_quads(buffer, rdf_format, graph, &use_prefixes)
+            .write_quads(buffer, rdf_format, graphs, &use_prefixes)
             .map_err(MaplibError::TriplestoreError)?;
         Ok(())
     }

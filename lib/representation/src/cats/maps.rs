@@ -25,9 +25,14 @@ impl CatMaps {
     /// Whether some encoded string may start with `prefix`. On disk this is not checked, so
     /// the answer there is always true.
     pub fn may_have_string_with_prefix(&self, prefix: &str) -> bool {
+        self.has_string_with_prefix(prefix).unwrap_or(true)
+    }
+
+    /// Whether some encoded string starts with `prefix`, None if this is not known (on disk).
+    pub fn has_string_with_prefix(&self, prefix: &str) -> Option<bool> {
         match self {
-            CatMaps::InMemory(cat_maps) => cat_maps.has_string_with_prefix(prefix),
-            CatMaps::OnDisk(_) => true,
+            CatMaps::InMemory(cat_maps) => Some(cat_maps.has_string_with_prefix(prefix)),
+            CatMaps::OnDisk(_) => None,
         }
     }
 
