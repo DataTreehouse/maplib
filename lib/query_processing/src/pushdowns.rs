@@ -529,6 +529,10 @@ fn equal_literal_terms(l: &Literal) -> Option<Vec<Term>> {
         )
     } else if representation::literal_is_numeric(l.datatype()) {
         numeric_equal_terms(l)
+    } else if crate::expressions::durations::is_duration_datatype(l.datatype()) {
+        // Durations with other lexical forms and duration datatypes can be equal, e.g.
+        // "P1D"^^xsd:dayTimeDuration = "PT24H"^^xsd:dayTimeDuration.
+        None
     } else {
         Some(vec![Term::Literal(l.clone())])
     }

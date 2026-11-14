@@ -1,7 +1,10 @@
 use oxrdf::vocab::xsd;
 use oxrdf::NamedNodeRef;
 use polars::datatypes::DataType;
-use polars::prelude::{lit, when, Expr, LiteralValue, StrptimeOptions};
+use crate::expressions::durations::{cast_to_duration, is_duration_datatype};
+use polars::prelude::{
+    lit, when, Expr, Field, IntoColumn, LiteralValue, StringChunked, StrptimeOptions,
+};
 use representation::cats::{maybe_decode_expr, LockedCats};
 use representation::formatting::literal_expr_to_string;
 use representation::solution_mapping::BaseCatState;
@@ -81,6 +84,30 @@ fn cast_to_numeric(c: Expr, src: NamedNodeRef, trg: NamedNodeRef, trg_type: Data
     }
 }
 
+/// Casting to xsd:duration, xsd:yearMonthDuration and xsd:dayTimeDuration (XPath 19.1.6):
+/// invalid lexical forms are errors (null), and durations are converted to the target type.
+fn cast_to_duration_expr(c: Expr, src: NamedNodeRef, trg: NamedNodeRef) -> Expr {
+    if !(src == xsd::STRING || is_duration_datatype(src)) {
+        return null_of(DataType::String);
+    }
+    if src == trg && src != xsd::STRING {
+        return c;
+    }
+    let src = src.into_owned();
+    let trg = trg.into_owned();
+    c.cast(DataType::String).map(
+        move |x| {
+            let ca: StringChunked = x
+                .str()?
+                .iter()
+                .map(|v| v.and_then(|v| cast_to_duration(v, src.as_ref(), trg.as_ref())))
+                .collect();
+            Ok(ca.into_column())
+        },
+        |_, f| Ok(Field::new(f.name().clone(), DataType::String)),
+    )
+}
+
 pub fn cast_literal(
     mut c: Expr,
     src_bt: &BaseRDFNodeType,
@@ -92,7 +119,7 @@ pub fn cast_literal(
 ) -> Expr {
     // Works around issue where src is string and trg is string.
     // TODO: Handle state comprehensively
-    if src == xsd::STRING {
+    if src == xsd::STRING || is_duration_datatype(src) {
         c = maybe_decode_expr(c, src_bt, src_bs, global_cats);
     }
     if trg == xsd::STRING {
@@ -128,9 +155,8 @@ pub fn cast_literal(
             exact: false,
             cache: false,
         })
-    } else if src == xsd::STRING && trg == xsd::DURATION {
-        //Todo handle durations
-        c
+    } else if is_duration_datatype(trg) {
+        cast_to_duration_expr(c, src, trg)
     } else {
         c.cast(trg_type)
     }

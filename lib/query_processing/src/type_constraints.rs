@@ -1,6 +1,7 @@
 use oxrdf::vocab::xsd;
 use oxrdf::{NamedNode, Variable};
 use representation::subtypes::{is_literal_subtype, OWL_REAL};
+use crate::expressions::durations::{equal_duration_datatypes, is_duration_datatype};
 use representation::BaseRDFNodeType;
 use spargebra::algebra::{Expression, Function};
 use std::cmp::PartialEq;
@@ -159,6 +160,10 @@ pub fn equal_variable_possible_types(
                 .iter()
                 .map(|x| x.into_owned())
                 .collect()
+        } else if is_duration_datatype(l.as_ref()) {
+            // Durations are equal across duration datatypes, e.g. "P0M"^^xsd:yearMonthDuration
+            // = "PT0S"^^xsd:dayTimeDuration.
+            equal_duration_datatypes(l.as_ref())
         } else {
             vec![]
         };
@@ -177,6 +182,15 @@ pub fn datetime_datatypes() -> [oxrdf::NamedNode; 2] {
         xsd::DATE_TIME.into_owned(),
         xsd::DATE_TIME_STAMP.into_owned(),
     ]
+}
+
+fn owl_real() -> ConstraintBaseRDFNodeType {
+    ConstraintBaseRDFNodeType::Literal(NamedNode::new_unchecked(OWL_REAL))
+}
+
+fn is_numeric_constraint(t: Option<ConstraintBaseRDFNodeType>) -> bool {
+    matches!(t, Some(ConstraintBaseRDFNodeType::Literal(l))
+        if l.as_str() == OWL_REAL || representation::literal_is_numeric(l.as_ref()))
 }
 
 pub fn get_expression_rdf_type(e: &Expression) -> Option<ConstraintBaseRDFNodeType> {
@@ -199,14 +213,35 @@ pub fn get_expression_rdf_type(e: &Expression) -> Option<ConstraintBaseRDFNodeTy
         | Expression::Bound(_) => Some(ConstraintBaseRDFNodeType::Literal(
             xsd::BOOLEAN.into_owned(),
         )),
-        Expression::Add(_, _)
-        | Expression::Subtract(_, _)
-        | Expression::Multiply(_, _)
-        | Expression::Divide(_, _)
-        | Expression::UnaryPlus(_)
-        | Expression::UnaryMinus(_) => Some(ConstraintBaseRDFNodeType::Literal(
-            NamedNode::new_unchecked(OWL_REAL),
-        )),
+        // Arithmetic gives a number when it is defined on the operands, unless they are
+        // durations, dates, dateTimes or times: a number can not be added to or subtracted
+        // from these, but durations can be multiplied and divided by numbers.
+        Expression::Add(a, b) | Expression::Subtract(a, b) => {
+            if is_numeric_constraint(get_expression_rdf_type(a))
+                || is_numeric_constraint(get_expression_rdf_type(b))
+            {
+                Some(owl_real())
+            } else {
+                None
+            }
+        }
+        Expression::Multiply(a, b) => {
+            if is_numeric_constraint(get_expression_rdf_type(a))
+                && is_numeric_constraint(get_expression_rdf_type(b))
+            {
+                Some(owl_real())
+            } else {
+                None
+            }
+        }
+        Expression::Divide(a, _) => {
+            if is_numeric_constraint(get_expression_rdf_type(a)) {
+                Some(owl_real())
+            } else {
+                None
+            }
+        }
+        Expression::UnaryPlus(_) | Expression::UnaryMinus(_) => Some(owl_real()),
         //Expression::If(_, _, _) => {} todo..
         //Expression::Coalesce(_) => {} todo..
         Expression::FunctionCall(f, _args) => match f {

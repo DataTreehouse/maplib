@@ -1,5 +1,6 @@
 use crate::cats::create_compatible_cats;
-use crate::expressions::operations::compatible_operation;
+use crate::expressions::durations::{duration_equal_expr, is_duration_type, temporal_operation};
+use crate::expressions::operations::{compatible_operation, literal_parts};
 use oxrdf::NamedNodeRef;
 use polars::datatypes::DataType;
 use polars::prelude::{coalesce, col, lit, Expr, LiteralValue};
@@ -57,7 +58,7 @@ fn typed_equals_expr_impl(
     let mut exploded: Vec<_> = create_compatible_cats(
         vec![Some(col(left_col)), Some(col(right_col))],
         vec![Some(left_type.clone()), Some(right_type.clone())],
-        global_cats,
+        global_cats.clone(),
     )
     .into_iter()
     .map(|x| x.unwrap())
@@ -65,10 +66,38 @@ fn typed_equals_expr_impl(
     let left_map = exploded.remove(0);
     let right_map = exploded.remove(0);
     let mut eq: Option<Expr> = None;
+    if value_equality {
+        // Durations are equal when they have the same months and seconds, whatever their
+        // lexical forms and duration datatypes, e.g. "P1D"^^xsd:dayTimeDuration = "PT24H".
+        let right_parts = literal_parts(right_col, right_type);
+        for (le, lt, ls) in literal_parts(left_col, left_type) {
+            for (re, rt, rs) in &right_parts {
+                if let Some(new_eq) = duration_equal_expr(
+                    le.clone(),
+                    re.clone(),
+                    &lt,
+                    &ls,
+                    rt,
+                    rs,
+                    global_cats.clone(),
+                ) {
+                    eq = if let Some(eq) = eq {
+                        Some(eq.or(new_eq))
+                    } else {
+                        Some(new_eq)
+                    };
+                }
+            }
+        }
+    }
     for (lt, (les, _ls)) in left_map {
         let matching: Vec<_> = right_map
             .iter()
             .filter(|(rt, _)| {
+                if value_equality && is_duration_type(&lt) && is_duration_type(rt) {
+                    // Compared above
+                    return false;
+                }
                 *rt == &lt
                     || (value_equality
                         && (matches!((&lt, *rt),
@@ -110,85 +139,39 @@ pub fn typed_comparison_expr(
     left_type: &RDFNodeState,
     right_type: &RDFNodeState,
     expression: &Expression,
+    global_cats: LockedCats,
 ) -> Expr {
     let mut comps = vec![];
-    if left_type.is_multi() {
-        if right_type.is_multi() {
-            for lt in left_type.map.keys() {
-                for rt in right_type.map.keys() {
-                    if let BaseRDFNodeType::Literal(lt_nn, _) = lt {
-                        if let BaseRDFNodeType::Literal(rt_nn, _) = rt {
-                            comps.push(comp(
-                                col(left_col).struct_().field_by_name(&lt.field_col_name()),
-                                col(right_col).struct_().field_by_name(&rt.field_col_name()),
-                                lt_nn.as_ref(),
-                                rt_nn.as_ref(),
-                                expression,
-                            ));
-                        }
-                    }
-                }
-            }
-        } else if !right_type.is_multi() && right_type.is_literal() {
-            let rt = right_type.get_base_type().unwrap();
-            let rt_nn = if let BaseRDFNodeType::Literal(rt_nn, _) = rt {
-                rt_nn
-            } else {
+    let right_parts = literal_parts(right_col, right_type);
+    for (le, lt, ls) in literal_parts(left_col, left_type) {
+        for (re, rt, rs) in &right_parts {
+            let (BaseRDFNodeType::Literal(lt_nn, _), BaseRDFNodeType::Literal(rt_nn, _)) =
+                (&lt, rt)
+            else {
                 unreachable!("Should never happen")
             };
-            //Only left multi
-            for lt in left_type.map.keys() {
-                if let BaseRDFNodeType::Literal(lt_nn, _) = lt {
-                    comps.push(comp(
-                        col(left_col).struct_().field_by_name(&lt.field_col_name()),
-                        col(right_col),
-                        lt_nn.as_ref(),
-                        rt_nn.as_ref(),
-                        expression,
-                    ));
-                }
-            }
-        }
-    } else if right_type.is_multi() {
-        if !left_type.is_multi() && left_type.is_literal() {
-            let lt = left_type.get_base_type().unwrap();
-            let lt_nn = if let BaseRDFNodeType::Literal(lt_nn, _) = lt {
-                lt_nn
+            // yearMonthDurations, dayTimeDurations and times are compared by value
+            if let Some((e, _)) = temporal_operation(
+                le.clone(),
+                re.clone(),
+                &lt,
+                &ls,
+                rt,
+                rs,
+                expression,
+                global_cats.clone(),
+            ) {
+                comps.push(e);
             } else {
-                unreachable!("Should never happen")
-            };
-            for rt in right_type.map.keys() {
-                if let BaseRDFNodeType::Literal(rt_nn, _) = rt {
-                    comps.push(comp(
-                        col(left_col),
-                        col(right_col).struct_().field_by_name(&rt.field_col_name()),
-                        lt_nn.as_ref(),
-                        rt_nn.as_ref(),
-                        expression,
-                    ));
-                }
+                comps.push(comp(
+                    le.clone(),
+                    re.clone(),
+                    lt_nn.as_ref(),
+                    rt_nn.as_ref(),
+                    expression,
+                ));
             }
         }
-    } else if left_type.is_literal() && right_type.is_literal() {
-        let lt = left_type.get_base_type().unwrap();
-        let rt = right_type.get_base_type().unwrap();
-        let lt_nn = if let BaseRDFNodeType::Literal(lt_nn, _) = lt {
-            lt_nn
-        } else {
-            unreachable!("Should never happen")
-        };
-        let rt_nn = if let BaseRDFNodeType::Literal(rt_nn, _) = rt {
-            rt_nn
-        } else {
-            unreachable!("Should never happen")
-        };
-        comps.push(comp(
-            col(left_col),
-            col(right_col),
-            lt_nn.as_ref(),
-            rt_nn.as_ref(),
-            expression,
-        ));
     }
 
     if comps.is_empty() {

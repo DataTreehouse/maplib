@@ -1,4 +1,5 @@
 pub mod comparisons;
+pub mod durations;
 pub mod functions;
 pub mod operations;
 
@@ -393,6 +394,7 @@ pub fn binary_expression(
             left_type,
             right_type,
             expression,
+            global_cats,
         );
         solution_mappings.mappings = solution_mappings
             .mappings

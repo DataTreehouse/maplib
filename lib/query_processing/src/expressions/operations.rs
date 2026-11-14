@@ -1,8 +1,10 @@
 use crate::expressions::coalesce_expressions;
+use crate::expressions::durations::temporal_operation;
 use oxrdf::vocab::xsd;
 use oxrdf::NamedNodeRef;
 use polars::prelude::{col, lit, when, DataType, Expr, LiteralValue};
 use representation::cats::LockedCats;
+use representation::solution_mapping::BaseCatState;
 use representation::{
     literal_is_boolean, literal_is_date, literal_is_datetime, literal_is_numeric,
     literal_is_string, BaseRDFNodeType, RDFNodeState,
@@ -10,6 +12,31 @@ use representation::{
 use spargebra::algebra::Expression;
 use std::cmp;
 use std::ops::{Add, Mul, Sub};
+
+/// The literal parts of a column: the expression, type and state of the values of each literal
+/// type.
+pub(crate) fn literal_parts(
+    c: &str,
+    t: &RDFNodeState,
+) -> Vec<(Expr, BaseRDFNodeType, BaseCatState)> {
+    let mut parts = vec![];
+    if t.is_multi() {
+        for (bt, bs) in &t.map {
+            if matches!(bt, BaseRDFNodeType::Literal(..)) {
+                parts.push((
+                    col(c).struct_().field_by_name(&bt.field_col_name()),
+                    bt.clone(),
+                    bs.clone(),
+                ));
+            }
+        }
+    } else if t.is_literal() {
+        let bt = t.get_base_type().unwrap();
+        let bs = t.get_base_state().unwrap();
+        parts.push((col(c), bt.clone(), bs.clone()));
+    }
+    parts
+}
 
 pub fn typed_numerical_operation(
     left_col: &str,
@@ -20,87 +47,36 @@ pub fn typed_numerical_operation(
     global_cats: LockedCats,
 ) -> (Expr, RDFNodeState) {
     let mut ops = vec![];
-    if left_type.is_multi() {
-        if right_type.is_multi() {
-            for lt in left_type.map.keys() {
-                for rt in right_type.map.keys() {
-                    if let BaseRDFNodeType::Literal(lt_nn, _) = lt {
-                        if let BaseRDFNodeType::Literal(rt_nn, _) = rt {
-                            ops.push(op(
-                                col(left_col).struct_().field_by_name(&lt.field_col_name()),
-                                col(right_col).struct_().field_by_name(&rt.field_col_name()),
-                                lt_nn.as_ref(),
-                                rt_nn.as_ref(),
-                                expression,
-                            ));
-                        }
-                    }
-                }
-            }
-        } else if !right_type.is_multi() && right_type.is_literal() {
-            let rt = right_type.get_base_type().unwrap();
-            let rt_nn = if let BaseRDFNodeType::Literal(rt_nn, _) = rt {
-                rt_nn
-            } else {
-                unreachable!("Should never happen");
-            };
-            //Only left multi
-            for lt in left_type.map.keys() {
-                if let BaseRDFNodeType::Literal(lt_nn, _) = &lt {
-                    ops.push(op(
-                        col(left_col).struct_().field_by_name(&lt.field_col_name()),
-                        col(right_col),
-                        lt_nn.as_ref(),
-                        rt_nn.as_ref(),
-                        expression,
-                    ));
-                }
-            }
-        }
-    } else if right_type.is_multi() {
-        if !left_type.is_multi() && left_type.is_literal() {
-            let lt = left_type.get_base_type().unwrap();
-            let lt_nn = if let BaseRDFNodeType::Literal(lt_nn, _) = lt {
-                lt_nn
-            } else {
+    let right_parts = literal_parts(right_col, right_type);
+    for (le, lt, ls) in literal_parts(left_col, left_type) {
+        for (re, rt, rs) in &right_parts {
+            let (BaseRDFNodeType::Literal(lt_nn, _), BaseRDFNodeType::Literal(rt_nn, _)) =
+                (&lt, rt)
+            else {
                 unreachable!("Should never happen")
             };
-            for rt in right_type.map.keys() {
-                if let BaseRDFNodeType::Literal(rt_nn, _) = rt {
-                    ops.push(op(
-                        col(left_col),
-                        col(right_col).struct_().field_by_name(&rt.field_col_name()),
-                        lt_nn.as_ref(),
-                        rt_nn.as_ref(),
-                        expression,
-                    ));
-                }
+            // Durations, dates, dateTimes and times (XPath 8.4 and 9.7)
+            if let Some(o) = temporal_operation(
+                le.clone(),
+                re.clone(),
+                &lt,
+                &ls,
+                rt,
+                rs,
+                expression,
+                global_cats.clone(),
+            ) {
+                ops.push(o);
+            } else {
+                ops.push(op(
+                    le.clone(),
+                    re.clone(),
+                    lt_nn.as_ref(),
+                    rt_nn.as_ref(),
+                    expression,
+                ));
             }
         }
-    } else if !left_type.is_multi()
-        && left_type.is_literal()
-        && !right_type.is_multi()
-        && right_type.is_literal()
-    {
-        let lt = left_type.get_base_type().unwrap();
-        let lt_nn = if let BaseRDFNodeType::Literal(lt_nn, _) = lt {
-            lt_nn
-        } else {
-            unreachable!("Should never happen")
-        };
-        let rt = right_type.get_base_type().unwrap();
-        let rt_nn = if let BaseRDFNodeType::Literal(rt_nn, _) = rt {
-            rt_nn
-        } else {
-            unreachable!("Should never happen")
-        };
-        ops.push(op(
-            col(left_col),
-            col(right_col),
-            lt_nn.as_ref(),
-            rt_nn.as_ref(),
-            expression,
-        ));
     }
     if ops.is_empty() {
         let t = BaseRDFNodeType::None;

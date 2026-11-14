@@ -1,0 +1,807 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2010/09/qt-fots-catalog"
+          name="op-divide-dayTimeDuration">
+   <description>Tests for the divide-dayTimeDuration() function</description>
+   <link type="spec" document="http://www.w3.org/TR/xpath-functions-30/"
+         idref="func-divide-dayTimeDuration"/>
+   <test-case name="op-divide-dayTimeDuration2args-1">
+      <description>
+*******************************************************
+Test: op-divide-dayTimeDuration2args-1                  
+Written By: Carmelo Montanez                            
+Date: Tue Apr 12 16:29:08 GMT-05:00 2005                
+Purpose: Evaluates The "op:divide-dayTimeDuration" operator
+ with the arguments set as follows:                    
+$arg1 = xs:dayTimeDuration(lower bound)               
+$arg2 = xs:double(lower bound)                         
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2004-12-13"/>
+      <test>xs:dayTimeDuration("P0DT0H0M0S") div xs:double("-1.7976931348623157E308")</test>
+      <result>
+         <assert-string-value>PT0S</assert-string-value>
+      </result>
+   </test-case>
+   <test-case name="op-divide-dayTimeDuration2args-2">
+      <description>
+*******************************************************
+Test: op-divide-dayTimeDuration2args-2                  
+Written By: Carmelo Montanez                            
+Date: Tue Apr 12 16:29:08 GMT-05:00 2005                
+Purpose: Evaluates The "op:divide-dayTimeDuration" operator
+ with the arguments set as follows:                    
+$arg1 = xs:dayTimeDuration(mid range)                 
+$arg2 = xs:double(lower bound)                         
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2004-12-13"/>
+      <modified by="Michael Kay" on="2023-09-11" change="allow small values other than zero"/>
+      <test>xs:dayTimeDuration("P15DT11H59M59S") div xs:double("-1.7976931348623157E308")</test>
+      <result>
+         <assert>abs(seconds-from-duration($result)) lt 1e-100</assert>
+      </result>
+   </test-case>
+   <test-case name="op-divide-dayTimeDuration2args-3">
+      <description>
+*******************************************************
+Test: op-divide-dayTimeDuration2args-3                  
+Written By: Carmelo Montanez                            
+Date: Tue Apr 12 16:29:08 GMT-05:00 2005                
+Purpose: Evaluates The "op:divide-dayTimeDuration" operator
+ with the arguments set as follows:                    
+$arg1 = xs:dayTimeDuration(upper bound)               
+$arg2 = xs:double(lower bound)                         
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2004-12-13"/>
+      <modified by="Michael Kay" on="2023-09-11" change="allow small values other than zero"/>
+      <test>xs:dayTimeDuration("P31DT23H59M59S") div xs:double("-1.7976931348623157E308")</test>
+      <result>
+         <assert>abs(seconds-from-duration($result)) lt 1e-100</assert>
+      </result>
+   </test-case>
+   <test-case name="op-divide-dayTimeDuration2args-4">
+      <description>
+*******************************************************
+Test: op-divide-dayTimeDuration2args-4                  
+Written By: Carmelo Montanez                            
+Date: Tue Apr 12 16:29:08 GMT-05:00 2005                
+Purpose: Evaluates The "op:divide-dayTimeDuration" operator
+ with the arguments set as follows:                    
+$arg1 = xs:dayTimeDuration(lower bound)               
+$arg2 = xs:double(mid range)                           
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2004-12-13"/>
+      <test>xs:dayTimeDuration("P0DT0H0M0S") div xs:double("0.1")</test>
+      <result>
+         <assert-string-value>PT0S</assert-string-value>
+      </result>
+   </test-case>
+   <test-case name="op-divide-dayTimeDuration2args-5">
+      <description>
+*******************************************************
+Test: op-divide-dayTimeDuration2args-5                  
+Written By: Carmelo Montanez                            
+Date: Tue Apr 12 16:29:08 GMT-05:00 2005                
+Purpose: Evaluates The "op:divide-dayTimeDuration" operator
+ with the arguments set as follows:                    
+$arg1 = xs:dayTimeDuration(lower bound)               
+$arg2 = xs:double(upper bound)                         
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2004-12-13"/>
+      <test>xs:dayTimeDuration("P0DT0H0M0S") div xs:double("1.7976931348623157E308")</test>
+      <result>
+         <assert-string-value>PT0S</assert-string-value>
+      </result>
+   </test-case>
+   <test-case name="op-divide-dayTimeDuration-2">
+      <description>
+*******************************************************
+Test: op-divide-dayTimeDuration-2                      
+Written By: Carmelo Montanez                           
+Date: June 29, 2005                                    
+Purpose: Evaluates The "divide-dayTimeDuration" function 
+used as part of a boolean expression (and operator) and the "fn:false" function. 
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2005-06-29"/>
+      <test>fn:string((xs:dayTimeDuration("P10DT10H11M")) div 2.0) and fn:false()</test>
+      <result>
+         <assert-false/>
+      </result>
+   </test-case>
+   <test-case name="op-divide-dayTimeDuration-3">
+      <description>
+*******************************************************
+Test: op-divide-dayTimeDuration-3                      
+Date: June 29, 2005                                    
+Purpose: Evaluates The "divide-dayTimeDuration" function as 
+part of a boolean expression (or operator) and the "fn:boolean" function. 
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2005-06-29"/>
+      <test>fn:string((xs:dayTimeDuration("P20DT20H10M") div 2.0)) or fn:false()</test>
+      <result>
+         <assert-true/>
+      </result>
+   </test-case>
+   <test-case name="op-divide-dayTimeDuration-4">
+      <description>
+*******************************************************
+Test: op-divide-dayTimeDuration-4                      
+Written By: Carmelo Montanez                           
+Date: June 29, 2005                                    
+Purpose: Evaluates The "divide-dayTimeDuration" function that  
+return true and used together with fn:not.             
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2005-06-29"/>
+      <test>fn:not(fn:string(xs:dayTimeDuration("P11DT12H04M") div 2.0))</test>
+      <result>
+         <assert-false/>
+      </result>
+   </test-case>
+   <test-case name="op-divide-dayTimeDuration-5">
+      <description>
+*******************************************************
+Test: op-divide-dayTimeDuration-5                      
+Written By: Carmelo Montanez                           
+Date: June 29 2005                                     
+Purpose: Evaluates The "divide-dayTimeDuration" function that  
+is used as an argument to the fn:boolean function.     
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2005-06-29"/>
+      <test>fn:boolean(fn:string(xs:dayTimeDuration("P05DT09H08M") div 2.0))</test>
+      <result>
+         <assert-true/>
+      </result>
+   </test-case>
+   <test-case name="op-divide-dayTimeDuration-6">
+      <description>
+*******************************************************
+Test: op-divide-dayTimeDuration-6                      
+Written By: Carmelo Montanez                           
+Date: June 29, 2005                                    
+Purpose: Evaluates The "divide-dayTimeDuration" operator that 
+is used as an argument to the fn:number function.      
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2005-06-29"/>
+      <test>fn:number(xs:dayTimeDuration("P02DT06H09M") div 2.0)</test>
+      <result>
+         <assert-string-value>NaN</assert-string-value>
+      </result>
+   </test-case>
+   <test-case name="op-divide-dayTimeDuration-7">
+      <description>
+*******************************************************
+Test: op-divide-dayTimeDuration-7                      
+Written By: Carmelo Montanez                           
+Date: June 29, 2005                                    
+Purpose: Evaluates The "divide-dayTimeDuration" function used  
+as an argument to the "fn:string" function).           
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2005-06-29"/>
+      <test>fn:string(xs:dayTimeDuration("P03DT04H08M") div 2.0)</test>
+      <result>
+         <assert-string-value>P1DT14H4M</assert-string-value>
+      </result>
+   </test-case>
+   <test-case name="op-divide-dayTimeDuration-8">
+      <description>
+*******************************************************
+Test: op-divide-dayTimeDuration-8                      
+Written By: Carmelo Montanez                           
+Date: June 29, 2005                                    
+Purpose: Evaluates The "divide-dayTimeDuration" function that  
+returns a negative value.                              
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2005-06-29"/>
+      <test>(xs:dayTimeDuration("P10DT01H01M") div -2.0)</test>
+      <result>
+         <assert-string-value>-P5DT30M30S</assert-string-value>
+      </result>
+   </test-case>
+   <test-case name="op-divide-dayTimeDuration-9">
+      <description>
+*******************************************************
+Test: op-divide-dayTimeDuration-9                      
+Written By: Carmelo Montanez                           
+Date: June 29, 2005                                    
+Purpose: Evaluates The "divide-dayTimeDuration" function used 
+together with and "and" expression.                    
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2005-06-29"/>
+      <test>fn:string((xs:dayTimeDuration("P01DT02H01M") div 2.0)) and fn:string((xs:dayTimeDuration("P02DT03H03M") div 2.0 ))</test>
+      <result>
+         <assert-true/>
+      </result>
+   </test-case>
+   <test-case name="op-divide-dayTimeDuration-10">
+      <description>
+*******************************************************
+Test: op-divide-dayTimeDuration-10                     
+Written By: Carmelo Montanez                           
+Date: June 29, 2005                                    
+Purpose: Evaluates The "divide-dayTimeDuration" function used  
+together with an "or" expression.                      
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2005-06-29"/>
+      <test>fn:string((xs:dayTimeDuration("P05DT09H02M") div 2.0)) or fn:string((xs:dayTimeDuration("P05DT05H03M") div 2.0))</test>
+      <result>
+         <assert-true/>
+      </result>
+   </test-case>
+   <test-case name="op-divide-dayTimeDuration-11">
+      <description>
+*******************************************************
+Test: op-divide-dayTimeDuration-11                     
+Written By: Carmelo Montanez                           
+Date: June 29, 2005                                    
+Purpose: Evaluates The "divide-dayTimeDuration" function used  
+together with multiple "div" expressions.              
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2005-06-29"/>
+      <test>(xs:dayTimeDuration("P42DT10H10M") div 2.0) div (xs:dayTimeDuration("P42DT10H10M") div 2.0)</test>
+      <result>
+         <assert-string-value>1</assert-string-value>
+      </result>
+   </test-case>
+   <test-case name="op-divide-dayTimeDuration-12">
+      <description>
+*******************************************************
+Test: op-divide-dayTimeDuration-12                     
+Written By: Carmelo Montanez                           
+Date: June 29, 2005                                    
+Purpose: Evaluates The "divide-dayTimeDuration" operators used 
+with a boolean expression and the "fn:true" function.   
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2005-06-29"/>
+      <test>fn:string((xs:dayTimeDuration("P10DT08H11M") div 2.0)) and (fn:true())</test>
+      <result>
+         <assert-true/>
+      </result>
+   </test-case>
+   <test-case name="op-divide-dayTimeDuration-13">
+      <description>
+*******************************************************
+Test: op-divide-dayTimeDuration-13                     
+Written By: Carmelo Montanez                           
+Date: June 29, 2005                                    
+Purpose: Evaluates The "divide-dayTimeDuration" function used  
+together with the numeric-equal-operator "eq".         
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2005-06-29"/>
+      <test>(xs:dayTimeDuration("P23DT11H11M") div 2.0) eq xs:dayTimeDuration("P23DT11H11M")</test>
+      <result>
+         <assert-false/>
+      </result>
+   </test-case>
+   <test-case name="op-divide-dayTimeDuration-14">
+      <description>
+*******************************************************
+Test: op-divide-dayTimeDuration-14                     
+Written By: Carmelo Montanez                           
+Date: June 29, 2005                                    
+Purpose: Evaluates The "divide-dayTimeDuration" function used  
+together with the numeric-equal operator "ne".         
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2005-06-29"/>
+      <test>(xs:dayTimeDuration("P21DT08H12M") div 2.0) ne xs:dayTimeDuration("P08DT08H05M")</test>
+      <result>
+         <assert-true/>
+      </result>
+   </test-case>
+   <test-case name="op-divide-dayTimeDuration-15">
+      <description>
+*******************************************************
+Test: op-divide-dayTimeDuration-15                     
+Written By: Carmelo Montanez                           
+Date: June 29, 2005                                    
+Purpose: Evaluates The "divide-dayTimeDuration" function used  
+together with the numeric-equal operator "le".         
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2005-06-29"/>
+      <test>(xs:dayTimeDuration("P10DT10H01M") div 2.0) le xs:dayTimeDuration("P17DT10H02M")</test>
+      <result>
+         <assert-true/>
+      </result>
+   </test-case>
+   <test-case name="op-divide-dayTimeDuration-16">
+      <description>
+*******************************************************
+Test: op-divide-dayTimeDuration-16                     
+Date: June 29, 2005                                    
+Purpose: Evaluates The "divide-dayTimeDuration" function used  
+together with the numeric-equal operator "ge".         
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2005-06-29"/>
+      <test>(xs:dayTimeDuration("P13DT09H09M") div 2.0) ge xs:dayTimeDuration("P18DT02H02M")</test>
+      <result>
+         <assert-false/>
+      </result>
+   </test-case>
+   <test-case name="K-DayTimeDurationDivide-1">
+      <description>
+*******************************************************
+ Test: K-DayTimeDurationDivide-1                       
+ Written by: Frans Englich                             
+ Date: 2007-11-22T11:31:21+01:00                       
+ Purpose: Simple test of dividing a xs:dayTimeDuration with 4. 
+*******************************************************
+</description>
+      <created by="Frans Englich" on="2007-11-26+01:00"/>
+      <test>xs:dayTimeDuration("P8DT4H4M4.400S") div 4 eq xs:dayTimeDuration("P2DT1H1M1.1S")</test>
+      <result>
+         <assert-true/>
+      </result>
+   </test-case>
+   <test-case name="K-DayTimeDurationDivide-2">
+      <description>
+*******************************************************
+ Test: K-DayTimeDurationDivide-2                       
+ Written by: Frans Englich                             
+ Date: 2007-11-22T11:31:21+01:00                       
+ Purpose: Simple test of dividing a xs:dayTimeDuration with xs:double('-INF'). 
+*******************************************************
+</description>
+      <created by="Frans Englich" on="2007-11-26+01:00"/>
+      <test>xs:dayTimeDuration("P3D") div xs:double("-INF") eq xs:dayTimeDuration("PT0S")</test>
+      <result>
+         <assert-true/>
+      </result>
+   </test-case>
+   <test-case name="K-DayTimeDurationDivide-3">
+      <description>
+*******************************************************
+ Test: K-DayTimeDurationDivide-3                       
+ Written by: Frans Englich                             
+ Date: 2007-11-22T11:31:21+01:00                       
+ Purpose: Simple test of dividing a xs:dayTimeDuration with xs:double('INF'). 
+*******************************************************
+</description>
+      <created by="Frans Englich" on="2007-11-26+01:00"/>
+      <test>xs:dayTimeDuration("P3D") div xs:double("INF") eq xs:dayTimeDuration("PT0S")</test>
+      <result>
+         <assert-true/>
+      </result>
+   </test-case>
+   <test-case name="K-DayTimeDurationDivide-4">
+      <description>
+*******************************************************
+ Test: K-DayTimeDurationDivide-4                       
+ Written by: Frans Englich                             
+ Date: 2007-11-22T11:31:21+01:00                       
+ Purpose: Simple test of dividing a xs:dayTimeDuration with 0. 
+*******************************************************
+</description>
+      <created by="Frans Englich" on="2007-11-26+01:00"/>
+      <test>xs:dayTimeDuration("P3DT4H3M3.100S") div 0</test>
+      <result>
+         <error code="FODT0002"/>
+      </result>
+   </test-case>
+   <test-case name="K-DayTimeDurationDivide-5">
+      <description>
+*******************************************************
+ Test: K-DayTimeDurationDivide-5                       
+ Written by: Frans Englich                             
+ Date: 2007-11-22T11:31:21+01:00                       
+ Purpose: Simple test of dividing a xs:dayTimeDuration with NaN. 
+*******************************************************
+</description>
+      <created by="Frans Englich" on="2007-11-26+01:00"/>
+      <test>xs:dayTimeDuration("P3DT4H3M3.100S") div xs:double("NaN")</test>
+      <result>
+         <error code="FOCA0005"/>
+      </result>
+   </test-case>
+   <test-case name="K-DayTimeDurationDivide-6">
+      <description>
+*******************************************************
+ Test: K-DayTimeDurationDivide-6                       
+ Written by: Frans Englich                             
+ Date: 2007-11-22T11:31:21+01:00                       
+ Purpose: Simple test of dividing a xs:dayTimeDuration with xs:double('-0'). 
+*******************************************************
+</description>
+      <created by="Frans Englich" on="2007-11-26+01:00"/>
+      <test>xs:dayTimeDuration("P3D") div xs:double("-0")</test>
+      <result>
+         <error code="FODT0002"/>
+      </result>
+   </test-case>
+   <test-case name="K-DayTimeDurationDivide-7">
+      <description>
+*******************************************************
+ Test: K-DayTimeDurationDivide-7                       
+ Written by: Frans Englich                             
+ Date: 2007-11-22T11:31:21+01:00                       
+ Purpose: The division operator is not available between xs:duration and xs:integer. 
+*******************************************************
+</description>
+      <created by="Frans Englich" on="2007-11-26+01:00"/>
+      <test>xs:duration("P1Y3M") div 3</test>
+      <result>
+         <error code="XPTY0004"/>
+      </result>
+   </test-case>
+   <test-case name="K-DayTimeDurationDivide-8">
+      <description>
+*******************************************************
+ Test: K-DayTimeDurationDivide-8                       
+ Written by: Frans Englich                             
+ Date: 2007-11-22T11:31:21+01:00                       
+ Purpose: The division operator is not available between xs:integer and xs:duration. 
+*******************************************************
+</description>
+      <created by="Frans Englich" on="2007-11-26+01:00"/>
+      <test>3 div xs:duration("P1Y3M")</test>
+      <result>
+         <error code="XPTY0004"/>
+      </result>
+   </test-case>
+   <test-case name="K-DayTimeDurationDivide-9">
+      <description>
+*******************************************************
+ Test: K-DayTimeDurationDivide-9                       
+ Written by: Frans Englich                             
+ Date: 2007-11-22T11:31:21+01:00                       
+ Purpose: The division operator is not available between xs:integer and xs:yearMonthDuration. 
+*******************************************************
+</description>
+      <created by="Frans Englich" on="2007-11-26+01:00"/>
+      <test>3 div xs:yearMonthDuration("P1Y3M")</test>
+      <result>
+         <error code="XPTY0004"/>
+      </result>
+   </test-case>
+   <test-case name="K-DayTimeDurationDivide-10">
+      <description>
+*******************************************************
+ Test: K-DayTimeDurationDivide-10                      
+ Written by: Frans Englich                             
+ Date: 2007-11-22T11:31:21+01:00                       
+ Purpose: The division operator is not available between xs:integer and xs:dayTimeDuration. 
+*******************************************************
+</description>
+      <created by="Frans Englich" on="2007-11-26+01:00"/>
+      <test>3 div xs:dayTimeDuration("P3D")</test>
+      <result>
+         <error code="XPTY0004"/>
+      </result>
+   </test-case>
+   <test-case name="K-DayTimeDurationDivide-11">
+      <description>
+*******************************************************
+ Test: K-DayTimeDurationDivide-11                      
+ Written by: Frans Englich                             
+ Date: 2007-11-22T11:31:21+01:00                       
+ Purpose: The division operator is not available between xs:dayTimeDuration and xs:yearMonthDuration. 
+*******************************************************
+</description>
+      <created by="Frans Englich" on="2007-11-26+01:00"/>
+      <test>xs:dayTimeDuration("P3D") div xs:yearMonthDuration("P3Y3M")</test>
+      <result>
+         <error code="XPTY0004"/>
+      </result>
+   </test-case>
+   <test-case name="K-DayTimeDurationDivide-12">
+      <description>
+*******************************************************
+ Test: K-DayTimeDurationDivide-12                      
+ Written by: Frans Englich                             
+ Date: 2007-11-22T11:31:21+01:00                       
+ Purpose: The division operator is not available between xs:yearMonthDuration and xs:dayTimeDuration. 
+*******************************************************
+</description>
+      <created by="Frans Englich" on="2007-11-26+01:00"/>
+      <test>xs:yearMonthDuration("P3Y3M") div xs:dayTimeDuration("P3D")</test>
+      <result>
+         <error code="XPTY0004"/>
+      </result>
+   </test-case>
+   <test-case name="K-DayTimeDurationDivide-13">
+      <description>
+*******************************************************
+ Test: K-DayTimeDurationDivide-13                      
+ Written by: Frans Englich                             
+ Date: 2007-11-22T11:31:21+01:00                       
+ Purpose: The division operator is not available between xs:duration and xs:yearMonthDuration. 
+*******************************************************
+</description>
+      <created by="Frans Englich" on="2007-11-26+01:00"/>
+      <test>xs:duration("P3D") div xs:yearMonthDuration("P3Y3M")</test>
+      <result>
+         <error code="XPTY0004"/>
+      </result>
+   </test-case>
+   <test-case name="K-DayTimeDurationDivide-14">
+      <description>
+*******************************************************
+ Test: K-DayTimeDurationDivide-14                      
+ Written by: Frans Englich                             
+ Date: 2007-11-22T11:31:21+01:00                       
+ Purpose: The division operator is not available between xs:yearMonthDuration and xs:duration. 
+*******************************************************
+</description>
+      <created by="Frans Englich" on="2007-11-26+01:00"/>
+      <test>xs:yearMonthDuration("P3Y3M") div xs:duration("P3D")</test>
+      <result>
+         <error code="XPTY0004"/>
+      </result>
+   </test-case>
+   <test-case name="K-DayTimeDurationDivide-15">
+      <description>
+*******************************************************
+ Test: K-DayTimeDurationDivide-15                      
+ Written by: Frans Englich                             
+ Date: 2007-11-22T11:31:21+01:00                       
+ Purpose: The division operator is not available between xs:dayTimeDuration and xs:duration. 
+*******************************************************
+</description>
+      <created by="Frans Englich" on="2007-11-26+01:00"/>
+      <test>xs:dayTimeDuration("P3D") div xs:duration("P3Y3M")</test>
+      <result>
+         <error code="XPTY0004"/>
+      </result>
+   </test-case>
+   <test-case name="K-DayTimeDurationDivide-16">
+      <description>
+*******************************************************
+ Test: K-DayTimeDurationDivide-16                      
+ Written by: Frans Englich                             
+ Date: 2007-11-22T11:31:21+01:00                       
+ Purpose: The division operator is not available between xs:duration and xs:dayTimeDuration. 
+*******************************************************
+</description>
+      <created by="Frans Englich" on="2007-11-26+01:00"/>
+      <test>xs:duration("P3Y3M") div xs:dayTimeDuration("P3D")</test>
+      <result>
+         <error code="XPTY0004"/>
+      </result>
+   </test-case>
+   
+
+   <test-case name="cbcl-divide-dayTimeDuration-001">
+      <description> test division of xs:dayTimeDuration by 0 </description>
+      <created by="Tim Mills" on="2008-05-14"/>
+      <dependency type="spec" value="XQ10+"/>
+      
+      <test>declare function local:dayTimeDuration($days as xs:integer) as xs:dayTimeDuration { xs:dayTimeDuration(concat("P", $days, "D")) }; local:dayTimeDuration(2) div 0</test>
+      <result>
+         <error code="FODT0002"/>
+      </result>
+   </test-case>
+   
+
+   <test-case name="cbcl-divide-dayTimeDuration-002">
+      <description> test division of xs:dayTimeDuration by 1 </description>
+      <created by="Tim Mills" on="2008-05-14"/>
+      <dependency type="spec" value="XQ10+"/>
+      
+      <test>declare function local:dayTimeDuration($days as xs:integer) as xs:dayTimeDuration { xs:dayTimeDuration(concat("P", $days, "D")) }; local:dayTimeDuration(2) div 1</test>
+      <result>
+         <assert-string-value>P2D</assert-string-value>
+      </result>
+   </test-case>
+   
+
+   <test-case name="cbcl-divide-dayTimeDuration-003">
+      <description> test possible overflow in divison of large xs:dayTimeDuration by one-half</description>
+      <created by="Tim Mills" on="2008-05-14"/>
+      <modified by="Michael Kay" on="2020-01-14" change="allow success result, limits are implementation defined"/>
+      <test>xs:dayTimeDuration("P9223372036854775807D") div 0.5</test>
+      <result>
+         <any-of>
+            <assert-eq>xs:dayTimeDuration("P18446744073709551614D")</assert-eq>
+            <error code="FODT0002"/>
+         </any-of>
+      </result>
+   </test-case>
+   
+   
+   <test-case name="cbcl-div-001">
+      <description> Test behaviour of division operator when presented with an expression with static type duration </description>
+      <created by="Oliver Hallam" on="2010-02-26"/>
+      <dependency type="spec" value="XQ10+"/>
+      
+      <test>declare function local:f($x) { if ($x) then xs:duration("P1Y") else xs:yearMonthDuration("P1Y") }; local:f(false()) div xs:yearMonthDuration("P1M")</test>
+      <result>
+         <assert-string-value>12</assert-string-value>
+      </result>
+   </test-case>
+   
+
+   <test-case name="cbcl-div-002">
+      <description> Test behaviour of division operator when presented with an expression with static type duration </description>
+      <created by="Oliver Hallam" on="2010-02-26"/>
+      <dependency type="spec" value="XQ10+"/>
+      
+      <test>declare function local:f($x) { if ($x) then xs:duration("P1Y") else xs:yearMonthDuration("P1Y") }; local:f(true()) div xs:yearMonthDuration("P1M")</test>
+      <result>
+         <error code="XPTY0004"/>
+      </result>
+   </test-case>
+   
+
+   <test-case name="cbcl-div-003">
+      <description> Test behaviour of division operator when presented with an expression with static type duration </description>
+      <created by="Oliver Hallam" on="2010-02-26"/>
+      <dependency type="spec" value="XQ10+"/>
+      
+      <test>declare function local:f($x) { if ($x) then xs:duration("P1D") else xs:dayTimeDuration("P1D") }; local:f(false()) div xs:dayTimeDuration("PT1H")</test>
+      <result>
+         <assert-string-value>24</assert-string-value>
+      </result>
+   </test-case>
+   
+
+   <test-case name="cbcl-div-004">
+      <description> Test behaviour of division operator when presented with an expression with static type duration </description>
+      <created by="Oliver Hallam" on="2010-02-26"/>
+      <dependency type="spec" value="XQ10+"/>
+      
+      <test>declare function local:f($x) { if ($x) then xs:duration("P1D") else xs:dayTimeDuration("P1D") }; local:f(true()) div xs:dayTimeDuration("PT1H")</test>
+      <result>
+         <error code="XPTY0004"/>
+      </result>
+   </test-case>
+   
+
+   <test-case name="cbcl-div-005">
+      <description> Test behaviour of division operator when presented with an expression with static type duration </description>
+      <created by="Oliver Hallam" on="2010-02-26"/>
+      <dependency type="spec" value="XQ10+"/>
+      
+      <test>declare function local:f($x) { if ($x) then xs:duration("P1M") else xs:yearMonthDuration("P1M") }; xs:yearMonthDuration("P1Y") div local:f(false())</test>
+      <result>
+         <assert-string-value>12</assert-string-value>
+      </result>
+   </test-case>
+   
+
+   <test-case name="cbcl-div-006">
+      <description> Test behaviour of division operator when presented with an expression with static type duration </description>
+      <created by="Oliver Hallam" on="2010-02-26"/>
+      <dependency type="spec" value="XQ10+"/>
+      
+      <test>declare function local:f($x) { if ($x) then xs:duration("P1M") else xs:yearMonthDuration("P1M") }; xs:yearMonthDuration("P1Y") div local:f(true())</test>
+      <result>
+         <error code="XPTY0004"/>
+      </result>
+   </test-case>
+   
+
+   <test-case name="cbcl-div-007">
+      <description> Test behaviour of division operator when presented with an expression with static type duration </description>
+      <created by="Oliver Hallam" on="2010-02-26"/>
+      <dependency type="spec" value="XQ10+"/>
+      
+      <test>declare function local:f($x) { if ($x) then xs:duration("P1M") else xs:dayTimeDuration("PT1H") }; xs:dayTimeDuration("P1D") div local:f(false())</test>
+      <result>
+         <assert-string-value>24</assert-string-value>
+      </result>
+   </test-case>
+   
+
+   <test-case name="cbcl-div-008">
+      <description> Test behaviour of division operator when presented with an expression with static type duration </description>
+      <created by="Oliver Hallam" on="2010-02-26"/>
+      <dependency type="spec" value="XQ10+"/>
+      
+      <test>declare function local:f($x) { if ($x) then xs:duration("P1M") else xs:dayTimeDuration("PT1H") }; xs:dayTimeDuration("P1D") div local:f(true())</test>
+      <result>
+         <error code="XPTY0004"/>
+      </result>
+   </test-case>
+   
+
+   <test-case name="cbcl-div-009">
+      <description> Test behaviour of division operator when presented with an expression with static type duration </description>
+      <created by="Oliver Hallam" on="2010-02-26"/>
+      <dependency type="spec" value="XQ10+"/>
+      
+      <test>declare function local:f($x) { if ($x) then xs:duration("P1M") else xs:yearMonthDuration("P1M") }; local:f(false()) div local:f(false())</test>
+      <result>
+         <assert-string-value>1</assert-string-value>
+      </result>
+   </test-case>
+   
+
+   <test-case name="cbcl-div-010">
+      <description> Test behaviour of division operator when presented with an expression with static type duration </description>
+      <created by="Oliver Hallam" on="2010-02-26"/>
+      <dependency type="spec" value="XQ10+"/>
+      
+      <test>declare function local:f($x) { if ($x) then xs:duration("P1M") else xs:yearMonthDuration("P1M") }; local:f(true()) div local:f(false())</test>
+      <result>
+         <error code="XPTY0004"/>
+      </result>
+   </test-case>
+   
+
+   <test-case name="cbcl-div-011">
+      <description> Test behaviour of division operator when presented with an expression with static type duration </description>
+      <created by="Oliver Hallam" on="2010-02-26"/>
+      <dependency type="spec" value="XQ10+"/>
+      
+      <test>declare function local:f($x) { if ($x) then xs:duration("P1M") else xs:dayTimeDuration("PT1H") }; local:f(false()) div local:f(false())</test>
+      <result>
+         <assert-string-value>1</assert-string-value>
+      </result>
+   </test-case>
+   
+
+   <test-case name="cbcl-div-012">
+      <description> Test behaviour of division operator when presented with an expression with static type duration </description>
+      <created by="Oliver Hallam" on="2010-02-26"/>
+      <dependency type="spec" value="XQ10+"/>
+      
+      <test>declare function local:f($x) { if ($x) then xs:duration("P1M") else xs:dayTimeDuration("PT1H") }; local:f(false()) div local:f(true())</test>
+      <result>
+         <error code="XPTY0004"/>
+      </result>
+   </test-case>
+   
+
+   <test-case name="cbcl-div-013">
+      <description> Test behaviour of division operator when presented with an expression with static type duration </description>
+      <created by="Oliver Hallam" on="2010-02-26"/>
+      <dependency type="spec" value="XQ10+"/>
+      
+      <test>declare function local:f($x) { if ($x) then xs:duration("P2M") else xs:yearMonthDuration("P2M") }; local:f(false()) div 2</test>
+      <result>
+         <assert-string-value>P1M</assert-string-value>
+      </result>
+   </test-case>
+   
+
+   <test-case name="cbcl-div-014">
+      <description> Test behaviour of division operator when presented with an expression with static type duration </description>
+      <created by="Oliver Hallam" on="2010-02-26"/>
+      <dependency type="spec" value="XQ10+"/>
+      
+      <test>declare function local:f($x) { if ($x) then xs:duration("P2M") else xs:yearMonthDuration("P2M") }; local:f(true()) div 2</test>
+      <result>
+         <error code="XPTY0004"/>
+      </result>
+   </test-case>
+   
+
+   <test-case name="cbcl-div-015">
+      <description> Test behaviour of division operator when presented with an expression with static type duration </description>
+      <created by="Oliver Hallam" on="2010-02-26"/>
+      <dependency type="spec" value="XQ10+"/>
+      
+      <test>declare function local:f($x) { if ($x) then xs:duration("P1D") else xs:dayTimeDuration("P1D") }; local:f(false()) div 2</test>
+      <result>
+         <assert-string-value>PT12H</assert-string-value>
+      </result>
+   </test-case>
+   
+
+   <test-case name="cbcl-div-016">
+      <description> Test behaviour of division operator when presented with an expression with static type duration </description>
+      <created by="Oliver Hallam" on="2010-02-26"/>
+      <dependency type="spec" value="XQ10+"/>
+      
+      <test>declare function local:f($x) { if ($x) then xs:duration("P1M") else xs:dayTimeDuration("P1D") }; local:f(true()) div 2</test>
+      <result>
+         <error code="XPTY0004"/>
+      </result>
+   </test-case>   
+</test-set>

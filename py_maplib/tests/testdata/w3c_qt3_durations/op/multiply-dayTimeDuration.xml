@@ -1,0 +1,697 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2010/09/qt-fots-catalog"
+          name="op-multiply-dayTimeDuration">
+   <description>Tests for the multiply-dayTimeDuration() function</description>
+   <link type="spec" document="http://www.w3.org/TR/xpath-functions-30/"
+         idref="func-multiply-dayTimeDuration"/>
+   <test-case name="op-multiply-dayTimeDuration2args-1">
+      <description>
+*******************************************************
+Test: op-multiply-dayTimeDuration2args-1                
+Written By: Carmelo Montanez                            
+Date: Tue Apr 12 16:29:08 GMT-05:00 2005                
+Purpose: Evaluates The "op:multiply-dayTimeDuration" operator
+ with the arguments set as follows:                    
+$arg1 = xs:dayTimeDuration(lower bound)               
+$arg2 = xs:double(lower bound)                         
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2004-12-13"/>
+      <test>xs:dayTimeDuration("P0DT0H0M0S") * xs:double("-1.7976931348623157E308")</test>
+      <result>
+         <assert-string-value>PT0S</assert-string-value>
+      </result>
+   </test-case>
+   <test-case name="op-multiply-dayTimeDuration2args-2">
+      <description>
+*******************************************************
+Test: op-multiply-dayTimeDuration2args-2                
+Written By: Carmelo Montanez                            
+Date: Tue Apr 12 16:29:08 GMT-05:00 2005                
+Purpose: Evaluates The "op:multiply-dayTimeDuration" operator
+ with the arguments set as follows:                    
+$arg1 = xs:dayTimeDuration(mid range)                 
+$arg2 = xs:double(lower bound)                         
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2004-12-13"/>
+      <test>xs:dayTimeDuration("P15DT11H59M59S") * xs:double("0")</test>
+      <result>
+         <assert-string-value>PT0S</assert-string-value>
+      </result>
+   </test-case>
+   <test-case name="op-multiply-dayTimeDuration2args-3">
+      <description>
+*******************************************************
+Test: op-multiply-dayTimeDuration2args-3                
+Written By: Carmelo Montanez                            
+Date: Tue Apr 12 16:29:08 GMT-05:00 2005                
+Purpose: Evaluates The "op:multiply-dayTimeDuration" operator
+ with the arguments set as follows:                    
+$arg1 = xs:dayTimeDuration(upper bound)               
+$arg2 = xs:double(lower bound)                         
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2004-12-13"/>
+      <test>xs:dayTimeDuration("P31DT23H59M59S") * xs:double("0")</test>
+      <result>
+         <assert-string-value>PT0S</assert-string-value>
+      </result>
+   </test-case>
+   <test-case name="op-multiply-dayTimeDuration2args-4">
+      <description>
+*******************************************************
+Test: op-multiply-dayTimeDuration2args-4                
+Written By: Carmelo Montanez                            
+Date: Tue Apr 12 16:29:08 GMT-05:00 2005                
+Purpose: Evaluates The "op:multiply-dayTimeDuration" operator
+ with the arguments set as follows:                    
+$arg1 = xs:dayTimeDuration(lower bound)               
+$arg2 = xs:double(mid range)                           
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2004-12-13"/>
+      <test>xs:dayTimeDuration("P0DT0H0M0S") * xs:double("0")</test>
+      <result>
+         <assert-string-value>PT0S</assert-string-value>
+      </result>
+   </test-case>
+   <test-case name="op-multiply-dayTimeDuration2args-5">
+      <description>
+*******************************************************
+Test: op-multiply-dayTimeDuration2args-5                
+Written By: Carmelo Montanez                            
+Date: Tue Apr 12 16:29:08 GMT-05:00 2005                
+Purpose: Evaluates The "op:multiply-dayTimeDuration" operator
+ with the arguments set as follows:                    
+$arg1 = xs:dayTimeDuration(lower bound)               
+$arg2 = xs:double(upper bound)                         
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2004-12-13"/>
+      <test>xs:dayTimeDuration("P0DT0H0M0S") * xs:double("1.7976931348623157E308")</test>
+      <result>
+         <assert-string-value>PT0S</assert-string-value>
+      </result>
+   </test-case>
+   <test-case name="op-multiply-dayTimeDuration-1">
+      <description>
+*******************************************************
+Test: op-multiply-dayTimeDuration-1                    
+Written By: Carmelo Montanez                           
+Date: June 29, 2005                                    
+Purpose: Evaluates The "multiply-dayTimeDuration" function 
+As per example 1 (for this function)of the F&amp;O specs.  
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2005-06-29"/>
+      <test>xs:dayTimeDuration("PT2H10M") * 2.1</test>
+      <result>
+         <assert-string-value>PT4H33M</assert-string-value>
+      </result>
+   </test-case>
+   <test-case name="op-multiply-dayTimeDuration-2">
+      <description>
+*******************************************************
+Test: op-multiply-dayTimeDuration-2                    
+Written By: Carmelo Montanez                           
+Date: June 29, 2005                                    
+Purpose: Evaluates The "multiply-dayTimeDuration" function 
+used as part of a boolean expression (and operator) and the "fn:false" function. 
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2005-06-29"/>
+      <test>fn:string((xs:dayTimeDuration("P10DT10H11M")) * 2.0) and fn:false()</test>
+      <result>
+         <assert-false/>
+      </result>
+   </test-case>
+   <test-case name="op-multiply-dayTimeDuration-3">
+      <description>
+*******************************************************
+Test: op-multiply-dayTimeDuration-3                    
+Date: June 29, 2005                                    
+Purpose: Evaluates The "multiply-dayTimeDuration" function as 
+part of a boolean expression (or operator) and the "fn:boolean" function. 
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2005-06-29"/>
+      <test>fn:string((xs:dayTimeDuration("P20DT20H10M") * 2.0)) or fn:false()</test>
+      <result>
+         <assert-true/>
+      </result>
+   </test-case>
+   <test-case name="op-multiply-dayTimeDuration-4">
+      <description>
+*******************************************************
+Test: op-multiply-dayTimeDuration-4                    
+Written By: Carmelo Montanez                           
+Date: June 29, 2005                                    
+Purpose: Evaluates The "multiply-dayTimeDuration" function that  
+return true and used together with fn:not.             
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2005-06-29"/>
+      <test>fn:not(fn:string(xs:dayTimeDuration("P11DT12H04M") * 2.0))</test>
+      <result>
+         <assert-false/>
+      </result>
+   </test-case>
+   <test-case name="op-multiply-dayTimeDuration-5">
+      <description>
+*******************************************************
+Test: op-multiply-dayTimeDuration-5                    
+Written By: Carmelo Montanez                           
+Date: June 29 2005                                     
+Purpose: Evaluates The "multiply-dayTimeDuration" function that  
+is used as an argument to the fn:boolean function.     
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2005-06-29"/>
+      <test>fn:boolean(fn:string(xs:dayTimeDuration("P05DT09H08M") *2.0))</test>
+      <result>
+         <assert-true/>
+      </result>
+   </test-case>
+   <test-case name="op-multiply-dayTimeDuration-6">
+      <description>
+*******************************************************
+Test: op-multiply-dayTimeDuration-6                    
+Written By: Carmelo Montanez                           
+Date: June 29, 2005                                    
+Purpose: Evaluates The "multiply-dayTimeDuration" operator that 
+is used as an argument to the fn:number function.      
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2005-06-29"/>
+      <test>fn:number(xs:dayTimeDuration("P02DT06H09M") *2.0)</test>
+      <result>
+         <assert-string-value>NaN</assert-string-value>
+      </result>
+   </test-case>
+   <test-case name="op-multiply-dayTimeDuration-7">
+      <description>
+*******************************************************
+Test: op-multiply-dayTimeDuration-7                    
+Written By: Carmelo Montanez                           
+Date: June 29, 2005                                    
+Purpose: Evaluates The "multiply-dayTimeDuration" function used  
+as an argument to the "fn:string" function).           
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2005-06-29"/>
+      <test>fn:string(xs:dayTimeDuration("P03DT04H08M") * 2.0)</test>
+      <result>
+         <assert-string-value>P6DT8H16M</assert-string-value>
+      </result>
+   </test-case>
+   <test-case name="op-multiply-dayTimeDuration-8">
+      <description>
+*******************************************************
+Test: op-multiply-dayTimeDuration-8                    
+Written By: Carmelo Montanez                           
+Date: June 29, 2005                                    
+Purpose: Evaluates The "multiply-dayTimeDuration" function that  
+returns a negative value.                              
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2005-06-29"/>
+      <test>(xs:dayTimeDuration("P10DT01H01M") * -2.0)</test>
+      <result>
+         <assert-string-value>-P20DT2H2M</assert-string-value>
+      </result>
+   </test-case>
+   <test-case name="op-multiply-dayTimeDuration-9">
+      <description>
+*******************************************************
+Test: op-multiply-dayTimeDuration-9                    
+Written By: Carmelo Montanez                           
+Date: June 29, 2005                                    
+Purpose: Evaluates The "multiply-dayTimeDuration" function used 
+together with and "and" expression.                    
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2005-06-29"/>
+      <test>fn:string((xs:dayTimeDuration("P01DT02H01M") * 2.0)) and fn:string((xs:dayTimeDuration("P02DT03H03M") * 2.0 ))</test>
+      <result>
+         <assert-true/>
+      </result>
+   </test-case>
+   <test-case name="op-multiply-dayTimeDuration-10">
+      <description>
+*******************************************************
+Test: op-multiply-dayTimeDuration-10                   
+Written By: Carmelo Montanez                           
+Date: June 29, 2005                                    
+Purpose: Evaluates The "multiply-dayTimeDuration" function used  
+together with an "or" expression.                      
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2005-06-29"/>
+      <test>fn:string((xs:dayTimeDuration("P05DT09H02M") * 2.0)) or fn:string((xs:dayTimeDuration("P05DT05H03M") * 2.0))</test>
+      <result>
+         <assert-true/>
+      </result>
+   </test-case>
+   <test-case name="op-multiply-dayTimeDuration-11">
+      <description>
+*******************************************************
+Test: op-multiply-dayTimeDuration-11                   
+Written By: Carmelo Montanez                           
+Date: June 29, 2005                                    
+Purpose: Evaluates The "multiply-dayTimeDuration" function used  
+together with a "div" expression.                      
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2005-06-29"/>
+      <test>(xs:dayTimeDuration("P42DT10H10M") * 2.0) div (xs:dayTimeDuration("P42DT10H10M") * 2.0)</test>
+      <result>
+         <assert-string-value>1</assert-string-value>
+      </result>
+   </test-case>
+   <test-case name="op-multiply-dayTimeDuration-12">
+      <description>
+*******************************************************
+Test: op-multiply-dayTimeDuration-12                   
+Written By: Carmelo Montanez                           
+Date: June 29, 2005                                    
+Purpose: Evaluates The "multiply-dayTimeDuration" operators used 
+with a boolean expression and the "fn:true" function.   
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2005-06-29"/>
+      <test>fn:string((xs:dayTimeDuration("P10DT08H11M") * 2.0)) and (fn:true())</test>
+      <result>
+         <assert-true/>
+      </result>
+   </test-case>
+   <test-case name="op-multiply-dayTimeDuration-13">
+      <description>
+*******************************************************
+Test: op-multiply-dayTimeDuration-13                   
+Written By: Carmelo Montanez                           
+Date: June 29, 2005                                    
+Purpose: Evaluates The "multiply-dayTimeDuration" function used  
+together with the numeric-equal-operator "eq".         
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2005-06-29"/>
+      <test>(xs:dayTimeDuration("P23DT11H11M") * 2.0) eq xs:dayTimeDuration("P23DT11H11M")</test>
+      <result>
+         <assert-false/>
+      </result>
+   </test-case>
+   <test-case name="op-multiply-dayTimeDuration-14">
+      <description>
+*******************************************************
+Test: op-multiply-dayTimeDuration-14                   
+Written By: Carmelo Montanez                           
+Date: June 29, 2005                                    
+Purpose: Evaluates The "multiply-dayTimeDuration" function used  
+together with the numeric-equal operator "ne".         
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2005-06-29"/>
+      <test>(xs:dayTimeDuration("P21DT08H12M") * 2.0) ne xs:dayTimeDuration("P08DT08H05M")</test>
+      <result>
+         <assert-true/>
+      </result>
+   </test-case>
+   <test-case name="op-multiply-dayTimeDuration-15">
+      <description>
+*******************************************************
+Test: op-multiply-dayTimeDuration-15                   
+Written By: Carmelo Montanez                           
+Date: June 29, 2005                                    
+Purpose: Evaluates The "multiply-dayTimeDuration" function used  
+together with the numeric-equal operator "le".         
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2005-06-29"/>
+      <test>(xs:dayTimeDuration("P10DT10H01M") * 2.0) le xs:dayTimeDuration("P17DT10H02M")</test>
+      <result>
+         <assert-false/>
+      </result>
+   </test-case>
+   <test-case name="op-multiply-dayTimeDuration-16">
+      <description>
+*******************************************************
+Test: op-multiply-dayTimeDuration-16                   
+Written By: Carmelo Montanez                           
+Date: June 29, 2005                                    
+Purpose: Evaluates The "multiply-dayTimeDuration" function used  
+together with the numeric-equal operator "ge".         
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2005-06-29"/>
+      <test>(xs:dayTimeDuration("P13DT09H09M") * 2.0) ge xs:dayTimeDuration("P18DT02H02M")</test>
+      <result>
+         <assert-true/>
+      </result>
+   </test-case>
+   <test-case name="op-multiply-dayTimeDuration-17">
+      <description>
+*******************************************************
+Test: op-multiply-dayTimeDuration-17                   
+Written By: Carmelo Montanez                           
+Date: June 29, 2005                                    
+Purpose: Evaluates The "multiply-dayTimeDuration" function 
+multiplied by -0. Use fn:count to avoid empty file.    
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2005-06-29"/>
+      <test>fn:count(xs:dayTimeDuration("P13DT09H09M") * -0)</test>
+      <result>
+         <assert-string-value>1</assert-string-value>
+      </result>
+   </test-case>
+   <test-case name="op-multiply-dayTimeDuration-18">
+      <description>
+*******************************************************
+Test: op-multiply-dayTimeDuration-18                   
+Written By: Carmelo Montanez                           
+Date: June 29, 2005                                    
+Purpose: Evaluates The "multiply-dayTimeDuration" function 
+multiplied by +0. Use fn:count to avoid empty file.    
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2005-06-29"/>
+      <test>fn:count(xs:dayTimeDuration("P13DT09H09M") * +0)</test>
+      <result>
+         <assert-string-value>1</assert-string-value>
+      </result>
+   </test-case>
+   <test-case name="K-DayTimeDurationMultiply-1">
+      <description>
+*******************************************************
+ Test: K-DayTimeDurationMultiply-1                     
+ Written by: Frans Englich                             
+ Date: 2007-11-22T11:31:21+01:00                       
+ Purpose: Simple test of multiplying a xs:dayTimeDuration with 3. 
+*******************************************************
+</description>
+      <created by="Frans Englich" on="2007-11-26+01:00"/>
+      <test>xs:dayTimeDuration("P3DT4H3M3.100S") * 3 eq xs:dayTimeDuration("P9DT12H9M9.3S")</test>
+      <result>
+         <assert-true/>
+      </result>
+   </test-case>
+   <test-case name="K-DayTimeDurationMultiply-2">
+      <description>
+*******************************************************
+ Test: K-DayTimeDurationMultiply-2                     
+ Written by: Frans Englich                             
+ Date: 2007-11-22T11:31:21+01:00                       
+ Purpose: Simple test of multiplying 3 with xs:dayTimeDuration. 
+*******************************************************
+</description>
+      <created by="Frans Englich" on="2007-11-26+01:00"/>
+      <test>3 * xs:dayTimeDuration("P3DT4H3M3.100S") eq xs:dayTimeDuration("P9DT12H9M9.3S")</test>
+      <result>
+         <assert-true/>
+      </result>
+   </test-case>
+   <test-case name="K-DayTimeDurationMultiply-3">
+      <description>
+*******************************************************
+ Test: K-DayTimeDurationMultiply-3                     
+ Written by: Frans Englich                             
+ Date: 2007-11-22T11:31:21+01:00                       
+ Purpose: Simple test of multiplying a xs:dayTimeDuration with 0. 
+*******************************************************
+</description>
+      <created by="Frans Englich" on="2007-11-26+01:00"/>
+      <test>xs:dayTimeDuration("P3DT4H3M3.100S") * 0 eq xs:dayTimeDuration("PT0S")</test>
+      <result>
+         <assert-true/>
+      </result>
+   </test-case>
+   <test-case name="K-DayTimeDurationMultiply-4">
+      <description>
+*******************************************************
+ Test: K-DayTimeDurationMultiply-4                     
+ Written by: Frans Englich                             
+ Date: 2007-11-22T11:31:21+01:00                       
+ Purpose: Simple test of multiplying 0 with xs:dayTimeDuration. 
+*******************************************************
+</description>
+      <created by="Frans Englich" on="2007-11-26+01:00"/>
+      <test>0 * xs:dayTimeDuration("P3DT4H3M3.100S") eq xs:dayTimeDuration("PT0S")</test>
+      <result>
+         <assert-true/>
+      </result>
+   </test-case>
+   <test-case name="K-DayTimeDurationMultiply-5">
+      <description>
+*******************************************************
+ Test: K-DayTimeDurationMultiply-5                     
+ Written by: Frans Englich                             
+ Date: 2007-11-22T11:31:21+01:00                       
+ Purpose: Simple test of multiplying a xs:dayTimeDuration with -0. 
+*******************************************************
+</description>
+      <created by="Frans Englich" on="2007-11-26+01:00"/>
+      <test>xs:dayTimeDuration("P3DT4H3M3.100S") * xs:double("-0") eq xs:dayTimeDuration("PT0S")</test>
+      <result>
+         <assert-true/>
+      </result>
+   </test-case>
+   <test-case name="K-DayTimeDurationMultiply-6">
+      <description>
+*******************************************************
+ Test: K-DayTimeDurationMultiply-6                     
+ Written by: Frans Englich                             
+ Date: 2007-11-22T11:31:21+01:00                       
+ Purpose: Simple test of multiplying -0 with xs:dayTimeDuration. 
+*******************************************************
+</description>
+      <created by="Frans Englich" on="2007-11-26+01:00"/>
+      <test>xs:double("-0") * xs:dayTimeDuration("P3DT4H3M3.100S") eq xs:dayTimeDuration("PT0S")</test>
+      <result>
+         <assert-true/>
+      </result>
+   </test-case>
+   <test-case name="K-DayTimeDurationMultiply-7">
+      <description>
+*******************************************************
+ Test: K-DayTimeDurationMultiply-7                     
+ Written by: Frans Englich                             
+ Date: 2007-11-22T11:31:21+01:00                       
+ Purpose: Simple test of multiplying a xs:dayTimeDuration with INF. 
+*******************************************************
+</description>
+      <created by="Frans Englich" on="2007-11-26+01:00"/>
+      <test>xs:dayTimeDuration("P3DT4H3M3.100S") * xs:double("INF")</test>
+      <result>
+         <error code="FODT0002"/>
+      </result>
+   </test-case>
+   <test-case name="K-DayTimeDurationMultiply-8">
+      <description>
+*******************************************************
+ Test: K-DayTimeDurationMultiply-8                     
+ Written by: Frans Englich                             
+ Date: 2007-11-22T11:31:21+01:00                       
+ Purpose: Simple test of multiplying a xs:dayTimeDuration with -INF. 
+*******************************************************
+</description>
+      <created by="Frans Englich" on="2007-11-26+01:00"/>
+      <test>xs:dayTimeDuration("P3DT4H3M3.100S") * xs:double("-INF")</test>
+      <result>
+         <error code="FODT0002"/>
+      </result>
+   </test-case>
+   <test-case name="K-DayTimeDurationMultiply-9">
+      <description>
+*******************************************************
+ Test: K-DayTimeDurationMultiply-9                     
+ Written by: Frans Englich                             
+ Date: 2007-11-22T11:31:21+01:00                       
+ Purpose: Simple test of multiplying a xs:dayTimeDuration with NaN. 
+*******************************************************
+</description>
+      <created by="Frans Englich" on="2007-11-26+01:00"/>
+      <test>xs:dayTimeDuration("P3DT4H3M3.100S") * xs:double("NaN")</test>
+      <result>
+         <error code="FOCA0005"/>
+      </result>
+   </test-case>
+   
+   <test-case name="K-DayTimeDurationMultiply-10">
+      <description>Potential overflow: Saxon bug 5461</description>
+      <created by="Michael Kay" on="2022-04-26"/>
+      <test>xs:dayTimeDuration('PT0.001S') * 60000 * 60</test>
+      <result>
+         <assert-string-value>PT1H</assert-string-value>
+      </result>
+   </test-case>
+   
+   
+   <test-case name="cbcl-multiply-dayTimeDuration-001">
+      <description> test multiplication of xs:dayTimeDuration by 0 </description>
+      <created by="Oliver Hallam" on="2008-05-14"/>
+      <dependency type="spec" value="XQ10+"/>
+      
+      <test>declare function local:dayTimeDuration($days as xs:integer) as xs:dayTimeDuration { xs:dayTimeDuration(concat("P", $days, "D")) }; local:dayTimeDuration(2) * 0</test>
+      <result>
+         <assert-string-value>PT0S</assert-string-value>
+      </result>
+   </test-case>
+   
+
+   <test-case name="cbcl-multiply-dayTimeDuration-002">
+      <description> test multiplication of xs:dayTimeDuration by 1 </description>
+      <created by="Oliver Hallam" on="2008-05-14"/>
+      <dependency type="spec" value="XQ10+"/>
+      
+      <test>declare function local:dayTimeDuration($days as xs:integer) as xs:dayTimeDuration { xs:dayTimeDuration(concat("P", $days, "D")) }; local:dayTimeDuration(2) * 1</test>
+      <result>
+         <assert-string-value>P2D</assert-string-value>
+      </result>
+   </test-case>
+   
+
+   <test-case name="cbcl-multiply-dayTimeDuration-003">
+      <description> test multiplication of xs:dayTimeDuration by NaN </description>
+      <created by="Oliver Hallam" on="2008-05-14"/>
+      <dependency type="spec" value="XQ10+"/>
+      
+      <test>declare function local:dayTimeDuration($days as xs:integer) as xs:dayTimeDuration { xs:dayTimeDuration(concat("P", $days, "D")) }; local:dayTimeDuration(2) * xs:double("NaN")</test>
+      <result>
+         <error code="FOCA0005"/>
+      </result>
+   </test-case>
+   
+
+   <test-case name="cbcl-multiply-dayTimeDuration-004">
+      <description> test multiplication of xs:dayTimeDuration by 0 </description>
+      <created by="Oliver Hallam" on="2008-05-14"/>
+      <dependency type="spec" value="XQ10+"/>
+      
+      <test>declare function local:dayTimeDuration($days as xs:integer) as xs:dayTimeDuration { xs:dayTimeDuration(concat("P", $days, "D")) }; 0 * local:dayTimeDuration(2)</test>
+      <result>
+         <assert-string-value>PT0S</assert-string-value>
+      </result>
+   </test-case>
+   
+
+   <test-case name="cbcl-multiply-dayTimeDuration-005">
+      <description> test multiplication of xs:dayTimeDuration by 1 </description>
+      <created by="Oliver Hallam" on="2008-05-14"/>
+      <dependency type="spec" value="XQ10+"/>
+      
+      <test>declare function local:dayTimeDuration($days as xs:integer) as xs:dayTimeDuration { xs:dayTimeDuration(concat("P", $days, "D")) }; 1 * local:dayTimeDuration(2)</test>
+      <result>
+         <assert-string-value>P2D</assert-string-value>
+      </result>
+   </test-case>
+   
+
+   <test-case name="cbcl-multiply-dayTimeDuration-006">
+      <description> test multiplication of xs:dayTimeDuration by NaN </description>
+      <created by="Oliver Hallam" on="2008-05-14"/>
+      <dependency type="spec" value="XQ10+"/>
+      
+      <test>declare function local:dayTimeDuration($days as xs:integer) as xs:dayTimeDuration { xs:dayTimeDuration(concat("P", $days, "D")) }; xs:double("NaN") * local:dayTimeDuration(2)</test>
+      <result>
+         <error code="FOCA0005"/>
+      </result>
+   </test-case>
+   
+   
+   <test-case name="cbcl-times-001">
+      <description> Test behaviour of times operator when presented with an expression with static type duration </description>
+      <created by="Oliver Hallam" on="2010-02-26"/>
+      <dependency type="spec" value="XQ10+"/>
+      <test>
+        declare function local:f($x) { if ($x) then xs:duration("P1M") else xs:yearMonthDuration("P1M") };
+        local:f(false()) * 2</test>
+      <result>
+         <assert-string-value>P2M</assert-string-value>
+      </result>
+   </test-case>
+
+   <test-case name="cbcl-times-002">
+      <description> Test behaviour of times operator when presented with an expression with static type duration </description>
+      <created by="Oliver Hallam" on="2010-02-26"/>
+      <dependency type="spec" value="XQ10+"/>
+      <test>
+        declare function local:f($x) { if ($x) then xs:duration("P1M") else xs:yearMonthDuration("P1M") };
+        local:f(true()) * 2</test>
+      <result>
+         <error code="XPTY0004"/>
+      </result>
+   </test-case>
+
+   <test-case name="cbcl-times-003">
+      <description> Test behaviour of times operator when presented with an expression with static type duration </description>
+      <created by="Oliver Hallam" on="2010-02-26"/>
+      <dependency type="spec" value="XQ10+"/>
+      <test>
+        declare function local:f($x) { if ($x) then xs:duration("P1M") else xs:dayTimeDuration("P1D") };
+        local:f(false()) * 2</test>
+      <result>
+         <assert-string-value>P2D</assert-string-value>
+      </result>
+   </test-case>
+
+   <test-case name="cbcl-times-004">
+      <description> Test behaviour of times operator when presented with an expression with static type duration </description>
+      <created by="Oliver Hallam" on="2010-02-26"/>
+      <dependency type="spec" value="XQ10+"/>
+      <test>
+        declare function local:f($x) { if ($x) then xs:duration("P1M") else xs:dayTimeDuration("P1D") };
+        local:f(true()) * 2</test>
+      <result>
+         <error code="XPTY0004"/>
+      </result>
+   </test-case>
+
+   <test-case name="cbcl-times-005">
+      <description> Test behaviour of times operator when presented with an expression with static type duration </description>
+      <created by="Oliver Hallam" on="2010-02-26"/>
+      <dependency type="spec" value="XQ10+"/>
+      <test>
+        declare function local:f($x) { if ($x) then xs:duration("P1M") else xs:yearMonthDuration("P1M") };
+        2 * local:f(false())</test>
+      <result>
+         <assert-string-value>P2M</assert-string-value>
+      </result>
+   </test-case>
+
+   <test-case name="cbcl-times-006">
+      <description> Test behaviour of times operator when presented with an expression with static type duration </description>
+      <created by="Oliver Hallam" on="2010-02-26"/>
+      <dependency type="spec" value="XQ10+"/>
+      <test>
+        declare function local:f($x) { if ($x) then xs:duration("P1M") else xs:yearMonthDuration("P1M") };
+        2 * local:f(true())</test>
+      <result>
+         <error code="XPTY0004"/>
+      </result>
+   </test-case>
+
+   <test-case name="cbcl-times-007">
+      <description> Test behaviour of times operator when presented with an expression with static type duration </description>
+      <created by="Oliver Hallam" on="2010-02-26"/>
+      <dependency type="spec" value="XQ10+"/>
+      <test>
+        declare function local:f($x) { if ($x) then xs:duration("P1M") else xs:dayTimeDuration("P1D") };
+        2 * local:f(false())</test>
+      <result>
+         <assert-string-value>P2D</assert-string-value>
+      </result>
+   </test-case>
+
+   <test-case name="cbcl-times-008">
+      <description> Test behaviour of times operator when presented with an expression with static type duration </description>
+      <created by="Oliver Hallam" on="2010-02-26"/>
+      <dependency type="spec" value="XQ10+"/>
+      <test>
+        declare function local:f($x) { if ($x) then xs:duration("P1M") else xs:dayTimeDuration("P1D") };
+        2 * local:f(true())</test>
+      <result>
+         <error code="XPTY0004"/>
+      </result>
+   </test-case>
+</test-set>

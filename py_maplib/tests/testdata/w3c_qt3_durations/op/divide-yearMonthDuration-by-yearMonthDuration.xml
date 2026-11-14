@@ -1,0 +1,377 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2010/09/qt-fots-catalog"
+          name="op-divide-yearMonthDuration-by-yearMonthDuration">
+   <description>Tests for the divide-yearMonthDuration-by-yearMonthDuration() function</description>
+   <link type="spec" document="http://www.w3.org/TR/xpath-functions-30/"
+         idref="func-divide-yearMonthDuration-by-yearMonthDuration"/>
+   <test-case name="op-divide-yearMonthDuration-by-yearMonthDuration2args-1">
+      <description>
+*******************************************************
+Test: op-divide-yearMonthDuration-by-yearMonthDuration2args-1
+Written By: Carmelo Montanez                            
+Date: Tue Apr 12 16:29:08 GMT-05:00 2005                
+Purpose: Evaluates The "op:divide-yearMonthDuration-by-yearMonthDuration" operator
+ with the arguments set as follows:                    
+$arg1 = xs:yearMonthDuration(lower bound)             
+$arg2 = xs:yearMonthDuration(lower bound)             
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2004-12-13"/>
+      <test>xs:yearMonthDuration("P0Y0M") div xs:yearMonthDuration("P0Y1M")</test>
+      <result>
+         <assert-eq>0</assert-eq>
+      </result>
+   </test-case>
+   <test-case name="op-divide-yearMonthDuration-by-yearMonthDuration2args-2">
+      <description>
+*******************************************************
+Test: op-divide-yearMonthDuration-by-yearMonthDuration2args-2
+Written By: Carmelo Montanez                            
+Date: Tue Apr 12 16:29:08 GMT-05:00 2005                
+Purpose: Evaluates The "op:divide-yearMonthDuration-by-yearMonthDuration" operator
+ with the arguments set as follows:                    
+$arg1 = xs:yearMonthDuration(mid range)               
+$arg2 = xs:yearMonthDuration(lower bound)             
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2004-12-13"/>
+      <test>xs:yearMonthDuration("P1000Y6M") div xs:yearMonthDuration("P0Y1M")</test>
+      <result>
+         <assert-eq>12006</assert-eq>
+      </result>
+   </test-case>
+   <test-case name="op-divide-yearMonthDuration-by-yearMonthDuration2args-3">
+      <description>
+*******************************************************
+Test: op-divide-yearMonthDuration-by-yearMonthDuration2args-3
+Written By: Carmelo Montanez                            
+Date: Tue Apr 12 16:29:08 GMT-05:00 2005                
+Purpose: Evaluates The "op:divide-yearMonthDuration-by-yearMonthDuration" operator
+ with the arguments set as follows:                    
+$arg1 = xs:yearMonthDuration(upper bound)             
+$arg2 = xs:yearMonthDuration(lower bound)             
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2004-12-13"/>
+      <test>xs:yearMonthDuration("P2030Y12M") div xs:yearMonthDuration("P0Y1M")</test>
+      <result>
+         <assert-eq>24372</assert-eq>
+      </result>
+   </test-case>
+   <test-case name="op-divide-yearMonthDuration-by-yearMonthDuration2args-4">
+      <description>
+*******************************************************
+Test: op-divide-yearMonthDuration-by-yearMonthDuration2args-4
+Written By: Carmelo Montanez                            
+Date: Tue Apr 12 16:29:08 GMT-05:00 2005                
+Purpose: Evaluates The "op:divide-yearMonthDuration-by-yearMonthDuration" operator
+ with the arguments set as follows:                    
+$arg1 = xs:yearMonthDuration(lower bound)             
+$arg2 = xs:yearMonthDuration(mid range)               
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2004-12-13"/>
+      <test>xs:yearMonthDuration("P0Y0M") div xs:yearMonthDuration("P1000Y6M")</test>
+      <result>
+         <assert-eq>0</assert-eq>
+      </result>
+   </test-case>
+   <test-case name="op-divide-yearMonthDuration-by-yearMonthDuration2args-5">
+      <description>
+*******************************************************
+Test: op-divide-yearMonthDuration-by-yearMonthDuration2args-5
+Written By: Carmelo Montanez                            
+Date: Tue Apr 12 16:29:08 GMT-05:00 2005                
+Purpose: Evaluates The "op:divide-yearMonthDuration-by-yearMonthDuration" operator
+ with the arguments set as follows:                    
+$arg1 = xs:yearMonthDuration(lower bound)             
+$arg2 = xs:yearMonthDuration(upper bound)             
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2004-12-13"/>
+      <test>xs:yearMonthDuration("P0Y0M") div xs:yearMonthDuration("P2030Y12M")</test>
+      <result>
+         <assert-eq>0</assert-eq>
+      </result>
+   </test-case>
+   <test-case name="op-divide-yearMonthDuration-by-yMD-1">
+      <description>
+*******************************************************
+Test: op-divide-yearMonthDuration-by-YMD-1             
+Written By: Carmelo Montanez                           
+Date: June 30, 2005                                    
+Purpose: Evaluates The "divide-yearMonthDuration-by-YMD" operator 
+As per example 1 (for this function)of the F&amp;O specs.  
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2005-06-30"/>
+      <test>xs:yearMonthDuration("P3Y4M") div xs:yearMonthDuration("-P1Y4M")</test>
+      <result>
+         <assert-eq>-2.5</assert-eq>
+      </result>
+   </test-case>
+   <test-case name="op-divide-yearMonthDuration-by-yMD-2">
+      <description>
+*******************************************************
+Test: op-divide-yearMonthDuration-by-YMD-2             
+Written By: Carmelo Montanez                           
+Date: June 30, 2005                                    
+Purpose: Evaluates The "divide-yearMonthDuration-by-YMD" operator 
+used as part of a boolean expression (and operator) and the "fn:false" function. 
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2005-06-30"/>
+      <test>xs:yearMonthDuration("P10Y11M") div xs:yearMonthDuration("P12Y07M") and fn:false()</test>
+      <result>
+         <assert-false/>
+      </result>
+   </test-case>
+   <test-case name="op-divide-yearMonthDuration-by-yMD-3">
+      <description>
+*******************************************************
+Test: op-divide-yearMonthDuration-by-YMD-3             
+Written By: Carmelo Montanez                           
+Date: June 30, 2005                                    
+Purpose: Evaluates The "divide-yearMonthDuration-by-YMD" operator as 
+part of a boolean expression (or operator) and the "fn:boolean" function. 
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2005-06-30"/>
+      <test>xs:yearMonthDuration("P20Y10M") div xs:yearMonthDuration("P19Y10M") or fn:false()</test>
+      <result>
+         <assert-true/>
+      </result>
+   </test-case>
+   <test-case name="op-divide-yearMonthDuration-by-yMD-4">
+      <description>
+*******************************************************
+Test: op-divide-yearMonthDuration-by-YMD-4             
+Written By: Carmelo Montanez                           
+Date: June 30, 2005                                    
+Purpose: Evaluates The "divide-yearMonthDuration-by-YMD" operator that  
+return true and used together with fn:not.             
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2005-06-30"/>
+      <test>fn:not(xs:yearMonthDuration("P11Y04M") div xs:yearMonthDuration("P02Y11M"))</test>
+      <result>
+         <assert-false/>
+      </result>
+   </test-case>
+   <test-case name="op-divide-yearMonthDuration-by-yMD-5">
+      <description>
+*******************************************************
+Test: op-divide-yearMonthDuration-by-YMD-5             
+Written By: Carmelo Montanez                           
+Date: June 30, 2005                                    
+Purpose: Evaluates The "divide-yearMonthDuration-by-YMD" operator that  
+is used as an argument to the fn:boolean function.     
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2005-06-30"/>
+      <test>fn:boolean(xs:yearMonthDuration("P05Y08M") div xs:yearMonthDuration("P03Y06M"))</test>
+      <result>
+         <assert-true/>
+      </result>
+   </test-case>
+   <test-case name="op-divide-yearMonthDuration-by-yMD-6">
+      <description>
+*******************************************************
+Test: op-divide-yearMonthDuration-by-YMD-6             
+Written By: Carmelo Montanez                           
+Date: June 30, 2005                                    
+Purpose: Evaluates The "divide-yearMonthDuration-by-YMD" operator that 
+is used as an argument to the fn:number function.      
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2005-06-30"/>
+      <test>fn:number(xs:yearMonthDuration("P02Y09M") div xs:yearMonthDuration("P02Y09M"))</test>
+      <result>
+         <assert-eq>1</assert-eq>
+      </result>
+   </test-case>
+   <test-case name="op-divide-yearMonthDuration-by-yMD-7">
+      <description>
+*******************************************************
+Test: op-divide-yearMonthDuration-by-YMD-7             
+Written By: Carmelo Montanez                           
+Date: June 30, 2005                                    
+Purpose: Evaluates The "divide-yearMonthDuration-by-YMD" operator used  
+as an argument to the "fn:string" function).           
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2005-06-30"/>
+      <test>fn:string(xs:yearMonthDuration("P03Y08M") div xs:yearMonthDuration("P03Y08M"))</test>
+      <result>
+         <assert-eq>"1"</assert-eq>
+      </result>
+   </test-case>
+   <test-case name="op-divide-yearMonthDuration-by-yMD-8">
+      <description>
+*******************************************************
+Test: op-divide-yearMonthDuration-by-YMD-8             
+Written By: Carmelo Montanez                           
+Date: June 30, 2005                                    
+Purpose: Evaluates The "divide-yearMonthDuration-by-YMD" operator that  
+returns a negative value.                              
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2005-06-30"/>
+      <test>(xs:yearMonthDuration("P10Y01M") div xs:yearMonthDuration("-P10Y01M"))</test>
+      <result>
+         <assert-eq>-1</assert-eq>
+      </result>
+   </test-case>
+   <test-case name="op-divide-yearMonthDuration-by-yMD-9">
+      <description>
+*******************************************************
+Test: op-divide-yearMonthDuration-by-YMD-9             
+Written By: Carmelo Montanez                           
+Date: June 30, 2005                                    
+Purpose: Evaluates The "divide-yearMonthDuration-by-YMD" operator used 
+together with and "and" expression.                    
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2005-06-30"/>
+      <test>(xs:yearMonthDuration("P01Y01M") div xs:yearMonthDuration("P02Y02M")) and (xs:yearMonthDuration("P02Y03M") div xs:yearMonthDuration("P04Y04M"))</test>
+      <result>
+         <assert-true/>
+      </result>
+   </test-case>
+   <test-case name="op-divide-yearMonthDuration-by-yMD-10">
+      <description>
+*******************************************************
+Test: op-divide-yearMonthDuration-by-YMD-10            
+Written By: Carmelo Montanez                           
+Date: June 30, 2005                                    
+Purpose: Evaluates The "divide-yearMonthDuration-by-YMD" operator used  
+together with an "or" expression.                      
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2005-06-30"/>
+      <test>(xs:yearMonthDuration("P05Y02M") div xs:yearMonthDuration("P03Y04M")) or (xs:yearMonthDuration("P05Y03M") div xs:yearMonthDuration("P01Y03M"))</test>
+      <result>
+         <assert-true/>
+      </result>
+   </test-case>
+   <test-case name="op-divide-yearMonthDuration-by-yMD-11">
+      <description>
+*******************************************************
+Test: op-divide-yearMonthDuration-by-YMD-11            
+Written By: Carmelo Montanez                           
+Date: June 30, 2005                                    
+Purpose: Evaluates The "divide-yearMonthDuration-by-YMD" operator used  
+together with multiple "div" expressions.              
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2005-06-30"/>
+      <test>round-half-to-even( (xs:yearMonthDuration("P42Y10M") div xs:yearMonthDuration("P20Y10M")) div (xs:yearMonthDuration("P20Y11M") div xs:yearMonthDuration("P18Y11M")), 15)</test>
+      <result>
+         <assert-eq>1.859410358565737</assert-eq>
+      </result>
+   </test-case>
+   <test-case name="op-divide-yearMonthDuration-by-yMD-12">
+      <description>
+*******************************************************
+Test: op-divide-yearMonthDuration-by-YMD-12            
+Written By: Carmelo Montanez                           
+Date: June 30, 2005                                    
+Purpose: Evaluates The "divide-yearMonthDuration-by-YMD" operator used 
+with a boolean expression and the "fn:true" function.   
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2005-06-30"/>
+      <test>(xs:yearMonthDuration("P10Y11M") div xs:yearMonthDuration("P05Y07M")) and (fn:true())</test>
+      <result>
+         <assert-true/>
+      </result>
+   </test-case>
+   <test-case name="op-divide-yearMonthDuration-by-yMD-13">
+      <description>
+*******************************************************
+Test: op-divide-yearMonthDuration-by-YMD-13            
+Written By: Carmelo Montanez                           
+Date: June 30, 2005                                    
+Purpose: Evaluates The "divide-yearMonthDuration-by-YMD" operator used  
+together with the numeric-equal- operator "eq".        
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2005-06-30"/>
+      <test>(xs:yearMonthDuration("P23Y11M") div xs:yearMonthDuration("P23Y11M")) eq xs:decimal(2.0)</test>
+      <result>
+         <assert-false/>
+      </result>
+   </test-case>
+   <test-case name="op-divide-yearMonthDuration-by-yMD-14">
+      <description>
+*******************************************************
+Test: op-divide-yearMonthDuration-by-YMD-14            
+Written By: Carmelo Montanez                           
+Date: June 30, 2005                                    
+Purpose: Evaluates The "divide-yearMonthDuration-by-YMD" operator used  
+together with the numeric-equal operator "ne".         
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2005-06-30"/>
+      <test>(xs:yearMonthDuration("P21Y12M") div xs:yearMonthDuration("P08Y05M")) ne xs:decimal(2.0)</test>
+      <result>
+         <assert-true/>
+      </result>
+   </test-case>
+   <test-case name="op-divide-yearMonthDuration-by-yMD-15">
+      <description>
+*******************************************************
+Test: op-divide-yearMonthDuration-by-YMD-15            
+Written By: Carmelo Montanez                           
+Date: June 30, 2005                                    
+Purpose: Evaluates The "divide-yearMonthDuration-by-YMD" operator used  
+together with the numeric-equal operator "le".         
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2005-06-30"/>
+      <test>(xs:yearMonthDuration("P10Y01M") div xs:yearMonthDuration("P17Y02M")) le xs:decimal(2.0)</test>
+      <result>
+         <assert-true/>
+      </result>
+   </test-case>
+   <test-case name="op-divide-yearMonthDuration-by-yMD-16">
+      <description>
+*******************************************************
+Test: op-divide-yearMonthDuration-by-YMD-16            
+Written By: Carmelo Montanez                           
+Date: June 30, 2005                                    
+Purpose: Evaluates The "divide-yearMonthDuration-by-YMD" operator used  
+together with the numeric-equal operator "ge".         
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2005-06-30"/>
+      <test>(xs:yearMonthDuration("P13Y09M") div xs:yearMonthDuration("P18Y02M")) ge xs:decimal(2.0)</test>
+      <result>
+         <assert-false/>
+      </result>
+   </test-case>
+   <test-case name="K-YearMonthDurationDivideYMD-1">
+      <description>
+*******************************************************
+ Test: K-YearMonthDurationDivideYMD-1                  
+ Written by: Frans Englich                             
+ Date: 2007-11-22T11:31:21+01:00                       
+ Purpose: Simple test of dividing a xs:yearMonthDuration with xs:yearMonthDuration. 
+*******************************************************
+</description>
+      <created by="Frans Englich" on="2007-11-26+01:00"/>
+      <test>xs:yearMonthDuration("P3Y36M") div xs:yearMonthDuration("P60Y") eq 0.1</test>
+      <result>
+         <assert-true/>
+      </result>
+   </test-case>
+   
+   <test-case name="cbcl-divide-yearMonthDuration-by-yearMonthDuration-001">
+      <description> test division of xs:yearMonthDuration by 0 </description>
+      <created by="Tim Mills" on="2008-05-14"/>
+      <test>xs:yearMonthDuration("P2Y") div xs:yearMonthDuration("P0Y")</test>
+      <result>
+         <error code="FOAR0001"/>
+      </result>
+   </test-case>
+</test-set>

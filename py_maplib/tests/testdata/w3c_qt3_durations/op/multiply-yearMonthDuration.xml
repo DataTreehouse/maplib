@@ -1,0 +1,685 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2010/09/qt-fots-catalog"
+          name="op-multiply-yearMonthDuration">
+   <description>Tests for the multiply-yearMonthDuration() function</description>
+   <link type="spec" document="http://www.w3.org/TR/xpath-functions-30/"
+         idref="func-multiply-yearMonthDuration"/>
+   <test-case name="op-multiply-yearMonthDuration2args-1">
+      <description>
+*******************************************************
+Test: op-multiply-yearMonthDuration2args-1              
+Written By: Carmelo Montanez                            
+Date: Tue Apr 12 16:29:08 GMT-05:00 2005                
+Purpose: Evaluates The "op:multiply-yearMonthDuration" operator
+ with the arguments set as follows:                    
+$arg1 = xs:yearMonthDuration(lower bound)             
+$arg2 = xs:double(lower bound)                         
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2004-12-13"/>
+      <test>xs:yearMonthDuration("P0Y0M") * xs:double("-1.7976931348623157E308")</test>
+      <result>
+         <assert-string-value>P0M</assert-string-value>
+      </result>
+   </test-case>
+   <test-case name="op-multiply-yearMonthDuration2args-2">
+      <description>
+*******************************************************
+Test: op-multiply-yearMonthDuration2args-2              
+Written By: Carmelo Montanez                            
+Date: Tue Apr 12 16:29:08 GMT-05:00 2005                
+Purpose: Evaluates The "op:multiply-yearMonthDuration" operator
+ with the arguments set as follows:                    
+$arg1 = xs:yearMonthDuration(mid range)               
+$arg2 = xs:double(lower bound)                         
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2004-12-13"/>
+      <test>xs:yearMonthDuration("P1000Y6M") * xs:double("-0")</test>
+      <result>
+         <assert-string-value>P0M</assert-string-value>
+      </result>
+   </test-case>
+   <test-case name="op-multiply-yearMonthDuration2args-3">
+      <description>
+*******************************************************
+Test: op-multiply-yearMonthDuration2args-3              
+Written By: Carmelo Montanez                            
+Date: Tue Apr 12 16:29:08 GMT-05:00 2005                
+Purpose: Evaluates The "op:multiply-yearMonthDuration" operator
+ with the arguments set as follows:                    
+$arg1 = xs:yearMonthDuration(upper bound)             
+$arg2 = xs:double(lower bound)                         
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2004-12-13"/>
+      <test>xs:yearMonthDuration("P2030Y12M") * xs:double("-0")</test>
+      <result>
+         <assert-string-value>P0M</assert-string-value>
+      </result>
+   </test-case>
+   <test-case name="op-multiply-yearMonthDuration2args-4">
+      <description>
+*******************************************************
+Test: op-multiply-yearMonthDuration2args-4              
+Written By: Carmelo Montanez                            
+Date: Tue Apr 12 16:29:08 GMT-05:00 2005                
+Purpose: Evaluates The "op:multiply-yearMonthDuration" operator
+ with the arguments set as follows:                    
+$arg1 = xs:yearMonthDuration(lower bound)             
+$arg2 = xs:double(mid range)                           
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2004-12-13"/>
+      <test>xs:yearMonthDuration("P0Y0M") * xs:double("0")</test>
+      <result>
+         <assert-string-value>P0M</assert-string-value>
+      </result>
+   </test-case>
+   <test-case name="op-multiply-yearMonthDuration2args-5">
+      <description>
+*******************************************************
+Test: op-multiply-yearMonthDuration2args-5              
+Written By: Carmelo Montanez                            
+Date: Tue Apr 12 16:29:08 GMT-05:00 2005                
+Purpose: Evaluates The "op:multiply-yearMonthDuration" operator
+ with the arguments set as follows:                    
+$arg1 = xs:yearMonthDuration(lower bound)             
+$arg2 = xs:double(upper bound)                         
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2004-12-13"/>
+      <test>xs:yearMonthDuration("P0Y0M") * xs:double("1.7976931348623157E308")</test>
+      <result>
+         <assert-string-value>P0M</assert-string-value>
+      </result>
+   </test-case>
+   <test-case name="op-multiply-yearMonthDuration-1">
+      <description>
+*******************************************************
+Test: op-multiply-yearMonthDuration-1                  
+Written By: Carmelo Montanez                           
+Date: June 30, 2005                                    
+Purpose: Evaluates The "multiply-yearMonthDuration" function 
+As per example 1 (for this function)of the F&amp;O specs.  
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2005-06-29"/>
+      <test>xs:yearMonthDuration("P2Y11M") * 2.3</test>
+      <result>
+         <assert-string-value>P6Y9M</assert-string-value>
+      </result>
+   </test-case>
+   <test-case name="op-multiply-yearMonthDuration-2">
+      <description>
+*******************************************************
+Test: op-multiply-yearMonthDuration-2                  
+Written By: Carmelo Montanez                           
+Date: June 30, 2005                                    
+Purpose: Evaluates The "multiply-yearMonthDuration" function 
+used as part of a boolean expression (and operator) and the "fn:false" function. 
+ Apply "fn:string" function to account for new EBV.     
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2005-06-29"/>
+      <test>fn:string((xs:yearMonthDuration("P10Y11M")) * 2.0) and fn:false()</test>
+      <result>
+         <assert-false/>
+      </result>
+   </test-case>
+   <test-case name="op-multiply-yearMonthDuration-3">
+      <description>
+*******************************************************
+Test: op-multiply-yearMonthDuration-3                  
+Written By: Carmelo Montanez                           
+Date: June 30, 2005                                    
+Purpose: Evaluates The "multiply-yearMonthDuration" function as 
+part of a boolean expression (or operator) and the "fn:boolean" function. 
+ Apply "fn:string" function to account for new EBV.     
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2005-06-29"/>
+      <test>fn:string((xs:yearMonthDuration("P20Y10M") * 2.0)) or fn:false()</test>
+      <result>
+         <assert-true/>
+      </result>
+   </test-case>
+   <test-case name="op-multiply-yearMonthDuration-4">
+      <description>
+*******************************************************
+Test: op-multiply-yearMonthDuration-4                  
+Written By: Carmelo Montanez                           
+Date: June 30, 2005                                    
+Purpose: Evaluates The "multiply-yearMonthDuration" function that  
+return true and used together with fn:not.             
+ Apply "fn:string" function to account for new EBV.     
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2005-06-29"/>
+      <test>fn:not(fn:string(xs:yearMonthDuration("P11Y04M") * 2.0))</test>
+      <result>
+         <assert-false/>
+      </result>
+   </test-case>
+   <test-case name="op-multiply-yearMonthDuration-5">
+      <description>
+*******************************************************
+Test: op-multiply-yearMonthDuration-5                  
+Written By: Carmelo Montanez                           
+Date: June 30, 2005                                    
+Purpose: Evaluates The "multiply-yearMonthDuration" function that  
+is used as an argument to the fn:boolean function.     
+ Apply "fn:string" function to account for new EBV.     
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2005-06-29"/>
+      <test>fn:boolean(fn:string(xs:yearMonthDuration("P05Y08M") * 2.0))</test>
+      <result>
+         <assert-true/>
+      </result>
+   </test-case>
+   <test-case name="op-multiply-yearMonthDuration-6">
+      <description>
+*******************************************************
+Test: op-multiply-yearMonthDuration-6                  
+Written By: Carmelo Montanez                           
+Date: June 30, 2005                                    
+Purpose: Evaluates The "multiply-yearMonthDuration" operator that 
+is used as an argument to the fn:number function.      
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2005-06-29"/>
+      <test>fn:number(xs:yearMonthDuration("P02Y09M") * 2.0)</test>
+      <result>
+         <assert-string-value>NaN</assert-string-value>
+      </result>
+   </test-case>
+   <test-case name="op-multiply-yearMonthDuration-7">
+      <description>
+*******************************************************
+Test: op-multiply-yearMonthDuration-7                  
+Written By: Carmelo Montanez                           
+Date: June 30, 2005                                    
+Purpose: Evaluates The "multiply-yearMonthDuration" function used  
+as an argument to the "fn:string" function).           
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2005-06-29"/>
+      <test>fn:string(xs:yearMonthDuration("P03Y08M") * 2.0)</test>
+      <result>
+         <assert-string-value>P7Y4M</assert-string-value>
+      </result>
+   </test-case>
+   <test-case name="op-multiply-yearMonthDuration-8">
+      <description>
+*******************************************************
+Test: op-multiply-yearMonthDuration-8                  
+Written By: Carmelo Montanez                           
+Date: June 30, 2005                                    
+Purpose: Evaluates The "multiply-yearMonthDuration" function that  
+returns a negative value.                              
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2005-06-29"/>
+      <test>(xs:yearMonthDuration("P10Y01M") * -2.0)</test>
+      <result>
+         <assert-string-value>-P20Y2M</assert-string-value>
+      </result>
+   </test-case>
+   <test-case name="op-multiply-yearMonthDuration-9">
+      <description>
+*******************************************************
+Test: op-multiply-yearMonthDuration-9                  
+Written By: Carmelo Montanez                           
+Date: June 30, 2005                                    
+Purpose: Evaluates The "multiply-yearMonthDuration" function used 
+together with and "and" expression.                    
+ Apply "fn:string" function to account for new EBV.     
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2005-06-29"/>
+      <test>fn:string((xs:yearMonthDuration("P01Y01M") * 2.0)) and fn:string((xs:yearMonthDuration("P02Y03M") * 2.0))</test>
+      <result>
+         <assert-true/>
+      </result>
+   </test-case>
+   <test-case name="op-multiply-yearMonthDuration-10">
+      <description>
+*******************************************************
+Test: op-multiply-yearMonthDuration-10                 
+Written By: Carmelo Montanez                           
+Date: June 30, 2005                                    
+Purpose: Evaluates The "multiply-yearMonthDuration" function used  
+together with an "or" expression.                      
+ Apply "fn:string" function to account for new EBV.     
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2005-06-29"/>
+      <test>fn:string((xs:yearMonthDuration("P05Y02M") * 2.0)) or fn:string((xs:yearMonthDuration("P05Y03M") * 2.0))</test>
+      <result>
+         <assert-true/>
+      </result>
+   </test-case>
+   <test-case name="op-multiply-yearMonthDuration-11">
+      <description>
+*******************************************************
+Test: op-multiply-yearMonthDuration-11                 
+Written By: Carmelo Montanez                           
+Date: June 30, 2005                                    
+Purpose: Evaluates The "multiply-yearMonthDuration" function used  
+together with a "div" expression.                      
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2005-06-29"/>
+      <test>(xs:yearMonthDuration("P20Y11M") * 2.0) div (xs:yearMonthDuration("P20Y11M") * 2.0)</test>
+      <result>
+         <assert-string-value>1</assert-string-value>
+      </result>
+   </test-case>
+   <test-case name="op-multiply-yearMonthDuration-12">
+      <description>
+*******************************************************
+Test: op-multiply-yearMonthDuration-12                 
+Written By: Carmelo Montanez                           
+Date: June 30, 2005                                    
+Purpose: Evaluates The "multiply-yearMonthDuration" operators used 
+with a boolean expression and the "fn:true" function.   
+ Apply "fn:string" function to account for new EBV.     
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2005-06-29"/>
+      <test>fn:string((xs:yearMonthDuration("P10Y11M") * 2.0)) and (fn:true())</test>
+      <result>
+         <assert-true/>
+      </result>
+   </test-case>
+   <test-case name="op-multiply-yearMonthDuration-13">
+      <description>
+*******************************************************
+Test: op-multiply-yearMonthDuration-13                 
+Written By: Carmelo Montanez                           
+Date: June 29, 2005                                    
+Purpose: Evaluates The "multiply-yearMonthDuration" function used  
+together with the numeric-equal- operator "eq".        
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2005-06-29"/>
+      <test>(xs:yearMonthDuration("P23Y11M") * 2.0) eq xs:yearMonthDuration("P23Y11M")</test>
+      <result>
+         <assert-false/>
+      </result>
+   </test-case>
+   <test-case name="op-multiply-yearMonthDuration-14">
+      <description>
+*******************************************************
+Test: op-multiply-yearMonthDuration-14                 
+Written By: Carmelo Montanez                           
+Date: June 30, 2005                                    
+Purpose: Evaluates The "multiply-yearMonthDuration" function used  
+together with the numeric-equal operator "ne".         
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2005-06-29"/>
+      <test>(xs:yearMonthDuration("P21Y12M") * 2.0) ne xs:yearMonthDuration("P08Y05M")</test>
+      <result>
+         <assert-true/>
+      </result>
+   </test-case>
+   <test-case name="op-multiply-yearMonthDuration-15">
+      <description>
+*******************************************************
+Test: op-multiply-yearMonthDuration-15                 
+Written By: Carmelo Montanez                           
+Date: June 30, 2005                                    
+Purpose: Evaluates The "multiply-yearMonthDuration" function used  
+together with the numeric-equal operator "le".         
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2005-06-29"/>
+      <test>(xs:yearMonthDuration("P10Y01M") * 2.0) le xs:yearMonthDuration("P17Y02M")</test>
+      <result>
+         <assert-false/>
+      </result>
+   </test-case>
+   <test-case name="op-multiply-yearMonthDuration-16">
+      <description>
+*******************************************************
+Test: op-subtract-yearMonthDurations-16                
+Written By: Carmelo Montanez                           
+Date: June 29, 2005                                    
+Purpose: Evaluates The "subtract-yearMonthDurations" function used  
+together with the numeric-equal operator "ge".         
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2005-06-29"/>
+      <test>(xs:yearMonthDuration("P13Y09M") - xs:yearMonthDuration("P18Y02M")) ge xs:yearMonthDuration("P18Y02M")</test>
+      <result>
+         <assert-false/>
+      </result>
+   </test-case>
+   <test-case name="op-multiply-yearMonthDuration-17">
+      <description>
+*******************************************************
+Test: op-multiply-yearMonthDuration-16                 
+Written By: Carmelo Montanez                           
+Date: June 30, 2005                                    
+Purpose: Evaluates The "multiply-yearMonthDuration" operator
+multiplied by +0.  Use of fn:count to avoid empty file. 
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2005-06-29"/>
+      <test>fn:count((xs:yearMonthDuration("P13Y09M") *+0))</test>
+      <result>
+         <assert-string-value>1</assert-string-value>
+      </result>
+   </test-case>
+   <test-case name="op-multiply-yearMonthDuration-18">
+      <description>
+*******************************************************
+Test: op-multiply-yearMonthDuration-18                 
+Written By: Carmelo Montanez                           
+Date: June 30, 2005                                    
+Purpose: Evaluates The "multiply-yearMonthDuration" operator
+multiplied by -0.  Use of fn:count to avoid empty file. 
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2005-06-29"/>
+      <test>fn:count((xs:yearMonthDuration("P13Y09M") *-0))</test>
+      <result>
+         <assert-string-value>1</assert-string-value>
+      </result>
+   </test-case>
+   <test-case name="op-multiply-yearMonthDuration-19">
+      <description>
+*******************************************************
+Test: op-multiply-yearMonthDuration-19                 
+Written By: Carmelo Montanez                           
+Date: June 30, 2005                                    
+Purpose: Evaluates The "multiply-yearMonthDuration" operator
+with arg2 set to NaN.  Should raise an error           
+*******************************************************
+</description>
+      <created by="Carmelo Montanez" on="2005-06-29"/>
+      <test>xs:yearMonthDuration("P13Y09M") * fn:number(())</test>
+      <result>
+         <error code="FOCA0005"/>
+      </result>
+   </test-case>
+   <test-case name="op-multiply-yearMonthDuration-20">
+      <description>
+*******************************************************
+Test: op-multiply-yearMonthDuration-20                 
+Written By: Michael Kay                                
+Date: 5 Feb 2009                                       
+Purpose: Test rounding behaviour, FO.E12.              
+*******************************************************
+</description>
+      <created by="Michael Kay, Saxonica" on="2009-03-05"/>
+      <test>for $i in (-3.9, -3.5, -3.1, -0.9, -0.5, -0.1, +0.1, +0.5, +0.9, +3.1, +3.5, +3.9) return xs:yearMonthDuration("P1M") * $i</test>
+      <result>
+         <assert-string-value>-P4M -P3M -P3M -P1M P0M P0M P0M P1M P1M P3M P4M P4M</assert-string-value>
+      </result>
+   </test-case>
+   <test-case name="K-YearMonthDurationMultiply-1">
+      <description>
+*******************************************************
+ Test: K-YearMonthDurationMultiply-1                   
+ Written by: Frans Englich                             
+ Date: 2007-11-22T11:31:21+01:00                       
+ Purpose: Simple test of multiplying a xs:yearMonthDuration with 3. 
+*******************************************************
+</description>
+      <created by="Frans Englich" on="2007-11-26+01:00"/>
+      <test>xs:yearMonthDuration("P3Y36M") * 3 eq xs:yearMonthDuration("P18Y")</test>
+      <result>
+         <assert-true/>
+      </result>
+   </test-case>
+   <test-case name="K-YearMonthDurationMultiply-2">
+      <description>
+*******************************************************
+ Test: K-YearMonthDurationMultiply-2                   
+ Written by: Frans Englich                             
+ Date: 2007-11-22T11:31:21+01:00                       
+ Purpose: Simple test of multiplying 3 with xs:yearMonthDuration. 
+*******************************************************
+</description>
+      <created by="Frans Englich" on="2007-11-26+01:00"/>
+      <test>3 * xs:yearMonthDuration("P3Y36M") eq xs:yearMonthDuration("P18Y")</test>
+      <result>
+         <assert-true/>
+      </result>
+   </test-case>
+   <test-case name="K-YearMonthDurationMultiply-3">
+      <description>
+*******************************************************
+ Test: K-YearMonthDurationMultiply-3                   
+ Written by: Frans Englich                             
+ Date: 2007-11-22T11:31:21+01:00                       
+ Purpose: Simple test of multiplying 0 with xs:yearMonthDuration. 
+*******************************************************
+</description>
+      <created by="Frans Englich" on="2007-11-26+01:00"/>
+      <test>0 * xs:yearMonthDuration("P3Y36M") eq xs:yearMonthDuration("P0M")</test>
+      <result>
+         <assert-true/>
+      </result>
+   </test-case>
+   <test-case name="K-YearMonthDurationMultiply-4">
+      <description>
+*******************************************************
+ Test: K-YearMonthDurationMultiply-4                   
+ Written by: Frans Englich                             
+ Date: 2007-11-22T11:31:21+01:00                       
+ Purpose: Simple test of multiplying a xs:yearMonthDuration with 0. 
+*******************************************************
+</description>
+      <created by="Frans Englich" on="2007-11-26+01:00"/>
+      <test>xs:yearMonthDuration("P3Y36M") * 0 eq xs:yearMonthDuration("P0M")</test>
+      <result>
+         <assert-true/>
+      </result>
+   </test-case>
+   <test-case name="K-YearMonthDurationMultiply-5">
+      <description>
+*******************************************************
+ Test: K-YearMonthDurationMultiply-5                   
+ Written by: Frans Englich                             
+ Date: 2007-11-22T11:31:21+01:00                       
+ Purpose: Simple test of multiplying a xs:yearMonthDuration with INF. 
+*******************************************************
+</description>
+      <created by="Frans Englich" on="2007-11-26+01:00"/>
+      <test>xs:yearMonthDuration("P3Y3M") * xs:double("INF")</test>
+      <result>
+         <error code="FODT0002"/>
+      </result>
+   </test-case>
+   <test-case name="K-YearMonthDurationMultiply-6">
+      <description>
+*******************************************************
+ Test: K-YearMonthDurationMultiply-6                   
+ Written by: Frans Englich                             
+ Date: 2007-11-22T11:31:21+01:00                       
+ Purpose: Simple test of multiplying a xs:yearMonthDuration with -INF. 
+*******************************************************
+</description>
+      <created by="Frans Englich" on="2007-11-26+01:00"/>
+      <test>xs:yearMonthDuration("P3Y3M") * xs:double("-INF")</test>
+      <result>
+         <error code="FODT0002"/>
+      </result>
+   </test-case>
+   <test-case name="K-YearMonthDurationMultiply-7">
+      <description>
+*******************************************************
+ Test: K-YearMonthDurationMultiply-7                   
+ Written by: Frans Englich                             
+ Date: 2007-11-22T11:31:21+01:00                       
+ Purpose: Simple test of multiplying a xs:yearMonthDuration with NaN. 
+*******************************************************
+</description>
+      <created by="Frans Englich" on="2007-11-26+01:00"/>
+      <test>xs:yearMonthDuration("P3Y3M") * xs:double("NaN")</test>
+      <result>
+         <error code="FOCA0005"/>
+      </result>
+   </test-case>
+   <test-case name="K-YearMonthDurationMultiply-8">
+      <description>
+*******************************************************
+ Test: K-YearMonthDurationMultiply-8                   
+ Written by: Frans Englich                             
+ Date: 2007-11-22T11:31:21+01:00                       
+ Purpose: The multiplication operator is not available between xs:duration and xs:integer. 
+*******************************************************
+</description>
+      <created by="Frans Englich" on="2007-11-26+01:00"/>
+      <test>xs:duration("P1Y3M") * 3</test>
+      <result>
+         <error code="XPTY0004"/>
+      </result>
+   </test-case>
+   <test-case name="K-YearMonthDurationMultiply-9">
+      <description>
+*******************************************************
+ Test: K-YearMonthDurationMultiply-9                   
+ Written by: Frans Englich                             
+ Date: 2007-11-22T11:31:21+01:00                       
+ Purpose: The multiplication operator is not available between xs:integer and xs:duration. 
+*******************************************************
+</description>
+      <created by="Frans Englich" on="2007-11-26+01:00"/>
+      <test>3 * xs:duration("P1Y3M")</test>
+      <result>
+         <error code="XPTY0004"/>
+      </result>
+   </test-case>
+   <test-case name="K-YearMonthDurationMultiply-10">
+      <description>
+*******************************************************
+ Test: K-YearMonthDurationMultiply-10                  
+ Written by: Frans Englich                             
+ Date: 2007-11-22T11:31:21+01:00                       
+ Purpose: The multiplication operator is not available between xs:dayTimeDuration and xs:yearMonthDuration. 
+*******************************************************
+</description>
+      <created by="Frans Englich" on="2007-11-26+01:00"/>
+      <test>xs:dayTimeDuration("P3D") * xs:yearMonthDuration("P3Y3M")</test>
+      <result>
+         <error code="XPTY0004"/>
+      </result>
+   </test-case>
+   <test-case name="K-YearMonthDurationMultiply-11">
+      <description>
+*******************************************************
+ Test: K-YearMonthDurationMultiply-11                  
+ Written by: Frans Englich                             
+ Date: 2007-11-22T11:31:21+01:00                       
+ Purpose: The multiplication operator is not available between xs:yearMonthDuration and xs:dayTimeDuration. 
+*******************************************************
+</description>
+      <created by="Frans Englich" on="2007-11-26+01:00"/>
+      <test>xs:yearMonthDuration("P3Y3M") * xs:dayTimeDuration("P3D")</test>
+      <result>
+         <error code="XPTY0004"/>
+      </result>
+   </test-case>
+   <test-case name="K-YearMonthDurationMultiply-12">
+      <description>
+*******************************************************
+ Test: K-YearMonthDurationMultiply-12                  
+ Written by: Frans Englich                             
+ Date: 2007-11-22T11:31:21+01:00                       
+ Purpose: The multiplication operator is not available between xs:yearMonthDuration and xs:yearMonthDuration. 
+*******************************************************
+</description>
+      <created by="Frans Englich" on="2007-11-26+01:00"/>
+      <test>xs:yearMonthDuration("P3Y3M") * xs:yearMonthDuration("P3Y3M")</test>
+      <result>
+         <error code="XPTY0004"/>
+      </result>
+   </test-case>
+   <test-case name="K-YearMonthDurationMultiply-13">
+      <description>
+*******************************************************
+ Test: K-YearMonthDurationMultiply-13                  
+ Written by: Frans Englich                             
+ Date: 2007-11-22T11:31:21+01:00                       
+ Purpose: The multiplication operator is not available between xs:dayTimeDuration and xs:dayTimeDuration. 
+*******************************************************
+</description>
+      <created by="Frans Englich" on="2007-11-26+01:00"/>
+      <test>xs:dayTimeDuration("P3D") * xs:dayTimeDuration("P3D")</test>
+      <result>
+         <error code="XPTY0004"/>
+      </result>
+   </test-case>
+   
+   
+   <test-case name="cbcl-multiply-yearMonthDuration-001">
+      <description> test multiplication of xs:yearMonthDuration by 0 </description>
+      <created by="Tim Mills" on="2008-05-14"/>
+      <dependency type="spec" value="XQ10+"/>
+      <test>
+        declare function local:yearMonthDuration($years as xs:integer) as xs:yearMonthDuration { xs:yearMonthDuration(concat("P", $years, "Y")) };
+        local:yearMonthDuration(2) * 0</test>
+      <result>
+         <assert-string-value>P0M</assert-string-value>
+      </result>
+   </test-case>
+
+   <test-case name="cbcl-multiply-yearMonthDuration-002">
+      <description> test multiplication of xs:yearMonthDuration by 1 </description>
+      <created by="Tim Mills" on="2008-05-14"/>
+      <dependency type="spec" value="XQ10+"/>
+      <test>
+        declare function local:yearMonthDuration($years as xs:integer) as xs:yearMonthDuration { xs:yearMonthDuration(concat("P", $years, "Y")) };
+        local:yearMonthDuration(2) * 1</test>
+      <result>
+         <assert-string-value>P2Y</assert-string-value>
+      </result>
+   </test-case>
+
+   <test-case name="cbcl-multiply-yearMonthDuration-003">
+      <description> test multiplication of xs:yearMonthDuration by NaN </description>
+      <created by="Tim Mills" on="2008-05-14"/>
+      <test>xs:yearMonthDuration("P2Y") * xs:double('NaN')</test>
+      <result>
+         <error code="FOCA0005"/>
+      </result>
+   </test-case>
+
+   <test-case name="cbcl-multiply-yearMonthDuration-004">
+      <description> test multiplication of xs:yearMonthDuration by 0 </description>
+      <created by="Tim Mills" on="2008-05-14"/>
+      <dependency type="spec" value="XQ10+"/>
+      <test>
+        declare function local:yearMonthDuration($years as xs:integer) as xs:yearMonthDuration { xs:yearMonthDuration(concat("P", $years, "Y")) };
+        0 * local:yearMonthDuration(2)</test>
+      <result>
+         <assert-string-value>P0M</assert-string-value>
+      </result>
+   </test-case>
+
+   <test-case name="cbcl-multiply-yearMonthDuration-005">
+      <description> test multiplication of xs:yearMonthDuration by 1 </description>
+      <created by="Tim Mills" on="2008-05-14"/>
+      <dependency type="spec" value="XQ10+"/>
+      <test>
+        declare function local:yearMonthDuration($years as xs:integer) as xs:yearMonthDuration { xs:yearMonthDuration(concat("P", $years, "Y")) };
+        1 * local:yearMonthDuration(2)</test>
+      <result>
+         <assert-string-value>P2Y</assert-string-value>
+      </result>
+   </test-case>
+
+   <test-case name="cbcl-multiply-yearMonthDuration-006">
+      <description> test multiplication of xs:yearMonthDuration by NaN </description>
+      <created by="Tim Mills" on="2008-05-14"/>
+      <test>xs:double('NaN') * xs:yearMonthDuration("P2Y")</test>
+      <result>
+         <error code="FOCA0005"/>
+      </result>
+   </test-case>
+</test-set>
