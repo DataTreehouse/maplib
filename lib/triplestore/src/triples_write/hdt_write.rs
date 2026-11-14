@@ -68,7 +68,7 @@ struct TypedObjects {
 }
 
 pub(super) fn write_hdt<W: Write>(
-    triplestore: &mut Triplestore,
+    triplestore: &Triplestore,
     buf: &mut W,
     graph: &NamedGraph,
 ) -> Result<(), TriplestoreError> {

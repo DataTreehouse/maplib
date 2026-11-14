@@ -32,7 +32,7 @@ use representation::solution_mapping::EagerSolutionMappings;
 use representation::RDFNodeState;
 use std::collections::HashMap;
 use std::io::{BufWriter, Write};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use templates::ast::Template;
 use tracing::instrument;
 use triplestore::triples_read::ExtendedRdfFormat;
@@ -80,7 +80,7 @@ impl DocumentKind {
 
     pub(crate) fn map_mutex(
         &self,
-        inner: &mut std::sync::MutexGuard<InnerModel>,
+        inner: &mut InnerModel,
         doc: StringOrPathBuf,
         graph: Option<String>,
         uuid_namespace: Option<String>,
@@ -340,7 +340,7 @@ impl PyModelStream {
     fn collect(&self, py: Python<'_>) -> PyResult<()> {
         let model = self.model.bind(py).get();
         let carrier = py.detach(|| {
-            let mut inner = model.inner.lock().unwrap();
+            let mut inner = model.inner.write().unwrap();
             empty_model_like(&mut inner, false)
         })?;
         let mut state = BatchState {
@@ -509,8 +509,7 @@ fn run_batch(
     writers: &mut [Option<StreamWriter>],
     input: BatchInput,
 ) -> PyResult<()> {
-    let batch_model = Mutex::new(empty_model_like(&mut state.carrier, true)?);
-    let mut inner = batch_model.lock().unwrap();
+    let mut inner = empty_model_like(&mut state.carrier, true)?;
     let res = run_batch_steps(
         &mut inner,
         &mut state.default_template,
@@ -525,7 +524,7 @@ fn run_batch(
 }
 
 fn run_batch_steps(
-    inner: &mut std::sync::MutexGuard<InnerModel>,
+    inner: &mut InnerModel,
     default_template: &mut Option<Template>,
     source: &StreamSource,
     steps: &[StreamStep],
@@ -538,7 +537,7 @@ fn run_batch_steps(
 
 /// Maps the input of one batch into the batch model.
 fn map_batch(
-    inner: &mut std::sync::MutexGuard<InnerModel>,
+    inner: &mut InnerModel,
     default_template: &mut Option<Template>,
     source: &StreamSource,
     input: BatchInput,
@@ -630,7 +629,7 @@ fn map_batch(
 
 /// Runs the steps of the stream on the batch model.
 fn run_steps(
-    inner: &mut std::sync::MutexGuard<InnerModel>,
+    inner: &mut InnerModel,
     steps: &[StreamStep],
     writers: &mut [Option<StreamWriter>],
 ) -> PyResult<()> {

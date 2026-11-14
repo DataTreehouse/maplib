@@ -60,7 +60,7 @@ impl Triplestore {
 
     /// The triples with the predicate in the graph, merged with those in the included graphs.
     pub fn get_predicate_eager_solution_mappings(
-        &mut self,
+        &self,
         predicate: &NamedNode,
         graph: &NamedGraph,
         include_graphs: &[NamedGraph],

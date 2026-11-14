@@ -26,7 +26,7 @@ const CHUNK_SIZE: usize = 1_024;
 
 impl Triplestore {
     pub fn write_triples<W: Write>(
-        &mut self,
+        &self,
         buf: &mut W,
         format: RdfFormat,
         graph: &NamedGraph,
@@ -146,7 +146,7 @@ impl Triplestore {
     /// Writes quads in a dataset format (TriG or N-Quads).
     /// If graph is None, all graphs are written, the default graph first.
     pub fn write_quads<W: Write>(
-        &mut self,
+        &self,
         buf: &mut W,
         format: RdfFormat,
         graph: Option<&NamedGraph>,
@@ -220,7 +220,7 @@ impl Triplestore {
     }
 
     pub fn write_hdt<W: Write>(
-        &mut self,
+        &self,
         buf: &mut W,
         graph: &NamedGraph,
     ) -> Result<(), TriplestoreError> {

@@ -520,7 +520,7 @@ SELECT ?loc ?crs ?seq ?x ?y ?z WHERE {{
 
     #[instrument(skip_all)]
     pub fn query(
-        &mut self,
+        &self,
         query: &str,
         parameters: Option<&HashMap<String, EagerSolutionMappings>>,
         graph: Option<&NamedGraph>,
@@ -564,7 +564,7 @@ SELECT ?loc ?crs ?seq ?x ?y ?z WHERE {{
 
     #[instrument(skip_all)]
     pub fn query_external(
-        &mut self,
+        &self,
         query: &str,
         endpoint: &str,
         method: SparqlMethod,
@@ -643,7 +643,7 @@ SELECT ?loc ?crs ?seq ?x ?y ?z WHERE {{
     }
 
     pub fn write_triples<W: Write>(
-        &mut self,
+        &self,
         buffer: &mut W,
         graph: &NamedGraph,
         rdf_format: RdfFormat,
@@ -661,7 +661,7 @@ SELECT ?loc ?crs ?seq ?x ?y ?z WHERE {{
 
     /// Writes a dataset format (TriG or N-Quads), all graphs if graph is None.
     pub fn write_quads<W: Write>(
-        &mut self,
+        &self,
         buffer: &mut W,
         graph: Option<&NamedGraph>,
         rdf_format: RdfFormat,
@@ -678,7 +678,7 @@ SELECT ?loc ?crs ?seq ?x ?y ?z WHERE {{
     }
 
     pub fn write_hdt<W: Write>(
-        &mut self,
+        &self,
         buffer: &mut W,
         graph: &NamedGraph,
     ) -> Result<(), MaplibError> {
@@ -782,7 +782,7 @@ SELECT ?loc ?crs ?seq ?x ?y ?z WHERE {{
     }
 
     pub fn get_predicate_iris(
-        &mut self,
+        &self,
         graph: &NamedGraph,
         include_graphs: &[NamedGraph],
     ) -> Result<Vec<NamedNode>, MaplibError> {
@@ -793,7 +793,7 @@ SELECT ?loc ?crs ?seq ?x ?y ?z WHERE {{
 
     #[instrument(skip_all)]
     pub fn get_predicate(
-        &mut self,
+        &self,
         predicate: &NamedNode,
         graph: &NamedGraph,
         include_graphs: &[NamedGraph],

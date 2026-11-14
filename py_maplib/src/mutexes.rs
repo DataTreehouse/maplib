@@ -29,7 +29,7 @@ use spargebra::term::GroundTerm;
 use std::collections::HashMap;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, MutexGuard};
+use std::sync::RwLock;
 use templates::ast::Template;
 use tracing::warn;
 use triplestore::sparql::{InsertResult, UpdateResult};
@@ -37,7 +37,7 @@ use triplestore::triples_read::ExtendedRdfFormat;
 use triplestore::{IndexingOptions, Triplestore};
 
 pub(crate) fn add_template_mutex(
-    inner: &mut MutexGuard<InnerModel>,
+    inner: &mut InnerModel,
     template: TemplateType,
 ) -> PyResult<()> {
     match template {
@@ -62,7 +62,7 @@ pub(crate) fn add_template_mutex(
 }
 
 pub(crate) fn size_mutex(
-    inner: &mut MutexGuard<InnerModel>,
+    inner: &InnerModel,
     graph: Option<String>,
 ) -> PyResult<usize> {
     let graph = parse_optional_named_node(graph)?;
@@ -71,7 +71,7 @@ pub(crate) fn size_mutex(
 }
 
 pub(crate) fn add_virtualization_mutex(
-    inner: &mut MutexGuard<InnerModel>,
+    inner: &mut InnerModel,
     virtualized_database: VirtualizedPythonDatabase,
     resources: HashMap<String, PyTemplate>,
 ) -> PyResult<()> {
@@ -86,7 +86,7 @@ pub(crate) fn add_virtualization_mutex(
 }
 
 pub(crate) fn add_prefixes_mutex(
-    inner: &mut MutexGuard<InnerModel>,
+    inner: &mut InnerModel,
     prefixes: HashMap<String, NamedNode>,
 ) -> PyResult<()> {
     inner.prefixes.extend(prefixes);
@@ -94,7 +94,7 @@ pub(crate) fn add_prefixes_mutex(
 }
 
 pub(crate) fn truncate_graph_mutex(
-    inner: &mut MutexGuard<InnerModel>,
+    inner: &mut InnerModel,
     graph: &NamedGraph,
 ) -> PyResult<()> {
     inner.triplestore.truncate(graph);
@@ -102,7 +102,7 @@ pub(crate) fn truncate_graph_mutex(
 }
 
 pub(crate) fn detach_graph_mutex(
-    model: &mut MutexGuard<InnerModel>,
+    model: &mut InnerModel,
     graph: &NamedGraph,
     preserve_name: bool,
 ) -> PyResult<PyModel> {
@@ -110,13 +110,13 @@ pub(crate) fn detach_graph_mutex(
         .detach_graph(graph, preserve_name)
         .map_err(PyMaplibError::from)?;
     let m = PyModel {
-        inner: Mutex::new(sprout),
+        inner: RwLock::new(sprout),
     };
     Ok(m)
 }
 
 pub(crate) fn map_mutex(
-    inner: &mut MutexGuard<InnerModel>,
+    inner: &mut InnerModel,
     template: TemplateType,
     df: Option<DataFrame>,
     graph: Option<String>,
@@ -129,7 +129,7 @@ pub(crate) fn map_mutex(
 
 /// Resolves the template to its IRI, adding it to the model if needed.
 pub(crate) fn resolve_template_mutex(
-    inner: &mut MutexGuard<InnerModel>,
+    inner: &mut InnerModel,
     template: TemplateType,
 ) -> PyResult<String> {
     let template = match template {
@@ -166,7 +166,7 @@ pub(crate) fn resolve_template_mutex(
 }
 
 pub(crate) fn map_resolved_mutex(
-    inner: &mut MutexGuard<InnerModel>,
+    inner: &mut InnerModel,
     template: &str,
     df: Option<DataFrame>,
     graph: Option<String>,
@@ -196,7 +196,7 @@ pub(crate) fn map_resolved_mutex(
 }
 
 pub(crate) fn map_json_mutex(
-    inner: &mut MutexGuard<InnerModel>,
+    inner: &mut InnerModel,
     string_or_path: StringOrPathBuf,
     graph: Option<String>,
     uuid_namespace: Option<String>,
@@ -229,7 +229,7 @@ pub(crate) fn map_json_mutex(
 }
 
 pub(crate) fn map_xml_mutex(
-    inner: &mut MutexGuard<InnerModel>,
+    inner: &mut InnerModel,
     string_or_path: StringOrPathBuf,
     graph: Option<String>,
     uuid_namespace: Option<String>,
@@ -263,7 +263,7 @@ pub(crate) fn map_xml_mutex(
 }
 
 pub(crate) fn map_triples_mutex(
-    inner: &mut MutexGuard<InnerModel>,
+    inner: &mut InnerModel,
     df: DataFrame,
     predicate: Option<String>,
     graph: Option<String>,
@@ -286,7 +286,7 @@ pub(crate) fn map_triples_mutex(
 }
 
 pub(crate) fn map_default_mutex(
-    inner: &mut MutexGuard<InnerModel>,
+    inner: &mut InnerModel,
     df: DataFrame,
     primary_key_column: String,
     graph: NamedGraph,
@@ -302,7 +302,7 @@ pub(crate) fn map_default_mutex(
 }
 
 pub(crate) fn map_default_first_batch_mutex(
-    inner: &mut MutexGuard<InnerModel>,
+    inner: &mut InnerModel,
     df: DataFrame,
     primary_key_column: &str,
     graph: NamedGraph,
@@ -318,7 +318,7 @@ pub(crate) fn map_default_first_batch_mutex(
 }
 
 pub(crate) fn map_default_batch_mutex(
-    inner: &mut MutexGuard<InnerModel>,
+    inner: &mut InnerModel,
     template: &Template,
     df: DataFrame,
     primary_key_column: &str,
@@ -335,7 +335,7 @@ pub(crate) fn map_default_batch_mutex(
 }
 
 pub fn map_df_mutex(
-    inner: &mut MutexGuard<InnerModel>,
+    inner: &mut InnerModel,
     df: DataFrame,
     graph: NamedGraph,
     uuid_namespace: Option<String>,
@@ -347,7 +347,7 @@ pub fn map_df_mutex(
 }
 
 pub(crate) fn query_mutex(
-    inner: &mut MutexGuard<InnerModel>,
+    inner: &InnerModel,
     query: String,
     mapped_parameters: Option<HashMap<String, EagerSolutionMappings>>,
     graph: Option<NamedGraph>,
@@ -371,7 +371,7 @@ pub(crate) fn query_mutex(
 }
 
 pub(crate) fn query_external_mutex(
-    inner: &mut MutexGuard<InnerModel>,
+    inner: &InnerModel,
     query: String,
     endpoint: String,
     method: SparqlMethod,
@@ -391,7 +391,7 @@ pub(crate) fn query_external_mutex(
 }
 
 pub(crate) fn update_mutex(
-    inner: &mut MutexGuard<InnerModel>,
+    inner: &mut InnerModel,
     update: String,
     mapped_parameters: Option<HashMap<String, EagerSolutionMappings>>,
     graph: Option<String>,
@@ -416,7 +416,7 @@ pub(crate) fn update_mutex(
 }
 
 pub(crate) fn create_index_mutex(
-    inner: &mut MutexGuard<InnerModel>,
+    inner: &mut InnerModel,
     options: Option<PyIndexingOptions>,
 ) -> PyResult<()> {
     let options = if let Some(options) = options {
@@ -429,7 +429,7 @@ pub(crate) fn create_index_mutex(
 }
 
 pub(crate) fn validate_mutex(
-    inner: &mut MutexGuard<InnerModel>,
+    inner: &mut InnerModel,
     shape_graph: Option<String>,
     data_graph: Option<String>,
     report_graph: Option<String>,
@@ -510,7 +510,7 @@ pub(crate) fn validate_mutex(
 }
 
 pub(crate) fn insert_mutex(
-    inner: &mut MutexGuard<InnerModel>,
+    inner: &mut InnerModel,
     query: String,
     mapped_parameters: Option<HashMap<String, EagerSolutionMappings>>,
     source_graph: NamedGraph,
@@ -535,7 +535,7 @@ pub(crate) fn insert_mutex(
 }
 
 pub(crate) fn read_mutex(
-    inner: &mut MutexGuard<InnerModel>,
+    inner: &mut InnerModel,
     source: ReadSource,
     format: Option<String>,
     base_iri: Option<String>,
@@ -618,7 +618,7 @@ fn check_geo_format(geo: bool, format: Option<&ExtendedRdfFormat>) -> PyResult<(
 const HDT_MAGIC: &[u8] = b"$HDT";
 
 pub(crate) fn read_template_mutex(
-    inner: &mut MutexGuard<InnerModel>,
+    inner: &mut InnerModel,
     file_path: String,
 ) -> PyResult<()> {
     let path = Path::new(&file_path);
@@ -627,7 +627,7 @@ pub(crate) fn read_template_mutex(
 }
 
 pub(crate) fn reads_mutex(
-    inner: &mut MutexGuard<InnerModel>,
+    inner: &mut InnerModel,
     s: &str,
     format: &str,
     base_iri: Option<String>,
@@ -671,7 +671,7 @@ pub(crate) fn reads_mutex(
 }
 
 pub(crate) fn write_triples_mutex(
-    inner: &mut MutexGuard<InnerModel>,
+    inner: &InnerModel,
     target: WriteTarget,
     format: Option<String>,
     graph: Option<String>,
@@ -684,7 +684,7 @@ pub(crate) fn write_triples_mutex(
 }
 
 pub(crate) fn write_bytes_mutex(
-    inner: &mut MutexGuard<InnerModel>,
+    inner: &InnerModel,
     format: Option<String>,
     graph: Option<String>,
     prefixes: Option<HashMap<String, NamedNode>>,
@@ -711,7 +711,7 @@ fn resolve_write_format(format: Option<String>) -> PyResult<ExtendedRdfFormat> {
 }
 
 fn write_to<W: Write>(
-    inner: &mut MutexGuard<InnerModel>,
+    inner: &InnerModel,
     w: &mut W,
     format: ExtendedRdfFormat,
     graph: Option<String>,
@@ -746,7 +746,7 @@ fn write_to<W: Write>(
 const CIM_XML_DATETIME_FORMAT: &str = "%Y-%m-%dT%H:%M:%SZ";
 
 pub(crate) fn write_cim_xml_mutex(
-    inner: &mut MutexGuard<InnerModel>,
+    inner: &mut InnerModel,
     target: WriteTarget,
     profile_graph: String,
     model_iri: Option<String>,
@@ -799,7 +799,7 @@ pub(crate) fn write_cim_xml_mutex(
 }
 
 pub(crate) fn writes_mutex(
-    inner: &mut MutexGuard<InnerModel>,
+    inner: &InnerModel,
     format: Option<String>,
     graph: Option<String>,
     prefixes: Option<HashMap<String, NamedNode>>,
@@ -818,7 +818,7 @@ pub(crate) fn writes_mutex(
 }
 
 pub(crate) fn get_predicate_iris_mutex(
-    inner: &mut MutexGuard<InnerModel>,
+    inner: &InnerModel,
     graph: Option<String>,
     include_graphs: Option<Vec<String>>,
 ) -> PyResult<Vec<PyIRI>> {
@@ -831,7 +831,7 @@ pub(crate) fn get_predicate_iris_mutex(
 }
 
 pub(crate) fn get_predicate_mutex(
-    inner: &mut MutexGuard<InnerModel>,
+    inner: &InnerModel,
     iri: PyIRI,
     graph: Option<String>,
     include_graphs: Option<Vec<String>>,
@@ -860,7 +860,7 @@ pub(crate) fn get_predicate_mutex(
 }
 
 pub(crate) fn infer_mutex(
-    inner: &mut MutexGuard<InnerModel>,
+    inner: &mut InnerModel,
     rulesets: Vec<String>,
     max_iterations: Option<usize>,
     max_results: Option<usize>,
@@ -883,14 +883,14 @@ pub(crate) fn infer_mutex(
 }
 
 pub(crate) fn infer_rdfs_mutex(
-    inner: &mut MutexGuard<InnerModel>,
+    inner: &mut InnerModel,
     graph: &NamedGraph,
 ) -> Result<usize, PyMaplibError> {
     inner.infer_rdfs(graph).map_err(PyMaplibError::MaplibError)
 }
 
 pub fn serialize_triples_mutex(
-    inner: &mut MutexGuard<InnerModel>,
+    inner: &mut InnerModel,
     path: &Path,
     raw_db: bool,
     single_file: bool,
@@ -900,12 +900,12 @@ pub fn serialize_triples_mutex(
         .map_err(PyMaplibError::from)?)
 }
 
-pub fn compact_mutex(inner: &mut MutexGuard<InnerModel>) -> PyResult<()> {
+pub fn compact_mutex(inner: &mut InnerModel) -> PyResult<()> {
     Ok(inner.compact().map_err(PyMaplibError::from)?)
 }
 
 pub fn add_udf_mutex(
-    inner: &mut MutexGuard<InnerModel>,
+    inner: &mut InnerModel,
     iri: NamedNode,
     func: Py<PyAny>,
     output: BaseRDFNodeType,
@@ -916,7 +916,7 @@ pub fn add_udf_mutex(
 }
 
 pub fn add_graph_mutex(
-    inner: &mut MutexGuard<InnerModel>,
+    inner: &mut InnerModel,
     other_triplestore: &Triplestore,
     source_graph: NamedGraph,
     target_graph: NamedGraph,
@@ -925,7 +925,7 @@ pub fn add_graph_mutex(
     Ok(())
 }
 
-pub fn list_udfs_mutex(inner: &mut InnerModel) -> Result<Vec<String>, PyMaplibError> {
+pub fn list_udfs_mutex(inner: &InnerModel) -> Result<Vec<String>, PyMaplibError> {
     Ok(inner
         .list_udfs()
         .into_iter()
