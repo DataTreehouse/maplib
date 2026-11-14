@@ -998,25 +998,36 @@ class Model:
             bind: str = "localhost",
             popup=False,
             fts=True,
-            fts_path: str = "fts",
+            fts_path: str = None,
+            root_path: str = "/",
             graph: str = None,
             page: str = None,
+            frontend: Union[str, Path] = None,
+            flight_port: int = None,
+            cors_origins: List[str] = None,
     ) -> "ExploreServer":
-        """Starts a graph explorer session.
-        To run from Jupyter Notebook use:
+        """Explores the model in the Model portal, served by Model.serve.
+
+        Model.serve hosts both the SPARQL endpoint (/sparql) that every page of the portal queries
+        and the portal itself (/ui/).
         >>> server = m.explore()
-        You can later stop the server with
-        >>> df = Model().query("SELECT * WHERE {?s ?p ?o}", endpoint=server.url)  # From another process or host
+        >>> server.url         # the portal, open it in a browser
+        >>> server.sparql_url  # the SPARQL endpoint, e.g. Model().query(..., endpoint=server.sparql_url)
         >>> server.stop()
 
-        :param host: The hostname that we will point the browser to.
-        :param port: The port where the graph explorer webserver listens on.
+        :param host: The host name in the URLs (the server listens on bind).
+        :param port: The port of the server, 0 for any free port.
         :param bind: Bind to the following host / ip.
         :param popup: Pop up the browser window (deprecated, open server.url yourself instead).
-        :param fts: Enable full text search indexing
-        :param fts_path: Deprecated and ignored, the index is stored with the categorical maps (strings).
-        :param graph: The named graph to explore, defaults to the default graph
-        :param page: We use this feature flag to test new frontends (try "new" or "yasgui")
+        :param fts: Build the full text search index used by the search boxes.
+        :param fts_path: Deprecated and ignored, the index needs no path.
+        :param root_path: The path the server is reached under behind a proxy (JupyterHub is detected).
+        :param graph: The named graph to explore, defaults to the default graph.
+        :param page: Deprecated and ignored, the portal replaces the old explorer pages.
+        :param frontend: A folder with a portal build (its index.html). Defaults to the
+            MAPLIB_EXPLORE_FRONTEND environment variable, then the portal packaged with maplib.
+        :param flight_port: Also serve Arrow Flight on this port.
+        :param cors_origins: Browser origins allowed to query, e.g. a portal dev server.
         """
 
     def query(
@@ -1521,6 +1532,10 @@ class Model:
             batch_rows: Optional[int] = None,
             result_ttl: Optional[float] = None,
             arrow_compression: LiteralType["auto", "zstd", "none"] = "auto",
+            static_dir: Union[str, Path] = None,
+            static_path: str = "/ui",
+            static_vars: Dict[str, str] = None,
+            query_log_size: int = 1000,
             block: bool = False,
     ) -> "Server":
         """
@@ -1583,6 +1598,16 @@ class Model:
                                   network is the bottleneck, and not for clients on the same host, where compressing
                                   costs more time than it saves. Requests can choose with "compression" in the Flight
                                   command or ticket, or the compression parameter over HTTP.
+        :param static_dir: A web application to serve from this folder, e.g. a built single page application
+            such as the Model portal. Files are read from disk on every request, so a rebuilt application
+            is picked up by refreshing the page. Paths without a file get index.html, and "/" redirects to it.
+        :param static_path: Where the application is served, by default "/ui".
+        :param static_vars: Values for the <!--#echo var='name' --> directives (nginx SSI) in its HTML pages, e.g.
+            the runtime configuration of the application.
+        :param query_log_size: How many queries and updates the query log keeps (0 for none). GET /query-log
+            gives them as JSON, with when they ran, who sent them (X-Query-Source header or Referer), status,
+            rows, bytes and the time spent waiting, running and serializing, and summary statistics.
+            DELETE /query-log empties it.
         :param block: Block until the server stops, Ctrl-C stops it.
         :return: The running Server.
         """

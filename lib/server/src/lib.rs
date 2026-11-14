@@ -61,6 +61,14 @@ pub struct ServerOptions {
     /// Compression of the record batches in Arrow results (Flight and Arrow over HTTP), when
     /// the request does not choose. Readers decompress them transparently.
     pub arrow_compression: ArrowCompression,
+    /// A web application to serve from this folder, read from disk on every request.
+    pub static_dir: Option<std::path::PathBuf>,
+    /// Where the application is served, e.g. "/ui".
+    pub static_path: String,
+    /// Values for the `<!--#echo var='name' -->` directives (nginx SSI) in its HTML pages.
+    pub static_vars: std::collections::HashMap<String, String>,
+    /// How many queries and updates the query log (`/query-log`) keeps, 0 for no log.
+    pub query_log_size: usize,
 }
 
 /// Compression of Arrow record batch buffers, as defined by the Arrow IPC format.
@@ -112,6 +120,10 @@ impl Default for ServerOptions {
             max_request_bytes: 256 << 20,
             batch_rows: 65_536,
             result_ttl: Duration::from_secs(600),
+            static_dir: None,
+            static_path: "/ui".to_string(),
+            static_vars: Default::default(),
+            query_log_size: 1000,
             result_capacity: 64,
             arrow_compression: ArrowCompression::Auto,
         }

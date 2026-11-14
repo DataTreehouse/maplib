@@ -1298,6 +1298,10 @@ impl PyModel {
         batch_rows=None,
         result_ttl=None,
         arrow_compression=None,
+        static_dir=None,
+        static_path="/ui".to_string(),
+        static_vars=None,
+        query_log_size=1000,
         block=false,
     ))]
     fn serve(
@@ -1317,6 +1321,10 @@ impl PyModel {
         batch_rows: Option<usize>,
         result_ttl: Option<f64>,
         arrow_compression: Option<String>,
+        static_dir: Option<PathBuf>,
+        static_path: String,
+        static_vars: Option<HashMap<String, String>>,
+        query_log_size: usize,
         block: bool,
     ) -> PyResult<Py<PyServer>> {
         let mut options = ServerOptions {
@@ -1330,6 +1338,10 @@ impl PyModel {
                 .map(|g| NamedGraph::from_maybe_named_node(Some(&g))),
             include_graphs: parse_include_graphs(include_graphs, true)?,
             max_rows,
+            static_dir,
+            static_path,
+            static_vars: static_vars.unwrap_or_default(),
+            query_log_size,
             ..ServerOptions::default()
         };
         if let Some(cors_origins) = cors_origins {
