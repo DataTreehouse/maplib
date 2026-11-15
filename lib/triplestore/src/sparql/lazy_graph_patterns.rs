@@ -9,6 +9,7 @@ mod left_join;
 mod minus;
 mod order_by;
 pub mod path;
+pub mod path_search;
 mod project;
 mod pvalues;
 mod triple;
@@ -86,6 +87,17 @@ impl Triplestore {
                     patterns.clone()
                 };
 
+                if path_search::has_path_search(&patterns) {
+                    return self.lazy_path_search(
+                        &patterns,
+                        solution_mappings,
+                        context,
+                        parameters,
+                        &pushdowns,
+                        query_settings,
+                        dataset,
+                    );
+                }
                 pushdowns.add_patterns_pushdowns(&patterns);
                 let mut updated_solution_mappings = solution_mappings;
                 let bgp_context = context.extension_with(PathEntry::BGP);

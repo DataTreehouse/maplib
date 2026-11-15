@@ -100,9 +100,23 @@ pub struct Triples {
     subject_object_index: Option<SubjectObjectIndex>,
     /// Set in disk storage mode: new segments are stored as parquet files in this folder.
     triples_folder: Option<PathBuf>,
+    /// Changes whenever the triples change, for caches of data derived from them.
+    generation: u64,
+}
+
+static NEXT_GENERATION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+
+pub(crate) fn next_generation() -> u64 {
+    NEXT_GENERATION.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
 }
 
 impl Triples {
+    /// Changes whenever the triples change: new tables get a new generation, and so do tables
+    /// that triples are added to.
+    pub fn generation(&self) -> u64 {
+        self.generation
+    }
+
     /// The number of triples.
     pub fn height(&self) -> usize {
         self.height
@@ -146,6 +160,7 @@ impl Triples {
             object_indexing_enabled,
             subject_object_index: None,
             triples_folder: triples_folder.map(|x| x.to_owned()),
+            generation: next_generation(),
         })
     }
 
@@ -484,6 +499,7 @@ impl Triples {
             object_indexing_enabled,
             subject_object_index: None,
             triples_folder: triples_folder.map(|x| x.to_owned()),
+            generation: next_generation(),
         })
     }
 
@@ -520,6 +536,7 @@ impl Triples {
             object_indexing_enabled,
             subject_object_index,
             triples_folder: triples_folder.map(|x| x.to_owned()),
+            generation: next_generation(),
         })
     }
 

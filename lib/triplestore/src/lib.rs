@@ -84,6 +84,8 @@ pub struct Triplestore {
     pub global_cats: LockedCats,
     n_triples_deleted: usize,
     pub udf_registry: Arc<UdfRegistry>,
+    /// Search graphs of path searches.
+    pub(crate) path_graph_cache: sparql::lazy_graph_patterns::path_search::PathGraphCache,
 }
 
 impl Triplestore {
@@ -531,6 +533,7 @@ impl Triplestore {
                 geo_index: None,
                 global_cats: LockedCats::new(cats_image),
                 n_triples_deleted: 0,
+                path_graph_cache: Default::default(),
                 udf_registry: Arc::new(UdfRegistry::new()),
             };
             if detached.indexing.geo {
@@ -825,6 +828,7 @@ impl Triplestore {
             geo_index,
             global_cats: locked_cats,
             n_triples_deleted: 0,
+            path_graph_cache: Default::default(),
             udf_registry: Arc::new(UdfRegistry::new()),
         })
     }

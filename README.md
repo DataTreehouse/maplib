@@ -200,6 +200,46 @@ with open("records.jsonl") as lines:
     )
 ```
 
+## Shortest paths in SPARQL
+The magic predicate `maplib:shortestPath` (`PREFIX maplib: <https://datatreehouse.github.io/maplib/vocab#>`) finds shortest paths between resources, with the path, inside an ordinary SELECT query. Its subject is the source and its object a node that carries the options, which have the same names as those of the length-constrained `maplib:path`:
+
+```sparql
+PREFIX maplib: <https://datatreehouse.github.io/maplib/vocab#>
+PREFIX cim: <http://iec.ch/TC57/CIM100#>
+SELECT ?breaker ?len ?nodes WHERE {
+  ?src cim:IdentifiedObject.name "T1" .
+  ?src maplib:shortestPath ?p .
+  ?p maplib:predicate cim:Terminal.ConductingEquipment, cim:Terminal.ConnectivityNode ;
+     maplib:inversePredicate cim:Terminal.ConductingEquipment, cim:Terminal.ConnectivityNode ;
+     maplib:object ?breaker ;
+     maplib:limit 3 ;
+     maplib:avoid ?open ;
+     maplib:length ?len ;
+     maplib:pathNodes ?nodes .
+  ?breaker a cim:Breaker .
+  ?open cim:Switch.open true .
+}
+```
+
+The other patterns of the group are evaluated first, and the values they give the source, the object and the avoided nodes are the sources, the targets and the nodes to avoid. Patterns that share no variables are evaluated on their own, so many sources and many targets are not multiplied together: each source is searched once, for all its targets. FILTERs apply to the whole group and so after the search; to restrict the targets with a FILTER, put the target pattern and the FILTER in a subquery or a nested group (`{ ?t ... FILTER(...) }`) in the same group as the search.
+
+| Option | |
+|---|---|
+| `maplib:object` | The targets: a variable or constants. A variable bound by the group's other patterns gives the targets; an unbound variable makes every node reached a target and binds it. |
+| `maplib:predicate`, `maplib:inversePredicate` | The edges, followed from subject to object, and from object to subject. Give a predicate as both to follow it both ways. At least one, or `anyPredicate`, is required. |
+| `maplib:anyPredicate`, `maplib:excludePredicate` | `"forward"`, `"backward"` or `"both"`: follow every predicate whose objects are IRIs or blank nodes, except `rdf:type`, leaving out the excluded ones. Useful for exploring unknown data; hubs such as shared types or regions then give short paths, so exclude their predicates. |
+| `maplib:minLength`, `maplib:maxLength` | The fewest edges (default 1) and the most. With a minimum of 1 the source is not its own target, unless a cycle leads back to it; targets whose shortest path is shorter than the minimum are left out. |
+| `maplib:limit` | The number of nearest targets of each source. |
+| `maplib:weight`, `maplib:defaultWeight` | A numeric predicate whose value is the cost of entering a node, and the cost of nodes without one (default 0). With weights the cheapest paths are found (Dijkstra), otherwise those with the fewest edges (breadth first search). |
+| `maplib:maxCost` | The highest cost of a path. |
+| `maplib:avoid` | Nodes that paths may start or end at, but not pass through: a variable bound by the group's other patterns, or constants. |
+| `maplib:kShortest` | The k shortest paths (without repeated nodes) to each target, by Yen's algorithm. |
+| `maplib:allShortest`, `maplib:maxPaths` | All shortest paths to each target, at most `maxPaths` (default 1000). |
+
+The outputs are variables: `maplib:length` (the number of edges), `maplib:cost`, `maplib:pathIndex` (the rank of the path for its source and target, from 0) and `maplib:pathNodes`, the nodes of the path as a JSON array of strings (IRIs, `_:` blank nodes and the lexical forms of literals). With `maplib:pathNode`, `maplib:nodeIndex`, `maplib:stepPredicate` and `maplib:stepInverse` the result has one row per node of each path: the node, its position from 0, and the predicate of the edge that reached it and whether that edge was followed from object to subject (unbound for the source).
+
+Searches run on a graph of integers built from the triples of the edge predicates in the queried graph, which is kept until those triples change, so repeated searches over the same predicates do not rebuild it. A search costs what it visits: a single target is found by a bidirectional breadth first search, and searches with many targets or a limit stop as soon as the targets are found. Searches from different sources run in parallel.
+
 ## API
 The [API](https://datatreehouse.github.io/maplib/maplib.html) is simple, and contains only one class and a few methods for:
 - expanding templates, also from LazyFrames and iterables of batches

@@ -48,6 +48,8 @@ pub enum SparqlError {
     ReplaceBindingsError(RepresentationError),
     #[error("Error constructing quads from quad patterns `{0}`")]
     QuadPatternsError(String),
+    #[error("Path search error: {0}")]
+    PathSearchError(String),
 }
 
 impl<T> From<PoisonError<T>> for SparqlError {

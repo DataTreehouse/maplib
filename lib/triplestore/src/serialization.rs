@@ -406,6 +406,7 @@ impl Triplestore {
             geo_index,
             global_cats: LockedCats::new(cats),
             n_triples_deleted: 0,
+            path_graph_cache: Default::default(),
             udf_registry: Arc::new(UdfRegistry::new()),
         };
         // The geo index is not serialized, it is rebuilt from the triples.

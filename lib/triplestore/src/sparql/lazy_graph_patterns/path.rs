@@ -29,8 +29,8 @@ use sprs::{CsMatBase, TriMatBase};
 use std::collections::{HashMap, HashSet};
 
 const NAMED_NODE_INDEX_COL: &str = "named_node_index_column";
-const VALUE_COLUMN: &str = "value";
-const LOOKUP_COLUMN: &str = "key";
+pub(crate) const VALUE_COLUMN: &str = "value";
+pub(crate) const LOOKUP_COLUMN: &str = "key";
 
 type SparseMatrix = CsMatBase<u32, usize, Vec<usize>, Vec<usize>, Vec<u32>, usize>;
 
@@ -40,7 +40,7 @@ struct SparsePathReturn {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-enum PathLeaf {
+pub(crate) enum PathLeaf {
     NamedNode(NamedNode),
     NegatedSet(Vec<NamedNode>),
 }
@@ -781,7 +781,7 @@ fn sparse_path(
     }
 }
 
-struct U32DataFrameCreator {
+pub(crate) struct U32DataFrameCreator {
     pub named_nodes: HashMap<PathLeaf, (DataFrame, RDFNodeState, RDFNodeState)>,
     dataset: QueryGraph,
 }
@@ -974,7 +974,7 @@ impl U32DataFrameCreator {
         Ok((lookup_df, lookup_df_types, out_df_map))
     }
 
-    fn gather_namednode_dfs(
+    pub(crate) fn gather_namednode_dfs(
         &mut self,
         ppe: &PropertyPathExpression,
         triplestore: &Triplestore,

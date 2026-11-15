@@ -101,6 +101,12 @@ impl Triplestore {
                     if bindings.iter().any(|row| row.iter().any(|x| x.is_none())))
             });
         ordered.extend(with_undef);
+        // Path searches take their sources and targets from the other patterns of the group,
+        // so they are joined last.
+        let (mut ordered, path_searches): (Vec<_>, Vec<_>) = ordered
+            .into_iter()
+            .partition(|(gp, _)| !super::path_search::is_path_search_pattern(gp));
+        ordered.extend(path_searches);
         ordered_flat_gps = ordered;
         let mut output_solution_mappings = solution_mappings;
         for (gp, ctx) in ordered_flat_gps {

@@ -55,6 +55,7 @@ impl Triples {
         };
         let new_height = new_df.height();
         self.height += new_height;
+        self.generation = super::next_generation();
 
         // The trailing segments to merge with the new triples: segments[first..].
         let n = self.segments.len();
